@@ -10,6 +10,7 @@ import shutil
 import os
 import uuid
 import json
+import tempfile
 from pathlib import Path
 
 from app.api import deps
@@ -705,8 +706,159 @@ async def preview_upload_file(
 
 
 @router.post("/{id}/directory")
-async def upload_project_directory(id: str):
-    pass
+async def upload_project_directory(
+    id: str,
+    files: List[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    上传文件夹（实际为多个文件）
+    
+    工作流程：
+    1. 验证项目权限
+    2. 使用 tempfile 创建临时目录
+    3. 将所有文件保存到临时目录（保持目录结构）
+    4. 压缩成 ZIP 文件
+    5. 保存到项目存储
+    6. 自动清理临时目录和文件
+    
+    参数：
+    - files: 多个文件，前端应该保持相对路径信息（通过 webkitRelativePath）
+    """
+    project = await db.get(Project, id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 检查权限
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权操作此项目")
+    
+    # 检查项目类型
+    if project.source_type != "zip":
+        raise HTTPException(status_code=400, detail="仅ZIP类型项目可以上传文件")
+    
+    if not files:
+        raise HTTPException(status_code=400, detail="至少需要上传一个文件")
+    
+    # 使用 tempfile 创建临时目录（自动清理）
+    with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_upload") as temp_base_dir:
+        try:
+            total_size = 0
+            file_count = 0
+            
+            # 逐个保存文件，保持目录结构
+            for file in files:
+                if not file.filename:
+                    continue
+                
+                # 检查文件大小
+                file_content = await file.read()
+                file_size = len(file_content)
+                
+                if file_size == 0:
+                    continue  # 跳过空文件
+                
+                total_size += file_size
+                file_count += 1
+                
+                # 检查总大小是否超过限制（500MB）
+                if total_size > 500 * 1024 * 1024:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="文件总大小不能超过 500MB"
+                    )
+                
+                # 获取文件的相对路径（保持目录结构）
+                # 例如：src/main.py, tests/unit/test.py
+                file_path = file.filename
+                
+                # 移除开头的 "/"（如果存在）
+                if file_path.startswith("/"):
+                    file_path = file_path[1:]
+                
+                # 完整的目标路径
+                target_path = os.path.join(temp_base_dir, file_path)
+                
+                # 创建必要的目录
+                target_dir = os.path.dirname(target_path)
+                os.makedirs(target_dir, exist_ok=True)
+                
+                # 保存文件
+                with open(target_path, "wb") as f:
+                    f.write(file_content)
+                
+            
+            if file_count == 0:
+                raise HTTPException(status_code=400, detail="没有有效的文件")
+            
+            # 使用 tempfile 创建临时 ZIP 文件
+            with tempfile.NamedTemporaryFile(
+                suffix=".zip",
+                prefix="deepaudit_",
+                delete=False
+            ) as temp_zip_file:
+                temp_zip_path = temp_zip_file.name
+            
+            try:
+                # 使用 shutil.make_archive 压缩
+                archive_path = shutil.make_archive(
+                    temp_zip_path.replace(".zip", ""),  # 去掉 .zip 后缀（make_archive 会自动添加）
+                    "zip",
+                    temp_base_dir
+                )
+            except Exception as e:
+                # 清理临时 ZIP 文件
+                if os.path.exists(temp_zip_path):
+                    os.remove(temp_zip_path)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"压缩文件失败: {str(e)}"
+                )
+            
+            # 验证压缩文件
+            is_valid, error = UploadManager.validate_file(temp_zip_path)
+            if not is_valid:
+                if os.path.exists(temp_zip_path):
+                    os.remove(temp_zip_path)
+                raise HTTPException(status_code=400, detail=f"压缩文件验证失败: {error}")
+            
+            # 获取文件预览
+            success, file_list, error = UploadManager.get_file_list_preview(temp_zip_path)
+            if not success:
+                if os.path.exists(temp_zip_path):
+                    os.remove(temp_zip_path)
+                raise HTTPException(status_code=400, detail=error)
+            
+            # 生成文件名为项目ID
+            archive_filename = f"{id}.zip"
+            
+            # 保存到项目存储
+            try:
+                meta = await save_project_zip(id, temp_zip_path, archive_filename)
+            finally:
+                # 确保临时 ZIP 文件被清理
+                if os.path.exists(temp_zip_path):
+                    os.remove(temp_zip_path)
+            
+            
+            return {
+                "message": "文件夹上传成功",
+                "file_count": file_count,
+                "total_size": total_size,
+                "total_size_mb": f"{total_size / 1024 / 1024:.2f}",
+                "original_filename": meta["original_filename"],
+                "file_size": meta["file_size"],
+                "uploaded_at": meta["uploaded_at"],
+                "format": ".zip",
+                "archive_file_count": len(file_list),
+                "sample_files": file_list[:10]
+            }
+        
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
 @router.delete("/{id}/zip")
 async def delete_project_zip_file(
