@@ -614,9 +614,19 @@ async def upload_project_zip(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
-    上传或更新项目文件
+    上传项目文件（支持多种压缩格式）
     
-    支持 .zip, .tar, .tar.gz, .7z, .rar 等
+    支持的格式: .zip, .tar, .tar.gz, .tar.bz2, .7z, .rar 等
+    所有格式都会被转换为 .zip 格式保存
+    
+    工作流程：
+    1. 验证文件格式是否支持
+    2. 保存上传的压缩文件到临时位置
+    3. 验证文件完整性
+    4. 解压到临时目录
+    5. 重新压缩为 .zip 格式
+    6. 保存到项目存储
+    7. 清理临时文件
     """
     project = await db.get(Project, id)
     if not project:
@@ -626,46 +636,101 @@ async def upload_project_zip(
     if project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权操作此项目")
     
-    # 检查项目类型
-    if project.source_type != "zip":
-        raise HTTPException(status_code=400, detail="仅ZIP类型项目可以上传ZIP文件")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
     
-    # 验证文件类型
-    if not file.filename.lower().endswith('.zip'):
-        raise HTTPException(status_code=400, detail="请上传ZIP格式文件")
+    # 检查文件格式是否支持
+    supported_formats = CompressionStrategyFactory.get_supported_formats()
+    file_ext = Path(file.filename).suffix.lower()
     
-    # 保存到临时文件
-    temp_file_id = str(uuid.uuid4())
-    temp_file_path = f"/tmp/{temp_file_id}.zip"
+    # 特殊处理 .tar.gz 等复合扩展名
+    file_name_lower = file.filename.lower()
+    is_tar_gz = file_name_lower.endswith(('.tar.gz', '.tgz', '.tar.gzip'))
+    is_tar_bz2 = file_name_lower.endswith(('.tar.bz2', '.tbz', '.tbz2'))
     
-    try:
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+    if is_tar_gz:
+        file_ext = '.tar.gz'
+    elif is_tar_bz2:
+        file_ext = '.tar.bz2'
+    
+    if file_ext not in supported_formats:
+        return HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式: {file_ext}。支持的格式: {', '.join(sorted(supported_formats))}"
+        )
+    
+    # 使用 tempfile 创建临时目录
+    with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_zip_upload") as temp_dir:
+        try:
+            # 保存上传的原始文件到临时位置
+            temp_upload_path = os.path.join(temp_dir, file.filename)
+            with open(temp_upload_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            # 验证上传文件
+            is_valid, error = UploadManager.validate_file(temp_upload_path)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=f"文件验证失败: {error}")
+            
+            # 解压到临时目录
+            temp_extract_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(temp_extract_dir, exist_ok=True)
+            
+            success, extracted_files, error = await UploadManager.extract_file(
+                temp_upload_path,
+                temp_extract_dir
+            )
+            
+            if not success:
+                raise HTTPException(status_code=400, detail=f"解压失败: {error}")
+            
+            # 创建最终的 ZIP 文件（命名为项目ID）
+            final_zip_path = os.path.join(temp_dir, f"{id}.zip")
+            
+            try:
+                shutil.make_archive(
+                    final_zip_path.replace(".zip", ""),
+                    "zip",
+                    temp_extract_dir
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"重新压缩失败: {str(e)}"
+                )
+            
+            # 验证生成的 ZIP 文件
+            is_valid, error = UploadManager.validate_file(final_zip_path)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=f"生成的 ZIP 文件验证失败: {error}")
+            
+            # 获取最终 ZIP 文件的预览
+            success, file_list, error = UploadManager.get_file_list_preview(final_zip_path)
+            if not success:
+                raise HTTPException(status_code=400, detail=error)
+            
+            # 生成最终的文件名
+            archive_filename = f"{id}.zip"
+            
+            # 保存到项目存储
+            meta = await save_project_zip(id, final_zip_path, archive_filename)
+            
+            return {
+                "message": "文件上传成功（已转换为 ZIP 格式）",
+                "original_filename": file.filename,
+                "original_format": file_ext,
+                "final_filename": meta["original_filename"],
+                "final_format": ".zip",
+                "file_size": meta["file_size"],
+                "uploaded_at": meta["uploaded_at"],
+                "file_count": len(file_list),
+                "sample_files": file_list[:10]
+            }
         
-        # 验证文件
-        is_valid, error = UploadManager.validate_file(temp_file_path)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error)
-        # 获取文件预览
-        success, file_list, error = UploadManager.get_file_list_preview(temp_file_path)
-        if not success:
-            raise HTTPException(status_code=400, detail=error)
-        
-        meta = await save_project_zip(id, temp_file_path, file.filename)
-        
-        return {
-            "message": "文件上传成功",
-            "original_filename": meta["original_filename"],
-            "file_size": meta["file_size"],
-            "uploaded_at": meta["uploaded_at"],
-            "format": Path(temp_file_path).suffix,
-            "file_count": len(file_list),
-            "sample_files": file_list[:10]  # 返回前10个文件作为示例
-        }
-    finally:
-        # 清理临时文件
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
 
 @router.get("/{id}/upload/preview")
