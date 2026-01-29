@@ -10,6 +10,7 @@ import shutil
 import os
 import uuid
 import json
+from pathlib import Path
 
 from app.api import deps
 from app.db.session import get_db, AsyncSessionLocal
@@ -24,6 +25,8 @@ from app.services.zip_storage import (
     save_project_zip, load_project_zip, get_project_zip_meta,
     delete_project_zip, has_project_zip
 )
+from app.services.upload.upload_manager import UploadManager
+from app.services.upload.compression_factory import CompressionStrategyFactory
 
 router = APIRouter()
 
@@ -610,7 +613,9 @@ async def upload_project_zip(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
-    上传或更新项目ZIP文件
+    上传或更新项目文件
+    
+    支持 .zip, .tar, .tar.gz, .7z, .rar 等
     """
     project = await db.get(Project, id)
     if not project:
@@ -636,25 +641,72 @@ async def upload_project_zip(
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # 检查文件大小
-        file_size = os.path.getsize(temp_file_path)
-        if file_size > 500 * 1024 * 1024:  # 500MB limit
-            raise HTTPException(status_code=400, detail="文件大小不能超过500MB")
+        # 验证文件
+        is_valid, error = UploadManager.validate_file(temp_file_path)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error)
+        # 获取文件预览
+        success, file_list, error = UploadManager.get_file_list_preview(temp_file_path)
+        if not success:
+            raise HTTPException(status_code=400, detail=error)
         
-        # 保存到持久化存储
         meta = await save_project_zip(id, temp_file_path, file.filename)
         
         return {
-            "message": "ZIP文件上传成功",
+            "message": "文件上传成功",
             "original_filename": meta["original_filename"],
             "file_size": meta["file_size"],
-            "uploaded_at": meta["uploaded_at"]
+            "uploaded_at": meta["uploaded_at"],
+            "format": Path(temp_file_path).suffix,
+            "file_count": len(file_list),
+            "sample_files": file_list[:10]  # 返回前10个文件作为示例
         }
     finally:
         # 清理临时文件
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
+
+@router.get("/{id}/upload/preview")
+async def preview_upload_file(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    获取上传文件预览信息
+    
+    返回压缩包内的文件列表和统计信息
+    """
+    project = await db.get(Project, id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权查看此项目")
+    
+    if project.source_type != "zip":
+        raise HTTPException(status_code=400, detail="仅ZIP类型项目支持")
+    
+    # 获取 ZIP 文件
+    zip_path = await load_project_zip(id)
+    if not zip_path or not os.path.exists(zip_path):
+        raise HTTPException(status_code=404, detail="未找到上传的文件")
+    
+    success, file_list, error = UploadManager.get_file_list_preview(zip_path, limit=50)
+    if not success:
+        raise HTTPException(status_code=500, detail=error)
+    
+    return {
+        "file_count": len(file_list),
+        "files": file_list,
+        "supported_formats": list(CompressionStrategyFactory.get_supported_formats())
+    }
+
+
+@router.post("/{id}/directory")
+async def upload_project_directory(id: str):
+    pass
 
 @router.delete("/{id}/zip")
 async def delete_project_zip_file(
