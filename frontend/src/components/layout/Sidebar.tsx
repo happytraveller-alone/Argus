@@ -12,16 +12,16 @@ import {
     X,
     LayoutDashboard,
     FolderGit2,
-    Zap,
-    ListTodo,
+    // Zap,
+    // ListTodo,
     Settings,
-    Trash2,
+    // Trash2,
     ChevronLeft,
     ChevronRight,
     Github,
     // UserCircle,
     Shield,
-    MessageSquare,
+    // MessageSquare,
     Bot,
 } from "lucide-react";
 import routes from "@/app/routes";
@@ -32,12 +32,12 @@ const routeIcons: Record<string, React.ReactNode> = {
     "/": <Bot className="w-[18px] h-[18px]" />,
     "/dashboard": <LayoutDashboard className="w-[18px] h-[18px]" />,
     "/projects": <FolderGit2 className="w-[18px] h-[18px]" />,
-    "/instant-analysis": <Zap className="w-[18px] h-[18px]" />,
-    "/audit-tasks": <ListTodo className="w-[18px] h-[18px]" />,
+    // "/instant-analysis": <Zap className="w-[18px] h-[18px]" />,
+    // "/audit-tasks": <ListTodo className="w-[18px] h-[18px]" />,
     "/audit-rules": <Shield className="w-[18px] h-[18px]" />,
-    "/prompts": <MessageSquare className="w-[18px] h-[18px]" />,
+    // "/prompts": <MessageSquare className="w-[18px] h-[18px]" />,
     "/admin": <Settings className="w-[18px] h-[18px]" />,
-    "/recycle-bin": <Trash2 className="w-[18px] h-[18px]" />,
+    // "/recycle-bin": <Trash2 className="w-[18px] h-[18px]" />,
 };
 
 interface SidebarProps {

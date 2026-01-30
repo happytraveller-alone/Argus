@@ -482,7 +482,7 @@ export default function TaskDetail() {
     return (
       <div className="space-y-6 p-6 cyber-bg-elevated min-h-screen font-mono">
         <div className="flex items-center space-x-4">
-          <Link to="/audit-tasks">
+          <Link to="/dashboard">
             <Button variant="outline" size="sm" className="cyber-btn-ghost h-10 w-10 p-0">
               <ArrowLeft className="w-5 h-5" />
             </Button>
@@ -506,7 +506,7 @@ export default function TaskDetail() {
 
       {/* Top Action Bar */}
       <div className="flex items-center justify-between relative z-10">
-        <Link to="/audit-tasks">
+        <Link to="/dashboard">
           <Button variant="outline" size="sm" className="cyber-btn-ghost h-10 w-10 p-0">
             <ArrowLeft className="w-5 h-5" />
           </Button>

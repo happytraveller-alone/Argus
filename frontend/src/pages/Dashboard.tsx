@@ -418,11 +418,7 @@ export default function Dashboard() {
             <div className="section-header">
               <Clock className="w-5 h-5 text-emerald-400" />
               <h3 className="section-title">最近任务</h3>
-              <Link to="/audit-tasks" className="ml-auto">
-                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                  查看全部 <ArrowUpRight className="w-3 h-3 ml-1" />
-                </Button>
-              </Link>
+              
             </div>
             <div className="space-y-2">
               {recentTasks.length > 0 ? (
@@ -488,24 +484,14 @@ export default function Dashboard() {
                   Agent 智能审计
                 </Button>
               </Link>
-              <Link to="/instant-analysis" className="block">
-                <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
-                  <Zap className="w-4 h-4 mr-2" />
-                  即时代码分析
-                </Button>
-              </Link>
+
               <Link to="/projects" className="block">
                 <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
                   <GitBranch className="w-4 h-4 mr-2" />
                   创建新项目
                 </Button>
-              </Link>
-              <Link to="/audit-tasks" className="block">
-                <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
-                  <Shield className="w-4 h-4 mr-2" />
-                  启动审计任务
-                </Button>
-              </Link>
+              </Link>                          
+              
             </div>
           </div>
 
