@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
+// import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
     Menu,
     X,
@@ -277,7 +277,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
 
                         {/* Theme Toggle */}
-                        <ThemeToggle collapsed={collapsed} />
+                        {/*<ThemeToggle collapsed={collapsed} />*/}
 
                         {/* Account Link */}
                         {/*<Link
