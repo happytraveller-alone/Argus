@@ -380,42 +380,10 @@ def get_tool_config(tool_name: str) -> ToolConfig:
 
     # Tool-specific configurations
     tool_configs: Dict[str, ToolConfig] = {
-        "opengrep_scan": ToolConfig(
-            name="opengrep_scan",
-            enabled=config.opengrep_enabled,
-            timeout_seconds=config.opengrep_timeout_seconds,
-            rate_limit_per_second=config.external_tool_rate_per_second,
-            fallback_tool="pattern_match",
-        ),
-        "bandit_scan": ToolConfig(
-            name="bandit_scan",
-            enabled=config.bandit_enabled,
-            timeout_seconds=config.bandit_timeout_seconds,
-            rate_limit_per_second=config.external_tool_rate_per_second,
-            fallback_tool="pattern_match",
-        ),
         "gitleaks_scan": ToolConfig(
             name="gitleaks_scan",
             enabled=config.gitleaks_enabled,
             timeout_seconds=config.gitleaks_timeout_seconds,
-            rate_limit_per_second=config.external_tool_rate_per_second,
-        ),
-        "npm_audit": ToolConfig(
-            name="npm_audit",
-            enabled=config.npm_audit_enabled,
-            timeout_seconds=config.tool_timeout_seconds,
-            rate_limit_per_second=config.external_tool_rate_per_second,
-        ),
-        "safety_check": ToolConfig(
-            name="safety_check",
-            enabled=config.safety_enabled,
-            timeout_seconds=config.tool_timeout_seconds,
-            rate_limit_per_second=config.external_tool_rate_per_second,
-        ),
-        "osv_scanner": ToolConfig(
-            name="osv_scanner",
-            enabled=config.osv_scanner_enabled,
-            timeout_seconds=config.tool_timeout_seconds,
             rate_limit_per_second=config.external_tool_rate_per_second,
         ),
     }
@@ -428,6 +396,62 @@ def get_tool_config(tool_name: str) -> ToolConfig:
             max_retries=config.tool_max_retries,
         )
     )
+
+
+# def get_tool_config(tool_name: str) -> ToolConfig:
+#     """Get configuration for a specific tool"""
+#     config = get_agent_config()
+
+#     # Tool-specific configurations
+#     tool_configs: Dict[str, ToolConfig] = {
+#         "opengrep_scan": ToolConfig(
+#             name="opengrep_scan",
+#             enabled=config.opengrep_enabled,
+#             timeout_seconds=config.opengrep_timeout_seconds,
+#             rate_limit_per_second=config.external_tool_rate_per_second,
+#             fallback_tool="pattern_match",
+#         ),
+#         "bandit_scan": ToolConfig(
+#             name="bandit_scan",
+#             enabled=config.bandit_enabled,
+#             timeout_seconds=config.bandit_timeout_seconds,
+#             rate_limit_per_second=config.external_tool_rate_per_second,
+#             fallback_tool="pattern_match",
+#         ),
+#         "gitleaks_scan": ToolConfig(
+#             name="gitleaks_scan",
+#             enabled=config.gitleaks_enabled,
+#             timeout_seconds=config.gitleaks_timeout_seconds,
+#             rate_limit_per_second=config.external_tool_rate_per_second,
+#         ),
+#         "npm_audit": ToolConfig(
+#             name="npm_audit",
+#             enabled=config.npm_audit_enabled,
+#             timeout_seconds=config.tool_timeout_seconds,
+#             rate_limit_per_second=config.external_tool_rate_per_second,
+#         ),
+#         "safety_check": ToolConfig(
+#             name="safety_check",
+#             enabled=config.safety_enabled,
+#             timeout_seconds=config.tool_timeout_seconds,
+#             rate_limit_per_second=config.external_tool_rate_per_second,
+#         ),
+#         "osv_scanner": ToolConfig(
+#             name="osv_scanner",
+#             enabled=config.osv_scanner_enabled,
+#             timeout_seconds=config.tool_timeout_seconds,
+#             rate_limit_per_second=config.external_tool_rate_per_second,
+#         ),
+#     }
+
+#     return tool_configs.get(
+#         tool_name,
+#         ToolConfig(
+#             name=tool_name,
+#             timeout_seconds=config.tool_timeout_seconds,
+#             max_retries=config.tool_max_retries,
+#         )
+#     )
 
 
 def get_agent_type_config(agent_type: str) -> AgentTypeConfig:

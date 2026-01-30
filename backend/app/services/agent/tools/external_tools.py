@@ -450,7 +450,7 @@ Bandit 是 Python 专用的安全分析工具。
 
 
 # ============ Gitleaks 工具 ============
-
+# TODO
 class GitleaksInput(BaseModel):
     """Gitleaks 扫描输入"""
     target_path: str = Field(
