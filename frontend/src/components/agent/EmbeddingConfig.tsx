@@ -17,10 +17,8 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  Brain,
   Cpu,
   Check,
-  X,
   Loader2,
   RefreshCw,
   Server,
