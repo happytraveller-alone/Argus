@@ -613,7 +613,6 @@ async def create_opengrep_rule(
 @router.put("/rules/{rule_id}")
 async def update_opengrep_rule(
     rule_id: str,
-    is_active: Optional[bool] = Query(None, description="是否启用规则"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
@@ -624,11 +623,8 @@ async def update_opengrep_rule(
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(status_code=404, detail="规则不存在")
-
-    if is_active is not None:
-        rule.is_active = is_active
-        await db.commit()
-
+    rule.is_active = not rule.is_active
+    await db.commit()
     return {"message": "规则已更新", "rule_id": rule_id, "is_active": rule.is_active}
 
 
