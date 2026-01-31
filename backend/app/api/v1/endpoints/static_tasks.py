@@ -56,7 +56,7 @@ class OpengrepScanTaskResponse(BaseModel):
     files_scanned: int
     lines_scanned: int
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
