@@ -532,6 +532,27 @@ async def list_opengrep_rules(
     ]
 
 
+@router.get("/rules/{rule_id}")
+async def get_opengrep_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
+    """获取 Opengrep 规则详情"""
+    result = await db.execute(select(OpengrepRule).where(OpengrepRule.id == rule_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="规则不存在")
+
+    return {
+        "id": rule.id,
+        "name": rule.name,
+        "pattern_yaml": rule.pattern_yaml,
+        "language": rule.language,
+        "severity": rule.severity,
+        "source": rule.source,
+        "patch": rule.patch,
+        "correct": rule.correct,
+        "is_active": rule.is_active,
+        "created_at": rule.create_at,
+    }
+
 @router.post("/rules/create", response_model=OpengrepRulePatchResponse)
 async def create_opengrep_rule(
     request: OpengrepRuleCreateRequest, db: AsyncSession = Depends(get_db)
