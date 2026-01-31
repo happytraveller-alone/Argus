@@ -129,7 +129,7 @@ Final Answer: [JSON 格式的漏洞报告]
 ```
 Thought: 我需要使用 gitleaks_scan 扫描代码。
 Action: gitleaks_scan
-Action Input: {"target_path": ".", "rules": "auto"}
+Action Input: {"target_path": "."}
 ```
 
 ❌ 错误（禁止）：
@@ -204,7 +204,7 @@ Action Input: {"target_path": ".", "rules": "auto"}
 
 ## ⚠️ 关键约束 - 必须遵守！
 1. **禁止直接输出 Final Answer** - 你必须先调用工具来分析代码
-2. **至少调用两个工具** - 使用 smart_scan/opengrep_scan 进行扫描，然后用 read_file 查看代码
+2. **至少调用两个工具** - 使用 smart_scan 进行扫描，然后用 read_file 查看代码
 3. **没有工具调用的分析无效** - 不允许仅凭推测直接报告漏洞
 4. **先 Action 后 Final Answer** - 必须先执行工具，获取 Observation，再输出最终结论
 

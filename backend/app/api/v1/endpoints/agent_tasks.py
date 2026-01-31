@@ -919,13 +919,13 @@ async def _initialize_tools(
     recon_tools = {
         **base_tools,
         # 🔥 外部侦察工具 (Recon 阶段也需要使用这些工具来收集初步信息)
-        "opengrep_scan": OpengrepTool(project_root, sandbox_manager),
-        "bandit_scan": BanditTool(project_root, sandbox_manager),
+        # "opengrep_scan": OpengrepTool(project_root, sandbox_manager),
+        # "bandit_scan": BanditTool(project_root, sandbox_manager),
         "gitleaks_scan": GitleaksTool(project_root, sandbox_manager),
-        "npm_audit": NpmAuditTool(project_root, sandbox_manager),
-        "safety_scan": SafetyTool(project_root, sandbox_manager),
-        "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
-        "osv_scan": OSVScannerTool(project_root, sandbox_manager),
+        # "npm_audit": NpmAuditTool(project_root, sandbox_manager),
+        # "safety_scan": SafetyTool(project_root, sandbox_manager),
+        # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
+        # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
     }
 
     # 🔥 注册 RAG 工具到 Recon Agent
@@ -947,13 +947,13 @@ async def _initialize_tools(
         # 数据流分析
         "dataflow_analysis": DataFlowAnalysisTool(llm_service),
         # 外部安全工具 (传入共享的 sandbox_manager)
-        "opengrep_scan": OpengrepTool(project_root, sandbox_manager),
-        "bandit_scan": BanditTool(project_root, sandbox_manager),
+        # "opengrep_scan": OpengrepTool(project_root, sandbox_manager),
+        # "bandit_scan": BanditTool(project_root, sandbox_manager),
         "gitleaks_scan": GitleaksTool(project_root, sandbox_manager),
-        "npm_audit": NpmAuditTool(project_root, sandbox_manager),
-        "safety_scan": SafetyTool(project_root, sandbox_manager),
-        "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
-        "osv_scan": OSVScannerTool(project_root, sandbox_manager),
+        # "npm_audit": NpmAuditTool(project_root, sandbox_manager),
+        # "safety_scan": SafetyTool(project_root, sandbox_manager),
+        # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
+        # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
         # 安全知识查询
         "query_security_knowledge": SecurityKnowledgeQueryTool(),
         "get_vulnerability_knowledge": GetVulnerabilityKnowledgeTool(),
@@ -986,19 +986,19 @@ async def _initialize_tools(
     verification_tools = {
         **base_tools,
         # 🔥 沙箱验证工具
-        "sandbox_exec": SandboxTool(sandbox_manager),
-        "sandbox_http": SandboxHttpTool(sandbox_manager),
-        "verify_vulnerability": VulnerabilityVerifyTool(sandbox_manager),
+        #"sandbox_exec": SandboxTool(sandbox_manager),
+        #"sandbox_http": SandboxHttpTool(sandbox_manager),
+        #"verify_vulnerability": VulnerabilityVerifyTool(sandbox_manager),
 
         # 🔥 多语言代码测试工具
-        "php_test": PhpTestTool(sandbox_manager, project_root),
-        "python_test": PythonTestTool(sandbox_manager, project_root),
-        "javascript_test": JavaScriptTestTool(sandbox_manager, project_root),
-        "java_test": JavaTestTool(sandbox_manager, project_root),
-        "go_test": GoTestTool(sandbox_manager, project_root),
-        "ruby_test": RubyTestTool(sandbox_manager, project_root),
-        "shell_test": ShellTestTool(sandbox_manager, project_root),
-        "universal_code_test": UniversalCodeTestTool(sandbox_manager, project_root),
+        #"php_test": PhpTestTool(sandbox_manager, project_root),
+        #"python_test": PythonTestTool(sandbox_manager, project_root),
+        #"javascript_test": JavaScriptTestTool(sandbox_manager, project_root),
+        #"java_test": JavaTestTool(sandbox_manager, project_root),
+        #"go_test": GoTestTool(sandbox_manager, project_root),
+        #"ruby_test": RubyTestTool(sandbox_manager, project_root),
+        #"shell_test": ShellTestTool(sandbox_manager, project_root),
+        #"universal_code_test": UniversalCodeTestTool(sandbox_manager, project_root),
 
         # 🔥 漏洞验证专用工具
         "test_command_injection": CommandInjectionTestTool(sandbox_manager, project_root),
@@ -1010,7 +1010,7 @@ async def _initialize_tools(
         "universal_vuln_test": UniversalVulnTestTool(sandbox_manager, project_root),
 
         # 🔥 新增：通用代码执行工具 (LLM 驱动的 Fuzzing Harness)
-        "run_code": RunCodeTool(sandbox_manager, project_root),
+        #"run_code": RunCodeTool(sandbox_manager, project_root),
         "extract_function": ExtractFunctionTool(project_root),
 
         # 报告工具 - 🔥 v2.1: 传递 project_root 用于文件验证
