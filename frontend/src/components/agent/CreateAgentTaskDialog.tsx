@@ -367,7 +367,7 @@ export default function CreateAgentTaskDialog({
                       </span>
                       <input
                         type="file"
-                        accept=".zip"
+                        accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
                         onChange={handleFileChange}
                         className="hidden"
                       />

@@ -75,7 +75,7 @@ function StoredZipView({
         <Info className="w-5 h-5 text-green-600 mt-0.5" />
         <div className="flex-1">
           <p className="font-bold text-green-900 text-sm uppercase">
-            已有存储的ZIP文件
+            已有存储的源码归档
           </p>
           <p className="text-xs text-green-700 mt-1 font-bold">
             文件名: {storedZipInfo.original_filename}
@@ -121,7 +121,7 @@ function StoredZipView({
           <Input
             id="zipFile"
             type="file"
-            accept=".zip"
+            accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
             onChange={(e) => {
               const file = e.target.files?.[0];
               onFileSelect(file || null, e.target);
@@ -150,22 +150,22 @@ function NoStoredZipView({
         <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
         <div>
           <p className="font-bold text-amber-900 text-sm uppercase">
-            需要上传ZIP文件
+            需要上传源码归档文件
           </p>
           <p className="text-xs text-amber-700 mt-1 font-bold">
-            此项目还没有存储的ZIP文件，请上传文件进行扫描
+            此项目还没有存储的源码归档，请上传文件进行扫描
           </p>
         </div>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="zipFile" className="font-bold uppercase">
-          上传ZIP文件
+          上传源码归档
         </Label>
         <Input
           id="zipFile"
           type="file"
-          accept=".zip"
+          accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
           onChange={(e) => {
             const file = e.target.files?.[0];
             onFileSelect(file || null, e.target);

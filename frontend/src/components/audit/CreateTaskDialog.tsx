@@ -324,7 +324,7 @@ export default function CreateTaskDialog({
 
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
             {/* 项目选择 */}
-            <div className="space-y-3">
+            <div className="space-y-3 hidden">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-mono font-bold uppercase text-muted-foreground">
                   选择项目
@@ -747,7 +747,7 @@ function ZipUploadCard({
           </div>
         </div>
 
-        <div className="flex gap-4 pt-2 border-t border-emerald-500/20">
+        <div className="flex gap-4 pt-2 border-t border-emerald-500/20 hidden">
           <label className="flex items-center gap-2 cursor-pointer font-mono text-sm">
             <input
               type="radio"
@@ -772,7 +772,7 @@ function ZipUploadCard({
           <div className="flex gap-2 items-center">
             <Input
               type="file"
-              accept=".zip"
+              accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
@@ -815,12 +815,12 @@ function ZipUploadCard({
         </div>
         <div className="flex-1">
           <p className="text-sm font-bold text-amber-700 dark:text-amber-300 font-mono uppercase">
-            上传 ZIP 文件
+            上传源码归档
           </p>
           <div className="flex gap-2 items-center mt-2">
             <Input
               type="file"
-              accept=".zip"
+              accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {

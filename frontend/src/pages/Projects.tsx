@@ -447,11 +447,11 @@ export default function Projects() {
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-6">
-            <Tabs defaultValue="repository" className="w-full">
+            <Tabs defaultValue="upload" className="w-full">
               <TabsList className="flex w-full bg-muted border border-border p-1 h-auto gap-1 rounded">
                 <TabsTrigger
                   value="repository"
-                  className="flex-1 data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm"
+                  className="hidden flex-1 data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm"
                 >
                   <GitBranch className="w-4 h-4 mr-2" />
                   Git 仓库
@@ -653,14 +653,14 @@ export default function Projects() {
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3 group-hover:text-primary transition-colors" />
-                      <h3 className="text-base font-bold text-foreground uppercase mb-1">上传 ZIP 归档</h3>
+                      <h3 className="text-base font-bold text-foreground uppercase mb-1">上传源码归档</h3>
                       <p className="text-xs font-mono text-muted-foreground mb-3">
-                        最大: 500MB // 格式: .ZIP
+                        最大: 500MB // 格式: .zip .tar .tar.gz .tar.bz2 .7z .rar
                       </p>
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".zip"
+                        accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
                         onChange={handleFileSelect}
                         className="hidden"
                         disabled={uploading}
@@ -1128,7 +1128,7 @@ export default function Projects() {
                   <input
                     ref={editZipInputRef}
                     type="file"
-                    accept=".zip"
+                    accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];

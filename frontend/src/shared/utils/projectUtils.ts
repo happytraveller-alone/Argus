@@ -70,7 +70,7 @@ export function getScanMethodDescription(project: Project): string {
   if (isRepositoryProject(project)) {
     return `从 ${getRepositoryPlatformLabel(project.repository_type)} 仓库拉取代码`;
   }
-  return '上传ZIP文件进行扫描';
+  return '上传源码归档进行扫描';
 }
 
 /**
