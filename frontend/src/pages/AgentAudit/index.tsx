@@ -748,10 +748,33 @@ function AgentAuditPageContent() {
 
   if (showSplash && !taskId) {
     return (
-      <>
+      <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 cyber-grid opacity-20" />
+        <div className="absolute inset-0 vignette pointer-events-none" />
+
+        <div className="relative z-10 max-w-2xl mx-auto px-6 text-center">
+          <div className="mx-auto mb-6 w-16 h-16 rounded-2xl border border-primary/40 bg-primary/10 flex items-center justify-center shadow-[0_0_30px_rgba(255,107,44,0.25)]">
+            <img
+              src="/logo_deepaudit.png"
+              alt="DeepAudit"
+              className="w-9 h-9 object-contain"
+            />
+          </div>
+
+          <h1 className="text-3xl md:text-4xl font-mono font-bold tracking-wider text-foreground">
+            DeepAudit
+          </h1>
+          <p className="mt-4 text-sm md:text-base text-muted-foreground leading-relaxed">
+            面向代码安全与合规审计的智能分析平台。聚焦仓库级项目，
+            提供任务编排、自动化审计与结果追踪，帮助团队更快定位风险与改进点。
+          </p>
+        </div>
+
+        {/*
         <SplashScreen onComplete={() => setShowCreateDialog(true)} />
         <CreateAgentTaskDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
-      </>
+        */}
+      </div>
     );
   }
 
