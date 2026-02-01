@@ -91,8 +91,8 @@ const FORMAT_CONFIG: Record<ReportFormat, {
     icon: <FileText className="w-5 h-5" />,
     extension: ".md",
     mime: "text/markdown",
-    color: "text-sky-600 dark:text-sky-400",
-    bgColor: "bg-sky-100 dark:bg-sky-500/10 border-sky-300 dark:border-sky-500/30",
+    color: "text-sky-400",
+    bgColor: "bg-sky-500/10 border-sky-500/30",
   },
   json: {
     label: "JSON",
@@ -100,8 +100,8 @@ const FORMAT_CONFIG: Record<ReportFormat, {
     icon: <FileJson className="w-5 h-5" />,
     extension: ".json",
     mime: "application/json",
-    color: "text-amber-600 dark:text-amber-400",
-    bgColor: "bg-amber-100 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/30",
+    color: "text-amber-400",
+    bgColor: "bg-amber-500/10 border-amber-500/30",
   },
   html: {
     label: "HTML",
@@ -109,8 +109,8 @@ const FORMAT_CONFIG: Record<ReportFormat, {
     icon: <FileCode className="w-5 h-5" />,
     extension: ".html",
     mime: "text/html",
-    color: "text-emerald-600 dark:text-emerald-400",
-    bgColor: "bg-emerald-100 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30",
+    color: "text-emerald-400",
+    bgColor: "bg-emerald-500/10 border-emerald-500/30",
   },
 };
 
@@ -529,7 +529,7 @@ const MarkdownPreview = memo(function MarkdownPreview({
                     ))}
                   </div>
                 </div>
-                <pre className="p-3 pl-14 text-xs font-mono text-foreground overflow-x-auto leading-5">
+                <pre className="p-3 pl-14 text-xs font-mono text-foreground overflow-x-auto leading-5 whitespace-pre-wrap break-all">
                   {codeContent.map((codeLine, i) => (
                     <div key={i}>{highlightText(codeLine, searchQuery) || " "}</div>
                   ))}
@@ -597,7 +597,7 @@ const MarkdownPreview = memo(function MarkdownPreview({
         elements.push(
           <div key={index} className="flex gap-3 text-sm text-foreground ml-3 my-1 group">
             <span className="text-primary mt-1.5 text-xs group-hover:scale-125 transition-transform">●</span>
-            <span className="flex-1">{highlightText(line.slice(2), searchQuery)}</span>
+            <span className="flex-1 break-words">{highlightText(line.slice(2), searchQuery)}</span>
           </div>
         );
         return;
@@ -613,7 +613,7 @@ const MarkdownPreview = memo(function MarkdownPreview({
           return highlightText(part, searchQuery);
         });
         elements.push(
-          <p key={index} className="text-sm text-foreground my-1.5 leading-relaxed">
+          <p key={index} className="text-sm text-foreground my-1.5 leading-relaxed break-words">
             {lineElements}
           </p>
         );
@@ -628,7 +628,7 @@ const MarkdownPreview = memo(function MarkdownPreview({
 
       // Regular paragraphs
       elements.push(
-        <p key={index} className="text-sm text-foreground my-1.5 leading-relaxed">
+        <p key={index} className="text-sm text-foreground my-1.5 leading-relaxed break-words">
           {highlightText(line, searchQuery)}
         </p>
       );
@@ -638,7 +638,7 @@ const MarkdownPreview = memo(function MarkdownPreview({
   };
 
   return (
-    <div className="prose prose-invert max-w-none">
+    <div className="prose prose-invert max-w-none break-words overflow-wrap-anywhere">
       {renderMarkdown(content)}
     </div>
   );
@@ -689,7 +689,7 @@ const JsonPreview = memo(function JsonPreview({
         </div>
       </div>
       <pre
-        className="text-xs font-mono text-foreground whitespace-pre-wrap pl-14 py-3 leading-5"
+        className="text-xs font-mono text-foreground whitespace-pre-wrap break-all pl-14 py-3 leading-5"
         dangerouslySetInnerHTML={{ __html: highlightJson(content) }}
       />
     </div>
@@ -729,7 +729,7 @@ const HtmlPreview = memo(function HtmlPreview({
   return (
     <div className="relative">
       <pre
-        className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-5"
+        className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all leading-5"
         dangerouslySetInnerHTML={{ __html: highlightHtml(truncatedContent) }}
       />
       {isTruncated && (
