@@ -16,6 +16,121 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# 需要过滤的目录和文件
+EXCLUDE_PATTERNS = {
+    # Node.js
+    "node_modules",
+    "npm-debug.log",
+    "yarn-error.log",
+    ".npm",
+    ".yarn",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    
+    # Python
+    "__pycache__",
+    ".pyc",
+    ".pyo",
+    "*.egg-info",
+    ".eggs",
+    "dist",
+    "build",
+    ".venv",
+    "venv",
+    "env",
+    ".Python",
+    "pip-log.txt",
+    "pip-delete-this-directory.txt",
+    
+    # Git
+    ".git",
+    ".gitignore",
+    ".gitattributes",
+    
+    # IDE
+    ".vscode",
+    ".idea",
+    ".DS_Store",
+    "*.swp",
+    "*.swo",
+    "*.swn",
+    ".project",
+    ".classpath",
+    
+    # Build & Cache
+    ".cache",
+    ".gradle",
+    ".m2",
+    "target",
+    "out",
+    
+    # Java
+    ".class",
+    ".jar",
+    
+    # Ruby
+    ".bundle",
+    "Gemfile.lock",
+    
+    # Go
+    "vendor",
+}
+
+
+def should_exclude_file(file_path: str) -> bool:
+    """
+    判断文件是否应该被排除
+    
+    Args:
+        file_path: 相对于解压目录的文件路径
+    
+    Returns:
+        True 表示应该排除，False 表示应该包含
+    """
+    # 规范化路径
+    normalized_path = file_path.replace("\\", "/").strip("/")
+    parts = normalized_path.split("/")
+    
+    # 检查路径中的每个部分
+    for part in parts:
+        if part in EXCLUDE_PATTERNS:
+            return True
+        # 检查文件扩展名
+        if part.endswith(".pyc") or part.endswith(".pyo"):
+            return True
+        # 检查 *.egg-info 类型的目录
+        if part.endswith(".egg-info"):
+            return True
+    
+    return False
+
+
+def create_zip_with_exclusions(source_dir: str, zip_file_path: str) -> None:
+    """
+    创建 ZIP 文件，排除指定的目录和文件
+    
+    Args:
+        source_dir: 源目录路径
+        zip_file_path: 目标 ZIP 文件路径
+    """
+    import zipfile
+    
+    with zipfile.ZipFile(zip_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(source_dir):
+            # 原地修改 dirs 列表，以跳过被排除的目录
+            dirs[:] = [d for d in dirs if not should_exclude_file(d)]
+            
+            for file in files:
+                file_path = os.path.join(root, file)
+                # 计算相对路径
+                arcname = os.path.relpath(file_path, source_dir)
+                
+                # 检查是否应该排除
+                if not should_exclude_file(arcname):
+                    zipf.write(file_path, arcname)
+
+
 from app.api import deps
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.project import Project
@@ -815,11 +930,11 @@ async def upload_project_zip(
             if not success:
                 raise HTTPException(status_code=400, detail=f"解压失败: {error}")
 
-            # 创建最终的 ZIP 文件（命名为项目ID）
+            # 创建最终的 ZIP 文件（命名为项目ID，并排除不需要的文件）
             final_zip_path = os.path.join(temp_dir, f"{id}.zip")
 
             try:
-                shutil.make_archive(final_zip_path.replace(".zip", ""), "zip", temp_extract_dir)
+                create_zip_with_exclusions(temp_extract_dir, final_zip_path)
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"重新压缩失败: {str(e)}")
 
