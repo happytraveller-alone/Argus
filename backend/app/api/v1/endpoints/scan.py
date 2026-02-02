@@ -245,10 +245,6 @@ async def scan_zip(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     
-    # 检查权限：只有项目所有者可以上传
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权操作此项目")
-    
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
 
@@ -340,10 +336,6 @@ async def scan_stored_zip(
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    
-    # 检查权限：只有项目所有者可以扫描
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权操作此项目")
     
     # 检查是否有存储的ZIP文件
     stored_zip_path = await load_project_zip(project_id)

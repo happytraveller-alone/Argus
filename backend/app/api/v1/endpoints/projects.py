@@ -161,11 +161,9 @@ async def read_projects(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
-    Retrieve projects for current user.
+    Retrieve projects.
     """
     query = select(Project).options(selectinload(Project.owner))
-    # 只返回当前用户的项目
-    query = query.where(Project.owner_id == current_user.id)
     if not include_deleted:
         query = query.where(Project.is_active == True)
     query = query.order_by(Project.created_at.desc()).offset(skip).limit(limit)
@@ -179,12 +177,11 @@ async def read_deleted_projects(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
-    Retrieve deleted (soft-deleted) projects for current user.
+    Retrieve deleted (soft-deleted) projects.
     """
     result = await db.execute(
         select(Project)
         .options(selectinload(Project.owner))
-        .where(Project.owner_id == current_user.id)
         .where(Project.is_active == False)
         .order_by(Project.updated_at.desc())
     )
@@ -197,10 +194,9 @@ async def get_stats(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
-    Get statistics for current user.
+    Get global statistics.
     """
-    # 只统计当前用户的项目
-    projects_result = await db.execute(select(Project).where(Project.owner_id == current_user.id))
+    projects_result = await db.execute(select(Project))
     projects = projects_result.scalars().all()
     project_ids = [p.id for p in projects]
 
@@ -275,8 +271,6 @@ async def read_project(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 检查权限：只有项目所有者可以查看
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权查看此项目")
 
     return project
 
@@ -297,8 +291,6 @@ async def get_project_info(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 2. 检查权限
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权查看此项目")
 
     # 3. 获取用户配置（用于LLM分析）
     user_config = {}
@@ -395,8 +387,6 @@ async def update_project(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 检查权限：只有项目所有者可以更新
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权更新此项目")
 
     update_data = project_in.model_dump(exclude_unset=True)
     if "programming_languages" in update_data and update_data["programming_languages"] is not None:
@@ -426,8 +416,6 @@ async def delete_project(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 检查权限：只有项目所有者可以删除
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权删除此项目")
 
     project.is_active = False
     project.updated_at = datetime.now(timezone.utc)
@@ -450,8 +438,6 @@ async def restore_project(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 检查权限：只有项目所有者可以恢复
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权恢复此项目")
 
     project.is_active = True
     project.updated_at = datetime.now(timezone.utc)
@@ -474,8 +460,6 @@ async def permanently_delete_project(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 检查权限：只有项目所有者可以永久删除
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权永久删除此项目")
 
     # 如果是ZIP类型项目，删除关联的ZIP文件和元数据
     if project.source_type == "zip":
@@ -509,8 +493,6 @@ async def get_project_files(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # Check permissions
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权查看此项目")
 
     # 解析排除模式
     parsed_exclude_patterns = []
@@ -785,8 +767,6 @@ async def upload_project_zip(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 检查权限
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权操作此项目")
 
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
@@ -899,9 +879,6 @@ async def preview_upload_file(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权查看此项目")
-
     if project.source_type != "zip":
         raise HTTPException(status_code=400, detail="仅ZIP类型项目支持")
 
@@ -947,8 +924,6 @@ async def upload_project_directory(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 检查权限
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权操作此项目")
 
     # 检查项目类型
     if project.source_type != "zip":
@@ -1081,8 +1056,6 @@ async def delete_project_zip_file(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     # 检查权限
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权操作此项目")
 
     deleted = await delete_project_zip(id)
 

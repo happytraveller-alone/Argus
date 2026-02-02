@@ -92,17 +92,9 @@ async def list_tasks(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
-    List tasks for current user's projects.
+    List tasks.
     """
-    # 先获取当前用户的项目ID列表
-    projects_result = await db.execute(
-        select(Project.id).where(Project.owner_id == current_user.id)
-    )
-    user_project_ids = [p[0] for p in projects_result.fetchall()]
-    
     query = select(AuditTask).options(selectinload(AuditTask.project))
-    # 只返回当前用户项目的任务
-    query = query.where(AuditTask.project_id.in_(user_project_ids)) if user_project_ids else query.where(False)
     if project_id:
         query = query.where(AuditTask.project_id == project_id)
     query = query.order_by(AuditTask.created_at.desc())
@@ -128,10 +120,6 @@ async def read_task(
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     
-    # 检查权限：只有任务创建者可以查看
-    if task.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="无权查看此任务")
-    
     return task
 
 
@@ -148,10 +136,6 @@ async def cancel_task(
     task = result.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
-    # 检查权限：只有任务创建者可以取消
-    if task.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="无权取消此任务")
     
     if task.status not in ["pending", "running"]:
         raise HTTPException(status_code=400, detail="只能取消待处理或运行中的任务")
@@ -176,17 +160,13 @@ async def read_task_issues(
     """
     Get issues for a specific task.
     """
-    # 先检查任务是否存在且属于当前用户
+    # 先检查任务是否存在
     task_result = await db.execute(
         select(AuditTask).where(AuditTask.id == id)
     )
     task = task_result.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
-    # 检查权限：只有任务创建者可以查看问题
-    if task.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="无权查看此任务的问题")
     
     result = await db.execute(
         select(AuditIssue)

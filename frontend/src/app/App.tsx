@@ -3,8 +3,6 @@ import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import Sidebar from "@/components/layout/Sidebar";
 import routes from "./routes";
-import { AuthProvider } from "@/shared/context/AuthContext";
-import { ProtectedRoute } from "./ProtectedRoute";
 import NotFound from "@/pages/NotFound";
 
 function AppLayout() {
@@ -26,29 +24,22 @@ function AppLayout() {
 
 function App() {
     return (
-        <AuthProvider>
-            <BrowserRouter>
-                <Toaster position="top-right" />
-                <Routes>
-                    {/*Protected Routes */}
-                    {/* App Routes */}
-                    <Route element={<ProtectedRoute />}>
-                        <Route element={<AppLayout />}>
-                            {routes.map((route) => (
-                                <Route
-                                    key={route.path}
-                                    path={route.path}
-                                    element={route.element}
-                                />
-                            ))}
-                        </Route>
-                    </Route>
+        <BrowserRouter>
+            <Toaster position="top-right" />
+            <Routes>
+                <Route element={<AppLayout />}>
+                    {routes.map((route) => (
+                        <Route
+                            key={route.path}
+                            path={route.path}
+                            element={route.element}
+                        />
+                    ))}
+                </Route>
 
-                    {/* Catch all */}
-                    <Route path="*" element={<NotFound />} />
-                </Routes>
-            </BrowserRouter>
-        </AuthProvider>
+                <Route path="*" element={<NotFound />} />
+            </Routes>
+        </BrowserRouter>
     );
 }
 

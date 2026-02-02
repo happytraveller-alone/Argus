@@ -129,7 +129,7 @@ class ErrorHandler {
       case 401:
         return {
           type: ErrorType.AUTHENTICATION,
-          message: '未登录或登录已过期，请重新登录',
+          message: '请求未通过校验，请检查服务配置',
           code: status,
           originalError: error,
           timestamp,

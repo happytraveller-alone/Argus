@@ -88,10 +88,6 @@ async def add_project_member(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     
-    # Check if user is project owner or admin
-    if project.owner_id != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="权限不足")
-    
     # Check if user exists
     user = await db.get(User, member_in.user_id)
     if not user:
@@ -144,10 +140,6 @@ async def update_project_member(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     
-    # Check permissions
-    if project.owner_id != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="权限不足")
-    
     # Get member
     result = await db.execute(
         select(ProjectMember)
@@ -190,10 +182,6 @@ async def remove_project_member(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     
-    # Check permissions
-    if project.owner_id != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="权限不足")
-    
     # Get member
     result = await db.execute(
         select(ProjectMember)
@@ -207,7 +195,6 @@ async def remove_project_member(
     await db.commit()
     
     return {"message": "成员已移除"}
-
 
 
 

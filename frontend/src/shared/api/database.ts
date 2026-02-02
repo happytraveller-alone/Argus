@@ -34,7 +34,7 @@ export const api = {
   },
 
   async createProfiles(profile: Partial<Profile>): Promise<Profile> {
-    // Registration is handled separately via /auth/register
+    // 用户创建由后端统一处理
     return profile as Profile;
   },
 

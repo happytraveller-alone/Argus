@@ -266,13 +266,11 @@ export async function* streamAgentEvents(
   afterSequence = 0,
   signal?: AbortSignal
 ): AsyncGenerator<AgentEvent, void, unknown> {
-  const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
   const baseUrl = import.meta.env.VITE_API_URL || "";
   const url = `${baseUrl}/api/v1/agent-tasks/${taskId}/events?after_sequence=${afterSequence}`;
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${token}`,
       Accept: "text/event-stream",
     },
     signal,
@@ -441,4 +439,3 @@ export async function downloadAgentReport(taskId: string, format: "markdown" | "
   link.parentNode?.removeChild(link);
   window.URL.revokeObjectURL(url);
 }
-

@@ -1537,9 +1537,6 @@ async def create_agent_task(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权访问此项目")
-    
     # 创建任务
     task = AgentTask(
         id=str(uuid4()),
@@ -1584,7 +1581,7 @@ async def list_agent_tasks(
     """
     # 获取用户的项目
     projects_result = await db.execute(
-        select(Project.id).where(Project.owner_id == current_user.id)
+        select(Project.id)
     )
     user_project_ids = [p[0] for p in projects_result.fetchall()]
     
@@ -1628,7 +1625,7 @@ async def get_agent_task(
     
     # 检查权限
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     # 构建响应，确保所有字段都包含
@@ -1724,7 +1721,7 @@ async def cancel_agent_task(
         raise HTTPException(status_code=404, detail="任务不存在")
 
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权操作此任务")
 
     if task.status in [AgentTaskStatus.COMPLETED, AgentTaskStatus.FAILED, AgentTaskStatus.CANCELLED]:
@@ -1780,7 +1777,7 @@ async def stream_agent_events(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     async def event_generator():
@@ -1880,7 +1877,7 @@ async def stream_agent_with_thinking(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     # 定义 SSE 格式化函数
@@ -2062,7 +2059,7 @@ async def list_agent_events(
         raise HTTPException(status_code=404, detail="任务不存在")
 
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
 
     result = await db.execute(
@@ -2102,7 +2099,7 @@ async def list_agent_findings(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     query = select(AgentFinding).where(AgentFinding.task_id == task_id)
@@ -2149,7 +2146,7 @@ async def get_task_summary(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     # 获取所有发现
@@ -2217,7 +2214,7 @@ async def update_finding_status(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权操作")
     
     finding = await db.get(AgentFinding, finding_id)
@@ -2784,7 +2781,7 @@ async def get_agent_tree(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     # 尝试从内存中获取 Agent 树（运行中的任务）
@@ -2972,7 +2969,7 @@ async def list_checkpoints(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     from app.models.agent_task import AgentCheckpoint
@@ -3023,7 +3020,7 @@ async def get_checkpoint_detail(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     from app.models.agent_task import AgentCheckpoint
@@ -3079,7 +3076,7 @@ async def generate_audit_report(
         raise HTTPException(status_code=404, detail="任务不存在")
     
     project = await db.get(Project, task.project_id)
-    if not project or project.owner_id != current_user.id:
+    if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     # 获取此任务的所有发现

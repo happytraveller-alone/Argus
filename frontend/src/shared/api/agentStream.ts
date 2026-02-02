@@ -142,27 +142,19 @@ export class AgentStreamHandler {
       return;
     }
 
-    const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
-    if (!token) {
-      this.options.onError?.('未登录');
-      return;
-    }
-
     const params = new URLSearchParams({
       include_thinking: String(this.options.includeThinking),
       include_tool_calls: String(this.options.includeToolCalls),
       after_sequence: String(this.options.afterSequence),
     });
 
-    // 使用 EventSource (不支持自定义 headers，需要通过 URL 传递 token)
-    // 或者使用 fetch + ReadableStream
-    this.connectWithFetch(token, params);
+    this.connectWithFetch(params);
   }
 
   /**
    * 使用 fetch 连接（支持自定义 headers）
    */
-  private async connectWithFetch(token: string, params: URLSearchParams): Promise<void> {
+  private async connectWithFetch(params: URLSearchParams): Promise<void> {
     // 🔥 如果正在断开，不连接
     if (this.isDisconnecting) {
       return;
@@ -176,7 +168,6 @@ export class AgentStreamHandler {
     try {
       const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'text/event-stream',
         },
         signal: this.abortController.signal, // 🔥 支持取消
@@ -643,4 +634,3 @@ export function createAgentStreamWithState(
     },
   });
 }
-
