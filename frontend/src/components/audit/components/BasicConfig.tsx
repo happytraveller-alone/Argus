@@ -133,7 +133,7 @@ function ProjectInfoCard({ project }: { project: Project }) {
             选中项目：{project.name}
           </p>
           <div className="text-blue-800 space-y-1 font-bold">
-            <p>项目类型：{isRepo ? "远程仓库" : "ZIP上传"}</p>
+            <p>项目类型：{isRepo ? "远程仓库" : "上传项目"}</p>
             {project.description && <p>描述：{project.description}</p>}
             {isRepo && (
               <>

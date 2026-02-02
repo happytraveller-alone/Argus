@@ -294,7 +294,6 @@ export default function TerminalProgressDialog({
                             }
                         }
 
-                        addLog(`[SCOR] 质量评分: ${task.quality_score.toFixed(1)}/100`, "success");
                         addLog("----------------------------------", "info");
                         addLog("[FIN] 审计任务已完成！", "success");
 

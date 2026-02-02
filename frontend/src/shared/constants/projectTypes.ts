@@ -17,8 +17,8 @@ export const PROJECT_SOURCE_TYPES: Array<{
     },
     {
       value: 'zip',
-      label: 'ZIP上传',
-      description: '上传本地ZIP压缩包进行扫描'
+      label: '上传项目',
+      description: '上传本地压缩包进行扫描'
     }
   ];
 

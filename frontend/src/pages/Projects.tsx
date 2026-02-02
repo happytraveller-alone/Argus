@@ -739,7 +739,7 @@ export default function Projects() {
 
       {/* Stats Section */}
       {projects.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 relative z-10">
           <div className="cyber-card p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -767,19 +767,7 @@ export default function Projects() {
           <div className="cyber-card p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="stat-label">远程仓库</p>
-                <p className="stat-value">{projects.filter(p => isRepositoryProject(p)).length}</p>
-              </div>
-              <div className="stat-icon text-sky-400">
-                <GitBranch className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          <div className="cyber-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="stat-label">ZIP上传</p>
+                <p className="stat-label">上传项目</p>
                 <p className="stat-value">{projects.filter(p => isZipProject(p)).length}</p>
               </div>
               <div className="stat-icon text-amber-400">
@@ -955,7 +943,7 @@ export default function Projects() {
               编辑项目配置
               {projectToEdit && (
                 <Badge className={`ml-2 ${editForm.source_type === 'repository' ? 'cyber-badge-info' : 'cyber-badge-warning'}`}>
-                  {editForm.source_type === 'repository' ? '远程仓库' : 'ZIP上传'}
+                  {editForm.source_type === 'repository' ? '远程仓库' : '上传项目'}
                 </Badge>
               )}
             </DialogTitle>

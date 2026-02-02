@@ -126,10 +126,6 @@ export default function InstantExportDialog({
                                 <span className="font-bold text-sky-400">{language.toUpperCase()}</span>
                             </div>
                             <div className="flex items-center justify-between border-b border-border pb-2">
-                                <span className="text-muted-foreground">质量评分:</span>
-                                <span className="font-bold text-emerald-400">{(analysisResult.quality_score ?? 0).toFixed(1)}/100</span>
-                            </div>
-                            <div className="flex items-center justify-between border-b border-border pb-2">
                                 <span className="text-muted-foreground">发现问题:</span>
                                 <span className="font-bold text-amber-400">{analysisResult.issues?.length ?? 0}</span>
                             </div>

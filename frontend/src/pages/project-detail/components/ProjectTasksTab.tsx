@@ -3,7 +3,6 @@ import { FileText, Play, Activity } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import type { AuditTask } from "@/shared/types";
 import type { UnifiedTask } from "@/shared/types";
 
@@ -43,7 +42,6 @@ export function ProjectTasksTab(props: {
                 : (task.findings_count ?? 0);
             const totalFiles = isStaticTask ? (task.files_scanned ?? 0) : (task.total_files ?? 0);
             const totalLines = isStaticTask ? (task.lines_scanned ?? "-") : (task.total_lines ?? "-");
-            const qualityScore = typeof task.quality_score === "number" ? task.quality_score : null;
 
             return (
               <div key={`${wrappedTask.kind}:${task.id}`} className="cyber-card p-6">
@@ -90,7 +88,7 @@ export function ProjectTasksTab(props: {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 font-mono">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4 font-mono">
                   <div className="text-center p-3 bg-muted rounded-lg border border-border">
                     <p className="text-2xl font-bold text-foreground">{totalFiles}</p>
                     <p className="text-xs text-muted-foreground uppercase">总文件数</p>
@@ -103,23 +101,7 @@ export function ProjectTasksTab(props: {
                     <p className="text-2xl font-bold text-amber-400">{issueCount}</p>
                     <p className="text-xs text-muted-foreground uppercase">{isAuditTask ? "发现问题" : "发现漏洞"}</p>
                   </div>
-                  <div className="text-center p-3 bg-muted rounded-lg border border-border">
-                    <p className="text-2xl font-bold text-primary">
-                      {qualityScore != null ? qualityScore.toFixed(1) : "-"}
-                    </p>
-                    <p className="text-xs text-muted-foreground uppercase">质量评分</p>
-                  </div>
                 </div>
-
-                {task.status === "completed" && typeof qualityScore === "number" && (
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center justify-between text-sm font-mono">
-                      <span className="text-muted-foreground">质量评分</span>
-                      <span className="text-foreground font-bold">{qualityScore.toFixed(1)}/100</span>
-                    </div>
-                    <Progress value={qualityScore} className="h-2 bg-muted [&>div]:bg-primary" />
-                  </div>
-                )}
 
                 <div className="flex justify-end space-x-2 pt-4 border-t border-border">
                   <Link to={
@@ -143,7 +125,7 @@ export function ProjectTasksTab(props: {
         <div className="cyber-card p-12 text-center">
           <Activity className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-bold text-foreground mb-2 uppercase">暂无审计任务</h3>
-          <p className="text-sm text-muted-foreground mb-6 font-mono">创建第一个审计任务开始代码质量分析</p>
+          <p className="text-sm text-muted-foreground mb-6 font-mono">创建第一个审计任务开始代码安全分析</p>
           <Button onClick={onCreateTask} className="cyber-btn-primary">
             <Play className="w-4 h-4 mr-2" />
             创建任务
@@ -153,5 +135,4 @@ export function ProjectTasksTab(props: {
     </>
   );
 }
-
 

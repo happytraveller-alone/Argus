@@ -26,7 +26,7 @@ export function isZipProject(project: Project): boolean {
 export function getSourceTypeLabel(sourceType: ProjectSourceType): string {
   const labels: Record<ProjectSourceType, string> = {
     repository: '远程仓库',
-    zip: 'ZIP上传'
+    zip: '上传项目'
   };
   return labels[sourceType] || '未知';
 }

@@ -113,10 +113,6 @@ export default function ExportReportDialog({
                                 <span className="font-bold text-foreground">{task.project?.name || "未知"}</span>
                             </div>
                             <div className="flex items-center justify-between border-b border-border pb-2">
-                                <span className="text-muted-foreground">质量评分:</span>
-                                <span className="font-bold text-emerald-400">{task.quality_score.toFixed(1)}/100</span>
-                            </div>
-                            <div className="flex items-center justify-between border-b border-border pb-2">
                                 <span className="text-muted-foreground">扫描文件:</span>
                                 <span className="font-bold text-foreground">{task.scanned_files}/{task.total_files}</span>
                             </div>

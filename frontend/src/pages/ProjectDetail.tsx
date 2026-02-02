@@ -495,14 +495,7 @@ export default function ProjectDetail() {
       auditTasks.reduce((sum, t) => sum + (t.issues_count || 0), 0) +
       agentTasks.reduce((sum, t) => sum + (t.findings_count || 0), 0) +
       staticTasks.reduce((sum, t) => sum + (t.total_findings || 0), 0);
-    const scoredTasks = [
-      ...auditTasks.map((t) => t.quality_score ?? null),
-      ...agentTasks.map((t) => t.quality_score ?? null),
-    ].filter((v): v is number => typeof v === 'number');
-    const avgQualityScore = scoredTasks.length > 0
-      ? scoredTasks.reduce((sum, v) => sum + v, 0) / scoredTasks.length
-      : 0;
-    return { totalTasks, completedTasks, totalIssues, avgQualityScore };
+    return { totalTasks, completedTasks, totalIssues };
   }, [auditTasks, agentTasks, staticTasks]);
 
   const handleRunAudit = () => {

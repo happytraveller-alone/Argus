@@ -18,7 +18,6 @@ import {
     // Trash2,
     ChevronLeft,
     ChevronRight,
-    Github,
     // UserCircle,
     Shield,
     Code,
@@ -26,7 +25,6 @@ import {
     Bot,
 } from "lucide-react";
 import routes from "@/app/routes";
-import { version } from "../../../package.json";
 
 // Icon mapping for routes with consistent sizing
 const routeIcons: Record<string, React.ReactNode> = {
@@ -305,57 +303,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                             )}
                         </Link>*/}
 
-                        {/* GitHub & Status Row */}
-                        <div
-                            className={`flex items-center ${collapsed ? "flex-col gap-2" : "justify-between"} px-3 py-2`}
-                        >
-                            <a
-                                href="https://github.com/lintsinghua/DeepAudit"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 transition-all duration-300 group"
-                                style={{ color: "var(--cyber-text-muted)" }}
-                                title="GitHub"
-                            >
-                                <Github className="w-[18px] h-[18px] group-hover:text-primary transition-colors" />
-                                {!collapsed && (
-                                    <span className="text-xs font-mono text-muted-foreground">
-                                        v{version}
-                                    </span>
-                                )}
-                            </a>
-
-                            {!collapsed && (
-                                <div className="flex items-center gap-2">
-                                    <div className="relative">
-                                        <div
-                                            className="w-2 h-2 rounded-full bg-emerald-400"
-                                            style={{
-                                                boxShadow:
-                                                    "0 0 8px rgba(52, 211, 153, 0.6)",
-                                            }}
-                                        />
-                                        <div className="absolute inset-0 w-2 h-2 rounded-full bg-emerald-400 animate-ping opacity-50" />
-                                    </div>
-                                    <span className="text-xs font-mono text-emerald-500">
-                                        Online
-                                    </span>
-                                </div>
-                            )}
-
-                            {collapsed && (
-                                <div className="relative">
-                                    <div
-                                        className="w-2 h-2 rounded-full bg-emerald-400"
-                                        style={{
-                                            boxShadow:
-                                                "0 0 8px rgba(52, 211, 153, 0.6)",
-                                        }}
-                                    />
-                                    <div className="absolute inset-0 w-2 h-2 rounded-full bg-emerald-400 animate-ping opacity-50" />
-                                </div>
-                            )}
-                        </div>
+                        <div className="h-6" />
                     </div>
                 </div>
             </aside>

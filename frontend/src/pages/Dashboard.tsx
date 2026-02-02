@@ -371,9 +371,6 @@ export default function Dashboard() {
                         <p className="text-base font-medium text-foreground group-hover:text-primary transition-colors">
                           {task.project?.name || '未知项目'}
                         </p>
-                        <p className="text-sm text-muted-foreground">
-                          质量分: <span className="text-foreground">{task.quality_score?.toFixed(1) || '0.0'}</span>
-                        </p>
                       </div>
                     </div>
                     {getStatusBadge(task.status)}

@@ -76,7 +76,7 @@ export default function OpengrepRules() {
         source: (selectedSource as 'internal' | 'patch') || undefined,
       });
       setRules(data);
-      
+
       // 提取所有唯一的编程语言
       const languages = Array.from(new Set(data.map(rule => rule.language))).sort();
       setAvailableLanguages(languages);
@@ -214,7 +214,7 @@ export default function OpengrepRules() {
           <div>
             <h1 className="text-3xl font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
               <Shield className="w-8 h-8 text-primary" />
-              Opengrep规则管理
+              静态扫描规则管理
             </h1>
             <p className="text-muted-foreground font-mono text-sm mt-1">
               管理和配置静态代码扫描规则
@@ -392,11 +392,10 @@ export default function OpengrepRules() {
                           {rule.severity}
                         </Badge>
                         <Badge
-                          className={`cyber-badge ${
-                            rule.source === 'patch'
+                          className={`cyber-badge ${rule.source === 'patch'
                               ? 'cyber-badge-warning'
                               : 'cyber-badge-info'
-                          }`}
+                            }`}
                         >
                           {getSourceBadge(rule.source)}
                         </Badge>
@@ -444,9 +443,8 @@ export default function OpengrepRules() {
                         size="sm"
                         variant="outline"
                         onClick={() => handleToggleRule(rule)}
-                        className={`cyber-btn-ghost h-8 px-3 ${
-                          rule.is_active ? 'hover:bg-rose-500/10' : 'hover:bg-emerald-500/10'
-                        }`}
+                        className={`cyber-btn-ghost h-8 px-3 ${rule.is_active ? 'hover:bg-rose-500/10' : 'hover:bg-emerald-500/10'
+                          }`}
                       >
                         {rule.is_active ? '禁用' : '启用'}
                       </Button>
