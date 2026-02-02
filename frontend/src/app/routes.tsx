@@ -3,7 +3,7 @@ import Projects from "@/pages/Projects";
 import AgentAudit from "@/pages/AgentAudit";
 import AdminDashboard from "@/pages/AdminDashboard";
 import ProjectDetail from "@/pages/ProjectDetail";
-import AuditRules from "@/pages/AuditRules";
+// import AuditRules from "@/pages/AuditRules";
 import OpengrepRules from "@/pages/OpengrepRules";
 import StaticAnalysis from "@/pages/StaticAnalysis";
 import type { ReactNode } from "react";
@@ -48,12 +48,6 @@ const routes: RouteConfig[] = [
     },
     {
         name: "审计规则",
-        path: "/audit-rules",
-        element: <AuditRules />,
-        visible: false,
-    },
-    {
-        name: "Opengrep规则",
         path: "/opengrep-rules",
         element: <OpengrepRules />,
         visible: true,

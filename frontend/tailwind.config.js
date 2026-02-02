@@ -20,9 +20,9 @@ export default {
     extend: {
       // Typography - Pixel-perfect monospace for terminal aesthetic
       fontFamily: {
-        mono: ['"Times New Roman"', 'Times', '"FangSong_GB2312"', '"FangSong"', '"仿宋"', '"STFangsong"', 'serif'],
-        sans: ['"Times New Roman"', 'Times', '"FangSong_GB2312"', '"FangSong"', '"仿宋"', '"STFangsong"', 'serif'],
-        display: ['"Times New Roman"', 'Times', '"FangSong_GB2312"', '"FangSong"', '"仿宋"', '"STFangsong"', 'serif'],
+        mono: ['"Times New Roman"', 'Times', '"Microsoft YaHei"', '"微软雅黑"', '"PingFang SC"', '"Noto Sans SC"', 'serif'],
+        sans: ['"Times New Roman"', 'Times', '"Microsoft YaHei"', '"微软雅黑"', '"PingFang SC"', '"Noto Sans SC"', 'serif'],
+        display: ['"Times New Roman"', 'Times', '"Microsoft YaHei"', '"微软雅黑"', '"PingFang SC"', '"Noto Sans SC"', 'serif'],
       },
       fontSize: {
         'xs': ['0.8125rem', { lineHeight: '1.125rem', letterSpacing: '0.01em' }],  // 13px

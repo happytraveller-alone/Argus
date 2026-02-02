@@ -7,13 +7,12 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer
 } from "recharts";
 import {
   Activity, AlertTriangle, Clock, Code,
-  FileText, GitBranch, Shield, TrendingUp, Zap,
-  BarChart3, Target, ArrowUpRight, Calendar,
+  FileText, GitBranch, Shield, Zap,
+  BarChart3, Calendar,
   MessageSquare, Bot, Cpu, Terminal
 } from "lucide-react";
 import { api, dbMode, isDemoMode } from "@/shared/config/database";
@@ -29,7 +28,6 @@ export default function Dashboard() {
   const [recentTasks, setRecentTasks] = useState<AuditTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [issueTypeData, setIssueTypeData] = useState<Array<{ name: string; value: number; color: string }>>([]);
-  const [qualityTrendData, setQualityTrendData] = useState<Array<{ date: string; score: number }>>([]);
   const [ruleStats, setRuleStats] = useState({ total: 0, enabled: 0 });
   const [templateStats, setTemplateStats] = useState({ total: 0, active: 0 });
 
@@ -73,22 +71,6 @@ export default function Dashboard() {
         setRecentTasks(tasks.slice(0, 10));
       } else {
         setRecentTasks([]);
-      }
-
-      if (tasks.length > 0) {
-        const tasksByDate = tasks
-          .filter(t => t.completed_at && t.quality_score > 0)
-          .sort((a, b) => new Date(a.completed_at!).getTime() - new Date(b.completed_at!).getTime())
-          .slice(-6);
-
-        const trendData = tasksByDate.map((task) => ({
-          date: new Date(task.completed_at!).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
-          score: task.quality_score
-        }));
-
-        setQualityTrendData(trendData.length > 0 ? trendData : []);
-      } else {
-        setQualityTrendData([]);
       }
 
       try {
@@ -193,7 +175,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
         {/* Total Projects */}
         <div className="cyber-card p-4">
           <div className="flex items-center justify-between">
@@ -245,28 +227,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Quality Score */}
-        <div className="cyber-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">平均质量分</p>
-              <p className="stat-value">
-                {stats?.avg_quality_score ? stats.avg_quality_score.toFixed(1) : '0.0'}
-              </p>
-              {stats?.avg_quality_score ? (
-                <p className="text-sm text-emerald-400 mt-1 flex items-center gap-1">
-                  <TrendingUp className="w-4 h-4" />
-                  持续改进
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground mt-1">暂无数据</p>
-              )}
-            </div>
-            <div className="stat-icon text-violet-400">
-              <Target className="w-6 h-6" />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Main Content */}
@@ -274,47 +234,7 @@ export default function Dashboard() {
         {/* Left Content */}
         <div className="xl:col-span-3 space-y-4">
           {/* Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Quality Trend */}
-            <div className="cyber-card p-4">
-              <div className="section-header">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                <h3 className="section-title">代码质量趋势</h3>
-              </div>
-              {qualityTrendData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={qualityTrendData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--cyber-border)" />
-                    <XAxis dataKey="date" stroke="var(--cyber-text-muted)" fontSize={11} tick={{ fontFamily: 'monospace' }} />
-                    <YAxis stroke="var(--cyber-text-muted)" fontSize={11} domain={[0, 100]} tick={{ fontFamily: 'monospace' }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'var(--cyber-bg-elevated)',
-                        border: '1px solid var(--cyber-border)',
-                        borderRadius: '4px',
-                        fontFamily: 'monospace',
-                        fontSize: '12px',
-                        color: 'var(--cyber-text)'
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="score"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      dot={{ fill: 'hsl(var(--primary))', stroke: 'var(--cyber-bg)', strokeWidth: 2, r: 4 }}
-                      activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="empty-state h-[220px]">
-                  <TrendingUp className="empty-state-icon" />
-                  <p className="empty-state-description">暂无质量趋势数据</p>
-                </div>
-              )}
-            </div>
-
+          <div className="grid grid-cols-1 gap-4">
             {/* Issue Distribution */}
             <div className="cyber-card p-4">
               <div className="section-header">
