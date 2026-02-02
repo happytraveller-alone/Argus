@@ -32,6 +32,16 @@ from app.core.config import settings
 # ============ Schemas ============
 
 
+class OpengrepRuleBatchUpdateRequest(BaseModel):
+    """批量更新规则状态请求"""
+
+    rule_ids: Optional[List[str]] = Field(None, description="规则ID列表")
+    language: Optional[str] = Field(None, description="按编程语言过滤")
+    source: Optional[str] = Field(None, description="按来源过滤: internal, patch")
+    severity: Optional[str] = Field(None, description="按严重程度过滤: ERROR, WARNING, INFO")
+    is_active: bool = Field(..., description="要设置的激活状态")
+
+
 class OpengrepScanTaskCreate(BaseModel):
     """创建 Opengrep 扫描任务请求"""
 
@@ -711,3 +721,67 @@ async def delete_opengrep_rule(
     await db.commit()
 
     return {"message": "规则已删除", "rule_id": rule_id}
+
+
+@router.post("/rules/select")
+async def select_opengrep_rules(
+    request: OpengrepRuleBatchUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """
+    批量启用或禁用 Opengrep 规则
+
+    支持通过规则ID列表、编程语言、规则来源、严重程度等条件进行过滤
+    至少需要提供一个过滤条件
+    """
+    # 构建查询条件
+    query = select(OpengrepRule)
+    has_filter = False
+
+    if request.rule_ids:
+        query = query.where(OpengrepRule.id.in_(request.rule_ids))
+        has_filter = True
+
+    if request.language:
+        query = query.where(OpengrepRule.language == request.language)
+        has_filter = True
+
+    if request.source:
+        query = query.where(OpengrepRule.source == request.source)
+        has_filter = True
+
+    if request.severity:
+        query = query.where(OpengrepRule.severity == request.severity)
+        has_filter = True
+
+    if not has_filter:
+        raise HTTPException(
+            status_code=400,
+            detail="至少需要提供一个过滤条件（rule_ids, language, source, severity）",
+        )
+
+    # 查询符合条件的规则
+    result = await db.execute(query)
+    rules = result.scalars().all()
+
+    if not rules:
+        return {
+            "message": "没有找到符合条件的规则",
+            "updated_count": 0,
+            "is_active": request.is_active,
+        }
+
+    # 批量更新规则状态
+    updated_count = 0
+    for rule in rules:
+        rule.is_active = request.is_active
+        updated_count += 1
+
+    await db.commit()
+
+    return {
+        "message": f"已{'启用' if request.is_active else '禁用'} {updated_count} 条规则",
+        "updated_count": updated_count,
+        "is_active": request.is_active,
+    }
