@@ -149,13 +149,28 @@ async def _get_project_root(project_id: str) -> Optional[str]:
         return None
 
 
-def _parse_opengrep_output(stdout: str) -> List[Dict[str, Any]]:
-    """解析 opengrep JSON 输出并返回 results 列表。"""
-    if not stdout:
-        return []
+def _parse_opengrep_output(stdout: str) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """解析 opengrep JSON 输出并返回 (results, errors)。"""
+    if not stdout or not stdout.strip():
+        return [], []
+
     try:
         output = json.loads(stdout)
-        return output.get("results", [])
+        if isinstance(output, dict):
+            results = output.get("results", [])
+            errors = output.get("errors", [])
+        elif isinstance(output, list):
+            # 兼容部分引擎直接返回结果数组
+            results = output
+            errors = []
+        else:
+            raise ValueError("Unexpected opengrep output type")
+
+        if not isinstance(results, list):
+            raise ValueError("Invalid opengrep results format")
+        if not isinstance(errors, list):
+            errors = []
+        return results, errors
     except json.JSONDecodeError as e:
         raise ValueError("Failed to parse opengrep output") from e
 
@@ -254,12 +269,31 @@ async def _execute_opengrep_scan(
 
                 # 解析扫描结果
                 try:
-                    findings = _parse_opengrep_output(result.stdout)
+                    findings, scan_errors = _parse_opengrep_output(result.stdout)
                 except ValueError as e:
-                    logger.error(f"Failed to parse opengrep output: {e}")
+                    logger.error(f"Failed to parse opengrep output: {e}, stderr={result.stderr}")
                     task.status = "failed"
                     task.error_count += 1
                     await db.commit()
+                    return
+
+                # 规则配置错误/执行错误才判定失败；命中数为 0 不算失败
+                if scan_errors:
+                    task.status = "failed"
+                    task.error_count = max(1, len(scan_errors))
+                    await db.commit()
+                    logger.error(f"Scan task {task_id} failed with rule errors: {scan_errors[:3]}")
+                    return
+
+                # 无扫描结果且进程异常退出，按规则执行失败处理
+                if result.returncode != 0 and not findings:
+                    stderr_text = (result.stderr or "").strip()
+                    task.status = "failed"
+                    task.error_count = 1
+                    await db.commit()
+                    logger.error(
+                        f"Scan task {task_id} failed: returncode={result.returncode}, stderr={stderr_text}"
+                    )
                     return
 
                 # 保存发现
@@ -282,7 +316,7 @@ async def _execute_opengrep_scan(
 
                         start_line = finding.get("start", {}).get("line", 0)
                         end_line = finding.get("end", {}).get("line", start_line)
-                        lines_scanned += end_line - start_line + 1
+                        lines_scanned += max(0, end_line - start_line + 1)
 
                         opengrep_finding = OpengrepFinding(
                             scan_task_id=task_id,

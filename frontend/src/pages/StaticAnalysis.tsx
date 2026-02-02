@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   type OpengrepFinding,
   type OpengrepScanTask,
 } from "@/shared/api/opengrep";
+import { showToastQueue } from "@/shared/utils/toastQueue";
 import { AlertCircle, ArrowLeft, RefreshCw, Shield, Loader2 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -112,6 +113,7 @@ export default function StaticAnalysis() {
   const [updatingFindingId, setUpdatingFindingId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<OpengrepFinding | null>(null);
+  const lastNotifiedStatusRef = useRef<string | null>(null);
 
   const taskStatusLabel = useMemo(
     () => (task?.status ? STATUS_LABELS[task.status] || task.status : "未知"),
@@ -166,6 +168,46 @@ export default function StaticAnalysis() {
     }, 5000);
     return () => clearInterval(timer);
   }, [taskId, task?.status]);
+
+  useEffect(() => {
+    if (!task?.status) return;
+    if (lastNotifiedStatusRef.current === task.status) return;
+    lastNotifiedStatusRef.current = task.status;
+
+    if (task.status === "pending") {
+      void showToastQueue(
+        [{ level: "info", message: "静态扫描任务已创建，等待执行..." }],
+        { durationMs: 2200 }
+      );
+      return;
+    }
+
+    if (task.status === "running") {
+      void showToastQueue(
+        [{ level: "info", message: "静态规则扫描进行中，请稍候..." }],
+        { durationMs: 2200 }
+      );
+      return;
+    }
+
+    if (task.status === "completed") {
+      const hasFindings = (task.total_findings || 0) > 0;
+      void showToastQueue(
+        hasFindings
+          ? [{ level: "success", message: `扫描完成，共发现 ${task.total_findings} 条结果` }]
+          : [{ level: "success", message: "扫描完成，未发现规则命中（结果为 0 也视为成功）" }],
+        { durationMs: 2600 }
+      );
+      return;
+    }
+
+    if (task.status === "failed") {
+      void showToastQueue(
+        [{ level: "error", message: "扫描失败：规则执行异常或规则配置错误" }],
+        { durationMs: 2600 }
+      );
+    }
+  }, [task?.status, task?.total_findings]);
 
   const handleUpdateStatus = async (findingId: string, status: "open" | "verified" | "false_positive") => {
     setUpdatingFindingId(findingId);
