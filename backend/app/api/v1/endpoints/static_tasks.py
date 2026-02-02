@@ -278,12 +278,20 @@ async def _execute_opengrep_scan(
                     return
 
                 # 规则配置错误/执行错误才判定失败；命中数为 0 不算失败
-                if scan_errors:
+                # 只有 level=error 的错误才算失败，warn 级别的忽略（如 PartialParsing）
+                critical_errors = [err for err in scan_errors if err.get("level") == "error"]
+                if critical_errors:
                     task.status = "failed"
-                    task.error_count = max(1, len(scan_errors))
+                    task.error_count = max(1, len(critical_errors))
                     await db.commit()
-                    logger.error(f"Scan task {task_id} failed with rule errors: {scan_errors[:3]}")
+                    logger.error(f"Scan task {task_id} failed with critical errors: {critical_errors[:3]}")
                     return
+                
+                # 记录警告但不影响任务状态
+                if scan_errors:
+                    warning_errors = [err for err in scan_errors if err.get("level") != "error"]
+                    if warning_errors:
+                        logger.warning(f"Scan task {task_id} has {len(warning_errors)} warnings (e.g., PartialParsing)")
 
                 # 无扫描结果且进程异常退出，按规则执行失败处理
                 if result.returncode != 0 and not findings:
