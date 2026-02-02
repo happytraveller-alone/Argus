@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import {
   Trash2,
@@ -23,6 +24,8 @@ import {
   Zap,
   AlertCircle,
   CheckCircle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   getOpengrepRules,
@@ -58,8 +61,13 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
   const [selectedRule, setSelectedRule] = useState<OpengrepRuleDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
+  const [allRules, setAllRules] = useState<OpengrepRule[]>([]); // 保存所有规则用于提取语言列表
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [generatingRule, setGeneratingRule] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
+  const [batchOperating, setBatchOperating] = useState(false);
   const [generateFormData, setGenerateFormData] = useState({
     repo_owner: '',
     repo_name: '',
@@ -74,6 +82,7 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
   // 当筛选条件改变时，重新加载规则
   useEffect(() => {
     if (!loading) {
+      setCurrentPage(1);
       loadRules();
     }
   }, [selectedLanguage, selectedSource, selectedSeverity]);
@@ -87,9 +96,13 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
       });
       setRules(data);
 
-      // 提取所有唯一的编程语言
-      const languages = Array.from(new Set(data.map(rule => rule.language))).sort();
-      setAvailableLanguages(languages);
+      // 如果是首次加载或没有筛选条件，保存所有规则用于提取语言列表
+      if (!selectedLanguage && !selectedSource) {
+        setAllRules(data);
+        // 提取所有唯一的编程语言
+        const languages = Array.from(new Set(data.map(rule => rule.language))).sort();
+        setAvailableLanguages(languages);
+      }
 
       // 同步启用规则到全局缓存
       setOpengrepActiveRules(data.filter((rule) => rule.is_active));
@@ -170,6 +183,62 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
     setSelectedLanguage('');
     setSelectedSource('');
     setSelectedSeverity('');
+    setCurrentPage(1);
+    setSelectedRuleIds(new Set());
+  };
+
+  const handleToggleRuleSelection = (ruleId: string) => {
+    const newSet = new Set(selectedRuleIds);
+    if (newSet.has(ruleId)) {
+      newSet.delete(ruleId);
+    } else {
+      newSet.add(ruleId);
+    }
+    setSelectedRuleIds(newSet);
+  };
+
+  const handleToggleAllSelection = () => {
+    if (selectedRuleIds.size === paginatedRules.length) {
+      setSelectedRuleIds(new Set());
+    } else {
+      setSelectedRuleIds(new Set(paginatedRules.map(r => r.id)));
+    }
+  };
+
+  const handleBatchUpdateRules = async (isActive: boolean) => {
+    if (selectedRuleIds.size === 0) {
+      toast.error('请先选择要操作的规则');
+      return;
+    }
+
+    try {
+      setBatchOperating(true);
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'}/v1/static-tasks/rules/select`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+        },
+        body: JSON.stringify({
+          rule_ids: Array.from(selectedRuleIds),
+          is_active: isActive,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('批量操作失败');
+      }
+
+      const result = await response.json();
+      toast.success(result.message);
+      setSelectedRuleIds(new Set());
+      loadRules();
+    } catch (error) {
+      console.error('Batch operation failed:', error);
+      toast.error('批量操作失败');
+    } finally {
+      setBatchOperating(false);
+    }
   };
 
   const filteredRules = rules.filter((rule) => {
@@ -182,6 +251,10 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
 
     return matchSearch && matchLanguage && matchSeverity;
   });
+
+  // 分页逻辑
+  const totalPages = Math.ceil(filteredRules.length / pageSize);
+  const paginatedRules = filteredRules.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -214,9 +287,13 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
   }
 
   return (
-    <div className="space-y-6 p-6 bg-background min-h-screen font-mono relative">
+    <div className="h-screen flex flex-col bg-background font-mono relative overflow-hidden">
       {/* Grid background */}
       <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
+      
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="space-y-6 p-6 relative z-10">
 
       {/* Header */}
       <div className="relative z-10">
@@ -261,8 +338,8 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
           <div className="cyber-card p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="stat-label">内置规则</p>
-                <p className="stat-value">{rules.filter((r) => r.source === 'internal').length}</p>
+                <p className="stat-label">已选择</p>
+                <p className="stat-value">{selectedRuleIds.size}</p>
               </div>
               <Shield className="w-6 h-6 text-sky-400" />
             </div>
@@ -374,6 +451,38 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
         </div>
       </div>
 
+      {/* Batch Operations */}
+      {selectedRuleIds.size > 0 && (
+        <div className="cyber-card p-4 relative z-10 bg-primary/5 border-primary/30">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="font-mono text-sm">已选择 <span className="font-bold text-primary">{selectedRuleIds.size}</span> 条规则</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => handleBatchUpdateRules(true)}
+                disabled={batchOperating}
+                className="cyber-btn-primary h-9 text-sm"
+              >
+                {batchOperating ? '处理中...' : '批量启用'}
+              </Button>
+              <Button
+                onClick={() => handleBatchUpdateRules(false)}
+                disabled={batchOperating}
+                className="cyber-btn-outline h-9 text-sm"
+              >
+                {batchOperating ? '处理中...' : '批量禁用'}
+              </Button>
+              <Button
+                onClick={() => setSelectedRuleIds(new Set())}
+                disabled={batchOperating}
+                className="cyber-btn-ghost h-9 text-sm"
+              >
+                取消选择
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Rules Table */}
       <div className="cyber-card relative z-10 overflow-hidden">
         {filteredRules.length === 0 ? (
@@ -387,91 +496,178 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
             </p>
           </div>
         ) : (
-          <ScrollArea className="h-[600px]">
-            <div className="divide-y divide-border">
-              {filteredRules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className="p-4 hover:bg-muted/50 transition-colors border-b border-border last:border-0"
-                >
-                  <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-bold text-foreground truncate">{rule.name}</h3>
-                        <Badge className={`cyber-badge ${getSeverityColor(rule.severity)}`}>
-                          {rule.severity}
-                        </Badge>
-                        <Badge
-                          className={`cyber-badge ${rule.source === 'patch'
-                              ? 'cyber-badge-warning'
-                              : 'cyber-badge-info'
-                            }`}
-                        >
-                          {getSourceBadge(rule.source)}
-                        </Badge>
-                        {rule.is_active ? (
-                          <Badge className="cyber-badge cyber-badge-success">已启用</Badge>
-                        ) : (
-                          <Badge className="cyber-badge cyber-badge-muted">已禁用</Badge>
-                        )}
-                      </div>
+          <>
+            <div>
+              {/* Table Header with Select All */}
+              <div className="flex items-center gap-3 p-4 border-b border-border bg-muted/30">
+                <Checkbox
+                  checked={selectedRuleIds.size === paginatedRules.length && paginatedRules.length > 0}
+                  onCheckedChange={handleToggleAllSelection}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-mono text-muted-foreground">
+                  {selectedRuleIds.size > 0 ? `已选择 ${selectedRuleIds.size} 条` : '全选当前页'}
+                </span>
+              </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground font-mono">
-                        <div>
-                          <span className="text-muted-foreground">ID: </span>
-                          <span className="text-foreground font-bold">{rule.id.substring(0, 8)}</span>
+              {/* Rules List */}
+              <ScrollArea className="h-[calc(100vh-600px)] min-h-[400px]">
+                <div className="divide-y divide-border">
+                  {paginatedRules.map((rule) => (
+                    <div
+                      key={rule.id}
+                      className="p-4 hover:bg-muted/50 transition-colors border-b border-border last:border-0"
+                    >
+                      <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+                        <div className="flex gap-3 flex-1 min-w-0">
+                          <Checkbox
+                            checked={selectedRuleIds.has(rule.id)}
+                            onCheckedChange={() => handleToggleRuleSelection(rule.id)}
+                            className="w-4 h-4 mt-1"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="font-bold text-foreground truncate">{rule.name}</h3>
+                              <Badge className={`cyber-badge ${getSeverityColor(rule.severity)}`}>
+                                {rule.severity}
+                              </Badge>
+                              <Badge
+                                className={`cyber-badge ${rule.source === 'patch'
+                                    ? 'cyber-badge-warning'
+                                    : 'cyber-badge-info'
+                                  }`}
+                              >
+                                {getSourceBadge(rule.source)}
+                              </Badge>
+                              {rule.is_active ? (
+                                <Badge className="cyber-badge cyber-badge-success">已启用</Badge>
+                              ) : (
+                                <Badge className="cyber-badge cyber-badge-muted">已禁用</Badge>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground font-mono">
+                              <div>
+                                <span className="text-muted-foreground">ID: </span>
+                                <span className="text-foreground font-bold">{rule.id.substring(0, 8)}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">语言: </span>
+                                <span className="text-foreground font-bold">{rule.language}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">状态: </span>
+                                <span className={rule.correct ? 'text-emerald-400' : 'text-amber-400'}>
+                                  {rule.correct ? '✓ 正确' : '⚠ 未验证'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">创建: </span>
+                                <span className="text-foreground font-bold">
+                                  {new Date(rule.created_at).toLocaleDateString('zh-CN')}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-muted-foreground">语言: </span>
-                          <span className="text-foreground font-bold">{rule.language}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">状态: </span>
-                          <span className={rule.correct ? 'text-emerald-400' : 'text-amber-400'}>
-                            {rule.correct ? '✓ 正确' : '⚠ 未验证'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">创建: </span>
-                          <span className="text-foreground font-bold">
-                            {new Date(rule.created_at).toLocaleDateString('zh-CN')}
-                          </span>
+
+                        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewRule(rule)}
+                            className="cyber-btn-ghost h-8 px-3 min-w-[64px]"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleToggleRule(rule)}
+                            className={`cyber-btn-ghost h-8 px-3 min-w-[72px] ${rule.is_active ? 'hover:bg-rose-500/10' : 'hover:bg-emerald-500/10'
+                              }`}
+                          >
+                            {rule.is_active ? '禁用' : '启用'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteRule(rule.id)}
+                            className="cyber-btn-ghost h-8 px-3 min-w-[64px] hover:bg-rose-500/10 hover:text-rose-400"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleViewRule(rule)}
-                        className="cyber-btn-ghost h-8 px-3 min-w-[64px]"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleToggleRule(rule)}
-                        className={`cyber-btn-ghost h-8 px-3 min-w-[72px] ${rule.is_active ? 'hover:bg-rose-500/10' : 'hover:bg-emerald-500/10'
-                          }`}
-                      >
-                        {rule.is_active ? '禁用' : '启用'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDeleteRule(rule.id)}
-                        className="cyber-btn-ghost h-8 px-3 min-w-[64px] hover:bg-rose-500/10 hover:text-rose-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              </ScrollArea>
             </div>
-          </ScrollArea>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between p-4 border-t border-border bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs font-mono text-muted-foreground">每页显示:</Label>
+                <Select value={pageSize.toString()} onValueChange={(val) => {
+                  setPageSize(Number(val));
+                  setCurrentPage(1);
+                }}>
+                  <SelectTrigger className="cyber-input w-[80px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="cyber-dialog border-border">
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="text-xs font-mono text-muted-foreground">
+                第 {currentPage} / {totalPages} 页 (共 {filteredRules.length} 条)
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="cyber-btn-ghost h-8 px-2 w-8"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const page = Math.max(1, currentPage - 2) + i;
+                    if (page > totalPages) return null;
+                    return (
+                      <Button
+                        key={page}
+                        size="sm"
+                        variant={page === currentPage ? 'default' : 'outline'}
+                        onClick={() => setCurrentPage(page)}
+                        className={`cyber-btn-${page === currentPage ? 'primary' : 'ghost'} h-8 px-2 min-w-8`}
+                      >
+                        {page}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="cyber-btn-ghost h-8 px-2 w-8"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -698,6 +894,8 @@ export default function OpengrepRules(props: OpengrepRulesProps = {}) {
           </div>
         </DialogContent>
       </Dialog>
+        </div>
+      </div>
     </div>
   );
 }
