@@ -158,7 +158,7 @@ export async function uploadOpengrepRulesDirectory(
     files: File[],
 ): Promise<any> {
     const formData = new FormData();
-    files.forEach((file, index) => {
+    files.forEach((file) => {
         formData.append("files", file);
     });
     const response = await apiClient.post(
@@ -170,6 +170,9 @@ export async function uploadOpengrepRulesDirectory(
             },
         },
     );
+    return response.data;
+}
+
 export interface OpengrepRuleUpdateRequest {
     name?: string;
     pattern_yaml?: string;

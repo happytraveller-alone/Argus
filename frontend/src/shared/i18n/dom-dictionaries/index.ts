@@ -5,6 +5,7 @@ import { dashboardDictionary } from "./dashboard";
 import { projectsDictionary } from "./projects";
 import { opengrepRulesDictionary } from "./opengrepRules";
 import { systemConfigDictionary } from "./systemConfig";
+import { intelligentAuditDictionary } from "./intelligentAudit";
 
 export const manualDomTranslations: DomDictionary = {
   ...commonDictionary,
@@ -13,4 +14,5 @@ export const manualDomTranslations: DomDictionary = {
   ...projectsDictionary,
   ...opengrepRulesDictionary,
   ...systemConfigDictionary,
+  ...intelligentAuditDictionary,
 };
