@@ -106,6 +106,67 @@ export async function createOpengrepGenericRule(params: {
     return response.data;
 }
 
+/**
+ * Upload single rule via JSON
+ */
+export async function uploadOpengrepRuleJSON(params: {
+    id?: string;
+    name: string;
+    pattern_yaml: string;
+    language: string;
+    severity?: string;
+    source?: string;
+    patch?: string;
+    correct?: boolean;
+    is_active?: boolean;
+}): Promise<any> {
+    const response = await apiClient.post(
+        `/static-tasks/rules/upload/json`,
+        params,
+    );
+    return response.data;
+}
+
+/**
+ * Upload compressed rules file
+ */
+export async function uploadOpengrepRulesCompressed(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await apiClient.post(
+        `/static-tasks/rules/upload`,
+        formData,
+        {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        },
+    );
+    return response.data;
+}
+
+/**
+ * Upload rules from directory
+ */
+export async function uploadOpengrepRulesDirectory(
+    files: File[],
+): Promise<any> {
+    const formData = new FormData();
+    files.forEach((file, index) => {
+        formData.append("files", file);
+    });
+    const response = await apiClient.post(
+        `/static-tasks/rules/upload/directory`,
+        formData,
+        {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        },
+    );
+    return response.data;
+}
+
 export interface OpengrepScanTask {
     id: string;
     project_id: string;

@@ -55,7 +55,9 @@ import {
     toggleOpengrepRule,
     deleteOpengrepRule,
     generateOpengrepRule,
-    createOpengrepGenericRule,
+    uploadOpengrepRuleJSON,
+    uploadOpengrepRulesCompressed,
+    uploadOpengrepRulesDirectory,
     batchUpdateOpengrepRules,
     RULE_SOURCES,
     SEVERITIES,
@@ -84,14 +86,12 @@ export default function OpengrepRules() {
     const [showGenericDialog, setShowGenericDialog] = useState(false);
     const [showEventDialog, setShowEventDialog] = useState(false);
     const [generatingRule, setGeneratingRule] = useState(false);
-    const [generatingGenericRule, setGeneratingGenericRule] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(
         new Set(),
     );
     const [batchOperating, setBatchOperating] = useState(false);
-    const [genericRuleYaml, setGenericRuleYaml] = useState("");
     const [pendingDeleteRule, setPendingDeleteRule] = useState<{
         id: string;
         name: string;
@@ -102,6 +102,23 @@ export default function OpengrepRules() {
         repo_name: "",
         commit_hash: "",
         commit_content: "",
+    });
+    const [genericRuleUploadTab, setGenericRuleUploadTab] = useState<
+        "manual" | "compressed" | "directory"
+    >("manual");
+    const [compressedFile, setCompressedFile] = useState<File | null>(null);
+    const [directoryFiles, setDirectoryFiles] = useState<File[]>([]);
+    const [uploadingRules, setUploadingRules] = useState(false);
+    const [manualRuleForm, setManualRuleForm] = useState({
+        id: "",
+        name: "",
+        language: "python",
+        pattern_yaml: "",
+        severity: "WARNING",
+        source: "json",
+        patch: "",
+        correct: true,
+        is_active: true,
     });
 
     useEffect(() => {
@@ -251,23 +268,156 @@ export default function OpengrepRules() {
     };
 
     const handleGenerateGenericRule = async () => {
-        if (!genericRuleYaml.trim()) {
-            toast.error("请粘贴规则文本");
+        if (!manualRuleForm.name.trim()) {
+            toast.error("请输入规则名称");
             return;
         }
+        if (!manualRuleForm.pattern_yaml.trim()) {
+            toast.error("请输入规则 YAML 内容");
+            return;
+        }
+        if (!manualRuleForm.language.trim()) {
+            toast.error("请输入编程语言");
+            return;
+        }
+
+        // 验证编程语言是否正确
+        const supportedLanguages = [
+            "python",
+            "javascript",
+            "typescript",
+            "java",
+            "go",
+            "rust",
+            "cpp",
+            "c",
+            "csharp",
+            "c#",
+            "php",
+            "ruby",
+            "kotlin",
+            "swift",
+            "objc",
+            "scala",
+            "groovy",
+            "clojure",
+            "elixir",
+            "erlang",
+            "haskell",
+            "lua",
+            "perl",
+            "r",
+            "sql",
+            "bash",
+            "shell",
+            "powershell",
+            "dockerfile",
+            "yaml",
+            "json",
+            "xml",
+            "html",
+            "css",
+            "scss",
+            "less",
+            "dart",
+            "go",
+            "julia",
+        ];
+
+        const language = manualRuleForm.language.toLowerCase().trim();
+        if (!supportedLanguages.includes(language)) {
+            toast.error(
+                `编程语言 "${manualRuleForm.language}" 不是常见语言，请检查拼写。常见语言: ${supportedLanguages.slice(0, 8).join(", ")}...`,
+            );
+            return;
+        }
+
         try {
-            setGeneratingGenericRule(true);
-            await createOpengrepGenericRule({ rule_yaml: genericRuleYaml });
-            toast.success("规则生成成功");
+            setUploadingRules(true);
+            await uploadOpengrepRuleJSON({
+                ...(manualRuleForm.id && { id: manualRuleForm.id }),
+                name: manualRuleForm.name,
+                pattern_yaml: manualRuleForm.pattern_yaml,
+                language: language,
+                severity: manualRuleForm.severity,
+                source: manualRuleForm.source,
+                ...(manualRuleForm.patch && { patch: manualRuleForm.patch }),
+                correct: manualRuleForm.correct,
+                is_active: manualRuleForm.is_active,
+            });
+
+            toast.success("规则上传成功");
             setShowGenericDialog(false);
-            setGenericRuleYaml("");
+            setManualRuleForm({
+                id: "",
+                name: "",
+                language: "python",
+                pattern_yaml: "",
+                severity: "WARNING",
+                source: "json",
+                patch: "",
+                correct: true,
+                is_active: true,
+            });
+            setGenericRuleUploadTab("manual");
             await loadRules({ silent: true });
             await loadRuleStats();
         } catch (error: any) {
-            const message = error?.response?.data?.detail || "生成规则失败";
+            const message =
+                error?.response?.data?.detail || error?.message || "上传规则失败";
             toast.error(message);
         } finally {
-            setGeneratingGenericRule(false);
+            setUploadingRules(false);
+        }
+    };
+
+    const handleUploadCompressedRules = async () => {
+        if (!compressedFile) {
+            toast.error("请选择压缩文件");
+            return;
+        }
+        try {
+            setUploadingRules(true);
+            const result = await uploadOpengrepRulesCompressed(compressedFile);
+            toast.success(
+                `上传成功: 成功 ${result.success_count}，失败 ${result.failed_count}，重复 ${result.duplicate_count}`,
+            );
+            setShowGenericDialog(false);
+            setCompressedFile(null);
+            setGenericRuleUploadTab("manual");
+            await loadRules({ silent: true });
+            await loadRuleStats();
+        } catch (error: any) {
+            const message =
+                error?.response?.data?.detail || error?.message || "上传规则失败";
+            toast.error(message);
+        } finally {
+            setUploadingRules(false);
+        }
+    };
+
+    const handleUploadDirectoryRules = async () => {
+        if (directoryFiles.length === 0) {
+            toast.error("请选择规则文件");
+            return;
+        }
+        try {
+            setUploadingRules(true);
+            const result = await uploadOpengrepRulesDirectory(directoryFiles);
+            toast.success(
+                `上传成功: 成功 ${result.success_count}，失败 ${result.failed_count}，重复 ${result.duplicate_count}`,
+            );
+            setShowGenericDialog(false);
+            setDirectoryFiles([]);
+            setGenericRuleUploadTab("manual");
+            await loadRules({ silent: true });
+            await loadRuleStats();
+        } catch (error: any) {
+            const message =
+                error?.response?.data?.detail || error?.message || "上传规则失败";
+            toast.error(message);
+        } finally {
+            setUploadingRules(false);
         }
     };
 
@@ -1294,71 +1444,432 @@ export default function OpengrepRules() {
                         open={showGenericDialog}
                         onOpenChange={setShowGenericDialog}
                     >
-                        <DialogContent className="cyber-dialog max-w-2xl border-border">
+                        <DialogContent className="cyber-dialog max-w-3xl border-border max-h-[90vh] flex flex-col">
                             <DialogHeader className="px-6 pt-4 flex-shrink-0">
                                 <DialogTitle className="font-mono text-lg uppercase tracking-wider text-foreground">
                                     通用型规则
                                 </DialogTitle>
                             </DialogHeader>
 
-                            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                                <div>
-                                    <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                                        规则文本
-                                    </Label>
-                                    <Textarea
-                                        value={genericRuleYaml}
-                                        onChange={(e) =>
-                                            setGenericRuleYaml(e.target.value)
-                                        }
-                                        placeholder="粘贴规则 YAML..."
-                                        className="cyber-input mt-1.5 font-mono text-xs min-h-56 cursor-text"
-                                    />
-                                </div>
+                            {/* Tab Selection */}
+                            <div className="flex-shrink-0 px-6 flex gap-2 border-b border-border">
+                                <button
+                                    onClick={() => setGenericRuleUploadTab("manual")}
+                                    className={`px-4 py-2 font-mono text-xs font-bold uppercase border-b-2 transition-colors ${
+                                        genericRuleUploadTab === "manual"
+                                            ? "border-primary text-primary"
+                                            : "border-transparent text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    手动上传
+                                </button>
+                                <button
+                                    onClick={() => setGenericRuleUploadTab("compressed")}
+                                    className={`px-4 py-2 font-mono text-xs font-bold uppercase border-b-2 transition-colors ${
+                                        genericRuleUploadTab === "compressed"
+                                            ? "border-primary text-primary"
+                                            : "border-transparent text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    压缩包上传
+                                </button>
+                                <button
+                                    onClick={() => setGenericRuleUploadTab("directory")}
+                                    className={`px-4 py-2 font-mono text-xs font-bold uppercase border-b-2 transition-colors ${
+                                        genericRuleUploadTab === "directory"
+                                            ? "border-primary text-primary"
+                                            : "border-transparent text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    目录上传
+                                </button>
                             </div>
 
+                            {/* Content Area */}
+                            <div className="flex-1 overflow-y-auto p-6">
+                                {/* Manual Upload Tab */}
+                                {genericRuleUploadTab === "manual" && (
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {/* Rule ID (Optional) */}
+                                            <div>
+                                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                    规则 ID <span className="text-muted-foreground/60">(可选)</span>
+                                                </Label>
+                                                <Input
+                                                    value={manualRuleForm.id}
+                                                    onChange={(e) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            id: e.target.value,
+                                                        })
+                                                    }
+                                                    placeholder="自动生成"
+                                                    className="cyber-input mt-1.5 font-mono text-xs"
+                                                />
+                                            </div>
+
+                                            {/* Rule Name (Required) */}
+                                            <div>
+                                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                    规则名称 <span className="text-rose-400">*</span>
+                                                </Label>
+                                                <Input
+                                                    value={manualRuleForm.name}
+                                                    onChange={(e) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            name: e.target.value,
+                                                        })
+                                                    }
+                                                    placeholder="例如: sql-injection-detector"
+                                                    className="cyber-input mt-1.5 font-mono text-xs"
+                                                />
+                                            </div>
+
+                                            {/* Language (Required) */}
+                                            <div>
+                                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                    编程语言 <span className="text-rose-400">*</span>
+                                                </Label>
+                                                <Input
+                                                    value={manualRuleForm.language}
+                                                    onChange={(e) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            language: e.target.value,
+                                                        })
+                                                    }
+                                                    placeholder="例如: python, javascript, java"
+                                                    className="cyber-input mt-1.5 font-mono text-xs"
+                                                />
+                                            </div>
+
+                                            {/* Severity */}
+                                            <div>
+                                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                    严重程度
+                                                </Label>
+                                                <Select
+                                                    value={manualRuleForm.severity}
+                                                    onValueChange={(value) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            severity: value,
+                                                        })
+                                                    }
+                                                >
+                                                    <SelectTrigger className="cyber-input mt-1.5 font-mono text-xs">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="ERROR">
+                                                            ERROR
+                                                        </SelectItem>
+                                                        <SelectItem value="WARNING">
+                                                            WARNING
+                                                        </SelectItem>
+                                                        <SelectItem value="INFO">
+                                                            INFO
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {/* Patch Link (Optional) */}
+                                            <div className="col-span-2">
+                                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                    补丁或相关链接 <span className="text-muted-foreground/60">(可选)</span>
+                                                </Label>
+                                                <Input
+                                                    value={manualRuleForm.patch}
+                                                    onChange={(e) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            patch: e.target.value,
+                                                        })
+                                                    }
+                                                    placeholder="https://example.com/patch"
+                                                    className="cyber-input mt-1.5 font-mono text-xs"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* YAML Content (Required) */}
+                                        <div>
+                                            <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                规则 YAML 内容 <span className="text-rose-400">*</span>
+                                            </Label>
+                                            <Textarea
+                                                value={manualRuleForm.pattern_yaml}
+                                                onChange={(e) =>
+                                                    setManualRuleForm({
+                                                        ...manualRuleForm,
+                                                        pattern_yaml: e.target.value,
+                                                    })
+                                                }
+                                                placeholder={
+                                                    "规则 YAML 内容...\n\n示例:\nrules:\n  - id: my-rule\n    languages: [python]\n    pattern: $X = $Y\n    message: Found assignment"
+                                                }
+                                                className="cyber-input mt-1.5 font-mono text-xs min-h-56 cursor-text"
+                                            />
+                                        </div>
+
+                                        {/* Checkboxes */}
+                                        <div className="flex gap-4 items-center">
+                                            <div className="flex items-center gap-2">
+                                                <Checkbox
+                                                    id="correct"
+                                                    checked={manualRuleForm.correct}
+                                                    onCheckedChange={(checked) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            correct: Boolean(checked),
+                                                        })
+                                                    }
+                                                />
+                                                <Label
+                                                    htmlFor="correct"
+                                                    className="font-mono text-xs text-muted-foreground cursor-pointer"
+                                                >
+                                                    规则正确
+                                                </Label>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <Checkbox
+                                                    id="is_active"
+                                                    checked={manualRuleForm.is_active}
+                                                    onCheckedChange={(checked) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            is_active: Boolean(checked),
+                                                        })
+                                                    }
+                                                />
+                                                <Label
+                                                    htmlFor="is_active"
+                                                    className="font-mono text-xs text-muted-foreground cursor-pointer"
+                                                >
+                                                    启用规则
+                                                </Label>
+                                            </div>
+                                        </div>
+
+                                        <p className="text-xs text-muted-foreground font-mono pt-2 border-t border-border">
+                                            <span className="text-rose-400">*</span> 表示必填项，规则 YAML 必须包含 rules 数组和规则 id
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Compressed Upload Tab */}
+                                {genericRuleUploadTab === "compressed" && (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                选择压缩文件
+                                            </Label>
+                                            <div className="mt-1.5 border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                                                onClick={() => {
+                                                    const input =
+                                                        document.createElement(
+                                                            "input",
+                                                        );
+                                                    input.type = "file";
+                                                    input.accept =
+                                                        ".zip,.tar,.tar.gz,.tgz,.tar.bz2,.7z,.rar";
+                                                    input.onchange = (e) => {
+                                                        const file = (e.target as HTMLInputElement)
+                                                            .files?.[0];
+                                                        if (file) {
+                                                            setCompressedFile(file);
+                                                        }
+                                                    };
+                                                    input.click();
+                                                }}
+                                            >
+                                                {compressedFile ? (
+                                                    <div>
+                                                        <p className="text-sm font-mono text-primary">
+                                                            ✓{" "}
+                                                            {compressedFile.name}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground mt-1">
+                                                            ({(
+                                                                compressedFile.size /
+                                                                1024 /
+                                                                1024
+                                                            ).toFixed(2)}
+                                                            MB)
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <div>
+                                                        <p className="text-sm font-mono text-muted-foreground">
+                                                            点击选择或拖拽上传
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground mt-2">
+                                                            支持: ZIP, TAR, TAR.GZ,
+                                                            TAR.BZ2, 7Z, RAR
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground font-mono">
+                                            批量上传规则文件，系统会自动递归查找所有 YAML
+                                            文件并进行去重处理
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Directory Upload Tab */}
+                                {genericRuleUploadTab === "directory" && (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                选择规则文件
+                                            </Label>
+                                            <div className="mt-1.5 border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                                                onClick={() => {
+                                                    const input =
+                                                        document.createElement(
+                                                            "input",
+                                                        );
+                                                    input.type = "file";
+                                                    input.multiple = true;
+                                                    input.accept = ".yaml,.yml";
+                                                    input.onchange = (e) => {
+                                                        const files = Array.from(
+                                                            (e.target as HTMLInputElement)
+                                                                .files || [],
+                                                        );
+                                                        if (files.length > 0) {
+                                                            setDirectoryFiles(files);
+                                                        }
+                                                    };
+                                                    input.click();
+                                                }}
+                                            >
+                                                {directoryFiles.length > 0 ? (
+                                                    <div>
+                                                        <p className="text-sm font-mono text-primary">
+                                                            ✓ 已选择{" "}
+                                                            {directoryFiles.length}{" "}
+                                                             个文件
+                                                        </p>
+                                                        <div className="text-xs text-muted-foreground mt-2 space-y-1 max-h-32 overflow-y-auto">
+                                                            {directoryFiles
+                                                                .slice(0, 5)
+                                                                .map((f) => (
+                                                                    <p key={f.name}>
+                                                                        {f.name}
+                                                                    </p>
+                                                                ))}
+                                                            {directoryFiles.length >
+                                                                5 && (
+                                                                <p>
+                                                                    ... 及其他{" "}
+                                                                    {directoryFiles.length -
+                                                                        5}{" "}
+                                                                    个文件
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div>
+                                                        <p className="text-sm font-mono text-muted-foreground">
+                                                            点击选择或拖拽上传
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground mt-2">
+                                                            支持选择多个
+                                                            YAML/YML 规则文件
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground font-mono">
+                                            选择一个或多个规则文件，支持批量上传和自动去重
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer */}
                             <div className="flex-shrink-0 flex justify-between gap-3 px-6 py-4 bg-muted border-t border-border">
                                 <Button
                                     variant="outline"
                                     onClick={() => {
                                         setShowGenericDialog(false);
                                         setShowRuleTypeDialog(true);
+                                        setGenericRuleUploadTab("manual");
+                                        setManualRuleForm({
+                                            id: "",
+                                            name: "",
+                                            language: "python",
+                                            pattern_yaml: "",
+                                            severity: "WARNING",
+                                            source: "json",
+                                            patch: "",
+                                            correct: true,
+                                            is_active: true,
+                                        });
+                                        setCompressedFile(null);
+                                        setDirectoryFiles([]);
                                     }}
                                     className="cyber-btn-outline"
-                                    disabled={generatingGenericRule}
+                                    disabled={uploadingRules}
                                 >
                                     返回
                                 </Button>
-                                <div className="flex items-center gap-3">
+                                <div className="flex gap-3">
                                     <Button
-                                        variant="outline"
-                                        onClick={() =>
-                                            setShowGenericDialog(false)
-                                        }
-                                        className="cyber-btn-outline"
-                                        disabled={generatingGenericRule}
-                                    >
-                                        取消
-                                    </Button>
-                                    <Button
-                                        onClick={handleGenerateGenericRule}
+                                        onClick={() => {
+                                            if (genericRuleUploadTab === "manual") {
+                                                handleGenerateGenericRule();
+                                            } else if (
+                                                genericRuleUploadTab === "compressed"
+                                            ) {
+                                                handleUploadCompressedRules();
+                                            } else {
+                                                handleUploadDirectoryRules();
+                                            }
+                                        }}
                                         className="cyber-btn-primary"
-                                        disabled={generatingGenericRule}
+                                        disabled={
+                                            uploadingRules ||
+                                            (genericRuleUploadTab === "manual" &&
+                                                (!manualRuleForm.name.trim() ||
+                                                    !manualRuleForm.pattern_yaml.trim() ||
+                                                    !manualRuleForm.language.trim())) ||
+                                            (genericRuleUploadTab ===
+                                                "compressed" &&
+                                                !compressedFile) ||
+                                            (genericRuleUploadTab ===
+                                                "directory" &&
+                                                directoryFiles.length === 0)
+                                        }
                                     >
-                                        {generatingGenericRule ? (
+                                        {uploadingRules ? (
                                             <>
                                                 <div className="loading-spinner mr-2" />
-                                                生成中...
+                                                上传中...
                                             </>
                                         ) : (
-                                            <>生成规则</>
+                                            `${
+                                                genericRuleUploadTab ===
+                                                "manual"
+                                                    ? "生成规则"
+                                                    : "上传规则"
+                                            }`
                                         )}
                                     </Button>
                                 </div>
                             </div>
                         </DialogContent>
                     </Dialog>
-
                     {/* Event Rule Dialog */}
                     <Dialog
                         open={showEventDialog}
