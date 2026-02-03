@@ -1,0 +1,220 @@
+From 08a6a5c48611f953cacca950c4cbe42a80bb3430 Mon Sep 17 00:00:00 2001
+From: lbrdnk <lbrdnk@users.noreply.github.com>
+Date: Fri, 26 May 2023 20:45:18 +0200
+Subject: [PATCH] Fix mongo nested queries handling (#30877)
+
+* Fix native source query handling for mongo
+
+* Add test for mongo nested native query
+
+* Fix mongo `aggregation-at-index` usage
+
+* Add test for source query with aggregation and sort
+
+* Adjust test for presto and oracle
+
+* Add PR suggestions
+---
+ .../metabase/driver/mongo/query_processor.clj | 14 +++--
+ .../mongo/test/metabase/driver/mongo_test.clj | 51 +++++++++++++++++++
+ .../middleware/fetch_source_query.clj         | 14 +++--
+ .../middleware/fetch_source_query_test.clj    | 17 +++++++
+ .../nested_queries_test.clj                   | 14 +++++
+ 5 files changed, 102 insertions(+), 8 deletions(-)
+
+diff --git a/modules/drivers/mongo/src/metabase/driver/mongo/query_processor.clj b/modules/drivers/mongo/src/metabase/driver/mongo/query_processor.clj
+index f9650cdfab..30aab14b58 100644
+--- a/modules/drivers/mongo/src/metabase/driver/mongo/query_processor.clj
++++ b/modules/drivers/mongo/src/metabase/driver/mongo/query_processor.clj
+@@ -91,6 +91,11 @@
+ ;; TODO - We already have a *query* dynamic var in metabase.query-processor.interface. Do we need this one too?
+ (def ^:dynamic ^:private *query* nil)
+ 
++(def ^:dynamic ^:private *nesting-level*
++  "Used for tracking depth of nesting on which [[mbql->native-rec]] operates.
++  That is required eg. in `->lvalue :aggregation` call."
++  0)
++
+ (def ^:dynamic ^:private *field-mappings*
+   "The mapping from the fields to the projected names created
+   by the nested query."
+@@ -217,7 +222,7 @@
+ ;;
+ (defmethod ->lvalue :aggregation
+   [[_ index]]
+-  (annotate/aggregation-name (mbql.u/aggregation-at-index *query* index)))
++  (annotate/aggregation-name (mbql.u/aggregation-at-index *query* index *nesting-level*)))
+ 
+ (defmethod ->lvalue :field
+   [[_ id-or-name _props :as field]]
+@@ -1342,14 +1347,15 @@
+   (if-let [source-query (-> inner-query :source-query)]
+     (let [compiled (or (when-let [nq (:native source-query)]
+                          (cond
+-                           (string? nq)
++                           (string? (:query nq))
+                            (-> source-query
+                                (dissoc :native)
+-                               (assoc :query (parse-query-string nq)))
++                               (assoc :query (parse-query-string (:query nq))))
+ 
+                            :else
+                            nq))
+-                       (mbql->native-rec source-query))
++                       (binding [*nesting-level* (inc *nesting-level*)]
++                         (mbql->native-rec source-query)))
+           field-mappings (get-field-mappings source-query (:projections compiled))]
+       (binding [*field-mappings* field-mappings]
+         (merge compiled (add-aggregation-pipeline inner-query compiled))))
+diff --git a/modules/drivers/mongo/test/metabase/driver/mongo_test.clj b/modules/drivers/mongo/test/metabase/driver/mongo_test.clj
+index 6f85ae0be2..22b4b6f164 100644
+--- a/modules/drivers/mongo/test/metabase/driver/mongo_test.clj
++++ b/modules/drivers/mongo/test/metabase/driver/mongo_test.clj
+@@ -7,9 +7,11 @@
+             [metabase.db.metadata-queries :as metadata-queries]
+             [metabase.driver :as driver]
+             [metabase.driver.mongo :as mongo]
++            [metabase.driver.mongo.query-processor :as mongo.qp]
+             [metabase.driver.mongo.util :as mongo.util]
+             [metabase.driver.util :as driver.u]
+             [metabase.mbql.util :as mbql.u]
++            [metabase.models.card :refer [Card]]
+             [metabase.models.database :refer [Database]]
+             [metabase.models.field :refer [Field]]
+             [metabase.models.table :as table :refer [Table]]
+@@ -120,6 +122,55 @@
+                                 :database (mt/id)})
+              (m/dissoc-in [:data :results_metadata] [:data :insights]))))))
+ 
++(deftest nested-native-query-test
++  (mt/test-driver :mongo
++    (testing "Mbql query with nested native source query _returns correct results_ (#30112)"
++        (mt/with-temp Card [{:keys [id]} {:dataset_query {:type     :native
++                                                          :native   {:collection    "venues"
++                                                                     :query         native-query}
++                                                          :database (mt/id)}}]
++          (let [query (mt/mbql-query nil
++                        {:source-table (str "card__" id)
++                         :limit        1})]
++            (is (partial=
++                 {:status :completed
++                  :data   {:native_form {:collection "venues"
++                                         :query      (conj (mongo.qp/parse-query-string native-query)
++                                                           {"$limit" 1})}
++                           :rows        [[1]]}}
++                 (qp/process-query query))))))
++    (testing "Mbql query with nested native source query _aggregates_ correctly (#30112)"
++      (let [query-str (str "[{\"$project\":\n"
++                           "   {\"_id\": \"$_id\",\n"
++                           "    \"name\": \"$name\",\n"
++                           "    \"category_id\": \"$category_id\",\n"
++                           "    \"latitude\": \"$latitude\",\n"
++                           "    \"longitude\": \"$longitude\",\n"
++                           "    \"price\": \"$price\"}\n"
++                           "}]")]
++        (mt/with-temp Card [{:keys [id]} {:dataset_query {:type     :native
++                                                          :native   {:collection    "venues"
++                                                                     :query         query-str}
++                                                          :database (mt/id)}}]
++          (let [query (mt/mbql-query venues
++                        {:source-table (str "card__" id)
++                         :aggregation [:count]
++                         :breakout [*category_id/Integer]
++                         :order-by [[:desc [:aggregation 0]]]
++                         :limit 5})]
++            (is (partial=
++                 {:status :completed
++                  :data   {:native_form
++                           {:collection "venues"
++                            :query (conj (mongo.qp/parse-query-string query-str)
++                                         {"$group" {"_id" {"category_id" "$category_id"}, "count" {"$sum" 1}}}
++                                         {"$sort" {"_id" 1}}
++                                         {"$project" {"_id" false, "category_id" "$_id.category_id", "count" true}}
++                                         {"$sort" {"count" -1, "category_id" 1}}
++                                         {"$limit" 5})}
++                           :rows [[7 10] [50 10] [40 9] [2 8] [5 7]]}}
++                 (qp/process-query query)))))))))
++
+ ;; ## Tests for individual syncing functions
+ 
+ (deftest describe-database-test
+diff --git a/src/metabase/query_processor/middleware/fetch_source_query.clj b/src/metabase/query_processor/middleware/fetch_source_query.clj
+index ba7f0b1964..b8cf42322c 100644
+--- a/src/metabase/query_processor/middleware/fetch_source_query.clj
++++ b/src/metabase/query_processor/middleware/fetch_source_query.clj
+@@ -115,11 +115,17 @@
+        (let [collection (:collection native-query)]
+          (cond-> native-query
+                  ;; MongoDB native  queries consist of a collection and a pipelne (query)
+-                 collection (update :native (fn [pipeline] {:collection collection
+-                                                            :query      pipeline}))
++                 collection
++                 (update :native (fn [pipeline] {:collection collection
++                                                 :query      pipeline}))
++
+                  ;; trim trailing comments from SQL, but not other types of native queries
+-                 (string? (:native native-query)) (update :native (partial trim-sql-query card-id))
+-                 (empty? template-tags) (dissoc :template-tags))))
++                 (and (nil? collection)
++                      (string? (:native native-query)))
++                 (update :native (partial trim-sql-query card-id))
++
++                 (empty? template-tags)
++                 (dissoc :template-tags))))
+      (throw (ex-info (tru "Missing source query in Card {0}" card-id)
+                      {:card card})))))
+ 
+diff --git a/test/metabase/query_processor/middleware/fetch_source_query_test.clj b/test/metabase/query_processor/middleware/fetch_source_query_test.clj
+index 3d765ac8bb..350b452e5a 100644
+--- a/test/metabase/query_processor/middleware/fetch_source_query_test.clj
++++ b/test/metabase/query_processor/middleware/fetch_source_query_test.clj
+@@ -352,4 +352,21 @@
+                                   :collection  "checkins"
+                                   :mbql?       true}
+                 :database        (mt/id)}
++               (#'fetch-source-query/card-id->source-query-and-metadata card-id))))))
++  (testing "card-id->source-query-and-metadata-test should preserve mongodb native queries in string format (#30112)"
++    (let [query-str (str "[{\"$project\":\n"
++                         "   {\"_id\":\"$_id\",\n"
++                         "    \"user_id\":\"$user_id\",\n"
++                         "    \"venue_id\": \"$venue_id\"}},\n"
++                         " {\"$limit\": 1048575}]")
++          query {:type     :native
++                 :native   {:query query-str
++                            :collection  "checkins"}
++                 :database (mt/id)}]
++      (mt/with-temp Card [{card-id :id} {:dataset_query query}]
++        (is (= {:source-metadata nil
++                :source-query    {:native      {:collection "checkins"
++                                                :query      query-str}
++                                  :collection  "checkins"}
++                :database        (mt/id)}
+                (#'fetch-source-query/card-id->source-query-and-metadata card-id)))))))
+diff --git a/test/metabase/query_processor_test/nested_queries_test.clj b/test/metabase/query_processor_test/nested_queries_test.clj
+index daecfd535b..01d502d459 100644
+--- a/test/metabase/query_processor_test/nested_queries_test.clj
++++ b/test/metabase/query_processor_test/nested_queries_test.clj
+@@ -97,6 +97,20 @@
+                     :aggregation  [:count]
+                     :breakout     [$price]}))))))))
+ 
++(deftest mbql-source-query-aggregation-order-by-test
++  (mt/test-drivers (mt/normal-drivers-with-feature :nested-queries)
++    (testing "Source query with aggregation and order by produces expected results (#30874)."
++      (is (= [[50 10] [7 10] [40 9]]
++             (mt/formatted-rows [int int]
++               (mt/run-mbql-query venues
++                 {:source-query {:source-table $$venues
++                                 :aggregation  [:count]
++                                 :breakout     [$category_id]
++                                 :order-by     [[:desc [:aggregation 0]]]}
++                  :order-by [[:desc *count/Integer]
++                             [:desc $category_id]]
++                  :limit 3})))))))
++
+ (deftest breakout-fk-column-test
+   (mt/test-drivers (mt/normal-drivers-with-feature :nested-queries :foreign-keys)
+     (testing "Test including a breakout of a nested query column that follows an FK"
+-- 
+2.34.1
+

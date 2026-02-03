@@ -1,0 +1,29 @@
+From 2faafa4cfcf3be3acfb2e935937aa8082fb4b81d Mon Sep 17 00:00:00 2001
+From: Yonggang Luo <luoyonggang@gmail.com>
+Date: Wed, 30 Dec 2020 03:55:17 -0800
+Subject: [PATCH] Make test262-harness.py Python 3-compatible (#4381)
+
+Less operator is not supported between int and None in Python 3. Fix
+that Python 2 legacy in test262-harness.py.
+
+JerryScript-DCO-1.0-Signed-off-by: Yonggang Luo luoyonggang@gmail.com
+---
+ tools/runners/test262-harness.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/runners/test262-harness.py b/tools/runners/test262-harness.py
+index bdd683b5..ee6072c3 100755
+--- a/tools/runners/test262-harness.py
++++ b/tools/runners/test262-harness.py
+@@ -129,7 +129,7 @@ def my_maybe_list(value):
+ def my_multiline_list(lines, value):
+     # assume no explcit indentor (otherwise have to parse value)
+     value = []
+-    indent = None
++    indent = 0
+     while lines:
+         line = lines.pop(0)
+         leading = my_leading_spaces(line)
+-- 
+2.34.1
+

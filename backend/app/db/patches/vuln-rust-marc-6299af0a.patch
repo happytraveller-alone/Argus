@@ -1,0 +1,26 @@
+From 6299af0ab17f070a78b75367e14b9101c29ce475 Mon Sep 17 00:00:00 2001
+From: Anatoly Ikorsky <aikorsky@gmail.com>
+Date: Wed, 27 Jan 2021 09:12:28 +0300
+Subject: [PATCH] Remove unsafe code (fix #7)
+
+---
+ src/lib.rs | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/lib.rs b/src/lib.rs
+index f129603..fc2f838 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -134,8 +134,7 @@ impl<'a> Record<'a> {
+             return Err(Error::RecordTooShort(len));
+         }
+ 
+-        data.reserve(len - 5);
+-        unsafe { data.set_len(len) };
++        data.resize(len, 0);
+         input.read_exact(&mut data[5..len])?;
+ 
+         let data_offset = misc::read_dec_5(&data[12..17])?;
+-- 
+2.34.1
+

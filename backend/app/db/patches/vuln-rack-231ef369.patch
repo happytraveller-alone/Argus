@@ -1,0 +1,31 @@
+From 231ef369ad0b542575fb36c74fcfcfabcf6c530c Mon Sep 17 00:00:00 2001
+From: Aaron Patterson <tenderlove@ruby-lang.org>
+Date: Mon, 13 Mar 2023 10:58:13 -0700
+Subject: [PATCH] Avoid ReDoS problem
+
+Split headers on commas, then strip the strings in order to avoid ReDoS
+issues.
+
+[CVE-2023-27539]
+---
+ lib/rack/request.rb | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/rack/request.rb b/lib/rack/request.rb
+index e6969645..89421674 100644
+--- a/lib/rack/request.rb
++++ b/lib/rack/request.rb
+@@ -666,8 +666,8 @@ module Rack
+       end
+ 
+       def parse_http_accept_header(header)
+-        header.to_s.split(/\s*,\s*/).map do |part|
+-          attribute, parameters = part.split(/\s*;\s*/, 2)
++        header.to_s.split(",").each(&:strip!).map do |part|
++          attribute, parameters = part.split(";", 2).each(&:strip!)
+           quality = 1.0
+           if parameters and /\Aq=([\d.]+)/ =~ parameters
+             quality = $1.to_f
+-- 
+2.34.1
+

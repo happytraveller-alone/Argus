@@ -1,0 +1,43 @@
+From 6771283c3406586e352337675b79ff2ca50f191b Mon Sep 17 00:00:00 2001
+From: Anton Kosyakov <anton@gitpod.io>
+Date: Wed, 10 May 2023 21:16:55 +0200
+Subject: [PATCH] allow to redirect only for whitelisted trusted protocols
+ (#17559)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* fix IDE-69: allow to redirect only for whitelisted trusted protocols
+
+* Update components/dashboard/src/service/service.tsx
+
+Co-authored-by: Filip Troníček <filip@gitpod.io>
+
+* drop security
+
+---------
+
+Co-authored-by: Filip Troníček <filip@gitpod.io>
+---
+ components/dashboard/src/service/service.tsx | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/components/dashboard/src/service/service.tsx b/components/dashboard/src/service/service.tsx
+index 256c7ca9a..ca61e348d 100644
+--- a/components/dashboard/src/service/service.tsx
++++ b/components/dashboard/src/service/service.tsx
+@@ -176,7 +176,10 @@ export class IDEFrontendService implements IDEFrontendDashboardService.IServer {
+         let redirect = false;
+         try {
+             const desktopLink = new URL(url);
+-            redirect = desktopLink.protocol !== "http:" && desktopLink.protocol !== "https:";
++            // allow to redirect only for whitelisted trusted protocols
++            // IDE-69
++            const trustedProtocols = ["vscode:", "vscode-insiders:", "jetbrains-gateway:"];
++            redirect = trustedProtocols.includes(desktopLink.protocol);
+         } catch (e) {
+             console.error("invalid desktop link:", e);
+         }
+-- 
+2.34.1
+

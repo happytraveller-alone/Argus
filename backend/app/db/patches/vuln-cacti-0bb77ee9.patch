@@ -1,0 +1,25 @@
+From 0bb77ee9b4d1c7a99e0140b88789e050e523e628 Mon Sep 17 00:00:00 2001
+From: TheWitness <thewitness@cacti.net>
+Date: Mon, 21 Feb 2022 14:09:07 -0500
+Subject: [PATCH] Partially revert the last commit #4562
+
+---
+ lib/ldap.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/ldap.php b/lib/ldap.php
+index e203323fe..91bd8f048 100644
+--- a/lib/ldap.php
++++ b/lib/ldap.php
+@@ -351,7 +351,7 @@ abstract class LdapError {
+ 				break;
+ 
+ 			case LdapError::EmptyPassword:
+-				$error_text = __('Password is required.  Login failed.');
++				$error_text = __('Invalid Password provided.  Login failed.');
+ 				break;
+ 
+ 			default:
+-- 
+2.34.1
+

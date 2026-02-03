@@ -1,0 +1,31 @@
+From b6ecf515b38c2d82d32743f27236534f3e03ee0c Mon Sep 17 00:00:00 2001
+From: tobiasKaminsky <tobias@kaminsky.me>
+Date: Tue, 12 Oct 2021 12:19:37 +0200
+Subject: [PATCH] Fix GHSL-2021-1008 by using permission instead of
+ readPermission
+
+Signed-off-by: tobiasKaminsky <tobias@kaminsky.me>
+---
+ src/main/AndroidManifest.xml | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/main/AndroidManifest.xml b/src/main/AndroidManifest.xml
+index 32697dea4a..fdf673f446 100644
+--- a/src/main/AndroidManifest.xml
++++ b/src/main/AndroidManifest.xml
+@@ -306,9 +306,10 @@
+         <provider
+             android:name=".providers.DiskLruImageCacheFileProvider"
+             android:authorities="@string/image_cache_provider_authority"
+-            android:exported="true"
+             android:grantUriPermissions="true"
+-            android:readPermission="android.permission.MANAGE_DOCUMENTS" />
++            android:permission="android.permission.MANAGE_DOCUMENTS"
++            android:exported="true">
++        </provider>
+ 
+         <!-- Disable WorkManager initialization. Whoever designed this, should pay closer attention -->
+         <!-- to "best before" dates in his fridge. -->
+-- 
+2.34.1
+

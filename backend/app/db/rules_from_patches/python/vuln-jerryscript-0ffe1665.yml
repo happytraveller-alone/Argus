@@ -1,0 +1,24 @@
+rules:
+- id: vuln-jerryscript-0ffe1665
+  pattern: '$CASE.run_pipe()
+
+    '
+  pattern-not: '$CASE.run()
+
+    '
+  languages:
+  - python
+  message: Detected usage of deprecated or unsafe method 'run_pipe()'. Use 'run()'
+    instead to ensure proper execution and security.
+  severity: ERROR
+  metadata:
+    source-url: github.com/jerryscript-project/jerryscript/commit/0ffe1665bd0ee457dd4c1083811e1592a5e2908d
+    category: security
+    cwe:
+    - CWE-477
+    owasp:
+    - A9:2017-Using Components with Known Vulnerabilities
+    references:
+    - https://github.com/jerryscript-project/jerryscript/commit/0ffe1665bd0ee457dd4c1083811e1592a5e2908d
+    technology:
+    - python

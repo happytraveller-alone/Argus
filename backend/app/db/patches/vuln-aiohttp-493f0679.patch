@@ -1,0 +1,87 @@
+From 493f06797654c383242f0e8007f6e06b818a1fbc Mon Sep 17 00:00:00 2001
+From: Ben Kallus <49924171+kenballus@users.noreply.github.com>
+Date: Wed, 18 Oct 2023 06:22:20 -0400
+Subject: [PATCH] Stop accepting `\x80-\xff` in header names; stop accepting
+ `\n` as separating whitespace in status-lines (#7719)
+
+## What do these changes do?
+
+This PR updates the python HTTP parser to stop accepting `\x80-\xff` in
+header names and stop accepting `\n` as separating whitespace in
+status-lines. Both of these are not allowed in the RFCs.
+
+## Are there changes in behavior for the user?
+
+Only users of seriously misbehaving clients would notice a change in
+behavior for this patch. If a client sends non-ascii UTF-8 within header
+names, their messages will now 400. Note that (nearly) arbitrary values
+are still allowed within header values. Most HTTP servers (Apache,
+Nginx, IIS, Node) do not accept UTF-8 within header names because of the
+risk of control character injection.
+
+---------
+
+Co-authored-by: pre-commit-ci[bot] <66853113+pre-commit-ci[bot]@users.noreply.github.com>
+---
+ CHANGES/7719.bugfix       | 1 +
+ aiohttp/http_parser.py    | 6 ++++--
+ tests/test_http_parser.py | 7 +++++++
+ 3 files changed, 12 insertions(+), 2 deletions(-)
+ create mode 100644 CHANGES/7719.bugfix
+
+diff --git a/CHANGES/7719.bugfix b/CHANGES/7719.bugfix
+new file mode 100644
+index 00000000000..b5474398bc4
+--- /dev/null
++++ b/CHANGES/7719.bugfix
+@@ -0,0 +1 @@
++Update parser to disallow invalid characters in header field names and stop accepting LF as a request line separator.
+diff --git a/aiohttp/http_parser.py b/aiohttp/http_parser.py
+index c2e04139a44..34f4d040c03 100644
+--- a/aiohttp/http_parser.py
++++ b/aiohttp/http_parser.py
+@@ -65,7 +65,9 @@
+ #     token = 1*tchar
+ METHRE: Final[Pattern[str]] = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+ VERSRE: Final[Pattern[str]] = re.compile(r"HTTP/(\d).(\d)")
+-HDRRE: Final[Pattern[bytes]] = re.compile(rb"[\x00-\x1F\x7F()<>@,;:\[\]={} \t\"\\]")
++HDRRE: Final[Pattern[bytes]] = re.compile(
++    rb"[\x00-\x1F\x7F-\xFF()<>@,;:\[\]={} \t\"\\]"
++)
+ HEXDIGIT = re.compile(rb"[0-9a-fA-F]+")
+ 
+ 
+@@ -540,7 +542,7 @@ def parse_message(self, lines: List[bytes]) -> RawRequestMessage:
+         # request line
+         line = lines[0].decode("utf-8", "surrogateescape")
+         try:
+-            method, path, version = line.split(maxsplit=2)
++            method, path, version = line.split(" ", maxsplit=2)
+         except ValueError:
+             raise BadStatusLine(line) from None
+ 
+diff --git a/tests/test_http_parser.py b/tests/test_http_parser.py
+index 4cd38836af2..8b4121be87d 100644
+--- a/tests/test_http_parser.py
++++ b/tests/test_http_parser.py
+@@ -177,6 +177,7 @@ def test_cve_2023_37276(parser: Any) -> None:
+         "Baz: abc\x00def",
+         "Foo : bar",  # https://www.rfc-editor.org/rfc/rfc9112.html#section-5.1-2
+         "Foo\t: bar",
++        "\xffoo: bar",
+     ),
+ )
+ def test_bad_headers(parser: Any, hdr: str) -> None:
+@@ -678,6 +679,12 @@ def test_http_request_bad_status_line(parser: Any) -> None:
+     assert r"\n" not in exc_info.value.message
+ 
+ 
++def test_http_request_bad_status_line_whitespace(parser: Any) -> None:
++    text = b"GET\n/path\fHTTP/1.1\r\n\r\n"
++    with pytest.raises(http_exceptions.BadStatusLine):
++        parser.feed_data(text)
++
++
+ def test_http_request_upgrade(parser: Any) -> None:
+     text = (
+         b"GET /test HTTP/1.1\r\n"

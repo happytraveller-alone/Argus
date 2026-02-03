@@ -1,0 +1,25 @@
+From e680e134a4215c979bfd2eaf58336be34c8fc6e6 Mon Sep 17 00:00:00 2001
+From: Bozhidar Slaveykov <bobi@microweber.com>
+Date: Wed, 19 Jan 2022 11:35:10 +0200
+Subject: [PATCH] search_authors only admins
+
+---
+ src/MicroweberPackages/User/helpers/api_user.php | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/MicroweberPackages/User/helpers/api_user.php b/src/MicroweberPackages/User/helpers/api_user.php
+index 2278395c345..ad6bb9572b3 100644
+--- a/src/MicroweberPackages/User/helpers/api_user.php
++++ b/src/MicroweberPackages/User/helpers/api_user.php
+@@ -63,9 +63,9 @@
+ 
+ });
+ 
+-api_expose('users/search_authors', function ($params = false) {
++api_expose_admin('users/search_authors', function ($params = false) {
+ 
+-    $return = array();
++    $return = array(); 
+ 
+     $kw = false;
+     if (isset($params['kw'])) {

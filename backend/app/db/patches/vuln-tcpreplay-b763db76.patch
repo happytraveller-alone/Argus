@@ -1,0 +1,52 @@
+From f3fe91fc65d17687822ed8f376f2e54b97f18291 Mon Sep 17 00:00:00 2001
+From: Fred Klassen <fklassen@appneta.com>
+Date: Mon, 1 Jun 2020 17:59:51 -0700
+Subject: [PATCH] Bug #556 #538 guard HBO in checksum - fix as per
+ @GabrielGanne
+
+---
+ docs/CHANGELOG         | 2 +-
+ src/tcpedit/checksum.c | 9 +++++++--
+ 2 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/docs/CHANGELOG b/docs/CHANGELOG
+index 390d4e6f..19fe0151 100644
+--- a/docs/CHANGELOG
++++ b/docs/CHANGELOG
+@@ -3,7 +3,7 @@
+     - Fix warnings from gcc version 10 (#580)
+     - Heap Buffer Overflow in randomize_iparp (#579)
+     - Use after free in get_ipv6_next (#578)
+-    - Heap Buffer Overflow in do_checksum (#577)
++    - Heap Buffer Overflow in do_checksum (#577) (#556)
+     - Heap Buffer Overflow in git_ipv6_next (#576)
+ 
+ 03/12/2019 Version 4.3.2
+diff --git a/src/tcpedit/checksum.c b/src/tcpedit/checksum.c
+index 54fc069b..77905f4a 100644
+--- a/src/tcpedit/checksum.c
++++ b/src/tcpedit/checksum.c
+@@ -50,13 +50,18 @@ do_checksum(tcpedit_t *tcpedit, uint8_t *data, int proto, int payload_len) {
+     ipv6 = NULL;
+     assert(data);
+ 
+-    if (!data || payload_len <= 0 || payload_len > 65535) {
+-        tcpedit_setwarn(tcpedit, "%s", "Unable to checksum packets with no L3+ data");
++    if (!data || payload_len < (int)sizeof(*ipv4) || payload_len > 0xffff) {
++        tcpedit_setwarn(tcpedit, "%s", "Unable to checksum packet with no L3+ data");
+         return TCPEDIT_WARN;
+     }
+ 
+     ipv4 = (ipv4_hdr_t *)data;
+     if (ipv4->ip_v == 6) {
++        if (payload_len < sizeof(*ipv6)) {
++            tcpedit_setwarn(tcpedit, "%s", "Unable to checksum IPv6 packet with insufficient data");
++            return TCPEDIT_WARN;
++        }
++
+         ipv6 = (ipv6_hdr_t *)data;
+         ipv4 = NULL;
+ 
+-- 
+2.34.1
+

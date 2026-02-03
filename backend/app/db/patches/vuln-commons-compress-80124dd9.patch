@@ -1,0 +1,34 @@
+From 7ce1b0796d6cbe1f41b969583bd49f33ae0efef0 Mon Sep 17 00:00:00 2001
+From: Stefan Bodewig <stefan.bodewig@innoq.com>
+Date: Wed, 30 Jun 2021 22:01:22 +0200
+Subject: [PATCH] potential integer overflow in check
+
+---
+ .../org/apache/commons/compress/archivers/tar/TarUtils.java  | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/main/java/org/apache/commons/compress/archivers/tar/TarUtils.java b/src/main/java/org/apache/commons/compress/archivers/tar/TarUtils.java
+index d809125e..ec12f17f 100644
+--- a/src/main/java/org/apache/commons/compress/archivers/tar/TarUtils.java
++++ b/src/main/java/org/apache/commons/compress/archivers/tar/TarUtils.java
+@@ -741,13 +741,16 @@ public class TarUtils {
+                     while((ch = inputStream.read()) != -1) {
+                         read++;
+                         totalRead++;
++                        if (totalRead < 0 || (headerSize >= 0 && totalRead >= headerSize)) {
++                            break;
++                        }
+                         if (ch == '='){ // end of keyword
+                             final String keyword = coll.toString(CharsetNames.UTF_8);
+                             // Get rest of entry
+                             final int restLen = len - read;
+                             if (restLen <= 1) { // only NL
+                                 headers.remove(keyword);
+-                            } else if (headerSize >= 0 && totalRead + restLen > headerSize) {
++                            } else if (headerSize >= 0 && restLen > headerSize - totalRead) {
+                                 throw new IOException("Paxheader value size " + restLen
+                                     + " exceeds size of header record");
+                             } else {
+-- 
+2.34.1
+

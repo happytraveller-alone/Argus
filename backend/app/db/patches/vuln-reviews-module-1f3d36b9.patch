@@ -1,0 +1,125 @@
+From 463c54d825610eea656cd06a901c28aa074b8f06 Mon Sep 17 00:00:00 2001
+From: Scott Torres <scotttorres@Scotts-MacBook-Air.local>
+Date: Wed, 12 Jun 2019 19:10:33 -0700
+Subject: [PATCH] Repair POST request bug where incorrect data type was being
+ sent from client
+
+---
+ database/index.js | 71 +++++++++++++++++++++++------------------------
+ server/index.js   |  4 +++
+ 2 files changed, 39 insertions(+), 36 deletions(-)
+
+diff --git a/database/index.js b/database/index.js
+index 98c9c98..c2a8700 100644
+--- a/database/index.js
++++ b/database/index.js
+@@ -28,42 +28,41 @@ module.exports.getSummary = (restaurantId, callback) => {
+ };
+ 
+ module.exports.createReview = (reviewData, callback) => {
+-  const client = new Client({
+-    user: dbconf.role,
+-    host: dbconf.host,
+-    database: 'reviews',
+-    password: dbconf.password,
+-    port: 5432
+-  });
+-
+-  const insertReview = `INSERT INTO reviews
+-    (
+-      restaurant,
+-      diner,
+-      text,
+-      date,
+-      overall,
+-      food,
+-      service,
+-      ambience,
+-      wouldrecommend,
+-      tags
+-    ) 
+-    VALUES
+-    (
+-      ${reviewData.restaurant},
+-      ${reviewData.diner},
+-      ${reviewData.text},
+-      ${reviewData.date},
+-      ${reviewData.overall},
+-      ${reviewData.food},
+-      ${reviewData.service},
+-      ${reviewData.ambience},
+-      ${reviewData.wouldrecommend},
+-      ${reviewData.tags},
+-    )`;
+-  
+-    makeQuery(client, insertReview, callback);
++  console.log(reviewData.text);
++  Pool.pool.query(`
++  INSERT INTO reviews (
++    id,
++    restaurant_id,
++    user_id,
++    text,
++    date,
++    overall_score,
++    food_score,
++    service_score,
++    ambience_score,
++    value_score,
++    is_recommended,
++    tags
++  ) VALUES (
++    nextval('reviews_id_seq_override'),
++    ${reviewData.restaurant_id},
++    ${reviewData.user_id},
++    '${reviewData.text}',
++    '${reviewData.date}',
++    ${reviewData.overall_score},
++    ${reviewData.food_score},
++    ${reviewData.service_score},
++    ${reviewData.ambience_score},
++    ${reviewData.value_score},
++    '${reviewData.is_recommended}',
++    '${reviewData.tags}'
++  )`, (err) => {
++    if (err) {
++      callback(err);
++    } else {
++      callback(null);
++    }
++  })
+ }
+ 
+ module.exports.editReview = (reviewData, callback) => {
+diff --git a/server/index.js b/server/index.js
+index 02c8e64..aadde3e 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -1,11 +1,13 @@
+ const path = require('path');
+ const cors = require('cors');
+ const express = require('express');
++const bodyParser = require('body-parser');
+ const db = require('../database/index.js');
+ 
+ const app = express();
+ 
+ app.use(cors());
++app.use(bodyParser.json())
+ app.use(express.static(path.resolve(__dirname, '../public')));
+ 
+ // Gets files from public folder
+@@ -45,8 +47,10 @@ app.get('/:id/reviews', (req, res) => {
+ });
+ 
+ app.post('/:id/reviews', (req, res) => {
++  console.log(req.body);
+   db.createReview(req.body, (err) => {
+     if (err) {
++      console.log(err);
+       res.status(422).end();
+     } else {
+       res.status(201).send('Successfully created review.');
+-- 
+2.34.1
+

@@ -1,0 +1,118 @@
+From 9e0e55f8bfa60bddca083ff85699f855c91c42e7 Mon Sep 17 00:00:00 2001
+From: bobsayshilol <bobsayshilol@live.co.uk>
+Date: Sun, 14 Feb 2021 13:51:50 +0000
+Subject: [PATCH] Move these magic numbers into the common header and give them
+ some error messages
+
+Without this the client gets the message "Not a valid error number
+(666)" printed to stdout, which doesn't explain what the issue is.
+
+These were found via fuzzing where the fuzzer was spamming these
+messages.
+---
+ src/avr.c     | 6 ++----
+ src/caf.c     | 4 ----
+ src/common.h  | 9 +++++++++
+ src/mpc2k.c   | 2 --
+ src/sndfile.c | 9 +++++++++
+ 5 files changed, 20 insertions(+), 10 deletions(-)
+
+diff --git a/src/avr.c b/src/avr.c
+index bd6b00f43..6c78ff69b 100644
+--- a/src/avr.c
++++ b/src/avr.c
+@@ -28,8 +28,6 @@
+ #define TWOBIT_MARKER	(MAKE_MARKER ('2', 'B', 'I', 'T'))
+ #define	AVR_HDR_SIZE	128
+ 
+-#define	SFE_AVR_X	666
+-
+ /*
+ ** From: hyc@hanauma.Jpl.Nasa.Gov (Howard Chu)
+ **
+@@ -116,7 +114,7 @@ avr_read_header (SF_PRIVATE *psf)
+ 	psf_log_printf (psf, "%M\n", hdr.marker) ;
+ 
+ 	if (hdr.marker != TWOBIT_MARKER)
+-		return SFE_AVR_X ;
++		return SFE_AVR_NOT_AVR ;
+ 
+ 	psf_log_printf (psf, "  Name        : %s\n", hdr.name) ;
+ 
+@@ -145,7 +143,7 @@ avr_read_header (SF_PRIVATE *psf)
+ 
+ 		default :
+ 			psf_log_printf (psf, "Error : bad rez/sign combination.\n") ;
+-			return SFE_AVR_X ;
++			return SFE_AVR_BAD_REZ_SIGN ;
+ 		} ;
+ 
+ 	psf_binheader_readf (psf, "E4444", &hdr.srate, &hdr.frames, &hdr.lbeg, &hdr.lend) ;
+diff --git a/src/caf.c b/src/caf.c
+index 0eaa8eaab..8e629ad6f 100644
+--- a/src/caf.c
++++ b/src/caf.c
+@@ -66,10 +66,6 @@
+ 
+ #define CAF_PEAK_CHUNK_SIZE(ch) 	((int) (sizeof (int) + ch * (sizeof (float) + 8)))
+ 
+-#define SFE_CAF_NOT_CAF	666
+-#define SFE_CAF_NO_DESC	667
+-#define SFE_CAF_BAD_PEAK 668
+-
+ /*------------------------------------------------------------------------------
+ ** Typedefs.
+ */
+diff --git a/src/common.h b/src/common.h
+index b2add65a7..b94e678a9 100644
+--- a/src/common.h
++++ b/src/common.h
+@@ -754,6 +754,15 @@ enum
+ 
+ 	SFE_OPUS_BAD_SAMPLERATE,
+ 
++	SFE_CAF_NOT_CAF,
++	SFE_CAF_NO_DESC,
++	SFE_CAF_BAD_PEAK,
++
++	SFE_AVR_NOT_AVR,
++	SFE_AVR_BAD_REZ_SIGN,
++
++	SFE_MPC_NO_MARKER,
++
+ 	SFE_MAX_ERROR			/* This must be last in list. */
+ } ;
+ 
+diff --git a/src/mpc2k.c b/src/mpc2k.c
+index aef21ad9b..9f490eaba 100644
+--- a/src/mpc2k.c
++++ b/src/mpc2k.c
+@@ -46,8 +46,6 @@
+ #define HEADER_LENGTH		42	/* Sum of above data fields. */
+ #define HEADER_NAME_LEN		17	/* Length of name string. */
+ 
+-#define	SFE_MPC_NO_MARKER	666
+-
+ /*------------------------------------------------------------------------------
+ ** Private static functions.
+ */
+diff --git a/src/sndfile.c b/src/sndfile.c
+index 99be23376..6de3963d2 100644
+--- a/src/sndfile.c
++++ b/src/sndfile.c
+@@ -279,6 +279,15 @@ ErrorStruct SndfileErrors [] =
+ 
+ 	{	SFE_OPUS_BAD_SAMPLERATE	, "Error : Opus only supports sample rates of 8000, 12000, 16000, 24000 and 48000." },
+ 
++	{	SFE_CAF_NOT_CAF			, "Error : Not a CAF file." },
++	{	SFE_CAF_NO_DESC			, "Error : No 'desc' marker in CAF file." },
++	{	SFE_CAF_BAD_PEAK		, "Error : Bad 'PEAK' chunk in CAF file." },
++
++	{	SFE_AVR_NOT_AVR			, "Error : Not an AVR file." },
++	{	SFE_AVR_BAD_REZ_SIGN	, "Error : Bad rez/sign combination." },
++
++	{	SFE_MPC_NO_MARKER		, "Error : No marker in MPC2K file." },
++
+ 	{	SFE_MAX_ERROR			, "Maximum error number." },
+ 	{	SFE_MAX_ERROR + 1		, NULL }
+ } ;

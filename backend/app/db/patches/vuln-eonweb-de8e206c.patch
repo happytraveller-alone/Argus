@@ -1,0 +1,58 @@
+From de8e206ca7d56171e524554fec33161184e7bb8f Mon Sep 17 00:00:00 2001
+From: root <root@localhost.localdomain>
+Date: Thu, 27 Feb 2020 13:40:20 +0100
+Subject: [PATCH] issue #51 injection SQL in Cookie
+
+---
+ include/classes/Translator.class.php | 10 +++++++++-
+ include/function.php                 | 13 +++++++++++++
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/include/classes/Translator.class.php b/include/classes/Translator.class.php
+index 771a82d..ecdbf14 100644
+--- a/include/classes/Translator.class.php
++++ b/include/classes/Translator.class.php
+@@ -46,7 +46,15 @@ class Translator
+ 		
+ 		// Check if user default lang is defined
+ 		if(isset($_COOKIE['user_id'])){
+-			$lang = mysqli_result(sqlrequest($database_eonweb,"select user_language from users where user_id='".$_COOKIE['user_id']."'"),0);
++			$idUser =$_COOKIE['user_id'];
++            $conn = connexionDB($database_eonweb);
++            $stmt = $conn->prepare("SELECT user_language from users where user_id= :idUser");
++            $stmt->bindParam(':idUser', $idUser);
++            $stmt->execute();
++            $result = $stmt->fetch(); 
++            $lang=$result["user_language"];
++            $stmt=null;
++            $conn=null;
+ 		}
+ 		
+ 		// Check if isset browser lang
+diff --git a/include/function.php b/include/function.php
+index 9c0c8e4..61a946a 100644
+--- a/include/function.php
++++ b/include/function.php
+@@ -113,6 +113,19 @@ function sqlrequest($database,$sql,$id=false,$prepare=false){
+ 	return $result;
+ }
+ 
++function connexionDB($database){
++    global $database_host;
++    global $database_username;
++    global $database_password;
++    try {
++        $dbh = new PDO("mysql:host=$database_host;dbname=$database", $database_username, $database_password);
++        return $dbh;
++    } catch (PDOException $e) {
++        print "Erreur !: " . $e->getMessage() . "<br/>";
++        die();
++    }
++}
++
+ // Display array value
+ function display_value($value, $key){
+ 	echo "$value\n";
+-- 
+2.34.1
+

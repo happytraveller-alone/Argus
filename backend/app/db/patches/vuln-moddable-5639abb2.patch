@@ -1,0 +1,38 @@
+From 5639abb24b6d725554969dc0be5822edb54a4a08 Mon Sep 17 00:00:00 2001
+From: Andrew Parker <aparker127@gmail.com>
+Date: Wed, 2 Sep 2020 21:35:09 -0700
+Subject: [PATCH] make servo example work out of the box
+
+---
+ modules/pins/servo/esp/modServo.cpp | 2 +-
+ modules/pins/servo/manifest.json    | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/modules/pins/servo/esp/modServo.cpp b/modules/pins/servo/esp/modServo.cpp
+index 0f6720509..5ca363173 100644
+--- a/modules/pins/servo/esp/modServo.cpp
++++ b/modules/pins/servo/esp/modServo.cpp
+@@ -21,7 +21,7 @@
+ #include "xsmc.h"
+ #include "mc.xs.h"			// for xsID_ values
+ 
+-#include "servo.h"
++#include "Servo.h"
+ 
+ typedef struct {
+ 	Servo		*s;
+diff --git a/modules/pins/servo/manifest.json b/modules/pins/servo/manifest.json
+index 5b7cb88ba..b459cd6ed 100644
+--- a/modules/pins/servo/manifest.json
++++ b/modules/pins/servo/manifest.json
+@@ -1,6 +1,6 @@
+ {
+ 	"build": {
+-		"ARDUINO_ESP8266": "/Users/$(USER)/esp/esp8266-2.3.0/",
++		"ARDUINO_ESP8266": "$(HOME)/esp/esp8266-2.3.0/",
+ 	},
+ 	"platforms":{
+ 		"esp": {
+-- 
+2.34.1
+

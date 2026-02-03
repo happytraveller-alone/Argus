@@ -1,0 +1,26 @@
+From 96ff19a19eba64bdf47f2f12ecdbc5ee331c09e2 Mon Sep 17 00:00:00 2001
+From: Shawn Webb <swebb@sourcefire.com>
+Date: Tue, 16 Dec 2014 16:21:40 -0500
+Subject: [PATCH] bb#11215 - Change a variable to be an unsigned int
+
+---
+ libclamav/petite.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libclamav/petite.c b/libclamav/petite.c
+index 7063050ae..610933168 100644
+--- a/libclamav/petite.c
++++ b/libclamav/petite.c
+@@ -108,7 +108,8 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct cli
+   while (1) {
+     char *ssrc, *ddst;
+     uint32_t size, srva;
+-    int backbytes, oldback, backsize, addsize;
++    int backbytes, oldback, addsize;
++    unsigned int backsize;
+     
+     if ( ! CLI_ISCONTAINED(buf, bufsz, packed, 4)) {
+       if (usects)
+-- 
+2.34.1
+

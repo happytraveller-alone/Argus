@@ -1,0 +1,38 @@
+From 62e126896fb063808767d74d00886001e38eaa1c Mon Sep 17 00:00:00 2001
+From: Dan Bungert <daniel.bungert@canonical.com>
+Date: Tue, 3 Oct 2023 16:40:48 -0600
+Subject: [PATCH] install: create autoinstall-user-data 0400
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+CVE-2023-5182
+
+As autoinstall-user-data contains a password hash hash for a user with
+sudo access, create the autoinstall-user-data as 0400 root:root.
+
+The old permissions are 0640 root:adm, and the adm group does not by
+default have sudo access, so cracking that hash could lead to privilege
+escallation for someone in the adm group.
+
+Thanks to Patric Åhlin and Johan Hortling for identifying and reporting
+the issue.
+---
+ subiquity/server/controllers/install.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/subiquity/server/controllers/install.py b/subiquity/server/controllers/install.py
+index d61a91eeb..ff376f32c 100644
+--- a/subiquity/server/controllers/install.py
++++ b/subiquity/server/controllers/install.py
+@@ -689,7 +689,9 @@ async def postinstall(self, *, context):
+         autoinstall_config = "#cloud-config\n" + yaml.dump(
+             {"autoinstall": self.app.make_autoinstall()}
+         )
+-        write_file(autoinstall_path, autoinstall_config)
++        # As autoinstall-user-data contains a password hash, we want this file
++        # to have a very restrictive mode and ownership.
++        write_file(autoinstall_path, autoinstall_config, mode=0o400, group="root")
+         try:
+             if self.supports_apt():
+                 packages = await self.get_target_packages(context=context)

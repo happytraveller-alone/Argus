@@ -1,0 +1,45 @@
+From cfda69feffd04cb3280ed4c87e420ef446777839 Mon Sep 17 00:00:00 2001
+From: Grant Gainey <ggainey@redhat.com>
+Date: Thu, 14 Nov 2013 10:43:48 -0500
+Subject: [PATCH] 1063915, CVE-2013-4415 - Fix XSS in new-list-tag by escaping
+ _LABEL_SELECTED
+
+---
+ .../taglibs/list/decorators/PageSizeDecorator.java         | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/java/code/src/com/redhat/rhn/frontend/taglibs/list/decorators/PageSizeDecorator.java b/java/code/src/com/redhat/rhn/frontend/taglibs/list/decorators/PageSizeDecorator.java
+index 08d4425aec..299138595c 100644
+--- a/java/code/src/com/redhat/rhn/frontend/taglibs/list/decorators/PageSizeDecorator.java
++++ b/java/code/src/com/redhat/rhn/frontend/taglibs/list/decorators/PageSizeDecorator.java
+@@ -21,6 +21,7 @@ import java.util.List;
+ import javax.servlet.ServletRequest;
+ import javax.servlet.jsp.JspException;
+ 
++import org.apache.commons.lang.StringEscapeUtils;
+ import org.apache.commons.lang.StringUtils;
+ import org.apache.log4j.Logger;
+ 
+@@ -135,8 +136,8 @@ public class PageSizeDecorator extends BaseListDecorator {
+             input.setAttribute("type", "hidden");
+             input.setAttribute("id", makeSelectionId(listName));
+             input.setAttribute("name", makeSelectionLabel(listName));
+-            input.setAttribute("value", pageContext.getRequest().getParameter
+-                                            (makeSelectionLabel(listName)));
++            input.setAttribute("value", StringEscapeUtils.escapeHtml(pageContext
++                            .getRequest().getParameter(makeSelectionLabel(listName))));
+             stringBuild.append(input.render());
+             ListTagUtil.write(pageContext, stringBuild.toString());
+         }
+@@ -205,7 +206,7 @@ public class PageSizeDecorator extends BaseListDecorator {
+         catch (NumberFormatException nfe) {
+             logger.warn("Number format exception encountered while parsing " +
+                     ConfigDefaults.PAGE_SIZES + "=" + pageSizes);
+-            return Collections.EMPTY_LIST;
++            return Collections.emptyList();
+         }
+     }
+ }
+-- 
+2.34.1
+

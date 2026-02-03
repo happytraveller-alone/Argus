@@ -1,0 +1,82 @@
+From c109bbd147ded620aaf5b5dee015ab669039090a Mon Sep 17 00:00:00 2001
+From: Jordan Sissel <jls@semicomplete.com>
+Date: Sat, 17 Sep 2022 14:52:51 -0700
+Subject: [PATCH] Refactor RPM::File#files to avoid invoking system()
+
+Now, file listing is computed from rpm tags DIRNAMES and BASENAMES
+instead of piping to cpio.
+
+This also fixes a security issue where a malicious rpm could provide a
+custom PAYLOADCOMPRESSOR tag which would allow arbitrary shell
+execution.
+
+The security issue was reported by Joern Schneeweisz.
+
+Context: https://gitlab.com/gitlab-org/gitlab/-/merge_requests/97602
+---
+ lib/arr-pm/file.rb | 49 ++++++----------------------------------------
+ 1 file changed, 6 insertions(+), 43 deletions(-)
+
+diff --git a/lib/arr-pm/file.rb b/lib/arr-pm/file.rb
+index c35aa14..49f8692 100644
+--- a/lib/arr-pm/file.rb
++++ b/lib/arr-pm/file.rb
+@@ -195,49 +195,12 @@ class RPM::File
+   # 
+   #   % rpm2cpio blah.rpm | cpio -it
+   def files
+-    return @files unless @files.nil?
+-
+-    lister = IO.popen("#{tags[:payloadcompressor]} -d | cpio -it --quiet", "r+")
+-    buffer = ""
+-    begin
+-        buffer.force_encoding("BINARY")
+-    rescue NoMethodError
+-        # Do Nothing
+-    end
+-    payload_fd = payload.clone
+-    output = ""
+-    loop do
+-      data = payload_fd.read(16384, buffer)
+-      break if data.nil? # listerextractor.write(data)
+-      lister.write(data)
+-
+-      # Read output from the pipe.
+-      begin
+-        output << lister.read_nonblock(16384)
+-      rescue Errno::EAGAIN
+-        # Nothing to read, move on!
+-      end
+-    end
+-    lister.close_write
+-
+-    # Read remaining output
+-    begin
+-      output << lister.read
+-    rescue Errno::EAGAIN
+-      # Because read_nonblock enables NONBLOCK the 'lister' fd,
+-      # and we may have invoked a read *before* cpio has started
+-      # writing, let's keep retrying this read until we get an EOF
+-      retry
+-    rescue EOFError
+-      # At EOF, hurray! We're done reading.
+-    end
+-
+-    # Split output by newline and strip leading "."
+-    @files = output.split("\n").collect { |s| s.gsub(/^\./, "") }
+-    return @files
+-  ensure
+-    lister.close unless lister.nil?
+-    payload_fd.close unless payload_fd.nil?
++    # RPM stores the file metadata split across multiple tags.
++    # A single path's filename (with no directories) is stored in the "basename" tag.
++    # The directory a file lives in is stored in the "dirnames" tag
++    #
++    # We can join each entry of dirnames and basenames to make the full filename.
++    return tags[:dirnames].zip(tags[:basenames]).map &File.method(:join)
+   end # def files
+ 
+   def mask?(value, mask)
+-- 
+2.34.1
+

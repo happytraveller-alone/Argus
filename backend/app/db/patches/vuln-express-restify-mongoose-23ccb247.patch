@@ -1,0 +1,345 @@
+From 23ccb247d0074bfaca6737cdff52d89c6d6e4a7c Mon Sep 17 00:00:00 2001
+From: Pier-Luc Gendreau <pier_taz@yahoo.com>
+Date: Tue, 16 Feb 2016 17:28:35 +0100
+Subject: [PATCH] fix(distinct): filter private/protected keys
+
+This will filter out distinct queries containing a private or protected field. As suggested, distinct fields are now verified before querying, thus saving a database call and fields that are filtered out return an empty array, as if the field did not exist.
+
+Closes #252
+---
+ src/express-restify-mongoose.js |   2 +-
+ src/operations.js               |  21 +++-
+ src/resource_filter.js          |  17 ++-
+ test/integration/access.js      | 186 ++++++++++++++++++++++++++++++++
+ 4 files changed, 223 insertions(+), 3 deletions(-)
+
+diff --git a/src/express-restify-mongoose.js b/src/express-restify-mongoose.js
+index ae76f3e..1427c82 100644
+--- a/src/express-restify-mongoose.js
++++ b/src/express-restify-mongoose.js
+@@ -111,7 +111,7 @@ const restify = function (app, model, opts = {}) {
+ 
+   options.name = options.name || model.modelName
+ 
+-  const ops = require('./operations')(model, options)
++  const ops = require('./operations')(model, options, excludedMap)
+ 
+   let uri_item = `${options.prefix}${options.version}/${options.name}`
+   if (uri_item.indexOf('/:id') === -1) {
+diff --git a/src/operations.js b/src/operations.js
+index 1cd1e79..8c4ac4e 100644
+--- a/src/operations.js
++++ b/src/operations.js
+@@ -2,7 +2,7 @@ const _ = require('lodash')
+ const http = require('http')
+ const moredots = require('moredots')
+ 
+-module.exports = function (model, options) {
++module.exports = function (model, options, excludedMap) {
+   const buildQuery = require('./buildQuery')(options)
+ 
+   function findById (filteredContext, id) {
+@@ -11,7 +11,20 @@ module.exports = function (model, options) {
+     })
+   }
+ 
++  function isDistinctExcluded (req) {
++    return options.filter.isExcluded(req._ermQueryOptions['distinct'], {
++      access: req.access,
++      excludedMap: excludedMap
++    })
++  }
++
+   function getItems (req, res, next) {
++    if (isDistinctExcluded(req)) {
++      req.erm.result = []
++      req.erm.statusCode = 200
++      return next()
++    }
++
+     options.contextFilter(model, req, (filteredContext) => {
+       let query = buildQuery(filteredContext.find(), req._ermQueryOptions).read(options.readPreference)
+ 
+@@ -89,6 +102,12 @@ module.exports = function (model, options) {
+   }
+ 
+   function getItem (req, res, next) {
++    if (isDistinctExcluded(req)) {
++      req.erm.result = []
++      req.erm.statusCode = 200
++      return next()
++    }
++
+     options.contextFilter(model, req, (filteredContext) => {
+       buildQuery(findById(filteredContext, req.params.id), req._ermQueryOptions).lean(options.lean).read(options.readPreference).exec().then((item) => {
+         if (!item) {
+diff --git a/src/resource_filter.js b/src/resource_filter.js
+index 4c6afb8..304caef 100644
+--- a/src/resource_filter.js
++++ b/src/resource_filter.js
+@@ -5,7 +5,7 @@ const weedout = require('weedout')
+ /**
+  * Represents a filter.
+  * @constructor
+- * @param {Object} - Options
++ * @param {Object} opts - Options
+  * @param {Object} opts.model - Mongoose model
+  * @param {Object} opts.excludedMap {} - Filtered keys for related models
+  * @param {Object} opts.filteredKeys {} - Keys to filter for the current model
+@@ -60,6 +60,21 @@ Filter.prototype.getExcluded = function (opts) {
+   return opts.access === 'protected' ? entry.private : entry.private.concat(entry.protected)
+ }
+ 
++Filter.prototype.isExcluded = function (field, opts) {
++  if (!field) {
++    return false
++  }
++
++  opts = _.defaults(opts, {
++    access: 'public',
++    excludedMap: {},
++    filteredKeys: this.filteredKeys,
++    modelName: this.model.modelName
++  })
++
++  return this.getExcluded(opts).indexOf(field) >= 0
++}
++
+ /**
+  * Removes excluded keys from a document.
+  * @memberof Filter
+diff --git a/test/integration/access.js b/test/integration/access.js
+index 28e11be..05f7f92 100644
+--- a/test/integration/access.js
++++ b/test/integration/access.js
+@@ -167,6 +167,38 @@ module.exports = function (createFn, setup, dismantle) {
+         })
+       })
+ 
++      it('GET /Customer?distinct=age 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer`,
++          qs: {
++            distinct: 'age'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 1)
++          assert.equal(body[0], 12)
++          done()
++        })
++      })
++
++      it('GET /Customer?distinct=comment 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer`,
++          qs: {
++            distinct: 'comment'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 1)
++          assert.equal(body[0], 'Boo')
++          done()
++        })
++      })
++
+       it('GET /Customer/:id 200', (done) => {
+         request.get({
+           url: `${testUrl}/api/v1/Customer/${customer._id}`,
+@@ -190,6 +222,38 @@ module.exports = function (createFn, setup, dismantle) {
+         })
+       })
+ 
++      it('GET /Customer/:id?distinct=age 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer/${customer._id}`,
++          qs: {
++            distinct: 'age'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 1)
++          assert.equal(body[0], 12)
++          done()
++        })
++      })
++
++      it('GET /Customer/:id?distinct=comment 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer/${customer._id}`,
++          qs: {
++            distinct: 'comment'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 1)
++          assert.equal(body[0], 'Boo')
++          done()
++        })
++      })
++
+       it('GET /Customer?populate=favorites.purchase.item,purchases.item,returns 200', (done) => {
+         request.get({
+           url: `${testUrl}/api/v1/Customer`,
+@@ -629,6 +693,37 @@ module.exports = function (createFn, setup, dismantle) {
+         })
+       })
+ 
++      it('GET /Customer?distinct=age 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer`,
++          qs: {
++            distinct: 'age'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 0)
++          done()
++        })
++      })
++
++      it('GET /Customer?distinct=comment 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer`,
++          qs: {
++            distinct: 'comment'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 1)
++          assert.equal(body[0], 'Boo')
++          done()
++        })
++      })
++
+       it('GET /Customer/:id 200', (done) => {
+         request.get({
+           url: `${testUrl}/api/v1/Customer/${customer._id}`,
+@@ -649,6 +744,37 @@ module.exports = function (createFn, setup, dismantle) {
+         })
+       })
+ 
++      it('GET /Customer/:id?distinct=age 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer/${customer._id}`,
++          qs: {
++            distinct: 'age'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 0)
++          done()
++        })
++      })
++
++      it('GET /Customer/:id?distinct=comment 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer/${customer._id}`,
++          qs: {
++            distinct: 'comment'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 1)
++          assert.equal(body[0], 'Boo')
++          done()
++        })
++      })
++
+       it('GET /Customer?populate=favorites.purchase.item,purchases.item,returns 200', (done) => {
+         request.get({
+           url: `${testUrl}/api/v1/Customer`,
+@@ -1069,6 +1195,36 @@ module.exports = function (createFn, setup, dismantle) {
+         })
+       })
+ 
++      it('GET /Customer?distinct=age 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer`,
++          qs: {
++            distinct: 'age'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 0)
++          done()
++        })
++      })
++
++      it('GET /Customer?distinct=comment 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer`,
++          qs: {
++            distinct: 'comment'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 0)
++          done()
++        })
++      })
++
+       it('GET /Customer/:id 200', (done) => {
+         request.get({
+           url: `${testUrl}/api/v1/Customer/${customer._id}`,
+@@ -1089,6 +1245,36 @@ module.exports = function (createFn, setup, dismantle) {
+         })
+       })
+ 
++      it('GET /Customer/:id?distinct=age 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer/${customer._id}`,
++          qs: {
++            distinct: 'age'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 0)
++          done()
++        })
++      })
++
++      it('GET /Customer/:id?distinct=comment 200', (done) => {
++        request.get({
++          url: `${testUrl}/api/v1/Customer/${customer._id}`,
++          qs: {
++            distinct: 'comment'
++          },
++          json: true
++        }, (err, res, body) => {
++          assert.ok(!err)
++          assert.equal(res.statusCode, 200)
++          assert.equal(body.length, 0)
++          done()
++        })
++      })
++
+       it('GET /Customer?populate=favorites.purchase.item,purchases.item,returns 200', (done) => {
+         request.get({
+           url: `${testUrl}/api/v1/Customer`,
+-- 
+2.34.1
+

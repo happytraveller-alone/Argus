@@ -1,0 +1,29 @@
+From 5f15d7c5817b07a6b18cbab17342c95cb7b42be4 Mon Sep 17 00:00:00 2001
+From: Kuan-Wei Chiu <visitorckw@gmail.com>
+Date: Wed, 29 Nov 2023 11:57:14 +0800
+Subject: [PATCH] RISC-V: Fix timeval conversion in _gettimeofday()
+
+Replace multiplication with division for microseconds calculation from
+nanoseconds in _gettimeofday function.
+
+Signed-off-by: Kuan-Wei Chiu <visitorckw@gmail.com>
+---
+ libgloss/riscv/sys_gettimeofday.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libgloss/riscv/sys_gettimeofday.c b/libgloss/riscv/sys_gettimeofday.c
+index 81bea8e55..5379a8963 100644
+--- a/libgloss/riscv/sys_gettimeofday.c
++++ b/libgloss/riscv/sys_gettimeofday.c
+@@ -23,7 +23,7 @@ _gettimeofday(struct timeval *tp, void *tzp)
+   int rv;
+   rv = syscall_errno (SYS_clock_gettime64, 2, 0, (long)&ts64, 0, 0, 0, 0);
+   tp->tv_sec = ts64.tv_sec;
+-  tp->tv_usec = ts64.tv_nsec * 1000;
++  tp->tv_usec = ts64.tv_nsec / 1000;
+   return rv;
+ #else
+   return syscall_errno (SYS_gettimeofday, 1, tp, 0, 0, 0, 0, 0);
+-- 
+2.34.1
+

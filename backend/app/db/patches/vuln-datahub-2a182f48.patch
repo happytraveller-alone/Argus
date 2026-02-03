@@ -1,0 +1,37 @@
+From 2a182f484677d056730d6b4e9f0143e67368359f Mon Sep 17 00:00:00 2001
+From: david-leifker <114954101+david-leifker@users.noreply.github.com>
+Date: Wed, 21 Dec 2022 20:11:11 -0600
+Subject: [PATCH] fix(pac4j-oidc): add verifier parameter (#6835)
+
+* fix(pac4j-oidc): add verifier parameter
+---
+ .../app/auth/sso/oidc/custom/CustomOidcAuthenticator.java    | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/datahub-frontend/app/auth/sso/oidc/custom/CustomOidcAuthenticator.java b/datahub-frontend/app/auth/sso/oidc/custom/CustomOidcAuthenticator.java
+index fcd91615136..8c8c250fb7e 100644
+--- a/datahub-frontend/app/auth/sso/oidc/custom/CustomOidcAuthenticator.java
++++ b/datahub-frontend/app/auth/sso/oidc/custom/CustomOidcAuthenticator.java
+@@ -15,6 +15,7 @@ import com.nimbusds.oauth2.sdk.auth.Secret;
+ import com.nimbusds.oauth2.sdk.http.HTTPRequest;
+ import com.nimbusds.oauth2.sdk.http.HTTPResponse;
+ import com.nimbusds.oauth2.sdk.id.ClientID;
++import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
+ import com.nimbusds.openid.connect.sdk.OIDCTokenResponse;
+ import com.nimbusds.openid.connect.sdk.OIDCTokenResponseParser;
+ import com.nimbusds.openid.connect.sdk.token.OIDCTokens;
+@@ -144,8 +145,10 @@ public class CustomOidcAuthenticator implements Authenticator<OidcCredentials> {
+     if (code != null) {
+       try {
+         final String computedCallbackUrl = client.computeFinalCallbackUrl(context);
++        CodeVerifier verifier = (CodeVerifier) configuration.getValueRetriever()
++                .retrieve(client.getCodeVerifierSessionAttributeName(), client, context).orElse(null);
+         // Token request
+-        final TokenRequest request = createTokenRequest(new AuthorizationCodeGrant(code, new URI(computedCallbackUrl)));
++        final TokenRequest request = createTokenRequest(new AuthorizationCodeGrant(code, new URI(computedCallbackUrl), verifier));
+         HTTPRequest tokenHttpRequest = request.toHTTPRequest();
+         tokenHttpRequest.setConnectTimeout(configuration.getConnectTimeout());
+         tokenHttpRequest.setReadTimeout(configuration.getReadTimeout());
+-- 
+2.34.1
+

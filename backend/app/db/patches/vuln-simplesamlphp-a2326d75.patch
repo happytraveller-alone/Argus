@@ -1,0 +1,26 @@
+From a2326d75dd14accaac162dd2cb30aaefcc1f9205 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jaime=20Pe=CC=81rez?= <jaime.perez@uninett.no>
+Date: Sat, 3 Dec 2016 13:14:51 +0100
+Subject: [PATCH] bugfix: Make sure to properly check the output of
+ RobRichards\XMLSecDSig::verify().
+
+---
+ lib/SimpleSAML/XML/Validator.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/SimpleSAML/XML/Validator.php b/lib/SimpleSAML/XML/Validator.php
+index 555578600..e4877f05c 100644
+--- a/lib/SimpleSAML/XML/Validator.php
++++ b/lib/SimpleSAML/XML/Validator.php
+@@ -115,7 +115,7 @@ class SimpleSAML_XML_Validator {
+ 		}
+ 
+ 		// Check the signature
+-		if (! $objXMLSecDSig->verify($objKey)) {
++		if ($objXMLSecDSig->verify($objKey) !== 1) {
+ 			throw new Exception("Unable to validate Signature");
+ 		}
+ 
+-- 
+2.34.1
+

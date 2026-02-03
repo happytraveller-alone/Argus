@@ -1,0 +1,30 @@
+From fd93c6e47651958b77c3bbe6a01fff695f81e886 Mon Sep 17 00:00:00 2001
+From: TheWitness <thewitness@cacti.net>
+Date: Sun, 7 Apr 2024 10:24:07 -0400
+Subject: [PATCH] Merge pull request from GHSA-vjph-r677-6pcc
+
+---
+ lib/api_automation.php | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/lib/api_automation.php b/lib/api_automation.php
+index e9779ab48..84da1997d 100644
+--- a/lib/api_automation.php
++++ b/lib/api_automation.php
+@@ -1804,7 +1804,7 @@ function build_graph_object_sql_having($rule, $filter) {
+ 			$i = 0;
+ 
+ 			foreach ($field_names as $column) {
+-				$sql_having .= ($i == 0 ? '':' OR ') . '`' . implode('`.`', explode('.', $column['field_name'])) . '`' . ' LIKE "%' . $filter . '%"';
++				$sql_having .= ($i == 0 ? '':' OR ') . '`' . implode('`.`', explode('.', $column['field_name'])) . '`' . ' LIKE ' . db_qstr('%' . $filter . '%');
+ 				$i++;
+ 			}
+ 
+@@ -5406,4 +5406,3 @@ function automation_validate_import_columns($table, &$data, &$debug_data) {
+ 
+ 	return true;
+ }
+-
+-- 
+2.34.1
+

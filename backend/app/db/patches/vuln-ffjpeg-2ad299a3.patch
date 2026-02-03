@@ -1,0 +1,55 @@
+From 2ad299a390c63895333f8ea51ff54f8765678494 Mon Sep 17 00:00:00 2001
+From: chenk <chenk@apical.com.cn>
+Date: Wed, 21 Aug 2019 16:01:24 +0800
+Subject: [PATCH] =?UTF-8?q?=E8=A7=A3=E5=86=B3=20jpeg=20=E8=A7=A3=E7=A0=81?=
+ =?UTF-8?q?=E5=87=BA=E7=9A=84=E5=9B=BE=E5=83=8F=E4=B8=8D=E6=AD=A3=E5=B8=B8?=
+ =?UTF-8?q?=E7=9A=84=E9=97=AE=E9=A2=98=EF=BC=88=E5=89=8D=E4=B8=80=E4=B8=AA?=
+ =?UTF-8?q?=E6=8F=90=E4=BA=A4=E7=82=B9=E4=B8=BA=E4=BF=AE=E6=AD=A3=20#12=20?=
+ =?UTF-8?q?issue=20=E6=90=9E=E5=87=BA=E9=97=AE=E9=A2=98=E4=BA=86=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ jfif.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/jfif.c b/jfif.c
+index 92d5b0e..d58fdfe 100755
+--- a/jfif.c
++++ b/jfif.c
+@@ -204,7 +204,7 @@ void* jfif_load(char *file)
+ 
+         case 0xdb: // DQT
+             dqt = buf;
+-            while (dqt < end) {
++            while (size > 0 && dqt < end) {
+                 int idx = dqt[0] & 0x0f;
+                 int f16 = dqt[0] & 0xf0;
+                 if (!jfif->pqtab[idx]) jfif->pqtab[idx] = malloc(64 * sizeof(int));
+@@ -215,12 +215,13 @@ void* jfif_load(char *file)
+                     }
+                 }
+                 dqt += 1 + 64 + (f16 ? 64 : 0);
++                size-= 1 + 64 + (f16 ? 64 : 0);
+             }
+             break;
+ 
+         case 0xc4: // DHT
+             dht = buf;
+-            while (dht < end) {
++            while (size > 0 && dht < end) {
+                 int idx = dht[0] & 0x0f;
+                 int fac = dht[0] & 0xf0;
+                 int len = 0;
+@@ -235,6 +236,7 @@ void* jfif_load(char *file)
+                     if ( jfif->phcdc[idx]) memcpy(jfif->phcdc[idx]->huftab, &dht[1], 16 + len);
+                 }
+                 dht += 17 + len;
++                size-= 17 + len;
+             }
+             break;
+         }
+-- 
+2.34.1
+

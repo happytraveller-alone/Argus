@@ -1,0 +1,23 @@
+From cb3fc5907da21a5111ae54128a5d0b49ae755e9b Mon Sep 17 00:00:00 2001
+From: Isaac Connor <isaac@zoneminder.com>
+Date: Thu, 6 Oct 2022 14:52:39 -0400
+Subject: [PATCH] Use canEdit['System'] and value of new ZM_LOG_INJECT to
+ disable attempting to inject javascript errors into zm logs
+
+---
+ web/js/logger.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/web/js/logger.js b/web/js/logger.js
+index 050b2cecbe..2af5b9507b 100644
+--- a/web/js/logger.js
++++ b/web/js/logger.js
+@@ -17,7 +17,7 @@
+ // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ //
+ $j.ajaxSetup({timeout: AJAX_TIMEOUT});
+-var reportLogs = true;
++const reportLogs = (ZM_LOG_INJECT !== '0' || canEdit["System"]);
+ 
+ if ( !window.console ) {
+   window.console =

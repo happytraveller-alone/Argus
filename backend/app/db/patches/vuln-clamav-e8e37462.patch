@@ -1,0 +1,153 @@
+From e8e3746266dd3f82054ca137b81b800e54de6ebd Mon Sep 17 00:00:00 2001
+From: Steve Morgan <smorgan@sourcefire.com>
+Date: Tue, 12 Feb 2013 09:02:14 -0800
+Subject: [PATCH] bb6809 G_Report 2630: Limit length of y0da emulation to the
+ length of the file to prevent this overrun/segv
+
+---
+ libclamav/pe.c | 28 +++++++++++++--------------
+ libclamav/yc.c | 51 ++++++++++++++++++++++++++++----------------------
+ 2 files changed, 43 insertions(+), 36 deletions(-)
+
+diff --git a/libclamav/pe.c b/libclamav/pe.c
+index d411b8acc..8f0ef5665 100644
+--- a/libclamav/pe.c
++++ b/libclamav/pe.c
+@@ -2093,23 +2093,23 @@ int cli_scanpe(cli_ctx *ctx)
+ 	    !memcmp(epbuff+0x63+offset, "\xaa\xe2\xcc", 3) &&
+ 	    (fsize >= exe_sections[nsections-1].raw + 0xC6 + ecx + offset)) {
+ 
+-	char *spinned;
++	    char *spinned;
+ 
+-	if((spinned = (char *) cli_malloc(fsize)) == NULL) {
+-	    free(exe_sections);
+-	    return CL_EMEM;
+-	}
++	    if((spinned = (char *) cli_malloc(fsize)) == NULL) {
++	      free(exe_sections);
++	      return CL_EMEM;
++	    }
+ 
+-	if((size_t) fmap_readn(map, spinned, 0, fsize) != fsize) {
+-	    cli_dbgmsg("yC: Can't read %lu bytes\n", (unsigned long)fsize);
+-	    free(spinned);
+-	    free(exe_sections);
+-	    return CL_EREAD;
+-	}
++	    if((size_t) fmap_readn(map, spinned, 0, fsize) != fsize) {
++	      cli_dbgmsg("yC: Can't read %lu bytes\n", (unsigned long)fsize);
++	      free(spinned);
++	      free(exe_sections);
++	      return CL_EREAD;
++	    }
+ 
+-	cli_dbgmsg("%d,%d,%d,%d\n", nsections-1, e_lfanew, ecx, offset);
+-	CLI_UNPTEMP("yC",(spinned,exe_sections,0));
+-	CLI_UNPRESULTS("yC",(yc_decrypt(spinned, fsize, exe_sections, nsections-1, e_lfanew, ndesc, ecx, offset)),0,(spinned,0));
++	    cli_dbgmsg("%d,%d,%d,%d\n", nsections-1, e_lfanew, ecx, offset);
++	    CLI_UNPTEMP("yC",(spinned,exe_sections,0));
++	    CLI_UNPRESULTS("yC",(yc_decrypt(spinned, fsize, exe_sections, nsections-1, e_lfanew, ndesc, ecx, offset)),0,(spinned,0));
+ 	}
+     }
+ 
+diff --git a/libclamav/yc.c b/libclamav/yc.c
+index dc46bcf4e..6d9074c0d 100644
+--- a/libclamav/yc.c
++++ b/libclamav/yc.c
+@@ -40,7 +40,7 @@
+ /* ========================================================================== */
+ /* "Emulates" the poly decryptors */
+ 
+-static int yc_poly_emulator(char* decryptor_offset, char* code, unsigned int ecx)
++static int yc_poly_emulator(char* decryptor_offset, char* code, unsigned int ecx, uint32_t max_emu)
+ {
+ 
+   /* 
+@@ -64,7 +64,7 @@ static int yc_poly_emulator(char* decryptor_offset, char* code, unsigned int ecx
+   unsigned char cl = ecx & 0xff;
+   unsigned int j,i;
+ 
+-  for(i=0;i<ecx;i++) /* Byte looper - Decrypts every byte and write it back */
++  for(i=0;i<ecx&&i<max_emu;i++) /* Byte looper - Decrypts every byte and write it back */
+     {
+       al = code[i];
+ 
+@@ -168,7 +168,7 @@ int yc_decrypt(char *fbuf, unsigned int filesize, struct cli_exe_section *sectio
+   unsigned int i;
+   struct pe_image_file_hdr *pe = (struct pe_image_file_hdr*) (fbuf + peoffset);
+   char *sname = (char *)pe + EC16(pe->SizeOfOptionalHeader) + 0x18;
+-
++  uint32_t max_emu;
+   /* 
+ 
+   First layer (decryptor of the section decryptor) in last section 
+@@ -180,7 +180,7 @@ int yc_decrypt(char *fbuf, unsigned int filesize, struct cli_exe_section *sectio
+   */
+   cli_dbgmsg("yC: offset: %x, length: %x\n", offset, ecx);
+   cli_dbgmsg("yC: decrypting decryptor on sect %d\n", sectcount);
+-  if (yc_poly_emulator(fbuf + ycsect + 0x93, fbuf + ycsect + 0xc6, ecx))
++  if (yc_poly_emulator(fbuf + ycsect + 0x93, fbuf + ycsect + 0xc6, ecx, ecx))
+     return 1;
+   filesize-=sections[sectcount].ursz;
+ 
+@@ -190,31 +190,38 @@ int yc_decrypt(char *fbuf, unsigned int filesize, struct cli_exe_section *sectio
+ 
+   Start offset for analyze: Start of yC Section + 0x457
+   End offset for analyze: Start of yC Section + 0x487
+-  Lenght to decrypt - ECX = Raw Size of Section
++  Length to decrypt - ECX = Raw Size of Section
+ 
+   */
+ 
+ 
+   /* Loop through all sections and decrypt them... */
+-  for(i=0;i<sectcount;i++)
+-    {
+-      uint32_t name = (uint32_t) cli_readint32(sname+i*0x28);
+-      if (!sections[i].raw ||
+-	  !sections[i].rsz ||
+-	   name == 0x63727372 || /* rsrc */
+-	   name == 0x7273722E || /* .rsr */
+-	   name == 0x6F6C6572 || /* relo */
+-	   name == 0x6C65722E || /* .rel */
+-	   name == 0x6164652E || /* .eda */
+-	   name == 0x6164722E || /* .rda */
+-	   name == 0x6164692E || /* .ida */
+-	   name == 0x736C742E || /* .tls */
+-	   (name&0xffff) == 0x4379  /* yC */
++  for(i=0;i<sectcount;i++) {
++    uint32_t name = (uint32_t) cli_readint32(sname+i*0x28);
++    if (!sections[i].raw ||
++	!sections[i].rsz ||
++	name == 0x63727372 || /* rsrc */
++	name == 0x7273722E || /* .rsr */
++	name == 0x6F6C6572 || /* relo */
++	name == 0x6C65722E || /* .rel */
++	name == 0x6164652E || /* .eda */
++	name == 0x6164722E || /* .rda */
++	name == 0x6164692E || /* .ida */
++	name == 0x736C742E || /* .tls */
++	(name&0xffff) == 0x4379  /* yC */
+ 	) continue;
+-      cli_dbgmsg("yC: decrypting sect%d\n",i);
+-      if (yc_poly_emulator(fbuf + ycsect + (offset == -0x18 ? 0x3ea : 0x457), fbuf + sections[i].raw, sections[i].ursz))
+-	  return 1;
++    cli_dbgmsg("yC: decrypting sect%d\n",i);
++    max_emu = filesize - sections[i].raw;
++    if (max_emu > filesize) {
++      cli_dbgmsg("yC: bad emulation length limit %u\n", max_emu);
++      return 1;
+     }
++    if (yc_poly_emulator(fbuf + ycsect + (offset == -0x18 ? 0x3ea : 0x457), 
++			 fbuf + sections[i].raw, 
++			 sections[i].ursz, 
++			 max_emu))
++      return 1;
++  }
+ 
+   /* Remove yC section */
+   pe->NumberOfSections=EC16(sectcount);
+-- 
+2.34.1
+

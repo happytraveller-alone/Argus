@@ -1,0 +1,37 @@
+From a0e70366a8a406fdd80abb21e8c88a3c8e682a2b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?L=C3=AA=20Ng=E1=BB=8Dc=20Hoa?=
+ <114990730+h2oa@users.noreply.github.com>
+Date: Wed, 1 May 2024 21:41:27 +0700
+Subject: [PATCH] Update test-functional.yml - Fix vulnerability code injection
+ (#8145)
+
+* Update test-functional.yml
+
+* Update test-functional.yml
+
+* tweaks
+
+---------
+
+Co-authored-by: pngwn <hello@pngwn.io>
+---
+ .github/workflows/test-functional.yml | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/.github/workflows/test-functional.yml b/.github/workflows/test-functional.yml
+index 3d20f26ef..7afb151cc 100644
+--- a/.github/workflows/test-functional.yml
++++ b/.github/workflows/test-functional.yml
+@@ -32,9 +32,6 @@ jobs:
+         with:
+           type: "functional"
+           token: ${{ secrets.GITHUB_TOKEN }}
+-      - name: echo github context
+-        if: always()
+-        run: echo "${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}-${{ github.workflow_ref }}"
+ 
+   test-functional:
+     name: "test-functional"
+-- 
+2.34.1
+

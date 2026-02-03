@@ -1,0 +1,101 @@
+From ee59c226d974ceb6cbdf8a3e0c19fafc7ce6f279 Mon Sep 17 00:00:00 2001
+From: Robert Fancsik <robert.fancsik@h-lab.eu>
+Date: Wed, 15 Dec 2021 10:31:09 +0100
+Subject: [PATCH] Fix invalid argument reference in Promise.all executor
+ (#4885)
+
+This patch fixes #4871.
+
+JerryScript-DCO-1.0-Signed-off-by: Robert Fancsik robert.fancsik@h-lab.eu
+---
+ .../ecma/operations/ecma-promise-object.c     | 12 ++----
+ .../es.next/regression-test-issue-4871.js     | 40 +++++++++++++++++++
+ 2 files changed, 44 insertions(+), 8 deletions(-)
+ create mode 100644 tests/jerry/es.next/regression-test-issue-4871.js
+
+diff --git a/jerry-core/ecma/operations/ecma-promise-object.c b/jerry-core/ecma/operations/ecma-promise-object.c
+index b2edf51f..746a841e 100644
+--- a/jerry-core/ecma/operations/ecma-promise-object.c
++++ b/jerry-core/ecma/operations/ecma-promise-object.c
+@@ -585,7 +585,8 @@ ecma_promise_all_or_all_settled_handler_cb (ecma_object_t *function_obj_p, /**<
+                                             const ecma_value_t args_p[], /**< argument list */
+                                             const uint32_t args_count) /**< argument number */
+ {
+-  JERRY_UNUSED (args_count);
++  ecma_value_t arg = args_count > 0 ? args_p[0] : ECMA_VALUE_UNDEFINED;
++
+   ecma_promise_all_executor_t *executor_p = (ecma_promise_all_executor_t *) function_obj_p;
+   uint8_t promise_type = executor_p->header.u.built_in.u2.routine_flags;
+ 
+@@ -602,7 +603,7 @@ ecma_promise_all_or_all_settled_handler_cb (ecma_object_t *function_obj_p, /**<
+     /* 8. */
+     ecma_op_object_put_by_index (ecma_get_object_from_value (executor_p->values),
+                                  (uint32_t) (executor_p->index - 1),
+-                                 args_p[0],
++                                 arg,
+                                  false);
+   }
+   else
+@@ -630,12 +631,7 @@ ecma_promise_all_or_all_settled_handler_cb (ecma_object_t *function_obj_p, /**<
+                                                     ecma_get_magic_string (data_propery_name),
+                                                     ECMA_PROPERTY_CONFIGURABLE_ENUMERABLE_WRITABLE,
+                                                     NULL);
+-    prop_value_p->value = ECMA_VALUE_UNDEFINED;
+-
+-    if (args_count != 0)
+-    {
+-      prop_value_p->value = ecma_copy_value_if_not_object (args_p[0]);
+-    }
++    prop_value_p->value = ecma_copy_value_if_not_object (arg);
+ 
+     ecma_value_t obj_val = ecma_make_object_value (obj_p);
+     /* 12. */
+diff --git a/tests/jerry/es.next/regression-test-issue-4871.js b/tests/jerry/es.next/regression-test-issue-4871.js
+new file mode 100644
+index 00000000..d1aae22a
+--- /dev/null
++++ b/tests/jerry/es.next/regression-test-issue-4871.js
+@@ -0,0 +1,40 @@
++// Copyright JS Foundation and other contributors, http://js.foundation
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++resolved = false;
++
++function T(p, r, u) {
++  return Object.assign(p, {
++    then(onFulfilled, onRejected) {
++      if (u) {
++        onFulfilled(r);
++      } else {
++        onFulfilled();
++      }
++
++      return Promise.prototype.then.call(this, onFulfilled, onRejected);
++    }
++  });
++}
++
++var ps = [T(Promise.resolve('success'))];
++Promise.all(ps).then(res => {
++  resolved = true;
++}).catch(err => {
++  assert(false);
++});
++
++function __checkAsync() {
++  assert(resolved);
++}
+-- 
+2.34.1
+

@@ -1,0 +1,170 @@
+From 1d4ab4eae68e0b38ed57f251079ab5341547e2b4 Mon Sep 17 00:00:00 2001
+From: Michael M Slusarz <slusarz@curecanti.org>
+Date: Tue, 7 Sep 2010 17:28:10 -0600
+Subject: [PATCH] Rename Dimp.baseWindow to DimpCore.base
+
+---
+ imp/js/compose-dimp.js     | 34 +++++++++++++++++-----------------
+ imp/js/dimpcore.js         |  4 ++--
+ imp/js/fullmessage-dimp.js | 12 ++++++------
+ 3 files changed, 25 insertions(+), 25 deletions(-)
+
+diff --git a/imp/js/compose-dimp.js b/imp/js/compose-dimp.js
+index a3d70b916f..daebfece0c 100644
+--- a/imp/js/compose-dimp.js
++++ b/imp/js/compose-dimp.js
+@@ -20,9 +20,9 @@ var DimpCompose = {
+     {
+         if (window.confirm(DIMP.text_compose.cancel)) {
+             if ((this.is_popup || DIMP.conf_compose.popup) &&
+-                DIMP.baseWindow.DimpBase &&
++                DimpCore.base &&
+                 !DIMP.conf_compose.qreply) {
+-                DIMP.baseWindow.focus();
++                DimpCore.base.focus();
+             }
+             DimpCore.doAction(DIMP.conf_compose.auto_save_interval_val ? 'deleteDraft' : 'cancelCompose', { imp_compose: $F('composeCache') }, { ajaxopts: { asynchronous: DIMP.conf_compose.qreply } });
+             this.updateDraftsMailbox();
+@@ -33,9 +33,9 @@ var DimpCompose = {
+     updateDraftsMailbox: function()
+     {
+         if (this.is_popup &&
+-            DIMP.baseWindow.DimpBase &&
+-            DIMP.baseWindow.DimpBase.folder == DIMP.conf_compose.drafts_mbox) {
+-            DIMP.baseWindow.DimpBase.poll();
++            DimpCore.base &&
++            DimpCore.base.DimpBase.folder == DIMP.conf_compose.drafts_mbox) {
++            DimpCore.base.DimpBase.poll();
+         }
+     },
+ 
+@@ -242,9 +242,9 @@ var DimpCompose = {
+ 
+                 if (d.action == 'saveDraft') {
+                     if (this.is_popup &&
+-                        DIMP.baseWindow.DimpBase &&
++                        DimpCore.base &&
+                         !DIMP.conf_compose.qreply) {
+-                        DIMP.baseWindow.DimpCore.showNotifications(r.msgs);
++                        DimpCore.base.DimpCore.showNotifications(r.msgs);
+                         r.msgs = [];
+                     }
+                     if (DIMP.conf_compose.close_draft) {
+@@ -254,38 +254,38 @@ var DimpCompose = {
+                 break;
+ 
+             case 'sendMessage':
+-                if (this.is_popup && DIMP.baseWindow.DimpBase) {
++                if (this.is_popup && DimpCore.base) {
+                     if (d.reply_type) {
+-                        DIMP.baseWindow.DimpBase.flag(d.reply_type == 'forward' ? '$forwarded' : '\\answered', true, { uid: d.uid, mailbox: d.reply_folder, noserver: true });
++                        DimpCore.base.DimpBase.flag(d.reply_type == 'forward' ? '$forwarded' : '\\answered', true, { uid: d.uid, mailbox: d.reply_folder, noserver: true });
+                     }
+ 
+                     if (d.mailbox) {
+-                        DIMP.baseWindow.DimpBase.mailboxCallback(r);
++                        DimpCore.base.DimpBase.mailboxCallback(r);
+                     }
+ 
+                     if (d.draft_delete) {
+-                        DIMP.baseWindow.DimpBase.poll();
++                        DimpCore.base.DimpBase.poll();
+                     }
+ 
+                     if (d.log) {
+-                        DIMP.baseWindow.DimpBase.updateMsgLog(d.log, { uid: d.uid, mailbox: d.reply_folder });
++                        DimpCore.base.DimpBase.updateMsgLog(d.log, { uid: d.uid, mailbox: d.reply_folder });
+                     }
+ 
+                     if (!DIMP.conf_compose.qreply) {
+-                        DIMP.baseWindow.DimpCore.showNotifications(r.msgs);
++                        DimpCore.base.DimpCore.showNotifications(r.msgs);
+                         r.msgs = [];
+                     }
+                 }
+                 return this.closeCompose();
+ 
+             case 'redirectMessage':
+-                if (this.is_popup && DIMP.baseWindow.DimpBase) {
++                if (this.is_popup && DimpCore.base) {
+                     if (d.log) {
+-                        DIMP.baseWindow.DimpBase.updateMsgLog(d.log, { uid: d.uid, mailbox: d.mbox });
++                        DimpCore.base.DimpBase.updateMsgLog(d.log, { uid: d.uid, mailbox: d.mbox });
+                     }
+ 
+                     if (!DIMP.conf_compose.qreply) {
+-                        DIMP.baseWindow.DimpCore.showNotifications(r.msgs);
++                        DimpCore.base.DimpCore.showNotifications(r.msgs);
+                         r.msgs = [];
+                     }
+                 }
+@@ -967,7 +967,7 @@ var DimpCompose = {
+         DimpCore.growler_log = false;
+         DimpCore.init();
+ 
+-        this.is_popup = DIMP.baseWindow.DimpBase;
++        this.is_popup = DimpCore.base;
+ 
+         /* Initialize redirect elements (always needed). */
+         $('redirect').observe('submit', Event.stop);
+diff --git a/imp/js/dimpcore.js b/imp/js/dimpcore.js
+index b449dd25b7..67c705685d 100644
+--- a/imp/js/dimpcore.js
++++ b/imp/js/dimpcore.js
+@@ -13,6 +13,7 @@ var DimpCore = {
+     //   DMenu, Growler, inAjaxCallback, is_init, is_logout
+     //   onDoActionComplete
+     alarms: {},
++    base: null,
+     growler_log: true,
+     server_error: 0,
+ 
+@@ -594,12 +595,11 @@ var DimpCore = {
+         /* Determine base window. Need a try/catch block here since, if the
+          * page was loaded by an opener out of this current domain, this will
+          * throw an exception. */
+-        DIMP.baseWindow = {};
+         try {
+             if (parent.opener &&
+                 parent.opener.location.host == window.location.host &&
+                 parent.opener.DimpCore) {
+-                DIMP.baseWindow = parent.opener.DIMP.baseWindow || parent.opener;
++                this.base = parent.opener.DimpCore.base || parent.opener;
+             }
+         } catch (e) {}
+     }
+diff --git a/imp/js/fullmessage-dimp.js b/imp/js/fullmessage-dimp.js
+index bcbf3a1493..0779a3e757 100644
+--- a/imp/js/fullmessage-dimp.js
++++ b/imp/js/fullmessage-dimp.js
+@@ -106,12 +106,12 @@ var DimpFullmessage = {
+             case 'button_deleted':
+             case 'button_ham':
+             case 'button_spam':
+-                if (DIMP.baseWindow.DimpBase) {
+-                    DIMP.baseWindow.focus();
++                if (DimpCore.base) {
++                    DimpCore.base.focus();
+                     if (id == 'button_deleted') {
+-                        DIMP.baseWindow.DimpBase.deleteMsg({ uid: this.uid, mailbox: this.mailbox });
++                        DimpCore.base.DimpBase.deleteMsg({ uid: this.uid, mailbox: this.mailbox });
+                     } else {
+-                        DIMP.baseWindow.DimpBase.reportSpam(id == 'button_spam', { uid: this.uid, mailbox: this.mailbox });
++                        DimpCore.base.DimpBase.reportSpam(id == 'button_spam', { uid: this.uid, mailbox: this.mailbox });
+                     }
+                     window.close();
+                 }
+@@ -230,8 +230,8 @@ var DimpFullmessage = {
+             DimpCore.updateMsgLog(this.log);
+         }
+ 
+-        if (this.strip && DIMP.baseWindow.DimpBase) {
+-            DIMP.baseWindow.DimpBase.poll();
++        if (this.strip && DimpCore.base) {
++            DimpCore.base.DimpBase.poll();
+         }
+ 
+         $('dimpLoading').hide();
+-- 
+2.34.1
+

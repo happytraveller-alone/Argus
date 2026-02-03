@@ -353,6 +353,122 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
         logger.info(f"所有 {skipped_count} 条规则已存在，无需创建新规则")
 
 
+async def create_patch_opengrep_rules(db: AsyncSession) -> None:
+    """
+    从 app/db/rules_from_patches 目录递归读取所有 .yml 文件并创建 patch 来源的 opengrep 规则
+    - 支持多层目录结构（按编程语言分类）
+    - 判断规则 ID 是否已在表中，只添加不存在的规则
+    """
+    # 获取规则文件目录
+    rules_dir = Path(__file__).parent / "rules_from_patches"
+    if not rules_dir.exists():
+        logger.warning(f"Patch 规则目录不存在: {rules_dir}")
+        return
+    
+    # 递归读取所有 .yml 文件
+    yaml_files = list(rules_dir.glob("**/*.yml")) + list(rules_dir.glob("**/*.yaml"))
+    if not yaml_files:
+        logger.warning(f"Patch 规则目录中没有找到 .yml 文件: {rules_dir}")
+        return
+    
+    logger.info(f"开始加载 Patch 来源规则，找到 {len(yaml_files)} 个文件...")
+    
+    # 获取数据库中已存在的规则名称
+    result = await db.execute(select(OpengrepRule.name))
+    existing_rule_names = {row[0] for row in result.fetchall()}
+    logger.info(f"数据库中已存在 {len(existing_rule_names)} 条规则")
+    
+    created_count = 0
+    skipped_count = 0
+    error_count = 0
+    
+    for yaml_file in yaml_files:
+        try:
+            with open(yaml_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                rule_data = yaml.safe_load(content)
+            
+            # 解析 YAML 中的规则
+            if not rule_data or 'rules' not in rule_data:
+                logger.debug(f"  ⊘ 跳过无效的规则文件: {yaml_file.relative_to(rules_dir)}")
+                error_count += 1
+                continue
+            
+            # 通常 Patch 规则文件只包含一条规则
+            for rule in rule_data['rules']:
+                rule_id = rule.get('id', yaml_file.stem)
+                
+                # 判断规则是否已在表中
+                if rule_id in existing_rule_names:
+                    logger.debug(f"  ⊘ 规则已存在，跳过: {rule_id}")
+                    skipped_count += 1
+                    continue
+                
+                # 提取语言（优先从顶层查找，再从 metadata 中查找）
+                languages = rule.get('languages', [])
+                if not languages or not isinstance(languages, list):
+                    # 从 metadata 中查找 languages
+                    metadata = rule.get('metadata', {})
+                    languages = metadata.get('languages', [])
+                
+                if isinstance(languages, list) and languages:
+                    language = languages[0]
+                else:
+                    # 如果规则中没有指定语言，尝试从目录名称中推断
+                    relative_path = yaml_file.relative_to(rules_dir)
+                    language = relative_path.parts[0] if relative_path.parts else 'unknown'
+                
+                # 提取严重程度
+                severity = rule.get('severity', 'INFO')
+                if severity not in ['ERROR', 'WARNING', 'INFO']:
+                    severity = 'INFO'
+                
+                # 读取对应的 patch 文件内容
+                patch_content = None
+                patch_file = Path(__file__).parent / "patches" / f"{yaml_file.stem}.patch"
+                if patch_file.exists():
+                    try:
+                        with open(patch_file, 'r', encoding='utf-8') as pf:
+                            patch_content = pf.read()
+                    except Exception as e:
+                        logger.debug(f"  ⊘ 无法读取 patch 文件 {patch_file.name}: {e}")
+                        # 如果读取失败，尝试从 metadata 获取 URL
+                        metadata = rule.get('metadata', {})
+                        patch_content = metadata.get('source-url', '')
+                else:
+                    # 如果没有对应的 patch 文件，从 metadata 获取 URL
+                    metadata = rule.get('metadata', {})
+                    patch_content = metadata.get('source-url', '')
+                
+                # 创建规则记录
+                opengrep_rule = OpengrepRule(
+                    name=rule_id,
+                    pattern_yaml=content,  # 保存完整的 YAML 内容
+                    language=language,
+                    severity=severity,
+                    source="patch",  # 标记为 patch 来源
+                    patch=patch_content,  # 保存 patch 文件内容或 URL
+                    correct=True,  # Patch 规则默认为正确
+                    is_active=True,
+                )
+                db.add(opengrep_rule)
+                created_count += 1
+                logger.debug(f"  ✓ 加载新规则: {rule_id} ({language}, {severity})")
+        
+        except Exception as e:
+            logger.error(f"加载规则文件失败 {yaml_file.relative_to(rules_dir)}: {e}")
+            error_count += 1
+            continue
+    
+    if created_count > 0:
+        await db.flush()
+        await db.commit()
+        logger.info(f"✓ Patch 规则导入完成: 成功创建 {created_count} 条新规则，"
+                   f"跳过 {skipped_count} 条已存在的规则，{error_count} 条错误")
+    else:
+        logger.info(f"Patch 规则导入完成: 所有 {skipped_count} 条规则已存在或无效 (错误: {error_count})")
+
+
 async def init_db(db: AsyncSession) -> None:
     """
     初始化数据库
@@ -370,6 +486,9 @@ async def init_db(db: AsyncSession) -> None:
     
     # 初始化内置 opengrep 规则
     await create_internal_opengrep_rules(db)
+    
+    # 初始化 Patch 来源的 opengrep 规则
+    await create_patch_opengrep_rules(db)
     
     # 初始化系统模板和规则
     try:

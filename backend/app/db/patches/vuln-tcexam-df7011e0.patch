@@ -1,0 +1,81 @@
+From df7011e0b1e924a2c7f9999a60f101960de971aa Mon Sep 17 00:00:00 2001
+From: nicolaasuni <info@tecnick.com>
+Date: Fri, 6 Jul 2018 09:42:04 +0100
+Subject: [PATCH] Define a constant for email regular expression
+
+---
+ admin/code/tce_edit_user.php          | 2 +-
+ public/code/tce_password_reset.php    | 2 +-
+ public/code/tce_user_change_email.php | 2 +-
+ public/code/tce_user_registration.php | 2 +-
+ shared/code/tce_functions_form.php    | 2 ++
+ 5 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/admin/code/tce_edit_user.php b/admin/code/tce_edit_user.php
+index d29f87c8..ddbc8200 100644
+--- a/admin/code/tce_edit_user.php
++++ b/admin/code/tce_edit_user.php
+@@ -454,7 +454,7 @@ echo getFormNoscriptSelect('selectrecord');
+ echo '<div class="row"><hr /></div>'.K_NEWLINE;
+ 
+ echo getFormRowTextInput('user_name', $l['w_username'], $l['h_login_name'], '', $user_name, '', 255, false, false, false);
+-echo getFormRowTextInput('user_email', $l['w_email'], $l['h_usered_email'], '', $user_email, '^([a-zA-Z0-9_\.\-]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$', 255, false, false, false);
++echo getFormRowTextInput('user_email', $l['w_email'], $l['h_usered_email'], '', $user_email, K_EMAIL_RE_PATTERN, 255, false, false, false);
+ echo getFormRowTextInput('newpassword', $l['w_password'], $l['h_password'], ' ('.$l['d_password_lenght'].')', '', K_USRREG_PASSWORD_RE, 255, false, false, true);
+ echo getFormRowTextInput('newpassword_repeat', $l['w_password'], $l['h_password_repeat'], ' ('.$l['w_repeat'].')', '', '', 255, false, false, true);
+ echo getFormRowFixedValue('user_regdate', $l['w_regdate'], $l['h_regdate'], '', $user_regdate);
+diff --git a/public/code/tce_password_reset.php b/public/code/tce_password_reset.php
+index 7ce73ce9..199a7e25 100644
+--- a/public/code/tce_password_reset.php
++++ b/public/code/tce_password_reset.php
+@@ -96,7 +96,7 @@ echo '<form action="'.$_SERVER['SCRIPT_NAME'].'" method="post" enctype="multipar
+ 
+ echo '<p>'.$l['d_reset_password'].'</p>'.K_NEWLINE;
+ 
+-echo getFormRowTextInput('user_email', $l['w_email'], $l['h_usered_email'], '', '', '^([a-zA-Z0-9_\.\-]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$', 255, false, false, false, '');
++echo getFormRowTextInput('user_email', $l['w_email'], $l['h_usered_email'], '', '', K_EMAIL_RE_PATTERN, 255, false, false, false, '');
+ 
+ echo '<div class="row">'.K_NEWLINE;
+ 
+diff --git a/public/code/tce_user_change_email.php b/public/code/tce_user_change_email.php
+index a5da534a..8f712610 100644
+--- a/public/code/tce_user_change_email.php
++++ b/public/code/tce_user_change_email.php
+@@ -102,7 +102,7 @@ echo '<div class="container">'.K_NEWLINE;
+ echo '<div class="gsoformbox">'.K_NEWLINE;
+ echo '<form action="'.$_SERVER['SCRIPT_NAME'].'" method="post" enctype="multipart/form-data" id="form_editor">'.K_NEWLINE;
+ 
+-echo getFormRowTextInput('user_email', $l['w_new_email'], $l['h_email'], '', '', '^([a-zA-Z0-9_\.\-]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$', 255, false, false, false, '');
++echo getFormRowTextInput('user_email', $l['w_new_email'], $l['h_email'], '', '', K_EMAIL_RE_PATTERN, 255, false, false, false, '');
+ echo getFormRowTextInput('user_email_repeat', $l['w_new_email'], $l['h_email'], ' ('.$l['w_repeat'].')', '', '', 255, false, false, false, '');
+ echo getFormRowTextInput('currentpassword', $l['w_password'], $l['h_password'], '', '', '', 255, false, false, true, '');
+ 
+diff --git a/public/code/tce_user_registration.php b/public/code/tce_user_registration.php
+index 9eb22c93..d73bf6a2 100644
+--- a/public/code/tce_user_registration.php
++++ b/public/code/tce_user_registration.php
+@@ -270,7 +270,7 @@ echo '<form action="'.$_SERVER['SCRIPT_NAME'].'" method="post" enctype="multipar
+ 
+ echo getFormRowTextInput('user_name', $l['w_username'], $l['h_login_name'], '', $user_name, '', 255, false, false, false, showRequiredField($regfields['user_name']));
+ if (K_USRREG_EMAIL_CONFIRM or $regfields['user_email']) {
+-    echo getFormRowTextInput('user_email', $l['w_email'], $l['h_usered_email'], '', $user_email, '^([a-zA-Z0-9_\.\-]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$', 255, false, false, false, showRequiredField($regfields['user_email']));
++    echo getFormRowTextInput('user_email', $l['w_email'], $l['h_usered_email'], '', $user_email, K_EMAIL_RE_PATTERN, 255, false, false, false, showRequiredField($regfields['user_email']));
+ }
+ echo getFormRowTextInput('newpassword', $l['w_password'], $l['h_password'], ' ('.$l['d_password_lenght'].')', '', K_USRREG_PASSWORD_RE, 255, false, false, true, showRequiredField(2));
+ echo getFormRowTextInput('newpassword_repeat', $l['w_password'], $l['h_password_repeat'], ' ('.$l['w_repeat'].')', '', '', 255, false, false, true, showRequiredField(2));
+diff --git a/shared/code/tce_functions_form.php b/shared/code/tce_functions_form.php
+index 86386994..9878f92d 100644
+--- a/shared/code/tce_functions_form.php
++++ b/shared/code/tce_functions_form.php
+@@ -54,6 +54,8 @@ if (!isset($menu_mode)) {
+     $menu_mode = '';
+ }
+ 
++define('K_EMAIL_RE_PATTERN', '^([a-zA-Z0-9_\.\-]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$');
++
+ /**
+  * Returns an array containing form fields.
+  * @return array containing form fields
+-- 
+2.34.1
+

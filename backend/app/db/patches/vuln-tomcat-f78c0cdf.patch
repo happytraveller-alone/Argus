@@ -1,0 +1,76 @@
+From f78c0cdfc8a3c2efdfe6df6b69e5e3daafa3f588 Mon Sep 17 00:00:00 2001
+From: Konstantin Kolinko <kkolinko@apache.org>
+Date: Mon, 27 Aug 2012 22:28:43 +0000
+Subject: [PATCH] Merged revision 1377887 from tomcat/trunk: Remove unneeded
+ handling of FORM authentication in RealmBase.
+
+The login and error pages are handled via forward, so processing completes before this code is ever reached.
+The action page is handled elsewhere.
+
+git-svn-id: https://svn.apache.org/repos/asf/tomcat/tc7.0.x/trunk@1377892 13f79535-47bb-0310-9956-ffa450edef68
+---
+ java/org/apache/catalina/realm/RealmBase.java | 26 -------------------
+ webapps/docs/changelog.xml                    |  3 +++
+ 2 files changed, 3 insertions(+), 26 deletions(-)
+
+diff --git a/java/org/apache/catalina/realm/RealmBase.java b/java/org/apache/catalina/realm/RealmBase.java
+index 066d76f78c..e62ea6d548 100644
+--- a/java/org/apache/catalina/realm/RealmBase.java
++++ b/java/org/apache/catalina/realm/RealmBase.java
+@@ -45,7 +45,6 @@ import org.apache.catalina.Service;
+ import org.apache.catalina.Wrapper;
+ import org.apache.catalina.connector.Request;
+ import org.apache.catalina.connector.Response;
+-import org.apache.catalina.deploy.LoginConfig;
+ import org.apache.catalina.deploy.SecurityCollection;
+ import org.apache.catalina.deploy.SecurityConstraint;
+ import org.apache.catalina.mbeans.MBeanUtils;
+@@ -822,31 +821,6 @@ public abstract class RealmBase extends LifecycleMBeanBase implements Realm {
+         if (constraints == null || constraints.length == 0)
+             return (true);
+ 
+-        // Specifically allow access to the form login and form error pages
+-        // and the "j_security_check" action
+-        LoginConfig config = context.getLoginConfig();
+-        if ((config != null) &&
+-            (Constants.FORM_METHOD.equals(config.getAuthMethod()))) {
+-            String requestURI = request.getRequestPathMB().toString();
+-            String loginPage = config.getLoginPage();
+-            if (loginPage.equals(requestURI)) {
+-                if (log.isDebugEnabled())
+-                    log.debug(" Allow access to login page " + loginPage);
+-                return (true);
+-            }
+-            String errorPage = config.getErrorPage();
+-            if (errorPage.equals(requestURI)) {
+-                if (log.isDebugEnabled())
+-                    log.debug(" Allow access to error page " + errorPage);
+-                return (true);
+-            }
+-            if (requestURI.endsWith(Constants.FORM_ACTION)) {
+-                if (log.isDebugEnabled())
+-                    log.debug(" Allow access to username/password submission");
+-                return (true);
+-            }
+-        }
+-
+         // Which user principal have we already authenticated?
+         Principal principal = request.getPrincipal();
+         boolean status = false;
+diff --git a/webapps/docs/changelog.xml b/webapps/docs/changelog.xml
+index a6ca631bb3..5ec5120d8c 100644
+--- a/webapps/docs/changelog.xml
++++ b/webapps/docs/changelog.xml
+@@ -182,6 +182,9 @@
+         Improve performance of DIGEST authenticator for concurrent requests.
+         (markt)
+       </fix>
++      <fix>
++        Remove unneeded handling of FORM authentication in RealmBase. (kkolinko)
++      </fix>
+     </changelog>
+   </subsection>
+   <subsection name="Coyote">
+-- 
+2.34.1
+

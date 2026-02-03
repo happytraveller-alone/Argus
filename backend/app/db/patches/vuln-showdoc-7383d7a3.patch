@@ -1,0 +1,96 @@
+From 7383d7a3c1b0807b6f397ba7df415a0ce7ccc436 Mon Sep 17 00:00:00 2001
+From: star7th <xing7th@gmail.com>
+Date: Wed, 26 Jan 2022 20:38:00 +0800
+Subject: [PATCH] File upload vulnerability
+
+---
+ .../Controller/AttachmentController.class.php | 15 +++-------
+ .../Api/Model/AttachmentModel.class.php       | 30 +++++++++++++++----
+ 2 files changed, 28 insertions(+), 17 deletions(-)
+
+diff --git a/server/Application/Api/Controller/AttachmentController.class.php b/server/Application/Api/Controller/AttachmentController.class.php
+index 296cb649..d0a67616 100644
+--- a/server/Application/Api/Controller/AttachmentController.class.php
++++ b/server/Application/Api/Controller/AttachmentController.class.php
+@@ -78,11 +78,8 @@ class AttachmentController extends BaseController {
+         if (!$_FILES['editormd-image-file']) {
+            return false;
+         }
+-        
+-        if (strstr(strip_tags(strtolower($_FILES['editormd-image-file']['name'])), ".php") 
+-            || strstr(strip_tags(strtolower($_FILES['editormd-image-file']['name'])), ".htm") 
+-            || strstr(strip_tags(strtolower($_FILES['editormd-image-file']['name'])), ".svg") 
+-            ) {
++
++        if(D("Attachment")->isDangerFilename($_FILES['editormd-image-file']['name'])){
+             return false;
+         }
+ 
+@@ -111,12 +108,8 @@ class AttachmentController extends BaseController {
+         if (!$uploadFile) {
+            return false;
+         }
+-        
+-        if (strstr(strip_tags(strtolower($uploadFile['name'])), ".php") 
+-            || strstr(strip_tags(strtolower($uploadFile['name'])), ".htm") 
+-            || strstr(strip_tags(strtolower($uploadFile['name'])), ".svg") 
+-            
+-            ) {
++
++        if(D("Attachment")->isDangerFilename($uploadFile['name'])){
+             $this->sendError(10100,'不支持此文件类型');
+             return false;
+         }
+diff --git a/server/Application/Api/Model/AttachmentModel.class.php b/server/Application/Api/Model/AttachmentModel.class.php
+index fca86680..3d76105b 100644
+--- a/server/Application/Api/Model/AttachmentModel.class.php
++++ b/server/Application/Api/Model/AttachmentModel.class.php
+@@ -57,13 +57,10 @@ class AttachmentModel extends BaseModel {
+ 	public function upload($_files , $file_key , $uid , $item_id = 0  , $page_id = 0  ){
+ 		$uploadFile = $_files[$file_key] ;
+ 
+-		if (strstr(strip_tags(strtolower($uploadFile['name'])), ".php")
+-		||  strstr(strip_tags(strtolower($uploadFile['name'])), ".php")
+-		||  strstr(strip_tags(strtolower($uploadFile['name'])), ".svg")
+-		
+-		) {
++		if($this->isDangerFilename($uploadFile['name'])){
+ 			return false;
+-	}
++		}
++
+ 		$oss_open = D("Options")->get("oss_open" ) ;
+ 		if ($oss_open) {
+ 				$url = $this->uploadOss($uploadFile);
+@@ -290,6 +287,27 @@ class AttachmentModel extends BaseModel {
+ 
+ 	}
+ 
++	// 判断文件名是否包含危险的扩展名
++	public function isDangerFilename($filename){
++
++		$isDangerStr = function ($filename , $keyword){
++			if(strstr(strip_tags(strtolower( $filename )), $keyword) ){
++				return true ;
++			}
++			return false;
++		};
++		if (
++			 $isDangerStr($filename , ".php")
++			|| $isDangerStr($filename , ".svg")
++			|| $isDangerStr($filename , ".htm")
++			|| $isDangerStr($filename , "%")
++		) {
++			return true;
++		}
++	
++		return false;
++	}
++
+ 
+ 
+ }
+\ No newline at end of file
+-- 
+2.34.1
+

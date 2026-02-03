@@ -1,0 +1,40 @@
+From 1988854011ec018c8c2878d5d2ae06eb034f9f22 Mon Sep 17 00:00:00 2001
+From: Donatas Abraitis <donatas.abraitis@gmail.com>
+Date: Tue, 1 Feb 2022 22:42:10 +0200
+Subject: [PATCH] tools: Skip decorating commits with references (branch name,
+ remote)
+
+I think we don't care about this in release notes.
+
+bgpd,pimd,isisd,nhrpd: Convert to vty_json() (origin/fix/vty_json)
+ospf6d: Fix memory leak for `show ipv6 ospf6 zebra json` (origin/fix/zebra_ospf6d_json_leak)
+
+Signed-off-by: Donatas Abraitis <donatas.abraitis@gmail.com>
+---
+ tools/release_notes.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/tools/release_notes.py b/tools/release_notes.py
+index 7481cc18c..973215b57 100755
+--- a/tools/release_notes.py
++++ b/tools/release_notes.py
+@@ -10,6 +10,7 @@ import os
+ import getopt
+ import subprocess
+ 
++
+ def run(cmd):
+     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+     rv = proc.communicate("")[0].decode("UTF-8")
+@@ -45,7 +46,7 @@ def main(argv):
+         tag = run(["git", "describe", "--abbrev=0"]).strip("\n")
+ 
+     chnglog = run(
+-        ["git", "log", "--no-merges", "--pretty=format:'%s%d'", tag + ".." + branch]
++        ["git", "log", "--no-merges", "--pretty=format:'%s'", tag + ".." + branch]
+     )
+     chnglog = chnglog.split("\n")
+ 
+-- 
+2.34.1
+

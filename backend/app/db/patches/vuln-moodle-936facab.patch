@@ -1,0 +1,34 @@
+From 936facab28d8d8bd03f38da42cb80fafba1a06db Mon Sep 17 00:00:00 2001
+From: Marina Glancy <marina@moodle.com>
+Date: Fri, 11 Sep 2015 08:12:18 +0800
+Subject: [PATCH] MDL-50744 enrol_meta: fix incorrect role assign (#2)
+
+---
+ enrol/meta/locallib.php | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/enrol/meta/locallib.php b/enrol/meta/locallib.php
+index 9916db019b3..a3c91e3fd8f 100644
+--- a/enrol/meta/locallib.php
++++ b/enrol/meta/locallib.php
+@@ -216,7 +216,7 @@ class enrol_meta_handler {
+ 
+         if ($unenrolaction == ENROL_EXT_REMOVED_UNENROL) {
+             // Purges grades, group membership, preferences, etc. - admins were warned!
+-            $plugin->unenrol_user($instance, $ue->userid, null, 0, 0, $ue->status);
++            $plugin->unenrol_user($instance, $userid);
+ 
+         } else if ($unenrolaction == ENROL_EXT_REMOVED_SUSPEND) {
+             if ($ue->status != ENROL_USER_SUSPENDED) {
+@@ -309,7 +309,7 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
+             }
+         }
+ 
+-        $meta->enrol_user($instance, $ue->userid, $ue->status);
++        $meta->enrol_user($instance, $ue->userid, null, 0, 0, $ue->status);
+         if ($verbose) {
+             mtrace("  enrolling: $ue->userid ==> $instance->courseid");
+         }
+-- 
+2.34.1
+

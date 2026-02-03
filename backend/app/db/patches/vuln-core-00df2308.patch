@@ -1,0 +1,29 @@
+From 00df2308b0733e810824545183d73276c416cdd3 Mon Sep 17 00:00:00 2001
+From: Timo Sirainen <timo.sirainen@open-xchange.com>
+Date: Mon, 17 Aug 2020 18:33:20 +0300
+Subject: [PATCH] imap: Escape tag when sending it to imap-hibernate process
+
+---
+ src/imap/imap-client-hibernate.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/imap/imap-client-hibernate.c b/src/imap/imap-client-hibernate.c
+index f639d722cb..4ef323453c 100644
+--- a/src/imap/imap-client-hibernate.c
++++ b/src/imap/imap-client-hibernate.c
+@@ -97,8 +97,10 @@ static void imap_hibernate_write_cmd(struct client *client, string_t *cmd,
+ 		str_append(cmd, "\tmailbox=");
+ 		str_append_tabescaped(cmd, mailbox_get_vname(client->mailbox));
+ 	}
+-	if (tag != NULL)
+-		str_printfa(cmd, "\ttag=%s", tag);
++	if (tag != NULL) {
++		str_append(cmd, "\ttag=");
++		str_append_tabescaped(cmd, tag);
++	}
+ 	str_append(cmd, "\tstats=");
+ 	str_append_tabescaped(cmd, client_stats(client));
+ 	if (client->command_queue != NULL &&
+-- 
+2.34.1
+

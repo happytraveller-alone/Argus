@@ -1,0 +1,64 @@
+From e4cc9d350ab162374ebe2e88d712dba70e511a3b Mon Sep 17 00:00:00 2001
+From: Erik de Castro Lopo <erikd@mega-nerd.com>
+Date: Thu, 19 Feb 2015 17:48:14 +1100
+Subject: [PATCH] src/(ima|ms)_adpcm.c : Validate block alignment on read.
+
+---
+ src/ima_adpcm.c | 11 ++++++++---
+ src/ms_adpcm.c  |  9 +++++++--
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/src/ima_adpcm.c b/src/ima_adpcm.c
+index 61b33b21d..dd11b0f19 100644
+--- a/src/ima_adpcm.c
++++ b/src/ima_adpcm.c
+@@ -1,5 +1,5 @@
+ /*
+-** Copyright (C) 1999-2014 Erik de Castro Lopo <erikd@mega-nerd.com>
++** Copyright (C) 1999-2015 Erik de Castro Lopo <erikd@mega-nerd.com>
+ **
+ ** This program is free software; you can redistribute it and/or modify
+ ** it under the terms of the GNU Lesser General Public License as published by
+@@ -200,8 +200,13 @@ ima_reader_init (SF_PRIVATE *psf, int blockalign, int samplesperblock)
+ 	psf->datalength = (psf->dataend) ? psf->dataend - psf->dataoffset :
+ 							psf->filelength - psf->dataoffset ;
+ 
+-	if (pima->blocksize == 0)
+-	{	psf_log_printf (psf, "*** Error : pima->blocksize should not be zero.\n") ;
++	if (pima->blocksize <= 0)
++	{	psf_log_printf (psf, "*** Error : pima->blocksize should be > 0.\n") ;
++		return SFE_INTERNAL ;
++		} ;
++
++	if (pima->samplesperblock <= 0)
++	{	psf_log_printf (psf, "*** Error : pima->samplesperblock should be > 0.\n") ;
+ 		return SFE_INTERNAL ;
+ 		} ;
+ 
+diff --git a/src/ms_adpcm.c b/src/ms_adpcm.c
+index d318dedc7..2251e5307 100644
+--- a/src/ms_adpcm.c
++++ b/src/ms_adpcm.c
+@@ -137,6 +137,11 @@ wav_w64_msadpcm_init	(SF_PRIVATE *psf, int blockalign, int samplesperblock)
+ 	if (psf->file.mode == SFM_WRITE)
+ 		samplesperblock = 2 + 2 * (blockalign - 7 * psf->sf.channels) / psf->sf.channels ;
+ 
++	if (blockalign < 7 * psf->sf.channels)
++	{	psf_log_printf (psf, "*** Error blockalign (%d) should be > %d.\n", blockalign, 7 * psf->sf.channels) ;
++		return SFE_INTERNAL ;
++		} ;
++
+ 	pmssize = sizeof (MSADPCM_PRIVATE) + blockalign + 3 * psf->sf.channels * samplesperblock ;
+ 
+ 	if (! (psf->codec_data = calloc (1, pmssize)))
+@@ -151,8 +156,8 @@ wav_w64_msadpcm_init	(SF_PRIVATE *psf, int blockalign, int samplesperblock)
+ 	pms->blocksize	= blockalign ;
+ 	pms->samplesperblock = samplesperblock ;
+ 
+-	if (pms->blocksize == 0)
+-	{	psf_log_printf (psf, "*** Error : pms->blocksize should not be zero.\n") ;
++	if (pms->blocksize <= 0)
++	{	psf_log_printf (psf, "*** Error : pms->blocksize should be > 0.\n") ;
+ 		return SFE_INTERNAL ;
+ 		} ;
+ 

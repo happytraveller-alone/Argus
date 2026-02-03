@@ -1,0 +1,52 @@
+From f166400c7ddd1bc571fcad52d18d2371f2c3fd87 Mon Sep 17 00:00:00 2001
+From: Xavier Morel <xmo@odoo.com>
+Date: Mon, 29 Nov 2021 11:34:12 +0100
+Subject: [PATCH] [IMP] l10n_fr_fec: fix report
+
+---
+ addons/l10n_fr_fec/wizard/account_fr_fec.py | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/addons/l10n_fr_fec/wizard/account_fr_fec.py b/addons/l10n_fr_fec/wizard/account_fr_fec.py
+index 5ea2a5c982e..3b062d8c056 100644
+--- a/addons/l10n_fr_fec/wizard/account_fr_fec.py
++++ b/addons/l10n_fr_fec/wizard/account_fr_fec.py
+@@ -7,7 +7,7 @@ import base64
+ import io
+ 
+ from odoo import api, fields, models, _
+-from odoo.exceptions import UserError
++from odoo.exceptions import UserError, AccessDenied
+ from odoo.tools import float_is_zero, pycompat
+ from odoo.tools.misc import get_lang
+ 
+@@ -31,7 +31,7 @@ class AccountFrFec(models.TransientModel):
+         if not self.test_file:
+             self.export_type = 'official'
+ 
+-    def do_query_unaffected_earnings(self):
++    def _do_query_unaffected_earnings(self):
+         ''' Compute the sum of ending balances for all accounts that are of a type that does not bring forward the balance in new fiscal years.
+             This is needed because we have to display only one line for the initial balance of all expense/revenue accounts in the FEC.
+         '''
+@@ -104,6 +104,8 @@ class AccountFrFec(models.TransientModel):
+ 
+     def generate_fec(self):
+         self.ensure_one()
++        if not (self.env.is_admin() or self.env.user.has_group('account.group_account_user')):
++            raise AccessDenied()
+         # We choose to implement the flat file instead of the XML
+         # file for 2 reasons :
+         # 1) the XSD file impose to have the label on the account.move
+@@ -148,7 +150,7 @@ class AccountFrFec(models.TransientModel):
+         unaffected_earnings_line = True  # used to make sure that we add the unaffected earning initial balance only once
+         if unaffected_earnings_xml_ref:
+             #compute the benefit/loss of last year to add in the initial balance of the current year earnings account
+-            unaffected_earnings_results = self.do_query_unaffected_earnings()
++            unaffected_earnings_results = self._do_query_unaffected_earnings()
+             unaffected_earnings_line = False
+ 
+         sql_query = '''
+-- 
+2.34.1
+

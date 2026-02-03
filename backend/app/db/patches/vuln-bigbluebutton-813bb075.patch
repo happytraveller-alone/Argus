@@ -1,0 +1,60 @@
+From 02ba4c6ff8e78a0f4384ad1b7c7367c5a90376e8 Mon Sep 17 00:00:00 2001
+From: Gustavo Trott <gustavo@trott.com.br>
+Date: Wed, 9 Aug 2023 09:54:38 -0300
+Subject: [PATCH] Fix: Getting final Url (from redirect) on presentation upload
+
+---
+ .../PresentationUrlDownloadService.java        | 18 ++++++++++++++----
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/bbb-common-web/src/main/java/org/bigbluebutton/presentation/PresentationUrlDownloadService.java b/bbb-common-web/src/main/java/org/bigbluebutton/presentation/PresentationUrlDownloadService.java
+index 9c67a8484a72..6fe5e1014fba 100755
+--- a/bbb-common-web/src/main/java/org/bigbluebutton/presentation/PresentationUrlDownloadService.java
++++ b/bbb-common-web/src/main/java/org/bigbluebutton/presentation/PresentationUrlDownloadService.java
+@@ -12,14 +12,12 @@
+ import java.util.concurrent.ScheduledExecutorService;
+ import java.util.concurrent.ScheduledFuture;
+ import java.util.concurrent.TimeUnit;
+-import java.util.stream.Stream;
+-
+-import org.apache.commons.codec.digest.DigestUtils;
+ import org.apache.commons.io.FileUtils;
+ import org.apache.commons.io.FilenameUtils;
+ import org.apache.http.HttpResponse;
+ import org.apache.http.HttpStatus;
+ import org.apache.http.client.ClientProtocolException;
++import org.apache.http.client.config.RequestConfig;
+ import org.apache.http.entity.ContentType;
+ import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
+ import org.apache.http.impl.nio.client.HttpAsyncClients;
+@@ -197,6 +195,7 @@ private String followRedirect(String meetingId, String redirectUrl,
+             conn.setReadTimeout(60000);
+             conn.addRequestProperty("Accept-Language", "en-US,en;q=0.8");
+             conn.addRequestProperty("User-Agent", "Mozilla");
++            conn.setInstanceFollowRedirects(false);
+ 
+             // normally, 3xx is redirect
+             int status = conn.getResponseCode();
+@@ -287,10 +286,21 @@ public boolean savePresentation(final String meetingId,
+         String finalUrl = followRedirect(meetingId, urlString, 0, urlString);
+ 
+         if (finalUrl == null) return false;
++        if(!finalUrl.equals(urlString)) {
++            log.info("Redirected to Final URL [{}]", finalUrl);
++        }
+ 
+         boolean success = false;
+ 
+-        CloseableHttpAsyncClient httpclient = HttpAsyncClients.createDefault();
++        //Disable follow redirect since finalUrl already did it
++        RequestConfig requestConfig = RequestConfig.custom()
++                .setRedirectsEnabled(false)
++                .build();
++
++        CloseableHttpAsyncClient httpclient = HttpAsyncClients.custom()
++                .setDefaultRequestConfig(requestConfig)
++                .build();
++
+         try {
+             httpclient.start();
+             File download = new File(filename);

@@ -1,0 +1,28 @@
+From d6f774f63fb78684f3705e2529620aadef7e0bd3 Mon Sep 17 00:00:00 2001
+From: Aditya Deshpande <aditya.deshpande@arm.com>
+Date: Fri, 9 Dec 2022 12:52:43 +0000
+Subject: [PATCH] Fix ChangeLog
+
+Signed-off-by: Aditya Deshpande <aditya.deshpande@arm.com>
+---
+ ChangeLog | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index a380be935..3673f5da5 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -30,8 +30,8 @@ Bugfix
+      other certificate files. Contributed by Eduardo Silva in #2602.
+    * Fix a compilation error when using CMake with an IAR toolchain.
+      Fixes #5964.
+-    * Fix bugs and missing dependencies when building and testing
+-      configurations with only one encryption type enabled in TLS 1.2.
++   * Fix bugs and missing dependencies when building and testing
++     configurations with only one encryption type enabled in TLS 1.2.
+    * Provide the missing definition of mbedtls_setbuf() in some configurations
+      with MBEDTLS_PLATFORM_C disabled. Fixes #6118, #6196.
+    * Fix compilation errors when trying to build with
+-- 
+2.34.1
+

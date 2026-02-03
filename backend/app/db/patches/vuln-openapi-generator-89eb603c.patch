@@ -1,0 +1,829 @@
+From 5a5ee163dc0a9a046f0e986d212629d019528583 Mon Sep 17 00:00:00 2001
+From: devhl-labs <shawnkanyer@gmail.com>
+Date: Sat, 28 Oct 2023 23:08:04 -0400
+Subject: [PATCH] fixed lambda to not strip line breaks (#16930)
+
+---
+ .../templating/mustache/IndentedLambda.java   |  2 +-
+ .../mustache/IndentedLambdaTest.java          | 12 ++++++
+ .../default-v3.0/models/Capitalization.ts     |  1 +
+ .../models/Capitalization.ts                  |  1 +
+ .../generated/3_0/api/AnotherFakeApi.cpp      |  2 +
+ .../generated/3_0/api/DefaultApi.cpp          |  2 +
+ .../cpp-restbed/generated/3_0/api/FakeApi.cpp | 40 +++++++++++++++++++
+ .../3_0/api/FakeClassnameTags123Api.cpp       |  2 +
+ .../cpp-restbed/generated/3_0/api/PetApi.cpp  | 18 +++++++++
+ .../generated/3_0/api/StoreApi.cpp            |  8 ++++
+ .../cpp-restbed/generated/3_0/api/UserApi.cpp | 16 ++++++++
+ .../org/openapitools/server/apis/PetApi.kt    |  8 ++++
+ .../org/openapitools/server/apis/StoreApi.kt  |  4 ++
+ .../org/openapitools/server/apis/UserApi.kt   |  8 ++++
+ .../org/openapitools/server/apis/PetApi.kt    |  8 ++++
+ .../org/openapitools/server/apis/StoreApi.kt  |  4 ++
+ .../org/openapitools/server/apis/UserApi.kt   |  8 ++++
+ 17 files changed, 143 insertions(+), 1 deletion(-)
+
+diff --git a/modules/openapi-generator/src/main/java/org/openapitools/codegen/templating/mustache/IndentedLambda.java b/modules/openapi-generator/src/main/java/org/openapitools/codegen/templating/mustache/IndentedLambda.java
+index f90b662c6d6..09f669ae3be 100644
+--- a/modules/openapi-generator/src/main/java/org/openapitools/codegen/templating/mustache/IndentedLambda.java
++++ b/modules/openapi-generator/src/main/java/org/openapitools/codegen/templating/mustache/IndentedLambda.java
+@@ -112,7 +112,7 @@ public class IndentedLambda implements Mustache.Lambda {
+         String prefixedIndention = StringUtils.repeat(new String(Character.toChars(spaceCode)), prefixSpaceCount);
+         StringBuilder sb = new StringBuilder();
+         // use \n instead of System.lineSeparator (e.g. \r\n in Windows) as templates use \n
+-        String[] lines = text.split("\n");
++        String[] lines = text.split("\n", -1);
+         for (int i = 0; i < lines.length; i++) {
+             String line = lines[i];
+             // Mustache will apply correct indentation to the first line of a template (to match declaration location).
+diff --git a/modules/openapi-generator/src/test/java/org/openapitools/codegen/templating/mustache/IndentedLambdaTest.java b/modules/openapi-generator/src/test/java/org/openapitools/codegen/templating/mustache/IndentedLambdaTest.java
+index b8853034455..739d632daac 100644
+--- a/modules/openapi-generator/src/test/java/org/openapitools/codegen/templating/mustache/IndentedLambdaTest.java
++++ b/modules/openapi-generator/src/test/java/org/openapitools/codegen/templating/mustache/IndentedLambdaTest.java
+@@ -1,9 +1,13 @@
+ package org.openapitools.codegen.templating.mustache;
+ 
++import static org.junit.Assert.assertEquals;
++
+ import java.util.Map;
+ 
+ import org.testng.annotations.Test;
+ 
++import com.samskivert.mustache.Mustache;
++
+ public class IndentedLambdaTest extends LambdaTest {
+ 
+     String lineSeparator = "\n";
+@@ -30,5 +34,13 @@ public class IndentedLambdaTest extends LambdaTest {
+                 "{{#indented}}first line" + lineSeparator + "second line{{/indented}}", ctx);
+     }
+ 
++    @Test
++    public void lineBreaksPreservedTest() {
++        Map<String, Object> ctx = context("indented", new IndentedLambda(4, " ", true, true));
+ 
++        String actual = execute(Mustache.compiler(), "{{#indented}}first line\nsecond line\n\nthird line\n\n\nfourth line\n\n{{/indented}}", ctx);
++        String expected = "    first line\n    second line\n\n    third line\n\n\n    fourth line\n\n";
++
++        assertEquals(expected, actual);
++    }
+ }
+diff --git a/samples/client/petstore/typescript-fetch/builds/default-v3.0/models/Capitalization.ts b/samples/client/petstore/typescript-fetch/builds/default-v3.0/models/Capitalization.ts
+index 6143a3f3707..53fec91847d 100644
+--- a/samples/client/petstore/typescript-fetch/builds/default-v3.0/models/Capitalization.ts
++++ b/samples/client/petstore/typescript-fetch/builds/default-v3.0/models/Capitalization.ts
+@@ -51,6 +51,7 @@ export interface Capitalization {
+     sCAETHFlowPoints?: string;
+     /**
+      * Name of the pet
++     * 
+      * @type {string}
+      * @memberof Capitalization
+      */
+diff --git a/samples/client/petstore/typescript-fetch/builds/snakecase-discriminator/models/Capitalization.ts b/samples/client/petstore/typescript-fetch/builds/snakecase-discriminator/models/Capitalization.ts
+index 6143a3f3707..53fec91847d 100644
+--- a/samples/client/petstore/typescript-fetch/builds/snakecase-discriminator/models/Capitalization.ts
++++ b/samples/client/petstore/typescript-fetch/builds/snakecase-discriminator/models/Capitalization.ts
+@@ -51,6 +51,7 @@ export interface Capitalization {
+     sCAETHFlowPoints?: string;
+     /**
+      * Name of the pet
++     * 
+      * @type {string}
+      * @memberof Capitalization
+      */
+diff --git a/samples/server/petstore/cpp-restbed/generated/3_0/api/AnotherFakeApi.cpp b/samples/server/petstore/cpp-restbed/generated/3_0/api/AnotherFakeApi.cpp
+index 3f8a8681299..37db1694e76 100644
+--- a/samples/server/petstore/cpp-restbed/generated/3_0/api/AnotherFakeApi.cpp
++++ b/samples/server/petstore/cpp-restbed/generated/3_0/api/AnotherFakeApi.cpp
+@@ -197,6 +197,8 @@ void Another_fakeDummyResource::handler_PATCH_internal(const std::shared_ptr<res
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+diff --git a/samples/server/petstore/cpp-restbed/generated/3_0/api/DefaultApi.cpp b/samples/server/petstore/cpp-restbed/generated/3_0/api/DefaultApi.cpp
+index 58514fb2f55..89be9ad5fd2 100644
+--- a/samples/server/petstore/cpp-restbed/generated/3_0/api/DefaultApi.cpp
++++ b/samples/server/petstore/cpp-restbed/generated/3_0/api/DefaultApi.cpp
+@@ -191,6 +191,8 @@ void FooResource::handler_GET_internal(const std::shared_ptr<restbed::Session> s
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+diff --git a/samples/server/petstore/cpp-restbed/generated/3_0/api/FakeApi.cpp b/samples/server/petstore/cpp-restbed/generated/3_0/api/FakeApi.cpp
+index b8d7c742d36..a96cd395d81 100644
+--- a/samples/server/petstore/cpp-restbed/generated/3_0/api/FakeApi.cpp
++++ b/samples/server/petstore/cpp-restbed/generated/3_0/api/FakeApi.cpp
+@@ -193,6 +193,8 @@ void FakeBigDecimalMapResource::handler_GET_internal(const std::shared_ptr<restb
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -304,6 +306,8 @@ void FakeHealthResource::handler_GET_internal(const std::shared_ptr<restbed::Ses
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -421,6 +425,8 @@ void FakeHttp_signature_testResource::handler_GET_internal(const std::shared_ptr
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -535,6 +541,8 @@ void FakeOuterBooleanResource::handler_POST_internal(const std::shared_ptr<restb
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -650,6 +658,8 @@ void FakeOuterCompositeResource::handler_POST_internal(const std::shared_ptr<res
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -764,6 +774,8 @@ void FakeOuterNumberResource::handler_POST_internal(const std::shared_ptr<restbe
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -879,6 +891,8 @@ void FakeOuterStringResource::handler_POST_internal(const std::shared_ptr<restbe
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -994,6 +1008,8 @@ void FakePropertyEnum_intResource::handler_POST_internal(const std::shared_ptr<r
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -1107,6 +1123,8 @@ void FakeBody_with_binaryResource::handler_PUT_internal(const std::shared_ptr<re
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -1220,6 +1238,8 @@ void FakeBody_with_file_schemaResource::handler_PUT_internal(const std::shared_p
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -1335,6 +1355,8 @@ void FakeBody_with_query_paramsResource::handler_PUT_internal(const std::shared_
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -1459,6 +1481,8 @@ void FakeResource::handler_PATCH_internal(const std::shared_ptr<restbed::Session
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ // x-extension
+@@ -1519,6 +1543,8 @@ void FakeResource::handler_POST_internal(const std::shared_ptr<restbed::Session>
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ // x-extension
+ void FakeResource::handler_GET_internal(const std::shared_ptr<restbed::Session> session) {
+@@ -1587,6 +1613,8 @@ void FakeResource::handler_GET_internal(const std::shared_ptr<restbed::Session>
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ // x-extension
+ void FakeResource::handler_DELETE_internal(const std::shared_ptr<restbed::Session> session) {
+@@ -1632,6 +1660,8 @@ void FakeResource::handler_DELETE_internal(const std::shared_ptr<restbed::Sessio
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ std::pair<int, Client> FakeResource::handler_PATCH(
+@@ -1759,6 +1789,8 @@ void FakeInline_additionalPropertiesResource::handler_POST_internal(const std::s
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -1872,6 +1904,8 @@ void FakeInline_freeform_additionalPropertiesResource::handler_POST_internal(con
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -1984,6 +2018,8 @@ void FakeJsonFormDataResource::handler_GET_internal(const std::shared_ptr<restbe
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -2097,6 +2133,8 @@ void FakeNullableResource::handler_POST_internal(const std::shared_ptr<restbed::
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -2240,6 +2278,8 @@ void FakeTest_query_parametersResource::handler_PUT_internal(const std::shared_p
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+diff --git a/samples/server/petstore/cpp-restbed/generated/3_0/api/FakeClassnameTags123Api.cpp b/samples/server/petstore/cpp-restbed/generated/3_0/api/FakeClassnameTags123Api.cpp
+index 4e13211d738..334196c1385 100644
+--- a/samples/server/petstore/cpp-restbed/generated/3_0/api/FakeClassnameTags123Api.cpp
++++ b/samples/server/petstore/cpp-restbed/generated/3_0/api/FakeClassnameTags123Api.cpp
+@@ -197,6 +197,8 @@ void Fake_classname_testResource::handler_PATCH_internal(const std::shared_ptr<r
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+diff --git a/samples/server/petstore/cpp-restbed/generated/3_0/api/PetApi.cpp b/samples/server/petstore/cpp-restbed/generated/3_0/api/PetApi.cpp
+index 1da63f76578..b231b5e4f82 100644
+--- a/samples/server/petstore/cpp-restbed/generated/3_0/api/PetApi.cpp
++++ b/samples/server/petstore/cpp-restbed/generated/3_0/api/PetApi.cpp
+@@ -205,6 +205,8 @@ void PetResource::handler_POST_internal(const std::shared_ptr<restbed::Session>
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ // x-extension
+@@ -270,6 +272,8 @@ void PetResource::handler_PUT_internal(const std::shared_ptr<restbed::Session> s
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ int PetResource::handler_POST(
+@@ -400,6 +404,8 @@ void PetPetIdResource::handler_DELETE_internal(const std::shared_ptr<restbed::Se
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ // x-extension
+@@ -458,6 +464,8 @@ void PetPetIdResource::handler_GET_internal(const std::shared_ptr<restbed::Sessi
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ // x-extension
+ void PetPetIdResource::handler_POST_internal(const std::shared_ptr<restbed::Session> session) {
+@@ -509,6 +517,8 @@ void PetPetIdResource::handler_POST_internal(const std::shared_ptr<restbed::Sess
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ int PetPetIdResource::handler_DELETE(
+@@ -641,6 +651,8 @@ void PetFindByStatusResource::handler_GET_internal(const std::shared_ptr<restbed
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -764,6 +776,8 @@ void PetFindByTagsResource::handler_GET_internal(const std::shared_ptr<restbed::
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -880,6 +894,8 @@ void PetPetIdUploadImageResource::handler_POST_internal(const std::shared_ptr<re
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -996,6 +1012,8 @@ void FakePetIdUploadImageWithRequiredFileResource::handler_POST_internal(const s
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+diff --git a/samples/server/petstore/cpp-restbed/generated/3_0/api/StoreApi.cpp b/samples/server/petstore/cpp-restbed/generated/3_0/api/StoreApi.cpp
+index 8719fd53657..e4fa42b5e96 100644
+--- a/samples/server/petstore/cpp-restbed/generated/3_0/api/StoreApi.cpp
++++ b/samples/server/petstore/cpp-restbed/generated/3_0/api/StoreApi.cpp
+@@ -201,6 +201,8 @@ void StoreOrderOrder_idResource::handler_DELETE_internal(const std::shared_ptr<r
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ // x-extension
+@@ -259,6 +261,8 @@ void StoreOrderOrder_idResource::handler_GET_internal(const std::shared_ptr<rest
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ int StoreOrderOrder_idResource::handler_DELETE(
+@@ -374,6 +378,8 @@ void StoreInventoryResource::handler_GET_internal(const std::shared_ptr<restbed:
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -496,6 +502,8 @@ void StoreOrderResource::handler_POST_internal(const std::shared_ptr<restbed::Se
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+diff --git a/samples/server/petstore/cpp-restbed/generated/3_0/api/UserApi.cpp b/samples/server/petstore/cpp-restbed/generated/3_0/api/UserApi.cpp
+index 958bce70c98..cd86876e735 100644
+--- a/samples/server/petstore/cpp-restbed/generated/3_0/api/UserApi.cpp
++++ b/samples/server/petstore/cpp-restbed/generated/3_0/api/UserApi.cpp
+@@ -193,6 +193,8 @@ void UserResource::handler_POST_internal(const std::shared_ptr<restbed::Session>
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -304,6 +306,8 @@ void UserCreateWithArrayResource::handler_POST_internal(const std::shared_ptr<re
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -415,6 +419,8 @@ void UserCreateWithListResource::handler_POST_internal(const std::shared_ptr<res
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -537,6 +543,8 @@ void UserUsernameResource::handler_DELETE_internal(const std::shared_ptr<restbed
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ // x-extension
+@@ -595,6 +603,8 @@ void UserUsernameResource::handler_GET_internal(const std::shared_ptr<restbed::S
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ // x-extension
+ void UserUsernameResource::handler_PUT_internal(const std::shared_ptr<restbed::Session> session) {
+@@ -645,6 +655,8 @@ void UserUsernameResource::handler_PUT_internal(const std::shared_ptr<restbed::S
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ int UserUsernameResource::handler_DELETE(
+@@ -779,6 +791,8 @@ void UserLoginResource::handler_GET_internal(const std::shared_ptr<restbed::Sess
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+@@ -886,6 +900,8 @@ void UserLogoutResource::handler_GET_internal(const std::shared_ptr<restbed::Ses
+         return;
+     }
+     defaultSessionClose(session, status_code, result);
++    
++    
+ }
+ 
+ 
+diff --git a/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/PetApi.kt b/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/PetApi.kt
+index 3265da9d1e5..d95a4b4d088 100644
+--- a/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/PetApi.kt
++++ b/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/PetApi.kt
+@@ -40,6 +40,7 @@ fun Route.PetApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -50,6 +51,7 @@ fun Route.PetApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -99,6 +101,7 @@ fun Route.PetApi() {
+                 "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+                 else -> call.respondText(exampleContentString)
+             }
++        
+     }
+     }
+ 
+@@ -148,6 +151,7 @@ fun Route.PetApi() {
+                 "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+                 else -> call.respondText(exampleContentString)
+             }
++        
+     }
+     }
+ 
+@@ -181,6 +185,7 @@ fun Route.PetApi() {
+                 "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+                 else -> call.respondText(exampleContentString)
+             }
++        
+     }
+     }
+ 
+@@ -191,6 +196,7 @@ fun Route.PetApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -201,6 +207,7 @@ fun Route.PetApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -222,6 +229,7 @@ fun Route.PetApi() {
+                 "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+                 else -> call.respondText(exampleContentString)
+             }
++        
+     }
+     }
+ 
+diff --git a/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/StoreApi.kt b/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/StoreApi.kt
+index 29fb8cf022f..fe780f7feb4 100644
+--- a/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/StoreApi.kt
++++ b/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/StoreApi.kt
+@@ -34,6 +34,7 @@ fun Route.StoreApi() {
+ 
+     delete<Paths.deleteOrder> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     authenticate("api_key") {
+@@ -43,6 +44,7 @@ fun Route.StoreApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -62,6 +64,7 @@ fun Route.StoreApi() {
+             "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+             else -> call.respondText(exampleContentString)
+         }
++        
+     }
+ 
+     post<Paths.placeOrder> {
+@@ -80,6 +83,7 @@ fun Route.StoreApi() {
+             "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+             else -> call.respondText(exampleContentString)
+         }
++        
+     }
+ 
+ }
+diff --git a/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/UserApi.kt b/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/UserApi.kt
+index a180d715fe7..ccf0509fca2 100644
+--- a/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/UserApi.kt
++++ b/samples/server/petstore/kotlin-server-modelMutable/src/main/kotlin/org/openapitools/server/apis/UserApi.kt
+@@ -34,18 +34,22 @@ fun Route.UserApi() {
+ 
+     post<Paths.createUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     post<Paths.createUsersWithArrayInput> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     post<Paths.createUsersWithListInput> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     delete<Paths.deleteUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     get<Paths.getUserByName> {
+@@ -66,18 +70,22 @@ fun Route.UserApi() {
+             "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+             else -> call.respondText(exampleContentString)
+         }
++        
+     }
+ 
+     get<Paths.loginUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     get<Paths.logoutUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     put<Paths.updateUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+ }
+diff --git a/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/PetApi.kt b/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/PetApi.kt
+index 3265da9d1e5..d95a4b4d088 100644
+--- a/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/PetApi.kt
++++ b/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/PetApi.kt
+@@ -40,6 +40,7 @@ fun Route.PetApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -50,6 +51,7 @@ fun Route.PetApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -99,6 +101,7 @@ fun Route.PetApi() {
+                 "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+                 else -> call.respondText(exampleContentString)
+             }
++        
+     }
+     }
+ 
+@@ -148,6 +151,7 @@ fun Route.PetApi() {
+                 "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+                 else -> call.respondText(exampleContentString)
+             }
++        
+     }
+     }
+ 
+@@ -181,6 +185,7 @@ fun Route.PetApi() {
+                 "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+                 else -> call.respondText(exampleContentString)
+             }
++        
+     }
+     }
+ 
+@@ -191,6 +196,7 @@ fun Route.PetApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -201,6 +207,7 @@ fun Route.PetApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -222,6 +229,7 @@ fun Route.PetApi() {
+                 "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+                 else -> call.respondText(exampleContentString)
+             }
++        
+     }
+     }
+ 
+diff --git a/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/StoreApi.kt b/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/StoreApi.kt
+index 29fb8cf022f..fe780f7feb4 100644
+--- a/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/StoreApi.kt
++++ b/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/StoreApi.kt
+@@ -34,6 +34,7 @@ fun Route.StoreApi() {
+ 
+     delete<Paths.deleteOrder> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     authenticate("api_key") {
+@@ -43,6 +44,7 @@ fun Route.StoreApi() {
+         
+         
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+     }
+ 
+@@ -62,6 +64,7 @@ fun Route.StoreApi() {
+             "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+             else -> call.respondText(exampleContentString)
+         }
++        
+     }
+ 
+     post<Paths.placeOrder> {
+@@ -80,6 +83,7 @@ fun Route.StoreApi() {
+             "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+             else -> call.respondText(exampleContentString)
+         }
++        
+     }
+ 
+ }
+diff --git a/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/UserApi.kt b/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/UserApi.kt
+index a180d715fe7..ccf0509fca2 100644
+--- a/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/UserApi.kt
++++ b/samples/server/petstore/kotlin-server/ktor/src/main/kotlin/org/openapitools/server/apis/UserApi.kt
+@@ -34,18 +34,22 @@ fun Route.UserApi() {
+ 
+     post<Paths.createUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     post<Paths.createUsersWithArrayInput> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     post<Paths.createUsersWithListInput> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     delete<Paths.deleteUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     get<Paths.getUserByName> {
+@@ -66,18 +70,22 @@ fun Route.UserApi() {
+             "application/xml" -> call.respondText(exampleContentString, ContentType.Text.Xml)
+             else -> call.respondText(exampleContentString)
+         }
++        
+     }
+ 
+     get<Paths.loginUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     get<Paths.logoutUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+     put<Paths.updateUser> {
+         call.respond(HttpStatusCode.NotImplemented)
++        
+     }
+ 
+ }
+-- 
+2.34.1
+

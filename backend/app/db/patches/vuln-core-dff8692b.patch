@@ -1,0 +1,80 @@
+From dff8692b8a230b7a561f8e1fc1cd458318621097 Mon Sep 17 00:00:00 2001
+From: Ad Schellevis <ad@opnsense.org>
+Date: Sun, 19 May 2019 09:39:18 +0200
+Subject: [PATCH] system: address CVE-2019-11816 privlege escalation bugs
+
+Reported by: Arnaud Cordier
+
+(cherry picked from commit 03c75f71be88d4d2d930c217377b5ff23f0ecae7)
+---
+ src/etc/inc/authgui.inc                           | 13 +++++++++++--
+ src/opnsense/mvc/app/models/OPNsense/Core/ACL.php | 15 ++++++++++-----
+ 2 files changed, 21 insertions(+), 7 deletions(-)
+
+diff --git a/src/etc/inc/authgui.inc b/src/etc/inc/authgui.inc
+index 0b3642db9..78f2e18bd 100644
+--- a/src/etc/inc/authgui.inc
++++ b/src/etc/inc/authgui.inc
+@@ -199,8 +199,17 @@ set_language();
+ /*
+  * redirect to first allowed page if requesting a wrong url
+  */
+-$page =  $_SERVER['REQUEST_URI']  == "/" ? "/index.php" : $_SERVER['REQUEST_URI'];
+-if ($_SESSION['Username'] != 'root' && !$acl->isPageAccessible($_SESSION['Username'],$page)) {
++if ($_SERVER['REQUEST_URI']  == '/') {
++    $page = '/index.php';
++} else {
++    /* reconstruct page uri to use actual script location, mimic realpath() behaviour */
++    $page = $_SERVER['SCRIPT_NAME'];
++    $tmp_uri = parse_url($_SERVER['REQUEST_URI']);
++    if (!empty($tmp_uri['query'])) {
++        $page .= '?' . $tmp_uri['query'];
++    }
++}
++if ($_SESSION['Username'] != 'root' && !$acl->isPageAccessible($_SESSION['Username'], $page)) {
+     if (session_status() == PHP_SESSION_NONE) {
+         session_start();
+     }
+diff --git a/src/opnsense/mvc/app/models/OPNsense/Core/ACL.php b/src/opnsense/mvc/app/models/OPNsense/Core/ACL.php
+index 30362a6d9..f65a3e0db 100644
+--- a/src/opnsense/mvc/app/models/OPNsense/Core/ACL.php
++++ b/src/opnsense/mvc/app/models/OPNsense/Core/ACL.php
+@@ -181,7 +181,7 @@ class ACL
+      * @param string $urlmask regex mask
+      * @return bool url matches mask
+      */
+-    private function urlMatch($url, $urlmask)
++    public function urlMatch($url, $urlmask)
+     {
+         /* "." and "?" have no effect on match, but "*" is a wildcard */
+         $match = str_replace(array('.', '*','?'), array('\.', '.*','\?'), $urlmask);
+@@ -242,6 +242,14 @@ class ACL
+                 }
+             }
+         }
++
++        /*
++         * Always allow logout and menu, should be yielded as final items
++         * to prevent redirect to the logout page in case unauthorised
++         * pages are tried.
++         */
++        yield 'index.php?logout';
++        yield 'api/core/menu/*';
+     }
+ 
+     /**
+@@ -252,10 +260,7 @@ class ACL
+      */
+     public function isPageAccessible($username, $url)
+     {
+-        if ($url == '/index.php?logout' || strpos($url, 'api/core/menu/') !== false) {
+-            // always allow logout and menu, could use better structuring...
+-            return true;
+-        } elseif (!empty($_SESSION['user_shouldChangePassword'])) {
++        if (!empty($_SESSION['user_shouldChangePassword'])) {
+             // when a password change is enforced, lock all other endpoints
+             return $this->urlMatch($url, 'system_usermanager_passwordmg.php*');
+         }
+-- 
+2.34.1
+

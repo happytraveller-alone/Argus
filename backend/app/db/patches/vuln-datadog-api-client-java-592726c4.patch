@@ -1,0 +1,156 @@
+From 99382ac630c3199160d89ba74d544b0808cc8841 Mon Sep 17 00:00:00 2001
+From: "api-clients-generation-pipeline[bot]"
+ <54105614+api-clients-generation-pipeline[bot]@users.noreply.github.com>
+Date: Mon, 1 Feb 2021 17:46:41 -0500
+Subject: [PATCH] Regenerate client from commit ad4a282 of spec repo (#634)
+
+Co-authored-by: ci.datadog-api-spec <packages@datadoghq.com>
+---
+ .apigentools-info                             |  8 ++--
+ api_docs/v1/MonitorUpdateRequest.md           |  1 +
+ .../v1/client/model/MonitorUpdateRequest.java | 40 ++++++++++++++++++-
+ src/main/java/com/datadog/api/v1/openapi.yaml |  7 ++++
+ 4 files changed, 51 insertions(+), 5 deletions(-)
+
+diff --git a/.apigentools-info b/.apigentools-info
+index cf4d8f85a..bdd7208ea 100644
+--- a/.apigentools-info
++++ b/.apigentools-info
+@@ -4,13 +4,13 @@
+     "spec_versions": {
+         "v1": {
+             "apigentools_version": "1.4.1.dev2",
+-            "regenerated": "2021-02-01 16:05:04.337834",
+-            "spec_repo_commit": "b12889a"
++            "regenerated": "2021-02-01 18:37:15.314726",
++            "spec_repo_commit": "ad4a282"
+         },
+         "v2": {
+             "apigentools_version": "1.4.1.dev2",
+-            "regenerated": "2021-02-01 16:05:14.491158",
+-            "spec_repo_commit": "b12889a"
++            "regenerated": "2021-02-01 18:37:25.055027",
++            "spec_repo_commit": "ad4a282"
+         }
+     }
+ }
+\ No newline at end of file
+diff --git a/api_docs/v1/MonitorUpdateRequest.md b/api_docs/v1/MonitorUpdateRequest.md
+index ff446ba78..6f1362524 100644
+--- a/api_docs/v1/MonitorUpdateRequest.md
++++ b/api_docs/v1/MonitorUpdateRequest.md
+@@ -19,6 +19,7 @@ Name | Type | Description | Notes
+ **overallState** | **MonitorOverallStates** |  |  [optional]
+ **priority** | **Long** | Integer from 1 (high) to 5 (low) indicating alert severity. |  [optional]
+ **query** | **String** | The monitor query. |  [optional]
++**restrictedRoles** | **List&lt;String&gt;** | A list of role identifiers that can be pulled from the Roles API. Cannot be used with &#x60;locked&#x60; option. |  [optional]
+ **state** | [**MonitorState**](MonitorState.md) |  |  [optional]
+ **tags** | **List&lt;String&gt;** | Tags associated to your monitor. |  [optional]
+ **type** | **MonitorType** |  |  [optional]
+diff --git a/src/main/java/com/datadog/api/v1/client/model/MonitorUpdateRequest.java b/src/main/java/com/datadog/api/v1/client/model/MonitorUpdateRequest.java
+index 498148cc9..fc9286aed 100644
+--- a/src/main/java/com/datadog/api/v1/client/model/MonitorUpdateRequest.java
++++ b/src/main/java/com/datadog/api/v1/client/model/MonitorUpdateRequest.java
+@@ -54,6 +54,7 @@ import com.datadog.api.v1.client.JSON;
+   MonitorUpdateRequest.JSON_PROPERTY_OVERALL_STATE,
+   MonitorUpdateRequest.JSON_PROPERTY_PRIORITY,
+   MonitorUpdateRequest.JSON_PROPERTY_QUERY,
++  MonitorUpdateRequest.JSON_PROPERTY_RESTRICTED_ROLES,
+   MonitorUpdateRequest.JSON_PROPERTY_STATE,
+   MonitorUpdateRequest.JSON_PROPERTY_TAGS,
+   MonitorUpdateRequest.JSON_PROPERTY_TYPE
+@@ -96,6 +97,9 @@ public class MonitorUpdateRequest {
+   public static final String JSON_PROPERTY_QUERY = "query";
+   private String query;
+ 
++  public static final String JSON_PROPERTY_RESTRICTED_ROLES = "restricted_roles";
++  private List<String> restrictedRoles = null;
++
+   public static final String JSON_PROPERTY_STATE = "state";
+   private MonitorState state;
+ 
+@@ -370,6 +374,38 @@ public class MonitorUpdateRequest {
+   }
+ 
+ 
++  public MonitorUpdateRequest restrictedRoles(List<String> restrictedRoles) {
++    this.restrictedRoles = restrictedRoles;
++    return this;
++  }
++
++  public MonitorUpdateRequest addRestrictedRolesItem(String restrictedRolesItem) {
++    if (this.restrictedRoles == null) {
++      this.restrictedRoles = new ArrayList<>();
++    }
++    this.restrictedRoles.add(restrictedRolesItem);
++    return this;
++  }
++
++   /**
++   * A list of role identifiers that can be pulled from the Roles API. Cannot be used with &#x60;locked&#x60; option.
++   * @return restrictedRoles
++  **/
++  @javax.annotation.Nullable
++  @ApiModelProperty(value = "A list of role identifiers that can be pulled from the Roles API. Cannot be used with `locked` option.")
++  @JsonProperty(JSON_PROPERTY_RESTRICTED_ROLES)
++  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
++
++  public List<String> getRestrictedRoles() {
++    return restrictedRoles;
++  }
++
++
++  public void setRestrictedRoles(List<String> restrictedRoles) {
++    this.restrictedRoles = restrictedRoles;
++  }
++
++
+   public MonitorUpdateRequest state(MonitorState state) {
+     this.state = state;
+     return this;
+@@ -474,6 +510,7 @@ public class MonitorUpdateRequest {
+         Objects.equals(this.overallState, monitorUpdateRequest.overallState) &&
+         Objects.equals(this.priority, monitorUpdateRequest.priority) &&
+         Objects.equals(this.query, monitorUpdateRequest.query) &&
++        Objects.equals(this.restrictedRoles, monitorUpdateRequest.restrictedRoles) &&
+         Objects.equals(this.state, monitorUpdateRequest.state) &&
+         Objects.equals(this.tags, monitorUpdateRequest.tags) &&
+         Objects.equals(this.type, monitorUpdateRequest.type);
+@@ -481,7 +518,7 @@ public class MonitorUpdateRequest {
+ 
+   @Override
+   public int hashCode() {
+-    return Objects.hash(created, creator, deleted, id, message, modified, multi, name, options, overallState, priority, query, state, tags, type);
++    return Objects.hash(created, creator, deleted, id, message, modified, multi, name, options, overallState, priority, query, restrictedRoles, state, tags, type);
+   }
+ 
+ 
+@@ -501,6 +538,7 @@ public class MonitorUpdateRequest {
+     sb.append("    overallState: ").append(toIndentedString(overallState)).append("\n");
+     sb.append("    priority: ").append(toIndentedString(priority)).append("\n");
+     sb.append("    query: ").append(toIndentedString(query)).append("\n");
++    sb.append("    restrictedRoles: ").append(toIndentedString(restrictedRoles)).append("\n");
+     sb.append("    state: ").append(toIndentedString(state)).append("\n");
+     sb.append("    tags: ").append(toIndentedString(tags)).append("\n");
+     sb.append("    type: ").append(toIndentedString(type)).append("\n");
+diff --git a/src/main/java/com/datadog/api/v1/openapi.yaml b/src/main/java/com/datadog/api/v1/openapi.yaml
+index 79a46881e..7010fd201 100644
+--- a/src/main/java/com/datadog/api/v1/openapi.yaml
++++ b/src/main/java/com/datadog/api/v1/openapi.yaml
+@@ -4443,6 +4443,13 @@ components:
+         query:
+           description: The monitor query.
+           type: string
++        restricted_roles:
++          description: A list of role identifiers that can be pulled from the Roles
++            API. Cannot be used with `locked` option.
++          items:
++            description: A role UUID.
++            type: string
++          type: array
+         state:
+           $ref: '#/components/schemas/MonitorState'
+         tags:
+-- 
+2.34.1
+

@@ -1,0 +1,73 @@
+From 1fc481dd7b09e08e85824c1fe6733b303a36bdce Mon Sep 17 00:00:00 2001
+From: Damyon Wiese <damyon@moodle.com>
+Date: Tue, 29 Jan 2019 09:23:36 +0800
+Subject: [PATCH] MDL-64651 comments: Do not send referrer
+
+Use blanktarget option on all comments to prevent malicious links.
+---
+ comment/classes/external.php | 4 +++-
+ comment/lib.php              | 5 +++--
+ comment/locallib.php         | 2 +-
+ 3 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/comment/classes/external.php b/comment/classes/external.php
+index 6ca460c252d..06f312db441 100644
+--- a/comment/classes/external.php
++++ b/comment/classes/external.php
+@@ -102,6 +102,7 @@ class core_comment_external extends external_api {
+         if ($comments === false) {
+             throw new moodle_exception('nopermissions', 'error', '', 'view comments');
+         }
++        $options = array('blanktarget' => true);
+ 
+         foreach ($comments as $key => $comment) {
+ 
+@@ -110,7 +111,8 @@ class core_comment_external extends external_api {
+                                                                                                  $context->id,
+                                                                                                  $params['component'],
+                                                                                                  '',
+-                                                                                                 0);
++                                                                                                 0,
++                                                                                                 $options);
+         }
+ 
+         $results = array(
+diff --git a/comment/lib.php b/comment/lib.php
+index 07f7a5b13c8..59536cf7775 100644
+--- a/comment/lib.php
++++ b/comment/lib.php
+@@ -570,7 +570,7 @@ class comment {
+         $params['itemid'] = $this->itemid;
+ 
+         $comments = array();
+-        $formatoptions = array('overflowdiv' => true);
++        $formatoptions = array('overflowdiv' => true, 'blanktarget' => true);
+         $rs = $DB->get_recordset_sql($sql, $params, $start, $perpage);
+         foreach ($rs as $u) {
+             $c = new stdClass();
+@@ -717,7 +717,8 @@ class comment {
+             $newcmt->fullname = fullname($USER);
+             $url = new moodle_url('/user/view.php', array('id' => $USER->id, 'course' => $this->courseid));
+             $newcmt->profileurl = $url->out();
+-            $newcmt->content = format_text($newcmt->content, $newcmt->format, array('overflowdiv'=>true));
++            $formatoptions = array('overflowdiv' => true, 'blanktarget' => true);
++            $newcmt->content = format_text($newcmt->content, $newcmt->format, $formatoptions);
+             $newcmt->avatar = $OUTPUT->user_picture($USER, array('size'=>16));
+ 
+             $commentlist = array($newcmt);
+diff --git a/comment/locallib.php b/comment/locallib.php
+index ec0633e3e2d..610aeb33e91 100644
+--- a/comment/locallib.php
++++ b/comment/locallib.php
+@@ -68,7 +68,7 @@ class comment_manager {
+                        ON u.id=c.userid
+               ORDER BY c.timecreated ASC";
+         $rs = $DB->get_recordset_sql($sql, null, $start, $this->perpage);
+-        $formatoptions = array('overflowdiv' => true);
++        $formatoptions = array('overflowdiv' => true, 'blanktarget' => true);
+         foreach ($rs as $item) {
+             // Set calculated fields
+             $item->fullname = fullname($item);
+-- 
+2.34.1
+

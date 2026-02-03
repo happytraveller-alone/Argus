@@ -1,0 +1,36 @@
+From 8a927904366fa2d02df7a11553f8b0aa93471279 Mon Sep 17 00:00:00 2001
+From: Krzysztof Piaskowy <krzychu2956@gmail.com>
+Date: Tue, 2 Aug 2022 15:30:16 +0200
+Subject: [PATCH] Prevent empty string match in color regex (#3419)
+
+## Description
+
+PR based on issue requested in comment: https://github.com/software-mansion/react-native-reanimated/pull/3382#issuecomment-1195439278
+
+I updated the regex to prevent empty string matches.
+The new regex `[-+]?(?:\d+(?:\.\d*)?|\.\d+)` - https://regex101.com/r/aHhlXG/1 is equivalent with the old version `[-+]?\d*\.?\d+` - https://regex101.com/r/Z0xMqR/1
+
+I also tested ReDoS, and the new regex is safe.
+```
+(new RegExp('^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$')).test(`${'1'.repeat(1e6)}z`)
+```
+---
+ src/reanimated2/Colors.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/reanimated2/Colors.ts b/src/reanimated2/Colors.ts
+index 905675de7..6f958fdcb 100644
+--- a/src/reanimated2/Colors.ts
++++ b/src/reanimated2/Colors.ts
+@@ -23,7 +23,7 @@ interface HSV {
+ }
+ 
+ // var INTEGER = '[-+]?\\d+';
+-const NUMBER = '[-+]?\\d*(?:\\.\\d*)?';
++const NUMBER = '[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)';
+ const PERCENTAGE = NUMBER + '%';
+ 
+ function call(...args: unknown[]): string {
+-- 
+2.34.1
+

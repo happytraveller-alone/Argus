@@ -1,0 +1,33 @@
+From 7d4538e104f2b3ff6a65a41394795654e6972339 Mon Sep 17 00:00:00 2001
+From: jeanlf <jeanlf@github.com>
+Date: Thu, 9 Sep 2021 15:04:12 +0200
+Subject: [PATCH] fixed #1912
+
+---
+ src/filters/dmx_nhml.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/filters/dmx_nhml.c b/src/filters/dmx_nhml.c
+index c35cbcc49..8ca7beed0 100644
+--- a/src/filters/dmx_nhml.c
++++ b/src/filters/dmx_nhml.c
+@@ -1021,8 +1021,14 @@ static GF_Err nhmldmx_send_sample(GF_Filter *filter, GF_NHMLDmxCtx *ctx)
+ 					}
+ 				}
+ 			}
+-			else if (!stricmp(att->name, "xmlFrom")) strcpy(szXmlFrom, att->value);
+-			else if (!stricmp(att->name, "xmlTo")) strcpy(szXmlTo, att->value);
++			else if (!stricmp(att->name, "xmlFrom")) {
++				strncpy(szXmlFrom, att->value, 999);
++				szXmlFrom[999]=0;
++			}
++			else if (!stricmp(att->name, "xmlTo")) {
++				strncpy(szXmlTo, att->value, 999);
++				szXmlTo[999]=0;
++			}
+ 			/*DIMS flags*/
+ 			else if (!stricmp(att->name, "is-Scene") && !stricmp(att->value, "yes"))
+ 				dims_flags |= GF_DIMS_UNIT_S;
+-- 
+2.34.1
+

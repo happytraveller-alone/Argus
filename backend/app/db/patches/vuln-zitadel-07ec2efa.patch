@@ -1,0 +1,28 @@
+From 07ec2efa9dc62f7a6c3a58c112b2879d24bc3e3c Mon Sep 17 00:00:00 2001
+From: Livio Spring <livio.a@gmail.com>
+Date: Mon, 11 Mar 2024 07:52:02 +0100
+Subject: [PATCH] fix: use correct template package (#7522)
+
+---
+ internal/renderer/renderer.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/internal/renderer/renderer.go b/internal/renderer/renderer.go
+index d9e4a44ef..cc4d1c6cc 100644
+--- a/internal/renderer/renderer.go
++++ b/internal/renderer/renderer.go
+@@ -2,10 +2,10 @@ package renderer
+ 
+ import (
+ 	"context"
++	"html/template"
+ 	"io/ioutil"
+ 	"net/http"
+ 	"os"
+-	"text/template"
+ 
+ 	"github.com/zitadel/logging"
+ 	"golang.org/x/text/language"
+-- 
+2.34.1
+

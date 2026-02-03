@@ -1,0 +1,163 @@
+From bec160fd287763f979ebc3c5a8cdcf92a57a6c4b Mon Sep 17 00:00:00 2001
+From: "Charles E. Rolke" <chug@apache.org>
+Date: Tue, 1 May 2012 19:18:09 +0000
+Subject: [PATCH] QPID-2616 Count and limit client connections. Add management
+ statistic and event to record denied connections.
+
+git-svn-id: https://svn.apache.org/repos/asf/qpid/trunk@1332788 13f79535-47bb-0310-9956-ffa450edef68
+---
+ qpid/cpp/src/qpid/acl/Acl.cpp                  | 13 ++++++++++++-
+ qpid/cpp/src/qpid/acl/Acl.h                    |  2 +-
+ qpid/cpp/src/qpid/acl/AclConnectionCounter.cpp | 11 +++++++----
+ qpid/cpp/src/qpid/acl/AclConnectionCounter.h   |  4 +++-
+ qpid/cpp/src/qpid/acl/management-schema.xml    |  3 +++
+ 5 files changed, 26 insertions(+), 7 deletions(-)
+
+diff --git a/qpid/cpp/src/qpid/acl/Acl.cpp b/qpid/cpp/src/qpid/acl/Acl.cpp
+index 71e8c8b5641..917c2e3398e 100644
+--- a/qpid/cpp/src/qpid/acl/Acl.cpp
++++ b/qpid/cpp/src/qpid/acl/Acl.cpp
+@@ -31,6 +31,7 @@
+ #include "qmf/org/apache/qpid/acl/ArgsAclLookupPublish.h"
+ #include "qmf/org/apache/qpid/acl/Package.h"
+ #include "qmf/org/apache/qpid/acl/EventAllow.h"
++#include "qmf/org/apache/qpid/acl/EventConnectionDeny.h"
+ #include "qmf/org/apache/qpid/acl/EventDeny.h"
+ #include "qmf/org/apache/qpid/acl/EventFileLoaded.h"
+ #include "qmf/org/apache/qpid/acl/EventFileLoadFailed.h"
+@@ -50,7 +51,7 @@ using qpid::management::Args;
+ namespace _qmf = qmf::org::apache::qpid::acl;
+ 
+ Acl::Acl (AclValues& av, Broker& b): aclValues(av), broker(&b), transferAcl(false), mgmtObject(0),
+-    connectionCounter(new ConnectionCounter(aclValues.aclMaxConnectPerUser, aclValues.aclMaxConnectPerIp))
++    connectionCounter(new ConnectionCounter(*this, aclValues.aclMaxConnectPerUser, aclValues.aclMaxConnectPerIp))
+ {
+ 
+     agent = broker->getManagementAgent();
+@@ -70,6 +71,16 @@ Acl::Acl (AclValues& av, Broker& b): aclValues(av), broker(&b), transferAcl(fals
+     if (mgmtObject!=0) mgmtObject->set_enforcingAcl(1);
+ }
+ 
++
++void Acl::reportConnectLimit(const std::string user, const std::string addr)
++{
++    if (mgmtObject!=0)
++        mgmtObject->inc_connectionDenyCount();
++
++    agent->raiseEvent(_qmf::EventConnectionDeny(user, addr));
++}
++
++
+ bool Acl::authorise(
+     const std::string&               id,
+     const Action&                    action,
+diff --git a/qpid/cpp/src/qpid/acl/Acl.h b/qpid/cpp/src/qpid/acl/Acl.h
+index c65a06d317d..c3451018ef0 100644
+--- a/qpid/cpp/src/qpid/acl/Acl.h
++++ b/qpid/cpp/src/qpid/acl/Acl.h
+@@ -66,7 +66,7 @@ class Acl : public broker::AclModule, public RefCounted, public management::Mana
+ public:
+     Acl (AclValues& av, broker::Broker& b);
+ 
+-    void initialize();
++    void reportConnectLimit(const std::string user, const std::string addr);
+ 
+     inline virtual bool doTransferAcl() {
+         return transferAcl;
+diff --git a/qpid/cpp/src/qpid/acl/AclConnectionCounter.cpp b/qpid/cpp/src/qpid/acl/AclConnectionCounter.cpp
+index 9715c472c17..5a70c569a7e 100644
+--- a/qpid/cpp/src/qpid/acl/AclConnectionCounter.cpp
++++ b/qpid/cpp/src/qpid/acl/AclConnectionCounter.cpp
+@@ -20,6 +20,7 @@
+  */
+ 
+ #include "AclConnectionCounter.h"
++#include "Acl.h"
+ #include "qpid/broker/Connection.h"
+ #include "qpid/log/Statement.h"
+ #include "qpid/sys/Mutex.h"
+@@ -40,8 +41,8 @@ namespace acl {
+ //
+ //
+ //
+-ConnectionCounter::ConnectionCounter(uint32_t nl, uint32_t hl) :
+-    nameLimit(nl), hostLimit(hl) {}
++ConnectionCounter::ConnectionCounter(Acl& a, uint32_t nl, uint32_t hl) :
++    acl(a), nameLimit(nl), hostLimit(hl) {}
+ 
+ ConnectionCounter::~ConnectionCounter() {}
+ 
+@@ -131,7 +132,8 @@ void ConnectionCounter::opened(broker::Connection& connection) {
+ 
+     if (!nameOk) {
+         // User has too many
+-        QPID_LOG(info, "ACL ConnectionCounter User '" << userName
++        acl.reportConnectLimit(userName, hostName);
++        QPID_LOG(notice, "ACL ConnectionCounter User '" << userName
+             << "' exceeded maximum allowed connections");
+         throw Exception(
+             QPID_MSG("User '" << userName
+@@ -140,7 +142,8 @@ void ConnectionCounter::opened(broker::Connection& connection) {
+ 
+     if (!hostOk) {
+         // Host has too many
+-        QPID_LOG(info, "ACL ConnectionCounter Client host '" << hostName
++        acl.reportConnectLimit(userName, hostName);
++        QPID_LOG(notice, "ACL ConnectionCounter Client host '" << hostName
+             << "' exceeded maximum allowed connections");
+         throw Exception(
+             QPID_MSG("Client host '" << hostName
+diff --git a/qpid/cpp/src/qpid/acl/AclConnectionCounter.h b/qpid/cpp/src/qpid/acl/AclConnectionCounter.h
+index b78eea022ee..31d11540fd6 100644
+--- a/qpid/cpp/src/qpid/acl/AclConnectionCounter.h
++++ b/qpid/cpp/src/qpid/acl/AclConnectionCounter.h
+@@ -35,6 +35,7 @@ class Connection;
+ }
+ 
+ namespace acl {
++class Acl;
+ 
+  /**
+  * Terminate client connections when a user tries to create 'too many'.
+@@ -46,6 +47,7 @@ class ConnectionCounter : public broker::ConnectionObserver
+     typedef std::map<std::string, uint32_t> connectCountsMap_t;
+     enum CONNECTION_PROGRESS { C_CREATED=1, C_OPENED=2 };
+ 
++    Acl&             acl;
+     uint32_t         nameLimit;
+     uint32_t         hostLimit;
+     qpid::sys::Mutex dataLock;
+@@ -65,7 +67,7 @@ class ConnectionCounter : public broker::ConnectionObserver
+                    uint32_t theLimit);
+ 
+ public:
+-    ConnectionCounter(uint32_t nl, uint32_t hl);
++    ConnectionCounter(Acl& acl, uint32_t nl, uint32_t hl);
+     ~ConnectionCounter();
+ 
+     void connection(broker::Connection& connection);
+diff --git a/qpid/cpp/src/qpid/acl/management-schema.xml b/qpid/cpp/src/qpid/acl/management-schema.xml
+index bb79568b462..19fe37333cb 100644
+--- a/qpid/cpp/src/qpid/acl/management-schema.xml
++++ b/qpid/cpp/src/qpid/acl/management-schema.xml
+@@ -23,6 +23,7 @@
+     <property name="transferAcl"   type="bool"    access="RO"    desc="Any transfer ACL rules in force"/>
+     <property name="lastAclLoad"   type="absTime" access="RO"    desc="Timestamp of last successful load of ACL"/>
+     <statistic name="aclDenyCount" type="count64" unit="request" desc="Number of ACL requests denied"/>
++    <statistic name="connectionDenyCount" type="count64" unit="connection" desc="Number of connections denied"/>
+ 
+     <method name="reloadACLFile" desc="Reload the ACL file"/>
+ 
+@@ -65,10 +66,12 @@
+     <arg name="objectType" type="sstr"/>
+     <arg name="reason"     type="lstr"/>
+     <arg name="userId"     type="sstr"/>
++    <arg name="clientAddr" type="sstr"/>
+   </eventArguments>
+ 
+   <event name="allow"          sev="inform" args="userId, action, objectType, objectName, arguments"/>
+   <event name="deny"           sev="notice" args="userId, action, objectType, objectName, arguments"/>
++  <event name="connectionDeny" sev="notice" args="userId, clientAddr"/>
+   <event name="fileLoaded"     sev="inform" args="userId"/>
+   <event name="fileLoadFailed" sev="error"  args="userId, reason"/>
+ 

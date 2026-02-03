@@ -1,0 +1,58 @@
+From fc75567b0df975833275a35690582b36088679ba Mon Sep 17 00:00:00 2001
+From: billz <billzimmerman@gmail.com>
+Date: Mon, 23 Oct 2023 12:39:35 +0100
+Subject: [PATCH] Update release version
+
+---
+ README.md             | 2 +-
+ includes/defaults.php | 2 +-
+ index.php             | 4 ++--
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/README.md b/README.md
+index de826dda..3dd1fc59 100644
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,5 @@
+ ![](https://i.imgur.com/xeKD93p.png)
+-[![Release 2.9.6](https://img.shields.io/badge/release-v2.9.6-green)](https://github.com/raspap/raspap-webgui/releases) [![Awesome](https://awesome.re/badge.svg)](https://github.com/thibmaek/awesome-raspberry-pi) [![Join Insiders](https://img.shields.io/static/v1?label=Join%20Insiders&message=%E2%9D%A4&logo=GitHub&color=ff69b4)](https://github.com/sponsors/RaspAP) [![Build Status](https://app.travis-ci.com/RaspAP/raspap-webgui.svg?branch=master)](https://app.travis-ci.com/RaspAP/raspap-webgui) [![Crowdin](https://badges.crowdin.net/raspap/localized.svg)](https://crowdin.com/project/raspap) [![Twitter URL](https://img.shields.io/twitter/url?label=%40RaspAP&logoColor=%23d8224c&url=https%3A%2F%2Ftwitter.com%2Frasp_ap)](https://twitter.com/rasp_ap) [![Subreddit subscribers](https://img.shields.io/reddit/subreddit-subscribers/RaspAP?style=social)](https://www.reddit.com/r/RaspAP/) [![Join the chat at https://app.gitter.im/#/room/#RaspAP:gitter.im](https://img.shields.io/badge/chat-on%20gitter-brightgreen)](https://app.gitter.im/#/room/#RaspAP:gitter.im)
++[![Release 2.9.7](https://img.shields.io/badge/release-v2.9.7-green)](https://github.com/raspap/raspap-webgui/releases) [![Awesome](https://awesome.re/badge.svg)](https://github.com/thibmaek/awesome-raspberry-pi) [![Join Insiders](https://img.shields.io/static/v1?label=Join%20Insiders&message=%E2%9D%A4&logo=GitHub&color=ff69b4)](https://github.com/sponsors/RaspAP) [![Build Status](https://app.travis-ci.com/RaspAP/raspap-webgui.svg?branch=master)](https://app.travis-ci.com/RaspAP/raspap-webgui) [![Crowdin](https://badges.crowdin.net/raspap/localized.svg)](https://crowdin.com/project/raspap) [![Twitter URL](https://img.shields.io/twitter/url?label=%40RaspAP&logoColor=%23d8224c&url=https%3A%2F%2Ftwitter.com%2Frasp_ap)](https://twitter.com/rasp_ap) [![Subreddit subscribers](https://img.shields.io/reddit/subreddit-subscribers/RaspAP?style=social)](https://www.reddit.com/r/RaspAP/) [![Join the chat at https://app.gitter.im/#/room/#RaspAP:gitter.im](https://img.shields.io/badge/chat-on%20gitter-brightgreen)](https://app.gitter.im/#/room/#RaspAP:gitter.im)
+ 
+ RaspAP is feature-rich wireless router software that _just works_ on many popular [Debian-based devices](#supported-operating-systems), including the Raspberry Pi. Our popular [Quick installer](#quick-installer) creates a known-good default configuration for all current Raspberry Pis with onboard wireless. A fully responsive, mobile-ready interface gives you control over the relevant services and networking options. Advanced DHCP settings, WireGuard and OpenVPN support, [SSL certificates](https://docs.raspap.com/ssl-quick/), security audits, [captive portal integration](https://docs.raspap.com/captive/), themes and [multilingual options](https://docs.raspap.com/translations/) are included.
+ 
+diff --git a/includes/defaults.php b/includes/defaults.php
+index 3fc6e914..6544cfa0 100755
+--- a/includes/defaults.php
++++ b/includes/defaults.php
+@@ -6,7 +6,7 @@ if (!defined('RASPI_CONFIG')) {
+ 
+ $defaults = [
+   'RASPI_BRAND_TEXT' => 'RaspAP',
+-  'RASPI_VERSION' => '2.9.6',
++  'RASPI_VERSION' => '2.9.7',
+   'RASPI_CONFIG_NETWORK' => RASPI_CONFIG.'/networking/defaults.json',
+   'RASPI_ADMIN_DETAILS' => RASPI_CONFIG.'/raspap.auth',
+   'RASPI_WIFI_AP_INTERFACE' => 'wlan0',
+diff --git a/index.php b/index.php
+index bafecca4..f4b4b120 100755
+--- a/index.php
++++ b/index.php
+@@ -8,13 +8,13 @@
+  * Recommended distribution is Raspberry Pi OS (64-bit) Lite. Specific instructions to install the supported software are
+  * in the README and original post by @SirLagz. For a quick run through, the packages required for the WebGUI are:
+  * lighttpd (version 1.4.59 installed via apt)
+- * php-cgi (version 7.4.33 installed via apt)
++ * php-cgi (version 8.2.7 installed via apt)
+  * along with their supporting packages, php7.4 will also need to be enabled.
+  *
+  * @author  Lawrence Yau <sirlagz@gmail.com>
+  * @author  Bill Zimmerman <billzimmerman@gmail.com>
+  * @license GNU General Public License, version 3 (GPL-3.0)
+- * @version 2.9.6
++ * @version 2.9.7
+  * @link    https://github.com/RaspAP/raspap-webgui/
+  * @link    https://raspap.com/
+  * @see     http://sirlagz.net/2013/02/08/raspap-webgui/
+-- 
+2.34.1
+

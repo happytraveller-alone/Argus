@@ -1,0 +1,208 @@
+From c6ec1155d026c91b1badb07ef1605bb747cff064 Mon Sep 17 00:00:00 2001
+From: Noah Eisen <ncteisen@google.com>
+Date: Wed, 5 Apr 2017 16:10:13 -0700
+Subject: [PATCH] Fix error overflow bug
+
+---
+ src/core/lib/iomgr/error.c                    |  35 ++++++++++++++++--
+ .../clusterfuzz-testcase-6312731374256128     | Bin 0 -> 26793 bytes
+ test/core/iomgr/error_test.c                  |  30 ++++++++++++++-
+ tools/run_tests/generated/tests.json          |  23 ++++++++++++
+ 4 files changed, 82 insertions(+), 6 deletions(-)
+ create mode 100644 test/core/end2end/fuzzers/server_fuzzer_corpus/clusterfuzz-testcase-6312731374256128
+
+diff --git a/src/core/lib/iomgr/error.c b/src/core/lib/iomgr/error.c
+index 1dbb64e8f3..766cc8a516 100644
+--- a/src/core/lib/iomgr/error.c
++++ b/src/core/lib/iomgr/error.c
+@@ -212,7 +212,11 @@ static uint8_t get_placement(grpc_error **err, size_t size) {
+   GPR_ASSERT(*err);
+   uint8_t slots = (uint8_t)(size / sizeof(intptr_t));
+   if ((*err)->arena_size + slots > (*err)->arena_capacity) {
+-    (*err)->arena_capacity = (uint8_t)(3 * (*err)->arena_capacity / 2);
++    (*err)->arena_capacity =
++        (uint8_t)GPR_MIN(UINT8_MAX - 1, (3 * (*err)->arena_capacity / 2));
++    if ((*err)->arena_size + slots > (*err)->arena_capacity) {
++      return UINT8_MAX;
++    }
+     *err = gpr_realloc(
+         *err, sizeof(grpc_error) + (*err)->arena_capacity * sizeof(intptr_t));
+   }
+@@ -223,10 +227,14 @@ static uint8_t get_placement(grpc_error **err, size_t size) {
+ 
+ static void internal_set_int(grpc_error **err, grpc_error_ints which,
+                              intptr_t value) {
+-  // GPR_ASSERT((*err)->ints[which] == UINT8_MAX); // TODO, enforce this
+   uint8_t slot = (*err)->ints[which];
+   if (slot == UINT8_MAX) {
+     slot = get_placement(err, sizeof(value));
++    if (slot == UINT8_MAX) {
++      gpr_log(GPR_ERROR, "Error %p is full, dropping int {\"%s\":%" PRIiPTR "}", *err,
++              error_int_name(which), value);
++      return;
++    }
+   }
+   (*err)->ints[which] = slot;
+   (*err)->arena[slot] = value;
+@@ -234,10 +242,16 @@ static void internal_set_int(grpc_error **err, grpc_error_ints which,
+ 
+ static void internal_set_str(grpc_error **err, grpc_error_strs which,
+                              grpc_slice value) {
+-  // GPR_ASSERT((*err)->strs[which] == UINT8_MAX); // TODO, enforce this
+   uint8_t slot = (*err)->strs[which];
+   if (slot == UINT8_MAX) {
+     slot = get_placement(err, sizeof(value));
++    if (slot == UINT8_MAX) {
++      const char *str = grpc_slice_to_c_string(value);
++      gpr_log(GPR_ERROR, "Error %p is full, dropping string {\"%s\":\"%s\"}",
++              *err, error_str_name(which), str);
++      gpr_free((void *)str);
++      return;
++    }
+   } else {
+     unref_slice(*(grpc_slice *)((*err)->arena + slot));
+   }
+@@ -245,12 +259,19 @@ static void internal_set_str(grpc_error **err, grpc_error_strs which,
+   memcpy((*err)->arena + slot, &value, sizeof(value));
+ }
+ 
++static char *fmt_time(gpr_timespec tm);
+ static void internal_set_time(grpc_error **err, grpc_error_times which,
+                               gpr_timespec value) {
+-  // GPR_ASSERT((*err)->times[which] == UINT8_MAX); // TODO, enforce this
+   uint8_t slot = (*err)->times[which];
+   if (slot == UINT8_MAX) {
+     slot = get_placement(err, sizeof(value));
++    if (slot == UINT8_MAX) {
++      const char *time_str = fmt_time(value);
++      gpr_log(GPR_ERROR, "Error %p is full, dropping \"%s\":\"%s\"}", *err,
++              error_time_name(which), time_str);
++      gpr_free((void *)time_str);
++      return;
++    }
+   }
+   (*err)->times[which] = slot;
+   memcpy((*err)->arena + slot, &value, sizeof(value));
+@@ -259,6 +280,12 @@ static void internal_set_time(grpc_error **err, grpc_error_times which,
+ static void internal_add_error(grpc_error **err, grpc_error *new) {
+   grpc_linked_error new_last = {new, UINT8_MAX};
+   uint8_t slot = get_placement(err, sizeof(grpc_linked_error));
++  if (slot == UINT8_MAX) {
++    gpr_log(GPR_ERROR, "Error %p is full, dropping error %p = %s", *err, new,
++            grpc_error_string(new));
++    GRPC_ERROR_UNREF(new);
++    return;
++  }
+   if ((*err)->first_err == UINT8_MAX) {
+     GPR_ASSERT((*err)->last_err == UINT8_MAX);
+     (*err)->last_err = slot;
+diff --git a/test/core/end2end/fuzzers/server_fuzzer_corpus/clusterfuzz-testcase-6312731374256128 b/test/core/end2end/fuzzers/server_fuzzer_corpus/clusterfuzz-testcase-6312731374256128
+new file mode 100644
+index 0000000000000000000000000000000000000000..4c6eb601ae342400eaccb7d4688136d152f2b06d
+GIT binary patch
+literal 26793
+zcmeI*u}Z@L6h`3)rAV>w(Ah!7r_ezt+V_8zn%nSuFE|ShUxyeYT@L>_2@dV~^ZoRA
+zdb?cC&#zA}$HVdP^-;%V+3%LyYyEM(u4lWu?e|=-YwM-^{dW21n7@1950cvnF80Es
+zc7hLl-~%7h0nZbjv)TsFpM2m0AG!m4-~%7{kmp7JUz#@bE^xu62*eZjP4~@dM0TMQ
+zlS=!73ob<<p6I83P9w4lotRYG7hG^D0`WvY^>Z4LUFgK5(!St=OA&}C`l+AOi0ncq
+zCYAOD7hH-!Jkd}6oJM39Ix(rVFSy`R1mcN)>gO~fyU>YArG3E#mm&~P^iw~l5!r=K
+zOe*aQF1Qqdc%q;BIgQ9JbYfCzUvR;t2*eZp)X!-|cA*oKO8bHfE=3@o=%;>8BeDyf
+zm{i&qTyQA@@kBrMa~hFd=)|PbzTkpO5r`-Hsh`t`>_R6dmG%V}T#7(E(NF!HMr0Q{
+zF{!jKxZqL*;)#Ch=QJX_(1}T<eZl4ba9MWs5%o(YOwZO~*2_LO4ms+X&mpfs_<oDc
+b2tM$E54k(^bA$V4GpVy*op|`uF9`Yuk8JBU
+
+literal 0
+HcmV?d00001
+
+diff --git a/test/core/iomgr/error_test.c b/test/core/iomgr/error_test.c
+index 5c60a4ddb8..607dbeea3e 100644
+--- a/test/core/iomgr/error_test.c
++++ b/test/core/iomgr/error_test.c
+@@ -182,8 +182,6 @@ static void print_error_string_reference() {
+   grpc_error* parent =
+       GRPC_ERROR_CREATE_REFERENCING_FROM_STATIC_STRING("Parent", children, 2);
+ 
+-  gpr_log(GPR_DEBUG, "%s", grpc_error_string(parent));
+-
+   for (size_t i = 0; i < 2; ++i) {
+     GRPC_ERROR_UNREF(children[i]);
+   }
+@@ -216,6 +214,33 @@ static void test_special() {
+   GRPC_ERROR_UNREF(error);
+ }
+ 
++static void test_overflow() {
++  grpc_error* error = GRPC_ERROR_CREATE_FROM_STATIC_STRING("Overflow");
++
++  for (size_t i = 0; i < 150; ++i) {
++    error = grpc_error_add_child(error,
++                                 GRPC_ERROR_CREATE_FROM_STATIC_STRING("Child"));
++  }
++
++  error = grpc_error_set_int(error, GRPC_ERROR_INT_HTTP2_ERROR, 5);
++  error =
++      grpc_error_set_str(error, GRPC_ERROR_STR_GRPC_MESSAGE,
++                         grpc_slice_from_static_string("message for child 2"));
++  error = grpc_error_set_int(error, GRPC_ERROR_INT_GRPC_STATUS, 5);
++
++  intptr_t i;
++  GPR_ASSERT(grpc_error_get_int(error, GRPC_ERROR_INT_HTTP2_ERROR, &i));
++  GPR_ASSERT(i == 5);
++  GPR_ASSERT(!grpc_error_get_int(error, GRPC_ERROR_INT_GRPC_STATUS, &i));
++
++  error = grpc_error_set_int(error, GRPC_ERROR_INT_HTTP2_ERROR, 10);
++  GPR_ASSERT(grpc_error_get_int(error, GRPC_ERROR_INT_HTTP2_ERROR, &i));
++  GPR_ASSERT(i == 10);
++
++  GRPC_ERROR_UNREF(error);
++  ;
++}
++
+ int main(int argc, char** argv) {
+   grpc_test_init(argc, argv);
+   grpc_init();
+@@ -228,6 +253,7 @@ int main(int argc, char** argv) {
+   test_create_referencing();
+   test_create_referencing_many();
+   test_special();
++  test_overflow();
+   grpc_shutdown();
+ 
+   return 0;
+diff --git a/tools/run_tests/generated/tests.json b/tools/run_tests/generated/tests.json
+index 88bac795e4..e99159f523 100644
+--- a/tools/run_tests/generated/tests.json
++++ b/tools/run_tests/generated/tests.json
+@@ -150765,6 +150765,29 @@
+     ], 
+     "uses_polling": false
+   }, 
++  {
++    "args": [
++      "test/core/end2end/fuzzers/server_fuzzer_corpus/clusterfuzz-testcase-6312731374256128"
++    ], 
++    "ci_platforms": [
++      "linux"
++    ], 
++    "cpu_cost": 0.1, 
++    "exclude_configs": [
++      "tsan"
++    ], 
++    "exclude_iomgrs": [
++      "uv"
++    ], 
++    "flaky": false, 
++    "language": "c", 
++    "name": "server_fuzzer_one_entry", 
++    "platforms": [
++      "mac", 
++      "linux"
++    ], 
++    "uses_polling": false
++  }, 
+   {
+     "args": [
+       "test/core/end2end/fuzzers/server_fuzzer_corpus/crash-0f4b135c0242669ce425d2662168e9440f8a628d"
+-- 
+2.34.1
+

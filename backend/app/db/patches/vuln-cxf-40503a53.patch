@@ -1,0 +1,54 @@
+From 40503a53914758759894f704bbf139ae89ace286 Mon Sep 17 00:00:00 2001
+From: Colm O hEigeartaigh <coheigea@apache.org>
+Date: Wed, 6 Jan 2021 09:30:08 +0000
+Subject: [PATCH] Disallow OAuth2 request_uri by default
+
+---
+ .../grants/code/JwtRequestCodeFilter.java       | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/rt/rs/security/oauth-parent/oauth2/src/main/java/org/apache/cxf/rs/security/oauth2/grants/code/JwtRequestCodeFilter.java b/rt/rs/security/oauth-parent/oauth2/src/main/java/org/apache/cxf/rs/security/oauth2/grants/code/JwtRequestCodeFilter.java
+index 4ef8dc9643..29ac00020d 100644
+--- a/rt/rs/security/oauth-parent/oauth2/src/main/java/org/apache/cxf/rs/security/oauth2/grants/code/JwtRequestCodeFilter.java
++++ b/rt/rs/security/oauth-parent/oauth2/src/main/java/org/apache/cxf/rs/security/oauth2/grants/code/JwtRequestCodeFilter.java
+@@ -42,6 +42,7 @@ import org.apache.cxf.rs.security.oauth2.utils.OAuthConstants;
+ import org.apache.cxf.rt.security.crypto.CryptoUtils;
+ 
+ public class JwtRequestCodeFilter extends OAuthJoseJwtConsumer implements AuthorizationRequestFilter {
++    private static final String REQUEST_URI_CONTENT_TYPE = "application/oauth-authz-req+jwt";
+     private static final String REQUEST_PARAM = "request";
+     private static final String REQUEST_URI_PARAM = "request_uri";
+     private boolean verifyWithClientCertificates;
+@@ -55,7 +56,7 @@ public class JwtRequestCodeFilter extends OAuthJoseJwtConsumer implements Author
+         if (requestToken == null) {
+             String requestUri = params.getFirst(REQUEST_URI_PARAM);
+             if (isRequestUriValid(client, requestUri)) {
+-                requestToken = WebClient.create(requestUri).get(String.class);
++                requestToken = WebClient.create(requestUri).accept(REQUEST_URI_CONTENT_TYPE).get(String.class);
+             }
+         }
+         if (requestToken != null) {
+@@ -101,9 +102,17 @@ public class JwtRequestCodeFilter extends OAuthJoseJwtConsumer implements Author
+         }
+         return params;
+     }
+-    private boolean isRequestUriValid(Client client, String requestUri) {
+-        //TODO: consider restricting to specific hosts
+-        return requestUri != null && requestUri.startsWith("https://");
++
++    /**
++     * This method must be overridden to support request_uri. Take care to validate the request_uri properly,
++     * as otherwise it could lead to a security problem
++     * (https://tools.ietf.org/html/draft-ietf-oauth-jwsreq-30#section-10.4)
++     * @param client the Client object
++     * @param requestUri the request_uri parameter to validate
++     * @return whether the requestUri is permitted or not
++     */
++    protected boolean isRequestUriValid(Client client, String requestUri) {
++        return false;
+     }
+     protected JwsSignatureVerifier getInitializedSigVerifier(Client c) {
+         if (verifyWithClientCertificates) {
+-- 
+2.34.1
+

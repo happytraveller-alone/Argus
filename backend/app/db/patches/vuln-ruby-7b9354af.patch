@@ -1,0 +1,26 @@
+From 7b9354af8805c02ed968765abe300162e0fcc943 Mon Sep 17 00:00:00 2001
+From: hone <hone@b2dd03c8-39d4-4d8f-98ff-823fe69b080e>
+Date: Thu, 7 Aug 2014 04:59:56 +0000
+Subject: [PATCH] Fix r32622.
+
+git-svn-id: svn+ssh://ci.ruby-lang.org/ruby/branches/ruby_1_9_2@47093 b2dd03c8-39d4-4d8f-98ff-823fe69b080e
+---
+ lib/uri/common.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/uri/common.rb b/lib/uri/common.rb
+index b9335ebd04..456f039599 100644
+--- a/lib/uri/common.rb
++++ b/lib/uri/common.rb
+@@ -822,7 +822,7 @@ module URI
+   # See URI.decode_www_form_component, URI.encode_www_form
+   def self.decode_www_form(str, enc=Encoding::UTF_8)
+     return [] if str.empty?
+-    unless /\A#{WFKV_}*=#{WFKV_}*(?:[;&]#{WFKV_}*=#{WFKV_}*)*\z/o =~ str
++    unless /\A#{WFKV_}=#{WFKV_}(?:[;&]#{WFKV_}=#{WFKV_})*\z/o =~ str
+       raise ArgumentError, "invalid data of application/x-www-form-urlencoded (#{str})"
+     end
+     ary = []
+-- 
+2.34.1
+

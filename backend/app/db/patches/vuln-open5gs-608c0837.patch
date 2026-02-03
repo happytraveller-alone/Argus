@@ -1,0 +1,24 @@
+From 608c08373de44b19afb0f76c986b713bb3fd6bb2 Mon Sep 17 00:00:00 2001
+From: Sukchan Lee <acetcom@gmail.com>
+Date: Sat, 23 Oct 2021 23:05:39 +0900
+Subject: [PATCH] WebUI uses `localhost` by default (#764, #587)
+
+---
+ webui/server/index.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/webui/server/index.js b/webui/server/index.js
+index 3005ebd4e..33bb75ae8 100644
+--- a/webui/server/index.js
++++ b/webui/server/index.js
+@@ -1,6 +1,6 @@
+ process.env.DB_URI = process.env.DB_URI || 'mongodb://localhost/open5gs';
+ 
+-const _hostname = process.env.HOSTNAME || '0.0.0.0';
++const _hostname = process.env.HOSTNAME || 'localhost';
+ const port = process.env.PORT || 3000;
+ 
+ const co = require('co');
+-- 
+2.34.1
+

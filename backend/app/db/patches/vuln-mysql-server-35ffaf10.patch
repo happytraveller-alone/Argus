@@ -1,0 +1,33 @@
+From 7a5145e445ee802241957eb5290a3e65ea4da70c Mon Sep 17 00:00:00 2001
+From: Terje Rosten <terje.rosten@oracle.com>
+Date: Tue, 30 Aug 2016 08:40:03 +0200
+Subject: [PATCH] Bug#24516262 PRIVILEGE ESCALATION USING MYSQL_PRE_SYSTEMD
+
+Post push fix: create error log only if it matches pattern /var/log/mysql*.log
+---
+ scripts/systemd/mysqld_pre_systemd.in | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/scripts/systemd/mysqld_pre_systemd.in b/scripts/systemd/mysqld_pre_systemd.in
+index 3dfba429787..55b0dd0b95c 100644
+--- a/scripts/systemd/mysqld_pre_systemd.in
++++ b/scripts/systemd/mysqld_pre_systemd.in
+@@ -48,10 +48,11 @@ install_db () {
+ 
+     [ -d "$datadir" ] || install -d -m 0751 -o@MYSQLD_USER@ -g@MYSQLD_USER@ "$datadir" || exit 1
+ 
+-    if [ ! -e "$log" -a ! -h "$log" -a -O "$(dirname "$log")" ]; then
+-	touch "$log"
+-	chmod 0640 "$log"
+-	chown @MYSQLD_USER@:@MYSQLD_USER@ "$log" || exit 1
++    if [ ! -e "$log" -a ! -h "$log" -a x$(dirname "$log") = "x/var/log" ]; then
++	case $(basename "$log") in
++	    mysql*.log) install /dev/null -m0640 -o@MYSQLD_USER@ -g@MYSQLD_USER@ "$log" ;;
++	    *) ;;
++	esac
+     fi
+ 
+     if [ -x /usr/sbin/restorecon ]; then
+-- 
+2.34.1
+

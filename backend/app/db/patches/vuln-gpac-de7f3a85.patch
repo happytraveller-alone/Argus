@@ -1,0 +1,25 @@
+From de7f3a852bef72a52825fd307cf4e8f486401a76 Mon Sep 17 00:00:00 2001
+From: jeanlf <jeanlf@gpac.io>
+Date: Fri, 1 Sep 2023 11:58:14 +0200
+Subject: [PATCH] Fixed #2579
+
+---
+ src/filters/mux_isom.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/filters/mux_isom.c b/src/filters/mux_isom.c
+index 08f9ff51d..4044ef11f 100644
+--- a/src/filters/mux_isom.c
++++ b/src/filters/mux_isom.c
+@@ -5713,7 +5713,7 @@ static GF_Err mp4_mux_initialize_movie(GF_MP4MuxCtx *ctx)
+ 		if (p && p->value.lfrac.den) {
+ 			tkw->pid_dur = p->value.lfrac;
+ 			if (tkw->pid_dur.num<0) tkw->pid_dur.num = -tkw->pid_dur.num;
+-			if (max_dur.num * (s64) tkw->pid_dur.den < (s64) max_dur.den * tkw->pid_dur.num) {
++			if (gf_timestamp_less(max_dur.num, max_dur.den, tkw->pid_dur.num, tkw->pid_dur.den)) {
+ 				max_dur.num = tkw->pid_dur.num;
+ 				max_dur.den = tkw->pid_dur.den;
+ 			}
+-- 
+2.34.1
+

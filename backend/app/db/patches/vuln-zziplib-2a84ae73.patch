@@ -1,0 +1,40 @@
+From 2a84ae73e93b0c1f4f12f2c58104f8327d10e41b Mon Sep 17 00:00:00 2001
+From: vlefebvre <valentin.lefebvre@suse.com>
+Date: Wed, 7 Aug 2024 11:10:05 +0200
+Subject: [PATCH] fetch_disk_trailer: Don't truncate the size verif
+
+* We must check if the tail obtained have the size of the zzip_disk_trailer
+  struct. end - tail should be at least >= of the size but not size - 2.
+  Where truncated by 2 was good for pre-C99 compilers.
+* Fix gdraheim#165
+
+Signed-off-by: vlefebvre <valentin.lefebvre@suse.com>
+---
+ zzip/zip.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/zzip/zip.c b/zzip/zip.c
+index e25a648..c59d9a4 100644
+--- a/zzip/zip.c
++++ b/zzip/zip.c
+@@ -292,7 +292,7 @@ __zzip_fetch_disk_trailer(int fd, zzip_off_t filesize, struct _disk_trailer* _zz
+             register unsigned char* tail;
+             for (tail = end - 1; (tail >= mapped); tail--) {
+                 if ((*tail == 'P') && /* quick pre-check for trailer magic */
+-                    end - tail >= __sizeof(struct zzip_disk_trailer) - 2 &&
++                    end - tail >= __sizeof(struct zzip_disk_trailer) &&
+                     zzip_disk_trailer_check_magic(tail)) {
+ #ifndef ZZIP_DISK64_TRAILER
+                     /* if the file-comment is not present, it happens
+@@ -328,7 +328,7 @@ __zzip_fetch_disk_trailer(int fd, zzip_off_t filesize, struct _disk_trailer* _zz
+                         return (0);
+                     }
+                 }
+-                else if ((*tail == 'P') && end - tail >= __sizeof(struct zzip_disk64_trailer) - 2 &&
++                else if ((*tail == 'P') && end - tail >= __sizeof(struct zzip_disk64_trailer) &&
+                          zzip_disk64_trailer_check_magic(tail)) {
+ #ifndef ZZIP_DISK64_TRAILER
+                     return (ZZIP_DIR_LARGEFILE);
+-- 
+2.34.1
+

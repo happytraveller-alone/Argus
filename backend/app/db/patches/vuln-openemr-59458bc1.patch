@@ -1,0 +1,22 @@
+From 59458bc15ab0cb556c521de9d5187167d6f88945 Mon Sep 17 00:00:00 2001
+From: Brady Miller <brady.g.miller@gmail.com>
+Date: Sat, 6 Aug 2022 00:41:11 -0700
+Subject: [PATCH] bug fix e7 (#5672)
+
+---
+ interface/forms/fee_sheet/review/fee_sheet_options_ajax.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/interface/forms/fee_sheet/review/fee_sheet_options_ajax.php b/interface/forms/fee_sheet/review/fee_sheet_options_ajax.php
+index b86757eae..06ba527e7 100644
+--- a/interface/forms/fee_sheet/review/fee_sheet_options_ajax.php
++++ b/interface/forms/fee_sheet/review/fee_sheet_options_ajax.php
+@@ -31,4 +31,4 @@ $fso = load_fee_sheet_options($pricelevel);
+ $retval = array();
+ $retval['fee_sheet_options'] = $fso;
+ $retval['pricelevel'] = $pricelevel;
+-echo json_encode($retval);
++echo text(json_encode($retval));
+-- 
+2.34.1
+

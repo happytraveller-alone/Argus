@@ -1,0 +1,59 @@
+From beedb3aa1c9e73de7df3913a36f2165a05b9ee3a Mon Sep 17 00:00:00 2001
+From: Reedy <reedy@wikimedia.org>
+Date: Thu, 15 Apr 2021 12:59:01 +0100
+Subject: [PATCH] SECURITY: Prevent blocked users from purging pages
+
+CVE-2021-35197
+
+Bug: T280226
+Change-Id: Id783618e885998cddf45a4cfc7b2c19fd0c7e9f5
+---
+ includes/actions/PurgeAction.php | 4 ----
+ includes/api/ApiPurge.php        | 9 ++++++++-
+ 2 files changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/includes/actions/PurgeAction.php b/includes/actions/PurgeAction.php
+index c9f18204edf..44ebe174176 100644
+--- a/includes/actions/PurgeAction.php
++++ b/includes/actions/PurgeAction.php
+@@ -33,10 +33,6 @@ class PurgeAction extends FormAction {
+ 		return 'purge';
+ 	}
+ 
+-	public function requiresUnblock() {
+-		return false;
+-	}
+-
+ 	public function getDescription() {
+ 		return '';
+ 	}
+diff --git a/includes/api/ApiPurge.php b/includes/api/ApiPurge.php
+index bb1f3d3bf90..e5a6722225b 100644
+--- a/includes/api/ApiPurge.php
++++ b/includes/api/ApiPurge.php
+@@ -31,6 +31,14 @@ class ApiPurge extends ApiBase {
+ 	 * Purges the cache of a page
+ 	 */
+ 	public function execute() {
++		$user = $this->getUser();
++
++		// Fail early if the user is sitewide blocked.
++		$block = $user->getBlock();
++		if ( $block && $block->isSitewide() ) {
++			$this->dieBlocked( $block );
++		}
++
+ 		$params = $this->extractRequestParams();
+ 
+ 		$continuationManager = new ApiContinuationManager( $this, [], [] );
+@@ -42,7 +50,6 @@ class ApiPurge extends ApiBase {
+ 		$pageSet->execute();
+ 
+ 		$result = $pageSet->getInvalidTitlesAndRevisions();
+-		$user = $this->getUser();
+ 
+ 		foreach ( $pageSet->getGoodTitles() as $title ) {
+ 			$r = [];
+-- 
+2.34.1
+

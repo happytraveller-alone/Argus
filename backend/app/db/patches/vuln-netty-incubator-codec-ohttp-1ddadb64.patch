@@ -1,0 +1,148 @@
+From 1ddadb6473cd3be5491d114431ed4c1a9f316001 Mon Sep 17 00:00:00 2001
+From: Netty Project Bot <netty-project-bot@users.noreply.github.com>
+Date: Thu, 2 May 2024 06:40:57 +0000
+Subject: [PATCH] [maven-release-plugin] prepare release
+ netty-incubator-codec-parent-ohttp-0.0.10.Final
+
+---
+ codec-bhttp/pom.xml                        | 4 ++--
+ codec-ohttp-hpke-bouncycastle/pom.xml      | 4 ++--
+ codec-ohttp-hpke-classes-boringssl/pom.xml | 4 ++--
+ codec-ohttp-hpke-native-boringssl/pom.xml  | 4 ++--
+ codec-ohttp-hpke/pom.xml                   | 4 ++--
+ codec-ohttp/pom.xml                        | 4 ++--
+ pom.xml                                    | 4 ++--
+ 7 files changed, 14 insertions(+), 14 deletions(-)
+
+diff --git a/codec-bhttp/pom.xml b/codec-bhttp/pom.xml
+index 9fc8552..e8c5c7b 100644
+--- a/codec-bhttp/pom.xml
++++ b/codec-bhttp/pom.xml
+@@ -19,11 +19,11 @@
+     <parent>
+         <groupId>io.netty.incubator</groupId>
+         <artifactId>netty-incubator-codec-parent-ohttp</artifactId>
+-        <version>0.0.10.Final-SNAPSHOT</version>
++        <version>0.0.10.Final</version>
+     </parent>
+ 
+     <artifactId>netty-incubator-codec-bhttp</artifactId>
+-    <version>0.0.10.Final-SNAPSHOT</version>
++    <version>0.0.10.Final</version>
+     <name>Netty/Incubator/Codec/BHTTP</name>
+     <packaging>jar</packaging>
+ 
+diff --git a/codec-ohttp-hpke-bouncycastle/pom.xml b/codec-ohttp-hpke-bouncycastle/pom.xml
+index 369757b..3033186 100644
+--- a/codec-ohttp-hpke-bouncycastle/pom.xml
++++ b/codec-ohttp-hpke-bouncycastle/pom.xml
+@@ -19,11 +19,11 @@
+ <parent>
+     <groupId>io.netty.incubator</groupId>
+     <artifactId>netty-incubator-codec-parent-ohttp</artifactId>
+-    <version>0.0.10.Final-SNAPSHOT</version>
++    <version>0.0.10.Final</version>
+ </parent>
+ 
+ <artifactId>netty-incubator-codec-ohttp-hpke-bouncycastle</artifactId>
+-<version>0.0.10.Final-SNAPSHOT</version>
++<version>0.0.10.Final</version>
+ <name>Netty/Incubator/Codec/OHTTP/HPKE/BouncyCastle</name>
+ <packaging>jar</packaging>
+ 
+diff --git a/codec-ohttp-hpke-classes-boringssl/pom.xml b/codec-ohttp-hpke-classes-boringssl/pom.xml
+index 5c13a0c..320167f 100644
+--- a/codec-ohttp-hpke-classes-boringssl/pom.xml
++++ b/codec-ohttp-hpke-classes-boringssl/pom.xml
+@@ -19,11 +19,11 @@
+     <parent>
+         <groupId>io.netty.incubator</groupId>
+         <artifactId>netty-incubator-codec-parent-ohttp</artifactId>
+-        <version>0.0.10.Final-SNAPSHOT</version>
++        <version>0.0.10.Final</version>
+     </parent>
+ 
+     <artifactId>netty-incubator-codec-ohttp-hpke-classes-boringssl</artifactId>
+-    <version>0.0.10.Final-SNAPSHOT</version>
++    <version>0.0.10.Final</version>
+     <name>Netty/Incubator/Codec/OHTTP/HPKE/Classes/BoringSSL</name>
+ 
+     <packaging>jar</packaging>
+diff --git a/codec-ohttp-hpke-native-boringssl/pom.xml b/codec-ohttp-hpke-native-boringssl/pom.xml
+index 4667c51..14fd275 100644
+--- a/codec-ohttp-hpke-native-boringssl/pom.xml
++++ b/codec-ohttp-hpke-native-boringssl/pom.xml
+@@ -19,10 +19,10 @@
+     <parent>
+         <groupId>io.netty.incubator</groupId>
+         <artifactId>netty-incubator-codec-parent-ohttp</artifactId>
+-        <version>0.0.10.Final-SNAPSHOT</version>
++        <version>0.0.10.Final</version>
+     </parent>
+     <artifactId>netty-incubator-codec-ohttp-hpke-native-boringssl</artifactId>
+-    <version>0.0.10.Final-SNAPSHOT</version>
++    <version>0.0.10.Final</version>
+     <name>Netty/Incubator/Codec/OHTTP/HPKE/Native/BoringSSL</name>
+ 
+     <packaging>${packaging.type}</packaging>
+diff --git a/codec-ohttp-hpke/pom.xml b/codec-ohttp-hpke/pom.xml
+index 7f658f4..d8210d3 100644
+--- a/codec-ohttp-hpke/pom.xml
++++ b/codec-ohttp-hpke/pom.xml
+@@ -19,11 +19,11 @@
+     <parent>
+         <groupId>io.netty.incubator</groupId>
+         <artifactId>netty-incubator-codec-parent-ohttp</artifactId>
+-        <version>0.0.10.Final-SNAPSHOT</version>
++        <version>0.0.10.Final</version>
+     </parent>
+ 
+     <artifactId>netty-incubator-codec-ohttp-hpke</artifactId>
+-    <version>0.0.10.Final-SNAPSHOT</version>
++    <version>0.0.10.Final</version>
+     <name>Netty/Incubator/Codec/OHTTP/HPKE</name>
+     <packaging>jar</packaging>
+ 
+diff --git a/codec-ohttp/pom.xml b/codec-ohttp/pom.xml
+index 64a2e08..12aa97e 100644
+--- a/codec-ohttp/pom.xml
++++ b/codec-ohttp/pom.xml
+@@ -19,11 +19,11 @@
+   <parent>
+     <groupId>io.netty.incubator</groupId>
+     <artifactId>netty-incubator-codec-parent-ohttp</artifactId>
+-    <version>0.0.10.Final-SNAPSHOT</version>
++    <version>0.0.10.Final</version>
+   </parent>
+ 
+   <artifactId>netty-incubator-codec-ohttp</artifactId>
+-  <version>0.0.10.Final-SNAPSHOT</version>
++  <version>0.0.10.Final</version>
+   <name>Netty/Incubator/Codec/OHTTP</name>
+   <packaging>jar</packaging>
+ 
+diff --git a/pom.xml b/pom.xml
+index 45b7b33..248910d 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -24,7 +24,7 @@
+ 
+   <groupId>io.netty.incubator</groupId>
+   <artifactId>netty-incubator-codec-parent-ohttp</artifactId>
+-  <version>0.0.10.Final-SNAPSHOT</version>
++  <version>0.0.10.Final</version>
+   <name>Netty/Incubator/Codec/Parent/OHTTP</name>
+   <packaging>pom</packaging>
+   <url>https://netty.io/</url>
+@@ -51,7 +51,7 @@
+     <url>https://github.com/netty/netty-incubator-codec-ohttp</url>
+     <connection>scm:git:git://github.com/netty/netty-incubator-codec-ohttp.git</connection>
+     <developerConnection>scm:git:ssh://git@github.com/netty/netty-incubator-codec-ohttp.git</developerConnection>
+-    <tag>HEAD</tag>
++    <tag>netty-incubator-codec-parent-ohttp-0.0.10.Final</tag>
+   </scm>
+ 
+   <developers>
+-- 
+2.34.1
+

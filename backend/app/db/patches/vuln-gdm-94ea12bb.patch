@@ -1,0 +1,361 @@
+From 94ea12bb61a1666d2d6d211e7100d6ad98731958 Mon Sep 17 00:00:00 2001
+From: Brian Cameron <brian.cameron@sun.com>
+Date: Mon, 30 Jul 2007 19:41:59 +0000
+Subject: [PATCH] This fixes CVE-2007-3381 - a denial of service attack where
+ the user can
+
+2007-07-30  Brian Cameron  <brian.cameron@sun.com>
+
+        This fixes CVE-2007-3381 - a denial of service attack where
+        the user can crash the GDM daemon with a carefully crafted GDM
+        sockets command and cause GDM to stop managing future displays.
+
+        * daemon/gdm.c, daemon/gdmconfig.c, gui/gdmconfig.c,
+          gui/gdmflexiserver.c, gui/gdmconfig.c: Fix g_strsplit calls
+          so that NULL return codes are better handled.
+
+svn path=/branches/gnome-2-14/; revision=5102
+---
+ ChangeLog                        | 92 ++++++++++++++++++--------------
+ daemon/gdm.c                     | 22 +++++---
+ daemon/gdmconfig.c               | 13 ++---
+ gui/gdmconfig.c                  |  6 +--
+ gui/gdmflexiserver.c             | 15 +++---
+ gui/greeter/greeter_item_ulist.c |  4 +-
+ 6 files changed, 88 insertions(+), 64 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 94238b394..620aab1a9 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,13 @@
++2007-07-30  Brian Cameron  <brian.cameron@sun.com>
++
++	This fixes CVE-2007-3381 - a denial of service attack where
++	the user can crash the GDM daemon with a carefully crafted GDM
++	sockets command and cause GDM to stop managing future displays.
++
++	* daemon/gdm.c, daemon/gdmconfig.c, gui/gdmconfig.c,
++	  gui/gdmflexiserver.c, gui/gdmconfig.c: Fix g_strsplit calls
++	  so that NULL return codes are better handled.
++
+ 2006-04-09  Brian Cameron  <brian.cameron@sun.com>
+ 
+ 	* Release 2.14.12: 
+@@ -7,34 +17,34 @@
+ 
+ 2007-04-09  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * configure.ac, daemon/gdm.[ch], gui/gdmlogin.c, gui/gdmcomm.c,
+-          gui/gdmXnestchooser.c, gui/greeter/greeter.c,
++	* configure.ac, daemon/gdm.[ch], gui/gdmlogin.c, gui/gdmcomm.c,
++	  gui/gdmXnestchooser.c, gui/greeter/greeter.c,
+ 	  gui/gdmflexiserver.c:  Deprecated GDM_KEY_PID_FILE and now
+ 	  use /var/run/gdm.pid.  This fixes bug #162849.  Backported
+ 	  from head, patch by William Jon McCann <mccann@jhu.edu>.
+ 
+ 2007-04-02  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * gui/gdmdynamic.c: Fix comparison with string literal.
+-          Fix by Hans Petter Jansson <hpj@novell.com>.  Fixes
+-          bug #407687.
++	* gui/gdmdynamic.c: Fix comparison with string literal.
++	  Fix by Hans Petter Jansson <hpj@novell.com>.  Fixes
++	  bug #407687.
+ 
+ 2007-04-02  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * docs/C/gdm.xml: Add <revhistory> tag so that this branch of GDM
+-          can be built with the latest docs tools.
++	* docs/C/gdm.xml: Add <revhistory> tag so that this branch of GDM
++	  can be built with the latest docs tools.
+ 
+ 2007-04-02  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * gui/gdmchooser.glade, gui/gdmsetup.glade, gui/gdmsetup.c:
+-          Remove gnome glade, since it is not used anymore.  Fixes
+-          bug #424696.  Patch by Kristof Vansant <de_lupus@pandora.be>.
++	* gui/gdmchooser.glade, gui/gdmsetup.glade, gui/gdmsetup.c:
++	  Remove gnome glade, since it is not used anymore.  Fixes
++	  bug #424696.  Patch by Kristof Vansant <de_lupus@pandora.be>.
+ 
+ 2007-04-02  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * gui/gdmlanguages.c: Fix strcpy so source and destination do not
+-          overlap.  Fixes bug #424299.  Patch by Ray Strode
+-          <rstrode@redhat.com>.
++	* gui/gdmlanguages.c: Fix strcpy so source and destination do not
++	  overlap.  Fixes bug #424299.  Patch by Ray Strode
++	  <rstrode@redhat.com>.
+ 
+ 2006-12-13  Brian Cameron  <brian.cameron@sun.com>
+ 
+@@ -44,28 +54,28 @@
+ 
+ 2006-12-05  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * vicious-extensions/ve-miscui.c: Same fix for
+-          primary message.
++	* vicious-extensions/ve-miscui.c: Same fix for
++	  primary message.
+ 
+ 2006-12-05  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * vicious-extensions/ve-miscui.c, gui/gdmchooser.c: Cleaner
+-          fix for same problem fixed in last commit.
++	* vicious-extensions/ve-miscui.c, gui/gdmchooser.c: Cleaner
++	  fix for same problem fixed in last commit.
+ 
+ 2006-12-04  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * vicious-extensions/ve-miscui.c, gui/gdmchooser.c: Fix so
+-          that if the "%" key is entered in the input field in
+-          gdmchooser, the secondary message in the error dialog
+-          displays properly.  Also fix ve-miscui.c so that if "%"
+-          exists in the secondary message, to not display it.
+-          Message must have "%%" to display the "%" character.
++	* vicious-extensions/ve-miscui.c, gui/gdmchooser.c: Fix so
++	  that if the "%" key is entered in the input field in
++	  gdmchooser, the secondary message in the error dialog
++	  displays properly.  Also fix ve-miscui.c so that if "%"
++	  exists in the secondary message, to not display it.
++	  Message must have "%%" to display the "%" character.
+ 
+ 2006-10-05  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * daemon/auth.c: Set authdir to NULL after freeing to avoid accessing
+-          an invalid pointer.  Fixes bug #359831.  Patch provided by
+-          Amnon Aaronsohn <bla@cs.huji.ac.il>.
++	* daemon/auth.c: Set authdir to NULL after freeing to avoid accessing
++	  an invalid pointer.  Fixes bug #359831.  Patch provided by
++	  Amnon Aaronsohn <bla@cs.huji.ac.il>.
+ 
+ 2006-08-03  Ray Strode  <rstrode@redhat.com>
+ 
+@@ -123,9 +133,9 @@
+ 
+ 2006-07-17  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * gui/gdmsetup.c:  Fix for bug causing gdmsetup to have
+-          performance issues starting up.  Fixes bug #345118.
+-          Patch by Ray Strode <rstrode@redhat.com>.
++	* gui/gdmsetup.c:  Fix for bug causing gdmsetup to have
++	  performance issues starting up.  Fixes bug #345118.
++	  Patch by Ray Strode <rstrode@redhat.com>.
+ 
+ 2006-06-30  Brian Cameron  <brian.cameron@sun.com>
+ 
+@@ -141,8 +151,8 @@
+ 
+ 2006-06-19  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * gui/gdmsetup.c: Fix bug that causes gdmsetup to not fail properly
+-          when there is no custom config file.
++	* gui/gdmsetup.c: Fix bug that causes gdmsetup to not fail properly
++	  when there is no custom config file.
+ 
+ 2006-06-16  Brian Cameron  <brian.cameron@sun.com>
+ 
+@@ -187,16 +197,16 @@
+ 
+ 2006-06-06  Brian Cameron  <brian.cameron@sun.com>
+ 
+-        * gui/gdmflexiserver.c:  Call gdmcomm_check with FALSE so that ti
+-          doesn't try to pop-up a GUI.  Sometimes gdmflexiserver is called
+-          by processes that do not have access to the display so this causes
+-          a crash, and gdmflexiserver prints out errors anyway.
+-        * gui/modules/AccessDwellMouseEvents.in: Added gestures so you can
+-          run the same commands as in AccessKeyMouseEvents.in with dwell
+-          gestures.
+-        * gui/modules/AccessKeyMouseEvents.in: Cleanup
+-        * gui/modules/keymouselisttener.c, gui/modules/dwellmouselistener.c:
+-          Added debug.
++	* gui/gdmflexiserver.c:  Call gdmcomm_check with FALSE so that ti
++	  doesn't try to pop-up a GUI.  Sometimes gdmflexiserver is called
++	  by processes that do not have access to the display so this causes
++	  a crash, and gdmflexiserver prints out errors anyway.
++	* gui/modules/AccessDwellMouseEvents.in: Added gestures so you can
++	  run the same commands as in AccessKeyMouseEvents.in with dwell
++	  gestures.
++	* gui/modules/AccessKeyMouseEvents.in: Cleanup
++	* gui/modules/keymouselisttener.c, gui/modules/dwellmouselistener.c:
++	  Added debug.
+ 
+ 2006-05-31  Brian Cameron  <brian.cameron@sun.com>
+ 
+diff --git a/daemon/gdm.c b/daemon/gdm.c
+index d0a956a8e..dcbe4507f 100644
+--- a/daemon/gdm.c
++++ b/daemon/gdm.c
+@@ -3052,9 +3052,13 @@ gdm_handle_user_message (GdmConnection *conn, const gchar *msg, gpointer data)
+  
+ 	} else if (strncmp (msg, GDM_SUP_GET_SERVER_DETAILS " ",
+ 		     strlen (GDM_SUP_GET_SERVER_DETAILS " ")) == 0) {
+-		const gchar *server = &msg[strlen (GDM_SUP_GET_SERVER_DETAILS " ")];
+-		gchar   **splitstr = g_strsplit (server, " ", 2);
+-		GdmXserver  *svr   = gdm_find_xserver ((gchar *)splitstr[0]);
++		const gchar  *server   = &msg[strlen (GDM_SUP_GET_SERVER_DETAILS " ")];
++		gchar       **splitstr = g_strsplit (server, " ", 2);
++		GdmXserver   *svr      = NULL;
++
++		if (splitstr != NULL && splitstr[0] != NULL) {
++			svr = gdm_find_xserver ((gchar *)splitstr[0]);
++		}
+ 
+ 		if (svr != NULL) {
+ 			if (g_strcasecmp (splitstr[1], "ID") == 0)
+@@ -3091,12 +3095,11 @@ gdm_handle_user_message (GdmConnection *conn, const gchar *msg, gpointer data)
+ 			   gdm_connection_printf (conn, "OK false\n");
+ 			else
+ 			   gdm_connection_printf (conn, "ERROR 2 Key not valid\n");
+-
+-			g_strfreev (splitstr);
+ 		} else {
+                		gdm_connection_printf (conn, "ERROR 1 Server not found\n");
+ 		}
+  
++		g_strfreev (splitstr);
+ 	} else if (strcmp (msg, GDM_SUP_GREETERPIDS) == 0) {
+ 		GString *msg;
+ 		GSList *li;
+@@ -3126,10 +3129,15 @@ gdm_handle_user_message (GdmConnection *conn, const gchar *msg, gpointer data)
+ 	} else if (strncmp (msg, GDM_SUP_GET_CONFIG " ",
+ 		     strlen (GDM_SUP_GET_CONFIG " ")) == 0) {
+ 		const gchar *parms = &msg[strlen (GDM_SUP_GET_CONFIG " ")];
+-		gchar **splitstr = g_strsplit (parms, " ", 2);
+-		gchar *retval = NULL;
++		gchar **splitstr   = g_strsplit (parms, " ", 2);
++		gchar *retval      = NULL;
+ 		static gboolean done_prefetch = FALSE;
+ 
++		if (splitstr == NULL || splitstr[0] == NULL) {
++               		gdm_connection_printf (conn, "ERROR 50 Unsupported key <null>\n");
++			return;
++		}
++		
+ 		/*
+ 		 * It is not meaningful to manage this in a per-display 
+ 		 * fashion since the prefetch program is only run once the
+diff --git a/daemon/gdmconfig.c b/daemon/gdmconfig.c
+index 4f66d2323..6e85dc96e 100644
+--- a/daemon/gdmconfig.c
++++ b/daemon/gdmconfig.c
+@@ -816,9 +816,10 @@ gdm_config_key_to_string_per_display (gchar *display, gchar *key, gchar **retval
+ 
+    file = gdm_get_per_display_custom_config_file (display);
+ 
+-   if (strcmp (ve_sure_string (splitstr[0]), "greeter") == 0 ||
+-       strcmp (ve_sure_string (splitstr[0]), "gui") == 0 ||
+-       is_key (key, GDM_KEY_PAM_STACK)) {
++   if (splitstr != NULL &&
++       (strcmp (ve_sure_string (splitstr[0]), "greeter") == 0 ||
++        strcmp (ve_sure_string (splitstr[0]), "gui") == 0 ||
++        is_key (key, GDM_KEY_PAM_STACK))) {
+       gdm_config_key_to_string (file, key, retval);
+    }
+ 
+@@ -843,7 +844,7 @@ gdm_config_key_to_string (gchar *file, gchar *key, gchar **retval)
+    *retval = NULL;
+ 
+    /* Should not fail, all keys should have a category. */
+-   if (splitstr[0] == NULL)
++   if (splitstr == NULL || splitstr[0] == NULL)
+       return;
+ 
+    /* If file doesn't exist, then just return */
+@@ -1704,7 +1705,7 @@ gdm_update_config (gchar* key)
+    if (custom_cfg != NULL) {
+        gchar **splitstr = g_strsplit (key, "/", 2);
+ 
+-       if (splitstr[0] != NULL) {
++       if (splitstr != NULL && splitstr[0] != NULL) {
+           GList *list = ve_config_get_keys (custom_cfg, splitstr[0]);
+ 
+           while (list != NULL) {
+@@ -1892,7 +1893,7 @@ gdm_load_config_option (gpointer key_in, gpointer value_in, gpointer data)
+       /* First check the custom file */
+       if (cfgfiles->custom_cfg != NULL) {
+           gchar **splitstr = g_strsplit (key_in, "/", 2);
+-          if (splitstr[0] != NULL) {
++          if (splitstr != NULL && splitstr[0] != NULL) {
+              GList *list = ve_config_get_keys (cfgfiles->custom_cfg, splitstr[0]);
+ 
+              while (list != NULL) {
+diff --git a/gui/gdmconfig.c b/gui/gdmconfig.c
+index e6b0cfc6f..1973bee24 100644
+--- a/gui/gdmconfig.c
++++ b/gui/gdmconfig.c
+@@ -214,11 +214,11 @@ gdm_config_get_xservers (gboolean flexible)
+ 	}
+ 
+ 	/* skip the "OK " */
+-        splitstr = g_strsplit (result + 3, ";", 0);
+-	sec = splitstr;
++	splitstr = g_strsplit (result + 3, ";", 0);
++	sec      = splitstr;
+ 	g_free (result);
+ 
+-        while (*sec != NULL) {
++	while (sec != NULL && *sec != NULL) {
+ 		GdmXserver *svr = g_new0 (GdmXserver, 1);
+ 		gchar *temp;
+ 
+diff --git a/gui/gdmflexiserver.c b/gui/gdmflexiserver.c
+index 756a964c3..724e33139 100644
+--- a/gui/gdmflexiserver.c
++++ b/gui/gdmflexiserver.c
+@@ -124,9 +124,10 @@ get_vt_num (char **vec, char *vtpart, int depth)
+ 	for (i = 0; vec[i] != NULL; i++) {
+ 		char **rvec;
+ 		rvec = g_strsplit (vec[i], ",", -1);
+-		if (rvec == NULL ||
+-		    ve_vector_len (rvec) != 3)
++		if (ve_vector_len (rvec) != 3) {
++			g_strfreev (rvec);
+ 			continue;
++		}
+ 
+ 		if (strcmp (rvec[0], vtpart) == 0) {
+ 			/* could be nested? */
+@@ -165,9 +166,10 @@ create_model (char **vec)
+ 		char **rvec;
+ 		int vt;
+ 		rvec = g_strsplit (vec[i], ",", -1);
+-		if (rvec == NULL ||
+-		    ve_vector_len (rvec) != 3)
++		if (ve_vector_len (rvec) != 3) {
++			g_strfreev (rvec);
+ 			continue;
++		}
+ 
+ 		vt = get_vt_num (vec, rvec[2], 5);
+ 
+@@ -504,9 +506,10 @@ check_for_users (void)
+ 		char **rvec;
+ 		int vt;
+ 		rvec = g_strsplit (vec[i], ",", -1);
+-		if (rvec == NULL ||
+-		    ve_vector_len (rvec) != 3)
++		if (ve_vector_len (rvec) != 3) {
++			g_strfreev (rvec);
+ 			continue;
++		}
+ 
+ 		vt = get_vt_num (vec, rvec[2], 5);
+ 
+diff --git a/gui/greeter/greeter_item_ulist.c b/gui/greeter/greeter_item_ulist.c
+index af7ca4733..6869c3597 100644
+--- a/gui/greeter/greeter_item_ulist.c
++++ b/gui/greeter/greeter_item_ulist.c
+@@ -102,8 +102,10 @@ check_for_displays (void)
+ 		char **rvec;
+ 
+ 		rvec = g_strsplit (vec[i], ",", -1);
+-		if (rvec == NULL || ve_vector_len (rvec) != 3)
++		if (ve_vector_len (rvec) != 3) {
++			g_strfreev (rvec);
+ 			continue;
++		}
+ 
+ 		g_hash_table_insert (displays_hash,
+ 				     g_strdup (rvec[1]),

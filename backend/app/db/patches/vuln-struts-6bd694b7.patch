@@ -1,0 +1,27 @@
+From 6bd694b7980494c12d49ca1bf39f12aec3e03e2f Mon Sep 17 00:00:00 2001
+From: Lukasz Lenart <lukaszlenart@apache.org>
+Date: Mon, 18 Apr 2016 20:39:05 +0200
+Subject: [PATCH] Drops defining location via request
+
+---
+ .../java/org/apache/struts2/views/xslt/XSLTResult.java     | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/core/src/main/java/org/apache/struts2/views/xslt/XSLTResult.java b/core/src/main/java/org/apache/struts2/views/xslt/XSLTResult.java
+index 5ebbf67bb7..5dfd5fb25d 100644
+--- a/core/src/main/java/org/apache/struts2/views/xslt/XSLTResult.java
++++ b/core/src/main/java/org/apache/struts2/views/xslt/XSLTResult.java
+@@ -404,12 +404,7 @@ protected URIResolver getURIResolver() {
+                 ServletActionContext.getServletContext());
+     }
+ 
+-    protected Templates getTemplates(String path) throws TransformerException, IOException {
+-        String pathFromRequest = ServletActionContext.getRequest().getParameter("xslt.location");
+-
+-        if (pathFromRequest != null)
+-            path = pathFromRequest;
+-
++    protected Templates getTemplates(final String path) throws TransformerException, IOException {
+         if (path == null)
+             throw new TransformerException("Stylesheet path is null");
+ 

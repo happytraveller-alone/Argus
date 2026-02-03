@@ -1,0 +1,51 @@
+From 8794dec6a5f11adc5cdd19a5ee91ea6b0816763f Mon Sep 17 00:00:00 2001
+From: nobu <nobu@b2dd03c8-39d4-4d8f-98ff-823fe69b080e>
+Date: Wed, 28 Mar 2018 10:08:57 +0000
+Subject: [PATCH] unixsocket.c: check NUL bytes
+
+* ext/socket/unixsocket.c (rsock_init_unixsock): check NUL bytes.
+  https://hackerone.com/reports/302997
+
+git-svn-id: svn+ssh://ci.ruby-lang.org/ruby/trunk@62991 b2dd03c8-39d4-4d8f-98ff-823fe69b080e
+---
+ ext/socket/unixsocket.c  |  2 +-
+ test/socket/test_unix.rb | 10 ++++++++++
+ 2 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/ext/socket/unixsocket.c b/ext/socket/unixsocket.c
+index 5a44b552f8..bf373f20ec 100644
+--- a/ext/socket/unixsocket.c
++++ b/ext/socket/unixsocket.c
+@@ -33,7 +33,7 @@ rsock_init_unixsock(VALUE sock, VALUE path, int server)
+     int fd, status;
+     rb_io_t *fptr;
+ 
+-    SafeStringValue(path);
++    FilePathValue(path);
+ 
+     INIT_SOCKADDR_UN(&sockaddr, sizeof(struct sockaddr_un));
+     if (sizeof(sockaddr.sun_path) < (size_t)RSTRING_LEN(path)) {
+diff --git a/test/socket/test_unix.rb b/test/socket/test_unix.rb
+index 36f48c35ed..6efb1d60ee 100644
+--- a/test/socket/test_unix.rb
++++ b/test/socket/test_unix.rb
+@@ -284,6 +284,16 @@ class TestSocket_UNIXSocket < Test::Unit::TestCase
+     File.unlink path if path && File.socket?(path)
+   end
+ 
++  def test_open_nul_byte
++    tmpfile = Tempfile.new("s")
++    path = tmpfile.path
++    tmpfile.close(true)
++    assert_raise(ArgumentError) {UNIXServer.open(path+"\0")}
++    assert_raise(ArgumentError) {UNIXSocket.open(path+"\0")}
++  ensure
++    File.unlink path if path && File.socket?(path)
++  end
++
+   def test_addr
+     bound_unix_socket(UNIXServer) {|serv, path|
+       UNIXSocket.open(path) {|c|
+-- 
+2.34.1
+

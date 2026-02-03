@@ -1,0 +1,314 @@
+From 5185cb13da413f826dcc5f1e0c1eb3e038dc0874 Mon Sep 17 00:00:00 2001
+From: Michael Adams <mdadams@ece.uvic.ca>
+Date: Sat, 12 Nov 2016 07:28:40 -0800
+Subject: [PATCH] Added support for the max_samples option to the JPC/JP2
+ decoder. Cleaned up some of the code for max_samples support in other
+ decoders (including fixing some potential bugs). All decoders supporting
+ max_samples now default to the value given by JAS_DEC_DEFAULT_MAX_SAMPLES in
+ the config file.
+
+---
+ src/appl/imginfo.c                           |  9 ++-
+ src/libjasper/bmp/bmp_dec.c                  |  4 +-
+ src/libjasper/include/jasper/jas_config.h.in |  4 ++
+ src/libjasper/jpc/jpc_dec.c                  | 64 +++++++++++++++++---
+ src/libjasper/jpc/jpc_dec.h                  |  4 ++
+ src/libjasper/jpg/jpg_dec.c                  |  4 +-
+ 6 files changed, 76 insertions(+), 13 deletions(-)
+
+diff --git a/src/appl/imginfo.c b/src/appl/imginfo.c
+index 160054c..8527fe9 100644
+--- a/src/appl/imginfo.c
++++ b/src/appl/imginfo.c
+@@ -138,6 +138,7 @@ int main(int argc, char **argv)
+ 	int debug;
+ 	size_t max_mem;
+ 	size_t max_samples;
++	bool max_samples_valid;
+ 	char optstr[32];
+ 
+ 	if (jas_init()) {
+@@ -146,7 +147,8 @@ int main(int argc, char **argv)
+ 
+ 	cmdname = argv[0];
+ 
+-	max_samples = 64 * JAS_MEBI;
++	max_samples = 0;
++	max_samples_valid = false;
+ 	infile = 0;
+ 	verbose = 0;
+ 	debug = 0;
+@@ -207,7 +209,10 @@ int main(int argc, char **argv)
+ 		fprintf(stderr, "unknown image format\n");
+ 	}
+ 
+-	snprintf(optstr, sizeof(optstr), "max_samples=%-zu", max_samples);
++	optstr[0] = '\0';
++	if (max_samples_valid) {
++		snprintf(optstr, sizeof(optstr), "max_samples=%-zu", max_samples);
++	}
+ 
+ 	/* Decode the image. */
+ 	if (!(image = jas_image_decode(instream, fmtid, optstr))) {
+diff --git a/src/libjasper/bmp/bmp_dec.c b/src/libjasper/bmp/bmp_dec.c
+index 6af2216..c8311d9 100644
+--- a/src/libjasper/bmp/bmp_dec.c
++++ b/src/libjasper/bmp/bmp_dec.c
+@@ -118,7 +118,7 @@ static int bmp_dec_parseopts(char *optstr, bmp_dec_importopts_t *opts)
+ {
+ 	jas_tvparser_t *tvp;
+ 
+-	opts->max_samples = 128 * JAS_MEBI;
++	opts->max_samples = JAS_DEC_DEFAULT_MAX_SAMPLES;
+ 
+ 	if (!(tvp = jas_tvparser_create(optstr ? optstr : ""))) {
+ 		return -1;
+@@ -128,7 +128,7 @@ static int bmp_dec_parseopts(char *optstr, bmp_dec_importopts_t *opts)
+ 		switch (jas_taginfo_nonull(jas_taginfos_lookup(decopts,
+ 		  jas_tvparser_gettag(tvp)))->id) {
+ 		case OPT_MAXSIZE:
+-			opts->max_samples = atoi(jas_tvparser_getval(tvp));
++			opts->max_samples = strtoull(jas_tvparser_getval(tvp), 0, 10);
+ 			break;
+ 		default:
+ 			jas_eprintf("warning: ignoring invalid option %s\n",
+diff --git a/src/libjasper/include/jasper/jas_config.h.in b/src/libjasper/include/jasper/jas_config.h.in
+index 0c0e86f..4866911 100644
+--- a/src/libjasper/include/jasper/jas_config.h.in
++++ b/src/libjasper/include/jasper/jas_config.h.in
+@@ -14,6 +14,10 @@
+ @JAS_HAVE_GETTIMEOFDAY@
+ @JAS_HAVE_GETRUSAGE@
+ 
++#if !defined(JAS_DEC_DEFAULT_MAX_SAMPLES)
++#define JAS_DEC_DEFAULT_MAX_SAMPLES (64 * ((size_t) 1048576))
++#endif
++
+ #if defined(__GNUC__) && !defined(__clang__)
+ #define JAS_ATTRIBUTE_DISABLE_USAN \
+   __attribute__((no_sanitize_undefined))
+diff --git a/src/libjasper/jpc/jpc_dec.c b/src/libjasper/jpc/jpc_dec.c
+index 58e101d..3454747 100644
+--- a/src/libjasper/jpc/jpc_dec.c
++++ b/src/libjasper/jpc/jpc_dec.c
+@@ -174,7 +174,8 @@ static int jpc_dec_cp_setfrompoc(jpc_dec_cp_t *cp, jpc_poc_t *poc, int reset);
+ static int jpc_pi_addpchgfrompoc(jpc_pi_t *pi, jpc_poc_t *poc);
+ 
+ static int jpc_dec_decode(jpc_dec_t *dec);
+-static jpc_dec_t *jpc_dec_create(jpc_dec_importopts_t *impopts, jas_stream_t *in);
++static jpc_dec_t *jpc_dec_create(jpc_dec_importopts_t *impopts,
++  jas_stream_t *in);
+ static void jpc_dec_destroy(jpc_dec_t *dec);
+ static void jpc_dequantize(jas_matrix_t *x, jpc_fix_t absstepsize);
+ static void jpc_undo_roi(jas_matrix_t *x, int roishift, int bgshift, int numbps);
+@@ -198,7 +199,8 @@ static int jpc_dec_process_ppt(jpc_dec_t *dec, jpc_ms_t *ms);
+ static int jpc_dec_process_com(jpc_dec_t *dec, jpc_ms_t *ms);
+ static int jpc_dec_process_unk(jpc_dec_t *dec, jpc_ms_t *ms);
+ static int jpc_dec_process_crg(jpc_dec_t *dec, jpc_ms_t *ms);
+-static int jpc_dec_parseopts(char *optstr, jpc_dec_importopts_t *opts);
++static jpc_dec_importopts_t *jpc_dec_opts_create(const char *optstr);
++static void jpc_dec_opts_destroy(jpc_dec_importopts_t *opts);
+ 
+ static jpc_dec_mstabent_t *jpc_dec_mstab_lookup(uint_fast16_t id);
+ 
+@@ -235,21 +237,24 @@ jpc_dec_mstabent_t jpc_dec_mstab[] = {
+ 
+ jas_image_t *jpc_decode(jas_stream_t *in, char *optstr)
+ {
+-	jpc_dec_importopts_t opts;
++	jpc_dec_importopts_t *opts;
+ 	jpc_dec_t *dec;
+ 	jas_image_t *image;
+ 
+ 	dec = 0;
++	opts = 0;
+ 
+-	if (jpc_dec_parseopts(optstr, &opts)) {
++	if (!(opts = jpc_dec_opts_create(optstr))) {
+ 		goto error;
+ 	}
+ 
+ 	jpc_initluts();
+ 
+-	if (!(dec = jpc_dec_create(&opts, in))) {
++	if (!(dec = jpc_dec_create(opts, in))) {
+ 		goto error;
+ 	}
++	jpc_dec_opts_destroy(opts);
++	opts = 0;
+ 
+ 	/* Do most of the work. */
+ 	if (jpc_dec_decode(dec)) {
+@@ -282,6 +287,9 @@ jas_image_t *jpc_decode(jas_stream_t *in, char *optstr)
+ 	return image;
+ 
+ error:
++	if (opts) {
++		jpc_dec_opts_destroy(opts);
++	}
+ 	if (dec) {
+ 		jpc_dec_destroy(dec);
+ 	}
+@@ -291,26 +299,36 @@ error:
+ typedef enum {
+ 	OPT_MAXLYRS,
+ 	OPT_MAXPKTS,
++	OPT_MAXSAMPLES,
+ 	OPT_DEBUG
+ } optid_t;
+ 
+ static jas_taginfo_t decopts[] = {
+ 	{OPT_MAXLYRS, "maxlyrs"},
+ 	{OPT_MAXPKTS, "maxpkts"},
++	{OPT_MAXSAMPLES, "max_samples"},
+ 	{OPT_DEBUG, "debug"},
+ 	{-1, 0}
+ };
+ 
+-static int jpc_dec_parseopts(char *optstr, jpc_dec_importopts_t *opts)
++static jpc_dec_importopts_t *jpc_dec_opts_create(const char *optstr)
+ {
++	jpc_dec_importopts_t *opts;
+ 	jas_tvparser_t *tvp;
+ 
++	opts = 0;
++
++	if (!(opts = jas_malloc(sizeof(jpc_dec_importopts_t)))) {
++		goto error;
++	}
++
+ 	opts->debug = 0;
+ 	opts->maxlyrs = JPC_MAXLYRS;
+ 	opts->maxpkts = -1;
++	opts->max_samples = JAS_DEC_DEFAULT_MAX_SAMPLES;
+ 
+ 	if (!(tvp = jas_tvparser_create(optstr ? optstr : ""))) {
+-		return -1;
++		goto error;
+ 	}
+ 
+ 	while (!jas_tvparser_next(tvp)) {
+@@ -325,6 +343,9 @@ static int jpc_dec_parseopts(char *optstr, jpc_dec_importopts_t *opts)
+ 		case OPT_MAXPKTS:
+ 			opts->maxpkts = atoi(jas_tvparser_getval(tvp));
+ 			break;
++		case OPT_MAXSAMPLES:
++			opts->max_samples = strtoull(jas_tvparser_getval(tvp), 0, 10);
++			break;
+ 		default:
+ 			jas_eprintf("warning: ignoring invalid option %s\n",
+ 			  jas_tvparser_gettag(tvp));
+@@ -334,9 +355,20 @@ static int jpc_dec_parseopts(char *optstr, jpc_dec_importopts_t *opts)
+ 
+ 	jas_tvparser_destroy(tvp);
+ 
++	return opts;
++
++error:
++	if (opts) {
++		jpc_dec_opts_destroy(opts);
++	}
+ 	return 0;
+ }
+ 
++static void jpc_dec_opts_destroy(jpc_dec_importopts_t *opts)
++{
++	jas_free(opts);
++}
++
+ /******************************************************************************\
+ * Code for table-driven code stream decoder.
+ \******************************************************************************/
+@@ -1206,6 +1238,8 @@ static int jpc_dec_process_siz(jpc_dec_t *dec, jpc_ms_t *ms)
+ 	int vtileno;
+ 	jpc_dec_cmpt_t *cmpt;
+ 	size_t size;
++	size_t num_samples;
++	size_t num_samples_delta;
+ 
+ 	dec->xstart = siz->xoff;
+ 	dec->ystart = siz->yoff;
+@@ -1225,6 +1259,7 @@ static int jpc_dec_process_siz(jpc_dec_t *dec, jpc_ms_t *ms)
+ 		return -1;
+ 	}
+ 
++	num_samples = 0;
+ 	for (compno = 0, cmpt = dec->cmpts; compno < dec->numcomps; ++compno,
+ 	  ++cmpt) {
+ 		cmpt->prec = siz->comps[compno].prec;
+@@ -1237,6 +1272,20 @@ static int jpc_dec_process_siz(jpc_dec_t *dec, jpc_ms_t *ms)
+ 		  JPC_CEILDIV(dec->ystart, cmpt->vstep);
+ 		cmpt->hsubstep = 0;
+ 		cmpt->vsubstep = 0;
++
++		if (!jas_safe_size_mul(cmpt->width, cmpt->height, &num_samples_delta)) {
++			jas_eprintf("image too large\n");
++			return -1;
++		}
++		if (!jas_safe_size_add(num_samples, num_samples_delta, &num_samples)) {
++			jas_eprintf("image too large\n");
++		}
++	}
++
++	if (dec->max_samples > 0 && num_samples > dec->max_samples) {
++		jas_eprintf("maximum number of samples exceeded (%zu > %zu)\n",
++		  num_samples, dec->max_samples);
++		return -1;
+ 	}
+ 
+ 	dec->image = 0;
+@@ -1934,6 +1983,7 @@ dec->numpkts = 0;
+ 	dec->pkthdrstreams = 0;
+ 	dec->ppmstab = 0;
+ 	dec->curtileendoff = 0;
++	dec->max_samples = impopts->max_samples;
+ 
+ 	return dec;
+ }
+diff --git a/src/libjasper/jpc/jpc_dec.h b/src/libjasper/jpc/jpc_dec.h
+index 81a1a50..7ed71b2 100644
+--- a/src/libjasper/jpc/jpc_dec.h
++++ b/src/libjasper/jpc/jpc_dec.h
+@@ -659,6 +659,8 @@ typedef struct {
+ 	/* This is required by the tier-2 decoder. */
+ 	jpc_cstate_t *cstate;
+ 
++	size_t max_samples;
++
+ } jpc_dec_t;
+ 
+ /* Decoder options. */
+@@ -674,6 +676,8 @@ typedef struct {
+ 	/* The maximum number of packets to decode. */
+ 	int maxpkts;
+ 
++	size_t max_samples;
++
+ } jpc_dec_importopts_t;
+ 
+ /******************************************************************************\
+diff --git a/src/libjasper/jpg/jpg_dec.c b/src/libjasper/jpg/jpg_dec.c
+index c4b3aa2..8fb3ce9 100644
+--- a/src/libjasper/jpg/jpg_dec.c
++++ b/src/libjasper/jpg/jpg_dec.c
+@@ -147,7 +147,7 @@ static int jpg_dec_parseopts(char *optstr, jpg_dec_importopts_t *opts)
+ {
+ 	jas_tvparser_t *tvp;
+ 
+-	opts->max_samples = 64 * JAS_MEBI;
++	opts->max_samples = JAS_DEC_DEFAULT_MAX_SAMPLES;
+ 
+ 	if (!(tvp = jas_tvparser_create(optstr ? optstr : ""))) {
+ 		return -1;
+@@ -157,7 +157,7 @@ static int jpg_dec_parseopts(char *optstr, jpg_dec_importopts_t *opts)
+ 		switch (jas_taginfo_nonull(jas_taginfos_lookup(decopts,
+ 		  jas_tvparser_gettag(tvp)))->id) {
+ 		case OPT_MAXSIZE:
+-			opts->max_samples = atoi(jas_tvparser_getval(tvp));
++			opts->max_samples = strtoull(jas_tvparser_getval(tvp), 0, 10);
+ 			break;
+ 		default:
+ 			jas_eprintf("warning: ignoring invalid option %s\n",
+-- 
+2.34.1
+

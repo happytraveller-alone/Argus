@@ -1,0 +1,84 @@
+From a3cbb13be1527874528c3b99fc33517c0297b6d3 Mon Sep 17 00:00:00 2001
+From: John Engelman <john.engelman@target.com>
+Date: Mon, 13 Jan 2020 20:46:48 -0600
+Subject: [PATCH] Escape user input rendered to the response in the development
+ error handler.
+
+---
+ .../error/internal/ErrorPageRenderer.java     |  6 ++++-
+ .../error/DevelopmentErrorHandlerSpec.groovy  | 26 +++++++++++++++++++
+ 2 files changed, 31 insertions(+), 1 deletion(-)
+
+diff --git a/ratpack-core/src/main/java/ratpack/error/internal/ErrorPageRenderer.java b/ratpack-core/src/main/java/ratpack/error/internal/ErrorPageRenderer.java
+index d96b50e04..bc766793d 100644
+--- a/ratpack-core/src/main/java/ratpack/error/internal/ErrorPageRenderer.java
++++ b/ratpack-core/src/main/java/ratpack/error/internal/ErrorPageRenderer.java
+@@ -81,7 +81,7 @@ public abstract class ErrorPageRenderer {
+         w.escape("Caused by: ");
+       }
+ 
+-      w.println(throwable.toString());
++      w.escapeln(throwable.toString());
+       for (StackTraceElement ste : throwable.getStackTrace()) {
+         String className = ste.getClassName();
+         if (className.startsWith("ratpack")
+@@ -120,6 +120,10 @@ public abstract class ErrorPageRenderer {
+     BodyWriter escape(String string) {
+       return print(HTML_ESCAPER.escape(string));
+     }
++
++    BodyWriter escapeln(String string) {
++      return println(HTML_ESCAPER.escape(string));
++    }
+   }
+ 
+   protected void messages(BodyWriter writer, String heading, Runnable block) {
+diff --git a/ratpack-core/src/test/groovy/ratpack/error/DevelopmentErrorHandlerSpec.groovy b/ratpack-core/src/test/groovy/ratpack/error/DevelopmentErrorHandlerSpec.groovy
+index 7cd3fb4a8..50fa8ae27 100644
+--- a/ratpack-core/src/test/groovy/ratpack/error/DevelopmentErrorHandlerSpec.groovy
++++ b/ratpack-core/src/test/groovy/ratpack/error/DevelopmentErrorHandlerSpec.groovy
+@@ -16,10 +16,14 @@
+ 
+ package ratpack.error
+ 
++import com.google.common.escape.Escaper
++import com.google.common.html.HtmlEscapers
+ import ratpack.test.internal.RatpackGroovyDslSpec
+ 
+ class DevelopmentErrorHandlerSpec extends RatpackGroovyDslSpec {
+ 
++  private static final Escaper HTML_ESCAPER = HtmlEscapers.htmlEscaper()
++
+   def "debug error handler prints html info if client wants html"() {
+     given:
+     def e = new RuntimeException("!")
+@@ -96,4 +100,26 @@ class DevelopmentErrorHandlerSpec extends RatpackGroovyDslSpec {
+       body.contentType.text
+     }
+   }
++
++  def "debug error handler properly escapes HTML characters"() {
++    given:
++    def payload = "<script>alert(1);</script>"
++    def e = new RuntimeException(payload)
++    requestSpec { it.headers.add("Accept", "text/html;q=1,text/plain;q=0.9") }
++
++    when:
++    serverConfig { development(true) }
++    handlers {
++      get("server") { error(e) }
++    }
++
++    then:
++    with(get("server")) {
++      statusCode == 500
++      body.text.startsWith("<!DOCTYPE html>")
++      !body.text.contains(payload)
++      body.text.contains(HTML_ESCAPER.escape(payload))
++      body.contentType.html
++      }
++    }
+ }
+-- 
+2.34.1
+

@@ -1,0 +1,25 @@
+From df143cb68a45e5bbbc9bc95fdcd7478f3ac8c263 Mon Sep 17 00:00:00 2001
+From: Patrick Soquet <ps@moddable.tech>
+Date: Wed, 2 Sep 2020 16:04:00 +0200
+Subject: [PATCH] XS: #432
+
+---
+ xs/sources/xsSyntaxical.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/xs/sources/xsSyntaxical.c b/xs/sources/xsSyntaxical.c
+index f186a0199..2265a7d57 100644
+--- a/xs/sources/xsSyntaxical.c
++++ b/xs/sources/xsSyntaxical.c
+@@ -1953,7 +1953,7 @@ void fxCallExpression(txParser* parser)
+ 				fxMatchToken(parser, XS_TOKEN_RIGHT_BRACKET);
+ 			}
+ 			else if (parser->token == XS_TOKEN_LEFT_PARENTHESIS) {
+-				if (parser->root->description->token == XS_TOKEN_ACCESS) {
++				if (parser->root->description && (parser->root->description->token == XS_TOKEN_ACCESS)) {
+ 					txAccessNode* access = (txAccessNode*)parser->root;
+ 					if (access->symbol == parser->evalSymbol) {
+ 						parser->flags |= mxEvalFlag;
+-- 
+2.34.1
+

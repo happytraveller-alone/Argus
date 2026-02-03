@@ -1,0 +1,96 @@
+From 94e60757575c0962d8ab45c33748028ce4b5b30c Mon Sep 17 00:00:00 2001
+From: Alexander Matyushentsev <Alexander_Matyushentsev@intuit.com>
+Date: Thu, 4 Feb 2021 16:03:56 -0800
+Subject: [PATCH] fix: /api/version should not return tools version for
+ unauthenticated requests (#5415)
+
+Signed-off-by: Alexander Matyushentsev <AMatyushentsev@gmail.com>
+---
+ reposerver/server.go      |  2 +-
+ server/server.go          |  2 +-
+ server/version/version.go | 24 +++++++++++++++++++++---
+ 3 files changed, 23 insertions(+), 5 deletions(-)
+
+diff --git a/reposerver/server.go b/reposerver/server.go
+index e594db5b1..e1f91a828 100644
+--- a/reposerver/server.go
++++ b/reposerver/server.go
+@@ -69,7 +69,7 @@ func NewServer(metricsServer *metrics.MetricsServer, cache *reposervercache.Cach
+ // CreateGRPC creates new configured grpc server
+ func (a *ArgoCDRepoServer) CreateGRPC() *grpc.Server {
+ 	server := grpc.NewServer(a.opts...)
+-	versionpkg.RegisterVersionServiceServer(server, &version.Server{})
++	versionpkg.RegisterVersionServiceServer(server, version.NewServer(nil, true))
+ 	manifestService := repository.NewService(a.metricsServer, a.cache, a.parallelismLimit)
+ 	apiclient.RegisterRepoServerServiceServer(server, manifestService)
+ 
+diff --git a/server/server.go b/server/server.go
+index 3201b9a2e..ba03c5e5e 100644
+--- a/server/server.go
++++ b/server/server.go
+@@ -541,7 +541,7 @@ func (a *ArgoCDServer) newGRPCServer() *grpc.Server {
+ 	accountService := account.NewServer(a.sessionMgr, a.settingsMgr, a.enf)
+ 	certificateService := certificate.NewServer(a.RepoClientset, db, a.enf)
+ 	gpgkeyService := gpgkey.NewServer(a.RepoClientset, db, a.enf)
+-	versionpkg.RegisterVersionServiceServer(grpcS, &version.Server{})
++	versionpkg.RegisterVersionServiceServer(grpcS, version.NewServer(a, a.DisableAuth))
+ 	clusterpkg.RegisterClusterServiceServer(grpcS, clusterService)
+ 	applicationpkg.RegisterApplicationServiceServer(grpcS, applicationService)
+ 	repositorypkg.RegisterRepositoryServiceServer(grpcS, repoService)
+diff --git a/server/version/version.go b/server/version/version.go
+index 5cf616531..d52e42998 100644
+--- a/server/version/version.go
++++ b/server/version/version.go
+@@ -7,21 +7,35 @@ import (
+ 
+ 	"github.com/argoproj/argo-cd/common"
+ 	"github.com/argoproj/argo-cd/pkg/apiclient/version"
++	"github.com/argoproj/argo-cd/server/settings"
+ 	"github.com/argoproj/argo-cd/util/helm"
+ 	ksutil "github.com/argoproj/argo-cd/util/ksonnet"
+ 	"github.com/argoproj/argo-cd/util/kustomize"
++	sessionmgr "github.com/argoproj/argo-cd/util/session"
+ )
+ 
+-type Server struct {
++type server struct {
+ 	ksonnetVersion   string
+ 	kustomizeVersion string
+ 	helmVersion      string
+ 	kubectlVersion   string
++	jsonnetVersion   string
++	authenticator    settings.Authenticator
++	disableAuth      bool
++}
++
++func NewServer(authenticator settings.Authenticator, disableAuth bool) *server {
++	return &server{authenticator: authenticator, disableAuth: disableAuth}
+ }
+ 
+ // Version returns the version of the API server
+-func (s *Server) Version(context.Context, *empty.Empty) (*version.VersionMessage, error) {
++func (s *server) Version(ctx context.Context, _ *empty.Empty) (*version.VersionMessage, error) {
+ 	vers := common.GetVersion()
++
++	if !sessionmgr.LoggedIn(ctx) && !s.disableAuth {
++		return &version.VersionMessage{Version: vers.Version}, nil
++	}
++
+ 	if s.ksonnetVersion == "" {
+ 		ksonnetVersion, err := ksutil.Version()
+ 		if err == nil {
+@@ -72,6 +86,10 @@ func (s *Server) Version(context.Context, *empty.Empty) (*version.VersionMessage
+ }
+ 
+ // AuthFuncOverride allows the version to be returned without auth
+-func (s *Server) AuthFuncOverride(ctx context.Context, fullMethodName string) (context.Context, error) {
++func (s *server) AuthFuncOverride(ctx context.Context, fullMethodName string) (context.Context, error) {
++	if s.authenticator != nil {
++		// this authenticates the user, but ignores any error, so that we have claims populated
++		ctx, _ = s.authenticator.Authenticate(ctx)
++	}
+ 	return ctx, nil
+ }
+-- 
+2.34.1
+

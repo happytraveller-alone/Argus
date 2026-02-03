@@ -1,0 +1,2074 @@
+From fc2ff9155cc53393ac29885f6de83ed87093b274 Mon Sep 17 00:00:00 2001
+From: Matthew Holt <mholt@users.noreply.github.com>
+Date: Sun, 4 Feb 2018 00:58:27 -0700
+Subject: [PATCH] tls: Restructure and improve certificate management
+
+- Expose the list of Caddy instances through caddy.Instances()
+
+- Added arbitrary storage to caddy.Instance
+
+- The cache of loaded certificates is no longer global; now scoped
+  per-instance, meaning upon reload (like SIGUSR1) the old cert cache
+  will be discarded entirely, whereas before, aggressively reloading
+  config that added and removed lots of sites would cause unnecessary
+  build-up in the cache over time.
+
+- Key certificates in the cache by their SHA-256 hash instead of
+  by their names. This means certificates will not be duplicated in
+  memory (within each instance), making Caddy much more memory-efficient
+  for large-scale deployments with thousands of sites sharing certs.
+
+- Perform name-to-certificate lookups scoped per caddytls.Config instead
+  of a single global lookup. This prevents certificates from stepping on
+  each other when they overlap in their names.
+
+- Do not allow TLS configurations keyed by the same hostname to be
+  different; this now throws an error.
+
+- Updated relevant tests, with a stark awareness that more tests are
+  needed.
+
+- Change the NewContext function signature to include an *Instance.
+
+- Strongly recommend (basically require) use of caddytls.NewConfig()
+  to create a new *caddytls.Config, to ensure pointers to the instance
+  certificate cache are initialized properly.
+
+- Update the TLS-SNI challenge solver (even though TLS-SNI is disabled
+  currently on the CA side). Store temporary challenge cert in instance
+  cache, but do so directly by the ACME challenge name, not the hash.
+  Modified the getCertificate function to check the cache directly for
+  a name match if one isn't found otherwise. This will allow any
+  caddytls.Config to be able to help solve a TLS-SNI challenge, with one
+  extra side-effect that might actually be kind of interesting (and
+  useless): clients could send a certificate's hash as the SNI and
+  Caddy would be able to serve that certificate for the handshake.
+
+- Do not attempt to match a "default" (random) certificate when SNI
+  is present but unrecognized; return no certificate so a TLS alert
+  happens instead.
+
+- Store an Instance in the list of instances even while the instance
+  is still starting up (this allows access to the cert cache for
+  performing renewals at startup, etc). Will be removed from list again
+  if instance startup fails.
+
+- Laid groundwork for ACMEv2 and Let's Encrypt wildcard support.
+
+Server type plugins will need to be updated slightly to accommodate
+minor adjustments to their API (like passing in an Instance). This
+commit includes the changes for the HTTP server.
+
+Certain Caddyfile configurations might error out with this change, if
+they configured different TLS settings for the same hostname.
+
+This change trades some complexity for other complexity, but ultimately
+this new complexity is more correct and robust than earlier logic.
+
+Fixes #1991
+Fixes #1994
+Fixes #1303
+---
+ caddy.go                            |  56 ++++-
+ caddyhttp/httpserver/https.go       |   7 +-
+ caddyhttp/httpserver/plugin.go      |  24 +-
+ caddyhttp/httpserver/plugin_test.go |   8 +-
+ caddytls/certificates.go            | 325 ++++++++++++++++-----------
+ caddytls/certificates_test.go       |  70 +++---
+ caddytls/client.go                  |   2 +-
+ caddytls/config.go                  | 116 +++++++++-
+ caddytls/crypto.go                  |   8 +-
+ caddytls/handshake.go               | 127 ++++++++---
+ caddytls/handshake_test.go          |  38 ++--
+ caddytls/maintain.go                | 330 +++++++++++++++-------------
+ caddytls/setup.go                   |  17 +-
+ caddytls/setup_test.go              |  44 +++-
+ caddytls/tls.go                     |  22 +-
+ controller.go                       |  20 +-
+ plugins.go                          |   2 +-
+ 17 files changed, 794 insertions(+), 422 deletions(-)
+
+diff --git a/caddy.go b/caddy.go
+index 8da6d4db..dd2d473a 100644
+--- a/caddy.go
++++ b/caddy.go
+@@ -79,6 +79,8 @@ var (
+ 
+ // Instance contains the state of servers created as a result of
+ // calling Start and can be used to access or control those servers.
++// It is literally an instance of a server type. Instance values
++// should NOT be copied. Use *Instance for safety.
+ type Instance struct {
+ 	// serverType is the name of the instance's server type
+ 	serverType string
+@@ -89,10 +91,11 @@ type Instance struct {
+ 	// wg is used to wait for all servers to shut down
+ 	wg *sync.WaitGroup
+ 
+-	// context is the context created for this instance.
++	// context is the context created for this instance,
++	// used to coordinate the setting up of the server type
+ 	context Context
+ 
+-	// servers is the list of servers with their listeners.
++	// servers is the list of servers with their listeners
+ 	servers []ServerListener
+ 
+ 	// these callbacks execute when certain events occur
+@@ -101,6 +104,18 @@ type Instance struct {
+ 	onRestart       []func() error // before restart commences
+ 	onShutdown      []func() error // stopping, even as part of a restart
+ 	onFinalShutdown []func() error // stopping, not as part of a restart
++
++	// storing values on an instance is preferable to
++	// global state because these will get garbage-
++	// collected after in-process reloads when the
++	// old instances are destroyed; use StorageMu
++	// to access this value safely
++	Storage   map[interface{}]interface{}
++	StorageMu sync.RWMutex
++}
++
++func Instances() []*Instance {
++	return instances
+ }
+ 
+ // Servers returns the ServerListeners in i.
+@@ -196,7 +211,7 @@ func (i *Instance) Restart(newCaddyfile Input) (*Instance, error) {
+ 	}
+ 
+ 	// create new instance; if the restart fails, it is simply discarded
+-	newInst := &Instance{serverType: newCaddyfile.ServerType(), wg: i.wg}
++	newInst := &Instance{serverType: newCaddyfile.ServerType(), wg: i.wg, Storage: make(map[interface{}]interface{})}
+ 
+ 	// attempt to start new instance
+ 	err := startWithListenerFds(newCaddyfile, newInst, restartFds)
+@@ -455,7 +470,7 @@ func (i *Instance) Caddyfile() Input {
+ //
+ // This function blocks until all the servers are listening.
+ func Start(cdyfile Input) (*Instance, error) {
+-	inst := &Instance{serverType: cdyfile.ServerType(), wg: new(sync.WaitGroup)}
++	inst := &Instance{serverType: cdyfile.ServerType(), wg: new(sync.WaitGroup), Storage: make(map[interface{}]interface{})}
+ 	err := startWithListenerFds(cdyfile, inst, nil)
+ 	if err != nil {
+ 		return inst, err
+@@ -468,11 +483,34 @@ func Start(cdyfile Input) (*Instance, error) {
+ }
+ 
+ func startWithListenerFds(cdyfile Input, inst *Instance, restartFds map[string]restartTriple) error {
++	// save this instance in the list now so that
++	// plugins can access it if need be, for example
++	// the caddytls package, so it can perform cert
++	// renewals while starting up; we just have to
++	// remove the instance from the list later if
++	// it fails
++	instancesMu.Lock()
++	instances = append(instances, inst)
++	instancesMu.Unlock()
++	var err error
++	defer func() {
++		if err != nil {
++			instancesMu.Lock()
++			for i, otherInst := range instances {
++				if otherInst == inst {
++					instances = append(instances[:i], instances[i+1:]...)
++					break
++				}
++			}
++			instancesMu.Unlock()
++		}
++	}()
++
+ 	if cdyfile == nil {
+ 		cdyfile = CaddyfileInput{}
+ 	}
+ 
+-	err := ValidateAndExecuteDirectives(cdyfile, inst, false)
++	err = ValidateAndExecuteDirectives(cdyfile, inst, false)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -504,10 +542,6 @@ func startWithListenerFds(cdyfile Input, inst *Instance, restartFds map[string]r
+ 		return err
+ 	}
+ 
+-	instancesMu.Lock()
+-	instances = append(instances, inst)
+-	instancesMu.Unlock()
+-
+ 	// run any AfterStartup callbacks if this is not
+ 	// part of a restart; then show file descriptor notice
+ 	if restartFds == nil {
+@@ -546,7 +580,7 @@ func startWithListenerFds(cdyfile Input, inst *Instance, restartFds map[string]r
+ func ValidateAndExecuteDirectives(cdyfile Input, inst *Instance, justValidate bool) error {
+ 	// If parsing only inst will be nil, create an instance for this function call only.
+ 	if justValidate {
+-		inst = &Instance{serverType: cdyfile.ServerType(), wg: new(sync.WaitGroup)}
++		inst = &Instance{serverType: cdyfile.ServerType(), wg: new(sync.WaitGroup), Storage: make(map[interface{}]interface{})}
+ 	}
+ 
+ 	stypeName := cdyfile.ServerType()
+@@ -563,7 +597,7 @@ func ValidateAndExecuteDirectives(cdyfile Input, inst *Instance, justValidate bo
+ 		return err
+ 	}
+ 
+-	inst.context = stype.NewContext()
++	inst.context = stype.NewContext(inst)
+ 	if inst.context == nil {
+ 		return fmt.Errorf("server type %s produced a nil Context", stypeName)
+ 	}
+diff --git a/caddyhttp/httpserver/https.go b/caddyhttp/httpserver/https.go
+index a1c84f11..a12d9982 100644
+--- a/caddyhttp/httpserver/https.go
++++ b/caddyhttp/httpserver/https.go
+@@ -27,7 +27,7 @@ func activateHTTPS(cctx caddy.Context) error {
+ 	operatorPresent := !caddy.Started()
+ 
+ 	if !caddy.Quiet && operatorPresent {
+-		fmt.Print("Activating privacy features...")
++		fmt.Print("Activating privacy features... ")
+ 	}
+ 
+ 	ctx := cctx.(*httpContext)
+@@ -69,7 +69,7 @@ func activateHTTPS(cctx caddy.Context) error {
+ 	}
+ 
+ 	if !caddy.Quiet && operatorPresent {
+-		fmt.Println(" done.")
++		fmt.Println("done.")
+ 	}
+ 
+ 	return nil
+@@ -163,6 +163,7 @@ func redirPlaintextHost(cfg *SiteConfig) *SiteConfig {
+ 	if redirPort == DefaultHTTPSPort {
+ 		redirPort = "" // default port is redundant
+ 	}
++
+ 	redirMiddleware := func(next Handler) Handler {
+ 		return HandlerFunc(func(w http.ResponseWriter, r *http.Request) (int, error) {
+ 			// Construct the URL to which to redirect. Note that the Host in a request might
+@@ -184,9 +185,11 @@ func redirPlaintextHost(cfg *SiteConfig) *SiteConfig {
+ 			return 0, nil
+ 		})
+ 	}
++
+ 	host := cfg.Addr.Host
+ 	port := HTTPPort
+ 	addr := net.JoinHostPort(host, port)
++
+ 	return &SiteConfig{
+ 		Addr:       Address{Original: addr, Host: host, Port: port},
+ 		ListenHost: cfg.ListenHost,
+diff --git a/caddyhttp/httpserver/plugin.go b/caddyhttp/httpserver/plugin.go
+index 643eea7f..ea31a58d 100644
+--- a/caddyhttp/httpserver/plugin.go
++++ b/caddyhttp/httpserver/plugin.go
+@@ -91,11 +91,13 @@ func hideCaddyfile(cctx caddy.Context) error {
+ 	return nil
+ }
+ 
+-func newContext() caddy.Context {
+-	return &httpContext{keysToSiteConfigs: make(map[string]*SiteConfig)}
++func newContext(inst *caddy.Instance) caddy.Context {
++	return &httpContext{instance: inst, keysToSiteConfigs: make(map[string]*SiteConfig)}
+ }
+ 
+ type httpContext struct {
++	instance *caddy.Instance
++
+ 	// keysToSiteConfigs maps an address at the top of a
+ 	// server block (a "key") to its SiteConfig. Not all
+ 	// SiteConfigs will be represented here, only ones
+@@ -146,15 +148,19 @@ func (h *httpContext) InspectServerBlocks(sourceFile string, serverBlocks []cadd
+ 				altTLSSNIPort = HTTPSPort
+ 			}
+ 
++			// Make our caddytls.Config, which has a pointer to the
++			// instance's certificate cache and enough information
++			// to use automatic HTTPS when the time comes
++			caddytlsConfig := caddytls.NewConfig(h.instance)
++			caddytlsConfig.Hostname = addr.Host
++			caddytlsConfig.AltHTTPPort = altHTTPPort
++			caddytlsConfig.AltTLSSNIPort = altTLSSNIPort
++
+ 			// Save the config to our master list, and key it for lookups
+ 			cfg := &SiteConfig{
+-				Addr: addr,
+-				Root: Root,
+-				TLS: &caddytls.Config{
+-					Hostname:      addr.Host,
+-					AltHTTPPort:   altHTTPPort,
+-					AltTLSSNIPort: altTLSSNIPort,
+-				},
++				Addr:            addr,
++				Root:            Root,
++				TLS:             caddytlsConfig,
+ 				originCaddyfile: sourceFile,
+ 				IndexPages:      staticfiles.DefaultIndexPages,
+ 			}
+diff --git a/caddyhttp/httpserver/plugin_test.go b/caddyhttp/httpserver/plugin_test.go
+index 31eafd8f..5a60f2e8 100644
+--- a/caddyhttp/httpserver/plugin_test.go
++++ b/caddyhttp/httpserver/plugin_test.go
+@@ -137,7 +137,7 @@ func TestAddressString(t *testing.T) {
+ func TestInspectServerBlocksWithCustomDefaultPort(t *testing.T) {
+ 	Port = "9999"
+ 	filename := "Testfile"
+-	ctx := newContext().(*httpContext)
++	ctx := newContext(&caddy.Instance{Storage: make(map[interface{}]interface{})}).(*httpContext)
+ 	input := strings.NewReader(`localhost`)
+ 	sblocks, err := caddyfile.Parse(filename, input, nil)
+ 	if err != nil {
+@@ -155,7 +155,7 @@ func TestInspectServerBlocksWithCustomDefaultPort(t *testing.T) {
+ 
+ func TestInspectServerBlocksCaseInsensitiveKey(t *testing.T) {
+ 	filename := "Testfile"
+-	ctx := newContext().(*httpContext)
++	ctx := newContext(&caddy.Instance{Storage: make(map[interface{}]interface{})}).(*httpContext)
+ 	input := strings.NewReader("localhost {\n}\nLOCALHOST {\n}")
+ 	sblocks, err := caddyfile.Parse(filename, input, nil)
+ 	if err != nil {
+@@ -207,7 +207,7 @@ func TestDirectivesList(t *testing.T) {
+ }
+ 
+ func TestContextSaveConfig(t *testing.T) {
+-	ctx := newContext().(*httpContext)
++	ctx := newContext(&caddy.Instance{Storage: make(map[interface{}]interface{})}).(*httpContext)
+ 	ctx.saveConfig("foo", new(SiteConfig))
+ 	if _, ok := ctx.keysToSiteConfigs["foo"]; !ok {
+ 		t.Error("Expected config to be saved, but it wasn't")
+@@ -226,7 +226,7 @@ func TestContextSaveConfig(t *testing.T) {
+ 
+ // Test to make sure we are correctly hiding the Caddyfile
+ func TestHideCaddyfile(t *testing.T) {
+-	ctx := newContext().(*httpContext)
++	ctx := newContext(&caddy.Instance{Storage: make(map[interface{}]interface{})}).(*httpContext)
+ 	ctx.saveConfig("test", &SiteConfig{
+ 		Root:            Root,
+ 		originCaddyfile: "Testfile",
+diff --git a/caddytls/certificates.go b/caddytls/certificates.go
+index 05af914f..2df576ff 100644
+--- a/caddytls/certificates.go
++++ b/caddytls/certificates.go
+@@ -15,9 +15,11 @@
+ package caddytls
+ 
+ import (
++	"crypto/sha256"
+ 	"crypto/tls"
+ 	"crypto/x509"
+ 	"errors"
++	"fmt"
+ 	"io/ioutil"
+ 	"log"
+ 	"strings"
+@@ -27,24 +29,14 @@ import (
+ 	"golang.org/x/crypto/ocsp"
+ )
+ 
+-// certCache stores certificates in memory,
+-// keying certificates by name. Certificates
+-// should not overlap in the names they serve,
+-// because a name only maps to one certificate.
+-var certCache = make(map[string]Certificate)
+-var certCacheMu sync.RWMutex
+-
+ // Certificate is a tls.Certificate with associated metadata tacked on.
+ // Even if the metadata can be obtained by parsing the certificate,
+-// we can be more efficient by extracting the metadata once so it's
+-// just there, ready to use.
++// we are more efficient by extracting the metadata onto this struct.
+ type Certificate struct {
+ 	tls.Certificate
+ 
+ 	// Names is the list of names this certificate is written for.
+ 	// The first is the CommonName (if any), the rest are SAN.
+-	// This should be the exact list of keys by which this cert
+-	// is accessed in the cache, careful to avoid overlap.
+ 	Names []string
+ 
+ 	// NotAfter is when the certificate expires.
+@@ -53,59 +45,91 @@ type Certificate struct {
+ 	// OCSP contains the certificate's parsed OCSP response.
+ 	OCSP *ocsp.Response
+ 
+-	// Config is the configuration with which the certificate was
+-	// loaded or obtained and with which it should be maintained.
+-	Config *Config
++	// The hex-encoded hash of this cert's chain's bytes.
++	Hash string
++
++	// configs is the list of configs that use or refer to
++	// The first one is assumed to be the config that is
++	// "in charge" of this certificate (i.e. determines
++	// whether it is managed, how it is managed, etc).
++	// This field will be populated by cacheCertificate.
++	// Only meddle with it if you know what you're doing!
++	configs []*Config
++}
++
++// certificateCache is to be an instance-wide cache of certs
++// that site-specific TLS configs can refer to. Using a
++// central map like this avoids duplication of certs in
++// memory when the cert is used by multiple sites, and makes
++// maintenance easier. Because these are not to be global,
++// the cache will get garbage collected after a config reload
++// (a new instance will take its place).
++type certificateCache struct {
++	sync.RWMutex
++	cache map[string]Certificate // keyed by certificate hash
+ }
+ 
+-// getCertificate gets a certificate that matches name (a server name)
+-// from the in-memory cache. If there is no exact match for name, it
+-// will be checked against names of the form '*.example.com' (wildcard
+-// certificates) according to RFC 6125. If a match is found, matched will
+-// be true. If no matches are found, matched will be false and a default
+-// certificate will be returned with defaulted set to true. If no default
+-// certificate is set, defaulted will be set to false.
++// replaceCertificate replaces oldCert with newCert in the cache, and
++// updates all configs that are pointing to the old certificate to
++// point to the new one instead. newCert must already be loaded into
++// the cache (this method does NOT load it into the cache).
+ //
+-// The logic in this function is adapted from the Go standard library,
+-// which is by the Go Authors.
++// Note that all the names on the old certificate will be deleted
++// from the name lookup maps of each config, then all the names on
++// the new certificate will be added to the lookup maps as long as
++// they do not overwrite any entries.
+ //
+-// This function is safe for concurrent use.
+-func getCertificate(name string) (cert Certificate, matched, defaulted bool) {
+-	var ok bool
+-
+-	// Not going to trim trailing dots here since RFC 3546 says,
+-	// "The hostname is represented ... without a trailing dot."
+-	// Just normalize to lowercase.
+-	name = strings.ToLower(name)
+-
+-	certCacheMu.RLock()
+-	defer certCacheMu.RUnlock()
+-
+-	// exact match? great, let's use it
+-	if cert, ok = certCache[name]; ok {
+-		matched = true
+-		return
+-	}
++// The newCert may be modified and its cache entry updated.
++//
++// This method is safe for concurrent use.
++func (certCache *certificateCache) replaceCertificate(oldCert, newCert Certificate) error {
++	certCache.Lock()
++	defer certCache.Unlock()
++
++	// have all the configs that are pointing to the old
++	// certificate point to the new certificate instead
++	for _, cfg := range oldCert.configs {
++		// first delete all the name lookup entries that
++		// pointed to the old certificate
++		for name, certKey := range cfg.Certificates {
++			if certKey == oldCert.Hash {
++				delete(cfg.Certificates, name)
++			}
++		}
+ 
+-	// try replacing labels in the name with wildcards until we get a match
+-	labels := strings.Split(name, ".")
+-	for i := range labels {
+-		labels[i] = "*"
+-		candidate := strings.Join(labels, ".")
+-		if cert, ok = certCache[candidate]; ok {
+-			matched = true
+-			return
++		// then add name lookup entries for the names
++		// on the new certificate, but don't overwrite
++		// entries that may already exist, not only as
++		// a courtesy, but importantly: because if we
++		// overwrote a value here, and this config no
++		// longer pointed to a certain certificate in
++		// the cache, that certificate's list of configs
++		// referring to it would be incorrect; so just
++		// insert entries, don't overwrite any
++		for _, name := range newCert.Names {
++			if _, ok := cfg.Certificates[name]; !ok {
++				cfg.Certificates[name] = newCert.Hash
++			}
+ 		}
+ 	}
+ 
+-	// if nothing matches, use the default certificate or bust
+-	cert, defaulted = certCache[""]
+-	return
++	// since caching a new certificate attaches only the config
++	// that loaded it, the new certificate needs to be given the
++	// list of all the configs that use it, so copy the list
++	// over from the old certificate to the new certificate
++	// in the cache
++	newCert.configs = oldCert.configs
++	certCache.cache[newCert.Hash] = newCert
++
++	// finally, delete the old certificate from the cache
++	delete(certCache.cache, oldCert.Hash)
++
++	return nil
+ }
+ 
+ // CacheManagedCertificate loads the certificate for domain into the
+-// cache, flagging it as Managed and, if onDemand is true, as "OnDemand"
+-// (meaning that it was obtained or loaded during a TLS handshake).
++// cache, from the TLS storage for managed certificates. It returns a
++// copy of the Certificate that was put into the cache.
+ //
+ // This method is safe for concurrent use.
+ func (cfg *Config) CacheManagedCertificate(domain string) (Certificate, error) {
+@@ -117,39 +141,24 @@ func (cfg *Config) CacheManagedCertificate(domain string) (Certificate, error) {
+ 	if err != nil {
+ 		return Certificate{}, err
+ 	}
+-	cert, err := makeCertificate(siteData.Cert, siteData.Key)
++	cert, err := makeCertificateWithOCSP(siteData.Cert, siteData.Key)
+ 	if err != nil {
+ 		return cert, err
+ 	}
+-	cert.Config = cfg
+-	cacheCertificate(cert)
+-	return cert, nil
++	return cfg.cacheCertificate(cert), nil
+ }
+ 
+ // cacheUnmanagedCertificatePEMFile loads a certificate for host using certFile
+ // and keyFile, which must be in PEM format. It stores the certificate in
+-// memory after evicting any other entries in the cache keyed by the names
+-// on this certificate. In other words, it replaces existing certificates keyed
+-// by the names on this certificate. The Managed and OnDemand flags of the
+-// certificate will be set to false.
++// the in-memory cache.
+ //
+ // This function is safe for concurrent use.
+-func cacheUnmanagedCertificatePEMFile(certFile, keyFile string) error {
+-	cert, err := makeCertificateFromDisk(certFile, keyFile)
++func (cfg *Config) cacheUnmanagedCertificatePEMFile(certFile, keyFile string) error {
++	cert, err := makeCertificateFromDiskWithOCSP(certFile, keyFile)
+ 	if err != nil {
+ 		return err
+ 	}
+-
+-	// since this is manually managed, this call might be part of a reload after
+-	// the owner renewed a certificate; so clear cache of any previous cert first,
+-	// otherwise the renewed certificate may never be loaded
+-	certCacheMu.Lock()
+-	for _, name := range cert.Names {
+-		delete(certCache, name)
+-	}
+-	certCacheMu.Unlock()
+-
+-	cacheCertificate(cert)
++	cfg.cacheCertificate(cert)
+ 	return nil
+ }
+ 
+@@ -157,20 +166,20 @@ func cacheUnmanagedCertificatePEMFile(certFile, keyFile string) error {
+ // of the certificate and key, then caches it in memory.
+ //
+ // This function is safe for concurrent use.
+-func cacheUnmanagedCertificatePEMBytes(certBytes, keyBytes []byte) error {
+-	cert, err := makeCertificate(certBytes, keyBytes)
++func (cfg *Config) cacheUnmanagedCertificatePEMBytes(certBytes, keyBytes []byte) error {
++	cert, err := makeCertificateWithOCSP(certBytes, keyBytes)
+ 	if err != nil {
+ 		return err
+ 	}
+-	cacheCertificate(cert)
++	cfg.cacheCertificate(cert)
+ 	return nil
+ }
+ 
+-// makeCertificateFromDisk makes a Certificate by loading the
++// makeCertificateFromDiskWithOCSP makes a Certificate by loading the
+ // certificate and key files. It fills out all the fields in
+ // the certificate except for the Managed and OnDemand flags.
+-// (It is up to the caller to set those.)
+-func makeCertificateFromDisk(certFile, keyFile string) (Certificate, error) {
++// (It is up to the caller to set those.) It staples OCSP.
++func makeCertificateFromDiskWithOCSP(certFile, keyFile string) (Certificate, error) {
+ 	certPEMBlock, err := ioutil.ReadFile(certFile)
+ 	if err != nil {
+ 		return Certificate{}, err
+@@ -179,13 +188,14 @@ func makeCertificateFromDisk(certFile, keyFile string) (Certificate, error) {
+ 	if err != nil {
+ 		return Certificate{}, err
+ 	}
+-	return makeCertificate(certPEMBlock, keyPEMBlock)
++	return makeCertificateWithOCSP(certPEMBlock, keyPEMBlock)
+ }
+ 
+ // makeCertificate turns a certificate PEM bundle and a key PEM block into
+-// a Certificate, with OCSP and other relevant metadata tagged with it,
+-// except for the OnDemand and Managed flags. It is up to the caller to
+-// set those properties.
++// a Certificate with necessary metadata from parsing its bytes filled into
++// its struct fields for convenience (except for the OnDemand and Managed
++// flags; it is up to the caller to set those properties!). This function
++// does NOT staple OCSP.
+ func makeCertificate(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
+ 	var cert Certificate
+ 
+@@ -195,16 +205,26 @@ func makeCertificate(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
+ 		return cert, err
+ 	}
+ 
+-	// Extract relevant metadata and staple OCSP
++	// Extract necessary metadata
+ 	err = fillCertFromLeaf(&cert, tlsCert)
+ 	if err != nil {
+ 		return cert, err
+ 	}
++
++	return cert, nil
++}
++
++// makeCertificateWithOCSP is the same as makeCertificate except that it also
++// staples OCSP to the certificate.
++func makeCertificateWithOCSP(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
++	cert, err := makeCertificate(certPEMBlock, keyPEMBlock)
++	if err != nil {
++		return cert, err
++	}
+ 	err = stapleOCSP(&cert, certPEMBlock)
+ 	if err != nil {
+ 		log.Printf("[WARNING] Stapling OCSP: %v", err)
+ 	}
+-
+ 	return cert, nil
+ }
+ 
+@@ -243,65 +263,104 @@ func fillCertFromLeaf(cert *Certificate, tlsCert tls.Certificate) error {
+ 		return errors.New("certificate has no names")
+ 	}
+ 
++	// save the hash of this certificate (chain) and
++	// expiration date, for necessity and efficiency
++	cert.Hash = hashCertificateChain(cert.Certificate.Certificate)
+ 	cert.NotAfter = leaf.NotAfter
+ 
+ 	return nil
+ }
+ 
+-// cacheCertificate adds cert to the in-memory cache. If the cache is
+-// empty, cert will be used as the default certificate. If the cache is
+-// full, random entries are deleted until there is room to map all the
+-// names on the certificate.
++// hashCertificateChain computes the unique hash of certChain,
++// which is the chain of DER-encoded bytes. It returns the
++// hex encoding of the hash.
++func hashCertificateChain(certChain [][]byte) string {
++	h := sha256.New()
++	for _, certInChain := range certChain {
++		h.Write(certInChain)
++	}
++	return fmt.Sprintf("%x", h.Sum(nil))
++}
++
++// managedCertInStorageExpiresSoon returns true if cert (being a
++// managed certificate) is expiring within RenewDurationBefore.
++// It returns false if there was an error checking the expiration
++// of the certificate as found in storage, or if the certificate
++// in storage is NOT expiring soon. A certificate that is expiring
++// soon in our cache but is not expiring soon in storage probably
++// means that another instance renewed the certificate in the
++// meantime, and it would be a good idea to simply load the cert
++// into our cache rather than repeating the renewal process again.
++func managedCertInStorageExpiresSoon(cert Certificate) (bool, error) {
++	if len(cert.configs) == 0 {
++		return false, fmt.Errorf("no configs for certificate")
++	}
++	storage, err := cert.configs[0].StorageFor(cert.configs[0].CAUrl)
++	if err != nil {
++		return false, err
++	}
++	siteData, err := storage.LoadSite(cert.Names[0])
++	if err != nil {
++		return false, err
++	}
++	tlsCert, err := tls.X509KeyPair(siteData.Cert, siteData.Key)
++	if err != nil {
++		return false, err
++	}
++	leaf, err := x509.ParseCertificate(tlsCert.Certificate[0])
++	if err != nil {
++		return false, err
++	}
++	timeLeft := leaf.NotAfter.Sub(time.Now().UTC())
++	return timeLeft < RenewDurationBefore, nil
++}
++
++// cacheCertificate adds cert to the in-memory cache. If a certificate
++// with the same hash is already cached, it is NOT overwritten; instead,
++// cfg is added to the existing certificate's list of configs if not
++// already in the list. Then all the names on cert are used to add
++// entries to cfg.Certificates (the config's name lookup map).
++// Then the certificate is stored/updated in the cache. It returns
++// a copy of the certificate that ends up being stored in the cache.
+ //
+-// This certificate will be keyed to the names in cert.Names. Any names
+-// already used as a cache key will NOT be replaced by this cert; in
+-// other words, no overlap is allowed, and this certificate will not
+-// service those pre-existing names.
++// It is VERY important, even for some test cases, that the Hash field
++// of the cert be set properly.
+ //
+ // This function is safe for concurrent use.
+-func cacheCertificate(cert Certificate) {
+-	if cert.Config == nil {
+-		cert.Config = new(Config)
++func (cfg *Config) cacheCertificate(cert Certificate) Certificate {
++	cfg.certCache.Lock()
++	defer cfg.certCache.Unlock()
++
++	// if this certificate already exists in the cache,
++	// use it instead of overwriting it -- very important!
++	if existingCert, ok := cfg.certCache.cache[cert.Hash]; ok {
++		cert = existingCert
+ 	}
+-	certCacheMu.Lock()
+-	if _, ok := certCache[""]; !ok {
+-		// use as default - must be *appended* to end of list, or bad things happen!
+-		cert.Names = append(cert.Names, "")
+-	}
+-	for len(certCache)+len(cert.Names) > 10000 {
+-		// for simplicity, just remove random elements
+-		for key := range certCache {
+-			if key == "" { // ... but not the default cert
+-				continue
+-			}
+-			delete(certCache, key)
++
++	// attach this config to the certificate so we know which
++	// configs are referencing/using the certificate, but don't
++	// duplicate entries
++	var found bool
++	for _, c := range cert.configs {
++		if c == cfg {
++			found = true
+ 			break
+ 		}
+ 	}
+-	for i := 0; i < len(cert.Names); i++ {
+-		name := cert.Names[i]
+-		if _, ok := certCache[name]; ok {
+-			// do not allow certificates to overlap in the names they serve;
+-			// this ambiguity causes problems because it is confusing while
+-			// maintaining certificates; see OCSP maintenance code and
+-			// https://caddy.community/t/random-ocsp-response-errors-for-random-clients/2473?u=matt.
+-			log.Printf("[NOTICE] There is already a certificate loaded for %s, "+
+-				"so certificate for %v will not service that name",
+-				name, cert.Names)
+-			cert.Names = append(cert.Names[:i], cert.Names[i+1:]...)
+-			i--
+-			continue
+-		}
+-		certCache[name] = cert
++	if !found {
++		cert.configs = append(cert.configs, cfg)
+ 	}
+-	certCacheMu.Unlock()
+-}
+ 
+-// uncacheCertificate deletes name's certificate from the
+-// cache. If name is not a key in the certificate cache,
+-// this function does nothing.
+-func uncacheCertificate(name string) {
+-	certCacheMu.Lock()
+-	delete(certCache, name)
+-	certCacheMu.Unlock()
++	// key the certificate by all its names for this config only,
++	// this is how we find the certificate during handshakes
++	// (yes, if certs overlap in the names they serve, one will
++	// overwrite another here, but that's just how it goes)
++	for _, name := range cert.Names {
++		cfg.Certificates[name] = cert.Hash
++	}
++
++	// store the certificate
++	cfg.certCache.cache[cert.Hash] = cert
++
++	return cert
+ }
+diff --git a/caddytls/certificates_test.go b/caddytls/certificates_test.go
+index ce848d10..817d1649 100644
+--- a/caddytls/certificates_test.go
++++ b/caddytls/certificates_test.go
+@@ -17,57 +17,71 @@ package caddytls
+ import "testing"
+ 
+ func TestUnexportedGetCertificate(t *testing.T) {
+-	defer func() { certCache = make(map[string]Certificate) }()
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 
+ 	// When cache is empty
+-	if _, matched, defaulted := getCertificate("example.com"); matched || defaulted {
++	if _, matched, defaulted := cfg.getCertificate("example.com"); matched || defaulted {
+ 		t.Errorf("Got a certificate when cache was empty; matched=%v, defaulted=%v", matched, defaulted)
+ 	}
+ 
+-	// When cache has one certificate in it (also is default)
+-	defaultCert := Certificate{Names: []string{"example.com", ""}}
+-	certCache[""] = defaultCert
+-	certCache["example.com"] = defaultCert
+-	if cert, matched, defaulted := getCertificate("Example.com"); !matched || defaulted || cert.Names[0] != "example.com" {
++	// When cache has one certificate in it
++	firstCert := Certificate{Names: []string{"example.com"}}
++	certCache.cache["0xdeadbeef"] = firstCert
++	cfg.Certificates["example.com"] = "0xdeadbeef"
++	if cert, matched, defaulted := cfg.getCertificate("Example.com"); !matched || defaulted || cert.Names[0] != "example.com" {
+ 		t.Errorf("Didn't get a cert for 'Example.com' or got the wrong one: %v, matched=%v, defaulted=%v", cert, matched, defaulted)
+ 	}
+-	if cert, matched, defaulted := getCertificate(""); !matched || defaulted || cert.Names[0] != "example.com" {
+-		t.Errorf("Didn't get a cert for '' or got the wrong one: %v, matched=%v, defaulted=%v", cert, matched, defaulted)
++	if cert, matched, defaulted := cfg.getCertificate("example.com"); !matched || defaulted || cert.Names[0] != "example.com" {
++		t.Errorf("Didn't get a cert for 'example.com' or got the wrong one: %v, matched=%v, defaulted=%v", cert, matched, defaulted)
+ 	}
+ 
+ 	// When retrieving wildcard certificate
+-	certCache["*.example.com"] = Certificate{Names: []string{"*.example.com"}}
+-	if cert, matched, defaulted := getCertificate("sub.example.com"); !matched || defaulted || cert.Names[0] != "*.example.com" {
++	certCache.cache["0xb01dface"] = Certificate{Names: []string{"*.example.com"}}
++	cfg.Certificates["*.example.com"] = "0xb01dface"
++	if cert, matched, defaulted := cfg.getCertificate("sub.example.com"); !matched || defaulted || cert.Names[0] != "*.example.com" {
+ 		t.Errorf("Didn't get wildcard cert for 'sub.example.com' or got the wrong one: %v, matched=%v, defaulted=%v", cert, matched, defaulted)
+ 	}
+ 
+-	// When no certificate matches, the default is returned
+-	if cert, matched, defaulted := getCertificate("nomatch"); matched || !defaulted {
++	// When no certificate matches and SNI is provided, return no certificate (should be TLS alert)
++	if cert, matched, defaulted := cfg.getCertificate("nomatch"); matched || defaulted {
++		t.Errorf("Expected matched=false, defaulted=false; but got matched=%v, defaulted=%v (cert: %v)", matched, defaulted, cert)
++	}
++
++	// When no certificate matches and SNI is NOT provided, a random is returned
++	if cert, matched, defaulted := cfg.getCertificate(""); matched || !defaulted {
+ 		t.Errorf("Expected matched=false, defaulted=true; but got matched=%v, defaulted=%v (cert: %v)", matched, defaulted, cert)
+-	} else if cert.Names[0] != "example.com" {
+-		t.Errorf("Expected default cert, got: %v", cert)
+ 	}
+ }
+ 
+ func TestCacheCertificate(t *testing.T) {
+-	defer func() { certCache = make(map[string]Certificate) }()
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 
+-	cacheCertificate(Certificate{Names: []string{"example.com", "sub.example.com"}})
+-	if _, ok := certCache["example.com"]; !ok {
+-		t.Error("Expected first cert to be cached by key 'example.com', but it wasn't")
++	cfg.cacheCertificate(Certificate{Names: []string{"example.com", "sub.example.com"}, Hash: "foobar"})
++	if len(certCache.cache) != 1 {
++		t.Errorf("Expected length of certificate cache to be 1")
++	}
++	if _, ok := certCache.cache["foobar"]; !ok {
++		t.Error("Expected first cert to be cached by key 'foobar', but it wasn't")
+ 	}
+-	if _, ok := certCache["sub.example.com"]; !ok {
+-		t.Error("Expected first cert to be cached by key 'sub.example.com', but it wasn't")
++	if _, ok := cfg.Certificates["example.com"]; !ok {
++		t.Error("Expected first cert to be keyed by 'example.com', but it wasn't")
+ 	}
+-	if cert, ok := certCache[""]; !ok || cert.Names[2] != "" {
+-		t.Error("Expected first cert to be cached additionally as the default certificate with empty name added, but it wasn't")
++	if _, ok := cfg.Certificates["sub.example.com"]; !ok {
++		t.Error("Expected first cert to be keyed by 'sub.example.com', but it wasn't")
+ 	}
+ 
+-	cacheCertificate(Certificate{Names: []string{"example2.com"}})
+-	if _, ok := certCache["example2.com"]; !ok {
+-		t.Error("Expected second cert to be cached by key 'exmaple2.com', but it wasn't")
++	// different config, but using same cache; and has cert with overlapping name,
++	// but different hash
++	cfg2 := &Config{Certificates: make(map[string]string), certCache: certCache}
++	cfg2.cacheCertificate(Certificate{Names: []string{"example.com"}, Hash: "barbaz"})
++	if _, ok := certCache.cache["barbaz"]; !ok {
++		t.Error("Expected second cert to be cached by key 'barbaz.com', but it wasn't")
+ 	}
+-	if cert, ok := certCache[""]; ok && cert.Names[0] == "example2.com" {
+-		t.Error("Expected second cert to NOT be cached as default, but it was")
++	if hash, ok := cfg2.Certificates["example.com"]; !ok {
++		t.Error("Expected second cert to be keyed by 'example.com', but it wasn't")
++	} else if hash != "barbaz" {
++		t.Errorf("Expected second cert to map to 'barbaz' but it was %s instead", hash)
+ 	}
+ }
+diff --git a/caddytls/client.go b/caddytls/client.go
+index 26ef6a3c..4775a2d1 100644
+--- a/caddytls/client.go
++++ b/caddytls/client.go
+@@ -160,7 +160,7 @@ var newACMEClient = func(config *Config, allowPrompts bool) (*ACMEClient, error)
+ 
+ 		// See if TLS challenge needs to be handled by our own facilities
+ 		if caddy.HasListenerWithAddress(net.JoinHostPort(config.ListenHost, useTLSSNIPort)) {
+-			c.acmeClient.SetChallengeProvider(acme.TLSSNI01, tlsSniSolver{})
++			c.acmeClient.SetChallengeProvider(acme.TLSSNI01, tlsSNISolver{certCache: config.certCache})
+ 		}
+ 
+ 		// Disable any challenges that should not be used
+diff --git a/caddytls/config.go b/caddytls/config.go
+index d3468e34..0b64f357 100644
+--- a/caddytls/config.go
++++ b/caddytls/config.go
+@@ -134,7 +134,12 @@ type Config struct {
+ 	// Protocol Negotiation (ALPN).
+ 	ALPN []string
+ 
+-	tlsConfig *tls.Config // the final tls.Config created with buildStandardTLSConfig()
++	// The map of hostname to certificate hash. This is used to complete
++	// handshakes and serve the right certificate given the SNI.
++	Certificates map[string]string
++
++	certCache *certificateCache // pointer to the Instance's certificate store
++	tlsConfig *tls.Config       // the final tls.Config created with buildStandardTLSConfig()
+ }
+ 
+ // OnDemandState contains some state relevant for providing
+@@ -155,6 +160,25 @@ type OnDemandState struct {
+ 	AskURL *url.URL
+ }
+ 
++// NewConfig returns a new Config with a pointer to the instance's
++// certificate cache. You will usually need to set Other fields on
++// the returned Config for successful practical use.
++func NewConfig(inst *caddy.Instance) *Config {
++	inst.StorageMu.RLock()
++	certCache, ok := inst.Storage[CertCacheInstStorageKey].(*certificateCache)
++	inst.StorageMu.RUnlock()
++	if !ok || certCache == nil {
++		certCache = &certificateCache{cache: make(map[string]Certificate)}
++		inst.StorageMu.Lock()
++		inst.Storage[CertCacheInstStorageKey] = certCache
++		inst.StorageMu.Unlock()
++	}
++	cfg := new(Config)
++	cfg.Certificates = make(map[string]string)
++	cfg.certCache = certCache
++	return cfg
++}
++
+ // ObtainCert obtains a certificate for name using c, as long
+ // as a certificate does not already exist in storage for that
+ // name. The name must qualify and c must be flagged as Managed.
+@@ -330,7 +354,9 @@ func (c *Config) buildStandardTLSConfig() error {
+ 
+ // MakeTLSConfig makes a tls.Config from configs. The returned
+ // tls.Config is programmed to load the matching caddytls.Config
+-// based on the hostname in SNI, but that's all.
++// based on the hostname in SNI, but that's all. This is used
++// to create a single TLS configuration for a listener (a group
++// of sites).
+ func MakeTLSConfig(configs []*Config) (*tls.Config, error) {
+ 	if len(configs) == 0 {
+ 		return nil, nil
+@@ -358,15 +384,28 @@ func MakeTLSConfig(configs []*Config) (*tls.Config, error) {
+ 				configs[i-1].Hostname, lastConfProto, cfg.Hostname, thisConfProto)
+ 		}
+ 
+-		// convert each caddytls.Config into a tls.Config
++		// convert this caddytls.Config into a tls.Config
+ 		if err := cfg.buildStandardTLSConfig(); err != nil {
+ 			return nil, err
+ 		}
+ 
+-		// Key this config by its hostname (overwriting
+-		// configs with the same hostname pattern); during
+-		// TLS handshakes, configs are loaded based on
+-		// the hostname pattern, according to client's SNI.
++		// if an existing config with this hostname was already
++		// configured, then they must be identical (or at least
++		// compatible), otherwise that is a configuration error
++		if otherConfig, ok := configMap[cfg.Hostname]; ok {
++			if err := assertConfigsCompatible(cfg, otherConfig); err != nil {
++				return nil, fmt.Errorf("incompabile TLS configurations for the same SNI "+
++					"name (%s) on the same listener: %v",
++					cfg.Hostname, err)
++			}
++		}
++
++		// key this config by its hostname (overwrites
++		// configs with the same hostname pattern; should
++		// be OK since we already asserted they are roughly
++		// the same); during TLS handshakes, configs are
++		// loaded based on the hostname pattern, according
++		// to client's SNI
+ 		configMap[cfg.Hostname] = cfg
+ 	}
+ 
+@@ -383,6 +422,63 @@ func MakeTLSConfig(configs []*Config) (*tls.Config, error) {
+ 	}, nil
+ }
+ 
++// assertConfigsCompatible returns an error if the two Configs
++// do not have the same (or roughly compatible) configurations.
++// If one of the tlsConfig pointers on either Config is nil,
++// an error will be returned. If both are nil, no error.
++func assertConfigsCompatible(cfg1, cfg2 *Config) error {
++	c1, c2 := cfg1.tlsConfig, cfg2.tlsConfig
++
++	if (c1 == nil && c2 != nil) || (c1 != nil && c2 == nil) {
++		return fmt.Errorf("one config is not made")
++	}
++	if c1 == nil && c2 == nil {
++		return nil
++	}
++
++	if len(c1.CipherSuites) != len(c2.CipherSuites) {
++		return fmt.Errorf("different number of allowed cipher suites")
++	}
++	for i, ciph := range c1.CipherSuites {
++		if c2.CipherSuites[i] != ciph {
++			return fmt.Errorf("different cipher suites or different order")
++		}
++	}
++
++	if len(c1.CurvePreferences) != len(c2.CurvePreferences) {
++		return fmt.Errorf("different number of allowed cipher suites")
++	}
++	for i, curve := range c1.CurvePreferences {
++		if c2.CurvePreferences[i] != curve {
++			return fmt.Errorf("different curve preferences or different order")
++		}
++	}
++
++	if len(c1.NextProtos) != len(c2.NextProtos) {
++		return fmt.Errorf("different number of ALPN (NextProtos) values")
++	}
++	for i, proto := range c1.NextProtos {
++		if c2.NextProtos[i] != proto {
++			return fmt.Errorf("different ALPN (NextProtos) values or different order")
++		}
++	}
++
++	if c1.PreferServerCipherSuites != c2.PreferServerCipherSuites {
++		return fmt.Errorf("one prefers server cipher suites, the other does not")
++	}
++	if c1.MinVersion != c2.MinVersion {
++		return fmt.Errorf("minimum TLS version mismatch")
++	}
++	if c1.MaxVersion != c2.MaxVersion {
++		return fmt.Errorf("maximum TLS version mismatch")
++	}
++	if c1.ClientAuth != c2.ClientAuth {
++		return fmt.Errorf("client authentication policy mismatch")
++	}
++
++	return nil
++}
++
+ // ConfigGetter gets a Config keyed by key.
+ type ConfigGetter func(c *caddy.Controller) *Config
+ 
+@@ -522,7 +618,7 @@ var supportedCurvesMap = map[string]tls.CurveID{
+ 	"P521":   tls.CurveP521,
+ }
+ 
+-// List of all the curves we want to use by default
++// List of all the curves we want to use by default.
+ //
+ // This list should only include curves which are fast by design (e.g. X25519)
+ // and those for which an optimized assembly implementation exists (e.g. P256).
+@@ -548,4 +644,8 @@ const (
+ 	// be capable of proxying or forwarding the request to this
+ 	// alternate port.
+ 	DefaultHTTPAlternatePort = "5033"
++
++	// CertCacheInstStorageKey is the name of the key for
++	// accessing the certificate storage on the *caddy.Instance.
++	CertCacheInstStorageKey = "tls_cert_cache"
+ )
+diff --git a/caddytls/crypto.go b/caddytls/crypto.go
+index 3036834c..b2107f15 100644
+--- a/caddytls/crypto.go
++++ b/caddytls/crypto.go
+@@ -237,15 +237,17 @@ func makeSelfSignedCert(config *Config) error {
+ 		return fmt.Errorf("could not create certificate: %v", err)
+ 	}
+ 
+-	cacheCertificate(Certificate{
++	chain := [][]byte{derBytes}
++
++	config.cacheCertificate(Certificate{
+ 		Certificate: tls.Certificate{
+-			Certificate: [][]byte{derBytes},
++			Certificate: chain,
+ 			PrivateKey:  privKey,
+ 			Leaf:        cert,
+ 		},
+ 		Names:    cert.DNSNames,
+ 		NotAfter: cert.NotAfter,
+-		Config:   config,
++		Hash:     hashCertificateChain(chain),
+ 	})
+ 
+ 	return nil
+diff --git a/caddytls/handshake.go b/caddytls/handshake.go
+index c50e8ab6..2f3f34af 100644
+--- a/caddytls/handshake.go
++++ b/caddytls/handshake.go
+@@ -59,15 +59,7 @@ func (cg configGroup) getConfig(name string) *Config {
+ 		}
+ 	}
+ 
+-	// as a fallback, try a config that serves all names
+-	if config, ok := cg[""]; ok {
+-		return config
+-	}
+-
+-	// as a last resort, use a random config
+-	// (even if the config isn't for that hostname,
+-	// it should help us serve clients without SNI
+-	// or at least defer TLS alerts to the cert)
++	// no matches, so just serve up a random config
+ 	for _, config := range cg {
+ 		return config
+ 	}
+@@ -102,6 +94,86 @@ func (cfg *Config) GetCertificate(clientHello *tls.ClientHelloInfo) (*tls.Certif
+ 	return &cert.Certificate, err
+ }
+ 
++// getCertificate gets a certificate that matches name (a server name)
++// from the in-memory cache, according to the lookup table associated with
++// cfg. The lookup then points to a certificate in the Instance certificate
++// cache.
++//
++// If there is no exact match for name, it will be checked against names of
++// the form '*.example.com' (wildcard certificates) according to RFC 6125.
++// If a match is found, matched will be true. If no matches are found, matched
++// will be false and a "default" certificate will be returned with defaulted
++// set to true. If defaulted is false, then no certificates were available.
++//
++// The logic in this function is adapted from the Go standard library,
++// which is by the Go Authors.
++//
++// This function is safe for concurrent use.
++func (cfg *Config) getCertificate(name string) (cert Certificate, matched, defaulted bool) {
++	var certKey string
++	var ok bool
++
++	// Not going to trim trailing dots here since RFC 3546 says,
++	// "The hostname is represented ... without a trailing dot."
++	// Just normalize to lowercase.
++	name = strings.ToLower(name)
++
++	cfg.certCache.RLock()
++	defer cfg.certCache.RUnlock()
++
++	// exact match? great, let's use it
++	if certKey, ok = cfg.Certificates[name]; ok {
++		cert = cfg.certCache.cache[certKey]
++		matched = true
++		return
++	}
++
++	// try replacing labels in the name with wildcards until we get a match
++	labels := strings.Split(name, ".")
++	for i := range labels {
++		labels[i] = "*"
++		candidate := strings.Join(labels, ".")
++		if certKey, ok = cfg.Certificates[candidate]; ok {
++			cert = cfg.certCache.cache[certKey]
++			matched = true
++			return
++		}
++	}
++
++	// check the certCache directly to see if the SNI name is
++	// already the key of the certificate it wants! this is vital
++	// for supporting the TLS-SNI challenge, since the tlsSNISolver
++	// just puts the temporary certificate in the instance cache,
++	// with no regard for configs; this also means that the SNI
++	// can contain the hash of a specific cert (chain) it wants
++	// and we will still be able to serve it up
++	// (this behavior, by the way, could be controversial as to
++	// whether it complies with RFC 6066 about SNI, but I think
++	// it does soooo...)
++	// NOTE/TODO: TLS-SNI challenge is changing, as of Jan. 2018
++	// but what will be different, if it ever returns, is unclear
++	if directCert, ok := cfg.certCache.cache[name]; ok {
++		cert = directCert
++		matched = true
++		return
++	}
++
++	// if nothing matches and SNI was not provided, use a random
++	// certificate; at least there's a chance this older client
++	// can connect, and in the future we won't need this provision
++	// (if SNI is present, it's probably best to just raise a TLS
++	// alert by not serving a certificate)
++	if name == "" {
++		for _, certKey := range cfg.Certificates {
++			defaulted = true
++			cert = cfg.certCache.cache[certKey]
++			return
++		}
++	}
++
++	return
++}
++
+ // getCertDuringHandshake will get a certificate for name. It first tries
+ // the in-memory cache. If no certificate for name is in the cache, the
+ // config most closely corresponding to name will be loaded. If that config
+@@ -115,7 +187,7 @@ func (cfg *Config) GetCertificate(clientHello *tls.ClientHelloInfo) (*tls.Certif
+ // This function is safe for concurrent use.
+ func (cfg *Config) getCertDuringHandshake(name string, loadIfNecessary, obtainIfNecessary bool) (Certificate, error) {
+ 	// First check our in-memory cache to see if we've already loaded it
+-	cert, matched, defaulted := getCertificate(name)
++	cert, matched, defaulted := cfg.getCertificate(name)
+ 	if matched {
+ 		return cert, nil
+ 	}
+@@ -258,7 +330,7 @@ func (cfg *Config) obtainOnDemandCertificate(name string) (Certificate, error) {
+ 	obtainCertWaitChans[name] = wait
+ 	obtainCertWaitChansMu.Unlock()
+ 
+-	// do the obtain
++	// obtain the certificate
+ 	log.Printf("[INFO] Obtaining new certificate for %s", name)
+ 	err := cfg.ObtainCert(name, false)
+ 
+@@ -317,9 +389,9 @@ func (cfg *Config) handshakeMaintenance(name string, cert Certificate) (Certific
+ 				// quite common considering not all certs have issuer URLs that support it.
+ 				log.Printf("[ERROR] Getting OCSP for %s: %v", name, err)
+ 			}
+-			certCacheMu.Lock()
+-			certCache[name] = cert
+-			certCacheMu.Unlock()
++			cfg.certCache.Lock()
++			cfg.certCache.cache[cert.Hash] = cert
++			cfg.certCache.Unlock()
+ 		}
+ 	}
+ 
+@@ -348,29 +420,22 @@ func (cfg *Config) renewDynamicCertificate(name string, currentCert Certificate)
+ 	obtainCertWaitChans[name] = wait
+ 	obtainCertWaitChansMu.Unlock()
+ 
+-	// do the renew and reload the certificate
++	// renew and reload the certificate
+ 	log.Printf("[INFO] Renewing certificate for %s", name)
+ 	err := cfg.RenewCert(name, false)
+ 	if err == nil {
+-		// immediately flush this certificate from the cache so
+-		// the name doesn't overlap when we try to replace it,
+-		// which would fail, because overlapping existing cert
+-		// names isn't allowed
+-		certCacheMu.Lock()
+-		for _, certName := range currentCert.Names {
+-			delete(certCache, certName)
+-		}
+-		certCacheMu.Unlock()
+-
+ 		// even though the recursive nature of the dynamic cert loading
+ 		// would just call this function anyway, we do it here to
+-		// make the replacement as atomic as possible. (TODO: similar
+-		// to the note in maintain.go, it'd be nice if the clearing of
+-		// the cache entries above and this load function were truly
+-		// atomic...)
+-		_, err := currentCert.Config.CacheManagedCertificate(name)
++		// make the replacement as atomic as possible.
++		newCert, err := currentCert.configs[0].CacheManagedCertificate(name)
+ 		if err != nil {
+-			log.Printf("[ERROR] loading renewed certificate: %v", err)
++			log.Printf("[ERROR] loading renewed certificate for %s: %v", name, err)
++		} else {
++			// replace the old certificate with the new one
++			err = cfg.certCache.replaceCertificate(currentCert, newCert)
++			if err != nil {
++				log.Printf("[ERROR] Replacing certificate for %s: %v", name, err)
++			}
+ 		}
+ 	}
+ 
+diff --git a/caddytls/handshake_test.go b/caddytls/handshake_test.go
+index 63a6c1db..f0b8f7be 100644
+--- a/caddytls/handshake_test.go
++++ b/caddytls/handshake_test.go
+@@ -21,9 +21,8 @@ import (
+ )
+ 
+ func TestGetCertificate(t *testing.T) {
+-	defer func() { certCache = make(map[string]Certificate) }()
+-
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 
+ 	hello := &tls.ClientHelloInfo{ServerName: "example.com"}
+ 	helloSub := &tls.ClientHelloInfo{ServerName: "sub.example.com"}
+@@ -38,33 +37,40 @@ func TestGetCertificate(t *testing.T) {
+ 		t.Errorf("GetCertificate should return error when cache is empty even if server name is blank, got: %v", cert)
+ 	}
+ 
+-	// When cache has one certificate in it (also is default)
+-	defaultCert := Certificate{Names: []string{"example.com", ""}, Certificate: tls.Certificate{Leaf: &x509.Certificate{DNSNames: []string{"example.com"}}}}
+-	certCache[""] = defaultCert
+-	certCache["example.com"] = defaultCert
++	// When cache has one certificate in it
++	firstCert := Certificate{Names: []string{"example.com"}, Certificate: tls.Certificate{Leaf: &x509.Certificate{DNSNames: []string{"example.com"}}}}
++	cfg.cacheCertificate(firstCert)
+ 	if cert, err := cfg.GetCertificate(hello); err != nil {
+ 		t.Errorf("Got an error but shouldn't have, when cert exists in cache: %v", err)
+ 	} else if cert.Leaf.DNSNames[0] != "example.com" {
+ 		t.Errorf("Got wrong certificate with exact match; expected 'example.com', got: %v", cert)
+ 	}
+-	if cert, err := cfg.GetCertificate(helloNoSNI); err != nil {
++	if _, err := cfg.GetCertificate(helloNoSNI); err != nil {
+ 		t.Errorf("Got an error with no SNI but shouldn't have, when cert exists in cache: %v", err)
+-	} else if cert.Leaf.DNSNames[0] != "example.com" {
+-		t.Errorf("Got wrong certificate for no SNI; expected 'example.com' as default, got: %v", cert)
+ 	}
+ 
+ 	// When retrieving wildcard certificate
+-	certCache["*.example.com"] = Certificate{Names: []string{"*.example.com"}, Certificate: tls.Certificate{Leaf: &x509.Certificate{DNSNames: []string{"*.example.com"}}}}
++	wildcardCert := Certificate{
++		Names:       []string{"*.example.com"},
++		Certificate: tls.Certificate{Leaf: &x509.Certificate{DNSNames: []string{"*.example.com"}}},
++		Hash:        "(don't overwrite the first one)",
++	}
++	cfg.cacheCertificate(wildcardCert)
+ 	if cert, err := cfg.GetCertificate(helloSub); err != nil {
+ 		t.Errorf("Didn't get wildcard cert, got: cert=%v, err=%v ", cert, err)
+ 	} else if cert.Leaf.DNSNames[0] != "*.example.com" {
+ 		t.Errorf("Got wrong certificate, expected wildcard: %v", cert)
+ 	}
+ 
+-	// When no certificate matches, the default is returned
+-	if cert, err := cfg.GetCertificate(helloNoMatch); err != nil {
+-		t.Errorf("Expected default certificate with no error when no matches, got err: %v", err)
+-	} else if cert.Leaf.DNSNames[0] != "example.com" {
+-		t.Errorf("Expected default cert with no matches, got: %v", cert)
++	// When cache is NOT empty but there's no SNI
++	if cert, err := cfg.GetCertificate(helloNoSNI); err != nil {
++		t.Errorf("Expected random certificate with no error when no SNI, got err: %v", err)
++	} else if cert == nil || len(cert.Leaf.DNSNames) == 0 {
++		t.Errorf("Expected random cert with no matches, got: %v", cert)
++	}
++
++	// When no certificate matches, raise an alert
++	if _, err := cfg.GetCertificate(helloNoMatch); err == nil {
++		t.Errorf("Expected an error when no certificate matched the SNI, got: %v", err)
+ 	}
+ }
+diff --git a/caddytls/maintain.go b/caddytls/maintain.go
+index 9e42fc87..7ce6c5e2 100644
+--- a/caddytls/maintain.go
++++ b/caddytls/maintain.go
+@@ -87,119 +87,163 @@ func maintainAssets(stopChan chan struct{}) {
+ // RenewManagedCertificates renews managed certificates,
+ // including ones loaded on-demand.
+ func RenewManagedCertificates(allowPrompts bool) (err error) {
+-	var renewQueue, deleteQueue []Certificate
+-	visitedNames := make(map[string]struct{})
+-
+-	certCacheMu.RLock()
+-	for name, cert := range certCache {
+-		if !cert.Config.Managed || cert.Config.SelfSigned {
++	for _, inst := range caddy.Instances() {
++		inst.StorageMu.RLock()
++		certCache, ok := inst.Storage[CertCacheInstStorageKey].(*certificateCache)
++		inst.StorageMu.RUnlock()
++		if !ok || certCache == nil {
+ 			continue
+ 		}
+ 
+-		// the list of names on this cert should never be empty...
+-		if cert.Names == nil || len(cert.Names) == 0 {
+-			log.Printf("[WARNING] Certificate keyed by '%s' has no names: %v - removing from cache", name, cert.Names)
+-			deleteQueue = append(deleteQueue, cert)
+-			continue
+-		}
++		// we use the queues for a very important reason: to do any and all
++		// operations that could require an exclusive write lock outside
++		// of the read lock! otherwise we get a deadlock, yikes. in other
++		// words, our first iteration through the certificate cache does NOT
++		// perform any operations--only queues them--so that more fine-grained
++		// write locks may be obtained during the actual operations.
++		var renewQueue, reloadQueue, deleteQueue []Certificate
++
++		certCache.RLock()
++		for certKey, cert := range certCache.cache {
++			if len(cert.configs) == 0 {
++				// this is bad if this happens, probably a programmer error (oops)
++				log.Printf("[ERROR] No associated TLS config for certificate with names %v; unable to manage", cert.Names)
++				continue
++			}
++			if !cert.configs[0].Managed || cert.configs[0].SelfSigned {
++				continue
++			}
+ 
+-		// skip names whose certificate we've already renewed
+-		if _, ok := visitedNames[name]; ok {
+-			continue
+-		}
+-		for _, name := range cert.Names {
+-			visitedNames[name] = struct{}{}
++			// the list of names on this cert should never be empty... programmer error?
++			if cert.Names == nil || len(cert.Names) == 0 {
++				log.Printf("[WARNING] Certificate keyed by '%s' has no names: %v - removing from cache", certKey, cert.Names)
++				deleteQueue = append(deleteQueue, cert)
++				continue
++			}
++
++			// if time is up or expires soon, we need to try to renew it
++			timeLeft := cert.NotAfter.Sub(time.Now().UTC())
++			if timeLeft < RenewDurationBefore {
++				// see if the certificate in storage has already been renewed, possibly by another
++				// instance of Caddy that didn't coordinate with this one; if so, just load it (this
++				// might happen if another instance already renewed it - kinda sloppy but checking disk
++				// first is a simple way to possibly drastically reduce rate limit problems)
++				storedCertExpiring, err := managedCertInStorageExpiresSoon(cert)
++				if err != nil {
++					// hmm, weird, but not a big deal, maybe it was deleted or something
++					log.Printf("[NOTICE] Error while checking if certificate for %v in storage is also expiring soon: %v",
++						cert.Names, err)
++				} else if !storedCertExpiring {
++					// if the certificate is NOT expiring soon and there was no error, then we
++					// are good to just reload the certificate from storage instead of repeating
++					// a likely-unnecessary renewal procedure
++					reloadQueue = append(reloadQueue, cert)
++					continue
++				}
++
++				// the certificate in storage has not been renewed yet, so we will do it
++				// NOTE 1: This is not correct 100% of the time, if multiple Caddy instances
++				// happen to run their maintenance checks at approximately the same times;
++				// both might start renewal at about the same time and do two renewals and one
++				// will overwrite the other. Hence TLS storage plugins. This is sort of a TODO.
++				// NOTE 2: It is super-important to note that the TLS-SNI challenge requires
++				// a write lock on the cache in order to complete its challenge, so it is extra
++				// vital that this renew operation does not happen inside our read lock!
++				renewQueue = append(renewQueue, cert)
++			}
+ 		}
++		certCache.RUnlock()
+ 
+-		// if its time is up or ending soon, we need to try to renew it
+-		timeLeft := cert.NotAfter.Sub(time.Now().UTC())
+-		if timeLeft < RenewDurationBefore {
+-			log.Printf("[INFO] Certificate for %v expires in %v; attempting renewal", cert.Names, timeLeft)
++		// Reload certificates that merely need to be updated in memory
++		for _, oldCert := range reloadQueue {
++			timeLeft := oldCert.NotAfter.Sub(time.Now().UTC())
++			log.Printf("[INFO] Certificate for %v expires in %v, but is already renewed in storage; reloading stored certificate",
++				oldCert.Names, timeLeft)
+ 
+-			if cert.Config == nil {
+-				log.Printf("[ERROR] %s: No associated TLS config; unable to renew", name)
++			// get the certificate from storage and cache it
++			newCert, err := oldCert.configs[0].CacheManagedCertificate(oldCert.Names[0])
++			if err != nil {
++				log.Printf("[ERROR] Unable to reload certificate for %v into cache: %v", oldCert.Names, err)
+ 				continue
+ 			}
+ 
+-			// queue for renewal when we aren't in a read lock anymore
+-			// (the TLS-SNI challenge will need a write lock in order to
+-			// present the certificate, so we renew outside of read lock)
+-			renewQueue = append(renewQueue, cert)
+-		}
+-	}
+-	certCacheMu.RUnlock()
+-
+-	// Perform renewals that are queued
+-	for _, cert := range renewQueue {
+-		// Get the name which we should use to renew this certificate;
+-		// we only support managing certificates with one name per cert,
+-		// so this should be easy. We can't rely on cert.Config.Hostname
+-		// because it may be a wildcard value from the Caddyfile (e.g.
+-		// *.something.com) which, as of Jan. 2017, is not supported by ACME.
+-		var renewName string
+-		for _, name := range cert.Names {
+-			if name != "" {
+-				renewName = name
+-				break
++			// and replace the old certificate with the new one
++			err = certCache.replaceCertificate(oldCert, newCert)
++			if err != nil {
++				log.Printf("[ERROR] Replacing certificate: %v", err)
+ 			}
+ 		}
+ 
+-		// perform renewal
+-		err := cert.Config.RenewCert(renewName, allowPrompts)
+-		if err != nil {
+-			if allowPrompts {
+-				// Certificate renewal failed and the operator is present. See a discussion
+-				// about this in issue 642. For a while, we only stopped if the certificate
+-				// was expired, but in reality, there is no difference between reporting
+-				// it now versus later, except that there's somebody present to deal with
+-				// it right now.
+-				timeLeft := cert.NotAfter.Sub(time.Now().UTC())
+-				if timeLeft < RenewDurationBeforeAtStartup {
+-					// See issue 1680. Only fail at startup if the certificate is dangerously
+-					// close to expiration.
+-					return err
++		// Renewal queue
++		for _, oldCert := range renewQueue {
++			timeLeft := oldCert.NotAfter.Sub(time.Now().UTC())
++			log.Printf("[INFO] Certificate for %v expires in %v; attempting renewal", oldCert.Names, timeLeft)
++
++			// Get the name which we should use to renew this certificate;
++			// we only support managing certificates with one name per cert,
++			// so this should be easy. We can't rely on cert.Config.Hostname
++			// because it may be a wildcard value from the Caddyfile (e.g.
++			// *.something.com) which, as of Jan. 2017, is not supported by ACME.
++			// TODO: ^ ^ ^ (wildcards)
++			renewName := oldCert.Names[0]
++
++			// perform renewal
++			err := oldCert.configs[0].RenewCert(renewName, allowPrompts)
++			if err != nil {
++				if allowPrompts {
++					// Certificate renewal failed and the operator is present. See a discussion
++					// about this in issue 642. For a while, we only stopped if the certificate
++					// was expired, but in reality, there is no difference between reporting
++					// it now versus later, except that there's somebody present to deal with
++					// it right now. Follow-up: See issue 1680. Only fail in this case if the
++					// certificate is dangerously close to expiration.
++					timeLeft := oldCert.NotAfter.Sub(time.Now().UTC())
++					if timeLeft < RenewDurationBeforeAtStartup {
++						return err
++					}
+ 				}
++				log.Printf("[ERROR] %v", err)
++				if oldCert.configs[0].OnDemand {
++					// loaded dynamically, remove dynamically
++					deleteQueue = append(deleteQueue, oldCert)
++				}
++				continue
+ 			}
+-			log.Printf("[ERROR] %v", err)
+-			if cert.Config.OnDemand {
+-				// loaded dynamically, removed dynamically
+-				deleteQueue = append(deleteQueue, cert)
+-			}
+-		} else {
++
+ 			// successful renewal, so update in-memory cache by loading
+ 			// renewed certificate so it will be used with handshakes
+ 
+-			// we must delete all the names this cert services from the cache
+-			// so that we can replace the certificate, because replacing names
+-			// already in the cache is not allowed, to avoid later conflicts
+-			// with renewals.
+-			// TODO: It would be nice if this whole operation were idempotent;
+-			// i.e. a thread-safe function to replace a certificate in the cache,
+-			// see also handshake.go for on-demand maintenance.
+-			certCacheMu.Lock()
+-			for _, name := range cert.Names {
+-				delete(certCache, name)
+-			}
+-			certCacheMu.Unlock()
+-
+ 			// put the certificate in the cache
+-			_, err := cert.Config.CacheManagedCertificate(cert.Names[0])
++			newCert, err := oldCert.configs[0].CacheManagedCertificate(renewName)
+ 			if err != nil {
+ 				if allowPrompts {
+ 					return err // operator is present, so report error immediately
+ 				}
+ 				log.Printf("[ERROR] %v", err)
+ 			}
++
++			// replace the old certificate with the new one
++			err = certCache.replaceCertificate(oldCert, newCert)
++			if err != nil {
++				log.Printf("[ERROR] Replacing certificate: %v", err)
++			}
+ 		}
+-	}
+ 
+-	// Apply queued deletion changes to the cache
+-	for _, cert := range deleteQueue {
+-		certCacheMu.Lock()
+-		for _, name := range cert.Names {
+-			delete(certCache, name)
++		// Deletion queue
++		for _, cert := range deleteQueue {
++			certCache.Lock()
++			// remove any pointers to this certificate from Configs
++			for _, cfg := range cert.configs {
++				for name, certKey := range cfg.Certificates {
++					if certKey == cert.Hash {
++						delete(cfg.Certificates, name)
++					}
++				}
++			}
++			// then delete the certificate from the cache
++			delete(certCache.cache, cert.Hash)
++			certCache.Unlock()
+ 		}
+-		certCacheMu.Unlock()
+ 	}
+ 
+ 	return nil
+@@ -212,91 +256,75 @@ func RenewManagedCertificates(allowPrompts bool) (err error) {
+ // Ryan Sleevi's recommendations for good OCSP support:
+ // https://gist.github.com/sleevi/5efe9ef98961ecfb4da8
+ func UpdateOCSPStaples() {
+-	// Create a temporary place to store updates
+-	// until we release the potentially long-lived
+-	// read lock and use a short-lived write lock.
+-	type ocspUpdate struct {
+-		rawBytes []byte
+-		parsed   *ocsp.Response
+-	}
+-	updated := make(map[string]ocspUpdate)
+-
+-	// A single SAN certificate maps to multiple names, so we use this
+-	// set to make sure we don't waste cycles checking OCSP for the same
+-	// certificate multiple times.
+-	visited := make(map[string]struct{})
+-
+-	certCacheMu.RLock()
+-	for name, cert := range certCache {
+-		// skip this certificate if we've already visited it,
+-		// and if not, mark all the names as visited
+-		if _, ok := visited[name]; ok {
++	for _, inst := range caddy.Instances() {
++		inst.StorageMu.RLock()
++		certCache, ok := inst.Storage[CertCacheInstStorageKey].(*certificateCache)
++		inst.StorageMu.RUnlock()
++		if !ok || certCache == nil {
+ 			continue
+ 		}
+-		for _, n := range cert.Names {
+-			visited[n] = struct{}{}
+-		}
+ 
+-		// no point in updating OCSP for expired certificates
+-		if time.Now().After(cert.NotAfter) {
+-			continue
++		// Create a temporary place to store updates
++		// until we release the potentially long-lived
++		// read lock and use a short-lived write lock
++		// on the certificate cache.
++		type ocspUpdate struct {
++			rawBytes []byte
++			parsed   *ocsp.Response
+ 		}
++		updated := make(map[string]ocspUpdate)
+ 
+-		var lastNextUpdate time.Time
+-		if cert.OCSP != nil {
+-			lastNextUpdate = cert.OCSP.NextUpdate
+-			if freshOCSP(cert.OCSP) {
+-				// no need to update staple if ours is still fresh
++		certCache.RLock()
++		for certHash, cert := range certCache.cache {
++			// no point in updating OCSP for expired certificates
++			if time.Now().After(cert.NotAfter) {
+ 				continue
+ 			}
+-		}
+ 
+-		err := stapleOCSP(&cert, nil)
+-		if err != nil {
++			var lastNextUpdate time.Time
+ 			if cert.OCSP != nil {
+-				// if there was no staple before, that's fine; otherwise we should log the error
+-				log.Printf("[ERROR] Checking OCSP: %v", err)
++				lastNextUpdate = cert.OCSP.NextUpdate
++				if freshOCSP(cert.OCSP) {
++					continue // no need to update staple if ours is still fresh
++				}
+ 			}
+-			continue
+-		}
+ 
+-		// By this point, we've obtained the latest OCSP response.
+-		// If there was no staple before, or if the response is updated, make
+-		// sure we apply the update to all names on the certificate.
+-		if cert.OCSP != nil && (lastNextUpdate.IsZero() || lastNextUpdate != cert.OCSP.NextUpdate) {
+-			log.Printf("[INFO] Advancing OCSP staple for %v from %s to %s",
+-				cert.Names, lastNextUpdate, cert.OCSP.NextUpdate)
+-			for _, n := range cert.Names {
+-				// BUG: If this certificate has names on it that appear on another
+-				// certificate in the cache, AND the other certificate is keyed by
+-				// that name in the cache, then this method of 'queueing' the staple
+-				// update will cause this certificate's new OCSP to be stapled to
+-				// a different certificate! See:
+-				// https://caddy.community/t/random-ocsp-response-errors-for-random-clients/2473?u=matt
+-				// This problem should be avoided if names on certificates in the
+-				// cache don't overlap with regards to the cache keys.
+-				// (This is isn't a bug anymore, since we're careful when we add
+-				// certificates to the cache by skipping keying when key already exists.)
+-				updated[n] = ocspUpdate{rawBytes: cert.Certificate.OCSPStaple, parsed: cert.OCSP}
++			err := stapleOCSP(&cert, nil)
++			if err != nil {
++				if cert.OCSP != nil {
++					// if there was no staple before, that's fine; otherwise we should log the error
++					log.Printf("[ERROR] Checking OCSP: %v", err)
++				}
++				continue
++			}
++
++			// By this point, we've obtained the latest OCSP response.
++			// If there was no staple before, or if the response is updated, make
++			// sure we apply the update to all names on the certificate.
++			if cert.OCSP != nil && (lastNextUpdate.IsZero() || lastNextUpdate != cert.OCSP.NextUpdate) {
++				log.Printf("[INFO] Advancing OCSP staple for %v from %s to %s",
++					cert.Names, lastNextUpdate, cert.OCSP.NextUpdate)
++				updated[certHash] = ocspUpdate{rawBytes: cert.Certificate.OCSPStaple, parsed: cert.OCSP}
+ 			}
+ 		}
++		certCache.RUnlock()
++
++		// These write locks should be brief since we have all the info we need now.
++		for certKey, update := range updated {
++			certCache.Lock()
++			cert := certCache.cache[certKey]
++			cert.OCSP = update.parsed
++			cert.Certificate.OCSPStaple = update.rawBytes
++			certCache.cache[certKey] = cert
++			certCache.Unlock()
++		}
+ 	}
+-	certCacheMu.RUnlock()
+-
+-	// This write lock should be brief since we have all the info we need now.
+-	certCacheMu.Lock()
+-	for name, update := range updated {
+-		cert := certCache[name]
+-		cert.OCSP = update.parsed
+-		cert.Certificate.OCSPStaple = update.rawBytes
+-		certCache[name] = cert
+-	}
+-	certCacheMu.Unlock()
+ }
+ 
+ // DeleteOldStapleFiles deletes cached OCSP staples that have expired.
+ // TODO: Should we do this for certificates too?
+ func DeleteOldStapleFiles() {
++	// TODO: Upgrade caddytls.Storage to support OCSP operations too
+ 	files, err := ioutil.ReadDir(ocspFolder)
+ 	if err != nil {
+ 		// maybe just hasn't been created yet; no big deal
+diff --git a/caddytls/setup.go b/caddytls/setup.go
+index cbc2baca..63c2a9e6 100644
+--- a/caddytls/setup.go
++++ b/caddytls/setup.go
+@@ -38,6 +38,7 @@ func init() {
+ // are specified by the user in the config file. All the automatic HTTPS
+ // stuff comes later outside of this function.
+ func setupTLS(c *caddy.Controller) error {
++	// obtain the configGetter, which loads the config we're, uh, configuring
+ 	configGetter, ok := configGetters[c.ServerType()]
+ 	if !ok {
+ 		return fmt.Errorf("no caddytls.ConfigGetter for %s server type; must call RegisterConfigGetter", c.ServerType())
+@@ -47,6 +48,14 @@ func setupTLS(c *caddy.Controller) error {
+ 		return fmt.Errorf("no caddytls.Config to set up for %s", c.Key)
+ 	}
+ 
++	// the certificate cache is tied to the current caddy.Instance; get a pointer to it
++	certCache, ok := c.Get(CertCacheInstStorageKey).(*certificateCache)
++	if !ok || certCache == nil {
++		certCache = &certificateCache{cache: make(map[string]Certificate)}
++		c.Set(CertCacheInstStorageKey, certCache)
++	}
++	config.certCache = certCache
++
+ 	config.Enabled = true
+ 
+ 	for c.Next() {
+@@ -237,7 +246,7 @@ func setupTLS(c *caddy.Controller) error {
+ 
+ 		// load a single certificate and key, if specified
+ 		if certificateFile != "" && keyFile != "" {
+-			err := cacheUnmanagedCertificatePEMFile(certificateFile, keyFile)
++			err := config.cacheUnmanagedCertificatePEMFile(certificateFile, keyFile)
+ 			if err != nil {
+ 				return c.Errf("Unable to load certificate and key files for '%s': %v", c.Key, err)
+ 			}
+@@ -246,7 +255,7 @@ func setupTLS(c *caddy.Controller) error {
+ 
+ 		// load a directory of certificates, if specified
+ 		if loadDir != "" {
+-			err := loadCertsInDir(c, loadDir)
++			err := loadCertsInDir(config, c, loadDir)
+ 			if err != nil {
+ 				return err
+ 			}
+@@ -273,7 +282,7 @@ func setupTLS(c *caddy.Controller) error {
+ // https://cbonte.github.io/haproxy-dconv/configuration-1.5.html#5.1-crt
+ //
+ // This function may write to the log as it walks the directory tree.
+-func loadCertsInDir(c *caddy.Controller, dir string) error {
++func loadCertsInDir(cfg *Config, c *caddy.Controller, dir string) error {
+ 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+ 		if err != nil {
+ 			log.Printf("[WARNING] Unable to traverse into %s; skipping", path)
+@@ -336,7 +345,7 @@ func loadCertsInDir(c *caddy.Controller, dir string) error {
+ 				return c.Errf("%s: no private key block found", path)
+ 			}
+ 
+-			err = cacheUnmanagedCertificatePEMBytes(certPEMBytes, keyPEMBytes)
++			err = cfg.cacheUnmanagedCertificatePEMBytes(certPEMBytes, keyPEMBytes)
+ 			if err != nil {
+ 				return c.Errf("%s: failed to load cert and key for '%s': %v", path, c.Key, err)
+ 			}
+diff --git a/caddytls/setup_test.go b/caddytls/setup_test.go
+index ee8a709b..b93b1fc5 100644
+--- a/caddytls/setup_test.go
++++ b/caddytls/setup_test.go
+@@ -46,9 +46,12 @@ func TestMain(m *testing.M) {
+ }
+ 
+ func TestSetupParseBasic(t *testing.T) {
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
++
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c := caddy.NewTestController("", `tls `+certFile+` `+keyFile+``)
++	c.Set(CertCacheInstStorageKey, certCache)
+ 
+ 	err := setupTLS(c)
+ 	if err != nil {
+@@ -124,9 +127,12 @@ func TestSetupParseWithOptionalParams(t *testing.T) {
+             must_staple
+             alpn http/1.1
+         }`
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
++
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c := caddy.NewTestController("", params)
++	c.Set(CertCacheInstStorageKey, certCache)
+ 
+ 	err := setupTLS(c)
+ 	if err != nil {
+@@ -158,9 +164,11 @@ func TestSetupDefaultWithOptionalParams(t *testing.T) {
+ 	params := `tls {
+             ciphers RSA-3DES-EDE-CBC-SHA
+         }`
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c := caddy.NewTestController("", params)
++	c.Set(CertCacheInstStorageKey, certCache)
+ 
+ 	err := setupTLS(c)
+ 	if err != nil {
+@@ -176,9 +184,12 @@ func TestSetupParseWithWrongOptionalParams(t *testing.T) {
+ 	params := `tls ` + certFile + ` ` + keyFile + ` {
+ 			protocols ssl tls
+ 		}`
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c := caddy.NewTestController("", params)
++	c.Set(CertCacheInstStorageKey, certCache)
++
+ 	err := setupTLS(c)
+ 	if err == nil {
+ 		t.Errorf("Expected errors, but no error returned")
+@@ -191,6 +202,7 @@ func TestSetupParseWithWrongOptionalParams(t *testing.T) {
+ 	cfg = new(Config)
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c = caddy.NewTestController("", params)
++	c.Set(CertCacheInstStorageKey, certCache)
+ 	err = setupTLS(c)
+ 	if err == nil {
+ 		t.Error("Expected errors, but no error returned")
+@@ -215,6 +227,7 @@ func TestSetupParseWithWrongOptionalParams(t *testing.T) {
+ 	cfg = new(Config)
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c = caddy.NewTestController("", params)
++	c.Set(CertCacheInstStorageKey, certCache)
+ 	err = setupTLS(c)
+ 	if err == nil {
+ 		t.Error("Expected errors, but no error returned")
+@@ -226,7 +239,8 @@ func TestSetupParseWithClientAuth(t *testing.T) {
+ 	params := `tls ` + certFile + ` ` + keyFile + ` {
+ 			clients
+ 		}`
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c := caddy.NewTestController("", params)
+ 	err := setupTLS(c)
+@@ -259,9 +273,11 @@ func TestSetupParseWithClientAuth(t *testing.T) {
+ 			clients verify_if_given
+ 		}`, tls.VerifyClientCertIfGiven, true, noCAs},
+ 	} {
+-		cfg := new(Config)
++		certCache := &certificateCache{cache: make(map[string]Certificate)}
++		cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 		RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 		c := caddy.NewTestController("", caseData.params)
++		c.Set(CertCacheInstStorageKey, certCache)
+ 		err := setupTLS(c)
+ 		if caseData.expectedErr {
+ 			if err == nil {
+@@ -311,9 +327,11 @@ func TestSetupParseWithCAUrl(t *testing.T) {
+ 				ca 1 2
+ 			}`, true, ""},
+ 	} {
+-		cfg := new(Config)
++		certCache := &certificateCache{cache: make(map[string]Certificate)}
++		cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 		RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 		c := caddy.NewTestController("", caseData.params)
++		c.Set(CertCacheInstStorageKey, certCache)
+ 		err := setupTLS(c)
+ 		if caseData.expectedErr {
+ 			if err == nil {
+@@ -335,9 +353,11 @@ func TestSetupParseWithKeyType(t *testing.T) {
+ 	params := `tls {
+             key_type p384
+         }`
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c := caddy.NewTestController("", params)
++	c.Set(CertCacheInstStorageKey, certCache)
+ 
+ 	err := setupTLS(c)
+ 	if err != nil {
+@@ -353,9 +373,11 @@ func TestSetupParseWithCurves(t *testing.T) {
+ 	params := `tls {
+             curves x25519 p256 p384 p521
+         }`
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c := caddy.NewTestController("", params)
++	c.Set(CertCacheInstStorageKey, certCache)
+ 
+ 	err := setupTLS(c)
+ 	if err != nil {
+@@ -380,9 +402,11 @@ func TestSetupParseWithOneTLSProtocol(t *testing.T) {
+ 	params := `tls {
+             protocols tls1.2
+         }`
+-	cfg := new(Config)
++	certCache := &certificateCache{cache: make(map[string]Certificate)}
++	cfg := &Config{Certificates: make(map[string]string), certCache: certCache}
+ 	RegisterConfigGetter("", func(c *caddy.Controller) *Config { return cfg })
+ 	c := caddy.NewTestController("", params)
++	c.Set(CertCacheInstStorageKey, certCache)
+ 
+ 	err := setupTLS(c)
+ 	if err != nil {
+diff --git a/caddytls/tls.go b/caddytls/tls.go
+index 9a17ddd3..bf1a8301 100644
+--- a/caddytls/tls.go
++++ b/caddytls/tls.go
+@@ -88,30 +88,38 @@ func Revoke(host string) error {
+ 	return client.Revoke(host)
+ }
+ 
+-// tlsSniSolver is a type that can solve tls-sni challenges using
++// tlsSNISolver is a type that can solve TLS-SNI challenges using
+ // an existing listener and our custom, in-memory certificate cache.
+-type tlsSniSolver struct{}
++type tlsSNISolver struct {
++	certCache *certificateCache
++}
+ 
+ // Present adds the challenge certificate to the cache.
+-func (s tlsSniSolver) Present(domain, token, keyAuth string) error {
++func (s tlsSNISolver) Present(domain, token, keyAuth string) error {
+ 	cert, acmeDomain, err := acme.TLSSNI01ChallengeCert(keyAuth)
+ 	if err != nil {
+ 		return err
+ 	}
+-	cacheCertificate(Certificate{
++	certHash := hashCertificateChain(cert.Certificate)
++	s.certCache.Lock()
++	s.certCache.cache[acmeDomain] = Certificate{
+ 		Certificate: cert,
+ 		Names:       []string{acmeDomain},
+-	})
++		Hash:        certHash, // perhaps not necesssary
++	}
++	s.certCache.Unlock()
+ 	return nil
+ }
+ 
+ // CleanUp removes the challenge certificate from the cache.
+-func (s tlsSniSolver) CleanUp(domain, token, keyAuth string) error {
++func (s tlsSNISolver) CleanUp(domain, token, keyAuth string) error {
+ 	_, acmeDomain, err := acme.TLSSNI01ChallengeCert(keyAuth)
+ 	if err != nil {
+ 		return err
+ 	}
+-	uncacheCertificate(acmeDomain)
++	s.certCache.Lock()
++	delete(s.certCache.cache, acmeDomain)
++	s.certCache.Unlock()
+ 	return nil
+ }
+ 
+diff --git a/controller.go b/controller.go
+index e162280c..6015d210 100644
+--- a/controller.go
++++ b/controller.go
+@@ -103,6 +103,20 @@ func (c *Controller) Context() Context {
+ 	return c.instance.context
+ }
+ 
++// Get safely gets a value from the Instance's storage.
++func (c *Controller) Get(key interface{}) interface{} {
++	c.instance.StorageMu.RLock()
++	defer c.instance.StorageMu.RUnlock()
++	return c.instance.Storage[key]
++}
++
++// Set safely sets a value on the Instance's storage.
++func (c *Controller) Set(key, val interface{}) {
++	c.instance.StorageMu.Lock()
++	c.instance.Storage[key] = val
++	c.instance.StorageMu.Unlock()
++}
++
+ // NewTestController creates a new Controller for
+ // the server type and input specified. The filename
+ // is "Testfile". If the server type is not empty and
+@@ -113,12 +127,12 @@ func (c *Controller) Context() Context {
+ // Used only for testing, but exported so plugins can
+ // use this for convenience.
+ func NewTestController(serverType, input string) *Controller {
+-	var ctx Context
++	testInst := &Instance{serverType: serverType, Storage: make(map[interface{}]interface{})}
+ 	if stype, err := getServerType(serverType); err == nil {
+-		ctx = stype.NewContext()
++		testInst.context = stype.NewContext(testInst)
+ 	}
+ 	return &Controller{
+-		instance:           &Instance{serverType: serverType, context: ctx},
++		instance:           testInst,
+ 		Dispenser:          caddyfile.NewDispenser("Testfile", strings.NewReader(input)),
+ 		OncePerServerBlock: func(f func() error) error { return f() },
+ 	}
+diff --git a/plugins.go b/plugins.go
+index f5372184..f7d14f86 100644
+--- a/plugins.go
++++ b/plugins.go
+@@ -191,7 +191,7 @@ type ServerType struct {
+ 	// startup phases before this one. It's a way to keep
+ 	// each set of server instances separate and to reduce
+ 	// the amount of global state you need.
+-	NewContext func() Context
++	NewContext func(inst *Instance) Context
+ }
+ 
+ // Plugin is a type which holds information about a plugin.
+-- 
+2.34.1
+

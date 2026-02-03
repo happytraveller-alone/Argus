@@ -1,0 +1,27 @@
+From 6274fa01a75d74d559bb7e514c970f1fc07d15bc Mon Sep 17 00:00:00 2001
+From: Yiheng Cao <65160922+Crispy-fried-chicken@users.noreply.github.com>
+Date: Fri, 25 Aug 2023 00:41:32 +0800
+Subject: [PATCH] [fix][broker] Use MessageDigest.isEqual when comparing
+ digests (#21061)
+
+(cherry picked from commit c05954e66ff33098aeb848f4bde51613ace7e47e)
+---
+ .../pulsar/broker/authentication/SaslRoleTokenSigner.java       | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pulsar-broker-auth-sasl/src/main/java/org/apache/pulsar/broker/authentication/SaslRoleTokenSigner.java b/pulsar-broker-auth-sasl/src/main/java/org/apache/pulsar/broker/authentication/SaslRoleTokenSigner.java
+index 6ded38132e..9d90cc26ec 100644
+--- a/pulsar-broker-auth-sasl/src/main/java/org/apache/pulsar/broker/authentication/SaslRoleTokenSigner.java
++++ b/pulsar-broker-auth-sasl/src/main/java/org/apache/pulsar/broker/authentication/SaslRoleTokenSigner.java
+@@ -76,7 +76,7 @@ public class SaslRoleTokenSigner {
+         String originalSignature = signedStr.substring(index + SIGNATURE.length());
+         String rawValue = signedStr.substring(0, index);
+         String currentSignature = computeSignature(rawValue);
+-        if (!originalSignature.equals(currentSignature)) {
++        if (!MessageDigest.isEqual(originalSignature.getBytes(), currentSignature.getBytes())){
+             throw new AuthenticationException("Invalid signature");
+         }
+         return rawValue;
+-- 
+2.34.1
+

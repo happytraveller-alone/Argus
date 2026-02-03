@@ -1,0 +1,72 @@
+From 31b7d5de00c21735164fa92940e6be2c08820c37 Mon Sep 17 00:00:00 2001
+From: Dominic Cleal <dcleal@redhat.com>
+Date: Fri, 11 Jan 2013 18:06:39 +0000
+Subject: [PATCH] fixes #2069 - use a random salt when saving the root password
+
+CVE-2013-0173: insecure fixed salt "foreman" for passwords
+---
+ app/models/host_common.rb |  4 +++-
+ test/unit/host_test.rb    | 28 ++++++++++++++++++++++++++++
+ 2 files changed, 31 insertions(+), 1 deletion(-)
+
+diff --git a/app/models/host_common.rb b/app/models/host_common.rb
+index db8852a6c..02f063de2 100644
+--- a/app/models/host_common.rb
++++ b/app/models/host_common.rb
+@@ -1,3 +1,5 @@
++require 'securerandom'
++
+ #Common methods between host and hostgroup
+ # mostly for template rendering consistency
+ module HostCommon
+@@ -74,7 +76,7 @@ module HostCommon
+     # make sure we store an encrypted copy of the password in the database
+     # this password can be use as is in a unix system
+     def root_pass=(pass)
+-      p = pass.empty? ? nil : (pass =~ /^\$1\$foreman\$.*/ ? pass : pass.crypt("$1$foreman$"))
++      p = pass.empty? ? nil : (pass.starts_with?('$') ? pass : pass.crypt("$1$#{SecureRandom.base64(6)}"))
+       write_attribute(:root_pass, p)
+     end
+ 
+diff --git a/test/unit/host_test.rb b/test/unit/host_test.rb
+index a4343482f..5a47e0bfa 100644
+--- a/test/unit/host_test.rb
++++ b/test/unit/host_test.rb
+@@ -414,6 +414,34 @@ class HostTest < ActiveSupport::TestCase
+     assert_equal h.root_pass, Setting.root_pass
+   end
+ 
++  test "should generate a random salt when saving root pw" do
++    h = hosts(:redhat)
++    pw = h.root_pass
++    h.root_pass = "token"
++    h.hostgroup = nil
++    assert h.save
++    first = h.root_pass
++
++    # Check it's a $.$....$...... enhanced style password
++    assert_equal 4, first.split('$').count
++    assert first.split('$')[2].size >= 8
++
++    # Check it changes
++    h.root_pass = "token"
++    assert h.save
++    assert_not_equal first.split('$')[2], h.root_pass.split('$')[2]
++  end
++
++  test "should pass through existing salt when saving root pw" do
++    h = hosts(:redhat)
++    pw = h.root_pass
++    pass = "$1$jmUiJ3NW$bT6CdeWZ3a6gIOio5qW0f1"
++    h.root_pass = pass
++    h.hostgroup = nil
++    assert h.save
++    assert_equal pass, h.root_pass
++  end
++
+   test "should use hostgroup root password" do
+     h = hosts(:redhat)
+     h.root_pass = nil
+-- 
+2.34.1
+

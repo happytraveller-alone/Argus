@@ -1,0 +1,167 @@
+From fd44ac1e8b75f6f83cc0fea20ae721de163ff9cc Mon Sep 17 00:00:00 2001
+From: NicolasDorier <nicolas.dorier@gmail.com>
+Date: Fri, 7 Apr 2017 09:38:33 +0000
+Subject: [PATCH] [Wallet] Rename std::pair<const CWalletTx*, unsigned int> to
+ CInputCoin
+
+---
+ src/bench/coin_selection.cpp     |  2 +-
+ src/wallet/feebumper.cpp         |  2 +-
+ src/wallet/test/wallet_tests.cpp |  2 +-
+ src/wallet/wallet.cpp            | 20 ++++++++++----------
+ src/wallet/wallet.h              |  6 +++---
+ 5 files changed, 16 insertions(+), 16 deletions(-)
+
+diff --git a/src/bench/coin_selection.cpp b/src/bench/coin_selection.cpp
+index 06882f151..42891f345 100644
+--- a/src/bench/coin_selection.cpp
++++ b/src/bench/coin_selection.cpp
+@@ -48,7 +48,7 @@ static void CoinSelection(benchmark::State& state)
+             addCoin(1000 * COIN, wallet, vCoins);
+         addCoin(3 * COIN, wallet, vCoins);
+ 
+-        std::set<std::pair<const CWalletTx*, unsigned int> > setCoinsRet;
++        std::set<CInputCoin> setCoinsRet;
+         CAmount nValueRet;
+         bool success = wallet.SelectCoinsMinConf(1003 * COIN, 1, 6, 0, vCoins, setCoinsRet, nValueRet);
+         assert(success);
+diff --git a/src/wallet/feebumper.cpp b/src/wallet/feebumper.cpp
+index fe3871a91..7201d17b0 100644
+--- a/src/wallet/feebumper.cpp
++++ b/src/wallet/feebumper.cpp
+@@ -23,7 +23,7 @@
+ int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *pWallet)
+ {
+     CMutableTransaction txNew(tx);
+-    std::vector<std::pair<const CWalletTx *, unsigned int>> vCoins;
++    std::vector<CInputCoin> vCoins;
+     // Look up the inputs.  We should have already checked that this transaction
+     // IsAllFromMe(ISMINE_SPENDABLE), so every input should already be in our
+     // wallet, with a valid index into the vout array.
+diff --git a/src/wallet/test/wallet_tests.cpp b/src/wallet/test/wallet_tests.cpp
+index 67e5e9022..033536192 100644
+--- a/src/wallet/test/wallet_tests.cpp
++++ b/src/wallet/test/wallet_tests.cpp
+@@ -29,7 +29,7 @@ extern UniValue importmulti(const JSONRPCRequest& request);
+ 
+ std::vector<std::unique_ptr<CWalletTx>> wtxn;
+ 
+-typedef std::set<std::pair<const CWalletTx*,unsigned int> > CoinSet;
++typedef std::set<CInputCoin> CoinSet;
+ 
+ BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
+ 
+diff --git a/src/wallet/wallet.cpp b/src/wallet/wallet.cpp
+index d449f83a8..982293aca 100644
+--- a/src/wallet/wallet.cpp
++++ b/src/wallet/wallet.cpp
+@@ -65,8 +65,8 @@ const uint256 CMerkleTx::ABANDON_HASH(uint256S("00000000000000000000000000000000
+ 
+ struct CompareValueOnly
+ {
+-    bool operator()(const std::pair<CAmount, std::pair<const CWalletTx*, unsigned int> >& t1,
+-                    const std::pair<CAmount, std::pair<const CWalletTx*, unsigned int> >& t2) const
++    bool operator()(const std::pair<CAmount, CInputCoin>& t1,
++                    const std::pair<CAmount, CInputCoin>& t2) const
+     {
+         return t1.first < t2.first;
+     }
+@@ -2032,7 +2032,7 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlySafe, const
+     }
+ }
+ 
+-static void ApproximateBestSubset(const std::vector<std::pair<CAmount, std::pair<const CWalletTx*,unsigned int> > >& vValue, const CAmount& nTotalLower, const CAmount& nTargetValue,
++static void ApproximateBestSubset(const std::vector<std::pair<CAmount, CInputCoin> >& vValue, const CAmount& nTotalLower, const CAmount& nTargetValue,
+                                   std::vector<char>& vfBest, CAmount& nBest, int iterations = 1000)
+ {
+     std::vector<char> vfIncluded;
+@@ -2079,16 +2079,16 @@ static void ApproximateBestSubset(const std::vector<std::pair<CAmount, std::pair
+ }
+ 
+ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, const int nConfMine, const int nConfTheirs, const uint64_t nMaxAncestors, std::vector<COutput> vCoins,
+-                                 std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, CAmount& nValueRet) const
++                                 std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet) const
+ {
+     setCoinsRet.clear();
+     nValueRet = 0;
+ 
+     // List of values less than target
+-    std::pair<CAmount, std::pair<const CWalletTx*,unsigned int> > coinLowestLarger;
++    std::pair<CAmount, CInputCoin> coinLowestLarger;
+     coinLowestLarger.first = std::numeric_limits<CAmount>::max();
+     coinLowestLarger.second.first = NULL;
+-    std::vector<std::pair<CAmount, std::pair<const CWalletTx*,unsigned int> > > vValue;
++    std::vector<std::pair<CAmount, CInputCoin> > vValue;
+     CAmount nTotalLower = 0;
+ 
+     random_shuffle(vCoins.begin(), vCoins.end(), GetRandInt);
+@@ -2109,7 +2109,7 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, const int nConfMin
+         int i = output.i;
+         CAmount n = pcoin->tx->vout[i].nValue;
+ 
+-        std::pair<CAmount,std::pair<const CWalletTx*,unsigned int> > coin = std::make_pair(n,std::make_pair(pcoin, i));
++        std::pair<CAmount,CInputCoin> coin = std::make_pair(n,std::make_pair(pcoin, i));
+ 
+         if (n == nTargetValue)
+         {
+@@ -2187,7 +2187,7 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, const int nConfMin
+     return true;
+ }
+ 
+-bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, CAmount& nValueRet, const CCoinControl* coinControl) const
++bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet, const CCoinControl* coinControl) const
+ {
+     std::vector<COutput> vCoins(vAvailableCoins);
+ 
+@@ -2205,7 +2205,7 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
+     }
+ 
+     // calculate value from preset inputs and store them
+-    std::set<std::pair<const CWalletTx*, uint32_t> > setPresetCoins;
++    std::set<CInputCoin> setPresetCoins;
+     CAmount nValueFromPresetInputs = 0;
+ 
+     std::vector<COutPoint> vPresetInputs;
+@@ -2395,7 +2395,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
+     assert(txNew.nLockTime < LOCKTIME_THRESHOLD);
+ 
+     {
+-        std::set<std::pair<const CWalletTx*,unsigned int> > setCoins;
++        std::set<CInputCoin> setCoins;
+         LOCK2(cs_main, cs_wallet);
+         {
+             std::vector<COutput> vAvailableCoins;
+diff --git a/src/wallet/wallet.h b/src/wallet/wallet.h
+index c714ddd09..a882cec77 100644
+--- a/src/wallet/wallet.h
++++ b/src/wallet/wallet.h
+@@ -475,7 +475,7 @@ public:
+ };
+ 
+ 
+-
++using CInputCoin = std::pair<const CWalletTx*, unsigned int>;
+ 
+ class COutput
+ {
+@@ -632,7 +632,7 @@ private:
+      * all coins from coinControl are selected; Never select unconfirmed coins
+      * if they are not ours
+      */
+-    bool SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, CAmount& nValueRet, const CCoinControl *coinControl = NULL) const;
++    bool SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet, const CCoinControl *coinControl = NULL) const;
+ 
+     CWalletDB *pwalletdbEncryption;
+ 
+@@ -780,7 +780,7 @@ public:
+      * completion the coin set and corresponding actual target value is
+      * assembled
+      */
+-    bool SelectCoinsMinConf(const CAmount& nTargetValue, int nConfMine, int nConfTheirs, uint64_t nMaxAncestors, std::vector<COutput> vCoins, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, CAmount& nValueRet) const;
++    bool SelectCoinsMinConf(const CAmount& nTargetValue, int nConfMine, int nConfTheirs, uint64_t nMaxAncestors, std::vector<COutput> vCoins, std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet) const;
+ 
+     bool IsSpent(const uint256& hash, unsigned int n) const;
+ 
+-- 
+2.34.1
+

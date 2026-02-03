@@ -1,0 +1,28 @@
+From f153050f21aa26d839749a4906c9fbbe50ddc52c Mon Sep 17 00:00:00 2001
+From: Masaki Enomoto <m_enomoto@plus-one.tech>
+Date: Fri, 25 Jun 2021 21:08:44 +0900
+Subject: [PATCH] =?UTF-8?q?#=20=E3=83=90=E3=83=BC=E3=82=B8=E3=83=A7?=
+ =?UTF-8?q?=E3=83=B3=E6=9B=B8=E3=81=8D=E6=8F=9B=E3=81=88?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ package.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/package.json b/package.json
+index 3e6340b..66ee47e 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "csv-plus",
+-  "version": "0.8.0",
++  "version": "0.8.1",
+   "description": "CSV tab editor",
+   "author": "Masaki Enomoto <m_enomoto@plus-one.tech>",
+   "license": "MIT",
+-- 
+2.34.1
+

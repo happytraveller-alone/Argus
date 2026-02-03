@@ -1,0 +1,153 @@
+From 4b3079905498e3d09517ee2766c8ff33c11e7ada Mon Sep 17 00:00:00 2001
+From: Guo Xiang Tan <gxtan1990@gmail.com>
+Date: Mon, 24 Aug 2020 11:53:07 +0800
+Subject: [PATCH] FIX: Correct `personal_messages:<username>` advanced search
+ filter.
+
+Renamed from `private_messages` to `personal_messages` without
+deprecation because the `private_messages` advanced search filter never
+worked in the first place when it was implemented.
+---
+ .../discourse/app/widgets/search-menu.js      | 19 +++++++-----
+ lib/search.rb                                 | 12 ++++++--
+ spec/components/search_spec.rb                | 30 ++++++++++++-------
+ 3 files changed, 40 insertions(+), 21 deletions(-)
+
+diff --git a/app/assets/javascripts/discourse/app/widgets/search-menu.js b/app/assets/javascripts/discourse/app/widgets/search-menu.js
+index 163cfcdc16..300c1c11c2 100644
+--- a/app/assets/javascripts/discourse/app/widgets/search-menu.js
++++ b/app/assets/javascripts/discourse/app/widgets/search-menu.js
+@@ -98,13 +98,18 @@ export default createWidget("search-menu", {
+       query += `q=${encodeURIComponent(searchData.term)}`;
+ 
+       if (contextEnabled && ctx) {
+-        if (
+-          this.currentUser &&
+-          ctx.id.toString().toLowerCase() ===
+-            this.currentUser.get("username_lower") &&
+-          type === "private_messages"
+-        ) {
+-          query += " in:personal";
++        if (type === "private_messages") {
++          if (
++            this.currentUser &&
++            ctx.id.toString().toLowerCase() ===
++              this.currentUser.get("username_lower")
++          ) {
++            query += " in:personal";
++          } else {
++            query += encodeURIComponent(
++              ` personal_messages:${ctx.id.toString().toLowerCase()}`
++            );
++          }
+         } else {
+           query += encodeURIComponent(" " + type + ":" + ctx.id);
+         }
+diff --git a/lib/search.rb b/lib/search.rb
+index a690fc08ba..a94b07b3f6 100644
+--- a/lib/search.rb
++++ b/lib/search.rb
+@@ -185,9 +185,8 @@ class Search
+       @original_term = PG::Connection.escape_string(@term)
+     end
+ 
+-    if @search_pms && @guardian.user
++    if @search_pms
+       @opts[:type_filter] = "private_messages"
+-      @search_context = @guardian.user
+     end
+ 
+     if @search_all_topics && @guardian.user
+@@ -690,13 +689,20 @@ class Search
+         nil
+       elsif word == 'in:personal'
+         @search_pms = true
++        @search_context = @guardian.user
+         nil
+       elsif word == "in:personal-direct"
+         @search_pms = true
+         @direct_pms_only = true
++        @search_context = @guardian.user
+         nil
+-      elsif word =~ /^personal_messages:(.+)$/
++      elsif word =~  /^personal_messages:(.+)$/
+         @search_pms = true
++
++        if user = User.find_by_username($1)
++          @search_context = user
++        end
++
+         nil
+       else
+         found ? nil : word
+diff --git a/spec/components/search_spec.rb b/spec/components/search_spec.rb
+index 680bac557b..bfc92e0b9b 100644
+--- a/spec/components/search_spec.rb
++++ b/spec/components/search_spec.rb
+@@ -190,19 +190,20 @@ describe Search do
+   end
+ 
+   context 'private messages' do
+-    let!(:topic) do
+-      Fabricate(:topic, category_id: nil, archetype: 'private_message')
+-    end
++    let!(:post) { Fabricate(:private_message_post) }
+ 
+-    let!(:post) { Fabricate(:post, topic: topic) }
++    let(:topic) { post.topic }
+ 
+     let!(:reply) do
+-      Fabricate(:post, topic: topic, raw: 'hello from mars, we just landed')
++      Fabricate(:private_message_post,
++        topic: post.topic,
++        raw: 'hello from mars, we just landed',
++        user: post.user
++      )
+     end
+ 
+     let!(:post2) do
+-      Fabricate(:post,
+-        topic: Fabricate(:topic, category_id: nil, archetype: 'private_message'),
++      Fabricate(:private_message_post,
+         raw: 'another secret pm from mars, testing'
+       )
+     end
+@@ -212,9 +213,6 @@ describe Search do
+         Search.execute('mars', type_filter: 'private_messages')
+       end.to raise_error(Discourse::InvalidAccess)
+ 
+-      TopicAllowedUser.create!(user_id: reply.user_id, topic_id: topic.id)
+-      TopicAllowedUser.create!(user_id: post.user_id, topic_id: topic.id)
+-
+       results = Search.execute(
+         'mars',
+         type_filter: 'private_messages',
+@@ -260,7 +258,6 @@ describe Search do
+ 
+       results = Search.execute(
+         'mars in:personal',
+-        search_context: post.user,
+         guardian: Guardian.new(post.user)
+       )
+ 
+@@ -283,6 +280,17 @@ describe Search do
+       expect(results.posts).to contain_exactly(reply)
+     end
+ 
++    context 'personal_messages filter' do
++      it 'correctly searches for the PM of the given user' do
++        results = Search.execute(
++          "mars personal_messages:#{post.user.username}",
++          guardian: Guardian.new(post.user)
++        )
++
++        expect(results.posts).to contain_exactly(reply)
++      end
++    end
++
+     context 'personal-direct flag' do
+       let(:current) { Fabricate(:user, admin: true, username: "current_user") }
+       let(:participant) { Fabricate(:user, username: "participant_1") }
+-- 
+2.34.1
+

@@ -1,0 +1,42 @@
+From f9cd7e4ef47b36b24646e060186d3941d75c46b7 Mon Sep 17 00:00:00 2001
+From: pallav_fdsi <Pallav Negi@pallav-fdsi.fdsi-private.fielddiagnostics.com>
+Date: Wed, 1 Jul 2015 18:38:43 -0400
+Subject: [PATCH] Open redirect attacks should be caught for all functions that
+ use the _next variable (for example: logout()) instead of just for the
+ login() function.
+
+---
+ gluon/tools.py | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/gluon/tools.py b/gluon/tools.py
+index 746c9ddb..f2b04461 100644
+--- a/gluon/tools.py
++++ b/gluon/tools.py
+@@ -1541,6 +1541,12 @@ class Auth(object):
+         next = current.request.vars._next
+         if isinstance(next, (list, tuple)):
+             next = next[0]
++        if next and self.settings.prevent_open_redirect_attacks:
++            # Prevent an attacker from adding an arbitrary url after the
++            # _next variable in the request.
++            items = next.split('/')
++            if '//' in next and items[2] != current.request.env.http_host:
++                next = None            
+         return next
+ 
+     def _get_user_id(self):
+@@ -2513,10 +2519,6 @@ class Auth(object):
+ 
+         ### use session for federated login
+         snext = self.get_vars_next()
+-        if snext and self.settings.prevent_open_redirect_attacks:
+-            items = snext.split('/')
+-            if '//' in snext and items[2] != request.env.http_host:
+-                snext = None
+ 
+         if snext:
+             session._auth_next = snext
+-- 
+2.34.1
+

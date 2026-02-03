@@ -1,0 +1,25 @@
+From 7f8799c01f264eb7770766621fb68debee414b68 Mon Sep 17 00:00:00 2001
+From: Joe Chen <jc@unknwon.io>
+Date: Tue, 31 May 2022 16:47:45 +0800
+Subject: [PATCH] release: update version to 0.12.8
+
+---
+ gogs.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/gogs.go b/gogs.go
+index 8554ca74..37e0c7ab 100644
+--- a/gogs.go
++++ b/gogs.go
+@@ -19,7 +19,7 @@ import (
+ )
+ 
+ func init() {
+-	conf.App.Version = "0.12.7"
++	conf.App.Version = "0.12.8"
+ }
+ 
+ func main() {
+-- 
+2.34.1
+

@@ -1,0 +1,51 @@
+From 73e59e6e2cc88e9cc6fee784659cebefe1cc2cf8 Mon Sep 17 00:00:00 2001
+From: Sora Morimoto <sora@morimoto.io>
+Date: Tue, 17 Oct 2023 16:21:17 +0900
+Subject: [PATCH] chore: run `nx repair` to correct nx configuration (#18446)
+
+Signed-off-by: Sora Morimoto <sora@morimoto.io>
+---
+ nx.json                                  | 1 +
+ packages/core/admin/package.json         | 2 +-
+ packages/core/helper-plugin/package.json | 2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/nx.json b/nx.json
+index d100fd87c7..6151beea98 100644
+--- a/nx.json
++++ b/nx.json
+@@ -1,4 +1,5 @@
+ {
++  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+   "namedInputs": {
+     "default": ["{projectRoot}/**/*"],
+     "production": [
+diff --git a/packages/core/admin/package.json b/packages/core/admin/package.json
+index 2f9de56225..730feab1db 100644
+--- a/packages/core/admin/package.json
++++ b/packages/core/admin/package.json
+@@ -156,7 +156,7 @@
+     "targets": {
+       "build": {
+         "outputs": [
+-          "./build"
++          "{projectRoot}/build"
+         ]
+       }
+     },
+diff --git a/packages/core/helper-plugin/package.json b/packages/core/helper-plugin/package.json
+index 23c55c3975..dcdeeecc44 100644
+--- a/packages/core/helper-plugin/package.json
++++ b/packages/core/helper-plugin/package.json
+@@ -111,7 +111,7 @@
+     "targets": {
+       "build": {
+         "outputs": [
+-          "./build"
++          "{projectRoot}/build"
+         ]
+       }
+     }
+-- 
+2.34.1
+

@@ -1,0 +1,87 @@
+From ca5f150da11d9caae86638885137afe35bcc3592 Mon Sep 17 00:00:00 2001
+From: fuzegit <fuze@instantcms.ru>
+Date: Wed, 16 Aug 2023 00:47:41 +0300
+Subject: [PATCH] Add session regenerate after login & logout. Secure cookie if
+ HTTPS. close #1473
+
+---
+ system/core/config.php |  2 +-
+ system/core/user.php   | 21 ++++++++++++++++++++-
+ 2 files changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/system/core/config.php b/system/core/config.php
+index 4035c694..df448bef 100755
+--- a/system/core/config.php
++++ b/system/core/config.php
+@@ -144,7 +144,7 @@ class cmsConfig extends cmsConfigs {
+             $replace_upload_host_protocol = true;
+         }
+ 
+-        $this->set('document_root', rtrim(PATH, $this->root));
++        $this->set('document_root', preg_replace('#(.*)('.preg_quote($this->root).')$#u', '$1', PATH . DIRECTORY_SEPARATOR));
+         $this->set('root_path', PATH . DIRECTORY_SEPARATOR);
+         $this->set('system_path', $this->root_path . 'system/');
+         $this->set('upload_path', $this->document_root . $this->upload_root);
+diff --git a/system/core/user.php b/system/core/user.php
+index 408665f4..c7466d50 100755
+--- a/system/core/user.php
++++ b/system/core/user.php
+@@ -265,6 +265,8 @@ class cmsUser {
+ 
+         self::setUserSession($user, $user['ip']);
+ 
++        self::sessionRegenerate();
++
+         return intval($user['id']);
+     }
+ 
+@@ -343,6 +345,8 @@ class cmsUser {
+         self::getInstance()->id = $user['id'];
+         self::getInstance()->is_logged = true;
+ 
++        self::sessionRegenerate();
++
+         return true;
+     }
+ 
+@@ -384,6 +388,8 @@ class cmsUser {
+ 
+         self::sessionUnset('user');
+ 
++        self::sessionRegenerate();
++
+         return true;
+     }
+ 
+@@ -486,6 +492,19 @@ class cmsUser {
+         }
+     }
+ 
++    public static function sessionRegenerate() {
++
++        session_regenerate_id(false);
++
++        $id = session_id();
++
++        session_write_close();
++
++        session_id($id);
++
++        session_start();
++    }
++
+     public static function sessionSet($key, $value) {
+ 
+         if (strpos($key, ':') === false) {
+@@ -568,7 +587,7 @@ class cmsUser {
+                 'path'     => $path,
+                 'domain'   => $domain,
+                 'samesite' => 'Lax',
+-                'secure'   => false,
++                'secure'   => cmsConfig::isSecureProtocol(),
+                 'httponly' => $http_only
+             ]);
+         }
+-- 
+2.34.1
+

@@ -1,0 +1,111 @@
+From b53d4589c586e8bbdcc89ed60f32cd7977e9a4f4 Mon Sep 17 00:00:00 2001
+From: Stuart Douglas <stuart.w.douglas@gmail.com>
+Date: Wed, 15 Apr 2020 15:39:02 +1000
+Subject: [PATCH] [UNDERTOW-1657] Fix issue with 100-continue and h2
+
+---
+ .../handlers/HttpContinueReadHandler.java       | 17 ++++++++---------
+ .../protocol/ajp/AjpServerConnection.java       |  6 +++++-
+ .../protocol/http/HttpServerConnection.java     |  6 +++++-
+ 3 files changed, 18 insertions(+), 11 deletions(-)
+
+diff --git a/core/src/main/java/io/undertow/server/handlers/HttpContinueReadHandler.java b/core/src/main/java/io/undertow/server/handlers/HttpContinueReadHandler.java
+index 1d91cd233..20712e5fc 100644
+--- a/core/src/main/java/io/undertow/server/handlers/HttpContinueReadHandler.java
++++ b/core/src/main/java/io/undertow/server/handlers/HttpContinueReadHandler.java
+@@ -23,20 +23,19 @@ import java.nio.ByteBuffer;
+ import java.nio.channels.FileChannel;
+ import java.util.concurrent.TimeUnit;
+ 
++import org.xnio.channels.StreamSinkChannel;
++import org.xnio.conduits.AbstractStreamSourceConduit;
++import org.xnio.conduits.StreamSourceConduit;
++
+ import io.undertow.server.ConduitWrapper;
+ import io.undertow.server.Connectors;
+-import io.undertow.server.ResponseCommitListener;
+-import io.undertow.server.protocol.http.HttpContinue;
+ import io.undertow.server.HttpHandler;
+ import io.undertow.server.HttpServerExchange;
++import io.undertow.server.ResponseCommitListener;
++import io.undertow.server.protocol.http.HttpContinue;
+ import io.undertow.util.ConduitFactory;
+ import io.undertow.util.StatusCodes;
+ 
+-import org.xnio.IoUtils;
+-import org.xnio.channels.StreamSinkChannel;
+-import org.xnio.conduits.AbstractStreamSourceConduit;
+-import org.xnio.conduits.StreamSourceConduit;
+-
+ /**
+  * Handler for requests that require 100-continue responses. If an attempt is made to read from the source
+  * channel then a 100 continue response is sent.
+@@ -48,7 +47,7 @@ public class HttpContinueReadHandler implements HttpHandler {
+     private static final ConduitWrapper<StreamSourceConduit> WRAPPER = new ConduitWrapper<StreamSourceConduit>() {
+         @Override
+         public StreamSourceConduit wrap(final ConduitFactory<StreamSourceConduit> factory, final HttpServerExchange exchange) {
+-            if(exchange.isRequestChannelAvailable() && !exchange.isResponseStarted()) {
++            if (exchange.isRequestChannelAvailable() && !exchange.isResponseStarted()) {
+                 return new ContinueConduit(factory.create(), exchange);
+             }
+             return factory.create();
+@@ -72,7 +71,7 @@ public class HttpContinueReadHandler implements HttpHandler {
+                     if (!HttpContinue.isContinueResponseSent(exchange)) {
+                         exchange.setPersistent(false);
+                         //we also kill the request channel, because it is unusable now
+-                        IoUtils.safeClose(exchange.getRequestChannel());
++                        exchange.getConnection().terminateRequestChannel(exchange);
+                     }
+                 }
+             });
+diff --git a/core/src/main/java/io/undertow/server/protocol/ajp/AjpServerConnection.java b/core/src/main/java/io/undertow/server/protocol/ajp/AjpServerConnection.java
+index af09ff0a7..54d1665a6 100644
+--- a/core/src/main/java/io/undertow/server/protocol/ajp/AjpServerConnection.java
++++ b/core/src/main/java/io/undertow/server/protocol/ajp/AjpServerConnection.java
+@@ -26,6 +26,8 @@ import io.undertow.server.HttpHandler;
+ import io.undertow.server.HttpServerExchange;
+ import io.undertow.server.SSLSessionInfo;
+ import io.undertow.util.DateUtils;
++
++import org.xnio.IoUtils;
+ import org.xnio.OptionMap;
+ import io.undertow.connector.ByteBufferPool;
+ import org.xnio.StreamConnection;
+@@ -61,7 +63,9 @@ public final class AjpServerConnection extends AbstractServerConnection {
+ 
+     @Override
+     public void terminateRequestChannel(HttpServerExchange exchange) {
+-        //todo: terminate
++        if (!exchange.isPersistent()) {
++            IoUtils.safeClose(getChannel().getSourceChannel());
++        }
+     }
+ 
+     @Override
+diff --git a/core/src/main/java/io/undertow/server/protocol/http/HttpServerConnection.java b/core/src/main/java/io/undertow/server/protocol/http/HttpServerConnection.java
+index 179b0b977..f15c0f038 100644
+--- a/core/src/main/java/io/undertow/server/protocol/http/HttpServerConnection.java
++++ b/core/src/main/java/io/undertow/server/protocol/http/HttpServerConnection.java
+@@ -36,6 +36,8 @@ import io.undertow.util.Headers;
+ import io.undertow.util.HttpString;
+ import io.undertow.util.ImmediatePooledByteBuffer;
+ import io.undertow.util.Methods;
++
++import org.xnio.IoUtils;
+ import org.xnio.OptionMap;
+ import io.undertow.connector.ByteBufferPool;
+ import io.undertow.connector.PooledByteBuffer;
+@@ -143,7 +145,9 @@ public final class HttpServerConnection extends AbstractServerConnection {
+ 
+     @Override
+     public void terminateRequestChannel(HttpServerExchange exchange) {
+-
++        if (!exchange.isPersistent()) {
++            IoUtils.safeClose(getChannel().getSourceChannel());
++        }
+     }
+ 
+     /**
+-- 
+2.34.1
+

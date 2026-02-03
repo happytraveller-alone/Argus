@@ -1,0 +1,78 @@
+From 0b804306c96c99b81755d5bd02df87ddf392853e Mon Sep 17 00:00:00 2001
+From: Ryan Mitchell <ryan@thoughtcollective.com>
+Date: Thu, 30 May 2024 15:36:04 +0100
+Subject: [PATCH] [5.x] Prevent user registration form saving
+ `password_confirmation` (#10228)
+
+Co-authored-by: Duncan McClean <duncan@duncanmcclean.com>
+---
+ src/Http/Requests/UserRegisterRequest.php |  2 +-
+ tests/Tags/User/RegisterFormTest.php      | 31 +++++++++++++++++++++++
+ 2 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/src/Http/Requests/UserRegisterRequest.php b/src/Http/Requests/UserRegisterRequest.php
+index d7bc535d2..bbf9ff357 100644
+--- a/src/Http/Requests/UserRegisterRequest.php
++++ b/src/Http/Requests/UserRegisterRequest.php
+@@ -52,7 +52,7 @@ class UserRegisterRequest extends FormRequest
+     {
+         return $this->blueprintFields->process()->values()
+             ->only(array_keys($this->submittedValues))
+-            ->except(['email', 'groups', 'roles', 'super']);
++            ->except(['email', 'groups', 'roles', 'super', 'password_confirmation']);
+     }
+ 
+     public function validator()
+diff --git a/tests/Tags/User/RegisterFormTest.php b/tests/Tags/User/RegisterFormTest.php
+index eead21e10..2097688ed 100644
+--- a/tests/Tags/User/RegisterFormTest.php
++++ b/tests/Tags/User/RegisterFormTest.php
+@@ -4,7 +4,9 @@ namespace Tests\Tags\User;
+ 
+ use Statamic\Facades\Blueprint;
+ use Statamic\Facades\Parse;
++use Statamic\Facades\Role;
+ use Statamic\Facades\User;
++use Statamic\Facades\UserGroup;
+ use Statamic\Statamic;
+ use Tests\NormalizesHtml;
+ use Tests\PreventSavingStacheItemsToDisk;
+@@ -339,6 +341,35 @@ EOT
+         $this->assertStringContainsString($expectedErrorRedirect, $output);
+     }
+ 
++    /** @test */
++    public function it_ensures_some_fields_arent_saved()
++    {
++        UserGroup::make('client')->title('Client')->save();
++        Role::make('admin')->title('Admin')->save();
++
++        $this->assertNull(User::findByEmail('san@holo.com'));
++        $this->assertFalse(auth()->check());
++
++        $this
++            ->post('/!/auth/register', [
++                'email' => 'san@holo.com',
++                'password' => 'chewbacca',
++                'password_confirmation' => 'chewbacca',
++                'groups' => ['client'],
++                'roles' => ['admin'],
++                'super' => true,
++            ])
++            ->assertSessionHasNoErrors()
++            ->assertLocation('/');
++
++        $user = User::findByEmail('san@holo.com');
++
++        $this->assertEquals($user->groups()->count(), 0);
++        $this->assertEquals($user->roles()->count(), 0);
++        $this->assertNull($user->get('super'));
++        $this->assertNull($user->get('password_confirmation'));
++    }
++
+     private function useCustomBlueprint()
+     {
+         $blueprint = Blueprint::make()->setContents([
+-- 
+2.34.1
+

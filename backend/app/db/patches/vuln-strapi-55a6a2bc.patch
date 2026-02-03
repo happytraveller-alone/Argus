@@ -1,0 +1,25 @@
+From ed711ac2057c8fd758328f37e8a7a1b9a660c66a Mon Sep 17 00:00:00 2001
+From: Convly <jean-sebastien.herbaux@epitech.eu>
+Date: Mon, 9 May 2022 11:29:40 +0200
+Subject: [PATCH] Fix sanitation for admin users in cm
+
+---
+ packages/strapi-admin/services/user.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/strapi-admin/services/user.js b/packages/strapi-admin/services/user.js
+index 20e86226f0..5b3ec68aab 100644
+--- a/packages/strapi-admin/services/user.js
++++ b/packages/strapi-admin/services/user.js
+@@ -14,7 +14,7 @@ const sanitizeUserRoles = role => _.pick(role, ['id', 'name', 'description', 'co
+  */
+ const sanitizeUser = user => {
+   return {
+-    ..._.omit(user, ['password', 'resetPasswordToken', 'roles']),
++    ..._.omit(user, ['password', 'resetPasswordToken', 'registrationToken', 'roles']),
+     roles: user.roles && user.roles.map(sanitizeUserRoles),
+   };
+ };
+-- 
+2.34.1
+

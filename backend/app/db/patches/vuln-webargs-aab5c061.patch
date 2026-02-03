@@ -1,0 +1,45 @@
+From aab5c061e2877050d53bf2998acf40744329e527 Mon Sep 17 00:00:00 2001
+From: Steven Loria <sloria1@gmail.com>
+Date: Fri, 11 Jan 2019 16:47:18 +0800
+Subject: [PATCH] Fix Flask<1.0 compatibility
+
+Use Request.get_data rather than the private _get_data_for_json,
+which doesn't exist on pre-1.0 Flask versions.
+
+Confirmed tests are passing for both Flask 0.12.4 and 1.0.2
+
+close #355
+---
+ CHANGELOG.rst          | 2 ++
+ webargs/flaskparser.py | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/CHANGELOG.rst b/CHANGELOG.rst
+index d84958b..726035a 100644
+--- a/CHANGELOG.rst
++++ b/CHANGELOG.rst
+@@ -11,6 +11,8 @@ Features:
+ 
+ Bug fixes:
+ 
++* Fix compatibility with Flask<1.0 (:issue:`355`).
++  Thanks :user:`hoatle` for reporting.
+ * Address warning on Python 3.7 about importing from ``collections.abc``.
+ 
+ 5.0.0 (2019-01-03)
+diff --git a/webargs/flaskparser.py b/webargs/flaskparser.py
+index aeb9585..ea5a24f 100644
+--- a/webargs/flaskparser.py
++++ b/webargs/flaskparser.py
+@@ -60,7 +60,7 @@ class FlaskParser(core.Parser):
+             # We decode the json manually here instead of
+             # using req.get_json() so that we can handle
+             # JSONDecodeErrors consistently
+-            data = req._get_data_for_json(cache=True)
++            data = req.get_data(cache=True)
+             try:
+                 self._cache["json"] = json_data = core.parse_json(data)
+             except json.JSONDecodeError as e:
+-- 
+2.34.1
+

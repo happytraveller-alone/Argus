@@ -1,0 +1,25 @@
+From 38ca8793b6faa6c35176537c8015cc4e76ce73f5 Mon Sep 17 00:00:00 2001
+From: Simey Lameze <simey@moodle.com>
+Date: Mon, 8 Dec 2014 14:37:57 +0800
+Subject: [PATCH] MDL-48368 course: fix xss on course request pending page
+
+---
+ course/pending.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/course/pending.php b/course/pending.php
+index eaf4c285fc1..31f99639853 100644
+--- a/course/pending.php
++++ b/course/pending.php
+@@ -116,7 +116,7 @@ if (empty($pending)) {
+         $row[] = format_string($course->shortname);
+         $row[] = format_string($course->fullname);
+         $row[] = fullname($course->get_requester());
+-        $row[] = $course->summary;
++        $row[] = format_text($course->summary, $course->summaryformat);
+         $row[] = $category->get_formatted_name();
+         $row[] = format_string($course->reason);
+         $row[] = $OUTPUT->single_button(new moodle_url($baseurl, array('approve' => $course->id, 'sesskey' => sesskey())), get_string('approve'), 'get') .
+-- 
+2.34.1
+

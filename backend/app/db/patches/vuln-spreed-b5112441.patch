@@ -1,0 +1,100 @@
+From b5112441b3f69228a1726df2008fd496dfc94152 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Daniel=20Calvi=C3=B1o=20S=C3=A1nchez?= <danxuliu@gmail.com>
+Date: Thu, 31 Mar 2022 08:44:04 +0200
+Subject: [PATCH] Remove no longer used "startedWithMedia" variable
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Daniel Calviño Sánchez <danxuliu@gmail.com>
+---
+ src/utils/webrtc/webrtc.js | 17 -----------------
+ 1 file changed, 17 deletions(-)
+
+diff --git a/src/utils/webrtc/webrtc.js b/src/utils/webrtc/webrtc.js
+index 4da540f1e..ec2c54d77 100644
+--- a/src/utils/webrtc/webrtc.js
++++ b/src/utils/webrtc/webrtc.js
+@@ -59,7 +59,6 @@ let callParticipantCollection = null
+ let localCallParticipantModel = null
+ let showedTURNWarning = false
+ let sendCurrentStateWithRepetitionTimeout = null
+-let startedWithMedia
+ 
+ /**
+  * @param {Array} a Source object
+@@ -677,8 +676,6 @@ export default function initWebRtc(signaling, _callParticipantCollection, _local
+ 	})
+ 
+ 	webrtc.startMedia = function(token, flags) {
+-		startedWithMedia = undefined
+-
+ 		// If no flags are provided try to enable both audio and video.
+ 		// Otherwise, try to enable only that allowed by the flags.
+ 		const mediaConstraints = {
+@@ -1018,8 +1015,6 @@ export default function initWebRtc(signaling, _callParticipantCollection, _local
+ 		if (webrtc.webrtc.isLocalMediaActive()
+ 			&& !(currentParticipant.participantPermissions & PARTICIPANT.PERMISSIONS.PUBLISH_AUDIO)
+ 			&& !(currentParticipant.participantPermissions & PARTICIPANT.PERMISSIONS.PUBLISH_VIDEO)) {
+-			startedWithMedia = undefined
+-
+ 			webrtc.stopLocalVideo()
+ 
+ 			// If the MCU is used and there is no sending peer there is no need
+@@ -1076,8 +1071,6 @@ export default function initWebRtc(signaling, _callParticipantCollection, _local
+ 			webrtc.off('localMediaStarted', forceReconnectOnceLocalMediaStarted)
+ 			webrtc.off('localMediaError', forceReconnectOnceLocalMediaError)
+ 
+-			startedWithMedia = true
+-
+ 			let flags = PARTICIPANT.CALL_FLAG.IN_CALL
+ 			if (constraints) {
+ 				if (constraints.audio) {
+@@ -1094,8 +1087,6 @@ export default function initWebRtc(signaling, _callParticipantCollection, _local
+ 			webrtc.off('localMediaStarted', forceReconnectOnceLocalMediaStarted)
+ 			webrtc.off('localMediaError', forceReconnectOnceLocalMediaError)
+ 
+-			startedWithMedia = false
+-
+ 			// If the media fails to start there will be no media, so no need to
+ 			// reconnect. A reconnection will happen once the user selects a
+ 			// different device.
+@@ -1104,8 +1095,6 @@ export default function initWebRtc(signaling, _callParticipantCollection, _local
+ 		webrtc.on('localMediaStarted', forceReconnectOnceLocalMediaStarted)
+ 		webrtc.on('localMediaError', forceReconnectOnceLocalMediaError)
+ 
+-		startedWithMedia = undefined
+-
+ 		const constraints = {
+ 			audio: currentParticipant.participantPermissions & PARTICIPANT.PERMISSIONS.PUBLISH_AUDIO,
+ 			video: currentParticipant.participantPermissions & PARTICIPANT.PERMISSIONS.PUBLISH_VIDEO,
+@@ -1314,8 +1303,6 @@ export default function initWebRtc(signaling, _callParticipantCollection, _local
+ 		// reconnection is forced to start sending it.
+ 		signaling.setSendVideoIfAvailable(true)
+ 
+-		startedWithMedia = true
+-
+ 		let flags = signaling.getCurrentCallFlags()
+ 		flags |= PARTICIPANT.CALL_FLAG.WITH_VIDEO
+ 
+@@ -1464,8 +1451,6 @@ export default function initWebRtc(signaling, _callParticipantCollection, _local
+ 	webrtc.on('localMediaStarted', function(/* configuration */) {
+ 		console.info('localMediaStarted')
+ 
+-		startedWithMedia = true
+-
+ 		clearLocalStreamRequestedTimeoutAndHideNotification()
+ 
+ 		if (signaling.hasFeature('mcu')) {
+@@ -1476,8 +1461,6 @@ export default function initWebRtc(signaling, _callParticipantCollection, _local
+ 	webrtc.on('localMediaError', function(error) {
+ 		console.warn('Access to microphone & camera failed', error)
+ 
+-		startedWithMedia = false
+-
+ 		clearLocalStreamRequestedTimeoutAndHideNotification()
+ 
+ 		if (error.name === 'TypeError') {
+-- 
+2.34.1
+

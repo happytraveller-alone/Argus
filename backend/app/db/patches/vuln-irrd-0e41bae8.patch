@@ -1,0 +1,59 @@
+From 0e41bae8d3d27316381a2fc7b466597230e35ec6 Mon Sep 17 00:00:00 2001
+From: Sasha Romijn <github@mxsasha.eu>
+Date: Tue, 29 Mar 2022 21:23:42 +0200
+Subject: [PATCH] Correct missing password hash removal
+
+Auth has removal was broken in a number of cases for all 4.2 versions:
+- All queries that returned the object text for a mntner when
+  all hash names (MD5-PW etc.) in the text were lower or mixed case
+- Queries for the auth attribute in GraphQL queries
+- Queries for the objectText for journal entries in GraphQL queries
+
+Further details in 4.2.3 release notes.
+
+Note that this commit only has the fix and tests or coverage may
+fail without the subsequent update to the tests.
+---
+ irrd/server/graphql/resolvers.py | 4 +++-
+ irrd/utils/text.py               | 3 ++-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/irrd/server/graphql/resolvers.py b/irrd/server/graphql/resolvers.py
+index 9fe6bb4..684b907 100644
+--- a/irrd/server/graphql/resolvers.py
++++ b/irrd/server/graphql/resolvers.py
+@@ -187,6 +187,8 @@ def resolve_rpsl_object_journal(rpsl_object, info: GraphQLResolveInfo):
+         response['operation'] = response['operation'].name
+         if response['origin']:
+             response['origin'] = response['origin'].name
++        if response['objectText']:
++            response['objectText'] = remove_auth_hashes(response['objectText'])
+         yield response
+ 
+ 
+@@ -221,7 +223,7 @@ def _rpsl_db_query_to_graphql_out(query: RPSLDatabaseQuery, info: GraphQLResolve
+         object_type = resolve_rpsl_object_type(row)
+         for key, value in row.get('parsed_data', dict()).items():
+             if key == 'auth':
+-                value = remove_auth_hashes(value)
++                value = [remove_auth_hashes(v) for v in value]
+             graphql_type = schema.graphql_types[object_type][key]
+             if graphql_type == 'String' and isinstance(value, list):
+                 value = '\n'.join(value)
+diff --git a/irrd/utils/text.py b/irrd/utils/text.py
+index c62e97d..12af06b 100644
+--- a/irrd/utils/text.py
++++ b/irrd/utils/text.py
+@@ -12,7 +12,8 @@ def remove_auth_hashes(input: Optional[str]):
+     if not input:
+         return input
+     # If there are no hashes, skip the RE for performance.
+-    if not any([pw_hash in input for pw_hash in PASSWORD_HASHERS_ALL.keys()]):
++    input_lower = input.lower()
++    if not any([pw_hash.lower() in input_lower for pw_hash in PASSWORD_HASHERS_ALL.keys()]):
+         return input
+     return re_remove_passwords.sub(r'\1 %s  # Filtered for security' % PASSWORD_HASH_DUMMY_VALUE, input)
+ 
+-- 
+2.34.1
+

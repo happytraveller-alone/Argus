@@ -1,0 +1,57 @@
+From 787b4671dcc645737745956ee1bc2c9b3844aee1 Mon Sep 17 00:00:00 2001
+From: Derek McGowan <derek@mcg.dev>
+Date: Wed, 2 Mar 2022 09:30:34 -0800
+Subject: [PATCH] Prepare release notes for v1.6.1
+
+Signed-off-by: Derek McGowan <derek@mcg.dev>
+---
+ releases/v1.6.1.toml | 23 +++++++++++++++++++++++
+ version/version.go   |  2 +-
+ 2 files changed, 24 insertions(+), 1 deletion(-)
+ create mode 100644 releases/v1.6.1.toml
+
+diff --git a/releases/v1.6.1.toml b/releases/v1.6.1.toml
+new file mode 100644
+index 000000000..99a0d7ecb
+--- /dev/null
++++ b/releases/v1.6.1.toml
+@@ -0,0 +1,23 @@
++# commit to be tagged for new release
++commit = "HEAD"
++
++project_name = "containerd"
++github_repo = "containerd/containerd"
++match_deps = "^github.com/(containerd/[a-zA-Z0-9-]+)$"
++
++# previous release
++previous = "v1.6.0"
++
++pre_release = false
++
++preface = """\
++The first patch release for containerd 1.6 includes a fix for
++[CVE-2022-23648](https://github.com/containerd/containerd/security/advisories/GHSA-crp2-qrr5-8pq7)
++and other issues.
++
++### Notable Updates
++
++* **Use fs.RootPath when mounting volumes** ([GHSA-crp2-qrr5-8pq7](https://github.com/containerd/containerd/security/advisories/GHSA-crp2-qrr5-8pq7))
++* **Return init pid when clean dead shim in runc.v1/v2 shims** ([#6572](https://github.com/containerd/containerd/pull/6572))
++
++See the changelog for complete list of changes"""
+diff --git a/version/version.go b/version/version.go
+index 4470b128f..a92784ef8 100644
+--- a/version/version.go
++++ b/version/version.go
+@@ -23,7 +23,7 @@ var (
+ 	Package = "github.com/containerd/containerd"
+ 
+ 	// Version holds the complete version number. Filled in at linking time.
+-	Version = "1.6.0+unknown"
++	Version = "1.6.1+unknown"
+ 
+ 	// Revision is filled with the VCS (e.g. git) revision being used to build
+ 	// the program at linking time.
+-- 
+2.34.1
+

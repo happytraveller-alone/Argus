@@ -1,0 +1,121 @@
+From c8ac07fb50fa92eee1d574823fbda09e1b309a63 Mon Sep 17 00:00:00 2001
+From: Mihail Geshoski <mihail@moodle.com>
+Date: Tue, 22 Sep 2020 16:09:35 +0800
+Subject: [PATCH] MDL-67837 backup: Verify caps before unenrolling users on
+ course restore
+
+---
+ .../controller/restore_controller.class.php   |  1 +
+ backup/moodle2/restore_stepslib.php           | 17 ++++++++++++++---
+ lib/enrollib.php                              | 19 +++++++++++++++++--
+ lib/moodlelib.php                             |  7 +++++--
+ 4 files changed, 37 insertions(+), 7 deletions(-)
+
+diff --git a/backup/controller/restore_controller.class.php b/backup/controller/restore_controller.class.php
+index 39c411606a2..f73cb3f00da 100644
+--- a/backup/controller/restore_controller.class.php
++++ b/backup/controller/restore_controller.class.php
+@@ -369,6 +369,7 @@ class restore_controller extends base_controller {
+             $options = array();
+             $options['keep_roles_and_enrolments'] = $this->get_setting_value('keep_roles_and_enrolments');
+             $options['keep_groups_and_groupings'] = $this->get_setting_value('keep_groups_and_groupings');
++            $options['userid'] = $this->userid;
+             restore_dbops::delete_course_content($this->get_courseid(), $options);
+         }
+         // If this is not a course restore or single activity restore (e.g. duplicate), inform the plan we are not
+diff --git a/backup/moodle2/restore_stepslib.php b/backup/moodle2/restore_stepslib.php
+index 67abb20db78..8108f6efbc4 100644
+--- a/backup/moodle2/restore_stepslib.php
++++ b/backup/moodle2/restore_stepslib.php
+@@ -2163,11 +2163,22 @@ class restore_default_enrolments_step extends restore_execution_step {
+         }
+ 
+         $course = $DB->get_record('course', array('id'=>$this->get_courseid()), '*', MUST_EXIST);
++        // Return any existing course enrolment instances.
++        $enrolinstances = enrol_get_instances($course->id, false);
++
++        if ($enrolinstances) {
++            // Something already added instances.
++            // Get the existing enrolment methods in the course.
++            $enrolmethods = array_map(function($enrolinstance) {
++                return $enrolinstance->enrol;
++            }, $enrolinstances);
+ 
+-        if ($DB->record_exists('enrol', array('courseid'=>$this->get_courseid(), 'enrol'=>'manual'))) {
+-            // Something already added instances, do not add default instances.
+             $plugins = enrol_get_plugins(true);
+-            foreach ($plugins as $plugin) {
++            foreach ($plugins as $pluginname => $plugin) {
++                // Make sure all default enrolment methods exist in the course.
++                if (!in_array($pluginname, $enrolmethods)) {
++                    $plugin->course_updated(true, $course, null);
++                }
+                 $plugin->restore_sync_course($course);
+             }
+ 
+diff --git a/lib/enrollib.php b/lib/enrollib.php
+index 193f0c5c33b..7b40ca068ce 100644
+--- a/lib/enrollib.php
++++ b/lib/enrollib.php
+@@ -1089,20 +1089,35 @@ function enrol_user_delete($user) {
+ 
+ /**
+  * Called when course is about to be deleted.
++ * If a user id is passed, only enrolments that the user has permission to un-enrol will be removed,
++ * otherwise all enrolments in the course will be removed.
++ *
+  * @param stdClass $course
++ * @param int|null $userid
+  * @return void
+  */
+-function enrol_course_delete($course) {
++function enrol_course_delete($course, $userid = null) {
+     global $DB;
+ 
++    $context = context_course::instance($course->id);
+     $instances = enrol_get_instances($course->id, false);
+     $plugins = enrol_get_plugins(true);
++
++    if ($userid) {
++        // If the user id is present, include only course enrolment instances which allow manual unenrolment and
++        // the given user have a capability to perform unenrolment.
++        $instances = array_filter($instances, function($instance) use ($userid, $plugins, $context) {
++            $unenrolcap = "enrol/{$instance->enrol}:unenrol";
++            return $plugins[$instance->enrol]->allow_unenrol($instance) &&
++                has_capability($unenrolcap, $context, $userid);
++        });
++    }
++
+     foreach ($instances as $instance) {
+         if (isset($plugins[$instance->enrol])) {
+             $plugins[$instance->enrol]->delete_instance($instance);
+         }
+         // low level delete in case plugin did not do it
+-        $DB->delete_records('user_enrolments', array('enrolid'=>$instance->id));
+         $DB->delete_records('role_assignments', array('itemid'=>$instance->id, 'component'=>'enrol_'.$instance->enrol));
+         $DB->delete_records('user_enrolments', array('enrolid'=>$instance->id));
+         $DB->delete_records('enrol', array('id'=>$instance->id));
+diff --git a/lib/moodlelib.php b/lib/moodlelib.php
+index 590777eb8e1..5e09703e17c 100644
+--- a/lib/moodlelib.php
++++ b/lib/moodlelib.php
+@@ -5371,11 +5371,14 @@ function remove_course_contents($courseid, $showfeedback = true, array $options
+     }
+     unset($childcontexts);
+ 
+-    // Remove all roles and enrolments by default.
++    // Remove roles and enrolments by default.
+     if (empty($options['keep_roles_and_enrolments'])) {
+         // This hack is used in restore when deleting contents of existing course.
++        // During restore, we should remove only enrolment related data that the user performing the restore has a
++        // permission to remove.
++        $userid = $options['userid'] ?? null;
++        enrol_course_delete($course, $userid);
+         role_unassign_all(array('contextid' => $coursecontext->id, 'component' => ''), true);
+-        enrol_course_delete($course);
+         if ($showfeedback) {
+             echo $OUTPUT->notification($strdeleted.get_string('type_enrol_plural', 'plugin'), 'notifysuccess');
+         }
+-- 
+2.34.1
+

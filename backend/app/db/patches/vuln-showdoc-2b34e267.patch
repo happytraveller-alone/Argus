@@ -1,0 +1,25 @@
+From 2b34e267e4186125f99bfa420140634ad45801fb Mon Sep 17 00:00:00 2001
+From: star7th <xing7th@gmail.com>
+Date: Tue, 25 Jan 2022 20:34:52 +0800
+Subject: [PATCH] bug
+
+---
+ server/Application/Api/Controller/AdminUserController.class.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/server/Application/Api/Controller/AdminUserController.class.php b/server/Application/Api/Controller/AdminUserController.class.php
+index edf0f559..9e966b8c 100644
+--- a/server/Application/Api/Controller/AdminUserController.class.php
++++ b/server/Application/Api/Controller/AdminUserController.class.php
+@@ -76,7 +76,7 @@ class AdminUserController extends BaseController {
+         $this->checkAdmin();
+         $username = I("post.username");
+         $password = I("post.password");
+-        $uid = I("post.uid");
++        $uid = I("post.uid/d");
+         $name = I("post.name");
+         if(!$username){
+             $this->sendError(10101,'用户名不允许为空');
+-- 
+2.34.1
+

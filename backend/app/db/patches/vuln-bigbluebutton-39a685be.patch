@@ -1,0 +1,169 @@
+From 39a685be8b006d4d5472f54dda0657851a726569 Mon Sep 17 00:00:00 2001
+From: Tainan Felipe <tainanfelipe214@gmail.com>
+Date: Fri, 27 May 2022 11:28:32 +0000
+Subject: [PATCH] Refactor: centralize sanitization functions
+
+---
+ .../ui/components/chat/alert/component.jsx    |  7 +---
+ .../chat/message-form/component.jsx           |  9 +----
+ .../imports/ui/components/chat/service.js     |  8 ++--
+ .../imports/ui/components/poll/service.js     |  8 +---
+ .../imports/utils/string-utils.js             | 39 ++++++++++++++++++-
+ 5 files changed, 47 insertions(+), 24 deletions(-)
+
+diff --git a/bigbluebutton-html5/imports/ui/components/chat/alert/component.jsx b/bigbluebutton-html5/imports/ui/components/chat/alert/component.jsx
+index b1d05e6245..6bd2f3778e 100644
+--- a/bigbluebutton-html5/imports/ui/components/chat/alert/component.jsx
++++ b/bigbluebutton-html5/imports/ui/components/chat/alert/component.jsx
+@@ -5,6 +5,7 @@ import { defineMessages, injectIntl } from 'react-intl';
+ import _ from 'lodash';
+ import injectNotify from '/imports/ui/components/toast/inject-notify/component';
+ import AudioService from '/imports/ui/components/audio/service';
++import { stripTags, unescapeHtml } from '/imports/utils/string-utils';
+ import ChatPushAlert from './push-alert/component';
+ import Service from '../service';
+ import { styles } from '../styles';
+@@ -146,11 +147,7 @@ const ChatAlert = (props) => {
+         if (content.text === PUBLIC_CHAT_CLEAR) {
+           return intl.formatMessage(intlMessages.publicChatClear);
+         }
+-        /* this code is to remove html tags that come in the server's messages */
+-        const tempDiv = document.createElement('div');
+-        tempDiv.innerHTML = content.text;
+-        const textWithoutTag = tempDiv.innerText;
+-        return textWithoutTag;
++        return unescapeHtml(stripTags(content.text));
+       });
+ 
+     return contentMessage;
+diff --git a/bigbluebutton-html5/imports/ui/components/chat/message-form/component.jsx b/bigbluebutton-html5/imports/ui/components/chat/message-form/component.jsx
+index 419bb6a02c..988899298d 100755
+--- a/bigbluebutton-html5/imports/ui/components/chat/message-form/component.jsx
++++ b/bigbluebutton-html5/imports/ui/components/chat/message-form/component.jsx
+@@ -5,6 +5,7 @@ import TextareaAutosize from 'react-autosize-textarea';
+ import deviceInfo from '/imports/utils/deviceInfo';
+ import PropTypes from 'prop-types';
+ import _ from 'lodash';
++import { escapeHtml } from '/imports/utils/string-utils';
+ import TypingIndicatorContainer from './typing-indicator/container';
+ import { styles } from './styles.scss';
+ import Button from '../../button/component';
+@@ -243,15 +244,9 @@ class MessageForm extends PureComponent {
+       return;
+     }
+ 
+-    // Sanitize. See: http://shebang.brandonmintern.com/foolproof-html-escaping-in-javascript/
+-
+-    const div = document.createElement('div');
+-    div.appendChild(document.createTextNode(msg));
+-    msg = div.innerHTML;
+-
+     const callback = this.typingIndicator ? stopUserTyping : null;
+ 
+-    handleSendMessage(msg);
++    handleSendMessage(escapeHtml(msg));
+     this.setState({ message: '', hasErrors: false }, callback);
+   }
+ 
+diff --git a/bigbluebutton-html5/imports/ui/components/chat/service.js b/bigbluebutton-html5/imports/ui/components/chat/service.js
+index dc0137a010..cb71e57425 100755
+--- a/bigbluebutton-html5/imports/ui/components/chat/service.js
++++ b/bigbluebutton-html5/imports/ui/components/chat/service.js
+@@ -5,6 +5,7 @@ import Auth from '/imports/ui/services/auth';
+ import UnreadMessages from '/imports/ui/services/unread-messages';
+ import Storage from '/imports/ui/services/storage/session';
+ import { makeCall } from '/imports/ui/services/api';
++import { stripTags, unescapeHtml } from '/imports/utils/string-utils';
+ import _ from 'lodash';
+ import { meetingIsBreakout } from '/imports/ui/components/app/service';
+ import { defineMessages } from 'react-intl';
+@@ -248,11 +249,8 @@ const removeFromClosedChatsSession = (idChatOpen) => {
+ 
+ // We decode to prevent HTML5 escaped characters.
+ const htmlDecode = (input) => {
+-  const e = document.createElement('div');
+-  e.innerHTML = input;
+-  const messages = Array.from(e.childNodes);
+-  const message = messages.map((chatMessage) => chatMessage.textContent);
+-  return message.join('');
++  const replacedBRs = input.replaceAll('<br/>', '\n');
++  return unescapeHtml(stripTags(replacedBRs));
+ };
+ 
+ // Export the chat as [Hour:Min] user: message
+diff --git a/bigbluebutton-html5/imports/ui/components/poll/service.js b/bigbluebutton-html5/imports/ui/components/poll/service.js
+index c4eaa070e9..567c5a95ee 100644
+--- a/bigbluebutton-html5/imports/ui/components/poll/service.js
++++ b/bigbluebutton-html5/imports/ui/components/poll/service.js
+@@ -2,6 +2,7 @@ import Users from '/imports/api/users';
+ import Auth from '/imports/ui/services/auth';
+ import Polls from '/imports/api/polls';
+ import caseInsensitiveReducer from '/imports/utils/caseInsensitiveReducer';
++import { escapeHtml } from '/imports/utils/string-utils';
+ import { defineMessages } from 'react-intl';
+ 
+ const POLL_AVATAR_COLOR = '#3B48A9';
+@@ -114,12 +115,7 @@ const isDefaultPoll = (pollType) => pollType !== pollTypes.Custom
+ const getPollResultString = (pollResultData, intl) => {
+   const formatBoldBlack = (s) => s.bold().fontcolor('black');
+ 
+-  // Sanitize. See: https://gist.github.com/sagewall/47164de600df05fb0f6f44d48a09c0bd
+-  const sanitize = (value) => {
+-    const div = document.createElement('div');
+-    div.appendChild(document.createTextNode(value));
+-    return div.innerHTML;
+-  };
++  const sanitize = (value) => escapeHtml(value)
+ 
+   const { answers, numRespondents, questionType } = pollResultData;
+   const ísDefault = isDefaultPoll(questionType);
+diff --git a/bigbluebutton-html5/imports/utils/string-utils.js b/bigbluebutton-html5/imports/utils/string-utils.js
+index c44a9a0a38..858d2412f6 100644
+--- a/bigbluebutton-html5/imports/utils/string-utils.js
++++ b/bigbluebutton-html5/imports/utils/string-utils.js
+@@ -1,3 +1,40 @@
++import sanitize from 'sanitize-html';
++
+ export const capitalizeFirstLetter = (s = '') => s.charAt(0).toUpperCase() + s.slice(1);
+ 
+-export default { capitalizeFirstLetter };
+\ No newline at end of file
++/**
++ * Returns a string in the format 'Year-Month-Day_Hour-Minutes'.
++ * @param {Date} [date] - The Date object.
++ */
++export const getDateString = (date = new Date()) => {
++  const hours = date.getHours().toString().padStart(2, 0);
++  const minutes = date.getMinutes().toString().padStart(2, 0);
++  const month = (date.getMonth() + 1).toString().padStart(2, 0);
++  const dayOfMonth = date.getDate().toString().padStart(2, 0);
++  const time = `${hours}-${minutes}`;
++  const dateString = `${date.getFullYear()}-${month}-${dayOfMonth}_${time}`;
++  return dateString;
++};
++
++export const stripTags = (text) => sanitize(text, { allowedTags: [] });
++
++// Sanitize. See: https://gist.github.com/sagewall/47164de600df05fb0f6f44d48a09c0bd
++export const escapeHtml = (text) => {
++  const div = document.createElement('div');
++  div.appendChild(document.createTextNode(text));
++  return div.innerHTML;
++};
++
++export const unescapeHtml = (input) => {
++  const e = document.createElement('textarea');
++  e.innerHTML = input;
++  return e.value;
++};
++
++export default {
++  capitalizeFirstLetter,
++  getDateString,
++  stripTags,
++  escapeHtml,
++  unescapeHtml,
++};
+-- 
+2.34.1
+

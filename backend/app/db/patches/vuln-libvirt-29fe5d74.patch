@@ -1,0 +1,189 @@
+From 29fe5d745fbe207ec2415441d4807ae76be05974 Mon Sep 17 00:00:00 2001
+From: Eric Blake <eblake@redhat.com>
+Date: Fri, 12 Jul 2013 14:55:21 -0600
+Subject: [PATCH] security_dac: compute supplemental groups before fork
+
+Commit 75c1256 states that virGetGroupList must not be called
+between fork and exec, then commit ee777e99 promptly violated
+that for lxc's use of virSecurityManagerSetProcessLabel.  Hoist
+the supplemental group detection to the time that the security
+manager needs to fork.  Qemu is safe, as it uses
+virSecurityManagerSetChildProcessLabel which in turn uses
+virCommand to determine supplemental groups.
+
+This does not fix the fact that virSecurityManagerSetProcessLabel
+calls virSecurityDACParseIds calls parseIds which eventually
+calls getpwnam_r, which also violates fork/exec async-signal-safe
+safety rules, but so far no one has complained of hitting
+deadlock in that case.
+
+* src/security/security_dac.c (_virSecurityDACData): Track groups
+in private data.
+(virSecurityDACPreFork): New function, to set them.
+(virSecurityDACClose): Clean up new fields.
+(virSecurityDACGetIds): Alter signature.
+(virSecurityDACSetSecurityHostdevLabelHelper)
+(virSecurityDACSetChardevLabel, virSecurityDACSetProcessLabel)
+(virSecurityDACSetChildProcessLabel): Update callers.
+
+Signed-off-by: Eric Blake <eblake@redhat.com>
+---
+ src/security/security_dac.c | 63 ++++++++++++++++++++++++++-----------
+ 1 file changed, 44 insertions(+), 19 deletions(-)
+
+diff --git a/src/security/security_dac.c b/src/security/security_dac.c
+index 9b5eaa890e..fa3b869487 100644
+--- a/src/security/security_dac.c
++++ b/src/security/security_dac.c
+@@ -43,6 +43,8 @@ typedef virSecurityDACData *virSecurityDACDataPtr;
+ struct _virSecurityDACData {
+     uid_t user;
+     gid_t group;
++    gid_t *groups;
++    int ngroups;
+     bool dynamicOwnership;
+ };
+ 
+@@ -146,7 +148,8 @@ virSecurityDACParseIds(virDomainDefPtr def, uid_t *uidPtr, gid_t *gidPtr)
+ 
+ static int
+ virSecurityDACGetIds(virDomainDefPtr def, virSecurityDACDataPtr priv,
+-                     uid_t *uidPtr, gid_t *gidPtr)
++                     uid_t *uidPtr, gid_t *gidPtr,
++                     gid_t **groups, int *ngroups)
+ {
+     int ret;
+ 
+@@ -157,8 +160,13 @@ virSecurityDACGetIds(virDomainDefPtr def, virSecurityDACDataPtr priv,
+         return -1;
+     }
+ 
+-    if ((ret = virSecurityDACParseIds(def, uidPtr, gidPtr)) <= 0)
++    if ((ret = virSecurityDACParseIds(def, uidPtr, gidPtr)) <= 0) {
++        if (groups)
++            *groups = NULL;
++        if (ngroups)
++            *ngroups = 0;
+         return ret;
++    }
+ 
+     if (!priv) {
+         virReportError(VIR_ERR_INTERNAL_ERROR,
+@@ -171,6 +179,10 @@ virSecurityDACGetIds(virDomainDefPtr def, virSecurityDACDataPtr priv,
+         *uidPtr = priv->user;
+     if (gidPtr)
+         *gidPtr = priv->group;
++    if (groups)
++        *groups = priv->groups;
++    if (ngroups)
++        *ngroups = priv->ngroups;
+ 
+     return 0;
+ }
+@@ -250,8 +262,10 @@ virSecurityDACOpen(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED)
+ }
+ 
+ static int
+-virSecurityDACClose(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED)
++virSecurityDACClose(virSecurityManagerPtr mgr)
+ {
++    virSecurityDACDataPtr priv = virSecurityManagerGetPrivateData(mgr);
++    VIR_FREE(priv->groups);
+     return 0;
+ }
+ 
+@@ -268,6 +282,21 @@ virSecurityDACGetDOI(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED)
+     return "0";
+ }
+ 
++static int
++virSecurityDACPreFork(virSecurityManagerPtr mgr)
++{
++    virSecurityDACDataPtr priv = virSecurityManagerGetPrivateData(mgr);
++    int ngroups;
++
++    VIR_FREE(priv->groups);
++    priv->ngroups = 0;
++    if ((ngroups = virGetGroupList(priv->user, priv->group,
++                                   &priv->groups)) < 0)
++        return -1;
++    priv->ngroups = ngroups;
++    return 0;
++}
++
+ static int
+ virSecurityDACSetOwnership(const char *path, uid_t uid, gid_t gid)
+ {
+@@ -448,7 +477,7 @@ virSecurityDACSetSecurityHostdevLabelHelper(const char *file,
+     uid_t user;
+     gid_t group;
+ 
+-    if (virSecurityDACGetIds(def, priv, &user, &group))
++    if (virSecurityDACGetIds(def, priv, &user, &group, NULL, NULL))
+         return -1;
+ 
+     return virSecurityDACSetOwnership(file, user, group);
+@@ -702,7 +731,7 @@ virSecurityDACSetChardevLabel(virSecurityManagerPtr mgr,
+     uid_t user;
+     gid_t group;
+ 
+-    if (virSecurityDACGetIds(def, priv, &user, &group))
++    if (virSecurityDACGetIds(def, priv, &user, &group, NULL, NULL))
+         return -1;
+ 
+     switch (dev->type) {
+@@ -996,26 +1025,20 @@ virSecurityDACSetProcessLabel(virSecurityManagerPtr mgr,
+ {
+     uid_t user;
+     gid_t group;
+-    virSecurityDACDataPtr priv = virSecurityManagerGetPrivateData(mgr);
+     gid_t *groups;
+     int ngroups;
+-    int ret = -1;
++    virSecurityDACDataPtr priv = virSecurityManagerGetPrivateData(mgr);
+ 
+-    if (virSecurityDACGetIds(def, priv, &user, &group))
+-        return -1;
+-    ngroups = virGetGroupList(user, group, &groups);
+-    if (ngroups < 0)
++    if (virSecurityDACGetIds(def, priv, &user, &group, &groups, &ngroups))
+         return -1;
+ 
+-    VIR_DEBUG("Dropping privileges of DEF to %u:%u",
+-              (unsigned int) user, (unsigned int) group);
++    VIR_DEBUG("Dropping privileges of DEF to %u:%u, %d supplemental groups",
++              (unsigned int) user, (unsigned int) group, ngroups);
+ 
+     if (virSetUIDGID(user, group, groups, ngroups) < 0)
+-        goto cleanup;
+-    ret = 0;
+-cleanup:
+-    VIR_FREE(groups);
+-    return ret;
++        return -1;
++
++    return 0;
+ }
+ 
+ 
+@@ -1028,7 +1051,7 @@ virSecurityDACSetChildProcessLabel(virSecurityManagerPtr mgr,
+     gid_t group;
+     virSecurityDACDataPtr priv = virSecurityManagerGetPrivateData(mgr);
+ 
+-    if (virSecurityDACGetIds(def, priv, &user, &group))
++    if (virSecurityDACGetIds(def, priv, &user, &group, NULL, NULL))
+         return -1;
+ 
+     VIR_DEBUG("Setting child to drop privileges of DEF to %u:%u",
+@@ -1206,6 +1229,8 @@ virSecurityDriver virSecurityDriverDAC = {
+     .getModel                           = virSecurityDACGetModel,
+     .getDOI                             = virSecurityDACGetDOI,
+ 
++    .preFork                            = virSecurityDACPreFork,
++
+     .domainSecurityVerify               = virSecurityDACVerify,
+ 
+     .domainSetSecurityImageLabel        = virSecurityDACSetSecurityImageLabel,
+-- 
+2.34.1
+

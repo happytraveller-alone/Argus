@@ -1,0 +1,78 @@
+From 00ece11be14efe4a97d59633c3df5e0d0c6674da Mon Sep 17 00:00:00 2001
+From: Damien Neil <dneil@google.com>
+Date: Wed, 7 Sep 2022 16:44:29 -0700
+Subject: [PATCH] [release-branch.go1.19] all: upgrade golang.org/x/net to
+ v0.0.0-20220907013720-d52c520e3766
+
+Restore vendoring after go1.19.1 security release.
+
+For #54376
+
+Change-Id: Ie1512aa2bf77e5f448893c89e4841cb14896da9b
+Reviewed-on: https://go-review.googlesource.com/c/go/+/429317
+Reviewed-by: Carlos Amedee <carlos@golang.org>
+Run-TryBot: Damien Neil <dneil@google.com>
+TryBot-Result: Gopher Robot <gobot@golang.org>
+---
+ src/cmd/internal/moddeps/moddeps_test.go | 2 --
+ src/go.mod                               | 2 +-
+ src/go.sum                               | 4 ++--
+ src/vendor/modules.txt                   | 2 +-
+ 4 files changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/src/cmd/internal/moddeps/moddeps_test.go b/src/cmd/internal/moddeps/moddeps_test.go
+index 9f8cfcd77b..053cb8f548 100644
+--- a/src/cmd/internal/moddeps/moddeps_test.go
++++ b/src/cmd/internal/moddeps/moddeps_test.go
+@@ -33,8 +33,6 @@ import (
+ // See issues 36852, 41409, and 43687.
+ // (Also see golang.org/issue/27348.)
+ func TestAllDependencies(t *testing.T) {
+-	t.Skip("TODO(#54376): 1.19.1 contains unreleased changes from vendored modules")
+-
+ 	goBin := testenv.GoToolPath(t)
+ 
+ 	// Ensure that all packages imported within GOROOT
+diff --git a/src/go.mod b/src/go.mod
+index 94380d6567..6c316312a2 100644
+--- a/src/go.mod
++++ b/src/go.mod
+@@ -4,7 +4,7 @@ go 1.19
+ 
+ require (
+ 	golang.org/x/crypto v0.0.0-20220516162934-403b01795ae8
+-	golang.org/x/net v0.0.0-20220517181318-183a9ca12b87
++	golang.org/x/net v0.0.0-20220907013720-d52c520e3766
+ )
+ 
+ require (
+diff --git a/src/go.sum b/src/go.sum
+index a54b0565bd..2f90a33f3a 100644
+--- a/src/go.sum
++++ b/src/go.sum
+@@ -1,7 +1,7 @@
+ golang.org/x/crypto v0.0.0-20220516162934-403b01795ae8 h1:y+mHpWoQJNAHt26Nhh6JP7hvM71IRZureyvZhoVALIs=
+ golang.org/x/crypto v0.0.0-20220516162934-403b01795ae8/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
+-golang.org/x/net v0.0.0-20220517181318-183a9ca12b87 h1:cCR+9mKLOGyX4Zx+uBZDXEDAQsvKQ/XbW4vreG5v1jU=
+-golang.org/x/net v0.0.0-20220517181318-183a9ca12b87/go.mod h1:CfG3xpIq0wQ8r1q4Su4UZFWDARRcnwPjda9FqA0JpMk=
++golang.org/x/net v0.0.0-20220907013720-d52c520e3766 h1:D02YdIT3M6OQkZXTQiO761u/SmR3DDDiDXLN2oZIUac=
++golang.org/x/net v0.0.0-20220907013720-d52c520e3766/go.mod h1:CfG3xpIq0wQ8r1q4Su4UZFWDARRcnwPjda9FqA0JpMk=
+ golang.org/x/sys v0.0.0-20220614162138-6c1b26c55098 h1:PgOr27OhUx2IRqGJ2RxAWI4dJQ7bi9cSrB82uzFzfUA=
+ golang.org/x/sys v0.0.0-20220614162138-6c1b26c55098/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/text v0.3.8-0.20220509174342-b4bca84b0361 h1:h+pU/hCb7sEApigI6eII3/Emx5ZHaFWS+nulUp0Az/k=
+diff --git a/src/vendor/modules.txt b/src/vendor/modules.txt
+index dfb87abf13..35c0208e4e 100644
+--- a/src/vendor/modules.txt
++++ b/src/vendor/modules.txt
+@@ -9,7 +9,7 @@ golang.org/x/crypto/curve25519/internal/field
+ golang.org/x/crypto/hkdf
+ golang.org/x/crypto/internal/poly1305
+ golang.org/x/crypto/internal/subtle
+-# golang.org/x/net v0.0.0-20220517181318-183a9ca12b87
++# golang.org/x/net v0.0.0-20220907013720-d52c520e3766
+ ## explicit; go 1.17
+ golang.org/x/net/dns/dnsmessage
+ golang.org/x/net/http/httpguts
+-- 
+2.34.1
+

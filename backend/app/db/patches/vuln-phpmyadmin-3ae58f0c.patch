@@ -1,0 +1,110 @@
+From 3ae58f0cd6b89ad4767920f9b214c38d3f6d4393 Mon Sep 17 00:00:00 2001
+From: Herman van Rink <rink@initfour.nl>
+Date: Fri, 8 Jul 2011 21:41:05 +0200
+Subject: [PATCH] [security] Fixed local file inclusion vulnerability and code
+ execution, see PMASA-2011-11
+
+---
+ ChangeLog                              | 13 +++++++------
+ libraries/schema/User_Schema.class.php |  7 +++++--
+ schema_export.php                      |  4 +++-
+ 3 files changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index d4d4f1bf4b..232d499451 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -4,6 +4,7 @@ phpMyAdmin - ChangeLog
+ 3.4.3.2 (2011-07-XX)
+ - [security] Fixed XSS vulnerability, see PMASA-2011-9
+ - [security] Fixed local file inclusion vulnerability, see PMASA-2011-10
++- [security] Fixed local file inclusion vulnerability and code execution, see PMASA-2011-11
+ 
+ 3.4.3.1 (2011-07-02)
+ - [security] Fixed possible session manipulation in swekey authentication, see PMASA-2011-5
+@@ -99,7 +100,7 @@ phpMyAdmin - ChangeLog
+ + patch #2974341 [structure] Clicking on table name in db Structure should 
+   Browse the table if possible, thanks to bhdouglass - dougboybhd
+ + patch #2975533 [search] New search operators, thanks to
+-  Martynas Mickevičius
++  Martynas MickeviÄius
+ + patch #2967320 [designer] Colored relations based on the primary key,
+   thanks to GreenRover - greenrover
+ - [core] Provide way for vendors to easily change paths to config files.
+@@ -253,7 +254,7 @@ phpMyAdmin - ChangeLog
+ 
+ 3.3.7.0 (2010-09-07)
+ - patch #3050492 [PDF scratchboard] Cannot drag table box to the edge after
+-  a page size increase, thanks to Martin Schönberger - mad05
++  a page size increase, thanks to Martin SchÃ¶nberger - mad05
+ 
+ 3.3.6.0 (2010-08-28)
+ - bug #3033063 [core] Navi gets wrong db name
+@@ -274,7 +275,7 @@ phpMyAdmin - ChangeLog
+ 
+ 3.3.5.0 (2010-07-26)
+ - patch #2932113 [information_schema] Slow export when having lots of
+-  databases, thanks to Stéphane Pontier - shadow_walker
++  databases, thanks to StÃ©phane Pontier - shadow_walker
+ - bug #3022705 [import] Import button does not work in Catalan when there
+   is no progress bar possible
+ - bug [replication] Do not offer information_schema in the list of databases
+@@ -314,9 +315,9 @@ phpMyAdmin - ChangeLog
+ - patch #2984893 [engines] InnoDB storage page emits a warning,
+   thanks to Madhura Jayaratne - madhuracj
+ - bug #2974687, bug #2974692 [compatibility] PHPExcel : IBM AIX iconv() does not work,
+-  thanks to Björn Wiberg - bwiberg
++  thanks to BjÃ¶rn Wiberg - bwiberg
+ - bug #2983066 [interface] Flush table on table operations shows the query twice, 
+-  thanks to Martynas Mickevičius - BlinK_
++  thanks to Martynas MickeviÄius - BlinK_
+ - bug #2983060, patch #2987900 [interface] Fix initial state of tables in
+   designer, thanks to Sutharshan Balachandren.
+ - bug #2983062, patch #2989408 [engines] Fix warnings when changing table
+@@ -395,7 +396,7 @@ phpMyAdmin - ChangeLog
+ + rfe #2839504 [engines] Support InnoDB plugin's new row formats 
+ + [core] Added ability for synchronizing databases among servers.
+ + [lang] #2843101 Dutch update, thanks to scavenger2008
+-+ [lang] Galician update, thanks to Xosé Calvo - xosecalvo
+++ [lang] Galician update, thanks to XosÃ© Calvo - xosecalvo
+ + [export] Added MediaWiki export module,
+   thanks to Derek Schaefer - drummingds1
+ + [lang] Turkish update, thanks to Burak Yavuz
+diff --git a/libraries/schema/User_Schema.class.php b/libraries/schema/User_Schema.class.php
+index fbec138de0..cb42dde2c2 100644
+--- a/libraries/schema/User_Schema.class.php
++++ b/libraries/schema/User_Schema.class.php
+@@ -567,10 +567,13 @@ class PMA_User_Schema
+         require_once './libraries/transformations.lib.php';
+         require_once './libraries/Index.class.php';
+         /**
+-         * default is PDF
++         * default is PDF, otherwise validate it's only letters a-z
+          */
+         global  $db,$export_type;
+-        $export_type            = isset($export_type) ? $export_type : 'pdf';
++        if (!isset($export_type) || !preg_match('/^[a-zA-Z]+$/', $export_type)) {
++            $export_type = 'pdf';
++        }
++
+         PMA_DBI_select_db($db);
+ 
+         include("./libraries/schema/".ucfirst($export_type)."_Relation_Schema.class.php");
+diff --git a/schema_export.php b/schema_export.php
+index 0a21d3296c..3e1067d55e 100644
+--- a/schema_export.php
++++ b/schema_export.php
+@@ -37,7 +37,9 @@ include_once("./libraries/schema/Export_Relation_Schema.class.php");
+  * default is PDF
+  */
+ global  $db,$export_type;
+-$export_type = isset($export_type) ? $export_type : 'pdf';
++if (!isset($export_type) || !preg_match('/^[a-zA-Z]+$/', $export_type)) {
++    $export_type = 'pdf';
++}
+ PMA_DBI_select_db($db);
+ 
+ $path = PMA_securePath(ucfirst($export_type));
+-- 
+2.34.1
+

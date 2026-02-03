@@ -1,0 +1,168 @@
+From 72f109a99c82b14c07dcb19946ba9b76efc32a1b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C4=8Ciha=C5=99?= <michal@cihar.com>
+Date: Thu, 7 Dec 2017 10:54:39 +0100
+Subject: [PATCH] Accept SQL query only from POST requests
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Michal Čihař <michal@cihar.com>
+---
+ db_multi_table_query.php         |  4 ++--
+ import.php                       |  4 ++--
+ libraries/classes/Core.php       |  4 ++--
+ libraries/classes/InsertEdit.php | 10 +++++-----
+ libraries/common.inc.php         |  4 ++--
+ test/classes/InsertEditTest.php  |  8 ++++----
+ 6 files changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/db_multi_table_query.php b/db_multi_table_query.php
+index 0ac3a0172ce..1ae4944db0a 100644
+--- a/db_multi_table_query.php
++++ b/db_multi_table_query.php
+@@ -10,9 +10,9 @@
+ 
+ require_once 'libraries/common.inc.php';
+ 
+-if (isset($_REQUEST['sql_query'])) {
++if (isset($_POST['sql_query'])) {
+     MultiTableQuery::displayResults(
+-        $_REQUEST['sql_query'],
++        $_POST['sql_query'],
+         $_REQUEST['db'],
+         $pmaThemeImage
+     );
+diff --git a/import.php b/import.php
+index 3aac8b85cf8..f83d03e2959 100644
+--- a/import.php
++++ b/import.php
+@@ -742,7 +742,7 @@
+         $cfgBookmark = Bookmark::getParams($GLOBALS['cfg']['Server']['user']);
+         Sql::storeTheQueryAsBookmark(
+             $db, $cfgBookmark['user'],
+-            $_REQUEST['sql_query'], $_POST['bkm_label'],
++            $_POST['sql_query'], $_POST['bkm_label'],
+             isset($_POST['bkm_replace']) ? $_POST['bkm_replace'] : null
+         );
+     }
+@@ -757,7 +757,7 @@
+         $cfgBookmark = Bookmark::getParams($GLOBALS['cfg']['Server']['user']);
+         Sql::storeTheQueryAsBookmark(
+             $db, $cfgBookmark['user'],
+-            $_REQUEST['sql_query'], $_POST['bkm_label'],
++            $_POST['sql_query'], $_POST['bkm_label'],
+             isset($_POST['bkm_replace']) ? $_POST['bkm_replace'] : null
+         );
+     }
+diff --git a/libraries/classes/Core.php b/libraries/classes/Core.php
+index 82e38b50650..8a67d60cff0 100644
+--- a/libraries/classes/Core.php
++++ b/libraries/classes/Core.php
+@@ -87,8 +87,8 @@ class Core
+      * <code>
+      * // $_REQUEST['db'] not set
+      * echo Core::ifSetOr($_REQUEST['db'], ''); // ''
+-     * // $_REQUEST['sql_query'] not set
+-     * echo Core::ifSetOr($_REQUEST['sql_query']); // null
++     * // $_POST['sql_query'] not set
++     * echo Core::ifSetOr($_POST['sql_query']); // null
+      * // $cfg['EnableFoo'] not set
+      * echo Core::ifSetOr($cfg['EnableFoo'], false, 'boolean'); // false
+      * echo Core::ifSetOr($cfg['EnableFoo']); // null
+diff --git a/libraries/classes/InsertEdit.php b/libraries/classes/InsertEdit.php
+index 6874b77af85..a977db6ad7a 100644
+--- a/libraries/classes/InsertEdit.php
++++ b/libraries/classes/InsertEdit.php
+@@ -44,7 +44,7 @@ public static function getFormParametersForInsertForm($db, $table, $where_clause
+             'table'     => $table,
+             'goto'      => $GLOBALS['goto'],
+             'err_url'   => $err_url,
+-            'sql_query' => $_REQUEST['sql_query'],
++            'sql_query' => $_POST['sql_query'],
+         );
+         if (isset($where_clauses)) {
+             foreach ($where_clause_array as $key_id => $where_clause) {
+@@ -204,8 +204,8 @@ public static function urlParamsInEditMode(array $url_params, array $where_claus
+                 $url_params['where_clause'] = trim($where_clause);
+             }
+         }
+-        if (! empty($_REQUEST['sql_query'])) {
+-            $url_params['sql_query'] = $_REQUEST['sql_query'];
++        if (! empty($_POST['sql_query'])) {
++            $url_params['sql_query'] = $_POST['sql_query'];
+         }
+         return $url_params;
+     }
+@@ -1458,7 +1458,7 @@ public static function getContinueInsertionForm($table, $db, array $where_clause
+             . '<input type="hidden" name="err_url"'
+             . ' value="' . htmlspecialchars($err_url) . '" />'
+             . '<input type="hidden" name="sql_query"'
+-            . ' value="' . htmlspecialchars($_REQUEST['sql_query']) . '" />';
++            . ' value="' . htmlspecialchars($_POST['sql_query']) . '" />';
+ 
+         if (isset($_REQUEST['where_clause'])) {
+             foreach ($where_clause_array as $key_id => $where_clause) {
+@@ -2626,7 +2626,7 @@ public static function getUrlParameters($db, $table)
+          */
+         $url_params = array(
+             'db' => $db,
+-            'sql_query' => $_REQUEST['sql_query']
++            'sql_query' => $_POST['sql_query']
+         );
+ 
+         if (preg_match('@^tbl_@', $GLOBALS['goto'])) {
+diff --git a/libraries/common.inc.php b/libraries/common.inc.php
+index cb3323afa3c..aade320bd79 100644
+--- a/libraries/common.inc.php
++++ b/libraries/common.inc.php
+@@ -234,8 +234,8 @@
+  * @global string $GLOBALS['sql_query']
+  */
+ $GLOBALS['sql_query'] = '';
+-if (Core::isValid($_REQUEST['sql_query'])) {
+-    $GLOBALS['sql_query'] = $_REQUEST['sql_query'];
++if (Core::isValid($_POST['sql_query'])) {
++    $GLOBALS['sql_query'] = $_POST['sql_query'];
+ }
+ 
+ //$_REQUEST['set_theme'] // checked later in this file LABEL_theme_setup
+diff --git a/test/classes/InsertEditTest.php b/test/classes/InsertEditTest.php
+index a5d4e5784a1..cc0c1d0e394 100644
+--- a/test/classes/InsertEditTest.php
++++ b/test/classes/InsertEditTest.php
+@@ -69,7 +69,7 @@ public function testGetFormParametersForInsertForm()
+     {
+         $where_clause = array('foo' => 'bar ', '1' => ' test');
+         $_REQUEST['clause_is_unique'] = false;
+-        $_REQUEST['sql_query'] = 'SELECT a';
++        $_POST['sql_query'] = 'SELECT a';
+         $GLOBALS['goto'] = 'index.php';
+ 
+         $result = InsertEdit::getFormParametersForInsertForm(
+@@ -259,7 +259,7 @@ public function testLoadFirstRow()
+     public function testUrlParamsInEditMode()
+     {
+         $where_clause_array = array('foo=1', 'bar=2');
+-        $_REQUEST['sql_query'] = 'SELECT 1';
++        $_POST['sql_query'] = 'SELECT 1';
+ 
+         $result = InsertEdit::urlParamsInEditMode(array(1), $where_clause_array, '');
+ 
+@@ -1431,7 +1431,7 @@ public function testGetContinueInsertionForm()
+         $GLOBALS['cfg']['ServerDefault'] = 1;
+         $GLOBALS['goto'] = "index.php";
+         $_REQUEST['where_clause'] = true;
+-        $_REQUEST['sql_query'] = "SELECT 1";
++        $_POST['sql_query'] = "SELECT 1";
+ 
+         $result = InsertEdit::getContinueInsertionForm(
+             "tbl", "db", $where_clause_array, "localhost"
+@@ -2817,7 +2817,7 @@ public function testGetCommentsMap()
+      */
+     public function testGetUrlParameters()
+     {
+-        $_REQUEST['sql_query'] = 'SELECT';
++        $_POST['sql_query'] = 'SELECT';
+         $GLOBALS['goto'] = 'tbl_change.php';
+ 
+         $this->assertEquals(

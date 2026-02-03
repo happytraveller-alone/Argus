@@ -1,0 +1,89 @@
+From a2a6c930bcca591a25d2b316fcfd2d6793897b26 Mon Sep 17 00:00:00 2001
+From: Armin Ronacher <armin.ronacher@active-4.com>
+Date: Sat, 6 Apr 2019 10:50:47 -0700
+Subject: [PATCH] sandbox str.format_map
+
+---
+ jinja2/sandbox.py      | 17 ++++++++++++++---
+ tests/test_security.py | 19 +++++++++++++++++++
+ 2 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/jinja2/sandbox.py b/jinja2/sandbox.py
+index 93fb9d4..752e812 100644
+--- a/jinja2/sandbox.py
++++ b/jinja2/sandbox.py
+@@ -137,7 +137,7 @@ class _MagicFormatMapping(Mapping):
+ def inspect_format_method(callable):
+     if not isinstance(callable, (types.MethodType,
+                                  types.BuiltinMethodType)) or \
+-       callable.__name__ != 'format':
++       callable.__name__ not in ('format', 'format_map'):
+         return None
+     obj = callable.__self__
+     if isinstance(obj, string_types):
+@@ -402,7 +402,7 @@ class SandboxedEnvironment(Environment):
+             obj.__class__.__name__
+         ), name=attribute, obj=obj, exc=SecurityError)
+ 
+-    def format_string(self, s, args, kwargs):
++    def format_string(self, s, args, kwargs, format_func=None):
+         """If a format call is detected, then this is routed through this
+         method so that our safety sandbox can be used for it.
+         """
+@@ -410,6 +410,17 @@ class SandboxedEnvironment(Environment):
+             formatter = SandboxedEscapeFormatter(self, s.escape)
+         else:
+             formatter = SandboxedFormatter(self)
++
++        if format_func is not None and format_func.__name__ == 'format_map':
++            if len(args) != 1 or kwargs:
++                raise TypeError(
++                    'format_map() takes exactly one argument %d given'
++                    % (len(args) + (kwargs is not None))
++                )
++
++            kwargs = args[0]
++            args = None
++
+         kwargs = _MagicFormatMapping(args, kwargs)
+         rv = formatter.vformat(s, args, kwargs)
+         return type(s)(rv)
+@@ -418,7 +429,7 @@ class SandboxedEnvironment(Environment):
+         """Call an object from sandboxed code."""
+         fmt = inspect_format_method(__obj)
+         if fmt is not None:
+-            return __self.format_string(fmt, args, kwargs)
++            return __self.format_string(fmt, args, kwargs, __obj)
+ 
+         # the double prefixes are to avoid double keyword argument
+         # errors when proxying the call.
+diff --git a/tests/test_security.py b/tests/test_security.py
+index 8e4222e..5c8639c 100644
+--- a/tests/test_security.py
++++ b/tests/test_security.py
+@@ -187,3 +187,22 @@ class TestStringFormat(object):
+         env = SandboxedEnvironment()
+         t = env.from_string('{{ ("a{0.foo}b{1}"|safe).format({"foo": 42}, "<foo>") }}')
+         assert t.render() == 'a42b&lt;foo&gt;'
++
++
++@pytest.mark.sandbox
++@pytest.mark.skipif(not hasattr(str, 'format_map'), reason='requires str.format_map method')
++class TestStringFormatMap(object):
++    def test_basic_format_safety(self):
++        env = SandboxedEnvironment()
++        t = env.from_string('{{ "a{x.__class__}b".format_map({"x":42}) }}')
++        assert t.render() == 'ab'
++
++    def test_basic_format_all_okay(self):
++        env = SandboxedEnvironment()
++        t = env.from_string('{{ "a{x.foo}b".format_map({"x":{"foo": 42}}) }}')
++        assert t.render() == 'a42b'
++
++    def test_safe_format_all_okay(self):
++        env = SandboxedEnvironment()
++        t = env.from_string('{{ ("a{x.foo}b{y}"|safe).format_map({"x":{"foo": 42}, "y":"<foo>"}) }}')
++        assert t.render() == 'a42b&lt;foo&gt;'
+-- 
+2.34.1
+

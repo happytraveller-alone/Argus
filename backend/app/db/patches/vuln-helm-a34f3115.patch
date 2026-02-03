@@ -1,0 +1,190 @@
+From a34f3115395474fbf3b8a167ef3473eb8b0952e9 Mon Sep 17 00:00:00 2001
+From: uzxmx <mingxiangxue@gmail.com>
+Date: Fri, 17 Apr 2020 03:53:39 +0800
+Subject: [PATCH] Fix nested null value overrides (#7743)
+
+* Fix nested null value overrides
+
+Signed-off-by: Mingxiang Xue <mingxiangxue@gmail.com>
+
+* Fix subchart value deletion
+
+Signed-off-by: Mingxiang Xue <mingxiangxue@gmail.com>
+---
+ pkg/chartutil/coalesce.go                     | 24 +++++------
+ pkg/chartutil/coalesce_test.go                | 40 +++++++++++++++++--
+ .../charts/pequod/charts/ahab/values.yaml     |  4 ++
+ pkg/chartutil/testdata/moby/values.yaml       |  2 +
+ 4 files changed, 52 insertions(+), 18 deletions(-)
+
+diff --git a/pkg/chartutil/coalesce.go b/pkg/chartutil/coalesce.go
+index bbdd5f21c96..a5ff66aed51 100644
+--- a/pkg/chartutil/coalesce.go
++++ b/pkg/chartutil/coalesce.go
+@@ -47,10 +47,7 @@ func CoalesceValues(chrt *chart.Chart, vals map[string]interface{}) (Values, err
+ 	if valsCopy == nil {
+ 		valsCopy = make(map[string]interface{})
+ 	}
+-	if _, err := coalesce(chrt, valsCopy); err != nil {
+-		return valsCopy, err
+-	}
+-	return coalesceDeps(chrt, valsCopy)
++	return coalesce(chrt, valsCopy)
+ }
+ 
+ // coalesce coalesces the dest values and the chart values, giving priority to the dest values.
+@@ -186,19 +183,18 @@ func CoalesceTables(dst, src map[string]interface{}) map[string]interface{} {
+ 	// Because dest has higher precedence than src, dest values override src
+ 	// values.
+ 	for key, val := range src {
+-		if istable(val) {
+-			switch innerdst, ok := dst[key]; {
+-			case !ok:
+-				dst[key] = val
+-			case istable(innerdst):
+-				CoalesceTables(innerdst.(map[string]interface{}), val.(map[string]interface{}))
+-			default:
++		if dv, ok := dst[key]; ok && dv == nil {
++			delete(dst, key)
++		} else if !ok {
++			dst[key] = val
++		} else if istable(val) {
++			if istable(dv) {
++				CoalesceTables(dv.(map[string]interface{}), val.(map[string]interface{}))
++			} else {
+ 				log.Printf("warning: cannot overwrite table with non table for %s (%v)", key, val)
+ 			}
+-		} else if dv, ok := dst[key]; ok && istable(dv) {
++		} else if istable(dv) {
+ 			log.Printf("warning: destination for %s is a table. Ignoring non-table value %v", key, val)
+-		} else if !ok { // <- ok is still in scope from preceding conditional.
+-			dst[key] = val
+ 		}
+ 	}
+ 	return dst
+diff --git a/pkg/chartutil/coalesce_test.go b/pkg/chartutil/coalesce_test.go
+index 6e82de59067..dc1017385e1 100644
+--- a/pkg/chartutil/coalesce_test.go
++++ b/pkg/chartutil/coalesce_test.go
+@@ -31,6 +31,8 @@ right: Null
+ left: NULL
+ front: ~
+ back: ""
++nested:
++  boat: null
+ 
+ global:
+   name: Ishmael
+@@ -47,6 +49,10 @@ pequod:
+       sail: true
+   ahab:
+     scope: whale
++    boat: null
++    nested:
++      foo: true
++      bar: null
+ `)
+ 
+ func TestCoalesceValues(t *testing.T) {
+@@ -86,6 +92,7 @@ func TestCoalesceValues(t *testing.T) {
+ 		{"{{.pequod.name}}", "pequod"},
+ 		{"{{.pequod.ahab.name}}", "ahab"},
+ 		{"{{.pequod.ahab.scope}}", "whale"},
++		{"{{.pequod.ahab.nested.foo}}", "true"},
+ 		{"{{.pequod.ahab.global.name}}", "Ishmael"},
+ 		{"{{.pequod.ahab.global.subject}}", "Queequeg"},
+ 		{"{{.pequod.ahab.global.harpooner}}", "Tashtego"},
+@@ -114,6 +121,19 @@ func TestCoalesceValues(t *testing.T) {
+ 		}
+ 	}
+ 
++	if _, ok := v["nested"].(map[string]interface{})["boat"]; ok {
++		t.Error("Expected nested boat key to be removed, still present")
++	}
++
++	subchart := v["pequod"].(map[string]interface{})["ahab"].(map[string]interface{})
++	if _, ok := subchart["boat"]; ok {
++		t.Error("Expected subchart boat key to be removed, still present")
++	}
++
++	if _, ok := subchart["nested"].(map[string]interface{})["bar"]; ok {
++		t.Error("Expected subchart nested bar key to be removed, still present")
++	}
++
+ 	// CoalesceValues should not mutate the passed arguments
+ 	is.Equal(valsCopy, vals)
+ }
+@@ -122,24 +142,28 @@ func TestCoalesceTables(t *testing.T) {
+ 	dst := map[string]interface{}{
+ 		"name": "Ishmael",
+ 		"address": map[string]interface{}{
+-			"street": "123 Spouter Inn Ct.",
+-			"city":   "Nantucket",
++			"street":  "123 Spouter Inn Ct.",
++			"city":    "Nantucket",
++			"country": nil,
+ 		},
+ 		"details": map[string]interface{}{
+ 			"friends": []string{"Tashtego"},
+ 		},
+ 		"boat": "pequod",
++		"hole": nil,
+ 	}
+ 	src := map[string]interface{}{
+ 		"occupation": "whaler",
+ 		"address": map[string]interface{}{
+-			"state":  "MA",
+-			"street": "234 Spouter Inn Ct.",
++			"state":   "MA",
++			"street":  "234 Spouter Inn Ct.",
++			"country": "US",
+ 		},
+ 		"details": "empty",
+ 		"boat": map[string]interface{}{
+ 			"mast": true,
+ 		},
++		"hole": "black",
+ 	}
+ 
+ 	// What we expect is that anything in dst overrides anything in src, but that
+@@ -170,6 +194,10 @@ func TestCoalesceTables(t *testing.T) {
+ 		t.Errorf("Unexpected state: %v", addr["state"])
+ 	}
+ 
++	if _, ok = addr["country"]; ok {
++		t.Error("The country is not left out.")
++	}
++
+ 	if det, ok := dst["details"].(map[string]interface{}); !ok {
+ 		t.Fatalf("Details is the wrong type: %v", dst["details"])
+ 	} else if _, ok := det["friends"]; !ok {
+@@ -179,4 +207,8 @@ func TestCoalesceTables(t *testing.T) {
+ 	if dst["boat"].(string) != "pequod" {
+ 		t.Errorf("Expected boat string, got %v", dst["boat"])
+ 	}
++
++	if _, ok = dst["hole"]; ok {
++		t.Error("The hole still exists.")
++	}
+ }
+diff --git a/pkg/chartutil/testdata/moby/charts/pequod/charts/ahab/values.yaml b/pkg/chartutil/testdata/moby/charts/pequod/charts/ahab/values.yaml
+index 86c3f63aac3..eee6980fa4f 100644
+--- a/pkg/chartutil/testdata/moby/charts/pequod/charts/ahab/values.yaml
++++ b/pkg/chartutil/testdata/moby/charts/pequod/charts/ahab/values.yaml
+@@ -1,2 +1,6 @@
+ scope: ahab
+ name: ahab
++boat: true
++nested:
++  foo: false
++  bar: true
+diff --git a/pkg/chartutil/testdata/moby/values.yaml b/pkg/chartutil/testdata/moby/values.yaml
+index 54e1ce46323..2169d756623 100644
+--- a/pkg/chartutil/testdata/moby/values.yaml
++++ b/pkg/chartutil/testdata/moby/values.yaml
+@@ -7,3 +7,5 @@ right: exists
+ left: exists
+ front: exists
+ back: exists
++nested:
++  boat: true

@@ -1,0 +1,60 @@
+From 526300236dc8a7664acdc265b6fc5d767289ac39 Mon Sep 17 00:00:00 2001
+From: Stefan Berger <stefanb@linux.vnet.ibm.com>
+Date: Tue, 17 Nov 2020 12:56:58 -0500
+Subject: [PATCH] swtpm_setup: Do not follow symlink on logfile
+ (CVE-2020-28407)
+
+Signed-off-by: Stefan Berger <stefanb@linux.ibm.com>
+---
+ src/swtpm_setup/py_swtpm_setup/swtpm_setup.py |  3 +++
+ src/swtpm_setup/py_swtpm_setup/swtpm_utils.py | 15 +++++++++++----
+ 2 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/src/swtpm_setup/py_swtpm_setup/swtpm_setup.py b/src/swtpm_setup/py_swtpm_setup/swtpm_setup.py
+index 01f2ef324..4d4ff9765 100755
+--- a/src/swtpm_setup/py_swtpm_setup/swtpm_setup.py
++++ b/src/swtpm_setup/py_swtpm_setup/swtpm_setup.py
+@@ -896,6 +896,9 @@ def main():
+         srkpass = DEFAULT_SRK_PASSWORD
+ 
+     if len(LOGFILE) > 0:
++        if os.path.islink(LOGFILE):
++            sys.stderr.write("Logfile must not be a symlink.\n")
++            sys.exit(1)
+         try:
+             fobj = open(LOGFILE, "a") # do not truncate
+             fobj.close()
+diff --git a/src/swtpm_setup/py_swtpm_setup/swtpm_utils.py b/src/swtpm_setup/py_swtpm_setup/swtpm_utils.py
+index 6ee7a5061..d98fb0d42 100644
+--- a/src/swtpm_setup/py_swtpm_setup/swtpm_utils.py
++++ b/src/swtpm_setup/py_swtpm_setup/swtpm_utils.py
+@@ -3,6 +3,7 @@
+ 
+ # pylint: disable=W0703
+ 
++import os
+ import sys
+ 
+ from cryptography.hazmat.backends import default_backend
+@@ -12,11 +13,17 @@
+ def append_to_file(filename, string):
+     """" Append a string to a file """
+     try:
+-        fobj = open(filename, 'a')
+-        fobj.write(string)
+-        fobj.close()
+-    except Exception:
++        filedesc = os.open(filename, os.O_WRONLY|os.O_APPEND|os.O_CREAT|os.O_NOFOLLOW, 0o640)
++        os.write(filedesc, string.encode('utf-8'))
++        os.close(filedesc)
++    except Exception as ex:
++        sys.stdout.write("Error: %s\n" % ex)
+         sys.stdout.write(string)
++        try:
++            if filedesc > 0:
++                os.close(filedesc)
++        except Exception:
++            pass
+ 
+ 
+ def logit(logfile, string):

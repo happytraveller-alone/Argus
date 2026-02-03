@@ -1,0 +1,65 @@
+From 54b48f1499bf319d9a784a6b661ba17e7a578e9b Mon Sep 17 00:00:00 2001
+From: Michael J Rubinsky <mrubinsk@horde.org>
+Date: Tue, 20 Oct 2015 22:25:35 -0400
+Subject: [PATCH] Released horde-5.2.8
+
+---
+ horde/composer.json       | 6 +++---
+ horde/docs/CHANGES        | 6 +++---
+ horde/lib/Application.php | 2 +-
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/horde/composer.json b/horde/composer.json
+index 3fe0a8fcc8..281f9dfb04 100644
+--- a/horde/composer.json
++++ b/horde/composer.json
+@@ -26,8 +26,8 @@
+             "role": "lead"
+         }
+     ],
+-    "version": "5.2.7",
+-    "time": "2015-08-01",
++    "version": "5.2.8",
++    "time": "2015-10-21",
+     "repositories": [
+         {
+             "type": "pear",
+@@ -79,7 +79,7 @@
+         "pear-pear.horde.org/Horde_OpenXchange": ">=1.0.0@stable,<=2.0.0alpha1@stable",
+         "pear-pear.horde.org/Horde_Service_Facebook": ">=2.0.0@stable,<=3.0.0alpha1@stable",
+         "pear-pear.horde.org/Horde_Service_Twitter": ">=2.1.0@stable,<=3.0.0alpha1@stable",
+-        "pear-pear.horde.org/Horde_Service_Weather": ">=2.1.0@stable,<=3.0.0alpha1@stable",
++        "pear-pear.horde.org/Horde_Service_Weather": ">=2.2.0@stable,<=3.0.0alpha1@stable",
+         "pear-pear.horde.org/Horde_SyncMl": ">=2.0.0@stable,<=3.0.0alpha1@stable",
+         "pear-pear.php.net/Console_Getopt": "*",
+         "pear-pear.php.net/Console_Table": "*",
+diff --git a/horde/docs/CHANGES b/horde/docs/CHANGES
+index 6cc6fb63cc..26caa2a3f9 100644
+--- a/horde/docs/CHANGES
++++ b/horde/docs/CHANGES
+@@ -1,6 +1,6 @@
+-----------
+-v5.2.8-git
+-----------
++------
++v5.2.8
++------
+ 
+ [mjr] SECURITY: Protect against CSRF attacks on various admin pages.
+ [jan] Don't apply access keys to checkbox and radiobox rows in the sidebar
+diff --git a/horde/lib/Application.php b/horde/lib/Application.php
+index fe77f9af89..b89025aef4 100644
+--- a/horde/lib/Application.php
++++ b/horde/lib/Application.php
+@@ -24,7 +24,7 @@ class Horde_Application extends Horde_Registry_Application
+ {
+     /**
+      */
+-    public $version = '5.2.8-git';
++    public $version = '5.2.8';
+ 
+     /**
+      */
+-- 
+2.34.1
+

@@ -1,0 +1,53 @@
+From f8009347c438bef22ef0603ab3d3ccb44bb10bed Mon Sep 17 00:00:00 2001
+From: Fabien Potencier <fabien@potencier.org>
+Date: Wed, 13 Jul 2022 14:52:38 +0200
+Subject: [PATCH] Fix a security issue on filesystem loader (possibility to
+ load a template outside a configured directory)
+
+---
+ src/Loader/FilesystemLoader.php | 4 ++--
+ tests/Loader/FilesystemTest.php | 5 +++++
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/Loader/FilesystemLoader.php b/src/Loader/FilesystemLoader.php
+index 1912e05a..7bcdae47 100644
+--- a/src/Loader/FilesystemLoader.php
++++ b/src/Loader/FilesystemLoader.php
+@@ -221,9 +221,9 @@ class FilesystemLoader implements LoaderInterface, ExistsLoaderInterface, Source
+         }
+ 
+         try {
+-            $this->validateName($name);
+-
+             list($namespace, $shortname) = $this->parseName($name);
++
++            $this->validateName($shortname);
+         } catch (LoaderError $e) {
+             if (!$throw) {
+                 return false;
+diff --git a/tests/Loader/FilesystemTest.php b/tests/Loader/FilesystemTest.php
+index 3307a9b7..eb6ec7e1 100644
+--- a/tests/Loader/FilesystemTest.php
++++ b/tests/Loader/FilesystemTest.php
+@@ -31,6 +31,7 @@ class FilesystemTest extends \PHPUnit\Framework\TestCase
+     public function testSecurity($template)
+     {
+         $loader = new FilesystemLoader([__DIR__.'/../Fixtures']);
++        $loader->addPath(__DIR__.'/../Fixtures', 'foo');
+ 
+         try {
+             $loader->getCacheKey($template);
+@@ -62,6 +63,10 @@ class FilesystemTest extends \PHPUnit\Framework\TestCase
+             ['filters\\\\..\\\\..\\\\AutoloaderTest.php'],
+             ['filters\\//../\\/\\..\\AutoloaderTest.php'],
+             ['/../AutoloaderTest.php'],
++            ['@__main__/../AutoloaderTest.php'],
++            ['@foo/../AutoloaderTest.php'],
++            ['@__main__/../../AutoloaderTest.php'],
++            ['@foo/../../AutoloaderTest.php'],
+         ];
+     }
+ 
+-- 
+2.34.1
+

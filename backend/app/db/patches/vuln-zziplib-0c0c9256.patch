@@ -1,0 +1,58 @@
+From 0c0c9256b0903f664bca25dd8d924211f81e01d3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Josef=20M=C3=B6llers?= <josef@firefly.moellers.local>
+Date: Fri, 2 Feb 2018 14:09:32 +0100
+Subject: [PATCH] Reject the ZIP file and report it as corrupt if the size of
+ the central directory and/or the offset of start of central directory point
+ beyond the end of the ZIP file. [CVE-2018-6484]
+
+---
+ bins/unzzipcat-zip.c |  2 +-
+ zzip/zip.c           | 12 ++++++++++++
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/bins/unzzipcat-zip.c b/bins/unzzipcat-zip.c
+index c8c124c..b285e37 100644
+--- a/bins/unzzipcat-zip.c
++++ b/bins/unzzipcat-zip.c
+@@ -78,7 +78,7 @@ static int unzzip_cat (int argc, char ** argv, int extract)
+     
+     disk = zzip_dir_open (argv[1], &error);
+     if (! disk) {
+-	perror(argv[1]);
++	fprintf(stderr, "%s: %s\n", argv[1], zzip_strerror(error));
+ 	return -1;
+     }
+ 
+diff --git a/zzip/zip.c b/zzip/zip.c
+index f0eac2b..67e662f 100644
+--- a/zzip/zip.c
++++ b/zzip/zip.c
+@@ -320,6 +320,12 @@ __zzip_fetch_disk_trailer(int fd, zzip_off_t filesize,
+ #                  endif
+ 
+                     __fixup_rootseek(offset + tail - mapped, trailer);
++		    /*
++		     * "extract data from files archived in a single zip file."
++		     * So the file offsets must be within the current ZIP archive!
++		     */
++		    if (trailer->zz_rootseek >= filesize || (trailer->zz_rootseek + trailer->zz_rootsize) >= filesize)
++		        return(ZZIP_CORRUPTED);
+                     { return(0); }
+                 } else if ((*tail == 'P') &&
+                            end - tail >=
+@@ -338,6 +344,12 @@ __zzip_fetch_disk_trailer(int fd, zzip_off_t filesize,
+                         zzip_disk64_trailer_finalentries(orig);
+                     trailer->zz_rootseek = zzip_disk64_trailer_rootseek(orig);
+                     trailer->zz_rootsize = zzip_disk64_trailer_rootsize(orig);
++		    /*
++		     * "extract data from files archived in a single zip file."
++		     * So the file offsets must be within the current ZIP archive!
++		     */
++		    if (trailer->zz_rootseek >= filesize || (trailer->zz_rootseek + trailer->zz_rootsize) >= filesize)
++		        return(ZZIP_CORRUPTED);
+                     { return(0); }
+ #                  endif
+                 }
+-- 
+2.34.1
+

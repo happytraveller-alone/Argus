@@ -1,0 +1,22 @@
+From 26e3c8674e66f0d10170d34f5445f0aed207387f Mon Sep 17 00:00:00 2001
+From: Tim Allclair <tallclair@google.com>
+Date: Wed, 10 Apr 2019 12:06:42 -0700
+Subject: [PATCH] Use consistent imageRef during container startup
+
+---
+ pkg/kubelet/kuberuntime/kuberuntime_container.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pkg/kubelet/kuberuntime/kuberuntime_container.go b/pkg/kubelet/kuberuntime/kuberuntime_container.go
+index ea16b028d3245..a63699169394e 100644
+--- a/pkg/kubelet/kuberuntime/kuberuntime_container.go
++++ b/pkg/kubelet/kuberuntime/kuberuntime_container.go
+@@ -194,7 +194,7 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(container *v1.Contai
+ 		return nil, nil, err
+ 	}
+ 
+-	uid, username, err := m.getImageUser(container.Image)
++	uid, username, err := m.getImageUser(imageRef)
+ 	if err != nil {
+ 		return nil, cleanupAction, err
+ 	}

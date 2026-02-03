@@ -1,0 +1,166 @@
+From 4f8772f9b731118628256189b73cd202149bbd97 Mon Sep 17 00:00:00 2001
+From: James M Snell <jasnell@gmail.com>
+Date: Thu, 12 Nov 2020 12:34:33 -0800
+Subject: [PATCH] src: retain pointers to WriteWrap/ShutdownWrap
+
+Avoids potential use-after-free when wrap req's are synchronously
+destroyed.
+
+CVE-ID: CVE-2020-8265
+Fixes: https://github.com/nodejs-private/node-private/issues/227
+Refs: https://hackerone.com/bugs?subject=nodejs&report_id=988103
+PR-URL: https://github.com/nodejs-private/node-private/pull/23
+Reviewed-By: Anna Henningsen <anna@addaleax.net>
+Reviewed-By: Matteo Collina <matteo.collina@gmail.com>
+Reviewed-By: Rich Trott <rtrott@gmail.com>
+---
+ src/stream_base-inl.h                         | 11 +++-
+ src/stream_base.cc                            |  2 +-
+ src/stream_base.h                             |  1 +
+ .../test-tls-use-after-free-regression.js     | 58 +++++++++++++++++++
+ 4 files changed, 68 insertions(+), 4 deletions(-)
+ create mode 100644 test/parallel/test-tls-use-after-free-regression.js
+
+diff --git a/src/stream_base-inl.h b/src/stream_base-inl.h
+index c003ffc1ef..c1590cc957 100644
+--- a/src/stream_base-inl.h
++++ b/src/stream_base-inl.h
+@@ -137,8 +137,11 @@ int StreamBase::Shutdown(v8::Local<v8::Object> req_wrap_obj) {
+     StreamReq::ResetObject(req_wrap_obj);
+   }
+ 
++  BaseObjectPtr<AsyncWrap> req_wrap_ptr;
+   AsyncHooks::DefaultTriggerAsyncIdScope trigger_scope(GetAsyncWrap());
+   ShutdownWrap* req_wrap = CreateShutdownWrap(req_wrap_obj);
++  if (req_wrap != nullptr)
++    req_wrap_ptr.reset(req_wrap->GetAsyncWrap());
+   int err = DoShutdown(req_wrap);
+ 
+   if (err != 0 && req_wrap != nullptr) {
+@@ -172,7 +175,7 @@ StreamWriteResult StreamBase::Write(
+   if (send_handle == nullptr) {
+     err = DoTryWrite(&bufs, &count);
+     if (err != 0 || count == 0) {
+-      return StreamWriteResult { false, err, nullptr, total_bytes };
++      return StreamWriteResult { false, err, nullptr, total_bytes, {} };
+     }
+   }
+ 
+@@ -182,13 +185,14 @@ StreamWriteResult StreamBase::Write(
+     if (!env->write_wrap_template()
+              ->NewInstance(env->context())
+              .ToLocal(&req_wrap_obj)) {
+-      return StreamWriteResult { false, UV_EBUSY, nullptr, 0 };
++      return StreamWriteResult { false, UV_EBUSY, nullptr, 0, {} };
+     }
+     StreamReq::ResetObject(req_wrap_obj);
+   }
+ 
+   AsyncHooks::DefaultTriggerAsyncIdScope trigger_scope(GetAsyncWrap());
+   WriteWrap* req_wrap = CreateWriteWrap(req_wrap_obj);
++  BaseObjectPtr<AsyncWrap> req_wrap_ptr(req_wrap->GetAsyncWrap());
+ 
+   err = DoWrite(req_wrap, bufs, count, send_handle);
+   bool async = err == 0;
+@@ -206,7 +210,8 @@ StreamWriteResult StreamBase::Write(
+     ClearError();
+   }
+ 
+-  return StreamWriteResult { async, err, req_wrap, total_bytes };
++  return StreamWriteResult {
++      async, err, req_wrap, total_bytes, std::move(req_wrap_ptr) };
+ }
+ 
+ template <typename OtherBase>
+diff --git a/src/stream_base.cc b/src/stream_base.cc
+index 3ad2017460..87781efb0e 100644
+--- a/src/stream_base.cc
++++ b/src/stream_base.cc
+@@ -265,7 +265,7 @@ int StreamBase::WriteString(const FunctionCallbackInfo<Value>& args) {
+ 
+     // Immediate failure or success
+     if (err != 0 || count == 0) {
+-      SetWriteResult(StreamWriteResult { false, err, nullptr, data_size });
++      SetWriteResult(StreamWriteResult { false, err, nullptr, data_size, {} });
+       return err;
+     }
+ 
+diff --git a/src/stream_base.h b/src/stream_base.h
+index 72142309fe..e106b00475 100644
+--- a/src/stream_base.h
++++ b/src/stream_base.h
+@@ -25,6 +25,7 @@ struct StreamWriteResult {
+   int err;
+   WriteWrap* wrap;
+   size_t bytes;
++  BaseObjectPtr<AsyncWrap> wrap_obj;
+ };
+ 
+ using JSMethodFunction = void(const v8::FunctionCallbackInfo<v8::Value>& args);
+diff --git a/test/parallel/test-tls-use-after-free-regression.js b/test/parallel/test-tls-use-after-free-regression.js
+new file mode 100644
+index 0000000000..51835fc033
+--- /dev/null
++++ b/test/parallel/test-tls-use-after-free-regression.js
+@@ -0,0 +1,58 @@
++'use strict';
++
++const common = require('../common');
++
++if (!common.hasCrypto)
++  common.skip('missing crypto');
++
++const https = require('https');
++const tls = require('tls');
++
++const kMessage =
++  'GET / HTTP/1.1\r\nHost: localhost\r\nConnection: Keep-alive\r\n\r\n';
++
++const key = `-----BEGIN EC PARAMETERS-----
++BggqhkjOPQMBBw==
++-----END EC PARAMETERS-----
++-----BEGIN EC PRIVATE KEY-----
++MHcCAQEEIDKfHHbiJMdu2STyHL11fWC7psMY19/gUNpsUpkwgGACoAoGCCqGSM49
++AwEHoUQDQgAEItqm+pYj3Ca8bi5mBs+H8xSMxuW2JNn4I+kw3aREsetLk8pn3o81
++PWBiTdSZrGBGQSy+UAlQvYeE6Z/QXQk8aw==
++-----END EC PRIVATE KEY-----`;
++
++const cert = `-----BEGIN CERTIFICATE-----
++MIIBhjCCASsCFDJU1tCo88NYU//pE+DQKO9hUDsFMAoGCCqGSM49BAMCMEUxCzAJ
++BgNVBAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5l
++dCBXaWRnaXRzIFB0eSBMdGQwHhcNMjAwOTIyMDg1NDU5WhcNNDgwMjA3MDg1NDU5
++WjBFMQswCQYDVQQGEwJBVTETMBEGA1UECAwKU29tZS1TdGF0ZTEhMB8GA1UECgwY
++SW50ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD
++QgAEItqm+pYj3Ca8bi5mBs+H8xSMxuW2JNn4I+kw3aREsetLk8pn3o81PWBiTdSZ
++rGBGQSy+UAlQvYeE6Z/QXQk8azAKBggqhkjOPQQDAgNJADBGAiEA7Bdn4F87KqIe
++Y/ABy/XIXXpFUb2nyv3zV7POQi2lPcECIQC3UWLmfiedpiIKsf9YRIyO0uEood7+
++glj2R1NNr1X68w==
++-----END CERTIFICATE-----`;
++
++const server = https.createServer(
++  { key, cert },
++  common.mustCall((req, res) => {
++    res.writeHead(200);
++    res.end('boom goes the dynamite\n');
++  }, 3));
++
++server.listen(0, common.mustCall(() => {
++  const socket =
++    tls.connect(
++      server.address().port,
++      'localhost',
++      { rejectUnauthorized: false },
++      common.mustCall(() => {
++        socket.write(kMessage);
++        socket.write(kMessage);
++        socket.write(kMessage);
++      }));
++
++  socket.on('data', common.mustCall(() => socket.destroy()));
++  socket.on('close', () => {
++    setImmediate(() => server.close());
++  });
++}));
+-- 
+2.34.1
+

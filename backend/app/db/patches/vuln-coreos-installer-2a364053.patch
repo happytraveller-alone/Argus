@@ -1,0 +1,307 @@
+From 18e3cc6b1f611809eed260b05797e2b488157ac8 Mon Sep 17 00:00:00 2001
+From: Benjamin Gilbert <bgilbert@redhat.com>
+Date: Sun, 3 Oct 2021 14:22:10 -0400
+Subject: [PATCH] download: explicitly check GPG exit status after copy
+ (CVE-2021-20319)
+
+Under normal conditions, GzDecoder doesn't read EOF from the underlying
+source; it stops reading as soon as it reaches the gzip trailer.  Since
+the wrapped GpgReader doesn't see EOF, it doesn't check the exit status of
+GPG, and a bad signature will not be noticed.  XzDecoder is not affected.
+
+This allows bypass of signature verification under uncommon circumstances.
+Notably, installing from a live ISO or PXE image uses either osmet images
+(Fedora CoreOS or RHEL CoreOS) or a full copy of the install image (RHEL for
+Edge), and these are not affected because they're trusted (they come from
+the installation media we've booted from).  These flows are affected:
+
+1.  Installing with --image-file, --image-url, or coreos.inst.image_url.
+For example, if a user has a local mirror of installation images, an
+attacker could replace an image with a gzip-compressed alternative (even
+if the file extension is .xz).  The result:
+
+$ coreos-installer install --image-url http://localhost:8080/image.xz /dev/loop0
+Downloading image from http://localhost:8080/image.xz
+Downloading signature from http://localhost:8080/image.xz.sig
+> Read disk 749.9 MiB/749.9 MiB (100%)
+gpg: Signature made Mon 20 Sep 2021 02:41:50 PM EDT
+gpg: using RSA key 8C5BA6990BDB26E19F2A1A801161AE6945719A39
+gpg: BAD signature from "Fedora (34) <fedora-34-primary@fedoraproject.org>" [ultimate]
+Install complete.
+
+GPG still complains when its stdin is closed, but coreos-installer doesn't
+notice.  Automation that relies on coreos-installer's exit status will not
+notice either.
+
+2. `coreos-installer download --decompress --image-url`:
+
+$ coreos-installer download --decompress --image-url http://localhost:8080/image.xz
+> Read disk 749.9 MiB/749.9 MiB (100%)
+gpg: Signature made Mon 20 Sep 2021 02:41:50 PM EDT
+gpg: using RSA key 8C5BA6990BDB26E19F2A1A801161AE6945719A39
+gpg: BAD signature from "Fedora (34) <fedora-34-primary@fedoraproject.org>" [ultimate]
+./image
+
+Again, coreos-installer exits 0.
+
+3. Installing with default parameters, when not using live install media
+with osmet, if the Red Hat-controlled S3 bucket is compromised or the
+HTTPS connection is successfully MITMed.
+
+4. `coreos-installer download --decompress` if the S3 bucket is
+compromised or the HTTPS connection is MITMed.
+
+Fix this by having callers explicitly check the signature verification
+result after the fetch pipeline reaches EOF.  This is easiest to do within
+the mutable borrow rules by adding a new VerifyReader which wraps either
+GpgReader if signatures are being checked, or the underlying source
+otherwise.  To ensure that the explicit check is done consistently, drop
+the implicit one at EOF, so that it'll be clear from a missing GPG report
+on stderr that the API was not used correctly.
+---
+ fixtures/verify/1M.gz     | Bin 0 -> 1054 bytes
+ fixtures/verify/1M.gz.sig | Bin 0 -> 438 bytes
+ src/download.rs           |  28 ++++++++-----
+ src/io/verify.rs          |  83 +++++++++++++++++++++++++++++---------
+ 4 files changed, 81 insertions(+), 30 deletions(-)
+ create mode 100644 fixtures/verify/1M.gz
+ create mode 100644 fixtures/verify/1M.gz.sig
+
+diff --git a/fixtures/verify/1M.gz b/fixtures/verify/1M.gz
+new file mode 100644
+index 0000000000000000000000000000000000000000..14b173837564b689f32c0b12c3c4b3bac6cad773
+GIT binary patch
+literal 1054
+zcmb2|=HNK;$3KyY+0d8a?Lk9E1_p*h3%>g2a>OqHGDpE^2#kin2nzu_W|>zO%NZC1
+F7yw9W3*G<#
+
+literal 0
+HcmV?d00001
+
+diff --git a/fixtures/verify/1M.gz.sig b/fixtures/verify/1M.gz.sig
+new file mode 100644
+index 0000000000000000000000000000000000000000..ba574bd99bb9ea5b2114b1cf4e593e682c354b26
+GIT binary patch
+literal 438
+zcmV;n0ZIOe0kZ@E0SEvc79j-uQLLZskxt6ie%mTvy{HEp@=JIH0%1@5>i`M~5MRBh
+z2OIKBcs9uk{vnVdsE}K4067mCXLfN2BqMG5Cw1n;2VAiETmk$!y)T0Oxif{*5g<~s
+zTvuppso@n5msw_@C5N&smacY(vhZ8$N(IHYAbE62A=Ak219-7vVbBmR75l9L*O<$l
+zgk-eyKR;@KdmQRR&yDOk`VMTvbYR+)0Xpzji-Su^+XoleXsH*)LSj^LN8Ea*NK)AK
+z_?H)v*EOroSM^BK$7FrR)GkzVttgKMVV<qEG65R|X%J~P$lAuxrb_&7U{08y#45%K
+znL{|4<ip1f=)<w(IG=<|eW0!<AIBc1bQur$O7Fs;l{Le8hnm`T&Uj7Z$Bsy>>ON``
+zaCzFYg9Nd&SIG?KZ20gfmpkRu8pgvp^(jVL?j{el7fP#ZzYLuA=C!CIr|~&i`bfN;
+z9^QN6jq-pFibB0To9He|7Dro|E7_obM}xM8TXGszz;HBv+MC8MX;_Q{_S>3V`?neo
+g>UeyPczOm$fAtsE377u`D}Jj@_DH0qhyrOv9amk^u>b%7
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/download.rs b/src/download.rs
+index edcafd5..4cee249 100644
+--- a/src/download.rs
++++ b/src/download.rs
+@@ -170,12 +170,13 @@ fn check_image_and_sig(
+         .with_context(|| format!("opening {}", path.display()))?;
+ 
+     // perform GPG verification
+-    let mut reader = GpgReader::new(
++    let mut reader = VerifyReader::new(
+         BufReader::with_capacity(BUFFER_SIZE, &mut file),
+-        signature,
++        Some(signature),
+         keys,
+     )?;
+     copy(&mut reader, &mut io::sink())?;
++    reader.verify()?;
+ 
+     Ok(())
+ }
+@@ -241,16 +242,14 @@ pub fn write_image<F>(
+ where
+     F: FnOnce(&[u8], &mut dyn Read, &mut File, &Path, Option<&SavedPartitions>) -> Result<()>,
+ {
+-    let mut reader: Box<dyn Read> = Box::new(&mut source.reader);
+-
+-    // wrap source for GPG verification
+-    if let Some(signature) = source.signature.as_ref() {
+-        reader = Box::new(GpgReader::new(reader, signature, keys)?);
+-    }
++    // wrap source for signature verification, if available
++    // keep the reader so we can explicitly check the result afterward
++    let mut verify_reader =
++        VerifyReader::new(&mut source.reader, source.signature.as_deref(), keys)?;
+ 
+     // wrap again for progress reporting
+-    reader = Box::new(ProgressReader::new(
+-        reader,
++    let mut reader: Box<dyn Read> = Box::new(ProgressReader::new(
++        &mut verify_reader,
+         source.length_hint,
+         &source.artifact_type,
+     ));
+@@ -297,6 +296,10 @@ where
+     // call the callback to copy the image
+     image_copy(&first_mb, &mut reader, dest, dest_path, saved)?;
+ 
++    // check signature
++    drop(reader);
++    verify_reader.verify()?;
++
+     // finish I/O before closing the progress bar
+     dest.sync_all().context("syncing data to disk")?;
+ 
+@@ -517,6 +520,11 @@ mod tests {
+             &include_bytes!("../fixtures/verify/1M.sig")[..],
+             &[0; 1 << 20][..],
+         );
++        test_one_signed_file(
++            &include_bytes!("../fixtures/verify/1M.gz")[..],
++            &include_bytes!("../fixtures/verify/1M.gz.sig")[..],
++            &[0; 1 << 20][..],
++        );
+         test_one_signed_file(
+             &include_bytes!("../fixtures/verify/1M.xz")[..],
+             &include_bytes!("../fixtures/verify/1M.xz.sig")[..],
+diff --git a/src/io/verify.rs b/src/io/verify.rs
+index 2a2f214..8db9599 100644
+--- a/src/io/verify.rs
++++ b/src/io/verify.rs
+@@ -37,7 +37,46 @@ enum VerifyReport {
+     Ignore,
+ }
+ 
+-pub struct GpgReader<R: Read> {
++pub struct VerifyReader<R: Read> {
++    typ: VerifyType<R>,
++}
++
++enum VerifyType<R: Read> {
++    None(R),
++    Gpg(GpgReader<R>),
++}
++
++impl<R: Read> VerifyReader<R> {
++    pub fn new(source: R, gpg_signature: Option<&[u8]>, keys: VerifyKeys) -> Result<Self> {
++        let typ = if let Some(signature) = gpg_signature {
++            VerifyType::Gpg(GpgReader::new(source, signature, keys)?)
++        } else {
++            VerifyType::None(source)
++        };
++        Ok(VerifyReader { typ })
++    }
++
++    /// Return an error if signature verification fails, and report the
++    /// result to stderr
++    pub fn verify(&mut self) -> Result<()> {
++        match &mut self.typ {
++            VerifyType::None(_) => (),
++            VerifyType::Gpg(reader) => reader.finish(VerifyReport::Stderr)?,
++        }
++        Ok(())
++    }
++}
++
++impl<R: Read> Read for VerifyReader<R> {
++    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
++        match &mut self.typ {
++            VerifyType::None(reader) => reader.read(buf),
++            VerifyType::Gpg(reader) => reader.read(buf),
++        }
++    }
++}
++
++struct GpgReader<R: Read> {
+     _gpgdir: TempDir,
+     source: R,
+     child: Child,
+@@ -45,7 +84,7 @@ pub struct GpgReader<R: Read> {
+ }
+ 
+ impl<R: Read> GpgReader<R> {
+-    pub fn new(source: R, signature: &[u8], keys: VerifyKeys) -> Result<Self> {
++    fn new(source: R, signature: &[u8], keys: VerifyKeys) -> Result<Self> {
+         // create GPG home directory with restrictive mode
+         let gpgdir = tempfile::Builder::new()
+             .prefix("coreos-installer-")
+@@ -235,9 +274,6 @@ impl<R: Read> Read for GpgReader<R> {
+                 .as_mut()
+                 .unwrap()
+                 .write_all(&buf[0..count])?;
+-        } else {
+-            // end of input; check result
+-            self.finish(VerifyReport::Stderr)?;
+         }
+         Ok(count)
+     }
+@@ -261,11 +297,12 @@ mod tests {
+         let data = include_bytes!("../../fixtures/verify/test-key.priv.asc");
+         let sig = include_bytes!("../../fixtures/verify/test-key.priv.asc.sig");
+ 
+-        let mut reader = GpgReader::new(&data[..], &sig[..], VerifyKeys::InsecureTest).unwrap();
++        let mut reader =
++            VerifyReader::new(&data[..], Some(&sig[..]), VerifyKeys::InsecureTest).unwrap();
+         let mut buf = Vec::new();
+         reader.read_to_end(&mut buf).unwrap();
+-        reader.finish(VerifyReport::Stderr).unwrap();
+-        reader.finish(VerifyReport::Stderr).unwrap();
++        reader.verify().unwrap();
++        reader.verify().unwrap();
+         assert_eq!(&buf[..], &data[..]);
+     }
+ 
+@@ -276,11 +313,13 @@ mod tests {
+         let sig = include_bytes!("../../fixtures/verify/test-key.priv.asc.sig");
+         data[data.len() - 1] = b'!';
+ 
+-        let mut reader = GpgReader::new(&data[..], &sig[..], VerifyKeys::InsecureTest).unwrap();
++        let mut reader =
++            VerifyReader::new(&data[..], Some(&sig[..]), VerifyKeys::InsecureTest).unwrap();
+         let mut buf = Vec::new();
+-        reader.read_to_end(&mut buf).unwrap_err();
+-        reader.finish(VerifyReport::Stderr).unwrap_err();
+-        reader.finish(VerifyReport::Stderr).unwrap_err();
++        reader.read_to_end(&mut buf).unwrap();
++        reader.verify().unwrap_err();
++        reader.verify().unwrap_err();
++        assert_eq!(&buf[..], &data[..]);
+     }
+ 
+     /// Read truncated data with otherwise-valid signature
+@@ -289,11 +328,13 @@ mod tests {
+         let data = include_bytes!("../../fixtures/verify/test-key.priv.asc");
+         let sig = include_bytes!("../../fixtures/verify/test-key.priv.asc.sig");
+ 
+-        let mut reader = GpgReader::new(&data[..1000], &sig[..], VerifyKeys::InsecureTest).unwrap();
++        let mut reader =
++            VerifyReader::new(&data[..1000], Some(&sig[..]), VerifyKeys::InsecureTest).unwrap();
+         let mut buf = Vec::new();
+-        reader.read_to_end(&mut buf).unwrap_err();
+-        reader.finish(VerifyReport::Stderr).unwrap_err();
+-        reader.finish(VerifyReport::Stderr).unwrap_err();
++        reader.read_to_end(&mut buf).unwrap();
++        reader.verify().unwrap_err();
++        reader.verify().unwrap_err();
++        assert_eq!(&buf[..], &data[..1000]);
+     }
+ 
+     /// Read data with signing key not in keyring
+@@ -302,10 +343,12 @@ mod tests {
+         let data = include_bytes!("../../fixtures/verify/test-key.priv.asc");
+         let sig = include_bytes!("../../fixtures/verify/test-key.priv.asc.random.sig");
+ 
+-        let mut reader = GpgReader::new(&data[..], &sig[..], VerifyKeys::InsecureTest).unwrap();
++        let mut reader =
++            VerifyReader::new(&data[..], Some(&sig[..]), VerifyKeys::InsecureTest).unwrap();
+         let mut buf = Vec::new();
+-        reader.read_to_end(&mut buf).unwrap_err();
+-        reader.finish(VerifyReport::Stderr).unwrap_err();
+-        reader.finish(VerifyReport::Stderr).unwrap_err();
++        reader.read_to_end(&mut buf).unwrap();
++        reader.verify().unwrap_err();
++        reader.verify().unwrap_err();
++        assert_eq!(&buf[..], &data[..]);
+     }
+ }
+-- 
+2.34.1
+

@@ -1,0 +1,248 @@
+From 723816ab9b52f807180c99fc69c7d08cf6c6bd61 Mon Sep 17 00:00:00 2001
+From: Patrick Soquet <ps@moddable.tech>
+Date: Wed, 6 May 2020 10:24:49 +0200
+Subject: [PATCH] XS: missing expression errors
+
+---
+ xs/sources/xsSyntaxical.c |  19 ++---
+ xs/sources/xsTree.c       | 172 +++++++++++++++++++-------------------
+ 2 files changed, 95 insertions(+), 96 deletions(-)
+
+diff --git a/xs/sources/xsSyntaxical.c b/xs/sources/xsSyntaxical.c
+index bcf14e078..96df29067 100644
+--- a/xs/sources/xsSyntaxical.c
++++ b/xs/sources/xsSyntaxical.c
+@@ -1442,10 +1442,7 @@ void fxIfStatement(txParser* parser)
+ 	txInteger aLine = parser->line;
+ 	fxMatchToken(parser, XS_TOKEN_IF);
+ 	fxMatchToken(parser, XS_TOKEN_LEFT_PARENTHESIS);
+-	if (gxTokenFlags[parser->token] & XS_TOKEN_BEGIN_EXPRESSION)
+-		fxCommaExpression(parser);
+-	else
+-		fxReportParserError(parser, "invalid if");
++	fxCommaExpression(parser);
+ 	fxMatchToken(parser, XS_TOKEN_RIGHT_PARENTHESIS);
+ 	fxStatement(parser, 0);
+ 	if (parser->token == XS_TOKEN_ELSE) {
+@@ -1478,10 +1475,7 @@ void fxSwitchStatement(txParser* parser)
+ 	txInteger aLine = parser->line;
+ 	fxMatchToken(parser, XS_TOKEN_SWITCH);
+ 	fxMatchToken(parser, XS_TOKEN_LEFT_PARENTHESIS);
+-	if (gxTokenFlags[parser->token] & XS_TOKEN_BEGIN_EXPRESSION)
+-		fxCommaExpression(parser);
+-	else
+-		fxReportParserError(parser, "invalid switch");
++	fxCommaExpression(parser);
+ 	fxMatchToken(parser, XS_TOKEN_RIGHT_PARENTHESIS);
+ 	fxMatchToken(parser, XS_TOKEN_LEFT_BRACE);
+ 	while ((parser->token == XS_TOKEN_CASE) || (parser->token == XS_TOKEN_DEFAULT)) {
+@@ -1489,10 +1483,7 @@ void fxSwitchStatement(txParser* parser)
+ 		txInteger aCaseLine = parser->line;
+ 		if (parser->token == XS_TOKEN_CASE) {
+ 			fxMatchToken(parser, XS_TOKEN_CASE);
+-			if (gxTokenFlags[parser->token] & XS_TOKEN_BEGIN_EXPRESSION)
+-				fxCommaExpression(parser);
+-			else
+-				fxReportParserError(parser, "invalid case");
++			fxCommaExpression(parser);
+ 			fxMatchToken(parser, XS_TOKEN_COLON);
+ 			aCaseCount = parser->nodeCount;
+ 			while (gxTokenFlags[parser->token] & XS_TOKEN_BEGIN_STATEMENT)
+@@ -1654,6 +1645,10 @@ void fxCommaExpression(txParser* parser)
+ 		fxPushNodeList(parser, aCount);
+ 		fxPushNodeStruct(parser, 1, XS_TOKEN_EXPRESSIONS, aLine);
+ 	}
++	else if (aCount == 0) {
++		fxPushNULL(parser);
++		fxReportParserError(parser, "missing expression");
++	}
+ }
+ 
+ void fxAssignmentExpression(txParser* parser)
+diff --git a/xs/sources/xsTree.c b/xs/sources/xsTree.c
+index 21d59bce8..d5b5672f7 100644
+--- a/xs/sources/xsTree.c
++++ b/xs/sources/xsTree.c
+@@ -1635,91 +1635,95 @@ void fxNodePrintTree(void* it, void* param)
+ 		fprintf(stderr, "\t");
+ 		tabs--;
+ 	}
+-	switch (node->description->token) {
+-	case XS_TOKEN_ACCESS: 
+-		fxAccessNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_ARG: 
+-	case XS_TOKEN_CONST: 
+-	case XS_TOKEN_DEFINE: 
+-	case XS_TOKEN_LET: 
+-	case XS_TOKEN_VAR: 
+-		fxDeclareDefineNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_EXPORT: 
+-		fxExportNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_IMPORT: 
+-		fxImportNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_INTEGER: 
+-		fxIntegerNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_FUNCTION: 
+-		fxFunctionNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_LABEL: 
+-		fxLabelNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_MEMBER: 
+-		fxMemberNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_NUMBER: 
+-		fxNumberNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_PROPERTY: 
+-		fxPropertyNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_PROPERTY_BINDING: 
+-		fxPropertyBindingNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_SPECIFIER: 
+-		fxSpecifierNodePrintNode(it); 
+-		break;
+-	case XS_TOKEN_STRING: 
+-		fxStringNodePrintNode(it); 
+-		break;
+-	default: 
+-		fxNodePrintNode(it); 
+-		break;
+-	}
+-	if (node->flags) {
+-		fprintf(stderr, " [");
+-		if (node->flags & mxArgumentsFlag)
+-			fprintf(stderr, " arguments");
+-		if (node->flags & mxArrowFlag)
+-			fprintf(stderr, " arrow");
+-		if (node->flags & mxAsyncFlag)
+-			fprintf(stderr, " async");
+-		if (node->flags & mxAwaitingFlag)
+-			fprintf(stderr, " await");
+-		if (node->flags & mxBaseFlag)
+-			fprintf(stderr, " base");
+-		if (node->flags & mxDerivedFlag)
+-			fprintf(stderr, " derived");
+-		if (node->flags & mxEvalFlag)
+-			fprintf(stderr, " eval");
+-		if (node->flags & mxTargetFlag)
+-			fprintf(stderr, " function");
+-		if (node->flags & mxGeneratorFlag)
+-			fprintf(stderr, " generator");
+-		if (node->flags & mxGetterFlag)
+-			fprintf(stderr, " getter");
+-		if (node->flags & mxMethodFlag)
+-			fprintf(stderr, " method");
+-		if (node->flags & mxSetterFlag)
+-			fprintf(stderr, " setter");
+-		if (node->flags & mxStaticFlag)
+-			fprintf(stderr, " static");
+-		if (node->flags & mxStrictFlag)
+-			fprintf(stderr, " strict");
+-		if (node->flags & mxSuperFlag)
+-			fprintf(stderr, " super");
+-		fprintf(stderr, " ]");
++	if (node) {
++		switch (node->description->token) {
++		case XS_TOKEN_ACCESS: 
++			fxAccessNodePrintNode(it); 
++			break;
++		case XS_TOKEN_ARG: 
++		case XS_TOKEN_CONST: 
++		case XS_TOKEN_DEFINE: 
++		case XS_TOKEN_LET: 
++		case XS_TOKEN_VAR: 
++			fxDeclareDefineNodePrintNode(it); 
++			break;
++		case XS_TOKEN_EXPORT: 
++			fxExportNodePrintNode(it); 
++			break;
++		case XS_TOKEN_IMPORT: 
++			fxImportNodePrintNode(it); 
++			break;
++		case XS_TOKEN_INTEGER: 
++			fxIntegerNodePrintNode(it); 
++			break;
++		case XS_TOKEN_FUNCTION: 
++			fxFunctionNodePrintNode(it); 
++			break;
++		case XS_TOKEN_LABEL: 
++			fxLabelNodePrintNode(it); 
++			break;
++		case XS_TOKEN_MEMBER: 
++			fxMemberNodePrintNode(it); 
++			break;
++		case XS_TOKEN_NUMBER: 
++			fxNumberNodePrintNode(it); 
++			break;
++		case XS_TOKEN_PROPERTY: 
++			fxPropertyNodePrintNode(it); 
++			break;
++		case XS_TOKEN_PROPERTY_BINDING: 
++			fxPropertyBindingNodePrintNode(it); 
++			break;
++		case XS_TOKEN_SPECIFIER: 
++			fxSpecifierNodePrintNode(it); 
++			break;
++		case XS_TOKEN_STRING: 
++			fxStringNodePrintNode(it); 
++			break;
++		default: 
++			fxNodePrintNode(it); 
++			break;
++		}
++		if (node->flags) {
++			fprintf(stderr, " [");
++			if (node->flags & mxArgumentsFlag)
++				fprintf(stderr, " arguments");
++			if (node->flags & mxArrowFlag)
++				fprintf(stderr, " arrow");
++			if (node->flags & mxAsyncFlag)
++				fprintf(stderr, " async");
++			if (node->flags & mxAwaitingFlag)
++				fprintf(stderr, " await");
++			if (node->flags & mxBaseFlag)
++				fprintf(stderr, " base");
++			if (node->flags & mxDerivedFlag)
++				fprintf(stderr, " derived");
++			if (node->flags & mxEvalFlag)
++				fprintf(stderr, " eval");
++			if (node->flags & mxTargetFlag)
++				fprintf(stderr, " function");
++			if (node->flags & mxGeneratorFlag)
++				fprintf(stderr, " generator");
++			if (node->flags & mxGetterFlag)
++				fprintf(stderr, " getter");
++			if (node->flags & mxMethodFlag)
++				fprintf(stderr, " method");
++			if (node->flags & mxSetterFlag)
++				fprintf(stderr, " setter");
++			if (node->flags & mxStaticFlag)
++				fprintf(stderr, " static");
++			if (node->flags & mxStrictFlag)
++				fprintf(stderr, " strict");
++			if (node->flags & mxSuperFlag)
++				fprintf(stderr, " super");
++			fprintf(stderr, " ]");
++		}
++		printer->tabs++;
++		(*node->description->dispatch->distribute)(node, fxNodePrintTree, param);
++		printer->tabs--;
+ 	}
+-	printer->tabs++;
+-	(*node->description->dispatch->distribute)(node, fxNodePrintTree, param);
+-	printer->tabs--;
++	else
++		fprintf(stderr, "NULL");
+ }
+ 
+ 
+-- 
+2.34.1
+

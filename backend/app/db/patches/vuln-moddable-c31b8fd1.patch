@@ -1,0 +1,27 @@
+From c31b8fd15df1ce5fdc11161d4d88fae278e974e1 Mon Sep 17 00:00:00 2001
+From: Patrick Soquet <ps@moddable.tech>
+Date: Tue, 21 Dec 2021 09:25:37 +0100
+Subject: [PATCH] XS: #752
+
+---
+ xs/sources/xsDataView.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/xs/sources/xsDataView.c b/xs/sources/xsDataView.c
+index 652d3b704..aedcf6f87 100644
+--- a/xs/sources/xsDataView.c
++++ b/xs/sources/xsDataView.c
+@@ -2299,8 +2299,8 @@ void fx_TypedArray_prototype_sort(txMachine* the)
+ 					i = lo + 1;
+ 					j = hi - 1;
+ 					do {
+-						while (COMPARE(i) < 0) i++;
+-						while (COMPARE(j) > 0) j--;
++						while ((COMPARE(i) < 0) && (i <= j)) i++;
++						while ((COMPARE(j) > 0) && (i <= j)) j--;
+ 						if (i < j) {
+ 							PUSH(i);
+ 							MOVE(j, i);
+-- 
+2.34.1
+

@@ -1,0 +1,89 @@
+From 4b87aa367c87e56de36ab12b3340b450c55cb9f6 Mon Sep 17 00:00:00 2001
+From: Lunny Xiao <xiaolunwen@gmail.com>
+Date: Fri, 12 Apr 2019 20:01:34 +0800
+Subject: [PATCH] fix mail notification when close/reopen issue (#6581) (#6588)
+
+---
+ models/issue_mail.go              | 16 ++++++++++++----
+ modules/notification/mail/mail.go | 21 ++++++++++++++++++---
+ 2 files changed, 30 insertions(+), 7 deletions(-)
+
+diff --git a/models/issue_mail.go b/models/issue_mail.go
+index 66ad46e39..18d011583 100644
+--- a/models/issue_mail.go
++++ b/models/issue_mail.go
+@@ -118,17 +118,25 @@ func mailIssueCommentToParticipants(e Engine, issue *Issue, doer *User, content
+ 
+ // MailParticipants sends new issue thread created emails to repository watchers
+ // and mentioned people.
+-func (issue *Issue) MailParticipants() (err error) {
+-	return issue.mailParticipants(x)
++func (issue *Issue) MailParticipants(opType ActionType) (err error) {
++	return issue.mailParticipants(x, opType)
+ }
+ 
+-func (issue *Issue) mailParticipants(e Engine) (err error) {
++func (issue *Issue) mailParticipants(e Engine, opType ActionType) (err error) {
+ 	mentions := markup.FindAllMentions(issue.Content)
+ 	if err = UpdateIssueMentions(e, issue.ID, mentions); err != nil {
+ 		return fmt.Errorf("UpdateIssueMentions [%d]: %v", issue.ID, err)
+ 	}
+ 
+-	if err = mailIssueCommentToParticipants(e, issue, issue.Poster, issue.Content, nil, mentions); err != nil {
++	var content = issue.Content
++	switch opType {
++	case ActionCloseIssue, ActionClosePullRequest:
++		content = fmt.Sprintf("Closed #%d", issue.Index)
++	case ActionReopenIssue, ActionReopenPullRequest:
++		content = fmt.Sprintf("Reopened #%d", issue.Index)
++	}
++
++	if err = mailIssueCommentToParticipants(e, issue, issue.Poster, content, nil, mentions); err != nil {
+ 		log.Error(4, "mailIssueCommentToParticipants: %v", err)
+ 	}
+ 
+diff --git a/modules/notification/mail/mail.go b/modules/notification/mail/mail.go
+index 8bb417344..11371a6d7 100644
+--- a/modules/notification/mail/mail.go
++++ b/modules/notification/mail/mail.go
+@@ -42,19 +42,34 @@ func (m *mailNotifier) NotifyCreateIssueComment(doer *models.User, repo *models.
+ }
+ 
+ func (m *mailNotifier) NotifyNewIssue(issue *models.Issue) {
+-	if err := issue.MailParticipants(); err != nil {
++	if err := issue.MailParticipants(models.ActionCreateIssue); err != nil {
+ 		log.Error(4, "MailParticipants: %v", err)
+ 	}
+ }
+ 
+ func (m *mailNotifier) NotifyIssueChangeStatus(doer *models.User, issue *models.Issue, isClosed bool) {
+-	if err := issue.MailParticipants(); err != nil {
++	var actionType models.ActionType
++	if issue.IsPull {
++		if isClosed {
++			actionType = models.ActionClosePullRequest
++		} else {
++			actionType = models.ActionReopenPullRequest
++		}
++	} else {
++		if isClosed {
++			actionType = models.ActionCloseIssue
++		} else {
++			actionType = models.ActionReopenIssue
++		}
++	}
++
++	if err := issue.MailParticipants(actionType); err != nil {
+ 		log.Error(4, "MailParticipants: %v", err)
+ 	}
+ }
+ 
+ func (m *mailNotifier) NotifyNewPullRequest(pr *models.PullRequest) {
+-	if err := pr.Issue.MailParticipants(); err != nil {
++	if err := pr.Issue.MailParticipants(models.ActionCreatePullRequest); err != nil {
+ 		log.Error(4, "MailParticipants: %v", err)
+ 	}
+ }
+-- 
+2.34.1
+

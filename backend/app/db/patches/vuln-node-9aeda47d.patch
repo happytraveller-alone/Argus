@@ -1,0 +1,89 @@
+From 9aeda47d9c90a60df906edb0c4601eb811756be7 Mon Sep 17 00:00:00 2001
+From: Rich Trott <rtrott@gmail.com>
+Date: Sat, 26 Feb 2022 05:34:20 +0000
+Subject: [PATCH] url: fix url.parse() for @hostname
+
+Make url.parse() behave more like browsers and WHATWHG URL when dealing
+with URLs that of the format `http:@example.com`. This is the same as
+`http://example.com`.
+
+This issue was reported by P0cas. https://github.com/P0cas
+
+PR-URL: https://github.com/nodejs/node/pull/42136
+Reviewed-By: Darshan Sen <raisinten@gmail.com>
+Reviewed-By: Antoine du Hamel <duhamelantoine1995@gmail.com>
+---
+ lib/url.js                             | 23 +++++++++++++++--------
+ test/parallel/test-url-parse-format.js | 17 ++++++++++++++++-
+ 2 files changed, 31 insertions(+), 9 deletions(-)
+
+diff --git a/lib/url.js b/lib/url.js
+index 745c7c9930ded..63d24bef7bf0b 100644
+--- a/lib/url.js
++++ b/lib/url.js
+@@ -294,22 +294,29 @@ Url.prototype.parse = function parse(url, parseQueryString, slashesDenoteHost) {
+     rest = rest.slice(proto.length);
+   }
+ 
+-  // Figure out if it's got a host
+-  // user@server is *always* interpreted as a hostname, and url
++  // Figure out if it's got a host.
++  // user@server is *always* interpreted as a hostname, and URL
+   // resolution will treat //foo/bar as host=foo,path=bar because that's
+-  // how the browser resolves relative URLs.
++  // how the browser resolves relative URLs. http:@example.com is treated
++  // the same as http://example.com.
+   let slashes;
++  let at;
+   if (slashesDenoteHost || proto || hostPattern.test(rest)) {
+     slashes = rest.charCodeAt(0) === CHAR_FORWARD_SLASH &&
+-              rest.charCodeAt(1) === CHAR_FORWARD_SLASH;
+-    if (slashes && !(proto && hostlessProtocol.has(lowerProto))) {
+-      rest = rest.slice(2);
+-      this.slashes = true;
++                  rest.charCodeAt(1) === CHAR_FORWARD_SLASH;
++    at = rest.charCodeAt(0) === CHAR_AT;
++    if (!(proto && hostlessProtocol.has(lowerProto))) {
++      if (slashes) {
++        rest = rest.slice(2);
++        this.slashes = true;
++      } else if (at) {
++        rest = rest.slice(1);
++      }
+     }
+   }
+ 
+   if (!hostlessProtocol.has(lowerProto) &&
+-      (slashes || (proto && !slashedProtocol.has(proto)))) {
++      (slashes || at || (proto && !slashedProtocol.has(proto)))) {
+ 
+     // there's a hostname.
+     // the first instance of /, ?, ;, or # ends the host.
+diff --git a/test/parallel/test-url-parse-format.js b/test/parallel/test-url-parse-format.js
+index e1cf80a2778ab..a4bb141b49bfc 100644
+--- a/test/parallel/test-url-parse-format.js
++++ b/test/parallel/test-url-parse-format.js
+@@ -975,7 +975,22 @@ const parseTests = {
+     query: null,
+     pathname: '/everybody',
+     path: '/everybody',
+-    href: '//fhqwhgads@example.com/everybody#to-the-limit'
++    href: '//fhqwhgads@example.com/everybody#to-the-limit',
++  },
++
++  'http:@localhost': {
++    protocol: 'http:',
++    slashes: null,
++    auth: null,
++    host: 'localhost',
++    port: null,
++    hostname: 'localhost',
++    hash: null,
++    search: null,
++    query: null,
++    pathname: '/',
++    path: '/',
++    href: 'http://localhost/',
+   },
+ };
+ 

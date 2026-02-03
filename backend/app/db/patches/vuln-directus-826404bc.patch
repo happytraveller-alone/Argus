@@ -1,0 +1,46 @@
+From 826404bcbe769f9bcd526baec41e696237b78ebb Mon Sep 17 00:00:00 2001
+From: Rijk van Zanten <rijkvanzanten@me.com>
+Date: Mon, 7 Mar 2022 16:05:02 -0500
+Subject: [PATCH] Default CORS to disabled (#12022)
+
+* Default CORS to disabled
+
+* Update docs to match
+---
+ api/src/env.ts                       | 4 ++--
+ docs/configuration/config-options.md | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/api/src/env.ts b/api/src/env.ts
+index ac3b7de1e..474a403ff 100644
+--- a/api/src/env.ts
++++ b/api/src/env.ts
+@@ -39,8 +39,8 @@ const defaults: Record<string, any> = {
+ 
+ 	ROOT_REDIRECT: './admin',
+ 
+-	CORS_ENABLED: true,
+-	CORS_ORIGIN: true,
++	CORS_ENABLED: false,
++	CORS_ORIGIN: false,
+ 	CORS_METHODS: 'GET,POST,PATCH,DELETE',
+ 	CORS_ALLOWED_HEADERS: 'Content-Type,Authorization',
+ 	CORS_EXPOSED_HEADERS: 'Content-Range',
+diff --git a/docs/configuration/config-options.md b/docs/configuration/config-options.md
+index 648979744..6b84f51a9 100644
+--- a/docs/configuration/config-options.md
++++ b/docs/configuration/config-options.md
+@@ -319,8 +319,8 @@ multiplied. This may cause out of memory errors, especially when running in cont
+ 
+ | Variable               | Description                                                                                                                                            | Default Value                |
+ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+-| `CORS_ENABLED`         | Whether or not to enable the CORS headers.                                                                                                             | `true`                       |
+-| `CORS_ORIGIN`          | Value for the `Access-Control-Allow-Origin` header. Use `true` to match the Origin header, or provide a domain or a CSV of domains for specific access | `true`                       |
++| `CORS_ENABLED`         | Whether or not to enable the CORS headers.                                                                                                             | `false`                      |
++| `CORS_ORIGIN`          | Value for the `Access-Control-Allow-Origin` header. Use `true` to match the Origin header, or provide a domain or a CSV of domains for specific access | `false`                      |
+ | `CORS_METHODS`         | Value for the `Access-Control-Allow-Methods` header.                                                                                                   | `GET,POST,PATCH,DELETE`      |
+ | `CORS_ALLOWED_HEADERS` | Value for the `Access-Control-Allow-Headers` header.                                                                                                   | `Content-Type,Authorization` |
+ | `CORS_EXPOSED_HEADERS` | Value for the `Access-Control-Expose-Headers` header.                                                                                                  | `Content-Range`              |
+-- 
+2.34.1
+

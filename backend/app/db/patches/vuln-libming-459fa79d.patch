@@ -1,0 +1,28 @@
+From 459fa79d04dcd240996765727a726e5dc5c38f34 Mon Sep 17 00:00:00 2001
+From: Balint Reczey <balint@balintreczey.hu>
+Date: Thu, 5 Jan 2017 15:51:11 +0100
+Subject: [PATCH] Parse Protect tag's Password as string
+
+Fixes CVE-2016-9827.
+
+Fixes: #59
+---
+ util/parser.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/util/parser.c b/util/parser.c
+index caa9cadb..96b12328 100644
+--- a/util/parser.c
++++ b/util/parser.c
+@@ -2752,7 +2752,7 @@ parseSWF_PROTECT (FILE * f, int length)
+   PAR_BEGIN (SWF_PROTECT);
+ 
+   if( length != 0 ) {
+-  	parserrec->Password = readBytes (f, length);
++  	parserrec->Password = readString (f);
+   } else {
+   	parserrec->Password = NULL;
+   }
+-- 
+2.34.1
+

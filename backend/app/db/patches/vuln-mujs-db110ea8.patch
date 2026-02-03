@@ -1,0 +1,31 @@
+From db110ea88edde20cfdd76a7162de751fefcc1fde Mon Sep 17 00:00:00 2001
+From: Tor Andersson <tor.andersson@artifex.com>
+Date: Wed, 16 Mar 2022 11:34:18 +0100
+Subject: [PATCH] Bug 705052: Don't use private STACK/TOP macros in jsstate.c
+
+These convenience macros are defined and used in jsrun.c, and should not
+be used in other files.
+---
+ jsstate.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/jsstate.c b/jsstate.c
+index 1dfb7fd..7ac4463 100644
+--- a/jsstate.c
++++ b/jsstate.c
+@@ -10,9 +10,9 @@
+ 
+ static int js_ptry(js_State *J) {
+ 	if (J->trytop == JS_TRYLIMIT) {
+-		STACK[TOP].type = JS_TLITSTR;
+-		STACK[TOP].u.litstr = "exception stack overflow";
+-		++TOP;
++		J->stack[J->top].type = JS_TLITSTR;
++		J->stack[J->top].u.litstr = "exception stack overflow";
++		++J->top;
+ 		return 1;
+ 	}
+ 	return 0;
+-- 
+2.34.1
+

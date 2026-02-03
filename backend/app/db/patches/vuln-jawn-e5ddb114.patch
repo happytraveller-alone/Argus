@@ -1,0 +1,33 @@
+From e5ddb114ed5d45ee0a605da06a280207bf9f9f58 Mon Sep 17 00:00:00 2001
+From: Nathaniel Fischer <nathan@nrktkt.tk>
+Date: Wed, 15 Dec 2021 17:30:37 -0800
+Subject: [PATCH] Use TreeMap in SimpleFacade to solve DoS vuln
+
+---
+ parser/shared/src/main/scala/jawn/Facade.scala | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/parser/shared/src/main/scala/jawn/Facade.scala b/parser/shared/src/main/scala/jawn/Facade.scala
+index af33b26..ffdb39d 100644
+--- a/parser/shared/src/main/scala/jawn/Facade.scala
++++ b/parser/shared/src/main/scala/jawn/Facade.scala
+@@ -1,6 +1,7 @@
+ package org.typelevel.jawn
+ 
+ import scala.collection.mutable
++import scala.collection.immutable.TreeMap
+ 
+ /**
+  * [[Facade]] is a type class that describes how Jawn should construct
+@@ -79,7 +80,7 @@ object Facade {
+     final def objectContext(): FContext[J] =
+       new FContext.NoIndexFContext[J] {
+         private[this] var key: String = null
+-        private[this] var vs = Map.empty[String, J]
++        private[this] var vs = TreeMap.empty[String, J]
+         def add(s: CharSequence): Unit =
+           if (key == null)
+             key = s.toString
+-- 
+2.34.1
+

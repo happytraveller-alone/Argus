@@ -1,0 +1,233 @@
+From 96133038d3b17de3fce0798917fcfa2b59646b4a Mon Sep 17 00:00:00 2001
+From: rosstimothy <39066650+rosstimothy@users.noreply.github.com>
+Date: Fri, 27 Oct 2023 16:51:38 -0400
+Subject: [PATCH] Fix discrepancies with dynamo events retention period
+ (#33998)
+
+* Replace audit_retention_period with retention_period
+
+* Override a zero retention period with the default value
+
+* Update docs to reflect which backends respect the retention_period
+
+* Remove unused json tags from dynamo events config
+
+---------
+
+Co-authored-by: Musaed Albrikan <mabrikan@gmail.com>
+---
+ .../config-reference/auth-service.yaml        |  9 +-
+ docs/pages/reference/audit.mdx                |  2 +-
+ docs/pages/reference/backends.mdx             |  2 +-
+ lib/events/dynamoevents/dynamoevents.go       | 18 ++--
+ lib/events/dynamoevents/dynamoevents_test.go  | 82 +++++++++++++++++++
+ 5 files changed, 101 insertions(+), 12 deletions(-)
+
+diff --git a/docs/pages/includes/config-reference/auth-service.yaml b/docs/pages/includes/config-reference/auth-service.yaml
+index b550a0714b..021db71902 100644
+--- a/docs/pages/includes/config-reference/auth-service.yaml
++++ b/docs/pages/includes/config-reference/auth-service.yaml
+@@ -20,6 +20,7 @@ teleport:
+         audit_events_uri:
+           - 'dynamodb://events_table_name'
+           - 'firestore://events_table_name'
++          - 'postgresql://user_name@database-address/events_table_name'
+           - 'file:///var/lib/teleport/log'
+           - 'stdout://'
+ 
+@@ -57,7 +58,13 @@ teleport:
+ 
+         # By default, Teleport stores stores audit events with an AWS TTL of 1 year.
+         # This value can be configured as shown below. If set to 0 seconds, TTL is disabled.
+-        audit_retention_period: 365d
++        #
++        # NOTE: Only the DynamoDB events backend respects the retention_period. All other event backends
++        # consume the retention period via a query parameter in the audit_events_uri. See the examples below
++        # for how to configure the retention period for other backends.
++        # Firestore: firestore://events_table_name?eventRetentionPeriod=10d
++        # Postgres: postgresql://user_name@database-address/teleport_audit?retention_period=10d
++        retention_period: 365d
+ 
+         # minimum/maximum read capacity in units
+         read_min_capacity: int
+diff --git a/docs/pages/reference/audit.mdx b/docs/pages/reference/audit.mdx
+index 0017c082dd..88e93e73e8 100644
+--- a/docs/pages/reference/audit.mdx
++++ b/docs/pages/reference/audit.mdx
+@@ -51,7 +51,7 @@ For High Availability configurations, users can refer to our
+ configure the SSH events and recorded sessions to be stored on network storage.
+ When these backends are in use, audit events will eventually expire and be
+ removed from the log. The default retention period is 1 year, but this can be
+-overridden using the `audit_retention_period` configuration parameter.
++overridden using the `retention_period` configuration parameter.
+ 
+ It is even possible to store audit logs in multiple places at the same time. For
+ more information on how to configure the audit log, refer to the `storage`
+diff --git a/docs/pages/reference/backends.mdx b/docs/pages/reference/backends.mdx
+index c1fb391140..4df305d16a 100644
+--- a/docs/pages/reference/backends.mdx
++++ b/docs/pages/reference/backends.mdx
+@@ -818,7 +818,7 @@ teleport:
+ 
+     # By default, Teleport stores audit events with an AWS TTL of 1 year.
+     # This value can be configured as shown below. If set to 0 seconds, TTL is disabled.
+-    audit_retention_period: 365d
++    retention_period: 365d
+ 
+     # Enables either Pay Per Request or Provisioned billing for the DynamoDB table. Set when Teleport creates the table.
+     # Possible values: "pay_per_request" and "provisioned"
+diff --git a/lib/events/dynamoevents/dynamoevents.go b/lib/events/dynamoevents/dynamoevents.go
+index ebaada75bd..a3f0847896 100644
+--- a/lib/events/dynamoevents/dynamoevents.go
++++ b/lib/events/dynamoevents/dynamoevents.go
+@@ -94,21 +94,21 @@ var tableSchema = []*dynamodb.AttributeDefinition{
+ // of Teleport YAML
+ type Config struct {
+ 	// Region is where DynamoDB Table will be used to store k/v
+-	Region string `json:"region,omitempty"`
++	Region string
+ 	// Tablename where to store K/V in DynamoDB
+-	Tablename string `json:"table_name,omitempty"`
++	Tablename string
+ 	// ReadCapacityUnits is Dynamodb read capacity units
+-	ReadCapacityUnits int64 `json:"read_capacity_units"`
++	ReadCapacityUnits int64
+ 	// WriteCapacityUnits is Dynamodb write capacity units
+-	WriteCapacityUnits int64 `json:"write_capacity_units"`
++	WriteCapacityUnits int64
+ 	// RetentionPeriod is a default retention period for events.
+-	RetentionPeriod *types.Duration `json:"audit_retention_period"`
++	RetentionPeriod *types.Duration
+ 	// Clock is a clock interface, used in tests
+ 	Clock clockwork.Clock
+ 	// UIDGenerator is unique ID generator
+ 	UIDGenerator utils.UID
+ 	// Endpoint is an optional non-AWS endpoint
+-	Endpoint string `json:"endpoint,omitempty"`
++	Endpoint string
+ 
+ 	// ReadMaxCapacity is the maximum provisioned read capacity.
+ 	ReadMaxCapacity int64
+@@ -174,8 +174,8 @@ func (cfg *Config) CheckAndSetDefaults() error {
+ 	if cfg.WriteCapacityUnits == 0 {
+ 		cfg.WriteCapacityUnits = DefaultWriteCapacityUnits
+ 	}
+-	if cfg.RetentionPeriod == nil {
+-		duration := types.Duration(DefaultRetentionPeriod)
++	if cfg.RetentionPeriod == nil || cfg.RetentionPeriod.Duration() == 0 {
++		duration := DefaultRetentionPeriod
+ 		cfg.RetentionPeriod = &duration
+ 	}
+ 	if cfg.Clock == nil {
+@@ -241,7 +241,7 @@ const (
+ 
+ 	// DefaultRetentionPeriod is a default data retention period in events table.
+ 	// The default is 1 year.
+-	DefaultRetentionPeriod = 365 * 24 * time.Hour
++	DefaultRetentionPeriod = types.Duration(365 * 24 * time.Hour)
+ )
+ 
+ // New returns new instance of DynamoDB backend.
+diff --git a/lib/events/dynamoevents/dynamoevents_test.go b/lib/events/dynamoevents/dynamoevents_test.go
+index dbcba77f54..56cfd4636e 100644
+--- a/lib/events/dynamoevents/dynamoevents_test.go
++++ b/lib/events/dynamoevents/dynamoevents_test.go
+@@ -28,6 +28,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/google/uuid"
++	"github.com/gravitational/trace"
+ 	"github.com/jonboulle/clockwork"
+ 	"github.com/stretchr/testify/require"
+ 
+@@ -350,6 +351,87 @@ func TestConfig_SetFromURL(t *testing.T) {
+ 	}
+ }
+ 
++func TestConfig_CheckAndSetDefaults(t *testing.T) {
++	zero := types.NewDuration(0)
++	hour := types.NewDuration(time.Hour)
++
++	tests := []struct {
++		name        string
++		config      *Config
++		assertionFn func(t *testing.T, cfg *Config, err error)
++	}{
++		{
++			name:   "table name required",
++			config: &Config{},
++			assertionFn: func(t *testing.T, cfg *Config, err error) {
++				require.True(t, trace.IsBadParameter(err), "expected a bad parameter error, got %T", err)
++			},
++		},
++		{
++			name: "nil retention period uses default",
++			config: &Config{
++				Tablename:       "test",
++				RetentionPeriod: nil,
++			},
++			assertionFn: func(t *testing.T, cfg *Config, err error) {
++				require.NoError(t, err)
++				require.Equal(t, DefaultRetentionPeriod.Duration(), cfg.RetentionPeriod.Duration())
++			},
++		},
++		{
++			name: "zero retention period uses default",
++			config: &Config{
++				Tablename:       "test",
++				RetentionPeriod: &zero,
++			},
++			assertionFn: func(t *testing.T, cfg *Config, err error) {
++				require.NoError(t, err)
++				require.Equal(t, DefaultRetentionPeriod.Duration(), cfg.RetentionPeriod.Duration())
++			},
++		},
++		{
++			name: "supplied retention period is used",
++			config: &Config{
++				Tablename:       "test",
++				RetentionPeriod: &hour,
++			},
++			assertionFn: func(t *testing.T, cfg *Config, err error) {
++				require.NoError(t, err)
++				require.Equal(t, hour.Duration(), cfg.RetentionPeriod.Duration())
++			},
++		},
++		{
++			name:   "zero capacity uses defaults",
++			config: &Config{Tablename: "test"},
++			assertionFn: func(t *testing.T, cfg *Config, err error) {
++				require.NoError(t, err)
++				require.Equal(t, int64(DefaultReadCapacityUnits), cfg.ReadCapacityUnits)
++				require.Equal(t, int64(DefaultWriteCapacityUnits), cfg.WriteCapacityUnits)
++			},
++		},
++		{
++			name: "supplied capacity is used",
++			config: &Config{
++				Tablename:          "test",
++				ReadCapacityUnits:  1,
++				WriteCapacityUnits: 7,
++			},
++			assertionFn: func(t *testing.T, cfg *Config, err error) {
++				require.NoError(t, err)
++				require.Equal(t, int64(1), cfg.ReadCapacityUnits)
++				require.Equal(t, int64(7), cfg.WriteCapacityUnits)
++			},
++		},
++	}
++
++	for _, test := range tests {
++		t.Run(test.name, func(t *testing.T) {
++			err := test.config.CheckAndSetDefaults()
++			test.assertionFn(t, test.config, err)
++		})
++	}
++}
++
+ var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+ 
+ func randStringAlpha(n int) string {
+-- 
+2.34.1
+

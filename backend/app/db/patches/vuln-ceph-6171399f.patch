@@ -1,0 +1,36 @@
+From caa653196856ecdf50519a9a33195d5c4e3372af Mon Sep 17 00:00:00 2001
+From: Abhishek Lekshmanan <abhishek@suse.com>
+Date: Wed, 7 Aug 2019 17:09:32 +0200
+Subject: [PATCH] rgw: asio: check the remote endpoint before processing
+ requests
+
+`socket.remote_endpoint()` can throw exceptions corresponding to errors in the
+`getpeername` syscall, make sure these are handled.
+
+Fixes: CVE-2019-10222, https://tracker.ceph.com/issues/40018
+Signed-off-by: Abhishek Lekshmanan <abhishek@suse.com>
+---
+ src/rgw/rgw_asio_frontend.cc | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/rgw/rgw_asio_frontend.cc b/src/rgw/rgw_asio_frontend.cc
+index d4ea4483e5456..ec74f10a9878f 100644
+--- a/src/rgw/rgw_asio_frontend.cc
++++ b/src/rgw/rgw_asio_frontend.cc
+@@ -146,9 +146,15 @@ void handle_connection(boost::asio::io_context& context,
+       RGWRequest req{env.store->get_new_req_id()};
+ 
+       auto& socket = stream.lowest_layer();
++      const auto& remote_endpoint = socket.remote_endpoint(ec);
++      if (ec) {
++        ldout(cct, 1) << "failed to connect client: " << ec.message() << dendl;
++        return;
++      }
++
+       StreamIO real_client{cct, stream, parser, yield, buffer, is_ssl,
+                            socket.local_endpoint(),
+-                           socket.remote_endpoint()};
++                           remote_endpoint};
+ 
+       auto real_client_io = rgw::io::add_reordering(
+                               rgw::io::add_buffering(cct,

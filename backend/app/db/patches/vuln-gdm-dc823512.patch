@@ -1,0 +1,71 @@
+From dc8235128c3a1fcd5da8f30ab6839d413d353f28 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marco=20Trevisan=20=28Trevi=C3=B1o=29?= <mail@3v1n0.net>
+Date: Tue, 27 Oct 2020 15:14:27 +0100
+Subject: [PATCH] display: Exit with failure if loading existing users fails
+
+Given not having users may make GDM to launch initial setup, that
+allows to create new users (potentially with sudo capabilities), it's
+better to make look_for_existing_users() to return its status and only
+if it didn't fail continue the gdm execution.
+
+GHSL-2020-202
+CVE-2020-16125
+
+Fixes #642
+---
+ daemon/gdm-display.c | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/daemon/gdm-display.c b/daemon/gdm-display.c
+index d1d24956f..687e7da4b 100644
+--- a/daemon/gdm-display.c
++++ b/daemon/gdm-display.c
+@@ -510,7 +510,7 @@ gdm_display_real_prepare (GdmDisplay *self)
+         return TRUE;
+ }
+ 
+-static void
++static gboolean
+ look_for_existing_users_sync (GdmDisplay *self)
+ {
+         GdmDisplayPrivate *priv;
+@@ -528,7 +528,7 @@ look_for_existing_users_sync (GdmDisplay *self)
+                                                              &error);
+ 
+         if (!priv->accountsservice_proxy) {
+-                g_warning ("Failed to contact accountsservice: %s", error->message);
++                g_critical ("Failed to contact accountsservice: %s", error->message);
+                 goto out;
+         }
+ 
+@@ -541,7 +541,7 @@ look_for_existing_users_sync (GdmDisplay *self)
+                                               &error);
+ 
+         if (!call_result) {
+-                g_warning ("Failed to list cached users: %s", error->message);
++                g_critical ("Failed to list cached users: %s", error->message);
+                 goto out;
+         }
+ 
+@@ -551,6 +551,7 @@ look_for_existing_users_sync (GdmDisplay *self)
+         g_variant_unref (call_result);
+ out:
+         g_clear_error (&error);
++        return priv->accountsservice_proxy != NULL && call_result != NULL;
+ }
+ 
+ gboolean
+@@ -568,7 +569,9 @@ gdm_display_prepare (GdmDisplay *self)
+         /* FIXME: we should probably do this in a more global place,
+          * asynchronously
+          */
+-        look_for_existing_users_sync (self);
++        if (!look_for_existing_users_sync (self)) {
++                exit (EXIT_FAILURE);
++        }
+ 
+         priv->doing_initial_setup = wants_initial_setup (self);
+ 
+-- 
+2.34.1
+

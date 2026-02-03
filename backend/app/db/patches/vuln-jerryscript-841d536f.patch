@@ -1,0 +1,1441 @@
+From 841d536fce1ce29267cdf0ea12be4026e1c35d3a Mon Sep 17 00:00:00 2001
+From: Zoltan Herczeg <zherczeg.u-szeged@partner.samsung.com>
+Date: Fri, 16 Oct 2020 11:02:36 +0200
+Subject: [PATCH] Implement proper arguments support (#4289)
+
+- Store arguments in a register when possible
+- Create separate arguments object for function argument initializer when necessary
+
+JerryScript-DCO-1.0-Signed-off-by: Zoltan Herczeg zherczeg.u-szeged@partner.samsung.com
+---
+ .../ecma/operations/ecma-arguments-object.c   |  23 +-
+ .../ecma/operations/ecma-arguments-object.h   |   5 +-
+ .../ecma/operations/ecma-function-object.c    |  10 +-
+ jerry-core/include/jerryscript-snapshot.h     |   2 +-
+ jerry-core/parser/js/byte-code.c              |   2 +-
+ jerry-core/parser/js/byte-code.h              |  19 +-
+ jerry-core/parser/js/js-parser.c              |  27 +-
+ jerry-core/parser/js/js-scanner-internal.h    |  22 +-
+ jerry-core/parser/js/js-scanner-util.c        | 422 ++++++++++++++----
+ jerry-core/parser/js/js-scanner.c             |  47 +-
+ jerry-core/parser/js/js-scanner.h             |  21 +
+ jerry-core/vm/vm-defines.h                    |   2 -
+ jerry-core/vm/vm.c                            |  31 ++
+ jerry-core/vm/vm.h                            |   1 +
+ tests/jerry/es.next/arguments.js              | 184 +++++++-
+ tests/test262-esnext-excludelist.xml          |   8 -
+ 16 files changed, 647 insertions(+), 179 deletions(-)
+
+diff --git a/jerry-core/ecma/operations/ecma-arguments-object.c b/jerry-core/ecma/operations/ecma-arguments-object.c
+index 0e2f090e56..ee7e92b1e5 100644
+--- a/jerry-core/ecma/operations/ecma-arguments-object.c
++++ b/jerry-core/ecma/operations/ecma-arguments-object.c
+@@ -37,13 +37,16 @@
+  * Arguments object creation operation.
+  *
+  * See also: ECMA-262 v5, 10.6
++ *
++ * @return ecma value of arguments object
++ *         Returned value must be freed with ecma_free_value
+  */
+-void
+-ecma_op_create_arguments_object (ecma_object_t *func_obj_p, /**< callee function */
+-                                 ecma_object_t *lex_env_p, /**< lexical environment the Arguments
++ecma_value_t
++ecma_op_create_arguments_object (vm_frame_ctx_shared_args_t *shared_p, /**< shared context data */
++                                 ecma_object_t *lex_env_p) /**< lexical environment the Arguments
+                                                             *   object is created for */
+-                                 vm_frame_ctx_shared_args_t *shared_p) /**< shared context data */
+ {
++  ecma_object_t *func_obj_p = shared_p->function_object_p;
+   const ecma_compiled_code_t *bytecode_data_p = shared_p->header.bytecode_header_p;
+   uint16_t formal_params_number;
+ 
+@@ -136,17 +139,7 @@ ecma_op_create_arguments_object (ecma_object_t *func_obj_p, /**< callee function
+     }
+   }
+ 
+-  uint8_t prop_flags = ((bytecode_data_p->status_flags & CBC_CODE_FLAGS_STRICT_MODE) ? ECMA_PROPERTY_FIXED
+-                                                                                     : ECMA_PROPERTY_FLAG_WRITABLE);
+-
+-  ecma_property_value_t *prop_value_p;
+-  prop_value_p = ecma_create_named_data_property (lex_env_p,
+-                                                  ecma_get_magic_string (LIT_MAGIC_STRING_ARGUMENTS),
+-                                                  prop_flags,
+-                                                  NULL);
+-
+-  prop_value_p->value = ecma_make_object_value (obj_p);
+-  ecma_deref_object (obj_p);
++  return ecma_make_object_value (obj_p);
+ } /* ecma_op_create_arguments_object */
+ 
+ /**
+diff --git a/jerry-core/ecma/operations/ecma-arguments-object.h b/jerry-core/ecma/operations/ecma-arguments-object.h
+index 551715d497..46daed6846 100644
+--- a/jerry-core/ecma/operations/ecma-arguments-object.h
++++ b/jerry-core/ecma/operations/ecma-arguments-object.h
+@@ -20,9 +20,8 @@
+ #include "ecma-helpers.h"
+ #include "vm-defines.h"
+ 
+-void
+-ecma_op_create_arguments_object (ecma_object_t *func_obj_p, ecma_object_t *lex_env_p,
+-                                 vm_frame_ctx_shared_args_t *shared_p);
++ecma_value_t
++ecma_op_create_arguments_object (vm_frame_ctx_shared_args_t *shared_p, ecma_object_t *lex_env_p);
+ 
+ ecma_value_t
+ ecma_op_arguments_object_delete (ecma_object_t *object_p, ecma_string_t *property_name_p, bool is_throw);
+diff --git a/jerry-core/ecma/operations/ecma-function-object.c b/jerry-core/ecma/operations/ecma-function-object.c
+index 08f6e4cbde..eedcc8483f 100644
+--- a/jerry-core/ecma/operations/ecma-function-object.c
++++ b/jerry-core/ecma/operations/ecma-function-object.c
+@@ -25,7 +25,6 @@
+ #include "ecma-lex-env.h"
+ #include "ecma-objects.h"
+ #include "ecma-objects-general.h"
+-#include "ecma-arguments-object.h"
+ #include "ecma-proxy-object.h"
+ #include "ecma-symbol-object.h"
+ #include "jcontext.h"
+@@ -879,11 +878,9 @@ ecma_op_function_call_simple (ecma_object_t *func_obj_p, /**< Function object */
+ 
+   vm_frame_ctx_shared_args_t shared_args;
+   shared_args.header.status_flags = VM_FRAME_CTX_SHARED_HAS_ARG_LIST;
++  shared_args.function_object_p = func_obj_p;
+   shared_args.arg_list_p = arguments_list_p;
+   shared_args.arg_list_len = arguments_list_len;
+-#if ENABLED (JERRY_ESNEXT)
+-  shared_args.function_object_p = func_obj_p;
+-#endif /* ENABLED (JERRY_ESNEXT) */
+ 
+   /* Entering Function Code (ECMA-262 v5, 10.4.3) */
+   ecma_extended_object_t *ext_func_p = (ecma_extended_object_t *) func_obj_p;
+@@ -946,11 +943,6 @@ ecma_op_function_call_simple (ecma_object_t *func_obj_p, /**< Function object */
+   {
+     shared_args.header.status_flags |= VM_FRAME_CTX_SHARED_FREE_LOCAL_ENV;
+     scope_p = ecma_create_decl_lex_env (scope_p);
+-
+-    if (JERRY_UNLIKELY (status_flags & CBC_CODE_FLAGS_IS_ARGUMENTS_NEEDED))
+-    {
+-      ecma_op_create_arguments_object (func_obj_p, scope_p, &shared_args);
+-    }
+   }
+ 
+   ecma_value_t ret_value;
+diff --git a/jerry-core/include/jerryscript-snapshot.h b/jerry-core/include/jerryscript-snapshot.h
+index c6c0960397..2e04112cab 100644
+--- a/jerry-core/include/jerryscript-snapshot.h
++++ b/jerry-core/include/jerryscript-snapshot.h
+@@ -30,7 +30,7 @@ extern "C"
+ /**
+  * Jerry snapshot format version.
+  */
+-#define JERRY_SNAPSHOT_VERSION (59u)
++#define JERRY_SNAPSHOT_VERSION (60u)
+ 
+ /**
+  * Flags for jerry_generate_snapshot and jerry_generate_function_snapshot.
+diff --git a/jerry-core/parser/js/byte-code.c b/jerry-core/parser/js/byte-code.c
+index 21021eaca3..8261055b54 100644
+--- a/jerry-core/parser/js/byte-code.c
++++ b/jerry-core/parser/js/byte-code.c
+@@ -27,7 +27,7 @@ JERRY_STATIC_ASSERT ((sizeof (cbc_uint16_arguments_t) % sizeof (jmem_cpointer_t)
+  */
+ JERRY_STATIC_ASSERT (CBC_END == 238,
+                      number_of_cbc_opcodes_changed);
+-JERRY_STATIC_ASSERT (CBC_EXT_END == 144,
++JERRY_STATIC_ASSERT (CBC_EXT_END == 145,
+                      number_of_cbc_ext_opcodes_changed);
+ 
+ #if ENABLED (JERRY_PARSER)
+diff --git a/jerry-core/parser/js/byte-code.h b/jerry-core/parser/js/byte-code.h
+index 7e6455b16d..79410f7725 100644
+--- a/jerry-core/parser/js/byte-code.h
++++ b/jerry-core/parser/js/byte-code.h
+@@ -582,6 +582,8 @@
+                       VM_OC_BRANCH_IF_NULLISH) \
+   \
+   /* Basic opcodes. */ \
++  CBC_OPCODE (CBC_EXT_CREATE_ARGUMENTS, CBC_HAS_LITERAL_ARG, 0, \
++              VM_OC_CREATE_ARGUMENTS) \
+   CBC_OPCODE (CBC_EXT_PUSH_LITERAL_PUSH_NUMBER_0, CBC_HAS_LITERAL_ARG, 2, \
+               VM_OC_PUSH_LIT_0 | VM_OC_GET_LITERAL) \
+   CBC_OPCODE (CBC_EXT_PUSH_LITERAL_PUSH_NUMBER_POS_BYTE, CBC_HAS_LITERAL_ARG | CBC_HAS_BYTE_ARG, 2, \
+@@ -866,12 +868,11 @@ typedef enum
+   CBC_CODE_FLAGS_UINT16_ARGUMENTS = (1u << 1), /**< compiled code data is cbc_uint16_arguments_t */
+   CBC_CODE_FLAGS_STRICT_MODE = (1u << 2), /**< strict mode is enabled */
+   CBC_CODE_FLAGS_MAPPED_ARGUMENTS_NEEDED = (1u << 3), /**< mapped arguments object must be constructed */
+-  CBC_CODE_FLAGS_UNMAPPED_ARGUMENTS_NEEDED = (1u << 4), /**< mapped arguments object must be constructed */
+-  CBC_CODE_FLAGS_LEXICAL_ENV_NOT_NEEDED = (1u << 5), /**< no need to create a lexical environment */
+-  CBC_CODE_FLAGS_STATIC_FUNCTION = (1u << 6), /**< this function is a static snapshot function */
+-  CBC_CODE_FLAGS_DEBUGGER_IGNORE = (1u << 7), /**< this function should be ignored by debugger */
+-  CBC_CODE_FLAGS_HAS_TAGGED_LITERALS = (1u << 8), /**< this function has tagged template literal list */
+-  CBC_CODE_FLAGS_LEXICAL_BLOCK_NEEDED = (1u << 9), /**< compiled code needs a lexical block */
++  CBC_CODE_FLAGS_LEXICAL_ENV_NOT_NEEDED = (1u << 4), /**< no need to create a lexical environment */
++  CBC_CODE_FLAGS_STATIC_FUNCTION = (1u << 5), /**< this function is a static snapshot function */
++  CBC_CODE_FLAGS_DEBUGGER_IGNORE = (1u << 6), /**< this function should be ignored by debugger */
++  CBC_CODE_FLAGS_HAS_TAGGED_LITERALS = (1u << 7), /**< this function has tagged template literal list */
++  CBC_CODE_FLAGS_LEXICAL_BLOCK_NEEDED = (1u << 8), /**< compiled code needs a lexical block */
+ 
+   /* Bits from bit 12 is reserved for function types (see CBC_FUNCTION_TYPE_SHIFT).
+    * Note: the last bits are used for type flags because < and >= operators can be used to
+@@ -943,12 +944,6 @@ typedef enum
+ #define CBC_FUNCTION_IS_ARROW(flags) \
+   ((flags) >= (CBC_FUNCTION_ARROW << CBC_FUNCTION_TYPE_SHIFT))
+ 
+-/**
+- * Any arguments object is needed
+- */
+-#define CBC_CODE_FLAGS_IS_ARGUMENTS_NEEDED \
+-  (CBC_CODE_FLAGS_MAPPED_ARGUMENTS_NEEDED | CBC_CODE_FLAGS_UNMAPPED_ARGUMENTS_NEEDED)
+-
+ #define CBC_OPCODE(arg1, arg2, arg3, arg4) arg1,
+ 
+ /**
+diff --git a/jerry-core/parser/js/js-parser.c b/jerry-core/parser/js/js-parser.c
+index 7d04451967..ebe56fb3a9 100644
+--- a/jerry-core/parser/js/js-parser.c
++++ b/jerry-core/parser/js/js-parser.c
+@@ -673,11 +673,6 @@ parse_print_final_cbc (ecma_compiled_code_t *compiled_code_p, /**< compiled code
+     JERRY_DEBUG_MSG (",mapped_arguments_needed");
+   }
+ 
+-  if (compiled_code_p->status_flags & CBC_CODE_FLAGS_UNMAPPED_ARGUMENTS_NEEDED)
+-  {
+-    JERRY_DEBUG_MSG (",unmapped_arguments_needed");
+-  }
+-
+   if (compiled_code_p->status_flags & CBC_CODE_FLAGS_LEXICAL_ENV_NOT_NEEDED)
+   {
+     JERRY_DEBUG_MSG (",no_lexical_env");
+@@ -1364,19 +1359,10 @@ parser_post_processing (parser_context_t *context_p) /**< context */
+     compiled_code_p->status_flags |= CBC_CODE_FLAGS_STRICT_MODE;
+   }
+ 
+-  if (context_p->status_flags & PARSER_ARGUMENTS_NEEDED)
++  if ((context_p->status_flags & PARSER_ARGUMENTS_NEEDED)
++      && PARSER_NEEDS_MAPPED_ARGUMENTS (context_p->status_flags))
+   {
+-    if (PARSER_NEEDS_MAPPED_ARGUMENTS (context_p->status_flags))
+-    {
+-      compiled_code_p->status_flags |= CBC_CODE_FLAGS_MAPPED_ARGUMENTS_NEEDED;
+-    }
+-    else
+-    {
+-      compiled_code_p->status_flags |= CBC_CODE_FLAGS_UNMAPPED_ARGUMENTS_NEEDED;
+-    }
+-
+-    /* Arguments is stored in the lexical environment. */
+-    JERRY_ASSERT (context_p->status_flags & PARSER_LEXICAL_ENV_NEEDED);
++    compiled_code_p->status_flags |= CBC_CODE_FLAGS_MAPPED_ARGUMENTS_NEEDED;
+   }
+ 
+   if (!(context_p->status_flags & PARSER_LEXICAL_ENV_NEEDED))
+@@ -1807,13 +1793,16 @@ parser_parse_function_arguments (parser_context_t *context_p, /**< context */
+   if (context_p->token.type == end_type)
+   {
+ #if ENABLED (JERRY_ESNEXT)
++    context_p->status_flags &= (uint32_t) ~PARSER_DISALLOW_AWAIT_YIELD;
++
+     if (context_p->status_flags & PARSER_IS_GENERATOR_FUNCTION)
+     {
++      scanner_create_variables (context_p, SCANNER_CREATE_VARS_IS_FUNCTION_ARGS);
+       parser_emit_cbc_ext (context_p, CBC_EXT_CREATE_GENERATOR);
+       parser_emit_cbc (context_p, CBC_POP);
++      scanner_create_variables (context_p, SCANNER_CREATE_VARS_IS_FUNCTION_BODY);
++      return;
+     }
+-
+-    context_p->status_flags &= (uint32_t) ~PARSER_DISALLOW_AWAIT_YIELD;
+ #endif /* ENABLED (JERRY_ESNEXT) */
+     scanner_create_variables (context_p, SCANNER_CREATE_VARS_NO_OPTS);
+     return;
+diff --git a/jerry-core/parser/js/js-scanner-internal.h b/jerry-core/parser/js/js-scanner-internal.h
+index 4d9d95147e..ba8e4a00ef 100644
+--- a/jerry-core/parser/js/js-scanner-internal.h
++++ b/jerry-core/parser/js/js-scanner-internal.h
+@@ -205,6 +205,11 @@ typedef enum
+  */
+ #define SCANNER_LITERAL_IS_LOCAL (SCANNER_LITERAL_IS_LET | SCANNER_LITERAL_IS_CONST)
+ 
++/**
++ * Literal is a local function declaration
++ */
++#define SCANNER_LITERAL_IS_LOCAL_FUNC (SCANNER_LITERAL_IS_FUNC | SCANNER_LITERAL_IS_FUNC_DECLARATION)
++
+ /**
+  * For statement descriptor.
+  */
+@@ -281,20 +286,23 @@ typedef enum
+ #endif /* ENABLED (JERRY_ESNEXT) */
+   SCANNER_LITERAL_POOL_IS_STRICT = (1 << 3), /**< literal pool represents a strict mode code block */
+   SCANNER_LITERAL_POOL_CAN_EVAL = (1 << 4), /**< prepare for executing eval in this block */
+-  SCANNER_LITERAL_POOL_NO_ARGUMENTS = (1 << 5), /**< arguments object must not be constructed */
++  SCANNER_LITERAL_POOL_NO_ARGUMENTS = (1 << 5), /**< arguments object must not be constructed,
++                                                 *   or arguments cannot be stored in registers if
++                                                 *   SCANNER_LITERAL_POOL_ARGUMENTS_IN_ARGS is set */
+ #if ENABLED (JERRY_ESNEXT)
+-  SCANNER_LITERAL_POOL_HAS_COMPLEX_ARGUMENT = (1 << 6), /**< function has complex (ES2015+) argument definition */
++  SCANNER_LITERAL_POOL_ARGUMENTS_IN_ARGS = (1 << 6), /**< arguments is referenced in function args */
++  SCANNER_LITERAL_POOL_HAS_COMPLEX_ARGUMENT = (1 << 7), /**< function has complex (ES2015+) argument definition */
+ #endif /* ENABLED (JERRY_ESNEXT) */
+-  SCANNER_LITERAL_POOL_IN_WITH = (1 << 7), /**< literal pool is in a with statement */
++  SCANNER_LITERAL_POOL_IN_WITH = (1 << 8), /**< literal pool is in a with statement */
+ #if ENABLED (JERRY_ESNEXT)
+-  SCANNER_LITERAL_POOL_FUNCTION_STATEMENT = (1 << 8), /**< function statement */
+   SCANNER_LITERAL_POOL_ARROW = (1 << 9), /**< arrow function */
+   SCANNER_LITERAL_POOL_GENERATOR = (1 << 10), /**< generator function */
+   SCANNER_LITERAL_POOL_ASYNC = (1 << 11), /**< async function */
+-  SCANNER_LITERAL_POOL_HAS_SUPER_REFERENCE = (1 << 12), /**< function body contains super reference */
++  SCANNER_LITERAL_POOL_FUNCTION_STATEMENT = (1 << 12), /**< function statement */
++  SCANNER_LITERAL_POOL_HAS_SUPER_REFERENCE = (1 << 13), /**< function body contains super reference */
+ #endif /* ENABLED (JERRY_ESNEXT) */
+ #if ENABLED (JERRY_MODULE_SYSTEM)
+-  SCANNER_LITERAL_POOL_IN_EXPORT = (1 << 13), /**< the declared variables are exported by the module system */
++  SCANNER_LITERAL_POOL_IN_EXPORT = (1 << 14), /**< the declared variables are exported by the module system */
+ #endif /* ENABLED (JERRY_MODULE_SYSTEM) */
+ } scanner_literal_pool_flags_t;
+ 
+@@ -396,9 +404,9 @@ scanner_literal_pool_t *scanner_push_literal_pool (parser_context_t *context_p,
+                                                    uint16_t status_flags);
+ void scanner_pop_literal_pool (parser_context_t *context_p, scanner_context_t *scanner_context_p);
+ #if ENABLED (JERRY_ESNEXT)
++void scanner_filter_arguments (parser_context_t *context_p, scanner_context_t *scanner_context_p);
+ void scanner_construct_global_block (parser_context_t *context_p, scanner_context_t *scanner_context_p);
+ #endif /* ENABLED (JERRY_ESNEXT) */
+-void scanner_filter_arguments (parser_context_t *context_p, scanner_context_t *scanner_context_p);
+ lexer_lit_location_t *scanner_add_custom_literal (parser_context_t *context_p, scanner_literal_pool_t *literal_pool_p,
+                                                   const lexer_lit_location_t *literal_location_p);
+ lexer_lit_location_t *scanner_add_literal (parser_context_t *context_p, scanner_context_t *scanner_context_p);
+diff --git a/jerry-core/parser/js/js-scanner-util.c b/jerry-core/parser/js/js-scanner-util.c
+index 0dd13274f5..60d9dc8722 100644
+--- a/jerry-core/parser/js/js-scanner-util.c
++++ b/jerry-core/parser/js/js-scanner-util.c
+@@ -162,7 +162,8 @@ scanner_get_stream_size (scanner_info_t *info_p, /**< scanner info block */
+       }
+       default:
+       {
+-        JERRY_ASSERT ((data_p[0] & SCANNER_STREAM_TYPE_MASK) == SCANNER_STREAM_TYPE_HOLE);
++        JERRY_ASSERT ((data_p[0] & SCANNER_STREAM_TYPE_MASK) == SCANNER_STREAM_TYPE_HOLE
++                      || SCANNER_STREAM_TYPE_IS_ARGUMENTS (data_p[0] & SCANNER_STREAM_TYPE_MASK));
+         data_p++;
+         continue;
+       }
+@@ -465,6 +466,18 @@ scanner_literal_is_arguments (lexer_lit_location_t *literal_p) /**< literal */
+   return lexer_compare_identifier_to_string (literal_p, (const uint8_t *) "arguments", 9);
+ } /* scanner_literal_is_arguments */
+ 
++/**
++ * Current status of arguments.
++ */
++typedef enum
++{
++  SCANNER_ARGUMENTS_NOT_PRESENT, /**< arguments object must not be created */
++  SCANNER_ARGUMENTS_MAY_PRESENT, /**< arguments object can be created */
++  SCANNER_ARGUMENTS_MAY_PRESENT_IN_EVAL, /**< arguments object must be present unless otherwise declared */
++  SCANNER_ARGUMENTS_PRESENT, /**< arguments object must be created */
++  SCANNER_ARGUMENTS_PRESENT_NO_REG, /**< arguments object must be created and cannot be stored in registers */
++} scanner_arguments_type_t;
++
+ /**
+  * Pop the last literal pool from the end.
+  */
+@@ -494,11 +507,30 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+     return;
+   }
+ 
+-  parser_list_iterator_t literal_iterator;
+-  lexer_lit_location_t *literal_p;
+   uint16_t status_flags = literal_pool_p->status_flags;
+-  bool arguments_required = ((status_flags & (SCANNER_LITERAL_POOL_CAN_EVAL | SCANNER_LITERAL_POOL_NO_ARGUMENTS))
+-                             == SCANNER_LITERAL_POOL_CAN_EVAL);
++  scanner_arguments_type_t arguments_type = SCANNER_ARGUMENTS_MAY_PRESENT;
++
++  if (status_flags & SCANNER_LITERAL_POOL_NO_ARGUMENTS)
++  {
++    arguments_type = SCANNER_ARGUMENTS_NOT_PRESENT;
++  }
++  else if (status_flags & SCANNER_LITERAL_POOL_CAN_EVAL)
++  {
++    arguments_type = SCANNER_ARGUMENTS_MAY_PRESENT_IN_EVAL;
++  }
++
++#if ENABLED (JERRY_ESNEXT)
++  if (status_flags & SCANNER_LITERAL_POOL_ARGUMENTS_IN_ARGS)
++  {
++    arguments_type = SCANNER_ARGUMENTS_PRESENT;
++
++    if (status_flags & (SCANNER_LITERAL_POOL_NO_ARGUMENTS | SCANNER_LITERAL_POOL_CAN_EVAL))
++    {
++      arguments_type = SCANNER_ARGUMENTS_PRESENT_NO_REG;
++      status_flags &= (uint16_t) ~SCANNER_LITERAL_POOL_NO_ARGUMENTS;
++    }
++  }
++#endif /* ENABLED (JERRY_ESNEXT) */
+ 
+   uint8_t can_eval_types = 0;
+ #if ENABLED (JERRY_ESNEXT)
+@@ -522,11 +554,11 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+   }
+ #endif /* ENABLED (JERRY_DEBUGGER) */
+ 
+-  parser_list_iterator_init (&literal_pool_p->literal_pool, &literal_iterator);
++  parser_list_iterator_t literal_iterator;
++  lexer_lit_location_t *literal_p;
++  int32_t no_declarations = literal_pool_p->no_declarations;
+ 
+-  const uint8_t *prev_source_p = literal_pool_p->source_p - 1;
+-  size_t compressed_size = 1;
+-  uint32_t no_declarations = literal_pool_p->no_declarations;
++  parser_list_iterator_init (&literal_pool_p->literal_pool, &literal_iterator);
+ 
+ #if ENABLED (JERRY_ESNEXT)
+   if (JERRY_UNLIKELY (status_flags & SCANNER_LITERAL_POOL_CLASS_NAME))
+@@ -541,6 +573,11 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+   }
+ #endif /* ENABLED (JERRY_ESNEXT) */
+ 
++  uint8_t arguments_stream_type = SCANNER_STREAM_TYPE_ARGUMENTS;
++  const uint8_t *prev_source_p = literal_pool_p->source_p - 1;
++  lexer_lit_location_t *last_argument_p = NULL;
++  size_t compressed_size = 1;
++
+   while ((literal_p = (lexer_lit_location_t *) parser_list_iterator_next (&literal_iterator)) != NULL)
+   {
+     uint8_t type = literal_p->type;
+@@ -552,23 +589,110 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+ 
+     if (!(status_flags & SCANNER_LITERAL_POOL_NO_ARGUMENTS) && scanner_literal_is_arguments (literal_p))
+     {
++#if ENABLED (JERRY_ESNEXT)
++      JERRY_ASSERT (arguments_type != SCANNER_ARGUMENTS_NOT_PRESENT);
++#else /* !ENABLED (JERRY_ESNEXT) */
++      JERRY_ASSERT (arguments_type == SCANNER_ARGUMENTS_MAY_PRESENT
++                    || arguments_type == SCANNER_ARGUMENTS_MAY_PRESENT_IN_EVAL);
++#endif /* ENABLED (JERRY_ESNEXT) */
++
+       status_flags |= SCANNER_LITERAL_POOL_NO_ARGUMENTS;
+ 
+-      if (type & (SCANNER_LITERAL_IS_ARG | SCANNER_LITERAL_IS_FUNC | SCANNER_LITERAL_IS_LOCAL))
++      if (type & SCANNER_LITERAL_IS_ARG)
+       {
+-        arguments_required = false;
++        JERRY_ASSERT (arguments_type != SCANNER_ARGUMENTS_PRESENT
++                      && arguments_type != SCANNER_ARGUMENTS_PRESENT_NO_REG);
++        arguments_type = SCANNER_ARGUMENTS_NOT_PRESENT;
++        last_argument_p = literal_p;
+       }
++#if ENABLED (JERRY_ESNEXT)
++      else if (type & SCANNER_LITERAL_IS_LOCAL)
++      {
++        if (arguments_type == SCANNER_ARGUMENTS_MAY_PRESENT || arguments_type == SCANNER_ARGUMENTS_MAY_PRESENT_IN_EVAL)
++        {
++          arguments_type = SCANNER_ARGUMENTS_NOT_PRESENT;
++        }
++        else
++        {
++          if (arguments_type == SCANNER_ARGUMENTS_PRESENT_NO_REG)
++          {
++            type |= SCANNER_LITERAL_NO_REG;
++          }
++          else if (type & (SCANNER_LITERAL_NO_REG | SCANNER_LITERAL_EARLY_CREATE))
++          {
++            arguments_type = SCANNER_ARGUMENTS_PRESENT_NO_REG;
++          }
++
++          if ((type & SCANNER_LITERAL_IS_LOCAL_FUNC) == SCANNER_LITERAL_IS_LOCAL_FUNC)
++          {
++            type |= SCANNER_LITERAL_IS_ARG;
++            literal_p->type = type;
++            no_declarations--;
++            arguments_stream_type = SCANNER_STREAM_TYPE_ARGUMENTS_FUNC;
++          }
++          else
++          {
++            arguments_stream_type |= SCANNER_STREAM_LOCAL_ARGUMENTS;
++          }
++        }
++      }
++#else /* !ENABLED (JERRY_ESNEXT) */
++      else if (type & SCANNER_LITERAL_IS_FUNC)
++      {
++        arguments_type = SCANNER_ARGUMENTS_NOT_PRESENT;
++      }
++#endif /* ENABLED (JERRY_ESNEXT) */
+       else
+       {
++#if ENABLED (JERRY_ESNEXT)
++        if ((type & SCANNER_LITERAL_IS_VAR)
++            && (arguments_type == SCANNER_ARGUMENTS_PRESENT || arguments_type == SCANNER_ARGUMENTS_PRESENT_NO_REG))
++        {
++          if (arguments_type == SCANNER_ARGUMENTS_PRESENT_NO_REG)
++          {
++            type |= SCANNER_LITERAL_NO_REG;
++          }
++          else if (type & (SCANNER_LITERAL_NO_REG | SCANNER_LITERAL_EARLY_CREATE))
++          {
++            arguments_type = SCANNER_ARGUMENTS_PRESENT_NO_REG;
++          }
++
++          type |= SCANNER_LITERAL_IS_ARG;
++          literal_p->type = type;
++          no_declarations--;
++        }
++#endif /* ENABLED (JERRY_ESNEXT) */
++
++        if ((type & SCANNER_LITERAL_NO_REG) || arguments_type == SCANNER_ARGUMENTS_MAY_PRESENT_IN_EVAL)
++        {
++          arguments_type = SCANNER_ARGUMENTS_PRESENT_NO_REG;
++        }
++        else if (arguments_type == SCANNER_ARGUMENTS_MAY_PRESENT)
++        {
++          arguments_type = SCANNER_ARGUMENTS_PRESENT;
++        }
++
++#if ENABLED (JERRY_ESNEXT)
++        /* The SCANNER_LITERAL_IS_ARG may be set above. */
++        if (!(type & SCANNER_LITERAL_IS_ARG))
++        {
++          literal_p->type = 0;
++          continue;
++        }
++#else /* !ENABLED (JERRY_ESNEXT) */
+         literal_p->type = 0;
+-        arguments_required = true;
+         continue;
++#endif /* ENABLED (JERRY_ESNEXT) */
+       }
+     }
++    else if (type & SCANNER_LITERAL_IS_ARG)
++    {
++      last_argument_p = literal_p;
++    }
+ 
+ #if ENABLED (JERRY_ESNEXT)
+     if ((status_flags & SCANNER_LITERAL_POOL_FUNCTION)
+-        && (type & (SCANNER_LITERAL_IS_FUNC | SCANNER_LITERAL_IS_FUNC_DECLARATION)) == SCANNER_LITERAL_IS_FUNC)
++        && (type & SCANNER_LITERAL_IS_LOCAL_FUNC) == SCANNER_LITERAL_IS_FUNC)
+     {
+       if (prev_literal_pool_p == NULL
+           && (context_p->global_status_flags & ECMA_PARSE_DIRECT_EVAL)
+@@ -707,6 +831,20 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+ 
+   if ((status_flags & SCANNER_LITERAL_POOL_FUNCTION) || (compressed_size > 1))
+   {
++    if (arguments_type == SCANNER_ARGUMENTS_MAY_PRESENT)
++    {
++      arguments_type = SCANNER_ARGUMENTS_NOT_PRESENT;
++    }
++    else if (arguments_type == SCANNER_ARGUMENTS_MAY_PRESENT_IN_EVAL)
++    {
++      arguments_type = SCANNER_ARGUMENTS_PRESENT_NO_REG;
++    }
++
++    if (arguments_type != SCANNER_ARGUMENTS_NOT_PRESENT)
++    {
++      compressed_size++;
++    }
++
+     compressed_size += sizeof (scanner_info_t);
+ 
+     scanner_info_t *info_p;
+@@ -727,6 +865,7 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+     }
+ 
+     uint8_t *data_p = (uint8_t *) (info_p + 1);
++    bool mapped_arguments = false;
+ 
+     if (status_flags & SCANNER_LITERAL_POOL_FUNCTION)
+     {
+@@ -734,7 +873,7 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+ 
+       uint8_t u8_arg = 0;
+ 
+-      if (arguments_required)
++      if (arguments_type != SCANNER_ARGUMENTS_NOT_PRESENT)
+       {
+         u8_arg |= SCANNER_FUNCTION_ARGUMENTS_NEEDED;
+ 
+@@ -749,10 +888,24 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+         const uint16_t is_unmapped = SCANNER_LITERAL_POOL_IS_STRICT;
+ #endif /* ENABLED (JERRY_ESNEXT) */
+ 
+-        if (status_flags & is_unmapped)
++        if (!(status_flags & is_unmapped))
+         {
+-          arguments_required = false;
++          mapped_arguments = true;
+         }
++
++        if (arguments_type == SCANNER_ARGUMENTS_PRESENT_NO_REG)
++        {
++          arguments_stream_type |= SCANNER_STREAM_NO_REG;
++        }
++
++        if (last_argument_p == NULL)
++        {
++          *data_p++ = arguments_stream_type;
++        }
++      }
++      else
++      {
++        last_argument_p = NULL;
+       }
+ 
+ #if ENABLED (JERRY_ESNEXT)
+@@ -809,6 +962,11 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+       if (literal_p->length == 0)
+       {
+         *data_p++ = SCANNER_STREAM_TYPE_HOLE;
++
++        if (literal_p == last_argument_p)
++        {
++          *data_p++ = arguments_stream_type;
++        }
+         continue;
+       }
+ 
+@@ -897,7 +1055,7 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+       }
+ 
+       if ((literal_p->type & SCANNER_LITERAL_NO_REG)
+-          || (arguments_required && (literal_p->type & SCANNER_LITERAL_IS_ARG)))
++          || (mapped_arguments && (literal_p->type & SCANNER_LITERAL_IS_ARG)))
+       {
+         type |= SCANNER_STREAM_NO_REG;
+       }
+@@ -931,6 +1089,11 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+         data_p += sizeof (const uint8_t *);
+       }
+ 
++      if (literal_p == last_argument_p)
++      {
++        *data_p++ = arguments_stream_type;
++      }
++
+       prev_source_p = literal_p->char_p + literal_p->length;
+     }
+ 
+@@ -940,7 +1103,7 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+   }
+ 
+   if (!(status_flags & SCANNER_LITERAL_POOL_FUNCTION)
+-      && prev_literal_pool_p->no_declarations < no_declarations)
++      && (int32_t) prev_literal_pool_p->no_declarations < no_declarations)
+   {
+     prev_literal_pool_p->no_declarations = (uint16_t) no_declarations;
+   }
+@@ -983,6 +1146,8 @@ scanner_pop_literal_pool (parser_context_t *context_p, /**< context */
+   scanner_free (literal_pool_p, sizeof (scanner_literal_pool_t));
+ } /* scanner_pop_literal_pool */
+ 
++#if ENABLED (JERRY_ESNEXT)
++
+ /**
+  * Filter out the arguments from a literal pool.
+  */
+@@ -1000,49 +1165,50 @@ scanner_filter_arguments (parser_context_t *context_p, /**< context */
+ 
+   JERRY_ASSERT (SCANNER_LITERAL_POOL_MAY_HAVE_ARGUMENTS (literal_pool_p->status_flags));
+ 
+-  if (can_eval && prev_literal_pool_p != NULL)
++  if (can_eval)
+   {
+-    prev_literal_pool_p->status_flags |= SCANNER_LITERAL_POOL_CAN_EVAL;
++    if (prev_literal_pool_p != NULL)
++    {
++      prev_literal_pool_p->status_flags |= SCANNER_LITERAL_POOL_CAN_EVAL;
++    }
++
++    if (has_arguments)
++    {
++      literal_pool_p->status_flags |= (SCANNER_LITERAL_POOL_ARGUMENTS_IN_ARGS | SCANNER_LITERAL_POOL_NO_ARGUMENTS);
++    }
+   }
+ 
+   literal_pool_p->status_flags &= (uint16_t) ~SCANNER_LITERAL_POOL_CAN_EVAL;
+ 
+   parser_list_iterator_init (&literal_pool_p->literal_pool, &literal_iterator);
+ 
+-  while ((literal_p = (lexer_lit_location_t *) parser_list_iterator_next (&literal_iterator)) != NULL)
++  while (true)
+   {
+-#if ENABLED (JERRY_ESNEXT)
+-    if (can_eval || (literal_p->type & SCANNER_LITERAL_EARLY_CREATE))
++    literal_p = (lexer_lit_location_t *) parser_list_iterator_next (&literal_iterator);
++
++    if (literal_p == NULL)
+     {
+-      literal_p->type |= SCANNER_LITERAL_NO_REG | SCANNER_LITERAL_EARLY_CREATE;
++      return;
+     }
+-#else /* !ENABLED (JERRY_ESNEXT) */
+-    if (can_eval)
++
++    if (can_eval || (literal_p->type & SCANNER_LITERAL_EARLY_CREATE))
+     {
+-      literal_p->type |= SCANNER_LITERAL_NO_REG;
++      literal_p->type |= SCANNER_LITERAL_NO_REG | SCANNER_LITERAL_EARLY_CREATE;
+     }
+-#endif /* ENABLED (JERRY_ESNEXT) */
+ 
+     uint8_t type = literal_p->type;
++    const uint8_t mask = (SCANNER_LITERAL_IS_ARG
++                          | SCANNER_LITERAL_IS_DESTRUCTURED_ARG
++                          | SCANNER_LITERAL_IS_ARROW_DESTRUCTURED_ARG);
+ 
+-    if (!(type & SCANNER_LITERAL_IS_ARG) && !(has_arguments && scanner_literal_is_arguments (literal_p)))
++    if ((type & mask) != SCANNER_LITERAL_IS_ARG)
+     {
+       break;
+     }
+-
+-#if ENABLED (JERRY_ESNEXT)
+-    if (type & (SCANNER_LITERAL_IS_DESTRUCTURED_ARG | SCANNER_LITERAL_IS_ARROW_DESTRUCTURED_ARG))
+-    {
+-      break;
+-    }
+-#endif /* ENABLED (JERRY_ESNEXT) */
+-  }
+-
+-  if (literal_p == NULL)
+-  {
+-    return;
+   }
+ 
++  /* Destructured args are placed after the other arguments because of register assignments. */
++  bool has_destructured_arg = false;
+   scanner_literal_pool_t *new_literal_pool_p;
+ 
+   new_literal_pool_p = (scanner_literal_pool_t *) scanner_malloc (context_p, sizeof (scanner_literal_pool_t));
+@@ -1057,18 +1223,12 @@ scanner_filter_arguments (parser_context_t *context_p, /**< context */
+ 
+   parser_list_iterator_init (&literal_pool_p->literal_pool, &literal_iterator);
+ 
+-#if ENABLED (JERRY_ESNEXT)
+-  /* Destructured args are placed after the other arguments because of register assignments. */
+-  bool has_destructured_arg = false;
+-#endif /* ENABLED (JERRY_ESNEXT) */
+-
+   while ((literal_p = (lexer_lit_location_t *) parser_list_iterator_next (&literal_iterator)) != NULL)
+   {
+     uint8_t type = literal_p->type;
+ 
+-    if ((type & SCANNER_LITERAL_IS_ARG) || (has_arguments && scanner_literal_is_arguments (literal_p)))
++    if (type & SCANNER_LITERAL_IS_ARG)
+     {
+-#if ENABLED (JERRY_ESNEXT)
+       if (can_eval || (literal_p->type & SCANNER_LITERAL_EARLY_CREATE))
+       {
+         type |= SCANNER_LITERAL_NO_REG | SCANNER_LITERAL_EARLY_CREATE;
+@@ -1090,34 +1250,31 @@ scanner_filter_arguments (parser_context_t *context_p, /**< context */
+         literal_p->type = type;
+         continue;
+       }
+-#else /* !ENABLED (JERRY_ESNEXT) */
+-      if (can_eval)
+-      {
+-        literal_p->type |= SCANNER_LITERAL_NO_REG;
+-      }
+-#endif /* ENABLED (JERRY_ESNEXT) */
+ 
+       lexer_lit_location_t *new_literal_p;
+       new_literal_p = (lexer_lit_location_t *) parser_list_append (context_p, &new_literal_pool_p->literal_pool);
+       *new_literal_p = *literal_p;
+     }
++    else if (has_arguments && scanner_literal_is_arguments (literal_p))
++    {
++      new_literal_pool_p->status_flags |= SCANNER_LITERAL_POOL_ARGUMENTS_IN_ARGS;
++
++      if (type & SCANNER_LITERAL_NO_REG)
++      {
++        new_literal_pool_p->status_flags |= SCANNER_LITERAL_POOL_NO_ARGUMENTS;
++      }
++    }
+     else if (prev_literal_pool_p != NULL)
+     {
+       /* Propagate literal to upper level. */
+       lexer_lit_location_t *literal_location_p = scanner_add_custom_literal (context_p,
+                                                                              prev_literal_pool_p,
+                                                                              literal_p);
+-      type |= SCANNER_LITERAL_NO_REG;
+-
+-#if ENABLED (JERRY_ESNEXT)
+-      type |= SCANNER_LITERAL_IS_USED;
+-#endif /* ENABLED (JERRY_ESNEXT) */
+-
++      type |= SCANNER_LITERAL_NO_REG | SCANNER_LITERAL_IS_USED;
+       literal_location_p->type |= type;
+     }
+   }
+ 
+-#if ENABLED (JERRY_ESNEXT)
+   if (has_destructured_arg)
+   {
+     parser_list_iterator_init (&literal_pool_p->literal_pool, &literal_iterator);
+@@ -1134,7 +1291,6 @@ scanner_filter_arguments (parser_context_t *context_p, /**< context */
+       }
+     }
+   }
+-#endif /* ENABLED (JERRY_ESNEXT) */
+ 
+   new_literal_pool_p->prev_p = prev_literal_pool_p;
+ 
+@@ -1142,6 +1298,8 @@ scanner_filter_arguments (parser_context_t *context_p, /**< context */
+   scanner_free (literal_pool_p, sizeof (scanner_literal_pool_t));
+ } /* scanner_filter_arguments */
+ 
++#endif /* ENABLED (JERRY_ESNEXT) */
++
+ /**
+  * Add any literal to the specified literal pool.
+  *
+@@ -1423,8 +1581,7 @@ scanner_detect_invalid_var (parser_context_t *context_p, /**< context */
+   scanner_literal_pool_t *literal_pool_p = scanner_context_p->active_literal_pool_p;
+ 
+   if (!(literal_pool_p->status_flags & SCANNER_LITERAL_POOL_FUNCTION)
+-      && (var_literal_p->type & (SCANNER_LITERAL_IS_FUNC | SCANNER_LITERAL_IS_FUNC_DECLARATION))
+-          == (SCANNER_LITERAL_IS_FUNC | SCANNER_LITERAL_IS_FUNC_DECLARATION))
++      && ((var_literal_p->type & SCANNER_LITERAL_IS_LOCAL_FUNC) == SCANNER_LITERAL_IS_LOCAL_FUNC))
+   {
+     scanner_raise_redeclaration_error (context_p);
+   }
+@@ -1816,11 +1973,26 @@ scanner_is_context_needed (parser_context_t *context_p, /**< context */
+ #if ENABLED (JERRY_ESNEXT)
+     uint32_t type = data & SCANNER_STREAM_TYPE_MASK;
+ 
+-    if (JERRY_UNLIKELY (type == SCANNER_STREAM_TYPE_HOLE))
++    if (JERRY_UNLIKELY (check_type == PARSER_CHECK_FUNCTION_CONTEXT))
+     {
+-      JERRY_ASSERT (check_type == PARSER_CHECK_FUNCTION_CONTEXT);
+-      data_p++;
+-      continue;
++      if (JERRY_UNLIKELY (type == SCANNER_STREAM_TYPE_HOLE))
++      {
++        data_p++;
++        continue;
++      }
++
++      if (JERRY_UNLIKELY (SCANNER_STREAM_TYPE_IS_ARGUMENTS (type)))
++      {
++        if ((data & SCANNER_STREAM_NO_REG)
++            || scope_stack_reg_top >= PARSER_MAXIMUM_NUMBER_OF_REGISTERS)
++        {
++          return true;
++        }
++
++        scope_stack_reg_top++;
++        data_p++;
++        continue;
++      }
+     }
+ 
+ #ifndef JERRY_NDEBUG
+@@ -2161,8 +2333,9 @@ scanner_create_variables (parser_context_t *context_p, /**< context */
+     JERRY_ASSERT (type != SCANNER_STREAM_TYPE_IMPORT || (data_p[0] & SCANNER_STREAM_NO_REG));
+ #endif /* ENABLED (JERRY_MODULE_SYSTEM) */
+ 
+-    if (type == SCANNER_STREAM_TYPE_HOLE)
++    if (JERRY_UNLIKELY (type == SCANNER_STREAM_TYPE_HOLE))
+     {
++      JERRY_ASSERT (info_type == SCANNER_TYPE_FUNCTION);
+       next_data_p++;
+ 
+       if (option_flags & SCANNER_CREATE_VARS_IS_FUNCTION_BODY)
+@@ -2185,6 +2358,92 @@ scanner_create_variables (parser_context_t *context_p, /**< context */
+       continue;
+     }
+ 
++    if (JERRY_UNLIKELY (SCANNER_STREAM_TYPE_IS_ARGUMENTS (type)))
++    {
++      JERRY_ASSERT (info_type == SCANNER_TYPE_FUNCTION);
++      next_data_p++;
++
++      if (option_flags & SCANNER_CREATE_VARS_IS_FUNCTION_BODY)
++      {
++        continue;
++      }
++
++      context_p->status_flags |= PARSER_ARGUMENTS_NEEDED;
++
++      if (JERRY_UNLIKELY (scope_stack_p >= scope_stack_end_p))
++      {
++        JERRY_ASSERT (context_p->scope_stack_size == PARSER_MAXIMUM_DEPTH_OF_SCOPE_STACK);
++        parser_raise_error (context_p, PARSER_ERR_SCOPE_STACK_LIMIT_REACHED);
++      }
++
++      lexer_construct_literal_object (context_p, &lexer_arguments_literal, LEXER_NEW_IDENT_LITERAL);
++      scope_stack_p->map_from = context_p->lit_object.index;
++
++      uint16_t map_to;
++
++      if (!(data_p[0] & SCANNER_STREAM_NO_REG)
++          && scope_stack_reg_top < PARSER_MAXIMUM_NUMBER_OF_REGISTERS)
++      {
++        map_to = (uint16_t) (PARSER_REGISTER_START + scope_stack_reg_top);
++
++#if ENABLED (JERRY_ESNEXT)
++        scope_stack_p->map_to = (uint16_t) (scope_stack_reg_top + 1);
++#endif /* ENABLED (JERRY_ESNEXT) */
++
++        scope_stack_reg_top++;
++      }
++      else
++      {
++        context_p->lit_object.literal_p->status_flags |= LEXER_FLAG_USED;
++        map_to = context_p->lit_object.index;
++
++        context_p->status_flags |= PARSER_LEXICAL_ENV_NEEDED;
++
++#if ENABLED (JERRY_ESNEXT)
++        if (data_p[0] & SCANNER_STREAM_LOCAL_ARGUMENTS)
++        {
++          context_p->status_flags |= PARSER_LEXICAL_BLOCK_NEEDED;
++        }
++
++        scope_stack_p->map_to = 0;
++#endif /* ENABLED (JERRY_ESNEXT) */
++      }
++
++#if !ENABLED (JERRY_ESNEXT)
++      scope_stack_p->map_to = map_to;
++#endif /* !ENABLED (JERRY_ESNEXT) */
++      scope_stack_p++;
++
++#if ENABLED (JERRY_PARSER_DUMP_BYTE_CODE)
++      context_p->scope_stack_top = (uint16_t) (scope_stack_p - context_p->scope_stack_p);
++#endif /* ENABLED (JERRY_PARSER_DUMP_BYTE_CODE) */
++
++      parser_emit_cbc_ext_literal (context_p, CBC_EXT_CREATE_ARGUMENTS, map_to);
++
++#if ENABLED (JERRY_ESNEXT)
++      if (type == SCANNER_STREAM_TYPE_ARGUMENTS_FUNC)
++      {
++        if (JERRY_UNLIKELY (scope_stack_p >= scope_stack_end_p))
++        {
++          JERRY_ASSERT (context_p->scope_stack_size == PARSER_MAXIMUM_DEPTH_OF_SCOPE_STACK);
++          parser_raise_error (context_p, PARSER_ERR_SCOPE_STACK_LIMIT_REACHED);
++        }
++
++        scope_stack_p->map_from = PARSER_SCOPE_STACK_FUNC;
++        scope_stack_p->map_to = context_p->literal_count;
++        scope_stack_p++;
++
++        scanner_create_unused_literal (context_p, 0);
++      }
++#endif /* ENABLED (JERRY_ESNEXT) */
++
++      if (option_flags & SCANNER_CREATE_VARS_IS_FUNCTION_ARGS)
++      {
++        break;
++      }
++      continue;
++    }
++
+     JERRY_ASSERT (context_p->scope_stack_size != 0);
+ 
+     if (!(data_p[0] & SCANNER_STREAM_UINT16_DIFF))
+@@ -2535,31 +2794,6 @@ scanner_create_variables (parser_context_t *context_p, /**< context */
+     scanner_create_unused_literal (context_p, 0);
+   }
+ 
+-  if (info_type == SCANNER_TYPE_FUNCTION
+-      && !(option_flags & SCANNER_CREATE_VARS_IS_FUNCTION_BODY)
+-      && (info_u8_arg & SCANNER_FUNCTION_ARGUMENTS_NEEDED))
+-  {
+-    JERRY_ASSERT (info_type == SCANNER_TYPE_FUNCTION);
+-
+-    if (JERRY_UNLIKELY (scope_stack_p >= scope_stack_end_p))
+-    {
+-      JERRY_ASSERT (context_p->scope_stack_size == PARSER_MAXIMUM_DEPTH_OF_SCOPE_STACK);
+-      parser_raise_error (context_p, PARSER_ERR_SCOPE_STACK_LIMIT_REACHED);
+-    }
+-
+-    context_p->status_flags |= PARSER_ARGUMENTS_NEEDED | PARSER_LEXICAL_ENV_NEEDED;
+-
+-    lexer_construct_literal_object (context_p, &lexer_arguments_literal, lexer_arguments_literal.type);
+-
+-    scope_stack_p->map_from = context_p->lit_object.index;
+-#if ENABLED (JERRY_ESNEXT)
+-    scope_stack_p->map_to = 0;
+-#else /* !ENABLED (JERRY_ESNEXT) */
+-    scope_stack_p->map_to = context_p->lit_object.index;
+-#endif /* ENABLED (JERRY_ESNEXT) */
+-    scope_stack_p++;
+-  }
+-
+   context_p->scope_stack_top = (uint16_t) (scope_stack_p - context_p->scope_stack_p);
+   context_p->scope_stack_reg_top = (uint16_t) scope_stack_reg_top;
+ 
+diff --git a/jerry-core/parser/js/js-scanner.c b/jerry-core/parser/js/js-scanner.c
+index 41887b687f..d9d7177b45 100644
+--- a/jerry-core/parser/js/js-scanner.c
++++ b/jerry-core/parser/js/js-scanner.c
+@@ -1553,7 +1553,7 @@ scanner_scan_statement (parser_context_t *context_p, /**< context */
+ 
+       if ((literal_p->type & SCANNER_LITERAL_IS_LOCAL)
+           && (literal_p->type & mask) != (SCANNER_LITERAL_IS_ARG | SCANNER_LITERAL_IS_DESTRUCTURED_ARG)
+-          && (literal_p->type & mask) != (SCANNER_LITERAL_IS_FUNC | SCANNER_LITERAL_IS_FUNC_DECLARATION))
++          && (literal_p->type & mask) != SCANNER_LITERAL_IS_LOCAL_FUNC)
+       {
+         scanner_raise_redeclaration_error (context_p);
+       }
+@@ -1566,7 +1566,7 @@ scanner_scan_statement (parser_context_t *context_p, /**< context */
+         scanner_raise_redeclaration_error (context_p);
+       }
+ 
+-      literal_p->type |= SCANNER_LITERAL_IS_FUNC | SCANNER_LITERAL_IS_FUNC_DECLARATION;
++      literal_p->type |= SCANNER_LITERAL_IS_LOCAL_FUNC;
+ 
+       scanner_context_p->status_flags &= (uint16_t) ~SCANNER_CONTEXT_THROW_ERR_ASYNC_FUNCTION;
+ #else
+@@ -3063,7 +3063,9 @@ scanner_scan_all (parser_context_t *context_p, /**< context */
+             context_p->line = 1;
+             context_p->column = 1;
+ 
++#if ENABLED (JERRY_ESNEXT)
+             scanner_filter_arguments (context_p, &scanner_context);
++#endif /* ENABLED (JERRY_ESNEXT) */
+             lexer_next_token (context_p);
+             scanner_check_directives (context_p, &scanner_context);
+             continue;
+@@ -3081,7 +3083,9 @@ scanner_scan_all (parser_context_t *context_p, /**< context */
+             scanner_raise_error (context_p);
+           }
+ 
++#if ENABLED (JERRY_ESNEXT)
+           scanner_filter_arguments (context_p, &scanner_context);
++#endif /* ENABLED (JERRY_ESNEXT) */
+           lexer_next_token (context_p);
+           scanner_check_directives (context_p, &scanner_context);
+           continue;
+@@ -3415,7 +3419,7 @@ scanner_scan_all (parser_context_t *context_p, /**< context */
+       /* The following code may allocate memory, so it is enclosed in a try/catch. */
+       PARSER_TRY (context_p->try_buffer)
+       {
+-  #if ENABLED (JERRY_ESNEXT)
++#if ENABLED (JERRY_ESNEXT)
+         if (scanner_context.status_flags & SCANNER_CONTEXT_THROW_ERR_ASYNC_FUNCTION)
+         {
+           JERRY_ASSERT (scanner_context.async_source_p != NULL);
+@@ -3424,7 +3428,7 @@ scanner_scan_all (parser_context_t *context_p, /**< context */
+           info_p = scanner_insert_info (context_p, scanner_context.async_source_p, sizeof (scanner_info_t));
+           info_p->type = SCANNER_TYPE_ERR_ASYNC_FUNCTION;
+         }
+-  #endif /* ENABLED (JERRY_ESNEXT) */
++#endif /* ENABLED (JERRY_ESNEXT) */
+ 
+         while (scanner_context.active_literal_pool_p != NULL)
+         {
+@@ -3510,6 +3514,38 @@ scanner_scan_all (parser_context_t *context_p, /**< context */
+           {
+             switch (data_p[0] & SCANNER_STREAM_TYPE_MASK)
+             {
++              case SCANNER_STREAM_TYPE_HOLE:
++              {
++                JERRY_DEBUG_MSG ("    HOLE\n");
++                data_p++;
++                continue;
++              }
++#if ENABLED (JERRY_ESNEXT)
++              case SCANNER_STREAM_TYPE_ARGUMENTS:
++              {
++                JERRY_DEBUG_MSG ("    ARGUMENTS%s%s\n",
++                                 (data_p[0] & SCANNER_STREAM_NO_REG) ? " *" : "",
++                                 (data_p[0] & SCANNER_STREAM_LOCAL_ARGUMENTS) ? " L" : "");
++                data_p++;
++                continue;
++              }
++              case SCANNER_STREAM_TYPE_ARGUMENTS_FUNC:
++              {
++                JERRY_DEBUG_MSG ("    ARGUMENTS_FUNC%s%s\n",
++                                 (data_p[0] & SCANNER_STREAM_NO_REG) ? " *" : "",
++                                 (data_p[0] & SCANNER_STREAM_LOCAL_ARGUMENTS) ? " L" : "");
++                data_p++;
++                continue;
++              }
++#else /* !ENABLED (JERRY_ESNEXT) */
++              case SCANNER_STREAM_TYPE_ARGUMENTS:
++              {
++                JERRY_DEBUG_MSG ("    ARGUMENTS%s\n",
++                                 (data_p[0] & SCANNER_STREAM_NO_REG) ? " *" : "");
++                data_p++;
++                continue;
++              }
++#endif /* ENABLED (JERRY_ESNEXT) */
+               case SCANNER_STREAM_TYPE_VAR:
+               {
+                 JERRY_DEBUG_MSG ("    VAR ");
+@@ -3580,8 +3616,7 @@ scanner_scan_all (parser_context_t *context_p, /**< context */
+               }
+               default:
+               {
+-                JERRY_ASSERT ((data_p[0] & SCANNER_STREAM_TYPE_MASK) == SCANNER_STREAM_TYPE_HOLE);
+-                JERRY_DEBUG_MSG ("    HOLE\n");
++                JERRY_UNREACHABLE ();
+                 data_p++;
+                 continue;
+               }
+diff --git a/jerry-core/parser/js/js-scanner.h b/jerry-core/parser/js/js-scanner.h
+index 57d0700446..2d0b26a5d8 100644
+--- a/jerry-core/parser/js/js-scanner.h
++++ b/jerry-core/parser/js/js-scanner.h
+@@ -148,6 +148,10 @@ typedef enum
+   SCANNER_STREAM_HAS_ESCAPE = (1 << 6), /**< binding has escape */
+   SCANNER_STREAM_NO_REG = (1 << 5), /**< binding cannot be stored in register */
+   SCANNER_STREAM_EARLY_CREATE = (1 << 4), /**< binding must be created with ECMA_VALUE_UNINITIALIZED */
++#if ENABLED (JERRY_ESNEXT)
++  SCANNER_STREAM_LOCAL_ARGUMENTS = SCANNER_STREAM_EARLY_CREATE, /**< arguments is redeclared
++                                                                 *   as let/const binding later */
++#endif /* ENABLED (JERRY_ESNEXT) */
+   /* Update SCANNER_STREAM_TYPE_MASK macro if more bits are added. */
+ } scanner_compressed_stream_flags_t;
+ 
+@@ -158,6 +162,11 @@ typedef enum
+ {
+   SCANNER_STREAM_TYPE_END, /**< end of scanner data */
+   SCANNER_STREAM_TYPE_HOLE, /**< no name is assigned to this argument */
++  SCANNER_STREAM_TYPE_ARGUMENTS, /**< arguments object should be created */
++#if ENABLED (JERRY_ESNEXT)
++  SCANNER_STREAM_TYPE_ARGUMENTS_FUNC, /**< arguments object should be created which
++                                       *   is later initialized with a function */
++#endif /* ENABLED (JERRY_ESNEXT) */
+   SCANNER_STREAM_TYPE_VAR, /**< var declaration */
+ #if ENABLED (JERRY_ESNEXT)
+   SCANNER_STREAM_TYPE_LET, /**< let declaration */
+@@ -210,6 +219,12 @@ typedef enum
+ #define SCANNER_STREAM_TYPE_IS_ARG_FUNC(type) \
+   ((type) == SCANNER_STREAM_TYPE_ARG_FUNC || (type) == SCANNER_STREAM_TYPE_DESTRUCTURED_ARG_FUNC)
+ 
++/**
++ * Checks whether the decoded type represents an arguments declaration
++ */
++#define SCANNER_STREAM_TYPE_IS_ARGUMENTS(type) \
++  ((type) == SCANNER_STREAM_TYPE_ARGUMENTS || (type) == SCANNER_STREAM_TYPE_ARGUMENTS_FUNC)
++
+ #else /* !ENABLED (JERRY_ESNEXT) */
+ 
+ /**
+@@ -222,6 +237,12 @@ typedef enum
+  */
+ #define SCANNER_STREAM_TYPE_IS_ARG_FUNC(type) ((type) == SCANNER_STREAM_TYPE_ARG_FUNC)
+ 
++/**
++ * Checks whether the decoded type represents an arguments declaration
++ */
++#define SCANNER_STREAM_TYPE_IS_ARGUMENTS(type) \
++  ((type) == SCANNER_STREAM_TYPE_ARGUMENTS)
++
+ #endif /* ENABLED (JERRY_ESNEXT) */
+ 
+ /**
+diff --git a/jerry-core/vm/vm-defines.h b/jerry-core/vm/vm-defines.h
+index 5e7f514bd7..db7d5790f0 100644
+--- a/jerry-core/vm/vm-defines.h
++++ b/jerry-core/vm/vm-defines.h
+@@ -66,9 +66,7 @@ typedef struct
+ typedef struct
+ {
+   vm_frame_ctx_shared_t header;                       /**< shared data header */
+-#if ENABLED (JERRY_ESNEXT)
+   ecma_object_t *function_object_p;                   /**< function obj */
+-#endif /* ENABLED (JERRY_ESNEXT) */
+   const ecma_value_t *arg_list_p;                     /**< arguments list */
+   uint32_t arg_list_len;                              /**< arguments list length */
+ } vm_frame_ctx_shared_args_t;
+diff --git a/jerry-core/vm/vm.c b/jerry-core/vm/vm.c
+index d6b7f67c5e..859722a06f 100644
+--- a/jerry-core/vm/vm.c
++++ b/jerry-core/vm/vm.c
+@@ -16,6 +16,7 @@
+ #include "common.h"
+ 
+ #include "ecma-alloc.h"
++#include "ecma-arguments-object.h"
+ #include "ecma-array-object.h"
+ #include "ecma-bigint.h"
+ #include "ecma-builtins.h"
+@@ -1512,6 +1513,36 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
+           continue;
+         }
+ #endif /* ENABLED (JERRY_ESNEXT) */
++        case VM_OC_CREATE_ARGUMENTS:
++        {
++          uint32_t literal_index;
++          READ_LITERAL_INDEX (literal_index);
++
++          JERRY_ASSERT (frame_ctx_p->shared_p->status_flags & VM_FRAME_CTX_SHARED_HAS_ARG_LIST);
++
++          result = ecma_op_create_arguments_object ((vm_frame_ctx_shared_args_t *) (frame_ctx_p->shared_p),
++                                                    frame_ctx_p->lex_env_p);
++
++          if (literal_index < register_end)
++          {
++            JERRY_ASSERT (VM_GET_REGISTER (frame_ctx_p, literal_index) == ECMA_VALUE_UNDEFINED);
++            VM_GET_REGISTER (frame_ctx_p, literal_index) = result;
++            continue;
++          }
++
++          ecma_string_t *name_p = ecma_get_string_from_value (literal_start_p[literal_index]);
++
++          JERRY_ASSERT (ecma_find_named_property (frame_ctx_p->lex_env_p, name_p) == NULL);
++
++          uint8_t prop_attributes = ECMA_PROPERTY_FLAG_WRITABLE;
++          ecma_property_value_t *property_value_p;
++
++          property_value_p = ecma_create_named_data_property (frame_ctx_p->lex_env_p, name_p, prop_attributes, NULL);
++          property_value_p->value = result;
++
++          ecma_deref_object (ecma_get_object_from_value (result));
++          continue;
++        }
+ #if ENABLED (JERRY_SNAPSHOT_EXEC)
+         case VM_OC_SET_BYTECODE_PTR:
+         {
+diff --git a/jerry-core/vm/vm.h b/jerry-core/vm/vm.h
+index 6417f1b794..80d530abb7 100644
+--- a/jerry-core/vm/vm.h
++++ b/jerry-core/vm/vm.h
+@@ -220,6 +220,7 @@ typedef enum
+   VM_OC_JUMP_AND_EXIT_CONTEXT,   /**< jump and exit context */
+ 
+   VM_OC_CREATE_BINDING,          /**< create variables */
++  VM_OC_CREATE_ARGUMENTS,        /**< create arguments object */
+   VM_OC_SET_BYTECODE_PTR,        /**< setting bytecode pointer */
+   VM_OC_VAR_EVAL,                /**< variable and function evaluation */
+ #if ENABLED (JERRY_ESNEXT)
+diff --git a/tests/jerry/es.next/arguments.js b/tests/jerry/es.next/arguments.js
+index 2186fb5e38..8f064c764c 100644
+--- a/tests/jerry/es.next/arguments.js
++++ b/tests/jerry/es.next/arguments.js
+@@ -12,10 +12,190 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
+-function f(a, b, c)
++function f1(a, b, c)
+ {
+   'use strict';
+   assert(!Object.hasOwnProperty(arguments,'caller'));
+ }
+ 
+-f(1, 2, 3);
++f1(1, 2, 3);
++
++// Normal arguments access
++
++function f2(a = arguments)
++{
++  assert(arguments[1] === 2)
++  var arguments = 1
++  assert(arguments === 1)
++  assert(a[1] === 2)
++}
++f2(undefined, 2)
++
++function f3(a = arguments)
++{
++  assert(arguments() === "X")
++  function arguments() { return "X" }
++  assert(arguments() === "X")
++  assert(a[1] === "R")
++}
++f3(undefined, "R")
++
++function f4(a = arguments)
++{
++  const arguments = 3.25
++  assert(arguments === 3.25)
++  assert(a[1] === -1.5)
++}
++f4(undefined, -1.5)
++
++// Normal arguments access with eval
++
++function f5(a = arguments)
++{
++  assert(arguments[1] === 2)
++  var arguments = 1
++  assert(arguments === 1)
++  assert(a[1] === 2)
++  eval()
++}
++f5(undefined, 2)
++
++function f6(a = arguments)
++{
++  assert(arguments() === "X")
++  function arguments() { return "X" }
++  assert(arguments() === "X")
++  assert(a[1] === "R")
++  eval()
++}
++f6(undefined, "R")
++
++function f7(a = arguments)
++{
++  const arguments = 3.25
++  assert(arguments === 3.25)
++  assert(a[1] === -1.5)
++  eval()
++}
++f7(undefined, -1.5)
++
++// Argument access through a function
++
++function f8(a = () => arguments)
++{
++  assert(arguments[1] === 2)
++  var arguments = 1
++  assert(arguments === 1)
++  assert(a()[1] === 2)
++}
++f8(undefined, 2)
++
++function f9(a = () => arguments)
++{
++  assert(arguments() === "X")
++  function arguments() { return "X" }
++  assert(arguments() === "X")
++  assert(a()[1] === "R")
++}
++f9(undefined, "R")
++
++function f10(a = () => arguments)
++{
++  let arguments = 3.25
++  assert(arguments === 3.25)
++  assert(a()[1] === -1.5)
++}
++f10(undefined, -1.5)
++
++// Argument access through an eval
++
++function f11(a = eval("() => arguments"))
++{
++  assert(arguments[1] === 2)
++  var arguments = 1
++  assert(arguments === 1)
++  assert(a()[1] === 2)
++}
++f11(undefined, 2)
++
++function f12(a = eval("() => arguments"))
++{
++  assert(arguments() === "X")
++  function arguments() { return "X" }
++  assert(arguments() === "X")
++  assert(a()[1] === "R")
++}
++f12(undefined, "R")
++
++function f13(a = eval("() => arguments"))
++{
++  const arguments = 3.25
++  assert(arguments === 3.25)
++  assert(a()[1] === -1.5)
++}
++f13(undefined, -1.5)
++
++// Other cases
++
++try {
++  function f14(a = arguments)
++  {
++    assert(a[1] === 6)
++    arguments;
++    let arguments = 1;
++  }
++  f14(undefined, 6)
++  assert(false)
++} catch (e) {
++  assert(e instanceof ReferenceError)
++}
++
++try {
++  eval("'use strict'; function f(a = arguments) { arguments = 5; eval() }");
++  assert(false)
++} catch (e) {
++  assert(e instanceof SyntaxError)
++}
++
++function f15()
++{
++  assert(arguments[0] === "A")
++  var arguments = 1
++  assert(arguments === 1)
++}
++f15("A")
++
++function f16()
++{
++  assert(arguments() === "W")
++  function arguments() { return "W" }
++  assert(arguments() === "W")
++}
++f16("A")
++
++function f17(a = arguments = "Val")
++{
++  assert(arguments === "Val")
++}
++f17();
++
++function f18(s = (v) => arguments = v, g = () => arguments)
++{
++  const arguments = -3.25
++  s("X")
++
++  assert(g() === "X")
++  assert(arguments === -3.25)
++}
++f18()
++
++function f19(e = (v) => eval(v))
++{
++  var arguments = -12.5
++  e("arguments[0] = 4.5")
++
++  assert(e("arguments[0]") === 4.5)
++  assert(e("arguments[1]") === "A")
++  assert(arguments === -12.5)
++}
++f19(undefined, "A");
+diff --git a/tests/test262-esnext-excludelist.xml b/tests/test262-esnext-excludelist.xml
+index 75f973793f..0d39ccd100 100644
+--- a/tests/test262-esnext-excludelist.xml
++++ b/tests/test262-esnext-excludelist.xml
+@@ -626,16 +626,12 @@
+   <test id="language/expressions/compound-assignment/S11.13.2_A7.7_T4.js"><reason></reason></test>
+   <test id="language/expressions/compound-assignment/S11.13.2_A7.8_T4.js"><reason></reason></test>
+   <test id="language/expressions/compound-assignment/S11.13.2_A7.9_T4.js"><reason></reason></test>
+-  <test id="language/expressions/function/arguments-with-arguments-fn.js"><reason></reason></test>
+-  <test id="language/expressions/function/arguments-with-arguments-lex.js"><reason></reason></test>
+   <test id="language/expressions/function/dflt-params-trailing-comma.js"><reason></reason></test>
+   <test id="language/expressions/function/dstr/ary-init-iter-no-close.js"><reason></reason></test>
+   <test id="language/expressions/function/dstr/dflt-ary-init-iter-no-close.js"><reason></reason></test>
+   <test id="language/expressions/function/eval-var-scope-syntax-err.js"><reason></reason></test>
+   <test id="language/expressions/function/length-dflt.js"><reason></reason></test>
+   <test id="language/expressions/function/name.js"><reason></reason></test>
+-  <test id="language/expressions/generators/arguments-with-arguments-fn.js"><reason></reason></test>
+-  <test id="language/expressions/generators/arguments-with-arguments-lex.js"><reason></reason></test>
+   <test id="language/expressions/generators/dflt-params-trailing-comma.js"><reason></reason></test>
+   <test id="language/expressions/generators/dstr/ary-init-iter-no-close.js"><reason></reason></test>
+   <test id="language/expressions/generators/dstr/dflt-ary-init-iter-no-close.js"><reason></reason></test>
+@@ -984,15 +980,11 @@
+   <test id="language/statements/for/let-block-with-newline.js"><reason></reason></test>
+   <test id="language/statements/for/let-identifier-with-newline.js"><reason></reason></test>
+   <test id="language/statements/for/scope-body-lex-open.js"><reason></reason></test>
+-  <test id="language/statements/function/arguments-with-arguments-fn.js"><reason></reason></test>
+-  <test id="language/statements/function/arguments-with-arguments-lex.js"><reason></reason></test>
+   <test id="language/statements/function/dflt-params-trailing-comma.js"><reason></reason></test>
+   <test id="language/statements/function/dstr/ary-init-iter-no-close.js"><reason></reason></test>
+   <test id="language/statements/function/dstr/dflt-ary-init-iter-no-close.js"><reason></reason></test>
+   <test id="language/statements/function/eval-var-scope-syntax-err.js"><reason></reason></test>
+   <test id="language/statements/function/length-dflt.js"><reason></reason></test>
+-  <test id="language/statements/generators/arguments-with-arguments-fn.js"><reason></reason></test>
+-  <test id="language/statements/generators/arguments-with-arguments-lex.js"><reason></reason></test>
+   <test id="language/statements/generators/dflt-params-trailing-comma.js"><reason></reason></test>
+   <test id="language/statements/generators/dstr/ary-init-iter-no-close.js"><reason></reason></test>
+   <test id="language/statements/generators/dstr/dflt-ary-init-iter-no-close.js"><reason></reason></test>

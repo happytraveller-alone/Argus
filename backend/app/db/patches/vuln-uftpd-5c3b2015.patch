@@ -1,0 +1,31 @@
+From 5c3b20158bae4f93e70f6ef8b3b3681006e20680 Mon Sep 17 00:00:00 2001
+From: Joachim Nilsson <troglobit@gmail.com>
+Date: Fri, 22 May 2020 08:40:02 +0200
+Subject: [PATCH] Fix #30: Dereferencing of NULL pointer in DBG() message
+
+This patch closes a nasty bug found by @martinclauss where we call
+strlen(NULL) in a very common use-case -- wrong CWD path.  Causing
+segfault, which for some users lead to loss of further service.
+
+Signed-off-by: Joachim Nilsson <troglobit@gmail.com>
+---
+ src/ftpcmd.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/ftpcmd.c b/src/ftpcmd.c
+index caf86df..af2a40f 100644
+--- a/src/ftpcmd.c
++++ b/src/ftpcmd.c
+@@ -404,8 +404,7 @@ static void handle_CWD(ctrl_t *ctrl, char *path)
+ 	 */
+ 	dir = compose_abspath(ctrl, path);
+ 	if (!dir || stat(dir, &st) || !S_ISDIR(st.st_mode)) {
+-		DBG("chrooted:%d, ctrl->cwd: %s, home:%s, dir:%s, len:%zd, dirlen:%zd",
+-		    chrooted, ctrl->cwd, home, dir, strlen(home), strlen(dir));
++		INFO("%s: CWD: invalid path to %s: %m", ctrl->clientaddr, path);
+ 		send_msg(ctrl->sd, "550 No such directory.\r\n");
+ 		return;
+ 	}
+-- 
+2.34.1
+

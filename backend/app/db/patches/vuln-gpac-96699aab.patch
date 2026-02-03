@@ -1,0 +1,160 @@
+From 96699aabae042f8f55cf8a85fa5758e3db752bae Mon Sep 17 00:00:00 2001
+From: jeanlf <jeanlf@gpac.io>
+Date: Fri, 21 Jan 2022 12:26:28 +0100
+Subject: [PATCH] fixed #2061
+
+---
+ include/gpac/utf.h        |  9 +++++----
+ src/filters/load_bt_xmt.c |  7 ++++---
+ src/filters/load_text.c   |  9 ++++-----
+ src/utils/utf.c           | 32 ++++++++++++++++++++++++--------
+ 4 files changed, 37 insertions(+), 20 deletions(-)
+
+diff --git a/include/gpac/utf.h b/include/gpac/utf.h
+index 55fe5cd10..5e1146ac6 100644
+--- a/include/gpac/utf.h
++++ b/include/gpac/utf.h
+@@ -84,14 +84,15 @@ u32 gf_utf8_wcslen(const unsigned short *s);
+ /*!
+ \brief returns a UTF8 string from a string started with BOM
+ 
+-Returns the length in character of a wide-char string
++Returns UTF8 from data
+ \param data the string or wide-char string
+ \param size of the data buffer
+   size of the data buffer
+-\param out_ptr set to an allocated buffer if needed for conversion, shall be destroyed by caller
+-\return the UTF8 string corresponding
++\param out_ptr set to an allocated buffer if needed for conversion, shall be destroyed by caller. Must not be NULL
++\param result set to resulting UTF8 string. Must not be NULL
++\return error if any: GF_IO_ERR if UTF decode error or GF_BAD_PARAM
+  */
+-char *gf_utf_get_utf8_string_from_bom(u8 *data, u32 size, char **out_ptr);
++GF_Err gf_utf_get_utf8_string_from_bom(const u8 *data, u32 size, char **out_ptr, char **result);
+ 
+ /*!
+ \brief Checks validity of a UTF8 string
+diff --git a/src/filters/load_bt_xmt.c b/src/filters/load_bt_xmt.c
+index 7c487267b..7b3fb4281 100644
+--- a/src/filters/load_bt_xmt.c
++++ b/src/filters/load_bt_xmt.c
+@@ -787,7 +787,8 @@ static const char *ctxload_probe_data(const u8 *probe_data, u32 size, GF_FilterP
+ {
+ 	const char *mime_type = NULL;
+ 	char *dst = NULL;
+-	u8 *res;
++	GF_Err e;
++	char *res=NULL;
+ 
+ 	/* check gzip magic header */
+ 	if ((size>2) && (probe_data[0] == 0x1f) && (probe_data[1] == 0x8b)) {
+@@ -795,8 +796,8 @@ static const char *ctxload_probe_data(const u8 *probe_data, u32 size, GF_FilterP
+ 		return "btz|bt.gz|xmt.gz|xmtz|wrl.gz|x3dv.gz|x3dvz|x3d.gz|x3dz";
+ 	}
+ 
+-	res = gf_utf_get_utf8_string_from_bom((char *)probe_data, size, &dst);
+-	if (res) probe_data = res;
++	e = gf_utf_get_utf8_string_from_bom(probe_data, size, &dst, &res);
++	if (e) return NULL;
+ 
+ 	//strip all spaces and \r\n
+ 	while (probe_data[0] && strchr("\n\r\t ", (char) probe_data[0]))
+diff --git a/src/filters/load_text.c b/src/filters/load_text.c
+index 9d0a687d3..f04298f48 100644
+--- a/src/filters/load_text.c
++++ b/src/filters/load_text.c
+@@ -3530,11 +3530,10 @@ void txtin_finalize(GF_Filter *filter)
+ static const char *txtin_probe_data(const u8 *data, u32 data_size, GF_FilterProbeScore *score)
+ {
+ 	char *dst = NULL;
+-	u8 *res;
+-
+-	res = gf_utf_get_utf8_string_from_bom((char *)data, data_size, &dst);
+-	if (res) data = res;
+-
++	char *res=NULL;
++	GF_Err e = gf_utf_get_utf8_string_from_bom((char *)data, data_size, &dst, &res);
++	if (e) return NULL;
++	
+ #define PROBE_OK(_score, _mime) \
+ 		*score = _score;\
+ 		if (dst) gf_free(dst);\
+diff --git a/src/utils/utf.c b/src/utils/utf.c
+index 79090ae24..978e2cc7d 100644
+--- a/src/utils/utf.c
++++ b/src/utils/utf.c
+@@ -648,36 +648,47 @@ bad_input:
+ 
+ 
+ GF_EXPORT
+-char *gf_utf_get_utf8_string_from_bom(u8 *data, u32 size, char **out_ptr)
++GF_Err gf_utf_get_utf8_string_from_bom(const u8 *data, u32 size, char **out_ptr, char **result)
+ {
+ 	u32 unicode_type = 0;
++	if (!out_ptr || !result || !data) return GF_BAD_PARAM;
+ 	*out_ptr = NULL;
++	*result = (char *) data;
+ 
+ 	if (size>=5) {
+ 		/*0: no unicode, 1: UTF-16BE, 2: UTF-16LE*/
+ 		if ((data[0]==0xFF) && (data[1]==0xFE)) {
+ 			if (!data[2] && !data[3]) {
+-				return NULL;
++				return GF_OK;
+ 			} else {
+ 				unicode_type = 2;
+ 			}
+ 		} else if ((data[0]==0xFE) && (data[1]==0xFF)) {
+ 			if (!data[2] && !data[3]) {
+-				return NULL;
++				return GF_OK;
+ 			} else {
+ 				unicode_type = 1;
+ 			}
+ 		} else if ((data[0]==0xEF) && (data[1]==0xBB) && (data[2]==0xBF)) {
+-			return data+4;
++			*result = (char *) (data+4);
++			return GF_OK;
+ 		}
+ 	}
+ 
+-	if (!unicode_type) return data;
++	if (!unicode_type) {
++		*result = (char *) data;
++		return GF_OK;
++	}
+ 
+ 	if (size%2) size--;
+ 	u16 *str_wc = gf_malloc(size+2);
++	if (!str_wc) return GF_OUT_OF_MEM;
+ 	u16 *srcwc;
+ 	char *dst = gf_malloc(size+2);
++	if (!dst) {
++		gf_free(str_wc);
++		return GF_OUT_OF_MEM;
++	}
+ 	*out_ptr = dst;
+ 	u32 i;
+ 	for (i=0; i<size; i+=2) {
+@@ -704,10 +715,15 @@ char *gf_utf_get_utf8_string_from_bom(u8 *data, u32 size, char **out_ptr)
+ 	}
+ 	str_wc[i/2] = 0;
+ 	srcwc = str_wc;
+-	gf_utf8_wcstombs(dst, size, (const unsigned short **) &srcwc);
++	u32 res = gf_utf8_wcstombs(dst, size, (const unsigned short **) &srcwc);
+ 	gf_free(str_wc);
+-
+-	return dst;
++	if (res==GF_UTF8_FAIL) {
++		gf_free(dst);
++		*out_ptr = NULL;
++		return GF_IO_ERR;
++	}
++	*result = dst;
++	return GF_OK;
+ }
+ 
+ 
+-- 
+2.34.1
+

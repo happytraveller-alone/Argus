@@ -1,0 +1,34 @@
+From d18d606a55330a6b9fd19596d8b12c4e9e0a4b57 Mon Sep 17 00:00:00 2001
+From: Olivier Dony <odo@openerp.com>
+Date: Fri, 2 Jun 2017 22:29:47 +0200
+Subject: [PATCH] [FIX] tools: verify path before opening
+
+---
+ openerp/tools/misc.py | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/openerp/tools/misc.py b/openerp/tools/misc.py
+index 13d5e24f9b9..bed509298cf 100644
+--- a/openerp/tools/misc.py
++++ b/openerp/tools/misc.py
+@@ -205,7 +205,16 @@ def file_open(name, mode="r", subdir='addons', pathinfo=False):
+ 
+ 
+ def _fileopen(path, mode, basedir, pathinfo, basename=None):
+-    name = os.path.normpath(os.path.join(basedir, path))
++    name = os.path.normpath(os.path.normcase(os.path.join(basedir, path)))
++
++    import openerp.modules as addons
++    paths = addons.module.ad_paths + [config['root_path']]
++    for addons_path in paths:
++        addons_path = os.path.normpath(os.path.normcase(addons_path)) + os.sep
++        if name.startswith(addons_path):
++            break
++    else:
++        raise ValueError("Unknown path: %s" % name)
+ 
+     if basename is None:
+         basename = name
+-- 
+2.34.1
+

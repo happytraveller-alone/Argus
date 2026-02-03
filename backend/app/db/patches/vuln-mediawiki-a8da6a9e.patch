@@ -1,0 +1,204 @@
+From a8da6a9e08ec1d63fcf22dd710ed084bfcf6fbc1 Mon Sep 17 00:00:00 2001
+From: Arlo Breault <abreault@wikimedia.org>
+Date: Fri, 28 Apr 2023 19:00:50 -0400
+Subject: [PATCH] SECURITY: Move badFile lookup to Linker
+
+CVE-2023-36674
+
+Bug: T335612
+Change-Id: I849d02f1d3dc9995353b7a9995601d214053dca3
+---
+ includes/linker/Linker.php   | 26 ++++++++++++++++++++++----
+ includes/parser/Parser.php   | 34 ++++++++++++++++------------------
+ tests/parser/legacyMedia.txt | 10 ++++++++++
+ tests/parser/media.txt       | 16 ++++++++++++----
+ 4 files changed, 60 insertions(+), 26 deletions(-)
+
+diff --git a/includes/linker/Linker.php b/includes/linker/Linker.php
+index 7dee24bc9f4..fffc27cc9e9 100644
+--- a/includes/linker/Linker.php
++++ b/includes/linker/Linker.php
+@@ -471,7 +471,10 @@ class Linker {
+ 			$thumb = false;
+ 		}
+ 
+-		if ( !$thumb || ( !$enableLegacyMediaDOM && $thumb->isError() ) ) {
++		$isBadFile = $file && $thumb &&
++			$parser->getBadFileLookup()->isBadFile( $title->getDBkey(), $parser->getTitle() );
++
++		if ( !$thumb || ( !$enableLegacyMediaDOM && $thumb->isError() ) || $isBadFile ) {
+ 			$rdfaType = 'mw:Error ' . $rdfaType;
+ 			$currentExists = $file && $file->exists();
+ 			if ( $enableLegacyMediaDOM ) {
+@@ -673,6 +676,7 @@ class Linker {
+ 		$thumb = false;
+ 		$noscale = false;
+ 		$manualthumb = false;
++		$manual_title = '';
+ 		$rdfaType = 'mw:File/Thumb';
+ 
+ 		if ( !$exists ) {
+@@ -751,6 +755,12 @@ class Linker {
+ 				. "<div class=\"thumbinner\" style=\"width:{$outerWidth}px;\">";
+ 		}
+ 
++		$isBadFile = $exists && $thumb && $parser &&
++			$parser->getBadFileLookup()->isBadFile(
++				$manualthumb ? $manual_title : $title->getDBkey(),
++				$parser->getTitle()
++			);
++
+ 		if ( !$exists ) {
+ 			$rdfaType = 'mw:Error ' . $rdfaType;
+ 			$label = '';
+@@ -761,10 +771,16 @@ class Linker {
+ 				$title, $label, '', '', '', (bool)$time, $handlerParams, false
+ 			);
+ 			$zoomIcon = '';
+-		} elseif ( !$thumb || ( !$enableLegacyMediaDOM && $thumb->isError() ) ) {
++		} elseif ( !$thumb || ( !$enableLegacyMediaDOM && $thumb->isError() ) || $isBadFile ) {
+ 			$rdfaType = 'mw:Error ' . $rdfaType;
+ 			if ( $enableLegacyMediaDOM ) {
+-				$s .= wfMessage( 'thumbnail_error', '' )->escaped();
++				if ( !$thumb ) {
++					$s .= wfMessage( 'thumbnail_error', '' )->escaped();
++				} else {
++					$s .= self::makeBrokenImageLinkObj(
++						$title, '', '', '', '', (bool)$time, $handlerParams, true
++					);
++				}
+ 			} else {
+ 				if ( $thumb && $thumb->isError() ) {
+ 					Assert::invariant(
+@@ -772,8 +788,10 @@ class Linker {
+ 						'Unknown MediaTransformOutput: ' . get_class( $thumb )
+ 					);
+ 					$label = $thumb->toText();
+-				} else {
++				} elseif ( !$thumb ) {
+ 					$label = wfMessage( 'thumbnail_error', '' )->text();
++				} else {
++					$label = '';
+ 				}
+ 				$s .= self::makeBrokenImageLinkObj(
+ 					$title, $label, '', '', '', (bool)$time, $handlerParams, true
+diff --git a/includes/parser/Parser.php b/includes/parser/Parser.php
+index 04e4b0382d1..7f20e056be2 100644
+--- a/includes/parser/Parser.php
++++ b/includes/parser/Parser.php
+@@ -2679,25 +2679,23 @@ class Parser {
+ 				}
+ 
+ 				if ( $ns === NS_FILE ) {
+-					if ( !$this->badFileLookup->isBadFile( $nt->getDBkey(), $this->getTitle() ) ) {
+-						if ( $wasblank ) {
+-							# if no parameters were passed, $text
+-							# becomes something like "File:Foo.png",
+-							# which we don't want to pass on to the
+-							# image generator
+-							$text = '';
+-						} else {
+-							# recursively parse links inside the image caption
+-							# actually, this will parse them in any other parameters, too,
+-							# but it might be hard to fix that, and it doesn't matter ATM
+-							$text = $this->handleExternalLinks( $text );
+-							$holders->merge( $this->handleInternalLinks2( $text ) );
+-						}
+-						# cloak any absolute URLs inside the image markup, so handleExternalLinks() won't touch them
+-						$s .= $prefix . $this->armorLinks(
+-							$this->makeImage( $nt, $text, $holders ) ) . $trail;
+-						continue;
++					if ( $wasblank ) {
++						# if no parameters were passed, $text
++						# becomes something like "File:Foo.png",
++						# which we don't want to pass on to the
++						# image generator
++						$text = '';
++					} else {
++						# recursively parse links inside the image caption
++						# actually, this will parse them in any other parameters, too,
++						# but it might be hard to fix that, and it doesn't matter ATM
++						$text = $this->handleExternalLinks( $text );
++						$holders->merge( $this->handleInternalLinks2( $text ) );
+ 					}
++					# cloak any absolute URLs inside the image markup, so handleExternalLinks() won't touch them
++					$s .= $prefix . $this->armorLinks(
++						$this->makeImage( $nt, $text, $holders ) ) . $trail;
++					continue;
+ 				} elseif ( $ns === NS_CATEGORY ) {
+ 					/**
+ 					 * Strip the whitespace Category links produce, see T2087
+diff --git a/tests/parser/legacyMedia.txt b/tests/parser/legacyMedia.txt
+index f5a1f255bba..da8ad62619a 100644
+--- a/tests/parser/legacyMedia.txt
++++ b/tests/parser/legacyMedia.txt
+@@ -3958,3 +3958,13 @@ wgParserEnableLegacyMediaDOM=true
+ !! html/parsoid
+ <figure class="mw-default-size" typeof="mw:Error mw:File/Thumb" data-mw='{"errors":[{"key":"apierror-filedoesnotexist","message":"This image does not exist."}]}'><a href="./Special:FilePath/Broken.jpg"><span class="mw-broken-media" resource="./File:Broken.jpg" data-width="180">File:Broken.jpg</span></a><figcaption>A caption for the media.</figcaption></figure>
+ !! end
++
++!! test
++Bad images - manualthumb
++!! config
++wgParserEnableLegacyMediaDOM=true
++!! wikitext
++[[File:Foobar.jpg|thumb=Bad.jpg|Uh oh]]
++!! html/php
++<div class="thumb tright"><div class="thumbinner" style="width:322px;"><a href="/wiki/File:Foobar.jpg" title="File:Foobar.jpg">File:Foobar.jpg</a>  <div class="thumbcaption">Uh oh</div></div></div>
++!! end
+diff --git a/tests/parser/media.txt b/tests/parser/media.txt
+index c8b44b975a1..dfa8f6d06d5 100644
+--- a/tests/parser/media.txt
++++ b/tests/parser/media.txt
+@@ -196,7 +196,6 @@ wgParserEnableLegacyMediaDOM=false
+ <figure class="mw-default-size" typeof="mw:File/Thumb"><a href="./File:Foobar.jpg" class="mw-file-description"><img resource="./File:Foobar.jpg" src="http://example.com/images/thumb/3/3a/Foobar.jpg/180px-Foobar.jpg" decoding="async" data-file-width="1941" data-file-height="220" data-file-type="bitmap" height="20" width="180" srcset="http://example.com/images/thumb/3/3a/Foobar.jpg/270px-Foobar.jpg 1.5x, http://example.com/images/thumb/3/3a/Foobar.jpg/360px-Foobar.jpg 2x"/></a><figcaption>one <i>two</i> <span typeof="mw:Entity">|</span> three</figcaption></figure>
+ !! end
+ 
+-## FIXME: Legacy output doesn't match Parsoid
+ !! test
+ Bad images - basic functionality
+ !! config
+@@ -204,13 +203,12 @@ wgParserEnableLegacyMediaDOM=false
+ !! wikitext
+ [[File:Bad.jpg]]
+ !! html/php
+-<p><a href="/wiki/File:Bad.jpg" title="File:Bad.jpg">File:Bad.jpg</a>
++<p><span class="mw-default-size" typeof="mw:Error mw:File"><a href="/wiki/File:Bad.jpg" title="File:Bad.jpg"><span class="mw-broken-media" data-width="320">File:Bad.jpg</span></a></span>
+ </p>
+ !! html/parsoid
+ <p><span class="mw-default-size" typeof="mw:Error mw:File" data-mw='{"errors":[{"key":"apierror-badfile","message":"This image is on the bad file list."}]}'><a href="./Special:FilePath/Bad.jpg"><span class="mw-broken-media" resource="./File:Bad.jpg">File:Bad.jpg</span></a></span></p>
+ !! end
+ 
+-## FIXME: Legacy output doesn't match Parsoid
+ !! test
+ Bad images - T18039: text after bad image disappears
+ !! config
+@@ -221,7 +219,7 @@ Foo bar
+ Bar foo
+ !! html/php
+ <p>Foo bar
+-<a href="/wiki/File:Bad.jpg" title="File:Bad.jpg">File:Bad.jpg</a>
++<span class="mw-default-size" typeof="mw:Error mw:File"><a href="/wiki/File:Bad.jpg" title="File:Bad.jpg"><span class="mw-broken-media" data-width="320">File:Bad.jpg</span></a></span>
+ Bar foo
+ </p>
+ !! html/parsoid
+@@ -230,6 +228,16 @@ Bar foo
+ Bar foo</p>
+ !! end
+ 
++!! test
++Bad images - manualthumb
++!! config
++wgParserEnableLegacyMediaDOM=false
++!! wikitext
++[[File:Foobar.jpg|thumb=Bad.jpg|Uh oh]]
++!! html/php
++<figure typeof="mw:Error mw:File/Thumb"><a href="/wiki/File:Foobar.jpg" title="File:Foobar.jpg"><span class="mw-broken-media" data-width="180">File:Foobar.jpg</span></a><figcaption>Uh oh</figcaption></figure>
++!! end
++
+ !! test
+ Bad images - in gallery
+ !! config
+-- 
+2.34.1
+

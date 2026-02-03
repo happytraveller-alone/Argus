@@ -1,0 +1,24 @@
+From 70c6fc090a7675d067bf6cb1dfbb171a327a7dc3 Mon Sep 17 00:00:00 2001
+From: Graham Campbell <GrahamCampbell@users.noreply.github.com>
+Date: Mon, 2 Mar 2020 17:09:30 +0000
+Subject: [PATCH] Fixed StyleCI config (#257)
+
+---
+ .styleci.yml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/.styleci.yml b/.styleci.yml
+index 90e4d66..0f17b92 100644
+--- a/.styleci.yml
++++ b/.styleci.yml
+@@ -4,5 +4,5 @@ disabled:
+   - single_class_element_per_statement
+ 
+ finder:
+-  exclude:
+-    - "tests/stubs/Controllers/GitConflictController.php"
++  not-name:
++    - "GitConflictController.php"
+-- 
+2.34.1
+

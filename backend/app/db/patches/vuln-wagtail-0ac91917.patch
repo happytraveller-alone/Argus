@@ -1,0 +1,25 @@
+From 0ac9191705225fd2fb3b5974fc6b6743ba00b5bb Mon Sep 17 00:00:00 2001
+From: Matt Westcott <matt@west.co.tt>
+Date: Thu, 17 Jun 2021 11:24:21 +0100
+Subject: [PATCH] Version bump to 2.12.5
+
+---
+ wagtail/__init__.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/wagtail/__init__.py b/wagtail/__init__.py
+index 5828140af1..bb2c6d1533 100644
+--- a/wagtail/__init__.py
++++ b/wagtail/__init__.py
+@@ -7,7 +7,7 @@ from wagtail.utils.version import get_semver_version, get_version
+ 
+ # major.minor.patch.release.number
+ # release must be one of alpha, beta, rc, or final
+-VERSION = (2, 12, 4, 'final', 1)
++VERSION = (2, 12, 5, 'final', 1)
+ 
+ __version__ = get_version(VERSION)
+ 
+-- 
+2.34.1
+

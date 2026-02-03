@@ -1,0 +1,65 @@
+From d320d27699abcea12479cf608908fa91bcc133d4 Mon Sep 17 00:00:00 2001
+From: Jakub Zalas <jakub@zalas.pl>
+Date: Thu, 21 May 2015 09:29:36 +0100
+Subject: [PATCH] [HttpKernel] Do not call the FragmentListener if _controller
+ is already defined
+
+---
+ .../EventListener/FragmentListener.php        |  2 +-
+ .../EventListener/FragmentListenerTest.php    | 20 +++++++++++++++++--
+ 2 files changed, 19 insertions(+), 3 deletions(-)
+
+diff --git a/src/Symfony/Component/HttpKernel/EventListener/FragmentListener.php b/src/Symfony/Component/HttpKernel/EventListener/FragmentListener.php
+index 6f45c3b129..04193aadd2 100644
+--- a/src/Symfony/Component/HttpKernel/EventListener/FragmentListener.php
++++ b/src/Symfony/Component/HttpKernel/EventListener/FragmentListener.php
+@@ -58,7 +58,7 @@ class FragmentListener implements EventSubscriberInterface
+     {
+         $request = $event->getRequest();
+ 
+-        if ($this->fragmentPath !== rawurldecode($request->getPathInfo())) {
++        if ($request->attributes->has('_controller') || $this->fragmentPath !== rawurldecode($request->getPathInfo())) {
+             return;
+         }
+ 
+diff --git a/src/Symfony/Component/HttpKernel/Tests/EventListener/FragmentListenerTest.php b/src/Symfony/Component/HttpKernel/Tests/EventListener/FragmentListenerTest.php
+index 7ddb2fbbf2..18edee6123 100644
+--- a/src/Symfony/Component/HttpKernel/Tests/EventListener/FragmentListenerTest.php
++++ b/src/Symfony/Component/HttpKernel/Tests/EventListener/FragmentListenerTest.php
+@@ -34,6 +34,22 @@ class FragmentListenerTest extends \PHPUnit_Framework_TestCase
+         $this->assertTrue($request->query->has('_path'));
+     }
+ 
++
++    public function testOnlyTriggeredIfControllerWasNotDefinedYet()
++    {
++        $request = Request::create('http://example.com/_fragment?_path=foo%3Dbar%26_controller%3Dfoo');
++        $request->attributes->set('_controller', 'bar');
++
++        $listener = new FragmentListener(new UriSigner('foo'));
++        $event = $this->createGetResponseEvent($request, HttpKernelInterface::SUB_REQUEST);
++
++        $expected = $request->attributes->all();
++
++        $listener->onKernelRequest($event);
++
++        $this->assertEquals($expected, $request->attributes->all());
++    }
++
+     /**
+      * @expectedException \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException
+      */
+@@ -74,8 +90,8 @@ class FragmentListenerTest extends \PHPUnit_Framework_TestCase
+         $this->assertFalse($request->query->has('_path'));
+     }
+ 
+-    private function createGetResponseEvent(Request $request)
++    private function createGetResponseEvent(Request $request, $requestType = HttpKernelInterface::MASTER_REQUEST)
+     {
+-        return new GetResponseEvent($this->getMock('Symfony\Component\HttpKernel\HttpKernelInterface'), $request, HttpKernelInterface::MASTER_REQUEST);
++        return new GetResponseEvent($this->getMock('Symfony\Component\HttpKernel\HttpKernelInterface'), $request, $requestType);
+     }
+ }
+-- 
+2.34.1
+

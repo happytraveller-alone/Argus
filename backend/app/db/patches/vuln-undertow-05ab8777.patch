@@ -1,0 +1,27 @@
+From 05ab8777ed7cc3510acf4550102e5e38fc706fd1 Mon Sep 17 00:00:00 2001
+From: Flavia Rainone <frainone@redhat.com>
+Date: Mon, 10 Oct 2022 12:23:16 -0300
+Subject: [PATCH] [UNDERTOW-2166] At UndertowInputStream, use as read timeout
+ the minimum of READ_TIMEOUT and IDLE_TIMEOUT when both options are configured
+
+Signed-off-by: Flavia Rainone <frainone@redhat.com>
+---
+ core/src/main/java/io/undertow/io/UndertowInputStream.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/core/src/main/java/io/undertow/io/UndertowInputStream.java b/core/src/main/java/io/undertow/io/UndertowInputStream.java
+index c9908c632..aeca337c3 100644
+--- a/core/src/main/java/io/undertow/io/UndertowInputStream.java
++++ b/core/src/main/java/io/undertow/io/UndertowInputStream.java
+@@ -71,7 +71,7 @@ public class UndertowInputStream extends InputStream {
+             final Integer idleTimeout = this.channel.getOption(IDLE_TIMEOUT);
+             if (readTimeout == null || readTimeout <= 0)
+                 readTimeout = idleTimeout;
+-            else if (idleTimeout != null && idleTimeout > 0) {
++            else if (idleTimeout != null && idleTimeout > 0 && idleTimeout < readTimeout) {
+                 readTimeout = idleTimeout;
+             }
+         } catch (IOException e) {
+-- 
+2.34.1
+

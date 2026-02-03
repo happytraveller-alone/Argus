@@ -1,0 +1,74 @@
+From 9c65ae9c2c67dd949b5c3aba9b8eba6da802ab7e Mon Sep 17 00:00:00 2001
+From: David Koloski <djkoloski@gmail.com>
+Date: Wed, 28 Apr 2021 19:41:10 -0400
+Subject: [PATCH] Fix more sneaky uninitialized memory issues
+
+---
+ rkyv/src/ser/mod.rs             | 10 ++++++++--
+ rkyv/src/ser/serializers/std.rs | 13 ++++++-------
+ 2 files changed, 14 insertions(+), 9 deletions(-)
+
+diff --git a/rkyv/src/ser/mod.rs b/rkyv/src/ser/mod.rs
+index 0182006..50a1b8b 100644
+--- a/rkyv/src/ser/mod.rs
++++ b/rkyv/src/ser/mod.rs
+@@ -65,8 +65,11 @@ pub trait Serializer: Fallible {
+     ) -> Result<usize, Self::Error> {
+         let pos = self.pos();
+         debug_assert!(pos & (mem::align_of::<T::Archived>() - 1) == 0);
+-        let mut resolved = mem::MaybeUninit::zeroed();
++
++        let mut resolved = mem::MaybeUninit::<T::Archived>::uninit();
++        resolved.as_mut_ptr().write_bytes(0, 1);
+         value.resolve(pos, resolver, &mut resolved);
++
+         let data = resolved.as_ptr().cast::<u8>();
+         let len = mem::size_of::<T::Archived>();
+         self.write(slice::from_raw_parts(data, len))?;
+@@ -97,8 +100,11 @@ pub trait Serializer: Fallible {
+     ) -> Result<usize, Self::Error> {
+         let from = self.pos();
+         debug_assert!(from & (mem::align_of::<RelPtr<T::Archived>>() - 1) == 0);
+-        let mut resolved = mem::MaybeUninit::zeroed();
++
++        let mut resolved = mem::MaybeUninit::<RelPtr<T::Archived>>::uninit();
++        resolved.as_mut_ptr().write_bytes(0, 1);
+         value.resolve_unsized(from, to, metadata_resolver, &mut resolved);
++
+         let data = resolved.as_ptr().cast::<u8>();
+         let len = mem::size_of::<RelPtr<T::Archived>>();
+         self.write(slice::from_raw_parts(data, len))?;
+diff --git a/rkyv/src/ser/serializers/std.rs b/rkyv/src/ser/serializers/std.rs
+index 9421f43..eb2bd16 100644
+--- a/rkyv/src/ser/serializers/std.rs
++++ b/rkyv/src/ser/serializers/std.rs
+@@ -118,7 +118,7 @@ impl<A: Borrow<AlignedVec> + BorrowMut<AlignedVec>> Serializer for AlignedSerial
+         vec.set_len(vec.len() + additional);
+ 
+         let ptr = vec.as_mut_ptr().add(pos).cast::<mem::MaybeUninit<T::Archived>>();
+-        core::ptr::write_bytes(ptr, 0, 1);
++        ptr.write_bytes(0, 1);
+ 
+         value.resolve(pos, resolver, &mut *ptr);
+         Ok(pos)
+@@ -132,12 +132,11 @@ impl<A: Borrow<AlignedVec> + BorrowMut<AlignedVec>> Serializer for AlignedSerial
+         let additional = mem::size_of::<RelPtr<T::Archived>>();
+         vec.reserve(additional);
+         vec.set_len(vec.len() + additional);
+-        value.resolve_unsized(
+-            from,
+-            to,
+-            metadata_resolver,
+-            &mut *vec.as_mut_ptr().add(from).cast::<mem::MaybeUninit<RelPtr<T::Archived>>>()
+-        );
++
++        let ptr = vec.as_mut_ptr().add(from).cast::<mem::MaybeUninit<RelPtr<T::Archived>>>();
++        ptr.write_bytes(0, 1);
++
++        value.resolve_unsized(from, to, metadata_resolver, &mut *ptr);
+         Ok(from)
+     }
+ }
+-- 
+2.34.1
+

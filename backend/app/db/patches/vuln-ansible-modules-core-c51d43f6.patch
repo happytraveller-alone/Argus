@@ -1,0 +1,42 @@
+From 6bfd2846f853b9beaeb01da6206d8ffa4abe7a4c Mon Sep 17 00:00:00 2001
+From: Evgeni Golov <evgeni@golov.de>
+Date: Mon, 4 Apr 2016 17:28:22 +0200
+Subject: [PATCH] don't create world-readable archives of LXC containers
+
+with the default umask tar will create a world-readable archive of the
+
+container, which may contain sensitive data
+
+
+
+Signed-off-by: Evgeni Golov <evgeni@golov.de>
+---
+ cloud/lxc/lxc_container.py | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/cloud/lxc/lxc_container.py b/cloud/lxc/lxc_container.py
+index ae583fe4..fb24fbf7 100644
+--- a/cloud/lxc/lxc_container.py
++++ b/cloud/lxc/lxc_container.py
+@@ -1366,6 +1366,8 @@ class LxcContainerManagement(object):
+         :type source_dir: ``str``
+         """
+ 
++        old_umask = os.umask(0077)
++
+         archive_path = self.module.params.get('archive_path')
+         if not os.path.isdir(archive_path):
+             os.makedirs(archive_path)
+@@ -1396,6 +1398,9 @@ class LxcContainerManagement(object):
+             build_command=build_command,
+             unsafe_shell=True
+         )
++
++        os.umask(old_umask)
++
+         if rc != 0:
+             self.failure(
+                 err=err,
+-- 
+2.34.1
+

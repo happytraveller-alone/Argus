@@ -1,0 +1,217 @@
+From 2e3c22672936f4980d343fb1d328b38919e74796 Mon Sep 17 00:00:00 2001
+From: Derek Collison <derek@nats.io>
+Date: Fri, 20 Nov 2020 18:19:58 -0800
+Subject: [PATCH] Fix for service import cycles
+
+Signed-off-by: Derek Collison <derek@nats.io>
+---
+ server/accounts.go           | 40 +++++++++++++++++
+ server/client.go             |  1 +
+ server/errors.go             |  3 ++
+ test/service_latency_test.go | 86 +++++++++++++++++-------------------
+ 4 files changed, 84 insertions(+), 46 deletions(-)
+
+diff --git a/server/accounts.go b/server/accounts.go
+index 82c35ed0..659c73ca 100644
+--- a/server/accounts.go
++++ b/server/accounts.go
+@@ -1343,10 +1343,26 @@ func (a *Account) AddServiceImportWithClaim(destination *Account, from, to strin
+ 		return ErrServiceImportAuthorization
+ 	}
+ 
++	if a.importFormsCycle(destination, from, to) {
++		return ErrServiceImportFormsCycle
++	}
++
+ 	_, err := a.addServiceImport(destination, from, to, imClaim)
+ 	return err
+ }
+ 
++// Detects if we have a cycle.
++func (a *Account) importFormsCycle(destination *Account, from, to string) bool {
++	// Check that what we are importing is not something we also export.
++	if a.serviceExportOverlaps(to) {
++		// So at this point if destination account is also importing from us, that forms a cycle.
++		if destination.serviceImportOverlaps(from) {
++			return true
++		}
++	}
++	return false
++}
++
+ // SetServiceImportSharing will allow sharing of information about requests with the export account.
+ // Used for service latency tracking at the moment.
+ func (a *Account) SetServiceImportSharing(destination *Account, to string, allow bool) error {
+@@ -1585,6 +1601,30 @@ func (a *Account) checkForReverseEntry(reply string, si *serviceImport, checkInt
+ 	}
+ }
+ 
++// Internal check to see if the to subject overlaps with another export.
++func (a *Account) serviceExportOverlaps(to string) bool {
++	a.mu.RLock()
++	defer a.mu.RUnlock()
++	for subj := range a.exports.services {
++		if to == subj || SubjectsCollide(to, subj) {
++			return true
++		}
++	}
++	return false
++}
++
++// Internal check to see if the from subject overlaps with another import.
++func (a *Account) serviceImportOverlaps(from string) bool {
++	a.mu.RLock()
++	defer a.mu.RUnlock()
++	for subj := range a.imports.services {
++		if from == subj || SubjectsCollide(from, subj) {
++			return true
++		}
++	}
++	return false
++}
++
+ // Internal check to see if a service import exists.
+ func (a *Account) serviceImportExists(dest *Account, from string) bool {
+ 	a.mu.RLock()
+diff --git a/server/client.go b/server/client.go
+index 048e4f1e..ecd32ca8 100644
+--- a/server/client.go
++++ b/server/client.go
+@@ -3705,6 +3705,7 @@ func (c *client) processMsgResults(acc *Account, r *SublistResult, msg, deliver,
+ 			}
+ 			continue
+ 		}
++
+ 		// Assume delivery subject is the normal subject to this point.
+ 		dsubj = subj
+ 
+diff --git a/server/errors.go b/server/errors.go
+index ef085acf..28f12fde 100644
+--- a/server/errors.go
++++ b/server/errors.go
+@@ -125,6 +125,9 @@ var (
+ 	// ErrServiceImportAuthorization is returned when a service import is not authorized.
+ 	ErrServiceImportAuthorization = errors.New("service import not authorized")
+ 
++	// ErrServiceImportFormsCycle is returned when a service import forms a cycle.
++	ErrServiceImportFormsCycle = errors.New("service import forms cycle")
++
+ 	// ErrClientOrRouteConnectedToGatewayPort represents an error condition when
+ 	// a client or route attempted to connect to the Gateway port.
+ 	ErrClientOrRouteConnectedToGatewayPort = errors.New("attempted to connect to gateway port")
+diff --git a/test/service_latency_test.go b/test/service_latency_test.go
+index a3257f8a..5ebd57c9 100644
+--- a/test/service_latency_test.go
++++ b/test/service_latency_test.go
+@@ -1304,68 +1304,62 @@ func TestServiceAndStreamStackOverflow(t *testing.T) {
+ }
+ 
+ func TestServiceCycle(t *testing.T) {
+-	t.Skip("Remove the skip to run this test and shows the issue")
+-
+ 	conf := createConfFile(t, []byte(`
+ 		accounts {
+ 		  A {
+-		    users = [ { user: "a", pass: "a" } ]
+-		    exports [
+-		      { service: help }
+-			]
+-			imports [
+-		      { service { subject: help, account: B } }
+-		    ]
++		    exports [ { service: help } ]
++			imports [ { service { subject: help, account: B } } ]
+ 		  }
+ 		  B {
+-		    users = [ { user: "b", pass: "b" } ]
+-		    exports [
+-		      { service: help }
+-			]
+-			imports [
+-		      { service { subject: help, account: A } }
+-		    ]
++		    exports [ { service: help } ]
++			imports [ { service { subject: help, account: A } } ]
+ 		  }
+ 		}
+ 	`))
+ 	defer os.Remove(conf)
+ 
+-	srv, opts := RunServerWithConfig(conf)
+-	defer srv.Shutdown()
+-
+-	// Responder (just request sub)
+-	nc, err := nats.Connect(fmt.Sprintf("nats://a:a@%s:%d", opts.Host, opts.Port))
+-	if err != nil {
+-		t.Fatalf("Error on connect: %v", err)
++	if _, err := server.ProcessConfigFile(conf); err == nil || !strings.Contains(err.Error(), server.ErrServiceImportFormsCycle.Error()) {
++		t.Fatalf("Expected an error on cycle service import, got none")
+ 	}
+-	defer nc.Close()
+ 
+-	cb := func(m *nats.Msg) {
+-		m.Respond(nil)
+-	}
+-	sub, _ := nc.Subscribe("help", cb)
+-	nc.Flush()
+-
+-	// Requestor
+-	nc2, err := nats.Connect(fmt.Sprintf("nats://b:b@%s:%d", opts.Host, opts.Port))
+-	if err != nil {
+-		t.Fatalf("Error on connect: %v", err)
+-	}
+-	defer nc2.Close()
++	conf = createConfFile(t, []byte(`
++		accounts {
++		  A {
++		    exports [ { service: * } ]
++			imports [ { service { subject: help, account: B } } ]
++		  }
++		  B {
++		    exports [ { service: help } ]
++			imports [ { service { subject: *, account: A } } ]
++		  }
++		}
++	`))
++	defer os.Remove(conf)
+ 
+-	// Send a single request.
+-	if _, err := nc2.Request("help", []byte("hi"), time.Second); err != nil {
+-		t.Fatal("Did not get the reply")
++	if _, err := server.ProcessConfigFile(conf); err == nil || !strings.Contains(err.Error(), server.ErrServiceImportFormsCycle.Error()) {
++		t.Fatalf("Expected an error on cycle service import, got none")
+ 	}
+ 
+-	// Make sure works for queue subscribers as well.
+-	sub.Unsubscribe()
+-	sub, _ = nc.QueueSubscribe("help", "prod", cb)
+-	nc.Flush()
++	conf = createConfFile(t, []byte(`
++		accounts {
++		  A {
++		    exports [ { service: * } ]
++			imports [ { service { subject: help, account: B } } ]
++		  }
++		  B {
++		    exports [ { service: help } ]
++			imports [ { service { subject: help, account: C } } ]
++		  }
++		  C {
++		    exports [ { service: * } ]
++			imports [ { service { subject: *, account: A } } ]
++		  }
++		}
++	`))
++	defer os.Remove(conf)
+ 
+-	// Send a single request.
+-	if _, err := nc2.Request("help", []byte("hi"), time.Second); err != nil {
+-		t.Fatal("Did not get the reply")
++	if _, err := server.ProcessConfigFile(conf); err == nil || !strings.Contains(err.Error(), server.ErrServiceImportFormsCycle.Error()) {
++		t.Fatalf("Expected an error on cycle service import, got none")
+ 	}
+ }
+ 
+-- 
+2.34.1
+

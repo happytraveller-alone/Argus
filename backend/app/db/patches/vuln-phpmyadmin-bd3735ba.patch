@@ -1,0 +1,52 @@
+From bd3735ba584e7a49aee78813845245354b061f61 Mon Sep 17 00:00:00 2001
+From: Dieter Adriaenssens <ruleant@users.sourceforge.net>
+Date: Sat, 10 Dec 2011 17:10:41 +0100
+Subject: [PATCH] [security] Self-XSS on export options (export
+ server/database/table), see PMASA-2011-20
+
+---
+ ChangeLog                        | 1 +
+ libraries/display_export.lib.php | 6 +++---
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index b2cdf5d51e..75ab453840 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -11,6 +11,7 @@ phpMyAdmin - ChangeLog
+ - bug #3452506 [edit] Unable to move tables with triggers
+ - bug #3449659 [navi] Fast filter broken with table tree
+ - bug #3448485 [GUI] Firefox favicon frameset regression
++- [security] Self-XSS on export options (export server/database/table), see PMASA-2011-20
+ 
+ 3.4.8.0 (2011-12-01)
+ - bug #3425230 [interface] enum data split at space char (more space to edit)
+diff --git a/libraries/display_export.lib.php b/libraries/display_export.lib.php
+index a58a441790..e740c2e6b2 100644
+--- a/libraries/display_export.lib.php
++++ b/libraries/display_export.lib.php
+@@ -150,10 +150,10 @@ if(isset($_GET['sql_query'])) {
+                     echo '<label for ="radio_allrows_0">' . __('Dump some row(s)') . '</label>'; ?>
+                 <ul>
+                     <li><label for="limit_to"><?php echo __('Number of rows:') . '</label> <input type="text" id="limit_to" name="limit_to" size="5" value="'
+-                . ((isset($_GET['limit_to'])) ? $_GET['limit_to'] : ((isset($unlim_num_rows) ? $unlim_num_rows : PMA_Table::countRecords($db, $table))))
++                . ((isset($_GET['limit_to'])) ? htmlspecialchars($_GET['limit_to']) : ((isset($unlim_num_rows) ? $unlim_num_rows : PMA_Table::countRecords($db, $table))))
+                 . '" onfocus="this.select()" />' ?></li>
+                     <li><label for="limit_from"><?php echo __('Row to begin at:') . '</label> <input type="text" id="limit_from" name="limit_from" value="'
+-                 . ((isset($_GET['limit_from'])) ? $_GET['limit_from'] : '0')
++                 . ((isset($_GET['limit_from'])) ? htmlspecialchars($_GET['limit_from']) : '0')
+                  . '" size="5" onfocus="this.select()" />'; ?></li>
+                 </ul>
+             </li>
+@@ -242,7 +242,7 @@ if(isset($_GET['sql_query'])) {
+                     <?php
+                         echo ' value="';
+                         if(isset($_GET['filename_template'])) {
+-                            echo $_GET['filename_template'];
++                            echo htmlspecialchars($_GET['filename_template']);
+                         } else {
+                             if ($export_type == 'database') {
+                                 echo htmlspecialchars($GLOBALS['PMA_Config']->getUserValue(
+-- 
+2.34.1
+

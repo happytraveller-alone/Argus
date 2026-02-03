@@ -1,0 +1,55 @@
+From 50861a2a1183a07daf99cc2e71395e79f022338f Mon Sep 17 00:00:00 2001
+From: Marc Bonsels <marc.bonsels@otrs.com>
+Date: Tue, 29 May 2018 08:36:22 +0100
+Subject: [PATCH] Fixed: IFRAME in customer ticket zoom loading the content
+ outside of itself (bug#13879).
+
+---
+ .../htdocs/js/Core.Customer.TicketZoom.js      | 18 +++++++-----------
+ 1 file changed, 7 insertions(+), 11 deletions(-)
+
+diff --git a/var/httpd/htdocs/js/Core.Customer.TicketZoom.js b/var/httpd/htdocs/js/Core.Customer.TicketZoom.js
+index e92c4520c4..89d6f2cadc 100644
+--- a/var/httpd/htdocs/js/Core.Customer.TicketZoom.js
++++ b/var/httpd/htdocs/js/Core.Customer.TicketZoom.js
+@@ -64,14 +64,10 @@ Core.Customer.TicketZoom = (function (TargetNS) {
+      */
+     function ResizeIframe(Iframe, Callback){
+         Iframe = isJQueryObject(Iframe) ? Iframe.get(0) : Iframe;
+-
+-        // initial height calculation
+-        $(Iframe).on('load', function() {
+-            CalculateHeight(this);
+-            if ($.isFunction(Callback)) {
+-                Callback();
+-            }
+-        });
++        CalculateHeight(Iframe);
++        if ($.isFunction(Callback)) {
++            Callback();
++        }
+     }
+ 
+     /**
+@@ -91,15 +87,15 @@ Core.Customer.TicketZoom = (function (TargetNS) {
+         Iframe = isJQueryObject(Iframe) ? Iframe.get(0) : Iframe;
+ 
+         if ($.browser.safari || $.browser.opera){
+-            $(Iframe).load(Iframe.src, null, function() {
+-                setTimeout(ResizeIframe, 0, this, Callback);
++            $(Iframe).on('load', function() {
++                setTimeout(ResizeIframe, 0, Iframe, Callback);
+             });
+             Source = Iframe.src;
+             Iframe.src = '';
+             Iframe.src = Source;
+         }
+         else {
+-            $(Iframe).load(Iframe.src, null, function() {
++            $(Iframe).on('load', function() {
+                 ResizeIframe(this, Callback);
+             });
+         }
+-- 
+2.34.1
+

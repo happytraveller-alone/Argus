@@ -1,0 +1,29 @@
+From a712a2041085e7cd5f2b153e1532ac2a2954ffaa Mon Sep 17 00:00:00 2001
+From: Michael Adams <mdadams@ece.uvic.ca>
+Date: Thu, 2 Mar 2017 09:28:42 -0800
+Subject: [PATCH] Added some additional checking to prevent a potential integer
+ overflow due to conversion in the JPC decoder.
+
+---
+ src/libjasper/jpc/jpc_dec.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/libjasper/jpc/jpc_dec.c b/src/libjasper/jpc/jpc_dec.c
+index 1da54a7..af02f5d 100644
+--- a/src/libjasper/jpc/jpc_dec.c
++++ b/src/libjasper/jpc/jpc_dec.c
+@@ -1294,7 +1294,10 @@ static int jpc_dec_process_siz(jpc_dec_t *dec, jpc_ms_t *ms)
+ 
+ 	dec->numhtiles = JPC_CEILDIV(dec->xend - dec->tilexoff, dec->tilewidth);
+ 	dec->numvtiles = JPC_CEILDIV(dec->yend - dec->tileyoff, dec->tileheight);
+-	if (!jas_safe_size_mul(dec->numhtiles, dec->numvtiles, &size)) {
++	assert(dec->numhtiles >= 0);
++	assert(dec->numvtiles >= 0);
++	if (!jas_safe_size_mul(dec->numhtiles, dec->numvtiles, &size) ||
++	  size > INT_MAX) {
+ 		return -1;
+ 	}
+ 	dec->numtiles = size;
+-- 
+2.34.1
+

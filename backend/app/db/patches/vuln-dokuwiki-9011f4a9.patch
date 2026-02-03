@@ -1,0 +1,22 @@
+From 9011f4a9a5c330a1692698b6b302b1c8c346b0ab Mon Sep 17 00:00:00 2001
+From: Phy <git@phy25.com>
+Date: Mon, 21 Aug 2017 01:30:39 +0800
+Subject: [PATCH] Fix RSS syntax XSS bug (#2081)
+
+---
+ inc/parser/xhtml.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/inc/parser/xhtml.php b/inc/parser/xhtml.php
+index 2efb1d831a..407d15a9fc 100644
+--- a/inc/parser/xhtml.php
++++ b/inc/parser/xhtml.php
+@@ -1280,7 +1280,7 @@ function rss($url, $params) {
+                     if($author) {
+                         $name = $author->get_name();
+                         if(!$name) $name = $author->get_email();
+-                        if($name) $this->doc .= ' '.$lang['by'].' '.$name;
++                        if($name) $this->doc .= ' '.$lang['by'].' '.hsc($name);
+                     }
+                 }
+                 if($params['date']) {

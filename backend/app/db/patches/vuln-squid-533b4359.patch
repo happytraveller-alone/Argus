@@ -1,0 +1,32 @@
+From 533b4359f16cf9ed15a6d709a57a4b06e4222cfe Mon Sep 17 00:00:00 2001
+From: Alex Rousskov <rousskov@measurement-factory.com>
+Date: Fri, 24 Sep 2021 20:10:37 +0000
+Subject: [PATCH] TLS: Fix X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+ handling (#898)
+
+---
+ src/security/PeerConnector.cc | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/security/PeerConnector.cc b/src/security/PeerConnector.cc
+index 58db7b057..c601fffb2 100644
+--- a/src/security/PeerConnector.cc
++++ b/src/security/PeerConnector.cc
+@@ -653,11 +653,11 @@ Security::PeerConnector::handleMissingCertificates(const Security::IoResult &ioR
+     Must(callerHandlesMissingCertificates);
+     callerHandlesMissingCertificates = false;
+ 
+-    if (!computeMissingCertificateUrls(sconn))
+-        return handleNegotiationResult(ioResult);
+-
+     suspendNegotiation(ioResult);
+ 
++    if (!computeMissingCertificateUrls(sconn))
++        return resumeNegotiation();
++
+     assert(!urlsOfMissingCerts.empty());
+     startCertDownloading(urlsOfMissingCerts.front());
+     urlsOfMissingCerts.pop();
+-- 
+2.34.1
+

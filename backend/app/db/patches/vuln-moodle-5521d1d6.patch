@@ -1,0 +1,42 @@
+From 5521d1d6e8bb8bebb76ad8154095f6b18ea26e7f Mon Sep 17 00:00:00 2001
+From: Paul Holden <paulh@moodle.com>
+Date: Wed, 8 Feb 2023 16:49:38 +0000
+Subject: [PATCH] MDL-77187 mod_wiki: validate external method sort parameters.
+
+---
+ mod/wiki/classes/external.php | 18 ++++++++++--------
+ 1 file changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/mod/wiki/classes/external.php b/mod/wiki/classes/external.php
+index 671b9bf4e80..ec0f9e72a74 100644
+--- a/mod/wiki/classes/external.php
++++ b/mod/wiki/classes/external.php
+@@ -457,15 +457,17 @@ class mod_wiki_external extends external_api {
+             throw new moodle_exception('cannotviewpage', 'wiki');
+         } else if ($subwiki->id != -1) {
+ 
+-            // Set sort param.
+             $options = $params['options'];
+-            if (!empty($options['sortby'])) {
+-                if ($options['sortdirection'] != 'ASC' && $options['sortdirection'] != 'DESC') {
+-                    // Invalid sort direction. Use default.
+-                    $options['sortdirection'] = 'ASC';
+-                }
+-                $sort = $options['sortby'] . ' ' . $options['sortdirection'];
+-            }
++
++            // Set sort param.
++            $sort = get_safe_orderby([
++                'id' => 'id',
++                'title' => 'title',
++                'timecreated' => 'timecreated',
++                'timemodified' => 'timemodified',
++                'pageviews' => 'pageviews',
++                'default' => 'title',
++            ], $options['sortby'], $options['sortdirection'], false);
+ 
+             $pages = wiki_get_page_list($subwiki->id, $sort);
+             $caneditpages = wiki_user_can_edit($subwiki);
+-- 
+2.34.1
+

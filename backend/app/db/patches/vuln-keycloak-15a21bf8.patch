@@ -1,0 +1,257 @@
+From 15a21bf8e4fb71f006ba9caf25b9c9d1d152cd20 Mon Sep 17 00:00:00 2001
+From: Ricardo Martin <rmartinc@redhat.com>
+Date: Wed, 6 Dec 2023 13:51:02 +0100
+Subject: [PATCH] CVE-2023-6291 keycloak: redirect_uri validation logic that
+ allows for a bypass of otherwise explicitly allowed hosts (#57)
+
+* Remove lowercase for the hostname as recommended/advised by OAuth spec
+Closes https://github.com/keycloak/keycloak/issues/25001
+
+Signed-off-by: rmartinc <rmartinc@redhat.com>
+
+* Strip off user-info from redirect URI when validating using wildcard
+Closes https://issues.redhat.com/browse/RHBK-679
+
+Signed-off-by: rmartinc <rmartinc@redhat.com>
+
+---------
+
+Signed-off-by: rmartinc <rmartinc@redhat.com>
+---
+ .../topics/keycloak/changes-22_0_7.adoc       |  7 +++
+ .../upgrading/topics/keycloak/changes.adoc    |  4 ++
+ .../protocol/oidc/utils/RedirectUtils.java    | 40 ++++++++------
+ .../oidc/utils/RedirectUtilsTest.java         | 52 +++++++++++++++++++
+ .../testsuite/oauth/OAuthRedirectUriTest.java | 11 ++--
+ 5 files changed, 92 insertions(+), 22 deletions(-)
+ create mode 100644 docs/documentation/upgrading/topics/keycloak/changes-22_0_7.adoc
+
+diff --git a/docs/documentation/upgrading/topics/keycloak/changes-22_0_7.adoc b/docs/documentation/upgrading/topics/keycloak/changes-22_0_7.adoc
+new file mode 100644
+index 000000000000..e7b1e798913d
+--- /dev/null
++++ b/docs/documentation/upgrading/topics/keycloak/changes-22_0_7.adoc
+@@ -0,0 +1,7 @@
++= Valid redirect URIs for clients are always compared with exact string matching
++
++Version 1.8.0 introduced a lower-case for the hostname and scheme when comparing a redirect URI with the specified valid redirects for a client. Unfortunately it did not fully work in all the protocols, and, for example, the host was lower-cased for `http` but not for `https`. As https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics#name-protecting-redirect-based-f[OAuth 2.0 Security Best Current Practice] advises to compare URIs using exact string matching, {project_name} will follow the recommendation and for now on valid redirects are compared with exact case even for the hostname and scheme.
++
++For realms relying on the old behavior, the valid redirect URIs for their clients should now hold separate entries for each URI that should be recognized by the server.
++
++Although it introduces more steps and verbosity when configuring clients, the new behavior enables more secure deployments as pattern-based checks are frequently the cause of security issues. Not only due to how they are implemented but also how they are configured.
+\ No newline at end of file
+diff --git a/docs/documentation/upgrading/topics/keycloak/changes.adoc b/docs/documentation/upgrading/topics/keycloak/changes.adoc
+index c1a4e8b0127a..e8dc835d6bff 100644
+--- a/docs/documentation/upgrading/topics/keycloak/changes.adoc
++++ b/docs/documentation/upgrading/topics/keycloak/changes.adoc
+@@ -1,5 +1,9 @@
+ == Migration Changes
+ 
++=== Migrating to 22.0.7
++
++include::changes-22_0_7.adoc[leveloffset=3]
++
+ === Migrating to 22.0.4
+ 
+ include::changes-22_0_4.adoc[leveloffset=3]
+diff --git a/services/src/main/java/org/keycloak/protocol/oidc/utils/RedirectUtils.java b/services/src/main/java/org/keycloak/protocol/oidc/utils/RedirectUtils.java
+index b1bc4e3aa866..3b95404abaca 100644
+--- a/services/src/main/java/org/keycloak/protocol/oidc/utils/RedirectUtils.java
++++ b/services/src/main/java/org/keycloak/protocol/oidc/utils/RedirectUtils.java
+@@ -72,10 +72,8 @@ public static Set<String> resolveValidRedirects(KeycloakSession session, String
+             if (validRedirect.startsWith("/")) {
+                 validRedirect = relativeToAbsoluteURI(session, rootUrl, validRedirect);
+                 logger.debugv("replacing relative valid redirect with: {0}", validRedirect);
+-                resolveValidRedirects.add(validRedirect);
+-            } else {
+-                resolveValidRedirects.add(validRedirect);
+             }
++            resolveValidRedirects.add(validRedirect);
+         }
+         return resolveValidRedirects;
+     }
+@@ -148,7 +146,11 @@ public static String verifyRedirectUri(KeycloakSession session, String rootUrl,
+                 valid = matchesRedirects(resolveValidRedirects, redirectUri, false);
+             }
+ 
+-            if (valid != null && redirectUri.startsWith("/")) {
++            if (valid != null && !originalRedirect.isAbsolute()) {
++                // return absolute if the original URI is relative
++                if (!redirectUri.startsWith("/")) {
++                    redirectUri = "/" + redirectUri;
++                }
+                 redirectUri = relativeToAbsoluteURI(session, rootUrl, redirectUri);
+             }
+ 
+@@ -174,7 +176,7 @@ public static String verifyRedirectUri(KeycloakSession session, String rootUrl,
+     private static URI toUri(String redirectUri) {
+         URI uri = null;
+         if (redirectUri != null) {
+-        try {
++            try {
+                 uri = URI.create(redirectUri);
+             } catch (IllegalArgumentException cause) {
+                 logger.debug("Invalid redirect uri", cause);
+@@ -189,7 +191,6 @@ private static String getNormalizedRedirectUri(URI uri) {
+         String redirectUri = null;
+         if (uri != null) {
+             redirectUri = uri.normalize().toString();
+-            redirectUri = lowerCaseHostname(redirectUri);
+         }
+         return redirectUri;
+     }
+@@ -204,9 +205,11 @@ private static String decodeRedirectUri(String redirectUri) {
+             KeycloakUriBuilder uriBuilder = KeycloakUriBuilder.fromUri(redirectUri, false).preserveDefaultPort();
+             String origQuery = uriBuilder.getQuery();
+             String origFragment = uriBuilder.getFragment();
++            String origUserInfo = uriBuilder.getUserInfo();
+             String encodedRedirectUri = uriBuilder
+                     .replaceQuery(null)
+                     .fragment(null)
++                    .userInfo(null)
+                     .buildAsString();
+             String decodedRedirectUri = null;
+ 
+@@ -217,6 +220,7 @@ private static String decodeRedirectUri(String redirectUri) {
+                     return KeycloakUriBuilder.fromUri(decodedRedirectUri, false).preserveDefaultPort()
+                             .replaceQuery(origQuery)
+                             .fragment(origFragment)
++                            .userInfo(origUserInfo)
+                             .buildAsString();
+                 } else {
+                     // Next attempt
+@@ -230,15 +234,6 @@ private static String decodeRedirectUri(String redirectUri) {
+         return null;
+     }
+ 
+-    private static String lowerCaseHostname(String redirectUri) {
+-        int n = redirectUri.indexOf('/', 7);
+-        if (n == -1) {
+-            return redirectUri.toLowerCase();
+-        } else {
+-            return redirectUri.substring(0, n).toLowerCase() + redirectUri.substring(n);
+-        }
+-    }
+-
+     private static String relativeToAbsoluteURI(KeycloakSession session, String rootUrl, String relative) {
+         if (rootUrl != null) {
+             rootUrl = ResolveRelative.resolveRootUrl(session, rootUrl);
+@@ -253,13 +248,24 @@ private static String relativeToAbsoluteURI(KeycloakSession session, String root
+         return sb.toString();
+     }
+ 
++    // removes the queryString, fragment and userInfo from the redirect
++    // to avoid comparing this when wildcards are used
++    private static String stripOffRedirectForWildcard(String redirect) {
++        return KeycloakUriBuilder.fromUri(redirect, false)
++                .preserveDefaultPort()
++                .userInfo(null)
++                .replaceQuery(null)
++                .fragment(null)
++                .buildAsString();
++    }
++
+     // return the String that matched the redirect or null if not matched
+     private static String matchesRedirects(Set<String> validRedirects, String redirect, boolean allowWildcards) {
+         logger.tracef("matchesRedirects: redirect URL to check: %s, allow wildcards: %b, Configured valid redirect URLs: %s", redirect, allowWildcards, validRedirects);
+         for (String validRedirect : validRedirects) {
+             if (validRedirect.endsWith("*") && !validRedirect.contains("?") && allowWildcards) {
+-                // strip off the query component - we don't check them when wildcards are effective
+-                String r = redirect.contains("?") ? redirect.substring(0, redirect.indexOf("?")) : redirect;
++                // strip off the userInfo, query or fragment components - we don't check them when wildcards are effective
++                String r = stripOffRedirectForWildcard(redirect);
+                 // strip off *
+                 int length = validRedirect.length() - 1;
+                 validRedirect = validRedirect.substring(0, length);
+diff --git a/services/src/test/java/org/keycloak/protocol/oidc/utils/RedirectUtilsTest.java b/services/src/test/java/org/keycloak/protocol/oidc/utils/RedirectUtilsTest.java
+index 4a5cd883c6ab..662e9a8f32a1 100644
+--- a/services/src/test/java/org/keycloak/protocol/oidc/utils/RedirectUtilsTest.java
++++ b/services/src/test/java/org/keycloak/protocol/oidc/utils/RedirectUtilsTest.java
+@@ -142,4 +142,56 @@ public void testverifyInvalidRedirectUri() {
+         Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "https://keycloak.org/path<less/", set, false));
+         Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "https://keycloak.org/path/index.jsp?param=v1 v2", set, false));
+     }
++
++    @Test
++    // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics#name-protecting-redirect-based-f
++    // OAuth recommends/advises exact matching string comparison for URIs
++    public void testverifyCaseIsSensitive() {
++        Set<String> set = Stream.of(
++                "https://keycloak.org/*",
++                "http://KeyCloak.org/*",
++                "no.host.Name.App:/Test"
++        ).collect(Collectors.toSet());
++
++        Assert.assertEquals("https://keycloak.org/index.html", RedirectUtils.verifyRedirectUri(session, null, "https://keycloak.org/index.html", set, false));
++        Assert.assertEquals("http://KeyCloak.org/index.html", RedirectUtils.verifyRedirectUri(session, null, "http://KeyCloak.org/index.html", set, false));
++        Assert.assertEquals("no.host.Name.App:/Test", RedirectUtils.verifyRedirectUri(session, null, "no.host.Name.App:/Test", set, false));
++
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "https://KeyCloak.org/index.html", set, false));
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "http://keycloak.org/index.html", set, false));
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "HTTPS://keycloak.org/index.html", set, false));
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "no.host.Name.app:/Test", set, false));
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "no.host.Name.App:/test", set, false));
++    }
++
++    @Test
++    public void testRelativeRedirectUri() {
++        Set<String> set = Stream.of(
++                "*"
++        ).collect(Collectors.toSet());
++
++        Assert.assertEquals("https://keycloak.org/path", RedirectUtils.verifyRedirectUri(session, "https://keycloak.org", "/path", set, false));
++        Assert.assertEquals("https://keycloak.org/path", RedirectUtils.verifyRedirectUri(session, "https://keycloak.org", "path", set, false));
++    }
++
++    @Test
++    public void testUserInfo() {
++        Set<String> set = Stream.of(
++                "https://keycloak.org/*",
++                "https://test*",
++                "https://something@keycloak.com/exact"
++        ).collect(Collectors.toSet());
++
++        Assert.assertEquals("https://keycloak.org/index.html", RedirectUtils.verifyRedirectUri(session, null, "https://keycloak.org/index.html", set, false));
++        Assert.assertEquals("https://test.com/index.html", RedirectUtils.verifyRedirectUri(session, null, "https://test.com/index.html", set, false));
++        Assert.assertEquals("https://something@keycloak.org/path", RedirectUtils.verifyRedirectUri(session, null, "https://something@keycloak.org/path", set, false));
++        Assert.assertEquals("https://some%20thing@test.com/path", RedirectUtils.verifyRedirectUri(session, null, "https://some%20thing@test.com/path", set, false));
++        Assert.assertEquals("https://something@keycloak.com/exact", RedirectUtils.verifyRedirectUri(session, null, "https://something@keycloak.com/exact", set, false));
++
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "https://something@other.com/", set, false));
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "https://keycloak.org@other.com", set, false));
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "https://keycloak.org%2F@other.com", set, false));
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "https://test@other.com", set, false));
++        Assert.assertNull(RedirectUtils.verifyRedirectUri(session, null, "https://test.com@other.com", set, false));
++    }
+ }
+diff --git a/testsuite/integration-arquillian/tests/base/src/test/java/org/keycloak/testsuite/oauth/OAuthRedirectUriTest.java b/testsuite/integration-arquillian/tests/base/src/test/java/org/keycloak/testsuite/oauth/OAuthRedirectUriTest.java
+index f857b7f0eed3..3317dd1c78d0 100755
+--- a/testsuite/integration-arquillian/tests/base/src/test/java/org/keycloak/testsuite/oauth/OAuthRedirectUriTest.java
++++ b/testsuite/integration-arquillian/tests/base/src/test/java/org/keycloak/testsuite/oauth/OAuthRedirectUriTest.java
+@@ -382,11 +382,11 @@ public void testDifferentCaseInHostname() throws IOException {
+         oauth.clientId("test-dash");
+ 
+         checkRedirectUri("http://with-dash.example.local", true);
+-        checkRedirectUri("http://wiTh-dAsh.example.local", true);
++        checkRedirectUri("http://wiTh-dAsh.example.local", false);
+         checkRedirectUri("http://with-dash.example.local/foo", true);
+-        checkRedirectUri("http://wiTh-dAsh.example.local/foo", true);
++        checkRedirectUri("http://wiTh-dAsh.example.local/foo", false);
+         checkRedirectUri("http://with-dash.example.local/foo", true);
+-        checkRedirectUri("http://wiTh-dAsh.example.local/foo", true);
++        checkRedirectUri("http://wiTh-dAsh.example.local/foo", false);
+         checkRedirectUri("http://wiTh-dAsh.example.local/Foo", false);
+         checkRedirectUri("http://wiTh-dAsh.example.local/foO", false);
+     }
+@@ -395,8 +395,9 @@ public void testDifferentCaseInHostname() throws IOException {
+     public void testDifferentCaseInScheme() throws IOException {
+         oauth.clientId("test-dash");
+ 
+-        checkRedirectUri("HTTP://with-dash.example.local", true);
+-        checkRedirectUri("Http://wiTh-dAsh.example.local", true);
++        checkRedirectUri("http://with-dash.example.local", true);
++        checkRedirectUri("HTTP://with-dash.example.local", false);
++        checkRedirectUri("Http://wiTh-dAsh.example.local", false);
+     }
+ 
+     @Test

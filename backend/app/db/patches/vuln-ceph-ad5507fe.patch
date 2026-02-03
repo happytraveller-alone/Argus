@@ -1,0 +1,34 @@
+From ad5507fe0bf72ed5bdf8353e315cc9092c740144 Mon Sep 17 00:00:00 2001
+From: Yehuda Sadeh <yehuda@redhat.com>
+Date: Thu, 30 Jul 2015 14:47:15 -0700
+Subject: [PATCH] rgw: url encode exposed bucket
+
+Fixes: #12537
+Don't send the bucket name back without url encoding it.
+
+Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+---
+ src/rgw/rgw_rest.cc | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/rgw/rgw_rest.cc b/src/rgw/rgw_rest.cc
+index a03e31fabf2..84681c7f13b 100644
+--- a/src/rgw/rgw_rest.cc
++++ b/src/rgw/rgw_rest.cc
+@@ -361,8 +361,11 @@ void dump_bucket_from_state(struct req_state *s)
+ {
+   int expose_bucket = g_conf->rgw_expose_bucket;
+   if (expose_bucket) {
+-    if (!s->bucket_name_str.empty())
+-      s->cio->print("Bucket: %s\r\n", s->bucket_name_str.c_str());
++    if (!s->bucket_name_str.empty()) {
++      string b;
++      url_encode(s->bucket_name_str, b);
++      s->cio->print("Bucket: %s\r\n", b.c_str());
++    }
+   }
+ }
+ 
+-- 
+2.34.1
+

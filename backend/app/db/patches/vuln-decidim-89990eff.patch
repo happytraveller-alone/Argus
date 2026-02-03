@@ -1,0 +1,301 @@
+From 89990eff4ab70391aec4a7151203ea6347334d85 Mon Sep 17 00:00:00 2001
+From: Alexandru Emil Lupu <contact@alecslupu.ro>
+Date: Wed, 19 Jul 2023 12:26:59 +0300
+Subject: [PATCH] Fix for saving an Election that wasn't blocked (#11187)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* Fix for saving an Election that wasn't blocked
+
+* Fix specs
+
+Co-authored-by: Andrés Pereira de Lucena <andreslucena@users.noreply.github.com>
+---
+ .../decidim/elections/admin/create_answer.rb  |  2 +-
+ .../elections/admin/create_question.rb        |  2 +-
+ .../decidim/elections/admin/destroy_answer.rb |  2 +-
+ .../elections/admin/destroy_election.rb       |  2 +-
+ .../elections/admin/destroy_question.rb       |  2 +-
+ .../admin/import_proposals_to_elections.rb    |  2 +-
+ .../decidim/elections/admin/update_answer.rb  |  2 +-
+ .../elections/admin/update_question.rb        |  2 +-
+ .../lib/decidim/elections/test/factories.rb   |  1 +
+ .../elections/admin/create_answer_spec.rb     |  4 +--
+ .../elections/admin/create_question_spec.rb   |  4 +--
+ .../elections/admin/destroy_answer_spec.rb    |  4 +--
+ .../elections/admin/destroy_election_spec.rb  |  4 +--
+ .../elections/admin/destroy_question_spec.rb  |  4 +--
+ .../elections/admin/update_answer_spec.rb     |  4 +--
+ .../elections/admin/update_question_spec.rb   |  4 +--
+ .../admin/admin_manages_questions_spec.rb     | 28 ++++---------------
+ 17 files changed, 28 insertions(+), 45 deletions(-)
+
+diff --git a/decidim-elections/app/commands/decidim/elections/admin/create_answer.rb b/decidim-elections/app/commands/decidim/elections/admin/create_answer.rb
+index bb875a0d44..aae97e88a7 100644
+--- a/decidim-elections/app/commands/decidim/elections/admin/create_answer.rb
++++ b/decidim-elections/app/commands/decidim/elections/admin/create_answer.rb
+@@ -38,7 +38,7 @@ module Decidim
+         attr_reader :form, :answer, :gallery
+ 
+         def invalid?
+-          form.election.started? || form.invalid?
++          form.election.blocked? || form.invalid?
+         end
+ 
+         def create_answer
+diff --git a/decidim-elections/app/commands/decidim/elections/admin/create_question.rb b/decidim-elections/app/commands/decidim/elections/admin/create_question.rb
+index 687c077db7..c7f6ee6415 100644
+--- a/decidim-elections/app/commands/decidim/elections/admin/create_question.rb
++++ b/decidim-elections/app/commands/decidim/elections/admin/create_question.rb
+@@ -14,7 +14,7 @@ module Decidim
+         #
+         # Broadcasts :ok if successful, :invalid otherwise.
+         def call
+-          return broadcast(:election_started) if form.election.started?
++          return broadcast(:election_started) if form.election.blocked?
+           return broadcast(:invalid) if form.invalid?
+ 
+           create_question!
+diff --git a/decidim-elections/app/commands/decidim/elections/admin/destroy_answer.rb b/decidim-elections/app/commands/decidim/elections/admin/destroy_answer.rb
+index e260ebe8d8..8a2831a2ce 100644
+--- a/decidim-elections/app/commands/decidim/elections/admin/destroy_answer.rb
++++ b/decidim-elections/app/commands/decidim/elections/admin/destroy_answer.rb
+@@ -31,7 +31,7 @@ module Decidim
+         attr_reader :answer, :current_user
+ 
+         def invalid?
+-          answer.question.election.started?
++          answer.question.election.blocked?
+         end
+ 
+         def destroy_answer
+diff --git a/decidim-elections/app/commands/decidim/elections/admin/destroy_election.rb b/decidim-elections/app/commands/decidim/elections/admin/destroy_election.rb
+index 526a7f5caf..f73f04c424 100644
+--- a/decidim-elections/app/commands/decidim/elections/admin/destroy_election.rb
++++ b/decidim-elections/app/commands/decidim/elections/admin/destroy_election.rb
+@@ -31,7 +31,7 @@ module Decidim
+         attr_reader :election, :current_user
+ 
+         def invalid?
+-          election.started?
++          election.blocked?
+         end
+ 
+         def destroy_election!
+diff --git a/decidim-elections/app/commands/decidim/elections/admin/destroy_question.rb b/decidim-elections/app/commands/decidim/elections/admin/destroy_question.rb
+index 21a7e67e09..d67326fc4a 100644
+--- a/decidim-elections/app/commands/decidim/elections/admin/destroy_question.rb
++++ b/decidim-elections/app/commands/decidim/elections/admin/destroy_question.rb
+@@ -27,7 +27,7 @@ module Decidim
+         attr_reader :question, :current_user
+ 
+         def invalid?
+-          question.election.started?
++          question.election.blocked?
+         end
+ 
+         def destroy_question!
+diff --git a/decidim-elections/app/commands/decidim/elections/admin/import_proposals_to_elections.rb b/decidim-elections/app/commands/decidim/elections/admin/import_proposals_to_elections.rb
+index 125fd89fab..77f0845239 100644
+--- a/decidim-elections/app/commands/decidim/elections/admin/import_proposals_to_elections.rb
++++ b/decidim-elections/app/commands/decidim/elections/admin/import_proposals_to_elections.rb
+@@ -30,7 +30,7 @@ module Decidim
+         attr_reader :form, :answer
+ 
+         def invalid?
+-          form.election.started? || form.invalid?
++          form.election.blocked? || form.invalid?
+         end
+ 
+         def create_answers_from_accepted_proposals
+diff --git a/decidim-elections/app/commands/decidim/elections/admin/update_answer.rb b/decidim-elections/app/commands/decidim/elections/admin/update_answer.rb
+index 6c4c9a9e10..60fdf5efeb 100644
+--- a/decidim-elections/app/commands/decidim/elections/admin/update_answer.rb
++++ b/decidim-elections/app/commands/decidim/elections/admin/update_answer.rb
+@@ -41,7 +41,7 @@ module Decidim
+         attr_reader :form, :answer, :gallery
+ 
+         def invalid?
+-          form.election.started? || form.invalid?
++          form.election.blocked? || form.invalid?
+         end
+ 
+         def update_answer
+diff --git a/decidim-elections/app/commands/decidim/elections/admin/update_question.rb b/decidim-elections/app/commands/decidim/elections/admin/update_question.rb
+index 930d266fb6..fd753eae90 100644
+--- a/decidim-elections/app/commands/decidim/elections/admin/update_question.rb
++++ b/decidim-elections/app/commands/decidim/elections/admin/update_question.rb
+@@ -27,7 +27,7 @@ module Decidim
+         attr_reader :form, :question
+ 
+         def invalid?
+-          question.election.started? || form.invalid?
++          question.election.blocked? || form.invalid?
+         end
+ 
+         def update_question!
+diff --git a/decidim-elections/lib/decidim/elections/test/factories.rb b/decidim-elections/lib/decidim/elections/test/factories.rb
+index 3bce5c8646..3eb5cd7da1 100644
+--- a/decidim-elections/lib/decidim/elections/test/factories.rb
++++ b/decidim-elections/lib/decidim/elections/test/factories.rb
+@@ -47,6 +47,7 @@ FactoryBot.define do
+ 
+     trait :ongoing do
+       started
++      blocked_at { Time.current }
+     end
+ 
+     trait :finished do
+diff --git a/decidim-elections/spec/commands/decidim/elections/admin/create_answer_spec.rb b/decidim-elections/spec/commands/decidim/elections/admin/create_answer_spec.rb
+index 0fb78d6ed3..9c52f72e9b 100644
+--- a/decidim-elections/spec/commands/decidim/elections/admin/create_answer_spec.rb
++++ b/decidim-elections/spec/commands/decidim/elections/admin/create_answer_spec.rb
+@@ -73,8 +73,8 @@ describe Decidim::Elections::Admin::CreateAnswer do
+     end
+   end
+ 
+-  context "when the election has started" do
+-    let(:election) { create :election, :started }
++  context "when the election has been created in the bulletin board" do
++    let(:election) { create(:election, :ongoing) }
+ 
+     it "is not valid" do
+       expect { subject.call }.to broadcast(:invalid)
+diff --git a/decidim-elections/spec/commands/decidim/elections/admin/create_question_spec.rb b/decidim-elections/spec/commands/decidim/elections/admin/create_question_spec.rb
+index 22e543fd26..1972cde20e 100644
+--- a/decidim-elections/spec/commands/decidim/elections/admin/create_question_spec.rb
++++ b/decidim-elections/spec/commands/decidim/elections/admin/create_question_spec.rb
+@@ -65,8 +65,8 @@ describe Decidim::Elections::Admin::CreateQuestion do
+     end
+   end
+ 
+-  context "when the election has started" do
+-    let(:election) { create :election, :started }
++  context "when the election has been created in the bulletin board" do
++    let(:election) { create(:election, :ongoing) }
+ 
+     it "is not valid" do
+       expect { subject.call }.to broadcast(:election_started)
+diff --git a/decidim-elections/spec/commands/decidim/elections/admin/destroy_answer_spec.rb b/decidim-elections/spec/commands/decidim/elections/admin/destroy_answer_spec.rb
+index 691e8619cb..3bd859f029 100644
+--- a/decidim-elections/spec/commands/decidim/elections/admin/destroy_answer_spec.rb
++++ b/decidim-elections/spec/commands/decidim/elections/admin/destroy_answer_spec.rb
+@@ -28,8 +28,8 @@ describe Decidim::Elections::Admin::DestroyAnswer do
+     expect(action_log.version.event).to eq "destroy"
+   end
+ 
+-  context "when the election has started" do
+-    let(:election) { create :election, :started }
++  context "when the election has been created in the bulletin board" do
++    let!(:election) { create(:election, :ongoing) }
+ 
+     it "is not valid" do
+       expect { subject.call }.to broadcast(:invalid)
+diff --git a/decidim-elections/spec/commands/decidim/elections/admin/destroy_election_spec.rb b/decidim-elections/spec/commands/decidim/elections/admin/destroy_election_spec.rb
+index 8f63aca929..21e3f0c593 100644
+--- a/decidim-elections/spec/commands/decidim/elections/admin/destroy_election_spec.rb
++++ b/decidim-elections/spec/commands/decidim/elections/admin/destroy_election_spec.rb
+@@ -25,8 +25,8 @@ describe Decidim::Elections::Admin::DestroyElection do
+     expect(action_log.version.event).to eq "destroy"
+   end
+ 
+-  context "when the election has started" do
+-    let(:election) { create :election, :started }
++  context "when the election has been created in the bulletin board" do
++    let(:election) { create(:election, :ongoing) }
+ 
+     it "is not valid" do
+       expect { subject.call }.to broadcast(:invalid)
+diff --git a/decidim-elections/spec/commands/decidim/elections/admin/destroy_question_spec.rb b/decidim-elections/spec/commands/decidim/elections/admin/destroy_question_spec.rb
+index aa558b61ef..0f5ab4f1a2 100644
+--- a/decidim-elections/spec/commands/decidim/elections/admin/destroy_question_spec.rb
++++ b/decidim-elections/spec/commands/decidim/elections/admin/destroy_question_spec.rb
+@@ -26,8 +26,8 @@ describe Decidim::Elections::Admin::DestroyQuestion do
+     expect(action_log.version.event).to eq "destroy"
+   end
+ 
+-  context "when the election has started" do
+-    let(:election) { create :election, :started }
++  context "when the election has been created in the bulletin board" do
++    let(:election) { create(:election, :ongoing) }
+ 
+     it "is not valid" do
+       expect { subject.call }.to broadcast(:invalid)
+diff --git a/decidim-elections/spec/commands/decidim/elections/admin/update_answer_spec.rb b/decidim-elections/spec/commands/decidim/elections/admin/update_answer_spec.rb
+index 0463bcef08..72c8389a72 100644
+--- a/decidim-elections/spec/commands/decidim/elections/admin/update_answer_spec.rb
++++ b/decidim-elections/spec/commands/decidim/elections/admin/update_answer_spec.rb
+@@ -81,8 +81,8 @@ describe Decidim::Elections::Admin::UpdateAnswer do
+     end
+   end
+ 
+-  context "when the election has started" do
+-    let(:election) { create :election, :started }
++  context "when the election has been created in the bulletin board" do
++    let(:election) { create(:election, :ongoing) }
+ 
+     it "is not valid" do
+       expect { subject.call }.to broadcast(:invalid)
+diff --git a/decidim-elections/spec/commands/decidim/elections/admin/update_question_spec.rb b/decidim-elections/spec/commands/decidim/elections/admin/update_question_spec.rb
+index 9058c702d1..f1e2a070b8 100644
+--- a/decidim-elections/spec/commands/decidim/elections/admin/update_question_spec.rb
++++ b/decidim-elections/spec/commands/decidim/elections/admin/update_question_spec.rb
+@@ -51,8 +51,8 @@ describe Decidim::Elections::Admin::UpdateQuestion do
+     end
+   end
+ 
+-  context "when the election has started" do
+-    let(:election) { create :election, :started }
++  context "when the election has been created in the bulletin board" do
++    let(:election) { create(:election, :ongoing) }
+ 
+     it "is not valid" do
+       expect { subject.call }.to broadcast(:invalid)
+diff --git a/decidim-elections/spec/system/admin/admin_manages_questions_spec.rb b/decidim-elections/spec/system/admin/admin_manages_questions_spec.rb
+index dfdd28acd3..aea0547382 100644
+--- a/decidim-elections/spec/system/admin/admin_manages_questions_spec.rb
++++ b/decidim-elections/spec/system/admin/admin_manages_questions_spec.rb
+@@ -46,34 +46,16 @@ describe "Admin manages questions", type: :system do
+     end
+   end
+ 
+-  context "when the election has already started" do
+-    let(:election) { create :election, :started, component: current_component }
+-
+-    it "doesn't create a new question" do
+-      click_on "New Question"
+-
+-      within ".new_question" do
+-        fill_in_i18n(
+-          :question_title,
+-          "#question-title-tabs",
+-          en: "My question",
+-          es: "Mi pregunta",
+-          ca: "La meva pregunta"
+-        )
+-      end
++  context "when the election has been created on the bulletin board" do
++    let(:election) { create(:election, :created, component: current_component) }
+ 
+-      within ".new_question" do
+-        find("*[type=submit]").click
+-      end
++    it "does not create a new question" do
++      visit Decidim::EngineRouter.admin_proxy(component).new_election_question_path(election)
+ 
+       within ".callout-wrapper" do
+-        expect(page).to have_content("has already started")
++        expect(page).to have_content("You are not authorized to perform this action")
+       end
+     end
+-  end
+-
+-  context "when the election has created on the bulletin board" do
+-    let(:election) { create(:election, :created, component: current_component) }
+ 
+     it "cannot add a new question" do
+       expect(page).to have_no_content("New Question")
+-- 
+2.34.1
+

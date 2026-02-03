@@ -1,0 +1,65 @@
+From 1ee96a8b1b0987ffe2a62dca7ad268bf9edfa9b8 Mon Sep 17 00:00:00 2001
+From: Lee Rowlands <lee.rowlands@previousnext.com.au>
+Date: Fri, 22 Aug 2014 11:11:38 +1000
+Subject: [PATCH] Test examples from Drupal SA-CORE-2014-003
+
+---
+ .../HttpFoundation/Tests/RequestTest.php      | 22 +++++++++++++++----
+ 1 file changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/src/Symfony/Component/HttpFoundation/Tests/RequestTest.php b/src/Symfony/Component/HttpFoundation/Tests/RequestTest.php
+index e0cc1dcfd0..88e0afbc8f 100644
+--- a/src/Symfony/Component/HttpFoundation/Tests/RequestTest.php
++++ b/src/Symfony/Component/HttpFoundation/Tests/RequestTest.php
+@@ -1595,9 +1595,11 @@ class RequestTest extends \PHPUnit_Framework_TestCase
+         Request::setTrustedHosts(array());
+     }
+ 
+-    public function testVeryLongHost()
++    /**
++     * @dataProvider getLongHostNames
++     */
++    public function testVeryLongHosts($host)
+     {
+-        $host = 'a'.str_repeat('.a', 40000);
+         $start = microtime(true);
+ 
+         $request = Request::create('/');
+@@ -1609,13 +1611,15 @@ class RequestTest extends \PHPUnit_Framework_TestCase
+     /**
+      * @dataProvider getHostValidities
+      */
+-    public function testHostValidity($host, $isValid)
++    public function testHostValidity($host, $isValid, $expectedHost = null, $expectedPort = null)
+     {
+         $request = Request::create('/');
+         $request->headers->set('host', $host);
+ 
+         if ($isValid) {
+-            $this->assertSame($host, $request->getHost());
++            $this->assertSame($expectedHost ?: $host, $request->getHost());
++            if ($expectedPort) {
++                $this->assertSame($expectedPort, $request->getPort());
+             }
+         } else {
+             $this->setExpectedException('UnexpectedValueException', 'Invalid Host');
+@@ -1631,6 +1635,16 @@ class RequestTest extends \PHPUnit_Framework_TestCase
+             array('a.', true),
+             array("\xE9", false),
+             array('[::1]', true),
++            array('[::1]:80', true, '[::1]', 80),
++            array(str_repeat('.', 101), false),
++        );
++    }
++
++    public function getLongHostNames()
++    {
++        return array(
++            array('a'.str_repeat('.a', 40000)),
++            array(str_repeat(':', 101)),
+         );
+     }
+ }
+-- 
+2.34.1
+

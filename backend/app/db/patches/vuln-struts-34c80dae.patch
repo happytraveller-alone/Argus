@@ -1,0 +1,43 @@
+From 34c80dae734e70f13c0e46f9c83602fb71318e58 Mon Sep 17 00:00:00 2001
+From: Lukasz Lenart <lukaszlenart@apache.org>
+Date: Tue, 20 Dec 2011 20:17:49 +0000
+Subject: [PATCH] WW-3729 - Improves Strict DMI mode
+
+git-svn-id: https://svn.apache.org/repos/asf/struts/struts2/branches/STRUTS_2_3_X@1221473 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../xwork2/config/entities/ActionConfig.java        | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/xwork-core/src/main/java/com/opensymphony/xwork2/config/entities/ActionConfig.java b/xwork-core/src/main/java/com/opensymphony/xwork2/config/entities/ActionConfig.java
+index 21ec3d2937..165103be13 100644
+--- a/xwork-core/src/main/java/com/opensymphony/xwork2/config/entities/ActionConfig.java
++++ b/xwork-core/src/main/java/com/opensymphony/xwork2/config/entities/ActionConfig.java
+@@ -17,11 +17,17 @@
+ 
+ import com.opensymphony.xwork2.util.location.Located;
+ import com.opensymphony.xwork2.util.location.Location;
++import org.apache.commons.lang.StringUtils;
+ 
+ import java.io.Serializable;
+-import java.util.*;
+-
+-import org.apache.commons.lang.StringUtils;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.Collections;
++import java.util.HashSet;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
+ 
+ 
+ /**
+@@ -218,6 +224,7 @@ public static class Builder implements InterceptorListHolder{
+ 
+         public Builder(ActionConfig toClone) {
+             target = new ActionConfig(toClone);
++            addAllowedMethod(toClone.getAllowedMethods());
+         }
+ 
+         public Builder(String packageName, String name, String className) {

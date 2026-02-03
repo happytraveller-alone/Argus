@@ -1,0 +1,154 @@
+From 905efea17d9740a081509780d7c44e742b99ce60 Mon Sep 17 00:00:00 2001
+From: "Daniel A. Wozniak" <dwozniak@saltstack.com>
+Date: Wed, 20 Jan 2021 13:40:02 -0700
+Subject: [PATCH] Tests and fix for CVE-2021-25281
+
+---
+ salt/client/mixins.py                   |  5 ++-
+ salt/master.py                          | 15 ++++++--
+ salt/wheel/__init__.py                  |  2 +-
+ tests/integration/netapi/test_client.py | 51 ++++++++++++++++++++++---
+ 4 files changed, 62 insertions(+), 11 deletions(-)
+
+diff --git a/salt/client/mixins.py b/salt/client/mixins.py
+index 131aa1e3de..69c8f9773d 100644
+--- a/salt/client/mixins.py
++++ b/salt/client/mixins.py
+@@ -469,7 +469,10 @@ class AsyncClientMixin(object):
+         low['__user__'] = user
+         low['__tag__'] = tag
+ 
+-        return self.low(fun, low, full_return=False)
++        try:
++            return self.cmd_sync(low)
++        except salt.exceptions.EauthAuthenticationError as exc:
++            log.error(exc)
+ 
+     def cmd_async(self, low):
+         '''
+diff --git a/salt/master.py b/salt/master.py
+index 63b4e04aca..8b2612cafa 100644
+--- a/salt/master.py
++++ b/salt/master.py
+@@ -1994,6 +1994,7 @@ class ClearFuncs(TransportMethods):
+         '''
+         Send a master control function back to the wheel system
+         '''
++        jid = clear_load.get('__jid__', salt.utils.jid.gen_jid(self.opts))
+         # All wheel ops pass through eauth
+         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(clear_load)
+ 
+@@ -2003,6 +2004,8 @@ class ClearFuncs(TransportMethods):
+ 
+         if error:
+             # Authentication error occurred: do not continue.
++            data = {'error': error, 'jid': jid}
++            self.event.fire_event(data, tagify([jid, "new"], "wheel"))
+             return {'error': error}
+ 
+         # Authorize
+@@ -2014,9 +2017,14 @@ class ClearFuncs(TransportMethods):
+                 clear_load.get('kwarg', {})
+             )
+             if not wheel_check:
+-                return {'error': {'name': err_name,
+-                                  'message': 'Authentication failure of type "{0}" occurred for '
+-                                             'user {1}.'.format(auth_type, username)}}
++                err_data = {
++                    'name': err_name,
++                    'message': 'Authentication failure of type "{0}" occurred for '
++                    'user {1}.'.format(auth_type, username)
++                }
++                data = {'error': err_data, 'jid': jid}
++                self.event.fire_event(data, tagify([jid, "new"], "wheel"))
++                return {'error': err_data}
+             elif isinstance(wheel_check, dict) and 'error' in wheel_check:
+                 # A dictionary with an error name/message was handled by ckminions.wheel_check
+                 return wheel_check
+@@ -2034,7 +2042,6 @@ class ClearFuncs(TransportMethods):
+ 
+         # Authorized. Do the job!
+         try:
+-            jid = salt.utils.jid.gen_jid(self.opts)
+             fun = clear_load.pop('fun')
+             tag = tagify(jid, prefix='wheel')
+             data = {'fun': "wheel.{0}".format(fun),
+diff --git a/salt/wheel/__init__.py b/salt/wheel/__init__.py
+index 7eeac71678..b72c6f0d1d 100644
+--- a/salt/wheel/__init__.py
++++ b/salt/wheel/__init__.py
+@@ -123,7 +123,7 @@ class WheelClient(salt.client.mixins.SyncClientMixin,
+             })
+             {'jid': '20131219224744416681', 'tag': 'salt/wheel/20131219224744416681'}
+         '''
+-        fun = low.pop('fun')
++        fun = low.get('fun')
+         return self.asynchronous(fun, low)
+ 
+     def cmd(self, fun, arg=None, pub_data=None, kwarg=None, print_event=True, full_return=False):  # pylint: disable=useless-super-delegation
+diff --git a/tests/integration/netapi/test_client.py b/tests/integration/netapi/test_client.py
+index 846d6f8165..de362d0244 100644
+--- a/tests/integration/netapi/test_client.py
++++ b/tests/integration/netapi/test_client.py
+@@ -125,12 +125,53 @@ class NetapiClientTest(TestCase):
+     def test_wheel_async(self):
+         # Give this test a little breathing room
+         time.sleep(3)
+-        low = {'client': 'wheel_async', 'fun': 'key.list_all'}
+-        low.update(self.eauth_creds)
++        timeout = 60
++        opts = salt.config.master_config(os.path.join(RUNTIME_VARS.TMP_CONF_DIR, 'master'))
++        with salt.utils.event.get_event("master", opts=opts) as event:
++            low = {"client": "wheel_async", "fun": "key.list_all"}
++            low.update(self.eauth_creds)
+ 
+-        ret = self.netapi.run(low)
+-        self.assertIn('jid', ret)
+-        self.assertIn('tag', ret)
++            ret = self.netapi.run(low)
++            self.assertIn("jid", ret)
++            self.assertIn("tag", ret)
++            jid = ret['jid']
++            start = time.time()
++            found_return = False
++            while time.time() - start <= timeout:
++                evt = event.get_event(tag=ret['tag'])
++                if evt is None:
++                    continue
++                assert 'error' not in evt
++                if 'return' in evt:
++                    found_return = True
++                    assert evt['success'] is True
++                    break
++            assert found_return is True
++
++    def test_wheel_async_unauthenticated(self):
++        """
++        This is a test for CVE-2021-25281
++        """
++        # Give this test a little breathing room
++        time.sleep(3)
++        opts = salt.config.master_config(os.path.join(RUNTIME_VARS.TMP_CONF_DIR, 'master'))
++        with salt.utils.event.get_event("master", opts=opts) as event:
++            low = {"client": "wheel_async", "fun": "key.list_all"}
++            low.update({
++                "eauth": "pam",
++                "username": "notvalid",
++                "password": "notvalid",
++            })
++            ret = self.netapi.run(low)
++            self.assertIn("jid", ret)
++            self.assertIn("tag", ret)
++            jid = ret['jid']
++            evt = event.get_event(tag=ret['tag'])
++            assert 'error' in evt
++            assert evt['error'] == {
++                'name': 'EauthAuthenticationError',
++                'message': 'Authentication failure of type "eauth" occurred for user notvalid.'
++            }
+ 
+     def test_wheel_unauthenticated(self):
+         low = {'client': 'wheel', 'tgt': '*', 'fun': 'test.ping'}
+-- 
+2.34.1
+

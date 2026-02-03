@@ -1,0 +1,142 @@
+From 3e0f7dea754381c5ad11a06ccc62eb153382b498 Mon Sep 17 00:00:00 2001
+From: Gustavo Noronha Silva <gns@gnome.org>
+Date: Thu, 18 Feb 2010 14:30:49 -0200
+Subject: [PATCH] Report broken certs through the padlock icon
+
+This uses a new feature in libsoup that reports through a
+SoupMessageFlag whether the message is talking to a server that has a
+trusted server.
+
+Bug #600663
+---
+ configure.ac              | 36 +++++++++++++++++++++++++++++++++++-
+ embed/ephy-embed-single.c | 15 +++++++++++++++
+ embed/ephy-embed.c        | 29 +++++++++++++++++++++--------
+ 3 files changed, 71 insertions(+), 9 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index c177e76f1f..37b98d7fcf 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -247,6 +247,39 @@ fi
+ 
+ AM_CONDITIONAL([ENABLE_SEED],[test "$enable_seed" = "yes"])
+ 
++# *********************
++# CA Certificate file
++# Stolen from GIO's TLS
++# *********************
++
++AC_MSG_CHECKING([location of system Certificate Authority list])
++AC_ARG_WITH(ca-file,
++            [AC_HELP_STRING([--with-ca-file=@<:@path@:>@],
++                            [path to system Certificate Authority list])])
++if test "$with_ca_file" = "no"; then
++    AC_MSG_RESULT([disabled])
++else
++    if test -z "$with_ca_file"; then
++        for f in /etc/pki/tls/certs/ca-bundle.crt \
++                 /etc/ssl/certs/ca-certificates.crt; do
++            if test -f "$f"; then
++                with_ca_file="$f"
++            fi
++        done
++        if test -z "$with_ca_file"; then
++            AC_MSG_ERROR([could not find. Use --with-ca-file=path to set, or --without-ca-file to disable])
++        fi
++    fi
++
++    AC_MSG_RESULT($with_ca_file)
++    if ! test -f "$with_ca_file"; then
++        AC_MSG_ERROR([No such file '$with_ca_file'. Use --with-ca-file=path to set, or --without-ca-file to disable])
++    fi
++    GTLS_SYSTEM_CA_FILE="$with_ca_file"
++
++    AC_DEFINE_UNQUOTED([GTLS_SYSTEM_CA_FILE], ["$GTLS_SYSTEM_CA_FILE"], [path to system Certificate Authority list])
++fi
++
+ # ***
+ # NSS
+ # ***
+@@ -456,5 +489,6 @@ Epiphany was configured with the following options:
+  	GObject introspection      : $found_introspection
+  	Seed support               : $enable_seed
+  	NSS support                : $enable_nss
+- 	Build tests                : $enable_tests
++	Build tests		   : $enable_tests
++	CA Certificates file	   : $GTLS_SYSTEM_CA_FILE
+ "
+diff --git a/embed/ephy-embed-single.c b/embed/ephy-embed-single.c
+index 44efecaeda..8c05532df8 100644
+--- a/embed/ephy-embed-single.c
++++ b/embed/ephy-embed-single.c
+@@ -39,6 +39,7 @@
+ #endif
+ 
+ #include <webkit/webkit.h>
++#include <glib/gi18n.h>
+ #include <libsoup/soup-gnome.h>
+ #include <gnome-keyring.h>
+ 
+@@ -481,6 +482,20 @@ ephy_embed_single_initialize (EphyEmbedSingle *single)
+ 
+   session = webkit_get_default_session ();
+ 
++#ifdef GTLS_SYSTEM_CA_FILE
++  /* Check SSL certificates */
++
++  if (g_file_test (GTLS_SYSTEM_CA_FILE, G_FILE_TEST_EXISTS)) {
++    g_object_set (session,
++                  SOUP_SESSION_SSL_CA_FILE, GTLS_SYSTEM_CA_FILE,
++                  "ignore-ssl-cert-errors", TRUE,
++                  NULL);
++  } else {
++    g_warning (_("CA Certificates file we should use was not found, "\
++                 "all SSL sites will be considered to have a broken certificate."));
++  }
++#endif
++
+   /* Store cookies in moz-compatible SQLite format */
+   filename = g_build_filename (ephy_dot_dir (), "cookies.sqlite", NULL);
+   jar = soup_cookie_jar_sqlite_new (filename, FALSE);
+diff --git a/embed/ephy-embed.c b/embed/ephy-embed.c
+index 7d2af54d25..acc4e94f56 100644
+--- a/embed/ephy-embed.c
++++ b/embed/ephy-embed.c
+@@ -220,15 +220,28 @@ load_status_changed_cb (WebKitWebView *view,
+                            FALSE,
+                            FALSE);
+ 
+-    /*
+-     * FIXME: as a temporary workaround while soup lacks the needed
+-     * security API, determine security level based on the existence of
+-     * a 'https' prefix for the URI
+-     */
+-    if (uri && g_str_has_prefix (uri, "https"))
+-      security_level = EPHY_WEB_VIEW_STATE_IS_SECURE_HIGH;
+-    else
++#ifdef GTLS_SYSTEM_CA_FILE
++    if (uri && g_str_has_prefix (uri, "https")) {
++      WebKitWebFrame *frame;
++      WebKitWebDataSource *source;
++      WebKitNetworkRequest *request;
++      SoupMessage *message;
++
++      frame = webkit_web_view_get_main_frame (view);
++      source = webkit_web_frame_get_data_source (frame);
++      request = webkit_web_data_source_get_request (source);
++      message = webkit_network_request_get_message (request);
++
++      if (message &&
++          (soup_message_get_flags (message) & SOUP_MESSAGE_CERTIFICATE_TRUSTED))
++        security_level = EPHY_WEB_VIEW_STATE_IS_SECURE_HIGH;
++      else
++        security_level = EPHY_WEB_VIEW_STATE_IS_BROKEN;
++    } else
+       security_level = EPHY_WEB_VIEW_STATE_IS_UNKNOWN;
++#else
++    security_level = EPHY_WEB_VIEW_STATE_IS_UNKNOWN;
++#endif
+ 
+     ephy_web_view_set_security_level (EPHY_WEB_VIEW (view), security_level);
+   } else if (status == WEBKIT_LOAD_PROVISIONAL || status == WEBKIT_LOAD_FINISHED) {

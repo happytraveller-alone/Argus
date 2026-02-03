@@ -1,0 +1,115 @@
+From a50953a266583981b51a181c2fce73dad2ac5d7d Mon Sep 17 00:00:00 2001
+From: matthias wandel <matthias@woodgears.ca>
+Date: Thu, 4 Mar 2021 12:18:27 -0400
+Subject: [PATCH] Make pointer range checks more consistent.     Also twiddle
+ the unused floating point print code (not used in real exif files),     but
+ fuzz testing hits it.  New code is equivalent but doesn't cause bus error
+ (don't understand why, but this is all a very bogus thing anyway, just trying
+ to avoid fuzz testing hits.
+
+---
+ exif.c      | 32 ++++++++++++++++++++++++++------
+ gpsinfo.c   |  2 +-
+ makernote.c |  2 +-
+ 3 files changed, 28 insertions(+), 8 deletions(-)
+
+diff --git a/exif.c b/exif.c
+index b03341d..9c035f8 100644
+--- a/exif.c
++++ b/exif.c
+@@ -389,7 +389,15 @@ void PrintFormatNumber(void * ValuePtr, int Format, int ByteCount)
+                 s = 8;
+                 break;
+ 
+-            case FMT_SINGLE:    printf("%f",(double)*(float *)ValuePtr); s=8; break;
++            case FMT_SINGLE:
++                {
++                    float f;
++                    int tmp = *(int*)ValuePtr;
++                    f = *(float *)&tmp;
++                    printf("%f",f);
++                }
++                s=4;
++                break;
+             case FMT_DOUBLE:    printf("%f",*(double *)ValuePtr);        s=8; break;
+             default: 
+                 printf("Unknown format %d:", Format);
+@@ -441,9 +449,20 @@ double ConvertAnyFormat(void * ValuePtr, int Format)
+         case FMT_SSHORT:    Value = (signed short)Get16u(ValuePtr);  break;
+         case FMT_SLONG:     Value = Get32s(ValuePtr);                break;
+ 
+-        // Not sure if this is correct (never seen float used in Exif format)
+-        case FMT_SINGLE:    Value = (double)*(float *)ValuePtr;      break;
+-        case FMT_DOUBLE:    Value = *(double *)ValuePtr;             break;
++        // Never seen floats used in actual exif format,
++        // this code only ever hit with fuzz testing.
++        // This code may not necessaryly print correct values if float *were*
++        // to be used in exif, as it doesn't define which floating point
++        // stanard is to be used.
++        case FMT_SINGLE:
++            {
++                int tmp = *(int*)ValuePtr;
++                Value = *(float *)&tmp;
++            }
++            break;
++
++        case FMT_DOUBLE:
++            Value = *(double *)ValuePtr;             break;
+ 
+         default:
+             ErrNonfatal("Illegal format code %d in Exif header",Format,0);
+@@ -463,7 +482,7 @@ static void ProcessExifDir(unsigned char * DirStart, unsigned char * OffsetBase,
+     int ThumbnailOffset = 0;
+     int ThumbnailSize = 0;
+     char IndentString[25];
+-    int OffsetVal;
++    unsigned OffsetVal;
+ 
+     if (NestingLevel > 4){
+         ErrNonfatal("Maximum Exif directory nesting exceeded (corrupt Exif header)", 0,0);
+@@ -533,7 +552,7 @@ static void ProcessExifDir(unsigned char * DirStart, unsigned char * OffsetBase,
+         if (ByteCount > 4){
+             OffsetVal = Get32u(DirEntry+8);
+             // If its bigger than 4 bytes, the dir entry contains an offset.
+-            if (OffsetVal+ByteCount > ExifLength || OffsetVal < 0 || OffsetVal > 65536){
++            if (OffsetVal+ByteCount > ExifLength || OffsetVal > 65536){
+                 // Bogus pointer offset and / or bytecount value
+                 ErrNonfatal("Illegal value pointer for tag %04x in Exif", Tag,0);
+                 continue;
+@@ -992,6 +1011,7 @@ void process_EXIF (unsigned char * ExifSection, int length)
+     
+     Clear_EXIF();
+ 
++
+     if (ShowTags){
+         printf("Exif header %u bytes long\n",length);
+     }
+diff --git a/gpsinfo.c b/gpsinfo.c
+index f6e538b..e170e40 100644
+--- a/gpsinfo.c
++++ b/gpsinfo.c
+@@ -107,7 +107,7 @@ void ProcessGpsInfo(unsigned char * DirStart, unsigned char * OffsetBase, unsign
+             unsigned OffsetVal;
+             OffsetVal = Get32u(DirEntry+8);
+             // If its bigger than 4 bytes, the dir entry contains an offset.
+-            if (OffsetVal > 0x1000000 || OffsetVal+ByteCount > ExifLength){
++            if (OffsetVal+ByteCount > ExifLength || OffsetVal > 65536){
+                 // Max exif in jpeg is 64k, so any offset bigger than that is bogus.
+                 // Bogus pointer offset and / or bytecount value
+                 ErrNonfatal("Illegal value pointer for Exif gps tag %04x", Tag,0);
+diff --git a/makernote.c b/makernote.c
+index 93cdf76..97e0ecb 100644
+--- a/makernote.c
++++ b/makernote.c
+@@ -70,7 +70,7 @@ static void ProcessCanonMakerNoteDir(unsigned char * DirStart, unsigned char * O
+             unsigned OffsetVal;
+             OffsetVal = Get32u(DirEntry+8);
+             // If its bigger than 4 bytes, the dir entry contains an offset.
+-            if ((int)OffsetVal < 0 || OffsetVal+ByteCount > ExifLength){
++            if (OffsetVal+ByteCount > ExifLength || OffsetVal > 65536){
+                 // Bogus pointer offset and / or bytecount value
+                 ErrNonfatal("Illegal value pointer for Exif maker tag %04x", Tag,0);
+                 continue;
+-- 
+2.34.1
+

@@ -1,0 +1,108 @@
+From b65130f39929ef03f44a486eb85629b4de1693ac Mon Sep 17 00:00:00 2001
+From: Alexandru Emil Lupu <contact@alecslupu.ro>
+Date: Wed, 19 Jul 2023 18:04:50 +0300
+Subject: [PATCH] Backport 'Fix memory leak with user answers serializer (at
+ survey export)' to v0.27 (#11241)
+
+* Fix memory leak with user answers serializer (at survey export)
+
+* Fix memory leak with user answers serializer (at survey export)
+
+* Simplify the answer generation
+
+* Fix linting issue
+
+---------
+
+Co-authored-by: Antti Hukkanen <antti.hukkanen@mainiotech.fi>
+---
+ .../decidim/forms/user_answers_serializer.rb  | 12 +++---
+ .../forms/user_answers_serializer_spec.rb     | 42 +++++++++++++++++++
+ 2 files changed, 48 insertions(+), 6 deletions(-)
+
+diff --git a/decidim-forms/lib/decidim/forms/user_answers_serializer.rb b/decidim-forms/lib/decidim/forms/user_answers_serializer.rb
+index d6d07b5b6d..e96864ebd6 100644
+--- a/decidim-forms/lib/decidim/forms/user_answers_serializer.rb
++++ b/decidim-forms/lib/decidim/forms/user_answers_serializer.rb
+@@ -39,19 +39,19 @@ module Decidim
+       end
+ 
+       def questions_hash
+-        return {} if questionnaire&.questions.blank?
++        questionnaire_id = @answers.first&.decidim_questionnaire_id
++        return {} unless questionnaire_id
+ 
+-        questionnaire.questions.each.inject({}) do |serialized, question|
++        questions = Decidim::Forms::Question.where(decidim_questionnaire_id: questionnaire_id)
++        return {} if questions.none?
++
++        questions.each.inject({}) do |serialized, question|
+           serialized.update(
+             translated_question_key(question.position, question.body) => ""
+           )
+         end
+       end
+ 
+-      def questionnaire
+-        @answers.first&.questionnaire
+-      end
+-
+       def translated_question_key(idx, body)
+         "#{idx + 1}. #{translated_attribute(body)}"
+       end
+diff --git a/decidim-forms/spec/serializers/decidim/forms/user_answers_serializer_spec.rb b/decidim-forms/spec/serializers/decidim/forms/user_answers_serializer_spec.rb
+index fd5ee749e6..d47540af8c 100644
+--- a/decidim-forms/spec/serializers/decidim/forms/user_answers_serializer_spec.rb
++++ b/decidim-forms/spec/serializers/decidim/forms/user_answers_serializer_spec.rb
+@@ -146,6 +146,48 @@ module Decidim
+             expect(serialized).to include("5. #{translated(conditional_question.body, locale: I18n.locale)}" => "")
+           end
+         end
++
++        context "when the questionnaire body is very long" do
++          let!(:questionnaire) { create(:questionnaire, questionnaire_for: questionable, description: questionnaire_description) }
++          let(:questionnaire_description) do
++            Decidim::Faker::Localized.wrapped("<p>", "</p>") do
++              Decidim::Faker::Localized.localized { "a" * 1_000_000 }
++            end
++          end
++          let!(:users) { create_list(:user, 100, organization: questionable.organization) }
++
++          before do
++            users.each do |user|
++              questions.each do |question|
++                create(:answer, questionnaire: questionnaire, question: question, user: user)
++              end
++            end
++          end
++
++          it "does not load the questionnaire description to memory every time when iterating an answer" do
++            # NOTE:
++            # For this test it is important to fetch the single user "answer
++            # sets" to an array and store them there because this is the same
++            # way the answers are loaded e.g. in the survey component export
++            # functionality. The export had previously a memory leak because the
++            # questionnaire is fetched individually for each "answer set" and if
++            # it has a very long description, it caused the description to be
++            # stored multiple times within the array (for each "answer set"
++            # separately) causing a out of memory errors when there is a large
++            # amount of answers.
++            all_answers = Decidim::Forms::QuestionnaireUserAnswers.for(questionnaire)
++
++            initial_memory = memory_usage
++            all_answers.each do |answer_set|
++              described_class.new(answer_set).serialize
++            end
++            expect(memory_usage - initial_memory).to be < 10_000
++          end
++
++          def memory_usage
++            `ps -o rss #{Process.pid}`.lines.last.to_i
++          end
++        end
+       end
+     end
+   end
+-- 
+2.34.1
+

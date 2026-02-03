@@ -1,0 +1,187 @@
+From 60ee8a0eb9975d123002b1cffbefd60a8cd5fae6 Mon Sep 17 00:00:00 2001
+From: Nikos Mavrogiannopoulos <nmav@gnutls.org>
+Date: Fri, 26 Nov 2010 12:46:16 +0100
+Subject: [PATCH] Reverted default behavior for verification and introduced
+ GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT. Thus by default V1 trusted CAs are
+ allowed, unless the new flag is specified.
+
+---
+ NEWS                       |  4 ++++
+ lib/gnutls_cert.c          |  5 -----
+ lib/includes/gnutls/x509.h | 11 ++++++-----
+ lib/x509/verify.c          |  4 ++--
+ src/certtool.c             |  4 ++--
+ src/cli.c                  |  3 +--
+ tests/chainverify.c        | 19 +++++++++++++------
+ 7 files changed, 28 insertions(+), 22 deletions(-)
+
+diff --git a/NEWS b/NEWS
+index d77ab0426..ca2f73ac2 100644
+--- a/NEWS
++++ b/NEWS
+@@ -5,6 +5,10 @@ See the end for copying conditions.
+ 
+ * Version 2.11.5 (unreleased)
+ 
++** libgnutls: Reverted default behavior for verification and
++introduced GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT. Thus by default
++V1 trusted CAs are allowed, unless the new flag is specified.
++
+ ** libgnutls: Correctly add leading zero to PKCS #8 encoded DSA key.
+ Reported by Jeffrey Walton.
+ 
+diff --git a/lib/gnutls_cert.c b/lib/gnutls_cert.c
+index 5415fda94..bd55de555 100644
+--- a/lib/gnutls_cert.c
++++ b/lib/gnutls_cert.c
+@@ -649,11 +649,6 @@ _gnutls_openpgp_crt_verify_peers (gnutls_session_t session,
+  * This function uses gnutls_x509_crt_list_verify() with the CAs in
+  * the credentials as trusted CAs.
+  *
+- * Note that some commonly used X.509 Certificate Authorities are
+- * still using Version 1 certificates.  If you want to accept them,
+- * you need to call gnutls_certificate_set_verify_flags() with, e.g.,
+- * %GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT parameter.
+- *
+  * Returns: a negative error code on error and zero on success.
+  **/
+ int
+diff --git a/lib/includes/gnutls/x509.h b/lib/includes/gnutls/x509.h
+index d9a7e61f6..80cd7db22 100644
+--- a/lib/includes/gnutls/x509.h
++++ b/lib/includes/gnutls/x509.h
+@@ -516,10 +516,10 @@ extern "C"
+  * @GNUTLS_VERIFY_DISABLE_TRUSTED_TIME_CHECKS: If set a signer in the trusted
+  *   list is never checked for expiration or activation.
+  * @GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT: Allow only trusted CA
+- *   certificates that have version 1.  This is safer than
+- *   %GNUTLS_VERIFY_ALLOW_ANY_X509_V1_CA_CRT, and should be used
+- *   instead. That way only signers in your trusted list will be
+- *   allowed to have certificates of version 1.
++ *   certificates that have version 1.  This is the default.
++ * @GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT: Do not allow trusted CA
++ *   certificates that have version 1.  This option is to be used
++ *   to deprecate all V1 certificates.
+  * @GNUTLS_VERIFY_DO_NOT_ALLOW_SAME: If a certificate is not signed by
+  *   anyone trusted but exists in the trusted CA list do not treat it
+  *   as trusted.
+@@ -547,7 +547,8 @@ extern "C"
+     GNUTLS_VERIFY_ALLOW_SIGN_RSA_MD2 = 16,
+     GNUTLS_VERIFY_ALLOW_SIGN_RSA_MD5 = 32,
+     GNUTLS_VERIFY_DISABLE_TIME_CHECKS = 64,
+-    GNUTLS_VERIFY_DISABLE_TRUSTED_TIME_CHECKS = 128
++    GNUTLS_VERIFY_DISABLE_TRUSTED_TIME_CHECKS = 128,
++    GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT = 256
+   } gnutls_certificate_verify_flags;
+ 
+   int gnutls_x509_crt_check_issuer (gnutls_x509_crt_t cert,
+diff --git a/lib/x509/verify.c b/lib/x509/verify.c
+index c9ac8b1fd..c845e6fae 100644
+--- a/lib/x509/verify.c
++++ b/lib/x509/verify.c
+@@ -196,7 +196,7 @@ check_if_ca (gnutls_x509_crt_t cert, gnutls_x509_crt_t issuer,
+      these certs only if the appropriate flags are set. */
+   else if ((result == GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE) &&
+ 	   ((flags & GNUTLS_VERIFY_ALLOW_ANY_X509_V1_CA_CRT) ||
+-	    ((flags & GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT) &&
++	    (!(flags & GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT) &&
+ 	     (gnutls_x509_crt_check_issuer (issuer, issuer) == 1))))
+     {
+       gnutls_assert ();
+@@ -336,7 +336,7 @@ _gnutls_verify_certificate2 (gnutls_x509_crt_t cert,
+     }
+ 
+   if (!(flags & GNUTLS_VERIFY_DISABLE_CA_SIGN) &&
+-      !((flags & GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT) && issuer_version == 1))
++      ((flags & GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT) || issuer_version != 1))
+     {
+       if (check_if_ca (cert, issuer, flags) == 0)
+ 	{
+diff --git a/src/certtool.c b/src/certtool.c
+index 5669195a4..6b3067f18 100644
+--- a/src/certtool.c
++++ b/src/certtool.c
+@@ -1902,8 +1902,8 @@ _verify_x509_mem (const void *cert, int cert_size)
+ {
+   const char *ptr;
+   int ret, i;
+-  char name[256];
+-  char issuer_name[256];
++  char name[512];
++  char issuer_name[512];
+   size_t name_size;
+   size_t issuer_name_size;
+   gnutls_datum_t tmp;
+diff --git a/src/cli.c b/src/cli.c
+index bd1d71299..8aea0695d 100644
+--- a/src/cli.c
++++ b/src/cli.c
+@@ -599,8 +599,7 @@ init_tls_session (const char *hostname)
+ 
+   gnutls_certificate_set_retrieve_function (xcred, cert_callback);
+   gnutls_certificate_set_verify_function (xcred, cert_verify_callback);
+-  gnutls_certificate_set_verify_flags (xcred,
+-				       GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT);
++  gnutls_certificate_set_verify_flags (xcred, 0);
+ 
+   /* send the fingerprint */
+ #ifdef ENABLE_OPENPGP
+diff --git a/tests/chainverify.c b/tests/chainverify.c
+index f5b8f8986..f0f21a154 100644
+--- a/tests/chainverify.c
++++ b/tests/chainverify.c
+@@ -687,15 +687,13 @@ static struct
+   { "CVE-2008-4989", cve_2008_4989_chain, &cve_2008_4989_chain[2],
+     0, GNUTLS_CERT_SIGNER_NOT_FOUND | GNUTLS_CERT_INVALID },
+   { "verisign.com v1 fail", verisign_com_chain, &verisign_com_chain[3],
+-    0, GNUTLS_CERT_SIGNER_NOT_CA | GNUTLS_CERT_INVALID },
+-  { "verisign.com v1 fail2", verisign_com_chain, &verisign_com_chain[3],
+-    GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT,
++    0,
+     GNUTLS_CERT_EXPIRED | GNUTLS_CERT_INVALID },
+   { "verisign.com v1 ok", verisign_com_chain, &verisign_com_chain[3],
+     GNUTLS_VERIFY_DISABLE_TIME_CHECKS | GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT,
+     0 },
+   { "citibank.com v1 fail", citibank_com_chain, &citibank_com_chain[2],
+-    0, GNUTLS_CERT_SIGNER_NOT_CA | GNUTLS_CERT_INVALID },
++    GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT, GNUTLS_CERT_SIGNER_NOT_CA | GNUTLS_CERT_INVALID },
+   { "expired self signed", pem_self_cert, &pem_self_cert[0],
+     0, GNUTLS_CERT_EXPIRED | GNUTLS_CERT_INVALID },
+   { "self signed", pem_self_cert, &pem_self_cert[0],
+@@ -706,7 +704,7 @@ static struct
+   { "ca=false2", thea_chain, &thea_chain[1],
+     0, GNUTLS_CERT_SIGNER_NOT_CA | GNUTLS_CERT_INVALID },
+   { "hbci v1 fail", hbci_chain, &hbci_chain[2],
+-    0, GNUTLS_CERT_SIGNER_NOT_CA | GNUTLS_CERT_INVALID},
++    GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT, GNUTLS_CERT_SIGNER_NOT_CA | GNUTLS_CERT_INVALID},
+   { "hbci v1 ok expired", hbci_chain, &hbci_chain[2],
+     GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT,
+     GNUTLS_CERT_EXPIRED | GNUTLS_CERT_INVALID },
+@@ -724,7 +722,7 @@ static struct
+   { "rsa-md5 ok", mayfirst_chain, &mayfirst_chain[1],
+     GNUTLS_VERIFY_DISABLE_TIME_CHECKS | GNUTLS_VERIFY_ALLOW_SIGN_RSA_MD5, 0 },
+   { "v1ca fail", v1ca, &v1ca[2],
+-    0, GNUTLS_CERT_SIGNER_NOT_CA | GNUTLS_CERT_INVALID },
++    GNUTLS_VERIFY_DO_NOT_ALLOW_X509_V1_CA_CRT, GNUTLS_CERT_SIGNER_NOT_CA | GNUTLS_CERT_INVALID },
+   { "v1ca expired", v1ca, &v1ca[2],
+     GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT,
+     GNUTLS_CERT_EXPIRED | GNUTLS_CERT_INVALID  },
+@@ -851,6 +849,15 @@ doit (void)
+ 	  fail ("chain[%s]: verify_status: %d expected: %d\n", chains[i].name,
+ 		verify_status, chains[i].expected_verify_result);
+ 
++#if 0
++              j=0;
++              do
++                {
++                  fprintf(stderr, "%s\n", chains[i].chain[j]);
++                }
++              while(chains[i].chain[++j] != NULL);
++#endif
++
+ 	  if (!debug)
+ 	    exit (1);
+ 	}
+-- 
+2.34.1
+

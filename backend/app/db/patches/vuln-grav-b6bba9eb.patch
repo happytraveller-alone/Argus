@@ -1,0 +1,33 @@
+From b6bba9eb99bf8cb55b8fa8d23f18873ca594e348 Mon Sep 17 00:00:00 2001
+From: Andy Miller <rhuk@mac.com>
+Date: Mon, 6 May 2024 12:48:45 +0100
+Subject: [PATCH] fixes #GHSA-f8v5-jmfh-pr69
+
+---
+ system/src/Grav/Common/Security.php | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/system/src/Grav/Common/Security.php b/system/src/Grav/Common/Security.php
+index 8b4783089..6fabf4eec 100644
+--- a/system/src/Grav/Common/Security.php
++++ b/system/src/Grav/Common/Security.php
+@@ -225,7 +225,7 @@ class Security
+         // Set the patterns we'll test against
+         $patterns = [
+             // Match any attribute starting with "on" or xmlns
+-            'on_events' => '#(<[^>]+[[a-z\x00-\x20\"\'\/])([\s\/]on|\sxmlns)[a-z].*=>?#iUu',
++            'on_events' => '#(<[^>]+[a-z\x00-\x20\"\'\/])(on[a-z]+|xmlns)\s*=[\s|\'\"].*[\s|\'\"]>#iUu',
+ 
+             // Match javascript:, livescript:, vbscript:, mocha:, feed: and data: protocols
+             'invalid_protocols' => '#(' . implode('|', array_map('preg_quote', $invalid_protocols, ['#'])) . ')(:|\&\#58)\S.*?#iUu',
+@@ -279,6 +279,7 @@ class Security
+             'twig.getFunction',
+             'core.setEscaper',
+             'twig.safe_functions',
++            'read_file',
+         ];
+         $string = preg_replace('/(({{\s*|{%\s*)[^}]*?(' . implode('|', $bad_twig) . ')[^}]*?(\s*}}|\s*%}))/i', '{# $1 #}', $string);
+         return $string;
+-- 
+2.34.1
+

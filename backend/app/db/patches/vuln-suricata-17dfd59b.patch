@@ -1,0 +1,36 @@
+From 17dfd59bc31a21e103e2f1216443cd1418398aa9 Mon Sep 17 00:00:00 2001
+From: Victor Julien <victor@inliniac.net>
+Date: Tue, 16 Dec 2014 19:12:20 +0100
+Subject: [PATCH] memcmp: compare the first byte as well
+
+MemcmpLowercase would not compare the first byte of both input buffers
+leading to two non-identical buffers to be considered the same.
+
+Affects SSE_4_1 and SSE_4_2 implementations of SCMemcmpLowercase, as well
+as the non-SIMD implementation. SSE_3 and Tile version are not affected.
+---
+ src/util-memcmp.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/util-memcmp.h b/src/util-memcmp.h
+index 4a5be891e..875652b10 100644
+--- a/src/util-memcmp.h
++++ b/src/util-memcmp.h
+@@ -41,12 +41,12 @@ void MemcmpRegisterTests(void);
+ static inline int
+ MemcmpLowercase(const void *s1, const void *s2, size_t n)
+ {
+-    size_t i;
++    ssize_t i;
+ 
+     /* check backwards because we already tested the first
+      * 2 to 4 chars. This way we are more likely to detect
+      * a miss and thus speed up a little... */
+-    for (i = n - 1; i; i--) {
++    for (i = n - 1; i >= 0; i--) {
+         if (((uint8_t *)s1)[i] != u8_tolower(*(((uint8_t *)s2)+i)))
+             return 1;
+     }
+-- 
+2.34.1
+

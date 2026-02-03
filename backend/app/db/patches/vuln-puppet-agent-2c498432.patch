@@ -1,0 +1,59 @@
+From 92b0edc2e1a8e41196bc37b52a43d7f86f8f040b Mon Sep 17 00:00:00 2001
+From: Morgan Rhodes <morgan@puppetlabs.com>
+Date: Fri, 22 Apr 2016 15:23:55 -0700
+Subject: [PATCH] (maint) Use tags instead of SHAs
+
+---
+ configs/components/cpp-pcp-client.json        | 2 +-
+ configs/components/facter.json                | 2 +-
+ configs/components/hiera.json                 | 2 +-
+ configs/components/marionette-collective.json | 2 +-
+ configs/components/puppet.json                | 2 +-
+ configs/components/pxp-agent.json             | 2 +-
+ 6 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/configs/components/cpp-pcp-client.json b/configs/components/cpp-pcp-client.json
+index c5a9cac19..3db8113f6 100644
+--- a/configs/components/cpp-pcp-client.json
++++ b/configs/components/cpp-pcp-client.json
+@@ -1 +1 @@
+-{"url": "git://github.com/puppetlabs/cpp-pcp-client.git", "ref": "2a0cbb5dbab8c967272b9cd04a0a923b6b42b73f"}
++{"url": "git://github.com/puppetlabs/cpp-pcp-client.git", "ref": "refs/tags/1.1.2"}
+diff --git a/configs/components/facter.json b/configs/components/facter.json
+index 15589622d..d9180da39 100644
+--- a/configs/components/facter.json
++++ b/configs/components/facter.json
+@@ -1 +1 @@
+-{"url": "git://github.com/puppetlabs/facter.git", "ref": "3a021f47393001e7acdde60e53ff8ac0cc04a9ec"}
++{"url": "git://github.com/puppetlabs/facter.git", "ref": "refs/tags/3.1.6"}
+diff --git a/configs/components/hiera.json b/configs/components/hiera.json
+index 2e68e3ccf..bb7c6b3e5 100644
+--- a/configs/components/hiera.json
++++ b/configs/components/hiera.json
+@@ -1 +1 @@
+-{"url": "git://github.com/puppetlabs/hiera.git", "ref": "a89b53e90eaabc0aaf4aab37708a6e5727781f61"}
++{"url": "git://github.com/puppetlabs/hiera.git", "ref": "refs/tags/3.1.2"}
+diff --git a/configs/components/marionette-collective.json b/configs/components/marionette-collective.json
+index 218977270..cbcabd9b8 100644
+--- a/configs/components/marionette-collective.json
++++ b/configs/components/marionette-collective.json
+@@ -1 +1 @@
+-{"url": "git://github.com/puppetlabs/marionette-collective.git", "ref": "1d427e2632abe360f8a7f41d8ccc6628a2c43e48"}
++{"url": "git://github.com/puppetlabs/marionette-collective.git", "ref": "refs/tags/2.8.8"}
+diff --git a/configs/components/puppet.json b/configs/components/puppet.json
+index 57fdb882c..3dfbab66b 100644
+--- a/configs/components/puppet.json
++++ b/configs/components/puppet.json
+@@ -1 +1 @@
+-{"url": "git@github.com:puppetlabs/puppet-cve-test.git", "ref": "23243d437f7df6f16f948ff426efc241366a3647"}
++{"url": "git@github.com:puppetlabs/puppet-cve-test.git", "ref": "refs/tags/4.4.2"}
+diff --git a/configs/components/pxp-agent.json b/configs/components/pxp-agent.json
+index 04c948e66..60391b8ad 100644
+--- a/configs/components/pxp-agent.json
++++ b/configs/components/pxp-agent.json
+@@ -1 +1 @@
+-{"url": "git://github.com/puppetlabs/pxp-agent.git", "ref": "f9a71ac06aefb1bca3b0cd4f586c56f6fbf27e35"}
++{"url": "git://github.com/puppetlabs/pxp-agent.git", "ref": "refs/tags/1.1.2"}
+-- 
+2.34.1
+

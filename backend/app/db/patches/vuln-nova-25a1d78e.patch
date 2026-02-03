@@ -1,0 +1,151 @@
+From 25a1d78e83065c5bea5d8e0a017fd9d0914d41d9 Mon Sep 17 00:00:00 2001
+From: Dan Smith <dansmith@redhat.com>
+Date: Mon, 20 Nov 2017 13:24:24 -0800
+Subject: [PATCH] Fix doubling allocations on rebuild
+
+Commit 984dd8ad6add4523d93c7ce5a666a32233e02e34 makes a rebuild
+with a new image go through the scheduler again to validate the
+image against the instance.host (we rebuild to the same host that
+the instance already lives on). This fixes the subsequent doubling
+of allocations that will occur by skipping the claim process if
+a policy-only scheduler check is being performed.
+
+Closes-Bug: #1732976
+
+Related-CVE: CVE-2017-17051
+Related-OSSA: OSSA-2017-006
+
+Change-Id: I8a9157bc76ba1068ab966c4abdbb147c500604a8
+---
+ nova/scheduler/filter_scheduler.py            | 10 ++++++++++
+ nova/tests/functional/test_servers.py         | 19 +++----------------
+ .../unit/scheduler/test_filter_scheduler.py   | 12 +++++++++++-
+ ...-allocations-rebuild-23e4d3b06eb4f43f.yaml | 18 ++++++++++++++++++
+ 4 files changed, 42 insertions(+), 17 deletions(-)
+ create mode 100644 releasenotes/notes/bug-1732976-doubled-allocations-rebuild-23e4d3b06eb4f43f.yaml
+
+diff --git a/nova/scheduler/filter_scheduler.py b/nova/scheduler/filter_scheduler.py
+index 6fad78fbf2..61fea4b31a 100644
+--- a/nova/scheduler/filter_scheduler.py
++++ b/nova/scheduler/filter_scheduler.py
+@@ -30,6 +30,7 @@ from nova.i18n import _
+ from nova import rpc
+ from nova.scheduler import client
+ from nova.scheduler import driver
++from nova.scheduler import utils
+ 
+ CONF = nova.conf.CONF
+ LOG = logging.getLogger(__name__)
+@@ -290,6 +291,15 @@ class FilterScheduler(driver.Scheduler):
+                            API's PUT /allocations/{consumer_uuid} call to claim
+                            resources for the instance
+         """
++
++        if utils.request_is_rebuild(spec_obj):
++            # NOTE(danms): This is a rebuild-only scheduling request, so we
++            # should not be doing any extra claiming
++            LOG.debug('Not claiming resources in the placement API for '
++                      'rebuild-only scheduling of instance %(uuid)s',
++                      {'uuid': instance_uuid})
++            return True
++
+         LOG.debug("Attempting to claim resources in the placement API for "
+                   "instance %s", instance_uuid)
+ 
+diff --git a/nova/tests/functional/test_servers.py b/nova/tests/functional/test_servers.py
+index b066d0ce40..94c8138eec 100644
+--- a/nova/tests/functional/test_servers.py
++++ b/nova/tests/functional/test_servers.py
+@@ -1170,15 +1170,6 @@ class ServerRebuildTestCase(integrated_helpers._IntegratedTestBase,
+             self.assertEqual(flavor['ram'], allocation['MEMORY_MB'])
+             self.assertEqual(flavor['disk'], allocation['DISK_GB'])
+ 
+-        def assertFlavorsMatchAllocation(old_flavor, new_flavor,
+-                                         allocation):
+-            self.assertEqual(old_flavor['vcpus'] + new_flavor['vcpus'],
+-                             allocation['VCPU'])
+-            self.assertEqual(old_flavor['ram'] + new_flavor['ram'],
+-                             allocation['MEMORY_MB'])
+-            self.assertEqual(old_flavor['disk'] + new_flavor['disk'],
+-                             allocation['DISK_GB'])
+-
+         nodename = self.compute.manager._get_nodename(None)
+         rp_uuid = _get_provider_uuid_by_host(nodename)
+         # make sure we start with no usage on the compute node
+@@ -1225,16 +1216,12 @@ class ServerRebuildTestCase(integrated_helpers._IntegratedTestBase,
+ 
+         # The usage and allocations should not have changed.
+         rp_usages = _get_provider_usages(rp_uuid)
+-        # FIXME(mriedem): This is a bug where the scheduler doubled up the
+-        # allocations for the instance even though we're just rebuilding
+-        # to the same host. Uncomment this once fixed.
+-        # assertFlavorMatchesAllocation(flavor, rp_usages)
+-        assertFlavorsMatchAllocation(flavor, flavor, rp_usages)
++        assertFlavorMatchesAllocation(flavor, rp_usages)
++
+         allocs = _get_allocations_by_server_uuid(server['id'])
+         self.assertIn(rp_uuid, allocs)
+         allocs = allocs[rp_uuid]['resources']
+-        # assertFlavorMatchesAllocation(flavor, allocs)
+-        assertFlavorsMatchAllocation(flavor, flavor, allocs)
++        assertFlavorMatchesAllocation(flavor, allocs)
+ 
+ 
+ class ProviderUsageBaseTestCase(test.TestCase,
+diff --git a/nova/tests/unit/scheduler/test_filter_scheduler.py b/nova/tests/unit/scheduler/test_filter_scheduler.py
+index b9048f5d4f..0ba8b7ca04 100644
+--- a/nova/tests/unit/scheduler/test_filter_scheduler.py
++++ b/nova/tests/unit/scheduler/test_filter_scheduler.py
+@@ -526,7 +526,7 @@ class FilterSchedulerTestCase(test_scheduler.SchedulerTestCase):
+         instance.
+         """
+         ctx = mock.Mock(user_id=uuids.user_id)
+-        spec_obj = mock.Mock(project_id=uuids.project_id)
++        spec_obj = objects.RequestSpec(project_id=uuids.project_id)
+         instance_uuid = uuids.instance
+         alloc_reqs = [mock.sentinel.alloc_req]
+ 
+@@ -539,6 +539,16 @@ class FilterSchedulerTestCase(test_scheduler.SchedulerTestCase):
+             mock.sentinel.alloc_req, uuids.project_id, uuids.user_id)
+         self.assertTrue(res)
+ 
++    @mock.patch('nova.scheduler.utils.request_is_rebuild')
++    def test_claim_resouces_for_policy_check(self, mock_policy):
++        mock_policy.return_value = True
++        res = self.driver._claim_resources(None, mock.sentinel.spec_obj,
++                                           mock.sentinel.instance_uuid,
++                                           [])
++        self.assertTrue(res)
++        mock_policy.assert_called_once_with(mock.sentinel.spec_obj)
++        self.assertFalse(self.placement_client.claim_resources.called)
++
+     def test_add_retry_host(self):
+         retry = dict(num_attempts=1, hosts=[])
+         filter_properties = dict(retry=retry)
+diff --git a/releasenotes/notes/bug-1732976-doubled-allocations-rebuild-23e4d3b06eb4f43f.yaml b/releasenotes/notes/bug-1732976-doubled-allocations-rebuild-23e4d3b06eb4f43f.yaml
+new file mode 100644
+index 0000000000..5ef700f4b3
+--- /dev/null
++++ b/releasenotes/notes/bug-1732976-doubled-allocations-rebuild-23e4d3b06eb4f43f.yaml
+@@ -0,0 +1,18 @@
++---
++security:
++  - |
++    `OSSA-2017-006`_: Nova FilterScheduler doubles resource allocations during
++    rebuild with new image (CVE-2017-17051)
++
++    By repeatedly rebuilding an instance with new images, an authenticated user
++    may consume untracked resources on a hypervisor host leading to a denial of
++    service. This regression was introduced with the fix for `OSSA-2017-005`_
++    (CVE-2017-16239), however, only Nova stable/pike or later deployments with
++    that fix applied and relying on the default FilterScheduler are affected.
++
++    The fix is in the `nova-api` and `nova-scheduler` services.
++
++    .. note:: The fix for errata in `OSSA-2017-005`_ (CVE-2017-16239) will
++              need to be applied in addition to this fix.
++
++    .. _OSSA-2017-006: https://security.openstack.org/ossa/OSSA-2017-006.html
+-- 
+2.34.1
+

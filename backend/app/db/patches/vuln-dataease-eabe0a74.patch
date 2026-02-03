@@ -1,0 +1,37 @@
+From 4d31834a5bd2614c6ff7c7080598d851e55bc214 Mon Sep 17 00:00:00 2001
+From: taojinlong <jinlong@fit2cloud.com>
+Date: Mon, 24 Jul 2023 11:51:18 +0800
+Subject: [PATCH] =?UTF-8?q?fix:=20=E8=A1=A5=E5=85=A8excel=E6=95=B0?=
+ =?UTF-8?q?=E6=8D=AE?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../io/dataease/service/dataset/DataSetTableService.java  | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/backend/src/main/java/io/dataease/service/dataset/DataSetTableService.java b/backend/src/main/java/io/dataease/service/dataset/DataSetTableService.java
+index 8bb823aba..1531f7dc1 100644
+--- a/backend/src/main/java/io/dataease/service/dataset/DataSetTableService.java
++++ b/backend/src/main/java/io/dataease/service/dataset/DataSetTableService.java
+@@ -3122,9 +3122,15 @@ public class NoModelDataListener extends AnalysisEventListener<Map<Integer, Stri
+         for (Integer key : dataMap.keySet()) {
+             String value = dataMap.get(key);
+             if (StringUtils.isEmpty(value)) {
+-                value = "none";
++                value = "";
+             }
+             line.add(value);
++        };
++        int size = line.size();
++        if(size < header.size()){
++            for (int i = 0; i < header.size() - size; i++) {
++                line.add("");
++            }
+         }
+         data.add(line);
+     }
+-- 
+2.34.1
+

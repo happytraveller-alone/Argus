@@ -1,0 +1,37 @@
+From 43eaf0e82b1475a6a5322881cbd8260b6c3f5ef8 Mon Sep 17 00:00:00 2001
+From: Jan Friesse <jfriesse@redhat.com>
+Date: Wed, 21 Feb 2024 17:40:11 +0100
+Subject: [PATCH] attr: Fix reading of server_reply
+
+read_server_reply first reads boothc header and then rest of packet
+which contains hmac info. This should go in memory right after
+boothc_header and not after full length of packet, because full length
+of packet already contains hmac info.
+
+Solution is to simply use length of header and not length of packet.
+
+Longer term and better solution would be to drop read_server_reply
+completely and use recv_auth which is used for everything else but attr
+set and delete.
+
+Signed-off-by: Jan Friesse <jfriesse@redhat.com>
+---
+ src/attr.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/attr.c b/src/attr.c
+index 44061e3..bc154f0 100644
+--- a/src/attr.c
++++ b/src/attr.c
+@@ -142,7 +142,7 @@ static int read_server_reply(
+ 		return -2;
+ 	}
+ 	len = ntohl(header->length);
+-	rv = tpt->recv(site, msg+len, len-sizeof(*header));
++	rv = tpt->recv(site, msg+sizeof(*header), len-sizeof(*header));
+ 	if (rv < 0) {
+ 		return -1;
+ 	}
+-- 
+2.34.1
+

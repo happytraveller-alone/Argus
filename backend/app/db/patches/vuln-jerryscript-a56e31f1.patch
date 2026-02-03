@@ -1,0 +1,63 @@
+From a56e31f194fe52000ed95605ae3c92390cd60ad5 Mon Sep 17 00:00:00 2001
+From: Rafal Walczyna <r.walczyna@samsung.com>
+Date: Tue, 2 Jun 2020 18:01:45 +0200
+Subject: [PATCH] Update ES6 Set and Map "size" accessor descriptors (#3826)
+
+In ES6 accessors of built in object are by default configurable.
+
+JerryScript-DCO-1.0-Signed-off-by: Rafal Walczyna r.walczyna@samsung.com
+---
+ .../ecma/builtin-objects/ecma-builtin-map-prototype.inc.h       | 2 +-
+ .../ecma/builtin-objects/ecma-builtin-set-prototype.inc.h       | 2 +-
+ tests/test262-es6-excludelist.xml                               | 2 --
+ 3 files changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/jerry-core/ecma/builtin-objects/ecma-builtin-map-prototype.inc.h b/jerry-core/ecma/builtin-objects/ecma-builtin-map-prototype.inc.h
+index 68e56e6b..a8c25e14 100644
+--- a/jerry-core/ecma/builtin-objects/ecma-builtin-map-prototype.inc.h
++++ b/jerry-core/ecma/builtin-objects/ecma-builtin-map-prototype.inc.h
+@@ -54,7 +54,7 @@ ROUTINE (LIT_GLOBAL_SYMBOL_ITERATOR, ecma_builtin_map_prototype_object_entries,
+ /* ECMA-262 v6, 23.1.3.10 */
+ ACCESSOR_READ_ONLY (LIT_MAGIC_STRING_SIZE,
+                     ecma_builtin_map_prototype_object_size_getter,
+-                    ECMA_PROPERTY_FIXED)
++                    ECMA_PROPERTY_FLAG_CONFIGURABLE)
+ 
+ #endif /* ENABLED (JERRY_ES2015_BUILTIN_MAP) */
+ 
+diff --git a/jerry-core/ecma/builtin-objects/ecma-builtin-set-prototype.inc.h b/jerry-core/ecma/builtin-objects/ecma-builtin-set-prototype.inc.h
+index baafe95b..9e070503 100644
+--- a/jerry-core/ecma/builtin-objects/ecma-builtin-set-prototype.inc.h
++++ b/jerry-core/ecma/builtin-objects/ecma-builtin-set-prototype.inc.h
+@@ -52,7 +52,7 @@ ROUTINE (LIT_GLOBAL_SYMBOL_ITERATOR, ecma_builtin_set_prototype_object_values, 0
+ 
+ ACCESSOR_READ_ONLY (LIT_MAGIC_STRING_SIZE,
+                     ecma_builtin_set_prototype_object_size_getter,
+-                    ECMA_PROPERTY_FIXED)
++                    ECMA_PROPERTY_FLAG_CONFIGURABLE)
+ 
+ #endif /* ENABLED (JERRY_ES2015_BUILTIN_SET) */
+ 
+diff --git a/tests/test262-es6-excludelist.xml b/tests/test262-es6-excludelist.xml
+index 26482f64..d8d5dfa9 100644
+--- a/tests/test262-es6-excludelist.xml
++++ b/tests/test262-es6-excludelist.xml
+@@ -45,7 +45,6 @@
+   <test id="built-ins/GeneratorFunction/instance-restricted-properties.js"><reason></reason></test>
+   <test id="built-ins/GeneratorPrototype/next/context-constructor-invocation.js"><reason></reason></test>
+   <test id="built-ins/GeneratorPrototype/throw/from-state-completed.js"><reason></reason></test>
+-  <test id="built-ins/Map/prototype/size/size.js"><reason></reason></test>
+   <test id="built-ins/Map/prototype/Symbol.iterator.js"><reason></reason></test>
+   <test id="built-ins/Number/15.7.4-1.js"><reason></reason></test>
+   <test id="built-ins/Number/prototype/S15.7.3.1_A2_T1.js"><reason></reason></test>
+@@ -146,7 +145,6 @@
+   <test id="built-ins/RegExp/prototype/Symbol.search/get-sticky-err.js"><reason></reason></test>
+   <test id="built-ins/RegExp/prototype/test/get-sticky-err.js"><reason></reason></test>
+   <test id="built-ins/Set/prototype/keys/keys.js"><reason></reason></test>
+-  <test id="built-ins/Set/prototype/size/size.js"><reason></reason></test>
+   <test id="built-ins/Set/prototype/Symbol.iterator.js"><reason></reason></test>
+   <test id="built-ins/String/prototype/normalize/form-is-not-valid-throws.js"><reason></reason></test>
+   <test id="built-ins/String/prototype/normalize/length.js"><reason></reason></test>
+-- 
+2.34.1
+

@@ -1,0 +1,25 @@
+From c4a5109dad73abe25ad12d8d529a728ae98d78ca Mon Sep 17 00:00:00 2001
+From: jeanlf <jeanlf@gpac.io>
+Date: Thu, 11 Mar 2021 15:28:56 +0100
+Subject: [PATCH] fixed #1702
+
+---
+ src/isomedia/track.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/isomedia/track.c b/src/isomedia/track.c
+index f218ab89a..881bb1b1f 100644
+--- a/src/isomedia/track.c
++++ b/src/isomedia/track.c
+@@ -1051,7 +1051,7 @@ GF_Err MergeTrack(GF_TrackBox *trak, GF_TrackFragmentBox *traf, GF_MovieFragment
+ 					break;
+ 				}
+ 			}
+-			if (saiz && saio) {
++			if (saiz && saio && senc) {
+ 				for (i = 0; i < saiz->sample_count; i++) {
+ 					GF_CENCSampleAuxInfo *sai;
+ 					const u8 *key_info=NULL;
+-- 
+2.34.1
+

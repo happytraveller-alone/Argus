@@ -1,0 +1,28 @@
+From b18cf7c2a13c994ea8d6d0d132feef4eb8193c36 Mon Sep 17 00:00:00 2001
+From: Matteo Collina <hello@matteocollina.com>
+Date: Wed, 8 Mar 2017 09:18:37 +0000
+Subject: [PATCH] Block long a-z chars sequences as well as numbers.
+
+Signed-off-by: Arnout Kazemier <info@3rd-Eden.com>
+---
+ index.js | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/index.js b/index.js
+index f14e548..9aaf93b 100644
+--- a/index.js
++++ b/index.js
+@@ -417,8 +417,8 @@ function isSafe(userAgent) {
+ 
+   for (var i = 0; i < userAgent.length; i++) {
+     code = userAgent.charCodeAt(i);
+-    // numbers between 0 and 9
+-    if (code >= 48 && code <= 57) {
++    // numbers between 0 and 9, letters between a and z
++    if ((code >= 48 && code <= 57) || (code >= 97 && code <= 122)) {
+       consecutive++;
+     } else {
+       consecutive = 0;
+-- 
+2.34.1
+

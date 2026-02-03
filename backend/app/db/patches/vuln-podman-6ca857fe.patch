@@ -1,0 +1,101 @@
+From 6ca857feb07a5fdc96fd947afef03916291673d8 Mon Sep 17 00:00:00 2001
+From: Aditya R <arajan@redhat.com>
+Date: Fri, 10 Feb 2023 15:16:27 +0530
+Subject: [PATCH] volume,container: chroot to source before exporting content
+
+* Utils must support higher level API to create Tar with chrooted into
+  directory
+* Volume export: use TarwithChroot instead of Tar so we can make sure no
+  symlink can be exported by tar if it exists outside of the source
+directory.
+* container export: use chroot and Tar instead of Tar so we can make sure no
+  symlink can be exported by tar if it exists outside of the mointPoint.
+
+[NO NEW TESTS NEEDED]
+[NO TESTS NEEDED]
+Race needs combination of external/in-container mechanism which is hard to repro in CI.
+
+Closes: BZ:#2168256
+CVE: https://access.redhat.com/security/cve/CVE-2023-0778
+
+Signed-off-by: Aditya R <arajan@redhat.com>
+---
+ libpod/container_internal.go |  4 ++--
+ utils/utils.go               | 25 ++++++++++++++++++++++++-
+ 2 files changed, 26 insertions(+), 3 deletions(-)
+
+diff --git a/libpod/container_internal.go b/libpod/container_internal.go
+index 607319c75..82f82bcba 100644
+--- a/libpod/container_internal.go
++++ b/libpod/container_internal.go
+@@ -34,7 +34,7 @@ import (
+ 	"github.com/containers/podman/v4/pkg/systemd/notifyproxy"
+ 	"github.com/containers/podman/v4/pkg/util"
+ 	"github.com/containers/storage"
+-	"github.com/containers/storage/pkg/archive"
++	"github.com/containers/storage/pkg/chrootarchive"
+ 	"github.com/containers/storage/pkg/idmap"
+ 	"github.com/containers/storage/pkg/idtools"
+ 	"github.com/containers/storage/pkg/lockfile"
+@@ -761,7 +761,7 @@ func (c *Container) export(out io.Writer) error {
+ 		}()
+ 	}
+ 
+-	input, err := archive.Tar(mountPoint, archive.Uncompressed)
++	input, err := chrootarchive.Tar(mountPoint, nil, mountPoint)
+ 	if err != nil {
+ 		return fmt.Errorf("reading container directory %q: %w", c.ID(), err)
+ 	}
+diff --git a/utils/utils.go b/utils/utils.go
+index f9f96f283..81b77e544 100644
+--- a/utils/utils.go
++++ b/utils/utils.go
+@@ -13,6 +13,7 @@ import (
+ 
+ 	"github.com/containers/common/pkg/cgroups"
+ 	"github.com/containers/storage/pkg/archive"
++	"github.com/containers/storage/pkg/chrootarchive"
+ 	"github.com/godbus/dbus/v5"
+ 	"github.com/sirupsen/logrus"
+ )
+@@ -63,7 +64,7 @@ func CreateTarFromSrc(source string, dest string) error {
+ 		return fmt.Errorf("could not create tarball file '%s': %w", dest, err)
+ 	}
+ 	defer file.Close()
+-	return TarToFilesystem(source, file)
++	return TarChrootToFilesystem(source, file)
+ }
+ 
+ // TarToFilesystem creates a tarball from source and writes to an os.file
+@@ -87,6 +88,28 @@ func Tar(source string) (io.ReadCloser, error) {
+ 	return archive.Tar(source, archive.Uncompressed)
+ }
+ 
++// TarChrootToFilesystem creates a tarball from source and writes to an os.file
++// provided while chrooted to the source.
++func TarChrootToFilesystem(source string, tarball *os.File) error {
++	tb, err := TarWithChroot(source)
++	if err != nil {
++		return err
++	}
++	_, err = io.Copy(tarball, tb)
++	if err != nil {
++		return err
++	}
++	logrus.Debugf("wrote tarball file %s", tarball.Name())
++	return nil
++}
++
++// TarWithChroot creates a tarball from source and returns a readcloser of it
++// while chrooted to the source.
++func TarWithChroot(source string) (io.ReadCloser, error) {
++	logrus.Debugf("creating tarball of %s", source)
++	return chrootarchive.Tar(source, nil, source)
++}
++
+ // RemoveScientificNotationFromFloat returns a float without any
+ // scientific notation if the number has any.
+ // golang does not handle conversion of float64s that have scientific
+-- 
+2.34.1
+

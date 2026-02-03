@@ -1,0 +1,27 @@
+From c8dcbedd1fdc312f5b1a70fcfbc1afe235d800cd Mon Sep 17 00:00:00 2001
+From: Nikos Mavrogiannopoulos <nmav@crystal.(none)>
+Date: Sun, 15 Feb 2009 19:51:12 +0200
+Subject: [PATCH] Corrected bit disable (was flipping instead). Initialy
+ reported by Daniel Kahn Gillmor on 9/1/2008. Many thanks to
+ moog@sysdev.oucs.ox.ac.uk for bringing this into my attention.
+
+---
+ lib/x509/verify.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/x509/verify.c b/lib/x509/verify.c
+index af97f4b0a..4b1252e85 100644
+--- a/lib/x509/verify.c
++++ b/lib/x509/verify.c
+@@ -504,7 +504,7 @@ _gnutls_x509_verify_certificate (const gnutls_x509_crt_t * certificate_list,
+        * certificates can exist in a supplied chain.
+        */
+       if (!(flags & GNUTLS_VERIFY_ALLOW_ANY_X509_V1_CA_CRT))
+-	flags ^= GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT;
++	flags &= ~(GNUTLS_VERIFY_ALLOW_X509_V1_CA_CRT);
+       if ((ret =
+ 	   _gnutls_verify_certificate2 (certificate_list[i - 1],
+ 					&certificate_list[i], 1, flags,
+-- 
+2.34.1
+

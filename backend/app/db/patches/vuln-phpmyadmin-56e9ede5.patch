@@ -1,0 +1,52 @@
+From 56e9ede5223219cef2187ced385924ef2e0ae21d Mon Sep 17 00:00:00 2001
+From: Dieter Adriaenssens <ruleant@users.sourceforge.net>
+Date: Sun, 7 Jul 2013 15:15:57 +0200
+Subject: [PATCH] fix unescaped parameter, see PMASA-2013-8 for details
+
+---
+ libraries/DisplayResults.class.php | 18 ++++++++----------
+ 1 file changed, 8 insertions(+), 10 deletions(-)
+
+diff --git a/libraries/DisplayResults.class.php b/libraries/DisplayResults.class.php
+index 35dd112eaf..5a090f1458 100644
+--- a/libraries/DisplayResults.class.php
++++ b/libraries/DisplayResults.class.php
+@@ -4920,19 +4920,18 @@ class PMA_DisplayResults
+             $message_view_warning = false;
+         }
+ 
+-        $message = PMA_Message::success(__('Showing rows'));
+-        $message->addMessage($first_shown_rec);
++        $message = PMA_Message::success(__('Showing rows %1s - %2s'));
++        $message->addParam($first_shown_rec);
+ 
+         if ($message_view_warning) {
+-
+-            $message->addMessage('...', ' - ');
+-            $message->addMessage($message_view_warning);
+-            $message->addMessage('(');
+-
++            $message->addParam('... ' . $message_view_warning, false);
+         } else {
++            $message->addParam($last_shown_rec);
++        }
+ 
+-            $message->addMessage($last_shown_rec, ' - ');
+-            $message->addMessage(' (');
++        $message->addMessage('(');
++
++        if (!$message_view_warning) {
+             $message->addMessage(
+                 $pre_count . PMA_Util::formatNumber($total, 0)
+             );
+@@ -4944,7 +4943,6 @@ class PMA_DisplayResults
+ 
+             $message->addMessage($selectstring, '');
+             $message->addMessage(', ', '');
+-
+         }
+ 
+         $messagge_qt = PMA_Message::notice(__('Query took %01.4f sec') . ')');
+-- 
+2.34.1
+

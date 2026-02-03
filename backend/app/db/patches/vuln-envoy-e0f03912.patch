@@ -1,0 +1,132 @@
+From e0f03912df27fd6a30c045b7a814e426afb16a79 Mon Sep 17 00:00:00 2001
+From: Rei Shimizu <Shikugawa@gmail.com>
+Date: Fri, 26 Mar 2021 01:47:19 +0900
+Subject: [PATCH] grpc: fix grpc-timeout integer overflow (#255)
+
+Fixes CVE-2021-28682, a remotely exploitable integer overflow.
+
+Signed-off-by: Asra Ali <asraa@google.com>
+Signed-off-by: Tony Allen <tony@allen.gg>
+---
+ source/common/grpc/common.cc               | 18 ++++++++++++------
+ source/common/grpc/common.h                |  2 ++
+ test/common/grpc/common_test.cc            |  3 +++
+ test/common/http/conn_manager_impl_test.cc | 13 +++++++++++++
+ test/common/router/router_test.cc          | 10 ++++++++++
+ test/integration/stats_integration_test.cc |  2 +-
+ 6 files changed, 41 insertions(+), 7 deletions(-)
+
+diff --git a/source/common/grpc/common.cc b/source/common/grpc/common.cc
+index 51196a8a8fac6..d7aa333e29cee 100644
+--- a/source/common/grpc/common.cc
++++ b/source/common/grpc/common.cc
+@@ -166,12 +166,18 @@ Common::getGrpcTimeout(const Http::RequestHeaderMap& request_headers) {
+   const Http::HeaderEntry* header_grpc_timeout_entry = request_headers.GrpcTimeout();
+   std::chrono::milliseconds timeout;
+   if (header_grpc_timeout_entry) {
+-    uint64_t grpc_timeout;
+-    // TODO(dnoe): Migrate to pure string_view (#6580)
+-    std::string grpc_timeout_string(header_grpc_timeout_entry->value().getStringView());
+-    const char* unit = StringUtil::strtoull(grpc_timeout_string.c_str(), grpc_timeout);
+-    if (unit != nullptr && *unit != '\0') {
+-      switch (*unit) {
++    int64_t grpc_timeout;
++    absl::string_view timeout_entry = header_grpc_timeout_entry->value().getStringView();
++    if (timeout_entry.empty()) {
++      // Must be of the form TimeoutValue TimeoutUnit. See
++      // https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests.
++      return absl::nullopt;
++    }
++    // TimeoutValue must be a positive integer of at most 8 digits.
++    if (absl::SimpleAtoi(timeout_entry.substr(0, timeout_entry.size() - 1), &grpc_timeout) &&
++        grpc_timeout >= 0 && static_cast<uint64_t>(grpc_timeout) <= MAX_GRPC_TIMEOUT_VALUE) {
++      const char unit = timeout_entry[timeout_entry.size() - 1];
++      switch (unit) {
+       case 'H':
+         return std::chrono::hours(grpc_timeout);
+       case 'M':
+diff --git a/source/common/grpc/common.h b/source/common/grpc/common.h
+index f76082610f317..dcade2ad8015a 100644
+--- a/source/common/grpc/common.h
++++ b/source/common/grpc/common.h
+@@ -178,6 +178,8 @@ class Common {
+ 
+ private:
+   static void checkForHeaderOnlyError(Http::ResponseMessage& http_response);
++
++  static constexpr size_t MAX_GRPC_TIMEOUT_VALUE = 99999999;
+ };
+ 
+ } // namespace Grpc
+diff --git a/test/common/grpc/common_test.cc b/test/common/grpc/common_test.cc
+index 3f6d88dd00963..c9b2e6d113fc1 100644
+--- a/test/common/grpc/common_test.cc
++++ b/test/common/grpc/common_test.cc
+@@ -78,6 +78,9 @@ TEST(GrpcContextTest, GetGrpcTimeout) {
+   Http::TestRequestHeaderMapImpl missing_unit{{"grpc-timeout", "123"}};
+   EXPECT_EQ(absl::nullopt, Common::getGrpcTimeout(missing_unit));
+ 
++  Http::TestRequestHeaderMapImpl small_missing_unit{{"grpc-timeout", "1"}};
++  EXPECT_EQ(absl::nullopt, Common::getGrpcTimeout(small_missing_unit));
++
+   Http::TestRequestHeaderMapImpl illegal_unit{{"grpc-timeout", "123F"}};
+   EXPECT_EQ(absl::nullopt, Common::getGrpcTimeout(illegal_unit));
+ 
+diff --git a/test/common/http/conn_manager_impl_test.cc b/test/common/http/conn_manager_impl_test.cc
+index a022f18c2cd80..9b9c8a6cba00d 100644
+--- a/test/common/http/conn_manager_impl_test.cc
++++ b/test/common/http/conn_manager_impl_test.cc
+@@ -2281,6 +2281,19 @@ TEST_F(HttpConnectionManagerImplTest, DurationTimeout) {
+     decoder_filters_[0]->callbacks_->clusterInfo();
+   }
+ 
++  // With an invalid gRPC timeout, refreshing cached route will not use header and use stream
++  // duration.
++  latched_headers->setGrpcTimeout("6666666666666H");
++  {
++    // 25ms used already from previous case so timer is set to be 5ms.
++    EXPECT_CALL(*timer, enableTimer(std::chrono::milliseconds(5), _));
++    EXPECT_CALL(route_config_provider_.route_config_->route_->route_entry_, maxStreamDuration())
++        .Times(2)
++        .WillRepeatedly(Return(std::chrono::milliseconds(30)));
++    decoder_filters_[0]->callbacks_->clearRouteCache();
++    decoder_filters_[0]->callbacks_->clusterInfo();
++  }
++
+   // Cleanup.
+   EXPECT_CALL(*timer, disableTimer());
+   EXPECT_CALL(*decoder_filters_[0], onStreamComplete());
+diff --git a/test/common/router/router_test.cc b/test/common/router/router_test.cc
+index 54365731d78f8..cca89f70f7eb5 100644
+--- a/test/common/router/router_test.cc
++++ b/test/common/router/router_test.cc
+@@ -5682,6 +5682,16 @@ TEST(RouterFilterUtilityTest, FinalTimeout) {
+     EXPECT_EQ("5", headers.get_("x-envoy-expected-rq-timeout-ms"));
+     EXPECT_EQ("5m", headers.get_("grpc-timeout"));
+   }
++  {
++    NiceMock<MockRouteEntry> route;
++    EXPECT_CALL(route, maxGrpcTimeout())
++        .WillRepeatedly(Return(absl::optional<std::chrono::milliseconds>(10000)));
++    Http::TestRequestHeaderMapImpl headers{{"content-type", "application/grpc"},
++                                           {"grpc-timeout", "6666666666666H"}};
++    FilterUtility::finalTimeout(route, headers, true, true, false, false);
++    EXPECT_EQ("10000", headers.get_("x-envoy-expected-rq-timeout-ms"));
++    EXPECT_EQ("10000m", headers.get_("grpc-timeout"));
++  }
+   {
+     NiceMock<MockRouteEntry> route;
+     EXPECT_CALL(route, timeout()).WillOnce(Return(std::chrono::milliseconds(10)));
+diff --git a/test/integration/stats_integration_test.cc b/test/integration/stats_integration_test.cc
+index 1683a3db13dc6..fa7826d0bdf83 100644
+--- a/test/integration/stats_integration_test.cc
++++ b/test/integration/stats_integration_test.cc
+@@ -288,7 +288,7 @@ TEST_P(ClusterMemoryTestRunner, MemoryLargeClusterSize) {
+     // https://github.com/envoyproxy/envoy/issues/12209
+     // EXPECT_MEMORY_EQ(m_per_cluster, 37061);
+   }
+-  EXPECT_MEMORY_LE(m_per_cluster, 39350); // Round up to allow platform variations.
++  EXPECT_MEMORY_LE(m_per_cluster, 39400); // Round up to allow platform variations.
+ }
+ 
+ TEST_P(ClusterMemoryTestRunner, MemoryLargeHostSizeWithStats) {

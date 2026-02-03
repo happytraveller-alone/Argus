@@ -1,0 +1,64 @@
+From 3a3ccc253b8eceddee84f158b2c262a4033b9402 Mon Sep 17 00:00:00 2001
+From: Laurent Destailleur <eldy@destailleur.fr>
+Date: Thu, 28 Mar 2024 16:18:50 +0100
+Subject: [PATCH] Fix GET use
+
+---
+ htdocs/accountancy/admin/categories_list.php | 5 -----
+ htdocs/accountancy/admin/journals_list.php   | 6 ------
+ htdocs/compta/paiement/card.php              | 4 ++--
+ 3 files changed, 2 insertions(+), 13 deletions(-)
+
+diff --git a/htdocs/accountancy/admin/categories_list.php b/htdocs/accountancy/admin/categories_list.php
+index 9f7ec9be7cf..4ca98e4c730 100644
+--- a/htdocs/accountancy/admin/categories_list.php
++++ b/htdocs/accountancy/admin/categories_list.php
+@@ -299,11 +299,6 @@ if (GETPOST('actionadd', 'alpha') || GETPOST('actionmodify', 'alpha')) {
+ 			setEventMessages($db->error(), null, 'errors');
+ 		}
+ 	}
+-	//$_GET["id"]=GETPOST('id', 'int');       // Force affichage dictionnaire en cours d'edition
+-}
+-
+-if (GETPOST('actioncancel', 'alpha')) {
+-	//$_GET["id"]=GETPOST('id', 'int');       // Force affichage dictionnaire en cours d'edition
+ }
+ 
+ if ($action == 'confirm_delete' && $confirm == 'yes') {       // delete
+diff --git a/htdocs/accountancy/admin/journals_list.php b/htdocs/accountancy/admin/journals_list.php
+index d64c8de7693..aec9df77614 100644
+--- a/htdocs/accountancy/admin/journals_list.php
++++ b/htdocs/accountancy/admin/journals_list.php
+@@ -272,14 +272,8 @@ if (GETPOST('actionadd', 'alpha') || GETPOST('actionmodify', 'alpha')) {
+ 			setEventMessages($db->error(), null, 'errors');
+ 		}
+ 	}
+-	//$_GET["id"]=GETPOST('id', 'int');       // Force affichage dictionnaire en cours d'edition
+ }
+ 
+-//if (GETPOST('actioncancel', 'alpha'))
+-//{
+-//	$_GET["id"]=GETPOST('id', 'int');       // Force affichage dictionnaire en cours d'edition
+-//}
+-
+ if ($action == 'confirm_delete' && $confirm == 'yes') {       // delete
+ 	if ($tabrowid[$id]) {
+ 		$rowidcol = $tabrowid[$id];
+diff --git a/htdocs/compta/paiement/card.php b/htdocs/compta/paiement/card.php
+index 63a47618cd7..382e9875d88 100644
+--- a/htdocs/compta/paiement/card.php
++++ b/htdocs/compta/paiement/card.php
+@@ -288,8 +288,8 @@ if ($action == 'delete') {
+ 
+ // Confirmation of payment validation
+ if ($action == 'valide') {
+-	$facid = $_GET['facid'];
+-	print $form->formconfirm($_SERVER['PHP_SELF'].'?id='.$object->id.'&amp;facid='.$facid, $langs->trans("ValidatePayment"), $langs->trans("ConfirmValidatePayment"), 'confirm_validate', '', 0, 2);
++	$facid = GETPOSTINT('facid');
++	print $form->formconfirm($_SERVER['PHP_SELF'].'?id='.$object->id.'&facid='.((int) $facid), $langs->trans("ValidatePayment"), $langs->trans("ConfirmValidatePayment"), 'confirm_validate', '', 0, 2);
+ }
+ 
+ $linkback = '<a href="'.DOL_URL_ROOT.'/compta/paiement/list.php?restore_lastsearch_values=1">'.$langs->trans("BackToList").'</a>';
+-- 
+2.34.1
+

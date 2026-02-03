@@ -1,0 +1,29 @@
+From 85d4478e598105fe94ac152d3e11e388374e8b86 Mon Sep 17 00:00:00 2001
+From: Stuart Douglas <stuart.w.douglas@gmail.com>
+Date: Fri, 9 Mar 2018 15:24:17 +1100
+Subject: [PATCH] UNDERTOW-1302 Fix response splitting flaw if headers contain
+ non-ascii characters
+
+---
+ .../undertow/server/protocol/http/HttpResponseConduit.java   | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/core/src/main/java/io/undertow/server/protocol/http/HttpResponseConduit.java b/core/src/main/java/io/undertow/server/protocol/http/HttpResponseConduit.java
+index 3fdf29ff5..a3b87670f 100644
+--- a/core/src/main/java/io/undertow/server/protocol/http/HttpResponseConduit.java
++++ b/core/src/main/java/io/undertow/server/protocol/http/HttpResponseConduit.java
+@@ -294,8 +294,9 @@ final class HttpResponseConduit extends AbstractStreamSinkConduit<StreamSinkCond
+         int length = string.length();
+         for (int charIndex = 0; charIndex < length; charIndex++) {
+             char c = string.charAt(charIndex);
+-            if(c != '\r' && c != '\n') {
+-                buffer.put((byte) c);
++            byte b = (byte) c;
++            if(b != '\r' && b != '\n') {
++                buffer.put(b);
+             } else {
+                 buffer.put((byte) ' ');
+             }
+-- 
+2.34.1
+

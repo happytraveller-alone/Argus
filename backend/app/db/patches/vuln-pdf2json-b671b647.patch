@@ -1,0 +1,39 @@
+From b671b647a7e487b021744f330b8dd2d6ccfa8103 Mon Sep 17 00:00:00 2001
+From: Erik <erik.engstrom@devaldi.com>
+Date: Sun, 24 Mar 2019 08:00:49 +1300
+Subject: [PATCH] bump to version 0.70
+
+---
+ src/ImgOutputDev.cc | 2 +-
+ src/pdf2json.cc     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/ImgOutputDev.cc b/src/ImgOutputDev.cc
+index 14a16a9..e5c5a6d 100644
+--- a/src/ImgOutputDev.cc
++++ b/src/ImgOutputDev.cc
+@@ -830,7 +830,7 @@ ImgOutputDev::ImgOutputDev(char *fileName, char *title,
+   pages = new HtmlPage(rawOrder, textAsJSON, compressData, extension);
+   
+   glMetaVars = new GList();
+-  glMetaVars->append(new HtmlMetaVar("generator", "pdf2json 0.69"));  
++  glMetaVars->append(new HtmlMetaVar("generator", "pdf2json 0.70"));  
+   if( author ) glMetaVars->append(new HtmlMetaVar("author", author));  
+   if( keywords ) glMetaVars->append(new HtmlMetaVar("keywords", keywords));  
+   if( date ) glMetaVars->append(new HtmlMetaVar("date", date));  
+diff --git a/src/pdf2json.cc b/src/pdf2json.cc
+index 32fc2d9..5a0c17e 100644
+--- a/src/pdf2json.cc
++++ b/src/pdf2json.cc
+@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
+   // parse args
+   ok = parseArgs(argDesc, &argc, argv);
+   if (!ok || argc < 2 || argc > 3 || printHelp || printVersion) {
+-    fprintf(stderr, "pdf2json version %s http://flexpaper.devaldi.com/pdf2json/, based on Xpdf version %s\n", "0.69", xpdfVersion);
++    fprintf(stderr, "pdf2json version %s http://flexpaper.devaldi.com/pdf2json/, based on Xpdf version %s\n", "0.70", xpdfVersion);
+     fprintf(stderr, "%s\n", "Copyright 1999-2011 Devaldi Ltd, Gueorgui Ovtcharov and Rainer Dorsch");
+     fprintf(stderr, "%s\n\n", xpdfCopyright);
+     if (!printVersion) {
+-- 
+2.34.1
+

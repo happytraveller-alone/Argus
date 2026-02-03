@@ -1,0 +1,120 @@
+From 4a262e42abac2208b02fefaf68ba1a5121649f04 Mon Sep 17 00:00:00 2001
+From: Livio Spring <livio.a@gmail.com>
+Date: Wed, 3 Jul 2024 09:43:34 +0200
+Subject: [PATCH] fix: correctly set user agent / fingerprint id on user
+ sessions (#8231)
+
+# Which Problems Are Solved
+
+When we switched to V2 tokens (#7822), the user agent was incorrectly
+set for sessions created though the login UI.
+Additionally, when calling the ListMyUserSessions from the AuthService,
+any session without the fingerprint ID (e.g. created through the session
+API) would be listed.
+
+# How the Problems Are Solved
+
+- Use the intended ID of the user agent (fingerprint)
+- Ignore empty user agent IDs when listing the user sessions
+
+# Additional Changes
+
+None.
+
+# Additional Context
+
+- relates #7822
+- closes #8213
+
+(cherry picked from commit 08a75635d2165fabf909032e8fd6293769a40393)
+---
+ internal/api/oidc/auth_request.go               |  2 +-
+ internal/api/oidc/token_code.go                 |  2 +-
+ internal/api/ui/login/device_auth.go            |  2 +-
+ internal/domain/browser_info.go                 | 17 +++++++++--------
+ .../view/user_sessions_by_user_agent.sql        |  2 +-
+ 5 files changed, 13 insertions(+), 12 deletions(-)
+
+diff --git a/internal/api/oidc/auth_request.go b/internal/api/oidc/auth_request.go
+index 5053f7c1a..de6ce3c79 100644
+--- a/internal/api/oidc/auth_request.go
++++ b/internal/api/oidc/auth_request.go
+@@ -555,7 +555,7 @@ func (s *Server) authResponseToken(authReq *AuthRequest, authorizer op.Authorize
+ 		authReq.AuthTime,
+ 		authReq.GetNonce(),
+ 		authReq.PreferredLanguage,
+-		authReq.BrowserInfo.ToUserAgent(),
++		authReq.ToUserAgent(),
+ 		domain.TokenReasonAuthRequest,
+ 		nil,
+ 		slices.Contains(scope, oidc.ScopeOfflineAccess),
+diff --git a/internal/api/oidc/token_code.go b/internal/api/oidc/token_code.go
+index 2e47c5564..b4705e9f2 100644
+--- a/internal/api/oidc/token_code.go
++++ b/internal/api/oidc/token_code.go
+@@ -81,7 +81,7 @@ func (s *Server) codeExchangeV1(ctx context.Context, client *Client, req *oidc.A
+ 		authReq.AuthTime,
+ 		authReq.GetNonce(),
+ 		authReq.PreferredLanguage,
+-		authReq.BrowserInfo.ToUserAgent(),
++		authReq.ToUserAgent(),
+ 		domain.TokenReasonAuthRequest,
+ 		nil,
+ 		slices.Contains(scope, oidc.ScopeOfflineAccess),
+diff --git a/internal/api/ui/login/device_auth.go b/internal/api/ui/login/device_auth.go
+index 0d5349903..ca26fb956 100644
+--- a/internal/api/ui/login/device_auth.go
++++ b/internal/api/ui/login/device_auth.go
+@@ -162,7 +162,7 @@ func (l *Login) handleDeviceAuthAction(w http.ResponseWriter, r *http.Request) {
+ 	action := mux.Vars(r)["action"]
+ 	switch action {
+ 	case deviceAuthAllowed:
+-		_, err = l.command.ApproveDeviceAuth(r.Context(), authDev.DeviceCode, authReq.UserID, authReq.UserOrgID, authReq.UserAuthMethodTypes(), authReq.AuthTime, authReq.PreferredLanguage, authReq.BrowserInfo.ToUserAgent())
++		_, err = l.command.ApproveDeviceAuth(r.Context(), authDev.DeviceCode, authReq.UserID, authReq.UserOrgID, authReq.UserAuthMethodTypes(), authReq.AuthTime, authReq.PreferredLanguage, authReq.ToUserAgent())
+ 	case deviceAuthDenied:
+ 		_, err = l.command.CancelDeviceAuth(r.Context(), authDev.DeviceCode, domain.DeviceAuthCanceledDenied)
+ 	default:
+diff --git a/internal/domain/browser_info.go b/internal/domain/browser_info.go
+index 7261cb3e6..fd0073183 100644
+--- a/internal/domain/browser_info.go
++++ b/internal/domain/browser_info.go
+@@ -23,14 +23,15 @@ func BrowserInfoFromRequest(r *net_http.Request) *BrowserInfo {
+ 	}
+ }
+ 
+-func (b *BrowserInfo) ToUserAgent() *UserAgent {
+-	if b == nil {
+-		return nil
++func (a *AuthRequest) ToUserAgent() *UserAgent {
++	agent := &UserAgent{
++		FingerprintID: &a.AgentID,
+ 	}
+-	return &UserAgent{
+-		FingerprintID: &b.UserAgent,
+-		IP:            b.RemoteIP,
+-		Description:   &b.UserAgent,
+-		Header:        b.Header,
++	if a.BrowserInfo == nil {
++		return agent
+ 	}
++	agent.IP = a.BrowserInfo.RemoteIP
++	agent.Description = &a.BrowserInfo.UserAgent
++	agent.Header = a.BrowserInfo.Header
++	return agent
+ }
+diff --git a/internal/user/repository/view/user_sessions_by_user_agent.sql b/internal/user/repository/view/user_sessions_by_user_agent.sql
+index ac72f27e3..580208da9 100644
+--- a/internal/user/repository/view/user_sessions_by_user_agent.sql
++++ b/internal/user/repository/view/user_sessions_by_user_agent.sql
+@@ -22,6 +22,6 @@ FROM auth.user_sessions s
+          LEFT JOIN projections.users12 u ON s.user_id = u.id AND s.instance_id = u.instance_id
+          LEFT JOIN projections.users12_humans h ON s.user_id = h.user_id AND s.instance_id = h.instance_id
+          LEFT JOIN projections.login_names3 l ON s.user_id = l.user_id AND s.instance_id = l.instance_id AND l.is_primary = true
+-WHERE (s.user_agent_id = $1)
++WHERE (s.user_agent_id = $1 and s.user_agent_id <> '')
+   AND (s.instance_id = $2)
+ ;
+\ No newline at end of file
+-- 
+2.34.1
+

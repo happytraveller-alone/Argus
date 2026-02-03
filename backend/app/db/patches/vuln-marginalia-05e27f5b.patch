@@ -1,0 +1,26 @@
+From 05e27f5b985bf72ed40093f0d8858710f7c30f67 Mon Sep 17 00:00:00 2001
+From: Igor <igorwwwwwwwwwwwwwwwwwwww@users.noreply.github.com>
+Date: Fri, 21 Sep 2018 18:10:43 +0200
+Subject: [PATCH] Update comment.rb
+
+---
+ lib/marginalia/comment.rb | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/lib/marginalia/comment.rb b/lib/marginalia/comment.rb
+index ec894c0..2f4d636 100644
+--- a/lib/marginalia/comment.rb
++++ b/lib/marginalia/comment.rb
+@@ -31,9 +31,6 @@ module Marginalia
+     end
+ 
+     def self.escape_sql_comment(str)
+-      if str.include?('/*') || str.include?('*/')
+-        str = str.dup
+-      end
+       while str.include?('/*') || str.include?('*/')
+         str = str.gsub('/*', '').gsub('*/', '')
+       end
+-- 
+2.34.1
+

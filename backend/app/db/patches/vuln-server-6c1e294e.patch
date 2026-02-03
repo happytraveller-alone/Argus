@@ -1,0 +1,88 @@
+From 6c1e294edd7389c8ecffdd2ead2534bf9972c64f Mon Sep 17 00:00:00 2001
+From: Joas Schilling <coding@schilljs.com>
+Date: Fri, 18 Dec 2020 14:46:41 +0100
+Subject: [PATCH] Compare and store the login name via the event
+
+Signed-off-by: Joas Schilling <coding@schilljs.com>
+---
+ .../lib/Listener/StorePasswordListener.php          |  9 ++++++---
+ lib/private/Server.php                              |  2 +-
+ lib/public/User/Events/UserLoggedInEvent.php        | 13 ++++++++++++-
+ 3 files changed, 19 insertions(+), 5 deletions(-)
+
+diff --git a/apps/files_external/lib/Listener/StorePasswordListener.php b/apps/files_external/lib/Listener/StorePasswordListener.php
+index f1683af2ecb..a2c359e58db 100644
+--- a/apps/files_external/lib/Listener/StorePasswordListener.php
++++ b/apps/files_external/lib/Listener/StorePasswordListener.php
+@@ -51,11 +51,14 @@ class StorePasswordListener implements IEventListener {
+ 		}
+ 
+ 		$stored = $this->credentialsManager->retrieve($event->getUser()->getUID(), LoginCredentials::CREDENTIALS_IDENTIFIER);
++		$update = $stored['password'] !== $event->getPassword();
++		if (!$update && $event instanceof UserLoggedInEvent) {
++			$update = $stored['user'] !== $event->getLoginName();
++		}
+ 
+-		if ($stored && ($stored['user'] !== $event->getUser()->getUID()
+-				|| $stored['password'] !== $event->getPassword())) {
++		if ($stored && $update) {
+ 			$credentials = [
+-				'user' => $event->getUser()->getUID(),
++				'user' => $event->getLoginName(),
+ 				'password' => $event->getPassword()
+ 			];
+ 
+diff --git a/lib/private/Server.php b/lib/private/Server.php
+index 1114e60f475..ba954165799 100644
+--- a/lib/private/Server.php
++++ b/lib/private/Server.php
+@@ -575,7 +575,7 @@ class Server extends ServerContainer implements IServerContainer {
+ 
+ 				/** @var IEventDispatcher $dispatcher */
+ 				$dispatcher = $this->get(IEventDispatcher::class);
+-				$dispatcher->dispatchTyped(new UserLoggedInEvent($user, $password, $isTokenLogin));
++				$dispatcher->dispatchTyped(new UserLoggedInEvent($user, $loginName, $password, $isTokenLogin));
+ 			});
+ 			$userSession->listen('\OC\User', 'preRememberedLogin', function ($uid) {
+ 				/** @var IEventDispatcher $dispatcher */
+diff --git a/lib/public/User/Events/UserLoggedInEvent.php b/lib/public/User/Events/UserLoggedInEvent.php
+index e2cb37a64dc..7d0c0bf41de 100644
+--- a/lib/public/User/Events/UserLoggedInEvent.php
++++ b/lib/public/User/Events/UserLoggedInEvent.php
+@@ -43,14 +43,18 @@ class UserLoggedInEvent extends Event {
+ 	/** @var bool */
+ 	private $isTokenLogin;
+ 
++	/** @var string */
++	private $loginName;
++
+ 	/**
+ 	 * @since 18.0.0
+ 	 */
+-	public function __construct(IUser $user, string $password, bool $isTokenLogin) {
++	public function __construct(IUser $user, string $loginName, string $password, bool $isTokenLogin) {
+ 		parent::__construct();
+ 		$this->user = $user;
+ 		$this->password = $password;
+ 		$this->isTokenLogin = $isTokenLogin;
++		$this->loginName = $loginName;
+ 	}
+ 
+ 	/**
+@@ -60,6 +64,13 @@ class UserLoggedInEvent extends Event {
+ 		return $this->user;
+ 	}
+ 
++	/**
++	 * @since 21.0.0
++	 */
++	public function getLoginName(): string {
++		return $this->loginName;
++	}
++
+ 	/**
+ 	 * @since 18.0.0
+ 	 */
+-- 
+2.34.1
+

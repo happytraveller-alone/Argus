@@ -1,0 +1,383 @@
+From 9a4fd2689de8d40aad8e7ad3fb3108431167dd88 Mon Sep 17 00:00:00 2001
+From: Bert Belder <bertbelder@gmail.com>
+Date: Sat, 12 Sep 2015 12:01:10 +0200
+Subject: [PATCH] win: redo/fix the uv_rwlock APIs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Previously, on Windows Vista and later, we'd use the Windows native
+SRWLock APIs. However they turned out to be semantically incompatible
+with pthread read-write locks and/or plain buggy. This patch makes sure
+that the custom implementation that was previously only used on old
+Windows versions is now used everywhere.
+
+This patch fixes a number of issues with the old fallback
+implementation. Specifically:
+
+* The reader count would not be incremented when a thread successfully
+  acquired a read lock while another thread *also* held a read lock.
+
+* `uv_rwlock_tryrdlock()` and `uv_rwlock_trywrlock()` now
+  consistently return UV_EBUSY when a lock couldn't be acquired.
+
+* Any unexpected errors now cause libuv to abort, with the exception of
+  `uv_rwlock_init()`.
+
+See also https://github.com/libuv/libuv/issues/515.
+
+PR-URL: https://github.com/libuv/libuv/pull/525
+Reviewed-By: Saúl Ibarra Corretgé <saghul@gmail.com>
+---
+ include/uv-win.h |  26 +++--
+ src/win/thread.c | 258 ++++++++++++++---------------------------------
+ 2 files changed, 87 insertions(+), 197 deletions(-)
+
+diff --git a/include/uv-win.h b/include/uv-win.h
+index a0b1ef02..300be476 100644
+--- a/include/uv-win.h
++++ b/include/uv-win.h
+@@ -246,22 +246,20 @@ typedef union {
+ } uv_cond_t;
+ 
+ typedef union {
+-  /* srwlock_ has type SRWLOCK, but not all toolchains define this type in */
+-  /* windows.h. */
+-  SRWLOCK srwlock_;
+   struct {
+-    union {
+-      CRITICAL_SECTION cs;
+-      /* TODO: remove me in v2.x. */
+-      uv_mutex_t unused;
+-    } read_lock_;
+-    union {
+-      HANDLE sem;
+-      /* TODO: remove me in v2.x. */
+-      uv_mutex_t unused;
+-    } write_lock_;
+     unsigned int num_readers_;
+-  } fallback_;
++    CRITICAL_SECTION num_readers_lock_;
++    HANDLE write_semaphore_;
++  } state_;
++  /* TODO: remove me in v2.x. */
++  struct {
++    SRWLOCK unused_;
++  } unused1_;
++  /* TODO: remove me in v2.x. */
++  struct {
++    uv_mutex_t unused1_;
++    uv_mutex_t unused2_;
++  } unused2_;
+ } uv_rwlock_t;
+ 
+ typedef struct {
+diff --git a/src/win/thread.c b/src/win/thread.c
+index 6c70e76e..27d45ecf 100644
+--- a/src/win/thread.c
++++ b/src/win/thread.c
+@@ -242,68 +242,111 @@ void uv_mutex_unlock(uv_mutex_t* mutex) {
+ 
+ 
+ int uv_rwlock_init(uv_rwlock_t* rwlock) {
+-  uv__once_init();
++  /* Initialize the semaphore that acts as the write lock. */
++  HANDLE handle = CreateSemaphoreW(NULL, 1, 1, NULL);
++  if (handle == NULL)
++    return uv_translate_sys_error(GetLastError());
++  rwlock->state_.write_semaphore_ = handle;
+ 
+-  if (HAVE_SRWLOCK_API())
+-    return uv__rwlock_srwlock_init(rwlock);
+-  else
+-    return uv__rwlock_fallback_init(rwlock);
++  /* Initialize the critical section protecting the reader count. */
++  InitializeCriticalSection(&rwlock->state_.num_readers_lock_);
++
++  /* Initialize the reader count. */
++  rwlock->state_.num_readers_ = 0;
++
++  return 0;
+ }
+ 
+ 
+ void uv_rwlock_destroy(uv_rwlock_t* rwlock) {
+-  if (HAVE_SRWLOCK_API())
+-    uv__rwlock_srwlock_destroy(rwlock);
+-  else
+-    uv__rwlock_fallback_destroy(rwlock);
++  DeleteCriticalSection(&rwlock->state_.num_readers_lock_);
++  CloseHandle(rwlock->state_.write_semaphore_);
+ }
+ 
+ 
+ void uv_rwlock_rdlock(uv_rwlock_t* rwlock) {
+-  if (HAVE_SRWLOCK_API())
+-    uv__rwlock_srwlock_rdlock(rwlock);
+-  else
+-    uv__rwlock_fallback_rdlock(rwlock);
++  /* Acquire the lock that protects the reader count. */
++  EnterCriticalSection(&rwlock->state_.num_readers_lock_);
++
++  /* Increase the reader count, and lock for write if this is the first
++   * reader.
++   */
++  if (++rwlock->state_.num_readers_ == 1) {
++    DWORD r = WaitForSingleObject(rwlock->state_.write_semaphore_, INFINITE);
++    if (r != WAIT_OBJECT_0)
++      uv_fatal_error(GetLastError(), "WaitForSingleObject");
++  }
++
++  /* Release the lock that protects the reader count. */
++  LeaveCriticalSection(&rwlock->state_.num_readers_lock_);
+ }
+ 
+ 
+ int uv_rwlock_tryrdlock(uv_rwlock_t* rwlock) {
+-  if (HAVE_SRWLOCK_API())
+-    return uv__rwlock_srwlock_tryrdlock(rwlock);
+-  else
+-    return uv__rwlock_fallback_tryrdlock(rwlock);
++  int err;
++
++  if (!TryEnterCriticalSection(&rwlock->state_.num_readers_lock_))
++    return UV_EBUSY;
++
++  err = 0;
++
++  if (rwlock->state_.num_readers_ == 0) {
++    /* Currently there are no other readers, which means that the write lock
++     * needs to be acquired.
++     */
++    DWORD r = WaitForSingleObject(rwlock->state_.write_semaphore_, 0);
++    if (r == WAIT_OBJECT_0)
++      rwlock->state_.num_readers_++;
++    else if (r == WAIT_TIMEOUT)
++      err = UV_EBUSY;
++    else if (r == WAIT_FAILED)
++      uv_fatal_error(GetLastError(), "WaitForSingleObject");
++
++  } else {
++    /* The write lock has already been acquired because there are other
++     * active readers.
++     */
++    rwlock->state_.num_readers_++;
++  }
++
++  LeaveCriticalSection(&rwlock->state_.num_readers_lock_);
++  return err;
+ }
+ 
+ 
+ void uv_rwlock_rdunlock(uv_rwlock_t* rwlock) {
+-  if (HAVE_SRWLOCK_API())
+-    uv__rwlock_srwlock_rdunlock(rwlock);
+-  else
+-    uv__rwlock_fallback_rdunlock(rwlock);
++  EnterCriticalSection(&rwlock->state_.num_readers_lock_);
++
++  if (--rwlock->state_.num_readers_ == 0) {
++    if (!ReleaseSemaphore(rwlock->state_.write_semaphore_, 1, NULL))
++      uv_fatal_error(GetLastError(), "ReleaseSemaphore");
++  }
++
++  LeaveCriticalSection(&rwlock->state_.num_readers_lock_);
+ }
+ 
+ 
+ void uv_rwlock_wrlock(uv_rwlock_t* rwlock) {
+-  if (HAVE_SRWLOCK_API())
+-    uv__rwlock_srwlock_wrlock(rwlock);
+-  else
+-    uv__rwlock_fallback_wrlock(rwlock);
++  DWORD r = WaitForSingleObject(rwlock->state_.write_semaphore_, INFINITE);
++  if (r != WAIT_OBJECT_0)
++    uv_fatal_error(GetLastError(), "WaitForSingleObject");
+ }
+ 
+ 
+ int uv_rwlock_trywrlock(uv_rwlock_t* rwlock) {
+-  if (HAVE_SRWLOCK_API())
+-    return uv__rwlock_srwlock_trywrlock(rwlock);
++  DWORD r = WaitForSingleObject(rwlock->state_.write_semaphore_, 0);
++  if (r == WAIT_OBJECT_0)
++    return 0;
++  else if (r == WAIT_TIMEOUT)
++    return UV_EBUSY;
+   else
+-    return uv__rwlock_fallback_trywrlock(rwlock);
++    uv_fatal_error(GetLastError(), "WaitForSingleObject");
+ }
+ 
+ 
+ void uv_rwlock_wrunlock(uv_rwlock_t* rwlock) {
+-  if (HAVE_SRWLOCK_API())
+-    uv__rwlock_srwlock_wrunlock(rwlock);
+-  else
+-    uv__rwlock_fallback_wrunlock(rwlock);
++  if (!ReleaseSemaphore(rwlock->state_.write_semaphore_, 1, NULL))
++    uv_fatal_error(GetLastError(), "ReleaseSemaphore");
+ }
+ 
+ 
+@@ -348,157 +391,6 @@ int uv_sem_trywait(uv_sem_t* sem) {
+ }
+ 
+ 
+-static int uv__rwlock_srwlock_init(uv_rwlock_t* rwlock) {
+-  pInitializeSRWLock(&rwlock->srwlock_);
+-  return 0;
+-}
+-
+-
+-static void uv__rwlock_srwlock_destroy(uv_rwlock_t* rwlock) {
+-  (void) rwlock;
+-}
+-
+-
+-static void uv__rwlock_srwlock_rdlock(uv_rwlock_t* rwlock) {
+-  pAcquireSRWLockShared(&rwlock->srwlock_);
+-}
+-
+-
+-static int uv__rwlock_srwlock_tryrdlock(uv_rwlock_t* rwlock) {
+-  if (pTryAcquireSRWLockShared(&rwlock->srwlock_))
+-    return 0;
+-  else
+-    return UV_EBUSY;  /* TODO(bnoordhuis) EAGAIN when owned by this thread. */
+-}
+-
+-
+-static void uv__rwlock_srwlock_rdunlock(uv_rwlock_t* rwlock) {
+-  pReleaseSRWLockShared(&rwlock->srwlock_);
+-}
+-
+-
+-static void uv__rwlock_srwlock_wrlock(uv_rwlock_t* rwlock) {
+-  pAcquireSRWLockExclusive(&rwlock->srwlock_);
+-}
+-
+-
+-static int uv__rwlock_srwlock_trywrlock(uv_rwlock_t* rwlock) {
+-  if (pTryAcquireSRWLockExclusive(&rwlock->srwlock_))
+-    return 0;
+-  else
+-    return UV_EBUSY;  /* TODO(bnoordhuis) EAGAIN when owned by this thread. */
+-}
+-
+-
+-static void uv__rwlock_srwlock_wrunlock(uv_rwlock_t* rwlock) {
+-  pReleaseSRWLockExclusive(&rwlock->srwlock_);
+-}
+-
+-
+-static int uv__rwlock_fallback_init(uv_rwlock_t* rwlock) {
+-  /* Initialize the semaphore that acts as the write lock. */
+-  HANDLE handle = CreateSemaphoreW(NULL, 1, 1, NULL);
+-  if (handle == NULL)
+-    return uv_translate_sys_error(GetLastError());
+-  rwlock->fallback_.write_lock_.sem = handle;
+-
+-  /* Initialize the critical section protecting the reader count. */
+-  InitializeCriticalSection(&rwlock->fallback_.read_lock_.cs);
+-
+-  /* Initialize the reader count. */
+-  rwlock->fallback_.num_readers_ = 0;
+-
+-  return 0;
+-}
+-
+-
+-static void uv__rwlock_fallback_destroy(uv_rwlock_t* rwlock) {
+-  DeleteCriticalSection(&rwlock->fallback_.read_lock_.cs);
+-  CloseHandle(rwlock->fallback_.write_lock_.sem);
+-}
+-
+-
+-static void uv__rwlock_fallback_rdlock(uv_rwlock_t* rwlock) {
+-  /* Acquire the lock that protects the reader count. */
+-  EnterCriticalSection(&rwlock->fallback_.read_lock_.cs);
+-
+-  /* Increase the reader count, and lock for write if this is the first
+-   * reader.
+-   */
+-  if (++rwlock->fallback_.num_readers_ == 1) {
+-    DWORD r = WaitForSingleObject(rwlock->fallback_.write_lock_.sem, INFINITE);
+-    if (r != WAIT_OBJECT_0)
+-      uv_fatal_error(GetLastError(), "WaitForSingleObject");
+-  }
+-
+-  /* Release the lock that protects the reader count. */
+-  LeaveCriticalSection(&rwlock->fallback_.read_lock_.cs);
+-}
+-
+-
+-static int uv__rwlock_fallback_tryrdlock(uv_rwlock_t* rwlock) {
+-  int err;
+-
+-  if (!TryEnterCriticalSection(&rwlock->fallback_.read_lock_.cs))
+-    return UV_EAGAIN;
+-
+-  err = 0;
+-  if (rwlock->fallback_.num_readers_ == 0) {
+-    DWORD r = WaitForSingleObject(rwlock->fallback_.write_lock_.sem, 0);
+-    if (r == WAIT_OBJECT_0)
+-      rwlock->fallback_.num_readers_++;
+-    else if (r == WAIT_TIMEOUT)
+-      err = UV_EAGAIN;
+-    else if (r == WAIT_FAILED)
+-      err = uv_translate_sys_error(GetLastError());
+-    else
+-      err = UV_EIO;
+-  }
+-
+-  LeaveCriticalSection(&rwlock->fallback_.read_lock_.cs);
+-  return err;
+-}
+-
+-
+-static void uv__rwlock_fallback_rdunlock(uv_rwlock_t* rwlock) {
+-  EnterCriticalSection(&rwlock->fallback_.read_lock_.cs);
+-
+-  if (--rwlock->fallback_.num_readers_ == 0) {
+-    if (!ReleaseSemaphore(rwlock->fallback_.write_lock_.sem, 1, NULL))
+-      uv_fatal_error(GetLastError(), "ReleaseSemaphore");
+-  }
+-
+-  LeaveCriticalSection(&rwlock->fallback_.read_lock_.cs);
+-}
+-
+-
+-static void uv__rwlock_fallback_wrlock(uv_rwlock_t* rwlock) {
+-  DWORD r = WaitForSingleObject(rwlock->fallback_.write_lock_.sem, INFINITE);
+-  if (r != WAIT_OBJECT_0)
+-    uv_fatal_error(GetLastError(), "WaitForSingleObject");
+-}
+-
+-
+-static int uv__rwlock_fallback_trywrlock(uv_rwlock_t* rwlock) {
+-  DWORD r = WaitForSingleObject(rwlock->fallback_.write_lock_.sem, 0);
+-  if (r == WAIT_OBJECT_0)
+-    return 0;
+-  else if (r == WAIT_TIMEOUT)
+-    return UV_EAGAIN;
+-  else if (r == WAIT_FAILED)
+-    return uv_translate_sys_error(GetLastError());
+-  else
+-    return UV_EIO;
+-}
+-
+-
+-static void uv__rwlock_fallback_wrunlock(uv_rwlock_t* rwlock) {
+-  if (!ReleaseSemaphore(rwlock->fallback_.write_lock_.sem, 1, NULL))
+-    uv_fatal_error(GetLastError(), "ReleaseSemaphore");
+-}
+-
+-
+-
+ /* This condition variable implementation is based on the SetEvent solution
+  * (section 3.2) at http://www.cs.wustl.edu/~schmidt/win32-cv-1.html
+  * We could not use the SignalObjectAndWait solution (section 3.4) because
+-- 
+2.34.1
+

@@ -1,0 +1,224 @@
+From 51f3dd9804cae04575323b92a9136e5a511fe810 Mon Sep 17 00:00:00 2001
+From: Ernesto Baschny <ernst@cron-it.de>
+Date: Thu, 22 Oct 2009 07:59:55 +0000
+Subject: [PATCH] * Fixed bug #12303: XSS vulnerability due to not proper
+ sanitizing in function t3lib_div::quoteJSvalue (thanks to Oliver Klee)
+
+git-svn-id: https://svn.typo3.org/TYPO3v4/Core/trunk@6232 709f56b5-9817-0410-a4d7-c38de5d9e867
+---
+ ChangeLog                          |   1 +
+ t3lib/class.t3lib_div.php          |  32 ++++---
+ tests/t3lib/t3lib_div_testcase.php | 130 ++++++++++++++++++++++++++++-
+ 3 files changed, 149 insertions(+), 14 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index ed5b97e45b6..7b113963fb0 100755
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,6 +1,7 @@
+ 2009-10-22  Ernesto Baschny <ernst@cron-it.de>
+ 
+ 	* Fixed bug #11586: Potential SQL injection in frontend editing (thanks to Oliver Klee)
++	* Fixed bug #12303: XSS vulnerability due to not proper sanitizing in function t3lib_div::quoteJSvalue (thanks to Oliver Klee)
+ 
+ 2009-10-21  Sebastian Kurfuerst  <sebastian@typo3.org>
+ 
+diff --git a/t3lib/class.t3lib_div.php b/t3lib/class.t3lib_div.php
+index fbc1a4ff811..d0b393037b0 100644
+--- a/t3lib/class.t3lib_div.php
++++ b/t3lib/class.t3lib_div.php
+@@ -5679,18 +5679,26 @@ final class t3lib_div {
+ 
+ 
+ 	/**
+-	 * Quotes a string for usage as JS parameter. Depends wheter the value is used in script tags (it doesn't need/must not get htmlspecialchar'ed in this case)
+-	 *
+-	 * @param	string		The string to encode.
+-	 * @param	boolean		If the values get's used in <script> tags.
+-	 * @return	string		The encoded value already quoted
+-	 */
+-	public static function quoteJSvalue($value, $inScriptTags = false)	{
+-		$value = addcslashes($value, '\''.'"'.chr(10).chr(13));
+-		if (!$inScriptTags) {
+-			$value = htmlspecialchars($value);
+-		}
+-		return '\''.$value.'\'';
++	 * Quotes a string for usage as JS parameter. Depends whether the value is
++	 * used in script tags (it doesn't need/must not get htmlspecialchar'ed in
++	 * this case).
++	 *
++	 * @param string $value the string to encode, may be empty
++	 * @param boolean $withinCData
++	 *        whether the escaped data is expected to be used as CDATA and thus
++	 *        does not need to be htmlspecialchared
++	 *
++	 * @return string the encoded value already quoted (with single quotes),
++	 *                will not be empty
++	 */
++	static public function quoteJSvalue($value, $withinCData = false)	{
++		$escapedValue = addcslashes(
++			$value, '\'' . '"' . '\\' . chr(9) . chr(10) . chr(13)
++		);
++		if (!$withinCData) {
++			$escapedValue = htmlspecialchars($escapedValue);
++		}
++		return '\'' . $escapedValue . '\'';
+ 	}
+ 
+ 
+diff --git a/tests/t3lib/t3lib_div_testcase.php b/tests/t3lib/t3lib_div_testcase.php
+index eefeb3e4b38..08b6f24b54e 100644
+--- a/tests/t3lib/t3lib_div_testcase.php
++++ b/tests/t3lib/t3lib_div_testcase.php
+@@ -26,12 +26,13 @@
+ /**
+  * Testcase for class t3lib_div
+  *
+- * @author	Ingo Renner <ingo@typo3.org>
++ * @author Ingo Renner <ingo@typo3.org>
++ * @author Oliver Klee <typo3-coding@oliverklee.de>
++ *
+  * @package TYPO3
+  * @subpackage t3lib
+  */
+ class t3lib_div_testcase extends tx_phpunit_testcase {
+-
+ 	/**
+ 	 * @test
+ 	 */
+@@ -454,6 +455,131 @@ class t3lib_div_testcase extends tx_phpunit_testcase {
+ 
+ 		$this->assertEquals($expectedResult, $result);
+ 	}
++
++
++	//////////////////////////////////
++	// Tests concerning quoteJSvalue
++	//////////////////////////////////
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueHtmlspecialcharsDataByDefault() {
++		$this->assertContains(
++			'&gt;',
++			t3lib_div::quoteJSvalue('>')
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvaluetHtmlspecialcharsDataWithinCDataSetToFalse() {
++		$this->assertContains(
++			'&gt;',
++			t3lib_div::quoteJSvalue('>', false)
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvaluetNotHtmlspecialcharsDataWithinCDataSetToTrue() {
++		$this->assertContains(
++			'>',
++			t3lib_div::quoteJSvalue('>', true)
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueReturnsEmptyStringQuotedInSingleQuotes() {
++		$this->assertEquals(
++			"''",
++			t3lib_div::quoteJSvalue("", true)
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueNotModifiesStringWithoutSpecialCharacters() {
++		$this->assertEquals(
++			"'Hello world!'",
++			t3lib_div::quoteJSvalue("Hello world!", true)
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueEscapesSingleQuote() {
++		$this->assertEquals(
++			"'\\''",
++			t3lib_div::quoteJSvalue("'", true)
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueEscapesDoubleQuoteWithinCDataSetToTrue() {
++		$this->assertEquals(
++			"'\\\"'",
++			t3lib_div::quoteJSvalue('"', true)
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueEscapesAndHtmlspecialcharsDoubleQuoteWithinCDataSetToFalse() {
++		$this->assertEquals(
++			"'\\&quot;'",
++			t3lib_div::quoteJSvalue('"', false)
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueEscapesTab() {
++		$this->assertEquals(
++			"'" . '\t' . "'",
++			t3lib_div::quoteJSvalue(chr(9))
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueEscapesLinefeed() {
++		$this->assertEquals(
++			"'" . '\n' . "'",
++			t3lib_div::quoteJSvalue(chr(10))
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueEscapesCarriageReturn() {
++		$this->assertEquals(
++			"'" . '\r' . "'",
++			t3lib_div::quoteJSvalue(chr(13))
++		);
++	}
++
++	/**
++	 * @test
++	 */
++	public function quoteJSvalueEscapesBackslah() {
++		$this->assertEquals(
++			"'\\\\'",
++			t3lib_div::quoteJSvalue('\\')
++		);
++	}
+ }
+ 
+ ?>
+\ No newline at end of file
+-- 
+2.34.1
+

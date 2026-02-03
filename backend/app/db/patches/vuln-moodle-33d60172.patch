@@ -1,0 +1,130 @@
+From 33d6017287e1835513a3de8edd3fbf7a6a90af9c Mon Sep 17 00:00:00 2001
+From: Peter Dias <peter@moodle.com>
+Date: Fri, 28 Aug 2020 12:53:26 +0800
+Subject: [PATCH] MDL-59293 block_onlineusers: Check whether current user can
+ view online users
+
+- Removed block from site admin.
+- Blocked guest from viewuserlist cap
+---
+ blocks/online_users/block_online_users.php    | 21 +++++++++++++++++--
+ blocks/online_users/classes/fetcher.php       |  2 +-
+ blocks/online_users/db/access.php             |  2 +-
+ .../lang/en/block_online_users.php            |  1 +
+ blocks/online_users/styles.css                |  4 ++++
+ blocks/online_users/version.php               |  2 +-
+ 6 files changed, 27 insertions(+), 5 deletions(-)
+
+diff --git a/blocks/online_users/block_online_users.php b/blocks/online_users/block_online_users.php
+index e44468cae6a..2fd93d477a9 100644
+--- a/blocks/online_users/block_online_users.php
++++ b/blocks/online_users/block_online_users.php
+@@ -88,14 +88,23 @@ class block_online_users extends block_base {
+ 
+         $this->content->text = '<div class="info">'.$usercount.' ('.$periodminutes.')</div>';
+ 
+-        // Verify if we can see the list of users, if not just print number of users
+-        if (!has_capability('block/online_users:viewlist', $this->page->context)) {
++        // Verify if we can see the list of users, if not just print number of users.
++        // If the current user is not logged in OR it's a guest then don't show any users.
++        if (!has_capability('block/online_users:viewlist', $this->page->context)
++                || isguestuser() || !isloggedin()) {
+             return $this->content;
+         }
+ 
+         $userlimit = 50; // We'll just take the most recent 50 maximum.
++        $initialcount = 0;
+         if ($users = $onlineusers->get_users($userlimit)) {
++            require_once($CFG->dirroot . '/user/lib.php');
++            $initialcount = count($users);
+             foreach ($users as $user) {
++                if (!user_can_view_profile($user)) {
++                    unset($users[$user->id]);
++                    continue;
++                }
+                 $users[$user->id]->fullname = fullname($user);
+             }
+         } else {
+@@ -153,6 +162,14 @@ class block_online_users extends block_base {
+                 }
+                 $this->content->text .= "</li>\n";
+             }
++            if ($initialcount - count($users) > 0) {
++                $this->content->text .= '<li class="listentry"><div class="otherusers">';
++                $this->content->text .= html_writer::span(
++                    get_string('otherusers', 'block_online_users', $initialcount - count($users))
++                );
++                $this->content->text .= "</div>";
++                $this->content->text .= "</li>\n";
++            }
+             $this->content->text .= '</ul><div class="clearer"><!-- --></div>';
+         }
+ 
+diff --git a/blocks/online_users/classes/fetcher.php b/blocks/online_users/classes/fetcher.php
+index a18e625caaf..a63e0ec73dc 100644
+--- a/blocks/online_users/classes/fetcher.php
++++ b/blocks/online_users/classes/fetcher.php
+@@ -86,7 +86,7 @@ class fetcher {
+         }
+         $params = array();
+ 
+-        $userfields = \user_picture::fields('u', array('username'));
++        $userfields = \user_picture::fields('u', array('username', 'deleted'));
+ 
+         // Add this to the SQL to show only group users.
+         if ($currentgroup !== null) {
+diff --git a/blocks/online_users/db/access.php b/blocks/online_users/db/access.php
+index f238b7384d7..6e8b95b7429 100644
+--- a/blocks/online_users/db/access.php
++++ b/blocks/online_users/db/access.php
+@@ -55,7 +55,7 @@ $capabilities = array(
+         'contextlevel' => CONTEXT_BLOCK,
+         'archetypes' => array(
+             'user' => CAP_ALLOW,
+-            'guest' => CAP_ALLOW,
++            'guest' => CAP_PREVENT,
+             'student' => CAP_ALLOW,
+             'teacher' => CAP_ALLOW,
+             'editingteacher' => CAP_ALLOW,
+diff --git a/blocks/online_users/lang/en/block_online_users.php b/blocks/online_users/lang/en/block_online_users.php
+index f34f5d68583..bf9cf6cfab6 100644
+--- a/blocks/online_users/lang/en/block_online_users.php
++++ b/blocks/online_users/lang/en/block_online_users.php
+@@ -23,6 +23,7 @@
+  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+  */
+ 
++$string['otherusers'] = 'Other Users ({$a})';
+ $string['onlinestatushiding_desc'] = 'If enabled, users have the option to hide their online status from other users.';
+ $string['configtimetosee'] = 'Number of minutes determining the period of inactivity after which a user is no longer considered to be online.';
+ $string['onlinestatushiding'] = 'Online status hiding';
+diff --git a/blocks/online_users/styles.css b/blocks/online_users/styles.css
+index bebee5abc1b..8c895082a4d 100644
+--- a/blocks/online_users/styles.css
++++ b/blocks/online_users/styles.css
+@@ -7,6 +7,10 @@
+     position: relative;
+ }
+ 
++.block_online_users .content .list li.listentry .otherusers {
++    margin-left: 1.5rem;
++}
++
+ .block_online_users .content .list li.listentry .user .userpicture {
+     vertical-align: text-bottom;
+ }
+diff --git a/blocks/online_users/version.php b/blocks/online_users/version.php
+index 1d951b56564..c86963d41d8 100644
+--- a/blocks/online_users/version.php
++++ b/blocks/online_users/version.php
+@@ -24,6 +24,6 @@
+ 
+ defined('MOODLE_INTERNAL') || die();
+ 
+-$plugin->version   = 2021052500;        // The current plugin version (Date: YYYYMMDDXX)
++$plugin->version   = 2021052501;        // The current plugin version (Date: YYYYMMDDXX)
+ $plugin->requires  = 2021052500;        // Requires this Moodle version
+ $plugin->component = 'block_online_users'; // Full name of the plugin (used for diagnostics)
+-- 
+2.34.1
+

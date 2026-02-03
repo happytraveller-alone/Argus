@@ -1,0 +1,34 @@
+From 514ba4d5be7d925934487b431141bcb7b9cc41ff Mon Sep 17 00:00:00 2001
+From: Flavia Rainone <frainone@redhat.com>
+Date: Mon, 16 Mar 2020 04:46:10 -0300
+Subject: [PATCH] [UNDERTOW-1671] Correct substring call from URLUtils path
+ param parsing outside for loop (it should use i instead of string.length in
+ case we hit the separator break in the loop; in case we didnt, i equals
+ string.length anyway)
+
+---
+ core/src/main/java/io/undertow/util/URLUtils.java | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/core/src/main/java/io/undertow/util/URLUtils.java b/core/src/main/java/io/undertow/util/URLUtils.java
+index 47df2181c..cd1c646af 100644
+--- a/core/src/main/java/io/undertow/util/URLUtils.java
++++ b/core/src/main/java/io/undertow/util/URLUtils.java
+@@ -276,12 +276,12 @@ public class URLUtils {
+                     }
+                 }
+                 if (attrName != null) {
+-                    handle(exchange, decode(charset, attrName, doDecode), decode(charset, string.substring(stringStart, string.length()), doDecode));
++                    handle(exchange, decode(charset, attrName, doDecode), decode(charset, string.substring(stringStart, i), doDecode));
+                     if(++count > max) {
+                         throw UndertowMessages.MESSAGES.tooManyParameters(max);
+                     }
+                 } else if (string.length() != stringStart) {
+-                    handle(exchange, decode(charset, string.substring(stringStart, string.length()), doDecode), "");
++                    handle(exchange, decode(charset, string.substring(stringStart, i), doDecode), "");
+                     if(++count > max) {
+                         throw UndertowMessages.MESSAGES.tooManyParameters(max);
+                     }
+-- 
+2.34.1
+

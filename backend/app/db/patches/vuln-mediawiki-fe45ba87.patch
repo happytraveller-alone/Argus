@@ -1,0 +1,141 @@
+From fe45ba87528d855b4f12785016280451bd7893cf Mon Sep 17 00:00:00 2001
+From: Catrope <roan.kattouw@gmail.com>
+Date: Fri, 16 Nov 2012 10:19:15 -0800
+Subject: [PATCH] (bug 42202) Validate preference values in action=options
+
+Previously, there was no validation whatsoever and the module would
+happily write any preference you asked it to. This, combined with the
+fact that the code using the 'editfont' preference didn't perform any
+validation or escaping, led to a CSS injection vulnerability.
+
+Using Preferences::getPreferences breaks some existing test cases
+because a MockUser doesn't have groups for preferences.
+
+Change-Id: I98df55f2b16ac1b6fce578798b6f58b5dad96775
+---
+ includes/api/ApiOptions.php                   | 35 ++++++++++++++-----
+ tests/phpunit/includes/api/ApiOptionsTest.php | 15 ++++++++
+ 2 files changed, 41 insertions(+), 9 deletions(-)
+
+diff --git a/includes/api/ApiOptions.php b/includes/api/ApiOptions.php
+index 4398eb069dc..f21bbc0000d 100644
+--- a/includes/api/ApiOptions.php
++++ b/includes/api/ApiOptions.php
+@@ -47,7 +47,7 @@ class ApiOptions extends ApiBase {
+ 		}
+ 
+ 		$params = $this->extractRequestParams();
+-		$changes = 0;
++		$changed = false;
+ 
+ 		if ( isset( $params['optionvalue'] ) && !isset( $params['optionname'] ) ) {
+ 			$this->dieUsageMsg( array( 'missingparam', 'optionname' ) );
+@@ -55,26 +55,43 @@ class ApiOptions extends ApiBase {
+ 
+ 		if ( $params['reset'] ) {
+ 			$user->resetOptions();
+-			$changes++;
++			$changed = true;
+ 		}
++
++		$changes = array();
+ 		if ( count( $params['change'] ) ) {
+ 			foreach ( $params['change'] as $entry ) {
+ 				$array = explode( '=', $entry, 2 );
+-				$user->setOption( $array[0], isset( $array[1] ) ? $array[1] : null );
+-				$changes++;
++				$changes[$array[0]] = isset( $array[1] ) ? $array[1] : null;
+ 			}
+ 		}
+ 		if ( isset( $params['optionname'] ) ) {
+ 			$newValue = isset( $params['optionvalue'] ) ? $params['optionvalue'] : null;
+-			$user->setOption( $params['optionname'], $newValue );
+-			$changes++;
++			$changes[$params['optionname']] = $newValue;
++		}
++		if ( !count( $changes ) ) {
++			$this->dieUsage( 'No changes were requested', 'nochanges' );
++		}
++
++		$prefs = Preferences::getPreferences( $user, $this->getContext() );
++		foreach ( $changes as $key => $value ) {
++			if ( !isset( $prefs[$key] ) ) {
++				$this->setWarning( "Not a valid preference: $key" );
++				continue;
++			}
++			$field = HTMLForm::loadInputFromParameters( $key, $prefs[$key] );
++			$validation = $field->validate( $value, $user->getOptions() );
++			if ( $validation === true ) {
++				$user->setOption( $key, $value );
++				$changed = true;
++			} else {
++				$this->setWarning( "Validation error for '$key': $validation" );
++			}
+ 		}
+ 
+-		if ( $changes ) {
++		if ( $changed ) {
+ 			// Commit changes
+ 			$user->saveSettings();
+-		} else {
+-			$this->dieUsage( 'No changes were requested', 'nochanges' );
+ 		}
+ 
+ 		$this->getResult()->addValue( null, $this->getModuleName(), 'success' );
+diff --git a/tests/phpunit/includes/api/ApiOptionsTest.php b/tests/phpunit/includes/api/ApiOptionsTest.php
+index 4684c557829..5469ccf3321 100644
+--- a/tests/phpunit/includes/api/ApiOptionsTest.php
++++ b/tests/phpunit/includes/api/ApiOptionsTest.php
+@@ -105,6 +105,9 @@ class ApiOptionsTest extends MediaWikiLangTestCase {
+ 		$this->fail( "UsageException was not thrown" );
+ 	}
+ 
++	/**
++	 * @group Broken
++	 */
+ 	public function testReset() {
+ 		$this->mUserMock->expects( $this->once() )
+ 			->method( 'resetOptions' );
+@@ -122,6 +125,9 @@ class ApiOptionsTest extends MediaWikiLangTestCase {
+ 		$this->assertEquals( self::$Success, $response );
+ 	}
+ 
++	/**
++	 * @group Broken
++	 */
+ 	public function testOptionWithValue() {
+ 		$this->mUserMock->expects( $this->never() )
+ 			->method( 'resetOptions' );
+@@ -140,6 +146,9 @@ class ApiOptionsTest extends MediaWikiLangTestCase {
+ 		$this->assertEquals( self::$Success, $response );
+ 	}
+ 
++	/**
++	 * @group Broken
++	 */
+ 	public function testOptionResetValue() {
+ 		$this->mUserMock->expects( $this->never() )
+ 			->method( 'resetOptions' );
+@@ -157,6 +166,9 @@ class ApiOptionsTest extends MediaWikiLangTestCase {
+ 		$this->assertEquals( self::$Success, $response );
+ 	}
+ 
++	/**
++	 * @group Broken
++	 */
+ 	public function testChange() {
+ 		$this->mUserMock->expects( $this->never() )
+ 			->method( 'resetOptions' );
+@@ -183,6 +195,9 @@ class ApiOptionsTest extends MediaWikiLangTestCase {
+ 		$this->assertEquals( self::$Success, $response );
+ 	}
+ 
++	/**
++	 * @group Broken
++	 */
+ 	public function testResetChangeOption() {
+ 		$this->mUserMock->expects( $this->once() )
+ 			->method( 'resetOptions' );
+-- 
+2.34.1
+

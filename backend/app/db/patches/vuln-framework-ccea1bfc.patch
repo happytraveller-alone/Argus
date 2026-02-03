@@ -1,0 +1,27 @@
+From ccea1bfcbb37cf923dc1bb30cdbf2effbfb1619c Mon Sep 17 00:00:00 2001
+From: Stephen Rees-Carter <stephen@rees-carter.net>
+Date: Thu, 18 Nov 2021 12:10:56 +1000
+Subject: [PATCH] Add .phar to blocked PHP extensions (#39666)
+
+By default Debian includes support for executing .phar files alongside
+.php and .phtml files, and should be included in the blocked list.
+---
+ src/Illuminate/Validation/Concerns/ValidatesAttributes.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/Illuminate/Validation/Concerns/ValidatesAttributes.php b/src/Illuminate/Validation/Concerns/ValidatesAttributes.php
+index 9b3f3b3215..2d2fa3ac77 100644
+--- a/src/Illuminate/Validation/Concerns/ValidatesAttributes.php
++++ b/src/Illuminate/Validation/Concerns/ValidatesAttributes.php
+@@ -1329,7 +1329,7 @@ trait ValidatesAttributes
+         }
+ 
+         $phpExtensions = [
+-            'php', 'php3', 'php4', 'php5', 'phtml',
++            'php', 'php3', 'php4', 'php5', 'phtml', 'phar',
+         ];
+ 
+         return ($value instanceof UploadedFile)
+-- 
+2.34.1
+

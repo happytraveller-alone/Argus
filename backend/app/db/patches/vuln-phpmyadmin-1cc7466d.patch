@@ -1,0 +1,92 @@
+From 1cc7466db3a05e95fe57a6702f41773e6829d54b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C4=8Ciha=C5=99?= <michal@cihar.com>
+Date: Mon, 20 Jun 2016 12:10:36 +0200
+Subject: [PATCH] Quote delimiter before using preg_replace
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Michal Čihař <michal@cihar.com>
+---
+ import.php                                            | 2 +-
+ libraries/Tracker.php                                 | 2 +-
+ libraries/plugins/export/ExportSql.php                | 2 +-
+ templates/columns_definitions/transformation.phtml    | 4 ++--
+ test/libraries/core/PMA_warnMissingExtension_test.php | 2 +-
+ 5 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/import.php b/import.php
+index 7315a8f7fc..ae0eaef802 100644
+--- a/import.php
++++ b/import.php
+@@ -111,7 +111,7 @@ if (! empty($sql_query)) {
+         && is_array($_REQUEST['parameters'])) {
+         $parameters = $_REQUEST['parameters'];
+         foreach ($parameters as $parameter => $replacement) {
+-            $quoted = preg_quote($parameter);
++            $quoted = preg_quote($parameter, '/');
+             // making sure that :param does not apply values to :param1
+             $sql_query = preg_replace(
+                 '/' . $quoted . '([^a-zA-Z0-9_])/',
+diff --git a/libraries/Tracker.php b/libraries/Tracker.php
+index 8f7e3d43dc..a4cb56c99f 100644
+--- a/libraries/Tracker.php
++++ b/libraries/Tracker.php
+@@ -903,7 +903,7 @@ class Tracker
+ 
+                 // Cut off `dbname`. from query
+                 $query = preg_replace(
+-                    '/`' . preg_quote($dbname) . '`\s?\./',
++                    '/`' . preg_quote($dbname, '/') . '`\s?\./',
+                     '',
+                     $query
+                 );
+diff --git a/libraries/plugins/export/ExportSql.php b/libraries/plugins/export/ExportSql.php
+index 8b531076b7..7812c7c732 100644
+--- a/libraries/plugins/export/ExportSql.php
++++ b/libraries/plugins/export/ExportSql.php
+@@ -1506,7 +1506,7 @@ class ExportSql extends ExportPlugin
+              */
+             if ($view) {
+                 $create_query = preg_replace(
+-                    '/' . preg_quote(Util::backquote($db)) . '\./',
++                    '/' . preg_quote(Util::backquote($db), '/') . '\./',
+                     '',
+                     $create_query
+                 );
+diff --git a/templates/columns_definitions/transformation.phtml b/templates/columns_definitions/transformation.phtml
+index d12e996bca..96467007ad 100644
+--- a/templates/columns_definitions/transformation.phtml
++++ b/templates/columns_definitions/transformation.phtml
+@@ -7,7 +7,7 @@
+             <?php
+                 $checked = isset($columnMeta['Field'])
+                          && isset($mime_map[$columnMeta['Field']][$type])
+-                         && preg_match('@' . preg_quote($available_mime[$type . '_file'][$mimekey]) . '3?@i',
++                         && preg_match('@' . preg_quote($available_mime[$type . '_file'][$mimekey], '@') . '3?@i',
+                                         $mime_map[$columnMeta['Field']][$type]) ? 'selected ' : '';
+                 $tooltip = PMA_getTransformationDescription(
+                     $available_mime[$type . '_file'][$mimekey]
+@@ -24,4 +24,4 @@
+             </option>
+         <?php endforeach; ?>
+     <?php endif; ?>
+-</select>
+\ No newline at end of file
++</select>
+diff --git a/test/libraries/core/PMA_warnMissingExtension_test.php b/test/libraries/core/PMA_warnMissingExtension_test.php
+index 7f74e285c1..1c6a2129a3 100644
+--- a/test/libraries/core/PMA_warnMissingExtension_test.php
++++ b/test/libraries/core/PMA_warnMissingExtension_test.php
+@@ -59,7 +59,7 @@ class PMA_WarnMissingExtension_Test extends PHPUnit_Framework_TestCase
+             . '" target="Documentation"><em>' . $ext
+             . '</em></a> extension is missing. Please check your PHP configuration.';
+ 
+-        $this->expectOutputRegex('@' . preg_quote($warn) . '@');
++        $this->expectOutputRegex('@' . preg_quote($warn, '@') . '@');
+ 
+         PMA_warnMissingExtension($ext, true);
+     }
+-- 
+2.34.1
+

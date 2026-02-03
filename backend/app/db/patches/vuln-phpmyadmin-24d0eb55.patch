@@ -1,0 +1,55 @@
+From 24d0eb55203b029f250c77d63f2900ffbe099e8b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C4=8Ciha=C5=99?= <mcihar@suse.cz>
+Date: Mon, 29 Jul 2013 13:09:17 +0200
+Subject: [PATCH] Improved protection against cross framing
+
+We now include CSS to hide the page and display it conditionally after
+checking we're in top frame. This adds extra protection for clients who
+do not support X-Frame-Options.
+
+See also http://en.wikipedia.org/wiki/Framekiller and
+https://www.owasp.org/index.php/Clickjacking_Defense_Cheat_Sheet
+---
+ js/cross_framing_protection.js | 15 +++++----------
+ libraries/Header.class.php     |  1 +
+ 2 files changed, 6 insertions(+), 10 deletions(-)
+
+diff --git a/js/cross_framing_protection.js b/js/cross_framing_protection.js
+index 6fb780350f..1e1caf0fd4 100644
+--- a/js/cross_framing_protection.js
++++ b/js/cross_framing_protection.js
+@@ -1,14 +1,9 @@
+ /* vim: set expandtab sw=4 ts=4 sts=4: */
+ /**
+- * Conditionally included if third-party framing is not allowed
+- *
++ * Conditionally included if framing is not allowed
+  */
+-
+-try {
+-    if (top != self) {
+-        top.location.href = self.location.href;
+-    }
+-} catch(e) {
+-    alert("Redirecting... (error: " + e);
+-    top.location.href = self.location.href;
++if(self == top) {
++    document.documentElement.style.display = 'block' ;
++} else {
++    top.location = self.location ;
+ }
+diff --git a/libraries/Header.class.php b/libraries/Header.class.php
+index 810d556904..8e4ba3393d 100644
+--- a/libraries/Header.class.php
++++ b/libraries/Header.class.php
+@@ -531,6 +531,7 @@ class PMA_Header
+         $retval  = '<meta charset="utf-8" />';
+         $retval .= '<meta name="robots" content="noindex,nofollow" />';
+         $retval .= '<meta http-equiv="X-UA-Compatible" content="IE=Edge">';
++        $retval .= '<style>html{display: none;}</style>';
+         return $retval;
+     }
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,109 @@
+From 637c7d464b2876765370d1143b7ba6441efb730b Mon Sep 17 00:00:00 2001
+From: Claire <claire.github-309c@sitedethib.com>
+Date: Wed, 2 Feb 2022 11:49:22 +0100
+Subject: [PATCH] Bump version to 3.3.2
+
+---
+ .github/workflows/build-image.yml |  2 +-
+ CHANGELOG.md                      | 12 ++++++++++++
+ chart/values.yaml.template        |  2 +-
+ docker-compose.yml                |  6 +++---
+ lib/mastodon/version.rb           |  2 +-
+ 5 files changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/.github/workflows/build-image.yml b/.github/workflows/build-image.yml
+index 58f2813d3..81db8b712 100644
+--- a/.github/workflows/build-image.yml
++++ b/.github/workflows/build-image.yml
+@@ -21,7 +21,7 @@ jobs:
+         with:
+           images: tootsuite/mastodon
+           flavor: |
+-            latest=auto
++            latest=false
+           tags: |
+             type=edge,branch=main
+             type=semver,pattern={{ raw }}
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 658447ba8..b77b9446c 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,18 @@ Changelog
+ 
+ All notable changes to this project will be documented in this file.
+ 
++## [3.3.2] - 2022-02-03
++### Fixed
++- Fix `mastodon:webpush:generate_vapid_key` task requiring a functional environment ([ClearlyClaire](https://github.com/mastodon/mastodon/pull/17338))
++- Fix spurious errors when receiving an Add activity for a private post ([ClearlyClaire](https://github.com/mastodon/mastodon/pull/17425))
++
++### Security
++- Fix error-prone SQL queries ([ClearlyClaire](https://github.com/mastodon/mastodon/pull/15828))
++- Fix not compacting incoming signed JSON-LD activities ([puckipedia](https://github.com/mastodon/mastodon/pull/17426), [ClearlyClaire](https://github.com/mastodon/mastodon/pull/17428)) (CVE-2022-24307)
++- Fix insufficient sanitization of report comments ([ClearlyClaire](https://github.com/mastodon/mastodon/pull/17430))
++- Fix stop condition of a Common Table Expression ([ClearlyClaire](https://github.com/mastodon/mastodon/pull/17427))
++- Disable legacy XSS filtering ([Wonderfall](https://github.com/mastodon/mastodon/pull/17289))
++
+ ## [3.3.1] - 2022-01-31
+ ### Added
+ - Add more advanced migration tests ([ClearlyClaire](https://github.com/mastodon/mastodon/pull/17393))
+diff --git a/chart/values.yaml.template b/chart/values.yaml.template
+index 9e50c6dac..dd9ef1f3e 100644
+--- a/chart/values.yaml.template
++++ b/chart/values.yaml.template
+@@ -4,7 +4,7 @@ image:
+   repository: tootsuite/mastodon
+   pullPolicy: Always
+   # https://hub.docker.com/r/tootsuite/mastodon/tags
+-  tag: v3.3.0
++  tag: v3.3.2
+   # alternatively, use `latest` for the latest release or `edge` for the image
+   # built from the most recent commit
+   #
+diff --git a/docker-compose.yml b/docker-compose.yml
+index a92b40c22..55b12bf39 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -43,7 +43,7 @@ services:
+ 
+   web:
+     build: .
+-    image: tootsuite/mastodon:v3.3.1
++    image: tootsuite/mastodon:v3.3.2
+     restart: always
+     env_file: .env.production
+     command: bash -c "rm -f /mastodon/tmp/pids/server.pid; bundle exec rails s -p 3000"
+@@ -63,7 +63,7 @@ services:
+ 
+   streaming:
+     build: .
+-    image: tootsuite/mastodon:v3.3.1
++    image: tootsuite/mastodon:v3.3.2
+     restart: always
+     env_file: .env.production
+     command: node ./streaming
+@@ -80,7 +80,7 @@ services:
+ 
+   sidekiq:
+     build: .
+-    image: tootsuite/mastodon:v3.3.1
++    image: tootsuite/mastodon:v3.3.2
+     restart: always
+     env_file: .env.production
+     command: bundle exec sidekiq
+diff --git a/lib/mastodon/version.rb b/lib/mastodon/version.rb
+index 1e298b807..5e4f09959 100644
+--- a/lib/mastodon/version.rb
++++ b/lib/mastodon/version.rb
+@@ -13,7 +13,7 @@ module Mastodon
+     end
+ 
+     def patch
+-      1
++      2
+     end
+ 
+     def flags
+-- 
+2.34.1
+

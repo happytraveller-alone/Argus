@@ -1,0 +1,36 @@
+From 26bb167e1094d5780e5194d0608670eb55723af8 Mon Sep 17 00:00:00 2001
+From: xjm <xjm@65776.no-reply.drupal.org>
+Date: Sun, 3 May 2020 03:07:52 -0500
+Subject: [PATCH] Issue #3115772 by saurabh.rocksoul, swatichouhan012, Wim
+ Leers, alexpott: User::load calls should be avoided in classes, use
+ dependency injection instead in jsonapi module
+
+(cherry picked from commit 8b7aee5be46a7218bcb5563069c0cf9bea75b82c)
+---
+ core/modules/jsonapi/src/Controller/EntryPoint.php | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/core/modules/jsonapi/src/Controller/EntryPoint.php b/core/modules/jsonapi/src/Controller/EntryPoint.php
+index 4f98708fb3..a564580523 100644
+--- a/core/modules/jsonapi/src/Controller/EntryPoint.php
++++ b/core/modules/jsonapi/src/Controller/EntryPoint.php
+@@ -14,7 +14,6 @@ use Drupal\jsonapi\JsonApiResource\ResourceObjectData;
+ use Drupal\jsonapi\ResourceResponse;
+ use Drupal\jsonapi\ResourceType\ResourceType;
+ use Drupal\jsonapi\ResourceType\ResourceTypeRepositoryInterface;
+-use Drupal\user\Entity\User;
+ use Symfony\Component\DependencyInjection\ContainerInterface;
+ use Symfony\Component\Routing\Exception\RouteNotFoundException;
+ 
+@@ -104,7 +103,7 @@ class EntryPoint extends ControllerBase {
+ 
+     $meta = [];
+     if ($this->user->isAuthenticated()) {
+-      $current_user_uuid = User::load($this->user->id())->uuid();
++      $current_user_uuid = $this->entityTypeManager()->getStorage('user')->load($this->user->id())->uuid();
+       $meta['links']['me'] = ['meta' => ['id' => $current_user_uuid]];
+       $cacheability->addCacheContexts(['user']);
+       try {
+-- 
+2.34.1
+

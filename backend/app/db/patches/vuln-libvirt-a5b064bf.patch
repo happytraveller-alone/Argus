@@ -1,0 +1,51 @@
+From a5b064bf4b17a9884d7d361733737fb614ad8979 Mon Sep 17 00:00:00 2001
+From: Peter Krempa <pkrempa@redhat.com>
+Date: Tue, 14 Apr 2020 10:31:02 +0200
+Subject: [PATCH] conf: Don't format http cookies unless
+ VIR_DOMAIN_DEF_FORMAT_SECURE is used
+
+Starting with 3b076391befc3fe72deb0c244ac6c2b4c100b410
+(v6.1.0-122-g3b076391be) we support http cookies. Since they may contain
+somewhat sensitive information we should not format them into the XML
+unless VIR_DOMAIN_DEF_FORMAT_SECURE is asserted.
+
+Reported-by: Han Han <hhan@redhat.com>
+Signed-off-by: Peter Krempa <pkrempa@redhat.com>
+Reviewed-by: Erik Skultety <eskultet@redhat.com>
+---
+ src/conf/domain_conf.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/conf/domain_conf.c b/src/conf/domain_conf.c
+index 8e8146374c..8700d56761 100644
+--- a/src/conf/domain_conf.c
++++ b/src/conf/domain_conf.c
+@@ -24636,11 +24636,15 @@ virDomainSourceDefFormatSeclabel(virBufferPtr buf,
+ 
+ static void
+ virDomainDiskSourceFormatNetworkCookies(virBufferPtr buf,
+-                                        virStorageSourcePtr src)
++                                        virStorageSourcePtr src,
++                                        unsigned int flags)
+ {
+     g_auto(virBuffer) childBuf = VIR_BUFFER_INIT_CHILD(buf);
+     size_t i;
+ 
++    if (!(flags & VIR_DOMAIN_DEF_FORMAT_SECURE))
++        return;
++
+     for (i = 0; i < src->ncookies; i++) {
+         virBufferEscapeString(&childBuf, "<cookie name='%s'>", src->cookies[i]->name);
+         virBufferEscapeString(&childBuf, "%s</cookie>\n", src->cookies[i]->value);
+@@ -24701,7 +24705,7 @@ virDomainDiskSourceFormatNetwork(virBufferPtr attrBuf,
+                           virTristateBoolTypeToString(src->sslverify));
+     }
+ 
+-    virDomainDiskSourceFormatNetworkCookies(childBuf, src);
++    virDomainDiskSourceFormatNetworkCookies(childBuf, src, flags);
+ 
+     if (src->readahead)
+         virBufferAsprintf(childBuf, "<readahead size='%llu'/>\n", src->readahead);
+-- 
+2.34.1
+

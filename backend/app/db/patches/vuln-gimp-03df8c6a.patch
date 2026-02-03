@@ -1,0 +1,664 @@
+From 03df8c6af4ec4e5d547e9fff46d0710b3c262c58 Mon Sep 17 00:00:00 2001
+From: Michael Natterer <mitch@gimp.org>
+Date: Sun, 10 Nov 2013 00:18:48 +0100
+Subject: [PATCH] plug-ins: pass the format's name again in calls to
+ gimp_export_image()
+
+and clean up the formatting of the call and the lines around it. Now
+we can check the various (disabled) export options for regressions
+again by changing a single line in gimp_export_image().
+---
+ plug-ins/common/file-aa.c        |  4 +++-
+ plug-ins/common/file-cel.c       |  4 +++-
+ plug-ins/common/file-csource.c   |  2 +-
+ plug-ins/common/file-dicom.c     |  4 ++--
+ plug-ins/common/file-gbr.c       |  4 +++-
+ plug-ins/common/file-gegl.c      | 11 ++++++-----
+ plug-ins/common/file-gif-save.c  |  2 +-
+ plug-ins/common/file-gih.c       |  4 +++-
+ plug-ins/common/file-header.c    |  4 +++-
+ plug-ins/common/file-mng.c       |  7 ++++---
+ plug-ins/common/file-pat.c       |  4 +++-
+ plug-ins/common/file-pcx.c       |  9 +++++----
+ plug-ins/common/file-pix.c       |  4 +++-
+ plug-ins/common/file-png.c       | 11 ++++++-----
+ plug-ins/common/file-pnm.c       |  8 ++++----
+ plug-ins/common/file-ps.c        | 11 +++++++----
+ plug-ins/common/file-psp.c       |  4 +++-
+ plug-ins/common/file-sunras.c    | 10 ++++++----
+ plug-ins/common/file-tga.c       | 11 ++++++-----
+ plug-ins/common/file-tiff-save.c | 12 +++++++-----
+ plug-ins/common/file-xbm.c       |  3 ++-
+ plug-ins/common/file-xmc.c       | 12 +++++++-----
+ plug-ins/common/file-xpm.c       |  7 ++++---
+ plug-ins/common/file-xwd.c       | 10 ++++++----
+ plug-ins/file-bmp/bmp.c          | 16 ++++++++++------
+ plug-ins/file-fits/fits.c        | 10 ++++++----
+ plug-ins/file-fli/fli-gimp.c     |  4 +++-
+ plug-ins/file-jpeg/jpeg.c        |  8 +++++---
+ plug-ins/file-psd/psd-save.c     |  3 ++-
+ plug-ins/file-psd/psd.c          |  4 +++-
+ plug-ins/file-sgi/sgi.c          |  4 +++-
+ 31 files changed, 130 insertions(+), 81 deletions(-)
+
+diff --git a/plug-ins/common/file-aa.c b/plug-ins/common/file-aa.c
+index 69316229c1..59068fe97e 100644
+--- a/plug-ins/common/file-aa.c
++++ b/plug-ins/common/file-aa.c
+@@ -161,11 +161,13 @@ run (const gchar      *name,
+     case GIMP_RUN_INTERACTIVE:
+     case GIMP_RUN_WITH_LAST_VALS:
+       gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-      export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++      export = gimp_export_image (&image_ID, &drawable_ID, "AA",
+                                   GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                   GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                   GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                   GIMP_EXPORT_CAN_HANDLE_ALPHA);
++
+       if (export == GIMP_EXPORT_CANCEL)
+         {
+           values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-cel.c b/plug-ins/common/file-cel.c
+index 193eea8cba..9ee3a966d5 100644
+--- a/plug-ins/common/file-cel.c
++++ b/plug-ins/common/file-cel.c
+@@ -236,10 +236,12 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "CEL",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB   |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-csource.c b/plug-ins/common/file-csource.c
+index ed8eabb650..4d87def234 100644
+--- a/plug-ins/common/file-csource.c
++++ b/plug-ins/common/file-csource.c
+@@ -172,7 +172,7 @@ run (const gchar      *name,
+ 
+       gimp_ui_init (PLUG_IN_BINARY, FALSE);
+ 
+-      export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++      export = gimp_export_image (&image_ID, &drawable_ID, "C Source",
+                                   GIMP_EXPORT_CAN_HANDLE_RGB |
+                                   GIMP_EXPORT_CAN_HANDLE_ALPHA);
+ 
+diff --git a/plug-ins/common/file-dicom.c b/plug-ins/common/file-dicom.c
+index d30cd3457a..a40e04af97 100644
+--- a/plug-ins/common/file-dicom.c
++++ b/plug-ins/common/file-dicom.c
+@@ -230,10 +230,10 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++          export = gimp_export_image (&image_ID, &drawable_ID, "DICOM",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-gbr.c b/plug-ins/common/file-gbr.c
+index 082056f5cf..2acfb42bc4 100644
+--- a/plug-ins/common/file-gbr.c
++++ b/plug-ins/common/file-gbr.c
+@@ -220,11 +220,13 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "GBR",
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-gegl.c b/plug-ins/common/file-gegl.c
+index 7a93a77500..e75e473cbd 100644
+--- a/plug-ins/common/file-gegl.c
++++ b/plug-ins/common/file-gegl.c
+@@ -241,11 +241,12 @@ run (const gchar      *name,
+             case GIMP_RUN_INTERACTIVE:
+             case GIMP_RUN_WITH_LAST_VALS:
+               gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-              export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                          (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                           GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                           GIMP_EXPORT_CAN_HANDLE_INDEXED |
+-                                           GIMP_EXPORT_CAN_HANDLE_ALPHA));
++
++              export = gimp_export_image (&image_ID, &drawable_ID, "GEGL",
++                                          GIMP_EXPORT_CAN_HANDLE_RGB     |
++                                          GIMP_EXPORT_CAN_HANDLE_GRAY    |
++                                          GIMP_EXPORT_CAN_HANDLE_INDEXED |
++                                          GIMP_EXPORT_CAN_HANDLE_ALPHA);
+ 
+               if (export == GIMP_EXPORT_CANCEL)
+                 {
+diff --git a/plug-ins/common/file-gif-save.c b/plug-ins/common/file-gif-save.c
+index 8f3c8f63b2..b2ed8e8f43 100644
+--- a/plug-ins/common/file-gif-save.c
++++ b/plug-ins/common/file-gif-save.c
+@@ -264,7 +264,7 @@ run (const gchar      *name,
+             if (gsvals.as_animation)
+               capabilities |= GIMP_EXPORT_CAN_HANDLE_LAYERS;
+ 
+-            export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++            export = gimp_export_image (&image_ID, &drawable_ID, "GIF",
+                                         capabilities);
+ 
+             if (export == GIMP_EXPORT_CANCEL)
+diff --git a/plug-ins/common/file-gih.c b/plug-ins/common/file-gih.c
+index 92c550a3fe..b17b4de1a6 100644
+--- a/plug-ins/common/file-gih.c
++++ b/plug-ins/common/file-gih.c
+@@ -281,11 +281,13 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "GIH",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB   |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY  |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA |
+                                       GIMP_EXPORT_CAN_HANDLE_LAYERS);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-header.c b/plug-ins/common/file-header.c
+index 20aac1f7a5..957e7734ea 100644
+--- a/plug-ins/common/file-header.c
++++ b/plug-ins/common/file-header.c
+@@ -120,9 +120,11 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "Header",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-mng.c b/plug-ins/common/file-mng.c
+index d11598a20b..ab423f7fa9 100644
+--- a/plug-ins/common/file-mng.c
++++ b/plug-ins/common/file-mng.c
+@@ -1653,13 +1653,14 @@ run (const gchar      *name,
+       gint32           drawable_id       = param[2].data.d_int32;
+       GimpExportReturn export            = GIMP_EXPORT_IGNORE;
+ 
+-      if ((run_mode == GIMP_RUN_INTERACTIVE)
+-          || (run_mode == GIMP_RUN_WITH_LAST_VALS))
++      if (run_mode == GIMP_RUN_INTERACTIVE ||
++          run_mode == GIMP_RUN_WITH_LAST_VALS)
+         {
+           gimp_procedural_db_get_data (SAVE_PROC, &mng_data);
+ 
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_id, &drawable_id, NULL,
++
++          export = gimp_export_image (&image_id, &drawable_id, "MNG",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+diff --git a/plug-ins/common/file-pat.c b/plug-ins/common/file-pat.c
+index 71b84701fd..ed95ad7246 100644
+--- a/plug-ins/common/file-pat.c
++++ b/plug-ins/common/file-pat.c
+@@ -193,11 +193,13 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "PAT",
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-pcx.c b/plug-ins/common/file-pcx.c
+index f7f0b13672..e3f495bad4 100644
+--- a/plug-ins/common/file-pcx.c
++++ b/plug-ins/common/file-pcx.c
+@@ -213,10 +213,11 @@ run (const gchar      *name,
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+ 
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED));
++          export = gimp_export_image (&image_ID, &drawable_ID, "PCX",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB  |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-pix.c b/plug-ins/common/file-pix.c
+index 096c9caf2d..352134a9c8 100644
+--- a/plug-ins/common/file-pix.c
++++ b/plug-ins/common/file-pix.c
+@@ -230,9 +230,11 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "PIX",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-png.c b/plug-ins/common/file-png.c
+index 6bec80c7f7..0468f91bed 100644
+--- a/plug-ins/common/file-png.c
++++ b/plug-ins/common/file-png.c
+@@ -504,11 +504,12 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+-                                       GIMP_EXPORT_CAN_HANDLE_ALPHA));
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "PNG",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB     |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY    |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED |
++                                      GIMP_EXPORT_CAN_HANDLE_ALPHA);
+ 
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+diff --git a/plug-ins/common/file-pnm.c b/plug-ins/common/file-pnm.c
+index 7f4228c6d3..78e068457a 100644
+--- a/plug-ins/common/file-pnm.c
++++ b/plug-ins/common/file-pnm.c
+@@ -381,25 +381,25 @@ run (const gchar      *name,
+ 
+           if (strcmp (name, PNM_SAVE_PROC) == 0)
+             {
+-              export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++              export = gimp_export_image (&image_ID, &drawable_ID, "PNM",
+                                           GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                           GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                           GIMP_EXPORT_CAN_HANDLE_INDEXED);
+             }
+           else if (strcmp (name, PBM_SAVE_PROC) == 0)
+             {
+-              export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++              export = gimp_export_image (&image_ID, &drawable_ID, "PBM",
+                                           GIMP_EXPORT_CAN_HANDLE_BITMAP);
+               pbm = TRUE;  /* gimp has no mono image type so hack it */
+             }
+           else if (strcmp (name, PGM_SAVE_PROC) == 0)
+             {
+-              export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++              export = gimp_export_image (&image_ID, &drawable_ID, "PGM",
+                                           GIMP_EXPORT_CAN_HANDLE_GRAY);
+             }
+           else
+             {
+-              export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++              export = gimp_export_image (&image_ID, &drawable_ID, "PPM",
+                                           GIMP_EXPORT_CAN_HANDLE_RGB |
+                                           GIMP_EXPORT_CAN_HANDLE_INDEXED);
+             }
+diff --git a/plug-ins/common/file-ps.c b/plug-ins/common/file-ps.c
+index 80bc098f54..742fe24898 100644
+--- a/plug-ins/common/file-ps.c
++++ b/plug-ins/common/file-ps.c
+@@ -862,10 +862,13 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED));
++
++          export = gimp_export_image (&image_ID, &drawable_ID,
++                                      psvals.eps ? "EPS" : "PostScript",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB  |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-psp.c b/plug-ins/common/file-psp.c
+index 9d2dbf5f0a..d2146d4d61 100644
+--- a/plug-ins/common/file-psp.c
++++ b/plug-ins/common/file-psp.c
+@@ -1946,12 +1946,14 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "PSP",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                       GIMP_EXPORT_CAN_HANDLE_LAYERS);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-sunras.c b/plug-ins/common/file-sunras.c
+index f56ec0341c..75375f6533 100644
+--- a/plug-ins/common/file-sunras.c
++++ b/plug-ins/common/file-sunras.c
+@@ -296,10 +296,12 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED));
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "SUNRAS",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB  |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-tga.c b/plug-ins/common/file-tga.c
+index a0802d34c2..45694b7d13 100644
+--- a/plug-ins/common/file-tga.c
++++ b/plug-ins/common/file-tga.c
+@@ -332,11 +332,12 @@ run (const gchar      *name,
+         {
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+-                                       GIMP_EXPORT_CAN_HANDLE_ALPHA ));
++          export = gimp_export_image (&image_ID, &drawable_ID, "TGA",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB     |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY    |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED |
++                                      GIMP_EXPORT_CAN_HANDLE_ALPHA);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-tiff-save.c b/plug-ins/common/file-tiff-save.c
+index e93f5e0a1c..52a16f9e5d 100644
+--- a/plug-ins/common/file-tiff-save.c
++++ b/plug-ins/common/file-tiff-save.c
+@@ -263,11 +263,13 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image, &drawable, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+-                                       GIMP_EXPORT_CAN_HANDLE_ALPHA ));
++
++          export = gimp_export_image (&image, &drawable, "TIFF",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB     |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY    |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED |
++                                      GIMP_EXPORT_CAN_HANDLE_ALPHA);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-xbm.c b/plug-ins/common/file-xbm.c
+index bda8c673bd..5c4b21b3cf 100644
+--- a/plug-ins/common/file-xbm.c
++++ b/plug-ins/common/file-xbm.c
+@@ -288,7 +288,8 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "XBM",
+                                       GIMP_EXPORT_CAN_HANDLE_BITMAP |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA);
+ 
+diff --git a/plug-ins/common/file-xmc.c b/plug-ins/common/file-xmc.c
+index 4757adac26..15b2247f6d 100644
+--- a/plug-ins/common/file-xmc.c
++++ b/plug-ins/common/file-xmc.c
+@@ -486,11 +486,13 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_ALPHA |
+-                                       GIMP_EXPORT_CAN_HANDLE_LAYERS |
+-                                       GIMP_EXPORT_NEEDS_ALPHA));
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "XMC",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB    |
++                                      GIMP_EXPORT_CAN_HANDLE_ALPHA  |
++                                      GIMP_EXPORT_CAN_HANDLE_LAYERS |
++                                      GIMP_EXPORT_NEEDS_ALPHA);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               *nreturn_vals = 1;
+diff --git a/plug-ins/common/file-xpm.c b/plug-ins/common/file-xpm.c
+index fb6bbc1195..61bd875a3b 100644
+--- a/plug-ins/common/file-xpm.c
++++ b/plug-ins/common/file-xpm.c
+@@ -259,11 +259,12 @@ run (const gchar      *name,
+         {
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                      GIMP_EXPORT_CAN_HANDLE_GRAY |
++          export = gimp_export_image (&image_ID, &drawable_ID, "XPM",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB     |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/common/file-xwd.c b/plug-ins/common/file-xwd.c
+index 43b6495a4f..c8e1a6eb10 100644
+--- a/plug-ins/common/file-xwd.c
++++ b/plug-ins/common/file-xwd.c
+@@ -364,10 +364,12 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED));
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "XWD",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB  |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/file-bmp/bmp.c b/plug-ins/file-bmp/bmp.c
+index a1eb21de64..e5c9d08707 100644
+--- a/plug-ins/file-bmp/bmp.c
++++ b/plug-ins/file-bmp/bmp.c
+@@ -222,13 +222,17 @@ run (const gchar      *name,
+           /* fallthrough */
+ 
+         case GIMP_RUN_WITH_LAST_VALS:
+-          if (run_mode == GIMP_RUN_WITH_LAST_VALS) lastvals = TRUE;
++          if (run_mode == GIMP_RUN_WITH_LAST_VALS)
++            lastvals = TRUE;
++
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_ALPHA |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED));
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "BMP",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB   |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY  |
++                                      GIMP_EXPORT_CAN_HANDLE_ALPHA |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/file-fits/fits.c b/plug-ins/file-fits/fits.c
+index a262f62008..6361aa6553 100644
+--- a/plug-ins/file-fits/fits.c
++++ b/plug-ins/file-fits/fits.c
+@@ -281,10 +281,12 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY |
+-                                       GIMP_EXPORT_CAN_HANDLE_INDEXED));
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "FITS",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB  |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY |
++                                      GIMP_EXPORT_CAN_HANDLE_INDEXED);
++
+         if (export == GIMP_EXPORT_CANCEL)
+           {
+             values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/file-fli/fli-gimp.c b/plug-ins/file-fli/fli-gimp.c
+index 41c1027020..626b78befd 100644
+--- a/plug-ins/file-fli/fli-gimp.c
++++ b/plug-ins/file-fli/fli-gimp.c
+@@ -352,11 +352,13 @@ run (const gchar      *name,
+ 	case GIMP_RUN_INTERACTIVE:
+ 	case GIMP_RUN_WITH_LAST_VALS:
+ 	  gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-	  export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++	  export = gimp_export_image (&image_ID, &drawable_ID, "FLI",
+ 				      GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                       GIMP_EXPORT_CAN_HANDLE_LAYERS);
++
+ 	  if (export == GIMP_EXPORT_CANCEL)
+ 	    {
+ 	      values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/file-jpeg/jpeg.c b/plug-ins/file-jpeg/jpeg.c
+index 9079dcb982..12d3d8c11c 100644
+--- a/plug-ins/file-jpeg/jpeg.c
++++ b/plug-ins/file-jpeg/jpeg.c
+@@ -298,9 +298,11 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
+-                                      (GIMP_EXPORT_CAN_HANDLE_RGB |
+-                                       GIMP_EXPORT_CAN_HANDLE_GRAY));
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "JPEG",
++                                      GIMP_EXPORT_CAN_HANDLE_RGB |
++                                      GIMP_EXPORT_CAN_HANDLE_GRAY);
++
+           switch (export)
+             {
+             case GIMP_EXPORT_EXPORT:
+diff --git a/plug-ins/file-psd/psd-save.c b/plug-ins/file-psd/psd-save.c
+index 70883d1228..9ffec9c7c1 100644
+--- a/plug-ins/file-psd/psd-save.c
++++ b/plug-ins/file-psd/psd-save.c
+@@ -272,7 +272,8 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_id, &drawable_id, NULL,
++
++          export = gimp_export_image (&image_id, &drawable_id, "PSD",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+diff --git a/plug-ins/file-psd/psd.c b/plug-ins/file-psd/psd.c
+index ced191725b..8fb267434c 100644
+--- a/plug-ins/file-psd/psd.c
++++ b/plug-ins/file-psd/psd.c
+@@ -288,13 +288,15 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "PSD",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA   |
+                                       GIMP_EXPORT_CAN_HANDLE_LAYERS  |
+                                       GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+diff --git a/plug-ins/file-sgi/sgi.c b/plug-ins/file-sgi/sgi.c
+index d69b948f0a..f13de97418 100644
+--- a/plug-ins/file-sgi/sgi.c
++++ b/plug-ins/file-sgi/sgi.c
+@@ -202,11 +202,13 @@ run (const gchar      *name,
+         case GIMP_RUN_INTERACTIVE:
+         case GIMP_RUN_WITH_LAST_VALS:
+           gimp_ui_init (PLUG_IN_BINARY, FALSE);
+-          export = gimp_export_image (&image_ID, &drawable_ID, NULL,
++
++          export = gimp_export_image (&image_ID, &drawable_ID, "SGI",
+                                       GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                       GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                       GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                       GIMP_EXPORT_CAN_HANDLE_ALPHA);
++
+           if (export == GIMP_EXPORT_CANCEL)
+             {
+               values[0].data.d_status = GIMP_PDB_CANCEL;
+-- 
+2.34.1
+

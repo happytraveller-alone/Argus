@@ -1,0 +1,170 @@
+From fd3d3dbbbf5691fa6e3f609d60ee016a1a5ec618 Mon Sep 17 00:00:00 2001
+From: Peter Haag <peter@people.ops-trust.net>
+Date: Wed, 17 Jul 2019 21:34:24 +0200
+Subject: [PATCH] Add latency extension if dumping flowcache
+
+---
+ ChangeLog           |  3 +++
+ bin/ipfrag.c        | 12 +++++++++++-
+ bin/ipfrag.h        |  6 +++++-
+ bin/nfdump.c        |  5 ++---
+ bin/nffile_inline.c |  7 +++++++
+ bin/pcaproc.c       |  4 +++-
+ 6 files changed, 31 insertions(+), 6 deletions(-)
+ mode change 100755 => 100644 bin/nffile_inline.c
+
+diff --git a/ChangeLog b/ChangeLog
+index 239099f..4e0f476 100755
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,6 @@
++2019-07016
++- Add latency extension if dumping flowcache
++
+ 2019-07-15
+ - Fix typos
+ - Fix exporter struct inconsistancies. Coredump on ARM otherwise.
+diff --git a/bin/ipfrag.c b/bin/ipfrag.c
+index abb0c84..3c36a5e 100644
+--- a/bin/ipfrag.c
++++ b/bin/ipfrag.c
+@@ -79,6 +79,8 @@ RB_GENERATE(IPFragTree, IPFragNode, entry, IPFragNodeCMP);
+ 
+ static IPFragTree_t *IPFragTree;
+ static uint32_t NumFragments;
++static time_t tCompare;
++static uint32_t expireNodes = 0;
+ 
+ static int IPFragNodeCMP(struct IPFragNode *e1, struct IPFragNode *e2) {
+ uint32_t    *a = &e1->src_addr;
+@@ -87,6 +89,12 @@ int i;
+    
+ 	// 2 x sizeof(uint32_t) (8) + frag_offset == 12
+ 	i = memcmp((void *)a, (void *)b, KEYLEN );
++	if ( (tCompare - e1->last) > 30 ) {
++		LogError("Node 1 older than 30s: %u", expireNodes++);
++	}
++	if ( (tCompare - e2->last) > 30 ) { 
++		LogError("Node 2 older than 30s: %u", expireNodes++);
++	}
+ 	return i; 
+  
+ } // End of IPFragNodeCMP
+@@ -181,7 +189,7 @@ struct IPFragNode *node, *nxt;
+ 
+ } // End of IPFragTree_free
+ 
+-void *IPFrag_tree_Update(uint32_t src, uint32_t dst, uint32_t ident, uint32_t *length, uint32_t ip_off, void *data) {
++void *IPFrag_tree_Update(time_t when, uint32_t src, uint32_t dst, uint32_t ident, uint32_t *length, uint32_t ip_off, void *data) {
+ struct IPFragNode FindNode, *n;
+ hole_t *hole, *h, *hole_parent;
+ uint16_t more_fragments, first, last, max;
+@@ -190,6 +198,7 @@ int found_hole;
+ 	FindNode.src_addr = src;
+ 	FindNode.dst_addr = dst;
+ 	FindNode.ident 	  = ident;
++	tCompare 	  	  = when;
+ 	n = RB_FIND(IPFragTree, IPFragTree, &FindNode);
+ 	if ( !n ) {
+ 		n = New_frag_node();
+@@ -201,6 +210,7 @@ int found_hole;
+ 			LogError("Node insert returned existing node - Software error in %s line %d", __FILE__, __LINE__);
+ 		}
+ 	}
++	n->last = when;
+ 	hole = n->holes;
+ 	hole_parent = NULL;
+ 
+diff --git a/bin/ipfrag.h b/bin/ipfrag.h
+index 6b88781..b6014b5 100644
+--- a/bin/ipfrag.h
++++ b/bin/ipfrag.h
+@@ -39,6 +39,8 @@
+ #include <stdint.h>
+ #endif
+ 
++#include <time.h>
++
+ #include "rbtree.h"
+ 
+ typedef struct hole_s {
+@@ -59,6 +61,8 @@ struct IPFragNode {
+ 	// End of flow key
+ 
+ 	uint32_t	data_size;
++	time_t		last;
++
+ 	// packet data
+ 	void		*data;
+ 	void		*eod;
+@@ -77,7 +81,7 @@ int IPFragTree_init(void);
+ 
+ void IPFragTree_free(void);
+ 
+-void *IPFrag_tree_Update(uint32_t src, uint32_t dst, uint32_t ident, uint32_t *length, uint32_t ip_off, void *data);
++void *IPFrag_tree_Update(time_t when, uint32_t src, uint32_t dst, uint32_t ident, uint32_t *length, uint32_t ip_off, void *data);
+ 
+ uint32_t IPFragEntries(void);
+ 
+diff --git a/bin/nfdump.c b/bin/nfdump.c
+index 10fa196..e6798fd 100644
+--- a/bin/nfdump.c
++++ b/bin/nfdump.c
+@@ -1,6 +1,5 @@
+ /*
+- *  Copyright (c) 2018, 2017 Peter Haag
+- *  Copyright (c) 2009, Peter Haag
++ *  Copyright (c) 2009-2019, Peter Haag
+  *  Copyright (c) 2004-2008, SWITCH - Teleinformatikdienste fuer Lehre und Forschung
+  *  All rights reserved.
+  *  
+@@ -306,7 +305,7 @@ static void usage(char *name) {
+ 					"\t\t json     json output format.\n"
+ 					"\t\t pipe     '|' separated legacy machine parseable output format.\n"
+ 					"\t\t\tmode may be extended by '6' for full IPv6 listing. e.g.long6, extended6.\n"
+-					"-E <file>\tPrint exporter ans sampling info for collected flows.\n"
++					"-E <file>\tPrint exporter and sampling info for collected flows.\n"
+ 					"-v <file>\tverify netflow data file. Print version and blocks.\n"
+ 					"-x <file>\tverify extension records in netflow data file.\n"
+ 					"-X\t\tDump Filtertable and exit (debug option).\n"
+diff --git a/bin/nffile_inline.c b/bin/nffile_inline.c
+old mode 100755
+new mode 100644
+index 4514001..4fb93ac
+--- a/bin/nffile_inline.c
++++ b/bin/nffile_inline.c
+@@ -725,6 +725,13 @@ int		i;
+ 				tpl->received = master_record->received;
+ 				p = (void *)tpl->data;
+ 				} break;
++			case EX_LATENCY: {
++				tpl_ext_latency_t *tpl = (tpl_ext_latency_t *)p;
++				tpl->client_nw_delay_usec = master_record->client_nw_delay_usec;
++				tpl->server_nw_delay_usec = master_record->server_nw_delay_usec;
++				tpl->appl_latency_usec	  = master_record->appl_latency_usec;
++				p = (void *)tpl->data;
++			} break;
+ #ifdef NSEL
+ 			case EX_NSEL_COMMON: {
+ 				tpl_ext_37_t *tpl = (tpl_ext_37_t *)p;
+diff --git a/bin/pcaproc.c b/bin/pcaproc.c
+index a1de877..c0947ee 100644
+--- a/bin/pcaproc.c
++++ b/bin/pcaproc.c
+@@ -582,10 +582,12 @@ pkt->vlans[pkt->vlan_count].pcp = (p[0] >> 5) & 7;
+ 				printf("Fragmented packet: last segement: ip_off: %u, frag_offset: %u\n", ip_off, frag_offset);
+ #endif
+ 			// fragmented packet
+-			defragmented = IPFrag_tree_Update(ip->ip_src.s_addr, ip->ip_dst.s_addr, ip_id, &payload_len, ip_off, payload);
++			defragmented = IPFrag_tree_Update(hdr->ts.tv_sec, ip->ip_src.s_addr, ip->ip_dst.s_addr, 
++				ip_id, &payload_len, ip_off, payload);
+ 			if ( defragmented == NULL ) {
+ 				// not yet complete
+ 				dbg_printf("Fragmentation not yet completed\n");
++				Free_Node(Node);
+ 				return;
+ 			}
+ 			dbg_printf("Fragmentation assembled\n");
+-- 
+2.34.1
+

@@ -1,0 +1,41 @@
+From 695ce63fddb3567cf8d87339ddc1fa3b67ae2db8 Mon Sep 17 00:00:00 2001
+From: Bjoern Kasteleiner <bjkastel@users.noreply.github.com>
+Date: Thu, 7 Nov 2019 10:03:06 +0100
+Subject: [PATCH] JENKINS-59069 / SECURITY-795: Fix session fixation
+ vulnerability (#16)
+
+Ported fix from github-oauth-plugin:
+https://github.com/jenkinsci/github-oauth-plugin/commit/3fcc367022c58486e5f52def3edbac92ed258ba4
+---
+ .../org/jenkinsci/plugins/GitLabSecurityRealm.java    | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/src/main/java/org/jenkinsci/plugins/GitLabSecurityRealm.java b/src/main/java/org/jenkinsci/plugins/GitLabSecurityRealm.java
+index a77b788..493412e 100644
+--- a/src/main/java/org/jenkinsci/plugins/GitLabSecurityRealm.java
++++ b/src/main/java/org/jenkinsci/plugins/GitLabSecurityRealm.java
+@@ -92,7 +92,8 @@
+ import hudson.security.UserMayOrMayNotExistException;
+ import hudson.tasks.Mailer;
+ import jenkins.model.Jenkins;
+-import sun.net.util.URLUtil;
++
++import javax.servlet.http.HttpSession;
+ 
+ /**
+  *
+@@ -345,6 +346,14 @@ public HttpResponse doFinishLogin(StaplerRequest request) throws IOException {
+         if (StringUtils.isNotBlank(accessToken)) {
+             // only set the access token if it exists.
+             GitLabAuthenticationToken auth = new GitLabAuthenticationToken(accessToken, getGitlabApiUri(), TokenType.ACCESS_TOKEN);
++
++            HttpSession session = request.getSession(false);
++            if (session != null) {
++                // avoid session fixation
++                session.invalidate();
++            }
++            request.getSession(true);
++
+             SecurityContextHolder.getContext().setAuthentication(auth);
+ 
+             GitlabUser self = auth.getMyself();

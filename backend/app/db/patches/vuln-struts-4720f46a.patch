@@ -1,0 +1,60 @@
+From 4720f46a63caaf9db97ba27dc51ac5ad21e66bdc Mon Sep 17 00:00:00 2001
+From: Rene Gielen <rgielen@apache.org>
+Date: Thu, 14 Jan 2016 15:24:34 +0100
+Subject: [PATCH] WW-4507 - adjust Tomcat url decoding code to Log4j 2 logging
+ used in Struts
+
+---
+ .../org/apache/struts2/util/tomcat/buf/StringCache.java     | 6 +++---
+ .../java/org/apache/struts2/util/tomcat/buf/UDecoder.java   | 6 +++---
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/core/src/main/java/org/apache/struts2/util/tomcat/buf/StringCache.java b/core/src/main/java/org/apache/struts2/util/tomcat/buf/StringCache.java
+index 3a72d49770..f982b7d452 100644
+--- a/core/src/main/java/org/apache/struts2/util/tomcat/buf/StringCache.java
++++ b/core/src/main/java/org/apache/struts2/util/tomcat/buf/StringCache.java
+@@ -16,8 +16,8 @@
+  */
+ package org.apache.struts2.util.tomcat.buf;
+ 
+-import com.opensymphony.xwork2.util.logging.Logger;
+-import com.opensymphony.xwork2.util.logging.LoggerFactory;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
+ 
+ import java.nio.charset.Charset;
+ import java.util.ArrayList;
+@@ -33,7 +33,7 @@
+ public class StringCache {
+ 
+ 
+-    private static final Logger log = LoggerFactory.getLogger(StringCache.class);
++    private static final Logger log = LogManager.getLogger(StringCache.class);
+ 
+ 
+     // ------------------------------------------------------- Static Variables
+diff --git a/core/src/main/java/org/apache/struts2/util/tomcat/buf/UDecoder.java b/core/src/main/java/org/apache/struts2/util/tomcat/buf/UDecoder.java
+index b52cda749d..7f9beec9fd 100644
+--- a/core/src/main/java/org/apache/struts2/util/tomcat/buf/UDecoder.java
++++ b/core/src/main/java/org/apache/struts2/util/tomcat/buf/UDecoder.java
+@@ -16,9 +16,9 @@
+  */
+ package org.apache.struts2.util.tomcat.buf;
+ 
+-import com.opensymphony.xwork2.util.logging.LoggerFactory;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
+ 
+-import com.opensymphony.xwork2.util.logging.Logger;
+ import java.io.CharConversionException;
+ import java.io.IOException;
+ import java.io.UnsupportedEncodingException;
+@@ -33,7 +33,7 @@
+  */
+ public final class UDecoder {
+ 
+-    private static final Logger log = LoggerFactory.getLogger(UDecoder.class);
++    private static final Logger log = LogManager.getLogger(UDecoder.class);
+ 
+     public static final boolean ALLOW_ENCODED_SLASH =
+         Boolean.parseBoolean(System.getProperty("org.apache.tomcat.util.buf.UDecoder.ALLOW_ENCODED_SLASH", "false"));

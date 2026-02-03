@@ -1,0 +1,187 @@
+From 8bb6729431b0fb12f9803ba0d8c01a96e99c4122 Mon Sep 17 00:00:00 2001
+From: Patryk Gruszka <patryk.gruszka@comarch.pl>
+Date: Mon, 16 Sep 2024 10:13:12 +0200
+Subject: [PATCH] Fix MST-76
+
+---
+ .../Templating/Helper/FormatterHelper.php     |   8 +-
+ .../Templating/Helper/FormatterHelperTest.php | 100 ++++++++++++++++++
+ .../ReportControllerFunctionalTest.php        |  27 +++++
+ 3 files changed, 132 insertions(+), 3 deletions(-)
+
+diff --git a/app/bundles/CoreBundle/Templating/Helper/FormatterHelper.php b/app/bundles/CoreBundle/Templating/Helper/FormatterHelper.php
+index 31843f9dd3..f96e827c0d 100644
+--- a/app/bundles/CoreBundle/Templating/Helper/FormatterHelper.php
++++ b/app/bundles/CoreBundle/Templating/Helper/FormatterHelper.php
+@@ -55,7 +55,7 @@ class FormatterHelper extends Helper
+                     if (is_array($v)) {
+                         $stringParts = $this->_($v, 'array', $textOnly, $round + 1);
+                     } else {
+-                        $stringParts[] = $v;
++                        $stringParts[] = InputHelper::clean($v);
+                     }
+                 }
+                 if (1 === $round) {
+@@ -74,10 +74,12 @@ class FormatterHelper extends Helper
+                 $string = $this->dateHelper->toDate($val, 'utc');
+                 break;
+             case 'url':
+-                $string = ($textOnly) ? $val : '<a href="'.$val.'" target="_new">'.$val.'</a>';
++                $url    = InputHelper::url($val);
++                $string = ($textOnly) ? $url : '<a href="'.$url.'" target="_blank">'.$url.'</a>';
+                 break;
+             case 'email':
+-                $string = ($textOnly) ? $val : '<a href="mailto:'.$val.'">'.$val.'</a>';
++                $url    = InputHelper::url($val);
++                $string = ($textOnly) ? $url : '<a href="mailto:'.$url.'">'.$url.'</a>';
+                 break;
+             case 'int':
+                 $string = (int) $val;
+diff --git a/app/bundles/CoreBundle/Tests/Unit/Templating/Helper/FormatterHelperTest.php b/app/bundles/CoreBundle/Tests/Unit/Templating/Helper/FormatterHelperTest.php
+index 2981ee643f..bde6c61d7f 100644
+--- a/app/bundles/CoreBundle/Tests/Unit/Templating/Helper/FormatterHelperTest.php
++++ b/app/bundles/CoreBundle/Tests/Unit/Templating/Helper/FormatterHelperTest.php
+@@ -104,4 +104,104 @@ class FormatterHelperTest extends \PHPUnit\Framework\TestCase
+             DateTime::createFromFormat('Y-m-d H:i:s', 'now', new \DateTimeZone('UTC')),
+         ];
+     }
++
++    /**
++     * @dataProvider urlFormatProvider
++     */
++    public function testUrlFormat(string $url, string $expected): void
++    {
++        $result = $this->formatterHelper->_($url, 'url');
++        $this->assertEquals($expected, $result);
++    }
++
++    /**
++     * @return array<string, array<string>>
++     */
++    public function urlFormatProvider(): array
++    {
++        return [
++            'normal url' => [
++                'http://example.com',
++                '<a href="http://example.com" target="_blank">http://example.com</a>',
++            ],
++            'malicious url' => [
++                'http://example.com"><script>alert("XSS")</script>',
++                '<a href="http://example.com&#34;&#62;&#60;script&#62;alert(&#34;XSS&#34;)&#60;/script&#62;" target="_blank">http://example.com&#34;&#62;&#60;script&#62;alert(&#34;XSS&#34;)&#60;/script&#62;</a>',
++            ],
++            'malicious url2' => [
++                'http://example.com?a="<b>test</b>',
++                '<a href="http://example.com?a=%22%3Cb%3Etest%3C%2Fb%3E" target="_blank">http://example.com?a=%22%3Cb%3Etest%3C%2Fb%3E</a>',
++            ],
++            'url with single GET parameter' => [
++                'http://example.com/page?param=value',
++                '<a href="http://example.com/page?param=value" target="_blank">http://example.com/page?param=value</a>',
++            ],
++            'url with multiple GET parameters' => [
++                'http://example.com/search?q=test&page=1&sort=desc',
++                '<a href="http://example.com/search?q=test&page=1&sort=desc" target="_blank">http://example.com/search?q=test&page=1&sort=desc</a>',
++            ],
++            'url with encoded GET parameters' => [
++                'http://example.com/search?q=hello+world&lang=en',
++                '<a href="http://example.com/search?q=hello+world&lang=en" target="_blank">http://example.com/search?q=hello+world&lang=en</a>',
++            ],
++            'url with special characters in GET parameters' => [
++                'http://example.com/path?param=value&special=!@#$%^&*()',
++                '<a href="http://example.com/path?param=value&special=%21%40#$%^&*()" target="_blank">http://example.com/path?param=value&special=%21%40#$%^&*()</a>',
++            ],
++            'https url' => [
++                'https://secure.example.com',
++                '<a href="https://secure.example.com" target="_blank">https://secure.example.com</a>',
++            ],
++            'url with port number' => [
++                'http://example.com:8080/path',
++                '<a href="http://example.com:8080/path" target="_blank">http://example.com:8080/path</a>',
++            ],
++            'url with username and password' => [
++                'http://user:pass@example.com',
++                '<a href="http://user:pass@example.com" target="_blank">http://user:pass@example.com</a>',
++            ],
++            'url with fragment identifier' => [
++                'http://example.com/page#section',
++                '<a href="http://example.com/page#section" target="_blank">http://example.com/page#section</a>',
++            ],
++        ];
++    }
++
++    /**
++     * @dataProvider emailFormatProvider
++     */
++    public function testEmailFormat(string $email, string $expected): void
++    {
++        $result = $this->formatterHelper->_($email, 'email');
++        $this->assertEquals($expected, $result);
++    }
++
++    /**
++     * @return array<string, array<string>>
++     */
++    public function emailFormatProvider(): array
++    {
++        return [
++            'normal email' => [
++                'user@example.com',
++                '<a href="mailto:user@example.com">user@example.com</a>',
++            ],
++            'email with alias' => [
++                'user.one+test@example.com',
++                '<a href="mailto:user.one+test@example.com">user.one+test@example.com</a>',
++            ],
++            'malicious email' => [
++                'user@example.com"><script>alert("XSS")</script>',
++                '<a href="mailto:user@example.com&#34;&#62;&#60;script&#62;alert(&#34;XSS&#34;)&#60;/script&#62;">user@example.com&#34;&#62;&#60;script&#62;alert(&#34;XSS&#34;)&#60;/script&#62;</a>',
++            ],
++        ];
++    }
++
++    public function testArrayFormat(): void
++    {
++        $input    = ['<script>alert("XSS")</script>'];
++        $result   = $this->formatterHelper->_($input, 'array');
++        $expected = '&#60;script&#62;alert(&#34;XSS&#34;)&#60;/script&#62;';
++        $this->assertEquals($expected, $result);
++    }
+ }
+diff --git a/app/bundles/ReportBundle/Tests/Controller/ReportControllerFunctionalTest.php b/app/bundles/ReportBundle/Tests/Controller/ReportControllerFunctionalTest.php
+index 189774bacb..fb3a4971e1 100644
+--- a/app/bundles/ReportBundle/Tests/Controller/ReportControllerFunctionalTest.php
++++ b/app/bundles/ReportBundle/Tests/Controller/ReportControllerFunctionalTest.php
+@@ -54,4 +54,31 @@ class ReportControllerFunctionalTest extends MauticMysqlTestCase
+         $this->client->request('GET', '/s/reports/view/'.$report->getId().'?tmpl=list&name=report.'.$report->getId().'&orderby=a_id');
+         $this->assertTrue($this->client->getResponse()->isOk());
+     }
++
++    public function testXssUrlFromQuery(): void
++    {
++        $report = new Report();
++        $report->setName('Hits report');
++        $report->setDescription('<b>Text Xss Hits</b>');
++        $report->setSource('page.hits');
++        $coulmns = [
++            'ph.isp',
++            'ph.url',
++            'ph.browser_languages',
++            'ph.referer',
++            'ph.remote_host',
++            'ph.user_agent',
++        ];
++        $report->setColumns($coulmns);
++        $this->getContainer()->get('mautic.report.model.report')->saveEntity($report);
++        $xssHeader     = '<script>alert(1)</script>';
++        $this->client->request('GET', '/mtracking.gif?page_url='.$xssHeader);
++        $this->assertResponseStatusCodeSame(200);
++        $this->client->request('GET', '/s/reports/view/'.$report->getId());
++        $this->assertResponseStatusCodeSame(200);
++        $this->assertStringNotContainsString($xssHeader, $this->client->getResponse()->getContent());
++
++        $this->client->request('GET', '/s/reports/view/'.$report->getId().'/export/html');
++        $this->assertStringNotContainsString($xssHeader, $this->client->getResponse()->getContent());
++    }
+ }
+-- 
+2.34.1
+

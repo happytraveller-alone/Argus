@@ -1,0 +1,146 @@
+From 3afacc174867cc9d1f74ef2683bc780de4b0b2df Mon Sep 17 00:00:00 2001
+From: Michael Adams <mdadams@ece.uvic.ca>
+Date: Fri, 4 Nov 2016 10:14:13 -0700
+Subject: [PATCH] Made some changes in an attempt to fix a JPEG decoder problem
+ that I cannot reproduce. The changes check for integer overflow/narrowing at
+ various places in the code.
+
+The safe arithmetic functions in jas_math.h have been
+changed so that a null pointer can be given for the
+result parameter, in which case the result is discarded.
+---
+ src/libjasper/base/jas_image.c           | 22 ++++++++++++++------
+ src/libjasper/include/jasper/jas_image.h |  2 ++
+ src/libjasper/include/jasper/jas_math.h  | 26 +++++++++++++++++++++---
+ src/libjasper/jpg/jpg_dec.c              |  6 ++++++
+ 4 files changed, 47 insertions(+), 9 deletions(-)
+
+diff --git a/src/libjasper/base/jas_image.c b/src/libjasper/base/jas_image.c
+index cb2b164..d011bc5 100644
+--- a/src/libjasper/base/jas_image.c
++++ b/src/libjasper/base/jas_image.c
+@@ -97,9 +97,10 @@
+ 
+ static jas_image_cmpt_t *jas_image_cmpt_create0(void);
+ static void jas_image_cmpt_destroy(jas_image_cmpt_t *cmpt);
+-static jas_image_cmpt_t *jas_image_cmpt_create(uint_fast32_t tlx, uint_fast32_t tly,
+-  uint_fast32_t hstep, uint_fast32_t vstep, uint_fast32_t width, uint_fast32_t
+-  height, uint_fast16_t depth, bool sgnd, uint_fast32_t inmem);
++static jas_image_cmpt_t *jas_image_cmpt_create(int_fast32_t tlx,
++  int_fast32_t tly, int_fast32_t hstep, int_fast32_t vstep,
++  int_fast32_t width, int_fast32_t height, uint_fast16_t depth, bool sgnd,
++  uint_fast32_t inmem);
+ static void jas_image_setbbox(jas_image_t *image);
+ static jas_image_cmpt_t *jas_image_cmpt_copy(jas_image_cmpt_t *cmpt);
+ static int jas_image_growcmpts(jas_image_t *image, int maxcmpts);
+@@ -306,14 +307,23 @@ void jas_image_destroy(jas_image_t *image)
+ 	jas_free(image);
+ }
+ 
+-static jas_image_cmpt_t *jas_image_cmpt_create(uint_fast32_t tlx,
+-  uint_fast32_t tly, uint_fast32_t hstep, uint_fast32_t vstep,
+-  uint_fast32_t width, uint_fast32_t height, uint_fast16_t depth, bool sgnd,
++static jas_image_cmpt_t *jas_image_cmpt_create(int_fast32_t tlx,
++  int_fast32_t tly, int_fast32_t hstep, int_fast32_t vstep,
++  int_fast32_t width, int_fast32_t height, uint_fast16_t depth, bool sgnd,
+   uint_fast32_t inmem)
+ {
+ 	jas_image_cmpt_t *cmpt;
+ 	size_t size;
+ 
++	cmpt = 0;
++	if (width < 0 || height < 0 || hstep <= 0 || vstep <= 0) {
++		goto error;
++	}
++	if (!jas_safe_intfast32_add(tlx, width, 0) ||
++	  !jas_safe_intfast32_add(tly, height, 0)) {
++		goto error;
++	}
++
+ 	if (!(cmpt = jas_malloc(sizeof(jas_image_cmpt_t)))) {
+ 		goto error;
+ 	}
+diff --git a/src/libjasper/include/jasper/jas_image.h b/src/libjasper/include/jasper/jas_image.h
+index 9e9f36f..4dcfcc1 100644
+--- a/src/libjasper/include/jasper/jas_image.h
++++ b/src/libjasper/include/jasper/jas_image.h
+@@ -124,6 +124,8 @@ extern "C" {
+ 
+ /* Image coordinate. */
+ typedef int_fast32_t jas_image_coord_t;
++#define JAS_IMAGE_COORD_MAX INT_FAST32_MAX
++#define JAS_IMAGE_COORD_MIN INT_FAST32_MIN
+ 
+ /* Color space (e.g., RGB, YCbCr). */
+ typedef int_fast16_t jas_image_colorspc_t;
+diff --git a/src/libjasper/include/jasper/jas_math.h b/src/libjasper/include/jasper/jas_math.h
+index 44fae68..88f43ed 100644
+--- a/src/libjasper/include/jasper/jas_math.h
++++ b/src/libjasper/include/jasper/jas_math.h
+@@ -181,7 +181,9 @@ inline static bool jas_safe_size_mul(size_t x, size_t y, size_t *result)
+ 		/* Overflow would occur. */
+ 		return false;
+ 	}
+-	*result = x * y;
++	if (result) {
++		*result = x * y;
++	}
+ 	return true;
+ }
+ 
+@@ -191,7 +193,9 @@ inline static bool jas_safe_size_add(size_t x, size_t y, size_t *result)
+ 	if (y > SIZE_MAX - x) {
+ 		return false;
+ 	}
+-	*result = x + y;
++	if (result) {
++		*result = x + y;
++	}
+ 	return true;
+ }
+ 
+@@ -201,7 +205,23 @@ inline static bool jas_safe_size_sub(size_t x, size_t y, size_t *result)
+ 	if (y > x) {
+ 		return false;
+ 	}
+-	*result = x - y;
++	if (result) {
++		*result = x - y;
++	}
++	return true;
++}
++
++/* Compute the sum of two size_t integer with overflow checking. */
++inline static bool jas_safe_intfast32_add(int_fast32_t x, int_fast32_t y,
++  int_fast32_t *result)
++{
++	if ((y > 0 && x > INT_FAST32_MAX - y) ||
++	  (y < 0 && x < INT_FAST32_MIN - y)) {
++		return false;
++	}
++	if (result) {
++		*result = x + y;
++	}
+ 	return true;
+ }
+ 
+diff --git a/src/libjasper/jpg/jpg_dec.c b/src/libjasper/jpg/jpg_dec.c
+index d1c16df..544bed7 100644
+--- a/src/libjasper/jpg/jpg_dec.c
++++ b/src/libjasper/jpg/jpg_dec.c
+@@ -267,6 +267,12 @@ static jas_image_t *jpg_mkimage(j_decompress_ptr cinfo)
+ 		goto error;
+ 	}
+ 	for (cmptno = 0; cmptno < numcmpts; ++cmptno) {
++		if (cinfo->image_width < JAS_IMAGE_COORD_MIN ||
++		  cinfo->image_width > JAS_IMAGE_COORD_MAX ||
++		  cinfo->image_height < JAS_IMAGE_COORD_MIN ||
++		  cinfo->image_height > JAS_IMAGE_COORD_MAX) {
++			goto error;
++		}
+ 		cmptparm.tlx = 0;
+ 		cmptparm.tly = 0;
+ 		cmptparm.hstep = 1;
+-- 
+2.34.1
+

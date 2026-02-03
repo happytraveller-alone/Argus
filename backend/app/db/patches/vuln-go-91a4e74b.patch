@@ -1,0 +1,196 @@
+From 91a4e74b98179f63a27dbff1ad68ddd0ed64363a Mon Sep 17 00:00:00 2001
+From: Damien Neil <dneil@google.com>
+Date: Thu, 24 Aug 2023 09:57:58 -0700
+Subject: [PATCH] [release-branch.go1.21] crypto/tls: QUIC: fix panics when
+ processing post-handshake messages
+
+The check for fragmentary post-handshake messages in QUICConn.HandleData
+was reversed, resulting in a potential panic when HandleData receives
+a partial message.
+
+In addition, HandleData wasn't checking the size of buffered
+post-handshake messages. Produce an error when a post-handshake
+message is larger than maxHandshake.
+
+TestQUICConnectionState was using an onHandleCryptoData hook
+in runTestQUICConnection that was never being called.
+(I think it was inadvertently removed at some point while
+the CL was in review.) Fix this test while making the hook
+more general.
+
+For #62266
+Fixes #62290
+
+Change-Id: I210b70634e50beb456ab3977eb11272b8724c241
+Reviewed-on: https://go-review.googlesource.com/c/go/+/522595
+Run-TryBot: Damien Neil <dneil@google.com>
+TryBot-Result: Gopher Robot <gobot@golang.org>
+Reviewed-by: Marten Seemann <martenseemann@gmail.com>
+Reviewed-by: Roland Shoemaker <roland@golang.org>
+(cherry picked from commit e92c0f846c54d88f479b1c48f0dbc001d2ff53e9)
+Reviewed-on: https://go-review.googlesource.com/c/go/+/523039
+Auto-Submit: Dmitri Shuralyov <dmitshur@google.com>
+LUCI-TryBot-Result: Go LUCI <golang-scoped@luci-project-accounts.iam.gserviceaccount.com>
+---
+ src/crypto/tls/quic.go      | 10 ++++-
+ src/crypto/tls/quic_test.go | 80 ++++++++++++++++++++++++++++++-------
+ 2 files changed, 74 insertions(+), 16 deletions(-)
+
+diff --git a/src/crypto/tls/quic.go b/src/crypto/tls/quic.go
+index 286302f0ec..ba5c2af0fb 100644
+--- a/src/crypto/tls/quic.go
++++ b/src/crypto/tls/quic.go
+@@ -228,16 +228,22 @@ func (q *QUICConn) HandleData(level QUICEncryptionLevel, data []byte) error {
+ 		return nil
+ 	}
+ 	// The handshake goroutine has exited.
++	c.handshakeMutex.Lock()
++	defer c.handshakeMutex.Unlock()
+ 	c.hand.Write(c.quic.readbuf)
+ 	c.quic.readbuf = nil
+ 	for q.conn.hand.Len() >= 4 && q.conn.handshakeErr == nil {
+ 		b := q.conn.hand.Bytes()
+ 		n := int(b[1])<<16 | int(b[2])<<8 | int(b[3])
+-		if 4+n < len(b) {
++		if n > maxHandshake {
++			q.conn.handshakeErr = fmt.Errorf("tls: handshake message of length %d bytes exceeds maximum of %d bytes", n, maxHandshake)
++			break
++		}
++		if len(b) < 4+n {
+ 			return nil
+ 		}
+ 		if err := q.conn.handlePostHandshakeMessage(); err != nil {
+-			return quicError(err)
++			q.conn.handshakeErr = err
+ 		}
+ 	}
+ 	if q.conn.handshakeErr != nil {
+diff --git a/src/crypto/tls/quic_test.go b/src/crypto/tls/quic_test.go
+index 9a29fa56b8..323906a2f2 100644
+--- a/src/crypto/tls/quic_test.go
++++ b/src/crypto/tls/quic_test.go
+@@ -85,7 +85,7 @@ func (q *testQUICConn) setWriteSecret(level QUICEncryptionLevel, suite uint16, s
+ 
+ var errTransportParametersRequired = errors.New("transport parameters required")
+ 
+-func runTestQUICConnection(ctx context.Context, cli, srv *testQUICConn, onHandleCryptoData func()) error {
++func runTestQUICConnection(ctx context.Context, cli, srv *testQUICConn, onEvent func(e QUICEvent, src, dst *testQUICConn) bool) error {
+ 	a, b := cli, srv
+ 	for _, c := range []*testQUICConn{a, b} {
+ 		if !c.conn.conn.quic.started {
+@@ -97,6 +97,9 @@ func runTestQUICConnection(ctx context.Context, cli, srv *testQUICConn, onHandle
+ 	idleCount := 0
+ 	for {
+ 		e := a.conn.NextEvent()
++		if onEvent != nil && onEvent(e, a, b) {
++			continue
++		}
+ 		switch e.Kind {
+ 		case QUICNoEvent:
+ 			idleCount++
+@@ -211,6 +214,37 @@ func TestQUICSessionResumption(t *testing.T) {
+ 	}
+ }
+ 
++func TestQUICFragmentaryData(t *testing.T) {
++	clientConfig := testConfig.Clone()
++	clientConfig.MinVersion = VersionTLS13
++	clientConfig.ClientSessionCache = NewLRUClientSessionCache(1)
++	clientConfig.ServerName = "example.go.dev"
++
++	serverConfig := testConfig.Clone()
++	serverConfig.MinVersion = VersionTLS13
++
++	cli := newTestQUICClient(t, clientConfig)
++	cli.conn.SetTransportParameters(nil)
++	srv := newTestQUICServer(t, serverConfig)
++	srv.conn.SetTransportParameters(nil)
++	onEvent := func(e QUICEvent, src, dst *testQUICConn) bool {
++		if e.Kind == QUICWriteData {
++			// Provide the data one byte at a time.
++			for i := range e.Data {
++				if err := dst.conn.HandleData(e.Level, e.Data[i:i+1]); err != nil {
++					t.Errorf("HandleData: %v", err)
++					break
++				}
++			}
++			return true
++		}
++		return false
++	}
++	if err := runTestQUICConnection(context.Background(), cli, srv, onEvent); err != nil {
++		t.Fatalf("error during first connection handshake: %v", err)
++	}
++}
++
+ func TestQUICPostHandshakeClientAuthentication(t *testing.T) {
+ 	// RFC 9001, Section 4.4.
+ 	config := testConfig.Clone()
+@@ -264,6 +298,28 @@ func TestQUICPostHandshakeKeyUpdate(t *testing.T) {
+ 	}
+ }
+ 
++func TestQUICPostHandshakeMessageTooLarge(t *testing.T) {
++	config := testConfig.Clone()
++	config.MinVersion = VersionTLS13
++	cli := newTestQUICClient(t, config)
++	cli.conn.SetTransportParameters(nil)
++	srv := newTestQUICServer(t, config)
++	srv.conn.SetTransportParameters(nil)
++	if err := runTestQUICConnection(context.Background(), cli, srv, nil); err != nil {
++		t.Fatalf("error during connection handshake: %v", err)
++	}
++
++	size := maxHandshake + 1
++	if err := cli.conn.HandleData(QUICEncryptionLevelApplication, []byte{
++		byte(typeNewSessionTicket),
++		byte(size >> 16),
++		byte(size >> 8),
++		byte(size),
++	}); err == nil {
++		t.Fatalf("%v-byte post-handshake message: got no error, want one", size)
++	}
++}
++
+ func TestQUICHandshakeError(t *testing.T) {
+ 	clientConfig := testConfig.Clone()
+ 	clientConfig.MinVersion = VersionTLS13
+@@ -298,26 +354,22 @@ func TestQUICConnectionState(t *testing.T) {
+ 	cli.conn.SetTransportParameters(nil)
+ 	srv := newTestQUICServer(t, config)
+ 	srv.conn.SetTransportParameters(nil)
+-	onHandleCryptoData := func() {
++	onEvent := func(e QUICEvent, src, dst *testQUICConn) bool {
+ 		cliCS := cli.conn.ConnectionState()
+-		cliWantALPN := ""
+ 		if _, ok := cli.readSecret[QUICEncryptionLevelApplication]; ok {
+-			cliWantALPN = "h3"
+-		}
+-		if want, got := cliCS.NegotiatedProtocol, cliWantALPN; want != got {
+-			t.Errorf("cli.ConnectionState().NegotiatedProtocol = %q, want %q", want, got)
++			if want, got := cliCS.NegotiatedProtocol, "h3"; want != got {
++				t.Errorf("cli.ConnectionState().NegotiatedProtocol = %q, want %q", want, got)
++			}
+ 		}
+-
+ 		srvCS := srv.conn.ConnectionState()
+-		srvWantALPN := ""
+ 		if _, ok := srv.readSecret[QUICEncryptionLevelHandshake]; ok {
+-			srvWantALPN = "h3"
+-		}
+-		if want, got := srvCS.NegotiatedProtocol, srvWantALPN; want != got {
+-			t.Errorf("srv.ConnectionState().NegotiatedProtocol = %q, want %q", want, got)
++			if want, got := srvCS.NegotiatedProtocol, "h3"; want != got {
++				t.Errorf("srv.ConnectionState().NegotiatedProtocol = %q, want %q", want, got)
++			}
+ 		}
++		return false
+ 	}
+-	if err := runTestQUICConnection(context.Background(), cli, srv, onHandleCryptoData); err != nil {
++	if err := runTestQUICConnection(context.Background(), cli, srv, onEvent); err != nil {
+ 		t.Fatalf("error during connection handshake: %v", err)
+ 	}
+ }
+-- 
+2.34.1
+

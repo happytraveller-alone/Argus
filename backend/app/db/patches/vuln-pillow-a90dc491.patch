@@ -1,0 +1,365 @@
+From a90dc4910045f5c6c119b582d4fd2e4841cd51f8 Mon Sep 17 00:00:00 2001
+From: Mickael B <gtmicka@hotmail.fr>
+Date: Sat, 22 Jul 2017 03:34:06 -0400
+Subject: [PATCH] add RLE decompression for SGI images
+
+---
+ PIL/SgiImagePlugin.py     |  51 ++++++++++----
+ Tests/test_file_sgi.py    |   7 +-
+ _imaging.c                |   2 +
+ decode.c                  |  32 +++++++++
+ libImaging/Imaging.h      |   2 +
+ libImaging/SgiRleDecode.c | 138 ++++++++++++++++++++++++++++++++++++++
+ setup.py                  |   4 +-
+ 7 files changed, 217 insertions(+), 19 deletions(-)
+ create mode 100644 libImaging/SgiRleDecode.c
+
+diff --git a/PIL/SgiImagePlugin.py b/PIL/SgiImagePlugin.py
+index c96a8d821..5a5a44433 100644
+--- a/PIL/SgiImagePlugin.py
++++ b/PIL/SgiImagePlugin.py
+@@ -9,6 +9,7 @@
+ #
+ #
+ # History:
++# 2017-22-07 mb   Add RLE decompression
+ # 2016-16-10 mb   Add save method without compression
+ # 1995-09-10 fl   Created
+ #
+@@ -44,40 +45,62 @@ class SgiImageFile(ImageFile.ImageFile):
+     def _open(self):
+ 
+         # HEAD
+-        s = self.fp.read(512)
++        offset = 512
++        s = self.fp.read(offset)
++
++        # magic number : 474
+         if i16(s) != 474:
+             raise ValueError("Not an SGI image file")
+ 
+-        # relevant header entries
++        # compression : verbatim or RLE
+         compression = i8(s[2])
+ 
+-        # bytes, dimension, zsize
+-        layout = i8(s[3]), i16(s[4:]), i16(s[10:])
++        # depth : 1 or 2 bytes (8bits or 16bits)
++        depth = i8(s[3]) * 8
++
++        # dimension : 1, 2 or 3 (depending on xsize, ysize and zsize)
++        dimension = i16(s[4:])
++
++        # xsize : width
++        xsize = i16(s[6:])
++
++        # ysize : height
++        ysize = i16(s[8:])
+ 
+-        # determine mode from bytes/zsize
+-        if layout == (1, 2, 1) or layout == (1, 1, 1):
++        # zsize : channels count
++        zsize = i16(s[10:])
++
++        # layout
++        layout = depth, dimension, zsize
++
++        # determine mode from bits/zsize
++        if layout == (8, 2, 1) or layout == (8, 1, 1):
+             self.mode = "L"
+-        elif layout == (1, 3, 3):
++        elif layout == (8, 3, 3):
+             self.mode = "RGB"
+-        elif layout == (1, 3, 4):
++        elif layout == (8, 3, 4):
+             self.mode = "RGBA"
+         else:
+             raise ValueError("Unsupported SGI image mode")
+ 
+-        # size
+-        self.size = i16(s[6:]), i16(s[8:])
++        self.size = xsize, ysize
++
++        # orientation -1 : scanlines begins at the bottom-left corner
++        orientation = -1
+ 
+         # decoder info
+         if compression == 0:
+-            offset = 512
+-            pagesize = self.size[0]*self.size[1]*layout[0]
++            pagesize = xsize * ysize * (depth / 8)
+             self.tile = []
+             for layer in self.mode:
+                 self.tile.append(
+-                    ("raw", (0, 0)+self.size, offset, (layer, 0, -1)))
++                    ("raw", (0, 0) + self.size,
++                        offset, (layer, 0, orientation)))
+                 offset = offset + pagesize
+         elif compression == 1:
+-            raise ValueError("SGI RLE encoding not supported")
++            self.tile = [("sgi_rle", (0, 0) + self.size,
++                          offset, (self.mode, orientation, depth))]
++            # raise ValueError("SGI RLE encoding not supported")
+ 
+ 
+ def _save(im, fp, filename):
+diff --git a/Tests/test_file_sgi.py b/Tests/test_file_sgi.py
+index e78217f6f..f2e3cfc62 100644
+--- a/Tests/test_file_sgi.py
++++ b/Tests/test_file_sgi.py
+@@ -31,12 +31,13 @@ class TestFileSgi(PillowTestCase):
+         self.assert_image_equal(im, target)
+ 
+     def test_rle(self):
++        # Created with ImageMagick:
+         # convert hopper.ppm  hopper.sgi
+-        # We don't support RLE compression, this should throw a value error
+         test_file = "Tests/images/hopper.sgi"
+ 
+-        with self.assertRaises(ValueError):
+-            Image.open(test_file)
++        im = Image.open(test_file)
++        target = Image.open('Tests/images/hopper.rgb')
++        self.assert_image_equal(im, target)
+ 
+     def test_invalid_file(self):
+         invalid_file = "Tests/images/flower.jpg"
+diff --git a/_imaging.c b/_imaging.c
+index 7b70bef19..b1aa3ef6d 100644
+--- a/_imaging.c
++++ b/_imaging.c
+@@ -3347,6 +3347,7 @@ extern PyObject* PyImaging_PackbitsDecoderNew(PyObject* self, PyObject* args);
+ extern PyObject* PyImaging_PcdDecoderNew(PyObject* self, PyObject* args);
+ extern PyObject* PyImaging_PcxDecoderNew(PyObject* self, PyObject* args);
+ extern PyObject* PyImaging_RawDecoderNew(PyObject* self, PyObject* args);
++extern PyObject* PyImaging_SgiRleDecoderNew(PyObject* self, PyObject* args);
+ extern PyObject* PyImaging_SunRleDecoderNew(PyObject* self, PyObject* args);
+ extern PyObject* PyImaging_TgaRleDecoderNew(PyObject* self, PyObject* args);
+ extern PyObject* PyImaging_XbmDecoderNew(PyObject* self, PyObject* args);
+@@ -3426,6 +3427,7 @@ static PyMethodDef functions[] = {
+     {"pcx_encoder", (PyCFunction)PyImaging_PcxEncoderNew, 1},
+     {"raw_decoder", (PyCFunction)PyImaging_RawDecoderNew, 1},
+     {"raw_encoder", (PyCFunction)PyImaging_RawEncoderNew, 1},
++    {"sgi_rle_decoder", (PyCFunction)PyImaging_SgiRleDecoderNew, 1},
+     {"sun_rle_decoder", (PyCFunction)PyImaging_SunRleDecoderNew, 1},
+     {"tga_rle_decoder", (PyCFunction)PyImaging_TgaRleDecoderNew, 1},
+     {"xbm_decoder", (PyCFunction)PyImaging_XbmDecoderNew, 1},
+diff --git a/decode.c b/decode.c
+index 022912ffb..890f51ef5 100644
+--- a/decode.c
++++ b/decode.c
+@@ -671,6 +671,38 @@ PyImaging_RawDecoderNew(PyObject* self, PyObject* args)
+ }
+ 
+ 
++/* -------------------------------------------------------------------- */
++/* SGI RLE                                                              */
++/* -------------------------------------------------------------------- */
++
++PyObject*
++PyImaging_SgiRleDecoderNew(PyObject* self, PyObject* args)
++{
++    ImagingDecoderObject* decoder;
++
++    char* mode;
++    char* rawmode;
++    int ystep = 1;
++    int depth = 8;
++    if (!PyArg_ParseTuple(args, "ss|ii", &mode, &rawmode, &ystep, &depth))
++        return NULL;
++
++    decoder = PyImaging_DecoderNew(0);
++    if (decoder == NULL)
++        return NULL;
++
++    if (get_unpacker(decoder, mode, rawmode) < 0)
++        return NULL;
++
++    decoder->decode = ImagingSgiRleDecode;
++
++    decoder->state.ystep = ystep;
++    decoder->state.count = depth;
++
++    return (PyObject*) decoder;
++}
++
++
+ /* -------------------------------------------------------------------- */
+ /* SUN RLE                                                              */
+ /* -------------------------------------------------------------------- */
+diff --git a/libImaging/Imaging.h b/libImaging/Imaging.h
+index e55e6a6e8..b77c1ec69 100644
+--- a/libImaging/Imaging.h
++++ b/libImaging/Imaging.h
+@@ -445,6 +445,8 @@ extern int ImagingRawDecode(Imaging im, ImagingCodecState state,
+                             UINT8* buffer, int bytes);
+ extern int ImagingRawEncode(Imaging im, ImagingCodecState state,
+                             UINT8* buffer, int bytes);
++extern int ImagingSgiRleDecode(Imaging im, ImagingCodecState state,
++                               UINT8* buffer, int bytes);
+ extern int ImagingSunRleDecode(Imaging im, ImagingCodecState state,
+                                UINT8* buffer, int bytes);
+ extern int ImagingTgaRleDecode(Imaging im, ImagingCodecState state,
+diff --git a/libImaging/SgiRleDecode.c b/libImaging/SgiRleDecode.c
+new file mode 100644
+index 000000000..f612691c0
+--- /dev/null
++++ b/libImaging/SgiRleDecode.c
+@@ -0,0 +1,138 @@
++/*
++ * The Python Imaging Library.
++ * $Id$
++ *
++ * decoder for Sgi RLE data.
++ *
++ * history:
++ * 2017-07-20 mb	created
++ *
++ * Copyright (c) Mickael Bonfill 2017.
++ *
++ * See the README file for information on usage and redistribution.
++ */
++
++
++#include "Imaging.h"
++#include "stdio.h"
++
++static unsigned long getlong(UINT8 *buf)
++{
++	return (unsigned long)(buf[0]<<24)+(buf[1]<<16)+(buf[2]<<8)+(buf[3]<<0);
++}
++
++static void readlongtab(UINT8** buf, int n, unsigned long *tab)
++{
++	int i;
++	for (i = 0; i < n; i++) {
++        tab[i] = getlong(*buf);
++        *buf += 4;
++    }
++}
++
++static void expandrow(UINT8* optr,UINT8* iptr, int z)
++{
++	UINT8 pixel, count;
++
++	optr += z;
++	while(1) {
++		pixel = *iptr++;
++		if ( !(count = (pixel & 0x7f)) )
++			return;
++		if(pixel & 0x80) {
++			while(count--) 
++				*optr++ = *iptr++;
++		} else {
++			pixel = *iptr++;
++			while(count--) 
++				*optr++ = pixel;
++		}
++	}
++}
++
++int
++ImagingSgiRleDecode(Imaging im, ImagingCodecState state,
++		    UINT8* buf, int bytes)
++{
++	int n, depth;
++    UINT8* ptr;
++
++    ptr = buf;
++
++    if (state->state == 0) {
++
++	/* check image orientation */
++	if (state->ystep < 0) {
++	    state->y = state->ysize-1;
++	    state->ystep = -1;
++	} else
++	    state->ystep = 1;
++
++	state->state = 1;
++
++    }
++
++    /* get the channels count */
++    int zsize = state->bits / state->count;
++
++    /* allocate memory for the buffer used for full lines later */
++    state->buffer = (UINT8*)malloc(sizeof(UINT8) * state->xsize * zsize);
++
++
++    /* get RLE offset and length tabs  */
++    unsigned long *starttab, *lengthtab;
++    int tablen = state->ysize * zsize * sizeof(unsigned long);
++
++    starttab = (unsigned long *)malloc(tablen);
++    lengthtab = (unsigned long *)malloc(tablen);
++
++    readlongtab(&ptr, state->ysize * zsize, starttab);
++    readlongtab(&ptr, state->ysize * zsize, lengthtab);
++
++    /* get scanlines informations */
++    for (int rowno = 0; rowno < state->ysize; ++rowno) {
++
++    	for (int channo = 0; channo < zsize; ++channo) {
++
++    		unsigned long rleoffset = starttab[rowno + channo * state->ysize];
++
++            /* 
++             * we also need to substract the file header and RLE tabs length
++             * from the offset
++             */
++            rleoffset -= 512;
++            rleoffset -= tablen;
++
++    		unsigned long rlelength = lengthtab[rowno + channo * state->ysize];
++
++    		UINT8* rledata;
++    		rledata = (UINT8*)malloc(sizeof(UINT8) * rlelength);
++    		memcpy(rledata, &ptr[rleoffset], rlelength * sizeof(UINT8));
++    		UINT8* scanline;
++    		scanline = (UINT8*)malloc(sizeof(UINT8) * state->xsize);
++
++            /* decompress raw data */
++    		expandrow(scanline, rledata, 0);
++
++            /* populate the state buffer */
++    		for (int x = 0; x < state->xsize; ++x) {
++   				state->buffer[x * zsize + channo] = scanline[x];
++    		}
++
++    		free(rledata);
++    		free(scanline);
++    	}
++
++        /* Unpack the full line stored in the state buffer */
++        state->shuffle((UINT8*) im->image[state->y + state->yoff] +
++                state->xoff * im->pixelsize, state->buffer,
++                state->xsize);
++
++    	state->y += state->ystep;
++    }
++    
++    free(starttab);
++    free(lengthtab);
++
++    return -1;
++}
+\ No newline at end of file
+diff --git a/setup.py b/setup.py
+index 579553f64..4948faf1a 100755
+--- a/setup.py
++++ b/setup.py
+@@ -35,8 +35,8 @@ _LIB_IMAGING = (
+     "Negative", "Offset", "Pack", "PackDecode", "Palette", "Paste",
+     "Quant", "QuantOctree", "QuantHash", "QuantHeap", "PcdDecode", "PcxDecode",
+     "PcxEncode", "Point", "RankFilter", "RawDecode", "RawEncode", "Storage",
+-    "SunRleDecode", "TgaRleDecode", "Unpack", "UnpackYCC", "UnsharpMask",
+-    "XbmDecode", "XbmEncode", "ZipDecode", "ZipEncode", "TiffDecode",
++    "SgiRleDecode", "SunRleDecode", "TgaRleDecode", "Unpack", "UnpackYCC",
++    "UnsharpMask", "XbmDecode", "XbmEncode", "ZipDecode", "ZipEncode", "TiffDecode",
+     "Jpeg2KDecode", "Jpeg2KEncode", "BoxBlur", "QuantPngQuant", "codec_fd")
+ 
+ DEBUG = False
+-- 
+2.34.1
+

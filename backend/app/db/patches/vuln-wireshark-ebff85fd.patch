@@ -1,0 +1,953 @@
+From ebff85fdbbe9667f469e18686ad945f634be2682 Mon Sep 17 00:00:00 2001
+From: Guy Harris <guy@alum.mit.edu>
+Date: Fri, 8 Aug 2014 18:09:00 -0700
+Subject: [PATCH] Clean up Internet checksum handling.
+
+Add macros to set entries of a vec_t, one for use when you have a
+pointer to private data, and one for use when you have data in a tvbuff.
+The latter wraps the use of tvb_get_ptr(), so that you're not directly
+calling it in a dissector.
+
+Move ip_checksum() to epan/in_cksum.c, and add an ip_checksum_tvb() that
+wraps the use of tvb_get_ptr().
+
+In the CARP dissector, give the length variable an unsigned type -
+there's no benefit to it being signed, and that requires some casts to
+be thrown around.
+
+In the DCCP dissector, check only against the coverage length to see if
+we have enough data, combine the "should we check the checksum?" check
+with the "*can* we check the checksum?" check in a single if, and throw
+a dissector assertion if the source network address type isn't IPv4 or
+IPv6.
+
+Get rid of inclues of <epan/in_cksum.h> in dissectors that don't use any
+of the Internet checksum routines.
+
+In the HIP dissector, make sure we have the data to calculate the
+checksum before doing so.
+
+Change-Id: I2f9674775dbb54c533d33082632809f7d32ec8ae
+Reviewed-on: https://code.wireshark.org/review/3517
+Reviewed-by: Guy Harris <guy@alum.mit.edu>
+---
+ epan/dissectors/packet-6lowpan.c     |  9 +--
+ epan/dissectors/packet-carp.c        |  9 ++-
+ epan/dissectors/packet-cdp.c         |  6 +-
+ epan/dissectors/packet-dccp.c        | 98 +++++++++++++---------------
+ epan/dissectors/packet-eigrp.c       | 10 +--
+ epan/dissectors/packet-extreme.c     |  3 +-
+ epan/dissectors/packet-flip.c        |  8 +--
+ epan/dissectors/packet-foundry.c     |  1 -
+ epan/dissectors/packet-gmhdr.c       |  4 +-
+ epan/dissectors/packet-gre.c         |  3 +-
+ epan/dissectors/packet-hip.c         | 25 ++++---
+ epan/dissectors/packet-icmp.c        |  8 +--
+ epan/dissectors/packet-icmpv6.c      | 15 ++---
+ epan/dissectors/packet-igmp.c        |  3 +-
+ epan/dissectors/packet-ip.c          | 12 +---
+ epan/dissectors/packet-ip.h          |  1 -
+ epan/dissectors/packet-ipv6.c        |  7 +-
+ epan/dissectors/packet-ipvs-syncd.c  |  1 -
+ epan/dissectors/packet-ixiatrailer.c |  3 +-
+ epan/dissectors/packet-lmp.c         |  5 +-
+ epan/dissectors/packet-nhrp.c        |  8 +--
+ epan/dissectors/packet-ospf.c        | 19 ++----
+ epan/dissectors/packet-pgm.c         |  3 +-
+ epan/dissectors/packet-pim.c         | 18 ++---
+ epan/dissectors/packet-rsvp.c        |  3 +-
+ epan/dissectors/packet-tcp.c         | 16 ++---
+ epan/dissectors/packet-udp.c         | 14 ++--
+ epan/dissectors/packet-vrrp.c        | 15 ++---
+ epan/dissectors/packet-xtp.c         |  3 +-
+ epan/in_cksum.c                      | 19 ++++++
+ epan/in_cksum.h                      | 16 +++++
+ 31 files changed, 158 insertions(+), 207 deletions(-)
+
+diff --git a/epan/dissectors/packet-6lowpan.c b/epan/dissectors/packet-6lowpan.c
+index 634f25b420..5a8358c873 100644
+--- a/epan/dissectors/packet-6lowpan.c
++++ b/epan/dissectors/packet-6lowpan.c
+@@ -2041,12 +2041,9 @@ dissect_6lowpan_iphc_nhc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gi
+             cksum_phdr.proto = IP_PROTO_UDP;
+ 
+             /* Compute the checksum. */
+-            cksum_vec[0].ptr = (const guint8 *)&cksum_phdr;
+-            cksum_vec[0].len = sizeof(cksum_phdr);
+-            cksum_vec[1].ptr = (const guint8 *)&udp;
+-            cksum_vec[1].len = sizeof(struct udp_hdr);
+-            cksum_vec[2].ptr = tvb_get_ptr(tvb, offset, length);
+-            cksum_vec[2].len = length;
++            SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)&cksum_phdr, sizeof(cksum_phdr));
++            SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)&udp, sizeof(struct udp_hdr));
++            SET_CKSUM_VEC_TVB(cksum_vec[2], tvb, offset, length);
+             udp.checksum = in_cksum(cksum_vec, 3);
+             if (udp.checksum == 0) udp.checksum = 0xffff;
+         }
+diff --git a/epan/dissectors/packet-carp.c b/epan/dissectors/packet-carp.c
+index 36a05ee243..db4d3eee6c 100644
+--- a/epan/dissectors/packet-carp.c
++++ b/epan/dissectors/packet-carp.c
+@@ -85,7 +85,7 @@ static int
+ dissect_carp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+ {
+     int offset = 0;
+-    gint carp_len;
++    guint carp_len;
+     guint8  vhid;
+     vec_t cksum_vec[4];
+     proto_item *ti, *tv;
+@@ -136,12 +136,11 @@ dissect_carp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+ 
+     cksum = tvb_get_ntohs(tvb, offset);
+     ti = proto_tree_add_item(carp_tree, hf_carp_checksum, tvb, offset, 2, ENC_BIG_ENDIAN);
+-    carp_len = (gint)tvb_reported_length(tvb);
+-    if (!pinfo->fragmented && (gint)tvb_length(tvb) >= carp_len) {
++    carp_len = tvb_reported_length(tvb);
++    if (!pinfo->fragmented && tvb_length(tvb) >= carp_len) {
+         /* The packet isn't part of a fragmented datagram
+            and isn't truncated, so we can checksum it. */
+-        cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, carp_len);
+-        cksum_vec[0].len = carp_len;
++        SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, carp_len);
+         computed_cksum = in_cksum(&cksum_vec[0], 1);
+         if (computed_cksum == 0) {
+             proto_item_append_text(ti, " [correct]");
+diff --git a/epan/dissectors/packet-cdp.c b/epan/dissectors/packet-cdp.c
+index 87e5d6563e..2a2a515cf6 100644
+--- a/epan/dissectors/packet-cdp.c
++++ b/epan/dissectors/packet-cdp.c
+@@ -282,12 +282,10 @@ dissect_cdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+           padded_buffer[data_length-1]--;
+         }
+         /* Setup checksum routine data buffer */
+-        cksum_vec[0].ptr = padded_buffer;
+-        cksum_vec[0].len = data_length+1;
++        SET_CKSUM_VEC_PTR(cksum_vec[0], padded_buffer, data_length+1);
+     } else {
+         /* Setup checksum routine data buffer */
+-        cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, data_length);
+-        cksum_vec[0].len = data_length;
++        SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, data_length);
+     }
+ 
+     computed_checksum = in_cksum(cksum_vec, 1);
+diff --git a/epan/dissectors/packet-dccp.c b/epan/dissectors/packet-dccp.c
+index b8b2af88e5..b1593a1b1b 100644
+--- a/epan/dissectors/packet-dccp.c
++++ b/epan/dissectors/packet-dccp.c
+@@ -631,6 +631,7 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
+     guint      offset                     = 0;
+     guint      len                        = 0;
+     guint      reported_len               = 0;
++    guint      csum_coverage_len;
+     guint      advertised_dccp_header_len = 0;
+     guint      options_len                = 0;
+     e_dccphdr *dccph;
+@@ -716,61 +717,52 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
+      */
+     reported_len = tvb_reported_length(tvb);
+     len = tvb_length(tvb);
++    csum_coverage_len = dccp_csum_coverage(dccph, reported_len);
++
++    if (dccp_check_checksum && !pinfo->fragmented && len >= csum_coverage_len) {
++        /* We're supposed to check the checksum, and the packet isn't part
++         * of a fragmented datagram and isn't truncated, so we can checksum it.
++         * XXX - make a bigger scatter-gather list once we do fragment
++         * reassembly? */
++        /* Set up the fields of the pseudo-header. */
++        SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)pinfo->src.data, pinfo->src.len);
++        SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)pinfo->dst.data, pinfo->dst.len);
++        switch (pinfo->src.type) {
++        case AT_IPv4:
++            phdr[0] = g_htonl((IP_PROTO_DCCP << 16) + reported_len);
++            SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *) &phdr, 4);
++            break;
++        case AT_IPv6:
++            phdr[0] = g_htonl(reported_len);
++            phdr[1] = g_htonl(IP_PROTO_DCCP);
++            SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *) &phdr, 8);
++            break;
+ 
+-    if (!pinfo->fragmented && len >= reported_len) {
+-        /* The packet isn't part of a fragmented datagram and isn't
+-            * truncated, so we can checksum it.
+-            * XXX - make a bigger scatter-gather list once we do fragment
+-            * reassembly? */
+-        if (dccp_check_checksum) {
+-            /* Set up the fields of the pseudo-header. */
+-            cksum_vec[0].ptr = (const guint8 *)pinfo->src.data;
+-            cksum_vec[0].len = pinfo->src.len;
+-            cksum_vec[1].ptr = (const guint8 *)pinfo->dst.data;
+-            cksum_vec[1].len = pinfo->dst.len;
+-            cksum_vec[2].ptr = (const guint8 *) &phdr;
+-            switch (pinfo->src.type) {
+-            case AT_IPv4:
+-                phdr[0] = g_htonl((IP_PROTO_DCCP << 16) + reported_len);
+-                cksum_vec[2].len = 4;
+-                break;
+-            case AT_IPv6:
+-                phdr[0] = g_htonl(reported_len);
+-                phdr[1] = g_htonl(IP_PROTO_DCCP);
+-                cksum_vec[2].len = 8;
+-                break;
+-
+-            default:
+-                /* DCCP runs only atop IPv4 and IPv6... */
+-                break;
+-            }
+-            cksum_vec[3].ptr = tvb_get_ptr(tvb, 0, len);
+-            cksum_vec[3].len = dccp_csum_coverage(dccph, reported_len);
+-            computed_cksum = in_cksum(&cksum_vec[0], 4);
+-            if (computed_cksum == 0) {
+-                proto_tree_add_uint_format_value(dccp_tree,
+-                                                 hf_dccp_checksum, tvb,
+-                                                 offset, 2,
+-                                                 dccph->checksum,
+-                                                 "0x%04x [correct]",
+-                                                 dccph->checksum);
+-            } else {
+-                hidden_item =
+-                    proto_tree_add_boolean(dccp_tree, hf_dccp_checksum_bad,
+-                                           tvb, offset, 2, TRUE);
+-                PROTO_ITEM_SET_HIDDEN(hidden_item);
+-                proto_tree_add_uint_format_value(
+-                    dccp_tree, hf_dccp_checksum, tvb, offset, 2,
+-                    dccph->checksum,
+-                    "0x%04x [incorrect, should be 0x%04x]",
+-                    dccph->checksum,
+-                    in_cksum_shouldbe(dccph->checksum, computed_cksum));
+-            }
++        default:
++            /* DCCP runs only atop IPv4 and IPv6... */
++            DISSECTOR_ASSERT_NOT_REACHED();
++            break;
++        }
++        SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, 0, csum_coverage_len);
++        computed_cksum = in_cksum(&cksum_vec[0], 4);
++        if (computed_cksum == 0) {
++            proto_tree_add_uint_format_value(dccp_tree,
++                                             hf_dccp_checksum, tvb,
++                                             offset, 2,
++                                             dccph->checksum,
++                                             "0x%04x [correct]",
++                                             dccph->checksum);
+         } else {
+-            proto_tree_add_uint_format_value(dccp_tree, hf_dccp_checksum,
+-                                             tvb,
+-                                             offset, 2, dccph->checksum,
+-                                             "0x%04x", dccph->checksum);
++            hidden_item =
++                proto_tree_add_boolean(dccp_tree, hf_dccp_checksum_bad,
++                                       tvb, offset, 2, TRUE);
++            PROTO_ITEM_SET_HIDDEN(hidden_item);
++            proto_tree_add_uint_format_value(
++                dccp_tree, hf_dccp_checksum, tvb, offset, 2,
++                dccph->checksum,
++                "0x%04x [incorrect, should be 0x%04x]",
++                dccph->checksum,
++                in_cksum_shouldbe(dccph->checksum, computed_cksum));
+         }
+     } else {
+         proto_tree_add_uint_format_value(dccp_tree, hf_dccp_checksum, tvb,
+diff --git a/epan/dissectors/packet-eigrp.c b/epan/dissectors/packet-eigrp.c
+index 70e2c2a5eb..04869c7706 100644
+--- a/epan/dissectors/packet-eigrp.c
++++ b/epan/dissectors/packet-eigrp.c
+@@ -2395,14 +2395,6 @@ dissect_eigrp_multi_protocol_tlv (proto_item *ti, proto_tree *tree, tvbuff_t *tv
+  */
+ #include <epan/in_cksum.h>
+ 
+-static guint16 ip_checksum(const guint8 *ptr, int len)
+-{
+-    vec_t cksum_vec[1];
+-
+-    cksum_vec[0].ptr = ptr;
+-    cksum_vec[0].len = len;
+-    return in_cksum(&cksum_vec[0], 1);
+-}
+ static int
+ dissect_eigrp (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+ {
+@@ -2455,7 +2447,7 @@ dissect_eigrp (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
+ 
+     size          = tvb_length(tvb);
+     checksum      = tvb_get_ntohs(tvb, 2);
+-    cacl_checksum = ip_checksum(tvb_get_ptr(tvb, 0, size), size);
++    cacl_checksum = ip_checksum_tvb(tvb, 0, size);
+ 
+     if (cacl_checksum == checksum) {
+         proto_tree_add_text(eigrp_tree, tvb, 2, 2,
+diff --git a/epan/dissectors/packet-extreme.c b/epan/dissectors/packet-extreme.c
+index 62cd38f989..24db1e7305 100644
+--- a/epan/dissectors/packet-extreme.c
++++ b/epan/dissectors/packet-extreme.c
+@@ -1002,8 +1002,7 @@ dissect_edp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+ 		 */
+ 		if (tvb_length(tvb) >= data_length) {
+ 			/* Checksum from version to null tlv */
+-			cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, data_length);
+-			cksum_vec[0].len = data_length;
++			SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, data_length);
+ 			computed_checksum = in_cksum(&cksum_vec[0], 1);
+ 			checksum_good = (computed_checksum == 0);
+ 			checksum_bad = !checksum_good;
+diff --git a/epan/dissectors/packet-flip.c b/epan/dissectors/packet-flip.c
+index 75bf492f37..c96b7c3840 100644
+--- a/epan/dissectors/packet-flip.c
++++ b/epan/dissectors/packet-flip.c
+@@ -522,11 +522,9 @@ dissect_flip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
+             {
+                 vec_t   vec[2];
+ 
+-                vec[0].ptr = tvb_get_ptr(flip_tvb, 0, bytes_dissected + 2);
+-                vec[0].len = bytes_dissected + 2;
+-                vec[1].ptr = tvb_get_ptr(flip_tvb, bytes_dissected + 4,
+-                                         flip_len - (bytes_dissected + 4));
+-                vec[1].len = flip_len - (bytes_dissected + 4);
++                SET_CKSUM_VEC_TVB(vec[0], flip_tvb, 0, bytes_dissected + 2);
++                SET_CKSUM_VEC_TVB(vec[1], flip_tvb, bytes_dissected + 4,
++                                  flip_len - (bytes_dissected + 4));
+                 computed_chksum = in_cksum(&vec[0], 2);
+ 
+                 /* Checksums handled in network order. */
+diff --git a/epan/dissectors/packet-foundry.c b/epan/dissectors/packet-foundry.c
+index 9baf5afb93..4cba24dff0 100644
+--- a/epan/dissectors/packet-foundry.c
++++ b/epan/dissectors/packet-foundry.c
+@@ -29,7 +29,6 @@
+ #include <epan/packet.h>
+ #include <epan/expert.h>
+ #include <epan/strutil.h>
+-#include <epan/in_cksum.h>
+ #include "packet-llc.h"
+ #include <epan/oui.h>
+ 
+diff --git a/epan/dissectors/packet-gmhdr.c b/epan/dissectors/packet-gmhdr.c
+index 018defa87e..8d1b62c1c3 100644
+--- a/epan/dissectors/packet-gmhdr.c
++++ b/epan/dissectors/packet-gmhdr.c
+@@ -368,8 +368,8 @@ dissect_gmtrailer(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void
+   /* Verify the checksum; if not valid, it means that the trailer is not valid */
+   {
+     vec_t vec;
+-    vec.len = length + 3;
+-    vec.ptr = tvb_get_ptr(tvb, offset, vec.len);
++
++    SET_CKSUM_VEC_TVB(vec, tvb, offset, length + 3);
+ 
+     comp_cksum = in_cksum(&vec, 1);
+     if (pntoh16(&comp_cksum) != cksum) {
+diff --git a/epan/dissectors/packet-gre.c b/epan/dissectors/packet-gre.c
+index 2158926fec..c14acba526 100644
+--- a/epan/dissectors/packet-gre.c
++++ b/epan/dissectors/packet-gre.c
+@@ -413,8 +413,7 @@ dissect_gre(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+             /* The Checksum Present bit is set, and the packet isn't part of a
+                fragmented datagram and isn't truncated, so we can checksum it. */
+             if ((flags_and_ver & GRE_CHECKSUM) && !pinfo->fragmented && length >= reported_length) {
+-                cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, reported_length);
+-                cksum_vec[0].len = reported_length;
++                SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, reported_length);
+                 computed_cksum = in_cksum(cksum_vec, 1);
+                 if (computed_cksum == 0) {
+                     proto_item_append_text(it_checksum," [correct]");
+diff --git a/epan/dissectors/packet-hip.c b/epan/dissectors/packet-hip.c
+index b7501c0cde..6dd263fd11 100644
+--- a/epan/dissectors/packet-hip.c
++++ b/epan/dissectors/packet-hip.c
+@@ -416,6 +416,8 @@ dissect_hip_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gboolean
+         int length, offset = 0, newoffset = 0;
+         guint16 control_h, checksum_h, computed_checksum;
+         guint16 tlv_type_h, tlv_length_h; /* For storing in host order */
++        guint len;
++        guint reported_len;
+         vec_t cksum_vec[4];
+         guint32 phdr[2];
+ 
+@@ -482,29 +484,26 @@ dissect_hip_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gboolean
+                                           ((hiph_shim6_fixed_bit_s) ? "HIP" : "SHIM6"));
+ 
+                 /* Checksum - this is the same algorithm from UDP, ICMPv6 */
+-                if (!pinfo->fragmented) {
++                reported_len = tvb_reported_length(tvb);
++                len = tvb_captured_length(tvb);
++                if (!pinfo->fragmented && len >= reported_len) {
+                         /* IPv4 or IPv6 addresses */
+-                        cksum_vec[0].ptr = (const guint8 *)pinfo->src.data;
+-                        cksum_vec[0].len = pinfo->src.len;
+-                        cksum_vec[1].ptr = (const guint8 *)pinfo->dst.data;
+-                        cksum_vec[1].len = pinfo->dst.len;
++                        SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)pinfo->src.data, pinfo->src.len);
++                        SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)pinfo->dst.data, pinfo->dst.len);
+ 
+                         /* the rest of the pseudo-header */
+                         if (pinfo->src.type == AT_IPv6) {
+-                                cksum_vec[2].ptr = (const guint8 *)&phdr;
+-                                phdr[0] = tvb_reported_length(tvb);
++                                phdr[0] = reported_len;
+                                 phdr[0] = g_htonl(phdr[0]);   /* Note: g_htonl() macro may eval arg multiple times */
+                                 phdr[1] = g_htonl(IP_PROTO_HIP);
+-                                cksum_vec[2].len = 8;
++                                SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)&phdr, 8);
+                         } else {
+-                                cksum_vec[2].ptr = (const guint8 *)&phdr;
+-                                phdr[0] = (IP_PROTO_HIP<<16)+tvb_reported_length(tvb);
++                                phdr[0] = (IP_PROTO_HIP<<16)+reported_len;
+                                 phdr[0] = g_htonl(phdr[0]);  /* Note: g_htonl() macro may eval arg multiple times */
+-                                cksum_vec[2].len = 4;
++                                SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)&phdr, 4);
+                         }
+                         /* pointer to the HIP header (packet data) */
+-                        cksum_vec[3].len = tvb_reported_length(tvb);
+-                        cksum_vec[3].ptr = tvb_get_ptr(tvb, 0, cksum_vec[3].len);
++                        SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, 0, reported_len);
+                         computed_checksum = in_cksum(cksum_vec, 4);
+                         if (computed_checksum == 0) {
+                                 proto_tree_add_uint_format_value(hip_tree, hf_hip_checksum, tvb,
+diff --git a/epan/dissectors/packet-icmp.c b/epan/dissectors/packet-icmp.c
+index 26a9b8baf0..e34878d69f 100644
+--- a/epan/dissectors/packet-icmp.c
++++ b/epan/dissectors/packet-icmp.c
+@@ -835,9 +835,7 @@ dissect_extensions(tvbuff_t * tvb, gint offset, proto_tree * tree)
+ 	/* Checksum */
+ 	cksum = tvb_get_ntohs(tvb, offset + 2);
+ 
+-	computed_cksum =
+-	    ip_checksum(tvb_get_ptr(tvb, offset, reported_length),
+-			reported_length);
++	computed_cksum = ip_checksum_tvb(tvb, offset, reported_length);
+ 
+ 	if (computed_cksum == 0) {
+ 		proto_tree_add_uint_format_value(ext_tree, hf_icmp_ext_checksum,
+@@ -1328,9 +1326,7 @@ dissect_icmp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data)
+ 		   truncated, and isn't the payload of an error packet, so we can checksum
+ 		   it. */
+ 
+-		computed_cksum =
+-		    ip_checksum(tvb_get_ptr(tvb, 0, reported_length),
+-				reported_length);
++		computed_cksum = ip_checksum_tvb(tvb, 0, reported_length);
+ 		if (computed_cksum == 0) {
+ 			proto_tree_add_uint_format_value(icmp_tree,
+ 						   hf_icmp_checksum, tvb,
+diff --git a/epan/dissectors/packet-icmpv6.c b/epan/dissectors/packet-icmpv6.c
+index a8d99090fe..99c1f38c64 100644
+--- a/epan/dissectors/packet-icmpv6.c
++++ b/epan/dissectors/packet-icmpv6.c
+@@ -3288,16 +3288,12 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+                truncated, so we can checksum it. */
+ 
+             /* Set up the fields of the pseudo-header. */
+-            cksum_vec[0].ptr = (const guint8 *)pinfo->src.data;
+-            cksum_vec[0].len = pinfo->src.len;
+-            cksum_vec[1].ptr = (const guint8 *)pinfo->dst.data;
+-            cksum_vec[1].len = pinfo->dst.len;
+-            cksum_vec[2].ptr = (const guint8 *)&phdr;
++            SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)pinfo->src.data, pinfo->src.len);
++            SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)pinfo->dst.data, pinfo->dst.len);
+             phdr[0] = g_htonl(reported_length);
+             phdr[1] = g_htonl(IP_PROTO_ICMPV6);
+-            cksum_vec[2].len = 8;
+-            cksum_vec[3].len = reported_length;
+-            cksum_vec[3].ptr = tvb_get_ptr(tvb, 0, cksum_vec[3].len);
++            SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)&phdr, 8);
++            SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, 0, reported_length);
+             computed_cksum = in_cksum(cksum_vec, 4);
+ 
+             if (computed_cksum == 0) {
+@@ -3363,8 +3359,7 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+ 
+                     tmp[0] = ~cksum;
+                     tmp[1] = ~0x0100; /* The difference between echo request & reply */
+-                    cksum_vec[0].len = sizeof(tmp);
+-                    cksum_vec[0].ptr = (guint8 *)tmp;
++                    SET_CKSUM_VEC_PTR(cksum_vec[0], (guint8 *)tmp, sizeof(tmp));
+                     conv_key[0] = in_cksum(cksum_vec, 1);
+                     if (conv_key[0] == 0)
+                         conv_key[0] = 0xffff;
+diff --git a/epan/dissectors/packet-igmp.c b/epan/dissectors/packet-igmp.c
+index f9833b6f42..fbaff47c3e 100644
+--- a/epan/dissectors/packet-igmp.c
++++ b/epan/dissectors/packet-igmp.c
+@@ -346,8 +346,7 @@ void igmp_checksum(proto_tree *tree, tvbuff_t *tvb, int hf_index,
+ 		 * The packet isn't part of a fragmented datagram and isn't
+ 		 * truncated, so we can checksum it.
+ 		 */
+-		cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, len);
+-		cksum_vec[0].len = len;
++		SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, len);
+ 
+ 		cksum = in_cksum(&cksum_vec[0],1);
+ 
+diff --git a/epan/dissectors/packet-ip.c b/epan/dissectors/packet-ip.c
+index 747b81bafd..ed0b8991f6 100644
+--- a/epan/dissectors/packet-ip.c
++++ b/epan/dissectors/packet-ip.c
+@@ -1945,16 +1945,6 @@ static const true_false_string flags_sf_set_evil = {
+   "Not evil"
+ };
+ 
+-guint16
+-ip_checksum(const guint8 *ptr, int len)
+-{
+-  vec_t cksum_vec[1];
+-
+-  cksum_vec[0].ptr = ptr;
+-  cksum_vec[0].len = len;
+-  return in_cksum(&cksum_vec[0], 1);
+-}
+-
+ static void
+ dissect_ip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree)
+ {
+@@ -2161,7 +2151,7 @@ dissect_ip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree)
+    * checksum.
+    */
+   if (ip_check_checksum && tvb_bytes_exist(tvb, offset, hlen)&&(!pinfo->flags.in_error_pkt)) {
+-    ipsum = ip_checksum(tvb_get_ptr(tvb, offset, hlen), hlen);
++    ipsum = ip_checksum_tvb(tvb, offset, hlen);
+     if (tree) {
+       if (ipsum == 0) {
+         item = proto_tree_add_uint_format_value(ip_tree, hf_ip_checksum, tvb,
+diff --git a/epan/dissectors/packet-ip.h b/epan/dissectors/packet-ip.h
+index e561355aec..23c8f379be 100644
+--- a/epan/dissectors/packet-ip.h
++++ b/epan/dissectors/packet-ip.h
+@@ -43,7 +43,6 @@ typedef struct _ws_ip
+ } ws_ip;
+ 
+ void capture_ip(const guchar *, int, int, packet_counts *);
+-guint16 ip_checksum(const guint8 *ptr, int len);
+ 
+ /* Export the DSCP extended value-string table for other protocols */
+ WS_DLL_PUBLIC value_string_ext dscp_vals_ext;
+diff --git a/epan/dissectors/packet-ipv6.c b/epan/dissectors/packet-ipv6.c
+index c8800a8343..f4b67084cf 100644
+--- a/epan/dissectors/packet-ipv6.c
++++ b/epan/dissectors/packet-ipv6.c
+@@ -1242,12 +1242,11 @@ dissect_dstopts(tvbuff_t *tvb, packet_info * pinfo, proto_tree *tree, void *data
+ }
+ 
+ /* START SHIM6 PART */
+-static guint16 shim_checksum(const guint8 *ptr, int len)
++static guint16 shim_checksum(tvbuff_t *tvb, int offset, int len)
+ {
+     vec_t cksum_vec[1];
+ 
+-    cksum_vec[0].ptr = ptr;
+-    cksum_vec[0].len = len;
++    SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, offset, len);
+     return in_cksum(&cksum_vec[0], 1);
+ }
+ 
+@@ -1762,7 +1761,7 @@ dissect_shim6(tvbuff_t *tvb, packet_info * pinfo, proto_tree *tree, void* data _
+             p++;
+ 
+             /* Checksum */
+-            csum = shim_checksum(tvb_get_ptr(tvb, offset, len), len);
++            csum = shim_checksum(tvb, offset, len);
+ 
+             if (csum == 0) {
+                 ti = proto_tree_add_uint_format_value(shim_tree, hf_ipv6_shim6_checksum, tvb, p, 2,
+diff --git a/epan/dissectors/packet-ipvs-syncd.c b/epan/dissectors/packet-ipvs-syncd.c
+index 5d5b8e64c5..7b389a149f 100644
+--- a/epan/dissectors/packet-ipvs-syncd.c
++++ b/epan/dissectors/packet-ipvs-syncd.c
+@@ -26,7 +26,6 @@
+ 
+ #include <epan/packet.h>
+ #include <epan/ipproto.h>
+-#include <epan/in_cksum.h>
+ 
+ void proto_register_ipvs_syncd(void);
+ void proto_reg_handoff_ipvs_syncd(void);
+diff --git a/epan/dissectors/packet-ixiatrailer.c b/epan/dissectors/packet-ixiatrailer.c
+index ad4f39b391..07e843b217 100644
+--- a/epan/dissectors/packet-ixiatrailer.c
++++ b/epan/dissectors/packet-ixiatrailer.c
+@@ -112,8 +112,7 @@ dissect_ixiatrailer(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, voi
+     cksum = tvb_get_ntohs(tvb, tvblen-2);
+ 
+     /* Verify the checksum; if not valid, it means that the trailer is not valid */
+-    vec.len = trailer_length + 3;
+-    vec.ptr = tvb_get_ptr(tvb, offset, vec.len);
++    SET_CKSUM_VEC_TVB(vec, tvb, offset, trailer_length + 3);
+     comp_cksum = in_cksum(&vec, 1);
+     if (pntoh16(&comp_cksum) != cksum) {
+         return 0;
+diff --git a/epan/dissectors/packet-lmp.c b/epan/dissectors/packet-lmp.c
+index 9d4f43ea5d..8774cc17cd 100644
+--- a/epan/dissectors/packet-lmp.c
++++ b/epan/dissectors/packet-lmp.c
+@@ -740,9 +740,8 @@ dissect_lmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+ 							offset+6, 2, ENC_BIG_ENDIAN);
+ 		if (!pinfo->fragmented && (int) tvb_length(tvb) >= msg_length) {
+ 			/* The packet isn't part of a fragmented datagram and isn't truncated, so we can checksum it. */
+-			cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, msg_length);
+-			cksum_vec[0].len = msg_length;
+-			computed_cksum = in_cksum(&cksum_vec[0], 1);
++			SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, msg_length);
++			computed_cksum = in_cksum(cksum_vec, 1);
+ 
+ 			if (computed_cksum == 0) {
+ 				proto_item_append_text( ti, " [correct]");
+diff --git a/epan/dissectors/packet-nhrp.c b/epan/dissectors/packet-nhrp.c
+index 16222359f2..66d240d23e 100644
+--- a/epan/dissectors/packet-nhrp.c
++++ b/epan/dissectors/packet-nhrp.c
+@@ -275,12 +275,11 @@ typedef struct _e_nhrp {
+     guint8  ar_sstl;
+ } e_nhrp_hdr;
+ 
+-static guint16 nhrp_checksum(const guint8 *ptr, int len)
++static guint16 nhrp_checksum(tvbuff_t *tvb, int len)
+ {
+     vec_t cksum_vec[1];
+ 
+-    cksum_vec[0].ptr = ptr;
+-    cksum_vec[0].len = len;
++    SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, len);
+     return in_cksum(&cksum_vec[0], 1);
+ }
+ 
+@@ -377,8 +376,7 @@ static void dissect_nhrp_hdr(tvbuff_t     *tvb,
+ 
+     rx_chksum = tvb_get_ntohs(tvb, offset);
+     if (tvb_bytes_exist(tvb, 0, total_len)) {
+-        ipcsum = nhrp_checksum(tvb_get_ptr(tvb, 0, total_len),
+-            total_len);
++        ipcsum = nhrp_checksum(tvb, total_len);
+         if (ipcsum == 0) {
+             proto_tree_add_uint_format_value(nhrp_tree, hf_nhrp_hdr_chksum, tvb, offset, 2, rx_chksum,
+                 "0x%04x [correct]", rx_chksum);
+diff --git a/epan/dissectors/packet-ospf.c b/epan/dissectors/packet-ospf.c
+index 4d6b0a6d21..05aaa3298a 100644
+--- a/epan/dissectors/packet-ospf.c
++++ b/epan/dissectors/packet-ospf.c
+@@ -1096,14 +1096,12 @@ dissect_ospf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+         case OSPF_VERSION_2:
+             /* Header, not including the authentication data (the OSPFv2
+                checksum excludes the 64-bit authentication field). */
+-            cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, 16);
+-            cksum_vec[0].len = 16;
++            SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, 16);
+             if (length > ospf_header_length) {
+                 /* Rest of the packet, again not including the
+                    authentication data. */
+                 reported_length -= ospf_header_length;
+-                cksum_vec[1].ptr = tvb_get_ptr(tvb, ospf_header_length, reported_length);
+-                cksum_vec[1].len = reported_length;
++                SET_CKSUM_VEC_TVB(cksum_vec[1], tvb, ospf_header_length, reported_length);
+                 cksum_vec_len = 2;
+             } else {
+                 /* There's nothing but a header. */
+@@ -1116,17 +1114,12 @@ dissect_ospf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+                and a prepended IPv6 pseudo-header. */
+ 
+             /* Set up the fields of the pseudo-header. */
+-            cksum_vec[0].ptr = (const guint8 *)pinfo->src.data;
+-            cksum_vec[0].len = pinfo->src.len;
+-            cksum_vec[1].ptr = (const guint8 *)pinfo->dst.data;
+-            cksum_vec[1].len = pinfo->dst.len;
+-            cksum_vec[2].ptr = (const guint8 *)&phdr;
++            SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)pinfo->src.data, pinfo->src.len);
++            SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)pinfo->dst.data, pinfo->dst.len);
+             phdr[0] = g_htonl(ospflen);
+             phdr[1] = g_htonl(IP_PROTO_OSPF);
+-            cksum_vec[2].len = 8;
+-
+-            cksum_vec[3].ptr = tvb_get_ptr(tvb, 0, reported_length);
+-            cksum_vec[3].len = reported_length;
++            SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)&phdr, 8);
++            SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, 0, reported_length);
+             cksum_vec_len = 4;
+             break;
+ 
+diff --git a/epan/dissectors/packet-pgm.c b/epan/dissectors/packet-pgm.c
+index 4dd290bc22..62d08b2144 100644
+--- a/epan/dissectors/packet-pgm.c
++++ b/epan/dissectors/packet-pgm.c
+@@ -926,8 +926,7 @@ dissect_pgm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+ 				vec_t cksum_vec[1];
+ 				guint16 computed_cksum;
+ 
+-				cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, pgmlen);
+-				cksum_vec[0].len = pgmlen;
++				SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, pgmlen);
+ 				computed_cksum = in_cksum(&cksum_vec[0], 1);
+ 				if (computed_cksum == 0) {
+ 					proto_tree_add_uint_format_value(pgm_tree, hf_pgm_main_cksum, tvb,
+diff --git a/epan/dissectors/packet-pim.c b/epan/dissectors/packet-pim.c
+index c4e1cfb820..e322ad3f77 100644
+--- a/epan/dissectors/packet-pim.c
++++ b/epan/dissectors/packet-pim.c
+@@ -246,8 +246,7 @@ dissect_pimv1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
+          * The packet isn't part of a fragmented datagram and isn't
+          * truncated, so we can checksum it.
+          */
+-        cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, pim_length);
+-        cksum_vec[0].len = pim_length;
++        SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, pim_length);
+         computed_cksum = in_cksum(&cksum_vec[0], 1);
+         if (computed_cksum == 0) {
+             proto_tree_add_uint_format_value(pim_tree, hf_pim_cksum, tvb,
+@@ -754,22 +753,17 @@ dissect_pim(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
+ 
+         switch (pinfo->src.type) {
+         case AT_IPv4:
+-            cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, pim_length);
+-            cksum_vec[0].len = pim_length;
++            SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, pim_length);
+             computed_cksum = in_cksum(&cksum_vec[0], 1);
+             break;
+         case AT_IPv6:
+             /* Set up the fields of the pseudo-header. */
+-            cksum_vec[0].ptr = (const guint8 *)pinfo->src.data;
+-            cksum_vec[0].len = pinfo->src.len;
+-            cksum_vec[1].ptr = (const guint8 *)pinfo->dst.data;
+-            cksum_vec[1].len = pinfo->dst.len;
+-            cksum_vec[2].ptr = (const guint8 *)&phdr;
++            SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)pinfo->src.data, pinfo->src.len);
++            SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)pinfo->dst.data, pinfo->dst.len);
+             phdr[0] = g_htonl(pim_length);
+             phdr[1] = g_htonl(IP_PROTO_PIM);
+-            cksum_vec[2].len = 8;
+-            cksum_vec[3].ptr = tvb_get_ptr(tvb, 0, pim_length);
+-            cksum_vec[3].len = pim_length;
++            SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)&phdr, 8);
++            SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, pim_length);
+             computed_cksum = in_cksum(&cksum_vec[0], 4);
+             break;
+         default:
+diff --git a/epan/dissectors/packet-rsvp.c b/epan/dissectors/packet-rsvp.c
+index 8d6ccf41c6..8917691c4a 100644
+--- a/epan/dissectors/packet-rsvp.c
++++ b/epan/dissectors/packet-rsvp.c
+@@ -7204,8 +7204,7 @@ dissect_rsvp_msg_tree(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
+     if (!pinfo->fragmented && ((int) tvb_length(tvb) >= msg_length)) {
+         /* The packet isn't part of a fragmented datagram and isn't
+            truncated, so we can checksum it. */
+-        cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, msg_length);
+-        cksum_vec[0].len = msg_length;
++        SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, msg_length);
+         computed_cksum = in_cksum(&cksum_vec[0], 1);
+         if (computed_cksum == 0) {
+             proto_item_append_text(cksum_item, " [correct]");
+diff --git a/epan/dissectors/packet-tcp.c b/epan/dissectors/packet-tcp.c
+index a614e79c29..47cef7aa2d 100644
+--- a/epan/dissectors/packet-tcp.c
++++ b/epan/dissectors/packet-tcp.c
+@@ -25,7 +25,6 @@
+ #include <stdio.h>
+ #include <string.h>
+ #include <glib.h>
+-#include <epan/in_cksum.h>
+ 
+ #include <epan/packet.h>
+ #include <epan/exceptions.h>
+@@ -42,6 +41,7 @@
+ #include <epan/reassemble.h>
+ #include <epan/tap.h>
+ #include <epan/decode_as.h>
++#include <epan/in_cksum.h>
+ 
+ #include "packet-tcp.h"
+ #include "packet-ip.h"
+@@ -4602,22 +4602,19 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+             /* We haven't turned checksum checking off; checksum it. */
+ 
+             /* Set up the fields of the pseudo-header. */
+-            cksum_vec[0].ptr = (const guint8 *)pinfo->src.data;
+-            cksum_vec[0].len = pinfo->src.len;
+-            cksum_vec[1].ptr = (const guint8 *)pinfo->dst.data;
+-            cksum_vec[1].len = pinfo->dst.len;
+-            cksum_vec[2].ptr = (const guint8 *)phdr;
++            SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)pinfo->src.data, pinfo->src.len);
++            SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)pinfo->dst.data, pinfo->dst.len);
+             switch (pinfo->src.type) {
+ 
+             case AT_IPv4:
+                 phdr[0] = g_htonl((IP_PROTO_TCP<<16) + reported_len);
+-                cksum_vec[2].len = 4;
++                SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)phdr, 4);
+                 break;
+ 
+             case AT_IPv6:
+                 phdr[0] = g_htonl(reported_len);
+                 phdr[1] = g_htonl(IP_PROTO_TCP);
+-                cksum_vec[2].len = 8;
++                SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)phdr, 8);
+                 break;
+ 
+             default:
+@@ -4625,8 +4622,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+                 DISSECTOR_ASSERT_NOT_REACHED();
+                 break;
+             }
+-            cksum_vec[3].ptr = tvb_get_ptr(tvb, offset, reported_len);
+-            cksum_vec[3].len = reported_len;
++            SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, offset, reported_len);
+             computed_cksum = in_cksum(cksum_vec, 4);
+             if (computed_cksum == 0 && th_sum == 0xffff) {
+                 item = proto_tree_add_uint_format_value(tcp_tree, hf_tcp_checksum, tvb,
+diff --git a/epan/dissectors/packet-udp.c b/epan/dissectors/packet-udp.c
+index 0b601c3e93..5730403cc6 100644
+--- a/epan/dissectors/packet-udp.c
++++ b/epan/dissectors/packet-udp.c
+@@ -655,11 +655,8 @@ dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 ip_proto)
+     if (((ip_proto == IP_PROTO_UDP) && udp_check_checksum) ||
+         ((ip_proto == IP_PROTO_UDPLITE) && udplite_check_checksum)) {
+       /* Set up the fields of the pseudo-header. */
+-      cksum_vec[0].ptr = (const guint8 *)pinfo->src.data;
+-      cksum_vec[0].len = pinfo->src.len;
+-      cksum_vec[1].ptr = (const guint8 *)pinfo->dst.data;
+-      cksum_vec[1].len = pinfo->dst.len;
+-      cksum_vec[2].ptr = (const guint8 *)&phdr;
++      SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)pinfo->src.data, pinfo->src.len);
++      SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)pinfo->dst.data, pinfo->dst.len);
+       switch (pinfo->src.type) {
+ 
+       case AT_IPv4:
+@@ -667,7 +664,7 @@ dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 ip_proto)
+           phdr[0] = g_htonl((ip_proto<<16) | udph->uh_ulen);
+         else
+           phdr[0] = g_htonl((ip_proto<<16) | reported_len);
+-        cksum_vec[2].len = 4;
++        SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)&phdr, 4);
+         break;
+ 
+       case AT_IPv6:
+@@ -676,7 +673,7 @@ dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 ip_proto)
+         else
+           phdr[0] = g_htonl(reported_len);
+         phdr[1] = g_htonl(ip_proto);
+-        cksum_vec[2].len = 8;
++        SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)&phdr, 8);
+         break;
+ 
+       default:
+@@ -684,8 +681,7 @@ dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 ip_proto)
+         DISSECTOR_ASSERT_NOT_REACHED();
+         break;
+       }
+-      cksum_vec[3].ptr = tvb_get_ptr(tvb, offset, udph->uh_sum_cov);
+-      cksum_vec[3].len = udph->uh_sum_cov;
++      SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, offset, udph->uh_sum_cov);
+       computed_cksum = in_cksum(&cksum_vec[0], 4);
+       if (computed_cksum == 0) {
+         item = proto_tree_add_uint_format_value(udp_tree, hfi_udp_checksum.id, tvb,
+diff --git a/epan/dissectors/packet-vrrp.c b/epan/dissectors/packet-vrrp.c
+index 57e88cf0ce..70518b067e 100644
+--- a/epan/dissectors/packet-vrrp.c
++++ b/epan/dissectors/packet-vrrp.c
+@@ -181,23 +181,18 @@ dissect_vrrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
+             case 3:
+                 if((g_vrrp_v3_checksum_as_in_v2 == FALSE)||(pinfo->src.type == AT_IPv6)){
+                     /* Set up the fields of the pseudo-header. */
+-                    cksum_vec[0].ptr = (const guint8 *)pinfo->src.data;
+-                    cksum_vec[0].len = pinfo->src.len;
+-                    cksum_vec[1].ptr = (const guint8 *)pinfo->dst.data;
+-                    cksum_vec[1].len = pinfo->dst.len;
+-                    cksum_vec[2].ptr = (const guint8 *)&phdr;
++                    SET_CKSUM_VEC_PTR(cksum_vec[0], (const guint8 *)pinfo->src.data, pinfo->src.len);
++                    SET_CKSUM_VEC_PTR(cksum_vec[1], (const guint8 *)pinfo->dst.data, pinfo->dst.len);
+                     phdr[0] = g_htonl(vrrp_len);
+                     phdr[1] = g_htonl(IP_PROTO_VRRP);
+-                    cksum_vec[2].len = 8;
+-                    cksum_vec[3].ptr = tvb_get_ptr(tvb, 0, vrrp_len);
+-                    cksum_vec[3].len = vrrp_len;
++                    SET_CKSUM_VEC_PTR(cksum_vec[2], (const guint8 *)&phdr, 8);
++                    SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, 0, vrrp_len);
+                     computed_cksum = in_cksum(cksum_vec, 4);
+                     break;
+                 }
+             case 2:
+             default:
+-                cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, vrrp_len);
+-                cksum_vec[0].len = vrrp_len;
++                SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, vrrp_len);
+                 computed_cksum = in_cksum(&cksum_vec[0], 1);
+                 break;
+         }
+diff --git a/epan/dissectors/packet-xtp.c b/epan/dissectors/packet-xtp.c
+index c394613cf3..20b7ee2949 100644
+--- a/epan/dissectors/packet-xtp.c
++++ b/epan/dissectors/packet-xtp.c
+@@ -1054,8 +1054,7 @@ dissect_xtp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+ 			guint32 check_len = XTP_HEADER_LEN;
+ 			if (!(xtph->cmd_options & XTP_CMD_OPTIONS_NOCHECK))
+ 				check_len += xtph->dlen;
+-			cksum_vec[0].ptr = tvb_get_ptr(tvb, 0, check_len);
+-			cksum_vec[0].len = check_len;
++			SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, 0, check_len);
+ 			computed_cksum = in_cksum(cksum_vec, 1);
+ 			if (computed_cksum == 0) {
+ 				proto_tree_add_text(xtp_tree, tvb, offset, 2,
+diff --git a/epan/in_cksum.c b/epan/in_cksum.c
+index feb1079f6f..4d65c0646b 100644
+--- a/epan/in_cksum.c
++++ b/epan/in_cksum.c
+@@ -37,6 +37,7 @@
+ 
+ #include <glib.h>
+ 
++#include <epan/tvbuff.h>
+ #include <epan/in_cksum.h>
+ 
+ /*
+@@ -143,6 +144,24 @@ in_cksum(const vec_t *vec, int veclen)
+ 	return (~sum & 0xffff);
+ }
+ 
++guint16
++ip_checksum(const guint8 *ptr, int len)
++{
++	vec_t cksum_vec[1];
++
++	SET_CKSUM_VEC_PTR(cksum_vec[0], ptr, len);
++	return in_cksum(&cksum_vec[0], 1);
++}
++
++guint16
++ip_checksum_tvb(tvbuff_t *tvb, int offset, int len)
++{
++	vec_t cksum_vec[1];
++
++	SET_CKSUM_VEC_TVB(cksum_vec[0], tvb, offset, len);
++	return in_cksum(&cksum_vec[0], 1);
++}
++
+ /*
+  * Given the host-byte-order value of the checksum field in a packet
+  * header, and the network-byte-order computed checksum of the data
+diff --git a/epan/in_cksum.h b/epan/in_cksum.h
+index 775b0e0ac0..3183b5a76f 100644
+--- a/epan/in_cksum.h
++++ b/epan/in_cksum.h
+@@ -39,6 +39,22 @@ typedef struct {
+ 	int	len;
+ } vec_t;
+ 
++#define SET_CKSUM_VEC_PTR(vecelem, data, length) \
++	G_STMT_START { \
++		vecelem.ptr = (data); \
++		vecelem.len = (length); \
++	} G_STMT_END
++
++#define SET_CKSUM_VEC_TVB(vecelem, tvb, offset, length) \
++	G_STMT_START { \
++		vecelem.len = (length); \
++		vecelem.ptr = tvb_get_ptr((tvb), (offset), vecelem.len); \
++	} G_STMT_END
++
++WS_DLL_PUBLIC guint16 ip_checksum(const guint8 *ptr, int len);
++
++WS_DLL_PUBLIC guint16 ip_checksum_tvb(tvbuff_t *tvb, int offset, int len);
++
+ WS_DLL_PUBLIC int in_cksum(const vec_t *vec, int veclen);
+ 
+ guint16 in_cksum_shouldbe(guint16 sum, guint16 computed_sum);
+-- 
+2.34.1
+

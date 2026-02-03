@@ -1,0 +1,48 @@
+From d4c553b75a214e41299af010ef4b26174a0f802c Mon Sep 17 00:00:00 2001
+From: Livio Spring <livio.a@gmail.com>
+Date: Thu, 15 Feb 2024 07:53:59 +0100
+Subject: [PATCH] fix: set user agent cookie on host only (without subdomains)
+ (#7297)
+
+This PR changes the domain / prefix of the user agent cookie from including the subdomain to the domain only and therefore changing the prefix from __Secure to __Host.
+
+Note:
+As the cookie is used to determine existing session on the login UI, applying the change will require end-users to start a new session on the next login, since the existing ones cannot be retrieved anymore.
+
+(cherry picked from commit d5266ea51cceb163b48c8e2e5124093927150e96)
+---
+ internal/api/http/cookie.go                       | 4 ++++
+ internal/api/http/middleware/user_agent_cookie.go | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/internal/api/http/cookie.go b/internal/api/http/cookie.go
+index ab055c20d..4519a1fc5 100644
+--- a/internal/api/http/cookie.go
++++ b/internal/api/http/cookie.go
+@@ -147,6 +147,10 @@ func (c *CookieHandler) httpSetWithSameSite(w http.ResponseWriter, name, host, v
+ 	secure := c.secureOnly || (sameSite == http.SameSiteNoneMode && domain == "localhost")
+ 	// prefix the cookie for secure cookies (TLS only, therefore not for samesite none on http://localhost)
+ 	prefixedName := SetCookiePrefix(name, c.secureOnly, c.prefix)
++	// in case the host prefix is set, we need to make sure the domain is not set (otherwise the browser will reject the cookie)
++	if secure && c.prefix == PrefixHost {
++		domain = ""
++	}
+ 	http.SetCookie(w, &http.Cookie{
+ 		Name:     prefixedName,
+ 		Value:    value,
+diff --git a/internal/api/http/middleware/user_agent_cookie.go b/internal/api/http/middleware/user_agent_cookie.go
+index 5eddfb443..e4c2a99e5 100644
+--- a/internal/api/http/middleware/user_agent_cookie.go
++++ b/internal/api/http/middleware/user_agent_cookie.go
+@@ -46,7 +46,7 @@ func NewUserAgentHandler(config *UserAgentCookieConfig, cookieKey []byte, idGene
+ 	opts := []http_utils.CookieHandlerOpt{
+ 		http_utils.WithEncryption(cookieKey, cookieKey),
+ 		http_utils.WithMaxAge(int(config.MaxAge.Seconds())),
+-		http_utils.WithPrefix(http_utils.PrefixSecure),
++		http_utils.WithPrefix(http_utils.PrefixHost),
+ 	}
+ 	if !externalSecure {
+ 		opts = append(opts, http_utils.WithUnsecure())
+-- 
+2.34.1
+

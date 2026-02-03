@@ -1,0 +1,70 @@
+From 691486e43ce0e4893cd703e221bafc10a871f365 Mon Sep 17 00:00:00 2001
+From: Nicolas Grekas <nicolas.grekas@gmail.com>
+Date: Fri, 19 Apr 2019 14:48:43 +0200
+Subject: [PATCH] [HttpFoundation] fix guessing mime-types of files with
+ leading dash
+
+---
+ .../File/MimeType/FileBinaryMimeTypeGuesser.php    |   4 ++--
+ .../HttpFoundation/Tests/File/Fixtures/-test       | Bin 0 -> 35 bytes
+ .../Tests/File/MimeType/MimeTypeTest.php           |  11 ++++++++++-
+ 3 files changed, 12 insertions(+), 3 deletions(-)
+ create mode 100644 src/Symfony/Component/HttpFoundation/Tests/File/Fixtures/-test
+
+diff --git a/src/Symfony/Component/HttpFoundation/File/MimeType/FileBinaryMimeTypeGuesser.php b/src/Symfony/Component/HttpFoundation/File/MimeType/FileBinaryMimeTypeGuesser.php
+index 313000195d..d5a9a10bed 100644
+--- a/src/Symfony/Component/HttpFoundation/File/MimeType/FileBinaryMimeTypeGuesser.php
++++ b/src/Symfony/Component/HttpFoundation/File/MimeType/FileBinaryMimeTypeGuesser.php
+@@ -31,7 +31,7 @@ class FileBinaryMimeTypeGuesser implements MimeTypeGuesserInterface
+      *
+      * @param string $cmd The command to run to get the mime type of a file
+      */
+-    public function __construct(string $cmd = 'file -b --mime %s 2>/dev/null')
++    public function __construct(string $cmd = 'file -b --mime -- %s 2>/dev/null')
+     {
+         $this->cmd = $cmd;
+     }
+@@ -80,7 +80,7 @@ class FileBinaryMimeTypeGuesser implements MimeTypeGuesserInterface
+         ob_start();
+ 
+         // need to use --mime instead of -i. see #6641
+-        passthru(sprintf($this->cmd, escapeshellarg($path)), $return);
++        passthru(sprintf($this->cmd, escapeshellarg((0 === strpos($path, '-') ? './' : '').$path)), $return);
+         if ($return > 0) {
+             ob_end_clean();
+ 
+diff --git a/src/Symfony/Component/HttpFoundation/Tests/File/Fixtures/-test b/src/Symfony/Component/HttpFoundation/Tests/File/Fixtures/-test
+new file mode 100644
+index 0000000000000000000000000000000000000000..b636f4b8df536b0a85e7cea1a6cf3f0bd3179b96
+GIT binary patch
+literal 35
+jcmZ?wbh9u|WMp7uXkcLY4+c66KmZb9U}AD%WUvMRyAlZ1
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/Symfony/Component/HttpFoundation/Tests/File/MimeType/MimeTypeTest.php b/src/Symfony/Component/HttpFoundation/Tests/File/MimeType/MimeTypeTest.php
+index bb88807ab0..ff2aa892ee 100644
+--- a/src/Symfony/Component/HttpFoundation/Tests/File/MimeType/MimeTypeTest.php
++++ b/src/Symfony/Component/HttpFoundation/Tests/File/MimeType/MimeTypeTest.php
+@@ -20,7 +20,16 @@ use Symfony\Component\HttpFoundation\File\MimeType\MimeTypeGuesser;
+  */
+ class MimeTypeTest extends TestCase
+ {
+-    protected $path;
++    public function testGuessWithLeadingDash()
++    {
++        $cwd = getcwd();
++        chdir(__DIR__.'/../Fixtures');
++        try {
++            $this->assertEquals('image/gif', MimeTypeGuesser::getInstance()->guess('-test'));
++        } finally {
++            chdir($cwd);
++        }
++    }
+ 
+     public function testGuessImageWithoutExtension()
+     {
+-- 
+2.34.1
+

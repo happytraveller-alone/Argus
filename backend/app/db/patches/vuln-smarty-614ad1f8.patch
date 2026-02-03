@@ -1,0 +1,79 @@
+From 614ad1f8b9b00086efc123e49b7bb8efbfa81b61 Mon Sep 17 00:00:00 2001
+From: Uwe Tews <uwe.tews@googlemail.com>
+Date: Fri, 21 Jul 2017 05:13:54 +0200
+Subject: [PATCH] - security possible PHP code injection on custom resources at
+ display() or fetch()     calls if the resource does not sanitize the template
+ name
+
+---
+ change_log.txt                                        | 4 ++++
+ libs/Smarty.class.php                                 | 2 +-
+ libs/sysplugins/smarty_internal_runtime_codeframe.php | 4 ++--
+ libs/sysplugins/smarty_resource_custom.php            | 4 ++--
+ 4 files changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/change_log.txt b/change_log.txt
+index 3db0cd9e..7ab4888f 100644
+--- a/change_log.txt
++++ b/change_log.txt
+@@ -1,4 +1,8 @@
+ ﻿===== 3.1.32 - dev ===
++21.7.2017
++  - security possible PHP code injection on custom resources at display() or fetch()
++    calls if the resource does not sanitize the template name
++
+ 27.5.2017
+   - bugfix change compiled code for registered function and modifiers to called as callable to allow closures
+     https://github.com/smarty-php/smarty/pull/368, https://github.com/smarty-php/smarty/issues/273
+diff --git a/libs/Smarty.class.php b/libs/Smarty.class.php
+index 38c274b4..c3e57297 100644
+--- a/libs/Smarty.class.php
++++ b/libs/Smarty.class.php
+@@ -108,7 +108,7 @@ class Smarty extends Smarty_Internal_TemplateBase
+     /**
+      * smarty version
+      */
+-    const SMARTY_VERSION = '3.1.32-dev-11';
++    const SMARTY_VERSION = '3.1.32-dev-12';
+ 
+     /**
+      * define variable scopes
+diff --git a/libs/sysplugins/smarty_internal_runtime_codeframe.php b/libs/sysplugins/smarty_internal_runtime_codeframe.php
+index e363712a..ceb386ff 100644
+--- a/libs/sysplugins/smarty_internal_runtime_codeframe.php
++++ b/libs/sysplugins/smarty_internal_runtime_codeframe.php
+@@ -41,8 +41,8 @@ class Smarty_Internal_Runtime_CodeFrame
+             $properties[ 'cache_lifetime' ] = $_template->cache_lifetime;
+         }
+         $output = "<?php\n";
+-        $output .= "/* Smarty version " . Smarty::SMARTY_VERSION . ", created on " . strftime("%Y-%m-%d %H:%M:%S") .
+-                   "\n  from \"" . $_template->source->filepath . "\" */\n\n";
++        $output .= "/* Smarty version {Smarty::SMARTY_VERSION}, created on " . strftime("%Y-%m-%d %H:%M:%S") .
++                   "\n  from \"" . str_replace('*/','* /',$_template->source->filepath) . "\" */\n\n";
+         $output .= "/* @var Smarty_Internal_Template \$_smarty_tpl */\n";
+         $dec = "\$_smarty_tpl->_decodeProperties(\$_smarty_tpl, " . var_export($properties, true) . ',' .
+                ($cache ? 'true' : 'false') . ")";
+diff --git a/libs/sysplugins/smarty_resource_custom.php b/libs/sysplugins/smarty_resource_custom.php
+index 619f2d6f..77f619ec 100644
+--- a/libs/sysplugins/smarty_resource_custom.php
++++ b/libs/sysplugins/smarty_resource_custom.php
+@@ -47,7 +47,7 @@ abstract class Smarty_Resource_Custom extends Smarty_Resource
+      */
+     public function populate(Smarty_Template_Source $source, Smarty_Internal_Template $_template = null)
+     {
+-        $source->filepath = $source->type . ':' . $source->name;
++        $source->filepath = $source->type . ':' . substr(preg_replace('/[^A-Za-z0-9.]/','',$source->name),0,25);
+         $source->uid = sha1($source->type . ':' . $source->name);
+ 
+         $mtime = $this->fetchTimestamp($source->name);
+@@ -90,6 +90,6 @@ abstract class Smarty_Resource_Custom extends Smarty_Resource
+      */
+     public function getBasename(Smarty_Template_Source $source)
+     {
+-        return basename($source->name);
++        return basename(substr(preg_replace('/[^A-Za-z0-9.]/','',$source->name),0,25));
+     }
+ }
+-- 
+2.34.1
+

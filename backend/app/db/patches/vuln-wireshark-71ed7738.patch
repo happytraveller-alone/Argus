@@ -1,0 +1,474 @@
+From 71ed773862716ff3a4def1884fa1d7f427f1ea47 Mon Sep 17 00:00:00 2001
+From: Gerald Combs <gerald@wireshark.org>
+Date: Fri, 5 Oct 2012 18:52:42 +0000
+Subject: [PATCH] Add a capture_file * element to packet_range_t and pass it
+ explicitly in packet_range_init(). Get rid of global cfile references in
+ packet-range.c. C++-ize packet-range.h. Shuffle some includes around.
+
+svn path=/trunk/; revision=45333
+---
+ cfile.h                   |  2 ++
+ file.c                    |  2 +-
+ file.h                    |  4 +---
+ fileset.h                 |  1 -
+ packet-range.c            | 45 ++++++++++++++++++++++-----------------
+ packet-range.h            | 30 ++++++++++++++++----------
+ tshark.c                  |  8 +++----
+ ui/gtk/capture_file_dlg.c | 14 ++++++------
+ ui/gtk/print_dlg.c        | 14 ++++++------
+ ui/win32/file_dlg_win32.c | 18 +++++++---------
+ 10 files changed, 76 insertions(+), 62 deletions(-)
+
+diff --git a/cfile.h b/cfile.h
+index cc478bd8d0..ea7935f818 100644
+--- a/cfile.h
++++ b/cfile.h
+@@ -25,6 +25,8 @@
+ #ifndef __CFILE_H__
+ #define __CFILE_H__
+ 
++#include <epan/dfilter/dfilter.h>
++#include <epan/frame_data.h>
+ #include "frame_data_sequence.h"
+ 
+ #ifdef __cplusplus
+diff --git a/file.c b/file.c
+index 52083fb23a..c63e5c035c 100644
+--- a/file.c
++++ b/file.c
+@@ -2327,7 +2327,7 @@ cf_retap_packets(capture_file *cf)
+ 
+   /* Iterate through the list of packets, dissecting all packets and
+      re-running the taps. */
+-  packet_range_init(&range);
++  packet_range_init(&range, cf);
+   packet_range_process_init(&range);
+   switch (process_specified_packets(cf, &range, "Recalculating statistics on",
+                                     "all packets", TRUE, retap_packet,
+diff --git a/file.h b/file.h
+index 912f71dfbc..13d9df8ae9 100644
+--- a/file.h
++++ b/file.h
+@@ -25,14 +25,12 @@
+ #ifndef __FILE_H__
+ #define __FILE_H__
+ 
+-#include "packet-range.h"
+ #include "wiretap/wtap.h"
+-#include <epan/dfilter/dfilter.h>
+ #include "print.h"
+ #include <errno.h>
+ #include <epan/epan.h>
+ 
+-#include "cfile.h"
++#include "packet-range.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+diff --git a/fileset.h b/fileset.h
+index 597455a9c0..2eb05cdc82 100644
+--- a/fileset.h
++++ b/fileset.h
+@@ -29,7 +29,6 @@
+ extern "C" {
+ #endif /* __cplusplus */
+ 
+-
+ typedef struct _fileset_entry {
+   char     *fullname;      /* File name with path (g_strdup'ed) */
+   char     *name;          /* File name without path (g_strdup'ed) */
+diff --git a/packet-range.c b/packet-range.c
+index 688f75158d..dc3391b3da 100644
+--- a/packet-range.c
++++ b/packet-range.c
+@@ -35,8 +35,6 @@
+ 
+ #include <epan/frame_data.h>
+ 
+-#include "globals.h"
+-
+ #include "packet-range.h"
+ 
+ /* (re-)calculate the packet counts (except the user specified range) */
+@@ -70,6 +68,8 @@ static void packet_range_calc(packet_range_t *range) {
+     range->displayed_ignored_mark_range_cnt = 0L;
+     range->displayed_ignored_user_range_cnt = 0L;
+ 
++    g_assert(range->cf != NULL);
++
+     /* XXX - this doesn't work unless you have a full set of frame_data
+      * structures for all packets in the capture, which is not,
+      * for example, the case when TShark is doing a one-pass
+@@ -81,7 +81,7 @@ static void packet_range_calc(packet_range_t *range) {
+      * the capture_file structure, updating them whenever we
+      * filter the display, etc..
+      */
+-    if (cfile.frames != NULL) {
++    if (range->cf->frames != NULL) {
+         /* The next for-loop is used to obtain the amount of packets
+          * to be processed and is used to present the information in
+          * the Save/Print As widget.
+@@ -91,10 +91,10 @@ static void packet_range_calc(packet_range_t *range) {
+          * data must be entered in the widget by the user.
+          */
+ 
+-        for(framenum = 1; framenum <= cfile.count; framenum++) {
+-            packet = frame_data_sequence_find(cfile.frames, framenum);
++        for(framenum = 1; framenum <= range->cf->count; framenum++) {
++            packet = frame_data_sequence_find(range->cf->frames, framenum);
+ 
+-            if (cfile.current_frame == packet) {
++            if (range->cf->current_frame == packet) {
+                 range->selected_packet = framenum;
+             }
+             if (packet->flags.passed_dfilter) {
+@@ -136,8 +136,8 @@ static void packet_range_calc(packet_range_t *range) {
+             }
+         }
+ 
+-        for(framenum = 1; framenum <= cfile.count; framenum++) {
+-            packet = frame_data_sequence_find(cfile.frames, framenum);
++        for(framenum = 1; framenum <= range->cf->count; framenum++) {
++            packet = frame_data_sequence_find(range->cf->frames, framenum);
+ 
+             if (framenum >= mark_low &&
+                 framenum <= mark_high)
+@@ -162,7 +162,7 @@ static void packet_range_calc(packet_range_t *range) {
+ 
+ #if 0
+         /* in case we marked just one packet, we add 1. */
+-        if (cfile.marked_count != 0) {
++        if (range->cf->marked_count != 0) {
+             range->mark_range = mark_high - mark_low + 1;
+         }
+ 
+@@ -185,6 +185,8 @@ static void packet_range_calc_user(packet_range_t *range) {
+     range->displayed_user_range_cnt   = 0L;
+     range->displayed_ignored_user_range_cnt = 0L;
+ 
++    g_assert(range->cf != NULL);
++
+     /* XXX - this doesn't work unless you have a full set of frame_data
+      * structures for all packets in the capture, which is not,
+      * for example, the case when TShark is doing a one-pass
+@@ -204,9 +206,9 @@ static void packet_range_calc_user(packet_range_t *range) {
+      * help, but if the user specified about *half* the packets in
+      * the range, that won't help, either.
+      */
+-    if (cfile.frames != NULL) {
+-        for(framenum = 1; framenum <= cfile.count; framenum++) {
+-            packet = frame_data_sequence_find(cfile.frames, framenum);
++    if (range->cf->frames != NULL) {
++        for(framenum = 1; framenum <= range->cf->count; framenum++) {
++            packet = frame_data_sequence_find(range->cf->frames, framenum);
+ 
+             if (value_is_in_range(range->user_range, framenum)) {
+                 range->user_range_cnt++;
+@@ -226,12 +228,12 @@ static void packet_range_calc_user(packet_range_t *range) {
+ 
+ 
+ /* init the range struct */
+-void packet_range_init(packet_range_t *range) {
++void packet_range_init(packet_range_t *range, capture_file *cf) {
+ 
+-    range->process            = range_process_all;
+-    range->process_filtered   = FALSE;
+-    range->remove_ignored     = FALSE;
+-    range->user_range         = range_empty();
++    memset(range, 0, sizeof(packet_range_t));
++    range->process    = range_process_all;
++    range->user_range = range_empty();
++    range->cf         = cf;
+ 
+     /* calculate all packet range counters */
+     packet_range_calc(range);
+@@ -273,6 +275,8 @@ range_process_e packet_range_process_packet(packet_range_t *range, frame_data *f
+         return range_process_next;
+     }
+ 
++    g_assert(range->cf != NULL);
++
+     switch(range->process) {
+     case(range_process_all):
+         break;
+@@ -280,7 +284,7 @@ range_process_e packet_range_process_packet(packet_range_t *range, frame_data *f
+         if (range->selected_done) {
+           return range_processing_finished;
+         }
+-        if (fdata->num != cfile.current_frame->num) {
++        if (fdata->num != range->cf->current_frame->num) {
+           return range_process_next;
+         }
+         range->selected_done = TRUE;
+@@ -343,7 +347,10 @@ void packet_range_convert_str(packet_range_t *range, const gchar *es)
+ 
+     if (range->user_range != NULL)
+         g_free(range->user_range);
+-    ret = range_convert_str(&new_range, es, cfile.count);
++
++    g_assert(range->cf != NULL);
++
++    ret = range_convert_str(&new_range, es, range->cf->count);
+     if (ret != CVT_NO_ERROR) {
+         /* range isn't valid */
+         range->user_range                 = NULL;
+diff --git a/packet-range.h b/packet-range.h
+index 451931c6ea..ac9cada687 100644
+--- a/packet-range.h
++++ b/packet-range.h
+@@ -28,12 +28,17 @@
+ #ifndef __PACKET_RANGE_H__
+ #define __PACKET_RANGE_H__
+ 
+-#include <glib.h>
++#ifdef __cplusplus
++extern "C" {
++#endif /* __cplusplus */
+ 
+-#include <epan/frame_data.h>
++#include <glib.h>
+ 
+ #include <epan/range.h>
+ 
++#include "cfile.h"
++
++
+ extern guint32  curr_selected_frame;
+ 
+ typedef enum {
+@@ -59,14 +64,13 @@ typedef struct packet_range_tag {
+     guint32  selected_packet;       /* the currently selected packet */
+ 
+     /* current packet counts (captured) */
+-    /* cfile.count */               /* packets in capture file */
+-    /* cfile.marked_count */        /* packets marked */
+-    guint32  mark_range_cnt;        /* packets in marked range */
+-    guint32  user_range_cnt;        /* packets in user specified range */
+-    guint32  ignored_cnt;           /* packets ignored */
+-    guint32  ignored_marked_cnt;    /* packets ignored and marked */
+-    guint32  ignored_mark_range_cnt;/* packets ignored in marked range */
+-    guint32  ignored_user_range_cnt;/* packets ignored in user specified range */
++    capture_file *cf;                     /* Associated capture file. */
++    guint32       mark_range_cnt;         /* packets in marked range */
++    guint32       user_range_cnt;         /* packets in user specified range */
++    guint32       ignored_cnt;            /* packets ignored */
++    guint32       ignored_marked_cnt;     /* packets ignored and marked */
++    guint32       ignored_mark_range_cnt; /* packets ignored in marked range */
++    guint32       ignored_user_range_cnt; /* packets ignored in user specified range */
+ 
+     /* current packet counts (displayed) */
+     guint32  displayed_cnt;
+@@ -92,7 +96,7 @@ typedef enum {
+ } range_process_e;
+ 
+ /* init the range structure */
+-extern void packet_range_init(packet_range_t *range);
++extern void packet_range_init(packet_range_t *range, capture_file *cf);
+ 
+ /* check whether the packet range is OK */
+ extern convert_ret_t packet_range_check(packet_range_t *range);
+@@ -109,4 +113,8 @@ extern range_process_e packet_range_process_packet(packet_range_t *range, frame_
+ /* convert user given string to the internal user specified range representation */
+ extern void packet_range_convert_str(packet_range_t *range, const gchar *es);
+ 
++#ifdef __cplusplus
++}
++#endif /* __cplusplus */
++
+ #endif /* __PACKET_RANGE_H__ */
+diff --git a/tshark.c b/tshark.c
+index 80d6ce3889..e55ddd084f 100644
+--- a/tshark.c
++++ b/tshark.c
+@@ -2543,7 +2543,7 @@ process_packet_first_pass(capture_file *cf,
+      run a read filter, or we're going to process taps, set up to
+      do a dissection and do so. */
+   if (do_dissection) {
+-    if (gbl_resolv_flags.mac_name || gbl_resolv_flags.network_name || 
++    if (gbl_resolv_flags.mac_name || gbl_resolv_flags.network_name ||
+         gbl_resolv_flags.transport_name || gbl_resolv_flags.concurrent_dns)
+       /* Grab any resolved addresses */
+       host_name_lookup_process();
+@@ -2608,7 +2608,7 @@ process_packet_second_pass(capture_file *cf, frame_data *fdata,
+      run a read filter, or we're going to process taps, set up to
+      do a dissection and do so. */
+   if (do_dissection) {
+-    if (gbl_resolv_flags.mac_name || gbl_resolv_flags.network_name || 
++    if (gbl_resolv_flags.mac_name || gbl_resolv_flags.network_name ||
+         gbl_resolv_flags.transport_name || gbl_resolv_flags.concurrent_dns)
+       /* Grab any resolved addresses */
+       host_name_lookup_process();
+@@ -3063,7 +3063,7 @@ process_packet(capture_file *cf, gint64 offset, const struct wtap_pkthdr *whdr,
+      run a read filter, or we're going to process taps, set up to
+      do a dissection and do so. */
+   if (do_dissection) {
+-    if (print_packet_info && (gbl_resolv_flags.mac_name || gbl_resolv_flags.network_name || 
++    if (print_packet_info && (gbl_resolv_flags.mac_name || gbl_resolv_flags.network_name ||
+         gbl_resolv_flags.transport_name || gbl_resolv_flags.concurrent_dns))
+       /* Grab any resolved addresses */
+       host_name_lookup_process();
+@@ -3465,7 +3465,7 @@ print_packet(capture_file *cf, epan_dissect_t *edt)
+       print_args.format = print_format;
+       print_args.print_summary = !verbose;
+       print_args.print_formfeed = FALSE;
+-      packet_range_init(&print_args.range);
++      packet_range_init(&print_args.range, &cfile);
+       */
+       print_args.print_hex = verbose && print_hex;
+       print_args.print_dissections = verbose ? print_dissections_expanded : print_dissections_none;
+diff --git a/ui/gtk/capture_file_dlg.c b/ui/gtk/capture_file_dlg.c
+index 32c9e7db7d..9197284a99 100644
+--- a/ui/gtk/capture_file_dlg.c
++++ b/ui/gtk/capture_file_dlg.c
+@@ -32,15 +32,16 @@
+ 
+ #include <gtk/gtk.h>
+ 
+-#include "packet-range.h"
+ #include <epan/filesystem.h>
+ #include <epan/addr_resolv.h>
+ #include <epan/prefs.h>
+ 
+-#include "../globals.h"
+-#include "../color.h"
+-#include "../color_filters.h"
+-#include "../merge.h"
++#include "packet-range.h"
++#include "globals.h"
++#include "color.h"
++#include "color_filters.h"
++#include "merge.h"
++
+ #include "ui/util.h"
+ #include <wsutil/file_util.h>
+ 
+@@ -1975,6 +1976,7 @@ gtk_export_specified_packets_file(GtkWidget *w _U_, GString *file_name, int *fil
+  * <platform/>_export_specified_packets_file routines should upon entry...
+  *   Set the path and fill in the filename if the path+filename is provided.
+  * ...and upon exit...
++ *   Not initialize range.
+  *   Return TRUE on "OK" and "FALSE" on "Cancel".
+  *   Close the window.
+  */
+@@ -1991,7 +1993,7 @@ file_export_specified_packets_cmd_cb(GtkWidget *w _U_, gpointer data _U_) {
+   GtkWidget *msg_dialog;
+ 
+   /* init the packet range */
+-  packet_range_init(&range);
++  packet_range_init(&range, &cfile);
+   range.process_filtered = TRUE;
+   range.include_dependents = TRUE;
+ 
+diff --git a/ui/gtk/print_dlg.c b/ui/gtk/print_dlg.c
+index 95bf6f8466..a43f21311d 100644
+--- a/ui/gtk/print_dlg.c
++++ b/ui/gtk/print_dlg.c
+@@ -145,7 +145,7 @@ file_print_cmd(gboolean print_selected)
+   }
+ 
+   /* init the printing range */
+-  packet_range_init(&args->range);
++  packet_range_init(&args->range, &cfile);
+   args->range.process_filtered = TRUE;
+ 
+   if(print_selected) {
+@@ -213,7 +213,7 @@ export_text_cmd_cb(GtkWidget *widget _U_, gpointer data _U_)
+   }
+ 
+   /* init the printing range */
+-  packet_range_init(&args->range);
++  packet_range_init(&args->range, &cfile);
+   args->range.process_filtered = TRUE;
+ 
+   export_text_win = open_print_dialog("Wireshark: Export as \"Plain Text\" File", output_action_export_text, args);
+@@ -267,7 +267,7 @@ export_ps_cmd_cb(GtkWidget *widget _U_, gpointer data _U_)
+   }
+ 
+   /* init the printing range */
+-  packet_range_init(&args->range);
++  packet_range_init(&args->range, &cfile);
+   args->range.process_filtered = TRUE;
+ 
+   export_ps_win = open_print_dialog("Wireshark: Export as \"PostScript\" file", output_action_export_ps, args);
+@@ -321,7 +321,7 @@ export_psml_cmd_cb(GtkWidget *widget _U_, gpointer data _U_)
+   }
+ 
+   /* init the printing range */
+-  packet_range_init(&args->range);
++  packet_range_init(&args->range, &cfile);
+   args->range.process_filtered = TRUE;
+ 
+   export_psml_win = open_print_dialog("Wireshark: Export as \"PSML\" file", output_action_export_psml, args);
+@@ -374,7 +374,7 @@ export_pdml_cmd_cb(GtkWidget *widget _U_, gpointer data _U_)
+   }
+ 
+   /* init the printing range */
+-  packet_range_init(&args->range);
++  packet_range_init(&args->range, &cfile);
+   args->range.process_filtered = TRUE;
+ 
+   export_pdml_win = open_print_dialog("Wireshark: Export as \"PDML\" file", output_action_export_pdml, args);
+@@ -426,7 +426,7 @@ export_csv_cmd_cb(GtkWidget *widget _U_, gpointer data _U_)
+   }
+ 
+   /* init the printing range */
+-  packet_range_init(&args->range);
++  packet_range_init(&args->range, &cfile);
+   args->range.process_filtered = TRUE;
+ 
+   export_csv_win = open_print_dialog("Wireshark: Export as \"Comma Separated Values\" File", output_action_export_csv, args);
+@@ -478,7 +478,7 @@ export_carrays_cmd_cb(GtkWidget *widget _U_, gpointer data _U_)
+   }
+ 
+   /* init the printing range */
+-  packet_range_init(&args->range);
++  packet_range_init(&args->range, &cfile);
+   args->range.process_filtered = TRUE;
+ 
+   export_carrays_win = open_print_dialog("Wireshark: Export as \"C Arrays\" File",
+diff --git a/ui/win32/file_dlg_win32.c b/ui/win32/file_dlg_win32.c
+index 2c233779aa..d43d455983 100644
+--- a/ui/win32/file_dlg_win32.c
++++ b/ui/win32/file_dlg_win32.c
+@@ -106,13 +106,13 @@ typedef enum {
+ 
+ #define FILE_DEFAULT_COLOR 2
+ 
+-static UINT_PTR CALLBACK open_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);	 
+-static UINT_PTR CALLBACK save_as_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);	 
+-static UINT_PTR CALLBACK export_specified_packets_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);	 
+-static UINT_PTR CALLBACK merge_file_hook_proc(HWND mf_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);	 
+-static UINT_PTR CALLBACK export_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);	 
+-static UINT_PTR CALLBACK export_raw_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);	 
+-static UINT_PTR CALLBACK export_sslkeys_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);	
++static UINT_PTR CALLBACK open_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);
++static UINT_PTR CALLBACK save_as_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);
++static UINT_PTR CALLBACK export_specified_packets_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);
++static UINT_PTR CALLBACK merge_file_hook_proc(HWND mf_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);
++static UINT_PTR CALLBACK export_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);
++static UINT_PTR CALLBACK export_raw_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);
++static UINT_PTR CALLBACK export_sslkeys_file_hook_proc(HWND of_hwnd, UINT ui_msg, WPARAM w_param, LPARAM l_param);
+ static void range_update_dynamics(HWND sf_hwnd, packet_range_t *range);
+ static void range_handle_wm_initdialog(HWND dlg_hwnd, packet_range_t *range);
+ static void range_handle_wm_command(HWND dlg_hwnd, HWND ctrl, WPARAM w_param, packet_range_t *range);
+@@ -2021,7 +2021,7 @@ range_handle_wm_command(HWND dlg_hwnd, HWND ctrl, WPARAM w_param, packet_range_t
+     TCHAR range_text[RANGE_TEXT_MAX];
+ 
+     if (!range) return;
+-    
++
+     switch(w_param) {
+         case (BN_CLICKED << 16) | EWFD_CAPTURED_BTN:
+         case (BN_CLICKED << 16) | EWFD_DISPLAYED_BTN:
+@@ -2165,8 +2165,6 @@ export_file_hook_proc(HWND ef_hwnd, UINT msg, WPARAM w_param, LPARAM l_param) {
+ 
+     switch(msg) {
+         case WM_INITDIALOG:
+-            /* init the printing range */
+-            packet_range_init(&print_args.range);
+             /* default to displayed packets */
+             print_args.range.process_filtered = TRUE;
+             range_handle_wm_initdialog(ef_hwnd, &print_args.range);
+-- 
+2.34.1
+

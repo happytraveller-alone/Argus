@@ -1,0 +1,208 @@
+From 3284be1e6cfe9165a2b23339d7f1bf8367ee9df7 Mon Sep 17 00:00:00 2001
+From: Mike Ragalie <mike.ragalie@shopify.com>
+Date: Mon, 3 Sep 2018 10:45:12 -0400
+Subject: [PATCH] Verify valid shop param
+
+Previously we got this for free, because we would fail to do the
+top-level redirect if the shop origin was incorrect. Since we don't get
+the check for free anymore, we need to use the same approach as the
+`shopify_app` gem and check it against a regex.
+---
+ .../src/auth/create-oauth-start.ts            | 14 +++++++--
+ packages/koa-shopify-auth/src/auth/errors.ts  |  2 +-
+ packages/koa-shopify-auth/src/auth/index.ts   |  2 ++
+ .../src/auth/oauth-query-string.ts            |  9 +-----
+ .../src/auth/test/oauth-query-string.test.ts  | 10 -------
+ .../src/auth/test/oauth-start.test.ts         | 29 ++++++++++++++++++-
+ packages/koa-shopify-auth/src/types.ts        |  1 +
+ 7 files changed, 45 insertions(+), 22 deletions(-)
+
+diff --git a/packages/koa-shopify-auth/src/auth/create-oauth-start.ts b/packages/koa-shopify-auth/src/auth/create-oauth-start.ts
+index 4664763b6..c4832f217 100644
+--- a/packages/koa-shopify-auth/src/auth/create-oauth-start.ts
++++ b/packages/koa-shopify-auth/src/auth/create-oauth-start.ts
+@@ -1,19 +1,29 @@
+ import {Context} from 'koa';
+ 
+-import {OAuthStartOptions} from '../types';
++import Error from './errors';
+ import oAuthQueryString from './oauth-query-string';
++import {OAuthStartOptions} from '../types';
+ 
+ export default function createOAuthStart(
+   options: OAuthStartOptions,
+   callbackPath: string,
+ ) {
+   return function oAuthStart(ctx: Context) {
++    const {myShopifyDomain} = options;
+     const {query} = ctx;
+     const {shop} = query;
+ 
++    const shopRegex = new RegExp(
++      `^[a-z0-9][a-z0-9\\-]*[a-z0-9]\\.${myShopifyDomain}$`,
++    );
++
++    if (shop == null || !shopRegex.test(shop)) {
++      ctx.throw(400, Error.ShopParamMissing);
++      return;
++    }
++
+     const formattedQueryString = oAuthQueryString(ctx, options, callbackPath);
+ 
+-    // TODO: Validate that the shop is legal
+     ctx.redirect(
+       `https://${shop}/admin/oauth/authorize?${formattedQueryString}`,
+     );
+diff --git a/packages/koa-shopify-auth/src/auth/errors.ts b/packages/koa-shopify-auth/src/auth/errors.ts
+index 7b7a864f9..9d8b80c0b 100644
+--- a/packages/koa-shopify-auth/src/auth/errors.ts
++++ b/packages/koa-shopify-auth/src/auth/errors.ts
+@@ -1,5 +1,5 @@
+ enum Error {
+-  ShopParamMissing = 'Expected a shop query parameter',
++  ShopParamMissing = 'Expected a valid shop query parameter',
+   InvalidHMAC = 'HMAC validation failed',
+   AccessTokenFetchFailure = 'Could not fetch access token',
+   NonceMatchFailed = 'Request origin could not be verified',
+diff --git a/packages/koa-shopify-auth/src/auth/index.ts b/packages/koa-shopify-auth/src/auth/index.ts
+index 23a38f27b..27ad0b421 100644
+--- a/packages/koa-shopify-auth/src/auth/index.ts
++++ b/packages/koa-shopify-auth/src/auth/index.ts
+@@ -6,6 +6,7 @@ import createOAuthCallback from './create-oauth-callback';
+ import createEnableCookies from './create-enable-cookies';
+ import createTopLevelRedirect from './create-top-level-redirect';
+ 
++const DEFAULT_MYSHOPIFY_DOMAIN = 'myshopify.com';
+ const DEFAULT_ACCESS_MODE: AccessMode = 'online';
+ 
+ const TOP_LEVEL_OAUTH_COOKIE_NAME = 'shopifyTopLevelOAuth';
+@@ -23,6 +24,7 @@ export default function createShopifyAuth(options: OAuthStartOptions) {
+   const config = {
+     scopes: [],
+     prefix: '',
++    myShopifyDomain: DEFAULT_MYSHOPIFY_DOMAIN,
+     accessMode: DEFAULT_ACCESS_MODE,
+     ...options,
+   };
+diff --git a/packages/koa-shopify-auth/src/auth/oauth-query-string.ts b/packages/koa-shopify-auth/src/auth/oauth-query-string.ts
+index b86b01019..e8836431a 100644
+--- a/packages/koa-shopify-auth/src/auth/oauth-query-string.ts
++++ b/packages/koa-shopify-auth/src/auth/oauth-query-string.ts
+@@ -2,7 +2,6 @@ import {Context} from 'koa';
+ import querystring from 'querystring';
+ import nonce from 'nonce';
+ 
+-import Error from "./errors";
+ import {OAuthStartOptions} from '../types';
+ 
+ const createNonce = nonce();
+@@ -12,15 +11,9 @@ export default function oAuthQueryString(
+   options: OAuthStartOptions,
+   callbackPath: string,
+ ) {
+-  const {query, host, cookies} = ctx;
+-  const {shop} = query;
++  const {host, cookies} = ctx;
+   const {scopes = [], apiKey, accessMode} = options;
+ 
+-  if (shop == null) {
+-    ctx.throw(400, Error.ShopParamMissing);
+-    return;
+-  }
+-
+   const requestNonce = createNonce();
+   cookies.set('shopifyNonce', requestNonce);
+ 
+diff --git a/packages/koa-shopify-auth/src/auth/test/oauth-query-string.test.ts b/packages/koa-shopify-auth/src/auth/test/oauth-query-string.test.ts
+index 108ddcc96..ef0fb6b73 100644
+--- a/packages/koa-shopify-auth/src/auth/test/oauth-query-string.test.ts
++++ b/packages/koa-shopify-auth/src/auth/test/oauth-query-string.test.ts
+@@ -38,16 +38,6 @@ describe('oAuthQueryString', () => {
+     mockedNonce.mockImplementation(() => fakeNonce);
+   });
+ 
+-  it('throws a 400 when no shop query parameter is given', async () => {
+-    const ctx = createMockContext({
+-      url: `https://${baseUrl}`,
+-      throw: jest.fn(),
+-    });
+-
+-    await oAuthQueryString(ctx, baseConfig, callbackPath);
+-    expect(ctx.throw).toBeCalledWith(400, Error.ShopParamMissing);
+-  });
+-
+   it('returns a valid query string', () => {
+     const ctx = createMockContext({
+       url: `https://${baseUrl}?${query({shop})}`,
+diff --git a/packages/koa-shopify-auth/src/auth/test/oauth-start.test.ts b/packages/koa-shopify-auth/src/auth/test/oauth-start.test.ts
+index fa87e3902..399a235ac 100644
+--- a/packages/koa-shopify-auth/src/auth/test/oauth-start.test.ts
++++ b/packages/koa-shopify-auth/src/auth/test/oauth-start.test.ts
+@@ -3,6 +3,7 @@ import {createMockContext} from '@shopify/jest-koa-mocks';
+ 
+ import createOAuthStart from '../create-oauth-start';
+ import redirectionPage from '../redirection-page';
++import Error from '../errors';
+ 
+ import oAuthQueryString from '../oauth-query-string';
+ 
+@@ -14,7 +15,8 @@ jest.mock('../oauth-query-string', () => ({
+ const query = querystring.stringify.bind(querystring);
+ const baseUrl = 'myapp.com/auth';
+ const callbackPath = '/callback';
+-const shop = 'shop1.myshopify.io';
++const shop = 'sho-p1.myshopify.io';
++const badShop = 'shop1myshopify.io';
+ const shopOrigin = 'https://shop1.myshopify.io';
+ const redirectionURL = `/admin/oauth/authorize`;
+ 
+@@ -22,9 +24,34 @@ const baseConfig = {
+   apiKey: 'myapikey',
+   scopes: ['write_orders, write_products'],
+   accessMode: 'offline',
++  myShopifyDomain: 'myshopify.io',
+ };
+ 
+ describe('OAuthStart', () => {
++  it('throws a 400 when no shop query parameter is given', () => {
++    const oAuthStart = createOAuthStart(baseConfig, callbackPath);
++    const ctx = createMockContext({
++      url: `https://${baseUrl}`,
++      throw: jest.fn(),
++    });
++
++    oAuthStart(ctx);
++
++    expect(ctx.throw).toBeCalledWith(400, Error.ShopParamMissing);
++  });
++
++  it('throws a 400 when an invalid shop query parameter is given', () => {
++    const oAuthStart = createOAuthStart(baseConfig, callbackPath);
++    const ctx = createMockContext({
++      url: `https://${baseUrl}?${query({badShop})}`,
++      throw: jest.fn(),
++    });
++
++    oAuthStart(ctx);
++
++    expect(ctx.throw).toBeCalledWith(400, Error.ShopParamMissing);
++  });
++
+   it('redirects to redirectionURL with the returned query string', () => {
+     const oAuthStart = createOAuthStart(baseConfig, callbackPath);
+     const ctx = createMockContext({
+diff --git a/packages/koa-shopify-auth/src/types.ts b/packages/koa-shopify-auth/src/types.ts
+index c92fa58ac..66508b34a 100644
+--- a/packages/koa-shopify-auth/src/types.ts
++++ b/packages/koa-shopify-auth/src/types.ts
+@@ -6,6 +6,7 @@ export interface AuthConfig {
+   secret: string;
+   apiKey: string;
+   baseUrl: string;
++  myShopifyDomain?: string;
+   accessMode?: 'online' | 'offline';
+   afterAuth?(ctx: Context): void;
+ }
+-- 
+2.34.1
+

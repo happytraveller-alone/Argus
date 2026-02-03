@@ -1,0 +1,34 @@
+From 484753b2abe3fd0fcdb73d8bf00c3fc3709eb8b7 Mon Sep 17 00:00:00 2001
+From: Ad Schellevis <ad@opnsense.org>
+Date: Tue, 19 Sep 2023 19:38:38 +0200
+Subject: [PATCH] Lobby: Dashboard - fix data cleansing issue in column_count
+ and sequences.
+
+---
+ src/www/index.php | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/www/index.php b/src/www/index.php
+index 59c816ede..2613c772e 100644
+--- a/src/www/index.php
++++ b/src/www/index.php
+@@ -37,6 +37,7 @@ $widgetCollection = array();
+ 
+ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+     $pconfig = $config['widgets'];
++    legacy_html_escape_form_data($pconfig);
+     // set default dashboard view
+     $pconfig['sequence'] = !empty($pconfig['sequence']) ? $pconfig['sequence'] : '';
+     $pconfig['column_count'] = !empty($pconfig['column_count']) ? $pconfig['column_count'] : 2;
+@@ -70,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+         unset($config['widgets']['sequence']);
+     }
+     if (!empty($_POST['column_count'])) {
+-        $config['widgets']['column_count'] = $_POST['column_count'];
++        $config['widgets']['column_count'] = filter_var($_POST['column_count'], FILTER_SANITIZE_NUMBER_INT);
+     } elseif(isset($config['widgets']['column_count'])) {
+         unset($config['widgets']['column_count']);
+     }
+-- 
+2.34.1
+

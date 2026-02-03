@@ -1,0 +1,23 @@
+From 10d173f541e6f060231e778ec25b8c9846109856 Mon Sep 17 00:00:00 2001
+From: Wadeck Follonier <wadeck.follonier@gmail.com>
+Date: Mon, 28 May 2018 13:07:58 +0200
+Subject: [PATCH] [SECURITY-602] Mask client secret in UI - the round-trip is
+ now done in encrypted format
+
+---
+ .../org/jenkinsci/plugins/GithubSecurityRealm/config.jelly      | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/main/resources/org/jenkinsci/plugins/GithubSecurityRealm/config.jelly b/src/main/resources/org/jenkinsci/plugins/GithubSecurityRealm/config.jelly
+index 0e39df05..5008251d 100644
+--- a/src/main/resources/org/jenkinsci/plugins/GithubSecurityRealm/config.jelly
++++ b/src/main/resources/org/jenkinsci/plugins/GithubSecurityRealm/config.jelly
+@@ -17,7 +17,7 @@
+         </f:entry>
+ 
+         <f:entry title="Client Secret" field="clientSecret" help="/plugin/github-oauth/help/realm/client-secret-help.html">
+-            <f:textbox />
++            <f:password />
+         </f:entry>
+ 
+         <f:entry title="OAuth Scope(s)" field="oauthScopes" help="/plugin/github-oauth/help/realm/oauth-scopes-help.html">

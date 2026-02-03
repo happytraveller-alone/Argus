@@ -1,0 +1,35 @@
+From 927d15f2d8b48e28dd89a2bb52a7e03420ef6ff1 Mon Sep 17 00:00:00 2001
+From: Robert Scheck <robert@fedoraproject.org>
+Date: Mon, 25 Jan 2021 23:46:48 +0100
+Subject: [PATCH] Handle '\n' line breaks in PEM-encoded SSL/TLS certificates
+
+For example Podman, handling OCI containers, does not seem to have
+a way to pass multi-line strings via env files (and Docker seems to
+have the same issue at least outside of docker-compose). Thus this
+change allows 'LDAP_CA_CERT' to handle a string with '\n', because
+currently only 0x0A aka LF might work. An example for additionally
+supported format:
+
+LDAP_CA_CERT=-----BEGIN CERTIFICATE-----\n...\n...\n...\n-----END CERTIFICATE-----
+
+See also: https://github.com/wekan/wekan/issues/3484
+---
+ packages/wekan-ldap/server/ldap.js | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/wekan-ldap/server/ldap.js b/packages/wekan-ldap/server/ldap.js
+index f2d9a7b72..c71408636 100644
+--- a/packages/wekan-ldap/server/ldap.js
++++ b/packages/wekan-ldap/server/ldap.js
+@@ -100,7 +100,7 @@ export default class LDAP {
+ 
+     if (this.options.ca_cert && this.options.ca_cert !== '') {
+       // Split CA cert into array of strings
+-      const chainLines = this.constructor.settings_get('LDAP_CA_CERT').split('\n');
++      const chainLines = this.constructor.settings_get('LDAP_CA_CERT').replace(/\\n/g,'\n').split('\n');
+       let cert         = [];
+       const ca         = [];
+       chainLines.forEach((line) => {
+-- 
+2.34.1
+

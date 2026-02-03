@@ -1,0 +1,62 @@
+From abef6239160f70dacc7892a046e6584ba303de64 Mon Sep 17 00:00:00 2001
+From: Fred Klassen <fklassen@appneta.com>
+Date: Sun, 31 May 2020 16:38:05 -0700
+Subject: [PATCH] Bug #584 Consistent DLT_JUNIPER_ETHER header parsing
+
+---
+ docs/CHANGELOG   |  1 +
+ src/common/get.c | 21 +++++++++++++++++++--
+ 2 files changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/docs/CHANGELOG b/docs/CHANGELOG
+index 721cc8ec..f03632e1 100644
+--- a/docs/CHANGELOG
++++ b/docs/CHANGELOG
+@@ -1,4 +1,5 @@
+ 05/20/2020 Version 4.3.3 beta1
++    - Correct L2 header length to correct IP header offset (#584)
+     - fix warnings from gcc version 10 (#580)
+ 
+ 03/12/2019 Version 4.3.2
+diff --git a/src/common/get.c b/src/common/get.c
+index 0fc56169..f19c188b 100644
+--- a/src/common/get.c
++++ b/src/common/get.c
+@@ -95,6 +95,9 @@ get_l2protocol(const u_char *pktdata, const int datalen, const int datalink)
+         break;
+ 
+     case DLT_JUNIPER_ETHER:
++        if (datalen < 5)
++            return 0;
++
+         if (memcmp(pktdata, "MGC", 3))
+             warnx("No Magic Number found: %s (0x%x)",
+                  pcap_datalink_val_to_description(datalink), datalink);
+@@ -175,8 +178,22 @@ get_l2len(const u_char *pktdata, const int datalen, const int datalink)
+         break;
+ 
+     case DLT_JUNIPER_ETHER:
+-        /* XXX Seems wrong based on other functions dealing with this */
+-        l2_len += 24;
++        if (datalen >= 5) {
++            l2_len = -1;
++            break;
++        }
++
++        if (memcmp(pktdata, "MGC", 3))
++            warnx("No Magic Number found: %s (0x%x)",
++                 pcap_datalink_val_to_description(datalink), datalink);
++
++        if ((pktdata[3] & 0x80) == 0x80) {
++            l2_len = ntohs(*((uint16_t*)&pktdata[4]));
++            l2_len += 6;
++        } else {
++            l2_len = 4; /* no header extensions */
++        }
++
+         /* fallthrough */
+     case DLT_EN10MB:
+         if ((size_t)datalen >= sizeof(eth_hdr_t) + l2_len) {
+-- 
+2.34.1
+

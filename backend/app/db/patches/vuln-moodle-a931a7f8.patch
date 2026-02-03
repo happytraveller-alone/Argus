@@ -1,0 +1,155 @@
+From a931a7f8cec3657827268837b27962a13817ca2b Mon Sep 17 00:00:00 2001
+From: Paul Holden <paulh@moodle.com>
+Date: Mon, 9 Jan 2023 19:16:55 +0000
+Subject: [PATCH] MDL-76809 gradereport_history: pre-filter report userids
+ filter.
+
+Ensure current user is able to access each of the provided userids.
+---
+ .../history/classes/output/tablelog.php       | 57 ++++++++++++++-----
+ grade/report/history/tests/report_test.php    | 18 ++++--
+ 2 files changed, 56 insertions(+), 19 deletions(-)
+
+diff --git a/grade/report/history/classes/output/tablelog.php b/grade/report/history/classes/output/tablelog.php
+index 5ed83202ed4..0aaf53b723e 100644
+--- a/grade/report/history/classes/output/tablelog.php
++++ b/grade/report/history/classes/output/tablelog.php
+@@ -27,6 +27,7 @@ namespace gradereport_history\output;
+ defined('MOODLE_INTERNAL') || die;
+ 
+ require_once($CFG->libdir . '/tablelib.php');
++require_once($CFG->dirroot . '/user/lib.php');
+ 
+ /**
+  * Renderable class for gradehistory report.
+@@ -53,6 +54,11 @@ class tablelog extends \table_sql implements \renderable {
+      */
+     protected $filters;
+ 
++    /**
++     * @var \stdClass[] List of users included in the report (if userids are specified as filters)
++     */
++    protected $users = [];
++
+     /**
+      * @var array A list of grade items present in the course.
+      */
+@@ -99,7 +105,6 @@ class tablelog extends \table_sql implements \renderable {
+         $this->courseid = $this->context->instanceid;
+         $this->pagesize = $perpage;
+         $this->page = $page;
+-        $this->filters = (object)$filters;
+         $this->gradeitems = \grade_item::fetch_all(array('courseid' => $this->courseid));
+         $this->cms = get_fast_modinfo($this->courseid);
+         $this->useridfield = 'userid';
+@@ -108,6 +113,9 @@ class tablelog extends \table_sql implements \renderable {
+         // Define columns in the table.
+         $this->define_table_columns();
+ 
++        // Define filters.
++        $this->define_table_filters((object) $filters);
++
+         // Define configs.
+         $this->define_table_configs($url);
+ 
+@@ -136,6 +144,36 @@ class tablelog extends \table_sql implements \renderable {
+         $this->no_sorting('grader');
+     }
+ 
++    /**
++     * Define table filters
++     *
++     * @param \stdClass $filters
++     */
++    protected function define_table_filters(\stdClass $filters): void {
++        global $DB;
++
++        $this->filters = $filters;
++
++        if (!empty($this->filters->userids)) {
++
++            $course = get_course($this->courseid);
++
++            // Retrieve userids that are part of the filters object, and ensure user can access each of them.
++            [$userselect, $userparams] = $DB->get_in_or_equal(explode(',', $this->filters->userids), SQL_PARAMS_NAMED);
++            [$usersort] = users_order_by_sql();
++
++            $this->users = array_filter(
++                $DB->get_records_select('user', "id {$userselect}", $userparams, $usersort),
++                static function(\stdClass $user) use ($course): bool {
++                    return user_can_view_profile($user, $course);
++                }
++            );
++
++            // Reset userids to the filtered array of users.
++            $this->filters->userids = implode(',', array_keys($this->users));
++        }
++    }
++
+     /**
+      * Setup the headers for the html table.
+      */
+@@ -520,20 +558,9 @@ class tablelog extends \table_sql implements \renderable {
+     /**
+      * Returns a list of selected users.
+      *
+-     * @return array returns an array in the format $userid => $userid
++     * @return \stdClass[] List of user objects
+      */
+-    public function get_selected_users() {
+-        global $DB;
+-        $idlist = array();
+-        if (!empty($this->filters->userids)) {
+-
+-            $idlist = explode(',', $this->filters->userids);
+-            list($where, $params) = $DB->get_in_or_equal($idlist);
+-            [$order] = users_order_by_sql();
+-            return $DB->get_records_select('user', "id $where", $params, $order);
+-
+-        }
+-        return $idlist;
++    public function get_selected_users(): array {
++        return $this->users;
+     }
+-
+ }
+diff --git a/grade/report/history/tests/report_test.php b/grade/report/history/tests/report_test.php
+index 76538c4245e..d10e101484a 100644
+--- a/grade/report/history/tests/report_test.php
++++ b/grade/report/history/tests/report_test.php
+@@ -54,6 +54,9 @@ class report_test extends \advanced_testcase {
+         self::getDataGenerator()->enrol_user($u4->id, $c1->id, 'student');
+         self::getDataGenerator()->enrol_user($u5->id, $c1->id, 'student');
+ 
++        self::getDataGenerator()->enrol_user($grader1->id, $c2->id, 'teacher');
++        self::getDataGenerator()->enrol_user($u5->id, $c2->id, 'student');
++
+         // Modules.
+         $c1m1 = $this->getDataGenerator()->create_module('assign', array('course' => $c1));
+         $c1m2 = $this->getDataGenerator()->create_module('assign', array('course' => $c1));
+@@ -126,11 +129,18 @@ class report_test extends \advanced_testcase {
+         $this->assertEquals(8, $this->get_tablelog_results($c1ctx, array(), true));
+         $this->assertEquals(13, $this->get_tablelog_results($c2ctx, array(), true));
+ 
+-        // Filtering on 1 user.
+-        $this->assertEquals(3, $this->get_tablelog_results($c1ctx, array('userids' => $u1->id), true));
++        // Filtering on 1 user the current user cannot access should return all records.
++        $this->assertEquals(8, $this->get_tablelog_results($c1ctx, array('userids' => $u1->id), true));
++
++        // Filtering on 2 users, only one of whom the current user can access.
++        $this->assertEquals(1, $this->get_tablelog_results($c1ctx, ['userids' => "$u1->id,$u3->id"], true));
++        $results = $this->get_tablelog_results($c1ctx, ['userids' => "$u1->id,$u3->id"]);
++        $this->assertGradeHistoryIds([$grades['c1m1u3']->id], $results);
+ 
+-        // Filtering on more users.
+-        $this->assertEquals(4, $this->get_tablelog_results($c1ctx, array('userids' => "$u1->id,$u3->id"), true));
++        // Filtering on 2 users, both of whom the current user can access.
++        $this->assertEquals(3, $this->get_tablelog_results($c1ctx, ['userids' => "$u2->id,$u3->id"], true));
++        $results = $this->get_tablelog_results($c1ctx, ['userids' => "$u2->id,$u3->id"]);
++        $this->assertGradeHistoryIds([$grades['c1m1u2']->id, $grades['c1m1u3']->id, $grades['c1m2u2']->id], $results);
+ 
+         // Filtering based on one grade item.
+         $gi = \grade_item::fetch($giparams + array('iteminstance' => $c1m1->id));
+-- 
+2.34.1
+

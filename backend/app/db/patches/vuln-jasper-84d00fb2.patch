@@ -1,0 +1,38 @@
+From 84d00fb29a22e360c2ff91bdc2cd81c288826bfc Mon Sep 17 00:00:00 2001
+From: Max Kellermann <max.kellermann@gmail.com>
+Date: Sat, 7 Oct 2017 10:59:54 +0200
+Subject: [PATCH] jpc_dec: check for JPC_QCX_EXPN() parameter overflow
+
+Avoid the assertion failure in the JPC_QCX_EXPN() function.  While the
+"expn" variable cannot be bigger than 0x1f, adding something to it may
+exceed that limit.
+
+This condition could be exploited with a malicious JP2 file, allowing
+a denial of service attack on processes which parse JP2 files.
+
+Fixes CVE-2016-9399 and CVE-2017-13751
+
+Closes https://github.com/jasper-maint/jasper/issues/1
+---
+ src/libjasper/jpc/jpc_dec.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/libjasper/jpc/jpc_dec.c b/src/libjasper/jpc/jpc_dec.c
+index c24371a..acf9320 100644
+--- a/src/libjasper/jpc/jpc_dec.c
++++ b/src/libjasper/jpc/jpc_dec.c
+@@ -1702,7 +1702,10 @@ static int calcstepsizes(uint_fast16_t refstepsize, int numrlvls,
+ 	numbands = 3 * numrlvls - 2;
+ 	for (bandno = 0; bandno < numbands; ++bandno) {
+ //jas_eprintf("DEBUG %d %d %d %d %d\n", bandno, expn, numrlvls, bandno, ((numrlvls - 1) - (numrlvls - 1 - ((bandno > 0) ? ((bandno + 2) / 3) : (0)))));
+-		stepsizes[bandno] = JPC_QCX_MANT(mant) | JPC_QCX_EXPN(expn + (bandno + 2) / 3);
++		uint_fast16_t e = expn + (bandno + 2) / 3;
++		if (e >= 0x20)
++			return -1;
++		stepsizes[bandno] = JPC_QCX_MANT(mant) | JPC_QCX_EXPN(e);
+ 	}
+ 	return 0;
+ }
+-- 
+2.34.1
+

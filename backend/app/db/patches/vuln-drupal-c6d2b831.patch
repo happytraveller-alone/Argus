@@ -1,0 +1,63 @@
+From c6d2b8311b82fe78d18732f01a68ceca3dea50af Mon Sep 17 00:00:00 2001
+From: webchick <webchick@24967.no-reply.drupal.org>
+Date: Sun, 19 Aug 2012 16:54:14 +0200
+Subject: [PATCH] Issue #1558478 by tim.plunkett, Berdir, jhodgdon: Fixed
+ SA-CORE-2012-002 - Access bypass - content administration.
+
+---
+ .../lib/Drupal/node/Tests/NodeQueryAlterTest.php   | 14 +++++++++++---
+ core/modules/node/node.admin.inc                   |  1 +
+ 2 files changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/core/modules/node/lib/Drupal/node/Tests/NodeQueryAlterTest.php b/core/modules/node/lib/Drupal/node/Tests/NodeQueryAlterTest.php
+index 6d149dd539..1f367cf240 100644
+--- a/core/modules/node/lib/Drupal/node/Tests/NodeQueryAlterTest.php
++++ b/core/modules/node/lib/Drupal/node/Tests/NodeQueryAlterTest.php
+@@ -52,9 +52,9 @@ class NodeQueryAlterTest extends NodeTestBase {
+ 
+     // Create user with simple node access permission. The 'node test view'
+     // permission is implemented and granted by the node_access_test module.
+-    $this->accessUser = $this->drupalCreateUser(array('access content', 'node test view'));
+-    $this->noAccessUser = $this->drupalCreateUser(array('access content'));
+-    $this->noAccessUser2 = $this->drupalCreateUser(array('access content'));
++    $this->accessUser = $this->drupalCreateUser(array('access content overview', 'access content', 'node test view'));
++    $this->noAccessUser = $this->drupalCreateUser(array('access content overview', 'access content'));
++    $this->noAccessUser2 = $this->drupalCreateUser(array('access content overview', 'access content'));
+   }
+ 
+   /**
+@@ -67,11 +67,19 @@ class NodeQueryAlterTest extends NodeTestBase {
+     $this->assertText('Yes, 4 nodes', "4 nodes were found for access user");
+     $this->assertNoText('Exception', "No database exception");
+ 
++    // Test the content overview page.
++    $this->drupalGet('admin/content');
++    $table_rows = $this->xpath('//tbody/tr');
++    $this->assertEqual(4, count($table_rows), "4 nodes were found for access user");
++
+     // Verify that a user with no access permission cannot see nodes.
+     $this->drupalLogin($this->noAccessUser);
+     $this->drupalGet('node_access_test_page');
+     $this->assertText('No nodes', "No nodes were found for no access user");
+     $this->assertNoText('Exception', "No database exception");
++
++    $this->drupalGet('admin/content');
++    $this->assertText(t('No content available.'));
+   }
+ 
+   /**
+diff --git a/core/modules/node/node.admin.inc b/core/modules/node/node.admin.inc
+index d4252324a4..7aa16ece90 100644
+--- a/core/modules/node/node.admin.inc
++++ b/core/modules/node/node.admin.inc
+@@ -471,6 +471,7 @@ function node_admin_nodes() {
+     ->fields('n',array('nid'))
+     ->limit(50)
+     ->orderByHeader($header)
++    ->addTag('node_access')
+     ->execute()
+     ->fetchCol();
+   $nodes = node_load_multiple($nids);
+-- 
+2.34.1
+

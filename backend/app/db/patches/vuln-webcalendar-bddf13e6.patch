@@ -1,0 +1,54 @@
+From bddf13e6384a991bddbc95e4c755cb348febed25 Mon Sep 17 00:00:00 2001
+From: Craig Knudsen <craig@k5n.us>
+Date: Fri, 11 Aug 2017 13:37:23 -0400
+Subject: [PATCH] Changed version dates for 1.2.8 release
+
+---
+ ChangeLog           | 6 +++++-
+ NEWS                | 2 +-
+ includes/config.php | 2 +-
+ 3 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 2d809b36..4d925059 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,4 +1,8 @@
+-Version 1.2.8 (?? Jul 2017)
++Version 1.2.8 (11 Aug 2017)
++ - Cross-site scripting (XSS) fixes.
++ - Updates to supper PHP7.  PHP 5.3 is now minimum PHP version required.
++ - Added missing code for mysqli support.
++ - Gracefully handle if the function ob_gzhandler is not available.
+ 
+ Version 1.2.7 (22 Feb 2013)
+  - Security fix: Do not show the reason for a failed login (i.e. "no such user")
+diff --git a/NEWS b/NEWS
+index fbe8b2c0..b7b5d9ef 100644
+--- a/NEWS
++++ b/NEWS
+@@ -6,7 +6,7 @@ list (that includes specific bugs fixed, please look at ChangeLog).
+ 
+ ---------------------------------------------------------------------------
+ 
+-Version 1.2.8 (?? ??? 2017)
++Version 1.2.8 (11 Aug 2017)
+  - Cross-site scripting (XSS) fixes.
+  - Updates to supper PHP7.  PHP 5.3 is now minimum PHP version required.
+  - Added missing code for mysqli support.
+diff --git a/includes/config.php b/includes/config.php
+index c785dc68..b0d8fb2c 100644
+--- a/includes/config.php
++++ b/includes/config.php
+@@ -109,7 +109,7 @@ function do_config ( $fileLoc ) {
+   $single_user_login, $TROUBLE_URL, $use_http_auth, $user_inc;
+ 
+   $PROGRAM_VERSION = 'v1.2.8';
+-  $PROGRAM_DATE = '09 Jul 2017';
++  $PROGRAM_DATE = '11 Aug 2017';
+   $PROGRAM_NAME = 'WebCalendar ' . "$PROGRAM_VERSION ($PROGRAM_DATE)";
+   $PROGRAM_URL = 'http://www.k5n.us/webcalendar.php';
+   $TROUBLE_URL = 'docs/WebCalendar-SysAdmin.html#trouble';
+-- 
+2.34.1
+

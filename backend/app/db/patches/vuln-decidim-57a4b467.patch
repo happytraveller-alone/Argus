@@ -1,0 +1,52 @@
+From 57a4b467787448307b5d9b01ce6e2c8502e121ac Mon Sep 17 00:00:00 2001
+From: Antti Hukkanen <antti.hukkanen@mainiotech.fi>
+Date: Wed, 11 Oct 2023 19:47:15 +0300
+Subject: [PATCH] Simplify the code related to questionnaire templates previews
+ (#11743)
+
+---
+ .../admin/questionnaire_templates_controller.rb    |  2 --
+ .../src/decidim/templates/admin/choose_template.js | 14 ++++----------
+ 2 files changed, 4 insertions(+), 12 deletions(-)
+
+diff --git a/decidim-templates/app/controllers/decidim/templates/admin/questionnaire_templates_controller.rb b/decidim-templates/app/controllers/decidim/templates/admin/questionnaire_templates_controller.rb
+index 9322c4a11e..68969674b3 100644
+--- a/decidim-templates/app/controllers/decidim/templates/admin/questionnaire_templates_controller.rb
++++ b/decidim-templates/app/controllers/decidim/templates/admin/questionnaire_templates_controller.rb
+@@ -8,8 +8,6 @@ module Decidim
+       class QuestionnaireTemplatesController < Decidim::Templates::Admin::ApplicationController
+         include Decidim::TranslatableAttributes
+ 
+-        skip_before_action :verify_authenticity_token, only: :preview
+-
+         helper_method :template
+ 
+         def index
+diff --git a/decidim-templates/app/packs/src/decidim/templates/admin/choose_template.js b/decidim-templates/app/packs/src/decidim/templates/admin/choose_template.js
+index a363914c45..45299162b8 100644
+--- a/decidim-templates/app/packs/src/decidim/templates/admin/choose_template.js
++++ b/decidim-templates/app/packs/src/decidim/templates/admin/choose_template.js
+@@ -13,16 +13,10 @@ $(() => {
+       return;
+     }
+     const params = new URLSearchParams({ id: id });
+-    fetch(`${previewURL}?${params.toString()}`, {
+-      method: "GET",
+-      headers: { "Content-Type": "application/json" }
+-    }).then((response) => response.text()).then((data) => {
+-      const script = document.createElement("script");
+-      script.type = "text/javascript";
+-      script.innerHTML = data;
+-      document.getElementsByTagName("head")[0].appendChild(script);
+-    }).catch((error) => {
+-      console.error(error); // eslint-disable-line no-console
++    Rails.ajax({
++      url: `${previewURL}?${params.toString()}`,
++      type: "GET",
++      error: (data) => (console.error(data))
+     });
+   }
+ 
+-- 
+2.34.1
+

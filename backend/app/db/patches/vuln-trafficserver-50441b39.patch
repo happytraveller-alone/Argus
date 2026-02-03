@@ -1,0 +1,329 @@
+From 50441b39e6631389ef95c4133f06bbf94544879c Mon Sep 17 00:00:00 2001
+From: Masaori Koshiba <masaori@apache.org>
+Date: Fri, 10 Apr 2020 10:38:20 -0700
+Subject: [PATCH] Bug fixes to h2 buffering
+
+---
+ doc/admin-guide/files/records.config.en.rst |  3 +-
+ mgmt/RecordsConfig.cc                       |  2 +-
+ proxy/http2/HTTP2.cc                        |  2 +-
+ proxy/http2/Http2ClientSession.cc           | 12 +++--
+ proxy/http2/Http2ClientSession.h            |  2 +
+ proxy/http2/Http2ConnectionState.cc         | 57 +++++++++++++++------
+ proxy/http2/Http2ConnectionState.h          |  7 ++-
+ proxy/http2/Http2Stream.cc                  | 31 +++++++++++
+ proxy/http2/Http2Stream.h                   |  5 +-
+ 9 files changed, 93 insertions(+), 28 deletions(-)
+
+diff --git a/doc/admin-guide/files/records.config.en.rst b/doc/admin-guide/files/records.config.en.rst
+index ffa61813d..21b9bb1aa 100644
+--- a/doc/admin-guide/files/records.config.en.rst
++++ b/doc/admin-guide/files/records.config.en.rst
+@@ -3698,7 +3698,7 @@ HTTP/2 Configuration
+    :ts:cv:`proxy.config.http2.min_concurrent_streams_in`.
+    To disable, set to zero (``0``).
+ 
+-.. ts:cv:: CONFIG proxy.config.http2.initial_window_size_in INT 1048576
++.. ts:cv:: CONFIG proxy.config.http2.initial_window_size_in INT 65535
+    :reloadable:
+ 
+    The initial window size for inbound connections.
+@@ -3828,7 +3828,6 @@ HTTP/2 Configuration
+    Clients that send smaller window increments lower than this limit will be immediately disconnected with an error
+    code of ENHANCE_YOUR_CALM.
+ 
+-
+ HTTP/3 Configuration
+ ====================
+ 
+diff --git a/mgmt/RecordsConfig.cc b/mgmt/RecordsConfig.cc
+index a7f7cb25d..99d7a6c15 100644
+--- a/mgmt/RecordsConfig.cc
++++ b/mgmt/RecordsConfig.cc
+@@ -1291,7 +1291,7 @@ static const RecordElement RecordsConfig[] =
+   ,
+   {RECT_CONFIG, "proxy.config.http2.max_active_streams_in", RECD_INT, "0", RECU_DYNAMIC, RR_NULL, RECC_STR, "^[0-9]+$", RECA_NULL}
+   ,
+-  {RECT_CONFIG, "proxy.config.http2.initial_window_size_in", RECD_INT, "1048576", RECU_DYNAMIC, RR_NULL, RECC_STR, "^[0-9]+$", RECA_NULL}
++  {RECT_CONFIG, "proxy.config.http2.initial_window_size_in", RECD_INT, "65535", RECU_DYNAMIC, RR_NULL, RECC_STR, "^[0-9]+$", RECA_NULL}
+   ,
+   {RECT_CONFIG, "proxy.config.http2.max_frame_size", RECD_INT, "16384", RECU_DYNAMIC, RR_NULL, RECC_STR, "^[0-9]+$", RECA_NULL}
+   ,
+diff --git a/proxy/http2/HTTP2.cc b/proxy/http2/HTTP2.cc
+index 942480603..336861b47 100644
+--- a/proxy/http2/HTTP2.cc
++++ b/proxy/http2/HTTP2.cc
+@@ -782,7 +782,7 @@ uint32_t Http2::min_concurrent_streams_in      = 10;
+ uint32_t Http2::max_active_streams_in          = 0;
+ bool Http2::throttling                         = false;
+ uint32_t Http2::stream_priority_enabled        = 0;
+-uint32_t Http2::initial_window_size            = 1048576;
++uint32_t Http2::initial_window_size            = 65535;
+ uint32_t Http2::max_frame_size                 = 16384;
+ uint32_t Http2::header_table_size              = 4096;
+ uint32_t Http2::max_header_list_size           = 4294967295;
+diff --git a/proxy/http2/Http2ClientSession.cc b/proxy/http2/Http2ClientSession.cc
+index 18133bb1a..2ecfa2ece 100644
+--- a/proxy/http2/Http2ClientSession.cc
++++ b/proxy/http2/Http2ClientSession.cc
+@@ -385,11 +385,9 @@ Http2ClientSession::main_event_handler(int event, void *edata)
+     break;
+ 
+   case VC_EVENT_WRITE_READY:
+-    retval = 0;
+-    break;
+-
+   case VC_EVENT_WRITE_COMPLETE:
+-    // Seems as this is being closed already
++    this->connection_state.restart_streams();
++
+     retval = 0;
+     break;
+ 
+@@ -678,6 +676,12 @@ Http2ClientSession::_should_do_something_else()
+   return (this->_n_frame_read & 0x7F) == 0;
+ }
+ 
++int64_t
++Http2ClientSession::write_avail()
++{
++  return this->write_buffer->write_avail();
++}
++
+ NetVConnection *
+ Http2ClientSession::get_netvc() const
+ {
+diff --git a/proxy/http2/Http2ClientSession.h b/proxy/http2/Http2ClientSession.h
+index 12be63dea..dfdb34ccb 100644
+--- a/proxy/http2/Http2ClientSession.h
++++ b/proxy/http2/Http2ClientSession.h
+@@ -134,6 +134,8 @@ public:
+   // Record history from Http2ConnectionState
+   void remember(const SourceLocation &location, int event, int reentrant = NO_REENTRANT);
+ 
++  int64_t write_avail();
++
+   // noncopyable
+   Http2ClientSession(Http2ClientSession &) = delete;
+   Http2ClientSession &operator=(const Http2ClientSession &) = delete;
+diff --git a/proxy/http2/Http2ConnectionState.cc b/proxy/http2/Http2ConnectionState.cc
+index ab1b5c6a2..7ace5cbf2 100644
+--- a/proxy/http2/Http2ConnectionState.cc
++++ b/proxy/http2/Http2ConnectionState.cc
+@@ -169,6 +169,12 @@ rcv_data_frame(Http2ConnectionState &cstate, const Http2Frame &frame)
+   cstate.decrement_server_rwnd(payload_length);
+   stream->decrement_server_rwnd(payload_length);
+ 
++  if (is_debug_tag_set("http2_con")) {
++    uint32_t rwnd = cstate.server_settings.get(HTTP2_SETTINGS_INITIAL_WINDOW_SIZE);
++    Http2StreamDebug(cstate.ua_session, id, "Received DATA frame: rwnd con=%zd/%" PRId32 " stream=%zd/%" PRId32,
++                     cstate.server_rwnd(), rwnd, stream->server_rwnd(), rwnd);
++  }
++
+   const uint32_t unpadded_length = payload_length - pad_length;
+   MIOBuffer *writer              = stream->read_vio_writer();
+   if (writer == nullptr) {
+@@ -205,21 +211,6 @@ rcv_data_frame(Http2ConnectionState &cstate, const Http2Frame &frame)
+     stream->signal_read_event(VC_EVENT_READ_READY);
+   }
+ 
+-  uint32_t initial_rwnd = cstate.server_settings.get(HTTP2_SETTINGS_INITIAL_WINDOW_SIZE);
+-  uint32_t min_rwnd     = std::min(initial_rwnd, cstate.server_settings.get(HTTP2_SETTINGS_MAX_FRAME_SIZE));
+-  // Connection level WINDOW UPDATE
+-  if (cstate.server_rwnd() <= min_rwnd) {
+-    Http2WindowSize diff_size = initial_rwnd - cstate.server_rwnd();
+-    cstate.increment_server_rwnd(diff_size);
+-    cstate.send_window_update_frame(0, diff_size);
+-  }
+-  // Stream level WINDOW UPDATE
+-  if (stream->server_rwnd() <= min_rwnd) {
+-    Http2WindowSize diff_size = initial_rwnd - stream->server_rwnd();
+-    stream->increment_server_rwnd(diff_size);
+-    cstate.send_window_update_frame(stream->get_id(), diff_size);
+-  }
+-
+   return Http2Error(Http2ErrorClass::HTTP2_ERROR_CLASS_NONE);
+ }
+ 
+@@ -1291,6 +1282,35 @@ Http2ConnectionState::restart_streams()
+   }
+ }
+ 
++void
++Http2ConnectionState::restart_receiving(Http2Stream *stream)
++{
++  uint32_t initial_rwnd = this->server_settings.get(HTTP2_SETTINGS_INITIAL_WINDOW_SIZE);
++  uint32_t min_rwnd     = std::min(initial_rwnd, this->server_settings.get(HTTP2_SETTINGS_MAX_FRAME_SIZE));
++
++  // Connection level WINDOW UPDATE
++  if (this->server_rwnd() < min_rwnd) {
++    Http2WindowSize diff_size = initial_rwnd - this->server_rwnd();
++    this->increment_server_rwnd(diff_size);
++    this->send_window_update_frame(0, diff_size);
++  }
++
++  // Stream level WINDOW UPDATE
++  if (stream == nullptr || stream->server_rwnd() >= min_rwnd) {
++    return;
++  }
++
++  // If read_vio is buffering data, do not fully update window
++  int64_t data_size = stream->read_vio_read_avail();
++  if (data_size >= initial_rwnd) {
++    return;
++  }
++
++  Http2WindowSize diff_size = initial_rwnd - std::max(static_cast<int64_t>(stream->server_rwnd()), data_size);
++  stream->increment_server_rwnd(diff_size);
++  this->send_window_update_frame(stream->get_id(), diff_size);
++}
++
+ void
+ Http2ConnectionState::cleanup_streams()
+ {
+@@ -1500,6 +1520,11 @@ Http2ConnectionState::send_a_data_frame(Http2Stream *stream, size_t &payload_len
+     return Http2SendDataFrameResult::ERROR;
+   }
+ 
++  if (this->ua_session->write_avail() == 0) {
++    Http2StreamDebug(this->ua_session, stream->get_id(), "Not write avail");
++    return Http2SendDataFrameResult::NOT_WRITE_AVAIL;
++  }
++
+   // Select appropriate payload length
+   if (resp_reader->is_read_avail_more_than(0)) {
+     // We only need to check for window size when there is a payload
+@@ -1865,7 +1890,7 @@ Http2ConnectionState::send_goaway_frame(Http2StreamId id, Http2ErrorCode ec)
+ void
+ Http2ConnectionState::send_window_update_frame(Http2StreamId id, uint32_t size)
+ {
+-  Http2StreamDebug(ua_session, id, "Send WINDOW_UPDATE frame");
++  Http2StreamDebug(ua_session, id, "Send WINDOW_UPDATE frame: size=%" PRIu32, size);
+ 
+   // Create WINDOW_UPDATE frame
+   Http2WindowUpdateFrame window_update(id, size);
+diff --git a/proxy/http2/Http2ConnectionState.h b/proxy/http2/Http2ConnectionState.h
+index 6ba4ffea0..1c4986d6a 100644
+--- a/proxy/http2/Http2ConnectionState.h
++++ b/proxy/http2/Http2ConnectionState.h
+@@ -39,6 +39,7 @@ enum class Http2SendDataFrameResult {
+   NO_ERROR = 0,
+   NO_WINDOW,
+   NO_PAYLOAD,
++  NOT_WRITE_AVAIL,
+   ERROR,
+   DONE,
+ };
+@@ -134,6 +135,8 @@ public:
+   void
+   init()
+   {
++    this->_server_rwnd = Http2::initial_window_size;
++
+     local_hpack_handle  = new HpackHandle(HTTP2_HEADER_TABLE_SIZE);
+     remote_hpack_handle = new HpackHandle(HTTP2_HEADER_TABLE_SIZE);
+     if (Http2::stream_priority_enabled) {
+@@ -190,7 +193,7 @@ public:
+   bool delete_stream(Http2Stream *stream);
+   void release_stream();
+   void cleanup_streams();
+-
++  void restart_receiving(Http2Stream *stream);
+   void update_initial_rwnd(Http2WindowSize new_size);
+ 
+   Http2StreamId
+@@ -377,7 +380,7 @@ private:
+ 
+   // Connection level window size
+   ssize_t _client_rwnd = HTTP2_INITIAL_WINDOW_SIZE;
+-  ssize_t _server_rwnd = Http2::initial_window_size;
++  ssize_t _server_rwnd = 0;
+ 
+   std::vector<size_t> _recent_rwnd_increment = {SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX};
+   int _recent_rwnd_increment_index           = 0;
+diff --git a/proxy/http2/Http2Stream.cc b/proxy/http2/Http2Stream.cc
+index a5a49b6b3..1a72de1e7 100644
+--- a/proxy/http2/Http2Stream.cc
++++ b/proxy/http2/Http2Stream.cc
+@@ -52,6 +52,7 @@ Http2Stream::init(Http2StreamId sid, ssize_t initial_rwnd)
+   this->_id          = sid;
+   this->_thread      = this_ethread();
+   this->_client_rwnd = initial_rwnd;
++  this->_server_rwnd = Http2::initial_window_size;
+ 
+   this->_reader = this->_request_buffer.alloc_reader();
+ 
+@@ -522,6 +523,19 @@ Http2Stream::update_read_request(int64_t read_len, bool call_update, bool check_
+ void
+ Http2Stream::restart_sending()
+ {
++  if (!this->response_header_done) {
++    return;
++  }
++
++  IOBufferReader *reader = this->response_get_data_reader();
++  if (reader && !reader->is_read_avail_more_than(0)) {
++    return;
++  }
++
++  if (this->write_vio.mutex && this->write_vio.ntodo() == 0) {
++    return;
++  }
++
+   this->send_response_body(true);
+ }
+ 
+@@ -723,6 +737,12 @@ Http2Stream::reenable(VIO *vio)
+       SCOPED_MUTEX_LOCK(lock, this->mutex, this_ethread());
+       update_write_request(vio->get_reader(), INT64_MAX, true);
+     } else if (vio->op == VIO::READ) {
++      Http2ClientSession *h2_proxy_ssn = static_cast<Http2ClientSession *>(this->_proxy_ssn);
++      {
++        SCOPED_MUTEX_LOCK(ssn_lock, h2_proxy_ssn->connection_state.mutex, this_ethread());
++        h2_proxy_ssn->connection_state.restart_receiving(this);
++      }
++
+       SCOPED_MUTEX_LOCK(lock, this->mutex, this_ethread());
+       update_read_request(INT64_MAX, true);
+     }
+@@ -983,3 +1003,14 @@ Http2Stream::get_transaction_priority_dependence() const
+     return priority_node->parent ? priority_node->parent->id : 0;
+   }
+ }
++
++int64_t
++Http2Stream::read_vio_read_avail()
++{
++  MIOBuffer *writer = this->read_vio.get_writer();
++  if (writer) {
++    return writer->max_read_avail();
++  }
++
++  return 0;
++}
+diff --git a/proxy/http2/Http2Stream.h b/proxy/http2/Http2Stream.h
+index 675d0899f..72bc06036 100644
+--- a/proxy/http2/Http2Stream.h
++++ b/proxy/http2/Http2Stream.h
+@@ -128,6 +128,7 @@ public:
+   bool has_trailing_header() const;
+   void set_request_headers(HTTPHdr &h2_headers);
+   MIOBuffer *read_vio_writer() const;
++  int64_t read_vio_read_avail();
+ 
+   //////////////////
+   // Variables
+@@ -204,8 +205,8 @@ private:
+   uint64_t data_length = 0;
+   uint64_t bytes_sent  = 0;
+ 
+-  ssize_t _client_rwnd;
+-  ssize_t _server_rwnd = Http2::initial_window_size;
++  ssize_t _client_rwnd = 0;
++  ssize_t _server_rwnd = 0;
+ 
+   std::vector<size_t> _recent_rwnd_increment = {SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX};
+   int _recent_rwnd_increment_index           = 0;
+-- 
+2.34.1
+

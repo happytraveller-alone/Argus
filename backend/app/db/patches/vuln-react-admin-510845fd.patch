@@ -1,0 +1,88 @@
+From c2113b8d36cad6d91ea376099b5b0339fcb408c2 Mon Sep 17 00:00:00 2001
+From: fzaninotto <fzaninotto@gmail.com>
+Date: Mon, 13 Feb 2023 13:57:58 +0100
+Subject: [PATCH] Fix `<RichTextField>` XSS vulnerability
+
+---
+ packages/ra-core/src/controller/index.ts              | 2 +-
+ packages/ra-ui-materialui/package.json                | 1 +
+ packages/ra-ui-materialui/src/field/RichTextField.tsx | 7 ++++++-
+ yarn.lock                                             | 5 +++++
+ 4 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/packages/ra-core/src/controller/index.ts b/packages/ra-core/src/controller/index.ts
+index 9d3ec219e..b097f3a18 100644
+--- a/packages/ra-core/src/controller/index.ts
++++ b/packages/ra-core/src/controller/index.ts
+@@ -29,6 +29,7 @@ import useListSortContext from './useListSortContext';
+ 
+ export type {
+     ListControllerProps,
++    ListPaginationContextValue,
+     PaginationHookResult,
+     SortProps,
+     UseReferenceProps,
+@@ -42,7 +43,6 @@ export {
+     ListContext,
+     ListFilterContext,
+     ListPaginationContext,
+-    ListPaginationContextValue,
+     ListSortContext,
+     ListContextProvider,
+     useCheckMinimumRequiredProps,
+diff --git a/packages/ra-ui-materialui/package.json b/packages/ra-ui-materialui/package.json
+index 864b8b287..2abad67d1 100644
+--- a/packages/ra-ui-materialui/package.json
++++ b/packages/ra-ui-materialui/package.json
+@@ -70,6 +70,7 @@
+         "classnames": "~2.2.5",
+         "connected-react-router": "^6.5.2",
+         "css-mediaquery": "^0.1.2",
++        "dompurify": "^2.4.3",
+         "downshift": "3.2.7",
+         "inflection": "~1.13.1",
+         "jsonexport": "^2.4.1",
+diff --git a/packages/ra-ui-materialui/src/field/RichTextField.tsx b/packages/ra-ui-materialui/src/field/RichTextField.tsx
+index ce9bac06e..bf9e6a534 100644
+--- a/packages/ra-ui-materialui/src/field/RichTextField.tsx
++++ b/packages/ra-ui-materialui/src/field/RichTextField.tsx
+@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
+ import get from 'lodash/get';
+ import Typography, { TypographyProps } from '@material-ui/core/Typography';
+ import { useRecordContext } from 'ra-core';
++import purify from 'dompurify';
+ 
+ import sanitizeFieldRestProps from './sanitizeFieldRestProps';
+ import { InjectedFieldProps, PublicFieldProps, fieldPropTypes } from './types';
+@@ -29,7 +30,11 @@ const RichTextField: FC<RichTextFieldProps> = memo<RichTextFieldProps>(
+                 ) : stripTags ? (
+                     removeTags(value)
+                 ) : (
+-                    <span dangerouslySetInnerHTML={{ __html: value }} />
++                    <span
++                        dangerouslySetInnerHTML={{
++                            __html: purify.sanitize(value),
++                        }}
++                    />
+                 )}
+             </Typography>
+         );
+diff --git a/yarn.lock b/yarn.lock
+index 799698dd5..7cb425872 100644
+--- a/yarn.lock
++++ b/yarn.lock
+@@ -8144,6 +8144,11 @@ domhandler@^4.2.0, domhandler@^4.3.0:
+   dependencies:
+     domelementtype "^2.2.0"
+ 
++dompurify@^2.4.3:
++  version "2.4.3"
++  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-2.4.3.tgz#f4133af0e6a50297fc8874e2eaedc13a3c308c03"
++  integrity sha512-q6QaLcakcRjebxjg8/+NP+h0rPfatOgOzc46Fst9VAA3jF2ApfKBNKMzdP4DYTqtUMXSCd5pRS/8Po/OmoCHZQ==
++
+ domutils@1.5.1:
+   version "1.5.1"
+   resolved "https://registry.yarnpkg.com/domutils/-/domutils-1.5.1.tgz#dcd8488a26f563d61079e48c9f7b7e32373682cf"
+-- 
+2.34.1
+

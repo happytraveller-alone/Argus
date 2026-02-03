@@ -1,0 +1,33 @@
+From 495ffa3f3a213ab058eee1d7da48fa5ef71914d8 Mon Sep 17 00:00:00 2001
+From: Christian Beier <dontmind@freeshell.org>
+Date: Sat, 10 Nov 2018 17:33:00 +0100
+Subject: [PATCH] tightvnc-filetransfer: do not close stuff from within a
+ thread
+
+... as this crashes badly and the client is closed by the main thread machinery afterwards.
+
+re #242
+---
+ .../tightvnc-filetransfer/handlefiletransferrequest.c       | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/libvncserver/tightvnc-filetransfer/handlefiletransferrequest.c b/libvncserver/tightvnc-filetransfer/handlefiletransferrequest.c
+index 70e105f4..71fb0851 100644
+--- a/libvncserver/tightvnc-filetransfer/handlefiletransferrequest.c
++++ b/libvncserver/tightvnc-filetransfer/handlefiletransferrequest.c
+@@ -489,12 +489,6 @@ RunFileDownloadThread(void* client)
+ 			if(rfbWriteExact(cl, fileDownloadMsg.data, fileDownloadMsg.length) < 0)  {
+ 				rfbLog("File [%s]: Method [%s]: Error while writing to socket \n"
+ 						, __FILE__, __FUNCTION__);
+-
+-				if(cl != NULL) {
+-			    	rfbCloseClient(cl);
+-				CloseUndoneFileDownload(cl, rtcp);
+-				}
+-				
+ 				FreeFileTransferMsg(fileDownloadMsg);
+ 				return NULL;
+ 			}
+-- 
+2.34.1
+

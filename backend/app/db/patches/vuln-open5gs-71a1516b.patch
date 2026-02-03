@@ -1,0 +1,109 @@
+From 71a1516b0376340d267caa85920cb0a4da261176 Mon Sep 17 00:00:00 2001
+From: Sukchan Lee <acetcom@gmail.com>
+Date: Sat, 1 Oct 2022 13:28:41 +0900
+Subject: [PATCH] [Security] Fixed a crash for port scanning (#1767)
+
+---
+ lib/core/ogs-tlv-msg.c | 10 +++++++++-
+ lib/core/ogs-tlv.c     |  7 +++++--
+ src/sgwc/pfcp-path.c   |  2 +-
+ src/sgwu/pfcp-path.c   |  2 +-
+ src/smf/pfcp-path.c    |  2 +-
+ src/upf/pfcp-path.c    |  2 +-
+ 6 files changed, 18 insertions(+), 7 deletions(-)
+
+diff --git a/lib/core/ogs-tlv-msg.c b/lib/core/ogs-tlv-msg.c
+index 3f3719d61..dea5714c7 100644
+--- a/lib/core/ogs-tlv-msg.c
++++ b/lib/core/ogs-tlv-msg.c
+@@ -759,7 +759,15 @@ static ogs_tlv_t *ogs_tlv_parse_block_desc(uint32_t length, void *data, uint8_t
+         ogs_assert(pos);
+     }
+ 
+-    ogs_assert(length == (pos - blk));
++    if (length != (pos - blk)) {
++        ogs_error("ogs_tlv_parse_block() failed[LEN:%d,MODE:%d]",
++                length, msg_mode);
++        ogs_error("POS[%p] BLK[%p] POS-BLK[%d]", pos, blk, (int)(pos - blk));
++        ogs_log_hexdump(OGS_LOG_FATAL, data, length);
++
++        ogs_tlv_free_all(root);
++        return NULL;
++    }
+ 
+     return root;
+ }
+diff --git a/lib/core/ogs-tlv.c b/lib/core/ogs-tlv.c
+index 0299145b3..0750986e5 100644
+--- a/lib/core/ogs-tlv.c
++++ b/lib/core/ogs-tlv.c
+@@ -462,9 +462,12 @@ ogs_tlv_t *ogs_tlv_parse_block(uint32_t length, void *data, uint8_t mode)
+     }
+ 
+     if (length != (pos - blk)) {
+-        ogs_fatal("ogs_tlv_parse_block() failed[LEN:%d,MODE:%d]", length, mode);
++        ogs_error("ogs_tlv_parse_block() failed[LEN:%d,MODE:%d]", length, mode);
++        ogs_error("POS[%p] BLK[%p] POS-BLK[%d]", pos, blk, (int)(pos - blk));
+         ogs_log_hexdump(OGS_LOG_FATAL, data, length);
+-        ogs_assert_if_reached();
++
++        ogs_tlv_free_all(root);
++        return NULL;
+     }
+ 
+     return root;
+diff --git a/src/sgwc/pfcp-path.c b/src/sgwc/pfcp-path.c
+index e75305720..7485759d1 100644
+--- a/src/sgwc/pfcp-path.c
++++ b/src/sgwc/pfcp-path.c
+@@ -80,7 +80,7 @@ static void pfcp_recv_cb(short when, ogs_socket_t fd, void *data)
+     ogs_pkbuf_trim(pkbuf, size);
+ 
+     h = (ogs_pfcp_header_t *)pkbuf->data;
+-    if (h->version > OGS_PFCP_VERSION) {
++    if (h->version != OGS_PFCP_VERSION) {
+         ogs_pfcp_header_t rsp;
+ 
+         ogs_error("Not supported version[%d]", h->version);
+diff --git a/src/sgwu/pfcp-path.c b/src/sgwu/pfcp-path.c
+index ff38d3959..fe825ed92 100644
+--- a/src/sgwu/pfcp-path.c
++++ b/src/sgwu/pfcp-path.c
+@@ -80,7 +80,7 @@ static void pfcp_recv_cb(short when, ogs_socket_t fd, void *data)
+     ogs_pkbuf_trim(pkbuf, size);
+ 
+     h = (ogs_pfcp_header_t *)pkbuf->data;
+-    if (h->version > OGS_PFCP_VERSION) {
++    if (h->version != OGS_PFCP_VERSION) {
+         ogs_pfcp_header_t rsp;
+ 
+         ogs_error("Not supported version[%d]", h->version);
+diff --git a/src/smf/pfcp-path.c b/src/smf/pfcp-path.c
+index e122513aa..b77ffbe22 100644
+--- a/src/smf/pfcp-path.c
++++ b/src/smf/pfcp-path.c
+@@ -120,7 +120,7 @@ static void pfcp_recv_cb(short when, ogs_socket_t fd, void *data)
+     ogs_pkbuf_trim(pkbuf, size);
+ 
+     h = (ogs_pfcp_header_t *)pkbuf->data;
+-    if (h->version > OGS_PFCP_VERSION) {
++    if (h->version != OGS_PFCP_VERSION) {
+         ogs_pfcp_header_t rsp;
+ 
+         ogs_error("Not supported version[%d]", h->version);
+diff --git a/src/upf/pfcp-path.c b/src/upf/pfcp-path.c
+index 13cc1bb44..2b188d2e7 100644
+--- a/src/upf/pfcp-path.c
++++ b/src/upf/pfcp-path.c
+@@ -83,7 +83,7 @@ static void pfcp_recv_cb(short when, ogs_socket_t fd, void *data)
+     ogs_pkbuf_trim(pkbuf, size);
+ 
+     h = (ogs_pfcp_header_t *)pkbuf->data;
+-    if (h->version > OGS_PFCP_VERSION) {
++    if (h->version != OGS_PFCP_VERSION) {
+         ogs_pfcp_header_t rsp;
+ 
+         ogs_error("Not supported version[%d]", h->version);
+-- 
+2.34.1
+

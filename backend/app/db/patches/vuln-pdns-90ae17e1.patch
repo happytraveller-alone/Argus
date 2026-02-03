@@ -1,0 +1,81 @@
+From ff1537871d451dc7f36e539189107f4ee2d05379 Mon Sep 17 00:00:00 2001
+From: Otto Moerbeek <otto.moerbeek@open-xchange.com>
+Date: Mon, 2 Jan 2023 16:34:56 +0100
+Subject: [PATCH] Backport to 4.8.x: Do *not* use QName Minimization for DS
+ retrievals in QM fallback mode.
+
+---
+ pdns/recursordist/rec-main.cc |  2 +-
+ pdns/syncres.cc               |  4 +++-
+ pdns/syncres.hh               | 13 +++++++++++++
+ 3 files changed, 17 insertions(+), 2 deletions(-)
+
+diff --git a/pdns/recursordist/rec-main.cc b/pdns/recursordist/rec-main.cc
+index 415b7c833..a29c87b82 100644
+--- a/pdns/recursordist/rec-main.cc
++++ b/pdns/recursordist/rec-main.cc
+@@ -2583,7 +2583,7 @@ int main(int argc, char** argv)
+   try {
+ #if HAVE_FIBER_SANITIZER
+     // Asan needs more stack
+-    ::arg().set("stack-size", "stack size per mthread") = "400000";
++    ::arg().set("stack-size", "stack size per mthread") = "600000";
+ #else
+     ::arg().set("stack-size", "stack size per mthread") = "200000";
+ #endif
+diff --git a/pdns/syncres.cc b/pdns/syncres.cc
+index 88a55a378..54602efab 100644
+--- a/pdns/syncres.cc
++++ b/pdns/syncres.cc
+@@ -1753,6 +1753,8 @@ int SyncRes::doResolve(const DNSName &qname, const QType qtype, vector<DNSRecord
+         // Case 5: unexpected answer
+         QLOG("Step5: other rcode, last effort final resolve");
+         setQNameMinimization(false);
++        setQMFallbackMode(true);
++
+         // We might have hit a depth level check, but we still want to allow some recursion levels in the fallback
+         // no-qname-minimization case. This has the effect that a qname minimization fallback case might reach 150% of
+         // maxdepth.
+@@ -3589,7 +3591,7 @@ vState SyncRes::getDSRecords(const DNSName& zone, dsmap_t& ds, bool taOnly, unsi
+ 
+   vState state = vState::Indeterminate;
+   const bool oldCacheOnly = setCacheOnly(false);
+-  const bool oldQM = setQNameMinimization(true);
++  const bool oldQM = setQNameMinimization(!getQMFallbackMode());
+   int rcode = doResolve(zone, QType::DS, dsrecords, depth + 1, beenthere, state);
+   setCacheOnly(oldCacheOnly);
+   setQNameMinimization(oldQM);
+diff --git a/pdns/syncres.hh b/pdns/syncres.hh
+index df26b9ac4..1bdf1508b 100644
+--- a/pdns/syncres.hh
++++ b/pdns/syncres.hh
+@@ -328,6 +328,18 @@ public:
+     return old;
+   }
+ 
++  bool setQMFallbackMode(bool state = true)
++  {
++    auto old = d_qNameMinimizationFallbackMode;
++    d_qNameMinimizationFallbackMode = state;
++    return old;
++  }
++
++  bool getQMFallbackMode() const
++  {
++    return d_qNameMinimizationFallbackMode;
++  }
++
+   void setDoEDNS0(bool state=true)
+   {
+     d_doEDNS0=state;
+@@ -664,6 +676,7 @@ private:
+   bool d_wasOutOfBand{false};
+   bool d_wasVariable{false};
+   bool d_qNameMinimization{false};
++  bool d_qNameMinimizationFallbackMode{false};
+   bool d_queryReceivedOverTCP{false};
+   bool d_followCNAME{true};
+   bool d_refresh{false};
+-- 
+2.34.1
+

@@ -1,0 +1,30 @@
+rules:
+- id: vuln-jerryscript-15629e8b
+  pattern: '- OPTS="--quiet --jerry-tests --jerry-test-suite --skip-list=parser-oom.js,parser-oom2.js,stack-limit.js,regression-test-issue-2190.js,regression-test-issue-2258-2963.js,regression-test-issue-2448.js,regression-test-issue-2905.js
+    --buildoptions=--stack-limit=0,--compile-flag=-fsanitize=address,--compile-flag=-m32,--compile-flag=-fno-omit-frame-pointer,--compile-flag=-fno-common,--compile-flag=-O2,--debug,--system-allocator=on,--linker-flag=-fuse-ld=gold"
+
+    '
+  pattern-not: '- OPTS="--quiet --jerry-tests --jerry-test-suite --skip-list=parser-oom.js,parser-oom2.js,stack-limit.js,regression-test-issue-2190.js,regression-test-issue-2258-2963.js,regression-test-issue-2448.js,regression-test-issue-2905.js,regression-test-issue-3785.js
+    --buildoptions=--stack-limit=0,--compile-flag=-fsanitize=address,--compile-flag=-m32,--compile-flag=-fno-omit-frame-pointer,--compile-flag=-fno-common,--compile-flag=-O2,--debug,--system-allocator=on,--linker-flag=-fuse-ld=gold"
+
+    '
+  languages:
+  - yaml
+  message: 'The skip-list in the test configuration is missing a critical regression
+    test (regression-test-issue-3785.js). This could lead to undetected issues in
+    the codebase. Ensure all relevant regression tests are included in the skip-list
+    to maintain comprehensive test coverage.
+
+    '
+  severity: WARNING
+  metadata:
+    source-url: github.com/jerryscript-project/jerryscript/commit/15629e8ba5bdbb4e92a81f327d532968343ae376
+    category: security
+    cwe:
+    - 'CWE-489: Active Debug Code'
+    owasp:
+    - A03:2021 - Injection
+    references:
+    - https://cwe.mitre.org/data/definitions/489.html
+    technology:
+    - yaml

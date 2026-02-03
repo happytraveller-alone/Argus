@@ -1,0 +1,451 @@
+From f2ec4ce36adb3f233e3b39df1f7a49fad8f1104c Mon Sep 17 00:00:00 2001
+From: Robin Mills <robin@clanmills.com>
+Date: Thu, 15 Sep 2016 12:20:51 +0000
+Subject: [PATCH] #1074 Work in progress.  fixed pngimage.cpp
+ doWriteMetadata().
+
+---
+ src/actions.cpp                               |   2 +-
+ src/pngchunk.cpp                              |  15 --
+ src/pngchunk_int.hpp                          |  11 --
+ src/pngimage.cpp                              |  59 ++++++--
+ .../{ReaganSmall.png => ReaganSmallPng.png}   | Bin
+ test/data/bugfixes-test.out                   | Bin 1912453 -> 1912453 bytes
+ test/data/icc-test.out                        | 128 ++++--------------
+ test/data/small.icc                           | Bin 3142 -> 560 bytes
+ 8 files changed, 73 insertions(+), 142 deletions(-)
+ rename test/data/{ReaganSmall.png => ReaganSmallPng.png} (100%)
+
+diff --git a/src/actions.cpp b/src/actions.cpp
+index 0958b1a9d..873f6b0ad 100644
+--- a/src/actions.cpp
++++ b/src/actions.cpp
+@@ -1187,7 +1187,7 @@ namespace Action {
+                 std::cerr << _("No embedded iccProfile: ") << path_ << std::endl;
+                 rc = -2;
+             } else {
+-                
++
+                 if ( Params::instance().target_ & Params::ctStdInOut ) { // -eC-
+                     std::cout.write((const char*)image->iccProfile()->pData_,image->iccProfile()->size_);
+                 } else {
+diff --git a/src/pngchunk.cpp b/src/pngchunk.cpp
+index 14638fd41..a87e03c98 100644
+--- a/src/pngchunk.cpp
++++ b/src/pngchunk.cpp
+@@ -541,21 +541,6 @@ namespace Exiv2 {
+ 
+     } // PngChunk::makeAsciiTxtChunk
+ 
+-    std::string PngChunk::makeICCPChunkHeader(const std::string& keyword,long compressedLength)
+-    {
+-        // Chunk structure: length (4 bytes) + chunk type
+-        std::string chunkData = keyword + '\0';
+-        std::string chunkType;
+-        chunkData += '\0' ;// byte 0 = standard compression
+-        chunkType = "iCCP";
+-        // Determine length of the chunk data
+-        byte length[4];
+-        ul2Data(length, static_cast<uint32_t>(chunkData.size()+compressedLength), bigEndian);
+-
+-        // Assemble chunk
+-        return std::string((const char*)length, 4) + chunkType + chunkData;
+-    } // PngChunk::makeICCPChunkHeader
+-
+     std::string PngChunk::makeUtf8TxtChunk(const std::string& keyword,
+                                            const std::string& text,
+                                            bool               compress)
+diff --git a/src/pngchunk_int.hpp b/src/pngchunk_int.hpp
+index 54c085664..a9af64f7e 100644
+--- a/src/pngchunk_int.hpp
++++ b/src/pngchunk_int.hpp
+@@ -116,17 +116,6 @@ namespace Exiv2 {
+         static std::string makeMetadataChunk(const std::string& metadata,
+                                                    MetadataId   type);
+ 
+-        /*!
+-          @brief Return PNG iCCP chunk header
+-                 (length + chunk type) as a string.
+-
+-          @param keyword         Keyword for the PNG iCCP chunk
+-          @param compressLength  length of compress data to follow chunk header
+-
+-          @return string containing the PNG chunk header
+-        */
+-        static std::string makeICCPChunkHeader(const std::string& keyword,long compressedLength);
+-
+     private:
+         /*!
+           @brief Parse PNG Text chunk to determine type and extract content.
+diff --git a/src/pngimage.cpp b/src/pngimage.cpp
+index 9dd8b3866..800c4226d 100644
+--- a/src/pngimage.cpp
++++ b/src/pngimage.cpp
+@@ -21,11 +21,9 @@
+ /*
+   File:    pngimage.cpp
+   Version: $Rev$
+-  Author(s): Gilles Caulier (cgilles) <caulier dot gilles at gmail dot com>
+-  History: 12-Jun-06, gc: submitted
+-  Credits: See header file
+  */
+ // *****************************************************************************
++
+ #include "rcsid_int.hpp"
+ EXIV2_RCSID("@(#) $Id$")
+ 
+@@ -53,7 +51,6 @@ EXIV2_RCSID("@(#) $Id$")
+ #include <cassert>
+ 
+ #include <zlib.h>     // To uncompress IccProfiles
+-
+ // Signature from front of PNG file
+ const unsigned char pngSignature[8] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+ 
+@@ -106,6 +103,12 @@ namespace Exiv2 {
+         do {
+             result.alloc(uncompressedLen);
+             zlibResult = uncompress((Bytef*)result.pData_,&uncompressedLen,bytes,length);
++            // if result buffer is large than necessary, redo to fit perfectly.
++            if (zlibResult == Z_OK && (long) uncompressedLen < result.size_ ) {
++                result.release();
++                result.alloc(uncompressedLen);
++                zlibResult = uncompress((Bytef*)result.pData_,&uncompressedLen,bytes,length);
++            }
+             if (zlibResult == Z_BUF_ERROR) {
+                 // the uncompressed buffer needs to be larger
+                 result.release();
+@@ -132,6 +135,7 @@ namespace Exiv2 {
+                 result.release();
+                 compressedLen *= 2;
+             } else {
++                result.release();
+                 result.alloc(compressedLen);
+                 zlibResult = compress((Bytef*)result.pData_,&compressedLen,bytes,length);
+             }
+@@ -512,6 +516,10 @@ namespace Exiv2 {
+             if (io_->error()) throw Error(14);
+             if (bufRead != (long)(dataOffset + 4)) throw Error(20);
+ 
++            char szChunk[5];
++            memcpy(szChunk,cheaderBuf.pData_ + 4,4);
++            szChunk[4]  = 0;
++
+             if (!memcmp(cheaderBuf.pData_ + 4, "IEND", 4))
+             {
+                 // Last chunk found: we write it and done.
+@@ -575,12 +583,34 @@ namespace Exiv2 {
+                 if ( iccProfileDefined() ) {
+                     DataBuf compressed;
+                     if ( zlibToCompressed(iccProfile_.pData_,iccProfile_.size_,compressed) ) {
+-                        std::string chunk = PngChunk::makeICCPChunkHeader("ICC Profile",compressed.size_);
+-                        if( outIo.write((const byte*)chunk.data(), static_cast<long>(chunk.size())) != (long)chunk.size()
+-                        ||  outIo.write (compressed.pData_,compressed.size_)                        != compressed.size_
++
++                        const byte* header   = (const byte*) "ICC PROFILE\0\0" ; // \0 = default compression
++                        const byte*  type    = (const byte*) "iCCP";
++                        uint32_t headerLen   = 13 ;
++                        uint32_t typeLen     = 4;
++                        uint32_t chunkLength = headerLen + compressed.size_ ;
++                        byte     length[4];
++                        ul2Data (length,chunkLength,bigEndian);
++
++                        // calculate CRC
++                        uLong   tmp = crc32(0L, Z_NULL, 0);
++                        tmp         = crc32(tmp, (const Bytef*)header           ,headerLen);
++                        tmp         = crc32(tmp, (const Bytef*)compressed.pData_,compressed.size_);
++                        byte    crc[4];
++                        ul2Data(crc, tmp, bigEndian);
++
++                        if( outIo.write(length,4)         != 4
++                        ||  outIo.write(type  ,typeLen)   != typeLen
++                        ||  outIo.write(header,headerLen) != headerLen
++                        ||  outIo.write (compressed.pData_,compressed.size_) != compressed.size_
++                        ||  outIo.write(crc,4)            != 4
+                         ){
+                             throw Error(21);
+                         }
++#ifdef DEBUG
++                        std::cout << "Exiv2::PngImage::doWriteMetadata: build iCCP"
++                        << " chunk (length: " << compressed.size_ + headerLen << ")" << std::endl;
++#endif
+                     }
+                 }
+ 
+@@ -610,19 +640,20 @@ namespace Exiv2 {
+                     memcmp("Raw profile type iptc", key.pData_, 21) == 0 ||
+                     memcmp("Raw profile type xmp",  key.pData_, 20) == 0 ||
+                     memcmp("XML:com.adobe.xmp",     key.pData_, 17) == 0 ||
+-                    memcmp("icc",                   key.pData_,  3) == 0 ||
++                    memcmp("icc",                   key.pData_,  3) == 0 || // see test/data/imagemagick.png
++                    memcmp("ICC",                   key.pData_,  3) == 0 ||
+                     memcmp("Description",           key.pData_, 11) == 0)
+                 {
+ #ifdef DEBUG
+-                    std::cout << "Exiv2::PngImage::doWriteMetadata: strip " << cheaderBuf.pData_ + 4
+-                              << " chunk (key: " << key.pData_ << ")\n";
++                    std::cout << "Exiv2::PngImage::doWriteMetadata: strip " << szChunk
++                              << " chunk (length: " << dataOffset << ")" << std::endl;
+ #endif
+                 }
+                 else
+                 {
+ #ifdef DEBUG
+-                    std::cout << "Exiv2::PngImage::doWriteMetadata: write " << cheaderBuf.pData_ + 4
+-                              << " chunk (length: " << dataOffset << ")\n";
++                    std::cout << "Exiv2::PngImage::doWriteMetadata: write " << szChunk
++                              << " chunk (length: " << dataOffset << ")" << std::endl;
+ #endif
+                     if (outIo.write(chunkBuf.pData_, chunkBuf.size_) != chunkBuf.size_) throw Error(21);
+                 }
+@@ -631,8 +662,8 @@ namespace Exiv2 {
+             {
+                 // Write all others chunk as well.
+ #ifdef DEBUG
+-                std::cout << "Exiv2::PngImage::doWriteMetadata: write " << cheaderBuf.pData_ + 4
+-                          << " chunk (length: " << dataOffset << ")\n";
++                std::cout << "Exiv2::PngImage::doWriteMetadata:  copy " << szChunk
++                          << " chunk (length: " << dataOffset << ")" << std::endl;
+ #endif
+                 if (outIo.write(chunkBuf.pData_, chunkBuf.size_) != chunkBuf.size_) throw Error(21);
+ 
+diff --git a/test/data/ReaganSmall.png b/test/data/ReaganSmallPng.png
+similarity index 100%
+rename from test/data/ReaganSmall.png
+rename to test/data/ReaganSmallPng.png
+diff --git a/test/data/bugfixes-test.out b/test/data/bugfixes-test.out
+index 30b283c8aa28504e850528a12f97a52096b9e370..201d012bc57419c8ee8b4a4521054f67b1d680a6 100644
+GIT binary patch
+delta 141
+zcmV~$*$sj)00!WAD+=O$VbT%k-9EYiJCq(1Fn|v~aUm0@VHdxzAG&_%-WXww38t7~
+zjs=!jA;TIQ<S4L3i5>Ph;D{5>xZsK#?s$BwoV=v3nc&QFL9H}OQK5tJZF0gUo_xxD
+fs$Gmxr{F1VS?z*x)CMILGs2koX-M^J$Ws@85j!b0
+
+delta 141
+zcmV~$*%5*;6a~<6R}{p3!<m$jJVJc=v;lfZh^c@A{J4w_Ib${S;yGR4c76NC07Hy0
+z#spK$FvkK3mRKQ0hBb0*u*D909B{-5XIyZ_?OUYcX^Auk$C4}MRjiD)O$g>i)&*UL
+hGNB-=#<4d#$}%<_nLNwrh?FBX{!@$MSBv{2`vVUBDE9yW
+
+diff --git a/test/data/icc-test.out b/test/data/icc-test.out
+index 78ab1b637..9e301c59b 100644
+--- a/test/data/icc-test.out
++++ b/test/data/icc-test.out
+@@ -152,124 +152,50 @@ STRUCTURE OF JPEG FILE: Reagan.jpg
+  1628273 | 0xffdd DRI   |       4 
+  1628279 | 0xffc4 DHT   |     418 
+  1628699 | 0xffda SOS  
+-Exiv2 exception in insert action for file Reagan.jpg:
+-Not a valid ICC Profile
+ STRUCTURE OF JPEG FILE: Reagan.jpg
+  address | marker       |  length | data
+        0 | 0xffd8 SOI  
+        2 | 0xffe1 APP1  |    5704 | Exif..MM.*......................
+     5708 | 0xffe1 APP1  |    5287 | http://ns.adobe.com/xap/1.0/.<?x
+-   10997 | 0xffe2 APP2  |   65512 | ICC_PROFILE... APPL....prtrRGB L chunk 1/-97
+-   76512 | 0xffe2 APP2  |   65512 | ICC_PROFILE...Ih.V...j.U..4mVT<. chunk 2/-99
+-  142027 | 0xffe2 APP2  |   65512 | ICC_PROFILE..f...~mcx...`.....] chunk 3/102
+-  207542 | 0xffe2 APP2  |   65512 | ICC_PROFILE.....S...^...v....... chunk 4/-99
+-  273057 | 0xffe2 APP2  |   65512 | ICC_PROFILE..bXf2..`Og...^0g..I\ chunk 5/98
+-  338572 | 0xffe2 APP2  |   65512 | ICC_PROFILE..~.|...{.}P..y.}..Vv chunk 6/126
+-  404087 | 0xffe2 APP2  |   65512 | ICC_PROFILE...b.....:...?.....E. chunk 7/-94
+-  469602 | 0xffe2 APP2  |   65512 | ICC_PROFILE..yq].R.wW].S.uJ]eT6s chunk 8/121
+-  535117 | 0xffe2 APP2  |   65512 | ICC_PROFILE..T'..RA.Y..P,....N%. chunk 9/84
+-  600632 | 0xffe2 APP2  |   65512 | ICC_PROFILE..}/..key...l.v..cn-r chunk 10/125
+-  666147 | 0xffe2 APP2  |   65512 | ICC_PROFILE.....O{.....|..c..|S. chunk 11/-67
+-  731662 | 0xffe2 APP2  |   65512 | ICC_PROFILE..;.O-F.-.R>J...a.`1 chunk 12/59
+-  797177 | 0xffe2 APP2  |   65512 | ICC_PROFILE....up............... chunk 13/-1
+-  862692 | 0xffe2 APP2  |   65512 | ICC_PROFILE.....<............... chunk 14/-1
+-  928207 | 0xffe2 APP2  |   65512 | ICC_PROFILE...........,...'..... chunk 15/-96
+-  993722 | 0xffe2 APP2  |   65512 | ICC_PROFILE....g.....m%....qw.. chunk 16/0
+- 1059237 | 0xffe2 APP2  |   65512 | ICC_PROFILE...s....xX.M..n.....g chunk 17/-126
+- 1124752 | 0xffe2 APP2  |   65512 | ICC_PROFILE.........0......E.... chunk 18/22
+- 1190267 | 0xffe2 APP2  |   65512 | ICC_PROFILE.....(.n.B.........J} chunk 19/-1
+- 1255782 | 0xffe2 APP2  |   65512 | ICC_PROFILE..0.282.0.282.0.281.0 chunk 20/48
+- 1321297 | 0xffe2 APP2  |   65512 | ICC_PROFILE..5.0.176.0.175.0.174 chunk 21/53
+- 1386812 | 0xffe2 APP2  |   65512 | ICC_PROFILE..3.0.114.0.126.0.136 chunk 22/51
+- 1452327 | 0xffe2 APP2  |   65512 | ICC_PROFILE..0.049.0.053.0.059.0 chunk 23/48
+- 1517842 | 0xffe2 APP2  |   65512 | ICC_PROFILE...670.0.653.0.634.0. chunk 24/46
+- 1583357 | 0xffe2 APP2  |   41712 | ICC_PROFILE...0.584.0.555.0.509. chunk 25/9
+- 1625072 | 0xffed APP13 |    3030 | Photoshop 3.0.8BIM..........Z...
+- 1628104 | 0xffee APP14 |      14 | Adobe.d@......
+- 1628120 | 0xffdb DQT   |     132 
+- 1628254 | 0xffc0 SOF0  |      17 
+- 1628273 | 0xffdd DRI   |       4 
+- 1628279 | 0xffc4 DHT   |     418 
+- 1628699 | 0xffda SOS  
++   10997 | 0xffe2 APP2  |     576 | ICC_PROFILE.....0ADBE....mntrRGB chunk 1/0
++   11576 | 0xffed APP13 |    3030 | Photoshop 3.0.8BIM..........Z...
++   14608 | 0xffee APP14 |      14 | Adobe.d@......
++   14624 | 0xffdb DQT   |     132 
++   14758 | 0xffc0 SOF0  |      17 
++   14777 | 0xffdd DRI   |       4 
++   14783 | 0xffc4 DHT   |     418 
++   15203 | 0xffda SOS  
+ STRUCTURE OF JPEG FILE: Reagan.jpg
+  address | marker       |  length | data
+        0 | 0xffd8 SOI  
+        2 | 0xffe1 APP1  |    5704 | Exif..MM.*......................
+     5708 | 0xffe1 APP1  |    5287 | http://ns.adobe.com/xap/1.0/.<?x
+-   10997 | 0xffe2 APP2  |   65512 | ICC_PROFILE.. APPL....prtrRGB La chunk 1/32
+-   76512 | 0xffe2 APP2  |   65512 | ICC_PROFILE..Ih.V...j.U..4mVT<.7 chunk 2/73
+-  142027 | 0xffe2 APP2  |   65512 | ICC_PROFILE.....~mcx...`.....]' chunk 3/-87
+-  207542 | 0xffe2 APP2  |   65512 | ICC_PROFILE....S...^...v........ chunk 4/-60
+-  273057 | 0xffe2 APP2  |   65512 | ICC_PROFILE..Xf2..`Og...^0g..I\% chunk 5/88
+-  338572 | 0xffe2 APP2  |   65512 | ICC_PROFILE...|...{.}P..y.}..Vvh chunk 6/-63
+-  404087 | 0xffe2 APP2  |   65512 | ICC_PROFILE..b.....:...?.....E.. chunk 7/98
+-  469602 | 0xffe2 APP2  |   65512 | ICC_PROFILE..q].R.wW].S.uJ]eT6s. chunk 8/113
+-  535117 | 0xffe2 APP2  |   65512 | ICC_PROFILE..'..RA.Y..P,....N%.Z chunk 9/39
+-  600632 | 0xffe2 APP2  |   65512 | ICC_PROFILE../..key...l.v..cn-r. chunk 10/47
+-  666147 | 0xffe2 APP2  |   65512 | ICC_PROFILE....O{.....|..c..|S.d chunk 11/-75
+-  731662 | 0xffe2 APP2  |   65512 | ICC_PROFILE...O-F.-.R>J...a.`1. chunk 12/-113
+-  797177 | 0xffe2 APP2  |   65512 | ICC_PROFILE...up................ chunk 13/-1
+-  862692 | 0xffe2 APP2  |   65512 | ICC_PROFILE....<................ chunk 14/-1
+-  928207 | 0xffe2 APP2  |   65512 | ICC_PROFILE..........,...'.....` chunk 15/9
+-  993722 | 0xffe2 APP2  |   65512 | ICC_PROFILE...g.....m%....qw... chunk 16/0
+- 1059237 | 0xffe2 APP2  |   65512 | ICC_PROFILE..s....xX.M..n.....gO chunk 17/115
+- 1124752 | 0xffe2 APP2  |   65512 | ICC_PROFILE........0......E..... chunk 18/-31
+- 1190267 | 0xffe2 APP2  |   65512 | ICC_PROFILE....(.n.B.........J}a chunk 19/-1
+- 1255782 | 0xffe2 APP2  |   65512 | ICC_PROFILE...282.0.282.0.281.0. chunk 20/46
+- 1321297 | 0xffe2 APP2  |   65512 | ICC_PROFILE...0.176.0.175.0.174. chunk 21/9
+- 1386812 | 0xffe2 APP2  |   65512 | ICC_PROFILE...0.114.0.126.0.136. chunk 22/9
+- 1452327 | 0xffe2 APP2  |   65512 | ICC_PROFILE...049.0.053.0.059.0. chunk 23/46
+- 1517842 | 0xffe2 APP2  |   65512 | ICC_PROFILE..670.0.653.0.634.0.6 chunk 24/54
+- 1583357 | 0xffe2 APP2  |   41712 | ICC_PROFILE..0.584.0.555.0.509.0 chunk 25/48
+- 1625072 | 0xffed APP13 |    3030 | Photoshop 3.0.8BIM..........Z...
+- 1628104 | 0xffee APP14 |      14 | Adobe.d@......
+- 1628120 | 0xffdb DQT   |     132 
+- 1628254 | 0xfffe COM   |      10 | abcdefg
+- 1628266 | 0xffc0 SOF0  |      17 
+- 1628285 | 0xffdd DRI   |       4 
+- 1628291 | 0xffc4 DHT   |     418 
+- 1628711 | 0xffda SOS  
++   10997 | 0xffe2 APP2  |     576 | ICC_PROFILE....0ADBE....mntrRGB  chunk 1/0
++   11576 | 0xffed APP13 |    3030 | Photoshop 3.0.8BIM..........Z...
++   14608 | 0xffee APP14 |      14 | Adobe.d@......
++   14624 | 0xffdb DQT   |     132 
++   14758 | 0xfffe COM   |      10 | abcdefg
++   14770 | 0xffc0 SOF0  |      17 
++   14789 | 0xffdd DRI   |       4 
++   14795 | 0xffc4 DHT   |     418 
++   15215 | 0xffda SOS  
+ abcdefg
+ STRUCTURE OF JPEG FILE: Reagan.jpg
+  address | marker       |  length | data
+        0 | 0xffd8 SOI  
+        2 | 0xffe1 APP1  |    5704 | Exif..MM.*......................
+     5708 | 0xffe1 APP1  |    5287 | http://ns.adobe.com/xap/1.0/.<?x
+-   10997 | 0xffe2 APP2  |   65512 | ICC_PROFILE..APPL....prtrRGB Lab chunk 1/65
+-   76512 | 0xffe2 APP2  |   65512 | ICC_PROFILE..h.V...j.U..4mVT<.7o chunk 2/104
+-  142027 | 0xffe2 APP2  |   65512 | ICC_PROFILE....~mcx...`.....]'. chunk 3/-85
+-  207542 | 0xffe2 APP2  |   65512 | ICC_PROFILE...S...^...v......... chunk 4/-50
+-  273057 | 0xffe2 APP2  |   65512 | ICC_PROFILE..f2..`Og...^0g..I\%h chunk 5/102
+-  338572 | 0xffe2 APP2  |   65512 | ICC_PROFILE..|...{.}P..y.}..Vvh} chunk 6/124
+-  404087 | 0xffe2 APP2  |   65512 | ICC_PROFILE.......:...?.....E... chunk 7/-110
+-  469602 | 0xffe2 APP2  |   65512 | ICC_PROFILE..].R.wW].S.uJ]eT6s.] chunk 8/93
+-  535117 | 0xffe2 APP2  |   65512 | ICC_PROFILE....RA.Y..P,....N%.Z. chunk 9/-127
+-  600632 | 0xffe2 APP2  |   65512 | ICC_PROFILE....key...l.v..cn-r.. chunk 10/-56
+-  666147 | 0xffe2 APP2  |   65512 | ICC_PROFILE...O{.....|..c..|S.d. chunk 11/-19
+-  731662 | 0xffe2 APP2  |   65512 | ICC_PROFILE..O-F.-.R>J...a.`1..g chunk 12/79
+-  797177 | 0xffe2 APP2  |   65512 | ICC_PROFILE..up................. chunk 13/117
+-  862692 | 0xffe2 APP2  |   65512 | ICC_PROFILE...<................. chunk 14/-102
+-  928207 | 0xffe2 APP2  |   65512 | ICC_PROFILE.........,...'.....` chunk 15/9
+-  993722 | 0xffe2 APP2  |   65512 | ICC_PROFILE..g.....m%....qw....u chunk 16/103
+- 1059237 | 0xffe2 APP2  |   65512 | ICC_PROFILE......xX.M..n.....gO. chunk 17/-112
+- 1124752 | 0xffe2 APP2  |   65512 | ICC_PROFILE.......0......E.....H chunk 18/-120
+- 1190267 | 0xffe2 APP2  |   65512 | ICC_PROFILE...(.n.B.........J}am chunk 19/-9
+- 1255782 | 0xffe2 APP2  |   65512 | ICC_PROFILE..282.0.282.0.281.0.2 chunk 20/50
+- 1321297 | 0xffe2 APP2  |   65512 | ICC_PROFILE..0.176.0.175.0.174.0 chunk 21/48
+- 1386812 | 0xffe2 APP2  |   65512 | ICC_PROFILE..0.114.0.126.0.136.0 chunk 22/48
+- 1452327 | 0xffe2 APP2  |   65512 | ICC_PROFILE..049.0.053.0.059.0.0 chunk 23/48
+- 1517842 | 0xffe2 APP2  |   65512 | ICC_PROFILE..70.0.653.0.634.0.60 chunk 24/55
+- 1583357 | 0xffe2 APP2  |   41712 | ICC_PROFILE...584.0.555.0.509.0. chunk 25/46
+- 1625072 | 0xffed APP13 |    3030 | Photoshop 3.0.8BIM..........Z...
+- 1628104 | 0xffee APP14 |      14 | Adobe.d@......
+- 1628120 | 0xffdb DQT   |     132 
+- 1628254 | 0xffc0 SOF0  |      17 
+- 1628273 | 0xffdd DRI   |       4 
+- 1628279 | 0xffc4 DHT   |     418 
+- 1628699 | 0xffda SOS  
++   10997 | 0xffe2 APP2  |     576 | ICC_PROFILE...0ADBE....mntrRGB X chunk 1/2
++   11576 | 0xffed APP13 |    3030 | Photoshop 3.0.8BIM..........Z...
++   14608 | 0xffee APP14 |      14 | Adobe.d@......
++   14624 | 0xffdb DQT   |     132 
++   14758 | 0xffc0 SOF0  |      17 
++   14777 | 0xffdd DRI   |       4 
++   14783 | 0xffc4 DHT   |     418 
++   15203 | 0xffda SOS  
+ 50b9125494306a6fc1b7c4f2a1a8d49d
+ 50b9125494306a6fc1b7c4f2a1a8d49d
+-daa5193ef28659d126c48d4010479428
+-daa5193ef28659d126c48d4010479428
++a78f7a71f1ea79f2f6708be6394e1305
++a78f7a71f1ea79f2f6708be6394e1305
+ d890d988d312ae8d497d21e936628ecc
+ d890d988d312ae8d497d21e936628ecc
+diff --git a/test/data/small.icc b/test/data/small.icc
+index 90d13cae16d0581b078d8f02f88514d6a056a27e..817c1572b201ea11c409b14b596429047914764c 100644
+GIT binary patch
+literal 560
+zcmZQzU@~xYadKr6U|`72D=7+ccT$Lmj8b4f&%nmO%m4<7$;AbZ0RcWBPF{XqDnt}c
+zGBPlHyT$+{85l0>g3N-;5Xaz3E+{GiD*Xe*Mk%Sq$qWpP20(Upc}W3KoN*42Es~TC
+zW^Vwoi$a2&f#OGiY`$~|`wEDi1Yth`v5SD70IK-{QlAcHGjV{}Nf5RSh+UFe0kW6D
+zIlrK?C^J2yM8VL~(o(@OB|j-uA-J-*BsI5K!80#8zo;O;D6u3p1*jI{K9DX3L5M<7
+zh-m;dT4;hrsYrn00b<<eKydgnik(4-AuLKREh>ZZ7@3S27zptZX3UXbVDMkcz`*hc
+cA!gFcz_37vfq{Q2LQKt&fk8l@fnnbq0K&6R{r~^~
+
+literal 3142
+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
+Jj}Jbj{~Hi~@%;b*
+
+-- 
+2.34.1
+

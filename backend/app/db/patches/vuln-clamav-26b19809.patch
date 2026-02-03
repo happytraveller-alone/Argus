@@ -1,0 +1,25 @@
+From 26b19809fb3b940cb0fda0422d685fff02a53b5f Mon Sep 17 00:00:00 2001
+From: Steven Morgan <smorgan@sourcefire.com>
+Date: Tue, 17 Mar 2015 05:31:28 -0400
+Subject: [PATCH] Change Y0da decryptor loop counter.
+
+---
+ libclamav/yc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libclamav/yc.c b/libclamav/yc.c
+index 5261c0fc4..e46680e7f 100644
+--- a/libclamav/yc.c
++++ b/libclamav/yc.c
+@@ -81,7 +81,7 @@ static int yc_poly_emulator(cli_ctx *ctx, char *base, unsigned int filesize, cha
+   unsigned char al;
+   unsigned char cl = ecx & 0xff;
+   unsigned int j,i;
+-  unsigned int max_jmp_loop = 100000;
++  unsigned int max_jmp_loop = 100000000;
+ 
+   for(i=0;i<ecx&&i<max_emu;i++) /* Byte looper - Decrypts every byte and write it back */
+     {
+-- 
+2.34.1
+

@@ -1,0 +1,30 @@
+From 833c22bd7de5bbb591c2cb3705c9983b6d2b1fee Mon Sep 17 00:00:00 2001
+From: ellie timoney <ellie@fastmail.com>
+Date: Fri, 2 Jul 2021 10:34:20 +1000
+Subject: [PATCH] hash: it's okay for seed to be zero sometimes
+
+randomly not seeding is not any more predictable than any individual
+random seed, and allowing it to be zero saves us having to deal with
+preventing zeroes.
+---
+ lib/hash.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/lib/hash.c b/lib/hash.c
+index 1b025b21b..8081b429d 100644
+--- a/lib/hash.c
++++ b/lib/hash.c
+@@ -48,9 +48,7 @@ hash_table *construct_hash_table(hash_table *table, size_t size, int use_mpool)
+ 	  fatal("construct_hash_table called without a size", EC_TEMPFAIL);
+ 
+       table->size  = size;
+-      do {
+-        table->seed = rand();
+-      } while (table->seed == 0);
++      table->seed = rand(); /* might be zero, that's okay */
+ 
+       /* Allocate the table -- different for using memory pools and not */
+       if(use_mpool) {
+-- 
+2.34.1
+

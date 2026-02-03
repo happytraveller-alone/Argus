@@ -1,0 +1,46 @@
+From bd68c54d1beeef79d237e8bfda44690834012a76 Mon Sep 17 00:00:00 2001
+From: Madhura Jayaratne <madhura.cj@gmail.com>
+Date: Tue, 21 Oct 2014 08:42:02 +0530
+Subject: [PATCH] bug #4562 [security] XSS in debug SQL output
+
+Signed-off-by: Madhura Jayaratne <madhura.cj@gmail.com>
+---
+ ChangeLog                             | 3 +++
+ libraries/DatabaseInterface.class.php | 5 +++--
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index 975b173306..02d02217d0 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,6 +1,9 @@
+ phpMyAdmin - ChangeLog
+ ======================
+ 
++4.2.10.1 (not yet released)
++- bug #4562 [security] XSS in debug SQL output
++
+ 4.2.10.0 (2014-10-11)
+ - bug #4361 Can't change font size (when config.inc.php not present)
+ - bug #4542 Tab key in column name not shown
+diff --git a/libraries/DatabaseInterface.class.php b/libraries/DatabaseInterface.class.php
+index c126c17d5d..c7c5171420 100644
+--- a/libraries/DatabaseInterface.class.php
++++ b/libraries/DatabaseInterface.class.php
+@@ -139,10 +139,11 @@ class PMA_DatabaseInterface
+             $_SESSION['debug']['queries'][$hash] = array();
+             if ($result == false) {
+                 $_SESSION['debug']['queries'][$hash]['error']
+-                    = '<b style="color:red">' . mysqli_error($link) . '</b>';
++                    = '<b style="color:red">'
++                        . htmlspecialchars(mysqli_error($link)) . '</b>';
+             }
+             $_SESSION['debug']['queries'][$hash]['count'] = 1;
+-            $_SESSION['debug']['queries'][$hash]['query'] = $query;
++            $_SESSION['debug']['queries'][$hash]['query'] = htmlspecialchars($query);
+             $_SESSION['debug']['queries'][$hash]['time'] = $time;
+         }
+ 
+-- 
+2.34.1
+

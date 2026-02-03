@@ -1,0 +1,106 @@
+From e3a4aeeffa17d6e001586d11f8c714f9c690e1b1 Mon Sep 17 00:00:00 2001
+From: Tim Abbott <tabbott@zulipchat.com>
+Date: Wed, 26 Feb 2020 17:10:40 -0800
+Subject: [PATCH] CVE-2020-9445: Remove unused and insecure modal_link feature.
+
+Zulip's modal_link markdown feature has not been used since 2017; it
+was a hack used for a 2013-era tutorial feature and was never used
+outside that use case.
+
+Unfortunately, it's sloppy implementation was exposed in the markdown
+processor for all users, not just the tutorial use case.
+
+More importantly, it was buggy, in that it did not validate the link
+using the standard validation approach used by our other code
+interacting with links.
+
+The right solution is simply to remove it.
+---
+ zerver/lib/bugdown/__init__.py                 | 17 -----------------
+ zerver/tests/fixtures/markdown_test_cases.json | 13 -------------
+ zerver/tests/test_bugdown.py                   | 10 ----------
+ 3 files changed, 40 deletions(-)
+
+diff --git a/zerver/lib/bugdown/__init__.py b/zerver/lib/bugdown/__init__.py
+index 4f99499fdc..222d53f762 100644
+--- a/zerver/lib/bugdown/__init__.py
++++ b/zerver/lib/bugdown/__init__.py
+@@ -1319,22 +1319,6 @@ class Emoji(markdown.inlinepatterns.Pattern):
+ def content_has_emoji_syntax(content: str) -> bool:
+     return re.search(EMOJI_REGEX, content) is not None
+ 
+-class ModalLink(markdown.inlinepatterns.Pattern):
+-    """
+-    A pattern that allows including in-app modal links in messages.
+-    """
+-
+-    def handleMatch(self, match: Match[str]) -> Element:
+-        relative_url = match.group('relative_url')
+-        text = match.group('text')
+-
+-        a_tag = markdown.util.etree.Element("a")
+-        a_tag.set("href", relative_url)
+-        a_tag.set("title", relative_url)
+-        a_tag.text = text
+-
+-        return a_tag
+-
+ class Tex(markdown.inlinepatterns.Pattern):
+     def handleMatch(self, match: Match[str]) -> Element:
+         rendered = render_tex(match.group('body'), is_inline=True)
+@@ -1923,7 +1907,6 @@ class Bugdown(markdown.Markdown):
+         reg.register(StreamTopicPattern(get_compiled_stream_topic_link_regex(), self), 'topic', 87)
+         reg.register(StreamPattern(get_compiled_stream_link_regex(), self), 'stream', 85)
+         reg.register(Avatar(AVATAR_REGEX, self), 'avatar', 80)
+-        reg.register(ModalLink(r'!modal_link\((?P<relative_url>[^)]*), (?P<text>[^)]*)\)'), 'modal_link', 75)
+         # Note that !gravatar syntax should be deprecated long term.
+         reg.register(Avatar(GRAVATAR_REGEX, self), 'gravatar', 70)
+         reg.register(UserGroupMentionPattern(mention.user_group_mentions, self), 'usergroupmention', 65)
+diff --git a/zerver/tests/fixtures/markdown_test_cases.json b/zerver/tests/fixtures/markdown_test_cases.json
+index a430badae1..4763c9dbb4 100644
+--- a/zerver/tests/fixtures/markdown_test_cases.json
++++ b/zerver/tests/fixtures/markdown_test_cases.json
+@@ -698,19 +698,6 @@
+       "expected_output": "<p>gonna take a break for a bit--all yours if you want to play around too. what I did:</p>\n<ul>\n<li>install cmake</li>\n<li>git clone zulip desktop</li>\n<li>run <code>cmake-gui ..</code> in <code>c:\\zulip\\zulip-desktop\\msvcbuild</code></li>\n<li>hit configure/generate until it generated the msvc project (had to make a fix to some cmake files)</li>\n<li>opened vs2013 </li>\n<li>tried to build</li>\n</ul>",
+       "text_content": "gonna take a break for a bit--all yours if you want to play around too. what I did:\n\ninstall cmake\ngit clone zulip desktop\nrun cmake-gui .. in c:\\zulip\\zulip-desktop\\msvcbuild\nhit configure\/generate until it generated the msvc project (had to make a fix to some cmake files)\nopened vs2013 \ntried to build\n"
+     },
+-    {
+-      "name": "modal_link",
+-      "input": "!modal_link(#settings, Settings page)",
+-      "expected_output": "<p><a href=\"#settings\" title=\"#settings\">Settings page</a></p>",
+-      "marked_expected_output": "<p>!modal_link(#settings, Settings page)</p>",
+-      "text_content": "Settings page"
+-    },
+-    {
+-      "name": "modal_link_escaped",
+-      "input": "`!modal_link(#settings, Settings page)`",
+-      "expected_output": "<p><code>!modal_link(#settings, Settings page)</code></p>",
+-      "text_content": "!modal_link(#settings, Settings page)"
+-    },
+     {
+       "name": "avatar",
+       "input": "!avatar(username@example.com)",
+diff --git a/zerver/tests/test_bugdown.py b/zerver/tests/test_bugdown.py
+index bb18d80b6a..b4ceef6509 100644
+--- a/zerver/tests/test_bugdown.py
++++ b/zerver/tests/test_bugdown.py
+@@ -1845,16 +1845,6 @@ class BugdownTest(ZulipTestCase):
+                          '<p>There #<strong>Nonexistentstream</strong></p>')
+         self.assertEqual(msg.mentions_user_ids, set())
+ 
+-    def test_in_app_modal_link(self) -> None:
+-        msg = '!modal_link(#settings, Settings page)'
+-        converted = bugdown_convert(msg)
+-        self.assertEqual(
+-            converted,
+-            '<p>'
+-            '<a href="#settings" title="#settings">Settings page</a>'
+-            '</p>'
+-        )
+-
+     def test_image_preview_title(self) -> None:
+         msg = '[My favorite image](https://example.com/testimage.png)'
+         converted = bugdown_convert(msg)
+-- 
+2.34.1
+

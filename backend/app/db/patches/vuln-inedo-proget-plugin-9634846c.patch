@@ -1,0 +1,258 @@
+From 9634846c65f204c2b54237674b2cecf66d5d5fdb Mon Sep 17 00:00:00 2001
+From: andrew-sumner <andrew-sumner@users.noreply.github.com>
+Date: Sat, 14 Sep 2019 16:21:08 +1200
+Subject: [PATCH] Secret management (#2)
+
+* SECURITY-1514 Use secret correctly
+---
+ build.gradle                                  | 18 +++++++-------
+ server.bat                                    |  2 --
+ .../proget/jenkins/ProGetConfiguration.java   | 15 ++++++------
+ .../com/inedo/proget/api/ProGetApiTests.java  |  2 +-
+ .../com/inedo/proget/jenkins/PluginTests.java | 10 ++++----
+ src/test/java/com/inedo/utils/MockData.java   |  3 ++-
+ src/test/java/com/inedo/utils/MockServer.java | 24 +++++++++----------
+ test.properties                               |  2 +-
+ 8 files changed, 38 insertions(+), 38 deletions(-)
+ delete mode 100644 server.bat
+
+diff --git a/build.gradle b/build.gradle
+index f2f9a77..247389c 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -12,7 +12,7 @@
+  */
+ 
+ plugins {
+- 	id 'org.jenkins-ci.jpi' version '0.27.0'
++ 	id 'org.jenkins-ci.jpi' version '0.28.1'
+ }
+ 
+ apply plugin: 'java'
+@@ -25,7 +25,7 @@ version = '1.2'
+ description = 'Inedo ProGet Plugin'
+ 
+ ext {
+-	jenkinsVersion='2.54'
++	jenkinsVersion='2.138'
+ }
+ 
+ jenkinsPlugin {
+@@ -44,11 +44,9 @@ jenkinsPlugin {
+ }
+ 
+ repositories {
+-	maven { url 'http://repo.jenkins-ci.org/public' } // this was added to work around compile error "Could not find bootstrap-core-assets.jar (org.jenkins-ci.ui:bootstrap:1.3.2)"
++	maven { url 'http://repo.jenkins-ci.org/public' } // prevent java.lang.NoClassDefFoundError: org/junit/runner/manipulation/Filter
+ 	
+ 	jcenter()
+-	
+-	maven { url 'https://jitpack.io' }
+ }
+ 
+ configurations.all {
+@@ -57,14 +55,14 @@ configurations.all {
+ }
+ 
+ dependencies {
+-	compile ('com.github.concordion.cubano:cubano-httpeasy:master-SNAPSHOT') {
++	compile ('org.concordion:cubano-httpeasy:0.3.5') {
+ 		exclude group: 'com.github.markusbernhardt', module: 'proxy-vole' 
+ 	}
+ 	
+-	testCompile 'com.jayway.jsonpath:json-path:2.3.0'
+-	testCompile 'junit:junit:4.8.2'
+-	testCompile 'org.mockito:mockito-core:2.18.3'
+-	testCompile 'org.jenkins-ci.main:jenkins-test-harness:2.9'
++	testCompile 'com.jayway.jsonpath:json-path:2.4.0'
++	testCompile 'junit:junit:4.12'
++	testCompile 'org.mockito:mockito-core:2.28.2'
++	testCompile 'org.jenkins-ci.main:jenkins-test-harness:2.55'
+ }
+ 
+ task wrapper(type: Wrapper) {
+diff --git a/server.bat b/server.bat
+deleted file mode 100644
+index 480c47a..0000000
+--- a/server.bat
++++ /dev/null
+@@ -1,2 +0,0 @@
+-REM set GRADLE_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+-gradlew clean server -Dorg.gradle.java.home="C:\Program Files\Java\jdk1.8.0_121" 
+diff --git a/src/main/java/com/inedo/proget/jenkins/ProGetConfiguration.java b/src/main/java/com/inedo/proget/jenkins/ProGetConfiguration.java
+index bff7d2e..c101172 100644
+--- a/src/main/java/com/inedo/proget/jenkins/ProGetConfiguration.java
++++ b/src/main/java/com/inedo/proget/jenkins/ProGetConfiguration.java
+@@ -7,6 +7,7 @@
+ import org.kohsuke.stapler.QueryParameter;
+ import org.kohsuke.stapler.StaplerRequest;
+ 
++import com.google.common.base.Strings;
+ import com.inedo.proget.api.ProGetApi;
+ import com.inedo.proget.api.ProGetConfig;
+ import com.inedo.proget.jenkins.utils.JenkinsConsoleLogWriter;
+@@ -77,8 +78,8 @@ public void setUser(String value) {
+             user = value;
+         }
+         
+-        public void setPassword(String value) {
+-            password = Secret.fromString(value);
++        public void setPassword(Secret value) {
++            password = value;
+         }
+         
+         public void setLogApiRequests(boolean logApiRequests) {
+@@ -104,8 +105,8 @@ public String getUser() {
+             return user;
+         }
+         
+-        public String getPassword() {
+-            return Secret.toString(password);
++        public Secret getPassword() {
++            return password;
+         }
+         
+         public boolean getLogApiRequests() {
+@@ -129,7 +130,7 @@ public boolean isUserNameConfigured() {
+                 return false;
+             }
+ 
+-            if (password == null || Secret.toString(password).trim().isEmpty()) {
++            if (Strings.isNullOrEmpty(Secret.toString(password))) {
+                 return false;
+             }
+ 
+@@ -173,7 +174,7 @@ public FormValidation doTestConnection(
+                 @QueryParameter("url") final String url,
+                 @QueryParameter("apiKey") final String apiKey,
+                 @QueryParameter("user") final String user,
+-                @QueryParameter("password") final String password,
++                @QueryParameter("password") final Secret password,
+                 @QueryParameter("trustAllCertificates") final boolean trustAllCertificates) throws IOException, ServletException {
+ 
+             ProGetConfig config = new ProGetConfig();
+@@ -181,7 +182,7 @@ public FormValidation doTestConnection(
+             config.url = url;
+             config.apiKey = apiKey;
+             config.user = user;
+-            config.password = password;
++            config.password = Secret.toString(password);
+             config.trustAllCertificates = trustAllCertificates;
+ 
+             ProGetApi proget = new ProGetApi(config, new JenkinsConsoleLogWriter());
+diff --git a/src/test/java/com/inedo/proget/api/ProGetApiTests.java b/src/test/java/com/inedo/proget/api/ProGetApiTests.java
+index 396b7ac..b0b4029 100644
+--- a/src/test/java/com/inedo/proget/api/ProGetApiTests.java
++++ b/src/test/java/com/inedo/proget/api/ProGetApiTests.java
+@@ -158,7 +158,7 @@ public void getPackageVersions() throws IOException {
+ 
+         if (compareJson) {
+             JsonCompare.assertArrayFieldsIdentical("API Structure has not changed",
+-                    MockData.PACKAGE_VERSIONS.getAsString(), proget.getJsonString(), "[?(@.Version_Text=='0.0.1')]", PackageVersion.class);
++                    MockData.PACKAGE_VERSIONS.getAsString(), proget.getJsonString(), "[0]", PackageVersion.class);
+         }
+     }
+ 
+diff --git a/src/test/java/com/inedo/proget/jenkins/PluginTests.java b/src/test/java/com/inedo/proget/jenkins/PluginTests.java
+index dd98d10..b46c2fb 100644
+--- a/src/test/java/com/inedo/proget/jenkins/PluginTests.java
++++ b/src/test/java/com/inedo/proget/jenkins/PluginTests.java
+@@ -44,7 +44,9 @@ public class PluginTests {
+ 
+     @Rule
+     public TemporaryFolder folder = new TemporaryFolder();
+-    @ClassRule public static JenkinsRule j = new JenkinsRule();
++
++    @ClassRule
++    public static JenkinsRule jenkins = new JenkinsRule();
+ 
+     @Before
+     public void before() throws IOException, InterruptedException {
+@@ -80,7 +82,7 @@ public void performDownload() throws Exception {
+         DownloadFormat downloadFormat = DownloadFormat.PACKAGE;
+         String downloadFolder = folder.getRoot().getAbsolutePath();
+ 
+-        FreeStyleProject project = j.createFreeStyleProject();
++        FreeStyleProject project = jenkins.createFreeStyleProject();
+ 
+         // TODO This belongs in upload rather than download
+         project.getBuildersList().add(new TestBuilder() {
+@@ -123,7 +125,7 @@ public void performUpload() throws Exception {
+         String version = "0.0.${BUILD_NUMBER}";
+         String artifact = "XX.${BUILD_NUMBER}.TXT";
+         
+-        FreeStyleProject project = j.createFreeStyleProject();
++        FreeStyleProject project = jenkins.createFreeStyleProject();
+ 
+         // TODO This belongs in upload rather than download
+         project.getBuildersList().add(new TestBuilder() {
+@@ -149,7 +151,7 @@ public void setEnvironmentVariables() throws IOException {
+         EnvironmentVariablesNodeProperty prop = new EnvironmentVariablesNodeProperty();
+         EnvVars envVars = prop.getEnvVars();
+         envVars.put("sampleEnvVarKey", "sampleEnvVarValue");
+-        j.jenkins.getGlobalNodeProperties().add(prop);
++        jenkins.jenkins.getGlobalNodeProperties().add(prop);
+     }
+ 
+     public class HoldFileName {
+diff --git a/src/test/java/com/inedo/utils/MockData.java b/src/test/java/com/inedo/utils/MockData.java
+index f3b8511..cfdd2d2 100644
+--- a/src/test/java/com/inedo/utils/MockData.java
++++ b/src/test/java/com/inedo/utils/MockData.java
+@@ -3,7 +3,8 @@
+ import java.io.IOException;
+ 
+ import org.apache.commons.io.IOUtils;
+-import org.apache.http.entity.InputStreamEntity;
++
++import hidden.jth.org.apache.http.entity.InputStreamEntity;
+ 
+ public enum MockData {
+     FEED("Feed.json"), 
+diff --git a/src/test/java/com/inedo/utils/MockServer.java b/src/test/java/com/inedo/utils/MockServer.java
+index cef4f76..4cd1aff 100644
+--- a/src/test/java/com/inedo/utils/MockServer.java
++++ b/src/test/java/com/inedo/utils/MockServer.java
+@@ -5,20 +5,20 @@
+ import java.net.InetAddress;
+ import java.net.URI;
+ 
+-import org.apache.http.HttpException;
+-import org.apache.http.HttpRequest;
+-import org.apache.http.HttpResponse;
+-import org.apache.http.HttpStatus;
+-import org.apache.http.entity.ContentType;
+-import org.apache.http.entity.FileEntity;
+-import org.apache.http.entity.StringEntity;
+-import org.apache.http.impl.bootstrap.HttpServer;
+-import org.apache.http.impl.bootstrap.ServerBootstrap;
+-import org.apache.http.protocol.HttpContext;
+-import org.apache.http.protocol.HttpRequestHandler;
+-
+ import com.inedo.proget.api.ProGetConfig;
+ 
++import hidden.jth.org.apache.http.HttpException;
++import hidden.jth.org.apache.http.HttpRequest;
++import hidden.jth.org.apache.http.HttpResponse;
++import hidden.jth.org.apache.http.HttpStatus;
++import hidden.jth.org.apache.http.entity.ContentType;
++import hidden.jth.org.apache.http.entity.FileEntity;
++import hidden.jth.org.apache.http.entity.StringEntity;
++import hidden.jth.org.apache.http.impl.bootstrap.HttpServer;
++import hidden.jth.org.apache.http.impl.bootstrap.ServerBootstrap;
++import hidden.jth.org.apache.http.protocol.HttpContext;
++import hidden.jth.org.apache.http.protocol.HttpRequestHandler;
++
+ /**
+  * A Mocked server that replaces a live ProGet installation
+  * 
+diff --git a/test.properties b/test.properties
+index d1cb7c1..d3b14f8 100644
+--- a/test.properties
++++ b/test.properties
+@@ -1,4 +1,4 @@
+-useMockServer = false
++useMockServer = true
+ 
+ # User Specific Properties
+ andre.useMockServer = false

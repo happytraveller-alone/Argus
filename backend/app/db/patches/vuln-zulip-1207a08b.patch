@@ -1,0 +1,37 @@
+From 1207a08b36c7696397855ef7fd6ae6cff2c8c4be Mon Sep 17 00:00:00 2001
+From: Tim Abbott <tabbott@zulipchat.com>
+Date: Thu, 22 Mar 2018 12:47:38 -0700
+Subject: [PATCH] CVE-2018-9987: Fix XSS issue with muting notifications.
+
+This fixes an XSS issue with Zulip's muting UI, where if a stream or
+topic name contained malicious HTML containing JavaScript, and the
+user did a muting interaction, the malicious JavaScript could run when
+rendering the "you just muted a topic" notification.
+
+We did an audit for similarly problematic use of `.html`, and found
+none; for the next release we'll be merging a series of changes to our
+linter to prevent future instances of this being added.
+
+Thanks to Suhas Sunil Gaikwad for reporting this issue.
+---
+ static/js/muting_ui.js | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/static/js/muting_ui.js b/static/js/muting_ui.js
+index 94560f5d75..7886d2b82a 100644
+--- a/static/js/muting_ui.js
++++ b/static/js/muting_ui.js
+@@ -70,8 +70,8 @@ exports.notify_with_undo_option = (function () {
+         // add a four second delay before closing up.
+         meta.hide_me_time = new Date().getTime() + 4000;
+ 
+-        meta.$mute.find(".topic").html(topic);
+-        meta.$mute.find(".stream").html(stream);
++        meta.$mute.find(".topic").text(topic);
++        meta.$mute.find(".stream").text(stream);
+ 
+         animate.fadeIn();
+ 
+-- 
+2.34.1
+

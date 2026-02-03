@@ -1,0 +1,25 @@
+From ce5a785b0962c3c94c7a7b0d36176482d21db95d Mon Sep 17 00:00:00 2001
+From: Osanda Malith Jayathissa <osandajayathissa@gmail.com>
+Date: Wed, 4 Jun 2014 13:55:11 +0800
+Subject: [PATCH] MDL-45683 user: Escaping Skype ID used in profile
+
+---
+ user/profile.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/user/profile.php b/user/profile.php
+index 3ac9b7a2431..291fc131f6f 100644
+--- a/user/profile.php
++++ b/user/profile.php
+@@ -334,7 +334,7 @@ if ($user->icq && !isset($hiddenfields['icqnumber'])) {
+ 
+ if ($user->skype && !isset($hiddenfields['skypeid'])) {
+     $imurl = 'skype:'.urlencode($user->skype).'?call';
+-    $iconurl = new moodle_url('http://mystatus.skype.com/smallicon/'.$user->skype);
++    $iconurl = new moodle_url('http://mystatus.skype.com/smallicon/'.urlencode($user->skype));
+     if (strpos($CFG->httpswwwroot, 'https:') === 0) {
+         // Bad luck, skype devs are lazy to set up SSL on their servers - see MDL-37233.
+         $statusicon = '';
+-- 
+2.34.1
+

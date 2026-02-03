@@ -1,0 +1,121 @@
+From da0460dea092194fb6af68e73e1e992d84b552aa Mon Sep 17 00:00:00 2001
+From: Lunny Xiao <xiaolunwen@gmail.com>
+Date: Fri, 13 Nov 2020 10:51:32 +0800
+Subject: [PATCH] Prevent git operations for inactive users (#13527) (#13537)
+
+* prevent git operations for inactive users
+
+* Some fixes
+
+* Deny push to the repositories which's owner is inactive
+
+* deny operations also when user is ProhibitLogin
+
+Co-authored-by: zeripath <art27@cantab.net>
+
+Co-authored-by: zeripath <art27@cantab.net>
+---
+ routers/private/serv.go | 36 +++++++++++++++++++++++++++++++++++-
+ routers/repo/http.go    |  9 +++++++++
+ 2 files changed, 44 insertions(+), 1 deletion(-)
+
+diff --git a/routers/private/serv.go b/routers/private/serv.go
+index d5b5fcc8f..eba431785 100644
+--- a/routers/private/serv.go
++++ b/routers/private/serv.go
+@@ -61,6 +61,12 @@ func ServNoCommand(ctx *macaron.Context) {
+ 			})
+ 			return
+ 		}
++		if !user.IsActive || user.ProhibitLogin {
++			ctx.JSON(http.StatusForbidden, map[string]interface{}{
++				"err": "Your account is disabled.",
++			})
++			return
++		}
+ 		results.Owner = user
+ 	}
+ 	ctx.JSON(http.StatusOK, &results)
+@@ -98,9 +104,28 @@ func ServCommand(ctx *macaron.Context) {
+ 		results.RepoName = repoName[:len(repoName)-5]
+ 	}
+ 
++	owner, err := models.GetUserByName(results.OwnerName)
++	if err != nil {
++		log.Error("Unable to get repository owner: %s/%s Error: %v", results.OwnerName, results.RepoName, err)
++		ctx.JSON(http.StatusInternalServerError, map[string]interface{}{
++			"results": results,
++			"type":    "InternalServerError",
++			"err":     fmt.Sprintf("Unable to get repository owner: %s/%s %v", results.OwnerName, results.RepoName, err),
++		})
++		return
++	}
++	if !owner.IsActive {
++		ctx.JSON(http.StatusForbidden, map[string]interface{}{
++			"results": results,
++			"type":    "ForbiddenError",
++			"err":     "Repository cannot be accessed, you could retry it later",
++		})
++		return
++	}
++
+ 	// Now get the Repository and set the results section
+ 	repoExist := true
+-	repo, err := models.GetRepositoryByOwnerAndName(results.OwnerName, results.RepoName)
++	repo, err := models.GetRepositoryByName(owner.ID, results.RepoName)
+ 	if err != nil {
+ 		if models.IsErrRepoNotExist(err) {
+ 			repoExist = false
+@@ -127,6 +152,7 @@ func ServCommand(ctx *macaron.Context) {
+ 	}
+ 
+ 	if repoExist {
++		repo.Owner = owner
+ 		repo.OwnerName = ownerName
+ 		results.RepoID = repo.ID
+ 
+@@ -238,6 +264,14 @@ func ServCommand(ctx *macaron.Context) {
+ 			})
+ 			return
+ 		}
++
++		if !user.IsActive || user.ProhibitLogin {
++			ctx.JSON(http.StatusForbidden, map[string]interface{}{
++				"err": "Your account is disabled.",
++			})
++			return
++		}
++
+ 		results.UserName = user.Name
+ 	}
+ 
+diff --git a/routers/repo/http.go b/routers/repo/http.go
+index 1eec03388..8cb4827f4 100644
+--- a/routers/repo/http.go
++++ b/routers/repo/http.go
+@@ -104,6 +104,10 @@ func HTTP(ctx *context.Context) {
+ 		ctx.NotFoundOrServerError("GetUserByName", models.IsErrUserNotExist, err)
+ 		return
+ 	}
++	if !owner.IsActive {
++		ctx.HandleText(http.StatusForbidden, "Repository cannot be accessed. You cannot push or open issues/pull-requests.")
++		return
++	}
+ 
+ 	repoExist := true
+ 	repo, err := models.GetRepositoryByName(owner.ID, reponame)
+@@ -243,6 +247,11 @@ func HTTP(ctx *context.Context) {
+ 			}
+ 		}
+ 
++		if !authUser.IsActive || authUser.ProhibitLogin {
++			ctx.HandleText(http.StatusForbidden, "Your account is disabled.")
++			return
++		}
++
+ 		if repoExist {
+ 			perm, err := models.GetUserRepoPermission(repo, authUser)
+ 			if err != nil {
+-- 
+2.34.1
+

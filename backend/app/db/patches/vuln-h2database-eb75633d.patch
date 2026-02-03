@@ -1,0 +1,248 @@
+From eb75633d0dfa86341e6ef77a861665c4a0f16ab8 Mon Sep 17 00:00:00 2001
+From: Evgenij Ryazanov <katzyn@gmail.com>
+Date: Sat, 15 Jan 2022 10:09:47 +0800
+Subject: [PATCH] Fix WebServer.getConnection()
+
+---
+ h2/src/main/org/h2/Driver.java               |  2 +-
+ h2/src/main/org/h2/jdbc/JdbcConnection.java  |  7 ++++++-
+ h2/src/main/org/h2/jdbcx/JdbcDataSource.java |  9 +++++----
+ h2/src/main/org/h2/server/TcpServer.java     |  5 +++--
+ h2/src/main/org/h2/server/web/WebServer.java | 10 ++--------
+ h2/src/main/org/h2/tools/CreateCluster.java  |  6 +++---
+ h2/src/main/org/h2/tools/GUIConsole.java     |  2 +-
+ h2/src/main/org/h2/tools/Upgrade.java        |  2 +-
+ h2/src/main/org/h2/util/JdbcUtils.java       |  7 ++++---
+ h2/src/test/org/h2/test/unit/TestTools.java  |  6 ++++++
+ 10 files changed, 32 insertions(+), 24 deletions(-)
+
+diff --git a/h2/src/main/org/h2/Driver.java b/h2/src/main/org/h2/Driver.java
+index 03056dc5b..a0660fc5f 100644
+--- a/h2/src/main/org/h2/Driver.java
++++ b/h2/src/main/org/h2/Driver.java
+@@ -56,7 +56,7 @@ public class Driver implements java.sql.Driver, JdbcDriverBackwardsCompat {
+         if (url == null) {
+             throw DbException.getJdbcSQLException(ErrorCode.URL_FORMAT_ERROR_2, null, Constants.URL_FORMAT, null);
+         } else if (url.startsWith(Constants.START_URL)) {
+-            return new JdbcConnection(url, info, null, null);
++            return new JdbcConnection(url, info, null, null, false);
+         } else if (url.equals(DEFAULT_URL)) {
+             return DEFAULT_CONNECTION.get();
+         } else {
+diff --git a/h2/src/main/org/h2/jdbc/JdbcConnection.java b/h2/src/main/org/h2/jdbc/JdbcConnection.java
+index 147118822..9834e7a03 100644
+--- a/h2/src/main/org/h2/jdbc/JdbcConnection.java
++++ b/h2/src/main/org/h2/jdbc/JdbcConnection.java
+@@ -103,12 +103,17 @@ public class JdbcConnection extends TraceObject implements Connection, JdbcConne
+      * @param info of this connection
+      * @param user of this connection
+      * @param password for the user
++     * @param forbidCreation whether database creation is forbidden
+      * @throws SQLException on failure
+      */
+     @SuppressWarnings("resource")
+-    public JdbcConnection(String url, Properties info, String user, Object password) throws SQLException {
++    public JdbcConnection(String url, Properties info, String user, Object password, boolean forbidCreation)
++            throws SQLException {
+         try {
+             ConnectionInfo ci = new ConnectionInfo(url, info, user, password);
++            if (forbidCreation) {
++                ci.setProperty("FORBID_CREATION", "TRUE");
++            }
+             String baseDir = SysProperties.getBaseDir();
+             if (baseDir != null) {
+                 ci.setBaseDir(baseDir);
+diff --git a/h2/src/main/org/h2/jdbcx/JdbcDataSource.java b/h2/src/main/org/h2/jdbcx/JdbcDataSource.java
+index 535f64114..4c0ab0cfa 100644
+--- a/h2/src/main/org/h2/jdbcx/JdbcDataSource.java
++++ b/h2/src/main/org/h2/jdbcx/JdbcDataSource.java
+@@ -152,7 +152,7 @@ public final class JdbcDataSource extends TraceObject implements XADataSource, D
+     @Override
+     public Connection getConnection() throws SQLException {
+         debugCodeCall("getConnection");
+-        return new JdbcConnection(url, null, userName, StringUtils.cloneCharArray(passwordChars));
++        return new JdbcConnection(url, null, userName, StringUtils.cloneCharArray(passwordChars), false);
+     }
+ 
+     /**
+@@ -169,7 +169,7 @@ public final class JdbcDataSource extends TraceObject implements XADataSource, D
+         if (isDebugEnabled()) {
+             debugCode("getConnection(" + quote(user) + ", \"\")");
+         }
+-        return new JdbcConnection(url, null, user, password);
++        return new JdbcConnection(url, null, user, password, false);
+     }
+ 
+     /**
+@@ -319,7 +319,7 @@ public final class JdbcDataSource extends TraceObject implements XADataSource, D
+     public XAConnection getXAConnection() throws SQLException {
+         debugCodeCall("getXAConnection");
+         return new JdbcXAConnection(factory, getNextId(XA_DATA_SOURCE),
+-                new JdbcConnection(url, null, userName, StringUtils.cloneCharArray(passwordChars)));
++                new JdbcConnection(url, null, userName, StringUtils.cloneCharArray(passwordChars), false));
+     }
+ 
+     /**
+@@ -336,7 +336,8 @@ public final class JdbcDataSource extends TraceObject implements XADataSource, D
+         if (isDebugEnabled()) {
+             debugCode("getXAConnection(" + quote(user) + ", \"\")");
+         }
+-        return new JdbcXAConnection(factory, getNextId(XA_DATA_SOURCE), new JdbcConnection(url, null, user, password));
++        return new JdbcXAConnection(factory, getNextId(XA_DATA_SOURCE),
++                new JdbcConnection(url, null, user, password, false));
+     }
+ 
+     /**
+diff --git a/h2/src/main/org/h2/server/TcpServer.java b/h2/src/main/org/h2/server/TcpServer.java
+index 99264bbf6..fe90ba41b 100644
+--- a/h2/src/main/org/h2/server/TcpServer.java
++++ b/h2/src/main/org/h2/server/TcpServer.java
+@@ -86,7 +86,8 @@ public class TcpServer implements Service {
+             managementPassword = StringUtils.convertBytesToHex(MathUtils.secureRandomBytes(32));
+         }
+         // avoid using the driver manager
+-        JdbcConnection conn = new JdbcConnection("jdbc:h2:" + getManagementDbName(port), null, "", managementPassword);
++        JdbcConnection conn = new JdbcConnection("jdbc:h2:" + getManagementDbName(port), null, "", managementPassword,
++                false);
+         managementDb = conn;
+ 
+         try (Statement stat = conn.createStatement()) {
+@@ -446,7 +447,7 @@ public class TcpServer implements Service {
+             }
+             String db = getManagementDbName(port);
+             for (int i = 0; i < 2; i++) {
+-                try (JdbcConnection conn = new JdbcConnection("jdbc:h2:" + url + '/' + db, null, "", password)) {
++                try (JdbcConnection conn = new JdbcConnection("jdbc:h2:" + url + '/' + db, null, "", password, true)) {
+                     PreparedStatement prep = conn.prepareStatement("CALL STOP_SERVER(?, ?, ?)");
+                     prep.setInt(1, all ? 0 : port);
+                     prep.setString(2, password);
+diff --git a/h2/src/main/org/h2/server/web/WebServer.java b/h2/src/main/org/h2/server/web/WebServer.java
+index 9e93917ed..1822065d5 100644
+--- a/h2/src/main/org/h2/server/web/WebServer.java
++++ b/h2/src/main/org/h2/server/web/WebServer.java
+@@ -801,16 +801,10 @@ public class WebServer implements Service {
+             String password, String userKey, NetworkConnectionInfo networkConnectionInfo) throws SQLException {
+         driver = driver.trim();
+         databaseUrl = databaseUrl.trim();
+-        if (databaseUrl.startsWith("jdbc:h2:")) {
+-            if (!allowSecureCreation || key == null || !key.equals(userKey)) {
+-                if (ifExists) {
+-                    databaseUrl += ";FORBID_CREATION=TRUE";
+-                }
+-            }
+-        }
+         // do not trim the password, otherwise an
+         // encrypted H2 database with empty user password doesn't work
+-        return JdbcUtils.getConnection(driver, databaseUrl, user.trim(), password, networkConnectionInfo);
++        return JdbcUtils.getConnection(driver, databaseUrl, user.trim(), password, networkConnectionInfo,
++                ifExists && (!allowSecureCreation || key == null || !key.equals(userKey)));
+     }
+ 
+     /**
+diff --git a/h2/src/main/org/h2/tools/CreateCluster.java b/h2/src/main/org/h2/tools/CreateCluster.java
+index f58facf1c..04508c784 100644
+--- a/h2/src/main/org/h2/tools/CreateCluster.java
++++ b/h2/src/main/org/h2/tools/CreateCluster.java
+@@ -102,7 +102,7 @@ public class CreateCluster extends Tool {
+             String user, String password, String serverList) throws SQLException {
+         // use cluster='' so connecting is possible
+         // even if the cluster is enabled
+-        try (JdbcConnection connSource = new JdbcConnection(urlSource + ";CLUSTER=''", null, user, password);
++        try (JdbcConnection connSource = new JdbcConnection(urlSource + ";CLUSTER=''", null, user, password, false);
+                 Statement statSource = connSource.createStatement()) {
+             // enable the exclusive mode and close other connections,
+             // so that data can't change while restoring the second database
+@@ -120,7 +120,7 @@ public class CreateCluster extends Tool {
+             String serverList) throws SQLException {
+ 
+         // Delete the target database first.
+-        try (JdbcConnection connTarget = new JdbcConnection(urlTarget + ";CLUSTER=''", null, user, password);
++        try (JdbcConnection connTarget = new JdbcConnection(urlTarget + ";CLUSTER=''", null, user, password, false);
+                 Statement statTarget = connTarget.createStatement()) {
+             statTarget.execute("DROP ALL OBJECTS DELETE FILES");
+         }
+@@ -129,7 +129,7 @@ public class CreateCluster extends Tool {
+             Future<?> threadFuture = startWriter(pipeReader, statSource);
+ 
+             // Read data from pipe reader, restore on target.
+-            try (JdbcConnection connTarget = new JdbcConnection(urlTarget, null, user, password);
++            try (JdbcConnection connTarget = new JdbcConnection(urlTarget, null, user, password, false);
+                     Statement statTarget = connTarget.createStatement()) {
+                 RunScript.execute(connTarget, pipeReader);
+ 
+diff --git a/h2/src/main/org/h2/tools/GUIConsole.java b/h2/src/main/org/h2/tools/GUIConsole.java
+index ed1ca4f2e..c2b9d1e8c 100644
+--- a/h2/src/main/org/h2/tools/GUIConsole.java
++++ b/h2/src/main/org/h2/tools/GUIConsole.java
+@@ -464,7 +464,7 @@ public class GUIConsole extends Console implements ActionListener, MouseListener
+         }
+         String url = "jdbc:h2:" + path;
+         try {
+-            new JdbcConnection(url, null, user, password).close();
++            new JdbcConnection(url, null, user, password, false).close();
+             errorArea.setForeground(new Color(0, 0x99, 0));
+             errorArea.setText("Database was created successfully.\n\n"
+                     + "JDBC URL for H2 Console:\n"
+diff --git a/h2/src/main/org/h2/tools/Upgrade.java b/h2/src/main/org/h2/tools/Upgrade.java
+index 2ebd40897..ca7750802 100644
+--- a/h2/src/main/org/h2/tools/Upgrade.java
++++ b/h2/src/main/org/h2/tools/Upgrade.java
+@@ -163,7 +163,7 @@ public final class Upgrade {
+             unloadH2(driver);
+         }
+         rename(name, false);
+-        try (JdbcConnection conn = new JdbcConnection(url, info, null, null)) {
++        try (JdbcConnection conn = new JdbcConnection(url, info, null, null, false)) {
+             StringBuilder builder = StringUtils.quoteStringSQL(new StringBuilder("RUNSCRIPT FROM "), script)
+                     .append(scriptCommandSuffix);
+             if (version <= 200) {
+diff --git a/h2/src/main/org/h2/util/JdbcUtils.java b/h2/src/main/org/h2/util/JdbcUtils.java
+index f261a8438..03a126c0a 100644
+--- a/h2/src/main/org/h2/util/JdbcUtils.java
++++ b/h2/src/main/org/h2/util/JdbcUtils.java
+@@ -267,7 +267,7 @@ public class JdbcUtils {
+      */
+     public static Connection getConnection(String driver, String url,
+             String user, String password) throws SQLException {
+-        return getConnection(driver, url, user, password, null);
++        return getConnection(driver, url, user, password, null, false);
+     }
+ 
+     /**
+@@ -278,13 +278,14 @@ public class JdbcUtils {
+      * @param user the user name or {@code null}
+      * @param password the password or {@code null}
+      * @param networkConnectionInfo the network connection information, or {@code null}
++     * @param forbidCreation whether database creation is forbidden
+      * @return the database connection
+      * @throws SQLException on failure
+      */
+     public static Connection getConnection(String driver, String url, String user, String password,
+-            NetworkConnectionInfo networkConnectionInfo) throws SQLException {
++            NetworkConnectionInfo networkConnectionInfo, boolean forbidCreation) throws SQLException {
+         if (url.startsWith(Constants.START_URL)) {
+-            JdbcConnection connection = new JdbcConnection(url, null, user, password);
++            JdbcConnection connection = new JdbcConnection(url, null, user, password, forbidCreation);
+             if (networkConnectionInfo != null) {
+                 connection.getSession().setNetworkConnectionInfo(networkConnectionInfo);
+             }
+diff --git a/h2/src/test/org/h2/test/unit/TestTools.java b/h2/src/test/org/h2/test/unit/TestTools.java
+index 81c3f48d1..69b8c9a0b 100644
+--- a/h2/src/test/org/h2/test/unit/TestTools.java
++++ b/h2/src/test/org/h2/test/unit/TestTools.java
+@@ -538,6 +538,12 @@ public class TestTools extends TestDb {
+             assertEquals("08001", e.getSQLState());
+             assertEquals("Only java scheme is supported for JNDI lookups", e.getMessage());
+         }
++        try {
++            JdbcUtils.getConnection("org.h2.Driver", "jdbc:h2:mem:", "sa", "", null, true);
++            fail("Expected SQLException: " + ErrorCode.REMOTE_DATABASE_NOT_FOUND_1);
++        } catch (SQLException e) {
++            assertEquals(ErrorCode.REMOTE_DATABASE_NOT_FOUND_1, e.getErrorCode());
++        }
+     }
+ 
+     private void testWrongServer() throws Exception {
+-- 
+2.34.1
+

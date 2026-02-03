@@ -1,0 +1,32 @@
+From be82f51f68d738cce205f4ce5b469ef42ed82d9e Mon Sep 17 00:00:00 2001
+From: Laurent Destailleur <eldy@destailleur.fr>
+Date: Tue, 21 Feb 2023 20:50:26 +0100
+Subject: [PATCH] Fix regression
+
+---
+ htdocs/public/ticket/ajax/ajax.php | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/htdocs/public/ticket/ajax/ajax.php b/htdocs/public/ticket/ajax/ajax.php
+index 0ddc6529996..e125b0122e7 100644
+--- a/htdocs/public/ticket/ajax/ajax.php
++++ b/htdocs/public/ticket/ajax/ajax.php
+@@ -57,12 +57,13 @@ $action = GETPOST('action', 'aZ09');
+ $id = GETPOST('id', 'int');
+ $email = GETPOST('email', 'alphanohtml');
+ 
++
+ if (!isModEnabled('ticket')) {
+-	httponly_accessforbidden('Module Ticket not enabled');
++	accessforbidden('', 0, 0, 1);
+ }
+ 
+ if (empty($conf->global->TICKET_CREATE_THIRD_PARTY_WITH_CONTACT_IF_NOT_EXIST)) {
+-	httponly_accessforbidden('Option TICKET_CREATE_THIRD_PARTY_WITH_CONTACT_IF_NOT_EXIST of module ticket is not enabled');
++	accessforbidden('', 0, 0, 1);
+ }
+ 
+ 
+-- 
+2.34.1
+

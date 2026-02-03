@@ -1,0 +1,180 @@
+From 12b8adaff5e9f3dca4df0b24a20d316c8b66e27e Mon Sep 17 00:00:00 2001
+From: Joas Schilling <coding@schilljs.com>
+Date: Mon, 30 Jan 2023 11:06:53 +0100
+Subject: [PATCH] Only filter mentions for conversation members
+
+Signed-off-by: Joas Schilling <coding@schilljs.com>
+---
+ lib/Collaboration/Collaborators/Listener.php  | 15 +++++-
+ .../features/bootstrap/FeatureContext.php     | 48 +++++++++++++++++++
+ .../conversation/add-participant.feature      | 43 +++++++++++++++++
+ 3 files changed, 104 insertions(+), 2 deletions(-)
+
+diff --git a/lib/Collaboration/Collaborators/Listener.php b/lib/Collaboration/Collaborators/Listener.php
+index 2f9603942..fdca86a18 100644
+--- a/lib/Collaboration/Collaborators/Listener.php
++++ b/lib/Collaboration/Collaborators/Listener.php
+@@ -32,6 +32,7 @@ use OCA\Talk\Model\Attendee;
+ use OCA\Talk\Participant;
+ use OCA\Talk\Room;
+ use OCA\Talk\Service\ParticipantService;
++use OCA\Talk\TalkSession;
+ use OCP\Collaboration\AutoComplete\AutoCompleteEvent;
+ use OCP\Collaboration\AutoComplete\IManager;
+ use OCP\EventDispatcher\IEventDispatcher;
+@@ -44,19 +45,25 @@ class Listener {
+ 	protected IUserManager $userManager;
+ 	protected ParticipantService $participantService;
+ 	protected Config $config;
++	protected TalkSession $talkSession;
+ 	/** @var string[] */
+ 	protected array $allowedGroupIds = [];
+ 	protected string $roomToken;
+ 	protected ?Room $room = null;
++	protected ?string $userId;
+ 
+ 	public function __construct(Manager $manager,
+ 								IUserManager $userManager,
+ 								ParticipantService $participantService,
+-								Config $config) {
++								Config $config,
++								TalkSession $talkSession,
++								?string $userId) {
+ 		$this->manager = $manager;
+ 		$this->userManager = $userManager;
+ 		$this->participantService = $participantService;
++		$this->talkSession = $talkSession;
+ 		$this->config = $config;
++		$this->userId = $userId;
+ 	}
+ 
+ 	public static function register(IEventDispatcher $dispatcher): void {
+@@ -122,10 +129,14 @@ class Listener {
+ 	}
+ 
+ 	protected function filterExistingParticipants(string $token, array $results): array {
++		$sessionId = $this->talkSession->getSessionForRoom($token);
+ 		try {
+-			$this->room = $this->manager->getRoomByToken($token);
++			$this->room = $this->manager->getRoomForUserByToken($token, $this->userId);
++			$this->participantService->getParticipant($this->room, $this->userId, $sessionId);
+ 		} catch (RoomNotFoundException $e) {
+ 			return $results;
++		} catch (ParticipantNotFoundException $e) {
++			return $results;
+ 		}
+ 
+ 		if (!empty($results['groups'])) {
+diff --git a/tests/integration/features/bootstrap/FeatureContext.php b/tests/integration/features/bootstrap/FeatureContext.php
+index 7e91444b4..aa5729251 100644
+--- a/tests/integration/features/bootstrap/FeatureContext.php
++++ b/tests/integration/features/bootstrap/FeatureContext.php
+@@ -2342,6 +2342,54 @@ class FeatureContext implements Context, SnippetAcceptingContext {
+ 		}
+ 	}
+ 
++	/**
++	 * @Then /^user "([^"]*)" gets the following collaborator suggestions in room "([^"]*)" for "([^"]*)" with (\d+)$/
++	 *
++	 * @param string $user
++	 * @param string $identifier
++	 * @param string $search
++	 * @param string $statusCode
++	 * @param string $apiVersion
++	 * @param TableNode|null $formData
++	 */
++	public function userGetsTheFollowingCollaboratorSuggestions($user, $identifier, $search, $statusCode, $apiVersion = 'v1', TableNode $formData = null) {
++		$this->setCurrentUser($user);
++		$this->sendRequest('GET', '/core/autocomplete/get?search=' . $search . '&itemType=call&itemId=' . self::$identifierToToken[$identifier] . '&shareTypes[]=0&shareTypes[]=1&shareTypes[]=7&shareTypes[]=4');
++		$this->assertStatusCode($this->response, $statusCode);
++
++		$mentions = $this->getDataFromResponse($this->response);
++
++		if ($formData === null) {
++			Assert::assertEmpty($mentions);
++			return;
++		}
++
++		Assert::assertCount(count($formData->getHash()), $mentions, 'Mentions count does not match');
++
++		usort($mentions, function ($a, $b) {
++			if ($a['source'] === $b['source']) {
++				return $a['label'] <=> $b['label'];
++			}
++			return $a['source'] <=> $b['source'];
++		});
++
++		$expected = $formData->getHash();
++		usort($expected, function ($a, $b) {
++			if ($a['source'] === $b['source']) {
++				return $a['label'] <=> $b['label'];
++			}
++			return $a['source'] <=> $b['source'];
++		});
++
++		foreach ($expected as $key => $row) {
++			unset($mentions[$key]['icon']);
++			unset($mentions[$key]['status']);
++			unset($mentions[$key]['subline']);
++			unset($mentions[$key]['shareWithDisplayNameUnique']);
++			Assert::assertEquals($row, $mentions[$key]);
++		}
++	}
++
+ 	/**
+ 	 * @Then /^guest "([^"]*)" sets name to "([^"]*)" in room "([^"]*)" with (\d+)(?: \((v1)\))?$/
+ 	 *
+diff --git a/tests/integration/features/conversation/add-participant.feature b/tests/integration/features/conversation/add-participant.feature
+index eb8b6f110..6799e9556 100644
+--- a/tests/integration/features/conversation/add-participant.feature
++++ b/tests/integration/features/conversation/add-participant.feature
+@@ -133,3 +133,46 @@ Feature: conversation/add-participant
+       | users      | participant1 | 1               |
+     And user "participant2" is not participant of room "room" (v4)
+     And user "participant3" is not participant of room "room" (v4)
++
++  Scenario: Getting participant suggestions in a private room
++    Given user "participant1" creates room "room" (v4)
++      | roomType | 2 |
++      | roomName | room |
++    And user "participant1" gets the following collaborator suggestions in room "room" for "particip" with 200
++      | source | id           | label                    |
++      | users  | participant2 | participant2-displayname |
++      | users  | participant3 | participant3-displayname |
++    And user "participant1" gets the following collaborator suggestions in room "room" for "participant2" with 200
++      | source | id           | label                    |
++      | users  | participant2 | participant2-displayname |
++    And user "participant3" gets the following collaborator suggestions in room "room" for "participant2" with 200
++      | source | id           | label                    |
++      | users  | participant2 | participant2-displayname |
++    And user "participant1" adds user "participant2" to room "room" with 200 (v4)
++    And user "participant1" gets the following collaborator suggestions in room "room" for "participant2" with 200
++    And user "participant3" gets the following collaborator suggestions in room "room" for "participant2" with 200
++      | source | id           | label                    |
++      | users  | participant2 | participant2-displayname |
++
++  Scenario: Getting participant suggestions in a public room
++    Given user "participant1" creates room "room" (v4)
++      | roomType | 3 |
++      | roomName | room |
++    And user "participant1" gets the following collaborator suggestions in room "room" for "particip" with 200
++      | source | id           | label                    |
++      | users  | participant2 | participant2-displayname |
++      | users  | participant3 | participant3-displayname |
++    And user "participant1" gets the following collaborator suggestions in room "room" for "participant2" with 200
++      | source | id           | label                    |
++      | users  | participant2 | participant2-displayname |
++    And user "participant3" gets the following collaborator suggestions in room "room" for "participant2" with 200
++      | source | id           | label                    |
++      | users  | participant2 | participant2-displayname |
++    And user "guest" joins room "room" with 200 (v4)
++    And user "guest" gets the following collaborator suggestions in room "room" for "participant2" with 401
++    And user "participant1" adds user "participant2" to room "room" with 200 (v4)
++    And user "participant1" gets the following collaborator suggestions in room "room" for "participant2" with 200
++    And user "participant3" gets the following collaborator suggestions in room "room" for "participant2" with 200
++      | source | id           | label                    |
++      | users  | participant2 | participant2-displayname |
++    And user "guest" gets the following collaborator suggestions in room "room" for "participant2" with 401
+-- 
+2.34.1
+

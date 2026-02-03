@@ -1,0 +1,25 @@
+From b2c28099ecb736d2fac4446fb062cfa20dd81d6f Mon Sep 17 00:00:00 2001
+From: Mike Dalessio <mike@csa.net>
+Date: Fri, 8 Jun 2012 10:38:25 -0400
+Subject: [PATCH] DEFAULT_XML parse options now include NONET. #693.
+
+---
+ lib/nokogiri/xml/parse_options.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/nokogiri/xml/parse_options.rb b/lib/nokogiri/xml/parse_options.rb
+index cf49c493..54ac5169 100644
+--- a/lib/nokogiri/xml/parse_options.rb
++++ b/lib/nokogiri/xml/parse_options.rb
+@@ -47,7 +47,7 @@ module Nokogiri
+       HUGE        = 1 << 19
+ 
+       # the default options used for parsing XML documents
+-      DEFAULT_XML  = RECOVER
++      DEFAULT_XML  = RECOVER | NONET
+       # the default options used for parsing HTML documents
+       DEFAULT_HTML = RECOVER | NOERROR | NOWARNING | NONET
+ 
+-- 
+2.34.1
+

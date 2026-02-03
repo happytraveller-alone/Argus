@@ -1,0 +1,26 @@
+From 989f4e8f146da7f19362bbd85dc4c8e26b2bd43e Mon Sep 17 00:00:00 2001
+From: Gleb Mazovetskiy <glex.spb@gmail.com>
+Date: Wed, 3 Apr 2019 17:06:46 +0100
+Subject: [PATCH] Bump to v3.2.0.4 (re-release of 3.2.0.2)
+
+This is a release of v3.2.0.2 that was yanked.
+v3.2.0.3 contains malware and has also been yanked.
+
+See https://github.com/twbs/bootstrap-sass/issues/1195 for more information.
+---
+ lib/bootstrap-sass/version.rb | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/bootstrap-sass/version.rb b/lib/bootstrap-sass/version.rb
+index dc78dde..65cbca0 100644
+--- a/lib/bootstrap-sass/version.rb
++++ b/lib/bootstrap-sass/version.rb
+@@ -1,4 +1,4 @@
+ module Bootstrap
+-  VERSION = '3.2.0.2'
++  VERSION = '3.2.0.4'
+   BOOTSTRAP_SHA = 'c068162161154a4b85110ea1e7dd3d7897ce2b72'
+ end
+-- 
+2.34.1
+

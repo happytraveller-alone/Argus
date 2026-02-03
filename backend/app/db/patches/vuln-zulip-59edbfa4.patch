@@ -1,0 +1,37 @@
+From 59edbfa4113d140d3e20126bc65f4d67b2a8ffe5 Mon Sep 17 00:00:00 2001
+From: Anders Kaseorg <anders@zulip.com>
+Date: Wed, 9 Nov 2022 17:03:04 -0800
+Subject: [PATCH] scim: Check SCIM tokens using constant-time comparison.
+
+Signed-off-by: Anders Kaseorg <anders@zulip.com>
+---
+ zerver/middleware.py | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/zerver/middleware.py b/zerver/middleware.py
+index c8c2fdec28..432d8e590a 100644
+--- a/zerver/middleware.py
++++ b/zerver/middleware.py
+@@ -25,6 +25,7 @@ from django.middleware.locale import LocaleMiddleware as DjangoLocaleMiddleware
+ from django.shortcuts import render
+ from django.utils import translation
+ from django.utils.cache import patch_vary_headers
++from django.utils.crypto import constant_time_compare
+ from django.utils.deprecation import MiddlewareMixin
+ from django.utils.log import log_response
+ from django.utils.translation import gettext as _
+@@ -704,7 +705,10 @@ def validate_scim_bearer_token(request: HttpRequest) -> Optional[SCIMClient]:
+     assert valid_bearer_token
+     assert scim_client_name
+ 
+-    if request.headers.get("Authorization") != f"Bearer {valid_bearer_token}":
++    authorization = request.headers.get("Authorization")
++    if authorization is None or not constant_time_compare(
++        authorization, f"Bearer {valid_bearer_token}"
++    ):
+         return None
+ 
+     request_notes = RequestNotes.get_notes(request)
+-- 
+2.34.1
+

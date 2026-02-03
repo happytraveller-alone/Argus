@@ -1,0 +1,129 @@
+From 19913ae4b4ff58ebcb84e9dc9fbef81da5c8d850 Mon Sep 17 00:00:00 2001
+From: Thomas Bernard <miniupnp@free.fr>
+Date: Wed, 11 Aug 2021 15:43:26 +0200
+Subject: [PATCH] prevent buffer overrun in NGIFLIB_NO_FILE mode
+
+fixes #18
+---
+ gif2tga.c    |  7 ++++++-
+ ngiflib.c    | 19 +++++++++++++++----
+ ngiflib.h    |  5 ++++-
+ ngiflibSDL.c | 10 ++++++++--
+ 4 files changed, 33 insertions(+), 8 deletions(-)
+
+diff --git a/gif2tga.c b/gif2tga.c
+index b271fc5..529b563 100644
+--- a/gif2tga.c
++++ b/gif2tga.c
+@@ -71,6 +71,10 @@ int main(int argc, char * * argv) {
+ #ifdef NGIFLIB_NO_FILE
+ 	fseek(fgif, 0, SEEK_END);
+ 	filesize = ftell(fgif);
++	if (filesize < 0) {
++		printf("Error reading %s\n", input_file);
++		return 3;
++	}
+ 	fseek(fgif, 0, SEEK_SET);
+ 	buffer = malloc(filesize);
+ 	if(buffer == NULL) {
+@@ -79,7 +83,8 @@ int main(int argc, char * * argv) {
+ 		return 4;
+ 	}
+ 	fread(buffer, 1, filesize, fgif);
+-	gif->input.bytes = buffer;
++	gif->input.buffer.bytes = buffer;
++	gif->input.buffer.count = (unsigned long)filesize;
+ 	gif->mode = NGIFLIB_MODE_FROM_MEM;
+ #else /* NGIFLIB_NO_FILE */
+ 	gif->input.file = fgif;
+diff --git a/ngiflib.c b/ngiflib.c
+index a271e40..a20d277 100644
+--- a/ngiflib.c
++++ b/ngiflib.c
+@@ -67,7 +67,12 @@ static u8 GetByte(struct ngiflib_gif * g) {
+ #ifndef NGIFLIB_NO_FILE
+ 	if(g->mode & NGIFLIB_MODE_FROM_MEM) {
+ #endif /* NGIFLIB_NO_FILE */
+-		return *(g->input.bytes++);
++		if (g->input.buffer.count > 0) {
++			g->input.buffer.count--;
++			return *(g->input.buffer.bytes++);
++		} else {
++			return 0;
++		}
+ #ifndef NGIFLIB_NO_FILE
+ 	} else {
+ #ifdef DEBUG
+@@ -105,9 +110,15 @@ static int GetByteStr(struct ngiflib_gif * g, u8 * p, int n) {
+ #ifndef NGIFLIB_NO_FILE
+ 	if(g->mode & NGIFLIB_MODE_FROM_MEM) {
+ #endif /* NGIFLIB_NO_FILE */
+-		ngiflib_memcpy(p, g->input.bytes, n);
+-		g->input.bytes += n;
+-		return 0;
++		if (g->input.buffer.count >= (unsigned)n) {
++			ngiflib_memcpy(p, g->input.buffer.bytes, n);
++			g->input.buffer.count -= n;
++			g->input.buffer.bytes += n;
++			return 0;
++		} else {
++			/* buffer overrun */
++			return -1;
++		}
+ #ifndef NGIFLIB_NO_FILE
+ 	} else {
+ 		size_t read;
+diff --git a/ngiflib.h b/ngiflib.h
+index 531d9f2..c23135d 100644
+--- a/ngiflib.h
++++ b/ngiflib.h
+@@ -133,7 +133,10 @@ struct ngiflib_gif {
+ #ifndef NGIFLIB_NO_FILE
+ 		FILE * file;
+ #endif /* NGIFLIB_NO_FILE */
+-		const u8 * bytes;
++		struct {
++			const u8 * bytes;
++			unsigned long count;
++		} buffer;
+ 	} input;	/* used by GetByte */
+ 	union ngiflib_pixpointer frbuff;	/* frame buffer    */
+ #ifndef NGIFLIB_NO_FILE
+diff --git a/ngiflibSDL.c b/ngiflibSDL.c
+index 043cc69..5a6e98f 100644
+--- a/ngiflibSDL.c
++++ b/ngiflibSDL.c
+@@ -28,6 +28,10 @@ SDL_Surface * SDL_LoadGIF(const char * file)
+ #ifdef NGIFLIB_NO_FILE
+ 	fseek(fgif, 0, SEEK_END);
+ 	filesize = ftell(fgif);
++	if (filesize < 0) {
++		GifDestroy(gif);
++		return NULL;
++	}
+ 	fseek(fgif, 0, SEEK_SET);
+ 	buffer = malloc(filesize);
+ 	if(buffer == NULL) {
+@@ -35,7 +39,8 @@ SDL_Surface * SDL_LoadGIF(const char * file)
+ 		return NULL;
+ 	}
+ 	fread(buffer, 1, filesize, fgif);
+-	gif->input.bytes = buffer;
++	gif->input.buffer.bytes = buffer;
++	gif->input.buffer.count = (unsigned long)filesize;
+ 	gif->mode = NGIFLIB_MODE_FROM_MEM | NGIFLIB_MODE_INDEXED;
+ #else /* NGIFLIB_NO_FILE */
+ 	gif->input.file = fgif;
+@@ -123,7 +128,8 @@ struct ngiflibSDL_animation * SDL_LoadAnimatedGif(const char * file)
+ 		return NULL;
+ 	}
+ 	fread(buffer, 1, filesize, fgif);
+-	gif->input.bytes = buffer;
++	gif->input.buffer.bytes = buffer;
++	gif->input.buffer.count = (unsigned long)filesize;
+ 	gif->mode = NGIFLIB_MODE_FROM_MEM | NGIFLIB_MODE_INDEXED;
+ #else /* NGIFLIB_NO_FILE */
+ 	gif->input.file = fgif;
+-- 
+2.34.1
+

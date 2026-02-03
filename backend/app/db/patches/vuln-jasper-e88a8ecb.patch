@@ -1,0 +1,30 @@
+From e88a8ecb8b0e2a7954c0147c1e5c15fdd588eca0 Mon Sep 17 00:00:00 2001
+From: Max Kellermann <max.kellermann@gmail.com>
+Date: Wed, 29 Jul 2020 15:29:03 +0200
+Subject: [PATCH] jas_seq: fix potential integer overflow on 32 bit CPUs
+
+Assigning a `size_t` to a `uint_fast32_t` is not safe, because the
+`size_t` may (theoretically) be larger than the `uint_fast32_t`.
+
+Closes https://github.com/jasper-software/jasper/issues/128
+---
+ src/libjasper/base/jas_seq.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/libjasper/base/jas_seq.c b/src/libjasper/base/jas_seq.c
+index 06ef6cb..fc83fde 100644
+--- a/src/libjasper/base/jas_seq.c
++++ b/src/libjasper/base/jas_seq.c
+@@ -109,7 +109,8 @@ jas_matrix_t *jas_matrix_create(jas_matind_t numrows, jas_matind_t numcols)
+ 	}
+ 
+ 	// matrix->datasize_ = numrows * numcols;
+-	if (!jas_safe_size_mul(numrows, numcols, &size)) {
++	if (!jas_safe_size_mul(numrows, numcols, &size) ||
++	    size > UINT_FAST32_MAX) {
+ 		return NULL;
+ 	}
+ 
+-- 
+2.34.1
+

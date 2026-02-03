@@ -1,0 +1,55 @@
+From 61f6a92cc050f3db831f04c3c19f8f2d52cbe08e Mon Sep 17 00:00:00 2001
+From: Matthew Noorenberghe <github@matthew.noorenberghe.com>
+Date: Sat, 9 Feb 2019 01:37:32 -0800
+Subject: [PATCH] view=download: Validate the eid parameter to avoid XSS. Fixes
+ #2442
+
+---
+ web/skins/classic/views/download.php | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/web/skins/classic/views/download.php b/web/skins/classic/views/download.php
+index 5535df36ae..cd3b6c71db 100644
+--- a/web/skins/classic/views/download.php
++++ b/web/skins/classic/views/download.php
+@@ -47,12 +47,20 @@
+ $exportFormat = '';
+ if (isset($_REQUEST['exportFormat'])) {
+   if (!in_array($_REQUEST['exportFormat'], array('zip', 'tar'))) {
+-    Error("Invalid exportFormat");
++    Error('Invalid exportFormat');
+     return;
+   }
+   $exportFormat = $_REQUEST['exportFormat'];
+ }
+ 
++if (!empty($_REQUEST['eid'])) {
++  $Event = new Event( $_REQUEST['eid'] );
++  if (!$Event->Id) {
++    Error('Invalid event id');
++    return;
++  }
++}
++
+ $focusWindow = true;
+ 
+ xhtmlHeaders(__FILE__, translate('Download') );
+@@ -72,8 +80,7 @@
+ ?>
+         <input type="hidden" name="id" value="<?php echo validInt($_REQUEST['eid']) ?>"/>
+     <?php
+-    $Event = new Event( $_REQUEST['eid'] );
+-    echo 'Downloading event ' . $_REQUEST['eid'] . ' Resulting file should be approximately ' . human_filesize( $Event->DiskSpace() );
++    echo 'Downloading event ' . $Event->Id . '. Resulting file should be approximately ' . human_filesize( $Event->DiskSpace() );
+ } else if ( !empty($_REQUEST['eids']) ) {
+     $total_size = 0;
+     foreach ( $_REQUEST['eids'] as $eid ) {
+@@ -126,7 +133,7 @@
+     }
+     if ( !empty($_REQUEST['generated']) ) {
+ ?>
+-      <h3 id="downloadLink"><a href="?view=archive&type=<?php echo $exportFormat; ?>"><?php echo translate('Download') ?></a></h3>
++      <h3 id="downloadLink"><a href="?view=archive&amp;type=<?php echo $exportFormat; ?>"><?php echo translate('Download') ?></a></h3>
+ <?php
+     }
+ ?>

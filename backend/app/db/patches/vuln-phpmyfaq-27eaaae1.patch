@@ -1,0 +1,59 @@
+From 27eaaae16850694634ac52416a0bd38b35d7330a Mon Sep 17 00:00:00 2001
+From: Thorsten Rinne <thorsten@phpmyfaq.de>
+Date: Wed, 15 Feb 2023 17:43:04 +0100
+Subject: [PATCH] fix: corrected check on null values
+
+---
+ phpmyfaq/ajaxservice.php          | 4 ++--
+ phpmyfaq/lang/language_de.php     | 2 +-
+ phpmyfaq/src/phpMyFAQ/Captcha.php | 4 ++--
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/phpmyfaq/ajaxservice.php b/phpmyfaq/ajaxservice.php
+index dca80db2f..ccb3c3e3c 100644
+--- a/phpmyfaq/ajaxservice.php
++++ b/phpmyfaq/ajaxservice.php
+@@ -116,8 +116,8 @@ $captcha = new Captcha($faqConfig);
+ $captcha->setUserIsLoggedIn($isLoggedIn);
+ 
+ if (
+-'savevoting' !== $action && 'saveuserdata' !== $action && 'changepassword' !== $action && !is_null($code) &&
+-    !$captcha->checkCaptchaCode($code)
++    'savevoting' !== $action && 'saveuserdata' !== $action && 'changepassword' !== $action &&
++    !$captcha->checkCaptchaCode($code ?? '')
+ ) {
+     $message = ['error' => $PMF_LANG['msgCaptcha']];
+ }
+diff --git a/phpmyfaq/lang/language_de.php b/phpmyfaq/lang/language_de.php
+index c2a0c61e9..c2f53e982 100755
+--- a/phpmyfaq/lang/language_de.php
++++ b/phpmyfaq/lang/language_de.php
+@@ -155,7 +155,7 @@ $PMF_LANG['err_badID'] = "Fehlerhafte ID!";
+ $PMF_LANG['err_noTopTen'] = "Derzeit sind keine beliebten FAQs verfügbar.";
+ $PMF_LANG['err_nothingFound'] = "Es wurde kein Eintrag gefunden.";
+ $PMF_LANG['err_SaveEntries'] = "Pflichtfelder sind <strong>Name</strong>, <strong>E-Mail-Adresse</strong>, <strong>Kategorie</strong>, <strong>Frage</strong> und <strong>Antwort</strong>!";
+-$PMF_LANG['err_SaveComment'] = "Pflichtfelder sind <strong>Name</strong>, <strong>E-Mail-Adresse</strong> und <strong>Kommentar</strong>!";
++$PMF_LANG['err_SaveComment'] = "Pflichtfelder sind Name, E-Mail-Adresse und Kommentar!";
+ $PMF_LANG['err_VoteTooMuch'] = "Leider konnte die Bewertung nicht gespeichert werden, da mit der IP bereits bewertet wurde.";
+ $PMF_LANG['err_noVote'] = "Es wurde keine Bewertung abgegeben!";
+ $PMF_LANG['err_noMailAdress'] = "Die angegebene E-Mail-Adresse ist nicht korrekt.";
+diff --git a/phpmyfaq/src/phpMyFAQ/Captcha.php b/phpmyfaq/src/phpMyFAQ/Captcha.php
+index 050e68b21..0902e1373 100755
+--- a/phpmyfaq/src/phpMyFAQ/Captcha.php
++++ b/phpmyfaq/src/phpMyFAQ/Captcha.php
+@@ -491,10 +491,10 @@ class Captcha
+      * This function checks the provided captcha code
+      * if the captcha code spam protection has been activated from the general PMF configuration.
+      *
+-     * @param string $code Captcha Code
++     * @param string|null $code Captcha Code
+      * @return bool
+      */
+-    public function checkCaptchaCode(string $code): bool
++    public function checkCaptchaCode(string $code = null): bool
+     {
+         if ($this->isUserIsLoggedIn()) {
+             return true;
+-- 
+2.34.1
+

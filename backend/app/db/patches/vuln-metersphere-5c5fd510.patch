@@ -1,0 +1,30 @@
+From 5c5fd5102bceb05eb233c1d3c249edcfc665b8c2 Mon Sep 17 00:00:00 2001
+From: chenjianxing <jianxing.chen@fit2cloud.com>
+Date: Tue, 21 Dec 2021 11:11:29 +0800
+Subject: [PATCH] =?UTF-8?q?fix:=20markdown=E5=9B=BE=E7=89=87=E4=B8=8A?=
+ =?UTF-8?q?=E4=BC=A0=E6=8E=A5=E5=8F=A3=E5=8F=AF=E5=8C=BF=E5=90=8D=E8=AE=BF?=
+ =?UTF-8?q?=E9=97=AE=20(#8653)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../src/main/java/io/metersphere/commons/utils/ShiroUtils.java  | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/backend/src/main/java/io/metersphere/commons/utils/ShiroUtils.java b/backend/src/main/java/io/metersphere/commons/utils/ShiroUtils.java
+index 3c9eb6fe97..c098e1766a 100644
+--- a/backend/src/main/java/io/metersphere/commons/utils/ShiroUtils.java
++++ b/backend/src/main/java/io/metersphere/commons/utils/ShiroUtils.java
+@@ -15,7 +15,7 @@ public class ShiroUtils {
+ 
+     public static void loadBaseFilterChain(Map<String, String> filterChainDefinitionMap) {
+ 
+-        filterChainDefinitionMap.put("/resource/**", "anon");
++        filterChainDefinitionMap.put("/resource/md/get/", "anon");
+         filterChainDefinitionMap.put("/*.worker.js", "anon");
+         filterChainDefinitionMap.put("/login", "anon");
+         filterChainDefinitionMap.put("/signin", "anon");
+-- 
+2.34.1
+

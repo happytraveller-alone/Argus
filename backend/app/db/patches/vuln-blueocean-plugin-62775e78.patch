@@ -1,0 +1,1735 @@
+From 9f44b895d018c514d5dccc1f2190a2a029e58259 Mon Sep 17 00:00:00 2001
+From: Yaroslav Afenkin <yaroslav.afenkin@gmail.com>
+Date: Wed, 4 May 2022 18:20:02 +0300
+Subject: [PATCH] [SECURITY-2502]
+
+---
+ .../AbstractBitbucketScm.java                 |  19 ++-
+ .../AbstractBitbucketScmSecurityTest.java     | 118 +++++++++++++++
+ .../BitbucketWireMockBase.java                |  21 ++-
+ .../cloud/BitbucketCloudScmTest.java          |  18 ++-
+ .../server/BitbucketServerScmTest.java        |  31 ++--
+ .../commons/stapler/TreeResponse.java         |  23 ++-
+ .../creation/bitbucket/api/BbCreationApi.js   |  18 ++-
+ .../creation/github/api/GithubCreationApi.js  |  17 ++-
+ .../credentials/bitbucket/BbCredentialsApi.js |  12 +-
+ .../git/GitCredentialsPickerSSH.jsx           |   2 +-
+ .../js/credentials/git/GitPWCredentialsApi.ts |  11 +-
+ .../github/GithubCredentialsApi.js            |  14 +-
+ .../blueocean_git_pipeline/GitScm.java        |   1 +
+ .../GitReadSaveTest.java                      |  16 +--
+ .../blueocean_git_pipeline/GitScmTest.java    |  22 ++-
+ .../blueocean_git_pipeline/GitUtilsTest.java  |   2 +-
+ .../blueocean_github_pipeline/GithubScm.java  |  18 +++
+ .../GithubApiTest.java                        |  21 ++-
+ .../GithubEnterpriseApiTest.java              |  24 ++--
+ .../GithubEnterpriseScmSecurityTest.java      | 134 ++++++++++++++++++
+ .../GithubMockBase.java                       |  26 +++-
+ .../GithubOrgFolderPermissionsTest.java       |  61 ++++++--
+ .../GithubScmSecurityTest.java                | 125 ++++++++++++++++
+ .../GithubScmTest.java                        |  20 ++-
+ .../rest/impl/pipeline/scm/AbstractScm.java   |  25 ++++
+ .../blueocean/rest/impl/pipeline/scm/Scm.java |   4 +-
+ .../rest/impl/pipeline/PipelineBaseTest.java  |   4 +-
+ .../rest/pageable/PagedResponse.java          |  17 ++-
+ 28 files changed, 742 insertions(+), 82 deletions(-)
+ create mode 100644 blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/AbstractBitbucketScmSecurityTest.java
+ create mode 100644 blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubEnterpriseScmSecurityTest.java
+ create mode 100644 blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScmSecurityTest.java
+
+diff --git a/blueocean-bitbucket-pipeline/src/main/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/AbstractBitbucketScm.java b/blueocean-bitbucket-pipeline/src/main/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/AbstractBitbucketScm.java
+index f448500be85..e4fa1698491 100644
+--- a/blueocean-bitbucket-pipeline/src/main/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/AbstractBitbucketScm.java
++++ b/blueocean-bitbucket-pipeline/src/main/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/AbstractBitbucketScm.java
+@@ -7,7 +7,6 @@
+ import hudson.model.User;
+ import io.jenkins.blueocean.commons.ErrorMessage;
+ import io.jenkins.blueocean.commons.ServiceException;
+-import io.jenkins.blueocean.commons.stapler.JsonBody;
+ import io.jenkins.blueocean.credential.CredentialsUtils;
+ import io.jenkins.blueocean.rest.Reachable;
+ import io.jenkins.blueocean.rest.hal.Link;
+@@ -24,6 +23,7 @@
+ import org.kohsuke.stapler.HttpResponse;
+ import org.kohsuke.stapler.Stapler;
+ import org.kohsuke.stapler.StaplerRequest;
++import org.kohsuke.stapler.json.JsonBody;
+ 
+ import javax.annotation.Nonnull;
+ import java.io.IOException;
+@@ -49,6 +49,12 @@ public AbstractBitbucketScm(Reachable parent) {
+     public Object getState() {
+         StaplerRequest request = Stapler.getCurrentRequest();
+         Objects.requireNonNull(request, "Must be called in HTTP request context");
++        String method = request.getMethod();
++        if (!"POST".equalsIgnoreCase(method)) {
++            throw new ServiceException.MethodNotAllowedException(String.format("Request method %s is not allowed", method));
++        }
++
++        checkPermission();
+ 
+         String apiUrl = request.getParameter("apiUrl");
+ 
+@@ -103,10 +109,16 @@ StandardUsernamePasswordCredentials getCredential(String apiUrl){
+ 
+     @Override
+     public Container<ScmOrganization> getOrganizations() {
+-        User authenticatedUser = getAuthenticatedUser();
+-
+         StaplerRequest request = Stapler.getCurrentRequest();
+         Objects.requireNonNull(request, "This request must be made in HTTP context");
++        String method = request.getMethod();
++        if (!"POST".equalsIgnoreCase(method)) {
++            throw new ServiceException.MethodNotAllowedException(String.format("Request method %s is not allowed", method));
++        }
++
++        User authenticatedUser = getAuthenticatedUser();
++        checkPermission();
++
+         String credentialId = BitbucketCredentialUtils.computeCredentialId(getCredentialIdFromRequest(request), getId(), getUri());
+ 
+         List<ErrorMessage.Error> errors = new ArrayList<>();
+@@ -191,6 +203,7 @@ public HttpResponse validateAndCreate(@JsonBody JSONObject request) {
+         if(authenticatedUser == null){
+             throw new ServiceException.UnauthorizedException("No logged in user found");
+         }
++        checkPermission();
+ 
+         String userName = (String) request.get("userName");
+         String password = (String) request.get("password");
+diff --git a/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/AbstractBitbucketScmSecurityTest.java b/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/AbstractBitbucketScmSecurityTest.java
+new file mode 100644
+index 00000000000..aa004f40533
+--- /dev/null
++++ b/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/AbstractBitbucketScmSecurityTest.java
+@@ -0,0 +1,118 @@
++package io.jenkins.blueocean.blueocean_bitbucket_pipeline;
++
++import com.mashape.unirest.http.exceptions.UnirestException;
++import hudson.model.Item;
++import hudson.model.User;
++import hudson.security.GlobalMatrixAuthorizationStrategy;
++import hudson.security.HudsonPrivateSecurityRealm;
++import io.jenkins.blueocean.blueocean_bitbucket_pipeline.server.BbServerWireMock;
++import io.jenkins.blueocean.blueocean_bitbucket_pipeline.server.BitbucketServerScm;
++import io.jenkins.blueocean.commons.MapsHelper;
++import jenkins.model.Jenkins;
++import net.sf.json.JSONArray;
++import net.sf.json.JSONObject;
++import org.junit.Before;
++import org.junit.Test;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++public class AbstractBitbucketScmSecurityTest extends BbServerWireMock {
++    private static final String ORGANIZATIONS_URL = "/organizations/jenkins/scm/" + BitbucketServerScm.ID + "/organizations/";
++    private static final String VALIDATE_URL = "/organizations/jenkins/scm/" + BitbucketServerScm.ID + "/validate/";
++    public static final String READONLY_USER_NAME = "readOnly";
++    public static final String READONLY_USER_PASSWORD = "pacific_ale";
++    public static final String ITEM_CREATE_USER_NAME = "itemCreateUser";
++    public static final String ITEM_CREATE_USER_PASSWORD = "pale_ale";
++
++    @Before
++    public void setupSecurity() throws Exception {
++        HudsonPrivateSecurityRealm realm = new HudsonPrivateSecurityRealm(true, false, null);
++        User readOnly = realm.createAccount(READONLY_USER_NAME, READONLY_USER_PASSWORD);
++        User itemCreateUser = realm.createAccount(ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++        j.jenkins.setSecurityRealm(realm);
++        GlobalMatrixAuthorizationStrategy as = new GlobalMatrixAuthorizationStrategy();
++        j.jenkins.setAuthorizationStrategy(as);
++        as.add(Jenkins.READ, (String) Jenkins.ANONYMOUS2.getPrincipal());
++        as.add(Jenkins.READ, readOnly.getId());
++        as.add(Item.CREATE, itemCreateUser.getId());
++        this.crumb = getCrumb(j.jenkins);
++    }
++
++    @Test
++    public void getOrganizationsWithoutCrumbToken() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++
++        String res = request()
++            .jwtToken(jwt)
++            .post(ORGANIZATIONS_URL)
++            .status(403)
++            .build(String.class);
++
++        assertTrue(res.contains("No valid crumb was included in the request"));
++    }
++
++    @Test
++    public void getOrganizationsWithGetRequest() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .get(ORGANIZATIONS_URL)
++            .status(405)
++            .build(JSONObject.class);
++
++        assertEquals("Request method GET is not allowed", res.getString("message"));
++    }
++
++    @Test
++    public void getOrganizationsForUserWithItemCreatePermission() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++        String credentialId = "totally-unique-credentialID";
++        createCredentialWithId(jwt, credentialId);
++
++        JSONArray res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .post(ORGANIZATIONS_URL + "?apiUrl=" + apiUrl + "&credentialId=" + credentialId)
++            .status(200)
++            .build(JSONArray.class);
++
++        assertEquals(3, res.size());
++    }
++
++    @Test
++    public void getOrganizationsForUserWithoutItemCreatePermission() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, READONLY_USER_NAME, READONLY_USER_PASSWORD);
++        String credentialId = "readonly-permissions";
++        createCredentialWithId(jwt, credentialId);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .header(BitbucketServerScm.X_CREDENTIAL_ID, credentialId)
++            .post(ORGANIZATIONS_URL + "?apiUrl=" + apiUrl)
++            .status(403)
++            .build(JSONObject.class);
++
++        assertEquals("You do not have Job/Create permission", res.getString("message"));
++    }
++
++    @Test
++    public void validateAndCreateForUserWithReadonlyPermissions() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, READONLY_USER_NAME, READONLY_USER_PASSWORD);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .data(MapsHelper.of("apiUrl", apiUrl,
++                "userName", ITEM_CREATE_USER_NAME,
++                "password", ITEM_CREATE_USER_PASSWORD))
++            .post(VALIDATE_URL + "?apiUrl=" + apiUrl)
++            .status(403)
++            .build(JSONObject.class);
++
++        String errorMessage = res.getString("message");
++        assertEquals("You do not have Job/Create permission", errorMessage);
++    }
++}
+diff --git a/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/BitbucketWireMockBase.java b/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/BitbucketWireMockBase.java
+index 67024462a2e..51256d59c3b 100644
+--- a/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/BitbucketWireMockBase.java
++++ b/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/BitbucketWireMockBase.java
+@@ -8,6 +8,7 @@
+ import io.jenkins.blueocean.blueocean_bitbucket_pipeline.cloud.BitbucketCloudScm;
+ import io.jenkins.blueocean.commons.MapsHelper;
+ import io.jenkins.blueocean.rest.impl.pipeline.PipelineBaseTest;
++import net.sf.json.JSONObject;
+ import org.junit.Before;
+ 
+ import java.io.File;
+@@ -69,9 +70,10 @@ public void setup() throws Exception {
+     protected String createCredential(String scmId, String apiMode, User user) throws IOException, UnirestException {
+ 
+         RequestBuilder builder = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-                .put("/organizations/jenkins/scm/"+ scmId+"/validate/")
++                .post("/organizations/jenkins/scm/"+ scmId+"/validate/")
+                 .data(MapsHelper.of("apiUrl", apiUrl,
+                         "userName", getUserName(),
+                         "password", getPassword()));
+@@ -96,4 +98,21 @@ protected String createCredential(String scmId) throws IOException, UnirestExcep
+         User user = login();
+         return createCredential(scmId, user);
+     }
++
++    protected void createCredentialWithId(String jwt, String credentialId) {
++        request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .data(MapsHelper.of("credentials", new MapsHelper.Builder()
++                .put("scope", "SYSTEM")
++                .put("id", credentialId)
++                .put("username", "vivek")
++                .put("password", "password")
++                .put("stapler-class", "com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl")
++                .put("$class", "com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl")
++                .build()))
++            .post("/organizations/jenkins/credentials/user/")
++            .status(201)
++            .build(JSONObject.class);
++    }
+ }
+diff --git a/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/cloud/BitbucketCloudScmTest.java b/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/cloud/BitbucketCloudScmTest.java
+index 57203a92858..91750b08c9f 100644
+--- a/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/cloud/BitbucketCloudScmTest.java
++++ b/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/cloud/BitbucketCloudScmTest.java
+@@ -17,9 +17,10 @@ public class BitbucketCloudScmTest extends BbCloudWireMock {
+     @Test
+     public void getBitbucketScm() throws UnirestException {
+         Map r = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+ BitbucketCloudScm.ID+getApiUrlParam())
++                .post("/organizations/jenkins/scm/"+ BitbucketCloudScm.ID + "/" + getApiUrlParam())
+                 .build(Map.class);
+ 
+         assertNotNull(r);
+@@ -32,9 +33,10 @@ public void getBitbucketScm() throws UnirestException {
+     public void getOrganizationsWithCredentialId() throws IOException, UnirestException {
+         String credentialId = createCredential(BitbucketCloudScm.ID);
+         List orgs = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+BitbucketCloudScm.ID+"/organizations/"+getApiUrlParam()+"&credentialId="+credentialId)
++                .post("/organizations/jenkins/scm/"+BitbucketCloudScm.ID+"/organizations/"+getApiUrlParam()+"&credentialId="+credentialId)
+                 .build(List.class);
+         assertEquals(2, orgs.size());
+         assertEquals(BbCloudWireMock.USER_UUID, ((Map)orgs.get(0)).get("key"));
+@@ -47,9 +49,10 @@ public void getOrganizationsWithCredentialId() throws IOException, UnirestExcept
+     public void getOrganizationsWithoutCredentialId() throws IOException, UnirestException {
+         createCredential(BitbucketCloudScm.ID);
+         List orgs = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-            .get("/organizations/jenkins/scm/"+BitbucketCloudScm.ID+"/organizations/"+getApiUrlParam())
++            .post("/organizations/jenkins/scm/"+BitbucketCloudScm.ID+"/organizations/"+getApiUrlParam())
+             .build(List.class);
+         assertEquals(2, orgs.size());
+         assertEquals(BbCloudWireMock.USER_UUID, ((Map)orgs.get(0)).get("key"));
+@@ -61,9 +64,10 @@ public void getOrganizationsWithoutCredentialId() throws IOException, UnirestExc
+     @Test
+     public void getOrganizationsWithInvalidCredentialId() throws IOException, UnirestException {
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(400)
+             .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-            .get("/organizations/jenkins/scm/"+ BitbucketCloudScm.ID+"/organizations/"+getApiUrlParam()+"&credentialId=foo")
++            .post("/organizations/jenkins/scm/"+ BitbucketCloudScm.ID+"/organizations/"+getApiUrlParam()+"&credentialId=foo")
+             .build(Map.class);
+     }
+ 
+@@ -71,9 +75,10 @@ public void getOrganizationsWithInvalidCredentialId() throws IOException, Unires
+     public void getRepositoriesWithCredentialId() throws IOException, UnirestException {
+         String credentialId = createCredential(BitbucketCloudScm.ID);
+         Map repoResp = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+BitbucketCloudScm.ID+"/organizations/" + BbCloudWireMock.TEAM_UUID + "/repositories/"+getApiUrlParam()+"&credentialId="+credentialId)
++                .post("/organizations/jenkins/scm/"+BitbucketCloudScm.ID+"/organizations/" + BbCloudWireMock.TEAM_UUID + "/repositories/"+getApiUrlParam()+"&credentialId="+credentialId)
+                 .build(Map.class);
+         List repos = (List) ((Map)repoResp.get("repositories")).get("items");
+         assertEquals("pipeline-demo-test", ((Map)repos.get(0)).get("name"));
+@@ -92,9 +97,10 @@ public void getRepositoriesWithCredentialId() throws IOException, UnirestExcepti
+     public void getRepositoriesWithoutCredentialId() throws IOException, UnirestException {
+         createCredential(BitbucketCloudScm.ID);
+         Map repoResp = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-            .get("/organizations/jenkins/scm/"+BitbucketCloudScm.ID+"/organizations/" + BbCloudWireMock.TEAM_UUID + "/repositories/"+getApiUrlParam())
++            .post("/organizations/jenkins/scm/"+BitbucketCloudScm.ID+"/organizations/" + BbCloudWireMock.TEAM_UUID + "/repositories/"+getApiUrlParam())
+             .build(Map.class);
+         List repos = (List) ((Map)repoResp.get("repositories")).get("items");
+         assertEquals("pipeline-demo-test", ((Map)repos.get(0)).get("name"));
+diff --git a/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/server/BitbucketServerScmTest.java b/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/server/BitbucketServerScmTest.java
+index f6eba9f8b84..1620bbbe3e9 100644
+--- a/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/server/BitbucketServerScmTest.java
++++ b/blueocean-bitbucket-pipeline/src/test/java/io/jenkins/blueocean/blueocean_bitbucket_pipeline/server/BitbucketServerScmTest.java
+@@ -36,18 +36,20 @@ public void setUp() throws Exception {
+     @Test
+     public void getBitbucketScmWithoutApiUrlParam() throws IOException, UnirestException {
+         new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(400)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/")
++                .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/")
+                 .build(Map.class);
+     }
+ 
+     @Test
+     public void getBitbucketScm() throws IOException, UnirestException {
+         Map r = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/?apiUrl="+apiUrl)
++                .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/?apiUrl="+apiUrl)
+                 .build(Map.class);
+ 
+         assertNotNull(r);
+@@ -70,9 +72,10 @@ public void getScmNormalizedUrlTest() throws IOException, UnirestException {
+         assertEquals(credentialId, expectedCredId);
+ 
+         Map r = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+String.format("?apiUrl=%s",apiUrl))
++                .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/"+String.format("?apiUrl=%s",apiUrl))
+                 .build(Map.class);
+ 
+         assertEquals(normalizedUrl, r.get("uri"));
+@@ -86,9 +89,10 @@ public void getScmNormalizedUrlTest() throws IOException, UnirestException {
+         assertEquals(expectedCredId, expectedCredIdWithSlash);
+ 
+         r = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+String.format("?apiUrl=%s",apiUrl))
++                .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/"+String.format("?apiUrl=%s",apiUrl))
+                 .build(Map.class);
+ 
+         assertEquals(expectedCredId, r.get("credentialId"));
+@@ -99,9 +103,10 @@ public void getScmNormalizedUrlTest() throws IOException, UnirestException {
+     public void getOrganizationsWithCredentialId() throws IOException, UnirestException {
+         String credentialId = createCredential(BitbucketServerScm.ID);
+         List orgs = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-            .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/?apiUrl="+apiUrl+"&credentialId="+credentialId)
++            .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/?apiUrl="+apiUrl+"&credentialId="+credentialId)
+             .build(List.class);
+         assertEquals(3, orgs.size());
+         assertEquals("Vivek Pandey", ((Map)orgs.get(0)).get("name"));
+@@ -116,9 +121,10 @@ public void getOrganizationsWithCredentialId() throws IOException, UnirestExcept
+     public void getOrganizationsWithoutCredentialId() throws IOException, UnirestException {
+         createCredential(BitbucketServerScm.ID);
+         List orgs = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/?apiUrl="+apiUrl)
++                .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/?apiUrl="+apiUrl)
+                 .build(List.class);
+         assertEquals(3, orgs.size());
+         assertEquals("Vivek Pandey", ((Map)orgs.get(0)).get("name"));
+@@ -132,9 +138,10 @@ public void getOrganizationsWithoutCredentialId() throws IOException, UnirestExc
+     @Test
+     public void getOrganizationsWithInvalidCredentialId() throws IOException, UnirestException {
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(400)
+             .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-            .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/?apiUrl="+apiUrl+"&credentialId=foo")
++            .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/?apiUrl="+apiUrl+"&credentialId=foo")
+             .build(Map.class);
+     }
+ 
+@@ -142,9 +149,10 @@ public void getOrganizationsWithInvalidCredentialId() throws IOException, Unires
+     public void getRepositoriesWithCredentialId() throws IOException, UnirestException {
+         String credentialId = createCredential(BitbucketServerScm.ID);
+         Map repoResp = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-                .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/TESTP/repositories/?apiUrl="+apiUrl+"&credentialId="+credentialId)
++                .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/TESTP/repositories/?apiUrl="+apiUrl+"&credentialId="+credentialId)
+                 .build(Map.class);
+         List repos = (List) ((Map)repoResp.get("repositories")).get("items");
+         assertEquals(2, repos.size());
+@@ -163,9 +171,10 @@ public void getRepositoriesWithCredentialId() throws IOException, UnirestExcepti
+     public void getRepositoriesWithoutCredentialId() throws IOException, UnirestException {
+         createCredential(BitbucketServerScm.ID);
+         Map repoResp = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, authenticatedUser.getId(), authenticatedUser.getId()))
+-            .get("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/TESTP/repositories/?apiUrl="+apiUrl)
++            .post("/organizations/jenkins/scm/"+BitbucketServerScm.ID+"/organizations/TESTP/repositories/?apiUrl="+apiUrl)
+             .build(Map.class);
+         List repos = (List) ((Map)repoResp.get("repositories")).get("items");
+         assertEquals(2, repos.size());
+@@ -192,10 +201,12 @@ public void getScmWithRevokedCredential() throws IOException, UnirestException {
+             .willReturn(aResponse().withStatus(401)));
+ 
+         Map result = httpRequest()
+-            .Get("/organizations/{org}/scm/{scmid}/?apiUrl={apiurl}")
++            .Post("/organizations/{org}/scm/{scmid}/?apiUrl={apiurl}")
+             .urlPart("org", "jenkins")
+             .urlPart("scmid", BitbucketServerScm.ID)
+             .urlPart("apiurl", apiUrl)
++            .header("Content-Type", "application/json")
++            .header(crumb.field, crumb.value)
+             .status(401)
+             .as(Map.class);
+ 
+diff --git a/blueocean-commons/src/main/java/io/jenkins/blueocean/commons/stapler/TreeResponse.java b/blueocean-commons/src/main/java/io/jenkins/blueocean/commons/stapler/TreeResponse.java
+index 88da01a7f72..4b347e9e578 100644
+--- a/blueocean-commons/src/main/java/io/jenkins/blueocean/commons/stapler/TreeResponse.java
++++ b/blueocean-commons/src/main/java/io/jenkins/blueocean/commons/stapler/TreeResponse.java
+@@ -15,6 +15,7 @@
+ import java.lang.annotation.Retention;
+ import java.lang.annotation.Target;
+ import java.lang.reflect.InvocationTargetException;
++import java.util.regex.Pattern;
+ 
+ import static java.lang.annotation.ElementType.METHOD;
+ import static java.lang.annotation.RetentionPolicy.RUNTIME;
+@@ -30,16 +31,26 @@
+ @InterceptorAnnotation(TreeResponse.Processor.class)
+ public @interface TreeResponse {
+     class Processor extends Interceptor {
++
++        private static final Pattern SCM_STATE_URI = Pattern.compile("scm/(github|github-enterprise|bitbucket-server|bitbucket-cloud|git)/");
++        public static final Pattern SCM_ORGANIZATIONS_URI = Pattern.compile("scm/(github|github-enterprise|bitbucket-server|bitbucket-cloud|git)/organizations/");
++
+         @Override
+         public Object invoke(StaplerRequest request, StaplerResponse response, Object instance, Object[] arguments)
+                 throws IllegalAccessException, InvocationTargetException, ServletException {
+ 
+             /**
+              *  If request.method and HTTP verb annotations {@link GET}, {@link POST}, {@link PUT} and {@link DELETE}
+-             *  do not match it skips invoking this target. If there no such annotations present then GET as default is
++             *  do not match it skips invoking this target. If there are no such annotations present then GET as default is
+              *  assumed and request is dispatched to target.
++             *  Additionally, requests to organizations/orgName/scm/scmName/organizations/ and organizations/orgName/scm/scmName/
++             *  have to be sent via POST, because some specific implementations of Scm.getOrganizations and Resource.getState
++             *  have side effects (such as sending requests to SCM APIs). All requests that try to access child routes
++             *  of organizations/orgName/scm/scmName/organizations/ must be sent via POST too. We allow POST requests
++             *  for these routes by checking a requested URL against a predefined pattern. Various Stapler quirks with
++             *  getter methods and child routes prevent us from using standard @POST annotations on individual routes.
+              */
+-            if (matches(request)) {
++            if (matches(request) || postRouteMatches(request, SCM_ORGANIZATIONS_URI) || postRouteMatches(request, SCM_STATE_URI)) {
+                 final Object resp = target.invoke(request, response, instance, arguments);
+ 
+                 return new HttpResponse() {
+@@ -67,5 +78,13 @@ private boolean matches(StaplerRequest request) {
+             //by default, we treat it as GET
+             return method.equals( "GET" );
+         }
++
++        private boolean postRouteMatches(StaplerRequest request, Pattern pattern) {
++            String method = request.getMethod();
++            if (!"POST".equalsIgnoreCase(method))
++                return false;
++
++            return pattern.matcher(request.getOriginalRequestURI()).find();
++        }
+     }
+ }
+diff --git a/blueocean-dashboard/src/main/js/creation/bitbucket/api/BbCreationApi.js b/blueocean-dashboard/src/main/js/creation/bitbucket/api/BbCreationApi.js
+index c193fc30162..3f93fee466e 100644
+--- a/blueocean-dashboard/src/main/js/creation/bitbucket/api/BbCreationApi.js
++++ b/blueocean-dashboard/src/main/js/creation/bitbucket/api/BbCreationApi.js
+@@ -47,7 +47,14 @@ export class BbCreationApi {
+             false
+         );
+ 
+-        return this._fetch(orgsUrl)
++        const fetchOptions = {
++            method: 'POST',
++            headers: {
++                'Content-Type': 'application/json',
++            }
++        };
++
++        return this._fetch(orgsUrl, { fetchOptions })
+             .then(orgs => capabilityAugmenter.augmentCapabilities(orgs))
+             .then(orgs => this._listOrganizationsSuccess(orgs, credentialId, apiUrl, pagedOrgsStart), error => this._listOrganizationsFailure(error));
+     }
+@@ -88,8 +95,15 @@ export class BbCreationApi {
+             `${path}/blue/rest/organizations/${this.organization}/scm/${this.scmId}/organizations/${organizationName}/repositories/` +
+                 `?credentialId=${credentialId}&pageNumber=${pageNumber}&pageSize=${pageSize}&apiUrl=${apiUrl}`
+         );
++        const fetchOptions = {
++            method: 'POST',
++            headers: {
++                'Content-Type': 'application/json',
++            }
++        };
+ 
+-        return this._fetch(reposUrl).then(response => capabilityAugmenter.augmentCapabilities(response));
++        return this._fetch(reposUrl, { fetchOptions })
++            .then(response => capabilityAugmenter.augmentCapabilities(response));
+     }
+ 
+     createMbp(credentialId, scmId, apiUrl, itemName, bbOrganizationKey, repoName, creatorClass) {
+diff --git a/blueocean-dashboard/src/main/js/creation/github/api/GithubCreationApi.js b/blueocean-dashboard/src/main/js/creation/github/api/GithubCreationApi.js
+index b59fb24090f..77dd27a7708 100644
+--- a/blueocean-dashboard/src/main/js/creation/github/api/GithubCreationApi.js
++++ b/blueocean-dashboard/src/main/js/creation/github/api/GithubCreationApi.js
+@@ -31,8 +31,14 @@ export class GithubCreationApi {
+             false
+         );
+         orgsUrl = GithubApiUtils.appendApiUrlParam(orgsUrl, apiUrl);
++        const fetchOptions = {
++            method: 'POST',
++            headers: {
++                'Content-Type': 'application/json',
++            }
++        };
+ 
+-        return this._fetch(orgsUrl)
++        return this._fetch(orgsUrl, { fetchOptions })
+             .then(orgs => capabilityAugmenter.augmentCapabilities(orgs))
+             .then(orgs => this._listOrganizationsSuccess(orgs), error => this._listOrganizationsFailure(error));
+     }
+@@ -74,8 +80,15 @@ export class GithubCreationApi {
+                 `?credentialId=${credentialId}&pageNumber=${pageNumber}&pageSize=${pageSize}`
+         );
+         reposUrl = GithubApiUtils.appendApiUrlParam(reposUrl, apiUrl);
++        const fetchOptions = {
++            method: 'POST',
++            headers: {
++                'Content-Type': 'application/json',
++            }
++        };
+ 
+-        return this._fetch(reposUrl).then(response => capabilityAugmenter.augmentCapabilities(response));
++        return this._fetch(reposUrl, { fetchOptions })
++            .then(response => capabilityAugmenter.augmentCapabilities(response));
+     }
+ 
+     findExistingOrgFolder(githubOrganization) {
+diff --git a/blueocean-dashboard/src/main/js/credentials/bitbucket/BbCredentialsApi.js b/blueocean-dashboard/src/main/js/credentials/bitbucket/BbCredentialsApi.js
+index d26304b4a9f..73dc842798b 100644
+--- a/blueocean-dashboard/src/main/js/credentials/bitbucket/BbCredentialsApi.js
++++ b/blueocean-dashboard/src/main/js/credentials/bitbucket/BbCredentialsApi.js
+@@ -23,7 +23,15 @@ class BbCredentialsApi {
+         const path = UrlConfig.getJenkinsRootURL();
+         const credUrl = Utils.cleanSlashes(`${path}/blue/rest/organizations/${this.organization}/scm/${this.scmId}/?apiUrl=${apiUrl}`);
+ 
+-        return this._fetch(credUrl).then(result => this._findExistingCredentialSuccess(result), error => this._findExistingCredentialFailure(error));
++        const fetchOptions = {
++            method: 'POST',
++            headers: {
++                'Content-Type': 'application/json',
++            }
++        };
++
++        return this._fetch(credUrl, {fetchOptions})
++            .then(result => this._findExistingCredentialSuccess(result), error => this._findExistingCredentialFailure(error));
+     }
+ 
+     _findExistingCredentialSuccess(credential) {
+@@ -55,7 +63,7 @@ class BbCredentialsApi {
+         };
+ 
+         const fetchOptions = {
+-            method: 'PUT',
++            method: 'POST',
+             headers: {
+                 'Content-Type': 'application/json',
+             },
+diff --git a/blueocean-dashboard/src/main/js/credentials/git/GitCredentialsPickerSSH.jsx b/blueocean-dashboard/src/main/js/credentials/git/GitCredentialsPickerSSH.jsx
+index 1845a85e7a7..675912d6533 100644
+--- a/blueocean-dashboard/src/main/js/credentials/git/GitCredentialsPickerSSH.jsx
++++ b/blueocean-dashboard/src/main/js/credentials/git/GitCredentialsPickerSSH.jsx
+@@ -71,7 +71,7 @@ export class GitCredentialsPickerSSH extends Component {
+             body.branch = branch || 'master';
+         }
+         const fetchOptions = {
+-            method: 'PUT',
++            method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(body),
+         };
+diff --git a/blueocean-dashboard/src/main/js/credentials/git/GitPWCredentialsApi.ts b/blueocean-dashboard/src/main/js/credentials/git/GitPWCredentialsApi.ts
+index c2b02ec43b6..fe5d4345a22 100644
+--- a/blueocean-dashboard/src/main/js/credentials/git/GitPWCredentialsApi.ts
++++ b/blueocean-dashboard/src/main/js/credentials/git/GitPWCredentialsApi.ts
+@@ -28,7 +28,14 @@ export class GitPWCredentialsApi implements GitPWCredentialsApiPublic {
+         // Create error in sync code for better stack trace
+         const possibleError = new TypedError();
+ 
+-        return this._fetch(credUrl).then(
++        const fetchOptions = {
++            method: 'POST',
++            headers: {
++                'Content-Type': 'application/json',
++            }
++        };
++
++        return this._fetch(credUrl, {fetchOptions}).then(
+             result => this._findExistingCredentialSuccess(result),
+             error => {
+                 const { responseBody } = error;
+@@ -78,7 +85,7 @@ export class GitPWCredentialsApi implements GitPWCredentialsApiPublic {
+         }
+ 
+         const fetchOptions = {
+-            method: 'PUT',
++            method: 'POST',
+             headers: {
+                 'Content-Type': 'application/json',
+             },
+diff --git a/blueocean-dashboard/src/main/js/credentials/github/GithubCredentialsApi.js b/blueocean-dashboard/src/main/js/credentials/github/GithubCredentialsApi.js
+index 728beb5e4aa..3e461a34101 100644
+--- a/blueocean-dashboard/src/main/js/credentials/github/GithubCredentialsApi.js
++++ b/blueocean-dashboard/src/main/js/credentials/github/GithubCredentialsApi.js
+@@ -32,10 +32,18 @@ class GithubCredentialsApi {
+ 
+     findExistingCredential(apiUrl) {
+         const path = UrlConfig.getJenkinsRootURL();
+-        let credUrl = Utils.cleanSlashes(`${path}/blue/rest/organizations/${this.organization}/scm/${this.scmId}`);
++        let credUrl = Utils.cleanSlashes(`${path}/blue/rest/organizations/${this.organization}/scm/${this.scmId}/`);
+         credUrl = GithubApiUtils.appendApiUrlParam(credUrl, apiUrl);
+ 
+-        return this._fetch(credUrl).then(result => this._findExistingCredentialSuccess(result), error => this._findExistingCredentialFailure(error));
++        const fetchOptions = {
++            method: 'POST',
++            headers: {
++                'Content-Type': 'application/json',
++            }
++        };
++
++        return this._fetch(credUrl, {fetchOptions})
++            .then(result => this._findExistingCredentialSuccess(result), error => this._findExistingCredentialFailure(error));
+     }
+ 
+     _findExistingCredentialSuccess(credential) {
+@@ -69,7 +77,7 @@ class GithubCredentialsApi {
+         };
+ 
+         const fetchOptions = {
+-            method: 'PUT',
++            method: 'POST',
+             headers: {
+                 'Content-Type': 'application/json',
+             },
+diff --git a/blueocean-git-pipeline/src/main/java/io/jenkins/blueocean/blueocean_git_pipeline/GitScm.java b/blueocean-git-pipeline/src/main/java/io/jenkins/blueocean/blueocean_git_pipeline/GitScm.java
+index 5c9cd3bace4..234f4d6a314 100644
+--- a/blueocean-git-pipeline/src/main/java/io/jenkins/blueocean/blueocean_git_pipeline/GitScm.java
++++ b/blueocean-git-pipeline/src/main/java/io/jenkins/blueocean/blueocean_git_pipeline/GitScm.java
+@@ -233,6 +233,7 @@ public HttpResponse validateAndCreate(@JsonBody JSONObject request) {
+         if (user == null) {
+             throw new ServiceException.UnauthorizedException("Not authenticated");
+         }
++        checkPermission();
+ 
+         // --[ Get credential id from request or create from repo url ]----------------------------------------
+ 
+diff --git a/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitReadSaveTest.java b/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitReadSaveTest.java
+index 2311834b423..4e1e8893c5a 100644
+--- a/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitReadSaveTest.java
++++ b/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitReadSaveTest.java
+@@ -233,7 +233,7 @@ public void testGitScmValidate() throws Exception {
+             .status(200)
+             .crumb( crumb )
+             .jwtToken(getJwtToken(j.jenkins, bob.getId(), bob.getId()))
+-            .put("/organizations/" + getOrgName() + "/scm/git/validate/")
++            .post("/organizations/" + getOrgName() + "/scm/git/validate/")
+             .data(MapsHelper.of(
+                 "repositoryUrl", remote,
+                 "credentialId", UserSSHKeyManager.getOrCreate(bob).getId()
+@@ -263,7 +263,7 @@ public void testGitScmValidate() throws Exception {
+             .status(200)
+             .crumb( crumb )
+             .jwtToken(getJwtToken(j.jenkins, bob.getId(), bob.getId()))
+-            .put("/organizations/" + getOrgName() + "/scm/git/validate/")
++            .post("/organizations/" + getOrgName() + "/scm/git/validate/")
+             .data(MapsHelper.of(
+                 "pipeline", MapsHelper.of("fullName", jobName),
+                 "credentialId", UserSSHKeyManager.getOrCreate(bob).getId()
+@@ -272,25 +272,25 @@ public void testGitScmValidate() throws Exception {
+         User alice = login("alice", "Alice Cooper", "alice@jenkins-ci.org");
+ 
+         // Test alice fails
+-        r = new RequestBuilder(baseUrl)
++        new RequestBuilder(baseUrl)
+             .status(428)
+             .crumb( crumb )
+             .jwtToken(getJwtToken(j.jenkins, alice.getId(), alice.getId()))
+-            .put("/organizations/" + getOrgName() + "/scm/git/validate/")
++            .post("/organizations/" + getOrgName() + "/scm/git/validate/")
+             .data(MapsHelper.of(
+                 "repositoryUrl", remote,
+                 "credentialId", UserSSHKeyManager.getOrCreate(alice).getId()
+-            )).build(Map.class);
++            )).build(String.class);
+ 
+-        r = new RequestBuilder(baseUrl)
++        new RequestBuilder(baseUrl)
+             .status(428)
+             .crumb( crumb )
+             .jwtToken(getJwtToken(j.jenkins, alice.getId(), alice.getId()))
+-            .put("/organizations/" + getOrgName() + "/scm/git/validate/")
++            .post("/organizations/" + getOrgName() + "/scm/git/validate/")
+             .data(MapsHelper.of(
+                 "pipeline", MapsHelper.of("fullName", jobName),
+                 "credentialId", UserSSHKeyManager.getOrCreate(alice).getId()
+-            )).build(Map.class);
++            )).build(String.class);
+     }
+ 
+     @Test
+diff --git a/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitScmTest.java b/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitScmTest.java
+index c6e10b4360c..933a2a3d8d2 100644
+--- a/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitScmTest.java
++++ b/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitScmTest.java
+@@ -23,6 +23,7 @@
+ import org.junit.runner.RunWith;
+ import org.junit.runners.Parameterized;
+ import org.junit.runners.Parameterized.Parameters;
++import org.jvnet.hudson.test.MockAuthorizationStrategy;
+ import org.jvnet.hudson.test.MockFolder;
+ import org.jvnet.hudson.test.TestExtension;
+ import org.powermock.core.classloader.annotations.PowerMockIgnore;
+@@ -402,7 +403,10 @@ public void shouldBePoliteAboutBadUrl() throws Exception {
+ 
+     @Test
+     public void shouldCreateCredentialsWithDefaultId() throws Exception {
+-        User user = login();
++        User user = login("Ken", "Create", "ken@create.item");
++        MockAuthorizationStrategy a = new MockAuthorizationStrategy();
++        a.grant(Jenkins.READ, Item.CREATE).everywhere().to(user.getId());
++        j.jenkins.setAuthorizationStrategy(a);
+ 
+         String scmPath = "/organizations/" + getOrgName() + "/scm/git/";
+ 
+@@ -421,7 +425,7 @@ public void shouldCreateCredentialsWithDefaultId() throws Exception {
+             .jwtToken(getJwtToken(j.jenkins,user.getId(), user.getId()))
+             .crumb( crumb )
+             .data(params)
+-            .put(scmValidatePath)
++            .post(scmValidatePath)
+             .build(Map.class);
+ 
+         assertEquals("ok", resp.get("status"));
+@@ -446,7 +450,10 @@ public void shouldCreateCredentialsWithDefaultId() throws Exception {
+      */
+     @Test
+     public void shouldNotCreateCredentialsForBadUrl1() throws Exception {
+-        User user = login();
++        User user = login("Ken", "Create", "ken@create.item");
++        MockAuthorizationStrategy a = new MockAuthorizationStrategy();
++        a.grant(Jenkins.READ, Item.CREATE).everywhere().to(user.getId());
++        j.jenkins.setAuthorizationStrategy(a);
+ 
+         String scmPath = "/organizations/" + getOrgName() + "/scm/git/";
+ 
+@@ -465,7 +472,7 @@ public void shouldNotCreateCredentialsForBadUrl1() throws Exception {
+             .jwtToken(getJwtToken(j.jenkins,user.getId(), user.getId()))
+             .crumb( crumb )
+             .data(params)
+-            .put(scmValidatePath)
++            .post(scmValidatePath)
+             .build(Map.class);
+ 
+         assertTrue(resp.get("message").toString().toLowerCase().contains("invalid url"));
+@@ -477,7 +484,10 @@ public void shouldNotCreateCredentialsForBadUrl1() throws Exception {
+      */
+     @Test
+     public void shouldNotCreateCredentialsForBadUrl2() throws Exception {
+-        User user = login();
++        User user = login("Ken", "Create", "ken@create.item");
++        MockAuthorizationStrategy a = new MockAuthorizationStrategy();
++        a.grant(Jenkins.READ, Item.CREATE).everywhere().to(user.getId());
++        j.jenkins.setAuthorizationStrategy(a);
+ 
+         String scmPath = "/organizations/" + getOrgName() + "/scm/git/";
+ 
+@@ -496,7 +506,7 @@ public void shouldNotCreateCredentialsForBadUrl2() throws Exception {
+             .jwtToken(getJwtToken(j.jenkins,user.getId(), user.getId()))
+             .crumb( crumb )
+             .data(params)
+-            .put(scmValidatePath)
++            .post(scmValidatePath)
+             .build(Map.class);
+ 
+         assertTrue(resp.get("message").toString().toLowerCase().contains("url unreachable"));
+diff --git a/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitUtilsTest.java b/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitUtilsTest.java
+index 9375fc1d486..bfd3e7ced7c 100644
+--- a/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitUtilsTest.java
++++ b/blueocean-git-pipeline/src/test/java/io/jenkins/blueocean/blueocean_git_pipeline/GitUtilsTest.java
+@@ -116,6 +116,6 @@ public void testValidatePushAccessFails() throws Exception {
+             "requirePush", true,
+             "branch", "master");
+ 
+-        put("/organizations/jenkins/scm/git/validate/", body, 428);
++        post("/organizations/jenkins/scm/git/validate/", body, "application/json", 428);
+     }
+ }
+diff --git a/blueocean-github-pipeline/src/main/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScm.java b/blueocean-github-pipeline/src/main/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScm.java
+index 6948d683aec..12625619e44 100644
+--- a/blueocean-github-pipeline/src/main/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScm.java
++++ b/blueocean-github-pipeline/src/main/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScm.java
+@@ -136,6 +136,15 @@ StandardUsernamePasswordCredentials getCredential(String apiUrl){
+ 
+     @Override
+     public Object getState() {
++        StaplerRequest request = Stapler.getCurrentRequest();
++        Objects.requireNonNull(request, "Must be called in HTTP request context");
++        String method = request.getMethod();
++        if (!"POST".equalsIgnoreCase(method)) {
++            throw new ServiceException.MethodNotAllowedException(String.format("Request method %s is not allowed", method));
++        }
++
++        checkPermission();
++
+         this.validateExistingAccessToken();
+         return super.getState();
+     }
+@@ -187,9 +196,17 @@ public GithubRepository getRepository(@QueryParameter String jobName, @QueryPara
+ 
+     @Override
+     public Container<ScmOrganization> getOrganizations() {
++        StaplerRequest request = Stapler.getCurrentRequest();
++        Objects.requireNonNull(request, "This request must be made in HTTP context");
++        String method = request.getMethod();
++        if (!"POST".equalsIgnoreCase(method)) {
++            throw new ServiceException.MethodNotAllowedException(String.format("Request method %s is not allowed", method));
++        }
++
+         StandardUsernamePasswordCredentials credential = getCredential();
+         String accessToken = credential.getPassword().getPlainText();
+ 
++        checkPermission();
+         try {
+             GitHub github = GitHubFactory.connect(accessToken, getUri());
+ 
+@@ -298,6 +315,7 @@ public HttpResponse validateAndCreate(@JsonBody JSONObject request) {
+ 
+         try {
+             User authenticatedUser =  getAuthenticatedUser();
++            checkPermission();
+ 
+             HttpURLConnection connection = connect(String.format("%s/%s", getUri(), "user"),accessToken);
+             validateAccessTokenScopes(connection);
+diff --git a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubApiTest.java b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubApiTest.java
+index c851464ec62..6ff1545bded 100644
+--- a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubApiTest.java
++++ b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubApiTest.java
+@@ -38,9 +38,10 @@ public void validateGithubToken() throws IOException, UnirestException {
+ 
+         //now that there is github credentials setup, calling scm api to get credential should simply return that.
+         Map r = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-                .get("/organizations/jenkins/scm/github/?apiUrl="+githubApiUrl)
++                .post("/organizations/jenkins/scm/github/?apiUrl="+githubApiUrl)
+                 .build(Map.class);
+ 
+         assertEquals("github", r.get("credentialId"));
+@@ -50,8 +51,9 @@ public void validateGithubToken() throws IOException, UnirestException {
+         r = new RequestBuilder(baseUrl)
+                 .data(MapsHelper.of("accessToken", accessToken))
+                 .status(200)
++                .crumb(crumb)
+                 .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-                .put("/organizations/jenkins/scm/github/validate/?apiUrl="+githubApiUrl)
++                .post("/organizations/jenkins/scm/github/validate/?apiUrl="+githubApiUrl)
+                 .build(Map.class);
+ 
+         assertEquals("github", r.get("credentialId"));
+@@ -67,9 +69,10 @@ public void fetchExistingCredentialTokenInvalid() throws UnirestException {
+         );
+ 
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(428)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github/?apiUrl="+githubApiUrl)
++            .post("/organizations/jenkins/scm/github/?apiUrl="+githubApiUrl)
+             .build(Map.class);
+ 
+         assertEquals("Invalid accessToken", r.get("message").toString());
+@@ -85,9 +88,10 @@ public void fetchExistingCredentialScopesInvalid() throws UnirestException {
+         );
+ 
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(428)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github/?apiUrl="+githubApiUrl)
++            .post("/organizations/jenkins/scm/github/?apiUrl="+githubApiUrl)
+             .build(Map.class);
+ 
+         assertTrue(r.get("message").toString().contains("missing scopes"));
+@@ -98,17 +102,19 @@ public void getOrganizationsAndRepositories() throws Exception {
+         String credentialId = createGithubCredential(user);
+ 
+         List l = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-                .get("/organizations/jenkins/scm/github/organizations/?credentialId=" + credentialId+"&apiUrl="+githubApiUrl)
++                .post("/organizations/jenkins/scm/github/organizations/?credentialId=" + credentialId+"&apiUrl="+githubApiUrl)
+                 .build(List.class);
+ 
+         Assert.assertTrue(l.size() > 0);
+ 
+         Map resp = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-                .get("/organizations/jenkins/scm/github/organizations/CloudBees-community/repositories/?pageSize=10&page=1&apiUrl="+githubApiUrl)
++                .post("/organizations/jenkins/scm/github/organizations/CloudBees-community/repositories/?pageSize=10&page=1&apiUrl="+githubApiUrl)
+                 .build(Map.class);
+ 
+         Map repos = (Map) resp.get("repositories");
+@@ -118,9 +124,10 @@ public void getOrganizationsAndRepositories() throws Exception {
+         assertTrue(repoItems.size() > 0);
+ 
+         resp = new RequestBuilder(baseUrl)
++                .crumb(crumb)
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-                .get("/organizations/jenkins/scm/github/organizations/CloudBees-community/repositories/RunMyProcess-task/?apiUrl="+githubApiUrl)
++                .post("/organizations/jenkins/scm/github/organizations/CloudBees-community/repositories/RunMyProcess-task/?apiUrl="+githubApiUrl)
+                 .build(Map.class);
+ 
+         assertEquals("RunMyProcess-task", resp.get("name"));
+diff --git a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubEnterpriseApiTest.java b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubEnterpriseApiTest.java
+index 6c739480d5b..e1dbbd3d91e 100644
+--- a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubEnterpriseApiTest.java
++++ b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubEnterpriseApiTest.java
+@@ -43,10 +43,11 @@ public void validateGithubToken() throws IOException, UnirestException {
+     @Test
+     public void validateGithubTokenApiUrlRequired() throws UnirestException {
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .data(MapsHelper.of("accessToken", accessToken))
+             .status(400)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .put("/organizations/jenkins/scm/github-enterprise/validate")
++            .post("/organizations/jenkins/scm/github-enterprise/validate")
+             .build(Map.class);
+         assertEquals(400, r.get("code"));
+     }
+@@ -57,9 +58,10 @@ public void fetchExistingCredentialExists() throws IOException, UnirestException
+ 
+         //now that there is github credentials setup, calling scm api to get credential should simply return that.
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github-enterprise/?apiUrl=" + githubApiUrl)
++            .post("/organizations/jenkins/scm/github-enterprise/?apiUrl=" + githubApiUrl)
+             .build(Map.class);
+ 
+         assertEquals(GithubCredentialUtils.computeCredentialId(null, GithubEnterpriseScm.ID, githubApiUrl), r.get("credentialId"));
+@@ -70,9 +72,10 @@ public void fetchExistingCredentialExists() throws IOException, UnirestException
+     public void fetchExistingCredentialApiUrlRequired() throws IOException, UnirestException {
+         // fetch the github-enterprise endpoint without specifying apirUrl
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(400)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github-enterprise/")
++            .post("/organizations/jenkins/scm/github-enterprise/")
+             .build(Map.class);
+         assertEquals(400, r.get("code"));
+     }
+@@ -86,9 +89,10 @@ public void fetchExistingCredentialNotExists() throws IOException, UnirestExcept
+ 
+         // look up credential for apiUrl that's invalid
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github-enterprise/?apiUrl="+bogusUrl)
++            .post("/organizations/jenkins/scm/github-enterprise/?apiUrl="+bogusUrl)
+             .build(Map.class);
+ 
+         assertNull(r.get("credentialId"));
+@@ -105,9 +109,10 @@ public void fetchExistingCredentialTokenInvalid() throws UnirestException {
+         );
+ 
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(428)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github-enterprise/?apiUrl="+githubApiUrl)
++            .post("/organizations/jenkins/scm/github-enterprise/?apiUrl="+githubApiUrl)
+             .build(Map.class);
+ 
+         assertEquals("Invalid accessToken", r.get("message").toString());
+@@ -123,9 +128,10 @@ public void fetchExistingCredentialScopesInvalid() throws UnirestException {
+         );
+ 
+         Map r = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(428)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github-enterprise/?apiUrl="+githubApiUrl)
++            .post("/organizations/jenkins/scm/github-enterprise/?apiUrl="+githubApiUrl)
+             .build(Map.class);
+ 
+         assertTrue(r.get("message").toString().contains("missing scopes"));
+@@ -136,9 +142,10 @@ public void getOrganizationsAndRepositories() throws Exception {
+         String credentialId = createGithubEnterpriseCredential();
+ 
+         List l = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github-enterprise/organizations/?credentialId="+credentialId+"&apiUrl="+githubApiUrl)
++            .post("/organizations/jenkins/scm/github-enterprise/organizations/?credentialId="+credentialId+"&apiUrl="+githubApiUrl)
+             .build(List.class);
+ 
+         Assert.assertTrue(l.size() > 0);
+@@ -148,9 +155,10 @@ public void getOrganizationsAndRepositories() throws Exception {
+         }
+ 
+         Map resp = new RequestBuilder(baseUrl)
++            .crumb(crumb)
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+-            .get("/organizations/jenkins/scm/github-enterprise/organizations/CloudBees-community/repositories/?pageSize=10&page=1&apiUrl="+githubApiUrl)
++            .post("/organizations/jenkins/scm/github-enterprise/organizations/CloudBees-community/repositories/?pageSize=10&page=1&apiUrl="+githubApiUrl)
+             .build(Map.class);
+ 
+         Map repos = (Map) resp.get("repositories");
+diff --git a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubEnterpriseScmSecurityTest.java b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubEnterpriseScmSecurityTest.java
+new file mode 100644
+index 00000000000..9c89e03fe48
+--- /dev/null
++++ b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubEnterpriseScmSecurityTest.java
+@@ -0,0 +1,134 @@
++package io.jenkins.blueocean.blueocean_github_pipeline;
++
++import com.mashape.unirest.http.exceptions.UnirestException;
++import hudson.model.Item;
++import hudson.model.User;
++import hudson.security.GlobalMatrixAuthorizationStrategy;
++import hudson.security.HudsonPrivateSecurityRealm;
++import io.jenkins.blueocean.commons.MapsHelper;
++import jenkins.model.Jenkins;
++import net.sf.json.JSONObject;
++import org.junit.Before;
++import org.junit.Test;
++
++import java.util.List;
++
++import static io.jenkins.blueocean.blueocean_github_pipeline.GithubScmSecurityTest.ITEM_CREATE_USER_NAME;
++import static io.jenkins.blueocean.blueocean_github_pipeline.GithubScmSecurityTest.ITEM_CREATE_USER_PASSWORD;
++import static io.jenkins.blueocean.blueocean_github_pipeline.GithubScmSecurityTest.READONLY_USER_NAME;
++import static io.jenkins.blueocean.blueocean_github_pipeline.GithubScmSecurityTest.READONLY_USER_PASSWORD;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++public class GithubEnterpriseScmSecurityTest extends GithubMockBase {
++
++    private final static String ORGANIZATIONS_URL = "/organizations/jenkins/scm/github-enterprise/organizations/";
++    private final static String VALIDATE_URL = "/organizations/jenkins/scm/github-enterprise/validate/";
++
++    @Before
++    public void setupSecurity() throws Exception {
++        HudsonPrivateSecurityRealm realm = new HudsonPrivateSecurityRealm(true, false, null);
++        User readOnly = realm.createAccount(READONLY_USER_NAME, READONLY_USER_PASSWORD);
++        User itemCreateUser = realm.createAccount(ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++        j.jenkins.setSecurityRealm(realm);
++        GlobalMatrixAuthorizationStrategy as = new GlobalMatrixAuthorizationStrategy();
++        j.jenkins.setAuthorizationStrategy(as);
++        as.add(Jenkins.READ, (String) Jenkins.ANONYMOUS2.getPrincipal());
++        {
++            as.add(Jenkins.READ, readOnly.getId());
++        }
++        {
++            as.add(Item.CREATE, itemCreateUser.getId());
++        }
++        this.crumb = getCrumb(j.jenkins);
++    }
++
++    @Test
++    public void getOrganizationsWithoutCrumbToken() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++
++        String res = request()
++            .jwtToken(jwt)
++            .post(ORGANIZATIONS_URL)
++            .status(403)
++            .build(String.class);
++
++        assertTrue(res.contains("No valid crumb was included in the request"));
++    }
++
++    @Test
++    public void getOrganizationsWithGetRequest() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .get(ORGANIZATIONS_URL)
++            .status(405)
++            .build(JSONObject.class);
++
++        assertEquals("Request method GET is not allowed", res.getString("message"));
++    }
++
++    @Test
++    public void getOrganizationsForUserWithoutCredentials() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, READONLY_USER_NAME, READONLY_USER_PASSWORD);
++        String credentialId = GithubCredentialUtils.computeCredentialId(null, GithubEnterpriseScm.ID, githubApiUrl);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .post(ORGANIZATIONS_URL + "?apiUrl=" + githubApiUrl)
++            .status(400)
++            .build(JSONObject.class);
++
++        assertEquals("Credential id: " + credentialId + " not found for user " + READONLY_USER_NAME, res.getString("message"));
++    }
++
++    @Test
++    public void getOrganizationsForUserWithoutItemCreatePermission() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, READONLY_USER_NAME, READONLY_USER_PASSWORD);
++        createCredentialWithId(jwt, GithubEnterpriseScm.ID);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .post(ORGANIZATIONS_URL + "?apiUrl=" + githubApiUrl + "&credentialId=" + GithubEnterpriseScm.ID)
++            .status(403)
++            .build(JSONObject.class);
++
++        assertEquals("You do not have Job/Create permission", res.getString("message"));
++    }
++
++    @Test
++    public void getOrganizationsForUserWithItemCreatePermission() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++        createCredentialWithId(jwt, GithubEnterpriseScm.ID);
++
++        List res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .header(GithubEnterpriseScm.X_CREDENTIAL_ID, GithubEnterpriseScm.ID)
++            .post(ORGANIZATIONS_URL + "?apiUrl=" + githubApiUrl)
++            .status(200)
++            .build(List.class);
++
++        assertEquals(6, res.size());
++    }
++
++    @Test
++    public void validateAndCreateForUserWithReadonlyPermissions() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, READONLY_USER_NAME, READONLY_USER_PASSWORD);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .data(MapsHelper.of(
++                "accessToken", accessToken
++            ))
++            .post(VALIDATE_URL + "?apiUrl=" + githubApiUrl)
++            .status(403)
++            .build(JSONObject.class);
++
++        assertEquals("You do not have Job/Create permission", res.getString("message"));
++    }
++}
+diff --git a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubMockBase.java b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubMockBase.java
+index 65f996b09a9..315955d31eb 100644
+--- a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubMockBase.java
++++ b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubMockBase.java
+@@ -22,6 +22,7 @@
+ import io.jenkins.blueocean.rest.impl.pipeline.credential.BlueOceanCredentialsProvider;
+ import jenkins.branch.MultiBranchProject;
+ import jenkins.branch.OrganizationFolder;
++import net.sf.json.JSONObject;
+ import org.jenkinsci.plugins.github_branch_source.GitHubSCMSource;
+ import org.junit.After;
+ import org.junit.Rule;
+@@ -139,7 +140,7 @@ protected String createGithubCredential(User user) throws UnirestException {
+                 .status(200)
+                 .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+                 .crumb(this.crumb)
+-                .put("/organizations/" + getOrgName() + "/scm/github/validate/?apiUrl="+githubApiUrl)
++                .post("/organizations/" + getOrgName() + "/scm/github/validate/?apiUrl=" + githubApiUrl)
+                 .build(Map.class);
+         String credentialId = (String) r.get("credentialId");
+         assertEquals(GithubScm.ID, credentialId);
+@@ -155,13 +156,34 @@ protected String createGithubEnterpriseCredential(User user) throws UnirestExcep
+             .status(200)
+             .jwtToken(getJwtToken(j.jenkins, user.getId(), user.getId()))
+             .crumb( this.crumb )
+-            .put("/organizations/" + getOrgName() + "/scm/github-enterprise/validate/?apiUrl="+githubApiUrl)
++            .post("/organizations/" + getOrgName() + "/scm/github-enterprise/validate/?apiUrl="+githubApiUrl)
+             .build(Map.class);
+         String credentialId = (String) r.get("credentialId");
+         assertEquals(GithubCredentialUtils.computeCredentialId(null, GithubEnterpriseScm.ID, githubApiUrl), credentialId);
+         return credentialId;
+     }
+ 
++    protected void createCredentialWithId(String jwt, String credentialId) {
++        createCredentialWithIdForOrg(jwt, credentialId, "jenkins");
++    }
++
++    protected void createCredentialWithIdForOrg(String jwt, String credentialId, String orgName) {
++        request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .data(MapsHelper.of("credentials", new MapsHelper.Builder()
++                .put("scope", "USER")
++                .put("id", credentialId)
++                .put("username", "username")
++                .put("password", "password")
++                .put("stapler-class", "com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl")
++                .put("$class", "com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl")
++                .build()))
++            .post("/organizations/" + orgName + "/credentials/user/")
++            .status(201)
++            .build(JSONObject.class);
++    }
++
+     /**
+      * Add a StubMapping to Wiremock corresponding to the supplied builder.
+      * Any mappings added will automatically be removed when @After fires.
+diff --git a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubOrgFolderPermissionsTest.java b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubOrgFolderPermissionsTest.java
+index 201174b3bc8..15124b75d6b 100644
+--- a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubOrgFolderPermissionsTest.java
++++ b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubOrgFolderPermissionsTest.java
+@@ -10,6 +10,7 @@
+ import io.jenkins.blueocean.service.embedded.rest.OrganizationImpl;
+ import jenkins.model.Jenkins;
+ import jenkins.model.ModifiableTopLevelItemGroup;
++import net.sf.json.JSONArray;
+ import org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject;
+ import org.junit.Assert;
+ import org.junit.Test;
+@@ -38,7 +39,8 @@ public void canCreateWhenHavePermissionsOnDefaultOrg() throws Exception {
+         j.jenkins.setAuthorizationStrategy(authz);
+         // refresh the JWT token otherwise all hell breaks loose.
+         jwtToken = getJwtToken(j.jenkins, "vivek", "vivek");
+-        createGithubPipeline(true);
++        createCredentialWithId(jwtToken, GithubScm.ID);
++        createGithubPipeline(jwtToken, true);
+     }
+ 
+     @Test
+@@ -48,18 +50,21 @@ public void canNotCreateWhenHaveNoPermissionOnDefaultOrg() throws Exception {
+         j.jenkins.setAuthorizationStrategy(authz);
+         // refresh the JWT token otherwise all hell breaks loose.
+         jwtToken = getJwtToken(j.jenkins, "vivek", "vivek");
+-        createGithubPipeline(false);
++        createCredentialWithId(jwtToken, GithubScm.ID);
++
++        createGithubPipeline(jwtToken, false);
+     }
+ 
+     @Test
+     public void canCreateWhenHavePermissionsOnCustomOrg() throws Exception {
+         MockAuthorizationStrategy authz = new MockAuthorizationStrategy();
+-        authz.grant(Item.READ,Jenkins.READ).everywhere().to(user);
++        authz.grant(Item.READ, Jenkins.READ).everywhere().to(user);
+         authz.grant(Item.CREATE, Item.CONFIGURE).onFolders(getOrgRoot()).to(user);
+         j.jenkins.setAuthorizationStrategy(authz);
+         // refresh the JWT token otherwise all hell breaks loose.
+         jwtToken = getJwtToken(j.jenkins, user.getId(), user.getId());
+-        createGithubPipeline(true);
++        createCredentialWithIdForOrg(jwtToken, GithubScm.ID, getOrgName());
++        createGithubPipeline(jwtToken, true);
+     }
+ 
+     @Test
+@@ -69,15 +74,53 @@ public void canNotCreateWhenHaveNoPermissionOnCustomOrg() throws Exception {
+         j.jenkins.setAuthorizationStrategy(authz);
+         // refresh the JWT token otherwise all hell breaks loose.
+         jwtToken = getJwtToken(j.jenkins, "vivek", "vivek");
+-        createGithubPipeline(false);
++        createCredentialWithId(jwtToken, GithubScm.ID);
++        createGithubPipeline(jwtToken, false);
++    }
++
++    @Test
++    public void getOrganizationsOnCustomOrg() throws Exception {
++        MockAuthorizationStrategy authz = new MockAuthorizationStrategy();
++        authz.grant(Item.READ, Jenkins.READ).everywhere().to("custom");
++        authz.grant(Item.CREATE, Item.CONFIGURE).onFolders(getOrgRoot()).to("custom");
++        j.jenkins.setAuthorizationStrategy(authz);
++        String jwt = getJwtToken(j.jenkins, "custom", "custom");
++        createCredentialWithIdForOrg(jwt, GithubScm.ID, getOrgName());
++
++        JSONArray res = request()
++            .crumb(crumb)
++            .jwtToken(jwt)
++            .status(200)
++            .post("/organizations/" + getOrgName() + "/scm/github/organizations/?apiUrl=" + githubApiUrl)
++            .build(JSONArray.class);
++
++        assertEquals(6, res.size());
++    }
++
++    @Test
++    public void getOrganizationsOnDefaultOrg() throws Exception {
++        MockAuthorizationStrategy authz = new MockAuthorizationStrategy();
++        authz.grant(Item.READ, Jenkins.READ).everywhere().to("default");
++        authz.grant(Item.CREATE, Item.CONFIGURE).onFolders(getOrgRoot()).to("default");
++        j.jenkins.setAuthorizationStrategy(authz);
++        String jwt = getJwtToken(j.jenkins, "default", "default");
++        createCredentialWithIdForOrg(jwt, GithubScm.ID, getOrgName());
++
++        JSONArray res = request()
++            .crumb(crumb)
++            .jwtToken(jwt)
++            .status(200)
++            .post("/organizations/" + getOrgName() + "/scm/github/organizations/?apiUrl=" + githubApiUrl)
++            .build(JSONArray.class);
++
++        assertEquals(6, res.size());
+     }
+ 
+-    private void createGithubPipeline(boolean shouldSucceed) throws Exception {
+-        String credentialId = createGithubCredential(user);
++    private void createGithubPipeline(String jwt, boolean shouldSucceed) {
+         String pipelineName = "cloudbeers";
+         Map resp = new RequestBuilder(baseUrl)
+                 .status(shouldSucceed ? 201 : 403)
+-                .jwtToken(getJwtToken(j.jenkins,user.getId(), user.getId()))
++                .jwtToken(jwt)
+                 .crumb( this.crumb )
+                 .post("/organizations/" + getOrgName() + "/pipelines/")
+                 .data(GithubTestUtils.buildRequestBody(GithubScm.ID,null, githubApiUrl, pipelineName, "PR-demo"))
+@@ -104,7 +147,7 @@ private static ModifiableTopLevelItemGroup getOrgRoot() {
+         return OrganizationFactory.getItemGroup(getOrgName());
+     }
+ 
+-    @TestExtension(value={"canCreateWhenHavePermissionsOnCustomOrg","canNotCreateWhenHaveNoPermissionOnCustomOrg"})
++    @TestExtension(value={"canCreateWhenHavePermissionsOnCustomOrg","canNotCreateWhenHaveNoPermissionOnCustomOrg","getOrganizationsOnCustomOrg"})
+     public static class TestOrganizationFactoryImpl extends OrganizationFactoryImpl {
+ 
+         private OrganizationImpl instance;
+diff --git a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScmSecurityTest.java b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScmSecurityTest.java
+new file mode 100644
+index 00000000000..7067bae79ed
+--- /dev/null
++++ b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScmSecurityTest.java
+@@ -0,0 +1,125 @@
++package io.jenkins.blueocean.blueocean_github_pipeline;
++
++import com.mashape.unirest.http.exceptions.UnirestException;
++import hudson.model.Item;
++import hudson.model.User;
++import hudson.security.GlobalMatrixAuthorizationStrategy;
++import hudson.security.HudsonPrivateSecurityRealm;
++import io.jenkins.blueocean.commons.MapsHelper;
++import jenkins.model.Jenkins;
++import net.sf.json.JSONArray;
++import net.sf.json.JSONObject;
++import org.junit.Before;
++import org.junit.Test;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++public class GithubScmSecurityTest extends GithubMockBase {
++
++    private final static String ORGANIZATIONS_URL = "/organizations/jenkins/scm/github/organizations/";
++    private final static String VALIDATE_URL = "/organizations/jenkins/scm/github/validate/";
++    public static final String READONLY_USER_NAME = "readOnly";
++    public static final String READONLY_USER_PASSWORD = "pacific_ale";
++    public static final String ITEM_CREATE_USER_NAME = "itemCreateUser";
++    public static final String ITEM_CREATE_USER_PASSWORD = "pale_ale";
++
++    @Before
++    public void setupSecurity() throws Exception {
++        HudsonPrivateSecurityRealm realm = new HudsonPrivateSecurityRealm(true, false, null);
++        User readOnly = realm.createAccount(READONLY_USER_NAME, READONLY_USER_PASSWORD);
++        User itemCreateUser = realm.createAccount(ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++        j.jenkins.setSecurityRealm(realm);
++        GlobalMatrixAuthorizationStrategy as = new GlobalMatrixAuthorizationStrategy();
++        j.jenkins.setAuthorizationStrategy(as);
++        as.add(Jenkins.READ, (String) Jenkins.ANONYMOUS2.getPrincipal());
++        as.add(Jenkins.READ, readOnly.getId());
++        as.add(Item.CREATE, itemCreateUser.getId());
++        this.crumb = getCrumb(j.jenkins);
++    }
++
++    @Test
++    public void getOrganizationsWithoutCrumbToken() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++
++        String res = request()
++            .jwtToken(jwt)
++            .post(ORGANIZATIONS_URL)
++            .status(403)
++            .build(String.class);
++
++        assertTrue(res.contains("No valid crumb was included in the request"));
++    }
++
++    @Test
++    public void getOrganizationsWithGetRequest() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .get(ORGANIZATIONS_URL)
++            .status(405)
++            .build(JSONObject.class);
++
++        assertEquals("Request method GET is not allowed", res.getString("message"));
++    }
++
++    @Test
++    public void getOrganizationsForUserWithoutCredentials() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, READONLY_USER_NAME, READONLY_USER_PASSWORD);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .post(ORGANIZATIONS_URL + "?apiUrl=" + githubApiUrl)
++            .status(400)
++            .build(JSONObject.class);
++
++        assertEquals("Credential id: " + GithubScm.ID + " not found for user " + READONLY_USER_NAME, res.getString("message"));
++    }
++
++    @Test
++    public void getOrganizationsForUserWithItemCreatePermission() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, ITEM_CREATE_USER_NAME, ITEM_CREATE_USER_PASSWORD);
++        createCredentialWithId(jwt, GithubScm.ID);
++
++        JSONArray res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .post(ORGANIZATIONS_URL + "?apiUrl=" + githubApiUrl)
++            .status(200)
++            .build(JSONArray.class);
++
++        assertEquals(6, res.size());
++    }
++
++    @Test
++    public void getOrganizationsForUserWithoutItemCreatePermission() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, READONLY_USER_NAME, READONLY_USER_PASSWORD);
++        createCredentialWithId(jwt, GithubScm.ID);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .post(ORGANIZATIONS_URL + "?apiUrl=" + githubApiUrl)
++            .status(403)
++            .build(JSONObject.class);
++
++        assertEquals("You do not have Job/Create permission", res.getString("message"));
++    }
++
++    @Test
++    public void validateAndCreateForUserWithReadonlyPermissions() throws UnirestException {
++        String jwt = getJwtToken(j.jenkins, READONLY_USER_NAME, READONLY_USER_PASSWORD);
++
++        JSONObject res = request()
++            .jwtToken(jwt)
++            .crumb(crumb)
++            .data(MapsHelper.of("accessToken", accessToken))
++            .post(VALIDATE_URL + "?apiUrl=" + githubApiUrl)
++            .status(403)
++            .build(JSONObject.class);
++
++        assertEquals("You do not have Job/Create permission", res.getString("message"));
++    }
++}
+diff --git a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScmTest.java b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScmTest.java
+index 9906fe9aff0..2a792d15f84 100644
+--- a/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScmTest.java
++++ b/blueocean-github-pipeline/src/test/java/io/jenkins/blueocean/blueocean_github_pipeline/GithubScmTest.java
+@@ -1,5 +1,6 @@
+ package io.jenkins.blueocean.blueocean_github_pipeline;
+ 
++import com.cloudbees.hudson.plugins.folder.Folder;
+ import com.cloudbees.plugins.credentials.CredentialsMatcher;
+ import com.cloudbees.plugins.credentials.CredentialsMatchers;
+ import com.cloudbees.plugins.credentials.CredentialsProvider;
+@@ -7,16 +8,23 @@
+ import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
+ import com.cloudbees.plugins.credentials.domains.Domain;
+ import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
++import hudson.model.Item;
+ import hudson.model.User;
++import hudson.security.AccessControlled;
+ import hudson.security.SecurityRealm;
+ import hudson.tasks.Mailer;
+ import hudson.util.Secret;
++import io.jenkins.blueocean.rest.factory.organization.AbstractOrganization;
++import io.jenkins.blueocean.rest.factory.organization.OrganizationFactory;
+ import io.jenkins.blueocean.rest.hal.Link;
+ import io.jenkins.blueocean.rest.impl.pipeline.credential.BlueOceanDomainRequirement;
++import io.jenkins.blueocean.service.embedded.OrganizationFactoryImpl;
+ import jenkins.model.Jenkins;
++import jenkins.model.ModifiableTopLevelItemGroup;
+ import net.sf.json.JSONObject;
+ import org.acegisecurity.Authentication;
+ import org.acegisecurity.GrantedAuthority;
++import org.apache.xpath.operations.Or;
+ import org.jenkinsci.plugins.github_branch_source.GitHubSCMSource;
+ import org.junit.Assert;
+ import org.junit.Before;
+@@ -36,7 +44,6 @@
+ import java.net.Proxy;
+ import java.net.URL;
+ import java.nio.charset.StandardCharsets;
+-import java.util.Arrays;
+ import java.util.Collections;
+ 
+ import static io.jenkins.blueocean.rest.impl.pipeline.scm.Scm.CREDENTIAL_ID;
+@@ -48,7 +55,7 @@
+  */
+ @RunWith(PowerMockRunner.class)
+ @PrepareForTest({GithubScm.class, Jenkins.class, Authentication.class, User.class, Secret.class,
+-    CredentialsMatchers.class, CredentialsProvider.class, Stapler.class, HttpRequest.class})
++    CredentialsMatchers.class, CredentialsProvider.class, Stapler.class, HttpRequest.class, OrganizationFactory.class})
+ @PowerMockIgnore({"javax.crypto.*", "javax.security.*", "javax.net.ssl.*", "com.sun.org.apache.xerces.*", "com.sun.org.apache.xalan.*", "javax.xml.*", "org.xml.*", "org.w3c.dom.*"})
+ public class GithubScmTest {
+ 
+@@ -117,6 +124,15 @@ protected void validateAndCreate(String accessToken) throws Exception {
+ 
+         mockCredentials("joe", accessToken, githubScm.getId(), GithubScm.DOMAIN_NAME);
+ 
++        mockStatic(OrganizationFactory.class);
++        OrganizationFactoryImpl organizationFactory = mock(OrganizationFactoryImpl.class);
++        when(OrganizationFactory.getInstance()).thenReturn(organizationFactory);
++        AbstractOrganization organization = mock(AbstractOrganization.class);
++        when(organizationFactory.list()).thenReturn(Collections.singletonList(organization));
++        Folder rootOrgFolder = mock(Folder.class);
++        when(organization.getGroup()).thenReturn(rootOrgFolder);
++        when(rootOrgFolder.hasPermission(Item.CREATE)).thenReturn(true);
++
+         mockStatic(HttpRequest.class);
+         HttpRequest httpRequestMock = mock(HttpRequest.class);
+ 
+diff --git a/blueocean-pipeline-api-impl/src/main/java/io/jenkins/blueocean/rest/impl/pipeline/scm/AbstractScm.java b/blueocean-pipeline-api-impl/src/main/java/io/jenkins/blueocean/rest/impl/pipeline/scm/AbstractScm.java
+index 9417d1b148c..6fc59b07a31 100644
+--- a/blueocean-pipeline-api-impl/src/main/java/io/jenkins/blueocean/rest/impl/pipeline/scm/AbstractScm.java
++++ b/blueocean-pipeline-api-impl/src/main/java/io/jenkins/blueocean/rest/impl/pipeline/scm/AbstractScm.java
+@@ -1,9 +1,16 @@
+ package io.jenkins.blueocean.rest.impl.pipeline.scm;
+ 
++import hudson.model.Item;
+ import hudson.model.User;
++import hudson.security.AccessControlled;
+ import io.jenkins.blueocean.commons.JsonConverter;
++import io.jenkins.blueocean.commons.ListsUtils;
+ import io.jenkins.blueocean.commons.MapsHelper;
+ import io.jenkins.blueocean.commons.ServiceException;
++import io.jenkins.blueocean.rest.factory.organization.AbstractOrganization;
++import io.jenkins.blueocean.rest.factory.organization.OrganizationFactory;
++import io.jenkins.blueocean.rest.model.BlueOrganization;
++import jenkins.model.ModifiableTopLevelItemGroup;
+ import org.kohsuke.stapler.HttpResponse;
+ import org.kohsuke.stapler.StaplerRequest;
+ 
+@@ -42,4 +49,22 @@ protected HttpResponse createResponse(final String credentialId) {
+         }
+         return credentialId;
+     }
++
++    protected static AccessControlled getRootOrgFolder() {
++        BlueOrganization organization = ListsUtils.getFirst(OrganizationFactory.getInstance().list(), null);
++
++        if (organization instanceof AbstractOrganization) {
++            ModifiableTopLevelItemGroup group = ((AbstractOrganization) organization).getGroup();
++            return (AccessControlled) group;
++        }
++
++        throw new AssertionError(organization + " is not an instance of AbstractOrganization");
++    }
++
++    protected void checkPermission() {
++        AccessControlled rootOrgFolder = getRootOrgFolder();
++        if (!rootOrgFolder.hasPermission(Item.CREATE)) {
++            throw new ServiceException.ForbiddenException("You do not have Job/Create permission");
++        }
++    }
+ }
+diff --git a/blueocean-pipeline-api-impl/src/main/java/io/jenkins/blueocean/rest/impl/pipeline/scm/Scm.java b/blueocean-pipeline-api-impl/src/main/java/io/jenkins/blueocean/rest/impl/pipeline/scm/Scm.java
+index 62a2f307945..5217756c08d 100644
+--- a/blueocean-pipeline-api-impl/src/main/java/io/jenkins/blueocean/rest/impl/pipeline/scm/Scm.java
++++ b/blueocean-pipeline-api-impl/src/main/java/io/jenkins/blueocean/rest/impl/pipeline/scm/Scm.java
+@@ -9,7 +9,7 @@
+ import org.kohsuke.stapler.WebMethod;
+ import org.kohsuke.stapler.export.Exported;
+ import org.kohsuke.stapler.json.JsonBody;
+-import org.kohsuke.stapler.verb.PUT;
++import org.kohsuke.stapler.verb.POST;
+ 
+ import javax.annotation.CheckForNull;
+ import javax.annotation.Nonnull;
+@@ -84,7 +84,7 @@ public abstract class Scm extends Resource {
+      *
+      * @return credential id. If accessToken is not applicable to this SCM, null is returned.
+      */
+-    @PUT
++    @POST
+     @WebMethod(name = VALIDATE)
+     public abstract @CheckForNull HttpResponse validateAndCreate(@JsonBody JSONObject request);
+ }
+diff --git a/blueocean-pipeline-api-impl/src/test/java/io/jenkins/blueocean/rest/impl/pipeline/PipelineBaseTest.java b/blueocean-pipeline-api-impl/src/test/java/io/jenkins/blueocean/rest/impl/pipeline/PipelineBaseTest.java
+index 7a7672aed77..8a405187b40 100644
+--- a/blueocean-pipeline-api-impl/src/test/java/io/jenkins/blueocean/rest/impl/pipeline/PipelineBaseTest.java
++++ b/blueocean-pipeline-api-impl/src/test/java/io/jenkins/blueocean/rest/impl/pipeline/PipelineBaseTest.java
+@@ -207,13 +207,13 @@ protected Map<String, Object> post(String path, Object body, int expectedStatus)
+         }
+     }
+ 
+-    protected String post(String path, String body, String contentType, int expectedStatus){
++    protected String post(String path, Object body, String contentType, int expectedStatus){
+         assert path.startsWith("/");
+         try {
+             HttpResponse<String> response = Unirest.post(getBaseUrl(path))
+                 .header("Content-Type",contentType)
+-                .header("Accept-Encoding","")
+                 .header("Authorization", "Bearer "+jwtToken)
++                .header(crumb.field, crumb.value)
+                 .body(body).asObject(String.class);
+             Assert.assertEquals(expectedStatus, response.getStatus());
+             return response.getBody();
+diff --git a/blueocean-rest/src/main/java/io/jenkins/blueocean/rest/pageable/PagedResponse.java b/blueocean-rest/src/main/java/io/jenkins/blueocean/rest/pageable/PagedResponse.java
+index 7c2b0dc17bd..44903a1e09f 100644
+--- a/blueocean-rest/src/main/java/io/jenkins/blueocean/rest/pageable/PagedResponse.java
++++ b/blueocean-rest/src/main/java/io/jenkins/blueocean/rest/pageable/PagedResponse.java
+@@ -16,8 +16,10 @@
+ import java.util.List;
+ import java.util.Spliterator;
+ import java.util.Spliterators;
++import java.util.regex.Pattern;
+ import java.util.stream.StreamSupport;
+ 
++import static io.jenkins.blueocean.commons.stapler.TreeResponse.Processor.SCM_ORGANIZATIONS_URI;
+ import static java.lang.annotation.ElementType.METHOD;
+ import static java.lang.annotation.RetentionPolicy.RUNTIME;
+ 
+@@ -32,12 +34,19 @@
+ public @interface PagedResponse {
+     int DEFAULT_LIMIT=100;
+     class Processor extends Interceptor {
++
+         @Override
+         public Object invoke(StaplerRequest request, StaplerResponse response, Object instance, Object[] arguments)
+             throws IllegalAccessException, InvocationTargetException, ServletException {
+ 
+             String method = request.getMethod();
+-            if(!method.equalsIgnoreCase("GET")){
++            // Requests to organizations/orgName/scm/scmName/organizations/ have to be sent via POST, because specific
++            // implementations of Scm.getOrganizations have side effects (such as sending requests to SCM APIs).
++            // All requests that try to access child routes of organizations/orgName/scm/scmName/organizations/
++            // must be sent via POST too. We allow POST requests for these routes by checking a requested URL against
++            // a predefined pattern. Various Stapler quirks with getter methods and child routes prevent us from using
++            // standard @POST annotations on individual routes.
++            if(!method.equalsIgnoreCase("GET") && !postRouteMatches(request, SCM_ORGANIZATIONS_URI)){
+                 throw new CancelRequestHandlingException();
+             }
+             final Pageable<?> resp = (Pageable<?>) target.invoke(request, response, instance, arguments);
+@@ -92,6 +101,12 @@ private String getQueryString(String query, String... excludes){
+             return sb.toString();
+         }
+ 
++        private boolean postRouteMatches(StaplerRequest request, Pattern pattern) {
++            String method = request.getMethod();
++            if (!"POST".equalsIgnoreCase(method))
++                return false;
+ 
++            return pattern.matcher(request.getOriginalRequestURI()).find();
++        }
+     }
+ }

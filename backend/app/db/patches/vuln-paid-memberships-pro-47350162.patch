@@ -1,0 +1,25 @@
+From dea88f56eeeb26afeaff97135bba90601c93e490 Mon Sep 17 00:00:00 2001
+From: Kim Coleman <kim@strangerstudios.com>
+Date: Thu, 21 Mar 2024 13:09:01 -0400
+Subject: [PATCH] Update readme.txt
+
+---
+ readme.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/readme.txt b/readme.txt
+index e4566821..98fbc065 100644
+--- a/readme.txt
++++ b/readme.txt
+@@ -43,7 +43,7 @@ PMPro supports any kind of member-focused business or organization. With over 12
+ = Membership Management Features =
+ 
+ * Unlimited Levels: Create distinct pricing and content access for each level
+-* Multiple Memberships Per User: Sell multiple membership types and membership add ons
++* Multiple Memberships Per User: Increase LTV by selling multiple membership types, allowing members to hold more than one active subscription simultaneously.
+ * Group Memberships: Offer child accounts linked to a paying parent account for umbrella memberships
+ * User Fields by Level: Capture custom profile info by membership level
+ * Email Communications: Customize content and design of every message
+-- 
+2.34.1
+

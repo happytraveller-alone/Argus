@@ -1,0 +1,30 @@
+From ce96f23fe15ce6addc2f56af015452c3ea406190 Mon Sep 17 00:00:00 2001
+From: Frederic Massart <fred@moodle.com>
+Date: Mon, 4 Mar 2013 13:45:32 +1300
+Subject: [PATCH] MDL-37681 repository_webdav: improved form handling when
+ configuring an instance
+
+---
+ repository/webdav/lib.php | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/repository/webdav/lib.php b/repository/webdav/lib.php
+index b07135e6730..e2d39bf315d 100644
+--- a/repository/webdav/lib.php
++++ b/repository/webdav/lib.php
+@@ -177,10 +177,10 @@ class repository_webdav extends repository {
+         $mform->addElement('select', 'webdav_auth', get_string('authentication', 'admin'), $choices);
+         $mform->addRule('webdav_auth', get_string('required'), 'required', null, 'client');
+ 
+-
+         $mform->addElement('text', 'webdav_port', get_string('webdav_port', 'repository_webdav'), array('size' => '40'));
+         $mform->addElement('text', 'webdav_user', get_string('webdav_user', 'repository_webdav'), array('size' => '40'));
+-        $mform->addElement('text', 'webdav_password', get_string('webdav_password', 'repository_webdav'), array('size' => '40'));
++        $mform->addElement('password', 'webdav_password', get_string('webdav_password', 'repository_webdav'),
++            array('size' => '40'));
+     }
+     public function supported_returntypes() {
+         return (FILE_INTERNAL | FILE_EXTERNAL);
+-- 
+2.34.1
+

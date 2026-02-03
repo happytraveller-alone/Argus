@@ -1,0 +1,92 @@
+From 1e86b777e61cf4eefc7d92fa57fa19dcc676013b Mon Sep 17 00:00:00 2001
+From: Sam Bull <git@sambull.org>
+Date: Mon, 13 Nov 2023 22:13:06 +0000
+Subject: [PATCH] Disallow arbitrary sequence types in version (#7835)
+
+Co-authored-by: pre-commit-ci[bot] <66853113+pre-commit-ci[bot]@users.noreply.github.com>
+---
+ CHANGES/7835.bugfix          |  1 +
+ aiohttp/client_reqrep.py     |  4 ++--
+ tests/test_client_request.py | 20 +++++++++++++++++---
+ 3 files changed, 20 insertions(+), 5 deletions(-)
+ create mode 100644 CHANGES/7835.bugfix
+
+diff --git a/CHANGES/7835.bugfix b/CHANGES/7835.bugfix
+new file mode 100644
+index 00000000..4ce3af4f
+--- /dev/null
++++ b/CHANGES/7835.bugfix
+@@ -0,0 +1 @@
++Fixed arbitrary sequence types being allowed to inject headers via version parameter -- by :user:`Dreamsorcerer`
+diff --git a/aiohttp/client_reqrep.py b/aiohttp/client_reqrep.py
+index ad480a86..f05a0863 100644
+--- a/aiohttp/client_reqrep.py
++++ b/aiohttp/client_reqrep.py
+@@ -644,8 +644,8 @@ class ClientRequest:
+             self.headers[hdrs.CONNECTION] = connection
+ 
+         # status + headers
+-        status_line = "{0} {1} HTTP/{2[0]}.{2[1]}".format(
+-            self.method, path, self.version
++        status_line = "{0} {1} HTTP/{v.major}.{v.minor}".format(
++            self.method, path, v=self.version
+         )
+         await writer.write_headers(status_line, self.headers)
+ 
+diff --git a/tests/test_client_request.py b/tests/test_client_request.py
+index c2853861..d7053efb 100644
+--- a/tests/test_client_request.py
++++ b/tests/test_client_request.py
+@@ -20,6 +20,7 @@ from aiohttp.client_reqrep import (
+     Fingerprint,
+     _gen_default_accept_encoding,
+ )
++from aiohttp.http import HttpVersion
+ from aiohttp.test_utils import make_mocked_coro
+ 
+ 
+@@ -590,18 +591,18 @@ async def test_connection_header(loop: Any, conn: Any) -> None:
+     req.headers.clear()
+ 
+     req.keep_alive.return_value = True
+-    req.version = (1, 1)
++    req.version = HttpVersion(1, 1)
+     req.headers.clear()
+     await req.send(conn)
+     assert req.headers.get("CONNECTION") is None
+ 
+-    req.version = (1, 0)
++    req.version = HttpVersion(1, 0)
+     req.headers.clear()
+     await req.send(conn)
+     assert req.headers.get("CONNECTION") == "keep-alive"
+ 
+     req.keep_alive.return_value = False
+-    req.version = (1, 1)
++    req.version = HttpVersion(1, 1)
+     req.headers.clear()
+     await req.send(conn)
+     assert req.headers.get("CONNECTION") == "close"
+@@ -1112,6 +1113,19 @@ async def test_close(loop: Any, buf: Any, conn: Any) -> None:
+     resp.close()
+ 
+ 
++async def test_bad_version(loop: Any, conn: Any) -> None:
++    req = ClientRequest(
++        "GET",
++        URL("http://python.org"),
++        loop=loop,
++        headers={"Connection": "Close"},
++        version=("1", "1\r\nInjected-Header: not allowed"),
++    )
++
++    with pytest.raises(AttributeError):
++        await req.send(conn)
++
++
+ async def test_custom_response_class(loop: Any, conn: Any) -> None:
+     class CustomResponse(ClientResponse):
+         def read(self, decode=False):
+-- 
+2.34.1
+

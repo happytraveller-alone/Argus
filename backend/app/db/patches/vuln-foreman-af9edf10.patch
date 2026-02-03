@@ -1,0 +1,114 @@
+From af9edf1098bf8e643e1607f9375595e375e7ade6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Hul=C3=A1n?= <ares@users.noreply.github.com>
+Date: Thu, 1 Jun 2017 12:11:12 +0200
+Subject: [PATCH] Fixes #19612 - CVE-2017-7505 don't expose admin to taxed
+ users
+
+---
+ .../foreman/controller/authentication.rb         |  2 +-
+ app/models/concerns/taxonomix.rb                 |  2 +-
+ app/models/notification.rb                       |  6 +++---
+ test/controllers/api/v2/users_controller_test.rb |  2 +-
+ test/models/taxonomix_test.rb                    | 16 +++++++++++++++-
+ 5 files changed, 21 insertions(+), 7 deletions(-)
+
+diff --git a/app/controllers/concerns/foreman/controller/authentication.rb b/app/controllers/concerns/foreman/controller/authentication.rb
+index c4ebe2e68..3e0cdedae 100644
+--- a/app/controllers/concerns/foreman/controller/authentication.rb
++++ b/app/controllers/concerns/foreman/controller/authentication.rb
+@@ -31,7 +31,7 @@ module Foreman::Controller::Authentication
+     else
+       # We assume we always have a user logged in
+       # if authentication is disabled, the user is the built-in admin account
+-      set_current_user User.only_admin.except_hidden.first
++      set_current_user User.unscoped.only_admin.except_hidden.first
+     end
+   end
+ 
+diff --git a/app/models/concerns/taxonomix.rb b/app/models/concerns/taxonomix.rb
+index cfc950b63..3ccad9191 100644
+--- a/app/models/concerns/taxonomix.rb
++++ b/app/models/concerns/taxonomix.rb
+@@ -82,7 +82,7 @@ module Taxonomix
+       if self == User
+         # In the case of users we want the taxonomy scope to get both the users
+         # of the taxonomy, admins, and the current user.
+-        ids.concat(admin_ids)
++        ids.concat(admin_ids) if User.current.present? && User.current.admin?
+         ids << User.current.id if User.current.present?
+       end
+ 
+diff --git a/app/models/notification.rb b/app/models/notification.rb
+index a8360d5ad..54eaa6828 100644
+--- a/app/models/notification.rb
++++ b/app/models/notification.rb
+@@ -44,7 +44,7 @@ class Notification < ApplicationRecord
+     when AUDIENCE_USER
+       [initiator.id]
+     when AUDIENCE_ADMIN
+-      User.only_admin.except_hidden.reorder('').uniq.pluck(:id)
++      User.unscoped.only_admin.except_hidden.reorder('').uniq.pluck(:id)
+     when AUDIENCE_GROUP
+       subject.all_users.uniq.map(&:id) # This needs to be rewritten in usergroups.
+     end
+@@ -62,8 +62,8 @@ class Notification < ApplicationRecord
+   end
+ 
+   def set_notification_recipients
+-    subscribers = subscriber_ids
+-    notification_recipients.build subscribers.map{|id| { :user_id => id}}
++    subscribers = User.unscoped.where(:id => subscriber_ids)
++    notification_recipients.build subscribers.map{|user| { :user => user}}
+   end
+ 
+   def set_custom_attributes
+diff --git a/test/controllers/api/v2/users_controller_test.rb b/test/controllers/api/v2/users_controller_test.rb
+index 3769e73d5..033f64d68 100644
+--- a/test/controllers/api/v2/users_controller_test.rb
++++ b/test/controllers/api/v2/users_controller_test.rb
+@@ -168,7 +168,7 @@ class Api::V2::UsersControllerTest < ActionController::TestCase
+         :admin => true, :login => 'new_admin', :auth_source_id => auth_sources(:one).id }
+       }
+       assert_response :created
+-      assert User.find_by_login('new_admin').admin?
++      assert User.unscoped.find_by_login('new_admin').admin?
+     end
+   end
+ 
+diff --git a/test/models/taxonomix_test.rb b/test/models/taxonomix_test.rb
+index e1d94b0ee..4d50dab84 100644
+--- a/test/models/taxonomix_test.rb
++++ b/test/models/taxonomix_test.rb
+@@ -188,6 +188,21 @@ class TaxonomixTest < ActiveSupport::TestCase
+       end
+     end
+ 
++    test 'list only users from the organization and myself but not global admins' do
++      loc = FactoryGirl.create(:location)
++      org = FactoryGirl.create(:organization)
++      user1 = FactoryGirl.create(:user, :organizations => [org], :locations => [loc])
++      user2 = FactoryGirl.create(:user, :organizations => [org], :locations => [loc])
++      admin = FactoryGirl.create(:user, :admin)
++
++      as_user(user1) do
++        found_ids = User.taxable_ids(loc, org)
++        assert_includes found_ids, user1.id
++        assert_includes found_ids, user2.id
++        refute_includes found_ids, admin.id
++      end
++    end
++
+     test "can work with array of taxonomies" do
+       loc1 = FactoryGirl.create(:location)
+       loc2 = FactoryGirl.create(:location, :parent_id => loc1.id)
+@@ -325,7 +340,6 @@ class TaxonomixTest < ActiveSupport::TestCase
+     as_user(:one) do
+       scoped_users = User.with_taxonomy_scope([],[])
+       assert_include scoped_users, User.current
+-      assert_include scoped_users, users(:admin)
+     end
+   end
+ 
+-- 
+2.34.1
+

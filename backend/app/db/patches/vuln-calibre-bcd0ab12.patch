@@ -1,0 +1,29 @@
+From bcd0ab12c41a887f8290a9b56e46c3a29038d9c4 Mon Sep 17 00:00:00 2001
+From: Kovid Goyal <kovid@kovidgoyal.net>
+Date: Tue, 30 Jul 2024 13:11:31 +0530
+Subject: [PATCH] Fix #2075125 [Private
+ bug](https://bugs.launchpad.net/calibre/+bug/2075125)
+
+---
+ src/calibre/db/backend.py | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/calibre/db/backend.py b/src/calibre/db/backend.py
+index ef73a7334d..c1f6a876eb 100644
+--- a/src/calibre/db/backend.py
++++ b/src/calibre/db/backend.py
+@@ -2004,7 +2004,10 @@ class DB:
+ 
+     def copy_extra_file_to(self, book_id, book_path, relpath, stream_or_path):
+         full_book_path = os.path.abspath(os.path.join(self.library_path, book_path))
+-        src_path = make_long_path_useable(os.path.join(full_book_path, relpath))
++        extra_file_path = os.path.abspath(os.path.join(full_book_path, relpath))
++        if not extra_file_path.startswith(full_book_path):
++            raise FileNotFoundError(f'No data file {relpath} in book: {book_id}')
++        src_path = make_long_path_useable(extra_file_path)
+         if isinstance(stream_or_path, str):
+             shutil.copy2(src_path, make_long_path_useable(stream_or_path))
+         else:
+-- 
+2.34.1
+

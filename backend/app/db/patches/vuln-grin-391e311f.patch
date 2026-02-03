@@ -1,0 +1,217 @@
+From 391e311f4c05619bd4b7b0d599a5071ce7753b90 Mon Sep 17 00:00:00 2001
+From: hashmap <hashmap@gmail.com>
+Date: Mon, 25 Feb 2019 07:57:56 +0100
+Subject: [PATCH] Don't extract unexpected files from txhashset archive (#2624)
+
+We verify and remove such files later one, it's safer to ignore them
+during unpacking
+---
+ Cargo.lock                       |   2 ++
+ chain/Cargo.toml                 |   2 ++
+ chain/src/txhashset/txhashset.rs |  39 ++++++++++++++++++++++++++++++-
+ chain/tests/test_txhashset.rs    |   6 +----
+ util/src/zip.rs                  |  15 ++++++++----
+ util/tests/test.zip              | Bin 0 -> 545 bytes
+ util/tests/zip.rs                |  10 +++++++-
+ 7 files changed, 63 insertions(+), 11 deletions(-)
+ create mode 100644 util/tests/test.zip
+
+diff --git a/Cargo.lock b/Cargo.lock
+index ee5925e4..7a7a7941 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -823,10 +823,12 @@ dependencies = [
+  "grin_keychain 1.0.2",
+  "grin_store 1.0.2",
+  "grin_util 1.0.2",
++ "lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+  "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
+  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+  "lru-cache 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+  "rand 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
++ "regex 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+  "serde 1.0.87 (registry+https://github.com/rust-lang/crates.io-index)",
+  "serde_derive 1.0.87 (registry+https://github.com/rust-lang/crates.io-index)",
+ ]
+diff --git a/chain/Cargo.toml b/chain/Cargo.toml
+index c4583a49..5ea3619f 100644
+--- a/chain/Cargo.toml
++++ b/chain/Cargo.toml
+@@ -21,6 +21,8 @@ serde = "1"
+ serde_derive = "1"
+ chrono = "0.4.4"
+ lru-cache = "0.1"
++lazy_static = "1"
++regex = "1"
+ 
+ grin_core = { path = "../core", version = "1.0.2" }
+ grin_keychain = { path = "../keychain", version = "1.0.2" }
+diff --git a/chain/src/txhashset/txhashset.rs b/chain/src/txhashset/txhashset.rs
+index 342b7d34..31d7ac08 100644
+--- a/chain/src/txhashset/txhashset.rs
++++ b/chain/src/txhashset/txhashset.rs
+@@ -1447,11 +1447,28 @@ pub fn zip_write(
+ ) -> Result<(), Error> {
+ 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
+ 	fs::create_dir_all(txhashset_path.clone())?;
+-	zip::decompress(txhashset_data, &txhashset_path)
++	zip::decompress(txhashset_data, &txhashset_path, expected_file)
+ 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
+ 	check_and_remove_files(&txhashset_path, header)
+ }
+ 
++fn expected_file(path: &Path) -> bool {
++	use lazy_static::lazy_static;
++	use regex::Regex;
++	let s_path = path.to_str().unwrap_or_else(|| "");
++	lazy_static! {
++		static ref RE: Regex = Regex::new(
++			format!(
++				r#"^({}|{}|{})(/pmmr_(hash|data|leaf|prun)\.bin(\.\w*)?)?$"#,
++				OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR
++			)
++			.as_str()
++		)
++		.unwrap();
++	}
++	RE.is_match(&s_path)
++}
++
+ /// Check a txhashset directory and remove any unexpected
+ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Error> {
+ 	// First compare the subdirectories
+@@ -1594,3 +1611,23 @@ pub fn input_pos_to_rewind(
+ 
+ 	bitmap_fast_or(None, &mut block_input_bitmaps).ok_or_else(|| ErrorKind::Bitmap.into())
+ }
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++
++	#[test]
++	fn test_expected_files() {
++		assert!(!expected_file(Path::new("kernels")));
++		assert!(!expected_file(Path::new("xkernel")));
++		assert!(expected_file(Path::new("kernel")));
++		assert!(expected_file(Path::new("kernel/pmmr_data.bin")));
++		assert!(expected_file(Path::new("kernel/pmmr_hash.bin")));
++		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin")));
++		assert!(expected_file(Path::new("kernel/pmmr_prun.bin")));
++		assert!(expected_file(Path::new("kernel/pmmr_leaf.bin.deadbeef")));
++		assert!(!expected_file(Path::new("xkernel/pmmr_data.bin")));
++		assert!(!expected_file(Path::new("kernel/pmmrx_data.bin")));
++		assert!(!expected_file(Path::new("kernel/pmmr_data.binx")));
++	}
++}
+diff --git a/chain/tests/test_txhashset.rs b/chain/tests/test_txhashset.rs
+index 1be15183..41ea97d8 100644
+--- a/chain/tests/test_txhashset.rs
++++ b/chain/tests/test_txhashset.rs
+@@ -136,9 +136,5 @@ fn txhashset_contains_expected_files(dirname: String, path_buf: PathBuf) -> bool
+ 	let intersection: HashSet<_> = zip_files_hashset
+ 		.difference(&expected_files_hashset)
+ 		.collect();
+-	if intersection.is_empty() {
+-		true
+-	} else {
+-		false
+-	}
++	intersection.is_empty()
+ }
+diff --git a/util/src/zip.rs b/util/src/zip.rs
+index 52531bd5..c79d0d00 100644
+--- a/util/src/zip.rs
++++ b/util/src/zip.rs
+@@ -62,15 +62,22 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
+ }
+ 
+ /// Decompress a source file into the provided destination path.
+-pub fn decompress<R>(src_file: R, dest: &Path) -> ZipResult<()>
++pub fn decompress<R, F>(src_file: R, dest: &Path, expected: F) -> ZipResult<usize>
+ where
+ 	R: io::Read + io::Seek,
++	F: Fn(&Path) -> bool,
+ {
++	let mut decompressed = 0;
+ 	let mut archive = zip_rs::ZipArchive::new(src_file)?;
+ 
+ 	for i in 0..archive.len() {
+ 		let mut file = archive.by_index(i)?;
+-		let file_path = dest.join(file.name());
++		let san_name = file.sanitized_name();
++		if san_name.to_str().unwrap_or("") != file.name() || !expected(&san_name) {
++			info!("ignoring a suspicious file: {}", file.name());
++			continue;
++		}
++		let file_path = dest.join(san_name);
+ 
+ 		if (&*file.name()).ends_with('/') {
+ 			fs::create_dir_all(&file_path)?;
+@@ -80,7 +87,6 @@ where
+ 					fs::create_dir_all(&p)?;
+ 				}
+ 			}
+-			//let mut outfile = fs::File::create(&file_path)?;
+ 			let res = fs::File::create(&file_path);
+ 			let mut outfile = match res {
+ 				Err(e) => {
+@@ -90,6 +96,7 @@ where
+ 				Ok(r) => r,
+ 			};
+ 			io::copy(&mut file, &mut outfile)?;
++			decompressed += 1;
+ 		}
+ 
+ 		// Get and Set permissions
+@@ -104,5 +111,5 @@ where
+ 			}
+ 		}
+ 	}
+-	Ok(())
++	Ok(decompressed)
+ }
+diff --git a/util/tests/test.zip b/util/tests/test.zip
+new file mode 100644
+index 0000000000000000000000000000000000000000..38b3f499de0163e62ca15ce18350a9d9a477a51b
+GIT binary patch
+literal 545
+zcmWIWW@h1H0D=Au{XYEp{-1?`Y!K#PkYPyA&ri`SsVE5z;bdU8U359h4v0%DxEUB(
+zzA-W|u!sQFm1JZVD*#cV0!Xz&eqJh90MJm76a&LlprHwl)s`S02)6*So}T`Ippx7I
+z{nWC|9FT|Lj?Pm62|-=W$Rx*%D=;L0E@xl>dYWNLBZ!3v8dgZqpan~SHzSh>Gwx6T
+jnE?Vz8bg8PfCLE8QsgiR@MdKLxrhk}K_2A>d6oeH^pk5C
+
+literal 0
+HcmV?d00001
+
+diff --git a/util/tests/zip.rs b/util/tests/zip.rs
+index d2a211b5..4c4422dc 100644
+--- a/util/tests/zip.rs
++++ b/util/tests/zip.rs
+@@ -38,7 +38,7 @@ fn zip_unzip() {
+ 
+ 	fs::create_dir_all(root.join("./dezipped")).unwrap();
+ 	let zip_file = File::open(zip_name).unwrap();
+-	zip::decompress(zip_file, &root.join("./dezipped")).unwrap();
++	zip::decompress(zip_file, &root.join("./dezipped"), |_| true).unwrap();
+ 
+ 	assert!(root.join("to_zip/foo.txt").is_file());
+ 	assert!(root.join("to_zip/bar.txt").is_file());
+@@ -46,6 +46,14 @@ fn zip_unzip() {
+ 	let lorem = root.join("to_zip/sub/lorem");
+ 	assert!(lorem.is_file());
+ 	assert!(lorem.metadata().unwrap().len() == 55);
++
++	let decompressed = zip::decompress(
++		File::open("tests/test.zip").unwrap(),
++		&root.join("./dezipped"),
++		|_| true,
++	)
++	.unwrap();
++	assert_eq!(decompressed, 1);
+ }
+ 
+ fn write_files(dir_name: String, root: &Path) -> io::Result<()> {
+-- 
+2.34.1
+

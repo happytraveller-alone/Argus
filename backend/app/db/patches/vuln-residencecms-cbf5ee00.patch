@@ -1,0 +1,83 @@
+From cbf5ee00d801015fcd1d5c8f8ce3b27f573598cc Mon Sep 17 00:00:00 2001
+From: Valery Maslov <valery.maslov@outlook.com>
+Date: Thu, 20 Jun 2024 13:51:03 +0300
+Subject: [PATCH] Fix XSS vulnerability #128
+
+---
+ src/Service/User/PropertyService.php    |  2 ++
+ src/Transformer/PropertyTransformer.php | 23 ++++++++++++++---------
+ src/Utils/HtmlHelper.php                |  8 ++++++++
+ 3 files changed, 24 insertions(+), 9 deletions(-)
+
+diff --git a/src/Service/User/PropertyService.php b/src/Service/User/PropertyService.php
+index fa256e5..03bcc6e 100644
+--- a/src/Service/User/PropertyService.php
++++ b/src/Service/User/PropertyService.php
+@@ -68,6 +68,8 @@ final class PropertyService extends Service
+         if (!$isHtmlAllowed) {
+             $property = $this->propertyTransformer->contentToPlainText($property);
+             $property = $this->propertyTransformer->contentToHtml($property);
++        } else {
++            $property = $this->propertyTransformer->removeScriptsFromHtml($property);
+         }
+ 
+         return $property;
+diff --git a/src/Transformer/PropertyTransformer.php b/src/Transformer/PropertyTransformer.php
+index d3ebee5..1003a5e 100644
+--- a/src/Transformer/PropertyTransformer.php
++++ b/src/Transformer/PropertyTransformer.php
+@@ -11,20 +11,25 @@ final class PropertyTransformer
+ {
+     public function contentToHtml(Property $property): Property
+     {
+-        $htmlContent = HtmlHelper::text2Html($property->getPropertyDescription()->getContent());
+-        $property->setPropertyDescription(
+-            $property->getPropertyDescription()->setContent($htmlContent)
+-        );
+-
+-        return $property;
++        return $this->transformContent($property, HtmlHelper::text2Html(...));
+     }
+ 
+     public function contentToPlainText(Property $property): Property
+     {
+-        $htmlContent = $property->getPropertyDescription()->getContent();
+-        $textContent = HtmlHelper::html2Text($htmlContent);
++        return $this->transformContent($property, HtmlHelper::html2Text(...));
++    }
++
++    public function removeScriptsFromHtml(Property $property): Property
++    {
++        return $this->transformContent($property, HtmlHelper::removeScriptsFromHtml(...));
++    }
++
++    private function transformContent(Property $property, callable $transformFunction): Property
++    {
++        $content = $property->getPropertyDescription()->getContent();
++        $transformedContent = \call_user_func($transformFunction, $content);
+         $property->setPropertyDescription(
+-            $property->getPropertyDescription()->setContent($textContent)
++            $property->getPropertyDescription()->setContent($transformedContent)
+         );
+ 
+         return $property;
+diff --git a/src/Utils/HtmlHelper.php b/src/Utils/HtmlHelper.php
+index 919748f..ca13e81 100644
+--- a/src/Utils/HtmlHelper.php
++++ b/src/Utils/HtmlHelper.php
+@@ -17,4 +17,12 @@ final class HtmlHelper
+     {
+         return preg_replace("/\r\n|\r|\n/", '<br>', $text);
+     }
++
++    public static function removeScriptsFromHtml(string $html): string
++    {
++        $sanitizedHtml = preg_replace('#<script(.*?)>(.*?)</script>#is', '', $html);
++        $sanitizedHtml = preg_replace('# on\w+="[^"]*"#i', '', (string) $sanitizedHtml);
++
++        return preg_replace("# on\w+='[^']*'#i", '', (string) $sanitizedHtml);
++    }
+ }
+-- 
+2.34.1
+

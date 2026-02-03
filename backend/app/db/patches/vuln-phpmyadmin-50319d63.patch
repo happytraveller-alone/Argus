@@ -1,0 +1,27 @@
+From 50319d634c620044a0542495939cd68530f00259 Mon Sep 17 00:00:00 2001
+From: Marc Delisle <marc@infomarc.info>
+Date: Tue, 26 Sep 2006 20:19:02 +0000
+Subject: [PATCH] additional check against REQUEST overwriting
+
+---
+ libraries/common.lib.php | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/libraries/common.lib.php b/libraries/common.lib.php
+index 7b467efa1d..8327ca1255 100644
+--- a/libraries/common.lib.php
++++ b/libraries/common.lib.php
+@@ -2887,7 +2887,9 @@ if (!isset($_REQUEST['token']) || empty($_SESSION[' PMA_token ']) || $_SESSION['
+         /* Possible login form */
+         'pma_servername', 'pma_username', 'pma_password',
+     );
+-    $keys = array_keys($_REQUEST);
++    //$keys = array_keys($_REQUEST);
++    // do not check only $_REQUEST because it could have been overwritten
++    $keys = array_keys(array_merge($_REQUEST, $_GET, $_POST, $_COOKIE));
+     /* Remove any non allowed stuff from requests */
+     foreach($keys as $key) {
+         if (!in_array($key, $allow_list)) {
+-- 
+2.34.1
+

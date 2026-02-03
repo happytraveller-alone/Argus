@@ -1,0 +1,37 @@
+From e12114e260c9781082545829ed2213b6195f4ec1 Mon Sep 17 00:00:00 2001
+From: Nate Lampton <nate@quicksketch.org>
+Date: Wed, 19 Apr 2023 12:09:59 -0700
+Subject: [PATCH] Issue #6050: Avoid static positioning on autocomplete for
+ mobile Safari support.
+
+By @quicksketch, @bugfolder, and @klonos.
+---
+ core/misc/autocomplete.js | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/core/misc/autocomplete.js b/core/misc/autocomplete.js
+index 99f5ef4e2..4b5ae47e2 100644
+--- a/core/misc/autocomplete.js
++++ b/core/misc/autocomplete.js
+@@ -217,13 +217,13 @@ Backdrop.jsAC.prototype.populatePopup = function () {
+     var paddingRight = parseInt($input.css('padding-right').replace('px', ''), 10);
+     var paddingWidth = paddingLeft + paddingRight;
+ 
+-    // Because we use "fixed" position, the final location is the offset from
+-    // the document and the height of the element, minus scroll bar position.
++    // Position "absolute" instead of "fixed" for mobile Safari compatibility.
++    // See https://github.com/backdrop/backdrop-issues/issues/6050
+     $(autocompleteInstance.popup).css({
+-      top: ($input.outerHeight() + offset.top - $(document).scrollTop()) + 'px',
+-      left: (offset.left - $(document).scrollLeft()) + 'px',
++      top: ($input.outerHeight() + offset.top) + 'px',
++      left: offset.left + 'px',
+       width: ($input.width() + paddingWidth) + 'px',
+-      position: 'fixed'
++      position: 'absolute'
+     });
+   }
+ };
+-- 
+2.34.1
+

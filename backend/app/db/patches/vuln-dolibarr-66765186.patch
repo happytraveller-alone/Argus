@@ -1,0 +1,25 @@
+From 667651860d1417329488cf123069ca700e8acdae Mon Sep 17 00:00:00 2001
+From: Laurent Destailleur <eldy@destailleur.fr>
+Date: Mon, 25 Jan 2016 15:24:31 +0100
+Subject: [PATCH] Fix sql injection #4341
+
+---
+ htdocs/main.inc.php | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/htdocs/main.inc.php b/htdocs/main.inc.php
+index f1399655666..25176c6bc93 100644
+--- a/htdocs/main.inc.php
++++ b/htdocs/main.inc.php
+@@ -99,7 +99,7 @@ function test_sql_and_script_inject($val, $type)
+     $sql_inj += preg_match('/<script/i', $val);
+     if (! defined('NOSTYLECHECK')) $sql_inj += preg_match('/<style/i', $val);
+     $sql_inj += preg_match('/base[\s]+href/si', $val);
+-    $sql_inj += preg_match('/<.*onmouseover/si', $val);       // onmouseover can be set on img or any html tag like <img title='>' onmouseover=alert(1)>
++    $sql_inj += preg_match('/<.*onmouse/si', $val);       // onmouseover can be set on img or any html tag like <img title='>' onmouseover=alert(1)>
+     if ($type == 1)
+     {
+         $sql_inj += preg_match('/javascript:/i', $val);
+-- 
+2.34.1
+

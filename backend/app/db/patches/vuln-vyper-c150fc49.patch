@@ -1,0 +1,53 @@
+From c150fc49ee9375a930d177044559b83cb95f7963 Mon Sep 17 00:00:00 2001
+From: Thabokani <149070269+Thabokani@users.noreply.github.com>
+Date: Tue, 30 Jan 2024 02:53:17 +0800
+Subject: [PATCH] chore(docs): fix typos (#3749)
+
+---
+ examples/tokens/ERC721.vy                                  | 2 +-
+ tests/functional/syntax/exceptions/test_invalid_payable.py | 2 +-
+ vyper/semantics/README.md                                  | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/examples/tokens/ERC721.vy b/examples/tokens/ERC721.vy
+index 152b94b0..9c86575e 100644
+--- a/examples/tokens/ERC721.vy
++++ b/examples/tokens/ERC721.vy
+@@ -28,7 +28,7 @@ interface ERC721Receiver:
+ #      transfer, the approved address for that NFT (if any) is reset to none.
+ # @param _from Sender of NFT (if address is zero address it indicates token creation).
+ # @param _to Receiver of NFT (if address is zero address it indicates token destruction).
+-# @param _tokenId The NFT that got transfered.
++# @param _tokenId The NFT that got transferred.
+ event Transfer:
+     sender: indexed(address)
+     receiver: indexed(address)
+diff --git a/tests/functional/syntax/exceptions/test_invalid_payable.py b/tests/functional/syntax/exceptions/test_invalid_payable.py
+index 4d8142fc..9d0d942b 100644
+--- a/tests/functional/syntax/exceptions/test_invalid_payable.py
++++ b/tests/functional/syntax/exceptions/test_invalid_payable.py
+@@ -14,7 +14,7 @@ def foo():
+ 
+ 
+ @pytest.mark.parametrize("bad_code", fail_list)
+-def test_variable_decleration_exception(bad_code):
++def test_variable_declaration_exception(bad_code):
+     with raises(NonPayableViolation):
+         compiler.compile_code(bad_code)
+ 
+diff --git a/vyper/semantics/README.md b/vyper/semantics/README.md
+index 36519bba..3b7acf94 100644
+--- a/vyper/semantics/README.md
++++ b/vyper/semantics/README.md
+@@ -206,7 +206,7 @@ function.
+ 2. We call `fetch_call_return` on the function definition object, with the AST
+ node representing the call. This method validates the input arguments, and returns
+ a `BytesM_T` with `m=32`.
+-3. We validation of the delcaration of `bar` in the same manner as the first
++3. We validation of the declaration of `bar` in the same manner as the first
+ example, and compare the generated type to that returned by `sha256`.
+ 
+ ### Exceptions
+-- 
+2.34.1
+

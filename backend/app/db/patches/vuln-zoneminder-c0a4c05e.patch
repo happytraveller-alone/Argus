@@ -1,0 +1,29 @@
+From c0a4c05e84eea0f6ccf7169c014efe5422c9ba0d Mon Sep 17 00:00:00 2001
+From: Isaac Connor <isaac@zoneminder.com>
+Date: Mon, 3 Oct 2022 15:49:48 -0400
+Subject: [PATCH] Only perform actions on post. Doing them on GET allows doing
+ actions from things like img tags which is not good.
+
+---
+ web/index.php | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/web/index.php b/web/index.php
+index 39f5b5a5d9..c886fc7a23 100644
+--- a/web/index.php
++++ b/web/index.php
+@@ -203,8 +203,12 @@
+   require_once $includeFile;
+ }
+ 
+-if ( isset($_REQUEST['action']) )
+-  $action = detaintPath($_REQUEST['action']);
++if (isset($_POST['action'])) {
++  # Actions can only be performed on POST because we don't check csrf on GETs.
++  $action = detaintPath($_POST['action']);
++} else if (isset($_REQUEST['action'])) {
++  ZM\Error('actions can no longer be performed without POST.');
++}
+ 
+ # The only variable we really need to set is action. The others are informal.
+ isset($view) || $view = NULL;

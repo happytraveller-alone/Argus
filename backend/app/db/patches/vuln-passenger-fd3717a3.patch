@@ -1,0 +1,551 @@
+From fd3717a3cd357aa0e80e1e81d4dc94a1eaf928f1 Mon Sep 17 00:00:00 2001
+From: "Hongli Lai (Phusion)" <hongli@phusion.nl>
+Date: Wed, 30 May 2018 16:10:19 +0200
+Subject: [PATCH] SpawningKit: ensure safe reading of files in the work dir
+ after its finalization
+
+After finalization of the work dir, it is owned by the app's user and group.
+This allows the app to arbitrarily modify the work dir to insert symlinks.
+In order to prevent the SpawningKit code (which may run as root) from reading
+arbitrary files through symlink attacks, we use the safeReadFile() function.
+This function also mitigates various DoS attacks (see its comments).
+---
+ src/agent/Core/SpawningKit/DirectSpawner.h    |  1 +
+ .../Core/SpawningKit/Handshake/Perform.h      | 83 +++++++++++++------
+ .../Core/SpawningKit/Handshake/Prepare.h      | 41 ++++++++-
+ .../Core/SpawningKit/Handshake/Session.h      | 35 +++++++-
+ src/agent/Core/SpawningKit/SmartSpawner.h     | 28 ++++---
+ src/cxx_supportlib/Constants.h                |  5 ++
+ .../phusion_passenger/constants.rb            |  5 ++
+ .../Core/SpawningKit/HandshakePerformTest.cpp | 22 +++++
+ 8 files changed, 180 insertions(+), 40 deletions(-)
+
+diff --git a/src/agent/Core/SpawningKit/DirectSpawner.h b/src/agent/Core/SpawningKit/DirectSpawner.h
+index 64f995061..bee9bcc62 100644
+--- a/src/agent/Core/SpawningKit/DirectSpawner.h
++++ b/src/agent/Core/SpawningKit/DirectSpawner.h
+@@ -41,6 +41,7 @@
+ 
+ #include <limits.h>  // for PTHREAD_STACK_MIN
+ #include <pthread.h>
++#include <unistd.h>
+ #include <adhoc_lve.h>
+ 
+ namespace Passenger {
+diff --git a/src/agent/Core/SpawningKit/Handshake/Perform.h b/src/agent/Core/SpawningKit/Handshake/Perform.h
+index 1260fab09..cd55d1d17 100644
+--- a/src/agent/Core/SpawningKit/Handshake/Perform.h
++++ b/src/agent/Core/SpawningKit/Handshake/Perform.h
+@@ -1,6 +1,6 @@
+ /*
+  *  Phusion Passenger - https://www.phusionpassenger.com/
+- *  Copyright (c) 2016-2017 Phusion Holding B.V.
++ *  Copyright (c) 2016-2018 Phusion Holding B.V.
+  *
+  *  "Passenger", "Phusion Passenger" and "Union Station" are registered
+  *  trademarks of Phusion Holding B.V.
+@@ -147,7 +147,8 @@ private:
+ 		TRACE_POINT();
+ 		try {
+ 			string path = session.responseDir + "/finish";
+-			int fd = syscalls::open(path.c_str(), O_RDONLY);
++			int fd = syscalls::openat(session.responseDirFd, "finish",
++				O_RDONLY | O_NOFOLLOW);
+ 			if (fd == -1) {
+ 				int e = errno;
+ 				throw FileSystemException("Error opening FIFO " + path,
+@@ -378,13 +379,21 @@ private:
+ 		vector<string> errors;
+ 
+ 		// We already checked whether properties.json exists before invoking
+-		// this method, so if unsafeReadFile() fails then we can't be sure that
++		// this method, so if safeReadFile() fails then we can't be sure that
+ 		// it's an application problem. This is why we want the SystemException
+ 		// to propagate to higher layers so that there it can be turned into
+ 		// a generic filesystem-related or IO-related SpawnException, as opposed
+ 		// to one about this problem specifically.
+ 
+-		if (!reader.parse(unsafeReadFile(path), doc)) {
++		pair<string, bool> jsonContent = safeReadFile(session.responseDirFd, "properties.json",
++			SPAWNINGKIT_MAX_PROPERTIES_JSON_SIZE);
++		if (!jsonContent.second) {
++			errors.push_back("Error parsing " + path + ": file bigger than "
++				+ toString(SPAWNINGKIT_MAX_PROPERTIES_JSON_SIZE) + " bytes");
++			throwSpawnExceptionBecauseOfResultValidationErrors(vector<string>(),
++				errors);
++		}
++		if (!reader.parse(jsonContent.first, doc)) {
+ 			errors.push_back("Error parsing " + path + ": " +
+ 				reader.getFormattedErrorMessages());
+ 			throwSpawnExceptionBecauseOfResultValidationErrors(vector<string>(),
+@@ -923,7 +932,8 @@ private:
+ 	ErrorCategory inferErrorCategoryFromResponseDir(ErrorCategory defaultValue) const {
+ 		TRACE_POINT();
+ 		if (fileExists(session.responseDir + "/error/category")) {
+-			string value = strip(unsafeReadFile(session.responseDir + "/error/category"));
++			string value = strip(safeReadFile(session.responseErrorDirFd,
++				"category", SPAWNINGKIT_MAX_ERROR_CATEGORY_SIZE).first);
+ 			ErrorCategory category = stringToErrorCategory(value);
+ 
+ 			if (category == UNKNOWN_ERROR_CATEGORY) {
+@@ -1048,18 +1058,24 @@ private:
+ 				continue;
+ 			}
+ 
++			map<JourneyStep, int>::const_iterator it = session.stepDirFds.find(step);
++			if (it == session.stepDirFds.end()) {
++				P_BUG("No fd opened for step " << stepString);
++			}
++
+ 			loadJourneyStateFromResponseDirForSpecificStep(
+-				session, pid, stdoutAndErrCapturer, step, stepDir);
++				session, pid, stdoutAndErrCapturer, step, stepDir, it->second);
+ 		}
+ 	}
+ 
+ 	static void loadJourneyStateFromResponseDirForSpecificStep(HandshakeSession &session,
+ 		pid_t pid, const BackgroundIOCapturerPtr &stdoutAndErrCapturer,
+-		JourneyStep step, const string &stepDir)
++		JourneyStep step, const string &stepDir, int stepDirFd)
+ 	{
+ 		TRACE_POINT_WITH_DATA(journeyStepToString(step).data());
+ 		string summary;
+-		string value = strip(unsafeReadFile(stepDir + "/state"));
++		string value = strip(safeReadFile(stepDirFd, "state",
++			SPAWNINGKIT_MAX_JOURNEY_STEP_FILE_SIZE).first);
+ 		JourneyStepState state = stringToJourneyStepState(value);
+ 		const Config *config = session.config;
+ 
+@@ -1275,13 +1291,15 @@ private:
+ 
+ 		UPDATE_TRACE_POINT();
+ 		if (fileExists(stepDir + "/begin_time_monotonic")) {
+-			value = unsafeReadFile(stepDir + "/begin_time_monotonic");
++			value = safeReadFile(stepDirFd, "begin_time_monotonic",
++				SPAWNINGKIT_MAX_JOURNEY_STEP_FILE_SIZE).first;
+ 			MonotonicTimeUsec beginTimeMonotonic = atof(value.c_str()) * 1000000;
+ 			P_DEBUG("[App " << pid << " journey] Step " << journeyStepToString(step)
+ 				<< ": monotonic begin time is \"" << cEscapeString(value) << "\"");
+ 			session.journey.setStepBeginTime(step, beginTimeMonotonic);
+ 		} else if (fileExists(stepDir + "/begin_time")) {
+-			value = unsafeReadFile(stepDir + "/begin_time");
++			value = safeReadFile(stepDirFd, "begin_time",
++				SPAWNINGKIT_MAX_JOURNEY_STEP_FILE_SIZE).first;
+ 			unsigned long long beginTime = atof(value.c_str()) * 1000000;
+ 			MonotonicTimeUsec beginTimeMonotonic = usecTimestampToMonoTime(beginTime);
+ 			P_DEBUG("[App " << pid << " journey] Step " << journeyStepToString(step)
+@@ -1295,13 +1313,15 @@ private:
+ 
+ 		UPDATE_TRACE_POINT();
+ 		if (fileExists(stepDir + "/end_time_monotonic")) {
+-			value = unsafeReadFile(stepDir + "/end_time_monotonic");
++			value = safeReadFile(stepDirFd, "end_time_monotonic",
++				SPAWNINGKIT_MAX_JOURNEY_STEP_FILE_SIZE).first;
+ 			MonotonicTimeUsec endTimeMonotonic = atof(value.c_str()) * 1000000;
+ 			P_DEBUG("[App " << pid << " journey] Step " << journeyStepToString(step)
+ 				<< ": monotonic end time is \"" << cEscapeString(value) << "\"");
+ 			session.journey.setStepEndTime(step, endTimeMonotonic);
+ 		} else if (fileExists(stepDir + "/end_time")) {
+-			value = unsafeReadFile(stepDir + "/end_time");
++			value = safeReadFile(stepDirFd, "end_time",
++				SPAWNINGKIT_MAX_JOURNEY_STEP_FILE_SIZE).first;
+ 			unsigned long long endTime = atof(value.c_str()) * 1000000;
+ 			MonotonicTimeUsec endTimeMonotonic = usecTimestampToMonoTime(endTime);
+ 			P_DEBUG("[App " << pid << " journey] Step " << journeyStepToString(step)
+@@ -1334,32 +1354,36 @@ private:
+ 		const string &envDumpDir = session.envDumpDir;
+ 
+ 		if (fileExists(responseDir + "/error/summary")) {
+-			e.setSummary(strip(unsafeReadFile(responseDir + "/error/summary")));
++			e.setSummary(strip(safeReadFile(session.responseErrorDirFd, "summary",
++				SPAWNINGKIT_MAX_SUBPROCESS_ERROR_MESSAGE_SIZE).first));
+ 		}
+ 
+ 		if (e.getAdvancedProblemDetails().empty()
+ 		 && fileExists(responseDir + "/error/advanced_problem_details"))
+ 		{
+-			e.setAdvancedProblemDetails(strip(unsafeReadFile(responseDir
+-				+ "/error/advanced_problem_details")));
++			e.setAdvancedProblemDetails(strip(safeReadFile(session.responseErrorDirFd,
++				"advanced_problem_details", SPAWNINGKIT_MAX_SUBPROCESS_ERROR_MESSAGE_SIZE).first));
+ 		}
+ 
+ 		if (fileExists(responseDir + "/error/problem_description.html")) {
+-			e.setProblemDescriptionHTML(unsafeReadFile(responseDir + "/error/problem_description.html"));
++			e.setProblemDescriptionHTML(safeReadFile(session.responseErrorDirFd,
++				"problem_description.html", SPAWNINGKIT_MAX_SUBPROCESS_ERROR_MESSAGE_SIZE).first);
+ 		} else if (fileExists(responseDir + "/error/problem_description.txt")) {
+-			e.setProblemDescriptionHTML(escapeHTML(strip(unsafeReadFile(
+-				responseDir + "/error/problem_description.txt"))));
++			e.setProblemDescriptionHTML(escapeHTML(strip(safeReadFile(session.responseErrorDirFd,
++				"problem_description.txt", SPAWNINGKIT_MAX_SUBPROCESS_ERROR_MESSAGE_SIZE).first)));
+ 		}
+ 
+ 		if (fileExists(responseDir + "/error/solution_description.html")) {
+-			e.setSolutionDescriptionHTML(unsafeReadFile(responseDir + "/error/solution_description.html"));
++			e.setSolutionDescriptionHTML(safeReadFile(session.responseErrorDirFd,
++				"solution_description.html", SPAWNINGKIT_MAX_SUBPROCESS_ERROR_MESSAGE_SIZE).first);
+ 		} else if (fileExists(responseDir + "/error/solution_description.txt")) {
+-			e.setSolutionDescriptionHTML(escapeHTML(strip(unsafeReadFile(
+-				responseDir + "/error/solution_description.txt"))));
++			e.setSolutionDescriptionHTML(escapeHTML(strip(safeReadFile(session.responseErrorDirFd,
++				"solution_description.txt", SPAWNINGKIT_MAX_SUBPROCESS_ERROR_MESSAGE_SIZE).first)));
+ 		}
+ 
+ 		string envvars, userInfo, ulimits;
+-		loadBasicInfoFromEnvDumpDir(envDumpDir, envvars, userInfo, ulimits);
++		loadBasicInfoFromEnvDumpDir(envDumpDir, session.envDumpDirFd, envvars,
++			userInfo, ulimits);
+ 		e.setSubprocessEnvvars(envvars);
+ 		e.setSubprocessUserInfo(userInfo);
+ 		e.setSubprocessUlimits(ulimits);
+@@ -1388,7 +1412,9 @@ private:
+ 		while ((ent = readdir(dir)) != NULL) {
+ 			if (ent->d_name[0] != '.') {
+ 				e.setAnnotation(ent->d_name, strip(
+-					unsafeReadFile(path + "/" + ent->d_name)));
++					safeReadFile(session.envDumpAnnotationsDirFd,
++						ent->d_name, SPAWNINGKIT_MAX_SUBPROCESS_ENVDUMP_SIZE).first
++				));
+ 			}
+ 		}
+ 	}
+@@ -1630,16 +1656,19 @@ public:
+ 	}
+ 
+ 	static void loadBasicInfoFromEnvDumpDir(const string &envDumpDir,
+-		string &envvars, string &userInfo, string &ulimits)
++		int envDumpDirFd, string &envvars, string &userInfo, string &ulimits)
+ 	{
+ 		if (fileExists(envDumpDir + "/envvars")) {
+-			envvars = unsafeReadFile(envDumpDir + "/envvars");
++			envvars = safeReadFile(envDumpDirFd, "envvars",
++				SPAWNINGKIT_MAX_SUBPROCESS_ENVDUMP_SIZE).first;
+ 		}
+ 		if (fileExists(envDumpDir + "/user_info")) {
+-			userInfo = unsafeReadFile(envDumpDir + "/user_info");
++			userInfo = safeReadFile(envDumpDirFd, "user_info",
++				SPAWNINGKIT_MAX_SUBPROCESS_ENVDUMP_SIZE).first;
+ 		}
+ 		if (fileExists(envDumpDir + "/ulimits")) {
+-			ulimits = unsafeReadFile(envDumpDir + "/ulimits");
++			ulimits = safeReadFile(envDumpDirFd, "ulimits",
++				SPAWNINGKIT_MAX_SUBPROCESS_ENVDUMP_SIZE).first;
+ 		}
+ 	}
+ };
+diff --git a/src/agent/Core/SpawningKit/Handshake/Prepare.h b/src/agent/Core/SpawningKit/Handshake/Prepare.h
+index 6e632e287..6093850cf 100644
+--- a/src/agent/Core/SpawningKit/Handshake/Prepare.h
++++ b/src/agent/Core/SpawningKit/Handshake/Prepare.h
+@@ -1,6 +1,6 @@
+ /*
+  *  Phusion Passenger - https://www.phusionpassenger.com/
+- *  Copyright (c) 2016-2017 Phusion Holding B.V.
++ *  Copyright (c) 2016-2018 Phusion Holding B.V.
+  *
+  *  "Passenger", "Phusion Passenger" and "Union Station" are registered
+  *  trademarks of Phusion Holding B.V.
+@@ -33,6 +33,7 @@
+ #include <vector>
+ #include <stdexcept>
+ #include <algorithm>
++#include <utility>
+ #include <cerrno>
+ #include <cstddef>
+ #include <cassert>
+@@ -216,6 +217,43 @@ private:
+ 		}
+ 	}
+ 
++	// Open various workdir subdirectories because we'll use these file descriptors later in
++	// safeReadFile() calls.
++	void openWorkDirSubdirFds() {
++		session.workDirFd = openDirFd(session.workDir->getPath());
++		session.responseDirFd = openDirFd(session.responseDir);
++		session.responseErrorDirFd = openDirFd(session.responseDir + "/error");
++		session.envDumpDirFd = openDirFd(session.envDumpDir);
++		session.envDumpAnnotationsDirFd = openDirFd(session.envDumpDir + "/annotations");
++		openJourneyStepDirFds(getFirstSubprocessJourneyStep(),
++			getLastSubprocessJourneyStep());
++		openJourneyStepDirFds(getFirstPreloaderJourneyStep(),
++			JourneyStep((int) getLastPreloaderJourneyStep() + 1));
++	}
++
++	void openJourneyStepDirFds(JourneyStep firstStep, JourneyStep lastStep) {
++		JourneyStep step;
++
++		for (step = firstStep; step < lastStep; step = JourneyStep((int) step + 1)) {
++			if (!session.journey.hasStep(step)) {
++				continue;
++			}
++
++			string stepString = journeyStepToStringLowerCase(step);
++			string stepDir = session.responseDir + "/steps/" + stepString;
++			session.stepDirFds.insert(make_pair(step, openDirFd(stepDir)));
++		}
++	}
++
++	int openDirFd(const string &path) {
++		int fd = open(path.c_str(), O_RDONLY);
++		if (fd == -1) {
++			int e = errno;
++			throw FileSystemException("Cannot open " + path, e, path);
++		}
++		return fd;
++	}
++
+ 	void initializeResult() {
+ 		session.result.initialize(*context, config);
+ 	}
+@@ -549,6 +587,7 @@ public:
+ 
+ 			resolveUserAndGroup();
+ 			createWorkDir();
++			openWorkDirSubdirFds();
+ 			initializeResult();
+ 
+ 			UPDATE_TRACE_POINT();
+diff --git a/src/agent/Core/SpawningKit/Handshake/Session.h b/src/agent/Core/SpawningKit/Handshake/Session.h
+index a35e42110..8fb0dafeb 100644
+--- a/src/agent/Core/SpawningKit/Handshake/Session.h
++++ b/src/agent/Core/SpawningKit/Handshake/Session.h
+@@ -1,6 +1,6 @@
+ /*
+  *  Phusion Passenger - https://www.phusionpassenger.com/
+- *  Copyright (c) 2016-2017 Phusion Holding B.V.
++ *  Copyright (c) 2016-2018 Phusion Holding B.V.
+  *
+  *  "Passenger", "Phusion Passenger" and "Union Station" are registered
+  *  trademarks of Phusion Holding B.V.
+@@ -28,6 +28,7 @@
+ 
+ #include <boost/scoped_ptr.hpp>
+ #include <string>
++#include <map>
+ 
+ #include <Utils.h>
+ #include <Core/SpawningKit/Context.h>
+@@ -50,6 +51,12 @@ struct HandshakeSession {
+ 	boost::scoped_ptr<HandshakeWorkDir> workDir;
+ 	string responseDir;
+ 	string envDumpDir;
++	int workDirFd;
++	int responseDirFd;
++	int responseErrorDirFd;
++	int envDumpDirFd;
++	int envDumpAnnotationsDirFd;
++	map<JourneyStep, int> stepDirFds;
+ 	Journey journey;
+ 	Result result;
+ 
+@@ -69,6 +76,11 @@ struct HandshakeSession {
+ 	HandshakeSession(Context &_context, Config &_config, JourneyType journeyType)
+ 		: context(&_context),
+ 		  config(&_config),
++		  workDirFd(-1),
++		  responseDirFd(-1),
++		  responseErrorDirFd(-1),
++		  envDumpDirFd(-1),
++		  envDumpAnnotationsDirFd(-1),
+ 		  journey(journeyType, !_config.genericApp && _config.startsUsingWrapper),
+ 		  uid(USER_NOT_GIVEN),
+ 		  gid(GROUP_NOT_GIVEN),
+@@ -77,6 +89,27 @@ struct HandshakeSession {
+ 		{ }
+ 
+ 	~HandshakeSession() {
++		if (workDirFd != -1) {
++			safelyClose(workDirFd, true);
++		}
++		if (responseDirFd != -1) {
++			safelyClose(responseDirFd, true);
++		}
++		if (responseErrorDirFd != -1) {
++			safelyClose(responseErrorDirFd, true);
++		}
++		if (envDumpDirFd != -1) {
++			safelyClose(envDumpDirFd, true);
++		}
++		if (envDumpAnnotationsDirFd != -1) {
++			safelyClose(envDumpAnnotationsDirFd, true);
++		}
++
++		map<JourneyStep, int>::iterator it, end = stepDirFds.end();
++		for (it = stepDirFds.begin(); it != end; it++) {
++			safelyClose(it->second);
++		}
++
+ 		if (config->debugWorkDir && workDir != NULL) {
+ 			string path = workDir->dontRemoveOnDestruction();
+ 			P_NOTICE("Work directory " << path << " preserved for debugging");
+diff --git a/src/agent/Core/SpawningKit/SmartSpawner.h b/src/agent/Core/SpawningKit/SmartSpawner.h
+index 6f03cef8e..f1c66de40 100644
+--- a/src/agent/Core/SpawningKit/SmartSpawner.h
++++ b/src/agent/Core/SpawningKit/SmartSpawner.h
+@@ -39,6 +39,7 @@
+ #include <sys/wait.h>
+ #include <sys/stat.h>
+ #include <signal.h>
++#include <unistd.h>
+ #include <cstring>
+ #include <cassert>
+ 
+@@ -177,6 +178,8 @@ private:
+ 	}
+ 
+ 	struct StdChannelsAsyncOpenState {
++		const int workDirFd;
++
+ 		oxt::thread *stdinOpenThread;
+ 		FileDescriptor stdinFd;
+ 		int stdinOpenErrno;
+@@ -187,8 +190,9 @@ private:
+ 
+ 		BackgroundIOCapturerPtr stdoutAndErrCapturer;
+ 
+-		StdChannelsAsyncOpenState()
+-			: stdinOpenThread(NULL),
++		StdChannelsAsyncOpenState(int _workDirFd)
++			: workDirFd(_workDirFd),
++			  stdinOpenThread(NULL),
+ 			  stdoutAndErrOpenThread(NULL)
+ 			{ }
+ 
+@@ -211,7 +215,8 @@ private:
+ 	StdChannelsAsyncOpenStatePtr openStdChannelsFifosAsynchronously(
+ 		HandshakeSession &session)
+ 	{
+-		StdChannelsAsyncOpenStatePtr state = boost::make_shared<StdChannelsAsyncOpenState>();
++		StdChannelsAsyncOpenStatePtr state = boost::make_shared<StdChannelsAsyncOpenState>(
++			session.workDirFd);
+ 		state->stdinOpenThread = new oxt::thread(boost::bind(
+ 			openStdinChannel, state, session.workDir->getPath()),
+ 			"FIFO opener: " + session.workDir->getPath() + "/stdin", 1024 * 128);
+@@ -282,7 +287,7 @@ private:
+ 	static void openStdinChannel(StdChannelsAsyncOpenStatePtr state,
+ 		const string &workDir)
+ 	{
+-		int fd = syscalls::open((workDir + "/stdin").c_str(), O_WRONLY | O_APPEND);
++		int fd = syscalls::openat(state->workDirFd, "stdin", O_WRONLY | O_APPEND | O_NOFOLLOW);
+ 		int e = errno;
+ 		state->stdinFd.assign(fd, __FILE__, __LINE__);
+ 		state->stdinOpenErrno = e;
+@@ -291,7 +296,7 @@ private:
+ 	static void openStdoutAndErrChannel(StdChannelsAsyncOpenStatePtr state,
+ 		const string &workDir)
+ 	{
+-		int fd = syscalls::open((workDir + "/stdout_and_err").c_str(), O_RDONLY);
++		int fd = syscalls::openat(state->workDirFd, "stdout_and_err", O_RDONLY | O_NOFOLLOW);
+ 		int e = errno;
+ 		state->stdoutAndErrFd.assign(fd, __FILE__, __LINE__);
+ 		state->stdoutAndErrOpenErrno = e;
+@@ -429,7 +434,7 @@ private:
+ 			// - bottom of stopPreloader()
+ 			// - addPreloaderEnvDumps()
+ 			HandshakePerform::loadBasicInfoFromEnvDumpDir(session.envDumpDir,
+-				envvars, userInfo, ulimits);
++				session.envDumpDirFd, envvars, userInfo, ulimits);
+ 			string socketAddress = findPreloaderCommandSocketAddress(session);
+ 
+ 			{
+@@ -441,7 +446,7 @@ private:
+ 				this->preloaderUserInfo = userInfo;
+ 				this->preloaderUlimits = ulimits;
+ 				this->preloaderAnnotations = loadAnnotationsFromEnvDumpDir(
+-					session.envDumpDir);
++					session.envDumpDir, session.envDumpAnnotationsDirFd);
+ 			}
+ 
+ 			PipeWatcherPtr watcher = boost::make_shared<PipeWatcher>(
+@@ -1145,7 +1150,9 @@ private:
+ 		return string();
+ 	}
+ 
+-	static StringKeyTable<string> loadAnnotationsFromEnvDumpDir(const string &envDumpDir) {
++	static StringKeyTable<string> loadAnnotationsFromEnvDumpDir(const string &envDumpDir,
++		int envDumpAnnotationsDirFd)
++	{
+ 		string path = envDumpDir + "/annotations";
+ 		DIR *dir = opendir(path.c_str());
+ 		if (dir == NULL) {
+@@ -1157,9 +1164,8 @@ private:
+ 		struct dirent *ent;
+ 		while ((ent = readdir(dir)) != NULL) {
+ 			if (ent->d_name[0] != '.') {
+-				result.insert(ent->d_name, strip(
+-					unsafeReadFile(path + "/" + ent->d_name)),
+-					true);
++				result.insert(ent->d_name, strip(safeReadFile(envDumpAnnotationsDirFd,
++					ent->d_name, SPAWNINGKIT_MAX_SUBPROCESS_ENVDUMP_SIZE).first), true);
+ 			}
+ 		}
+ 
+diff --git a/src/cxx_supportlib/Constants.h b/src/cxx_supportlib/Constants.h
+index 17176651c..d87e51377 100644
+--- a/src/cxx_supportlib/Constants.h
++++ b/src/cxx_supportlib/Constants.h
+@@ -98,6 +98,11 @@
+ #define SERVER_KIT_MAX_SERVER_ENDPOINTS 4
+ #define SERVER_TOKEN_NAME "Phusion_Passenger"
+ #define SHORT_PROGRAM_NAME "Passenger"
++#define SPAWNINGKIT_MAX_ERROR_CATEGORY_SIZE 32
++#define SPAWNINGKIT_MAX_JOURNEY_STEP_FILE_SIZE 32
++#define SPAWNINGKIT_MAX_PROPERTIES_JSON_SIZE 32768
++#define SPAWNINGKIT_MAX_SUBPROCESS_ENVDUMP_SIZE 131072
++#define SPAWNINGKIT_MAX_SUBPROCESS_ERROR_MESSAGE_SIZE 131072
+ #define SUPPORT_URL "https://www.phusionpassenger.com/support"
+ #define USER_NAMESPACE_DIRNAME ".passenger"
+ 
+diff --git a/src/ruby_supportlib/phusion_passenger/constants.rb b/src/ruby_supportlib/phusion_passenger/constants.rb
+index 1d2145d2b..c6e9e14b5 100644
+--- a/src/ruby_supportlib/phusion_passenger/constants.rb
++++ b/src/ruby_supportlib/phusion_passenger/constants.rb
+@@ -76,6 +76,11 @@ module PhusionPassenger
+     MESSAGE_SERVER_MAX_USERNAME_SIZE = 100
+     MESSAGE_SERVER_MAX_PASSWORD_SIZE = 100
+     POOL_HELPER_THREAD_STACK_SIZE = 1024 * 256
++    SPAWNINGKIT_MAX_SUBPROCESS_ERROR_MESSAGE_SIZE = 1024 * 128
++    SPAWNINGKIT_MAX_SUBPROCESS_ENVDUMP_SIZE = 1024 * 128
++    SPAWNINGKIT_MAX_PROPERTIES_JSON_SIZE = 1024 * 32
++    SPAWNINGKIT_MAX_ERROR_CATEGORY_SIZE = 32
++    SPAWNINGKIT_MAX_JOURNEY_STEP_FILE_SIZE = 32
+     # Small mbuf sizes avoid memory overhead (up to 1 blocksize per request), but
+     # also introduce context switching and smaller transfer writes. The size is picked
+     # to balance this out.
+diff --git a/test/cxx/Core/SpawningKit/HandshakePerformTest.cpp b/test/cxx/Core/SpawningKit/HandshakePerformTest.cpp
+index 112095ba7..ce5dfebf1 100644
+--- a/test/cxx/Core/SpawningKit/HandshakePerformTest.cpp
++++ b/test/cxx/Core/SpawningKit/HandshakePerformTest.cpp
+@@ -329,6 +329,28 @@ namespace tut {
+ 		ensure_equals(session->journey.getStepInfo(SUBPROCESS_LISTEN).state, STEP_PERFORMED);
+ 	}
+ 
++	TEST_METHOD(20) {
++		// Limited test of whether the code mitigates symlink attacks.
++		set_test_name("It does not read from symlinks");
++
++		init(SPAWN_DIRECTLY);
++
++		createFile(session->responseDir + "/properties-real.json",
++			createGoodPropertiesJson().toStyledString());
++		symlink("properties-real.json",
++			(session->responseDir + "/properties.json").c_str());
++		TempThread thr(boost::bind(&Core_SpawningKit_HandshakePerformTest::signalFinish,
++			this));
++
++		try {
++			execute();
++			fail("SpawnException expected");
++		} catch (const SpawnException &e) {
++			ensure(containsSubstring(e.getSummary(),
++				"Cannot open 'properties.json'"));
++		}
++	}
++
+ 
+ 	/***** Success response handling *****/
+ 
+-- 
+2.34.1
+

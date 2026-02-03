@@ -1,0 +1,24 @@
+From 2580706a2d687114eb7ecc8ba7b719e3d42cce51 Mon Sep 17 00:00:00 2001
+From: Marshall Hallenbeck <Marshall.Hallenbeck@gmail.com>
+Date: Sun, 12 Jan 2020 01:49:36 -0500
+Subject: [PATCH] bump version info
+
+---
+ package.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/package.json b/package.json
+index afd8762..f472ba5 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "OpenTrade",
+-  "version": "0.2.0",
++  "version": "0.2.1",
+   "description": "Open Source Cryptocurrency Exchange",
+   "repository": {
+     "type": "git",
+-- 
+2.34.1
+

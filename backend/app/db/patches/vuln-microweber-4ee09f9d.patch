@@ -1,0 +1,43 @@
+From 4ee09f9dda35cd1b15daa351f335c2a4a0538d29 Mon Sep 17 00:00:00 2001
+From: Peter Ivanov <peter@microweber.com>
+Date: Thu, 11 Dec 2014 13:47:13 +0200
+Subject: [PATCH] fixes
+
+---
+ src/Microweber/Category.php          | 2 +-
+ src/Microweber/includes/admin/ui.php | 7 ++++++-
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/Microweber/Category.php b/src/Microweber/Category.php
+index a102a6cff85..31a61455d43 100644
+--- a/src/Microweber/Category.php
++++ b/src/Microweber/Category.php
+@@ -1023,7 +1023,7 @@ public function get_parents($id = 0, $without_main_parrent = false, $data_type =
+     public function get_children($parent_id = 0, $type = false, $visible_on_frontend = false)
+     {
+ 
+-        $categories_id = intval($parent_id);
++        $categories_id = $parent_id =intval($parent_id);
+         $cache_group = 'categories/' . $categories_id;
+ 
+         $table = $this->tables['categories'];
+diff --git a/src/Microweber/includes/admin/ui.php b/src/Microweber/includes/admin/ui.php
+index 424e4cf2fe0..eb78d7e5bb8 100644
+--- a/src/Microweber/includes/admin/ui.php
++++ b/src/Microweber/includes/admin/ui.php
+@@ -98,9 +98,14 @@
+   for( ;i<l;i++){
+     var sel = uicss[i].selectorText;
+ 
++
+     if(!!sel && sel.indexOf('.mw-icon-') === 0){
++        var t = uicss[i].cssText.replace(/'/g, '"');
++        var glyph = t.split('"')[1].split('"')[0];
++
+         var cls = sel.replace(".", '').split(':')[0];
+-        html +='<li><span class="'+cls+'"></span><em>.'+cls+'</em></li>';
++        //html +='<li><span class="'+cls+'"></span><em>.'+cls+'</em></li>';
++        html +='<li><span style="font-family:Microweber">'+glyph+'</span><em>.'+cls+'</em></li>';
+     }
+   }
+   mw.$('#info-icon-list').html('<ul>'+html+'</ul>');

@@ -1,0 +1,58 @@
+From b78fa27ae0b717c5569878c106a67d5047e5fb88 Mon Sep 17 00:00:00 2001
+From: nobu <nobu@b2dd03c8-39d4-4d8f-98ff-823fe69b080e>
+Date: Wed, 28 Mar 2018 11:30:27 +0000
+Subject: [PATCH] unixsocket.c: abstract namespace
+
+* ext/socket/unixsocket.c (unixsock_path_value): fix r62991 for
+  Linux abstract namespace.
+
+git-svn-id: svn+ssh://ci.ruby-lang.org/ruby/trunk@63000 b2dd03c8-39d4-4d8f-98ff-823fe69b080e
+---
+ ext/socket/unixsocket.c | 24 +++++++++++++++++++++++-
+ 1 file changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/ext/socket/unixsocket.c b/ext/socket/unixsocket.c
+index bf373f20ec..75f17d6c10 100644
+--- a/ext/socket/unixsocket.c
++++ b/ext/socket/unixsocket.c
+@@ -25,6 +25,28 @@ unixsock_connect_internal(VALUE a)
+ 			        arg->sockaddrlen, 0);
+ }
+ 
++static VALUE
++unixsock_path_value(VALUE path)
++{
++#ifdef __linux__
++#define TO_STR_FOR_LINUX_ABSTRACT_NAMESPACE 0
++
++    VALUE name = path;
++#if TO_STR_FOR_LINUX_ABSTRACT_NAMESPACE
++    const int isstr = !NIL_P(name = rb_check_string_type(name));
++#else
++    const int isstr = RB_TYPE_P(name, T_STRING);
++#endif
++    if (isstr) {
++        if (RSTRING_LEN(name) == 0 || RSTRING_PTR(name)[0] == '\0') {
++            rb_check_safe_obj(name);
++            return name;             /* ignore encoding */
++        }
++    }
++#endif
++    return rb_get_path(path);
++}
++
+ VALUE
+ rsock_init_unixsock(VALUE sock, VALUE path, int server)
+ {
+@@ -33,7 +55,7 @@ rsock_init_unixsock(VALUE sock, VALUE path, int server)
+     int fd, status;
+     rb_io_t *fptr;
+ 
+-    FilePathValue(path);
++    path = unixsock_path_value(path);
+ 
+     INIT_SOCKADDR_UN(&sockaddr, sizeof(struct sockaddr_un));
+     if (sizeof(sockaddr.sun_path) < (size_t)RSTRING_LEN(path)) {
+-- 
+2.34.1
+

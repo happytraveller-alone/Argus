@@ -1,0 +1,124 @@
+From ab29bed2fc9f961fe895de1086a8208e21ddaddc Mon Sep 17 00:00:00 2001
+From: Joao Eduardo Luis <joao@suse.de>
+Date: Thu, 29 Nov 2018 01:05:31 +0000
+Subject: [PATCH] rgw: fix issues with 'enforce bounds' patch
+
+The patch to enforce bounds on max-keys/max-uploads/max-parts had a few
+issues that would prevent us from compiling it. Instead of changing the
+code provided by the submitter, we're addressing them in a separate
+commit to maintain the DCO.
+
+Signed-off-by: Joao Eduardo Luis <joao@suse.de>
+Signed-off-by: Abhishek Lekshmanan <abhishek@suse.com>
+(cherry picked from commit 29bc434a6a81a2e5c5b8cfc4c8d5c82ca5bf538a)
+mimic specific fixes:
+As the largeish change from master g_conf() isn't in mimic yet, use the g_conf
+global structure, also make rgw_op use the value from req_info ceph context as
+we do for all the requests
+---
+ src/common/options.cc |  2 +-
+ src/rgw/rgw_op.cc     |  4 +++-
+ src/rgw/rgw_op.h      | 19 ++++++++++++-------
+ src/rgw/rgw_rest.cc   |  8 ++++++--
+ 4 files changed, 22 insertions(+), 11 deletions(-)
+
+diff --git a/src/common/options.cc b/src/common/options.cc
+index a543256d8ad..d906d1d04e1 100644
+--- a/src/common/options.cc
++++ b/src/common/options.cc
+@@ -6238,7 +6238,7 @@ std::vector<Option> get_rgw_options() {
+     .set_default(1000)
+     .set_min_max(1, 100000)
+     .add_service("rgw")
+-    .set_description("Upper bound on results in listing operations, ListBucket max-keys"),
++    .set_description("Upper bound on results in listing operations, ListBucket max-keys")
+     .set_long_description("This caps the maximum permitted value for listing-like operations in RGW S3. "
+ 			  "Affects ListBucket(max-keys), "
+ 			  "ListBucketVersions(max-keys), "
+diff --git a/src/rgw/rgw_op.cc b/src/rgw/rgw_op.cc
+index 509592943c6..1863d793337 100644
+--- a/src/rgw/rgw_op.cc
++++ b/src/rgw/rgw_op.cc
+@@ -2383,7 +2383,9 @@ int RGWListBucket::parse_max_keys()
+   // Bound min value of max-keys to '0'
+   // Some S3 clients explicitly send max-keys=0 to detect if the bucket is
+   // empty without listing any items.
+-  op_ret = parse_value_and_bound(max_keys, &max, 0, g_conf()->rgw_max_listing_results, default_max);
++  return parse_value_and_bound(max_keys, max, 0,
++			s->cct->_conf->get_val<uint64_t>("rgw_max_listing_results"),
++			default_max);
+ }
+ 
+ void RGWListBucket::pre_exec()
+diff --git a/src/rgw/rgw_op.h b/src/rgw/rgw_op.h
+index 57352ae8c14..21bc8c7a6fb 100644
+--- a/src/rgw/rgw_op.h
++++ b/src/rgw/rgw_op.h
+@@ -2235,11 +2235,16 @@ public:
+   virtual const string name() { return "get_cluster_stat"; }
+ };
+ 
+-static inline int parse_value_and_bound(const string &input, long *output, const long lower_bound, const long upper_bound, const long default_val)
++static inline int parse_value_and_bound(
++    const string &input,
++    int &output,
++    const long lower_bound,
++    const long upper_bound,
++    const long default_val)
+ {
+   if (!input.empty()) {
+     char *endptr;
+-    *output = strtol(input.c_str(), &endptr, 10);
++    output = strtol(input.c_str(), &endptr, 10);
+     if (endptr) {
+       if (endptr == input.c_str()) return -EINVAL;
+       while (*endptr && isspace(*endptr)) // ignore white space
+@@ -2248,14 +2253,14 @@ static inline int parse_value_and_bound(const string &input, long *output, const
+         return -EINVAL;
+       }
+     }
+-    if(*output > upper_bound) {
+-      *output = upper_bound;
++    if(output > upper_bound) {
++      output = upper_bound;
+     }
+-    if(*output < lower_bound) {
+-      *output = lower_bound;
++    if(output < lower_bound) {
++      output = lower_bound;
+     }
+   } else {
+-    *output = default_val;
++    output = default_val;
+   }
+ 
+   return 0;
+diff --git a/src/rgw/rgw_rest.cc b/src/rgw/rgw_rest.cc
+index c87192d5674..fdb1a713efe 100644
+--- a/src/rgw/rgw_rest.cc
++++ b/src/rgw/rgw_rest.cc
+@@ -1588,7 +1588,9 @@ int RGWListMultipart_ObjStore::get_params()
+   }
+   
+   string str = s->info.args.get("max-parts");
+-  op_ret = parse_value_and_bound(str, &max_parts, 0, g_conf()->rgw_max_listing_results, max_parts);
++  op_ret = parse_value_and_bound(str, max_parts, 0,
++                                 g_conf->get_val<uint64_t>("rgw_max_listing_results"),
++                                 max_parts);
+ 
+   return op_ret;
+ }
+@@ -1598,7 +1600,9 @@ int RGWListBucketMultiparts_ObjStore::get_params()
+   delimiter = s->info.args.get("delimiter");
+   prefix = s->info.args.get("prefix");
+   string str = s->info.args.get("max-uploads");
+-  op_ret = parse_value_and_bound(str, &max_uploads, 0, g_conf()->rgw_max_listing_results, default_max);
++  op_ret = parse_value_and_bound(str, max_uploads, 0,
++			g_conf->get_val<uint64_t>("rgw_max_listing_results"),
++			default_max);
+   if (op_ret < 0) {
+     return op_ret;
+   }
+-- 
+2.34.1
+
