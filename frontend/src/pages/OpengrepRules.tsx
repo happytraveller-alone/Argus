@@ -56,8 +56,10 @@ import {
     deleteOpengrepRule,
     generateOpengrepRule,
     createOpengrepGenericRule,
+    batchUpdateOpengrepRules,
     RULE_SOURCES,
     SEVERITIES,
+    ACTIVE_STATUS,
     type OpengrepRule,
     type OpengrepRuleDetail,
 } from "@/shared/api/opengrep";
@@ -71,6 +73,7 @@ export default function OpengrepRules() {
     const [selectedLanguage, setSelectedLanguage] = useState<string>("");
     const [selectedSource, setSelectedSource] = useState<string>("");
     const [selectedSeverity, setSelectedSeverity] = useState<string>("");
+    const [selectedActiveStatus, setSelectedActiveStatus] = useState<string>("");
     const [showRuleDetail, setShowRuleDetail] = useState(false);
     const [selectedRule, setSelectedRule] = useState<OpengrepRuleDetail | null>(
         null,
@@ -112,7 +115,7 @@ export default function OpengrepRules() {
             setCurrentPage(1);
             loadRules();
         }
-    }, [selectedLanguage, selectedSource, selectedSeverity]);
+    }, [selectedLanguage, selectedSource, selectedSeverity, selectedActiveStatus]);
 
     const loadRules = async (options?: { silent?: boolean }) => {
         const silent = options?.silent ?? false;
@@ -273,6 +276,7 @@ export default function OpengrepRules() {
         setSelectedLanguage("");
         setSelectedSource("");
         setSelectedSeverity("");
+        setSelectedActiveStatus("");
         setCurrentPage(1);
         setSelectedRuleIds(new Set());
     };
@@ -296,35 +300,42 @@ export default function OpengrepRules() {
     };
 
     const handleBatchUpdateRules = async (isActive: boolean) => {
-        if (selectedRuleIds.size === 0) {
-            toast.error("请先选择要操作的规则");
+        // 如果有直接选中的规则 ID，使用 rule_ids 方式
+        if (selectedRuleIds.size > 0) {
+            try {
+                setBatchOperating(true);
+                const result = await batchUpdateOpengrepRules({
+                    rule_ids: Array.from(selectedRuleIds),
+                    is_active: isActive,
+                });
+                toast.success(result.message);
+                setSelectedRuleIds(new Set());
+                await loadRules({ silent: true });
+                await loadRuleStats();
+            } catch (error) {
+                console.error("Batch operation failed:", error);
+                toast.error("批量操作失败");
+            } finally {
+                setBatchOperating(false);
+            }
+            return;
+        }
+
+        // 否则，检查是否有其他过滤条件
+        if (!selectedLanguage && !selectedSource && !selectedSeverity) {
+            toast.error("请先选择要操作的规则或设定过滤条件");
             return;
         }
 
         try {
             setBatchOperating(true);
-            const response = await fetch(
-                `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"}/v1/static-tasks/rules/select`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
-                    },
-                    body: JSON.stringify({
-                        rule_ids: Array.from(selectedRuleIds),
-                        is_active: isActive,
-                    }),
-                },
-            );
-
-            if (!response.ok) {
-                throw new Error("批量操作失败");
-            }
-
-            const result = await response.json();
+            const result = await batchUpdateOpengrepRules({
+                language: selectedLanguage || undefined,
+                source: (selectedSource as "internal" | "patch") || undefined,
+                severity: selectedSeverity || undefined,
+                is_active: isActive,
+            });
             toast.success(result.message);
-            setSelectedRuleIds(new Set());
             await loadRules({ silent: true });
             await loadRuleStats();
         } catch (error) {
@@ -344,8 +355,14 @@ export default function OpengrepRules() {
             !selectedLanguage || rule.language === selectedLanguage;
         const matchSeverity =
             !selectedSeverity || rule.severity === selectedSeverity;
+        const matchActiveStatus =
+            !selectedActiveStatus ||
+            (selectedActiveStatus === "true" && rule.is_active) ||
+            (selectedActiveStatus === "false" && !rule.is_active);
 
-        return matchSearch && matchLanguage && matchSeverity;
+        return (
+            matchSearch && matchLanguage && matchSeverity && matchActiveStatus
+        );
     });
 
     // 分页逻辑
@@ -503,6 +520,37 @@ export default function OpengrepRules() {
                                 </Select>
                             </div>
 
+                            <div className="min-w-[180px] flex-1">
+                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                    启用状态
+                                </Label>
+                                <Select
+                                    value={selectedActiveStatus || "all"}
+                                    onValueChange={(val) =>
+                                        setSelectedActiveStatus(
+                                            val === "all" ? "" : val,
+                                        )
+                                    }
+                                >
+                                    <SelectTrigger className="cyber-input mt-1.5">
+                                        <SelectValue placeholder="所有状态" />
+                                    </SelectTrigger>
+                                    <SelectContent className="cyber-dialog border-border">
+                                        <SelectItem value="all">
+                                            所有状态
+                                        </SelectItem>
+                                        {ACTIVE_STATUS.map((status) => (
+                                            <SelectItem
+                                                key={status.value}
+                                                value={status.value}
+                                            >
+                                                {status.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             <div className="flex items-end gap-2">
                                 <Button
                                     variant="outline"
@@ -578,15 +626,30 @@ export default function OpengrepRules() {
                     </div>
 
                     {/* Batch Operations */}
-                    {selectedRuleIds.size > 0 && (
+                    {(selectedRuleIds.size > 0 ||
+                        selectedLanguage ||
+                        selectedSource ||
+                        selectedSeverity) && (
                         <div className="cyber-card p-4 relative z-10 bg-primary/5 border-primary/30">
                             <div className="flex flex-wrap items-center justify-between gap-4">
                                 <p className="font-mono text-sm">
-                                    已选择{" "}
-                                    <span className="font-bold text-primary">
-                                        {selectedRuleIds.size}
-                                    </span>{" "}
-                                    条规则
+                                    {selectedRuleIds.size > 0 ? (
+                                        <>
+                                            已选择{" "}
+                                            <span className="font-bold text-primary">
+                                                {selectedRuleIds.size}
+                                            </span>{" "}
+                                            条规则
+                                        </>
+                                    ) : (
+                                        <>
+                                            将对{" "}
+                                            <span className="font-bold text-primary">
+                                                {filteredRules.length}
+                                            </span>{" "}
+                                            条符合条件的规则进行操作
+                                        </>
+                                    )}
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     <Button
@@ -612,13 +675,14 @@ export default function OpengrepRules() {
                                             : "批量禁用"}
                                     </Button>
                                     <Button
-                                        onClick={() =>
-                                            setSelectedRuleIds(new Set())
-                                        }
+                                        onClick={() => {
+                                            setSelectedRuleIds(new Set());
+                                            handleResetFilters();
+                                        }}
                                         disabled={batchOperating}
                                         className="cyber-btn-ghost h-9 text-sm"
                                     >
-                                        取消选择
+                                        取消操作
                                     </Button>
                                 </div>
                             </div>

@@ -203,6 +203,20 @@ export async function updateOpengrepFindingStatus(params: {
 }
 
 /**
+ * Batch update opengrep rules
+ */
+export async function batchUpdateOpengrepRules(params: {
+    rule_ids?: string[];
+    language?: string;
+    source?: "internal" | "patch";
+    severity?: string;
+    is_active: boolean;
+}): Promise<{ message: string; updated_count: number; is_active: boolean }> {
+    const response = await apiClient.post(`/static-tasks/rules/select`, params);
+    return response.data;
+}
+
+/**
  * Get supported languages
  */
 export const SUPPORTED_LANGUAGES = [
@@ -229,4 +243,9 @@ export const SEVERITIES = [
     { value: "ERROR", label: "错误" },
     { value: "WARNING", label: "警告" },
     { value: "INFO", label: "信息" },
+];
+
+export const ACTIVE_STATUS = [
+    { value: "true", label: "已启用" },
+    { value: "false", label: "已禁用" },
 ];
