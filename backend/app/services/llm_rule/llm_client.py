@@ -34,11 +34,21 @@ class LLMClient:
             # First try to parse the YAML
             data = yaml.safe_load(text)
 
-            # Ensure we have a valid rules structure
-            if not isinstance(data, dict):
+            # Ensure we always normalize to {"rules": [...]}
+            # and correctly handle top-level YAML list rules:
+            # - id: demo-rule
+            #   ...
+            if isinstance(data, list):
+                data = {"rules": data}
+            elif isinstance(data, dict):
+                if "rules" not in data:
+                    data = {"rules": [data]}
+                elif isinstance(data.get("rules"), dict):
+                    data["rules"] = [data["rules"]]
+                elif data.get("rules") is None:
+                    data["rules"] = []
+            else:
                 data = {"rules": [data] if data else []}
-            elif "rules" not in data:
-                data = {"rules": [data]}
 
             # Clean dump with proper formatting
             return yaml.dump(data, sort_keys=False, default_flow_style=False)

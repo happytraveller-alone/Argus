@@ -53,15 +53,15 @@
     --card-foreground: 0 0% 98%;
     --popover: 220 30% 4%;
     --popover-foreground: 0 0% 98%;
-    --primary: 210 100% 56%;
+    --primary: 205 100% 40%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 90% 48%;
+    --secondary: 205 85% 36%;
     --secondary-foreground: 0 0% 100%;
     --success: 142 60% 40%;
     --success-foreground: 0 0% 100%;
     --muted: 220 20% 14%;
     --muted-foreground: 210 20% 80%;
-    --accent: 210 100% 64%;
+    --accent: 205 90% 45%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 80% 55%;
     --destructive-foreground: 0 0% 100%;
@@ -69,7 +69,7 @@
     --warning-foreground: 0 0% 10%;
     --border: 210 35% 24%;
     --input: 210 30% 20%;
-    --ring: 210 100% 56%;
+    --ring: 205 100% 40%;
     --radius: 4px;
 
     /* Light mode specific */
@@ -101,15 +101,15 @@
     --card-foreground: 0 0% 98%;
     --popover: 220 30% 4%;
     --popover-foreground: 0 0% 98%;
-    --primary: 210 100% 56%;
+    --primary: 205 100% 40%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 90% 48%;
+    --secondary: 205 85% 36%;
     --secondary-foreground: 0 0% 100%;
     --success: 142 60% 40%;
     --success-foreground: 0 0% 100%;
     --muted: 220 20% 14%;
     --muted-foreground: 210 20% 80%;
-    --accent: 210 100% 64%;
+    --accent: 205 90% 45%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 80% 55%;
     --destructive-foreground: 0 0% 100%;
@@ -117,7 +117,7 @@
     --warning-foreground: 0 0% 10%;
     --border: 210 35% 24%;
     --input: 210 30% 20%;
-    --ring: 210 100% 56%;
+    --ring: 205 100% 40%;
 
     /* Dark mode specific */
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.6);
@@ -380,15 +380,20 @@
   }
 
   .cyber-btn-primary {
-    background: linear-gradient(180deg, #ff6a2c 0%, #e55a1c 100%);
-    border-color: rgba(255, 106, 44, 0.5);
+    background: linear-gradient(180deg, #1393dc 0%, #007acc 100%);
+    border-color: rgba(0, 122, 204, 0.58);
     color: white;
-    box-shadow: 0 0 20px rgba(255, 107, 44, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 20px rgba(0, 122, 204, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
   .cyber-btn-primary:hover:not(:disabled) {
-    background: linear-gradient(180deg, #ff7a3c 0%, #f56a2c 100%);
-    box-shadow: 0 0 30px rgba(255, 107, 44, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    background: linear-gradient(180deg, #24a2eb 0%, #1087d7 100%);
+    box-shadow: 0 0 30px rgba(0, 122, 204, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  /* Filled action buttons keep text-only style */
+  .cyber-btn-primary svg {
+    display: none;
   }
 
   .cyber-btn-success {

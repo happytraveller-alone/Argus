@@ -6,23 +6,13 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DatabaseManager } from "@/components/database/DatabaseManager";
 import { SystemConfig } from "@/components/system/SystemConfig";
-import { Settings, Database, Terminal } from "lucide-react";
+import { Settings, Database } from "lucide-react";
 
 export default function AdminDashboard() {
   return (
     <div className="space-y-6 p-6 cyber-bg-elevated min-h-screen font-mono relative">
       {/* Grid background */}
       <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
-
-      {/* Header */}
-      <div className="relative z-10">
-        <div className="cyber-card p-0">
-          <div className="cyber-card-header">
-            <Terminal className="w-5 h-5 text-primary" />
-            <h1 className="text-lg font-bold uppercase tracking-wider text-foreground">系统管理</h1>
-          </div>
-        </div>
-      </div>
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="config" className="w-full relative z-10">

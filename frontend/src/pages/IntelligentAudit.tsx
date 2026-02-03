@@ -6,7 +6,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Boxes, Puzzle, Sparkles } from "lucide-react";
+import { Bot, Boxes, Puzzle } from "lucide-react";
 
 type SidebarGroup = {
   id: "agent" | "mcp" | "agent-skill";
@@ -55,16 +55,6 @@ export default function IntelligentAudit() {
     <div className="space-y-6 p-6 bg-background min-h-screen relative">
       <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
       <div className="relative z-10 space-y-6">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-wide flex items-center gap-2">
-            <Sparkles className="w-7 h-7 text-primary" />
-            智能审计能力面板
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            左侧下拉栏仅展示 Agent、MCP 与 Agent Skill；展开后查看对应项目。
-          </p>
-        </div>
-
         <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
           <aside className="cyber-card p-4 space-y-3 h-fit">
             <h2 className="text-lg font-bold">能力目录</h2>

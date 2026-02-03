@@ -21,6 +21,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -34,6 +44,10 @@ import {
     AlertCircle,
     ChevronLeft,
     ChevronRight,
+    AlertTriangle,
+    Database,
+    ShieldCheck,
+    ListFilter,
 } from "lucide-react";
 import {
     getOpengrepRules,
@@ -51,6 +65,7 @@ import { setOpengrepActiveRules } from "@/shared/stores/opengrepRulesStore";
 
 export default function OpengrepRules() {
     const [rules, setRules] = useState<OpengrepRule[]>([]);
+    const [ruleStats, setRuleStats] = useState({ total: 0, active: 0 });
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedLanguage, setSelectedLanguage] = useState<string>("");
@@ -74,6 +89,11 @@ export default function OpengrepRules() {
     );
     const [batchOperating, setBatchOperating] = useState(false);
     const [genericRuleYaml, setGenericRuleYaml] = useState("");
+    const [pendingDeleteRule, setPendingDeleteRule] = useState<{
+        id: string;
+        name: string;
+    } | null>(null);
+    const [deletingRule, setDeletingRule] = useState(false);
     const [generateFormData, setGenerateFormData] = useState({
         repo_owner: "",
         repo_name: "",
@@ -83,6 +103,7 @@ export default function OpengrepRules() {
 
     useEffect(() => {
         loadRules();
+        loadRuleStats();
     }, []);
 
     // 当筛选条件改变时，重新加载规则
@@ -126,6 +147,18 @@ export default function OpengrepRules() {
         }
     };
 
+    const loadRuleStats = async () => {
+        try {
+            const allRules = await getOpengrepRules();
+            setRuleStats({
+                total: allRules.length,
+                active: allRules.filter((rule) => rule.is_active).length,
+            });
+        } catch (error) {
+            console.error("Failed to load rule stats:", error);
+        }
+    };
+
     const handleViewRule = async (rule: OpengrepRule) => {
         try {
             setLoadingDetail(true);
@@ -152,6 +185,7 @@ export default function OpengrepRules() {
 
         try {
             await toggleOpengrepRule(rule.id);
+            loadRuleStats();
             toast.success(`规则已${rule.is_active ? "禁用" : "启用"}`);
         } catch (error) {
             setRules(previousRules);
@@ -163,17 +197,22 @@ export default function OpengrepRules() {
         }
     };
 
-    const handleDeleteRule = async (ruleId: string) => {
-        if (!confirm("确定要删除此规则吗?")) return;
-
+    const handleDeleteRule = async () => {
+        if (!pendingDeleteRule) return;
+        const deletingTarget = pendingDeleteRule;
         try {
-            await deleteOpengrepRule(ruleId);
-            toast.success("规则已删除");
-            loadRules();
+            setDeletingRule(true);
+            await deleteOpengrepRule(deletingTarget.id);
+            toast.success(`规则「${deletingTarget.name}」删除成功`);
+            await loadRules({ silent: true });
+            await loadRuleStats();
             setShowRuleDetail(false);
+            setPendingDeleteRule(null);
         } catch (error) {
             console.error("Failed to delete rule:", error);
             toast.error("删除规则失败");
+        } finally {
+            setDeletingRule(false);
         }
     };
 
@@ -198,7 +237,8 @@ export default function OpengrepRules() {
                 commit_hash: "",
                 commit_content: "",
             });
-            loadRules();
+            await loadRules({ silent: true });
+            await loadRuleStats();
         } catch (error) {
             console.error("Failed to generate rule:", error);
             toast.error("生成规则失败");
@@ -218,7 +258,8 @@ export default function OpengrepRules() {
             toast.success("规则生成成功");
             setShowGenericDialog(false);
             setGenericRuleYaml("");
-            loadRules();
+            await loadRules({ silent: true });
+            await loadRuleStats();
         } catch (error: any) {
             const message = error?.response?.data?.detail || "生成规则失败";
             toast.error(message);
@@ -284,7 +325,8 @@ export default function OpengrepRules() {
             const result = await response.json();
             toast.success(result.message);
             setSelectedRuleIds(new Set());
-            loadRules();
+            await loadRules({ silent: true });
+            await loadRuleStats();
         } catch (error) {
             console.error("Batch operation failed:", error);
             toast.error("批量操作失败");
@@ -471,10 +513,66 @@ export default function OpengrepRules() {
                                 </Button>
                                 <Button
                                     onClick={() => setShowRuleTypeDialog(true)}
-                                    className="h-10 min-w-[150px] bg-sky-600 text-white hover:bg-sky-500 border border-sky-500/60"
+                                    className="cyber-btn-primary h-10 min-w-[150px]"
                                 >
                                     新建规则
                                 </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
+                        <div className="cyber-card p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="stat-label">有效规则总数</p>
+                                    <p className="stat-value">
+                                        {ruleStats.total}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        当前规则库
+                                    </p>
+                                </div>
+                                <div className="stat-icon text-primary">
+                                    <Database className="w-6 h-6" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="cyber-card p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="stat-label">启用规则数量</p>
+                                    <p className="stat-value">
+                                        {ruleStats.active}
+                                    </p>
+                                    <p className="text-sm text-emerald-400 mt-1 flex items-center gap-1">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                        未禁用
+                                    </p>
+                                </div>
+                                <div className="stat-icon text-emerald-400">
+                                    <ShieldCheck className="w-6 h-6" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="cyber-card p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="stat-label">筛选规则数量</p>
+                                    <p className="stat-value">
+                                        {filteredRules.length}
+                                    </p>
+                                    <p className="text-sm text-sky-400 mt-1 flex items-center gap-1">
+                                        <span className="w-2 h-2 rounded-full bg-sky-400" />
+                                        当前筛选结果
+                                    </p>
+                                </div>
+                                <div className="stat-icon text-sky-400">
+                                    <ListFilter className="w-6 h-6" />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -714,8 +812,11 @@ export default function OpengrepRules() {
                                                                 size="sm"
                                                                 variant="outline"
                                                                 onClick={() =>
-                                                                    handleDeleteRule(
-                                                                        rule.id,
+                                                                    setPendingDeleteRule(
+                                                                        {
+                                                                            id: rule.id,
+                                                                            name: rule.name,
+                                                                        },
                                                                     )
                                                                 }
                                                                 className="cyber-btn-ghost h-8 px-3 min-w-[64px] hover:bg-rose-500/10 hover:text-rose-400"
@@ -1022,7 +1123,10 @@ export default function OpengrepRules() {
                                     variant="outline"
                                     onClick={() =>
                                         selectedRule &&
-                                        handleDeleteRule(selectedRule.id)
+                                        setPendingDeleteRule({
+                                            id: selectedRule.id,
+                                            name: selectedRule.name,
+                                        })
                                     }
                                     className="cyber-btn-ghost hover:bg-rose-500/10 hover:text-rose-400"
                                 >
@@ -1032,6 +1136,47 @@ export default function OpengrepRules() {
                             </div>
                         </DialogContent>
                     </Dialog>
+
+                    <AlertDialog
+                        open={Boolean(pendingDeleteRule)}
+                        onOpenChange={(open) => {
+                            if (!open && !deletingRule) {
+                                setPendingDeleteRule(null);
+                            }
+                        }}
+                    >
+                        <AlertDialogContent className="cyber-dialog border-border max-w-md p-0 gap-0">
+                            <AlertDialogHeader className="px-6 pt-5 pb-4 border-b border-border">
+                                <AlertDialogTitle className="flex items-center gap-2">
+                                    <AlertTriangle className="w-5 h-5 text-rose-400" />
+                                    确认删除规则
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="pt-1">
+                                    {pendingDeleteRule
+                                        ? `将删除规则「${pendingDeleteRule.name}」，该操作不可恢复。`
+                                        : "该操作不可恢复。"}
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel
+                                    disabled={deletingRule}
+                                    className="cyber-btn-outline"
+                                >
+                                    取消
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                    disabled={deletingRule}
+                                    onClick={(event) => {
+                                        event.preventDefault();
+                                        handleDeleteRule();
+                                    }}
+                                    className="cyber-btn-primary"
+                                >
+                                    {deletingRule ? "删除中..." : "确认删除"}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
                     {/* Rule Type Dialog */}
                     <Dialog
@@ -1058,7 +1203,7 @@ export default function OpengrepRules() {
                                         通用型规则
                                     </span>
                                     <span className="text-xs text-muted-foreground font-mono">
-                                        直接粘贴规则文本，自动校验与测试
+                                        直接粘贴规则文本，自动校验格式
                                     </span>
                                 </Button>
                                 <Button
@@ -1103,34 +1248,49 @@ export default function OpengrepRules() {
                                             setGenericRuleYaml(e.target.value)
                                         }
                                         placeholder="粘贴规则 YAML..."
-                                        className="cyber-input mt-1.5 font-mono text-xs min-h-56"
+                                        className="cyber-input mt-1.5 font-mono text-xs min-h-56 cursor-text"
                                     />
                                 </div>
                             </div>
 
-                            <div className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+                            <div className="flex-shrink-0 flex justify-between gap-3 px-6 py-4 bg-muted border-t border-border">
                                 <Button
                                     variant="outline"
-                                    onClick={() => setShowGenericDialog(false)}
+                                    onClick={() => {
+                                        setShowGenericDialog(false);
+                                        setShowRuleTypeDialog(true);
+                                    }}
                                     className="cyber-btn-outline"
                                     disabled={generatingGenericRule}
                                 >
-                                    取消
+                                    返回
                                 </Button>
-                                <Button
-                                    onClick={handleGenerateGenericRule}
-                                    className="cyber-btn-primary"
-                                    disabled={generatingGenericRule}
-                                >
-                                    {generatingGenericRule ? (
-                                        <>
-                                            <div className="loading-spinner mr-2" />
-                                            生成中...
-                                        </>
-                                    ) : (
-                                        <>生成规则</>
-                                    )}
-                                </Button>
+                                <div className="flex items-center gap-3">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() =>
+                                            setShowGenericDialog(false)
+                                        }
+                                        className="cyber-btn-outline"
+                                        disabled={generatingGenericRule}
+                                    >
+                                        取消
+                                    </Button>
+                                    <Button
+                                        onClick={handleGenerateGenericRule}
+                                        className="cyber-btn-primary"
+                                        disabled={generatingGenericRule}
+                                    >
+                                        {generatingGenericRule ? (
+                                            <>
+                                                <div className="loading-spinner mr-2" />
+                                                生成中...
+                                            </>
+                                        ) : (
+                                            <>生成规则</>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
                         </DialogContent>
                     </Dialog>
@@ -1149,7 +1309,6 @@ export default function OpengrepRules() {
                                     backgroundSize: "100% 4px",
                                 }}
                             />
-                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-green-500 to-cyan-500" />
                             <DialogHeader className="px-6 pt-4 flex-shrink-0">
                                 <DialogTitle className="font-mono text-lg uppercase tracking-wider flex items-center gap-2 text-foreground">
                                     事件型规则
@@ -1221,34 +1380,49 @@ export default function OpengrepRules() {
                                             })
                                         }
                                         placeholder="粘贴补丁内容..."
-                                        className="cyber-input mt-1.5 font-mono text-xs min-h-48"
+                                        className="cyber-input mt-1.5 font-mono text-xs min-h-48 cursor-text"
                                     />
                                 </div>
                             </div>
 
-                            <div className="flex-shrink-0 flex justify-end gap-3 px-6 py-4 bg-muted border-t border-border">
+                            <div className="flex-shrink-0 flex justify-between gap-3 px-6 py-4 bg-muted border-t border-border">
                                 <Button
                                     variant="outline"
-                                    onClick={() => setShowEventDialog(false)}
+                                    onClick={() => {
+                                        setShowEventDialog(false);
+                                        setShowRuleTypeDialog(true);
+                                    }}
                                     className="cyber-btn-outline"
                                     disabled={generatingRule}
                                 >
-                                    取消
+                                    返回
                                 </Button>
-                                <Button
-                                    onClick={handleGenerateRule}
-                                    className="cyber-btn-primary"
-                                    disabled={generatingRule}
-                                >
-                                    {generatingRule ? (
-                                        <>
-                                            <div className="loading-spinner mr-2" />
-                                            生成中...
-                                        </>
-                                    ) : (
-                                        <>生成规则</>
-                                    )}
-                                </Button>
+                                <div className="flex items-center gap-3">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() =>
+                                            setShowEventDialog(false)
+                                        }
+                                        className="cyber-btn-outline"
+                                        disabled={generatingRule}
+                                    >
+                                        取消
+                                    </Button>
+                                    <Button
+                                        onClick={handleGenerateRule}
+                                        className="cyber-btn-primary"
+                                        disabled={generatingRule}
+                                    >
+                                        {generatingRule ? (
+                                            <>
+                                                <div className="loading-spinner mr-2" />
+                                                生成中...
+                                            </>
+                                        ) : (
+                                            <>生成规则</>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
                         </DialogContent>
                     </Dialog>

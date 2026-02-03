@@ -758,7 +758,6 @@ async def create_opengrep_generic_rule(
     创建通用型 Opengrep 规则
 
     - 校验 YAML 格式与规则结构
-    - 使用大模型生成 test.yaml 并进行规则有效性测试
     """
     result = await validate_generic_rule(request.rule_yaml)
     validation = result.get("validation") or {}
