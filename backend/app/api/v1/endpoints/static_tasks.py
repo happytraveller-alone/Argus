@@ -317,7 +317,16 @@ async def _execute_opengrep_scan(
                 logger.error(f"Target path {full_target_path} not found")
                 return
 
-            # 合并规则并验证
+            # 辅助函数：过滤掉所有 null 值（Semgrep/Opengrep 不允许 null）
+            def remove_null_values(obj):
+                """递归移除字典/列表中的 null 值"""
+                if isinstance(obj, dict):
+                    return {k: remove_null_values(v) for k, v in obj.items() if v is not None}
+                elif isinstance(obj, list):
+                    return [remove_null_values(item) for item in obj if item is not None]
+                else:
+                    return obj
+
             def has_deprecated_features(rule):
                 """检查规则是否包含已弃用的特性"""
                 deprecated_keys = [
@@ -374,200 +383,303 @@ async def _execute_opengrep_scan(
                         return False, "missing standard pattern attributes"
                 
                 return True, "valid"
-            
-            # 过滤掉所有 null 值（Semgrep/Opengrep 不允许 null）
-            def remove_null_values(obj):
-                """递归移除字典/列表中的 null 值"""
-                if isinstance(obj, dict):
-                    return {k: remove_null_values(v) for k, v in obj.items() if v is not None}
-                elif isinstance(obj, list):
-                    return [remove_null_values(item) for item in obj if item is not None]
-                else:
-                    return obj
 
-            combined_rules = []
-            invalid_rule_count = 0
+            # 准备扫描环境变量
+            scan_env = os.environ.copy()
+            for proxy_key in (
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+            ):
+                scan_env.pop(proxy_key, None)
+            scan_env["NO_PROXY"] = "*"
+            scan_env["no_proxy"] = "*"
+
+            # 解析并验证所有规则，构建有效规则列表
+            valid_rules = []
+            skipped_rule_count = 0
             
             for rule in rules:
                 try:
                     rule_data = yaml.safe_load(rule.pattern_yaml)
-                    if rule_data and "rules" in rule_data:
-                        for r in rule_data["rules"]:
-                            # 先清理 null 值
-                            cleaned_rule = remove_null_values(r)
-                            # 再验证规则
-                            is_valid, reason = is_valid_rule(cleaned_rule)
-                            if is_valid:
-                                combined_rules.append(cleaned_rule)
-                            else:
-                                invalid_rule_count += 1
-                                rule_id = cleaned_rule.get("id", "unknown")
-                                logger.warning(f"Skipping invalid rule {rule_id}: {reason}")
+                    if not rule_data or "rules" not in rule_data:
+                        logger.warning(f"Skipping rule {rule.name}: invalid YAML structure")
+                        skipped_rule_count += 1
+                        continue
+
+                    for r in rule_data["rules"]:
+                        cleaned_rule = remove_null_values(r)
+                        is_valid, reason = is_valid_rule(cleaned_rule)
+                        if is_valid:
+                            valid_rules.append(cleaned_rule)
+                        else:
+                            rule_id = cleaned_rule.get("id", "unknown")
+                            logger.warning(f"Skipping invalid rule {rule_id} from {rule.name}: {reason}")
+                            skipped_rule_count += 1
                 except Exception as e:
                     logger.warning(f"Failed to parse rule {rule.name}: {e}")
-                    invalid_rule_count += 1
+                    skipped_rule_count += 1
 
-            if invalid_rule_count > 0:
-                logger.warning(f"Skipped {invalid_rule_count} invalid rules for task {task_id}")
-
-            if not combined_rules:
+            if not valid_rules:
                 task.status = "failed"
                 task.error_count = 1
                 await db.commit()
                 logger.error(f"No valid rules to apply for task {task_id}")
                 return
 
-            # 创建临时规则文件
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as tf:
-                yaml.dump({"rules": combined_rules}, tf, sort_keys=False, default_flow_style=False)
-                rule_file = tf.name
+            logger.info(f"Task {task_id}: {len(valid_rules)} valid rules, {skipped_rule_count} skipped")
 
-            try:
-                # 执行 opengrep 扫描
-                cmd = [
-                    "opengrep",
-                    "--config",
-                    rule_file,
-                    "--json",
-                    full_target_path,
-                ]
+            # 累积所有扫描结果
+            all_findings = []
+            all_scan_errors = []
+            successful_rule_count = 0
+            failed_rule_count = 0
 
-                logger.info(f"Executing opengrep for task {task_id}: {' '.join(cmd)}")
-
-                # opengrep/semgrep 在解析空代理变量时会报错，扫描时显式清理代理环境变量
-                scan_env = os.environ.copy()
-                for proxy_key in (
-                    "HTTP_PROXY",
-                    "HTTPS_PROXY",
-                    "ALL_PROXY",
-                    "http_proxy",
-                    "https_proxy",
-                    "all_proxy",
-                ):
-                    scan_env.pop(proxy_key, None)
-                scan_env["NO_PROXY"] = "*"
-                scan_env["no_proxy"] = "*"
-
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=600,
-                    env=scan_env,
-                )
-
-                # 解析扫描结果
-                try:
-                    findings, scan_errors = _parse_opengrep_output(result.stdout)
-                except ValueError as e:
-                    logger.error(f"Failed to parse opengrep output: {e}, stderr={result.stderr}")
-                    task.status = "failed"
-                    task.error_count += 1
-                    await db.commit()
-                    return
-
-                fatal_rule_errors = [item for item in scan_errors if _is_fatal_rule_error(item)]
-                non_fatal_scan_errors = [
-                    item for item in scan_errors if not _is_fatal_rule_error(item)
-                ]
-
-                # 规则配置错误/执行错误才判定失败；源码语法错误不视为失败
-                if fatal_rule_errors:
-                    task.status = "failed"
-                    task.error_count = max(1, len(fatal_rule_errors))
-                    await db.commit()
-                    logger.error(
-                        f"Scan task {task_id} failed with fatal rule errors: {fatal_rule_errors[:3]}"
-                    )
-                    return
-
-                # 记录警告但不影响任务状态
-                if scan_errors:
-                    warning_errors = [err for err in scan_errors if err.get("level") != "error"]
-                    if warning_errors:
-                        # PartialParsing 等警告是正常的，不影响扫描结果
-                        logger.info(
-                            f"Scan task {task_id} has {len(warning_errors)} parsing warnings "
-                            f"(normal for complex C/C++ code, not affecting results)"
-                        )
-
-                if non_fatal_scan_errors:
-                    # 非致命错误（如部分文件解析失败）记录为 INFO，不影响整体扫描
-                    logger.info(
-                        f"Scan task {task_id} has {len(non_fatal_scan_errors)} non-fatal parsing issues "
-                        f"(normal, scan continues with other files)"
-                    )
-
-                # 无扫描结果且进程异常退出，且无可忽略扫描错误时，按执行失败处理
-                if result.returncode != 0 and not findings and not non_fatal_scan_errors:
-                    stderr_text = (result.stderr or "").strip()
-                    task.status = "failed"
-                    task.error_count = 1
-                    await db.commit()
-                    logger.error(
-                        f"Scan task {task_id} failed: returncode={result.returncode}, stderr={stderr_text}"
-                    )
-                    return
-
-                # 保存发现
-                error_count = 0
-                warning_count = 0
-                files_scanned = set()
-                lines_scanned = 0
-
-                for finding in findings:
+            def execute_rules_batch(rules_batch: List[Dict], depth: int = 0) -> tuple[List[Dict], List[Dict], int, int]:
+                """
+                递归执行一批规则
+                
+                Args:
+                    rules_batch: 要执行的规则列表
+                    depth: 递归深度，用于日志
+                    
+                Returns:
+                    (findings, errors, success_count, failed_count)
+                """
+                if not rules_batch:
+                    return [], [], 0, 0
+                
+                batch_size = len(rules_batch)
+                indent = "  " * depth
+                
+                # 如果只有一条规则，直接执行
+                if batch_size == 1:
+                    rule = rules_batch[0]
+                    rule_id = rule.get("id", "unknown")
+                    rule_file = None
+                    
                     try:
-                        severity = finding.get("extra", {}).get("severity", "INFO")
-                        if severity == "ERROR":
-                            error_count += 1
-                        elif severity == "WARNING":
-                            warning_count += 1
+                        # 创建临时规则文件
+                        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as tf:
+                            yaml.dump({"rules": [rule]}, tf, sort_keys=False, default_flow_style=False)
+                            rule_file = tf.name
 
-                        file_path = finding.get("path", "")
-                        if file_path:
-                            files_scanned.add(file_path)
+                        # 执行扫描
+                        cmd = [
+                            "opengrep",
+                            "--config",
+                            rule_file,
+                            "--json",
+                            full_target_path,
+                        ]
 
-                        start_line = finding.get("start", {}).get("line", 0)
-                        end_line = finding.get("end", {}).get("line", start_line)
-                        lines_scanned += max(0, end_line - start_line + 1)
-
-                        opengrep_finding = OpengrepFinding(
-                            scan_task_id=task_id,
-                            rule=finding,
-                            description=finding.get("extra", {}).get("message"),
-                            file_path=file_path,
-                            start_line=start_line,
-                            code_snippet=finding.get("extra", {}).get("lines"),
-                            severity=severity,
-                            status="open",
+                        result = subprocess.run(
+                            cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=600,
+                            env=scan_env,
                         )
-                        db.add(opengrep_finding)
+
+                        # 解析结果
+                        try:
+                            findings, scan_errors = _parse_opengrep_output(result.stdout)
+                            fatal_errors = [item for item in scan_errors if _is_fatal_rule_error(item)]
+                            
+                            if fatal_errors:
+                                logger.warning(f"{indent}Rule {rule_id} has fatal errors, skipping")
+                                return [], [], 0, 1
+                            
+                            if findings:
+                                logger.info(f"{indent}Rule {rule_id} found {len(findings)} findings")
+                            
+                            return findings, scan_errors, 1, 0
+                            
+                        except ValueError as e:
+                            logger.warning(f"{indent}Failed to parse output for rule {rule_id}: {e}")
+                            return [], [], 0, 1
+
                     except Exception as e:
-                        logger.error(f"Error processing finding: {e}")
-                        error_count += 1
+                        logger.warning(f"{indent}Failed to execute rule {rule_id}: {e}")
+                        return [], [], 0, 1
+                    
+                    finally:
+                        if rule_file and os.path.exists(rule_file):
+                            try:
+                                os.unlink(rule_file)
+                            except:
+                                pass
+                
+                # 多条规则，尝试批量执行
+                rule_ids = [r.get("id", "unknown") for r in rules_batch]
+                logger.info(f"{indent}Executing batch of {batch_size} rules")
+                rule_file = None
+                
+                try:
+                    # 创建临时规则文件
+                    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as tf:
+                        yaml.dump({"rules": rules_batch}, tf, sort_keys=False, default_flow_style=False)
+                        rule_file = tf.name
 
-                # 更新任务统计
-                task.status = "completed"
-                task.total_findings = len(findings)
-                task.error_count = error_count
-                task.warning_count = warning_count + len(non_fatal_scan_errors)
-                task.files_scanned = len(files_scanned)
-                task.lines_scanned = lines_scanned
+                    # 执行扫描
+                    cmd = [
+                        "opengrep",
+                        "--config",
+                        rule_file,
+                        "--json",
+                        full_target_path,
+                    ]
 
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=600,
+                        env=scan_env,
+                    )
+
+                    # 解析结果
+                    try:
+                        findings, scan_errors = _parse_opengrep_output(result.stdout)
+                        fatal_errors = [item for item in scan_errors if _is_fatal_rule_error(item)]
+                        
+                        if not fatal_errors:
+                            # 批量执行成功
+                            logger.info(f"{indent}Batch of {batch_size} rules executed successfully, {len(findings)} findings")
+                            return findings, scan_errors, batch_size, 0
+                        else:
+                            # 有致命错误，需要分块执行
+                            logger.warning(f"{indent}Batch of {batch_size} rules has fatal errors, splitting...")
+                            
+                    except ValueError as e:
+                        # 解析失败，需要分块执行
+                        logger.warning(f"{indent}Failed to parse output for batch, splitting...")
+                
+                except Exception as e:
+                    logger.warning(f"{indent}Failed to execute batch of {batch_size} rules: {e}, splitting...")
+                
+                finally:
+                    if rule_file and os.path.exists(rule_file):
+                        try:
+                            os.unlink(rule_file)
+                        except:
+                            pass
+                
+                # 分块递归执行
+                chunk_size = max(1, batch_size // 10)  # 分成10块，向上取整
+                chunks = [rules_batch[i:i + chunk_size] for i in range(0, batch_size, chunk_size)]
+                
+                logger.info(f"{indent}Splitting {batch_size} rules into {len(chunks)} chunks")
+                
+                total_findings = []
+                total_errors = []
+                total_success = 0
+                total_failed = 0
+                
+                for idx, chunk in enumerate(chunks):
+                    logger.info(f"{indent}Processing chunk {idx + 1}/{len(chunks)} ({len(chunk)} rules)")
+                    findings, errors, success, failed = execute_rules_batch(chunk, depth + 1)
+                    total_findings.extend(findings)
+                    total_errors.extend(errors)
+                    total_success += success
+                    total_failed += failed
+                
+                return total_findings, total_errors, total_success, total_failed
+
+            # 执行所有规则
+            logger.info(f"Starting batch execution for {len(valid_rules)} rules")
+            all_findings, all_scan_errors, successful_rule_count, failed_rule_count = execute_rules_batch(valid_rules)
+
+            # 检查是否有成功执行的规则
+            if successful_rule_count == 0:
+                task.status = "failed"
+                task.error_count = 1
                 await db.commit()
+                logger.error(f"No valid rules executed successfully for task {task_id}")
+                return
+
+            logger.info(
+                f"Task {task_id}: {successful_rule_count} rules executed successfully, "
+                f"{failed_rule_count} rules failed, "
+                f"{skipped_rule_count} rules skipped during validation"
+            )
+
+            # 处理累积的扫描结果
+            non_fatal_scan_errors = [
+                item for item in all_scan_errors if not _is_fatal_rule_error(item)
+            ]
+
+            # 记录警告但不影响任务状态
+            if all_scan_errors:
+                warning_errors = [err for err in all_scan_errors if err.get("level") != "error"]
+                if warning_errors:
+                    logger.info(
+                        f"Scan task {task_id} has {len(warning_errors)} parsing warnings "
+                        f"(normal for complex C/C++ code, not affecting results)"
+                    )
+
+            if non_fatal_scan_errors:
                 logger.info(
-                    f"Scan task {task_id} completed: "
-                    f"{len(findings)} findings, "
-                    f"{error_count} errors, "
-                    f"{warning_count} warnings"
+                    f"Scan task {task_id} has {len(non_fatal_scan_errors)} non-fatal parsing issues "
+                    f"(normal, scan continues with other files)"
                 )
 
-            finally:
-                # 清理临时文件
+            # 保存发现
+            error_count = 0
+            warning_count = 0
+            files_scanned = set()
+            lines_scanned = 0
+
+            for finding in all_findings:
                 try:
-                    os.unlink(rule_file)
+                    severity = finding.get("extra", {}).get("severity", "INFO")
+                    if severity == "ERROR":
+                        error_count += 1
+                    elif severity == "WARNING":
+                        warning_count += 1
+
+                    file_path = finding.get("path", "")
+                    if file_path:
+                        files_scanned.add(file_path)
+
+                    start_line = finding.get("start", {}).get("line", 0)
+                    end_line = finding.get("end", {}).get("line", start_line)
+                    lines_scanned += max(0, end_line - start_line + 1)
+
+                    opengrep_finding = OpengrepFinding(
+                        scan_task_id=task_id,
+                        rule=finding,
+                        description=finding.get("extra", {}).get("message"),
+                        file_path=file_path,
+                        start_line=start_line,
+                        code_snippet=finding.get("extra", {}).get("lines"),
+                        severity=severity,
+                        status="open",
+                    )
+                    db.add(opengrep_finding)
                 except Exception as e:
-                    logger.warning(f"Failed to delete temporary rule file: {e}")
+                    logger.error(f"Error processing finding: {e}")
+                    error_count += 1
+
+            # 更新任务统计
+            task.status = "completed"
+            task.total_findings = len(all_findings)
+            task.error_count = error_count
+            task.warning_count = warning_count + len(non_fatal_scan_errors)
+            task.files_scanned = len(files_scanned)
+            task.lines_scanned = lines_scanned
+
+            await db.commit()
+            logger.info(
+                f"Scan task {task_id} completed: "
+                f"{len(all_findings)} findings from {successful_rule_count} rules, "
+                f"{error_count} errors, "
+                f"{warning_count} warnings, "
+                f"{skipped_rule_count} rules skipped"
+            )
 
         except Exception as e:
             logger.error(f"Error executing opengrep scan for task {task_id}: {e}")

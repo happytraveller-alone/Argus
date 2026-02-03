@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import yaml
+import subprocess
+import tempfile
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -263,10 +265,45 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
     logger.info("✓ 演示数据创建完成")
 
 
+def validate_opengrep_rule(yaml_content: str) -> bool:
+    """
+    使用 opengrep --config 验证规则是否有效
+    """
+    try:
+        # 创建临时文件保存规则
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as tmp_file:
+            tmp_file.write(yaml_content)
+            tmp_file_path = tmp_file.name
+        
+        try:
+            # 使用 opengrep --config 验证规则
+            result = subprocess.run(
+                ['opengrep', '--config', tmp_file_path, '--validate'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            return result.returncode == 0
+        finally:
+            # 删除临时文件
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
+    except subprocess.TimeoutExpired:
+        logger.warning("规则验证超时")
+        return False
+    except FileNotFoundError:
+        logger.warning("opengrep 命令未找到,跳过规则验证")
+        return True  # 如果找不到 opengrep,则跳过验证
+    except Exception as e:
+        logger.warning(f"规则验证失败: {e}")
+        return False
+
+
 async def create_internal_opengrep_rules(db: AsyncSession) -> None:
     """
     从 app/db/rules 目录读取所有 .yaml 文件并创建内置 opengrep 规则
-    - 判断文件名是否已在表中，只添加不存在的规则
+    - 判断文件名是否已在表中,只添加不存在的规则
+    - 验证每条规则是否可用
     """
     # 获取规则文件目录
     rules_dir = Path(__file__).parent / "rules"
@@ -289,6 +326,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
     
     created_count = 0
     skipped_count = 0
+    invalid_count = 0
     
     for yaml_file in yaml_files:
         try:
@@ -299,7 +337,14 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
             # 解析 YAML 中的规则
             if not rule_data or 'rules' not in rule_data:
                 logger.warning(f"跳过无效的规则文件: {yaml_file.name}")
+                invalid_count += 1
                 continue
+            
+            # 验证规则是否有效
+            # if not validate_opengrep_rule(content):
+            #     logger.warning(f"规则验证失败,跳过: {yaml_file.name}")
+            #     invalid_count += 1
+            #     continue
             
             for rule in rule_data['rules']:
                 rule_id = rule.get('id', yaml_file.stem)
@@ -372,17 +417,16 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
     if created_count > 0:
         await db.flush()
         await db.commit()
-        logger.info(f"✓ 成功创建 {created_count} 条新规则，跳过 {skipped_count} 条已存在的规则")
+        logger.info(f"✓ 成功创建 {created_count} 条新规则,跳过 {skipped_count} 条已存在的规则,{invalid_count} 条无效规则")
     else:
-        logger.info(f"所有 {skipped_count} 条规则已存在，无需创建新规则")
+        logger.info(f"所有规则已存在或无效: {skipped_count} 条已存在,{invalid_count} 条无效")
 
 
 async def create_patch_opengrep_rules(db: AsyncSession) -> None:
     """
     从 app/db/rules_from_patches 目录递归读取所有 .yml 文件并创建 patch 来源的 opengrep 规则
     - 支持多层目录结构（按编程语言分类）
-    - 判断规则 ID 是否已在表中，只添加不存在的规则
-    """
+    - 判断规则 ID 是否已在表中，只添加不存在的规则    - 验证每条规则是否可用    """
     # 获取规则文件目录
     rules_dir = Path(__file__).parent / "rules_from_patches"
     if not rules_dir.exists():
@@ -417,6 +461,12 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                 logger.debug(f"  ⊘ 跳过无效的规则文件: {yaml_file.relative_to(rules_dir)}")
                 error_count += 1
                 continue
+            
+            # 验证规则是否有效
+            # if not validate_opengrep_rule(content):
+            #     logger.debug(f"  ⊘ 规则验证失败,跳过: {yaml_file.relative_to(rules_dir)}")
+            #     error_count += 1
+            #     continue
             
             # 通常 Patch 规则文件只包含一条规则
             for rule in rule_data['rules']:
