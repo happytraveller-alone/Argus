@@ -229,6 +229,38 @@ def _parse_opengrep_output(stdout: str) -> tuple[List[Dict[str, Any]], List[Dict
         raise ValueError("Failed to parse opengrep output") from e
 
 
+async def _get_unique_rule_name(db: AsyncSession, base_name: str) -> str:
+    """
+    获取唯一的规则名称
+    
+    如果规则名已存在，则在后面追加 _1, _2, _3 等递增数字
+    
+    Args:
+        db: 数据库会话
+        base_name: 基础规则名
+        
+    Returns:
+        唯一的规则名
+    """
+    # 检查基础名称是否存在
+    result = await db.execute(
+        select(OpengrepRule).where(OpengrepRule.name == base_name)
+    )
+    if not result.scalar_one_or_none():
+        return base_name
+    
+    # 如果存在，尝试添加递增数字
+    counter = 1
+    while True:
+        new_name = f"{base_name}_{counter}"
+        result = await db.execute(
+            select(OpengrepRule).where(OpengrepRule.name == new_name)
+        )
+        if not result.scalar_one_or_none():
+            return new_name
+        counter += 1
+
+
 def _is_fatal_rule_error(error_item: Dict[str, Any]) -> bool:
     """
     判断是否为应导致任务失败的规则错误。
@@ -1397,9 +1429,12 @@ async def upload_opengrep_rule_json(
                 detail=f"规则已存在（重复），现有规则 ID: {existing_rule.id}",
             )
 
+        # 确保规则名唯一
+        unique_name = await _get_unique_rule_name(db, request.name)
+
         # 创建规则对象
         new_rule = OpengrepRule(
-            name=request.name,
+            name=unique_name,
             pattern_yaml=request.pattern_yaml,
             language=request.language,
             severity=severity,
@@ -1580,9 +1615,12 @@ async def upload_opengrep_rules(
                     if severity not in ["ERROR", "WARNING", "INFO"]:
                         severity = "WARNING"
 
+                    # 确保规则名唯一
+                    unique_rule_name = await _get_unique_rule_name(db, rule_id)
+
                     # 创建规则对象
                     new_rule = OpengrepRule(
-                        name=rule_id,
+                        name=unique_rule_name,
                         pattern_yaml=content,
                         language=language,
                         severity=severity,
@@ -1755,9 +1793,12 @@ async def upload_opengrep_rules_directory(
                     if severity not in ["ERROR", "WARNING", "INFO"]:
                         severity = "WARNING"
 
+                    # 确保规则名唯一
+                    unique_rule_name = await _get_unique_rule_name(db, rule_id)
+
                     # 创建规则对象
                     new_rule = OpengrepRule(
-                        name=rule_id,
+                        name=unique_rule_name,
                         pattern_yaml=content,
                         language=language,
                         severity=severity,
