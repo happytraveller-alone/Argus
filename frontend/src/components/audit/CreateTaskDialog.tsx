@@ -51,6 +51,7 @@ import {
   getOpengrepRules,
   type OpengrepRule,
 } from "@/shared/api/opengrep";
+import { createGitleaksScanTask } from "@/shared/api/gitleaks";
 import {
   getOpengrepActiveRules,
   subscribeOpengrepActiveRules,
@@ -59,7 +60,10 @@ import {
 import { useProjects } from "./hooks/useTaskForm";
 import { useZipFile, formatFileSize } from "./hooks/useZipFile";
 import FileSelectionDialog from "./FileSelectionDialog";
-import AgentModeSelector, { type AuditMode } from "@/components/agent/AgentModeSelector";
+import AgentModeSelector, {
+  type AuditMode,
+  type StaticToolSelection,
+} from "@/components/agent/AgentModeSelector";
 
 import {
   validateZipFile,
@@ -102,6 +106,10 @@ export default function CreateTaskDialog({
   const [uploading, setUploading] = useState(false);
 
   const [auditMode, setAuditMode] = useState<AuditMode>("agent");
+  const [staticTools, setStaticTools] = useState<StaticToolSelection>({
+    opengrep: true,
+    gitleaks: false,
+  });
   const [staticRules, setStaticRules] = useState<OpengrepRule[]>([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
   const [loadingStaticRules, setLoadingStaticRules] = useState(false);
@@ -172,7 +180,7 @@ export default function CreateTaskDialog({
 
   useEffect(() => {
     const loadStaticRules = async () => {
-      if (!open || auditMode !== "static") return;
+      if (!open || auditMode !== "static" || !staticTools.opengrep) return;
       if (staticRules.length > 0) return;
       setLoadingStaticRules(true);
       try {
@@ -185,7 +193,7 @@ export default function CreateTaskDialog({
       }
     };
     loadStaticRules();
-  }, [open, auditMode, staticRules.length]);
+  }, [open, auditMode, staticRules.length, staticTools.opengrep]);
 
   useEffect(() => {
     if (open) {
@@ -196,6 +204,7 @@ export default function CreateTaskDialog({
       setSearchTerm("");
       setShowAdvanced(false);
       setSelectedRuleIds([]);
+      setStaticTools({ opengrep: true, gitleaks: false });
       zipState.reset();
     }
   }, [open, preselectedProjectId, loadProjects]);
@@ -240,6 +249,10 @@ export default function CreateTaskDialog({
       }
 
       if (auditMode === "static") {
+        if (!staticTools.opengrep && !staticTools.gitleaks) {
+          toast.error("请选择至少一个静态分析工具");
+          return;
+        }
         if (!isZipProject(selectedProject)) {
           toast.error("静态分析仅支持源码归档项目");
           return;
@@ -248,25 +261,58 @@ export default function CreateTaskDialog({
           toast.error("请先上传源码归档");
           return;
         }
-        const activeRuleIds =
-          selectedRuleIds.length > 0
-            ? selectedRuleIds
-            : staticRules.map((rule) => rule.id);
-        if (activeRuleIds.length === 0) {
-          toast.error("未找到启用的规则，请先在规则管理中启用规则");
+        let opengrepTask: { id: string } | null = null;
+        let gitleaksTask: { id: string } | null = null;
+
+        if (staticTools.opengrep) {
+          const activeRuleIds =
+            selectedRuleIds.length > 0
+              ? selectedRuleIds
+              : staticRules.map((rule) => rule.id);
+          if (activeRuleIds.length === 0) {
+            toast.error("未找到启用的规则，请先在规则管理中启用规则");
+            return;
+          }
+          opengrepTask = await createOpengrepScanTask({
+            project_id: selectedProject.id,
+            name: `静态分析-Opengrep-${selectedProject.name}`,
+            rule_ids: activeRuleIds,
+            target_path: ".",
+          });
+        }
+
+        if (staticTools.gitleaks) {
+          gitleaksTask = await createGitleaksScanTask({
+            project_id: selectedProject.id,
+            name: `静态分析-Gitleaks-${selectedProject.name}`,
+            target_path: ".",
+            no_git: true,
+          });
+        }
+
+        const primaryTaskId = opengrepTask?.id || gitleaksTask?.id;
+        if (!primaryTaskId) {
+          toast.error("静态分析任务创建失败");
           return;
         }
-        const staticTask = await createOpengrepScanTask({
-          project_id: selectedProject.id,
-          name: `静态分析-${selectedProject.name}`,
-          rule_ids: activeRuleIds,
-          target_path: ".",
-        });
+
+        const params = new URLSearchParams();
+        if (opengrepTask && gitleaksTask) {
+          params.set("gitleaksTaskId", gitleaksTask.id);
+          params.set("opengrepTaskId", opengrepTask.id);
+        }
+        if (!opengrepTask && gitleaksTask) {
+          params.set("tool", "gitleaks");
+        }
 
         onOpenChange(false);
         onTaskCreated();
         toast.success("静态分析任务已创建");
-        navigate(`/static-analysis/${staticTask.id}`);
+        navigate(
+          `/static-analysis/${primaryTaskId}${
+            params.toString() ? `?${params.toString()}` : ""
+          }`,
+        );
 
         setSelectedProjectId("");
         setSelectedFiles(undefined);
@@ -290,7 +336,8 @@ export default function CreateTaskDialog({
     if (auditMode === "static") {
       return (
         isZipProject(selectedProject) &&
-        !!zipState.storedZipInfo?.has_file
+        !!zipState.storedZipInfo?.has_file &&
+        (staticTools.opengrep || staticTools.gitleaks)
       );
     }
     if (isZipProject(selectedProject)) {
@@ -300,7 +347,15 @@ export default function CreateTaskDialog({
       );
     }
     return !!selectedProject.repository_url && !!branch.trim();
-  }, [selectedProject, zipState, branch, auditMode, selectedRuleIds]);
+  }, [
+    selectedProject,
+    zipState,
+    branch,
+    auditMode,
+    selectedRuleIds,
+    staticTools.opengrep,
+    staticTools.gitleaks,
+  ]);
 
   return (
     <>
@@ -378,6 +433,8 @@ export default function CreateTaskDialog({
                 value={auditMode}
                 onChange={setAuditMode}
                 disabled={creating}
+                staticTools={staticTools}
+                onStaticToolsChange={setStaticTools}
               />
             )}
 

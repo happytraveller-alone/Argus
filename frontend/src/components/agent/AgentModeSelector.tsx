@@ -4,21 +4,46 @@
  */
 
 import { Bot, Zap, CheckCircle2, Clock, Shield, Code } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/shared/utils/utils";
 
 export type AuditMode = "static" | "agent";
+
+export type StaticTool = "opengrep" | "gitleaks";
+
+export interface StaticToolSelection {
+  opengrep: boolean;
+  gitleaks: boolean;
+}
 
 interface AgentModeSelectorProps {
   value: AuditMode;
   onChange: (mode: AuditMode) => void;
   disabled?: boolean;
+  staticTools?: StaticToolSelection;
+  onStaticToolsChange?: (next: StaticToolSelection) => void;
 }
 
 export default function AgentModeSelector({
   value,
   onChange,
   disabled = false,
+  staticTools,
+  onStaticToolsChange,
 }: AgentModeSelectorProps) {
+  const resolvedTools: StaticToolSelection = staticTools || {
+    opengrep: true,
+    gitleaks: false,
+  };
+
+  const updateStaticTool = (tool: StaticTool, checked: boolean) => {
+    if (!onStaticToolsChange) return;
+    onStaticToolsChange({
+      ...resolvedTools,
+      [tool]: checked,
+    });
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 mb-2">
@@ -86,6 +111,36 @@ export default function AgentModeSelector({
               无沙箱验证
             </li>
           </ul>
+
+          {value === "static" && (
+            <div className="mt-2 border-t border-border pt-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold font-mono">
+                静态工具
+              </div>
+              <label className="flex items-center gap-2 text-xs font-mono text-muted-foreground cursor-pointer">
+                <Checkbox
+                  checked={resolvedTools.opengrep}
+                  onCheckedChange={(checked) =>
+                    updateStaticTool("opengrep", Boolean(checked))
+                  }
+                  disabled={disabled}
+                  className="border-border data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                />
+                <span className="uppercase tracking-wider">Opengrep</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs font-mono text-muted-foreground cursor-pointer">
+                <Checkbox
+                  checked={resolvedTools.gitleaks}
+                  onCheckedChange={(checked) =>
+                    updateStaticTool("gitleaks", Boolean(checked))
+                  }
+                  disabled={disabled}
+                  className="border-border data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                />
+                <span className="uppercase tracking-wider">Gitleaks</span>
+              </label>
+            </div>
+          )}
 
           <div className="mt-auto pt-2 border-t border-border">
             <span className="text-xs uppercase tracking-wider text-muted-foreground font-bold font-mono">

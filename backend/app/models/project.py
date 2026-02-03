@@ -36,6 +36,9 @@ class Project(Base):
     opengrep_scan_tasks = relationship(
         "OpengrepScanTask", back_populates="project", cascade="all, delete-orphan"
     )
+    gitleaks_scan_tasks = relationship(
+        "GitleaksScanTask", back_populates="project", cascade="all, delete-orphan"
+    )
 
 class ProjectMember(Base):
     __tablename__ = "project_members"
