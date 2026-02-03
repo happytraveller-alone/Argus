@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,7 @@ from app.schemas.opengrep import (
     OpengrepRuleTextResponse,
 )
 from app.services.rule import get_rule_by_patch, validate_generic_rule
+from app.services.upload.upload_manager import UploadManager
 
 # ============ Schemas ============
 
@@ -990,6 +992,361 @@ async def select_opengrep_rules(
         "updated_count": updated_count,
         "is_active": request.is_active,
     }
+
+
+
+@router.post("/rules/upload")
+async def upload_opengrep_rules(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    上传 Opengrep 规则文件（支持多种压缩格式）
+
+    支持的格式: .zip, .tar, .tar.gz, .tar.bz2, .7z, .rar 等
+
+    工作流程：
+    1. 验证文件格式是否支持
+    2. 保存上传的压缩文件到临时位置
+    3. 验证文件完整性
+    4. 解压到临时目录
+    5. 递归查找所有 YAML 文件
+    6. 解析规则并验证
+    7. MD5 去重检查
+    8. 批量入库
+    9. 返回统计信息
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    # 检查文件格式是否支持
+    from app.services.upload.compression_factory import CompressionStrategyFactory
+
+    supported_formats = CompressionStrategyFactory.get_supported_formats()
+    file_ext = Path(file.filename).suffix.lower()
+
+    # 特殊处理 .tar.gz 等复合扩展名
+    file_name_lower = file.filename.lower()
+    is_tar_gz = file_name_lower.endswith((".tar.gz", ".tgz", ".tar.gzip"))
+    is_tar_bz2 = file_name_lower.endswith((".tar.bz2", ".tbz", ".tbz2"))
+
+    if is_tar_gz:
+        file_ext = ".tar.gz"
+    elif is_tar_bz2:
+        file_ext = ".tar.bz2"
+
+    if file_ext not in supported_formats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式: {file_ext}。支持的格式: {', '.join(sorted(supported_formats))}",
+        )
+
+    # 使用 tempfile 创建临时目录
+    with tempfile.TemporaryDirectory(prefix="deepaudit_rules_", suffix="_upload") as temp_dir:
+        try:
+            # 保存上传的原始文件到临时位置
+            temp_upload_path = os.path.join(temp_dir, file.filename)
+            with open(temp_upload_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            # 验证上传文件
+            is_valid, error = UploadManager.validate_file(temp_upload_path)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=f"文件验证失败: {error}")
+
+            # 解压到临时目录
+            temp_extract_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(temp_extract_dir, exist_ok=True)
+
+            success, extracted_files, error = await UploadManager.extract_file(
+                temp_upload_path, temp_extract_dir
+            )
+
+            if not success:
+                raise HTTPException(status_code=400, detail=f"解压失败: {error}")
+
+            # 递归查找所有 YAML 文件
+            yaml_files = []
+            for root, dirs, files in os.walk(temp_extract_dir):
+                for f in files:
+                    if f.endswith((".yml", ".yaml")):
+                        yaml_files.append(os.path.join(root, f))
+
+            if not yaml_files:
+                raise HTTPException(status_code=400, detail="压缩包中未找到 YAML 规则文件")
+
+            # 解析规则并进行 MD5 去重
+            total_count = len(yaml_files)
+            success_count = 0
+            failed_count = 0
+            duplicate_count = 0
+            failed_details = []
+
+            # 获取数据库中已存在的所有规则的 MD5 值
+            result = await db.execute(select(OpengrepRule.pattern_yaml))
+            existing_patterns = result.scalars().all()
+            existing_md5s = {hashlib.md5(p.encode("utf-8")).hexdigest() for p in existing_patterns}
+
+            rules_to_add = []
+
+            for yaml_file in yaml_files:
+                try:
+                    with open(yaml_file, "r", encoding="utf-8") as f:
+                        content = f.read()
+
+                    # 计算 MD5
+                    md5_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+
+                    # 检查是否重复
+                    if md5_hash in existing_md5s:
+                        duplicate_count += 1
+                        continue
+
+                    # 解析 YAML
+                    yaml_data = yaml.safe_load(content)
+                    if not yaml_data or "rules" not in yaml_data:
+                        failed_count += 1
+                        failed_details.append(
+                            {"file": os.path.basename(yaml_file), "error": "YAML 格式错误：缺少 rules 字段"}
+                        )
+                        continue
+
+                    rules = yaml_data["rules"]
+                    if not isinstance(rules, list) or len(rules) == 0:
+                        failed_count += 1
+                        failed_details.append(
+                            {"file": os.path.basename(yaml_file), "error": "rules 字段必须是非空数组"}
+                        )
+                        continue
+
+                    # 获取规则信息
+                    rule = rules[0]  # 通常一个文件包含一个规则
+                    rule_id = rule.get("id", os.path.splitext(os.path.basename(yaml_file))[0])
+                    languages = rule.get("languages", [])
+                    language = languages[0] if languages else "unknown"
+                    severity = rule.get("severity", "WARNING").upper()
+                    metadata = rule.get("metadata", {})
+                    source = metadata.get("source", "upload")
+
+                    # 验证严重程度
+                    if severity not in ["ERROR", "WARNING", "INFO"]:
+                        severity = "WARNING"
+
+                    # 创建规则对象
+                    new_rule = OpengrepRule(
+                        name=rule_id,
+                        pattern_yaml=content,
+                        language=language,
+                        severity=severity,
+                        source="upload",
+                        patch=metadata.get("source-url", ""),
+                        correct=True,
+                        is_active=True,
+                    )
+
+                    rules_to_add.append(new_rule)
+                    existing_md5s.add(md5_hash)  # 添加到已存在集合中，避免当前批次内重复
+                    success_count += 1
+
+                except yaml.YAMLError as e:
+                    failed_count += 1
+                    failed_details.append({"file": os.path.basename(yaml_file), "error": f"YAML 解析错误: {str(e)}"})
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append({"file": os.path.basename(yaml_file), "error": f"处理失败: {str(e)}"})
+
+            # 批量插入数据库
+            if rules_to_add:
+                db.add_all(rules_to_add)
+                await db.commit()
+
+            return {
+                "message": "规则上传处理完成",
+                "total_count": total_count,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "duplicate_count": duplicate_count,
+                "failed_details": failed_details[:20],  # 只返回前 20 条失败详情
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+
+
+@router.post("/rules/upload/directory")
+async def upload_opengrep_rules_directory(
+    files: List[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    上传文件夹（实际为多个文件）
+
+    工作流程：
+    1. 验证权限
+    2. 使用 tempfile 创建临时目录
+    3. 将所有文件保存到临时目录（保持目录结构）
+    4. 递归查找所有 YAML 文件
+    5. 解析规则并验证
+    6. MD5 去重检查
+    7. 批量入库
+    8. 返回统计信息
+
+    参数：
+    - files: 多个文件，前端应该保持相对路径信息（通过 webkitRelativePath）
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="至少需要上传一个文件")
+
+    # 使用 tempfile 创建临时目录（自动清理）
+    with tempfile.TemporaryDirectory(prefix="deepaudit_rules_", suffix="_directory") as temp_base_dir:
+        try:
+            total_uploaded_files = 0
+            yaml_files_paths = []
+
+            # 逐个保存文件，保持目录结构
+            for file in files:
+                if not file.filename:
+                    continue
+
+                # 检查文件大小
+                file_content = await file.read()
+                file_size = len(file_content)
+
+                if file_size == 0:
+                    continue  # 跳过空文件
+
+                total_uploaded_files += 1
+
+                # 获取文件的相对路径（保持目录结构）
+                file_path = file.filename
+
+                # 移除开头的 "/"（如果存在）
+                if file_path.startswith("/"):
+                    file_path = file_path[1:]
+
+                # 完整的目标路径
+                target_path = os.path.join(temp_base_dir, file_path)
+
+                # 创建必要的目录
+                target_dir = os.path.dirname(target_path)
+                os.makedirs(target_dir, exist_ok=True)
+
+                # 保存文件
+                with open(target_path, "wb") as f:
+                    f.write(file_content)
+
+                # 如果是 YAML 文件，添加到处理列表
+                if file_path.endswith((".yml", ".yaml")):
+                    yaml_files_paths.append(target_path)
+
+            if total_uploaded_files == 0:
+                raise HTTPException(status_code=400, detail="没有有效的文件")
+
+            if not yaml_files_paths:
+                raise HTTPException(status_code=400, detail="未找到 YAML 规则文件")
+
+            # 解析规则并进行 MD5 去重
+            total_count = len(yaml_files_paths)
+            success_count = 0
+            failed_count = 0
+            duplicate_count = 0
+            failed_details = []
+
+            # 获取数据库中已存在的所有规则的 MD5 值
+            result = await db.execute(select(OpengrepRule.pattern_yaml))
+            existing_patterns = result.scalars().all()
+            existing_md5s = {hashlib.md5(p.encode("utf-8")).hexdigest() for p in existing_patterns}
+
+            rules_to_add = []
+
+            for yaml_file in yaml_files_paths:
+                try:
+                    with open(yaml_file, "r", encoding="utf-8") as f:
+                        content = f.read()
+
+                    # 计算 MD5
+                    md5_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+
+                    # 检查是否重复
+                    if md5_hash in existing_md5s:
+                        duplicate_count += 1
+                        continue
+
+                    # 解析 YAML
+                    yaml_data = yaml.safe_load(content)
+                    if not yaml_data or "rules" not in yaml_data:
+                        failed_count += 1
+                        failed_details.append(
+                            {"file": os.path.basename(yaml_file), "error": "YAML 格式错误：缺少 rules 字段"}
+                        )
+                        continue
+
+                    rules = yaml_data["rules"]
+                    if not isinstance(rules, list) or len(rules) == 0:
+                        failed_count += 1
+                        failed_details.append(
+                            {"file": os.path.basename(yaml_file), "error": "rules 字段必须是非空数组"}
+                        )
+                        continue
+
+                    # 获取规则信息
+                    rule = rules[0]  # 通常一个文件包含一个规则
+                    rule_id = rule.get("id", os.path.splitext(os.path.basename(yaml_file))[0])
+                    languages = rule.get("languages", [])
+                    language = languages[0] if languages else "unknown"
+                    severity = rule.get("severity", "WARNING").upper()
+                    metadata = rule.get("metadata", {})
+
+                    # 验证严重程度
+                    if severity not in ["ERROR", "WARNING", "INFO"]:
+                        severity = "WARNING"
+
+                    # 创建规则对象
+                    new_rule = OpengrepRule(
+                        name=rule_id,
+                        pattern_yaml=content,
+                        language=language,
+                        severity=severity,
+                        source="upload",
+                        patch=metadata.get("source-url", ""),
+                        correct=True,
+                        is_active=True,
+                    )
+
+                    rules_to_add.append(new_rule)
+                    existing_md5s.add(md5_hash)  # 添加到已存在集合中，避免当前批次内重复
+                    success_count += 1
+
+                except yaml.YAMLError as e:
+                    failed_count += 1
+                    failed_details.append({"file": os.path.basename(yaml_file), "error": f"YAML 解析错误: {str(e)}"})
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append({"file": os.path.basename(yaml_file), "error": f"处理失败: {str(e)}"})
+
+            # 批量插入数据库
+            if rules_to_add:
+                db.add_all(rules_to_add)
+                await db.commit()
+
+            return {
+                "message": "规则文件夹上传处理完成",
+                "total_uploaded_files": total_uploaded_files,
+                "total_yaml_files": total_count,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "duplicate_count": duplicate_count,
+                "failed_details": failed_details[:20],  # 只返回前 20 条失败详情
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
 
 # ============ Gitleaks 密钥泄露检测 ============
