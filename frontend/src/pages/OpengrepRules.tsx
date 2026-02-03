@@ -70,8 +70,10 @@ import {
     type OpengrepRuleDetail,
 } from "@/shared/api/opengrep";
 import { setOpengrepActiveRules } from "@/shared/stores/opengrepRulesStore";
+import { useI18n } from "@/shared/i18n";
 
 export default function OpengrepRules() {
+    const { t, isEnglish } = useI18n();
     const [rules, setRules] = useState<OpengrepRule[]>([]);
     const [ruleStats, setRuleStats] = useState({ total: 0, active: 0 });
     const [loading, setLoading] = useState(true);
@@ -648,6 +650,17 @@ export default function OpengrepRules() {
         }
     };
 
+    const getSeverityLabel = (severity: string) => {
+        const normalized = severity.toUpperCase();
+        if (isEnglish) {
+            return normalized;
+        }
+        if (normalized === "ERROR") return "严重";
+        if (normalized === "WARNING") return "警告";
+        if (normalized === "INFO") return "提示";
+        return severity;
+    };
+
     const getSourceBadge = (source: string) => {
         return source === "patch" ? "从Patch生成" : "内置规则";
     };
@@ -682,7 +695,7 @@ export default function OpengrepRules() {
                             <div className="relative mt-1.5">
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                 <Input
-                                    placeholder="规则名称或ID..."
+                                    placeholder={t("opengrep.searchPlaceholder", "搜索规则名称或ID...")}
                                     value={searchTerm}
                                     onChange={(e) =>
                                         setSearchTerm(e.target.value)
@@ -776,7 +789,7 @@ export default function OpengrepRules() {
                                                 key={severity.value}
                                                 value={severity.value}
                                             >
-                                                {severity.label}
+                                                {getSeverityLabel(severity.value)}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -1055,9 +1068,7 @@ export default function OpengrepRules() {
                                                                     <Badge
                                                                         className={`cyber-badge ${getSeverityColor(rule.severity)}`}
                                                                     >
-                                                                        {
-                                                                            rule.severity
-                                                                        }
+                                                                        {getSeverityLabel(rule.severity)}
                                                                     </Badge>
                                                                     <Badge
                                                                         className={`cyber-badge ${
@@ -1476,13 +1487,13 @@ export default function OpengrepRules() {
                                                             </SelectTrigger>
                                                             <SelectContent className="cyber-dialog border-border">
                                                                 <SelectItem value="ERROR">
-                                                                    ERROR
+                                                                    {getSeverityLabel("ERROR")}
                                                                 </SelectItem>
                                                                 <SelectItem value="WARNING">
-                                                                    WARNING
+                                                                    {getSeverityLabel("WARNING")}
                                                                 </SelectItem>
                                                                 <SelectItem value="INFO">
-                                                                    INFO
+                                                                    {getSeverityLabel("INFO")}
                                                                 </SelectItem>
                                                             </SelectContent>
                                                         </Select>
@@ -1490,9 +1501,7 @@ export default function OpengrepRules() {
                                                         <Badge
                                                             className={`cyber-badge mt-1 ${getSeverityColor(selectedRule.severity)}`}
                                                         >
-                                                            {
-                                                                selectedRule.severity
-                                                            }
+                                                            {getSeverityLabel(selectedRule.severity)}
                                                         </Badge>
                                                     )}
                                                 </div>
@@ -1932,13 +1941,13 @@ export default function OpengrepRules() {
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="ERROR">
-                                                            ERROR
+                                                            {getSeverityLabel("ERROR")}
                                                         </SelectItem>
                                                         <SelectItem value="WARNING">
-                                                            WARNING
+                                                            {getSeverityLabel("WARNING")}
                                                         </SelectItem>
                                                         <SelectItem value="INFO">
-                                                            INFO
+                                                            {getSeverityLabel("INFO")}
                                                         </SelectItem>
                                                     </SelectContent>
                                                 </Select>

@@ -416,17 +416,9 @@ export default function Dashboard() {
               <h3 className="section-title">快速操作</h3>
             </div>
             <div className="space-y-2">
-              <Link to="/agent-audit" className="block">
-                <Button className="w-full justify-start cyber-btn-primary h-10">
-                  <Bot className="w-4 h-4 mr-2" />
-                  Agent 智能审计
-                </Button>
-              </Link>
-
               <Link to="/projects" className="block">
                 <Button variant="outline" className="w-full justify-start cyber-btn-outline h-10">
-                  <GitBranch className="w-4 h-4 mr-2" />
-                  创建新项目
+                  创建项目
                 </Button>
               </Link>                          
               

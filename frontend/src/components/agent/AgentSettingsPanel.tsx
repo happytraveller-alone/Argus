@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -44,6 +43,8 @@ const EMPTY_FORM: TemplateFormState = {
   sort_order: 0,
 };
 
+const AGENT_TEMPLATE_BINDING_STORAGE_KEY = "vulhunter_agent_template_bindings";
+
 interface AgentSettingsPanelProps {
   selectedAgent: string;
 }
@@ -72,6 +73,7 @@ function normalizeJson(text: string): string {
 export default function AgentSettingsPanel({ selectedAgent }: AgentSettingsPanelProps) {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [agentTemplateBindings, setAgentTemplateBindings] = useState<Record<string, string>>({});
   const [form, setForm] = useState<TemplateFormState>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,6 +106,20 @@ export default function AgentSettingsPanel({ selectedAgent }: AgentSettingsPanel
     );
   }, [selectedTemplate, form]);
 
+  const bindTemplateToAgent = (agentName: string, templateId: string) => {
+    setAgentTemplateBindings((prev) => {
+      if (prev[agentName] === templateId) {
+        return prev;
+      }
+      const next = { ...prev, [agentName]: templateId };
+      window.localStorage.setItem(
+        AGENT_TEMPLATE_BINDING_STORAGE_KEY,
+        JSON.stringify(next),
+      );
+      return next;
+    });
+  };
+
   const loadTemplates = async (preferredId?: string) => {
     try {
       setLoading(true);
@@ -116,12 +132,15 @@ export default function AgentSettingsPanel({ selectedAgent }: AgentSettingsPanel
         return;
       }
 
+      const boundTemplateId = agentTemplateBindings[selectedAgent];
       const nextId =
         (preferredId && response.items.some((item) => item.id === preferredId) && preferredId) ||
+        (boundTemplateId && response.items.some((item) => item.id === boundTemplateId) && boundTemplateId) ||
         (selectedTemplateId && response.items.some((item) => item.id === selectedTemplateId) && selectedTemplateId) ||
         response.items[0].id;
 
       setSelectedTemplateId(nextId);
+      bindTemplateToAgent(selectedAgent, nextId);
       const target = response.items.find((item) => item.id === nextId);
       if (target) {
         setForm(toTemplateForm(target));
@@ -135,13 +154,56 @@ export default function AgentSettingsPanel({ selectedAgent }: AgentSettingsPanel
   };
 
   useEffect(() => {
-    loadTemplates();
+    try {
+      const raw = window.localStorage.getItem(AGENT_TEMPLATE_BINDING_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        setAgentTemplateBindings(parsed as Record<string, string>);
+      }
+    } catch (error) {
+      console.warn("Failed to parse agent-template bindings:", error);
+    }
   }, []);
+
+  useEffect(() => {
+    loadTemplates();
+  }, [selectedAgent]);
+
+  useEffect(() => {
+    if (!templates.length) {
+      setSelectedTemplateId("");
+      return;
+    }
+
+    const boundTemplateId = agentTemplateBindings[selectedAgent];
+    const hasBound = Boolean(
+      boundTemplateId && templates.some((template) => template.id === boundTemplateId),
+    );
+
+    const fallbackTemplateId =
+      templates.find((template) => template.id === selectedTemplateId)?.id || templates[0].id;
+    const nextTemplateId = hasBound ? boundTemplateId! : fallbackTemplateId;
+
+    if (selectedTemplateId !== nextTemplateId) {
+      setSelectedTemplateId(nextTemplateId);
+    }
+    if (!hasBound) {
+      bindTemplateToAgent(selectedAgent, nextTemplateId);
+    }
+  }, [templates, selectedAgent, agentTemplateBindings, selectedTemplateId]);
 
   useEffect(() => {
     if (!selectedTemplate) return;
     setForm(toTemplateForm(selectedTemplate));
-  }, [selectedTemplateId]);
+  }, [selectedTemplate]);
+
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    bindTemplateToAgent(selectedAgent, templateId);
+  };
 
   const handleSave = async () => {
     if (!selectedTemplate) return;
@@ -222,47 +284,60 @@ export default function AgentSettingsPanel({ selectedAgent }: AgentSettingsPanel
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-        <div className="border border-border rounded-lg bg-muted/20">
-          <div className="px-3 py-2 border-b border-border text-sm text-muted-foreground font-bold">后端提示词模板</div>
-          <ScrollArea className="h-[520px]">
-            <div className="p-2 space-y-2">
-              {templates.map((template) => (
-                <button
-                  type="button"
-                  key={template.id}
-                  onClick={() => setSelectedTemplateId(template.id)}
-                  className={`w-full text-left rounded-md border p-3 transition ${
-                    selectedTemplateId === template.id
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-primary/40 hover:bg-muted/40"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-foreground line-clamp-1">{template.name}</span>
-                    {template.is_default && <Star className="w-4 h-4 text-amber-400" />}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    <Badge className="cyber-badge-info">{template.template_type}</Badge>
-                    {template.is_system ? <Badge className="cyber-badge-muted">system</Badge> : <Badge className="cyber-badge-success">custom</Badge>}
-                    <Badge className={template.is_active ? "cyber-badge-success" : "cyber-badge-danger"}>
-                      {template.is_active ? "enabled" : "disabled"}
-                    </Badge>
-                  </div>
-                </button>
-              ))}
-              {!loading && templates.length === 0 && (
-                <div className="text-sm text-muted-foreground p-3">暂无提示词模板数据</div>
-              )}
-            </div>
-          </ScrollArea>
+      <div className="border border-border rounded-lg bg-muted/10 p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(260px,340px)_1fr] gap-4 mb-4">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase text-muted-foreground font-semibold">后端提示词模板</Label>
+            <Select
+              value={selectedTemplateId || "__none__"}
+              onValueChange={(value) => value !== "__none__" && handleTemplateSelect(value)}
+              disabled={loading || templates.length === 0}
+            >
+              <SelectTrigger className="cyber-input">
+                <SelectValue placeholder="请选择模板" />
+              </SelectTrigger>
+              <SelectContent className="cyber-dialog border-border">
+                {templates.length === 0 ? (
+                  <SelectItem value="__none__" disabled>
+                    暂无提示词模板数据
+                  </SelectItem>
+                ) : (
+                  templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-end">
+            {selectedTemplate ? (
+              <div className="flex flex-wrap gap-2">
+                {selectedTemplate.is_default && (
+                  <Badge className="cyber-badge-warning flex items-center gap-1">
+                    <Star className="w-3 h-3" />
+                    default
+                  </Badge>
+                )}
+                <Badge className="cyber-badge-info">{selectedTemplate.template_type}</Badge>
+                <Badge className={selectedTemplate.is_system ? "cyber-badge-muted" : "cyber-badge-success"}>
+                  {selectedTemplate.is_system ? "system" : "custom"}
+                </Badge>
+                <Badge className={selectedTemplate.is_active ? "cyber-badge-success" : "cyber-badge-danger"}>
+                  {selectedTemplate.is_active ? "enabled" : "disabled"}
+                </Badge>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">暂无提示词模板数据</div>
+            )}
+          </div>
         </div>
 
-        <div className="border border-border rounded-lg bg-muted/10 p-4">
-          {!selectedTemplate ? (
-            <div className="text-muted-foreground text-sm">请在左侧选择模板进行查看或编辑。</div>
-          ) : (
-            <div className="space-y-4">
+        {!selectedTemplate ? (
+          <div className="text-muted-foreground text-sm">请选择模板进行查看或编辑。</div>
+        ) : (
+          <div className="space-y-4">
               {isSystemTemplate && (
                 <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
                   系统模板只允许修改“启用状态”，其余字段为只读。
@@ -386,9 +461,8 @@ export default function AgentSettingsPanel({ selectedAgent }: AgentSettingsPanel
                   </Button>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -19,5 +19,5 @@ export const dashboardDictionary: DomDictionary = {
   "暂无活动记录": "No recent activity",
   "快速操作": "Quick Actions",
   "Agent 智能审计": "Agent Smart Audit",
-  "创建新项目": "Create New Project",
+  "创建项目": "Create Project",
 };

@@ -73,8 +73,10 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import CreateTaskDialog from "@/components/audit/CreateTaskDialog";
 import { SUPPORTED_LANGUAGES, REPOSITORY_PLATFORMS } from "@/shared/constants";
+import { useI18n } from "@/shared/i18n";
 
 export default function Projects() {
+    const { t } = useI18n();
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
@@ -970,7 +972,7 @@ export default function Projects() {
                 <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 z-10" />
                     <Input
-                        placeholder="搜索项目..."
+                        placeholder={t("projects.searchPlaceholder", "搜索项目名称...")}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="cyber-input !pl-10"

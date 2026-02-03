@@ -16,8 +16,6 @@ const SKIP_TAGS = new Set([
   "SCRIPT",
   "STYLE",
   "NOSCRIPT",
-  "TEXTAREA",
-  "INPUT",
   "CODE",
   "PRE",
 ]);

@@ -1,7 +1,9 @@
 import type { DomDictionary } from "./types";
 
 export const intelligentAuditDictionary: DomDictionary = {
-  "智能审计能力": "Intelligent Audit Capability",
+  "审计能力": "Audit Capability",
+  "智能体选择": "Agent Selection",
+  "选择智能体": "Select Agent",
   "Agent（智能体）": "Agent",
   "负责调度、分析、验证": "Responsible for orchestration, analysis, and verification",
   "Agent 设置": "Agent Settings",
@@ -10,6 +12,8 @@ export const intelligentAuditDictionary: DomDictionary = {
   "刷新": "Refresh",
   "暂无提示词模板数据": "No prompt template data",
   "请在左侧选择模板进行查看或编辑。": "Select a template on the left to view or edit.",
+  "请选择模板进行查看或编辑。": "Please select a template to view or edit.",
+  "请选择模板": "Please select a template",
   "系统模板只允许修改“启用状态”，其余字段为只读。": "System templates only allow changing active status; other fields are read-only.",
   "模板名称": "Template Name",
   "模板类型": "Template Type",
@@ -32,4 +36,8 @@ export const intelligentAuditDictionary: DomDictionary = {
   "已设置为默认模板": "Set as default template",
   "设置默认模板失败": "Failed to set default template",
   "Agent 数量：": "Agent Count:",
+  "侦察智能体": "Recon Agent",
+  "分析智能体": "Analysis Agent",
+  "验证智能体": "Verification Agent",
+  "调度智能体": "Orchestration Agent",
 };
