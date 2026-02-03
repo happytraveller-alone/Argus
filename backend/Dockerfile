@@ -105,26 +105,26 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# 安装 Opengrep CLI（官方安装脚本）；若失败回退到 semgrep 兼容
+# 安装 Opengrep CLI（仅使用官方安装脚本）
+ARG OPENGREP_VERSION=v1.15.1
+
 RUN set -eux; \
-    opengrep_target="semgrep"; \
-    if curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash; then \
-        if command -v opengrep >/dev/null 2>&1; then \
-            opengrep_target="$(command -v opengrep)"; \
-        elif [ -x /usr/local/bin/opengrep ]; then \
-            opengrep_target="/usr/local/bin/opengrep"; \
-        elif [ -x /root/.local/bin/opengrep ]; then \
-            opengrep_target="/root/.local/bin/opengrep"; \
-        fi; \
-    else \
-        pip install --no-cache-dir semgrep; \
-    fi; \
-    if [ "$opengrep_target" = "/usr/local/bin/opengrep" ]; then \
-        mv /usr/local/bin/opengrep /usr/local/bin/opengrep.real; \
-        opengrep_target="/usr/local/bin/opengrep.real"; \
-    fi; \
-    printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY="*"\nexport no_proxy="*"\nexec %s "$@"\n' "$opengrep_target" > /usr/local/bin/opengrep; \
-    chmod +x /usr/local/bin/opengrep
+    unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; \
+    ARCH="$(uname -m)"; \
+    case "$ARCH" in \
+      x86_64|amd64) OG_DIST="opengrep_manylinux_x86" ;; \
+      aarch64|arm64) OG_DIST="opengrep_manylinux_aarch64" ;; \
+      *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    curl -fL "https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
+      -o /usr/local/bin/opengrep.real; \
+    chmod +x /usr/local/bin/opengrep.real; \
+    printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY="*"\nexport no_proxy="*"\nexec /usr/local/bin/opengrep.real "$@"\n' \
+      > /usr/local/bin/opengrep; \
+    chmod +x /usr/local/bin/opengrep; \
+    opengrep --version
+
+
 
 # 从构建阶段复制虚拟环境、uv 和 gitleaks
 COPY --from=builder /app/.venv /app/.venv

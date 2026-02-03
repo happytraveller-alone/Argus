@@ -1,6 +1,6 @@
 # DeepAudit Agent Sandbox
 # 安全沙箱环境用于漏洞验证和 PoC 执行
-# 集成各类安全扫描工具 (Semgrep, Bandit, Gitleaks, etc.)
+# 集成各类安全扫描工具 (Opengrep, Bandit, Gitleaks, etc.)
 
 FROM docker.m.daocloud.io/python:3.11-bullseye
 
@@ -71,29 +71,28 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
     pyjwt \
     python-jose \
     sqlparse \
-    semgrep \
     bandit \
     safety
 
-# 安装 Opengrep CLI（官方安装脚本）；若失败回退到 semgrep 兼容
-RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    opengrep_target="semgrep" && \
-    if curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash; then \
-      if command -v opengrep >/dev/null 2>&1; then \
-        opengrep_target="$(command -v opengrep)"; \
-      elif [ -x /usr/local/bin/opengrep ]; then \
-        opengrep_target="/usr/local/bin/opengrep"; \
-      elif [ -x /root/.local/bin/opengrep ]; then \
-        opengrep_target="/root/.local/bin/opengrep"; \
-      fi; \
-    else \
-      echo "opengrep install script failed, fallback to semgrep compatibility"; \
-    fi && \
-    if [ "$opengrep_target" = "/usr/local/bin/opengrep" ]; then \
-      mv /usr/local/bin/opengrep /usr/local/bin/opengrep.real && \
-      opengrep_target="/usr/local/bin/opengrep.real"; \
-    fi && \
-    printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY=\"*\"\nexport no_proxy=\"*\"\nexec %s \"$@\"\n' "$opengrep_target" > /usr/local/bin/opengrep && chmod +x /usr/local/bin/opengrep
+# 安装 Opengrep CLI（仅使用官方安装脚本）
+ARG OPENGREP_VERSION=v1.15.1
+
+RUN set -eux; \
+    unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; \
+    ARCH="$(uname -m)"; \
+    case "$ARCH" in \
+      x86_64|amd64) OG_DIST="opengrep_manylinux_x86" ;; \
+      aarch64|arm64) OG_DIST="opengrep_manylinux_aarch64" ;; \
+      *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    curl -fL "https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
+      -o /usr/local/bin/opengrep.real; \
+    chmod +x /usr/local/bin/opengrep.real; \
+    printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY="*"\nexport no_proxy="*"\nexec /usr/local/bin/opengrep.real "$@"\n' \
+      > /usr/local/bin/opengrep; \
+    chmod +x /usr/local/bin/opengrep; \
+    opengrep --version
+
 
 # 安装 Gitleaks
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
