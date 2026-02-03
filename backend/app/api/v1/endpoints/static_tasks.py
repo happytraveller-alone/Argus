@@ -36,6 +36,36 @@ from app.services.upload.upload_manager import UploadManager
 # ============ Schemas ============
 
 
+class OpengrepRuleSingleUploadRequest(BaseModel):
+    """上传单条规则请求"""
+
+    id: Optional[str] = Field(None, description="规则ID，不提供时自动生成")
+    name: str = Field(..., description="规则名称")
+    pattern_yaml: str = Field(..., description="规则的 YAML 内容")
+    language: str = Field(..., description="编程语言，如 python, java, javascript")
+    severity: str = Field("WARNING", description="严重程度: ERROR, WARNING, INFO")
+    source: str = Field("json", description="规则来源，默认为 json")
+    patch: Optional[str] = Field(None, description="补丁或相关链接")
+    correct: bool = Field(True, description="规则是否正确")
+    is_active: bool = Field(True, description="规则是否启用")
+
+
+class OpengrepRuleSingleUploadResponse(BaseModel):
+    """上传单条规则响应"""
+
+    rule_id: str
+    name: str
+    language: str
+    severity: str
+    source: str
+    is_active: bool
+    created_at: datetime
+    message: str
+
+    class Config:
+        from_attributes = True
+
+
 class OpengrepRuleBatchUpdateRequest(BaseModel):
     """批量更新规则状态请求"""
 
@@ -993,6 +1023,137 @@ async def select_opengrep_rules(
         "is_active": request.is_active,
     }
 
+
+
+@router.post("/rules/upload/json", response_model=OpengrepRuleSingleUploadResponse)
+async def upload_opengrep_rule_json(
+    request: OpengrepRuleSingleUploadRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    通过 JSON 上传单条规则
+
+    工作流程：
+    1. 验证 YAML 格式
+    2. 检查规则必需字段
+    3. 验证严重程度
+    4. 计算 MD5 去重
+    5. 保存到数据库
+    6. 返回规则信息
+
+    请求体示例：
+    ```json
+    {
+      "name": "my-security-rule",
+      "pattern_yaml": "rules:\\n  - id: my-rule\\n    ...",
+      "language": "python",
+      "severity": "ERROR",
+      "source": "json",
+      "patch": "https://example.com/patch",
+      "correct": true,
+      "is_active": true
+    }
+    ```
+    """
+    try:
+        # 验证严重程度
+        severity = request.severity.upper()
+        if severity not in ["ERROR", "WARNING", "INFO"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"严重程度不合法: {request.severity}，必须为 ERROR, WARNING, INFO 之一",
+            )
+
+        # 验证 YAML 格式
+        try:
+            yaml_data = yaml.safe_load(request.pattern_yaml)
+            if not yaml_data:
+                raise HTTPException(
+                    status_code=400,
+                    detail="YAML 内容为空或无效",
+                )
+        except yaml.YAMLError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"YAML 格式错误: {str(e)}",
+            )
+
+        # 检查规则必需字段
+        if "rules" not in yaml_data:
+            raise HTTPException(
+                status_code=400,
+                detail="YAML 中缺少 rules 字段",
+            )
+
+        rules = yaml_data.get("rules", [])
+        if not isinstance(rules, list) or len(rules) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="rules 字段必须是非空数组",
+            )
+
+        # 验证规则必需字段
+        rule = rules[0]
+        if not isinstance(rule, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="rules 数组中的规则必须是对象",
+            )
+
+        rule_id = rule.get("id")
+        if not rule_id:
+            raise HTTPException(
+                status_code=400,
+                detail="规则中缺少 id 字段",
+            )
+
+        # MD5 去重检查
+        md5_hash = hashlib.md5(request.pattern_yaml.encode("utf-8")).hexdigest()
+        result = await db.execute(
+            select(OpengrepRule).where(
+                OpengrepRule.pattern_yaml == request.pattern_yaml
+            )
+        )
+        existing_rule = result.scalar_one_or_none()
+        if existing_rule:
+            raise HTTPException(
+                status_code=400,
+                detail=f"规则已存在（重复），现有规则 ID: {existing_rule.id}",
+            )
+
+        # 创建规则对象
+        new_rule = OpengrepRule(
+            name=request.name,
+            pattern_yaml=request.pattern_yaml,
+            language=request.language,
+            severity=severity,
+            source=request.source,
+            patch=request.patch,
+            correct=request.correct,
+            is_active=request.is_active,
+        )
+
+        db.add(new_rule)
+        await db.commit()
+        await db.refresh(new_rule)
+
+        return {
+            "rule_id": new_rule.id,
+            "name": new_rule.name,
+            "language": new_rule.language,
+            "severity": new_rule.severity,
+            "source": new_rule.source,
+            "is_active": new_rule.is_active,
+            "created_at": new_rule.create_at,
+            "message": "规则上传成功",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading opengrep rule: {e}")
+        raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
 
 @router.post("/rules/upload")
