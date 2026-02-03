@@ -75,8 +75,11 @@ class OpengrepRule(Base):
     name = Column(String, nullable=False)
     pattern_yaml = Column(Text, nullable=False)
     language = Column(String, nullable=False)
-    severity = Column(String, nullable=False, comment="ERROR, WARNING, INFO")  #
-    source = Column(String, nullable=False, comment="internal, patch")
+    severity = Column(String, nullable=False, comment="ERROR, WARNING, INFO")
+    confidence = Column(String, nullable=True, comment="置信度: HIGH, MEDIUM, LOW")
+    description = Column(Text, nullable=True, comment="规则描述，对应YAML中的message字段")
+    cwe = Column(JSON, nullable=True, comment="CWE列表，对应YAML中的cwe字段")
+    source = Column(String, nullable=False, comment="internal, patch, json")
     patch = Column(String, nullable=True)
     correct = Column(Boolean, default=False, comment="是否是正确的语法")
     is_active = Column(Boolean, default=True, comment="是否启用")

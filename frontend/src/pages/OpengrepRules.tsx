@@ -75,6 +75,7 @@ export default function OpengrepRules() {
     const [selectedLanguage, setSelectedLanguage] = useState<string>("");
     const [selectedSource, setSelectedSource] = useState<string>("");
     const [selectedSeverity, setSelectedSeverity] = useState<string>("");
+    const [selectedConfidence, setSelectedConfidence] = useState<string>("");
     const [selectedActiveStatus, setSelectedActiveStatus] = useState<string>("");
     const [showRuleDetail, setShowRuleDetail] = useState(false);
     const [selectedRule, setSelectedRule] = useState<OpengrepRuleDetail | null>(
@@ -115,6 +116,9 @@ export default function OpengrepRules() {
         language: "python",
         pattern_yaml: "",
         severity: "WARNING",
+        confidence: "",
+        description: "",
+        cwe: [] as string[],
         source: "json",
         patch: "",
         correct: true,
@@ -132,7 +136,7 @@ export default function OpengrepRules() {
             setCurrentPage(1);
             loadRules();
         }
-    }, [selectedLanguage, selectedSource, selectedSeverity, selectedActiveStatus]);
+    }, [selectedLanguage, selectedSource, selectedSeverity, selectedConfidence, selectedActiveStatus]);
 
     const loadRules = async (options?: { silent?: boolean }) => {
         const silent = options?.silent ?? false;
@@ -340,6 +344,9 @@ export default function OpengrepRules() {
                 pattern_yaml: manualRuleForm.pattern_yaml,
                 language: language,
                 severity: manualRuleForm.severity,
+                ...(manualRuleForm.confidence && { confidence: manualRuleForm.confidence }),
+                ...(manualRuleForm.description && { description: manualRuleForm.description }),
+                ...(manualRuleForm.cwe.length > 0 && { cwe: manualRuleForm.cwe }),
                 source: manualRuleForm.source,
                 ...(manualRuleForm.patch && { patch: manualRuleForm.patch }),
                 correct: manualRuleForm.correct,
@@ -354,6 +361,9 @@ export default function OpengrepRules() {
                 language: "python",
                 pattern_yaml: "",
                 severity: "WARNING",
+                confidence: "",
+                description: "",
+                cwe: [],
                 source: "json",
                 patch: "",
                 correct: true,
@@ -426,6 +436,7 @@ export default function OpengrepRules() {
         setSelectedLanguage("");
         setSelectedSource("");
         setSelectedSeverity("");
+        setSelectedConfidence("");
         setSelectedActiveStatus("");
         setCurrentPage(1);
         setSelectedRuleIds(new Set());
@@ -505,13 +516,15 @@ export default function OpengrepRules() {
             !selectedLanguage || rule.language === selectedLanguage;
         const matchSeverity =
             !selectedSeverity || rule.severity === selectedSeverity;
+        const matchConfidence =
+            !selectedConfidence || rule.confidence === selectedConfidence;
         const matchActiveStatus =
             !selectedActiveStatus ||
             (selectedActiveStatus === "true" && rule.is_active) ||
             (selectedActiveStatus === "false" && !rule.is_active);
 
         return (
-            matchSearch && matchLanguage && matchSeverity && matchActiveStatus
+            matchSearch && matchLanguage && matchSeverity && matchConfidence && matchActiveStatus
         );
     });
 
@@ -666,6 +679,38 @@ export default function OpengrepRules() {
                                                 {severity.label}
                                             </SelectItem>
                                         ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="min-w-[180px] flex-1">
+                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                    置信度
+                                </Label>
+                                <Select
+                                    value={selectedConfidence || "all"}
+                                    onValueChange={(val) =>
+                                        setSelectedConfidence(
+                                            val === "all" ? "" : val,
+                                        )
+                                    }
+                                >
+                                    <SelectTrigger className="cyber-input mt-1.5">
+                                        <SelectValue placeholder="所有等级" />
+                                    </SelectTrigger>
+                                    <SelectContent className="cyber-dialog border-border">
+                                        <SelectItem value="all">
+                                            所有等级
+                                        </SelectItem>
+                                        <SelectItem value="HIGH">
+                                            高 (HIGH)
+                                        </SelectItem>
+                                        <SelectItem value="MEDIUM">
+                                            中 (MEDIUM)
+                                        </SelectItem>
+                                        <SelectItem value="LOW">
+                                            低 (LOW)
+                                        </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -926,6 +971,19 @@ export default function OpengrepRules() {
                                                                             rule.source,
                                                                         )}
                                                                     </Badge>
+                                                                    {rule.confidence && (
+                                                                        <Badge
+                                                                            className={`cyber-badge ${
+                                                                                rule.confidence === "HIGH"
+                                                                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                                                                    : rule.confidence === "MEDIUM"
+                                                                                      ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                                                                      : "bg-sky-500/20 text-sky-300 border-sky-500/30"
+                                                                            }`}
+                                                                        >
+                                                                            {rule.confidence}
+                                                                        </Badge>
+                                                                    )}
                                                                     {rule.is_active ? (
                                                                         <Badge className="cyber-badge cyber-badge-success">
                                                                             已启用
@@ -1259,10 +1317,59 @@ export default function OpengrepRules() {
                                                             : "⚠ 未验证"}
                                                     </p>
                                                 </div>
+                                                {selectedRule.confidence && (
+                                                    <div>
+                                                        <p className="text-muted-foreground">
+                                                            置信度
+                                                        </p>
+                                                        <Badge
+                                                            className={`cyber-badge mt-1 ${
+                                                                selectedRule.confidence === "HIGH"
+                                                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                                                    : selectedRule.confidence === "MEDIUM"
+                                                                      ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                                                      : "bg-sky-500/20 text-sky-300 border-sky-500/30"
+                                                            }`}
+                                                        >
+                                                            {selectedRule.confidence}
+                                                        </Badge>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
-                                        {/* Pattern YAML */}
+                                        {/* Description */}
+                                        {selectedRule.description && (
+                                            <div className="space-y-3">
+                                                <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">
+                                                    规则描述
+                                                </h3>
+                                                <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                                                    {selectedRule.description}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* CWE */}
+                                        {selectedRule.cwe && selectedRule.cwe.length > 0 && (
+                                            <div className="space-y-3">
+                                                <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">
+                                                    相关 CWE
+                                                </h3>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {selectedRule.cwe.map(
+                                                        (cwe, idx) => (
+                                                            <Badge
+                                                                key={idx}
+                                                                className="cyber-badge bg-violet-500/20 text-violet-300 border-violet-500/30"
+                                                            >
+                                                                {cwe}
+                                                            </Badge>
+                                                        ),
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground">
@@ -1576,6 +1683,76 @@ export default function OpengrepRules() {
                                                 </Select>
                                             </div>
 
+                                            {/* Confidence (Optional) */}
+                                            <div>
+                                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                    置信度 <span className="text-muted-foreground/60">(可选)</span>
+                                                </Label>
+                                                <Select
+                                                    value={manualRuleForm.confidence}
+                                                    onValueChange={(value) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            confidence: value,
+                                                        })
+                                                    }
+                                                >
+                                                    <SelectTrigger className="cyber-input mt-1.5 font-mono text-xs">
+                                                        <SelectValue placeholder="未设置" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="HIGH">
+                                                            HIGH
+                                                        </SelectItem>
+                                                        <SelectItem value="MEDIUM">
+                                                            MEDIUM
+                                                        </SelectItem>
+                                                        <SelectItem value="LOW">
+                                                            LOW
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {/* Description (Optional) */}
+                                            <div className="col-span-2">
+                                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                    规则描述 <span className="text-muted-foreground/60">(可选)</span>
+                                                </Label>
+                                                <Textarea
+                                                    value={manualRuleForm.description}
+                                                    onChange={(e) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            description: e.target.value,
+                                                        })
+                                                    }
+                                                    placeholder="描述这个规则的作用和检测目标"
+                                                    className="cyber-input mt-1.5 font-mono text-xs min-h-20 cursor-text"
+                                                />
+                                            </div>
+
+                                            {/* CWE (Optional) */}
+                                            <div className="col-span-2">
+                                                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                    CWE <span className="text-muted-foreground/60">(可选，用逗号分隔)</span>
+                                                </Label>
+                                                <Input
+                                                    value={manualRuleForm.cwe.join(", ")}
+                                                    onChange={(e) =>
+                                                        setManualRuleForm({
+                                                            ...manualRuleForm,
+                                                            cwe: e.target.value
+                                                                .split(",")
+                                                                .map((c) => c.trim())
+                                                                .filter((c) => c),
+                                                        })
+                                                    }
+                                                    placeholder="例如: CWE-89, CWE-79, CWE-20"
+                                                    className="cyber-input mt-1.5 font-mono text-xs"
+                                                />
+                                            </div>
+
                                             {/* Patch Link (Optional) */}
                                             <div className="col-span-2">
                                                 <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
@@ -1811,6 +1988,9 @@ export default function OpengrepRules() {
                                             language: "python",
                                             pattern_yaml: "",
                                             severity: "WARNING",
+                                            confidence: "",
+                                            description: "",
+                                            cwe: [],
                                             source: "json",
                                             patch: "",
                                             correct: true,

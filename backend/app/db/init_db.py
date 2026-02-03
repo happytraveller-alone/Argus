@@ -327,12 +327,36 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
                 if severity not in ['ERROR', 'WARNING', 'INFO']:
                     severity = 'INFO'
                 
+                # 提取置信度（从顶层或 metadata 中）- 如果没有则设置为 LOW
+                confidence = rule.get('confidence')
+                if not confidence:
+                    metadata = rule.get('metadata', {})
+                    confidence = metadata.get('confidence')
+                if not confidence or confidence not in ['HIGH', 'MEDIUM', 'LOW']:
+                    confidence = 'LOW'
+                
+                # 提取描述 - 如果没有则置空
+                description = rule.get('message') or None
+                
+                # 提取 CWE - 如果没有则置空
+                cwe = metadata.get('cwe')
+                if cwe:
+                    if isinstance(cwe, str):
+                        cwe = [cwe]
+                    elif not isinstance(cwe, list):
+                        cwe = None
+                else:
+                    cwe = None
+                
                 # 创建规则记录
                 opengrep_rule = OpengrepRule(
                     name=rule_id,
                     pattern_yaml=content,  # 保存完整的 YAML 内容
                     language=language,
                     severity=severity,
+                    confidence=confidence,  # 新增字段
+                    description=description,  # 新增字段
+                    cwe=cwe,  # 新增字段
                     source="internal",
                     correct=True,  # 内置规则默认为正确
                     is_active=True,
@@ -423,6 +447,17 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                 if severity not in ['ERROR', 'WARNING', 'INFO']:
                     severity = 'INFO'
                 
+                # 提取置信度（从顶层或 metadata 中）- 如果没有则设置为 LOW
+                confidence = rule.get('confidence')
+                if not confidence:
+                    metadata = rule.get('metadata', {})
+                    confidence = metadata.get('confidence')
+                if not confidence or confidence not in ['HIGH', 'MEDIUM', 'LOW']:
+                    confidence = 'LOW'
+                
+                # 提取描述 - 如果没有则置空
+                description = rule.get('message') or None
+                
                 # 读取对应的 patch 文件内容
                 patch_content = None
                 patch_file = Path(__file__).parent / "patches" / f"{yaml_file.stem}.patch"
@@ -434,11 +469,21 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                         logger.debug(f"  ⊘ 无法读取 patch 文件 {patch_file.name}: {e}")
                         # 如果读取失败，尝试从 metadata 获取 URL
                         metadata = rule.get('metadata', {})
-                        patch_content = metadata.get('source-url', '')
+                        patch_content = metadata.get('source-url') or None
                 else:
                     # 如果没有对应的 patch 文件，从 metadata 获取 URL
                     metadata = rule.get('metadata', {})
-                    patch_content = metadata.get('source-url', '')
+                    patch_content = metadata.get('source-url') or None
+                
+                # 提取 CWE - 如果没有则置空
+                cwe = metadata.get('cwe')
+                if cwe:
+                    if isinstance(cwe, str):
+                        cwe = [cwe]
+                    elif not isinstance(cwe, list):
+                        cwe = None
+                else:
+                    cwe = None
                 
                 # 创建规则记录
                 opengrep_rule = OpengrepRule(
@@ -446,6 +491,9 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                     pattern_yaml=content,  # 保存完整的 YAML 内容
                     language=language,
                     severity=severity,
+                    confidence=confidence,  # 新增字段
+                    description=description,  # 新增字段
+                    cwe=cwe,  # 新增字段
                     source="patch",  # 标记为 patch 来源
                     patch=patch_content,  # 保存 patch 文件内容或 URL
                     correct=True,  # Patch 规则默认为正确

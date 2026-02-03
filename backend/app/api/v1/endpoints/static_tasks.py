@@ -44,6 +44,9 @@ class OpengrepRuleSingleUploadRequest(BaseModel):
     pattern_yaml: str = Field(..., description="规则的 YAML 内容")
     language: str = Field(..., description="编程语言，如 python, java, javascript")
     severity: str = Field("WARNING", description="严重程度: ERROR, WARNING, INFO")
+    confidence: Optional[str] = Field(None, description="置信度: HIGH, MEDIUM, LOW")
+    description: Optional[str] = Field(None, description="规则描述")
+    cwe: Optional[List[str]] = Field(None, description="CWE列表")
     source: str = Field("json", description="规则来源，默认为 json")
     patch: Optional[str] = Field(None, description="补丁或相关链接")
     correct: bool = Field(True, description="规则是否正确")
@@ -57,6 +60,9 @@ class OpengrepRuleSingleUploadResponse(BaseModel):
     name: str
     language: str
     severity: str
+    confidence: Optional[str]
+    description: Optional[str]
+    cwe: Optional[List[str]]
     source: str
     is_active: bool
     created_at: datetime
@@ -73,6 +79,7 @@ class OpengrepRuleBatchUpdateRequest(BaseModel):
     language: Optional[str] = Field(None, description="按编程语言过滤")
     source: Optional[str] = Field(None, description="按来源过滤: internal, patch")
     severity: Optional[str] = Field(None, description="按严重程度过滤: ERROR, WARNING, INFO")
+    confidence: Optional[str] = Field(None, description="按置信度过滤: HIGH, MEDIUM, LOW")
     is_active: bool = Field(..., description="要设置的激活状态")
 
 
@@ -763,6 +770,7 @@ async def update_static_task_finding(
 async def list_opengrep_rules(
     language: Optional[str] = Query(None, description="按编程语言过滤"),
     source: Optional[str] = Query(None, description="按来源过滤: internal, patch"),
+    confidence: Optional[str] = Query(None, description="按置信度过滤: HIGH, MEDIUM, LOW"),
     is_active: Optional[bool] = Query(None, description="只获取活跃规则"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -773,6 +781,8 @@ async def list_opengrep_rules(
         query = query.where(OpengrepRule.language == language)
     if source:
         query = query.where(OpengrepRule.source == source)
+    if confidence:
+        query = query.where(OpengrepRule.confidence == confidence)
     if is_active is not None:
         query = query.where(OpengrepRule.is_active == is_active)
 
@@ -785,6 +795,9 @@ async def list_opengrep_rules(
             "name": r.name,
             "language": r.language,
             "severity": r.severity,
+            "confidence": r.confidence,
+            "description": r.description,
+            "cwe": r.cwe,
             "source": r.source,
             "correct": r.correct,
             "is_active": r.is_active,
@@ -808,6 +821,9 @@ async def get_opengrep_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
         "pattern_yaml": rule.pattern_yaml,
         "language": rule.language,
         "severity": rule.severity,
+        "confidence": rule.confidence,
+        "description": rule.description,
+        "cwe": rule.cwe,
         "source": rule.source,
         "patch": rule.patch,
         "correct": rule.correct,
@@ -969,7 +985,7 @@ async def select_opengrep_rules(
     """
     批量启用或禁用 Opengrep 规则
 
-    支持通过规则ID列表、编程语言、规则来源、严重程度等条件进行过滤
+    支持通过规则ID列表、编程语言、规则来源、严重程度、置信度等条件进行过滤
     至少需要提供一个过滤条件
     """
     # 构建查询条件
@@ -992,10 +1008,14 @@ async def select_opengrep_rules(
         query = query.where(OpengrepRule.severity == request.severity)
         has_filter = True
 
+    if request.confidence:
+        query = query.where(OpengrepRule.confidence == request.confidence)
+        has_filter = True
+
     if not has_filter:
         raise HTTPException(
             status_code=400,
-            detail="至少需要提供一个过滤条件（rule_ids, language, source, severity）",
+            detail="至少需要提供一个过滤条件（rule_ids, language, source, severity, confidence）",
         )
 
     # 查询符合条件的规则
@@ -1128,6 +1148,9 @@ async def upload_opengrep_rule_json(
             pattern_yaml=request.pattern_yaml,
             language=request.language,
             severity=severity,
+            confidence=request.confidence,
+            description=request.description,
+            cwe=request.cwe,
             source=request.source,
             patch=request.patch,
             correct=request.correct,
@@ -1143,6 +1166,9 @@ async def upload_opengrep_rule_json(
             "name": new_rule.name,
             "language": new_rule.language,
             "severity": new_rule.severity,
+            "confidence": new_rule.confidence,
+            "description": new_rule.description,
+            "cwe": new_rule.cwe,
             "source": new_rule.source,
             "is_active": new_rule.is_active,
             "created_at": new_rule.create_at,
@@ -1287,7 +1313,12 @@ async def upload_opengrep_rules(
                     languages = rule.get("languages", [])
                     language = languages[0] if languages else "unknown"
                     severity = rule.get("severity", "WARNING").upper()
+                    confidence = rule.get("confidence", "MEDIUM").upper()
+                    description = rule.get("message", "")
                     metadata = rule.get("metadata", {})
+                    cwe = metadata.get("cwe", [])
+                    if isinstance(cwe, str):
+                        cwe = [cwe]
                     source = metadata.get("source", "upload")
 
                     # 验证严重程度
@@ -1300,6 +1331,9 @@ async def upload_opengrep_rules(
                         pattern_yaml=content,
                         language=language,
                         severity=severity,
+                        confidence=confidence,
+                        description=description,
+                        cwe=cwe,
                         source="upload",
                         patch=metadata.get("source-url", ""),
                         correct=True,

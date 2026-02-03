@@ -10,7 +10,10 @@ export interface OpengrepRule {
     name: string;
     language: string;
     severity: string;
-    source: "internal" | "patch";
+    confidence?: string;
+    description?: string;
+    cwe?: string[];
+    source: "internal" | "patch" | "json" | "upload";
     correct: boolean;
     is_active: boolean;
     created_at: string;
@@ -115,6 +118,9 @@ export async function uploadOpengrepRuleJSON(params: {
     pattern_yaml: string;
     language: string;
     severity?: string;
+    confidence?: string;
+    description?: string;
+    cwe?: string[];
     source?: string;
     patch?: string;
     correct?: boolean;
