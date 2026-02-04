@@ -308,6 +308,8 @@ export default function StaticAnalysis() {
     const gitleaksTaskId =
         searchParams.get("gitleaksTaskId") ||
         (toolParam === "gitleaks" ? taskId || null : null);
+    const showOpengrepTab = Boolean(opengrepTaskId);
+    const showGitleaksTab = Boolean(gitleaksTaskId);
 
     const taskStatusLabel = useMemo(
         () =>
@@ -494,18 +496,18 @@ export default function StaticAnalysis() {
     };
 
     useEffect(() => {
-        if (toolParam === "gitleaks") {
+        if (toolParam === "gitleaks" && showGitleaksTab) {
             setActiveTab("gitleaks");
             return;
         }
-        if (opengrepTaskId) {
+        if (showOpengrepTab) {
             setActiveTab("opengrep");
             return;
         }
-        if (gitleaksTaskId) {
+        if (showGitleaksTab) {
             setActiveTab("gitleaks");
         }
-    }, [toolParam, opengrepTaskId, gitleaksTaskId]);
+    }, [toolParam, showOpengrepTab, showGitleaksTab]);
 
     useEffect(() => {
         loadOpengrepTask();
@@ -824,14 +826,20 @@ export default function StaticAnalysis() {
                 onValueChange={(val) => setActiveTab(val as "opengrep" | "gitleaks")}
                 className="relative z-10"
             >
-                <TabsList className="mb-4">
-                    <TabsTrigger value="opengrep" disabled={!opengrepTaskId}>
-                        Opengrep
-                    </TabsTrigger>
-                    <TabsTrigger value="gitleaks" disabled={!gitleaksTaskId}>
-                        Gitleaks
-                    </TabsTrigger>
-                </TabsList>
+                {(showOpengrepTab || showGitleaksTab) && (
+                    <TabsList className="mb-4">
+                        {showOpengrepTab && (
+                            <TabsTrigger value="opengrep">
+                                Opengrep
+                            </TabsTrigger>
+                        )}
+                        {showGitleaksTab && (
+                            <TabsTrigger value="gitleaks">
+                                Gitleaks
+                            </TabsTrigger>
+                        )}
+                    </TabsList>
+                )}
 
                 <TabsContent value="opengrep">
                     {opengrepTask && (
@@ -1010,7 +1018,9 @@ export default function StaticAnalysis() {
                                 <p className="text-muted-foreground font-mono text-sm">
                                     {opengrepTask?.status === "running"
                                         ? "扫描进行中，请稍后刷新"
-                                        : "未检测到问题"}
+                                        : opengrepTask?.status === "completed"
+                                          ? "扫描完成，未扫描到缺陷"
+                                          : "暂无扫描结果"}
                                 </p>
                             </div>
                         ) : (
@@ -1161,7 +1171,8 @@ export default function StaticAnalysis() {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="gitleaks">
+                {showGitleaksTab && (
+                    <TabsContent value="gitleaks">
                     <div className="cyber-card p-4 space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
@@ -1227,7 +1238,9 @@ export default function StaticAnalysis() {
                                 <p className="text-muted-foreground font-mono text-sm">
                                     {gitleaksTask?.status === "running"
                                         ? "扫描进行中，请稍后刷新"
-                                        : "未检测到问题"}
+                                        : gitleaksTask?.status === "completed"
+                                          ? "扫描完成，未扫描到缺陷"
+                                          : "暂无扫描结果"}
                                 </p>
                             </div>
                         ) : (
@@ -1381,7 +1394,8 @@ export default function StaticAnalysis() {
                             </ScrollArea>
                         )}
                     </div>
-                </TabsContent>
+                    </TabsContent>
+                )}
             </Tabs>
 
             <Dialog open={showDetail} onOpenChange={setShowDetail}>

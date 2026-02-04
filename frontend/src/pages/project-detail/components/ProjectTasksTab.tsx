@@ -12,8 +12,16 @@ export function ProjectTasksTab(props: {
   formatDate: (dateString: string) => string;
   renderStatusBadge: (status: string) => React.ReactNode;
   renderStatusIcon: (status: string) => React.ReactNode;
+  getTaskRoute?: (task: UnifiedTask) => string;
 }) {
-  const { unifiedTasks, onCreateTask, formatDate, renderStatusBadge, renderStatusIcon } = props;
+  const {
+    unifiedTasks,
+    onCreateTask,
+    formatDate,
+    renderStatusBadge,
+    renderStatusIcon,
+    getTaskRoute,
+  } = props;
 
   return (
     <>
@@ -42,6 +50,12 @@ export function ProjectTasksTab(props: {
                 : (task.findings_count ?? 0);
             const totalFiles = isStaticTask ? (task.files_scanned ?? 0) : (task.total_files ?? 0);
             const totalLines = isStaticTask ? (task.lines_scanned ?? "-") : (task.total_lines ?? "-");
+            const defaultRoute = isStaticTask
+              ? `/static-analysis/${task.id}`
+              : isAuditTask
+                ? `/tasks/${task.id}`
+                : `/agent-audit/${task.id}`;
+            const detailRoute = getTaskRoute ? getTaskRoute(wrappedTask) : defaultRoute;
 
             return (
               <div key={`${wrappedTask.kind}:${task.id}`} className="cyber-card p-6">
@@ -104,13 +118,7 @@ export function ProjectTasksTab(props: {
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-4 border-t border-border">
-                  <Link to={
-                    isStaticTask
-                      ? `/static-analysis/${task.id}`
-                      : isAuditTask
-                        ? `/tasks/${task.id}`
-                        : `/agent-audit/${task.id}`
-                  }>
+                  <Link to={detailRoute}>
                     <Button variant="outline" size="sm" className="cyber-btn-outline">
                       <FileText className="w-4 h-4 mr-2" />
                       查看详情
@@ -125,14 +133,11 @@ export function ProjectTasksTab(props: {
         <div className="cyber-card p-12 text-center">
           <Activity className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-bold text-foreground mb-2 uppercase">暂无审计任务</h3>
-          <p className="text-sm text-muted-foreground mb-6 font-mono">创建第一个审计任务开始代码安全分析</p>
-          <Button onClick={onCreateTask} className="cyber-btn-primary">
-            <Play className="w-4 h-4 mr-2" />
-            创建任务
-          </Button>
+          <p className="text-sm text-muted-foreground font-mono">
+            点击右上角「新建任务」开始代码安全分析
+          </p>
         </div>
       )}
     </>
   );
 }
-

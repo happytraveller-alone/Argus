@@ -48,6 +48,10 @@ import {
     type OpengrepScanTask,
 } from "@/shared/api/opengrep";
 import {
+    getGitleaksScanTasks,
+    type GitleaksScanTask,
+} from "@/shared/api/gitleaks";
+import {
     isRepositoryProject,
     getSourceTypeLabel,
     getRepositoryPlatformLabel,
@@ -80,6 +84,7 @@ export default function ProjectDetail() {
     const [auditTasks, setAuditTasks] = useState<AuditTask[]>([]);
     const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
     const [staticTasks, setStaticTasks] = useState<OpengrepScanTask[]>([]);
+    const [gitleaksTasks, setGitleaksTasks] = useState<GitleaksScanTask[]>([]);
     const [projectInfo, setProjectInfo] = useState<{
         id?: string;
         project_id?: string;
@@ -569,12 +574,19 @@ export default function ProjectDetail() {
 
         try {
             setLoading(true);
-            const [projectRes, auditTasksRes, agentTasksRes, staticTasksRes] =
+            const [
+                projectRes,
+                auditTasksRes,
+                agentTasksRes,
+                staticTasksRes,
+                gitleaksTasksRes,
+            ] =
                 await Promise.allSettled([
                     api.getProjectById(id),
                     api.getAuditTasks(id),
                     getAgentTasks({ project_id: id }),
                     getOpengrepScanTasks({ projectId: id }),
+                    getGitleaksScanTasks({ projectId: id }),
                 ]);
 
             if (projectRes.status === "fulfilled") {
@@ -625,6 +637,20 @@ export default function ProjectDetail() {
                     staticTasksRes.reason,
                 );
                 setStaticTasks([]);
+            }
+
+            if (gitleaksTasksRes.status === "fulfilled") {
+                setGitleaksTasks(
+                    Array.isArray(gitleaksTasksRes.value)
+                        ? gitleaksTasksRes.value
+                        : [],
+                );
+            } else {
+                console.warn(
+                    "Failed to load gitleaks tasks:",
+                    gitleaksTasksRes.reason,
+                );
+                setGitleaksTasks([]);
             }
 
             const shouldLoadProjectInfo =
@@ -679,6 +705,79 @@ export default function ProjectDetail() {
         );
         return merged;
     }, [auditTasks, agentTasks, staticTasks]);
+
+    const staticTaskRouteMap = useMemo(() => {
+        const map = new Map<string, string>();
+        const gitleaksByProject = new Map<string, GitleaksScanTask[]>();
+        for (const task of gitleaksTasks) {
+            const list = gitleaksByProject.get(task.project_id) || [];
+            list.push(task);
+            gitleaksByProject.set(task.project_id, list);
+        }
+
+        for (const [projectId, list] of gitleaksByProject.entries()) {
+            list.sort(
+                (a, b) =>
+                    new Date(a.created_at).getTime() -
+                    new Date(b.created_at).getTime(),
+            );
+            gitleaksByProject.set(projectId, list);
+        }
+
+        const usedGitleaksTaskIds = new Set<string>();
+        const pairingWindowMs = 60 * 1000;
+
+        const pickPairedGitleaksTask = (
+            opengrepTask: OpengrepScanTask,
+        ): GitleaksScanTask | null => {
+            const candidates =
+                gitleaksByProject.get(opengrepTask.project_id) || [];
+            if (candidates.length === 0) return null;
+
+            const opengrepTime = new Date(opengrepTask.created_at).getTime();
+            let bestTask: GitleaksScanTask | null = null;
+            let bestDiff = Number.POSITIVE_INFINITY;
+
+            for (const candidate of candidates) {
+                if (usedGitleaksTaskIds.has(candidate.id)) continue;
+                const diff = Math.abs(
+                    new Date(candidate.created_at).getTime() - opengrepTime,
+                );
+                if (diff <= pairingWindowMs && diff < bestDiff) {
+                    bestTask = candidate;
+                    bestDiff = diff;
+                }
+            }
+
+            if (bestTask) {
+                usedGitleaksTaskIds.add(bestTask.id);
+            }
+            return bestTask;
+        };
+
+        for (const task of staticTasks) {
+            const params = new URLSearchParams();
+            params.set("opengrepTaskId", task.id);
+            const pairedGitleaksTask = pickPairedGitleaksTask(task);
+            if (pairedGitleaksTask) {
+                params.set("gitleaksTaskId", pairedGitleaksTask.id);
+            }
+            map.set(task.id, `/static-analysis/${task.id}?${params.toString()}`);
+        }
+
+        return map;
+    }, [staticTasks, gitleaksTasks]);
+
+    const getTaskDetailRoute = (wrappedTask: UnifiedTask) => {
+        const task: any = wrappedTask.task as any;
+        if (wrappedTask.kind === "static") {
+            return staticTaskRouteMap.get(task.id) || `/static-analysis/${task.id}`;
+        }
+        if (wrappedTask.kind === "audit") {
+            return `/tasks/${task.id}`;
+        }
+        return `/agent-audit/${task.id}`;
+    };
 
     const combinedStats: ProjectCombinedStats = useMemo(() => {
         const totalTasks =
@@ -1008,13 +1107,7 @@ export default function ProjectDetail() {
                                         {unifiedTasks.slice(0, 5).map((t) => (
                                             <Link
                                                 key={`${t.kind}:${t.task.id}`}
-                                                to={
-                                                    t.kind === "static"
-                                                        ? `/static-analysis/${t.task.id}`
-                                                        : t.kind === "audit"
-                                                          ? `/tasks/${t.task.id}`
-                                                          : `/agent-audit/${t.task.id}`
-                                                }
+                                                to={getTaskDetailRoute(t)}
                                                 className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-all group"
                                             >
                                                 <div className="flex items-center space-x-3">
@@ -1208,6 +1301,7 @@ export default function ProjectDetail() {
                         formatDate={formatDate}
                         renderStatusBadge={getStatusBadge}
                         renderStatusIcon={getStatusIcon}
+                        getTaskRoute={getTaskDetailRoute}
                     />
                 </TabsContent>
 

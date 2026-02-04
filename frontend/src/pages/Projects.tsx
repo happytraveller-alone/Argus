@@ -488,16 +488,6 @@ export default function Projects() {
 
                     <div className="flex-1 overflow-y-auto p-6">
                         <Tabs defaultValue="upload" className="w-full">
-                            <TabsList className="flex w-full bg-muted border border-border p-1 h-auto gap-1 rounded">
-                                <TabsTrigger
-                                    value="repository"
-                                    className="hidden flex-1 data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm"
-                                >
-                                    <GitBranch className="w-4 h-4 mr-2" />
-                                    Git 仓库
-                                </TabsTrigger>
-
-                            </TabsList>
 
                             <TabsContent
                                 value="repository"
@@ -507,7 +497,7 @@ export default function Projects() {
                                     <div className="space-y-1.5">
                                         <Label
                                             htmlFor="name"
-                                            className="font-mono font-bold uppercase text-xs text-muted-foreground"
+                                            className="font-mono font-bold uppercase text-base text-muted-foreground"
                                         >
                                             项目名称 *
                                         </Label>
@@ -521,7 +511,7 @@ export default function Projects() {
                                                 })
                                             }
                                             placeholder="输入项目名称"
-                                            className="cyber-input"
+                                            className="h-11 text-base border-0 border-b border-border rounded-none px-0 bg-transparent focus-visible:ring-0 focus-visible:border-primary"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
@@ -564,7 +554,7 @@ export default function Projects() {
                                 <div className="space-y-1.5">
                                     <Label
                                         htmlFor="description"
-                                        className="font-mono font-bold uppercase text-xs text-muted-foreground"
+                                        className="font-mono font-bold uppercase text-base text-muted-foreground"
                                     >
                                         描述
                                     </Label>
@@ -726,7 +716,7 @@ export default function Projects() {
                                 <div className="space-y-1.5">
                                     <Label
                                         htmlFor="upload-name"
-                                        className="font-mono font-bold uppercase text-xs text-muted-foreground"
+                                        className="font-mono font-bold uppercase text-base text-muted-foreground"
                                     >
                                         项目名称 *
                                     </Label>
@@ -740,14 +730,14 @@ export default function Projects() {
                                             })
                                         }
                                         placeholder="输入项目名称"
-                                        className="cyber-input"
+                                        className="h-11 text-base border-0 border-b border-border rounded-none px-0 bg-transparent focus-visible:ring-0 focus-visible:border-primary"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label
                                         htmlFor="upload-description"
-                                        className="font-mono font-bold uppercase text-xs text-muted-foreground"
+                                        className="font-mono font-bold uppercase text-base text-muted-foreground"
                                     >
                                         描述
                                     </Label>
@@ -767,7 +757,7 @@ export default function Projects() {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                    <Label className="font-mono font-bold uppercase text-base text-muted-foreground">
                                         源代码
                                     </Label>
 

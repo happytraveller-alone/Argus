@@ -216,7 +216,7 @@ export default function Dashboard() {
           gitleaksByProject.set(projectId, list);
         }
         const usedGitleaksTaskIds = new Set<string>();
-        const pairingWindowMs = 5 * 60 * 1000;
+        const pairingWindowMs = 60 * 1000;
 
         const pickPairedGitleaksTask = (opengrepTask: OpengrepScanTask) => {
           const candidates = gitleaksByProject.get(opengrepTask.project_id) || [];
