@@ -1,0 +1,33 @@
+rules:
+- id: c_buffer_rule-lstrcatn-wcsncat
+  languages:
+  - c
+  - cpp
+  message: 'Consider using more secure alternatives such as `snprintf`, instead of
+    the
+
+    `wcsncat` family of functions.
+
+
+    If developing for C Runtime Library (CRT), more secure versions of these functions
+    should be
+
+    used, see:
+
+    https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/strncat-strncat-l-wcsncat-wcsncat-l-mbsncat-mbsncat-l?view=msvc-170
+
+    '
+  metadata:
+    shortDescription: Easily misused string processing functions
+    cwe: CWE-120
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern-either:
+  - pattern: lstrcatn(...)
+  - pattern: wcsncat(...)
+  - pattern: _tcsncat(...)
+  - pattern: _mbsnbcat(...)
+  severity: INFO

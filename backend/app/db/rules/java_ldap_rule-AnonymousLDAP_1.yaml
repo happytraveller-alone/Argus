@@ -1,0 +1,44 @@
+rules:
+- id: java_ldap_rule-AnonymousLDAP_1
+  languages:
+  - java
+  patterns:
+  - pattern-inside: 'import javax.naming.Context;
+
+      ...
+
+      '
+  - pattern: $ENV.put(Context.SECURITY_AUTHENTICATION, "none");
+  message: "The application does not provide authentication when communicating an\
+    \ LDAP\nserver. It is strongly recommended that the LDAP server be configured\
+    \ with\nauthentication and restrict what queries users can execute.\n\nExample\
+    \ code that authenticates with a remote LDAP server and encodes any\nuser-supplied\
+    \ input:\n```\n// Create a properties to hold the ldap connection details\nProperties\
+    \ props = new Properties();\n// Use the com.sun.jndi.ldap.LdapCtxFactory factory\
+    \ provider\nprops.put(Context.INITIAL_CONTEXT_FACTORY, \"com.sun.jndi.ldap.LdapCtxFactory\"\
+    );\n// The LDAP server URL\nprops.put(Context.PROVIDER_URL, \"ldap://ldap.example.org:3889\"\
+    );\n// User details for the connection\nprops.put(Context.SECURITY_PRINCIPAL,\
+    \ \"cn=admin,dc=example,dc=org\");\n// LDAP account password\nString ldapAccountPassword\
+    \ = getAccountPasswordFromSecureStoreOrKMS();\n// Pass in the LDAP password\n\
+    props.put(Context.SECURITY_CREDENTIALS, ldapAccountPassword);\n\n// Create the\
+    \ LDAPContext\nInitialDirContext ldapContext = new InitialDirContext(props);\n\
+    // Example using SUBTREE_SCOPE SearchControls\nSearchControls searchControls =\
+    \ new SearchControls();\nsearchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);\n\
+    \n// Get user input for query\nString userQuery = someUserInput;\n// Use searchArguments\
+    \ to hold the user-supplied input\nObject[] searchArguments = new Object[]{userQuery};\n\
+    // Hardcode the BaseDN, use the {0} format specifier to use the searchArguments\
+    \ array value,\nand pass in the search controls.\n// searchArguments automatically\
+    \ encode\nNamingEnumeration answer = ldapContext.search(\"dc=example,dc=org\"\
+    , \"(cn={0})\",\nsearchArguments, searchControls);\n// Process the response answer\n\
+    while (answer.hasMoreElements()) {\n  ...\n}\n```\n\nFor information on enabling\
+    \ authentication, please see your LDAP server's\ndocumentation.\n\nFor more information\
+    \ on LDAP Injection see OWASP:\nhttps://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html\n"
+  metadata:
+    shortDescription: Missing authentication for critical function (LDAP)
+    category: security
+    cwe: CWE-306
+    owasp:
+    - A2:2017-Broken Authentication
+    - A07:2021-Identification and Authentication Failures
+    security-severity: High
+  severity: WARNING

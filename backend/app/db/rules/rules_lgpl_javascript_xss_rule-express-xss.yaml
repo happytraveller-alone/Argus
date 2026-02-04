@@ -1,0 +1,68 @@
+rules:
+- id: rules_lgpl_javascript_xss_rule-express-xss
+  mode: taint
+  options:
+    taint_unify_mvars: true
+  pattern-sources:
+  - patterns:
+    - patterns:
+      - metavariable-regex:
+          metavariable: $LIB
+          regex: (?<!\s)\bexpress(?:\/.*)?\b
+      - pattern-either:
+        - pattern-inside: 'import { ... } from ''$LIB''
+
+            ...
+
+            '
+        - pattern-inside: 'import $IMPORT from ''$LIB''
+
+            ...
+
+            '
+        - pattern-inside: 'require(''$LIB'')
+
+            ...
+
+            '
+    - pattern-either:
+      - patterns:
+        - focus-metavariable: $REQ
+        - pattern: function ($REQ, $RES, ...) {...}
+      - patterns:
+        - focus-metavariable: $REQ
+        - pattern: function $FUNC($REQ, $RES, ...) {...}
+  pattern-propagators:
+  - pattern: $ARR.push($IN)
+    from: $IN
+    to: $ARR
+  pattern-sanitizers:
+  - pattern: encodeURI(...)
+  - pattern: encodeURIComponent(...)
+  pattern-sinks:
+  - patterns:
+    - focus-metavariable: $INPUT
+    - pattern-either:
+      - pattern: $RES. ... .send($INPUT)
+      - pattern: $RES. ... .write($INPUT)
+  message: "This application accepts user input directly from the client side without\
+    \ validation. \nThis could lead to Cross Site Scripting (XSS) if the input contains\
+    \ malicious script code and \nthe application server does not properly escape\
+    \ or sanitize the output.  \nConsider encoding input data before sending it to\
+    \ the client side.  \n\n```\n// safe method of sending user input data\nrouter.get('/safe/1',\
+    \ (req, res) => {\n  var name = encodeURI(req.query.name); \n  res.send(name);\n\
+    })\n```\n\nXSS is an attack that exploits a web application or system to treat\
+    \ user input as markup or script code. \nIt is important to encode the data depending\
+    \ on the specific context in which it is used. \n"
+  languages:
+  - javascript
+  severity: WARNING
+  metadata:
+    shortDescription: Improper neutralization of input during web page generation
+      ('Cross-site Scripting')
+    category: security
+    cwe: CWE-79
+    owasp:
+    - A7:2017-Cross-Site Scripting (XSS)
+    - A03:2021-Injection
+    security-severity: MEDIUM

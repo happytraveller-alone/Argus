@@ -1,0 +1,39 @@
+rules:
+- id: java_endpoint_rule-HostnameVerifier_1
+  languages:
+  - java
+  message: "The `HostnameVerifier` has been set to always return `true`. This effectively\
+    \ \ndisables the validation of server or client certificates. This could allow\
+    \ an \nadversary who is in between the application and the target host to launch\
+    \ a Man \nin the middle attack (MITM) i.e intercept potentially sensitive information\
+    \ or \ninject malicious content into the communication stream.\n\nTo mitigate\
+    \ this vulnerability and enhance the security of your application, it is \nstrongly\
+    \ advised to adhere to the default HostnameVerifier settings. This ensures \n\
+    that the validation mechanism remains intact, providing a crucial layer of security\
+    \ \nagainst unauthorized interception and data manipulation.\n\nImplementing the\
+    \ default HostnameVerifier can be achieved with the following code \nsnippet:\n\
+    ```\n// Use the default HostnameVerifier\nHttpsURLConnection connection = (HttpsURLConnection)\
+    \ url.openConnection();\nconnection.setHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());\n\
+    ```\nFor more information on TLS security, refer the following OWASP documentation:\n\
+    https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Protection_Cheat_Sheet.html\n"
+  metadata:
+    shortDescription: Improper certificate validation
+    category: security
+    cwe: CWE-295
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    security-severity: MEDIUM
+  patterns:
+  - pattern-inside: "class $V implements HostnameVerifier {\n  ...\n}\n"
+  - pattern-either:
+    - pattern: "boolean verify(...) {\n  ...\n  return true;\n  ...\n}\n"
+  - pattern-not:
+      patterns:
+      - pattern: "boolean verify(...) {\n    ...\n    return $VAR;\n    ...\n  }\n"
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: ^((?!true).)*$
+      - pattern-not: "boolean verify(...) {\n    $VAR = true;\n    ...\n    return\
+          \ $VAR;\n    ...\n  }\n"
+  severity: WARNING

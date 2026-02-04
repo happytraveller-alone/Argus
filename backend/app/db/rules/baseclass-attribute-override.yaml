@@ -1,0 +1,10 @@
+rules:
+- id: baseclass-attribute-override
+  patterns:
+  - pattern: "class $A(...):\n  def $F(...):\n   ...\n...\nclass $B(...):\n  def $F(...):\n\
+      \   ...\n...\nclass $C(..., $A, $B, ...):\n   ...\n"
+  message: Class $C inherits from both `$A` and `$B` which both have a method named
+    `$F`; one of these methods will be overwritten
+  languages:
+  - python
+  severity: WARNING

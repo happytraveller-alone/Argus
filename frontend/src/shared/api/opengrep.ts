@@ -173,6 +173,60 @@ export async function uploadOpengrepRulesDirectory(
     return response.data;
 }
 
+/**
+ * Patch 上传响应接口
+ */
+export interface PatchUploadResponse {
+    total_files: number;
+    success_count: number;
+    failed_count: number;
+    skipped_count: number;
+    details: Array<{
+        filename: string;
+        status: "success" | "failed" | "error" | "skipped";
+        attempts?: number;
+        message: string;
+    }>;
+}
+
+/**
+ * Upload patch archive (zip) to generate rules
+ */
+export async function uploadPatchArchive(file: File): Promise<PatchUploadResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await apiClient.post(
+        `/static-tasks/rules/upload/patch-archive`,
+        formData,
+        {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        },
+    );
+    return response.data;
+}
+
+/**
+ * Upload patch directory to generate rules
+ */
+export async function uploadPatchDirectory(files: File[]): Promise<PatchUploadResponse> {
+    const formData = new FormData();
+    files.forEach((file) => {
+        formData.append("files", file);
+    });
+    const response = await apiClient.post(
+        `/static-tasks/rules/upload/patch-directory`,
+        formData,
+        {
+            headers: {
+                "Content-Type": "multipart/form-data",
+            },
+        },
+    );
+    return response.data;
+}
+
 export interface OpengrepRuleUpdateRequest {
     name?: string;
     pattern_yaml?: string;

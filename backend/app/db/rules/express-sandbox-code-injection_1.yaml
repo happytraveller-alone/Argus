@@ -1,80 +1,25 @@
 rules:
 - id: express-sandbox-code-injection_1
+  message: Make sure that unverified user data can not reach `sandbox`.
+  severity: ERROR
   languages:
   - javascript
-  - typescript
-  message: Make sure that unverified user data can not reach `sandbox`.
   metadata:
-    category: security
-    confidence: MEDIUM
-    cwe:
-    - 'CWE-94: Improper Control of Generation of Code (''Code Injection'')'
-    cwe2022-top25: true
-    impact: MEDIUM
-    likelihood: MEDIUM
-    owasp:
-    - A03:2021 - Injection
-    references:
-    - https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html
-    subcategory:
-    - vuln
-    technology:
-    - express
-  mode: taint
-  pattern-sinks:
-  - patterns:
-    - pattern-inside: '$SANDBOX = require(''sandbox'');
+    owasp: 'A1: Injection'
+    cwe: 'CWE-94: Improper Control of Generation of Code (''Code Injection'')'
+  patterns:
+  - pattern-inside: '...
 
-        ...
+      $SANDBOX = require(''sandbox'');
 
-        '
-    - pattern-either:
-      - patterns:
-        - pattern-inside: '$S = new $SANDBOX(...);
+      ...
 
-            ...
-
-            '
-        - pattern: '$S.run(...)
-
-            '
-      - pattern: 'new $SANDBOX($OPTS).run(...)
-
-          '
-      - pattern: new $SANDBOX().run(...)
-  pattern-sources:
-  - patterns:
-    - pattern-either:
-      - pattern-inside: function ... ($REQ, $RES) {...}
-      - pattern-inside: function ... ($REQ, $RES, $NEXT) {...}
-      - patterns:
-        - pattern-either:
-          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES) {...})
-          - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, $NEXT) {...})
-        - metavariable-regex:
-            metavariable: $METHOD
-            regex: ^(get|post|put|head|delete|options)$
-    - pattern-either:
-      - pattern: $REQ.query
-      - pattern: $REQ.body
-      - pattern: $REQ.params
-      - pattern: $REQ.cookies
-      - pattern: $REQ.headers
-  - patterns:
-    - pattern-either:
-      - pattern-inside: '({ $REQ }: Request,$RES: Response, $NEXT: NextFunction) =>
-
-          {...}
-
-          '
-      - pattern-inside: '({ $REQ }: Request,$RES: Response) => {...}
-
-          '
-    - focus-metavariable: $REQ
-    - pattern-either:
-      - pattern: params
-      - pattern: query
-      - pattern: cookies
-      - pattern: headers
-      - pattern: body
-  severity: ERROR
+      '
+  - pattern-either:
+    - pattern-inside: function ($REQ, $RES, ...) {...}
+    - pattern-inside: function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: $X = function $FUNC($REQ, $RES, ...) {...}
+    - pattern-inside: var $X = function $FUNC($REQ, $RES, ...) {...};
+    - pattern-inside: $APP.$METHOD(..., function $FUNC($REQ, $RES, ...) {...})
+  - pattern-either:
+    - pattern: $S.run(<... $REQ.$QUERY.$FOO ...>,...);

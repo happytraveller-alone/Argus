@@ -1,0 +1,10 @@
+rules:
+- id: err-nil-check
+  patterns:
+  - pattern-either:
+    - pattern: "if err != nil {\n        return err\n}\nreturn nil\n"
+    - pattern: "if err != nil {\n        return $X, err\n}\nreturn $X, nil\n"
+  message: superfluous nil err check before return
+  languages:
+  - go
+  severity: ERROR

@@ -1,0 +1,17 @@
+rules:
+- id: scala_xss_rule-WicketXSS_1
+  languages:
+  - scala
+  message: 'Disabling HTML escaping put the application at risk for Cross-Site Scripting
+    (XSS).
+
+    '
+  metadata:
+    category: security
+    cwe: CWE-79
+    shortDescription: Improper Neutralization of Input During Web Page Generation
+      ('Cross-site Scripting')
+    security-severity: Medium
+  patterns:
+  - pattern: '($X: Label).setEscapeModelStrings(false);'
+  severity: WARNING

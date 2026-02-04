@@ -1,0 +1,25 @@
+rules:
+- id: scala_crypto_rule-WeakMessageDigest_1
+  languages:
+  - scala
+  message: 'DES is considered strong ciphers for modern applications. Currently, NIST
+    recommends the usage
+
+    of AES block ciphers instead of DES.
+
+    '
+  metadata:
+    category: security
+    cwe: CWE-326
+    shortDescription: Inadequate Encryption Strength
+    technology:
+    - scala
+    security-severity: Medium
+  patterns:
+  - pattern-either:
+    - pattern: MessageDigest.getInstance("$ALG", ...)
+    - pattern: Signature.getInstance("$ALG", ...)
+  - metavariable-regex:
+      metavariable: $ALG
+      regex: (.*(MD5|MD4|MD2|SHA1|SHA-1).*)
+  severity: WARNING

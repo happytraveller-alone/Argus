@@ -1,0 +1,56 @@
+rules:
+- id: go_injection_rule-template-injection_1
+  languages:
+  - go
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: template.HTML($IN)
+      - pattern-not: template.HTML("...")
+    - patterns:
+      - pattern: template.JS($IN)
+      - pattern-not: template.JS("...")
+    - patterns:
+      - pattern: template.URL($IN)
+      - pattern-not: template.URL("...")
+    - patterns:
+      - pattern: template.HTMLAttr($IN)
+      - pattern-not: template.HTMLAttr("...")
+  message: "Cross Site Scripting (XSS) is an attack which exploits a web application\
+    \ or system to treat\nuser input\nas markup or script code. It is important to\
+    \ encode the data depending on the specific context\nit\nis used in. There are\
+    \ at least six context types:\n\n- Inside HTML tags `<div>context 1</div>`\n-\
+    \ Inside attributes: `<div class=\"context 2\"></div>`\n- Inside event attributes\
+    \ `<button onclick=\"context 3\">button</button>`\n- Inside script blocks: `<script>var\
+    \ x = \"context 4\"</script>`\n- Unsafe element HTML assignment: `element.innerHTML\
+    \ = \"context 5\"`\n- Inside URLs: `<iframe src=\"context 6\"></iframe><a href=\"\
+    context 6\">link</a>`\n\nScript blocks alone have multiple ways they need to be\
+    \ encoded. Extra care must be taken if\nuser input\nis ever output inside of script\
+    \ tags.\n\nUser input that is displayed within the application must be encoded,\
+    \ sanitized or validated\nto ensure it cannot be treated as HTML or executed as\
+    \ Javascript code. Care must also be\ntaken\nto not mix server-side templating\
+    \ with client-side templating, as the server-side templating\nwill\nnot encode\
+    \ things like {{ 7*7 }} which may execute client-side templating features.\n\n\
+    It is _NOT_ advised to encode user input prior to inserting into a data store.\
+    \ The data will\nneed to be\nencoded depending on context of where it is output.\
+    \ It is much safer to force the displaying\nsystem to\nhandle the encoding and\
+    \ not attempt to guess how it should be encoded.\n\nUse of the following template\
+    \ types with user input denotes a security risk:\n\n- [template.HTML](https://pkg.go.dev/html/template#HTML)\n\
+    - [template.JS](https://pkg.go.dev/html/template#JS)\n- [template.URL](https://pkg.go.dev/html/template#URL)\n\
+    - [template.HTMLAttr](https://pkg.go.dev/html/template#HTMLAttr)\n\nEither remove\
+    \ these types from the application or hardcode as const strings prior\nto conversion:\n\
+    ```\ntestTemplate, err := template.New(\"testTemplate\").Funcs(template.FuncMap{\n\
+    \  \"SafeHTML\": func() template.HTML {\n    const safeHTML = \"<div>hardcoded,\
+    \ safe html</div>\"\n    return template.HTML(safeHTML)\n  },\n}).Parse(`<html><body>{{\
+    \ SafeHTML }}</body>`)\nif err != nil {\n  log.Fatal(err)\n}\n\nif err := testTemplate.Execute(os.Stdout,\
+    \ nil); err != nil {\n  log.Fatal(err)\n}\n```\n"
+  metadata:
+    shortDescription: Improper neutralization of input during web page generation
+      ('Cross-site Scripting')
+    cwe: CWE-79
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+    category: security
+  severity: WARNING

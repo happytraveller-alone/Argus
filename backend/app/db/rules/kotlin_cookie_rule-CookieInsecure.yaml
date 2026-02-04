@@ -1,0 +1,37 @@
+rules:
+- id: kotlin_cookie_rule-CookieInsecure
+  languages:
+  - kotlin
+  message: "\"A new cookie is created without the Secure flag set. The Secure flag\
+    \ is a\n directive to the browser to make sure that the cookie is not sent for\
+    \ insecure communication\n(http://)\"\n"
+  severity: WARNING
+  metadata:
+    shortDescription: Sensitive cookie in HTTPS session without 'Secure' attribute
+    category: security
+    cwe: CWE-614
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A05:2021-Security Misconfiguration
+    technology:
+    - kotlin
+    security-severity: MEDIUM
+  patterns:
+  - pattern: '$C = $X.servlet.http.Cookie(..., ...)
+
+      ...;
+
+      ($RESP: $X.servlet.http.HttpServletResponse).addCookie($C)
+
+      '
+  - pattern-not-inside: '$C = $X.servlet.http.Cookie(..., ...)
+
+      ...
+
+      $C.setSecure(true)
+
+      ...;
+
+      ($RESP: $X.servlet.http.HttpServletResponse).addCookie($C)
+
+      '

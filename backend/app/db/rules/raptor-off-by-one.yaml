@@ -1,0 +1,59 @@
+rules:
+- id: raptor-off-by-one
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/193
+    - https://cwe.mitre.org/data/definitions/787
+    - https://g.co/kgs/PCHQjJ
+    - https://github.com/struct/mms
+    confidence: MEDIUM
+  message: The software calculates or uses an incorrect maximum or minimum value that
+    is 1 more, or 1 less, than the correct value.
+  severity: WARNING
+  languages:
+  - c
+  - cpp
+  pattern-either:
+  - pattern: $BUF[sizeof($BUF)] = $_
+  - patterns:
+    - pattern: $BUF[$LEN] = $_
+    - pattern-inside: '$_ $BUF[$LEN];
+
+        ...
+
+        '
+  - patterns:
+    - pattern: '*($BUF + $LEN) = $_
+
+        '
+    - pattern-inside: '$_ $BUF[$LEN];
+
+        ...
+
+        '
+  - patterns:
+    - pattern: $BUF[$X][$Y] = $_
+    - pattern-either:
+      - pattern-inside: '$_ $BUF[$_][$Y];
+
+          ...
+
+          '
+      - pattern-inside: '$_ $BUF[$X][$_];
+
+          ...
+
+          '
+  - pattern: strlen($SRC) > sizeof($DST)
+  - pattern: strlen($SRC) <= sizeof($DST)
+  - pattern: sizeof($DST) < strlen($SRC)
+  - pattern: sizeof($DST) >= strlen($SRC)
+  - patterns:
+    - pattern: strncat($_, $_, $LEN)
+    - metavariable-pattern:
+        metavariable: $LEN
+        patterns:
+        - pattern-not: $_ - 1
+  - pattern: $STR[strlen($STR) - 1]
+  - pattern: malloc(strlen($STR))

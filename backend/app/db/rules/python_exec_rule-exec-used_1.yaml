@@ -1,0 +1,32 @@
+rules:
+- id: python_exec_rule-exec-used_1
+  languages:
+  - python
+  message: "The application was found calling the `exec` function with a non-literal\
+    \ variable. If the\nvariable comes from user-supplied input, an adversary could\
+    \ compromise the entire system by\nexecuting arbitrary python code.\n\nTo remediate\
+    \ this issue, remove all calls to `exec` and consider alternative methods for\n\
+    executing the necessary business logic. There is almost no safe method of calling\
+    \ `eval` \nwith user-supplied input.\n\nIf the application only needs to convert\
+    \ strings into objects, consider using `json.loads`.\nIn some cases `ast.literal_eval`\
+    \ is recommended, but this should be avoided as it can still\nsuffer from other\
+    \ issues such as the ability for malicious code to crash the python\ninterpreter\
+    \ or application.\n\nExample using `json.loads`` to load in arbitrary data to\
+    \ create data structures:\n```\n# User supplied data as a blob of JSON\nuser_supplied_data\
+    \ = \"\"\"{\"user\": \"test\", \"metadata\": [1,2,3]}\"\"\"\n# Load the JSON\n\
+    user_object = json.loads(user_supplied_data)\n# Manually add protected properties\
+    \ _after_ loading, never before\nuser_object[\"is_admin\"] = False\n# Work with\
+    \ the object\n```\n"
+  metadata:
+    cwe: CWE-78
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    category: security
+    shortDescription: Improper neutralization of special elements used in an OS command
+      ('OS Command Injection')
+    security-severity: High
+  patterns:
+  - pattern: exec(...)
+  - pattern-not: exec("...")
+  severity: WARNING

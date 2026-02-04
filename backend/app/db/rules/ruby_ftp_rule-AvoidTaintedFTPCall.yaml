@@ -1,0 +1,55 @@
+rules:
+- id: ruby_ftp_rule-AvoidTaintedFTPCall
+  mode: taint
+  pattern-sources:
+  - pattern: params
+  - pattern: cookies
+  - pattern: request.env
+  pattern-sinks:
+  - pattern-either:
+    - pattern: Net::FTP.$X(...)
+    - patterns:
+      - pattern-inside: '$FTP = Net::FTP.$OPEN(...)
+
+          ...
+
+          $FTP.$METHOD(...)
+
+          '
+      - pattern: $FTP.$METHOD(...)
+  message: "The application was found calling the Net::FTP modules methods with\n\
+    user supplied input. A malicious actor could use this to modify or access files\n\
+    they should not have access to.\n\nDirectly incorporating user-controlled input\
+    \ from `params`, `cookies`, \nor `request.env` into FTP commands or connection\
+    \ setups can lead to \nvarious security vulnerabilities, including Remote Code\
+    \ Execution \n(RCE), unauthorized file access, and data exfiltration. It's crucial\
+    \ \nto validate, sanitize, and, where possible, avoid using user-controlled \n\
+    data in sensitive operations like FTP transactions. Ensure that any input \nused\
+    \ in FTP operations is strictly controlled and validated against \nexpected patterns.\n\
+    \nRemediation Strategy:\nTo mitigate these risks, ensure that all user-provided\
+    \ input is strictly \nvalidated and sanitized before being used in FTP operations.\
+    \ \n- Verify the format and content of the input to ensure it meets expected \n\
+    criteria.\n- Use allowlists to restrict the input to known safe values.\n- Employ\
+    \ built-in security features of the programming language or \nframework to escape\
+    \ or safely handle user input.\n\nSecure Code Example:\n```\nfilename = params[:filename]\n\
+    # Validate the filename to ensure it's a known, safe file\nraise \"Invalid filename\"\
+    \ unless filename =~ /\\A[\\w]+\\.\\w+\\z/\n\nNet::FTP.open('example.com', 'user',\
+    \ 'password') do |ftp|\n  # Proceed with the FTP operation using the validated\
+    \ and sanitized filename\n  ftp.getbinaryfile(filename, \"local_#{filename}\"\
+    , 1024)\nend\n```\n"
+  languages:
+  - ruby
+  severity: WARNING
+  metadata:
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    cwe: CWE-76
+    shortDescription: Improper neutralization of equivalent special elements
+    references:
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/rails/security/audit/avoid-tainted-ftp-call.yaml
+    category: security
+    security-severity: MEDIUM
+    technology:
+    - ruby
+    - rails

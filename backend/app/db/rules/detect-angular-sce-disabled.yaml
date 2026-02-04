@@ -1,31 +1,16 @@
 rules:
-- id: detect-angular-sce-disabled_1
-  languages:
-  - javascript
-  - typescript
-  message: $sceProvider is set to false. Disabling Strict Contextual escaping (SCE)
-    in an AngularJS application could provide additional attack surface for XSS vulnerabilities.
-  metadata:
-    category: security
-    confidence: HIGH
-    cwe:
-    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site
-      Scripting'')'
-    cwe2021-top25: true
-    cwe2022-top25: true
-    impact: MEDIUM
-    likelihood: HIGH
-    owasp:
-    - A07:2017 - Cross-Site Scripting (XSS)
-    - A03:2021 - Injection
-    references:
-    - https://docs.angularjs.org/api/ng/service/$sce
-    - https://owasp.org/www-chapter-london/assets/slides/OWASPLondon20170727_AngularJS.pdf
-    subcategory:
-    - vuln
-    technology:
-    - angular
+- id: detect-angular-sce-disabled
   pattern: '$sceProvider.enabled(false);
 
     '
+  message: '$sceProvider is set to false. Disabling Strict Contextual escaping (SCE)
+    in an AngularJS application could provide additional attack surface for XSS vulnerabilities.
+
+    '
+  languages:
+  - javascript
+  metadata:
+    references:
+    - https://docs.angularjs.org/api/ng/service/$sce
+    - https://owasp.org/www-chapter-london/assets/slides/OWASPLondon20170727_AngularJS.pdf
   severity: ERROR

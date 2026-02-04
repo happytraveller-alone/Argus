@@ -1,0 +1,94 @@
+rules:
+- id: unsafe_zip_unpacking
+  languages:
+  - ruby
+  severity: ERROR
+  message: Unsafe Zip Unpacking
+  patterns:
+  - metavariable-pattern:
+      metavariable: $ZF
+      pattern-either:
+      - pattern: File
+      - pattern: ZipFile
+  - pattern-either:
+    - pattern-inside: "Zip::$ZF.foreach($FILE, ...) do |$ENTRY|\n  ...\nend\n"
+    - patterns:
+      - pattern-either:
+        - pattern-inside: "Zip::$ZF.open($FILE, ...) do |$ZIPFILE|\n  ...\nend\n"
+        - pattern-inside: "$ZIP = Zip::$ZF.open(..., ...)\n...\n$ZIP.each do |$ZIPFILE|\n\
+            \  ...\nend\n"
+        - pattern-inside: "$ZIP = Zip::$ZF.new(..., ...)\n...\n$ZIP.each do |$ZIPFILE|\n\
+            \  ...\nend\n"
+        - pattern-inside: "Zip::$ZF.open_buffer($FILE, ...) do |$ZIPFILE|\n  ...\n\
+            end\n"
+      - pattern-either:
+        - pattern-inside: "$ZIP.each do |$ENTRY|\n  ...\nend\n"
+        - pattern-inside: "$ZIP.each_with_object(...) do |$ENTRY, ...|\n  ...\nend\n"
+        - pattern-inside: '$ENTRY = $ZIP.get_entry(...)
+
+            ...
+
+            '
+        - pattern-inside: '$ENTRY = $ZIP.find_entry(...)
+
+            ...
+
+            '
+  - pattern-either:
+    - pattern: $ZIP.extract(..., <... $ENTRY.name ...>)
+    - patterns:
+      - pattern-not-inside: "unless $PATH.start_with?(...)\n  ...\nend\n...\n"
+      - pattern-not-inside: 'File.basename($ENTRY.name)
+
+          ...
+
+          '
+      - pattern: $ZIP.extract(..., <... $PATH ...>)
+      - pattern-either:
+        - pattern-inside: '$PATH = File.join(..., <... $ENTRY.name ...>)
+
+            ...
+
+            '
+        - pattern-inside: '$PATH = File.join(<... $ENTRY.name ...>, ...)
+
+            ...
+
+            '
+        - pattern-inside: '$PATH = File.expand_path(<... $ENTRY.name ...>, ...)
+
+            ...
+
+            '
+        - pattern-inside: '$PATH = File.expand_path(..., <... $ENTRY.name ...>)
+
+            ...
+
+            '
+        - patterns:
+          - pattern-either:
+            - pattern-inside: '$NAME = <... $ENTRY.name ...>
+
+                ...
+
+                $PATH = File.join(..., $NAME)
+
+                ...
+
+                '
+            - pattern-inside: '$NAME = <... $ENTRY.name ...>
+
+                ...
+
+                $PATH = File.expand_path($NAME, ...)
+
+                ...
+
+                '
+            - pattern-inside: '$NAME = <... $ENTRY.name ...>
+
+                ...
+
+                $PATH = File.expand_path(..., $NAME)
+
+                ...'

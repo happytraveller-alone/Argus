@@ -1,0 +1,27 @@
+rules:
+- id: go_crypto_rule-insecure-ignore-host-key_1
+  languages:
+  - go
+  patterns:
+  - pattern: ssh.InsecureIgnoreHostKey(...)
+  message: "The application was found to ignore host keys. Host keys are important\
+    \ as\nthey provide assurance that the client can prove that the host is trusted.\n\
+    By ignoring these host keys, it is impossible for the client to validate the\n\
+    connection is to a trusted host.\n\nFor the `ssh.ClientConfig` `HostKeyCallback`\
+    \ property, consider using the\n[knownhosts](https://pkg.go.dev/golang.org/x/crypto/ssh/knownhosts)\
+    \ package that\nparses OpenSSH's `known_hosts` key database.\n\nExample configuration\
+    \ connecting to a known, trusted host:\n```\nknownHostCallback, err := knownhosts.New(\"\
+    /home/user/.ssh/known_hosts\")\nif err != nil {\n  log.Fatal(err)\n}\n\n// Create\
+    \ client config using the knownHost callback function\nconfig := &ssh.ClientConfig{\n\
+    \  ...\n  HostKeyCallback: knownHostCallback,\n}\n\n// Connect to ssh server\n\
+    conn, err := ssh.Dial(\"tcp\", \"localhost:22\", config)\nif err != nil {\n  log.Fatal(\"\
+    unable to connect: \", err)\n}\ndefer conn.Close()\n```\n"
+  metadata:
+    shortDescription: Key exchange without entity authentication
+    cwe: CWE-322
+    owasp:
+    - A2:2017-Broken Authentication
+    - A07:2021-Identification and Authentication Failures
+    security-severity: Medium
+    category: security
+  severity: WARNING

@@ -1,0 +1,65 @@
+rules:
+- id: go_crypto_rule-tlsversion_1
+  languages:
+  - go
+  pattern-either:
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern-inside: 'tls.Config{...}
+
+            '
+        - pattern: 'MinVersion: $VAL
+
+            '
+      - patterns:
+        - pattern-inside: '$VAR = uint16($VAL)
+
+            ...
+
+            '
+        - pattern-inside: 'tls.Config{...}
+
+            '
+        - pattern: 'MinVersion: $VAR
+
+            '
+    - metavariable-pattern:
+        metavariable: $VAL
+        pattern-either:
+        - pattern: tls.VersionTLS11
+        - pattern: tls.VersionTLS10
+  - patterns:
+    - pattern-inside: 'tls.Config{...}
+
+        '
+    - pattern: 'MaxVersion: $ANYVAL
+
+        '
+    - pattern-not-inside: 'tls.Config{..., MinVersion: ..., ...}
+
+        '
+  message: "TLS versions 1.1 and 1.0 were deprecated by the IETF in June 2018 due\
+    \ to \na number of attacks against the vulnerable versions. Use of a deprecated\
+    \ \nTLS version may result in the unauthorized retrieval of sensitive \ninformation.\
+    \ It is strongly recommended that all TLS connections\nuse TLS 1.3 as Go will\
+    \ automatically choose the most secure cipher when \nnegotiating the TLS handshake\
+    \ with client or servers. TLS 1.3 cipher suites \nare configured to require Perfect\
+    \ Forward Secrecy (PFS). PFS is an important \nproperty as it will ensure that\
+    \ past encrypted transmissions could not be\ndecrypted if the TLS certificate\
+    \ was compromised.\n\nExample using TLS 1.3 for a Go server:\n```\ncert, err :=\
+    \ tls.LoadX509KeyPair(\"server.crt\", \"server.key\")\nif err != nil {\n  log.Fatal(err)\n\
+    }\n\ncfg := &tls.Config{Certificates: []tls.Certificate{cert}, \n            \
+    \      MinVersion: tls.VersionTLS13}\n\nsrv := &http.Server{\n  Addr:        \
+    \ \":8999\",\n  TLSConfig:    cfg,\n  ReadTimeout:  time.Minute,\n  WriteTimeout:\
+    \ time.Minute,\n}\nlog.Fatal(srv.ListenAndServeTLS(\"cert.pem\", \"key.pem\"))\n\
+    ```\n"
+  metadata:
+    shortDescription: Use of deprecated TLS version
+    cwe: CWE-310
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    security-severity: Medium
+    category: security
+  severity: WARNING

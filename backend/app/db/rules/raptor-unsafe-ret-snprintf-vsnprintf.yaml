@@ -1,0 +1,29 @@
+rules:
+- id: raptor-unsafe-ret-snprintf-vsnprintf
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://lwn.net/Articles/507319/
+    - https://g.co/kgs/PCHQjJ
+    - https://dustri.org/b/playing-with-weggli.html
+    confidence: MEDIUM
+  message: The snprintf() and vsnprintf() functions return the total length of the
+    string they tried to create. Therefore, this return value can be larger than the
+    size of the destination buffer. If it is used unsafely, e.g. as an index to write
+    to the destination buffer, memory corruption might occur.
+  severity: WARNING
+  languages:
+  - c
+  - cpp
+  patterns:
+  - pattern-either:
+    - pattern: $_ = $FUN($_, $_, $FMT, ...)
+    - pattern: $_ += $FUN($_, $_, $FMT, ...)
+  - metavariable-pattern:
+      metavariable: $FUN
+      pattern-either:
+      - pattern: snprintf
+      - pattern: vsnprintf
+  - metavariable-regex:
+      metavariable: $FMT
+      regex: (".*%l?s.*"|".*%S.*"|[a-zA-Z_][a-zA-Z0-9_]*)

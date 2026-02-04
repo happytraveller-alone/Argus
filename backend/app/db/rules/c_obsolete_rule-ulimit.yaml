@@ -1,0 +1,23 @@
+rules:
+- id: c_obsolete_rule-ulimit
+  languages:
+  - c
+  - cpp
+  message: 'The ulimit function is obsolete and no longer recommended. Use `getrlimit(2)`,
+
+    `setrlimit`, or `sysconf` instead.
+
+
+    For more information please see: https://linux.die.net/man/3/setrlimit
+
+    '
+  metadata:
+    shortDescription: Usage of deprecated function (ulimit)
+    cwe: CWE-676
+    owasp:
+    - A9:2017-Using Components with Known Vulnerabilities
+    - A06:2021-Vulnerable and Outdated Components
+    security-severity: Info
+    category: security
+  pattern: ulimit(...)
+  severity: INFO

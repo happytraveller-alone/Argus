@@ -1,0 +1,21 @@
+rules:
+- id: raptor-bad-words
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/546
+    - https://cwe.mitre.org/data/definitions/615
+    - https://btlr.dev/blog/how-to-find-vulnerabilities-in-code-bad-words
+    confidence: LOW
+  message: The code contains comments that suggest the presence of bugs, incomplete
+    functionality, or weaknesses. Many suspicious comments, such as BUG, HACK, FIXME,
+    LATER, LATER2, TODO, in the code indicate missing security functionality and checking.
+    Others indicate code problems that programmers should fix, such as hard-coded
+    variables, error handling, not using stored procedures, and performance issues.
+  severity: INFO
+  languages:
+  - generic
+  pattern-either:
+  - pattern-regex: (TODO|XXX|FIXME|BUG|HACK|LATER|CVE-)
+  - pattern-regex: (?i)(unsafe|insecure|dangerous|warning|overflow)
+  - pattern-regex: (?i)(password|private|token|secret)

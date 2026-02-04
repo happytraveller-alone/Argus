@@ -1,39 +1,56 @@
 rules:
-- id: insecure-cipher-algorithm-blowfish_1
-  message: Blowfish is a block cipher developed by Bruce Schneier. It is known to
-    be susceptible to attacks when using weak keys.  The author has recommended that
-    users of Blowfish move to newer algorithms such as AES. With the `cryptography`
-    package it is recommended to use `Fernet` which is a secure implementation of
-    AES in CBC mode with a 128-bit key.  Alternatively, keep using the `Cipher` class
-    from the hazmat primitives but use the AES algorithm instead.
+- id: insecure-cipher-algorithm-rc4
+  pattern: cryptography.hazmat.primitives.ciphers.algorithms.ARC4(...)
+  message: 'Detected RC4 cipher algorithm which is considered insecure. The algorithm
+    has many
+
+    known vulnerabilities. Use AES instead.
+
+    '
   metadata:
-    source-rule-url: https://github.com/PyCQA/bandit/blob/d5f8fa0d89d7b11442fc6ec80ca42953974354c8/bandit/blacklists/calls.py#L98
-    cwe:
-    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
-    owasp:
-    - A03:2017 - Sensitive Data Exposure
-    - A02:2021 - Cryptographic Failures
+    source-rule-url: https://github.com/PyCQA/bandit/blob/d5f8fa0d89d7b11442fc6ec80ca42953974354c8/bandit/blacklists/calls.py#L94
+    cwe: 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    owasp: 'A3: Sensitive Data Exposure'
     bandit-code: B304
     references:
-    - https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/#weak-ciphers
-    - https://tools.ietf.org/html/rfc5469
-    category: security
-    technology:
-    - cryptography
-    subcategory:
-    - vuln
-    likelihood: MEDIUM
-    impact: MEDIUM
-    confidence: MEDIUM
-    functional-categories:
-    - crypto::search::symmetric-algorithm::cryptography
+    - https://crypto.stackexchange.com/questions/853/google-is-using-rc4-but-isnt-rc4-considered-unsafe
+    - https://sweet32.info/
   severity: WARNING
   languages:
   - python
-  patterns:
-  - pattern: cryptography.hazmat.primitives.ciphers.algorithms.$BLOWFISH($KEY)
-  - metavariable-regex:
-      metavariable: $BLOWFISH
-      regex: ^(Blowfish)$
-  - focus-metavariable: $BLOWFISH
-  fix: AES
+- id: insecure-cipher-algorithm-blowfish_1
+  pattern: cryptography.hazmat.primitives.ciphers.algorithms.Blowfish(...)
+  message: 'Detected Blowfish cipher algorithm which is considered insecure. The algorithm
+    has many
+
+    known vulnerabilities. Use AES instead.
+
+    '
+  metadata:
+    source-rule-url: https://github.com/PyCQA/bandit/blob/d5f8fa0d89d7b11442fc6ec80ca42953974354c8/bandit/blacklists/calls.py#L96
+    cwe: 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    owasp: 'A3: Sensitive Data Exposure'
+    bandit-code: B304
+    references:
+    - https://sweet32.info/
+  severity: WARNING
+  languages:
+  - python
+- id: insecure-cipher-algorithm-idea
+  pattern: cryptography.hazmat.primitives.ciphers.algorithms.IDEA(...)
+  message: 'Detected IDEA cipher algorithm which is considered insecure. The algorithm
+    is
+
+    considered weak and has been deprecated. Use AES instead.
+
+    '
+  metadata:
+    source-rule-url: https://github.com/PyCQA/bandit/blob/d5f8fa0d89d7b11442fc6ec80ca42953974354c8/bandit/blacklists/calls.py#L98
+    cwe: 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    owasp: 'A3: Sensitive Data Exposure'
+    bandit-code: B304
+    references:
+    - https://tools.ietf.org/html/rfc5469
+  severity: WARNING
+  languages:
+  - python

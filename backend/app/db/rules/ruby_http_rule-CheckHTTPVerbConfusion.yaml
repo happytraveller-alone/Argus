@@ -1,0 +1,28 @@
+rules:
+- id: ruby_http_rule-CheckHTTPVerbConfusion
+  mode: search
+  patterns:
+  - pattern: "if request.get?\n  ...\nelse\n  ...\nend\n"
+  - pattern-not-inside: "if ...\nelsif ...\n  ...\nend\n"
+  message: "Found an improperly constructed control flow block with `request.get?`.\
+    \ \nRails will route HEAD requests as GET requests but they will fail the \n`request.get?`\
+    \ check, potentially causing unexpected behavior unless an \n`elsif` condition\
+    \ is used.\n\nSecure Code Example:\n```\nif request.get?\n  # Handle GET request\
+    \ logic here\nelsif request.head?\n  # Handle HEAD request logic here\nelse\n\
+    \  # Handle others if needed\nend\n```\n"
+  languages:
+  - ruby
+  severity: WARNING
+  metadata:
+    category: security
+    shortDescription: Improper check for unusual or exceptional conditions
+    cwe: CWE-754
+    owasp:
+    - A6:2017-Security Misconfiguration
+    - A04:2021-Insecure Design
+    security-severity: MEDIUM
+    technology:
+    - ruby
+    - rails
+    references:
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/rails/security/brakeman/check-http-verb-confusion.yaml

@@ -1,0 +1,151 @@
+rules:
+- id: sql-injection-kotlin-apps3c
+  languages:
+  - kotlin
+  severity: WARNING
+  message: Detected a formatted string starting with a SQL operation with a concatenated  value
+    that came from a function argument. This could lead to SQL injection if variables
+    in the SQL statement are not properly sanitized.
+  pattern-either:
+  - patterns:
+    - pattern-inside: "fun $FUNC(...,$PAR:$TYPE,...) {\n  ...\n}\n"
+    - pattern-either:
+      - pattern: $SELECT + $PRE + <... $PAR ...> + $POST
+      - pattern: $SELECT + <... $PAR ...> + $POST
+      - pattern: $SELECT + $PRE + <... $PAR ...>
+      - pattern: $SELECT + <... $PAR ...>
+      - pattern: $SELECT.plus($PRE).plus(<... $PAR ...>).plus($POST)
+      - pattern: $SELECT.plus(<... $PAR ...>).plus($POST)
+      - pattern: $SELECT.plus($PRE).plus(<... $PAR ...>)
+      - pattern: $SELECT.plus(<... $PAR ...>)
+      - pattern: $STRINGBUILDER.append($SELECT).append($PRE).append(<... $PAR ...>).append($POST)
+      - pattern: $STRINGBUILDER.append($SELECT).append(<... $PAR ...>).append($POST)
+      - pattern: $STRINGBUILDER.append($SELECT).append($PRE).append(<... $PAR ...>)
+      - pattern: $STRINGBUILDER.append($SELECT).append(<... $PAR ...>)
+      - pattern: '$COPY = $PAR
+
+          ...
+
+          $SELECT + $PRE + <... $COPY ...> + $POST
+
+          '
+      - pattern: '$COPY = $PAR;
+
+          ...
+
+          $SELECT + <... $COPY ...> + $POST
+
+          '
+      - pattern: '$COPY = $PAR;
+
+          ...
+
+          $SELECT + $PRE + <... $COPY ...>
+
+          '
+      - pattern: '$COPY = $PAR;
+
+          ...
+
+          $SELECT + <... $COPY ...>
+
+          '
+      - pattern: '$COPY = $PAR
+
+          ...
+
+          $SELECT.plus($PRE).plus(<... $COPY ...>).plus($POST)
+
+          '
+      - pattern: '$COPY = $PAR;
+
+          ...
+
+          $SELECT.plus(<... $COPY ...>).plus($POST)
+
+          '
+      - pattern: '$COPY = $PAR;
+
+          ...
+
+          $SELECT.plus($PRE).plus(<... $COPY ...>)
+
+          '
+      - pattern: '$COPY = $PAR;
+
+          ...
+
+          $SELECT.plus(<... $COPY ...>)
+
+          '
+      - pattern: '$COPY = $PAR
+
+          ...
+
+          $STRINGBUILDER.append($SELECT).append($PRE).append(<... $COPY ...>).append($POST)
+
+          '
+      - pattern: '$COPY = $PAR;
+
+          ...
+
+          $STRINGBUILDER.append($SELECT).append(<... $COPY ...>).append($POST)
+
+          '
+      - pattern: '$COPY = $PAR;
+
+          ...
+
+          $STRINGBUILDER.append($SELECT).append($PRE).append(<... $COPY ...>)
+
+          '
+      - pattern: "$COPY = $PAR;\n...\n$STRINGBUILDER.append($SELECT).append(<... $COPY\
+          \ ...>)               \n"
+    - metavariable-regex:
+        metavariable: $SELECT
+        regex: (?is)^["']+\s*(select |delete |insert |create |update |alter |drop
+          ).*["']+
+  - patterns:
+    - pattern-inside: "fun $FUNC(...,$PAR:$TYPE,...) {\n  ...\n}\n"
+    - pattern: $QUERY = <... $PAR ...>
+    - pattern: $QUERY = $SELECT
+    - metavariable-regex:
+        metavariable: $SELECT
+        regex: (?is)^["']+\s*(select |delete |insert |create |update |alter |drop
+          ).*["']+
+  - patterns:
+    - pattern-inside: "fun $FUNC(...,$PAR:$TYPE,...) {\n  ...\n  $COPY = $PAR\n  ...\
+        \            \n  $QUERY = $SELECT\n  ...\n}\n"
+    - pattern: '$COPY = $PAR
+
+        ...
+
+        $QUERY = <... $COPY ...>
+
+        '
+    - metavariable-regex:
+        metavariable: $SELECT
+        regex: (?is)^["']+\s*(select |delete |insert |create |update |alter |drop
+          ).*["']+
+  - patterns:
+    - pattern-inside: "fun $FUNC(...,$PAR:$TYPE,...) {\n  ...\n  $QUERYMETHOD($SELECT)\n\
+        \  ...\n}\n"
+    - pattern: $QUERYMETHOD(<... $PAR ...>)
+    - metavariable-regex:
+        metavariable: $SELECT
+        regex: (?is)^["']+\s*(select |delete |insert |create |update |alter |drop
+          ).*["']+
+  - patterns:
+    - pattern-inside: "fun $FUNC(...,$PAR:$TYPE,...) {\n  ...\n  $COPY = $PAR\n  ...\
+        \            \n  $QUERYMETHOD($SELECT)\n  ...\n}\n"
+    - pattern: '$COPY = $PAR
+
+        ...
+
+        $QUERYMETHOD(<... $COPY ...>)
+
+        '
+    - metavariable-regex:
+        metavariable: $SELECT
+        regex: (?is)^["']+\s*(select |delete |insert |create |update |alter |drop
+          ).*["']+

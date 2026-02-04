@@ -1,0 +1,41 @@
+rules:
+- id: ruby_exceptions_rule-DetailedExceptions
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: 'config.consider_all_requests_local = true
+
+          '
+    - patterns:
+      - pattern-inside: "class $CONTROLLER < ApplicationController\n  ...\nend\n"
+      - pattern: "def show_detailed_exceptions? (...)\n  ...\nreturn $RETURN\nend\n"
+      - metavariable-pattern:
+          metavariable: $RETURN
+          patterns:
+          - pattern-not: 'false
+
+              '
+  message: "The `consider_all_requests_local` setting was found set to true, which\
+    \ enables detailed exception reports. This setting, \nwhile useful during development\
+    \ for debugging purposes, can \ninadvertently expose sensitive system or application\
+    \ information \nto end users when enabled in production environments. Such \n\
+    information exposure could potentially aid attackers in crafting \nfurther attacks\
+    \ against the system.\n\nIt is advisable to disable detailed exception reporting\
+    \ in production \nenvironments to prevent the leakage of sensitive information.\
+    \ \n\nSecure Configuration Example:\n```\n# config/environments/production.rb\n\
+    Rails.application.config.consider_all_requests_local = false\n```\n"
+  languages:
+  - ruby
+  severity: WARNING
+  metadata:
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A05:2021-Security Misconfiguration
+    shortDescription: Generation of error message containing sensitive information
+    cwe: CWE-209
+    category: security
+    security-severity: MEDIUM
+    technology:
+    - rails
+    references:
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/rails/security/audit/detailed-exceptions.yaml

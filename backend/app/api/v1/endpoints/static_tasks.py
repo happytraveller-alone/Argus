@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -83,6 +84,16 @@ class OpengrepRuleBatchUpdateRequest(BaseModel):
     severity: Optional[str] = Field(None, description="按严重程度过滤: ERROR, WARNING, INFO")
     confidence: Optional[str] = Field(None, description="按置信度过滤: HIGH, MEDIUM, LOW")
     is_active: bool = Field(..., description="要设置的激活状态")
+
+
+class OpengrepRulePatchUploadResponse(BaseModel):
+    """Patch 文件上传生成规则响应"""
+
+    total_files: int = Field(..., description="总共需要处理的 patch 文件数")
+    success_count: int = Field(..., description="成功生成规则的数量")
+    failed_count: int = Field(..., description="失败的数量")
+    skipped_count: int = Field(0, description="跳过的文件数（不符合命名规范）")
+    details: List[Dict[str, Any]] = Field(default_factory=list, description="详细结果")
 
 
 class OpengrepScanTaskCreate(BaseModel):
@@ -1341,6 +1352,111 @@ async def get_opengrep_rule(rule_id: str, db: AsyncSession = Depends(get_db)):
     }
 
 
+def _validate_patch_filename(filename: str) -> bool:
+    """
+    验证 patch 文件名是否符合格式: 仓库owner_仓库名_哈希.patch
+    
+    Args:
+        filename: 文件名
+        
+    Returns:
+        是否符合格式
+    """
+    # 匹配格式: owner_repo_hash.patch
+    # owner 和 repo 可以包含字母、数字、下划线、连字符
+    # hash 通常是 40 位的 SHA-1 或 7-10 位的短 hash
+    pattern = r'^[\w\-]+_[\w\-]+_[a-f0-9]{7,40}\.patch$'
+    return bool(re.match(pattern, filename, re.IGNORECASE))
+
+
+async def _process_single_patch_file(
+    patch_content: str,
+    filename: str,
+    db: AsyncSession
+) -> Dict[str, Any]:
+    """
+    处理单个 patch 文件生成规则
+    
+    Args:
+        patch_content: patch 文件内容
+        filename: 文件名
+        db: 数据库会话
+        
+    Returns:
+        处理结果字典
+    """
+    try:
+        # 构建请求
+        request = OpengrepRuleCreateRequest(
+            commit_content=patch_content,
+            repo_name=filename.rsplit('.', 1)[0]  # 去掉 .patch 后缀
+        )
+        
+        # 调用规则生成服务
+        result = await get_rule_by_patch(request)
+        
+        attempts = result.get("attempts", [])
+        meta = result.get("meta", {})
+        success = False
+        
+        # 保存所有尝试到数据库
+        for attempt in attempts:
+            rule = attempt.get("rule")
+            validation = attempt.get("validation") or {}
+            is_valid = bool(validation.get("is_valid"))
+            message = validation.get("message")
+
+            if rule:
+                name = rule.get("id") or f"llm-attempt-{attempt.get('attempt', 0)}"
+                languages = rule.get("languages") or []
+                language = languages[0] if isinstance(languages, list) and languages else None
+                language = language or meta.get("language") or "unknown"
+                severity = rule.get("severity") or "ERROR"
+                pattern_yaml = yaml.safe_dump({"rules": [rule]}, sort_keys=False)
+                
+                if is_valid:
+                    success = True
+            else:
+                name = f"llm-attempt-{attempt.get('attempt', 0)}"
+                language = meta.get("language") or "unknown"
+                severity = "ERROR"
+                pattern_yaml = yaml.safe_dump(
+                    {"rules": [], "error": message or "LLM rule generation failed"},
+                    sort_keys=False,
+                )
+
+            opengrep_rule = OpengrepRule(
+                name=name,
+                pattern_yaml=pattern_yaml,
+                language=language,
+                severity=severity,
+                source="patch",
+                patch=patch_content,
+                correct=is_valid,
+                is_active=is_valid,
+            )
+            db.add(opengrep_rule)
+
+        await db.commit()
+        
+        return {
+            "filename": filename,
+            "status": "success" if success else "failed",
+            "attempts": len(attempts),
+            "message": "规则生成成功" if success else "所有尝试均失败"
+        }
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error processing patch file {filename}: {e}")
+        return {
+            "filename": filename,
+            "status": "error",
+            "attempts": 0,
+            "message": str(e)
+        }
+
+
 @router.post("/rules/create", response_model=OpengrepRulePatchResponse)
 async def create_opengrep_rule(
     request: OpengrepRuleCreateRequest, db: AsyncSession = Depends(get_db)
@@ -1794,6 +1910,247 @@ async def upload_opengrep_rule_json(
     except Exception as e:
         logger.error(f"Error uploading opengrep rule: {e}")
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+
+
+@router.post("/rules/upload/patch-archive", response_model=OpengrepRulePatchUploadResponse)
+async def upload_patch_archive(
+    file: UploadFile = File(..., description="包含多个 .patch 文件的压缩包"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    上传包含多个 Patch 文件的压缩包生成规则
+    
+    支持的压缩格式: .zip
+    压缩包内的 .patch 文件名必须符合格式: 仓库owner_仓库名_哈希.patch
+    
+    返回处理结果统计
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    
+    # 验证文件扩展名
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(
+            status_code=400,
+            detail=f"仅支持 .zip 压缩格式，当前文件: {file.filename}"
+        )
+    
+    temp_dir = None
+    try:
+        # 创建临时目录
+        temp_dir = tempfile.mkdtemp(prefix="patch_upload_")
+        zip_path = os.path.join(temp_dir, file.filename)
+        
+        # 保存上传的文件
+        content = await file.read()
+        with open(zip_path, 'wb') as f:
+            f.write(content)
+        
+        # 解压文件
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="压缩包格式错误或已损坏")
+        
+        # 查找所有 .patch 文件
+        patch_files = []
+        for root, dirs, files in os.walk(temp_dir):
+            for filename in files:
+                if filename.endswith('.patch'):
+                    file_path = os.path.join(root, filename)
+                    patch_files.append((filename, file_path))
+        
+        if not patch_files:
+            raise HTTPException(
+                status_code=400,
+                detail="压缩包中没有找到 .patch 文件"
+            )
+        
+        # 处理每个 patch 文件
+        total_files = len(patch_files)
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+        details = []
+        
+        logger.info(f"开始处理 {total_files} 个 patch 文件...")
+        
+        for filename, file_path in patch_files:
+            # 验证文件名格式
+            if not _validate_patch_filename(filename):
+                skipped_count += 1
+                details.append({
+                    "filename": filename,
+                    "status": "skipped",
+                    "attempts": 0,
+                    "message": "文件名不符合格式要求: 仓库owner_仓库名_哈希.patch"
+                })
+                logger.warning(f"跳过文件（格式不正确）: {filename}")
+                continue
+            
+            try:
+                # 读取文件内容
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    patch_content = f.read()
+                
+                # 处理 patch 文件
+                result = await _process_single_patch_file(patch_content, filename, db)
+                
+                if result["status"] == "success":
+                    success_count += 1
+                elif result["status"] in ["failed", "error"]:
+                    failed_count += 1
+                
+                details.append(result)
+                logger.info(f"处理完成 [{success_count + failed_count}/{total_files - skipped_count}]: {filename} - {result['status']}")
+                
+            except UnicodeDecodeError:
+                failed_count += 1
+                details.append({
+                    "filename": filename,
+                    "status": "error",
+                    "attempts": 0,
+                    "message": "文件编码错误，请确保文件是 UTF-8 编码"
+                })
+                logger.error(f"文件编码错误: {filename}")
+            except Exception as e:
+                failed_count += 1
+                details.append({
+                    "filename": filename,
+                    "status": "error",
+                    "attempts": 0,
+                    "message": str(e)
+                })
+                logger.error(f"处理文件失败 {filename}: {e}")
+        
+        logger.info(
+            f"批量处理完成: 总计 {total_files} 个文件，"
+            f"成功 {success_count} 个，失败 {failed_count} 个，跳过 {skipped_count} 个"
+        )
+        
+        return OpengrepRulePatchUploadResponse(
+            total_files=total_files,
+            success_count=success_count,
+            failed_count=failed_count,
+            skipped_count=skipped_count,
+            details=details
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing patch archive: {e}")
+        raise HTTPException(status_code=500, detail=f"处理压缩包失败: {str(e)}")
+    finally:
+        # 清理临时目录
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp directory {temp_dir}: {e}")
+
+
+@router.post("/rules/upload/patch-directory", response_model=OpengrepRulePatchUploadResponse)
+async def upload_patch_directory(
+    files: List[UploadFile] = File(..., description="目录中的多个 .patch 文件"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    上传目录中的多个 Patch 文件生成规则
+    
+    支持前端目录上传功能（浏览器会将目录中的所有文件作为多个文件上传）
+    文件名必须符合格式: 仓库owner_仓库名_哈希.patch
+    
+    返回处理结果统计
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="没有上传任何文件")
+    
+    # 过滤出 .patch 文件
+    patch_files = []
+    for file in files:
+        if file.filename and file.filename.endswith('.patch'):
+            patch_files.append(file)
+    
+    if not patch_files:
+        raise HTTPException(
+            status_code=400,
+            detail=f"上传的 {len(files)} 个文件中没有找到 .patch 文件"
+        )
+    
+    total_files = len(patch_files)
+    success_count = 0
+    failed_count = 0
+    skipped_count = 0
+    details = []
+    
+    logger.info(f"开始处理目录上传的 {total_files} 个 patch 文件...")
+    
+    for file in patch_files:
+        filename = file.filename
+        
+        # 验证文件名格式
+        if not _validate_patch_filename(filename):
+            skipped_count += 1
+            details.append({
+                "filename": filename,
+                "status": "skipped",
+                "attempts": 0,
+                "message": "文件名不符合格式要求: 仓库owner_仓库名_哈希.patch"
+            })
+            logger.warning(f"跳过文件（格式不正确）: {filename}")
+            continue
+        
+        try:
+            # 读取文件内容
+            content = await file.read()
+            patch_content = content.decode('utf-8')
+            
+            # 处理 patch 文件
+            result = await _process_single_patch_file(patch_content, filename, db)
+            
+            if result["status"] == "success":
+                success_count += 1
+            elif result["status"] in ["failed", "error"]:
+                failed_count += 1
+            
+            details.append(result)
+            logger.info(f"处理完成 [{success_count + failed_count}/{total_files - skipped_count}]: {filename} - {result['status']}")
+            
+        except UnicodeDecodeError:
+            failed_count += 1
+            details.append({
+                "filename": filename,
+                "status": "error",
+                "attempts": 0,
+                "message": "文件编码错误，请确保文件是 UTF-8 编码"
+            })
+            logger.error(f"文件编码错误: {filename}")
+        except Exception as e:
+            failed_count += 1
+            details.append({
+                "filename": filename,
+                "status": "error",
+                "attempts": 0,
+                "message": str(e)
+            })
+            logger.error(f"处理文件失败 {filename}: {e}")
+    
+    logger.info(
+        f"目录批量处理完成: 总计 {total_files} 个文件，"
+        f"成功 {success_count} 个，失败 {failed_count} 个，跳过 {skipped_count} 个"
+    )
+    
+    return OpengrepRulePatchUploadResponse(
+        total_files=total_files,
+        success_count=success_count,
+        failed_count=failed_count,
+        skipped_count=skipped_count,
+        details=details
+    )
 
 
 @router.post("/rules/upload")

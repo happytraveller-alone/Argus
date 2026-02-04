@@ -1,0 +1,63 @@
+rules:
+- id: kotlin_cookie_rule-HttpResponseSplitting
+  languages:
+  - kotlin
+  message: 'When an HTTP request contains unexpected CR and LF characters, the server
+    may respond with an
+
+    output stream that is interpreted as two different HTTP responses (instead of
+    one). An attacker
+
+    can control the second response and mount attacks such as cross-site scripting
+    and cache
+
+    poisoning attacks.
+
+    '
+  severity: WARNING
+  metadata:
+    shortDescription: Improper neutralization of CRLF sequences in HTTP headers ('HTTP
+      Response Splitting')
+    category: security
+    cwe: CWE-113
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - kotlin
+    security-severity: MEDIUM
+  mode: taint
+  pattern-sanitizers:
+  - patterns:
+    - metavariable-pattern:
+        metavariable: $S0
+        pattern-either:
+        - pattern: '...'
+        - pattern: '""'
+    - metavariable-pattern:
+        metavariable: $PATTERN
+        patterns:
+        - pattern: '...'
+        - pattern-regex: .*\[\]?(?=[^]]*\\r)(?=[^]]*\\n)[^]]*\]\+
+    - pattern-inside: '$STR.replace($PATTERN, $S0)
+
+        ...
+
+        '
+  - pattern: org.apache.commons.text.StringEscapeUtils.escapeJava(...)
+  pattern-sinks:
+  - pattern: javax.servlet.http.Cookie("$KEY", ...)
+  - patterns:
+    - pattern-inside: '$C = javax.servlet.http.Cookie("$KEY", ...)
+
+        ...
+
+        '
+    - pattern: $C.setValue(...)
+  pattern-sources:
+  - pattern: '($REQ: javax.servlet.http.HttpServletRequest).getParameter(...)'
+  - pattern: '($REQ: javax.servlet.http.HttpServletRequest).getParameterNames()'
+  - pattern: '($REQ: javax.servlet.http.HttpServletRequest).getParameterValues(...)'
+  - pattern: '($REQ: javax.servlet.http.HttpServletRequest).getParameterMap()'
+  - pattern: '($REQ: javax.servlet.http.HttpServletRequest).getHeader(...)'
+  - pattern: '($REQ: javax.servlet.http.HttpServletRequest).getPathInfo()'

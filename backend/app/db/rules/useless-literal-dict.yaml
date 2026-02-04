@@ -1,0 +1,11 @@
+rules:
+- id: useless-literal-dict
+  patterns:
+  - pattern-either:
+    - pattern: '{..., $X: $A, ..., $X: $B, ...}
+
+        '
+  message: key `$X` is uselessly assigned twice
+  languages:
+  - python
+  severity: WARNING

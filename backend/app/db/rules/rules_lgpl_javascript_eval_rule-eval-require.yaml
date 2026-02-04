@@ -1,0 +1,74 @@
+rules:
+- id: rules_lgpl_javascript_eval_rule-eval-require
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-inside: 'function ($REQ, $RES, ...) {...}
+
+        '
+    - focus-metavariable: $REQ
+  pattern-sinks:
+  - patterns:
+    - pattern: 'require($REQ, ...)
+
+        '
+    - focus-metavariable: $REQ
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: "if($VALIDATION){\n...\nrequire($REQ, ...) \n...\n} \n"
+      - pattern: '$A = $VALIDATION
+
+          ...
+
+          if($A){
+
+          ...
+
+          require($REQ, ...)
+
+          ...
+
+          }
+
+          '
+    - metavariable-pattern:
+        metavariable: $VALIDATION
+        pattern-either:
+        - pattern: "$AL.includes(...)  \n"
+        - pattern: '$AL.indexOf(...) !== -1
+
+            '
+        - pattern: '$AL.find(...) !== undefined
+
+            '
+        - pattern: '$ALS.has(...)
+
+            '
+  message: "Passing untrusted user input directly into the require() function without\
+    \ proper \nvalidation or sanitization can possibly cause a vulnerability known\
+    \ as remote code execution (RCE). \nAn attacker could manipulate the input to\
+    \ load and execute arbitrary code from external sources, \npotentially leading\
+    \ to severe security breaches such as data theft, system compromise, \nor unauthorized\
+    \ access.\nTo mitigate this risk, it's crucial to validate and sanitize user input\n\
+    thoroughly before passing it to functions like require(), ensuring that only trusted\
+    \ and safe inputs are utilized.\n\nFollowing is an example of secure validation\
+    \ against allowlist to prevent the vulnerability:\n```\n// Define a list of explicitly\
+    \ allowed packages for require\nconst allowedPkgs = [\n    'package1',\n    'package2',\n\
+    \    'package3'\n];\n\napp.get(\"/eval/require/7\", async (req, res) => {\n  \
+    \  var isAllowed = allowedPkgs.includes(req.query.name);  \n    if (isAllowed)\
+    \ {\n        // ok: rules_lgpl_javascript_eval_rule-eval-require\n        var\
+    \ cp = require(req.query.name);\n        cp.exec('ls', (error, stdout, stderr)\
+    \ => {\n            console.log(\"exec output : \\n\", stdout)\n        });  \
+    \      \n    }\n    res.send(\"Please check console logs.\");\n});\n```\n"
+  severity: ERROR
+  languages:
+  - javascript
+  metadata:
+    cwe: CWE-706
+    shortDescription: Use of incorrectly-resolved name or reference
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: CRITICAL

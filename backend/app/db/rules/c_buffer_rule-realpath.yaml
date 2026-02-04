@@ -1,0 +1,25 @@
+rules:
+- id: c_buffer_rule-realpath
+  languages:
+  - c
+  - cpp
+  message: "The `realpath` function should not be called with a destination buffer\
+    \ as it could\nlead to overflowing if the path is greater than PATH_LEN. It is\
+    \ instead recommended\nto call `realpath` with the destination buffer set to NULL\
+    \ and use the return value\nas the resolved path. Be sure to free the returned\
+    \ pointer as realpath will allocate\nthe buffer internally using `malloc`.\n\n\
+    For more information see: https://linux.die.net/man/3/realpath\n\nExample:\n\n\
+    ```\nchar const *symlink_path = \"/tmp/symlink\";\nchar *resolved_path = NULL;\n\
+    \nresolved_path = realpath(symlink_path, NULL);\nif (errno == 0) {\n  // ... use\
+    \ resolved_path...\n  free(resolved_path);\n}\n```\n"
+  metadata:
+    shortDescription: Function does not ensure destination buffer length is sufficient
+      before copying
+    cwe: CWE-120
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: High
+    category: security
+  pattern: realpath(...)
+  severity: WARNING

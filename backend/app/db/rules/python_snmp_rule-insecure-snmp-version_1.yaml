@@ -1,0 +1,26 @@
+rules:
+- id: python_snmp_rule-insecure-snmp-version_1
+  languages:
+  - python
+  message: "Pysnmp was detected using versions SNMPv1 or SNMPv2. SNPMv1 and SNMPv2\
+    \ are insecure\nand should no longer be used as they do not offer encryption.\n\
+    \nIf possible, query SNMP devices using SNMPv3 instead.\n\nExample querying a\
+    \ device using SNMPv3 with SHA-AES:\n```\nfrom pysnmp.hlapi import *\n# Create\
+    \ the snpm iterator\niterator = getCmd(\n    SnmpEngine(),\n    # Configure using\
+    \ SHA AES\n    UsmUserData('usr-sha-aes', 'authkey1', 'privkey1',\n          \
+    \      authProtocol=USM_AUTH_HMAC96_SHA,\n                privProtocol=USM_PRIV_CFB128_AES),\n\
+    \    UdpTransportTarget(('demo.snmplabs.com', 161)),\n    ContextData(),\n   \
+    \ ObjectType(ObjectIdentity('SNMPv2-MIB', 'sysDescr', 0))\n)\n```\n\nFor more\
+    \ information on using SNMPv3 with `Pysnmp` see:\n- https://pysnmp.readthedocs.io/en/latest/examples/hlapi/v3arch/asyncore/sync/manager/cmdgen/snmp-versions.html#snmpv3-auth-sha-privacy-aes128\n"
+  metadata:
+    cwe: CWE-319
+    category: security
+    shortDescription: Cleartext transmission of sensitive information
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    security-severity: Medium
+  pattern-either:
+  - pattern: pysnmp.hlapi.CommunityData(..., mpModel=0, ...)
+  - pattern: pysnmp.hlapi.CommunityData(..., mpModel=1, ...)
+  severity: WARNING

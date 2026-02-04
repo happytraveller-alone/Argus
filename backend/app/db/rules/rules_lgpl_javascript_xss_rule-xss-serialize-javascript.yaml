@@ -1,0 +1,39 @@
+rules:
+- id: rules_lgpl_javascript_xss_rule-xss-serialize-javascript
+  pattern-either:
+  - patterns:
+    - pattern-inside: '$S = require(''serialize-javascript'')
+
+        ...
+
+        '
+    - pattern: '$S(..., {...,unsafe: true,...})'
+  - patterns:
+    - pattern-inside: 'import serialize from "serialize-javascript";
+
+        ...
+
+        '
+    - pattern: 'serialize(..., {...,unsafe: true,...})'
+  message: "This application is serializing Javascript objects with vulnerable \n\
+    configurations by setting `{unsafe: true}` in serialize-javascript. \n\nThis could\
+    \ lead to Cross Site Scripting (XSS) if the input was malicious \nscript code\
+    \ and the application server is not properly validating the output.\n\n```\n//\
+    \ safe use of serialize-javascript\nconst jsObj = serialize({\n  foo: htmlResponse\n\
+    \  }\n);\n```\n\nXSS is an attack which exploits a web application or system to\
+    \ treat user input as markup or script code. \nIt is important to encode the data\
+    \ depending on the specific context it is used in. \n\nBy default, serialize-javascript\
+    \ encodes input values to prevent XSS attacks. \nConsider using serialize-javascript\
+    \ with default settings or set `{unsafe: false}` to encode\ninput data.\n"
+  severity: WARNING
+  languages:
+  - javascript
+  metadata:
+    owasp:
+    - A7:2017-Cross-Site Scripting (XSS)
+    - A03:2021-Injection
+    shortDescription: Improper neutralization of script-related HTML tags in a web
+      page (basic XSS)
+    cwe: CWE-80
+    security-severity: MEDIUM
+    category: security

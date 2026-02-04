@@ -1,0 +1,36 @@
+rules:
+- id: python_xml_rule-expatreader_1
+  languages:
+  - python
+  message: "The application was found using the `xml.sax.expatreader` package for\
+    \ processing XML. Python's\ndefault XML processors suffer from various XML parsing\
+    \ vulnerabilities\nand care must be taken when handling XML data. Additionally,\
+    \ depending on the\nversion of Python, more critical vulnerabilities such as eXternal\
+    \ XML Entity\ninjection maybe exploitable.\n\nThe `xml.sax` package suffers from\
+    \ the following security risks as of Python 3.7.1:\n* Billion laughs / exponential\
+    \ entity expansion - May allow an adversary to cause\n  a Denial of Service (DoS)\
+    \ against the application parsing arbitrary XML.\n* Quadratic blowup entity expansion\
+    \ - Similar to above, but requires a larger input\n  to cause the Denial of Service.\n\
+    \nTo remediate the above issues, consider using the\n[defusedxml](https://pypi.org/project/defusedxml/)\n\
+    library when processing untrusted XML.\n\nExample parsing an XML document using\
+    \ defusedxml:\n```\nfrom defusedxml.ElementTree import parse\n\n# Parse the inventory.xml\
+    \ file\net = parse('inventory.xml')\n# Get the root element\nroot = et.getroot()\n\
+    # Work with the root element\n# ...\n```\n\nFor more information on the various\
+    \ XML parsers and their vulnerabilities please see:\n- https://docs.python.org/3/library/xml.html#xml-vulnerabilities\n\
+    \nFor more information on XML security see OWASP's guide:\n- https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#python\n"
+  metadata:
+    cwe: CWE-611
+    owasp:
+    - A4:2017-XML External Entities (XXE)
+    - A03:2021-Injection
+    category: security
+    shortDescription: Improper restriction of XML external entity reference
+    security-severity: Medium
+  pattern-either:
+  - pattern: xml.dom.expatreader.parse(...)
+  - patterns:
+    - pattern: xml.dom.expatreader.parseString(...)
+    - pattern-not: xml.dom.expatreader.parseString("...")
+  - pattern: xml.dom.expatreader.parseString(...)
+  - pattern: xml.dom.expatreader.create_parser(...)
+  severity: WARNING

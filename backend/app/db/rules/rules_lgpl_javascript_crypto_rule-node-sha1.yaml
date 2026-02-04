@@ -1,0 +1,183 @@
+rules:
+- id: rules_lgpl_javascript_crypto_rule-node-sha1
+  pattern-either:
+  - patterns:
+    - pattern-either:
+      - patterns:
+        - pattern-inside: '$Y = $X.createHash(''sha1'')
+
+            ...
+
+            '
+        - pattern: '$Y.update("...")
+
+            '
+      - pattern: '$X.createHash(''sha1'').update("...")
+
+          '
+  - patterns:
+    - pattern-inside: 'require(''crypto-js'')
+
+        ...
+
+        '
+    - pattern: '$X.SHA1("...")
+
+        '
+  - patterns:
+    - pattern-either:
+      - pattern-inside: '$M = require(''sha1'')
+
+          ...
+
+          '
+      - pattern-inside: '$M = require(''js-sha1'')
+
+          ...
+
+          '
+    - pattern: '$M("...")
+
+        '
+  - patterns:
+    - pattern-inside: 'require(''node-forge'')
+
+        ...
+
+        '
+    - pattern-either:
+      - patterns:
+        - pattern-inside: '$Y = $X.md.sha1.create()
+
+            ...
+
+            '
+        - pattern: '$Y.update("...")
+
+            '
+      - pattern: '$X.md.sha1.create().update("...")
+
+          '
+  - patterns:
+    - pattern-inside: '$X = require(''jshashes'')
+
+        ...
+
+        $Y = new $X.SHA1()
+
+        ...
+
+        '
+    - pattern: '$Y.$METHOD("...")
+
+        '
+  - patterns:
+    - pattern-inside: 'require(''hash.js'')
+
+        ...
+
+        '
+    - pattern-either:
+      - patterns:
+        - pattern-inside: '$Y = $X.sha1()
+
+            ...
+
+            '
+        - pattern: '$Y.update("...")
+
+            '
+      - pattern: '$X.sha1().update("...")
+
+          '
+  - patterns:
+    - pattern-inside: '$X = require(''jssha'')
+
+        ...
+
+        '
+    - pattern-either:
+      - pattern: 'new $X(''SHA-1'', ...).update("...")
+
+          '
+      - patterns:
+        - pattern-inside: '$Y = new $X(''SHA-1'', ...)
+
+            ...
+
+            '
+        - pattern: '$Y.update("...")
+
+            '
+  - patterns:
+    - pattern-either:
+      - pattern: '$X(''sha1'').update("...")
+
+          '
+      - patterns:
+        - pattern-inside: '$Y = $X(''sha1'')
+
+            ...
+
+            '
+        - pattern: '$Y.update("...")
+
+            '
+  - pattern: '$X.subtle.digest(''SHA-1'', ...)
+
+      '
+  - patterns:
+    - pattern-either:
+      - pattern: '$X.SHA1.digest(...)
+
+          '
+      - patterns:
+        - pattern-inside: '$Y = $X.SHA1
+
+            ...
+
+            '
+        - pattern: "$Y.digest(...)  \n"
+  - patterns:
+    - pattern-either:
+      - pattern: '$X.codec.hex.fromBits($SJCL)
+
+          '
+      - patterns:
+        - pattern-inside: '$Y = $SJCL
+
+            ...
+
+            '
+        - pattern: '$X.codec.hex.fromBits($Y)
+
+            '
+    - metavariable-pattern:
+        metavariable: $SJCL
+        pattern: '$K.hash.sha1.hash("...")
+
+          '
+  message: "The SHA-1 hashing algorithm is no longer considered secure for\ncryptographic\
+    \ applications due to its vulnerability to collision attacks,\nwhere two different\
+    \ inputs produce the same output hash. SHA-1's\nsusceptibility to collision attacks\
+    \ undermines the security of\ncryptographic operations, allowing attackers to\
+    \ forge signatures or\nmanipulate data without detection. This poses significant\
+    \ risks in\nauthentication systems, data integrity validations, and secure\ncommunications.\
+    \ \n\nRemediation: To mitigate this vulnerability, replace the SHA1 hashing \n\
+    algorithm with  stronger cryptographic hash functions, such as SHA-256 \nor SHA-3.\
+    \ These  algorithms offer significantly improved security and \nare resistant\
+    \ to  collision attacks, making them suitable for cryptographic \npurposes in\
+    \  modern applications.\n\nSecure Code example:  \n```  \nconst crypto = require('crypto');\
+    \  \nconst hash = crypto.createHash('sha256').update('sensitive data').digest('hex');\
+    \  \nconsole.log(hash);   \n```\n"
+  languages:
+  - javascript
+  severity: WARNING
+  metadata:
+    shortDescription: Use of weak hash
+    category: security
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    cwe: CWE-328
+    security-severity: MEDIUM

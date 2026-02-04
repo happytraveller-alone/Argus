@@ -1,0 +1,38 @@
+rules:
+- id: ruby_cookie_rule-CookieSerialization
+  message: "The rule warns of a significant security risk in applications that use\
+    \ \nRuby's Marshal module for deserializing cookies. Marshal can serialize \n\
+    and deserialize Ruby objects, which, while powerful, poses a risk if \nmisused.\
+    \ If an attacker crafts a malicious cookie that is deserialized, \nit could lead\
+    \ to remote code execution (RCE) on the server due to \nMarshal.load's ability\
+    \ to execute code in deserialized objects. To mitigate \nthis risk, developers\
+    \ are advised to switch from Marshal to JSON for cookie \nserialization. JSON\
+    \ is safer as it cannot execute arbitrary code, reducing \nthe threat of RCE vulnerabilities\
+    \ from deserialized user data. The hybrid \ncheck is just to warn users to migrate\
+    \ to :json for best practice.\n\nSecure code example:\n```\n# In Rails, configure\
+    \ the cookie serializer to :json\n# config/initializers/cookies_serializer.rb\n\
+    Rails.application.config.action_dispatch.cookies_serializer = :json\n```\n\nAdditionally,\
+    \ always validate and sanitize user-supplied data as much \nas possible, even\
+    \ when using JSON, to further secure your application \nagainst various injection\
+    \ attacks.\n"
+  languages:
+  - ruby
+  metadata:
+    shortDescription: Improper control of generation of code ('Code Injection')
+    category: security
+    cwe: CWE-94
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    technology:
+    - ruby
+    security-severity: HIGH
+    references:
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/lang/security/cookie-serialization.yaml
+    - https://robertheaton.com/2013/07/22/how-to-hack-a-rails-app-using-its-secret-token/
+  severity: ERROR
+  pattern-either:
+  - pattern: 'Rails.application.config.action_dispatch.cookies_serializer = :marshal
+
+      '
+  - pattern: Rails.application.config.action_dispatch.cookies_serializer = :hybrid

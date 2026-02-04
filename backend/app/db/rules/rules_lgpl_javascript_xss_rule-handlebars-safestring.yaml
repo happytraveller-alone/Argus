@@ -1,0 +1,65 @@
+rules:
+- id: rules_lgpl_javascript_xss_rule-handlebars-safestring
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - focus-metavariable: $REQ
+    - pattern: function ($REQ, $RES, ...) {...}
+  pattern-sinks:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: '$HB = require(''handlebars'')
+
+          ...
+
+          '
+      - pattern: new $HB.SafeString(...)
+    - patterns:
+      - pattern-inside: 'import $HB from "handlebars";
+
+          ...
+
+          '
+      - pattern: new $HB.SafeString(...)
+  pattern-sanitizers:
+  - pattern-either:
+    - patterns:
+      - pattern-inside: '$HB = require(''handlebars'')
+
+          ...
+
+          '
+      - pattern: $HB.escapeExpression(...)
+    - patterns:
+      - pattern-inside: 'import $HB from "handlebars";
+
+          ...
+
+          '
+      - pattern: $HB.escapeExpression(...)
+  message: "This application is using a vulnerable method `Handlebars.SafeString(...)`.\n\
+    Handlebars SafeString method does not escape the data passed through it. \nUntrusted\
+    \ user input passing through SafeString method can make the application \nvulnerable\
+    \ to Cross-Site Scripting (XSS) attacks.\n\nXSS attacks are a type of security\
+    \ breach that occurs when an attacker manages to \ninject malicious scripts into\
+    \ web pages viewed by other users. These scripts can then \nexecute in the context\
+    \ of the victim's session, allowing the attacker to bypass access \ncontrols and\
+    \ potentially access sensitive information or perform actions on behalf of the\
+    \    \nuser. It is important to encode the data depending on the specific context\
+    \ it is used in. \n\nConsider using the `Handlebars.escapeExpression` method to\
+    \ escape user input while \nconstructing SafeString to avoid potential security\
+    \ concerns. Following is a secure code \nexample.\n```\n  var returnObj = new\
+    \ Handlebars.SafeString(\"<h1>Handlebars safe string</h1>\" +  Handlebars.escapeExpression(req.query.message))\n\
+    \  res.send(returnObj.string)\n```\n"
+  languages:
+  - javascript
+  severity: WARNING
+  metadata:
+    owasp:
+    - A7:2017-Cross-Site Scripting (XSS)
+    - A03:2021-Injection
+    cwe: CWE-79
+    shortDescription: Improper neutralization of input during web page generation
+      (Cross-site Scripting)
+    security-severity: MEDIUM
+    category: security

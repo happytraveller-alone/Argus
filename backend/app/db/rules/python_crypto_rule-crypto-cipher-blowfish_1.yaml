@@ -1,0 +1,47 @@
+rules:
+- id: python_crypto_rule-crypto-cipher-blowfish_1
+  languages:
+  - python
+  message: "The Blowfish encryption algorithm was meant as a drop-in replacement for\
+    \ DES and was created in\n1993. Smaller key sizes may make the ciphertext vulnerable\
+    \ to [birthday\nattacks](https://en.wikipedia.org/wiki/Birthday_attack). While\
+    \ no known attacks against\nBlowfish\nexist, it should never be used to encrypt\
+    \ files over 4GB in size. If possible consider\nusing ChaCha20Poly1305 or AES-GCM\
+    \ instead of Blowfish.\n\nFor older applications that don't have support for `ChaCha20Poly1305`,\
+    \ `AES-256-GCM` is\nrecommended, however it has many drawbacks:\n  - Slower than\
+    \ `ChaCha20Poly1305`.\n  - Catastrophic failure if nonce values are reused.\n\n\
+    Note that the `Crypto` and `Cryptodome` Python packages are no longer recommended\
+    \ for\nnew applications, instead consider using the [cryptography](https://cryptography.io/)\
+    \ package.\n\nExample using `ChaCha20Poly1305`:\n```\nimport os\n# Import ChaCha20Poly1305\
+    \ from cryptography\nfrom cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305\n\
+    # Our plaintext to encrypt\nplain_text = b\"Secret text to encrypt\"\n# We do\
+    \ not require authenticated but unencrypted data, so set to None\naad = None\n\
+    # Generate a secure key\nkey = ChaCha20Poly1305.generate_key()\n# Create a new\
+    \ ChaCha20Poly1305 instance with our secure key\nchacha = ChaCha20Poly1305(key)\n\
+    # Note: nonce values _must_ be regenerated every time they are used.\nnonce =\
+    \ os.urandom(12)\n# Encrypt our plaintext\ncipher_text = chacha.encrypt(nonce,\
+    \ plain_text, aad)\n# Decrypt the plain text using the nonce and cipher_text\n\
+    chacha.decrypt(nonce, cipher_text, aad)\n```\n\nExample using `AESGCM`:\n```\n\
+    import os\n# Import AESGCM from cryptography\nfrom cryptography.hazmat.primitives.ciphers.aead\
+    \ import AESGCM\n# Our plaintext to encrypt\nplain_text = b\"Secret text to encrypt\"\
+    \n# We do not require authenticated but unencrypted data, so set to None\naad\
+    \ = None\n# Generate a secure key\nkey = AESGCM.generate_key(bit_length=128)\n\
+    # Create a new AESGCM instance with our secure key\naesgcm = AESGCM(key)\n# Note:\
+    \ nonce values _must_ be regenerated every time they are used.\nnonce = os.urandom(12)\n\
+    # Encrypt our plaintext\ncipher_text = aesgcm.encrypt(nonce, plain_text, aad)\n\
+    # Decrypt the plain text using the nonce and cipher_text\naesgcm.decrypt(nonce,\
+    \ cipher_text, aad)\n```\n\nFor more information on the cryptography module see:\n\
+    - https://cryptography.io/en/latest/\n"
+  metadata:
+    cwe: CWE-327
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    category: security
+    shortDescription: Use of a broken or risky cryptographic algorithm
+    security-severity: Medium
+  patterns:
+  - pattern-either:
+    - pattern: Cryptodome.Cipher.Blowfish.new(...)
+    - pattern: Crypto.Cipher.Blowfish.new(...)
+  severity: WARNING

@@ -1,0 +1,22 @@
+rules:
+- id: scala_strings_rule-BadHexConversion_1
+  languages:
+  - scala
+  message: 'When converting a byte array containing a hash signature to a human readable
+    string, a
+
+    conversion mistake can be made if the array is read byte by byte.
+
+    '
+  metadata:
+    category: security
+    confidence: HIGH
+    cwe: CWE-704
+    shortDescription: Incorrect Type Conversion or Cast
+    security-severity: Medium
+  pattern-either:
+  - pattern: "$B_ARR = ($MD: java.security.MessageDigest).digest(...);\n...\nfor(...)\
+      \ {\n  ...\n  Integer.toHexString(...);\n}\n"
+  - pattern: "$B_ARR = ($MD: java.security.MessageDigest).digest(...);\n...\nwhile(...)\
+      \ {\n  ...\n  Integer.toHexString(...);\n}\n"
+  severity: WARNING

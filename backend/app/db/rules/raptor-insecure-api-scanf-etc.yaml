@@ -1,0 +1,40 @@
+rules:
+- id: raptor-insecure-api-scanf-etc
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/676
+    - https://cwe.mitre.org/data/definitions/120
+    - https://cwe.mitre.org/data/definitions/787
+    - https://g.co/kgs/PCHQjJ
+    confidence: HIGH
+  message: A buffer overflow condition exists when a program attempts to put more
+    data in a buffer than it can hold, or when a program attempts to put data in a
+    memory area outside of the boundaries of a buffer.
+  severity: ERROR
+  languages:
+  - c
+  - cpp
+  patterns:
+  - pattern-either:
+    - pattern: scanf($FMT, ...)
+    - pattern: __isoc99_scanf($FMT, ...)
+    - pattern: vscanf($FMT, ...)
+    - pattern: __isoc99_vscanf($FMT, ...)
+    - pattern: fscanf($_, $FMT, ...)
+    - pattern: __isoc99_fscanf($_, $FMT, ...)
+    - pattern: vfscanf($_, $FMT, ...)
+    - pattern: __isoc99_vfscanf($_, $FMT, ...)
+    - pattern: sscanf($_, $FMT, ...)
+    - pattern: __isoc99_sscanf($_, $FMT, ...)
+    - pattern: vsscanf($_, $FMT, ...)
+    - pattern: __isoc99_vsscanf($_, $FMT, ...)
+    - pattern: wscanf($FMT, ...)
+    - pattern: vwscanf($FMT, ...)
+    - pattern: fwscanf($_, $FMT, ...)
+    - pattern: vfwscanf($_, $FMT, ...)
+    - pattern: swscanf($_, $FMT, ...)
+    - pattern: vswscanf($_, $FMT, ...)
+  - metavariable-regex:
+      metavariable: $FMT
+      regex: (".*%l?s.*"|".*%S.*"|[a-zA-Z_][a-zA-Z0-9_]*)

@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from tqdm import tqdm
 
 from app.core.security import get_password_hash
 from app.models.user import User
@@ -302,9 +303,16 @@ def validate_opengrep_rule(yaml_content: str) -> bool:
 async def create_internal_opengrep_rules(db: AsyncSession) -> None:
     """
     从 app/db/rules 目录读取所有 .yaml 文件并创建内置 opengrep 规则
-    - 判断文件名是否已在表中,只添加不存在的规则
+    - 判断规则 ID 是否已在表中,只添加不存在的规则
     - 验证每条规则是否可用
     """
+    # 检查数据库中是否已有规则，如果有则跳过初始化
+    result = await db.execute(select(OpengrepRule.name))
+    existing_rule_ids = {row[0] for row in result.fetchall()}
+    if existing_rule_ids:
+        logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则，跳过内置规则初始化")
+        return
+    
     # 获取规则文件目录
     rules_dir = Path(__file__).parent / "rules"
     if not rules_dir.exists():
@@ -318,17 +326,15 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
         return
     
     logger.info(f"开始加载内置规则，找到 {len(yaml_files)} 个文件...")
-    
-    # 获取数据库中已存在的规则名称
-    result = await db.execute(select(OpengrepRule.name))
-    existing_rule_names = {row[0] for row in result.fetchall()}
-    logger.info(f"数据库中已存在 {len(existing_rule_names)} 条规则")
+    logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则")
     
     created_count = 0
     skipped_count = 0
     invalid_count = 0
+    rules_to_add = []
     
-    for yaml_file in yaml_files:
+    # 使用进度条显示文件处理进度
+    for yaml_file in tqdm(yaml_files, desc="处理规则文件", unit="file"):
         try:
             with open(yaml_file, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -350,7 +356,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
                 rule_id = rule.get('id', yaml_file.stem)
                 
                 # 判断规则是否已在表中
-                if rule_id in existing_rule_names:
+                if rule_id in existing_rule_ids:
                     logger.debug(f"  ⊘ 规则已存在，跳过: {rule_id}")
                     skipped_count += 1
                     continue
@@ -406,27 +412,44 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
                     correct=True,  # 内置规则默认为正确
                     is_active=True,
                 )
-                db.add(opengrep_rule)
-                created_count += 1
-                logger.info(f"  ✓ 加载新规则: {rule_id} ({language}, {severity})")
+                rules_to_add.append(opengrep_rule)
+                existing_rule_ids.add(rule_id)  # 更新本地集合，防止同一批次重复
         
         except Exception as e:
             logger.error(f"加载规则文件失败 {yaml_file.name}: {e}")
+            invalid_count += 1
             continue
     
-    if created_count > 0:
-        await db.flush()
-        await db.commit()
-        logger.info(f"✓ 成功创建 {created_count} 条新规则,跳过 {skipped_count} 条已存在的规则,{invalid_count} 条无效规则")
-    else:
-        logger.info(f"所有规则已存在或无效: {skipped_count} 条已存在,{invalid_count} 条无效")
+    # 一次性批量添加所有规则
+    if rules_to_add:
+        try:
+            logger.info(f"正在批量入库 {len(rules_to_add)} 条新规则...")
+            db.add_all(rules_to_add)
+            await db.commit()
+            created_count = len(rules_to_add)
+            logger.info(f"  ✓ 批量加载了 {created_count} 条新规则")
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"  ✗ 规则批量入库失败: {e}")
+            invalid_count += len(rules_to_add)
+    
+    logger.info(f"✓ 内置规则加载完成: 成功创建 {created_count} 条新规则，跳过 {skipped_count} 条已存在的规则，{invalid_count} 条失败")
 
 
 async def create_patch_opengrep_rules(db: AsyncSession) -> None:
     """
     从 app/db/rules_from_patches 目录递归读取所有 .yml 文件并创建 patch 来源的 opengrep 规则
     - 支持多层目录结构（按编程语言分类）
-    - 判断规则 ID 是否已在表中，只添加不存在的规则    - 验证每条规则是否可用    """
+    - 判断规则 ID 是否已在表中，只添加不存在的规则
+    - 验证每条规则是否可用
+    """
+    # 检查数据库中是否已有规则，如果有则跳过初始化
+    result = await db.execute(select(OpengrepRule.name))
+    existing_rule_ids = {row[0] for row in result.fetchall()}
+    if existing_rule_ids:
+        logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则，跳过 Patch 规则初始化")
+        return
+    
     # 获取规则文件目录
     rules_dir = Path(__file__).parent / "rules_from_patches"
     if not rules_dir.exists():
@@ -440,17 +463,15 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
         return
     
     logger.info(f"开始加载 Patch 来源规则，找到 {len(yaml_files)} 个文件...")
-    
-    # 获取数据库中已存在的规则名称
-    result = await db.execute(select(OpengrepRule.name))
-    existing_rule_names = {row[0] for row in result.fetchall()}
-    logger.info(f"数据库中已存在 {len(existing_rule_names)} 条规则")
+    logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则")
     
     created_count = 0
     skipped_count = 0
     error_count = 0
+    rules_to_add = []
     
-    for yaml_file in yaml_files:
+    # 使用进度条显示文件处理进度
+    for yaml_file in tqdm(yaml_files, desc="处理 Patch 规则文件", unit="file"):
         try:
             with open(yaml_file, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -473,7 +494,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                 rule_id = rule.get('id', yaml_file.stem)
                 
                 # 判断规则是否已在表中
-                if rule_id in existing_rule_names:
+                if rule_id in existing_rule_ids:
                     logger.debug(f"  ⊘ 规则已存在，跳过: {rule_id}")
                     skipped_count += 1
                     continue
@@ -549,22 +570,29 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                     correct=True,  # Patch 规则默认为正确
                     is_active=True,
                 )
-                db.add(opengrep_rule)
-                created_count += 1
-                logger.debug(f"  ✓ 加载新规则: {rule_id} ({language}, {severity})")
+                rules_to_add.append(opengrep_rule)
+                existing_rule_ids.add(rule_id)  # 更新本地集合，防止同一批次重复
         
         except Exception as e:
             logger.error(f"加载规则文件失败 {yaml_file.relative_to(rules_dir)}: {e}")
             error_count += 1
             continue
     
-    if created_count > 0:
-        await db.flush()
-        await db.commit()
-        logger.info(f"✓ Patch 规则导入完成: 成功创建 {created_count} 条新规则，"
-                   f"跳过 {skipped_count} 条已存在的规则，{error_count} 条错误")
-    else:
-        logger.info(f"Patch 规则导入完成: 所有 {skipped_count} 条规则已存在或无效 (错误: {error_count})")
+    # 一次性批量添加所有规则
+    if rules_to_add:
+        try:
+            logger.info(f"正在批量入库 {len(rules_to_add)} 条新规则...")
+            db.add_all(rules_to_add)
+            await db.commit()
+            created_count = len(rules_to_add)
+            logger.info(f"  ✓ 批量加载了 {created_count} 条新规则")
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"  ✗ 规则批量入库失败: {e}")
+            error_count += len(rules_to_add)
+    
+    logger.info(f"✓ Patch 规则导入完成: 成功创建 {created_count} 条新规则，"
+               f"跳过 {skipped_count} 条已存在的规则，{error_count} 条错误")
 
 
 async def init_db(db: AsyncSession) -> None:

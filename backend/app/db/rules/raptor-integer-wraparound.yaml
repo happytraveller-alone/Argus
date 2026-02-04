@@ -1,0 +1,204 @@
+rules:
+- id: raptor-integer-wraparound
+  metadata:
+    author: Marco Ivaldi <raptor@0xdeadbeef.info>
+    references:
+    - https://cwe.mitre.org/data/definitions/190
+    - https://cwe.mitre.org/data/definitions/128
+    - https://cwe.mitre.org/data/definitions/131
+    - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
+    - http://www.phrack.org/issues/60/10.html#article
+    - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
+    - https://dustri.org/b/playing-with-weggli.html
+    confidence: MEDIUM
+  message: The software performs a calculation that can produce an integer overflow
+    or wraparound, when the logic assumes that the resulting value will always be
+    larger than the original value. This can introduce other weaknesses when the calculation
+    is used for resource management or execution control.
+  severity: WARNING
+  languages:
+  - c
+  - cpp
+  pattern-either:
+  - patterns:
+    - pattern-either:
+      - pattern: $FUN($_ * $_)
+      - pattern: $FUN($_ *= $_)
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: malloc
+        - pattern: valloc
+  - patterns:
+    - pattern: $FUN($N)
+    - pattern-either:
+      - pattern-inside: '$N = $_ * $_;
+
+          ...
+
+          '
+      - pattern-inside: '$N *= $_;
+
+          ...
+
+          '
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: malloc
+        - pattern: valloc
+  - patterns:
+    - pattern-either:
+      - pattern: $FUN($_ + $_)
+      - pattern: $FUN($_ += $_)
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: malloc
+        - pattern: valloc
+  - patterns:
+    - pattern: $FUN($N)
+    - pattern-either:
+      - pattern-inside: '$N = $_ + $_;
+
+          ...
+
+          '
+      - pattern-inside: '$N += $_;
+
+          ...
+
+          '
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: malloc
+        - pattern: valloc
+  - patterns:
+    - pattern-either:
+      - pattern: $FUN($_, $_ * $_)
+      - pattern: $FUN($_, $_ *= $_)
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: calloc
+        - pattern: realloc
+        - pattern: reallocf
+        - pattern: aligned_alloc
+  - patterns:
+    - pattern: $FUN($_, $N)
+    - pattern-either:
+      - pattern-inside: '$N = $_ * $_;
+
+          ...
+
+          '
+      - pattern-inside: '$N *= $_;
+
+          ...
+
+          '
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: calloc
+        - pattern: realloc
+        - pattern: reallocf
+        - pattern: aligned_alloc
+  - patterns:
+    - pattern-either:
+      - pattern: $FUN($_, $_ + $_)
+      - pattern: $FUN($_, $_ += $_)
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: calloc
+        - pattern: realloc
+        - pattern: reallocf
+        - pattern: aligned_alloc
+  - patterns:
+    - pattern: $FUN($_, $N)
+    - pattern-either:
+      - pattern-inside: '$N = $_ + $_;
+
+          ...
+
+          '
+      - pattern-inside: '$N += $_;
+
+          ...
+
+          '
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: calloc
+        - pattern: realloc
+        - pattern: reallocf
+        - pattern: aligned_alloc
+  - patterns:
+    - pattern-either:
+      - pattern: $FUN($_ * $_, $_)
+      - pattern: $FUN($_ *= $_, $_)
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: calloc
+  - patterns:
+    - pattern: $FUN($N, $_)
+    - pattern-either:
+      - pattern-inside: '$N = $_ * $_;
+
+          ...
+
+          '
+      - pattern-inside: '$N *= $_;
+
+          ...
+
+          '
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: calloc
+  - patterns:
+    - pattern-either:
+      - pattern: $FUN($_ + $_, $_)
+      - pattern: $FUN($_ += $_, $_)
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: calloc
+  - patterns:
+    - pattern: $FUN($N, $_)
+    - pattern-either:
+      - pattern-inside: '$N = $_ + $_;
+
+          ...
+
+          '
+      - pattern-inside: '$N += $_;
+
+          ...
+
+          '
+    - metavariable-pattern:
+        metavariable: $FUN
+        pattern-either:
+        - pattern: calloc
+  - pattern: $X > $MAX || ($X + $_) > $MAX
+  - pattern: $X >= $MAX || ($X + $_) > $MAX
+  - pattern: $X > $MAX || ($X + $_) >= $MAX
+  - pattern: $X >= $MAX || ($X + $_) >= $MAX
+  - pattern: $X < $MAX && ($X + $_) < $MAX
+  - pattern: $X <= $MAX && ($X + $_) < $MAX
+  - pattern: $X < $MAX && ($X + $_) <= $MAX
+  - pattern: $X <= $MAX && ($X + $_) <= $MAX
+  - pattern: $X > $MAX || ($X * $_) > $MAX
+  - pattern: $X >= $MAX || ($X * $_) > $MAX
+  - pattern: $X > $MAX || ($X * $_) >= $MAX
+  - pattern: $X >= $MAX || ($X * $_) >= $MAX
+  - pattern: $X < $MAX && ($X * $_) < $MAX
+  - pattern: $X <= $MAX && ($X * $_) < $MAX
+  - pattern: $X < $MAX && ($X * $_) <= $MAX
+  - pattern: $X <= $MAX && ($X * $_) <= $MAX

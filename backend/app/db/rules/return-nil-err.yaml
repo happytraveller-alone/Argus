@@ -1,0 +1,10 @@
+rules:
+- id: return-nil-err
+  patterns:
+  - pattern-either:
+    - pattern: "if err == nil {\n        return err\n}\n"
+    - pattern: "if err == nil {\n        return ..., err\n}\n"
+  message: return nil err instead of nil value
+  languages:
+  - go
+  severity: ERROR

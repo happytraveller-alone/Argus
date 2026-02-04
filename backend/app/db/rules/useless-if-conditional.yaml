@@ -1,0 +1,21 @@
+rules:
+- id: useless-if-conditional
+  patterns:
+  - pattern-either:
+    - pattern: "if ($X) {\n    ...\n} else if ($X) {\n    ...\n}"
+  message: 'Detected an if block that checks for the same condition on both branches
+    (`$X`)
+
+    '
+  languages:
+  - go
+  severity: WARNING
+- id: useless-if-body
+  patterns:
+  - pattern: "if ($X) {\n    $S\n} else {\n    $S\n}"
+  message: 'Detected identical if-statement bodies. Is this intentional?
+
+    '
+  languages:
+  - go
+  severity: WARNING

@@ -60,6 +60,8 @@ import {
     uploadOpengrepRuleJSON,
     uploadOpengrepRulesCompressed,
     uploadOpengrepRulesDirectory,
+    uploadPatchArchive,
+    uploadPatchDirectory,
     createOpengrepGenericRule,
     updateOpengrepRule,
     batchUpdateOpengrepRules,
@@ -118,6 +120,11 @@ export default function OpengrepRules() {
         commit_hash: "",
         commit_content: "",
     });
+    const [eventRuleUploadTab, setEventRuleUploadTab] = useState<
+        "manual" | "archive" | "directory"
+    >("manual");
+    const [patchArchive, setPatchArchive] = useState<File | null>(null);
+    const [patchDirectoryFiles, setPatchDirectoryFiles] = useState<File[]>([]);
     const [genericRuleUploadTab, setGenericRuleUploadTab] = useState<
         "manual" | "compressed" | "directory"
     >("manual");
@@ -527,6 +534,64 @@ export default function OpengrepRules() {
         } catch (error: any) {
             const message =
                 error?.response?.data?.detail || error?.message || "上传规则失败";
+            toast.error(message);
+        } finally {
+            setUploadingRules(false);
+        }
+    };
+
+    const handleUploadPatchArchive = async () => {
+        if (!patchArchive) {
+            toast.error("请选择 Patch 压缩包");
+            return;
+        }
+        try {
+            setUploadingRules(true);
+            const result = await uploadPatchArchive(patchArchive);
+            
+            const { total_files, success_count, failed_count, skipped_count } = result;
+            
+            toast.success(
+                `上传完成: 总计 ${total_files} 个文件，成功 ${success_count}，失败 ${failed_count}，跳过 ${skipped_count}`,
+            );
+            
+            setShowEventDialog(false);
+            setPatchArchive(null);
+            setEventRuleUploadTab("manual");
+            await loadRules({ silent: true });
+            await loadRuleStats();
+        } catch (error: any) {
+            const message =
+                error?.response?.data?.detail || error?.message || "上传 Patch 压缩包失败";
+            toast.error(message);
+        } finally {
+            setUploadingRules(false);
+        }
+    };
+
+    const handleUploadPatchDirectory = async () => {
+        if (patchDirectoryFiles.length === 0) {
+            toast.error("请选择 Patch 文件");
+            return;
+        }
+        try {
+            setUploadingRules(true);
+            const result = await uploadPatchDirectory(patchDirectoryFiles);
+            
+            const { total_files, success_count, failed_count, skipped_count } = result;
+            
+            toast.success(
+                `上传完成: 总计 ${total_files} 个文件，成功 ${success_count}，失败 ${failed_count}，跳过 ${skipped_count}`,
+            );
+            
+            setShowEventDialog(false);
+            setPatchDirectoryFiles([]);
+            setEventRuleUploadTab("manual");
+            await loadRules({ silent: true });
+            await loadRuleStats();
+        } catch (error: any) {
+            const message =
+                error?.response?.data?.detail || error?.message || "上传 Patch 目录失败";
             toast.error(message);
         } finally {
             setUploadingRules(false);
@@ -2325,7 +2390,7 @@ export default function OpengrepRules() {
                         open={showEventDialog}
                         onOpenChange={setShowEventDialog}
                     >
-                        <DialogContent className="cyber-dialog max-w-2xl border-border">
+                        <DialogContent className="cyber-dialog max-w-3xl border-border max-h-[90vh] flex flex-col">
                             <div
                                 className="absolute inset-0 opacity-5 pointer-events-none"
                                 style={{
@@ -2336,78 +2401,191 @@ export default function OpengrepRules() {
                             />
                             <DialogHeader className="px-6 pt-4 flex-shrink-0">
                                 <DialogTitle className="font-mono text-lg uppercase tracking-wider flex items-center gap-2 text-foreground">
-                                    事件型规则
+                                    事件型规则（Patch 规则）
                                 </DialogTitle>
                             </DialogHeader>
 
+                            {/* Tab Selection */}
+                            <div className="flex-shrink-0 px-6 flex gap-2 border-b border-border">
+                                <button
+                                    onClick={() => setEventRuleUploadTab("manual")}
+                                    className={`px-4 py-2 font-mono text-xs font-bold uppercase border-b-2 transition-colors ${
+                                        eventRuleUploadTab === "manual"
+                                            ? "border-primary text-primary"
+                                            : "border-transparent text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    手动输入
+                                </button>
+                                <button
+                                    onClick={() => setEventRuleUploadTab("archive")}
+                                    className={`px-4 py-2 font-mono text-xs font-bold uppercase border-b-2 transition-colors ${
+                                        eventRuleUploadTab === "archive"
+                                            ? "border-primary text-primary"
+                                            : "border-transparent text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    压缩包上传
+                                </button>
+                                <button
+                                    onClick={() => setEventRuleUploadTab("directory")}
+                                    className={`px-4 py-2 font-mono text-xs font-bold uppercase border-b-2 transition-colors ${
+                                        eventRuleUploadTab === "directory"
+                                            ? "border-primary text-primary"
+                                            : "border-transparent text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    目录上传
+                                </button>
+                            </div>
+
                             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                                <div>
-                                    <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                                        仓库所有者
-                                    </Label>
-                                    <Input
-                                        value={generateFormData.repo_owner}
-                                        onChange={(e) =>
-                                            setGenerateFormData({
-                                                ...generateFormData,
-                                                repo_owner: e.target.value,
-                                            })
-                                        }
-                                        placeholder="例如: owner"
-                                        className="cyber-input mt-1.5"
-                                    />
-                                </div>
+                                {/* Manual Input Tab */}
+                                {eventRuleUploadTab === "manual" && (
+                                    <>
+                                        <div>
+                                            <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                仓库所有者
+                                            </Label>
+                                            <Input
+                                                value={generateFormData.repo_owner}
+                                                onChange={(e) =>
+                                                    setGenerateFormData({
+                                                        ...generateFormData,
+                                                        repo_owner: e.target.value,
+                                                    })
+                                                }
+                                                placeholder="例如: owner"
+                                                className="cyber-input mt-1.5"
+                                            />
+                                        </div>
 
-                                <div>
-                                    <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                                        仓库名称
-                                    </Label>
-                                    <Input
-                                        value={generateFormData.repo_name}
-                                        onChange={(e) =>
-                                            setGenerateFormData({
-                                                ...generateFormData,
-                                                repo_name: e.target.value,
-                                            })
-                                        }
-                                        placeholder="例如: repository"
-                                        className="cyber-input mt-1.5"
-                                    />
-                                </div>
+                                        <div>
+                                            <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                仓库名称
+                                            </Label>
+                                            <Input
+                                                value={generateFormData.repo_name}
+                                                onChange={(e) =>
+                                                    setGenerateFormData({
+                                                        ...generateFormData,
+                                                        repo_name: e.target.value,
+                                                    })
+                                                }
+                                                placeholder="例如: repository"
+                                                className="cyber-input mt-1.5"
+                                            />
+                                        </div>
 
-                                <div>
-                                    <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                                        提交哈希
-                                    </Label>
-                                    <Input
-                                        value={generateFormData.commit_hash}
-                                        onChange={(e) =>
-                                            setGenerateFormData({
-                                                ...generateFormData,
-                                                commit_hash: e.target.value,
-                                            })
-                                        }
-                                        placeholder="例如: abc123def456"
-                                        className="cyber-input mt-1.5"
-                                    />
-                                </div>
+                                        <div>
+                                            <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                提交哈希
+                                            </Label>
+                                            <Input
+                                                value={generateFormData.commit_hash}
+                                                onChange={(e) =>
+                                                    setGenerateFormData({
+                                                        ...generateFormData,
+                                                        commit_hash: e.target.value,
+                                                    })
+                                                }
+                                                placeholder="例如: abc123def456"
+                                                className="cyber-input mt-1.5"
+                                            />
+                                        </div>
 
-                                <div>
-                                    <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                                        Patch内容
-                                    </Label>
-                                    <Textarea
-                                        value={generateFormData.commit_content}
-                                        onChange={(e) =>
-                                            setGenerateFormData({
-                                                ...generateFormData,
-                                                commit_content: e.target.value,
-                                            })
-                                        }
-                                        placeholder="粘贴补丁内容..."
-                                        className="cyber-input mt-1.5 font-mono text-xs min-h-48 cursor-text"
-                                    />
-                                </div>
+                                        <div>
+                                            <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+                                                Patch内容
+                                            </Label>
+                                            <Textarea
+                                                value={generateFormData.commit_content}
+                                                onChange={(e) =>
+                                                    setGenerateFormData({
+                                                        ...generateFormData,
+                                                        commit_content: e.target.value,
+                                                    })
+                                                }
+                                                placeholder="粘贴补丁内容..."
+                                                className="cyber-input mt-1.5 font-mono text-xs min-h-48 cursor-text"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Archive Upload Tab */}
+                                {eventRuleUploadTab === "archive" && (
+                                    <div className="space-y-4">
+                                        <div className="border border-dashed border-border rounded-lg p-6 text-center">
+                                            <input
+                                                type="file"
+                                                id="patch-archive-input"
+                                                accept=".zip"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) setPatchArchive(file);
+                                                }}
+                                                className="hidden"
+                                            />
+                                            <Label
+                                                htmlFor="patch-archive-input"
+                                                className="cursor-pointer inline-flex flex-col items-center gap-2"
+                                            >
+                                                <div className="text-muted-foreground">
+                                                    点击选择 .zip 压缩包
+                                                </div>
+                                                {patchArchive && (
+                                                    <div className="text-xs text-primary font-mono">
+                                                        已选择: {patchArchive.name}
+                                                    </div>
+                                                )}
+                                            </Label>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground font-mono space-y-1">
+                                            <div>• 支持 .zip 格式压缩包</div>
+                                            <div>• 压缩包内的 .patch 文件名格式: 仓库owner_仓库名_哈希.patch</div>
+                                            <div>• 系统会自动解压并处理所有 .patch 文件</div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Directory Upload Tab */}
+                                {eventRuleUploadTab === "directory" && (
+                                    <div className="space-y-4">
+                                        <div className="border border-dashed border-border rounded-lg p-6 text-center">
+                                            <input
+                                                type="file"
+                                                id="patch-directory-input"
+                                                multiple
+                                                webkitdirectory=""
+                                                directory=""
+                                                onChange={(e) => {
+                                                    const files = Array.from(e.target.files || []);
+                                                    setPatchDirectoryFiles(files);
+                                                }}
+                                                className="hidden"
+                                            />
+                                            <Label
+                                                htmlFor="patch-directory-input"
+                                                className="cursor-pointer inline-flex flex-col items-center gap-2"
+                                            >
+                                                <div className="text-muted-foreground">
+                                                    点击选择目录
+                                                </div>
+                                                {patchDirectoryFiles.length > 0 && (
+                                                    <div className="text-xs text-primary font-mono">
+                                                        已选择 {patchDirectoryFiles.length} 个文件
+                                                    </div>
+                                                )}
+                                            </Label>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground font-mono space-y-1">
+                                            <div>• 选择包含 .patch 文件的目录</div>
+                                            <div>• 文件名格式: 仓库owner_仓库名_哈希.patch</div>
+                                            <div>• 系统会自动过滤并处理所有 .patch 文件</div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex-shrink-0 flex justify-between gap-3 px-6 py-4 bg-muted border-t border-border">
@@ -2418,7 +2596,7 @@ export default function OpengrepRules() {
                                         setShowRuleTypeDialog(true);
                                     }}
                                     className="cyber-btn-outline"
-                                    disabled={generatingRule}
+                                    disabled={generatingRule || uploadingRules}
                                 >
                                     返回
                                 </Button>
@@ -2429,24 +2607,58 @@ export default function OpengrepRules() {
                                             setShowEventDialog(false)
                                         }
                                         className="cyber-btn-outline"
-                                        disabled={generatingRule}
+                                        disabled={generatingRule || uploadingRules}
                                     >
                                         取消
                                     </Button>
-                                    <Button
-                                        onClick={handleGenerateRule}
-                                        className="cyber-btn-primary"
-                                        disabled={generatingRule}
-                                    >
-                                        {generatingRule ? (
-                                            <>
-                                                <div className="loading-spinner mr-2" />
-                                                生成中...
-                                            </>
-                                        ) : (
-                                            <>生成规则</>
-                                        )}
-                                    </Button>
+                                    {eventRuleUploadTab === "manual" && (
+                                        <Button
+                                            onClick={handleGenerateRule}
+                                            className="cyber-btn-primary"
+                                            disabled={generatingRule}
+                                        >
+                                            {generatingRule ? (
+                                                <>
+                                                    <div className="loading-spinner mr-2" />
+                                                    生成中...
+                                                </>
+                                            ) : (
+                                                <>生成规则</>
+                                            )}
+                                        </Button>
+                                    )}
+                                    {eventRuleUploadTab === "archive" && (
+                                        <Button
+                                            onClick={handleUploadPatchArchive}
+                                            className="cyber-btn-primary"
+                                            disabled={uploadingRules || !patchArchive}
+                                        >
+                                            {uploadingRules ? (
+                                                <>
+                                                    <div className="loading-spinner mr-2" />
+                                                    上传中...
+                                                </>
+                                            ) : (
+                                                <>上传压缩包</>
+                                            )}
+                                        </Button>
+                                    )}
+                                    {eventRuleUploadTab === "directory" && (
+                                        <Button
+                                            onClick={handleUploadPatchDirectory}
+                                            className="cyber-btn-primary"
+                                            disabled={uploadingRules || patchDirectoryFiles.length === 0}
+                                        >
+                                            {uploadingRules ? (
+                                                <>
+                                                    <div className="loading-spinner mr-2" />
+                                                    上传中...
+                                                </>
+                                            ) : (
+                                                <>上传目录</>
+                                            )}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         </DialogContent>

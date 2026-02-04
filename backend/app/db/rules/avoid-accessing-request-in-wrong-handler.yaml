@@ -1,0 +1,19 @@
+rules:
+- id: avoid-accessing-request-in-wrong-handler
+  patterns:
+  - pattern-inside: "@app.route(..., method=\"GET\")\ndef $X(...):\n  ...\n"
+  - pattern-either:
+    - pattern: '$Y = flask.request.json
+
+        '
+    - pattern: '$Y = flask.request.form
+
+        '
+    - pattern: '$Y = flask.request.data
+
+        '
+  message: Accessing request object inside a route handle for HTTP GET command will
+    throw due to missing request body.
+  languages:
+  - python
+  severity: WARNING

@@ -1,0 +1,23 @@
+rules:
+- id: example-allowed
+  message: Example
+  severity: ERROR
+  languages:
+  - json
+  - yaml
+  pattern: '...'
+  metadata:
+    cwe: 'CWE-257: Storing Passwords in a Recoverable Format'
+    technoloy:
+    - semgrep
+- id: example-prohibited
+  message: Example
+  severity: ERROR
+  languages:
+  - json
+  - yaml
+  pattern: '...'
+  metadata:
+    cwe: 'CWE-320: Key Management Errors'
+    technoloy:
+    - semgrep

@@ -1,0 +1,32 @@
+rules:
+- id: ruby_routes_rule-AvoidDefaultRoutes
+  patterns:
+  - pattern-either:
+    - pattern: map.connect ":controller/:action/:id"
+    - pattern: match ':controller(/:action(/:id(.:format)))'
+  paths:
+    include:
+    - '*routes.rb'
+  message: "Default routes are enabled in this routes file. This means any public\
+    \ method on a\ncontroller can be called as an action. It is easy to accidentally\
+    \ expose\nmethods. Instead, remove the offending line and explicitly include all\n\
+    routes that are intended for external users to follow.\n\nSecure Code Example:\n\
+    ```\n# In routes.rb\nRails.application.routes.draw do\n  get 'posts' => 'posts#index',\
+    \ as: :posts\n  get 'posts/:id' => 'posts#show', as: :post\n  post 'posts' =>\
+    \ 'posts#create'\n\n  # Other CRUD actions for posts can be defined similarly\n\
+    end\n```\n"
+  languages:
+  - ruby
+  severity: WARNING
+  metadata:
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    cwe: CWE-276
+    shortDescription: Incorrect Default Permissions
+    security-severity: MEDIUM
+    references:
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/rails/security/audit/xss/avoid-default-routes.yaml
+    category: security
+    technology:
+    - rails

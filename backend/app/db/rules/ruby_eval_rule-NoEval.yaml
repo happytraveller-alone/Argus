@@ -1,0 +1,67 @@
+rules:
+- id: ruby_eval_rule-NoEval
+  message: "The `eval` method in Ruby executes a string argument as Ruby code. When\
+    \ \n`eval` is used with input that can be controlled or manipulated by an \nexternal\
+    \ user, it can allow arbitrary code execution. This \nmeans an attacker could\
+    \ potentially execute malicious code on the server, \nleading to unauthorized\
+    \ access, data leakage, or server compromise.\n\nRemediation Steps:\n- Validate\
+    \ and sanitize input: If there's an absolute necessity to use \n`eval`, ensure\
+    \ that any user input is rigorously validated and sanitized \nto remove potentially\
+    \ harmful code. However, this is generally not \nrecommended due to the difficulty\
+    \ of securely sanitizing code.\n- Use safer alternatives: Depending on the requirement,\
+    \ consider using \nsafer alternatives to `eval`, such as `send` for calling methods\
+    \ dynamically \nor employing DSLs (Domain-Specific Languages) and safe parsing\
+    \ libraries \ndesigned for specific tasks.\n\nSecure Code Example:\n```\nclass\
+    \ Calculator\n  def add(a, b)\n    a + b\n  end\nend\n\n# Safer alternative using\
+    \ send\ncalculator = Calculator.new\nmethod = params[:operation] # Example: 'add'\
+    \ or 'subtract'\na = params[:a].to_i\nb = params[:b].to_i\n\nif calculator.respond_to?(method)\n\
+    \  result = calculator.send(method, a, b)\nelse\n  puts \"Invalid operation\"\n\
+    end\n```\n\nIn this example, `send` is used to dynamically call a method on the\
+    \ \nCalculator object based on user input. This approach is safer than \neval\
+    \ because it strictly limits the operations to those defined in \nthe class, preventing\
+    \ arbitrary code execution.\n"
+  severity: ERROR
+  metadata:
+    cwe: CWE-95
+    shortDescription: Improper neutralization of directives in dynamically evaluated
+      code ('Eval Injection')
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: HIGH
+    references:
+    - https://owasp.org/Top10/A03_2021-Injection
+    - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/lang/security/no-eval.yaml
+    technology:
+    - rails
+  languages:
+  - ruby
+  mode: taint
+  pattern-sources:
+  - pattern-either:
+    - pattern: params
+    - pattern: cookies
+    - patterns:
+      - pattern: 'RubyVM::InstructionSequence.compile(...)
+
+          '
+      - pattern-not: 'RubyVM::InstructionSequence.compile("...")
+
+          '
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: $X.eval
+      - pattern: $X.class_eval
+      - pattern: $X.instance_eval
+      - pattern: $X.module_eval
+      - pattern: $X.eval(...)
+      - pattern: $X.class_eval(...)
+      - pattern: $X.instance_eval(...)
+      - pattern: $X.module_eval(...)
+      - pattern: eval(...)
+      - pattern: class_eval(...)
+      - pattern: module_eval(...)
+      - pattern: instance_eval(...)
+    - pattern-not: $M("...",...)
