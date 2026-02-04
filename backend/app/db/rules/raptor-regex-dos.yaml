@@ -7,6 +7,10 @@ rules:
     - https://semgrep.dev/docs/writing-rules/metavariable-analysis
     - https://github.com/semgrep/semgrep/pull/4672
     confidence: MEDIUM
+    cwe:
+    - 'CWE-1333: Inefficient Regular Expression Complexity'
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-20: Improper Input Validation'
   message: The software uses a regular expression with an inefficient, possibly exponential
     worst-case computational complexity that consumes excessive CPU cycles. Poorly
     constructed regular expressions that exhibit exponential runtime when fed specifically

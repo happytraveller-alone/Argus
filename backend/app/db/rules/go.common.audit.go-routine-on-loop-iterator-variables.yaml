@@ -3,6 +3,9 @@ rules:
   metadata:
     references:
     - https://github.com/golang/go/wiki/CommonMistakes
+    cwe:
+    - 'CWE-362: Race Condition'
+    - 'CWE-667: Improper Locking'
   patterns:
   - pattern-inside: "func $FUNC(...) {\n  ...\n}\n"
   - pattern-either:

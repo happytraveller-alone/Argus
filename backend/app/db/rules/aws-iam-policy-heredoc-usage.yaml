@@ -16,3 +16,8 @@ rules:
   languages:
   - generic
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-16: Configuration'
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-269: Improper Privilege Management'

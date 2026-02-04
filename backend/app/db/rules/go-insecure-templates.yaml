@@ -22,5 +22,8 @@ rules:
     references:
     - https://golang.org/pkg/html/template/#HTML
     - https://twitter.com/empijei/status/1275177219011350528
+    cwe:
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-116: Improper Encoding or Escaping of Output'
   languages:
   - go

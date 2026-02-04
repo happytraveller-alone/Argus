@@ -56,3 +56,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-200: Information Exposure'
+    - 'CWE-79: Cross-site Scripting'

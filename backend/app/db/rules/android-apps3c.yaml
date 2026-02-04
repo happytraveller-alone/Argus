@@ -26,3 +26,9 @@ rules:
   - pattern: setAllowFileAccessFromFileURLs(...)
   - pattern: $WEBVIEW.setAllowUniversalAccessFromFileURLs(...)
   - pattern: setAllowUniversalAccessFromFileURLs(...)
+  metadata:
+    cwe:
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-94: Improper Control of Generation of Code'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'

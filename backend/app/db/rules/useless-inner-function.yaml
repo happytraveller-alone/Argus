@@ -10,3 +10,6 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-561: Dead Code'

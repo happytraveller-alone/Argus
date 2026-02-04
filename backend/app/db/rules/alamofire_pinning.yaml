@@ -15,6 +15,11 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-295: Improper Certificate Validation'
+    - 'CWE-297: Improper Validation of Certificate with Host Mismatch'
+    - 'CWE-311: Missing Encryption of Sensitive Data'
+    - 'CWE-319: Cleartext Transmission of Sensitive Information'
   message: 'This iOS mobile application seems not implementing properly the Certificate
     Pinning checks when connecting to external web servers, with AlamoFire libraries.  An
     attacker could be able to abuse this vulnerability in order to intercept the communications

@@ -18,6 +18,11 @@ rules:
       ...
 
       '
+  metadata:
+    cwe:
+    - 'CWE-918: Server-Side Request Forgery'
+    - 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code'
+    - 'CWE-20: Improper Input Validation'
 - id: javascript.playwright.security.audit.playwright-evaluate-arg-injection.playwright-evaluate-arg-injection
   message: If unverified user data can reach the `evaluate` method it can result in
     Server-Side Request Forgery vulnerabilities

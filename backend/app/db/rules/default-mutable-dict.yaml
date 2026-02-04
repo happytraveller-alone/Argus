@@ -66,3 +66,7 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-200: Information Exposure'

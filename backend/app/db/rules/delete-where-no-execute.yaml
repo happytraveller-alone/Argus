@@ -9,3 +9,8 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-840: Business Logic Errors'
+    - 'CWE-284: Improper Access Control'
+    - 'CWE-665: Improper Initialization'

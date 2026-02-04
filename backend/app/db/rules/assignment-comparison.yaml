@@ -9,3 +9,7 @@ rules:
   languages:
   - java
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-481: Assigning instead of comparing'
+    - 'CWE-571: Expression is always true/false'

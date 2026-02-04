@@ -8,6 +8,11 @@ rules:
     - https://cwe.mitre.org/data/definitions/497
     - https://github.com/struct/mms
     confidence: LOW
+    cwe:
+    - 'CWE-200: Information Exposure'
+    - 'CWE-209: Generation of Error Message Containing Sensitive Information'
+    - 'CWE-497: Exposure of Resource to Wrong Sphere'
+    - 'CWE-532: Information Exposure Through Log Files'
   message: The software generates an error message that includes sensitive information
     about its environment, users, or associated data. In particular, exposure of memory
     addresses might defeat ASLR.

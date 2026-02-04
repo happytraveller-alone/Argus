@@ -14,6 +14,11 @@ rules:
   metadata:
     references:
     - https://docs.sqlalchemy.org/en/13/orm/tutorial.html#common-filter-operators
+    cwe:
+    - 'CWE-285: Improper Authorization'
+    - 'CWE-200: Information Exposure'
+    - 'CWE-287: Improper Authentication'
+    - 'CWE-20: Improper Input Validation'
   patterns:
   - pattern-inside: "def $ANY(...):\n    ...\n    $MODEL.query\n"
   - pattern-inside: '$TARGET.filter(...)

@@ -71,3 +71,9 @@ rules:
             ...
 
             '
+  metadata:
+    cwe:
+    - 'CWE-22: Path Traversal'
+    - 'CWE-36: Absolute Path Traversal'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-400: Uncontrolled Resource Consumption'

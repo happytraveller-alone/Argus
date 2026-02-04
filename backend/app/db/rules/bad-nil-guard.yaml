@@ -14,3 +14,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-476: NULL Pointer Dereference'
+    - 'CWE-690: Unchecked Return Value to NULL Pointer'

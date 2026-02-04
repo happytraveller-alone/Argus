@@ -9,6 +9,11 @@ rules:
     - https://github.com/struct/mms
     - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
     confidence: MEDIUM
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    - 'CWE-690: Unchecked Return Value to NULL Pointer Dereference'
+    - 'CWE-476: NULL Pointer Dereference'
+    - 'CWE-401: Memory Leak'
   message: The software does not check the return value from a method or function,
     which can prevent it from detecting unexpected states and conditions.
   severity: WARNING

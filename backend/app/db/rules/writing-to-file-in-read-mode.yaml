@@ -23,3 +23,8 @@ rules:
   severity: ERROR
   languages:
   - python
+  metadata:
+    cwe:
+    - 'CWE-248: Uncaught Exception'
+    - 'CWE-391: Unchecked Error Condition'
+    - 'CWE-703: Improper Check or Handling of Exceptional Condition'

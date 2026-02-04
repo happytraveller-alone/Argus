@@ -6,6 +6,14 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-377: Insecure Temporary File'
+    - 'CWE-367: Time-of-check Time-of-use'
+    - 'CWE-276: Incorrect Default Permissions'
+    - 'CWE-22: Path Traversal'
+    - 'CWE-676: Use of Potentially Dangerous Function'
 - id: deprecated-ioutil-readall
   pattern: ioutil.ReadAll($R)
   fix: io.ReadAll($R)

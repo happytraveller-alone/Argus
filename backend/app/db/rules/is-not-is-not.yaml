@@ -7,3 +7,7 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-480: Use of Incorrect Operator'
+    - 'CWE-710: Improper Adherence to Coding Standards'

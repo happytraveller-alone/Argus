@@ -77,3 +77,9 @@ rules:
   message: '$METHOD(),$PATH,$HTTPMETHOD,$SECURE
 
     '
+  metadata:
+    cwe:
+    - 'CWE-285: Improper Authorization'
+    - 'CWE-287: Improper Authentication'
+    - 'CWE-306: Missing Authentication for Critical Function'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'

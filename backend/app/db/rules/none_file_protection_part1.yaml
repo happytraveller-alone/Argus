@@ -13,6 +13,10 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-312: Cleartext storage of sensitive information'
+    - 'CWE-311: Missing Encryption of Sensitive Data'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
   message: 'This iOS mobile application seems using a insufficient data protection
     class when storing some files locally into the device. The usage of the data protection
     class "NSFileProtectionNone" or "FileProtectionType.none" means that the file

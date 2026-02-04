@@ -6,6 +6,13 @@ rules:
     - https://cwe.mitre.org/data/definitions/469
     - https://github.com/struct/mms
     confidence: MEDIUM
+    cwe:
+    - 'CWE-469: Use of Pointer Subtraction to Determine Size'
+    - 'CWE-758: Reliance on Undefined, Unspecified, or Implementation-specific Behavior'
+    - 'CWE-805: Buffer Access with Incorrect Length Value'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-787: Out-of-bounds Write'
   message: The software subtracts one pointer from another in order to determine size,
     but this calculation can be incorrect if the pointers do not exist in the same
     memory chunk.

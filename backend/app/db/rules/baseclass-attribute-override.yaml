@@ -8,3 +8,7 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-284: Improper Access Control'
+    - 'CWE-665: Improper Initialization'

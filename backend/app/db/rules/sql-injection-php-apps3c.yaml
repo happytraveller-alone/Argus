@@ -154,3 +154,7 @@ rules:
         metavariable: $SELECT
         regex: (?is)^["']+\s*(select |delete |insert |create |update |alter |drop
           ).*["']+
+  metadata:
+    cwe:
+    - 'CWE-89: SQL Injection'
+    - 'CWE-20: Improper Input Validation'

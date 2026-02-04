@@ -16,3 +16,12 @@ rules:
     category: testing
     technology:
     - go
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-89: SQL Injection'
+    - 'CWE-94: Improper Control of Generation of Code'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-494: Download of Code Without Integrity Check'
+    - 'CWE-502: Deserialization of Untrusted Data'

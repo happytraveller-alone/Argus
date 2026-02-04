@@ -6,6 +6,11 @@ rules:
     - https://cwe.mitre.org/data/definitions/377
     - https://cwe.mitre.org/data/definitions/367
     confidence: HIGH
+    cwe:
+    - 'CWE-377: Insecure Temporary File'
+    - 'CWE-367: Time-of-check Time-of-use Race Condition'
+    - 'CWE-330: Use of Insufficiently Random Values'
+    - 'CWE-276: Incorrect Default Permissions'
   message: Creating and using insecure temporary files can leave application and system
     data vulnerable to attack.
   severity: WARNING

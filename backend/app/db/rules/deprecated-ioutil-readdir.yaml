@@ -6,6 +6,12 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-772: Missing Release of Resource'
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-377: Insecure Temporary File'
+    - 'CWE-732: Incorrect Permission Assignment for Critical Resource'
 - id: deprecated-ioutil-readall
   pattern: ioutil.ReadAll($R)
   fix: io.ReadAll($R)

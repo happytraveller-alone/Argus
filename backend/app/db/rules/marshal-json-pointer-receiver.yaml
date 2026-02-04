@@ -8,3 +8,6 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'

@@ -14,3 +14,7 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-116: Improper Encoding or Escaping of Output'

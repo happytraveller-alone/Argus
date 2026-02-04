@@ -90,3 +90,10 @@ rules:
                 ...>));
 
                 ...'
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-23: Relative Path Traversal'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-59: Improper Link Resolution Before File Access'
+    - 'CWE-367: Time-of-check Time-of-use Race Condition'

@@ -6,6 +6,10 @@ rules:
     - https://cwe.mitre.org/data/definitions/367
     - https://g.co/kgs/PCHQjJ
     confidence: HIGH
+    cwe:
+    - 'CWE-367: Time-of-check Time-of-use Race Condition'
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization'
+    - 'CWE-59: Improper Link Following'
   message: The software checks the state of a resource before using it, but the  resource's
     state can change between the check and the use in a way that  invalidates the
     results of the check. This canmcause the software to  perform invalid actions

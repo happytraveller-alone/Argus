@@ -6,6 +6,9 @@ rules:
     - https://cwe.mitre.org/data/definitions/590
     - https://github.com/shellphish/how2heap/blob/master/glibc_2.23/house_of_spirit.c
     confidence: MEDIUM
+    cwe:
+    - 'CWE-590: Free of Memory not on the Heap'
+    - 'CWE-416: Use After Free'
   message: The software calls free() on a pointer to memory that has a short  lifetime
     and was not allocated using associated heap allocation  functions such as malloc(),
     calloc(), or realloc().

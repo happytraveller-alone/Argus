@@ -7,3 +7,7 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-285: Improper Authorization'

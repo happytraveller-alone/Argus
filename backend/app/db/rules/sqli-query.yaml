@@ -4,6 +4,10 @@ rules:
   metadata:
     author: Maurizio Siddu
     confidence: high
+    cwe:
+    - 'CWE-89: SQL Injection'
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-74: Improper Neutralization of Special Elements in Output Used by a Downstream Component'
   references:
   - https://owasp.org/www-community/attacks/SQL_Injection
   - https://cwe.mitre.org/data/definitions/89.html

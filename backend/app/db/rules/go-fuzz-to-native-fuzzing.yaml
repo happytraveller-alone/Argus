@@ -9,3 +9,13 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-476: NULL Pointer Dereference'
+    - 'CWE-416: Use After Free'

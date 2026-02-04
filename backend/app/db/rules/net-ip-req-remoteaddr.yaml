@@ -7,3 +7,6 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-20: Improper Input Validation'

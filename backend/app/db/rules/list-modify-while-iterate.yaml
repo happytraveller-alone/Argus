@@ -15,3 +15,7 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-672: Modification of collection during iteration'
+    - 'CWE-835: Loop with Unreachable Exit Condition'

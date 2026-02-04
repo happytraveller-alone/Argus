@@ -18,3 +18,7 @@ rules:
   - metavariable-regex:
       metavariable: $EXTERNAL
       regex: (\<\?\=.*\>)
+  metadata:
+    cwe:
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+    - 'CWE-116: Improper Encoding or Escaping of Output'

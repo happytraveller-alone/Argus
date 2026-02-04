@@ -14,6 +14,11 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-284: Improper Access Control'
+    - 'CWE-732: Incorrect Permission Assignment for Critical Resource'
+    - 'CWE-522: Insufficiently Protected Credentials'
+    - 'CWE-200: Information Exposure'
   message: This iOS mobile application seems configured with a weak Keychain protection,
     because presents the deprecated Keychian attribute "kSecAttrAccessibleAlways"
     or  "kSecAttrAccessibleAlwaysThisDeviceOnly". These weak Keychain protection attributes

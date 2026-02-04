@@ -7,6 +7,11 @@ rules:
     - https://cwe.mitre.org/data/definitions/590
     - https://github.com/struct/mms
     confidence: LOW
+    cwe:
+    - 'CWE-762: Mismatched Memory Management Routines'
+    - 'CWE-590: Free of Memory Not on Heap'
+    - 'CWE-415: Double Free'
+    - 'CWE-416: Use After Free'
   message: The software attempts to return a memory resource to the system, but it
     calls a release function that is not compatible with the function that was originally
     used to allocate that resource. Due to inherent limitations of Semgrep, this rule

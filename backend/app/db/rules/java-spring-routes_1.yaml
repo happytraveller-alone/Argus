@@ -47,3 +47,8 @@ rules:
     '
   fix: ''
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-284: Improper Access Control'
+    - 'CWE-285: Improper Authorization'
+    - 'CWE-306: Missing Authentication for a Critical Function'

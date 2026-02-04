@@ -10,6 +10,10 @@ rules:
   languages:
   - go
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-571: Expression is Always True/False'
+    - 'CWE-561: Dead Code'
 - id: useless-if-body
   patterns:
   - pattern: "if ($X) {\n    $S\n} else {\n    $S\n}"

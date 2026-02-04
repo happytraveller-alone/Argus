@@ -18,3 +18,8 @@ rules:
     - pattern-not: return $AAAA.beforeAction(...);
     - pattern-not: return $AAAA::beforeAction(...);
     - pattern-not: return beforeAction(...);
+  metadata:
+    cwe:
+    - 'CWE-287: Improper Authentication'
+    - 'CWE-285: Improper Authorization'
+    - 'CWE-306: Missing Authentication for Critical Function'

@@ -5,6 +5,10 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression Is Always True/False'
+    - 'CWE-704: Incorrect Type Conversion or Cast'
 - id: string-is-comparison
   patterns:
   - pattern-not: $S is None

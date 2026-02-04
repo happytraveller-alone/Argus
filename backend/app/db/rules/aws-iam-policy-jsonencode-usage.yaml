@@ -21,3 +21,8 @@ rules:
   languages:
   - terraform
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-284: Improper Access Control'
+    - 'CWE-732: Incorrect Permission Assignment for a Critical Resource'
+    - 'CWE-20: Improper Input Validation'

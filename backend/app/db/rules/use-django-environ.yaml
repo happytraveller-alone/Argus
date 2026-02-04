@@ -36,3 +36,8 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-200: Exposure of Sensitive Information'
+    - 'CWE-522: Insufficiently Protected Credentials'
+    - 'CWE-532: Inclusion of Sensitive Information in Log Files'

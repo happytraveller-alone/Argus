@@ -14,3 +14,7 @@ rules:
   severity: WARNING
   languages:
   - python
+  metadata:
+    cwe:
+    - 'CWE-682: Incorrect Calculation'
+    - 'CWE-20: Improper Input Validation'

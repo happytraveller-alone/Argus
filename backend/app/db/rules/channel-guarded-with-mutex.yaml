@@ -27,3 +27,7 @@ rules:
   languages:
   - go
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-667: Improper Locking'
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization'

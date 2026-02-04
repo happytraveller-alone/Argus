@@ -82,3 +82,9 @@ rules:
                 $PATH = File.expand_path(..., $NAME)
 
                 ...'
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-36: Absolute Path Traversal'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-20: Improper Input Validation'

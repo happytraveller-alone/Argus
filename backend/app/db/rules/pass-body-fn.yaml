@@ -9,6 +9,10 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-398: Indicator of Poor Code Quality'
+    - 'CWE-561: Dead Code'
 - id: pass-body-range
   pattern: "for $X in $Y:\n    pass\n"
   message: '`pass` is the body of for $X in $Y. Consider removing this or raise NotImplementedError()

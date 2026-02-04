@@ -12,6 +12,11 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-311: Missing Encryption of Sensitive Data'
+    - 'CWE-312: Cleartext Storage in a File or on Disk'
+    - 'CWE-922: Insecure Storage of Sensitive Information'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
   message: This iOS mobile application seems using a insecure storage mechanism, that
     does not guarantee its confidentiality, to store some data locally into the device.  In
     particular, there are some insecure storage methods offered by the platform which

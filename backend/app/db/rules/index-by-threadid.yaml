@@ -26,6 +26,8 @@ rules:
     references:
     - https://www.julialang.org/blog/2023/07/PSA-dont-use-threadid/
     license: LGPL
+    cwe:
+    - 'CWE-362: Concurrent Execution using Shared Resources'
   languages:
   - julia
   severity: WARNING

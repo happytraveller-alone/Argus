@@ -12,6 +12,12 @@ rules:
     impact: LOW
     technology:
     - ios
+    cwe:
+    - 'CWE-200: Information Exposure'
+    - 'CWE-319: Cleartext Transmission of Sensitive Information'
+    - 'CWE-285: Improper Authorization'
+    - 'CWE-732: Incorrect Permission Assignment for Critical Resource'
+    - 'CWE-749: Exposed Dangerous Method or Function'
   message: 'This iOS mobile application seems calling critical device features (like:
     send SMS, make phone call, or send email) during its functioning.  Given the sensitivity
     of these features developers must take caution when using them, because theyir

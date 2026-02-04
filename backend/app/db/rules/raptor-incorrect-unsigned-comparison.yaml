@@ -6,6 +6,10 @@ rules:
     - https://cwe.mitre.org/data/definitions/697
     - https://g.co/kgs/PCHQjJ
     confidence: HIGH
+    cwe:
+    - 'CWE-571: Expression is Always True/False'
+    - 'CWE-697: Incorrect Comparison'
+    - 'CWE-681: Incorrect Conversion between Numeric Types'
   message: Checking if an unsigned variable is negative makes no sense and is usually
     a good indication that something is probably wrong with the code.
   severity: WARNING

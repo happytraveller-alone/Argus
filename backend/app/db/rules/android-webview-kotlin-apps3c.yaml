@@ -36,3 +36,10 @@ rules:
   - pattern: setAllowUniversalAccessFromFileURLs(...)
   - pattern: allowUniversalAccessFromFileURLs = ...
   - pattern: $OBJ.allowUniversalAccessFromFileURLs = ...
+  metadata:
+    cwe:
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-94: Improper Control of Generation of Code'
+    - 'CWE-200: Information Exposure'
+    - 'CWE-22: Path Traversal'
+    - 'CWE-732: Incorrect Permission Assignment for Critical Resource'

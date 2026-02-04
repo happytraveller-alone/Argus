@@ -93,3 +93,9 @@ rules:
                 ...>));
 
                 ...'
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory (''Path
+      Traversal'')'
+    - 'CWE-36: Absolute Path Traversal'
+    - 'CWE-73: External Control of File Name or Path'

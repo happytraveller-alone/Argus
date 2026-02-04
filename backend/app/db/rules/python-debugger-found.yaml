@@ -7,3 +7,7 @@ rules:
   severity: WARNING
   languages:
   - python
+  metadata:
+    cwe:
+    - 'CWE-489: Leftover Debug Code'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'

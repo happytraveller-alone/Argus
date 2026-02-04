@@ -13,3 +13,7 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-704: Incorrect Type Conversion or Cast'
+    - 'CWE-843: Access of Resource Using Incompatible Type'

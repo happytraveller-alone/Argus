@@ -6,6 +6,10 @@ rules:
     - https://lwn.net/Articles/507319/
     - https://g.co/kgs/PCHQjJ
     confidence: MEDIUM
+    cwe:
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-125: Out-of-bounds Read'
   message: The strlcpy() and strlcat() functions return the total length of the string
     they tried to create. For strlcpy() that means the length of the source string.
     For strlcat() that means the initial length of the destination string plus the

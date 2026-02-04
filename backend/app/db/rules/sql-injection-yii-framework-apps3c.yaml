@@ -539,3 +539,7 @@ rules:
       regex: (?is)^["']+\s*(select |insert |update |delete |selectDistinct |from |where
         |andWhere |orWhere |join |leftJoin |rightJoin |crossJoin |naturalJoin |group
         |having |order |orderBy |limit |offset |union ).*["']+
+  metadata:
+    cwe:
+    - 'CWE-89: SQL Injection'
+    - 'CWE-20: Improper Input Validation'

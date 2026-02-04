@@ -10,3 +10,8 @@ rules:
   message: 'Function: $FUNCTIONNAME, name: $VARIABLE
 
     '
+  metadata:
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command'
+    - 'CWE-74: Improper Neutralization of Special Elements in Output Used by a Downstream Component'
+    - 'CWE-20: Improper Input Validation'

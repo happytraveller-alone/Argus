@@ -7,6 +7,13 @@ rules:
     - https://cwe.mitre.org/data/definitions/615
     - https://btlr.dev/blog/how-to-find-vulnerabilities-in-code-bad-words
     confidence: LOW
+    cwe:
+    - 'CWE-546: Suspicious Comment'
+    - 'CWE-615: Information Exposure by Comment'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-259: Use of Hard-coded Password'
+    - 'CWE-321: Use of Hard-coded Cryptographic Key'
+    - 'CWE-798: Use of Hard-coded Credentials'
   message: The code contains comments that suggest the presence of bugs, incomplete
     functionality, or weaknesses. Many suspicious comments, such as BUG, HACK, FIXME,
     LATER, LATER2, TODO, in the code indicate missing security functionality and checking.

@@ -19,3 +19,6 @@ rules:
     category: correctness
     technology:
     - c
+    cwe:
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-117: Improper Output Neutralization for Logs or Logs/Output Integrity'

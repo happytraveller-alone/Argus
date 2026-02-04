@@ -6,6 +6,14 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
+    - 'CWE-1104: Use of Unmaintained Third-Party Component'
+    - 'CWE-601: URL Redirection to Untrusted Site'
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-400: Uncontrolled Resource Consumption'
 - id: django-compat-2_0-check-aggregate-support
   pattern: django.db.backends.base.BaseDatabaseOperations.check_aggregate_support(...)
   message: django.db.backends.base.BaseDatabaseOperations.check_aggregate_support()

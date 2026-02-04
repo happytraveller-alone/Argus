@@ -13,3 +13,6 @@ rules:
     category: security
     technology:
     - python
+    cwe:
+    - 'CWE-78: OS Command Injection'
+    - 'CWE-20: Improper Input Validation'

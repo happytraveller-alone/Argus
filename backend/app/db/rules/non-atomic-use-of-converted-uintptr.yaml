@@ -11,6 +11,10 @@ rules:
     confidence: MEDIUM
     technology:
     - golang
+    cwe:
+    - 'CWE-362: Race Condition'
+    - 'CWE-416: Use After Free'
+    - 'CWE-704: Incorrect Type Conversion or Cast'
   severity: WARNING
   languages:
   - go

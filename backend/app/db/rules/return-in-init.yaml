@@ -8,6 +8,10 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-391: Unchecked Error Condition'
 - id: yield-in-init
   patterns:
   - pattern-inside: "class A(...):\n    ...\n    def __init__(...):\n        ...\n"

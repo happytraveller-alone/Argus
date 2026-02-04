@@ -6,6 +6,10 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-398: Indicator of Poor Code Quality'
 - id: use-write-not-fprint
   patterns:
   - pattern: fmt.Fprint($W, string($VAR))

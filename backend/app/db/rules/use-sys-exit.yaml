@@ -8,3 +8,8 @@ rules:
   patterns:
   - pattern: exit(...)
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-400: Uncontrolled Resource Consumption (Denial of Service)'

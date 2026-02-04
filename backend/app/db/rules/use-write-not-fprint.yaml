@@ -6,6 +6,11 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-770: Allocation of Resources Without Limits or Throttling'
+    - 'CWE-401: Memory Leak'
 - id: use-write-not-fprint
   patterns:
   - pattern: fmt.Fprint($W, string($VAR))

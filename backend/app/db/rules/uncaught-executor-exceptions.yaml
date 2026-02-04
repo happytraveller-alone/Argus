@@ -24,3 +24,8 @@ rules:
   severity: WARNING
   languages:
   - python
+  metadata:
+    cwe:
+    - 'CWE-248: Uncaught Exception'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-252: Unchecked Return Value'

@@ -22,3 +22,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-682: Incorrect Calculation'
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-758: Reliance on Undefined Behavior'
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm or Approach'

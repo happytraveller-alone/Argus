@@ -9,6 +9,8 @@ rules:
     - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
     - https://dustri.org/b/playing-with-weggli.html
     confidence: MEDIUM
+    cwe:
+    - 'CWE-415: Double Free'
   message: The software calls free() twice on the same memory address, potentially  leading
     to memory corruption. This corruption can cause the program to  crash or cause
     two later calls to malloc() to return the same pointer.

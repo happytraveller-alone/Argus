@@ -14,6 +14,11 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-611: Improper Restriction of XML External Entity Reference'
+    - 'CWE-918: Server-Side Request Forgery'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-400: Uncontrolled Resource Consumption'
   message: The iOS mobile application could be vulnerable to XXE attacks, because
     the resolution of XML external entities in DTD is enabled on it.  This kind of
     vulnerabilities may lead to the disclosure of confidential data, denial of service,

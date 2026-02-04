@@ -14,3 +14,7 @@ rules:
   message: '$VALUE1, $VALUE2, $VALUE3
 
     '
+  metadata:
+    cwe:
+    - 'CWE-532: Inclusion of Sensitive Information in Log Files'
+    - 'CWE-117: Improper Output Neutralization for Logs'

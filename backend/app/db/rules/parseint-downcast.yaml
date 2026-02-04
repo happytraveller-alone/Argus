@@ -48,3 +48,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-197: Numeric Truncation Error'
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-704: Incorrect Type Conversion or Cast'
+    - 'CWE-20: Improper Input Validation'

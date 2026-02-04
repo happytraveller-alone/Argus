@@ -5,6 +5,9 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
 - id: python36-compatibility-Popen1
   pattern: subprocess.Popen(errors=$X, ...)
   message: the `errors` argument to Popen is only available on Python 3.6+

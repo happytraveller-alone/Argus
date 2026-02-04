@@ -4,6 +4,10 @@ rules:
   metadata:
     author: Maurizio Siddu
     confidence: high
+    cwe:
+    - 'CWE-78: OS Command Injection'
+    - 'CWE-77: Command Injection'
+    - 'CWE-20: Improper Input Validation'
   references:
   - https://owasp.org/www-community/attacks/Command_Injection
   - https://cwe.mitre.org/data/definitions/77.html

@@ -8,6 +8,15 @@ rules:
   languages:
   - javascript
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-79: Cross-site Scripting (XSS) — usage like alert($X)/prompt($X) can expose
+      XSS sinks when $X contains untrusted input'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor — alert/confirm/prompt/debugger
+      can leak sensitive internal data in production'
+    - 'CWE-532: Information Exposure Through Log Files (and similar debugging artifacts)
+      — presence of debugger/alert-based debugging can expose debug information or
+      secrets in production'
 - id: javascript-debugger
   pattern: debugger;
   message: found debugger call; should this be in production code?

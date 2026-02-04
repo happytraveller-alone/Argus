@@ -19,3 +19,7 @@ rules:
     category: security
     technology:
     - c
+    cwe:
+    - 'CWE-200: Exposure of Sensitive Information'
+    - 'CWE-401: Memory Leak'
+    - 'CWE-416: Use After Free'

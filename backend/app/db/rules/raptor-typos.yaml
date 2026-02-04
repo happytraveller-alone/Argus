@@ -10,6 +10,16 @@ rules:
     - https://g.co/kgs/PCHQjJ
     - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
     confidence: LOW
+    cwe:
+    - 'CWE-480: Use of Incorrect Operator'
+    - 'CWE-481: Assigning Instead of Comparing'
+    - 'CWE-482: Comparing Instead of Assigning'
+    - 'CWE-483: Incorrect Block Delimitation'
+    - 'CWE-571: Expression Is Always True'
+    - 'CWE-682: Incorrect Calculation'
+    - 'CWE-704: Incorrect Type Conversion or Cast'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-120: Buffer Copy without Checking Size of Input'
   message: The programmer accidentally uses the wrong operator, which changes the
     application logic in security-relevant ways. This rule also covers some other
     common typo patterns.

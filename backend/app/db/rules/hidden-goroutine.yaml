@@ -14,3 +14,8 @@ rules:
   languages:
   - go
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-362: Race Condition'
+    - 'CWE-401: Memory Leak'
+    - 'CWE-400: Uncontrolled Resource Consumption'

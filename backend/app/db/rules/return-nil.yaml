@@ -8,3 +8,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-476: NULL Pointer Dereference'

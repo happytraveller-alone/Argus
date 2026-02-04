@@ -12,6 +12,10 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-94: Code Injection'
+    - 'CWE-200: Information Exposure'
   message: "This iOS mobile application seems using a WKWebView object weakly configured\
     \ from a security point of view, as its settings present any of the following\
     \ flaws:\n  - WKWebView has JavaScript support not explicitly disabled (enabled\

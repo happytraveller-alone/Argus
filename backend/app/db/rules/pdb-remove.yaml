@@ -10,3 +10,7 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-534: Information Exposure Through Debug Information'
+    - 'CWE-200: Exposure of Sensitive Information'

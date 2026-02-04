@@ -10,3 +10,8 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-843: Access of Resource Using Incompatible Type'
+    - 'CWE-398: Indicator of Poor Code Quality'
+    - 'CWE-710: Improper Adherence to Coding Standards'

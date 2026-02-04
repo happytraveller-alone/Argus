@@ -13,6 +13,9 @@ rules:
     impact: HIGH
     technology:
     - ios
+    cwe:
+    - 'CWE-89: SQL Injection'
+    - 'CWE-20: Improper Input Validation'
   message: 'This iOS mobile application could be vulnerable to SQL Injection, because
     the SQL queries are built as string by concatenating code and untrusted input.
     A successful SQL injection exploit can read sensitive data from the database,

@@ -15,6 +15,18 @@ rules:
     - http://www.phrack.org/issues/60/10.html#article
     - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
     confidence: LOW
+    cwe:
+    - 'CWE-195: Signed to Unsigned Conversion Error'
+    - 'CWE-196: Unsigned to Signed Conversion Error'
+    - 'CWE-194: Unexpected Sign Extension'
+    - 'CWE-681: Incorrect Conversion between Numeric Types'
+    - 'CWE-789: Uncontrolled Memory Allocation'
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-191: Integer Underflow (Wrap or Wraparound)'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer
+      (Buffer Overflow)'
+    - 'CWE-124: Buffer Underwrite (''Buffer Underflow'')'
+    - 'CWE-122: Heap-based Buffer Overflow'
   message: The software uses a signed primitive and performs a cast to an unsigned
     primitive, or uses an unsigned primitive and performs a cast to a signed primitive,
     which can produce an unexpected value. When the result of a function is to be

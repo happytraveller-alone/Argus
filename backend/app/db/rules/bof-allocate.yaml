@@ -4,6 +4,11 @@ rules:
   metadata:
     author: Maurizio Siddu
     confidence: high
+    cwe:
+    - 'CWE-120: Buffer Copy without Checking Size of Input'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-20: Improper Input Validation'
   references:
   - https://owasp.org/www-community/vulnerabilities/Buffer_Overflow
   - https://cwe.mitre.org/data/definitions/120.html

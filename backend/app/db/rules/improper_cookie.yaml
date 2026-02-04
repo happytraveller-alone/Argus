@@ -8,6 +8,10 @@ rules:
     - https://cwe.mitre.org/data/definitions/1004.html
     - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/06-Session_Management_Testing/02-Testing_for_Cookies_Attributes
     category: security
+    cwe:
+    - 'CWE-319: Cleartext Transmission of Sensitive Information'
+    - 'CWE-1004: Cookies without HttpOnly/Secure flags'
+    - 'CWE-200: Information Exposure'
   message: This Java application seems not properly setting the security flags Secure
     and HttpOnly on some cookies, if these cookies contain sensitive information (i.e.
     session cookies) the attributes Secure and HttpOnly should be enabled. The Secure

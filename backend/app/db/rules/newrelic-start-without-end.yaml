@@ -21,3 +21,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-401: Memory Leak'

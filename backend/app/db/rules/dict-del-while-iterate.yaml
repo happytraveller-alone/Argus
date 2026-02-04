@@ -10,3 +10,8 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-672: Modification of Collection During Iteration'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-400: Uncontrolled Resource Consumption'

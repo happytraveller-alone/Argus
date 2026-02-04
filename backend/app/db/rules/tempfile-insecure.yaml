@@ -8,3 +8,7 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-377: Insecure Temporary File'
+    - 'CWE-367: Time-of-check Time-of-use Race Condition'

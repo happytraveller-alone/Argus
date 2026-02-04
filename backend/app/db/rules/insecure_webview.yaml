@@ -13,6 +13,11 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-94: Improper Control of Generation of Code'
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
   message: 'This iOS mobile application seems using an insecure WebView in-app browser,
     which could expose to various kind of vulnerabilities. More specifically, the
     usage of the deprecated UIWebView should be avoided, because it suffers of various

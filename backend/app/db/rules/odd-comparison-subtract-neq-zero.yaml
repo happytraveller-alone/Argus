@@ -7,6 +7,11 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-682: Incorrect Calculation'
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-480: Use of Incorrect Operator'
 - id: odd-comparison-subtract-neq-zero
   patterns:
   - pattern: $X - $Y != 0

@@ -19,3 +19,5 @@ rules:
     category: style
     technology:
     - go
+    cwe:
+    - 'CWE-398: Indicator of Poor Code Quality'

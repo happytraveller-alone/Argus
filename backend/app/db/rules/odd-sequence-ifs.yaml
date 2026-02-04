@@ -110,3 +110,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-561: Dead Code'
+    - 'CWE-571: Expression is Always True/False'

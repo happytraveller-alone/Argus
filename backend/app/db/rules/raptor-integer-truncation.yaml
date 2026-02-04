@@ -8,6 +8,13 @@ rules:
     - https://g.co/kgs/PCHQjJ
     - https://github.com/struct/mms
     confidence: LOW
+    cwe:
+    - 'CWE-197: Numeric Truncation Error'
+    - 'CWE-681: Incorrect Conversion between Numeric Types'
+    - 'CWE-195: Signed to Unsigned Conversion Error'
+    - 'CWE-194: Unexpected Sign Extension'
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
   message: Truncation errors occur when a primitive is cast to a primitive of a  smaller
     size and data is lost in the conversion. The value cannot be  trusted and the
     application will be in an undefined state.

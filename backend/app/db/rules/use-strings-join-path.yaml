@@ -10,3 +10,8 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-20: Improper Input Validation'

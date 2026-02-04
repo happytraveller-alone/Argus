@@ -18,3 +18,7 @@ rules:
       regex: metadata
   - focus-metavariable: $METADATA
   fix: "options:\n  interfile: true\nmetadata\n"
+  metadata:
+    cwe:
+    - 'CWE-16: Configuration'
+    - 'CWE-200: Information Exposure'

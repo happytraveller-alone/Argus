@@ -5,3 +5,7 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression is always true'
+    - 'CWE-561: Dead Code'

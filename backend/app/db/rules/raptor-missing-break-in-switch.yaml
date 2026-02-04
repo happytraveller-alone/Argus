@@ -8,6 +8,8 @@ rules:
     - https://github.com/struct/mms
     - https://github.com/returntocorp/semgrep/issues/4939
     confidence: LOW
+    cwe:
+    - 'CWE-484: Omitted Break Statement in Switch'
   message: The software omits a break statement within a switch or similar construct,
     causing code associated with multiple conditions to execute. This can cause problems
     when the programmer only intended to execute code associated with one condition.

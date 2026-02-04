@@ -43,3 +43,8 @@ rules:
   message: '$METHOD(),$PATH,$HTTPMETHOD,$SECURE
 
     '
+  metadata:
+    cwe:
+    - 'CWE-862: Missing Authorization'
+    - 'CWE-284: Improper Access Control'
+    - 'CWE-306: Missing Authentication for Critical Function'

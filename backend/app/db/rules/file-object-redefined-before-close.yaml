@@ -27,3 +27,8 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-404: Improper Resource Shutdown or Release'
+    - 'CWE-775: Missing Release of File Descriptor or Handle after Effective Lifetime'

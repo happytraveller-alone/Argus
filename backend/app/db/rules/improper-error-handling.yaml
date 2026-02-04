@@ -4,6 +4,11 @@ rules:
   metadata:
     author: Maurizio Siddu
     confidence: high
+    cwe:
+    - 'CWE-209: Information Exposure Through an Error Message'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-532: Insertion of Sensitive Information into Log File'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
   references:
   - https://owasp.org/www-community/Improper_Error_Handling
   - https://cwe.mitre.org/data/definitions/209.html

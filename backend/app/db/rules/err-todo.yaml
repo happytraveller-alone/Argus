@@ -13,3 +13,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Errors'
+    - 'CWE-252: Unchecked Return Value'

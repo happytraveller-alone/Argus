@@ -25,3 +25,8 @@ rules:
   - metavariable-regex:
       metavariable: $SELECT
       regex: (?is)^["']+\s*(select |delete |insert |create |update |alter |drop ).*["']+
+  metadata:
+    cwe:
+    - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command'
+    - 'CWE-20: Improper Input Validation — unsanitized/unchecked input being concatenated
+      into SQL statements'

@@ -26,3 +26,8 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-116: Improper Encoding or Escaping of Output'
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-918: Server-Side Request Forgery'

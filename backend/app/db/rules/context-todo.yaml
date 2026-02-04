@@ -9,3 +9,8 @@ rules:
   languages:
   - go
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-401: Memory Leak'

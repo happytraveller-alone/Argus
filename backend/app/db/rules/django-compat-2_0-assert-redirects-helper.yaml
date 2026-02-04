@@ -6,6 +6,13 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-401: Memory Leak'
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-94: Improper Control of Generation of Code'
+    - 'CWE-601: URL Redirection to Untrusted Site'
+    - 'CWE-200: Information Exposure'
 - id: django-compat-2_0-check-aggregate-support
   pattern: django.db.backends.base.BaseDatabaseOperations.check_aggregate_support(...)
   message: django.db.backends.base.BaseDatabaseOperations.check_aggregate_support()

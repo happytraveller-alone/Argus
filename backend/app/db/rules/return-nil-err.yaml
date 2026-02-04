@@ -8,3 +8,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-253: Incorrect Check for Function Return Value'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'

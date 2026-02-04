@@ -19,3 +19,6 @@ rules:
   severity: WARNING
   languages:
   - python
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'

@@ -28,3 +28,9 @@ rules:
             \  ...\n"
         - pattern-inside: "for $MEMBER in $FD.getmembers():\n  ...\n"
     - pattern: $FD.extractall(..., ..., ..., ..., ...)
+  metadata:
+    cwe:
+    - 'CWE-22: Path Traversal'
+    - 'CWE-36: Absolute Path Traversal'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-20: Improper Input Validation'

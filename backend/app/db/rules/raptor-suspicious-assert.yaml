@@ -6,6 +6,10 @@ rules:
     - https://legends2k.github.io/note/assert_vs_if/
     - https://github.com/struct/mms
     confidence: MEDIUM
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-617: Reachable Assertion'
   message: Most codebases define assertion macros which compile to a no-op on non-debug
     builds. If assertions are the only line of defense against untrusted input, the
     software may be exposed to attacks that leverage the lack of proper input checks.

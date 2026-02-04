@@ -23,6 +23,10 @@ rules:
   metadata:
     references:
     - https://overreacted.io/writing-resilient-components/#principle-1-dont-stop-the-data-flow
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-840: Business Logic Errors'
   languages:
   - typescript
   - javascript

@@ -7,6 +7,10 @@ rules:
     - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/04-Testing_for_Weak_Encryption
     - https://cwe.mitre.org/data/definitions/328.html
     category: security
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    - 'CWE-328: Reversible One-Way Hash'
+    - 'CWE-326: Inadequate Encryption Strength'
   message: This Java application uses a weak hashing algorithm, these hashed values
     result  vulnerable to various cryptographic attacks, which could allow to retrieve
     its plain-text value.  It is recommended to avoid the use of weak hashing algorithms.

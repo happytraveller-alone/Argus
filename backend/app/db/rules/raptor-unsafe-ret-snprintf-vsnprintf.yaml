@@ -7,6 +7,11 @@ rules:
     - https://g.co/kgs/PCHQjJ
     - https://dustri.org/b/playing-with-weggli.html
     confidence: MEDIUM
+    cwe:
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-252: Unchecked Return Value'
+    - 'CWE-131: Incorrect Calculation of Buffer Size'
   message: The snprintf() and vsnprintf() functions return the total length of the
     string they tried to create. Therefore, this return value can be larger than the
     size of the destination buffer. If it is used unsafely, e.g. as an index to write

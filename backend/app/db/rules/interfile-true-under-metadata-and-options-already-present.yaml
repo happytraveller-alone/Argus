@@ -27,3 +27,6 @@ rules:
     $FIRST_OPT
 
     '
+  metadata:
+    cwe:
+    - 'CWE-16: Configuration'

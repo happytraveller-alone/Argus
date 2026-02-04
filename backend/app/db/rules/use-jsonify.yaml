@@ -20,3 +20,8 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+    - 'CWE-116: Improper Encoding or Escaping of Output'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'

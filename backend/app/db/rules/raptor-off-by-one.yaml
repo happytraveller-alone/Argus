@@ -8,6 +8,12 @@ rules:
     - https://g.co/kgs/PCHQjJ
     - https://github.com/struct/mms
     confidence: MEDIUM
+    cwe:
+    - 'CWE-193: Off-by-one Error'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-131: Incorrect Calculation of Buffer Size'
   message: The software calculates or uses an incorrect maximum or minimum value that
     is 1 more, or 1 less, than the correct value.
   severity: WARNING

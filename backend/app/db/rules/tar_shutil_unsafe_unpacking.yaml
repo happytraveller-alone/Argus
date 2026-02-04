@@ -44,3 +44,9 @@ rules:
     - pattern-inside: '$DESTINATION_PATH = os.path.join($DEST, $FILENAME.name)
 
         ...'
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-36: Absolute Path Traversal'
+    - 'CWE-73: External Control of File Name or Path'
+    - 'CWE-59: Link Following'

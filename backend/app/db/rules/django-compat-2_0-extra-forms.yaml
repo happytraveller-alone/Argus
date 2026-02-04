@@ -6,6 +6,12 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function or Method'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-401: Memory Leak'
+    - 'CWE-601: URL Redirection to Untrusted Site'
 - id: django-compat-2_0-check-aggregate-support
   pattern: django.db.backends.base.BaseDatabaseOperations.check_aggregate_support(...)
   message: django.db.backends.base.BaseDatabaseOperations.check_aggregate_support()

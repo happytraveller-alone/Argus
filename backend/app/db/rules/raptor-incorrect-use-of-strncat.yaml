@@ -7,6 +7,10 @@ rules:
     - https://cwe.mitre.org/data/definitions/193
     - https://g.co/kgs/PCHQjJ
     confidence: HIGH
+    cwe:
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-193: Off-by-one Error'
   message: 'The strncat() function is nearly as dangerous as strcat(), in that it''s
     quite easy to misuse. The first common mistake is supplying the size of  the entire
     buffer instead of the size remaining in the buffer. A more  subtle mistake can

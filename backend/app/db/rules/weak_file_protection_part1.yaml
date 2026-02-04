@@ -14,6 +14,11 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-312: Cleartext Storage of Sensitive Information'
+    - 'CWE-732: Incorrect Permission Assignment for Critical Resource'
+    - 'CWE-276: Incorrect Default Permissions'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
   message: 'This iOS mobile application seems using a weak data protection class when
     storing some files locally into the device, this configuration could expose the
     files to undesiderated accesses because the data remain accessible under certain

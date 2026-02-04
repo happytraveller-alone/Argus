@@ -12,6 +12,11 @@ rules:
     impact: MEDIUM
     technology:
     - ios
+    cwe:
+    - 'CWE-89: SQL Injection'
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-74: Improper Neutralization of Special Elements in Output Used by a Downstream
+      Component'
   message: 'This iOS mobile application could be vulnerable to NoSQL Injection, because
     the NoSQL queries are built dynamically as string by concatenating code and untrusted
     input. A successful NoSQL injection exploit, similar to that of a SQL injection,

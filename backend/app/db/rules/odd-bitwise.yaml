@@ -13,3 +13,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression is Always True/False'
+    - 'CWE-682: Incorrect Calculation'

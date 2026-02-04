@@ -8,6 +8,10 @@ rules:
     - https://g.co/kgs/PCHQjJ
     - https://github.com/struct/mms
     confidence: MEDIUM
+    cwe:
+    - 'CWE-696: Incorrect Behavior Order'
+    - 'CWE-269: Improper Privilege Management'
+    - 'CWE-284: Improper Access Control'
   message: A compromised process might be able to regain elevated group privileges
     if set(e)gid() is called after set(e)uid(). A similar case is when  privileges
     are temporarily dropped with seteuid() and then setuid() or  seteuid() are called

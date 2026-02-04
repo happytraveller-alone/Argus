@@ -22,3 +22,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-209: Generation of Error Message Containing Sensitive Information'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'

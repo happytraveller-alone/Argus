@@ -27,3 +27,8 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    - 'CWE-347: Improper Verification of Cryptographic Signature'
+    - 'CWE-665: Improper Initialization'

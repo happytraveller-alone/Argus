@@ -37,6 +37,10 @@ rules:
   metadata:
     references:
     - https://requests.readthedocs.io/en/master/api/#requests.Response.raise_for_status
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    - 'CWE-391: Unchecked Error Condition'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
   severity: WARNING
   languages:
   - python

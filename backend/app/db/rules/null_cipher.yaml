@@ -7,6 +7,10 @@ rules:
     - https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html
     - https://cwe.mitre.org/data/definitions/327.html
     category: security
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    - 'CWE-326: Inadequate Encryption Strength'
+    - 'CWE-311: Missing Encryption of Sensitive Data'
   message: This Java application uses a weak cipher, the use of NULL cipher does not
     perform any encryption, this does not offer any protection to the confidentiality
     of data.  It is recommended to avoid the use of NULL cipher.

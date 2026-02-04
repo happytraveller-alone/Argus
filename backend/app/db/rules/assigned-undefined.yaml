@@ -11,3 +11,8 @@ rules:
   - pattern: const undefined = $X;
   - pattern: undefined = $X
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-758: Reliance on Undefined Behavior'
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-710: Improper Adherence to Coding Standards'

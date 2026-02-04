@@ -43,3 +43,8 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-367: Time-of-check Time-of-use Race Condition'
+    - 'CWE-377: Insecure Temporary File'
+    - 'CWE-772: Missing Release of Resource'

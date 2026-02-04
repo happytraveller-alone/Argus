@@ -10,3 +10,7 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-252: Unchecked Return Value'
+    - 'CWE-391: Unchecked Error Condition'

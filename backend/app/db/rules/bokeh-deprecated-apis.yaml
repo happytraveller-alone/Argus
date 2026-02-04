@@ -14,3 +14,6 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'

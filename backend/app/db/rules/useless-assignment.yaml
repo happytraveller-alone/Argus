@@ -25,3 +25,7 @@ rules:
   languages:
   - javascript
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-563: Assignment to Variable without Use'
+    - 'CWE-398: Indicator of Poor Code Quality'

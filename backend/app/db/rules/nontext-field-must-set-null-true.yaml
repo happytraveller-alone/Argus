@@ -15,3 +15,7 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'

@@ -11,6 +11,11 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-367: Time-of-check Time-of-use Race Condition'
+    - 'CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization'
+    - 'CWE-400: Uncontrolled Resource Consumption'
 - id: manual-defaultdict-set-create
   patterns:
   - pattern-either:

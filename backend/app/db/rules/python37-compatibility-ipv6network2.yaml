@@ -5,6 +5,10 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-754: Improper Check for Unusual or Exceptional Conditions'
 - id: python37-compatibility-importlib2
   pattern: import importlib.resources
   message: this module is only available on Python 3.7+; use importlib_resources for

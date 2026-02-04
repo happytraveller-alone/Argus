@@ -11,6 +11,16 @@ rules:
     - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
     - https://dustri.org/b/playing-with-weggli.html
     confidence: MEDIUM
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-128: Wrap-around'
+    - 'CWE-131: Incorrect Calculation of Buffer Size'
+    - 'CWE-122: Heap-based Buffer Overflow'
+    - 'CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer'
+    - 'CWE-787: Out-of-bounds Write'
+    - 'CWE-125: Out-of-bounds Read'
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-20: Improper Input Validation'
   message: The software performs a calculation that can produce an integer overflow
     or wraparound, when the logic assumes that the resulting value will always be
     larger than the original value. This can introduce other weaknesses when the calculation

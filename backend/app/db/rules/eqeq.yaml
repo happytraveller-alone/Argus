@@ -14,3 +14,8 @@ rules:
   languages:
   - java
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-570: Expression is always true/false'
+    - 'CWE-480: Use of Incorrect Operator'
+    - 'CWE-561: Dead Code'

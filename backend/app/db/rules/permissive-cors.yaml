@@ -66,3 +66,8 @@ rules:
       "=~/\(\(\*\)\|\(^[Nn][Uu][Ll][Ll]$\)\)/")
   - pattern: ServerResponse.$RES().header("=~/[Aa][Cc][Cc][Ee][Ss][Ss][-][Cc][Oo][Nn][Tt][Rr][Oo][Ll][-][Aa][Ll][Ll][Oo][Ww][-][Oo][Rr][Ii][Gg][Ii][Nn]/",
       "=~/\(\(\*\)\|\(^[Nn][Uu][Ll][Ll]$\)\)/")
+  metadata:
+    cwe:
+    - 'CWE-346: Origin Validation Error'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
+    - 'CWE-284: Improper Access Control'

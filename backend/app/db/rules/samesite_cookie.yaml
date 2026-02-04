@@ -7,6 +7,11 @@ rules:
     - https://cwe.mitre.org/data/definitions/1275.html
     - https://owasp.org/www-community/SameSite
     category: security
+    cwe:
+    - 'CWE-1275: SameSite Cookie Attribute Not Set or Incorrect'
+    - 'CWE-352: Cross-Site Request Forgery (CSRF) — misconfigured/missing SameSite
+      increases risk of CSRF attacks'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'
   message: This Java application seems having the attribute SameSite disabled on some
     cookies, if these cookies contain sensitive information (i.e. session cookies)
     the flag SameSite should not be configured to None value. When the SameSite attribute

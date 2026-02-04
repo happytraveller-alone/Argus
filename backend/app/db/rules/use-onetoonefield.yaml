@@ -12,3 +12,8 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-284: Improper Access Control'
+    - 'CWE-710: Improper Adherence to Coding Standards'
+    - 'CWE-840: Business Logic Errors'

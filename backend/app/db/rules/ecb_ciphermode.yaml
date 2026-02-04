@@ -7,6 +7,9 @@ rules:
     - https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html#cipher-modes
     - https://cwe.mitre.org/data/definitions/327.html
     category: security
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    - 'CWE-326: Inadequate Encryption Strength'
   message: This Java application uses a weak cipher, the data encrypted using EBC
     mode block results vulnerable to various cryptographic attacks, which could allow
     to retrieve its plain-text value (note that when none mode is specified by default

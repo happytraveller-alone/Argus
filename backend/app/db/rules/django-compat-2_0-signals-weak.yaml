@@ -6,6 +6,9 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
 - id: django-compat-2_0-check-aggregate-support
   pattern: django.db.backends.base.BaseDatabaseOperations.check_aggregate_support(...)
   message: django.db.backends.base.BaseDatabaseOperations.check_aggregate_support()

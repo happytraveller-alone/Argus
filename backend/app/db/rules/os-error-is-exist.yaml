@@ -7,6 +7,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
 - id: os-error-is-not-exist
   patterns:
   - pattern: os.IsNotExist($ERR)

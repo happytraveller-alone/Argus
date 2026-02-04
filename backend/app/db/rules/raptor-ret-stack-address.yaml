@@ -9,6 +9,9 @@ rules:
     - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
     - https://rules.sonarsource.com/c/type/Bug/RSPEC-946
     confidence: MEDIUM
+    cwe:
+    - 'CWE-562: Return of Stack Variable Address'
+    - 'CWE-416: Use After Free'
   message: A function returns the address of a stack variable, which will cause unintended
     program behavior, typically in the form of a crash.
   severity: INFO

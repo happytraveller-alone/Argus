@@ -28,3 +28,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-347: Improper Verification of Cryptographic Signature'
+    - 'CWE-200: Information Exposure'

@@ -7,6 +7,10 @@ rules:
     - https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html#cipher-modes
     - https://cwe.mitre.org/data/definitions/327.html
     category: security
+    cwe:
+    - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
+    - 'CWE-310: Cryptographic Issues'
+    - 'CWE-200: Information Exposure'
   message: This Java application uses a weak cipher, the data encrypted using CBC
     mode block with PKCS5 and PKCS7 paddings results vulnerable to Padding Oracle
     attack, which could allow to retrieve its plain-text value. It is suggested to

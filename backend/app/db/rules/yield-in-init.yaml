@@ -8,6 +8,10 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
 - id: yield-in-init
   patterns:
   - pattern-inside: "class A(...):\n    ...\n    def __init__(...):\n        ...\n"

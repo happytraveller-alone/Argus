@@ -21,5 +21,9 @@ rules:
     references:
     - https://docs.angularjs.org/api/ng/service/$sce
     - https://owasp.org/www-chapter-london/assets/slides/OWASPLondon20170727_AngularJS.pdf
+    cwe:
+    - 'CWE-79: Cross-site Scripting'
+    - 'CWE-116: Improper Encoding or Escaping of Output'
+    - 'CWE-20: Improper Input Validation'
   fix: ''
   severity: WARNING

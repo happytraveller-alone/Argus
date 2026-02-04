@@ -10,6 +10,11 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-570: Expression is always true'
+    - 'CWE-571: Expression is always false'
+    - 'CWE-561: Dead Code'
 - id: hardcoded-eq-true-or-false
   patterns:
   - pattern-either:

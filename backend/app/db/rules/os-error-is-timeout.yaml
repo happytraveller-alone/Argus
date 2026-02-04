@@ -7,6 +7,10 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-253: Incorrect Check of Function Return Value'
 - id: os-error-is-not-exist
   patterns:
   - pattern: os.IsNotExist($ERR)

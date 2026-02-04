@@ -17,6 +17,11 @@ rules:
     references:
     - https://docs.angularjs.org/api/ng/service/$sce#trustAsUrl
     - https://owasp.org/www-chapter-london/assets/slides/OWASPLondon20170727_AngularJS.pdf
+    cwe:
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site
+      Scripting)'
+    - 'CWE-116: Improper Encoding or Escaping of Output'
+    - 'CWE-20: Improper Input Validation'
 - id: detect-angular-translateprovider-translations-method
   patterns:
   - pattern-either:

@@ -7,6 +7,11 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-682: Incorrect Calculation)'
+    - 'CWE-571: Expression Is Always True (or always false) — redundant/odd comparisons
+      that indicate logic errors'
 - id: odd-comparison-subtract-neq-zero
   patterns:
   - pattern: $X - $Y != 0

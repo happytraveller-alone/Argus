@@ -24,6 +24,12 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-476: NULL Pointer Dereference'
+    - 'CWE-665: Improper Initialization'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-20: Improper Input Validation'
 - id: string-field-must-set-null-true
   patterns:
   - pattern-inside: "class $M(...):\n  ...\n"

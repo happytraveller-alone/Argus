@@ -8,3 +8,8 @@ rules:
   languages:
   - java
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression is Always True/False'
+    - 'CWE-561: Dead Code'
+    - 'CWE-398: Indicator of Poor Code Quality'

@@ -72,3 +72,8 @@ rules:
 
               '
           - pattern-inside: $PATH = <... $ENTRY.entryName ...>
+  metadata:
+    cwe:
+    - 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory'
+    - 'CWE-23: Relative Path Traversal'
+    - 'CWE-73: External Control of File Name or Pathname'

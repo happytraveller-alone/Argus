@@ -58,3 +58,10 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
+    - 'CWE-384: Session Fixation'
+    - 'CWE-94: Improper Control of Generation of Code'
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor'

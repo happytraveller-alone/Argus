@@ -36,3 +36,8 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-772: Missing Release of Resource after Effective Lifetime'
+    - 'CWE-404: Improper Resource Shutdown or Release'
+    - 'CWE-400: Uncontrolled Resource Consumption (Resource Exhaustion)'
