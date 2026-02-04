@@ -18,6 +18,10 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-200: Information Exposure'
+    - 'CWE-400: Uncontrolled Resource Consumption'
 - id: use-fprintf-not-write-fsprint
   patterns:
   - pattern: $W.Write([]byte(fmt.Sprintf($...VALS)))
@@ -25,3 +29,7 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-400: Uncontrolled Resource Consumption'
+    - 'CWE-398: Indicator of Poor Code Quality'

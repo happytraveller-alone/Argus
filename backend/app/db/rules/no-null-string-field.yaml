@@ -46,3 +46,6 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-16: Configuration'

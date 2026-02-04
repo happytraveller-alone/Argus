@@ -20,6 +20,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
 - id: odd-comparison-subtract-lt-zero
   patterns:
   - pattern: $X - $Y < 0
@@ -28,6 +31,11 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-571: Expression Is Always True/False'
+    - 'CWE-682: Incorrect Calculation'
 - id: odd-comparison-subtract-lte-zero
   patterns:
   - pattern: $X - $Y <= 0
@@ -36,6 +44,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
 - id: odd-comparison-subtract-gt-zero
   patterns:
   - pattern: $X - $Y > 0
@@ -44,6 +55,10 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
+    - 'CWE-682: Incorrect Calculation'
 - id: odd-comparison-subtract-gte-zero
   patterns:
   - pattern: $X - $Y >= 0
@@ -52,6 +67,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-190: Integer Overflow or Wraparound'
 - id: odd-comparison-xor-eq-zero
   patterns:
   - pattern: $X ^ $Y == 0
@@ -60,6 +78,10 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-480: Use of Incorrect Operator'
+    - 'CWE-682: Incorrect Calculation'
 - id: odd-comparison-xor-neq-zero
   patterns:
   - pattern: $X ^ $Y != 0
@@ -68,3 +90,6 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-682: Incorrect Calculation'

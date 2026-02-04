@@ -19,12 +19,18 @@ rules:
   languages:
   - javascript
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-489: Leftover Debug Code'
 - id: javascript-confirm
   pattern: confirm(...)
   message: found conform() call; should this be in production code?
   languages:
   - javascript
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-602: Client-Side Enforcement of Server-Side Security'
 - id: javascript-prompt
   patterns:
   - pattern-either:
@@ -35,3 +41,8 @@ rules:
   languages:
   - javascript
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-20: Improper Input Validation'
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site
+      Scripting)'

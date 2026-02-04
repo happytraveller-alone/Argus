@@ -17,3 +17,7 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-399: Resource Management Errors'
+    - 'CWE-400: Uncontrolled Resource Consumption'

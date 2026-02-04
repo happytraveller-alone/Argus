@@ -21,12 +21,18 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
 - id: deprecated-ioutil-readdir
   pattern: ioutil.ReadDir($D)
   message: ioutil.ReadDir is deprecated
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
 - id: deprecated-ioutil-readfile
   pattern: ioutil.ReadFile($F)
   fix: os.ReadFile($F)
@@ -41,6 +47,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
 - id: deprecated-ioutil-tempfile
   pattern: ioutil.TempFile($D, $P)
   fix: os.CreateTemp($D, $P)
@@ -48,6 +57,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
 - id: deprecated-ioutil-writefile
   pattern: ioutil.WriteFile($F, $D, $P)
   fix: os.WriteFile($F, $D, $P)
@@ -55,6 +67,9 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'
 - id: deprecated-ioutil-discard
   pattern: ioutil.Discard
   fix: io.Discard
@@ -62,3 +77,6 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-676: Use of Potentially Dangerous Function'

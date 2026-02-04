@@ -15,9 +15,15 @@ rules:
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-688: Function Call With Incorrect Number of Arguments'
 - id: python36-compatibility-Popen2
   pattern: subprocess.Popen(encoding=$X, ...)
   message: the `encoding` argument to Popen is only available on Python 3.6+
   languages:
   - python
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-248: Uncaught Exception'

@@ -23,3 +23,7 @@ rules:
   languages:
   - go
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-398: Indicator of Poor Code Quality'
+    - 'CWE-561: Dead Code'

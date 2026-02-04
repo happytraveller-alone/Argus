@@ -18,6 +18,10 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
+    - 'CWE-253: Incorrect Check of Function Return Value'
 - id: os-error-is-permission
   patterns:
   - pattern: os.IsPermission($ERR)
@@ -26,6 +30,10 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-253: Incorrect Check of Function Return Value'
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'
 - id: os-error-is-timeout
   patterns:
   - pattern: os.IsTimeout(...)
@@ -33,3 +41,6 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-703: Improper Check or Handling of Exceptional Conditions'

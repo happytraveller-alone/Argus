@@ -24,3 +24,8 @@ rules:
   languages:
   - go
   severity: ERROR
+  metadata:
+    cwe:
+    - 'CWE-571: Expression Is Always True/False'
+    - 'CWE-561: Dead Code'
+    - 'CWE-398: Indicator of Poor Code Quality'

@@ -9,6 +9,7 @@ import sys
 import yaml
 import subprocess
 import tempfile
+from typing import Optional, List, Any
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -385,7 +386,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
             #     invalid_count += 1
             #     continue
             
-            for rule in rule_data['rules']:
+            for rule_idx, rule in enumerate(rule_data['rules']):
                 rule_id = rule.get('id', yaml_file.stem)
                 metadata = rule.get('metadata', {}) if isinstance(rule, dict) else {}
                 
@@ -418,12 +419,22 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
                 # 提取描述 - 如果没有则置空
                 description = rule.get('message') or None
                 
-                # 提取 CWE - 如果没有则置空
-                cwe = metadata.get('cwe')
+                # 提取 CWE - 优先规则字段，其次 metadata
+                # 检查顶层的 cwe 字段（可能是 None 或具体值）
+                cwe = None
+                if 'cwe' in rule and rule['cwe'] is not None:
+                    cwe = rule['cwe']
+                elif 'cwe' in metadata and metadata['cwe'] is not None:
+                    cwe = metadata['cwe']
+                
+                # 标准化 CWE 格式为列表
                 if cwe:
                     if isinstance(cwe, str):
                         cwe = [cwe]
-                    elif not isinstance(cwe, list):
+                    elif isinstance(cwe, list):
+                        # 确保列表中的所有元素都是字符串
+                        cwe = [str(c) for c in cwe if c]
+                    else:
                         cwe = None
                 else:
                     cwe = None
@@ -444,6 +455,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
                     }
                 )
                 existing_rule_ids.add(rule_id)  # 更新本地集合，防止同一批次重复
+                logger.debug(f"  ✓ 规则已准备入库: {rule_id} (CWE: {len(cwe) if cwe else 0})")
         
         except Exception as e:
             logger.error(f"加载规则文件失败 {yaml_file.name}: {e}")
@@ -528,7 +540,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
             #     continue
             
             # 通常 Patch 规则文件只包含一条规则
-            for rule in rule_data['rules']:
+            for rule_idx, rule in enumerate(rule_data['rules']):
                 rule_id = rule.get('id', yaml_file.stem)
                 metadata = rule.get('metadata', {}) if isinstance(rule, dict) else {}
                 
@@ -578,12 +590,22 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                     # 如果没有对应的 patch 文件，从 metadata 获取 URL
                     patch_content = metadata.get('source-url') or None
                 
-                # 提取 CWE - 如果没有则置空
-                cwe = metadata.get('cwe')
+                # 提取 CWE - 优先规则字段，其次 metadata
+                # 检查顶层的 cwe 字段（可能是 None 或具体值）
+                cwe = None
+                if 'cwe' in rule and rule['cwe'] is not None:
+                    cwe = rule['cwe']
+                elif 'cwe' in metadata and metadata['cwe'] is not None:
+                    cwe = metadata['cwe']
+                
+                # 标准化 CWE 格式为列表
                 if cwe:
                     if isinstance(cwe, str):
                         cwe = [cwe]
-                    elif not isinstance(cwe, list):
+                    elif isinstance(cwe, list):
+                        # 确保列表中的所有元素都是字符串
+                        cwe = [str(c) for c in cwe if c]
+                    else:
                         cwe = None
                 else:
                     cwe = None
@@ -605,6 +627,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                     }
                 )
                 existing_rule_ids.add(rule_id)  # 更新本地集合，防止同一批次重复
+                logger.debug(f"  ✓ 规则已准备入库: {rule_id} (CWE: {len(cwe) if cwe else 0})")
         
         except Exception as e:
             logger.error(f"加载规则文件失败 {yaml_file.relative_to(rules_dir)}: {e}")

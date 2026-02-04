@@ -18,12 +18,19 @@ rules:
   languages:
   - javascript
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-489: Leftover Debug Code'
+    - 'CWE-200: Information Exposure'
 - id: javascript-confirm
   pattern: confirm(...)
   message: found conform() call; should this be in production code?
   languages:
   - javascript
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-489: Leftover Debug Code'
 - id: javascript-prompt
   patterns:
   - pattern-either:
@@ -34,3 +41,7 @@ rules:
   languages:
   - javascript
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-489: Leftover Debug Code'
+    - 'CWE-200: Information Exposure'

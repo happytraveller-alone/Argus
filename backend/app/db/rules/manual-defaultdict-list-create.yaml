@@ -28,6 +28,9 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-398: Indicator of Poor Code Quality'
 - id: manual-defaultdict-list-create
   patterns:
   - pattern-either:
@@ -40,6 +43,10 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-362: Race Condition'
+    - 'CWE-366: Time-of-check Time-of-use (TOCTOU) Race Condition'
 - id: manual-counter-create
   pattern: "$DICT = {}\n...\nfor $KEY, $VALUE in $OTHERDICT.items():\n    ...\n  \
     \  if $KEY not in $DICT:\n        ...\n        $DICT[$KEY] = 0\n        ...\n\
@@ -48,3 +55,6 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-398: Indicator of Poor Code Quality'

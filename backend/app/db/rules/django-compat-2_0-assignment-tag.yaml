@@ -21,6 +21,9 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
 - id: django-compat-2_0-extra-forms
   patterns:
   - pattern-either:
@@ -36,6 +39,9 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
 - id: django-compat-2_0-assignment-tag
   patterns:
   - pattern-either:
@@ -45,6 +51,9 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
 - id: django-compat-2_0-assert-redirects-helper
   patterns:
   - pattern-either:
@@ -54,3 +63,6 @@ rules:
   languages:
   - python
   severity: WARNING
+  metadata:
+    cwe:
+    - 'CWE-477: Use of Obsolete Function'
