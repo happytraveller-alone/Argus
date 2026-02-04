@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     
     # ZIP文件存储配置
     ZIP_STORAGE_PATH: str = "./uploads/zip_files"  # ZIP文件存储目录
+
+    # 通用缓存目录（git缓存等）
+    CACHE_DIR: str = "./data/cache"  # 缓存目录基础路径
     
     # 输出语言配置 - 支持 zh-CN（中文）和 en-US（英文）
     OUTPUT_LANGUAGE: str = "zh-CN"

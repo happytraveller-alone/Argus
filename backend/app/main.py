@@ -1,5 +1,7 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +10,7 @@ from app.api.v1.api import api_router
 from app.core.config import settings
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
+from app.services.llm_rule.repo_cache_manager import GlobalRepoCacheManager
 from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
 from sqlalchemy.future import select
@@ -56,6 +59,25 @@ async def check_agent_services():
     return issues
 
 
+async def _run_daily_cache_cleanup(stop_event: asyncio.Event) -> None:
+    """每日清理一次缓存，直到收到停止信号。"""
+    while not stop_event.is_set():
+        try:
+            cleaned = GlobalRepoCacheManager.cleanup_unused_caches(
+                max_age_days=30,
+                max_unused_days=14,
+            )
+            if cleaned > 0:
+                logger.info(f"  - 定时清理完成，已清理 {cleaned} 个过期的 Git 项目缓存")
+        except Exception as e:
+            logger.warning(f"定时清理过期缓存失败: {e}")
+
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=24 * 60 * 60)
+        except asyncio.TimeoutError:
+            continue
+
+
 async def recover_interrupted_static_scan_tasks() -> None:
     """
     将上次异常退出时仍处于 running 状态的静态扫描任务标记为 interrupted。
@@ -96,9 +118,17 @@ async def recover_interrupted_static_scan_tasks() -> None:
 async def lifespan(app: FastAPI):
     """
     应用生命周期管理
-    启动时初始化数据库（创建默认账户等）
+    启动时初始化数据库（创建默认账户等）和全局缓存管理
     """
     logger.info("DeepAudit 后端服务启动中...")
+
+    # 初始化全局 Git 项目缓存管理器
+    try:
+        cache_dir = Path(settings.CACHE_DIR) / "repos"
+        GlobalRepoCacheManager.set_cache_dir(cache_dir)
+        logger.info(f"  - Git 项目缓存初始化完成: {cache_dir}")
+    except Exception as e:
+        logger.warning(f"Git 项目缓存初始化失败: {e}")
 
     # 初始化数据库（创建默认账户）
     # 注意：需要先运行 alembic upgrade head 创建表结构
@@ -140,7 +170,36 @@ async def lifespan(app: FastAPI):
     logger.info("无需账号即可使用")
     logger.info("=" * 50)
 
+    # 启动每日定时清理任务
+    stop_event = asyncio.Event()
+    app.state.cache_cleanup_stop = stop_event
+    app.state.cache_cleanup_task = asyncio.create_task(
+        _run_daily_cache_cleanup(stop_event)
+    )
+
     yield
+
+    # 清理资源
+    logger.info("清理资源...")
+    # 停止每日清理任务
+    try:
+        stop_event = getattr(app.state, "cache_cleanup_stop", None)
+        task = getattr(app.state, "cache_cleanup_task", None)
+        if stop_event and task:
+            stop_event.set()
+            await task
+    except Exception as e:
+        logger.warning(f"停止定时清理任务失败: {e}")
+    try:
+        # 可选：清理过期的 git 缓存（超过30天未使用的缓存）
+        cleaned = GlobalRepoCacheManager.cleanup_unused_caches(
+            max_age_days=30, 
+            max_unused_days=14
+        )
+        if cleaned > 0:
+            logger.info(f"  - 已清理 {cleaned} 个过期的 Git 项目缓存")
+    except Exception as e:
+        logger.warning(f"清理过期缓存失败: {e}")
 
     logger.info("DeepAudit 后端服务已关闭")
 

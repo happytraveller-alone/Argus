@@ -190,9 +190,18 @@ export interface PatchUploadResponse {
 }
 
 /**
+ * Patch 规则创建响应接口（新流程）
+ */
+export interface PatchRuleCreationResponse {
+    rule_ids: string[];
+    total_files: number;
+    message: string;
+}
+
+/**
  * Upload patch archive (zip) to generate rules
  */
-export async function uploadPatchArchive(file: File): Promise<PatchUploadResponse> {
+export async function uploadPatchArchive(file: File): Promise<PatchRuleCreationResponse> {
     const formData = new FormData();
     formData.append("file", file);
     const response = await apiClient.post(
@@ -210,7 +219,7 @@ export async function uploadPatchArchive(file: File): Promise<PatchUploadRespons
 /**
  * Upload patch directory to generate rules
  */
-export async function uploadPatchDirectory(files: File[]): Promise<PatchUploadResponse> {
+export async function uploadPatchDirectory(files: File[]): Promise<PatchRuleCreationResponse> {
     const formData = new FormData();
     files.forEach((file) => {
         formData.append("files", file);
@@ -224,6 +233,14 @@ export async function uploadPatchDirectory(files: File[]): Promise<PatchUploadRe
             },
         },
     );
+    return response.data;
+}
+
+/**
+ * Get all rules that are currently being generated (patch source, correct=false)
+ */
+export async function getGeneratingRules(): Promise<OpengrepRule[]> {
+    const response = await apiClient.get(`/static-tasks/rules/generating/status`);
     return response.data;
 }
 

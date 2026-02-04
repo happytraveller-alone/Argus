@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from app.schemas.opengrep import OpengrepRuleCreateRequest
+from app.core.config import settings
 
 from .llm_rule.config import Config
 from .llm_rule.git_manager import GitManager
@@ -37,7 +38,7 @@ class AutoGrep:
             return None
 
         try:
-            patch_info = self.patch_processor.process_patch(patch_file)
+            patch_info = await asyncio.to_thread(self.patch_processor.process_patch, patch_file)
             if not patch_info:
                 self.config.cache_manager.mark_patch_processed(patch_file.name)
                 logging.warning(f"Failed to process patch file: {patch_file}")
@@ -68,7 +69,7 @@ class AutoGrep:
                 }
 
             # Prepare repository
-            repo_path = self.git_manager.prepare_repo(patch_info)
+            repo_path = await asyncio.to_thread(self.git_manager.prepare_repo, patch_info)
             if not repo_path:
                 self.config.cache_manager.mark_repo_failed(repo_key, "Failed to prepare repository")
                 self.config.cache_manager.mark_patch_processed(patch_file.name)
@@ -87,8 +88,11 @@ class AutoGrep:
 
             # Check if any existing rules can detect this vulnerability
             existing_rules = self.rule_manager.rules.get(language, [])
-            is_detected, detecting_rule = self.rule_validator.check_existing_rules(
-                patch_info, repo_path, existing_rules
+            is_detected, detecting_rule = await asyncio.to_thread(
+                self.rule_validator.check_existing_rules,
+                patch_info,
+                repo_path,
+                existing_rules,
             )
 
             if is_detected:
@@ -125,8 +129,11 @@ class AutoGrep:
                     )
                     continue
 
-                is_valid, validation_error = self.rule_validator.validate_rule(
-                    rule, patch_info, repo_path
+                is_valid, validation_error = await asyncio.to_thread(
+                    self.rule_validator.validate_rule,
+                    rule,
+                    patch_info,
+                    repo_path,
                 )
 
                 if is_valid:
@@ -273,80 +280,130 @@ class AutoGrep:
 
 
 async def get_rule_by_patch(request: OpengrepRuleCreateRequest) -> Dict[str, Any]:
+    import tempfile
+    from .llm_rule.repo_cache_manager import GlobalRepoCacheManager
+    
     repo_owner = request.repo_owner
     repo_name = request.repo_name
     commit_hash = request.commit_hash
     commit_content = request.commit_content
 
-    temp_file = (
-        Path(__file__).parent
-        / "llm_rule"
-        / "patches"
-        / f"github.com_{repo_owner}_{repo_name}_{commit_hash}.patch"
-    )
-    temp_file.write_text(commit_content)
-
-    config = Config(
-        max_files_changed=1,
-        max_retries=3,
-    )
-
-    config.generated_rules_dir.mkdir(parents=True, exist_ok=True)
-    config.repos_cache_dir.mkdir(parents=True, exist_ok=True)
-    config.rules_dir.mkdir(parents=True, exist_ok=True)
-    config.patches_dir.mkdir(parents=True, exist_ok=True)
+    # 创建临时目录来存储 patch 和生成的规则
+    # 注意: Git 克隆缓存会保留在全局缓存中，不在这个临时目录中
+    temp_dir = tempfile.mkdtemp(prefix="patch_rule_")
+    
     try:
-        autogen = AutoGrep(config)
-        logging.info("Starting AutoGrep run for single patch...")
-        result = await autogen.process_patch(temp_file)
+        # 创建临时patch文件
+        temp_patches_dir = Path(temp_dir) / "patches"
+        temp_patches_dir.mkdir(parents=True, exist_ok=True)
+        
+        temp_file = temp_patches_dir / f"github.com_{repo_owner}_{repo_name}_{commit_hash}.patch"
+        temp_file.write_text(commit_content)
 
-        if result:
-            patch_info = result.get("patch_info")
-            language = None
-            if patch_info and patch_info.file_changes:
-                language = patch_info.file_changes[0].language
+        # 检查是否有现有的项目缓存
+        cached_repo_dir = GlobalRepoCacheManager.get_repo_cache(repo_owner, repo_name)
+        
+        # 创建Config并指向合适的目录
+        config = Config(
+            max_files_changed=1,
+            max_retries=3,
+        )
+        # 使用全局缓存或创建新的临时缓存目录
+        if cached_repo_dir:
+            # 使用现有的全局缓存
+            config.repos_cache_dir = cached_repo_dir.parent
+            logging.info(f"使用现有项目缓存: {cached_repo_dir}")
+        else:
+            # 创建临时缓存目录，后续会注册到全局缓存
+            config.repos_cache_dir = Path(temp_dir) / "cache" / "repos"
+            config.repos_cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        config.patches_dir = temp_patches_dir
+        config.generated_rules_dir = Path(temp_dir) / "generated_rules"
+        config.rules_dir = Path(temp_dir) / "rules"
+        # 重新初始化 cache_manager
+        config.cache_manager = config.cache_manager.__class__(config.repos_cache_dir)
+
+        # 创建所有必要的目录
+        config.generated_rules_dir.mkdir(parents=True, exist_ok=True)
+        config.repos_cache_dir.mkdir(parents=True, exist_ok=True)
+        config.rules_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            autogen = AutoGrep(config)
+            logging.info("Starting AutoGrep run for single patch...")
+            result = await autogen.process_patch(temp_file)
+
+            # 如果这是一个新克隆的项目，注册到全局缓存
+            if not cached_repo_dir:
+                repo_cache_path = config.repos_cache_dir / f"{repo_owner}_{repo_name}".replace("/", "_")
+                if repo_cache_path.exists():
+                    # 如果是从临时目录克隆的，需要移动到全局缓存位置
+                    global_cache_base = Path(settings.CACHE_DIR) / "repos"
+                    global_cache_base.mkdir(parents=True, exist_ok=True)
+                    global_repo_cache = global_cache_base / f"{repo_owner}_{repo_name}".replace("/", "_")
+                    
+                    if not global_repo_cache.exists():
+                        try:
+                            # 尝试将临时缓存移动到全局位置
+                            shutil.move(str(repo_cache_path), str(global_repo_cache))
+                            logging.info(f"已移动项目缓存到全局位置: {global_repo_cache}")
+                            GlobalRepoCacheManager.register_repo_cache(repo_owner, repo_name, global_repo_cache)
+                        except Exception as e:
+                            logging.warning(f"无法移动缓存到全局位置: {e}，保留在临时位置")
+                            GlobalRepoCacheManager.register_repo_cache(repo_owner, repo_name, repo_cache_path)
+                    else:
+                        # 全局位置已存在，清理临时的
+                        shutil.rmtree(repo_cache_path, ignore_errors=True)
+                        logging.info(f"全局缓存已存在，使用现有缓存")
+
+            if result:
+                patch_info = result.get("patch_info")
+                language = None
+                if patch_info and patch_info.file_changes:
+                    language = patch_info.file_changes[0].language
+
+                return {
+                    "rule": result.get("rule"),
+                    "validation": result.get("validation"),
+                    "attempts": result.get("attempts", []),
+                    "meta": {
+                        "repo_owner": repo_owner,
+                        "repo_name": repo_name,
+                        "commit_hash": commit_hash,
+                        "language": language,
+                    },
+                }
 
             return {
-                "rule": result.get("rule"),
-                "validation": result.get("validation"),
-                "attempts": result.get("attempts", []),
+                "rule": None,
+                "validation": {"is_valid": False, "message": "大模型生成规则失败，请稍后重试"},
+                "attempts": [],
                 "meta": {
                     "repo_owner": repo_owner,
                     "repo_name": repo_name,
                     "commit_hash": commit_hash,
-                    "language": language,
+                    "language": None,
                 },
             }
-
-        return {
-            "rule": None,
-            "validation": {"is_valid": False, "message": "大模型生成规则失败，请稍后重试"},
-            "attempts": [],
-            "meta": {
-                "repo_owner": repo_owner,
-                "repo_name": repo_name,
-                "commit_hash": commit_hash,
-                "language": None,
-            },
-        }
-    except Exception as e:
-        logging.error(f"Error running AutoGrep: {e}", exc_info=True)
-        return {
-            "rule": None,
-            "validation": {"is_valid": False, "message": "生成失败"},
-            "attempts": [],
-            "meta": {
-                "repo_owner": repo_owner,
-                "repo_name": repo_name,
-                "commit_hash": commit_hash,
-                "language": None,
-            },
-        }
+        except Exception as e:
+            logging.error(f"Error running AutoGrep: {e}", exc_info=True)
+            return {
+                "rule": None,
+                "validation": {"is_valid": False, "message": "生成失败"},
+                "attempts": [],
+                "meta": {
+                    "repo_owner": repo_owner,
+                    "repo_name": repo_name,
+                    "commit_hash": commit_hash,
+                    "language": None,
+                },
+            }
     finally:
-        if temp_file.exists():
-            temp_file.unlink()
-        shutil.rmtree(config.generated_rules_dir, ignore_errors=True)
-        shutil.rmtree(config.repos_cache_dir, ignore_errors=True)
+        # 清理临时目录（但保留全局缓存中的 git 克隆）
+        if Path(temp_dir).exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logging.info(f"Cleaned up temporary directory: {temp_dir}")
 
 
 def _normalize_rule_yaml(

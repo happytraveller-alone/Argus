@@ -56,6 +56,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
     getOpengrepRules,
     getOpengrepRule,
+    getGeneratingRules,
     toggleOpengrepRule,
     deleteOpengrepRule,
     generateOpengrepRule,
@@ -135,6 +136,10 @@ export default function OpengrepRules() {
     const [compressedFile, setCompressedFile] = useState<File | null>(null);
     const [directoryFiles, setDirectoryFiles] = useState<File[]>([]);
     const [uploadingRules, setUploadingRules] = useState(false);
+    const [generatingRules, setGeneratingRules] = useState<
+        Map<string, { name: string; progress: number; status: string; doneAt?: number }>
+    >(new Map());
+    const [showGeneratingQueue, setShowGeneratingQueue] = useState(false);
     const [manualRuleForm, setManualRuleForm] = useState({
         id: "",
         name: "",
@@ -156,6 +161,7 @@ export default function OpengrepRules() {
     useEffect(() => {
         loadRules();
         loadRuleStats();
+        loadGeneratingRules();
     }, []);
 
     useEffect(() => {
@@ -171,6 +177,96 @@ export default function OpengrepRules() {
             loadRules();
         }
     }, [selectedLanguage, selectedSource, selectedSeverity, selectedConfidence, selectedActiveStatus]);
+
+    const loadGeneratingRules = async () => {
+        try {
+            const generatingRulesList = await getGeneratingRules();
+            const existingMap = new Map(generatingRules);
+            const incomingIds = new Set(generatingRulesList.map((rule) => rule.id));
+            const allIds = new Set<string>([
+                ...existingMap.keys(),
+                ...incomingIds,
+            ]);
+
+            if (allIds.size === 0) {
+                setGeneratingRules(new Map());
+                setShowGeneratingQueue(false);
+                return;
+            }
+
+            const detailResults = await Promise.all(
+                Array.from(allIds).map(async (ruleId) => {
+                    const listRule = generatingRulesList.find((rule) => rule.id === ruleId);
+                    try {
+                        const detail = await getOpengrepRule(ruleId);
+                        return { ruleId, listRule, detail, error: null };
+                    } catch (error) {
+                        return { ruleId, listRule, detail: null, error };
+                    }
+                })
+            );
+
+            const now = Date.now();
+            const nextMap = new Map<string, { name: string; progress: number; status: string; doneAt?: number }>();
+
+            for (const { ruleId, listRule, detail } of detailResults) {
+                const existing = existingMap.get(ruleId);
+                const name =
+                    detail?.name ||
+                    listRule?.name ||
+                    existing?.name ||
+                    ruleId;
+
+                let status = "生成中...";
+                let doneAt = existing?.doneAt;
+
+                if (detail?.correct === true) {
+                    status = "✓ 生成成功";
+                    doneAt = doneAt ?? now;
+                } else if (
+                    typeof detail?.pattern_yaml === "string" &&
+                    detail.pattern_yaml.includes("error")
+                ) {
+                    status = "✗ 生成失败";
+                    doneAt = doneAt ?? now;
+                }
+
+                const shouldKeep =
+                    incomingIds.has(ruleId) ||
+                    (doneAt !== undefined && now - doneAt < 5000);
+
+                if (shouldKeep) {
+                    nextMap.set(ruleId, {
+                        name,
+                        progress: 0,
+                        status,
+                        doneAt,
+                    });
+                }
+            }
+
+            if (nextMap.size === 0) {
+                setGeneratingRules(new Map());
+                setShowGeneratingQueue(false);
+                return;
+            }
+
+            setGeneratingRules(nextMap);
+            setShowGeneratingQueue(true);
+        } catch (error) {
+            console.error("Failed to load generating rules:", error);
+        }
+    };
+
+    useEffect(() => {
+        if (generatingRules.size === 0) {
+            return;
+        }
+        const timer = window.setInterval(() => {
+            loadGeneratingRules();
+        }, 2000);
+        return () => window.clearInterval(timer);
+    }, [generatingRules.size]);
 
     const loadRules = async (options?: { silent?: boolean }) => {
         const silent = options?.silent ?? false;
@@ -236,6 +332,22 @@ export default function OpengrepRules() {
             setSelectedRule(detail);
             syncEditForm(detail);
             setIsEditingRule(options?.edit ?? false);
+            setShowRuleDetail(true);
+        } catch (error) {
+            console.error("Failed to load rule detail:", error);
+            toast.error("加载规则详情失败");
+        } finally {
+            setLoadingDetail(false);
+        }
+    };
+
+    const handleViewRuleById = async (ruleId: string) => {
+        try {
+            setLoadingDetail(true);
+            const detail = await getOpengrepRule(ruleId);
+            setSelectedRule(detail);
+            syncEditForm(detail);
+            setIsEditingRule(false);
             setShowRuleDetail(true);
         } catch (error) {
             console.error("Failed to load rule detail:", error);
@@ -349,8 +461,21 @@ export default function OpengrepRules() {
             setDeletingRule(true);
             await deleteOpengrepRule(deletingTarget.id);
             toast.success(`规则「${deletingTarget.name}」删除成功`);
+            setGeneratingRules((prev) => {
+                if (!prev.has(deletingTarget.id)) {
+                    return prev;
+                }
+                const next = new Map(prev);
+                next.delete(deletingTarget.id);
+                if (next.size === 0) {
+                    setShowGeneratingQueue(false);
+                }
+                return next;
+            });
             await loadRules({ silent: true });
             await loadRuleStats();
+            // 从生成队列中移除已删除的规则
+            await loadGeneratingRules();
             setShowRuleDetail(false);
             setIsEditingRule(false);
             setPendingDeleteRule(null);
@@ -562,17 +687,20 @@ export default function OpengrepRules() {
             setUploadingRules(true);
             const result = await uploadPatchArchive(patchArchive);
             
-            const { total_files, success_count, failed_count, skipped_count } = result;
+            const { message, total_files } = result;
             
-            toast.success(
-                `上传完成: 总计 ${total_files} 个文件，成功 ${success_count}，失败 ${failed_count}，跳过 ${skipped_count}`,
-            );
+            toast.success(`${message}`);
             
+            // 关闭上传对话框
             setShowEventDialog(false);
             setPatchArchive(null);
             setEventRuleUploadTab("manual");
-            await loadRules({ silent: true });
-            await loadRuleStats();
+            
+            // 重新加载生成中的规则列表
+            await loadGeneratingRules();
+            
+            // 设置定期轮询以更新生成队列
+            setTimeout(() => loadGeneratingRules(), 2000);
         } catch (error: any) {
             const message =
                 error?.response?.data?.detail || error?.message || "上传 Patch 压缩包失败";
@@ -591,17 +719,20 @@ export default function OpengrepRules() {
             setUploadingRules(true);
             const result = await uploadPatchDirectory(patchDirectoryFiles);
             
-            const { total_files, success_count, failed_count, skipped_count } = result;
+            const { message, total_files } = result;
             
-            toast.success(
-                `上传完成: 总计 ${total_files} 个文件，成功 ${success_count}，失败 ${failed_count}，跳过 ${skipped_count}`,
-            );
+            toast.success(`${message}`);
             
+            // 关闭上传对话框
             setShowEventDialog(false);
             setPatchDirectoryFiles([]);
             setEventRuleUploadTab("manual");
-            await loadRules({ silent: true });
-            await loadRuleStats();
+            
+            // 重新加载生成中的规则列表
+            await loadGeneratingRules();
+            
+            // 设置定期轮询以更新生成队列
+            setTimeout(() => loadGeneratingRules(), 2000);
         } catch (error: any) {
             const message =
                 error?.response?.data?.detail || error?.message || "上传 Patch 目录失败";
@@ -609,6 +740,107 @@ export default function OpengrepRules() {
         } finally {
             setUploadingRules(false);
         }
+    }
+
+    const startPollingRules = async (ruleIds: string[]) => {
+        // 初始化生成队列显示，先获取所有规则信息
+        const initialProgress = new Map<string, { name: string; progress: number; status: string }>();
+        
+        for (const ruleId of ruleIds) {
+            try {
+                const rule = await getOpengrepRule(ruleId);
+                initialProgress.set(ruleId, { 
+                    name: rule.name || ruleId,
+                    progress: 0, 
+                    status: "等待处理中..." 
+                });
+            } catch (error) {
+                console.error(`获取规则信息失败 ${ruleId}:`, error);
+                initialProgress.set(ruleId, { 
+                    name: ruleId,
+                    progress: 0, 
+                    status: "加载中..." 
+                });
+            }
+        }
+        
+        setGeneratingRules(initialProgress);
+        setShowGeneratingQueue(true);
+        
+        // 启动后台轮询任务
+        const maxAttempts = 300; // 5 分钟（300 * 1000ms）
+        const pollInterval = 1000; // 1 秒
+        
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            let allComplete = true;
+            let successCount = 0;
+            let failedCount = 0;
+            const progressMap = new Map<string, { name: string; progress: number; status: string }>();
+            
+            for (let index = 0; index < ruleIds.length; index++) {
+                const ruleId = ruleIds[index];
+                const elapsed = (attempt * pollInterval) / 1000;
+                
+                try {
+                    const rule = await getOpengrepRule(ruleId);
+                    
+                    // 获取最新的规则名称
+                    const ruleName = rule.name || ruleId;
+                    
+                    if (rule.correct === true) {
+                        // 规则生成成功
+                        successCount++;
+                        progressMap.set(ruleId, { name: ruleName, progress: 100, status: "✓ 生成成功" });
+                    } else if (rule.correct === false && rule.pattern_yaml && rule.pattern_yaml.includes("error")) {
+                        // 规则生成失败
+                        failedCount++;
+                        progressMap.set(ruleId, { name: ruleName, progress: 100, status: "✗ 生成失败" });
+                    } else {
+                        // 仍在生成中
+                        allComplete = false;
+                        // 估计进度（基于已用时间）
+                        const estimatedProgress = Math.min(Math.floor((elapsed / 30) * 100), 95);
+                        progressMap.set(ruleId, { name: ruleName, progress: estimatedProgress, status: "生成中..." });
+                    }
+                } catch (error) {
+                    console.error(`轮询规则 ${ruleId} 失败:`, error);
+                    // 保留之前的规则名称，只更新状态
+                    const existing = generatingRules.get(ruleId);
+                    progressMap.set(ruleId, { name: existing?.name || ruleId, progress: 0, status: "查询失败" });
+                    allComplete = false;
+                }
+            }
+            
+            // 更新进度显示
+            setGeneratingRules(new Map(progressMap));
+            
+            if (allComplete) {
+                // 所有规则处理完成
+                toast.success(
+                    `规则生成完成: 成功 ${successCount}，失败 ${failedCount}`,
+                    { duration: 5 }
+                );
+                
+                // 关闭生成队列显示
+                setTimeout(() => {
+                    setShowGeneratingQueue(false);
+                    setGeneratingRules(new Map());
+                }, 3000);
+                
+                await loadRules({ silent: true });
+                await loadRuleStats();
+                await loadGeneratingRules();
+                break;
+            }
+            
+            // 等待后再轮询
+            await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        }
+        
+        // 超时未完成，关闭显示但保留在队列中
+        setShowGeneratingQueue(false);
+        // 最后一次更新生成队列状态
+        await loadGeneratingRules();
     };
 
     const handleResetFilters = () => {
@@ -1036,6 +1268,17 @@ export default function OpengrepRules() {
                                 >
                                     重置
                                 </Button>
+                                {generatingRules.size > 0 && (
+                                    <Button
+                                        onClick={() => setShowGeneratingQueue(!showGeneratingQueue)}
+                                        className="cyber-btn-primary h-10 min-w-[150px] whitespace-normal text-center leading-tight bg-cyan-950 border-cyan-500 hover:bg-cyan-900"
+                                    >
+                                        <div className="relative w-3 h-3 mr-2">
+                                            <div className="absolute inset-0 bg-cyan-400 rounded-full animate-pulse opacity-50" />
+                                        </div>
+                                        生成队列 ({generatingRules.size})
+                                    </Button>
+                                )}
                                 <Button
                                     onClick={() => setShowRuleTypeDialog(true)}
                                     className="cyber-btn-primary h-10 min-w-[150px] whitespace-normal text-center leading-tight"
@@ -1162,6 +1405,68 @@ export default function OpengrepRules() {
                                         取消操作
                                     </Button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Generating Queue Panel */}
+                    {generatingRules.size > 0 && (
+                        <div className="cyber-card relative z-10 bg-gradient-to-r from-blue-950/40 to-cyan-950/40 border-cyan-500/50 overflow-hidden">
+                            <div className="p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative w-5 h-5">
+                                            <div className="absolute inset-0 bg-cyan-500 rounded-full animate-pulse opacity-50" />
+                                            <div className="absolute inset-1 border border-cyan-400 rounded-full animate-spin" style={{ animationDuration: '2s' }} />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-cyan-400 font-mono">补丁规则生成队列</h3>
+                                        <Badge variant="outline" className="text-cyan-400 border-cyan-500">
+                                            {generatingRules.size} 个
+                                        </Badge>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setShowGeneratingQueue(!showGeneratingQueue)}
+                                        className="text-muted-foreground hover:text-cyan-400"
+                                    >
+                                        {showGeneratingQueue ? "▼" : "▶"}
+                                    </Button>
+                                </div>
+                                
+                                {showGeneratingQueue && (
+                                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                                        {Array.from(generatingRules.entries()).map(([ruleId, { name, status }]) => {
+                                            return (
+                                                <div key={ruleId} className="space-y-2 p-3 bg-black/30 rounded border border-cyan-500/30">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex-1">
+                                                            <p className="text-sm font-mono text-cyan-300 truncate">
+                                                                {name}
+                                                            </p>
+                                                        </div>
+                                                        <span className="text-xs font-mono text-muted-foreground ml-2 whitespace-nowrap">
+                                                            {status}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs text-muted-foreground font-mono">状态</span>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                                handleViewRuleById(ruleId);
+                                                            }}
+                                                            className="text-xs h-auto py-1 px-2 text-cyan-400 hover:text-cyan-300"
+                                                        >
+                                                            查看详情
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
