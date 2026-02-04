@@ -377,6 +377,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
             if not rule_data or 'rules' not in rule_data:
                 logger.warning(f"跳过无效的规则文件: {yaml_file.name}")
                 invalid_count += 1
+                failed_files.append(yaml_file)
                 continue
             
             # 验证规则是否有效
@@ -448,6 +449,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
         except Exception as e:
             logger.error(f"加载规则文件失败 {yaml_file.name}: {e}")
             invalid_count += 1
+            failed_files.append(yaml_file)
             continue
     
     # 一次性批量添加所有规则
@@ -473,12 +475,15 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
     - 判断规则 ID 是否已在表中，只添加不存在的规则
     - 验证每条规则是否可用
     """
-    # 检查数据库中是否已有规则，如果有则跳过初始化
+    # 检查数据库中是否已有规则
     result = await db.execute(select(OpengrepRule.name))
     existing_rule_ids = {row[0] for row in result.fetchall()}
-    if existing_rule_ids:
-        logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则，跳过 Patch 规则初始化")
-        return
+    
+    # 注意：Patch 规则通常是增量添加的，且数量较少，所以即使数据库不为空也不应该跳过初始化
+    # 我们只会跳过那些 ID 已经存在的规则
+    # if existing_rule_ids:
+    #     logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则，跳过 Patch 规则初始化")
+    #     return
     
     # 获取规则文件目录
     rules_dir = Path(__file__).parent / "rules_from_patches"
@@ -516,6 +521,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
             if not rule_data or 'rules' not in rule_data:
                 logger.debug(f"  ⊘ 跳过无效的规则文件: {yaml_file.relative_to(rules_dir)}")
                 error_count += 1
+                failed_files.append(yaml_file)
                 continue
             
             # 验证规则是否有效
@@ -606,6 +612,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
         except Exception as e:
             logger.error(f"加载规则文件失败 {yaml_file.relative_to(rules_dir)}: {e}")
             error_count += 1
+            failed_files.append(yaml_file)
             continue
     
     # 一次性批量添加所有规则
@@ -622,7 +629,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
             error_count += len(rows_to_add)
     
     logger.info(f"✓ Patch 规则导入完成: 成功创建 {created_count} 条新规则，"
-               f"跳过 {skipped_count} 条已存在的规则，{error_count} 条错误")
+               f"跳过 {skipped_count} 条已存在的规则，{error_count} 条错误并已删除")
 
 
 async def init_db(db: AsyncSession) -> None:
