@@ -8,15 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Activity, AlertTriangle, Clock, Code,
-  Zap, Cpu, Terminal
+  Zap, Terminal
 } from "lucide-react";
-import { api, dbMode, isDemoMode } from "@/shared/config/database";
+import { api, isDemoMode } from "@/shared/config/database";
 import type { Project, AuditTask, ProjectStats } from "@/shared/types";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { getRuleSets } from "@/shared/api/rules";
 import { getAgentTasks, type AgentTask } from "@/shared/api/agentTasks";
-import { getOpengrepScanTasks, type OpengrepScanTask } from "@/shared/api/opengrep";
+import {
+  getOpengrepRules,
+  getOpengrepScanTasks,
+  type OpengrepScanTask,
+} from "@/shared/api/opengrep";
 import { getGitleaksScanTasks, type GitleaksScanTask } from "@/shared/api/gitleaks";
 import { runWithRefreshMode } from "@/shared/utils/refreshMode";
 
@@ -35,7 +38,6 @@ const INTERRUPTED_STATUSES = new Set(["interrupted", "aborted", "cancelled"]);
 export default function Dashboard() {
   const [stats, setStats] = useState<ProjectStats | null>(null);
   const [recentActivities, setRecentActivities] = useState<RecentActivityItem[]>([]);
-  const [runningTasksCount, setRunningTasksCount] = useState(0);
   const [interruptedTasksCount, setInterruptedTasksCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [ruleStats, setRuleStats] = useState({ total: 0, enabled: 0 });
@@ -63,6 +65,19 @@ export default function Dashboard() {
     if (diffMins < 60) return `${Math.max(diffMins, 1)}分钟前`;
     if (diffHours < 24) return `${diffHours}小时前`;
     return `${diffDays}天前`;
+  };
+
+  const formatCreatedAt = (time: string) => {
+    const date = new Date(time);
+    if (Number.isNaN(date.getTime())) return time;
+    return date.toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
   };
 
   const getTaskStatusText = (status: string) => {
@@ -151,11 +166,9 @@ export default function Dashboard() {
       if (results[2].status === 'fulfilled') {
         tasks = Array.isArray(results[2].value) ? results[2].value : [];
       }
-      const baseRunningCount = tasks.filter((task) => task.status === "running").length;
       const baseInterruptedCount = tasks.filter((task) =>
         INTERRUPTED_STATUSES.has(task.status),
       ).length;
-      setRunningTasksCount(baseRunningCount);
       setInterruptedTasksCount(baseInterruptedCount);
 
       try {
@@ -241,12 +254,6 @@ export default function Dashboard() {
         );
 
         setRecentActivities(activityItems.slice(0, 8));
-        setRunningTasksCount(
-          baseRunningCount +
-            agentTasks.filter((task) => task.status === "running").length +
-            opengrepTasks.filter((task) => task.status === "running").length +
-            gitleaksTasks.filter((task) => task.status === "running").length,
-        );
         setInterruptedTasksCount(
           baseInterruptedCount +
             agentTasks.filter((task) => INTERRUPTED_STATUSES.has(task.status))
@@ -262,9 +269,9 @@ export default function Dashboard() {
       }
 
       try {
-        const rulesRes = await getRuleSets();
-        const totalRules = rulesRes.items.reduce((acc, rs) => acc + rs.rules_count, 0);
-        const enabledRules = rulesRes.items.reduce((acc, rs) => acc + rs.enabled_rules_count, 0);
+        const rules = await getOpengrepRules();
+        const totalRules = rules.length;
+        const enabledRules = rules.filter((rule) => rule.is_active).length;
         setRuleStats({ total: totalRules, enabled: enabledRules });
       } catch (error) {
         console.error('获取规则统计失败:', error);
@@ -349,18 +356,18 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Issues Found */}
+        {/* Rule Library */}
         <div className="cyber-card p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="stat-label">发现问题</p>
-              <p className="stat-value">{stats?.total_issues || 0}</p>
-              <p className="text-sm text-amber-400 mt-1 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                已解决: {stats?.resolved_issues || 0}
+              <p className="stat-label">审计规则</p>
+              <p className="stat-value">{ruleStats.total}</p>
+              <p className="text-sm text-sky-400 mt-1 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-sky-400" />
+                已启用: {ruleStats.enabled}
               </p>
             </div>
-            <div className="stat-icon text-amber-400">
+            <div className="stat-icon text-sky-400">
               <AlertTriangle className="w-6 h-6" />
             </div>
           </div>
@@ -391,22 +398,22 @@ export default function Dashboard() {
                       to={activity.route}
                       className={`block p-3 rounded-lg border transition-all ${getTaskStatusClassName(activity.status)}`}
                     >
-                      <p className="text-base font-medium text-foreground">
-                        {activityName}
-                      </p>
-                      {activity.kind === "rule_scan" && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Gitleaks扫描：{activity.gitleaksEnabled ? "已启用" : "未启用"}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <p className="text-base font-medium text-foreground">
+                          {activityName}
                         </p>
-                      )}
-                      <div className="mt-1">
+                        {activity.kind === "rule_scan" && (
+                          <span className="text-xs text-muted-foreground">
+                            Gitleaks扫描：{activity.gitleaksEnabled ? "已启用" : "未启用"}
+                          </span>
+                        )}
                         <Badge className={getTaskStatusBadgeClassName(activity.status)}>
                           漏洞扫描状态：{getTaskStatusText(activity.status)}
                         </Badge>
+                        <span className="text-sm text-muted-foreground/80">
+                          创建时间：{formatCreatedAt(activity.createdAt)}（{getRelativeTime(activity.createdAt)}）
+                        </span>
                       </div>
-                      <p className="text-sm text-muted-foreground/70 mt-2">
-                        {getRelativeTime(activity.createdAt)}
-                      </p>
                     </Link>
                   );
                 })
@@ -436,55 +443,6 @@ export default function Dashboard() {
                 </Button>
               </Link>                          
               
-            </div>
-          </div>
-
-          {/* System Status */}
-          <div className="cyber-card p-4">
-            <div className="section-header">
-              <Cpu className="w-5 h-5 text-emerald-400" />
-              <h3 className="section-title">系统状态</h3>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-base text-muted-foreground">数据库模式</span>
-                <Badge className={`
-                  ${dbMode === 'api' ? 'cyber-badge-primary' :
-                    dbMode === 'local' ? 'cyber-badge-info' :
-                    dbMode === 'supabase' ? 'cyber-badge-success' :
-                    'cyber-badge-muted'}
-                `}>
-                  {dbMode === 'api' ? '后端' : dbMode === 'local' ? '本地' : dbMode === 'supabase' ? '云端' : '演示'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-base text-muted-foreground">活跃项目</span>
-                <span className="text-base font-bold text-foreground">{stats?.active_projects || 0}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-base text-muted-foreground">运行中任务</span>
-                <span className="text-base font-bold text-sky-400">
-                  {runningTasksCount}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-base text-muted-foreground">任务中止</span>
-                <span className="text-base font-bold text-orange-400">
-                  {interruptedTasksCount}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-base text-muted-foreground">待解决问题</span>
-                <span className="text-base font-bold text-amber-400">
-                  {stats ? stats.total_issues - stats.resolved_issues : 0}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-base text-muted-foreground">审计规则</span>
-                <span className="text-base font-bold text-violet-400">
-                  {ruleStats.enabled}/{ruleStats.total}
-                </span>
-              </div>
             </div>
           </div>
 
