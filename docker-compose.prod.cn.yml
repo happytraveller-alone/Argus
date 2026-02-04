@@ -98,6 +98,8 @@ services:
       - NO_PROXY=*
     depends_on:
       - backend
+    logging:
+      driver: "none"
     networks:
       - deepaudit-network
 

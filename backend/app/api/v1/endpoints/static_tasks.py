@@ -411,6 +411,85 @@ def _is_fatal_rule_error(error_item: Dict[str, Any]) -> bool:
     return False
 
 
+def _truncate_for_progress_log(value: Any, max_length: int = 220) -> str:
+    """裁剪并规范化日志文本，避免进度日志被长文本刷屏。"""
+    text = str(value or "").replace("\n", " ").replace("\r", " ").strip()
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 3] + "..."
+
+
+def _extract_error_message(error_item: Dict[str, Any]) -> str:
+    for key in ("message", "long_msg", "short_msg", "details", "error"):
+        value = error_item.get(key)
+        if value:
+            return _truncate_for_progress_log(value, 220)
+    return ""
+
+
+def _extract_error_rule_ids(error_item: Dict[str, Any]) -> List[str]:
+    """尽可能从 opengrep error 中提取规则 ID 候选。"""
+    rule_ids: List[str] = []
+    ignored_tokens = {
+        "rule",
+        "rules",
+        "check",
+        "check_id",
+        "invalid",
+        "error",
+        "config",
+        "yaml",
+    }
+
+    def _append(value: Any) -> None:
+        candidate = str(value or "").strip().strip("'\"`")
+        if not candidate:
+            return
+        if len(candidate) > 160:
+            return
+        if candidate.lower() in ignored_tokens:
+            return
+        if candidate not in rule_ids:
+            rule_ids.append(candidate)
+
+    for key in ("rule_id", "check_id", "id", "name"):
+        _append(error_item.get(key))
+
+    rule_payload = error_item.get("rule")
+    if isinstance(rule_payload, dict):
+        for key in ("id", "check_id", "name"):
+            _append(rule_payload.get(key))
+
+    msg = _extract_error_message(error_item)
+    if msg:
+        for match in re.findall(
+            r"(?:rule id|rule|check_id|check-id|check)\s*[=:]?\s*['\"`]?([A-Za-z0-9_.:-]{3,})",
+            msg,
+            flags=re.IGNORECASE,
+        ):
+            _append(match)
+
+    return rule_ids
+
+
+def _summarize_fatal_rule_errors(
+    errors: List[Dict[str, Any]],
+    *,
+    max_rule_ids: int = 6,
+) -> tuple[List[str], str]:
+    rule_ids: List[str] = []
+    message = ""
+    for err in errors:
+        for rid in _extract_error_rule_ids(err):
+            if rid not in rule_ids:
+                rule_ids.append(rid)
+        if not message:
+            message = _extract_error_message(err)
+        if len(rule_ids) >= max_rule_ids and message:
+            break
+    return rule_ids[:max_rule_ids], message
+
+
 _static_scan_process_lock = threading.Lock()
 _static_running_scan_processes: Dict[str, subprocess.Popen] = {}
 _static_cancelled_scan_tasks: set[str] = set()
@@ -768,120 +847,329 @@ async def _execute_opengrep_scan(
             successful_rule_count = 0
             failed_rule_count = 0
             total_rules_for_execution = len(executable_rule_entries)
-            rule_file = None
+            fallback_reason = "合并执行无有效结果"
+            jobs = _resolve_opengrep_scan_jobs()
+            use_jobs_option = True
+            loop = asyncio.get_event_loop()
 
-            try:
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as tf:
-                    yaml.dump(
-                        {"rules": [entry["rule"] for entry in executable_rule_entries]},
-                        tf,
-                        sort_keys=False,
-                        default_flow_style=False,
-                    )
-                    rule_file = tf.name
+            async def run_merged_group_scan(
+                rule_entries: List[Dict[str, Any]],
+                *,
+                timeout_seconds: int,
+            ) -> Dict[str, Any]:
+                nonlocal use_jobs_option
+                rule_file = None
+                try:
+                    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as tf:
+                        yaml.dump(
+                            {"rules": [entry["rule"] for entry in rule_entries]},
+                            tf,
+                            sort_keys=False,
+                            default_flow_style=False,
+                        )
+                        rule_file = tf.name
 
-                jobs = _resolve_opengrep_scan_jobs()
-                cmd = [
-                    "opengrep",
-                    "--config",
-                    rule_file,
-                    "--json",
-                    "--jobs",
-                    str(jobs),
-                    full_target_path,
-                ]
-                _record_scan_progress(
-                    task_id,
-                    progress=40,
-                    stage="execute_rules",
-                    message=f"执行 opengrep 扫描（线程数 {jobs}）",
-                )
+                    cmd = ["opengrep", "--config", rule_file, "--json"]
+                    if use_jobs_option:
+                        cmd.extend(["--jobs", str(jobs)])
+                    cmd.append(full_target_path)
 
-                loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(
-                    None,
-                    lambda: _run_subprocess_with_tracking(
-                        "opengrep",
-                        task_id,
-                        cmd,
-                        env=scan_env,
-                        timeout=900,
-                    ),
-                )
-
-                # 兼容旧版本 opengrep 不支持 --jobs 参数
-                if result.returncode != 0 and (
-                    "unrecognized arguments: --jobs" in (result.stderr or "")
-                    or "unknown option '--jobs'" in (result.stderr or "")
-                ):
-                    fallback_cmd = [
-                        "opengrep",
-                        "--config",
-                        rule_file,
-                        "--json",
-                        full_target_path,
-                    ]
-                    logger.warning(
-                        "opengrep does not support --jobs, fallback to single process mode"
-                    )
                     result = await loop.run_in_executor(
                         None,
                         lambda: _run_subprocess_with_tracking(
                             "opengrep",
                             task_id,
-                            fallback_cmd,
+                            cmd,
                             env=scan_env,
-                            timeout=900,
+                            timeout=timeout_seconds,
                         ),
                     )
 
-                if _is_scan_task_cancelled("opengrep", task_id):
-                    task.status = "interrupted"
-                    task.error_count = (task.error_count or 0) + 1
-                    await db.commit()
+                    # 兼容旧版本 opengrep 不支持 --jobs 参数（仅切换一次）
+                    if use_jobs_option and result.returncode != 0 and (
+                        "unrecognized arguments: --jobs" in (result.stderr or "")
+                        or "unknown option '--jobs'" in (result.stderr or "")
+                    ):
+                        logger.warning(
+                            "opengrep does not support --jobs, fallback to single process mode"
+                        )
+                        use_jobs_option = False
+                        cmd = ["opengrep", "--config", rule_file, "--json", full_target_path]
+                        result = await loop.run_in_executor(
+                            None,
+                            lambda: _run_subprocess_with_tracking(
+                                "opengrep",
+                                task_id,
+                                cmd,
+                                env=scan_env,
+                                timeout=timeout_seconds,
+                            ),
+                        )
+
+                    parsed_findings, parsed_errors = _parse_opengrep_output(result.stdout)
+                    fatal_errors = [
+                        item for item in parsed_errors if _is_fatal_rule_error(item)
+                    ]
+                    command_failed_without_output = (
+                        result.returncode != 0 and not parsed_findings and not parsed_errors
+                    )
+
+                    if command_failed_without_output:
+                        stderr_msg = _truncate_for_progress_log(result.stderr or "", 200)
+                        reason = (
+                            f"命令失败（returncode={result.returncode}"
+                            + (f"，stderr={stderr_msg}" if stderr_msg else "")
+                            + "）"
+                        )
+                        return {
+                            "success": False,
+                            "reason": reason,
+                            "findings": [],
+                            "errors": [],
+                            "fatal_rule_ids": [],
+                            "returncode": result.returncode,
+                        }
+
+                    if fatal_errors and not parsed_findings:
+                        fatal_rule_ids, fatal_reason = _summarize_fatal_rule_errors(fatal_errors)
+                        reason = "命中致命规则错误"
+                        if fatal_rule_ids:
+                            reason += f"（疑似规则: {', '.join(fatal_rule_ids)}）"
+                        if fatal_reason:
+                            reason += f"：{fatal_reason}"
+                        return {
+                            "success": False,
+                            "reason": reason,
+                            "findings": [],
+                            "errors": parsed_errors,
+                            "fatal_rule_ids": fatal_rule_ids,
+                            "returncode": result.returncode,
+                        }
+
+                    return {
+                        "success": True,
+                        "reason": "",
+                        "findings": parsed_findings,
+                        "errors": parsed_errors,
+                        "fatal_rule_ids": [],
+                        "returncode": result.returncode,
+                    }
+                except ValueError as parse_error:
+                    return {
+                        "success": False,
+                        "reason": f"结果解析失败: {_truncate_for_progress_log(parse_error, 180)}",
+                        "findings": [],
+                        "errors": [],
+                        "fatal_rule_ids": [],
+                        "returncode": -1,
+                    }
+                except Exception as scan_error:
+                    return {
+                        "success": False,
+                        "reason": f"执行异常: {_truncate_for_progress_log(scan_error, 180)}",
+                        "findings": [],
+                        "errors": [],
+                        "fatal_rule_ids": [],
+                        "returncode": -1,
+                    }
+                finally:
+                    if rule_file and os.path.exists(rule_file):
+                        try:
+                            os.unlink(rule_file)
+                        except Exception:
+                            pass
+
+            async def run_bisect_fallback_scan(reason: str) -> tuple[
+                List[Dict[str, Any]],
+                List[Dict[str, Any]],
+                int,
+                int,
+            ]:
+                fallback_findings: List[Dict[str, Any]] = []
+                fallback_errors: List[Dict[str, Any]] = []
+                fallback_success = 0
+                fallback_failed = 0
+                fallback_failure_log_count = 0
+                fallback_failure_log_cap = 20
+                split_log_count = 0
+                split_log_cap = 20
+                processed_rules = 0
+
+                _record_scan_progress(
+                    task_id,
+                    progress=52,
+                    stage="execute_rules",
+                    message=f"合并扫描失败（{reason}），开始二分定位异常规则并优先扫描可合并规则",
+                    level="warning",
+                )
+
+                def update_fallback_progress() -> None:
+                    progress = 52 + (processed_rules / max(total_rules_for_execution, 1)) * 30
                     _record_scan_progress(
                         task_id,
-                        status="interrupted",
-                        progress=100,
-                        stage="interrupted",
-                        message="扫描任务已中止（用户操作）",
-                        level="warning",
+                        progress=progress,
+                        stage="execute_rules",
+                        message=f"二分回退进度（{processed_rules}/{total_rules_for_execution}）",
                     )
-                    return
 
-                all_findings, all_scan_errors = _parse_opengrep_output(result.stdout)
-                fatal_scan_errors = [
-                    item for item in all_scan_errors if _is_fatal_rule_error(item)
-                ]
-                command_failed_without_output = (
-                    result.returncode != 0 and not all_findings and not all_scan_errors
-                )
-                if command_failed_without_output:
-                    logger.warning(
-                        "opengrep execution failed without parsable output: returncode=%s stderr=%s",
-                        result.returncode,
-                        (result.stderr or "").strip()[:400],
+                async def bisect_and_scan(rule_entries: List[Dict[str, Any]]) -> None:
+                    nonlocal fallback_success, fallback_failed, fallback_failure_log_count, split_log_count, processed_rules
+                    if _is_scan_task_cancelled("opengrep", task_id):
+                        return
+                    if not rule_entries:
+                        return
+
+                    scan_result = await run_merged_group_scan(
+                        rule_entries,
+                        timeout_seconds=900,
                     )
-                    failed_rule_count = total_rules_for_execution
-                    successful_rule_count = 0
-                elif fatal_scan_errors and not all_findings:
-                    failed_rule_count = total_rules_for_execution
-                    successful_rule_count = 0
+                    if scan_result.get("success"):
+                        fallback_success += len(rule_entries)
+                        fallback_findings.extend(scan_result.get("findings") or [])
+                        fallback_errors.extend(scan_result.get("errors") or [])
+                        processed_rules += len(rule_entries)
+                        if (
+                            processed_rules == 1
+                            or processed_rules % 5 == 0
+                            or processed_rules == total_rules_for_execution
+                        ):
+                            update_fallback_progress()
+                        return
+
+                    if len(rule_entries) == 1:
+                        fallback_failed += 1
+                        processed_rules += 1
+                        single_rule_id = str(
+                            ((rule_entries[0].get("rule") or {}).get("id")) or "unknown"
+                        )
+                        reason_msg = _truncate_for_progress_log(
+                            scan_result.get("reason") or "未知失败原因",
+                            200,
+                        )
+                        fatal_rule_ids = scan_result.get("fatal_rule_ids") or []
+                        if fallback_failure_log_count < fallback_failure_log_cap:
+                            related_rule_note = (
+                                f"，关联规则候选: {', '.join(fatal_rule_ids[:3])}"
+                                if fatal_rule_ids
+                                else ""
+                            )
+                            _record_scan_progress(
+                                task_id,
+                                progress=54 + (processed_rules / max(total_rules_for_execution, 1)) * 26,
+                                stage="execute_rules",
+                                message=(
+                                    f"二分定位规则失败：{single_rule_id}"
+                                    f"{related_rule_note}，原因：{reason_msg}"
+                                ),
+                                level="warning",
+                            )
+                            fallback_failure_log_count += 1
+                        elif fallback_failure_log_count == fallback_failure_log_cap:
+                            _record_scan_progress(
+                                task_id,
+                                progress=54 + (processed_rules / max(total_rules_for_execution, 1)) * 26,
+                                stage="execute_rules",
+                                message="二分定位失败日志过多，后续失败原因省略显示",
+                                level="warning",
+                            )
+                            fallback_failure_log_count += 1
+                        if (
+                            processed_rules == 1
+                            or processed_rules % 5 == 0
+                            or processed_rules == total_rules_for_execution
+                        ):
+                            update_fallback_progress()
+                        return
+
+                    if split_log_count < split_log_cap:
+                        _record_scan_progress(
+                            task_id,
+                            progress=54 + (processed_rules / max(total_rules_for_execution, 1)) * 26,
+                            stage="execute_rules",
+                            message=(
+                                f"规则组执行失败，开始二分拆分（组大小 {len(rule_entries)}，"
+                                f"原因：{_truncate_for_progress_log(scan_result.get('reason'), 120)}）"
+                            ),
+                            level="warning",
+                        )
+                        split_log_count += 1
+
+                    mid = len(rule_entries) // 2
+                    await bisect_and_scan(rule_entries[:mid])
+                    await bisect_and_scan(rule_entries[mid:])
+
+                await bisect_and_scan(executable_rule_entries)
+                if processed_rules and processed_rules != total_rules_for_execution:
+                    update_fallback_progress()
+
+                return (
+                    fallback_findings,
+                    fallback_errors,
+                    fallback_success,
+                    fallback_failed,
+                )
+
+            _record_scan_progress(
+                task_id,
+                progress=40,
+                stage="execute_rules",
+                message=f"执行 opengrep 合并扫描（线程数 {jobs}）",
+            )
+
+            initial_scan_result = await run_merged_group_scan(
+                executable_rule_entries,
+                timeout_seconds=900,
+            )
+
+            if _is_scan_task_cancelled("opengrep", task_id):
+                task.status = "interrupted"
+                task.error_count = (task.error_count or 0) + 1
+                await db.commit()
+                _record_scan_progress(
+                    task_id,
+                    status="interrupted",
+                    progress=100,
+                    stage="interrupted",
+                    message="扫描任务已中止（用户操作）",
+                    level="warning",
+                )
+                return
+
+            if initial_scan_result.get("success"):
+                all_findings = initial_scan_result.get("findings") or []
+                all_scan_errors = initial_scan_result.get("errors") or []
+                successful_rule_count = total_rules_for_execution
+                failed_rule_count = 0
+            else:
+                fallback_reason = initial_scan_result.get("reason") or fallback_reason
+                _record_scan_progress(
+                    task_id,
+                    progress=50,
+                    stage="execute_rules",
+                    message=f"合并扫描失败：{fallback_reason}，将自动使用二分法定位并继续扫描有效规则",
+                    level="warning",
+                )
+                (
+                    fallback_findings,
+                    fallback_errors,
+                    fallback_success,
+                    fallback_failed,
+                ) = await run_bisect_fallback_scan(fallback_reason)
+                if fallback_success > 0:
+                    all_findings = fallback_findings
+                    all_scan_errors = fallback_errors
+                    successful_rule_count = fallback_success
+                    failed_rule_count = fallback_failed
+                    logger.info(
+                        "Task %s bisect fallback scan succeeded: success=%s failed=%s findings=%s",
+                        task_id,
+                        fallback_success,
+                        fallback_failed,
+                        len(fallback_findings),
+                    )
                 else:
-                    successful_rule_count = total_rules_for_execution
-                    failed_rule_count = 0
-            except ValueError as e:
-                logger.warning("Failed to parse opengrep output for task %s: %s", task_id, e)
-                failed_rule_count = total_rules_for_execution
-            except Exception as e:
-                logger.warning("Failed to execute opengrep for task %s: %s", task_id, e)
-                failed_rule_count = total_rules_for_execution
-            finally:
-                if rule_file and os.path.exists(rule_file):
-                    try:
-                        os.unlink(rule_file)
-                    except Exception:
-                        pass
+                    successful_rule_count = 0
+                    failed_rule_count = total_rules_for_execution
 
             _record_scan_progress(
                 task_id,
@@ -889,6 +1177,20 @@ async def _execute_opengrep_scan(
                 stage="aggregate_results",
                 message=f"扫描完成，汇总结果中（成功 {successful_rule_count} / 失败 {failed_rule_count}）",
             )
+
+            if _is_scan_task_cancelled("opengrep", task_id):
+                task.status = "interrupted"
+                task.error_count = (task.error_count or 0) + 1
+                await db.commit()
+                _record_scan_progress(
+                    task_id,
+                    status="interrupted",
+                    progress=100,
+                    stage="interrupted",
+                    message="扫描任务已中止（用户操作）",
+                    level="warning",
+                )
+                return
 
             # 检查是否有成功执行的规则
             if successful_rule_count == 0:
