@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
 	Terminal,
 	Bot,
@@ -47,6 +47,7 @@ import type { LogItem } from "./types";
 
 function AgentAuditPageContent() {
 	const { taskId } = useParams<{ taskId: string }>();
+	const navigate = useNavigate();
 	const {
 		task,
 		findings,
@@ -104,6 +105,14 @@ function AgentAuditPageContent() {
 	const [historicalEventsLoaded, setHistoricalEventsLoaded] =
 		useState<boolean>(false);
 	const { logoSrc, cycleLogoVariant } = useLogoVariant();
+
+	const handleBack = useCallback(() => {
+		if (typeof window !== "undefined" && window.history.length > 1) {
+			navigate(-1);
+			return;
+		}
+		navigate("/dashboard");
+	}, [navigate]);
 	// 🔥 当 taskId 变化时立即重置状态（新建任务时清理旧日志）
 	useEffect(() => {
 		// 如果 taskId 发生变化，立即重置
@@ -939,6 +948,7 @@ function AgentAuditPageContent() {
 				task={task}
 				isRunning={isRunning}
 				isCancelling={isCancelling}
+				onBack={handleBack}
 				onCancel={handleCancel}
 				onExport={handleExportReport}
 				onNewAudit={() => setShowCreateDialog(true)}

@@ -4,7 +4,15 @@
  * Features: Enhanced glow effects, refined controls, premium feel
  */
 
-import { Square, Download, Loader2, Radio, Cpu, Sparkles } from "lucide-react";
+import {
+	ArrowLeft,
+	Square,
+	Download,
+	Loader2,
+	Radio,
+	Cpu,
+	Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "./StatusBadge";
 import type { HeaderProps } from "../types";
@@ -13,6 +21,7 @@ export function Header({
 	task,
 	isRunning,
 	isCancelling,
+	onBack,
 	onCancel,
 	onExport,
 	onNewAudit,
@@ -72,6 +81,16 @@ export function Header({
 
 			{/* Right side - Controls */}
 			<div className="flex items-center gap-3 relative z-10">
+				<Button
+					variant="ghost"
+					size="sm"
+					onClick={onBack}
+					className="h-9 px-4 text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted border border-border hover:border-border/80 transition-all duration-300 rounded-md"
+				>
+					<ArrowLeft className="w-3.5 h-3.5 mr-2" />
+					<span>返回</span>
+				</Button>
+
 				{isRunning && (
 					<Button
 						variant="ghost"

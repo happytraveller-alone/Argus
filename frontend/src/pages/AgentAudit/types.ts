@@ -120,6 +120,7 @@ export interface HeaderProps {
   task: AgentTask | null;
   isRunning: boolean;
   isCancelling: boolean;
+  onBack: () => void;
   onCancel: () => void;
   onExport: () => void;
   onNewAudit: () => void;

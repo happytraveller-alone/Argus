@@ -5,10 +5,3 @@
 
 export { useAgentAuditState } from './useAgentAuditState';
 export type { AgentAuditStateHook } from './useAgentAuditState';
-
-export { useResilientStream } from './useResilientStream';
-export type {
-  ConnectionState,
-  ResilientStreamConfig,
-  ResilientStreamState,
-} from './useResilientStream';

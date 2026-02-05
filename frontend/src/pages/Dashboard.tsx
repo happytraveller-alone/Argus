@@ -3,7 +3,7 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -73,6 +73,7 @@ type RecentActivityItem = {
 };
 
 const INTERRUPTED_STATUSES = new Set(["interrupted", "aborted", "cancelled"]);
+const ACTIVITY_PAGE_SIZE = 10;
 
 export default function Dashboard() {
 	const navigate = useNavigate();
@@ -81,6 +82,8 @@ export default function Dashboard() {
 	const [recentActivities, setRecentActivities] = useState<
 		RecentActivityItem[]
 	>([]);
+	const [activityKeyword, setActivityKeyword] = useState("");
+	const [activityPage, setActivityPage] = useState(1);
 	const [interruptedTasksCount, setInterruptedTasksCount] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [ruleStats, setRuleStats] = useState({ total: 0, enabled: 0 });
@@ -110,6 +113,40 @@ export default function Dashboard() {
 		};
 	}, []);
 
+	const filteredActivities = useMemo(() => {
+		const keyword = activityKeyword.trim().toLowerCase();
+		if (!keyword) return recentActivities;
+		return recentActivities.filter((activity) => {
+			const kindText =
+				activity.kind === "rule_scan" ? "静态扫描" : "智能审计";
+			return (
+				activity.projectName.toLowerCase().includes(keyword) ||
+				kindText.includes(keyword) ||
+				getTaskStatusText(activity.status).includes(keyword)
+			);
+		});
+	}, [recentActivities, activityKeyword]);
+
+	const totalActivityPages = Math.max(
+		1,
+		Math.ceil(filteredActivities.length / ACTIVITY_PAGE_SIZE),
+	);
+
+	useEffect(() => {
+		setActivityPage(1);
+	}, [activityKeyword]);
+
+	useEffect(() => {
+		if (activityPage > totalActivityPages) {
+			setActivityPage(totalActivityPages);
+		}
+	}, [activityPage, totalActivityPages]);
+
+	const pagedActivities = useMemo(() => {
+		const start = (activityPage - 1) * ACTIVITY_PAGE_SIZE;
+		return filteredActivities.slice(start, start + ACTIVITY_PAGE_SIZE);
+	}, [filteredActivities, activityPage]);
+
 	const getRelativeTime = (time: string) => {
 		const now = new Date();
 		const taskDate = new Date(time);
@@ -136,7 +173,7 @@ export default function Dashboard() {
 		});
 	};
 
-	const getTaskStatusText = (status: string) => {
+	function getTaskStatusText(status: string) {
 		switch (status) {
 			case "completed":
 				return "任务完成";
@@ -153,7 +190,7 @@ export default function Dashboard() {
 			default:
 				return status || "未知状态";
 		}
-	};
+	}
 
 	const getTaskStatusClassName = (status: string) => {
 		if (status === "completed") {
@@ -336,7 +373,7 @@ export default function Dashboard() {
 								new Date(a.createdAt).getTime(),
 						);
 
-						setRecentActivities(activityItems.slice(0, 8));
+						setRecentActivities(activityItems);
 						setInterruptedTasksCount(
 							baseInterruptedCount +
 								agentTasks.filter((task) =>
@@ -674,11 +711,29 @@ export default function Dashboard() {
 					<div className="cyber-card p-4">
 						<div className="section-header">
 							<Terminal className="w-5 h-5 text-amber-400" />
-							<h3 className="section-title">最新活动</h3>
+							<h3 className="section-title">任务浏览</h3>
+						</div>
+						<div className="space-y-3 mb-3">
+							<div className="flex items-center gap-2">
+								<Input
+									value={activityKeyword}
+									onChange={(e) => setActivityKeyword(e.target.value)}
+									placeholder="按项目名/任务类型/状态搜索"
+									className="h-9 font-mono"
+								/>
+							</div>
+							<div className="flex items-center justify-between text-xs text-muted-foreground">
+								<span>
+									按时间倒序展示（新 → 旧）
+								</span>
+								<span>
+									共 {filteredActivities.length} 条
+								</span>
+							</div>
 						</div>
 						<div className="space-y-2">
-							{recentActivities.length > 0 ? (
-								recentActivities.map((activity) => {
+							{pagedActivities.length > 0 ? (
+								pagedActivities.map((activity) => {
 									const activityName =
 										activity.kind === "rule_scan"
 											? `${activity.projectName}-静态扫描`
@@ -718,11 +773,47 @@ export default function Dashboard() {
 								<div className="empty-state py-6">
 									<Clock className="w-10 h-10 text-muted-foreground mb-2" />
 									<p className="text-base text-muted-foreground">
-										暂无活动记录
+										{recentActivities.length === 0
+											? "暂无活动记录"
+											: "未匹配到任务"}
 									</p>
 								</div>
 							)}
 						</div>
+						{filteredActivities.length > 0 && (
+							<div className="mt-4 flex items-center justify-between">
+								<div className="text-xs text-muted-foreground">
+									第 {activityPage} / {totalActivityPages} 页（每页{" "}
+									{ACTIVITY_PAGE_SIZE} 条）
+								</div>
+								<div className="flex items-center gap-2">
+									<Button
+										variant="outline"
+										size="sm"
+										className="cyber-btn-outline h-8 px-3"
+										disabled={activityPage <= 1}
+										onClick={() =>
+											setActivityPage((prev) => Math.max(prev - 1, 1))
+										}
+									>
+										上一页
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										className="cyber-btn-outline h-8 px-3"
+										disabled={activityPage >= totalActivityPages}
+										onClick={() =>
+											setActivityPage((prev) =>
+												Math.min(prev + 1, totalActivityPages),
+											)
+										}
+									>
+										下一页
+									</Button>
+								</div>
+							</div>
+						)}
 					</div>
 				</div>
 
