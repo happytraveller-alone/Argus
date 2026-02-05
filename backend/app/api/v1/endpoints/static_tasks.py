@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -203,6 +204,19 @@ class OpengrepScanProgressResponse(BaseModel):
 
 def _is_test_like_directory(name: str) -> bool:
     return "test" in (name or "").lower()
+
+
+async def _cleanup_incorrect_rules(db: AsyncSession) -> None:
+    """移除 correct=false 的规则记录。"""
+    try:
+        await db.execute(delete(OpengrepRule).where(OpengrepRule.correct == False))
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to cleanup incorrect rules: {e}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
 
 def _prune_test_directories(scan_root: str) -> int:
@@ -2476,6 +2490,8 @@ async def _create_placeholder_rule(
         db.add(new_rule)
         await db.commit()
         await db.refresh(new_rule)
+
+        await _cleanup_incorrect_rules(db)
         
         logger.info(f"创建占位符规则: {new_rule.id} for {filename}")
         return new_rule.id
@@ -3061,6 +3077,8 @@ async def upload_opengrep_rule_json(
         await db.commit()
         await db.refresh(new_rule)
 
+        await _cleanup_incorrect_rules(db)
+
         return {
             "rule_id": new_rule.id,
             "name": new_rule.name,
@@ -3274,6 +3292,7 @@ async def _create_rules_and_generate_background(
 @router.post("/rules/upload/patch-archive", response_model=dict)
 async def upload_patch_archive(
     file: UploadFile = File(..., description="包含多个 .patch 文件的压缩包"),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> dict:
     """
@@ -3343,6 +3362,8 @@ async def upload_patch_archive(
                 temp_dir=temp_dir
             )
         )
+
+        await _cleanup_incorrect_rules(db)
         
         return {
             "message": f"已接收 {total_files} 个 patch 文件，正在后台处理...",
@@ -3366,6 +3387,7 @@ async def upload_patch_archive(
 @router.post("/rules/upload/patch-directory", response_model=dict)
 async def upload_patch_directory(
     files: List[UploadFile] = File(..., description="目录中的多个 .patch 文件"),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> dict:
     """
@@ -3417,6 +3439,8 @@ async def upload_patch_directory(
             task_type="directory"
         )
     )
+
+    await _cleanup_incorrect_rules(db)
     
     return {
         "message": f"已接收 {total_files} 个 patch 文件，正在后台处理...",
@@ -3611,6 +3635,8 @@ async def upload_opengrep_rules(
                 db.add_all(rules_to_add)
                 await db.commit()
 
+            await _cleanup_incorrect_rules(db)
+
             return {
                 "message": "规则上传处理完成",
                 "total_count": total_count,
@@ -3794,6 +3820,8 @@ async def upload_opengrep_rules_directory(
             if rules_to_add:
                 db.add_all(rules_to_add)
                 await db.commit()
+
+            await _cleanup_incorrect_rules(db)
 
             return {
                 "message": "规则文件夹上传处理完成",
