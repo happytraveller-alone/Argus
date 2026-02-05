@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import logging
 from app.services.zip_storage import get_project_zip_path
 from app.services.upload.upload_manager import UploadManager
-from app.services.llm.service import llm_service
+from app.services.llm.service import LLMService
 from app.models.project_info import ProjectInfo
 from .compression_factory import CompressionStrategyFactory
 
@@ -180,6 +180,9 @@ async def generate_project_description(project_info: ProjectInfo) -> Dict[str, A
 class ProjectDescriptionAnalyzer:
     """项目统计和分析器"""
 
+    def __init__(self, user_config: Optional[dict] = None):
+        self.llm_service = LLMService(user_config=user_config)
+
     # 需要排除的目录
     EXCLUDED_DIRS = {
         "node_modules",
@@ -320,7 +323,7 @@ class ProjectDescriptionAnalyzer:
         # 汇总：用LLM对文件分析结果生成项目级描述
         try:
             summary_prompt = self._build_project_summary_prompt(summaries)
-            project_summary_resp = await llm_service.chat_completion(
+            project_summary_resp = await self.llm_service.chat_completion(
                 [{"role": "user", "content": summary_prompt}], temperature=0.1, max_tokens=1000
             )
             logger.warning(f"项目汇总LLM响应: {project_summary_resp}")
@@ -469,7 +472,7 @@ class ProjectDescriptionAnalyzer:
             # 构建 prompt 并调用 LLM
             prompt = self._build_file_prompt(rel_path, language, functions, text)
             try:
-                resp = await llm_service.chat_completion(
+                resp = await self.llm_service.chat_completion(
                     [{"role": "user", "content": prompt}], temperature=0.1, max_tokens=800
                 )
                 analysis = resp.get("content") if isinstance(resp, dict) else ""

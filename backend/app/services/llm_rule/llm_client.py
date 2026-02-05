@@ -4,12 +4,12 @@ from typing import Optional, Tuple
 import logging
 
 from .patch_processor import PatchInfo
-from app.services.llm.service import llm_service
+from app.services.llm.service import LLMService
 
 
 class LLMClient:
-    def __init__(self):
-        self.client = llm_service
+    def __init__(self, user_config: Optional[dict] = None):
+        self.client = LLMService(user_config=user_config)
 
     def extract_response(self, text: str) -> str:
         """Remove thinking tags and markdown formatting from LLM response."""
