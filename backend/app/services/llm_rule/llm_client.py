@@ -5,6 +5,9 @@ import logging
 
 from .patch_processor import PatchInfo
 from app.services.llm.service import LLMService
+        
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -136,6 +139,10 @@ class LLMClient:
     ) -> Optional[dict]:
         """Generate a Semgrep rule using the LLM with improved validation."""
         prompt = self._build_prompt(patch_info, error_feedback)
+
+        # 🔥 记录LLM配置信息
+        config = self.client.config
+        logger.info(f"🤖 调用LLM生成规则 - Provider: {config.provider.value}, Model: {config.model}")
 
         try:
             response = await self.client.chat_completion(

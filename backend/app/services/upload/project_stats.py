@@ -153,7 +153,9 @@ def build_static_project_description(language_info_json: str, project_name: Opti
     )
 
 
-async def generate_project_description(project_info: ProjectInfo) -> Dict[str, Any]:
+async def generate_project_description(
+    project_info: ProjectInfo, user_config: Optional[dict] = None
+) -> Dict[str, Any]:
     """生成项目描述"""
     # MVP 实现：解压项目 -> 遍历文件 -> 提取每个文件的函数和注释 -> 调用LLM逐文件分析 -> 汇总
     zip_path = get_project_zip_path(project_info.project_id)
@@ -161,7 +163,7 @@ async def generate_project_description(project_info: ProjectInfo) -> Dict[str, A
         logger.error(f"项目ZIP文件不存在: {zip_path}")
         return json.dumps({"error": "项目ZIP文件不存在"}, ensure_ascii=False)
 
-    analyzer = ProjectDescriptionAnalyzer()
+    analyzer = ProjectDescriptionAnalyzer(user_config=user_config)
     try:
         with tempfile.TemporaryDirectory(prefix="deepaudit_desc_", suffix="_proj") as temp_dir:
             strategy = CompressionStrategyFactory.get_strategy(zip_path)

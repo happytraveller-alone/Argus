@@ -19,13 +19,13 @@ from .llm_rule.rule_validator import RuleValidator
 
 
 class AutoGrep:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, user_config: Optional[Dict[str, Any]] = None):
         self.config = config
         self.rule_manager = RuleManager(config)
         self.patch_processor = PatchProcessor(config)
         self.rule_validator = RuleValidator(config)
         self.git_manager = GitManager(config)
-        self.llm_client = LLMClient()
+        self.llm_client = LLMClient(user_config=user_config)
 
     async def process_patch(self, patch_file: Path) -> Optional[Dict[str, Any]]:
         """Process a single patch file with improved rule checking."""
@@ -279,7 +279,10 @@ class AutoGrep:
                     logging.error(f"Error processing repository patches: {result}")
 
 
-async def get_rule_by_patch(request: OpengrepRuleCreateRequest) -> Dict[str, Any]:
+async def get_rule_by_patch(
+    request: OpengrepRuleCreateRequest,
+    user_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     import tempfile
     from .llm_rule.repo_cache_manager import GlobalRepoCacheManager
     
@@ -330,7 +333,7 @@ async def get_rule_by_patch(request: OpengrepRuleCreateRequest) -> Dict[str, Any
         config.rules_dir.mkdir(parents=True, exist_ok=True)
         
         try:
-            autogen = AutoGrep(config)
+            autogen = AutoGrep(config, user_config=user_config)
             logging.info("Starting AutoGrep run for single patch...")
             result = await autogen.process_patch(temp_file)
 

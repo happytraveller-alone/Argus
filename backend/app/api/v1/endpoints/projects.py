@@ -184,6 +184,7 @@ from app.services.upload.language_detection import detect_languages_from_paths
 from app.services.upload.project_stats import (
     get_cloc_stats,
     build_static_project_description,
+    generate_project_description,
 )
 
 
@@ -196,6 +197,38 @@ def calculate_file_sha256(file_path: str) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             sha256.update(chunk)
     return sha256.hexdigest()
+
+
+async def _get_user_config(db: AsyncSession, user_id: Optional[str]) -> Optional[dict]:
+    """获取用户配置（与 static_tasks 一致）"""
+    if not user_id:
+        return None
+
+    try:
+        from app.api.v1.endpoints.config import (
+            decrypt_config,
+            SENSITIVE_LLM_FIELDS,
+            SENSITIVE_OTHER_FIELDS,
+        )
+
+        result = await db.execute(select(UserConfig).where(UserConfig.user_id == user_id))
+        config = result.scalar_one_or_none()
+
+        if config and config.llm_config:
+            user_llm_config = json.loads(config.llm_config) if config.llm_config else {}
+            user_other_config = json.loads(config.other_config) if config.other_config else {}
+
+            user_llm_config = decrypt_config(user_llm_config, SENSITIVE_LLM_FIELDS)
+            user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
+
+            return {
+                "llmConfig": user_llm_config,
+                "otherConfig": user_other_config,
+            }
+    except Exception as e:
+        logger.warning(f"Failed to get user config: {e}")
+
+    return None
 
 
 async def find_duplicate_zip_project(
@@ -485,12 +518,32 @@ async def get_project_info(
         await db.commit()
         await db.refresh(project_info)
 
+        user_config = await _get_user_config(db, current_user.id)
+        if user_config:
+            logger.info(f"已为用户 {current_user.id} 加载 LLM 配置")
+        else:
+            logger.warning(f"获取用户 {current_user.id} 的配置失败或为空，将使用默认配置")
+
         # 生成语言统计（纯静态）
         cloc_result = await get_cloc_stats(project_info)
         project_info.language_info = cloc_result
 
         # 基于静态统计生成项目描述（不依赖 LLM）
-        project_info.description = build_static_project_description(cloc_result, project.name)
+        static_description = build_static_project_description(cloc_result, project.name)
+        project_info.description = static_description
+
+        # 如可用则使用 LLM 生成项目描述（使用用户配置）
+        if user_config:
+            try:
+                llm_result = await generate_project_description(
+                    project_info, user_config=user_config
+                )
+                if isinstance(llm_result, dict):
+                    llm_description = (llm_result.get("project_description") or "").strip()
+                    if llm_description:
+                        project_info.description = llm_description
+            except Exception as e:
+                logger.warning(f"生成项目描述时 LLM 失败: {e}")
 
         project_info.status = "completed"
         db.add(project_info)

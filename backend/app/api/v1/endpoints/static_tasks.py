@@ -27,6 +27,7 @@ from app.models.opengrep import OpengrepFinding, OpengrepRule, OpengrepScanTask
 from app.models.gitleaks import GitleaksScanTask, GitleaksFinding
 from app.models.project import Project
 from app.models.user import User
+from app.models.user_config import UserConfig
 from app.schemas.opengrep import (
     OpengrepRuleCreateRequest,
     OpengrepRulePatchResponse,
@@ -2298,6 +2299,39 @@ def _validate_patch_filename(filename: str) -> bool:
     return bool(re.match(pattern, filename, re.IGNORECASE))
 
 
+async def _get_user_config(db: AsyncSession, user_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """获取用户配置（与 agent_tasks 一致）"""
+    if not user_id:
+        return None
+
+    try:
+        from app.api.v1.endpoints.config import (
+            decrypt_config,
+            SENSITIVE_LLM_FIELDS, SENSITIVE_OTHER_FIELDS
+        )
+
+        result = await db.execute(
+            select(UserConfig).where(UserConfig.user_id == user_id)
+        )
+        config = result.scalar_one_or_none()
+
+        if config and config.llm_config:
+            user_llm_config = json.loads(config.llm_config) if config.llm_config else {}
+            user_other_config = json.loads(config.other_config) if config.other_config else {}
+
+            user_llm_config = decrypt_config(user_llm_config, SENSITIVE_LLM_FIELDS)
+            user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
+
+            return {
+                "llmConfig": user_llm_config,
+                "otherConfig": user_other_config,
+            }
+    except Exception as e:
+        logger.warning(f"Failed to get user config: {e}")
+
+    return None
+
+
 async def _process_patch_files_background(
     patch_files: List[tuple],
     user_id: str,
@@ -2314,6 +2348,12 @@ async def _process_patch_files_background(
         temp_dir: 临时目录路径，处理完后会被清理
     """
     async with async_session_factory() as db:
+        user_config = await _get_user_config(db, user_id)
+        if user_config:
+            logger.info(f"已为用户 {user_id} 加载 LLM 配置")
+        else:
+            logger.warning(f"获取用户 {user_id} 的配置失败或为空，将使用默认配置")
+        
         try:
             logger.info(f"开始后台处理 {len(patch_files)} 个 patch 文件 (task_type={task_type})...")
             
@@ -2338,7 +2378,7 @@ async def _process_patch_files_background(
                     patch_content = content_or_path
                 
                 try:
-                    result = await _process_single_patch_file(patch_content, filename, rule_id, db)
+                    result = await _process_single_patch_file(patch_content, filename, rule_id, db, user_config=user_config)
                     if result["status"] == "success":
                         success_count += 1
                     else:
@@ -2453,7 +2493,8 @@ async def _process_single_patch_file(
     patch_content: str,
     filename: str,
     rule_id: str,
-    db: AsyncSession
+    db: AsyncSession,
+    user_config: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     处理单个 patch 文件生成规则
@@ -2464,6 +2505,7 @@ async def _process_single_patch_file(
         filename: 文件名
         rule_id: 规则ID
         db: 数据库会话
+        user_config: 用户配置，用于LLM模型选择
         
     Returns:
         处理结果字典
@@ -2494,8 +2536,8 @@ async def _process_single_patch_file(
             commit_content=patch_content
         )
         
-        # 调用规则生成服务
-        result = await get_rule_by_patch(request)
+        # 调用规则生成服务，传入用户配置
+        result = await get_rule_by_patch(request, user_config=user_config)
         
         attempts = result.get("attempts", [])
         meta = result.get("meta", {})
@@ -2575,14 +2617,26 @@ async def _process_single_patch_file(
 
 @router.post("/rules/create", response_model=OpengrepRulePatchResponse)
 async def create_opengrep_rule(
-    request: OpengrepRuleCreateRequest, db: AsyncSession = Depends(get_db)
+    request: OpengrepRuleCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
 ):
     """
     创建一个新的 Opengrep 规则（从 Patch 生成）
 
     使用大模型基于 patch 内容生成检测规则，并保存所有尝试到数据库
     """
-    result = await get_rule_by_patch(request)
+    user_config = await _get_user_config(db, current_user.id)
+    if user_config:
+        llm_config = user_config.get("llmConfig", {})
+        logger.info(
+            f"✅ 从数据库获取用户 {current_user.id} 的 LLM 配置: "
+            f"provider={llm_config.get('llmProvider')}, model={llm_config.get('llmModel')}"
+        )
+    else:
+        logger.info(f"⚠️ 未找到用户 {current_user.id} 的 LLM 配置，将使用默认配置")
+    
+    result = await get_rule_by_patch(request, user_config=user_config)
 
     attempts = result.get("attempts", [])
     meta = result.get("meta", {})
@@ -3052,6 +3106,16 @@ async def _create_rules_and_generate_background(
         # 任务级缓存：维护本次处理中使用过的项目，防止重复克隆
         task_repo_cache: Dict[str, Path] = {}
         
+        user_config = await _get_user_config(db, user_id)
+        if user_config:
+            llm_config = user_config.get("llmConfig", {})
+            logger.info(
+                f"✅ 从数据库获取用户 {user_id} 的 LLM 配置: "
+                f"provider={llm_config.get('llmProvider')}, model={llm_config.get('llmModel')}"
+            )
+        else:
+            logger.info(f"⚠️ 未找到用户 {user_id} 的 LLM 配置，将使用默认配置")
+        
         try:
             logger.info(f"开始后台创建占位符规则和处理 {len(patch_files)} 个 patch 文件 (task_type={task_type})...")
             
@@ -3100,7 +3164,7 @@ async def _create_rules_and_generate_background(
                     patch_content = content_or_path
                 
                 try:
-                    result = await _process_single_patch_file(patch_content, filename, rule_id, db)
+                    result = await _process_single_patch_file(patch_content, filename, rule_id, db, user_config=user_config)
                     
                     # 从patch处理结果中提取repo信息用于缓存追踪
                     try:
