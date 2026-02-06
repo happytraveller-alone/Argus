@@ -54,6 +54,7 @@ import {
     Folder,
     ArrowUpRight,
     Key,
+    Sparkles,
 } from "lucide-react";
 import { api } from "@/shared/config/database";
 import { validateZipFile } from "@/features/projects/services";
@@ -162,6 +163,7 @@ export default function Projects() {
         useState<"project-browser" | "quick-actions">("project-browser");
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploading, setUploading] = useState(false);
+    const [generatingDescription, setGeneratingDescription] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(
@@ -512,6 +514,7 @@ export default function Projects() {
             programming_languages: [],
         });
         setSelectedFile(null);
+        setGeneratingDescription(false);
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
@@ -628,6 +631,38 @@ export default function Projects() {
             if (progressInterval) clearInterval(progressInterval);
             setUploading(false);
             setUploadProgress(0);
+        }
+    };
+
+    const handleGenerateProjectDescription = async () => {
+        if (!selectedFile) {
+            toast.error("请先选择压缩包文件");
+            return;
+        }
+
+        try {
+            setGeneratingDescription(true);
+            const result = await api.generateProjectDescription({
+                file: selectedFile,
+                project_name: createForm.name,
+            });
+            setCreateForm((prev) => ({
+                ...prev,
+                description: result.description || "",
+            }));
+            if (result.source === "llm") {
+                toast.success("已生成项目描述");
+            } else {
+                toast.success("LLM不可用，已回退静态描述");
+            }
+        } catch (error) {
+            console.error("Failed to generate project description:", error);
+            import("@/shared/utils/errorHandler").then(({ handleError }) => {
+                handleError(error, "生成项目描述失败");
+            });
+            toast.error("生成项目描述失败");
+        } finally {
+            setGeneratingDescription(false);
         }
     };
 
@@ -1161,12 +1196,30 @@ export default function Projects() {
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <Label
-                                        htmlFor="upload-description"
-                                        className="font-mono font-bold uppercase text-base text-muted-foreground"
-                                    >
-                                        描述
-                                    </Label>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <Label
+                                            htmlFor="upload-description"
+                                            className="font-mono font-bold uppercase text-base text-muted-foreground"
+                                        >
+                                            描述
+                                        </Label>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={handleGenerateProjectDescription}
+                                            disabled={
+                                                !selectedFile ||
+                                                uploading ||
+                                                generatingDescription
+                                            }
+                                            className="cyber-btn-outline h-8 text-xs"
+                                        >
+                                            <Sparkles className="w-3 h-3 mr-1.5" />
+                                            {generatingDescription
+                                                ? "生成中..."
+                                                : "一键生成"}
+                                        </Button>
+                                    </div>
                                     <Textarea
                                         id="upload-description"
                                         value={createForm.description}
@@ -1179,6 +1232,7 @@ export default function Projects() {
                                         placeholder="// 项目描述..."
                                         rows={3}
                                         className="cyber-input min-h-[80px]"
+                                        disabled={uploading}
                                     />
                                 </div>
 
@@ -1249,6 +1303,7 @@ export default function Projects() {
                                                 size="icon"
                                                 onClick={() => {
                                                     setSelectedFile(null);
+                                                    setGeneratingDescription(false);
                                                     setCreateForm((prev) => ({
                                                         ...prev,
                                                         programming_languages:
@@ -1295,7 +1350,7 @@ export default function Projects() {
                                     <Button
                                         variant="outline"
                                         onClick={closeCreateProjectDialog}
-                                        disabled={uploading}
+                                        disabled={uploading || generatingDescription}
                                         className="cyber-btn-outline"
                                     >
                                         取消
@@ -1303,7 +1358,11 @@ export default function Projects() {
                                     <Button
                                         onClick={handleUploadAndCreate}
                                         className={PROJECT_ACTION_BTN_SUBTLE}
-                                        disabled={!selectedFile || uploading}
+                                        disabled={
+                                            !selectedFile ||
+                                            uploading ||
+                                            generatingDescription
+                                        }
                                     >
                                         {uploading ? "上传中..." : "执行创建"}
                                     </Button>
@@ -1488,7 +1547,7 @@ export default function Projects() {
                         />
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>项目管理同源数据（新 → 旧）</span>
+                        <span>项目管理同源数据</span>
                         <span>共 {filteredProjects.length} 个</span>
                     </div>
                 </div>

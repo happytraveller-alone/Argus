@@ -331,6 +331,11 @@ export default function StaticAnalysis() {
         () => new URLSearchParams(location.search),
         [location.search],
     );
+    const returnToParam = searchParams.get("returnTo") || "";
+    const returnTo =
+        returnToParam.startsWith("/") && !returnToParam.startsWith("//")
+            ? returnToParam
+            : "";
 
     const toolParam = searchParams.get("tool");
     const muteToast = searchParams.get("muteToast") === "1";
@@ -915,6 +920,14 @@ export default function StaticAnalysis() {
         navigate(`/opengrep-rules?${query.toString()}`);
     };
 
+    const handleBack = () => {
+        if (returnTo) {
+            navigate(returnTo);
+            return;
+        }
+        navigate(-1);
+    };
+
     const handleInterruptTasks = async () => {
         setInterruptingTask(true);
         try {
@@ -1030,7 +1043,7 @@ export default function StaticAnalysis() {
                         <Button
                             variant="outline"
                             className="cyber-btn-outline"
-                            onClick={() => navigate(-1)}
+                            onClick={handleBack}
                         >
                             <ArrowLeft className="w-4 h-4 mr-2" />
                             返回

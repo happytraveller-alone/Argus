@@ -197,6 +197,33 @@ export interface ProjectStats {
   avg_quality_score: number;
 }
 
+export interface StaticScanOverviewItem {
+  project_id: string;
+  project_name: string;
+  last_scan_tool: "opengrep" | "gitleaks";
+  last_scan_task_id: string;
+  paired_gitleaks_task_id?: string | null;
+  last_scan_at: string;
+  severe_count: number;
+  hint_count: number;
+  info_count: number;
+  total_findings: number;
+}
+
+export interface StaticScanOverviewResponse {
+  items: StaticScanOverviewItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface ProjectDescriptionGenerateResponse {
+  description: string;
+  language_info: string;
+  source: "llm" | "static";
+}
+
 export interface IssueStats {
   by_type: Record<string, number>;
   by_severity: Record<string, number>;

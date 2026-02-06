@@ -8,7 +8,9 @@ import type {
   InstantAnalysis,
   CreateProjectForm,
   CreateAuditTaskForm,
-  InstantAnalysisForm
+  InstantAnalysisForm,
+  StaticScanOverviewResponse,
+  ProjectDescriptionGenerateResponse,
 } from "../types/index";
 
 // Implement the same interface as the original localDatabase.ts but using backend API
@@ -93,6 +95,25 @@ export const api = {
     const res = await apiClient.post(`/projects/${id}/zip`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
+    return res.data;
+  },
+
+  async generateProjectDescription(params: {
+    file: File;
+    project_name?: string;
+  }): Promise<ProjectDescriptionGenerateResponse> {
+    const formData = new FormData();
+    formData.append("file", params.file);
+    if (params.project_name?.trim()) {
+      formData.append("project_name", params.project_name.trim());
+    }
+    const res = await apiClient.post(
+      "/projects/description/generate",
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      },
+    );
     return res.data;
   },
 
@@ -288,6 +309,31 @@ export const api = {
         total_issues: 0,
         resolved_issues: 0,
         avg_quality_score: 0
+      };
+    }
+  },
+
+  async getStaticScanOverview(params?: {
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+  }): Promise<StaticScanOverviewResponse> {
+    try {
+      const res = await apiClient.get('/projects/static-scan-overview', {
+        params: {
+          page: params?.page,
+          page_size: params?.page_size,
+          keyword: params?.keyword,
+        },
+      });
+      return res.data;
+    } catch (e) {
+      return {
+        items: [],
+        total: 0,
+        page: params?.page || 1,
+        page_size: params?.page_size || 6,
+        total_pages: 1,
       };
     }
   },

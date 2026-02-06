@@ -1035,20 +1035,6 @@ export default function OpengrepRules() {
         return `CWE-${upper}`;
     };
 
-    const getRuleCweTitle = (rule: OpengrepRule) => {
-        const normalizedCodes = (rule.cwe ?? [])
-            .map((item) => normalizeCweCode(item))
-            .filter(Boolean);
-
-        if (normalizedCodes.length === 0) {
-            return isEnglish ? "CWE-N/A" : "CWE-未设置";
-        }
-        if (normalizedCodes.length === 1) {
-            return normalizedCodes[0];
-        }
-        return `${normalizedCodes[0]} +${normalizedCodes.length - 1}`;
-    };
-
     const getSourceBadge = (source: string) => {
         return source === "patch" ? "补丁生成" : "内置规则";
     };
@@ -1542,12 +1528,10 @@ export default function OpengrepRules() {
                                                                 className="w-4 h-4 mt-1"
                                                             />
                                                             <div className="flex-1 min-w-0">
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <h3 className="font-bold text-foreground truncate">
-                                                                        {getRuleCweTitle(
-                                                                            rule,
-                                                                        )}
-                                                                    </h3>
+                                                                <h3 className="text-base font-semibold text-foreground truncate">
+                                                                    {rule.name}
+                                                                </h3>
+                                                                <div className="mt-2 flex items-center gap-2 flex-wrap">
                                                                     <Badge
                                                                         className={`cyber-badge ${getSeverityColor(rule.severity)}`}
                                                                     >
@@ -1584,11 +1568,15 @@ export default function OpengrepRules() {
                                                                     )}
                                                                 </div>
 
-                                                                <p className="text-foreground text-base font-bold truncate">
-                                                                    {rule.name}
-                                                                </p>
-
-                                                                <div className="mt-2 flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-mono">
+                                                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-mono">
+                                                                    <div>
+                                                                        <span className="text-muted-foreground">
+                                                                            规则ID:
+                                                                        </span>
+                                                                        <span className="text-foreground font-bold">
+                                                                            {rule.id}
+                                                                        </span>
+                                                                    </div>
                                                                     <div>
                                                                         <span className="text-muted-foreground">
                                                                             语言:

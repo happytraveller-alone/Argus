@@ -21,6 +21,7 @@ import {
 	TerminalSquare,
 	Upload,
 	Zap,
+	Sparkles,
 } from "lucide-react";
 import { api } from "@/shared/config/database";
 import type { Project } from "@/shared/types";
@@ -92,6 +93,7 @@ export default function CreateProjectAuditDialog({
 	const [newProjectName, setNewProjectName] = useState("");
 	const [newProjectDescription, setNewProjectDescription] = useState("");
 	const [newProjectFile, setNewProjectFile] = useState<File | null>(null);
+	const [generatingDescription, setGeneratingDescription] = useState(false);
 	const [mode, setMode] = useState<AuditCreateMode>("static");
 	const [branchName, setBranchName] = useState("main");
 	const [opengrepEnabled, setOpengrepEnabled] = useState(true);
@@ -134,6 +136,7 @@ export default function CreateProjectAuditDialog({
 		setNewProjectName("");
 		setNewProjectDescription("");
 		setNewProjectFile(null);
+		setGeneratingDescription(false);
 		setMode(initialMode || "static");
 		setBranchName("main");
 		setOpengrepEnabled(true);
@@ -278,9 +281,35 @@ export default function CreateProjectAuditDialog({
 			return;
 		}
 		setNewProjectFile(file);
+		setGeneratingDescription(false);
 		const inferredName = stripArchiveSuffix(file.name).trim();
 		if (inferredName) setNewProjectName(inferredName);
 		event.target.value = "";
+	};
+
+	const handleGenerateNewProjectDescription = async () => {
+		if (!newProjectFile) {
+			toast.error("请先选择项目压缩包");
+			return;
+		}
+
+		try {
+			setGeneratingDescription(true);
+			const result = await api.generateProjectDescription({
+				file: newProjectFile,
+				project_name: newProjectName,
+			});
+			setNewProjectDescription(result.description || "");
+			if (result.source === "llm") {
+				toast.success("已生成项目描述");
+			} else {
+				toast.success("LLM不可用，已回退静态描述");
+			}
+		} catch (error) {
+			toast.error(`生成失败: ${extractApiErrorMessage(error)}`);
+		} finally {
+			setGeneratingDescription(false);
+		}
 	};
 
 	const handleCreate = async (action: "primary" | "secondary" = "primary") => {
@@ -431,8 +460,11 @@ export default function CreateProjectAuditDialog({
 									type="button"
 									variant={sourceMode === "existing" ? "default" : "outline"}
 									className={sourceMode === "existing" ? "cyber-btn-primary h-10" : "cyber-btn-outline h-10"}
-									onClick={() => setSourceMode("existing")}
-									disabled={creating}
+									onClick={() => {
+										setSourceMode("existing");
+										setGeneratingDescription(false);
+									}}
+									disabled={creating || generatingDescription}
 								>
 									选择已有项目
 								</Button>
@@ -440,8 +472,11 @@ export default function CreateProjectAuditDialog({
 									type="button"
 									variant={sourceMode === "upload" ? "default" : "outline"}
 									className={sourceMode === "upload" ? "cyber-btn-primary h-10" : "cyber-btn-outline h-10"}
-									onClick={() => setSourceMode("upload")}
-									disabled={creating}
+									onClick={() => {
+										setSourceMode("upload");
+										setGeneratingDescription(false);
+									}}
+									disabled={creating || generatingDescription}
 								>
 									上传新项目
 								</Button>
@@ -463,7 +498,7 @@ export default function CreateProjectAuditDialog({
 											: "cyber-btn-outline h-10 justify-start"
 									}
 									onClick={() => setMode("static")}
-									disabled={creating}
+									disabled={creating || generatingDescription}
 								>
 									<Zap className="w-4 h-4 mr-2" />
 									静态审计
@@ -477,7 +512,7 @@ export default function CreateProjectAuditDialog({
 											: "cyber-btn-outline h-10 justify-start"
 									}
 									onClick={() => setMode("agent")}
-									disabled={creating}
+									disabled={creating || generatingDescription}
 								>
 									<Bot className="w-4 h-4 mr-2" />
 									智能审计
@@ -495,7 +530,7 @@ export default function CreateProjectAuditDialog({
 									onChange={(event) => setSearchTerm(event.target.value)}
 									placeholder="搜索项目..."
 									className="pl-12 h-9 cyber-input"
-									disabled={creating}
+									disabled={creating || generatingDescription}
 								/>
 							</div>
 							<div className="border border-border rounded-lg max-h-[280px] overflow-y-auto p-2 space-y-2">
@@ -514,7 +549,7 @@ export default function CreateProjectAuditDialog({
 													? "border-sky-500/50 bg-sky-500/10"
 													: "border-border hover:border-sky-500/30 bg-background"
 												}`}
-											disabled={creating}
+											disabled={creating || generatingDescription}
 										>
 											<div className="flex items-start justify-between gap-3">
 												<div className="min-w-0">
@@ -560,18 +595,36 @@ export default function CreateProjectAuditDialog({
 									onChange={(event) => setNewProjectName(event.target.value)}
 									placeholder="请输入项目名称"
 									className="h-9 cyber-input"
-									disabled={creating}
+									disabled={creating || generatingDescription}
 								/>
 							</div>
 							<div>
-								<p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">项目描述（可选）</p>
+								<div className="mb-1 flex items-center justify-between gap-2">
+									<p className="text-xs uppercase tracking-wider text-muted-foreground">
+										项目描述（可选）
+									</p>
+									<Button
+										type="button"
+										variant="outline"
+										className="cyber-btn-outline h-8 text-xs"
+										onClick={handleGenerateNewProjectDescription}
+										disabled={
+											creating ||
+											generatingDescription ||
+											!newProjectFile
+										}
+									>
+										<Sparkles className="w-3 h-3 mr-1.5" />
+										{generatingDescription ? "生成中..." : "一键生成"}
+									</Button>
+								</div>
 								<Textarea
 									value={newProjectDescription}
 									onChange={(event) => setNewProjectDescription(event.target.value)}
 									placeholder="请输入项目描述"
 									rows={2}
 									className="cyber-input min-h-[72px]"
-									disabled={creating}
+									disabled={creating || generatingDescription}
 								/>
 							</div>
 							<div>
@@ -582,7 +635,7 @@ export default function CreateProjectAuditDialog({
 										accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
 										className="hidden"
 										onChange={handleNewProjectFileSelect}
-										disabled={creating}
+										disabled={creating || generatingDescription}
 									/>
 									<span className="cyber-btn-outline h-9 px-3 inline-flex items-center cursor-pointer">
 										<Upload className="w-4 h-4 mr-2" />
@@ -609,7 +662,7 @@ export default function CreateProjectAuditDialog({
 									<Checkbox
 										checked={opengrepEnabled}
 										onCheckedChange={(checked) => setOpengrepEnabled(Boolean(checked))}
-										disabled={creating}
+										disabled={creating || generatingDescription}
 										className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
 									/>
 									<div>
@@ -621,7 +674,7 @@ export default function CreateProjectAuditDialog({
 									<Checkbox
 										checked={gitleaksEnabled}
 										onCheckedChange={(checked) => setGitleaksEnabled(Boolean(checked))}
-										disabled={creating}
+										disabled={creating || generatingDescription}
 										className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
 									/>
 									<div>
@@ -648,7 +701,7 @@ export default function CreateProjectAuditDialog({
 									onChange={(event) => setBranchName(event.target.value)}
 									placeholder="main"
 									className="h-9 cyber-input"
-									disabled={creating}
+									disabled={creating || generatingDescription}
 								/>
 							</div>
 						)}
@@ -661,7 +714,7 @@ export default function CreateProjectAuditDialog({
 							variant="outline"
 						className="cyber-btn-outline"
 						onClick={() => onOpenChange(false)}
-						disabled={creating}
+						disabled={creating || generatingDescription}
 					>
 						取消
 						</Button>
@@ -669,7 +722,7 @@ export default function CreateProjectAuditDialog({
 							type="button"
 							className="cyber-btn-primary"
 							onClick={() => handleCreate("primary")}
-							disabled={!canCreate || creating}
+							disabled={!canCreate || creating || generatingDescription}
 						>
 							{creating ? (
 							<>
@@ -688,7 +741,7 @@ export default function CreateProjectAuditDialog({
 								type="button"
 								className="cyber-btn-primary"
 								onClick={() => handleCreate("secondary")}
-								disabled={!canCreate || creating}
+								disabled={!canCreate || creating || generatingDescription}
 							>
 								{creating ? (
 									<>

@@ -15,13 +15,9 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     ArrowLeft,
-    Edit,
     ExternalLink,
     Shield,
     Activity,
@@ -29,14 +25,12 @@ import {
     CheckCircle,
     Clock,
     XCircle,
-    Upload,
     Terminal,
 } from "lucide-react";
 import { api } from "@/shared/config/database";
 import type {
     Project,
     AuditTask,
-    CreateProjectForm,
     AuditIssue,
 } from "@/shared/types";
 import type { AgentFinding, AgentTask } from "@/shared/api/agentTasks";
@@ -57,7 +51,6 @@ import {
 } from "@/shared/utils/projectUtils";
 import { toast } from "sonner";
 import CreateTaskDialog from "@/components/audit/CreateTaskDialog";
-import { SUPPORTED_LANGUAGES } from "@/shared/constants";
 import type {
     AggregatedAgentFinding,
     AggregatedAuditIssue,
@@ -107,15 +100,6 @@ export default function ProjectDetail() {
     const [projectInfoStatus, setProjectInfoStatus] = useState<string>("idle");
     const [loading, setLoading] = useState(true);
     const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
-    const [editForm, setEditForm] = useState<CreateProjectForm>({
-        name: "",
-        description: "",
-        source_type: "repository",
-        repository_url: "",
-        repository_type: "github",
-        default_branch: "main",
-        programming_languages: [],
-    });
     const [activeTab, setActiveTab] = useState("overview");
     const [latestIssues, setLatestIssues] = useState<AggregatedAuditIssue[]>(
         [],
@@ -559,43 +543,12 @@ export default function ProjectDetail() {
         }
     }, [projectInfo?.language_info]);
 
-    const handleOpenSettings = () => {
-        if (!project) return;
-
-        setEditForm({
-            name: project.name,
-            description: project.description || "",
-            source_type: project.source_type || "repository",
-            repository_url: project.repository_url || "",
-            repository_type: project.repository_type || "github",
-            default_branch: project.default_branch || "main",
-            programming_languages: project.programming_languages
-                ? JSON.parse(project.programming_languages)
-                : [],
-        });
-
-        setActiveTab("settings");
-    };
-
-    const formatLanguageName = (lang: string): string => {
-        const nameMap: Record<string, string> = {
-            javascript: "JavaScript",
-            typescript: "TypeScript",
-            python: "Python",
-            java: "Java",
-            go: "Go",
-            rust: "Rust",
-            cpp: "C++",
-            csharp: "C#",
-            php: "PHP",
-            ruby: "Ruby",
-            swift: "Swift",
-            kotlin: "Kotlin",
-        };
-        return nameMap[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
-    };
-
-    const supportedLanguages = SUPPORTED_LANGUAGES.map(formatLanguageName);
+    const projectAnalysisDescription = useMemo(() => {
+        const directDescription = (project?.description || "").trim();
+        if (directDescription) return directDescription;
+        const legacyDescription = (projectInfo?.description || "").trim();
+        return legacyDescription;
+    }, [project?.description, projectInfo?.description]);
 
     useEffect(() => {
         if (id) {
@@ -828,33 +781,6 @@ export default function ProjectDetail() {
         setShowCreateTaskDialog(true);
     };
 
-    const handleSaveSettings = async () => {
-        if (!id) return;
-
-        if (!editForm.name.trim()) {
-            toast.error("项目名称不能为空");
-            return;
-        }
-
-        try {
-            await api.updateProject(id, editForm);
-            toast.success("项目信息已保存");
-            loadProjectData();
-        } catch (error) {
-            console.error("Failed to update project:", error);
-            toast.error("保存失败");
-        }
-    };
-
-    const handleToggleLanguage = (lang: string) => {
-        const currentLanguages = editForm.programming_languages || [];
-        const newLanguages = currentLanguages.includes(lang)
-            ? currentLanguages.filter((l) => l !== lang)
-            : [...currentLanguages, lang];
-
-        setEditForm({ ...editForm, programming_languages: newLanguages });
-    };
-
     const getStatusBadge = (status: string) => {
         switch (status) {
             case "completed":
@@ -980,14 +906,6 @@ export default function ProjectDetail() {
                         <Shield className="w-4 h-4 mr-2" />
                         启动审计
                     </Button>
-                    <Button
-                        variant="outline"
-                        onClick={handleOpenSettings}
-                        className="cyber-btn-outline"
-                    >
-                        <Edit className="w-4 h-4 mr-2" />
-                        编辑
-                    </Button>
                 </div>
             </div>
 
@@ -1000,7 +918,7 @@ export default function ProjectDetail() {
                 onValueChange={setActiveTab}
                 className="w-full relative z-10"
             >
-                <TabsList className="grid w-full grid-cols-3 bg-muted border border-border p-1 h-auto gap-1 rounded">
+                <TabsList className="grid w-full grid-cols-2 bg-muted border border-border p-1 h-auto gap-1 rounded">
                     <TabsTrigger
                         value="overview"
                         className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm"
@@ -1012,12 +930,6 @@ export default function ProjectDetail() {
                         className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm"
                     >
                         审计任务
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="settings"
-                        className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2 text-muted-foreground transition-all rounded-sm"
-                    >
-                        项目设置
                     </TabsTrigger>
                 </TabsList>
 
@@ -1232,21 +1144,19 @@ export default function ProjectDetail() {
                                     项目分析生成失败，可稍后重试。
                                 </p>
                             )}
+                            <div className="space-y-2 font-mono">
+                                <h4 className="text-sm font-bold uppercase text-muted-foreground">
+                                    项目描述
+                                </h4>
+                                <div className="text-sm text-foreground bg-muted border border-border rounded p-3 whitespace-pre-wrap">
+                                    {projectAnalysisDescription || "未设置项目描述"}
+                                </div>
+                            </div>
                             {projectInfoStatus !== "loading" &&
                                 projectInfoStatus !== "pending" &&
                                 projectInfoStatus !== "failed" &&
                                 projectInfo && (
                                     <div className="space-y-4 font-mono">
-                                        {projectInfo.description && (
-                                            <div>
-                                                <h4 className="text-sm font-bold mb-2 uppercase text-muted-foreground">
-                                                    项目描述
-                                                </h4>
-                                                <div className="text-sm text-foreground bg-muted border border-border rounded p-3 whitespace-pre-wrap">
-                                                    {projectInfo.description}
-                                                </div>
-                                            </div>
-                                        )}
                                         {projectInfo.language_info && (
                                             <div>
                                                 <h4 className="text-sm font-bold mb-2 uppercase text-muted-foreground">
@@ -1387,12 +1297,6 @@ export default function ProjectDetail() {
                                         )}
                                     </div>
                                 )}
-                            {projectInfoStatus === "completed" &&
-                                !projectInfo && (
-                                    <p className="text-sm text-muted-foreground font-mono">
-                                        暂无项目分析结果。
-                                    </p>
-                                )}
                         </div>
                     </div>
                 </TabsContent>
@@ -1406,76 +1310,6 @@ export default function ProjectDetail() {
                         renderStatusIcon={getStatusIcon}
                         getTaskRoute={getTaskDetailRoute}
                     />
-                </TabsContent>
-
-                <TabsContent
-                    value="settings"
-                    className="flex flex-col gap-6 mt-6"
-                >
-                    <div className="cyber-card p-6">
-                        <div className="section-header">
-                            <Edit className="w-5 h-5 text-primary" />
-                            <h3 className="section-title">编辑项目配置</h3>
-                        </div>
-
-                        <div className="flex flex-col gap-6">
-                            {/* 基本信息 */}
-                            <div className="space-y-4">
-                                <div>
-                                    <Label
-                                        htmlFor="edit-name"
-                                        className="font-mono font-bold uppercase text-xs text-muted-foreground"
-                                    >
-                                        项目名称
-                                    </Label>
-                                    <Input
-                                        id="edit-name"
-                                        value={editForm.name}
-                                        onChange={(e) =>
-                                            setEditForm({
-                                                ...editForm,
-                                                name: e.target.value,
-                                            })
-                                        }
-                                        placeholder="输入项目名称"
-                                        className="cyber-input mt-1"
-                                    />
-                                </div>
-
-                                <div>
-                                    <Label
-                                        htmlFor="edit-description"
-                                        className="font-mono font-bold uppercase text-xs text-muted-foreground"
-                                    >
-                                        项目描述
-                                    </Label>
-                                    <Textarea
-                                        id="edit-description"
-                                        value={editForm.description}
-                                        onChange={(e) =>
-                                            setEditForm({
-                                                ...editForm,
-                                                description: e.target.value,
-                                            })
-                                        }
-                                        placeholder="输入项目描述"
-                                        rows={3}
-                                        className="cyber-input mt-1 min-h-[80px]"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end space-x-3 pt-6 border-t border-border">
-                                <Button
-                                    onClick={handleSaveSettings}
-                                    className="cyber-btn-primary"
-                                >
-                                    <Edit className="w-4 h-4 mr-2" />
-                                    保存修改
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
                 </TabsContent>
             </Tabs>
 

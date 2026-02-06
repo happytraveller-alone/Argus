@@ -1,8 +1,17 @@
-from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
+from typing import Any, List, Optional, Literal
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    BackgroundTasks,
+    UploadFile,
+    File,
+    Query,
+    Form,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func
+from sqlalchemy import func, case, or_, and_
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
@@ -187,7 +196,8 @@ from app.services.upload.language_detection import detect_languages_from_paths
 from app.services.upload.project_stats import (
     get_cloc_stats,
     build_static_project_description,
-    generate_project_description,
+    get_cloc_stats_from_extracted_dir,
+    generate_project_description_from_extracted_dir,
 )
 
 
@@ -315,6 +325,33 @@ class StatsResponse(BaseModel):
     resolved_issues: int
 
 
+class StaticScanOverviewItem(BaseModel):
+    project_id: str
+    project_name: str
+    last_scan_tool: Literal["opengrep", "gitleaks"]
+    last_scan_task_id: str
+    paired_gitleaks_task_id: Optional[str] = None
+    last_scan_at: datetime
+    severe_count: int
+    hint_count: int
+    info_count: int
+    total_findings: int
+
+
+class StaticScanOverviewResponse(BaseModel):
+    items: List[StaticScanOverviewItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class ProjectDescriptionGenerateResponse(BaseModel):
+    description: str
+    language_info: str
+    source: Literal["llm", "static"]
+
+
 class ProjectInfoResponse(BaseModel):
     id: str
     project_id: str
@@ -322,6 +359,66 @@ class ProjectInfoResponse(BaseModel):
     description: str
     status: str
     created_at: datetime
+
+
+def _build_static_scan_overview_item_from_row(
+    row: dict[str, Any],
+) -> Optional[StaticScanOverviewItem]:
+    opengrep_task_id = row.get("opengrep_task_id")
+    opengrep_created_at = row.get("opengrep_created_at")
+    latest_gitleaks_created_at = row.get("latest_gitleaks_created_at")
+    if opengrep_created_at is None and latest_gitleaks_created_at is None:
+        return None
+
+    project_id = str(row.get("project_id") or "")
+    project_name = str(row.get("project_name") or "")
+    if not project_id:
+        return None
+
+    if opengrep_created_at is not None and opengrep_task_id:
+        severe_count = int(row.get("opengrep_error_count") or 0)
+        opengrep_warning_count = int(row.get("opengrep_warning_count") or 0)
+        opengrep_total_findings = int(row.get("opengrep_total_findings") or 0)
+        paired_gitleaks_count = int(row.get("paired_gitleaks_total_findings") or 0)
+        hint_count = opengrep_warning_count + paired_gitleaks_count
+        info_count = max(opengrep_total_findings - severe_count - opengrep_warning_count, 0)
+        total_findings = severe_count + hint_count + info_count
+        task_id = str(opengrep_task_id)
+        paired_gitleaks_created_at = row.get("paired_gitleaks_created_at")
+        if (
+            paired_gitleaks_created_at is not None
+            and paired_gitleaks_created_at > opengrep_created_at
+        ):
+            last_scan_at = paired_gitleaks_created_at
+        else:
+            last_scan_at = opengrep_created_at
+        last_scan_tool: Literal["opengrep", "gitleaks"] = "opengrep"
+        paired_gitleaks_task_id = str(row.get("paired_gitleaks_task_id") or "") or None
+    else:
+        severe_count = 0
+        total_findings = int(row.get("latest_gitleaks_total_findings") or 0)
+        hint_count = total_findings
+        info_count = 0
+        task_id = str(row.get("latest_gitleaks_task_id") or "")
+        last_scan_at = latest_gitleaks_created_at
+        last_scan_tool = "gitleaks"
+        paired_gitleaks_task_id = None
+
+    if not task_id or last_scan_at is None:
+        return None
+
+    return StaticScanOverviewItem(
+        project_id=project_id,
+        project_name=project_name,
+        last_scan_tool=last_scan_tool,
+        last_scan_task_id=task_id,
+        paired_gitleaks_task_id=paired_gitleaks_task_id,
+        last_scan_at=last_scan_at,
+        severe_count=severe_count,
+        hint_count=hint_count,
+        info_count=info_count,
+        total_findings=total_findings,
+    )
     
 
 @router.post("/", response_model=ProjectResponse)
@@ -500,6 +597,315 @@ async def get_stats(
     }
 
 
+@router.get("/static-scan-overview", response_model=StaticScanOverviewResponse)
+async def get_static_scan_overview(
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(6, ge=1, le=50, description="每页数量"),
+    keyword: Optional[str] = Query(
+        None,
+        description="按项目名称模糊搜索（大小写不敏感）",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    获取项目静态扫描概览（分页）。
+    仅返回至少存在一次成功静态扫描（Opengrep/Gitleaks）的项目。
+    """
+    opengrep_ranked_subquery = (
+        select(
+            OpengrepScanTask.project_id.label("project_id"),
+            OpengrepScanTask.id.label("task_id"),
+            OpengrepScanTask.created_at.label("created_at"),
+            OpengrepScanTask.total_findings.label("total_findings"),
+            OpengrepScanTask.error_count.label("error_count"),
+            OpengrepScanTask.warning_count.label("warning_count"),
+            func.row_number()
+            .over(
+                partition_by=OpengrepScanTask.project_id,
+                order_by=OpengrepScanTask.created_at.desc(),
+            )
+            .label("rn"),
+        )
+        .where(func.lower(OpengrepScanTask.status) == "completed")
+        .subquery()
+    )
+    latest_opengrep_subquery = (
+        select(
+            opengrep_ranked_subquery.c.project_id,
+            opengrep_ranked_subquery.c.task_id,
+            opengrep_ranked_subquery.c.created_at,
+            opengrep_ranked_subquery.c.total_findings,
+            opengrep_ranked_subquery.c.error_count,
+            opengrep_ranked_subquery.c.warning_count,
+        )
+        .where(opengrep_ranked_subquery.c.rn == 1)
+        .subquery()
+    )
+
+    gitleaks_ranked_subquery = (
+        select(
+            GitleaksScanTask.project_id.label("project_id"),
+            GitleaksScanTask.id.label("task_id"),
+            GitleaksScanTask.created_at.label("created_at"),
+            GitleaksScanTask.total_findings.label("total_findings"),
+            func.row_number()
+            .over(
+                partition_by=GitleaksScanTask.project_id,
+                order_by=GitleaksScanTask.created_at.desc(),
+            )
+            .label("rn"),
+        )
+        .where(func.lower(GitleaksScanTask.status) == "completed")
+        .subquery()
+    )
+    latest_gitleaks_subquery = (
+        select(
+            gitleaks_ranked_subquery.c.project_id,
+            gitleaks_ranked_subquery.c.task_id,
+            gitleaks_ranked_subquery.c.created_at,
+            gitleaks_ranked_subquery.c.total_findings,
+        )
+        .where(gitleaks_ranked_subquery.c.rn == 1)
+        .subquery()
+    )
+
+    # 以 opengrep 最新 completed 为主锚，配对同批（60 秒窗口）gitleaks completed 任务
+    paired_gitleaks_ranked_subquery = (
+        select(
+            latest_opengrep_subquery.c.project_id.label("project_id"),
+            GitleaksScanTask.id.label("task_id"),
+            GitleaksScanTask.created_at.label("created_at"),
+            GitleaksScanTask.total_findings.label("total_findings"),
+            func.row_number()
+            .over(
+                partition_by=latest_opengrep_subquery.c.project_id,
+                order_by=(
+                    func.abs(
+                        func.extract(
+                            "epoch",
+                            GitleaksScanTask.created_at
+                            - latest_opengrep_subquery.c.created_at,
+                        )
+                    ).asc(),
+                    GitleaksScanTask.created_at.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .select_from(latest_opengrep_subquery)
+        .join(
+            GitleaksScanTask,
+            and_(
+                GitleaksScanTask.project_id == latest_opengrep_subquery.c.project_id,
+                func.lower(GitleaksScanTask.status) == "completed",
+                func.abs(
+                    func.extract(
+                        "epoch",
+                        GitleaksScanTask.created_at
+                        - latest_opengrep_subquery.c.created_at,
+                    )
+                )
+                <= 60,
+            ),
+        )
+        .subquery()
+    )
+
+    paired_gitleaks_subquery = (
+        select(
+            paired_gitleaks_ranked_subquery.c.project_id,
+            paired_gitleaks_ranked_subquery.c.task_id,
+            paired_gitleaks_ranked_subquery.c.created_at,
+            paired_gitleaks_ranked_subquery.c.total_findings,
+        )
+        .where(paired_gitleaks_ranked_subquery.c.rn == 1)
+        .subquery()
+    )
+
+    last_scan_at_expr = case(
+        (
+            latest_opengrep_subquery.c.created_at.is_not(None),
+            case(
+                (
+                    and_(
+                        paired_gitleaks_subquery.c.created_at.is_not(None),
+                        paired_gitleaks_subquery.c.created_at
+                        > latest_opengrep_subquery.c.created_at,
+                    ),
+                    paired_gitleaks_subquery.c.created_at,
+                ),
+                else_=latest_opengrep_subquery.c.created_at,
+            ),
+        ),
+        else_=latest_gitleaks_subquery.c.created_at,
+    )
+
+    base_stmt = (
+        select(
+            Project.id.label("project_id"),
+            Project.name.label("project_name"),
+            latest_opengrep_subquery.c.task_id.label("opengrep_task_id"),
+            latest_opengrep_subquery.c.created_at.label("opengrep_created_at"),
+            latest_opengrep_subquery.c.total_findings.label("opengrep_total_findings"),
+            latest_opengrep_subquery.c.error_count.label("opengrep_error_count"),
+            latest_opengrep_subquery.c.warning_count.label("opengrep_warning_count"),
+            paired_gitleaks_subquery.c.task_id.label("paired_gitleaks_task_id"),
+            paired_gitleaks_subquery.c.created_at.label("paired_gitleaks_created_at"),
+            paired_gitleaks_subquery.c.total_findings.label(
+                "paired_gitleaks_total_findings"
+            ),
+            latest_gitleaks_subquery.c.task_id.label("latest_gitleaks_task_id"),
+            latest_gitleaks_subquery.c.created_at.label("latest_gitleaks_created_at"),
+            latest_gitleaks_subquery.c.total_findings.label(
+                "latest_gitleaks_total_findings"
+            ),
+            last_scan_at_expr.label("last_scan_at"),
+        )
+        .select_from(Project)
+        .outerjoin(
+            latest_opengrep_subquery,
+            latest_opengrep_subquery.c.project_id == Project.id,
+        )
+        .outerjoin(
+            latest_gitleaks_subquery,
+            latest_gitleaks_subquery.c.project_id == Project.id,
+        )
+        .outerjoin(
+            paired_gitleaks_subquery,
+            paired_gitleaks_subquery.c.project_id == Project.id,
+        )
+        .where(
+            or_(
+                latest_opengrep_subquery.c.project_id.is_not(None),
+                latest_gitleaks_subquery.c.project_id.is_not(None),
+            )
+        )
+    )
+    if keyword and keyword.strip():
+        base_stmt = base_stmt.where(
+            func.lower(Project.name).like(f"%{keyword.strip().lower()}%")
+        )
+
+    count_stmt = select(func.count()).select_from(base_stmt.subquery())
+    count_result = await db.execute(count_stmt)
+    total = int(count_result.scalar() or 0)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+
+    paged_stmt = (
+        base_stmt.order_by(last_scan_at_expr.desc(), Project.name.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows_result = await db.execute(paged_stmt)
+    rows = rows_result.mappings().all()
+
+    items: List[StaticScanOverviewItem] = []
+    for row in rows:
+        item = _build_static_scan_overview_item_from_row(dict(row))
+        if item is not None:
+            items.append(item)
+
+    return StaticScanOverviewResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
+@router.post(
+    "/description/generate",
+    response_model=ProjectDescriptionGenerateResponse,
+)
+async def generate_project_description_preview(
+    file: UploadFile = File(...),
+    project_name: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    根据上传压缩包生成项目描述（不创建项目，不写数据库）。
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    supported_formats = CompressionStrategyFactory.get_supported_formats()
+    file_name_lower = file.filename.lower()
+    file_ext = Path(file.filename).suffix.lower()
+    if file_name_lower.endswith((".tar.gz", ".tgz", ".tar.gzip")):
+        file_ext = ".tar.gz"
+    elif file_name_lower.endswith((".tar.bz2", ".tbz", ".tbz2")):
+        file_ext = ".tar.bz2"
+
+    if file_ext not in supported_formats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式: {file_ext}。支持的格式: {', '.join(sorted(supported_formats))}",
+        )
+
+    with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_desc_generate") as temp_dir:
+        try:
+            temp_upload_path = os.path.join(temp_dir, file.filename)
+            with open(temp_upload_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            is_valid, error = UploadManager.validate_file(temp_upload_path)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=f"文件验证失败: {error}")
+
+            temp_extract_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(temp_extract_dir, exist_ok=True)
+            success, extracted_files, error = await UploadManager.extract_file(
+                temp_upload_path,
+                temp_extract_dir,
+                max_files=100000,
+            )
+            if not success:
+                raise HTTPException(status_code=400, detail=f"解压失败: {error}")
+
+            language_info = await get_cloc_stats_from_extracted_dir(
+                temp_extract_dir,
+                extracted_files=extracted_files,
+            )
+            static_description = build_static_project_description(
+                language_info,
+                (project_name or "").strip() or None,
+            )
+
+            source: Literal["llm", "static"] = "static"
+            description = static_description
+            user_config = await _get_user_config(db, current_user.id)
+            if user_config:
+                try:
+                    llm_result = await generate_project_description_from_extracted_dir(
+                        temp_extract_dir,
+                        user_config=user_config,
+                    )
+                    llm_description = ""
+                    if isinstance(llm_result, dict):
+                        llm_description = (
+                            llm_result.get("project_description") or ""
+                        ).strip()
+                    if llm_description:
+                        description = llm_description
+                        source = "llm"
+                except Exception as e:
+                    logger.warning(f"生成项目描述时 LLM 失败，已回退静态描述: {e}")
+
+            return ProjectDescriptionGenerateResponse(
+                description=description,
+                language_info=language_info,
+                source=source,
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"生成项目描述失败: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"生成项目描述失败: {str(e)}")
+
+
 @router.get("/{id}", response_model=ProjectResponse)
 async def read_project(
     id: str,
@@ -528,7 +934,7 @@ async def get_project_info(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
-    获取项目信息，包括自动分析的项目描述和语言统计
+    获取项目信息（语言统计）。
     """
     # 1. 获取项目基本信息
     result = await db.execute(select(Project).where(Project.id == id))
@@ -538,10 +944,11 @@ async def get_project_info(
 
     # 2. 检查权限
 
-    # 3. 获取/创建 ProjectInfo（纯静态统计，无需 LLM）
+    # 3. 获取/创建 ProjectInfo（纯静态统计）
     existing_info_result = await db.execute(select(ProjectInfo).where(ProjectInfo.project_id == id))
     existing_info = existing_info_result.scalars().first()
     if existing_info and existing_info.status == "completed" and existing_info.language_info:
+        existing_info.description = existing_info.description or ""
         return existing_info
     if existing_info and existing_info.status == "pending":
         raise HTTPException(status_code=202, detail="项目信息正在生成中，请稍后再试")
@@ -565,32 +972,12 @@ async def get_project_info(
         await db.commit()
         await db.refresh(project_info)
 
-        user_config = await _get_user_config(db, current_user.id)
-        if user_config:
-            logger.info(f"已为用户 {current_user.id} 加载 LLM 配置")
-        else:
-            logger.warning(f"获取用户 {current_user.id} 的配置失败或为空，将使用默认配置")
-
         # 生成语言统计（纯静态）
         cloc_result = await get_cloc_stats(project_info)
         project_info.language_info = cloc_result
 
-        # 基于静态统计生成项目描述（不依赖 LLM）
-        static_description = build_static_project_description(cloc_result, project.name)
-        project_info.description = static_description
-
-        # 如可用则使用 LLM 生成项目描述（使用用户配置）
-        if user_config:
-            try:
-                llm_result = await generate_project_description(
-                    project_info, user_config=user_config
-                )
-                if isinstance(llm_result, dict):
-                    llm_description = (llm_result.get("project_description") or "").strip()
-                    if llm_description:
-                        project_info.description = llm_description
-            except Exception as e:
-                logger.warning(f"生成项目描述时 LLM 失败: {e}")
+        # 兼容字段：不在该接口生成描述，仅保证响应字段非空
+        project_info.description = project_info.description or ""
 
         project_info.status = "completed"
         db.add(project_info)

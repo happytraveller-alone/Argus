@@ -22,102 +22,111 @@ from pycloc import CLOC
 from pycloc.exceptions import CLOCCommandError, CLOCDependencyError
 
 
-async def get_cloc_stats(project_info: ProjectInfo) -> str:
-    """获取项目代码统计（返回JSON字符串：总行数、总文件数、各语言文件数/行数/占比）"""
-    zip_path = get_project_zip_path(project_info.project_id)
-    if not os.path.exists(zip_path):
-        logger.warning(f"项目ZIP文件不存在: {zip_path}")
+def _build_cloc_payload(output: str, extracted_files: Optional[List[str]] = None) -> str:
+    # 解析 JSON 结果并转换为统一的 language_info 结构
+    cloc_result = json.loads(output)
+    exclude_fields = {"header", "SUM"}
+    language_stats: Dict[str, Dict[str, int]] = {}
+
+    for key, value in cloc_result.items():
+        if key not in exclude_fields and isinstance(value, dict):
+            code_lines = value.get("code", 0) or 0
+            files_count = (
+                value.get("nFiles")
+                or value.get("files")
+                or value.get("file_count")
+                or 0
+            )
+            language_stats[key] = {
+                "loc_number": int(code_lines),
+                "files_count": int(files_count),
+            }
+
+    total_lines = 0
+    if isinstance(cloc_result.get("SUM"), dict):
+        total_lines = cloc_result["SUM"].get("code", 0) or 0
+    if total_lines <= 0:
+        total_lines = sum(v.get("loc_number", 0) for v in language_stats.values())
+
+    total_files = sum(v.get("files_count", 0) for v in language_stats.values())
+    if total_files <= 0 and extracted_files:
+        total_files = len(
+            [
+                f
+                for f in extracted_files
+                if isinstance(f, str) and not f.endswith("/") and Path(f).suffix
+            ]
+        )
+
+    languages: Dict[str, Dict[str, float | int]] = {}
+    for lang, stats in language_stats.items():
+        lines = stats.get("loc_number", 0)
+        files_count = stats.get("files_count", 0)
+        proportion = (lines / total_lines) if total_lines > 0 else 0
+        languages[lang] = {
+            "loc_number": lines,
+            "files_count": files_count,
+            "proportion": round(proportion, 4),
+        }
+
+    result_payload = {
+        "total": total_lines,
+        "total_files": total_files,
+        "languages": languages,
+    }
+    return json.dumps(result_payload, ensure_ascii=False)
+
+
+def _run_cloc_on_directory(project_dir: str, extracted_files: Optional[List[str]] = None) -> str:
+    try:
+        cloc = CLOC(
+            json=True,
+            quiet=True,
+            exclude_dir="__pycache__,node_modules,venv",
+        )
+        output = cloc(project_dir)
+        if not output or not str(output).strip():
+            logger.error("pycloc 返回空输出")
+            return "{}"
+        return _build_cloc_payload(str(output), extracted_files=extracted_files)
+    except json.JSONDecodeError:
+        logger.error("pycloc JSON解析失败")
+        return "{}"
+    except CLOCDependencyError as e:
+        logger.error(f"pycloc 依赖错误（Perl不可用）: {e}")
+        return "{}"
+    except CLOCCommandError as e:
+        logger.error(f"pycloc 命令执行失败: {e}")
+        return "{}"
+    except Exception as e:
+        logger.error(f"pycloc 执行异常: {e}", exc_info=True)
+        return "{}"
+
+
+async def get_cloc_stats_from_extracted_dir(
+    extracted_dir: str, extracted_files: Optional[List[str]] = None
+) -> str:
+    return _run_cloc_on_directory(extracted_dir, extracted_files=extracted_files)
+
+
+async def get_cloc_stats_from_archive(archive_path: str) -> str:
+    if not os.path.exists(archive_path):
+        logger.warning(f"项目ZIP文件不存在: {archive_path}")
         return "{}"
 
     with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_cloc") as temp_dir:
-        # 解压文件
-        strategy = CompressionStrategyFactory.get_strategy(zip_path)
-        extracted_files = await strategy.extract(zip_path, temp_dir)
+        strategy = CompressionStrategyFactory.get_strategy(archive_path)
+        extracted_files = await strategy.extract(archive_path, temp_dir)
         if not extracted_files:
             logger.error("解压失败：无文件被解压")
             return "{}"
-        # 使用 pycloc 统计
-        try:
-            cloc = CLOC(
-                json=True,
-                quiet=True,
-                exclude_dir="__pycache__,node_modules,venv",
-            )
-            output = cloc(temp_dir)
-            if not output or not str(output).strip():
-                logger.error("pycloc 返回空输出")
-                return "{}"
-            # 解析JSON结果
-            cloc_result = json.loads(output)
-            # 定义需要排除的非语言字段
-            exclude_fields = {"header", "SUM"}
-            # 存储各语言统计
-            language_stats = {}
+        return _run_cloc_on_directory(temp_dir, extracted_files=extracted_files)
 
-            # 遍历所有字段，筛选出语言相关的统计
-            for key, value in cloc_result.items():
-                if key not in exclude_fields and isinstance(value, dict):
-                    code_lines = value.get("code", 0) or 0
-                    files_count = (
-                        value.get("nFiles")
-                        or value.get("files")
-                        or value.get("file_count")
-                        or 0
-                    )
-                    language_stats[key] = {
-                        "loc_number": int(code_lines),
-                        "files_count": int(files_count),
-                    }
 
-            # 把提取后的语言行数信息加入结果（方便外部使用）
-            total_lines = 0
-            if isinstance(cloc_result.get("SUM"), dict):
-                total_lines = cloc_result["SUM"].get("code", 0) or 0
-            if total_lines <= 0:
-                total_lines = sum(v.get("loc_number", 0) for v in language_stats.values())
-
-            total_files = sum(v.get("files_count", 0) for v in language_stats.values())
-            if total_files <= 0:
-                # pycloc 某些场景可能不返回 nFiles，回退到解压文件列表按后缀统计得到总文件数
-                total_files = len(
-                    [
-                        f
-                        for f in extracted_files
-                        if isinstance(f, str)
-                        and not f.endswith("/")
-                        and Path(f).suffix
-                    ]
-                )
-
-            # 计算占比
-            languages = {}
-            for lang, stats in language_stats.items():
-                lines = stats.get("loc_number", 0)
-                files_count = stats.get("files_count", 0)
-                proportion = (lines / total_lines) if total_lines > 0 else 0
-                languages[lang] = {
-                    "loc_number": lines,
-                    "files_count": files_count,
-                    "proportion": round(proportion, 4),
-                }
-            result_payload = {
-                "total": total_lines,
-                "total_files": total_files,
-                "languages": languages,
-            }
-            return json.dumps(result_payload, ensure_ascii=False)
-        except json.JSONDecodeError:
-            logger.error("pycloc JSON解析失败")
-            return "{}"
-        except CLOCDependencyError as e:
-            logger.error(f"pycloc 依赖错误（Perl不可用）: {e}")
-            return "{}"
-        except CLOCCommandError as e:
-            logger.error(f"pycloc 命令执行失败: {e}")
-            return "{}"
-        except Exception as e:
-            logger.error(f"pycloc 执行异常: {e}", exc_info=True)
-            return "{}"
+async def get_cloc_stats(project_info: ProjectInfo) -> str:
+    """获取项目代码统计（返回JSON字符串：总行数、总文件数、各语言文件数/行数/占比）"""
+    zip_path = get_project_zip_path(project_info.project_id)
+    return await get_cloc_stats_from_archive(zip_path)
 
 
 def build_static_project_description(language_info_json: str, project_name: Optional[str] = None) -> str:
@@ -156,27 +165,42 @@ def build_static_project_description(language_info_json: str, project_name: Opti
 async def generate_project_description(
     project_info: ProjectInfo, user_config: Optional[dict] = None
 ) -> Dict[str, Any]:
-    """生成项目描述"""
-    # MVP 实现：解压项目 -> 遍历文件 -> 提取每个文件的函数和注释 -> 调用LLM逐文件分析 -> 汇总
     zip_path = get_project_zip_path(project_info.project_id)
-    if not os.path.exists(zip_path):
-        logger.error(f"项目ZIP文件不存在: {zip_path}")
-        return json.dumps({"error": "项目ZIP文件不存在"}, ensure_ascii=False)
+    return await generate_project_description_from_archive(zip_path, user_config=user_config)
 
+
+async def generate_project_description_from_extracted_dir(
+    extracted_dir: str, user_config: Optional[dict] = None
+) -> Dict[str, Any]:
     analyzer = ProjectDescriptionAnalyzer(user_config=user_config)
     try:
-        with tempfile.TemporaryDirectory(prefix="deepaudit_desc_", suffix="_proj") as temp_dir:
-            strategy = CompressionStrategyFactory.get_strategy(zip_path)
-            extracted = await strategy.extract(zip_path, temp_dir)
-            if not extracted:
-                logger.error("解压失败：无文件被解压")
-                return json.dumps({"error": "解压失败"}, ensure_ascii=False)
-
-            # 分析目录并生成描述
-            return await analyzer.analyze_project(temp_dir)
+        return await analyzer.analyze_project(extracted_dir)
     except Exception as e:
         logger.error(f"生成项目描述失败: {e}", exc_info=True)
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+        return {"error": str(e)}
+
+
+async def generate_project_description_from_archive(
+    archive_path: str, user_config: Optional[dict] = None
+) -> Dict[str, Any]:
+    if not os.path.exists(archive_path):
+        logger.error(f"项目ZIP文件不存在: {archive_path}")
+        return {"error": "项目ZIP文件不存在"}
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="deepaudit_desc_", suffix="_proj") as temp_dir:
+            strategy = CompressionStrategyFactory.get_strategy(archive_path)
+            extracted = await strategy.extract(archive_path, temp_dir)
+            if not extracted:
+                logger.error("解压失败：无文件被解压")
+                return {"error": "解压失败"}
+            return await generate_project_description_from_extracted_dir(
+                temp_dir,
+                user_config=user_config,
+            )
+    except Exception as e:
+        logger.error(f"生成项目描述失败: {e}", exc_info=True)
+        return {"error": str(e)}
 
 
 class ProjectDescriptionAnalyzer:

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BranchSelector } from "@/components/ui/branch-selector";
@@ -36,6 +37,7 @@ import {
 	Loader2,
 	Zap,
 	Bot,
+	Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/shared/config/database";
@@ -153,6 +155,7 @@ export default function CreateTaskDialog({
 	const [newProjectName, setNewProjectName] = useState("");
 	const [newProjectDescription, setNewProjectDescription] = useState("");
 	const [newProjectFile, setNewProjectFile] = useState<File | null>(null);
+	const [generatingDescription, setGeneratingDescription] = useState(false);
 	const newProjectFileInputRef = useRef<HTMLInputElement>(null);
 
 	const [auditMode, setAuditMode] = useState<AuditMode>("agent");
@@ -263,6 +266,7 @@ export default function CreateTaskDialog({
 			setNewProjectName("");
 			setNewProjectDescription("");
 			setNewProjectFile(null);
+			setGeneratingDescription(false);
 			zipState.reset();
 		}
 	}, [open, preselectedProjectId, initialAuditMode, loadProjects]);
@@ -300,12 +304,14 @@ export default function CreateTaskDialog({
 			setNewProjectName(inferredName);
 		}
 		setNewProjectFile(file);
+		setGeneratingDescription(false);
 		event.target.value = "";
 	};
 
 	const handleSourceModeChange = (mode: "existing" | "upload") => {
 		setSourceMode(mode);
 		setSelectedFiles(undefined);
+		setGeneratingDescription(false);
 		if (mode === "upload") {
 			setSelectedProjectId("");
 			setBranch("main");
@@ -315,6 +321,32 @@ export default function CreateTaskDialog({
 
 		if (!selectedProjectId && projects.length > 0) {
 			setSelectedProjectId(projects[0].id);
+		}
+	};
+
+	const handleGenerateNewProjectDescription = async () => {
+		if (!newProjectFile) {
+			toast.error("请先选择项目压缩包");
+			return;
+		}
+
+		try {
+			setGeneratingDescription(true);
+			const result = await api.generateProjectDescription({
+				file: newProjectFile,
+				project_name: newProjectName,
+			});
+			setNewProjectDescription(result.description || "");
+			if (result.source === "llm") {
+				toast.success("已生成项目描述");
+			} else {
+				toast.success("LLM不可用，已回退静态描述");
+			}
+		} catch (error) {
+			const msg = extractApiErrorMessage(error);
+			toast.error(`生成失败: ${msg}`);
+		} finally {
+			setGeneratingDescription(false);
 		}
 	};
 
@@ -627,7 +659,7 @@ export default function CreateTaskDialog({
 												: "cyber-btn-outline"
 										}
 										onClick={() => handleSourceModeChange("existing")}
-										disabled={creating}
+										disabled={creating || generatingDescription}
 									>
 										选择已有项目
 									</Button>
@@ -639,7 +671,7 @@ export default function CreateTaskDialog({
 												: "cyber-btn-outline"
 										}
 										onClick={() => handleSourceModeChange("upload")}
-										disabled={creating}
+										disabled={creating || generatingDescription}
 									>
 										上传新项目
 									</Button>
@@ -705,12 +737,29 @@ export default function CreateTaskDialog({
 										onChange={(e) => setNewProjectName(e.target.value)}
 										placeholder="输入项目名称"
 										className="h-10 cyber-input"
+										disabled={creating || generatingDescription}
 									/>
 								</div>
 								<div className="space-y-1.5">
-									<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-										描述
-									</Label>
+									<div className="flex items-center justify-between gap-2">
+										<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+											描述
+										</Label>
+										<Button
+											type="button"
+											variant="outline"
+											className="cyber-btn-outline h-8 text-xs"
+											onClick={handleGenerateNewProjectDescription}
+											disabled={
+												creating ||
+												generatingDescription ||
+												!newProjectFile
+											}
+										>
+											<Sparkles className="w-3 h-3 mr-1.5" />
+											{generatingDescription ? "生成中..." : "一键生成"}
+										</Button>
+									</div>
 									<Textarea
 										value={newProjectDescription}
 										onChange={(e) =>
@@ -719,6 +768,7 @@ export default function CreateTaskDialog({
 										placeholder="// 项目描述..."
 										rows={2}
 										className="cyber-input min-h-[70px]"
+										disabled={creating || generatingDescription}
 									/>
 								</div>
 								<div className="space-y-2">
@@ -731,13 +781,13 @@ export default function CreateTaskDialog({
 										accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
 										onChange={handleNewProjectFileSelect}
 										className="hidden"
-										disabled={creating}
+										disabled={creating || generatingDescription}
 									/>
 									<Button
 										variant="outline"
 										className="cyber-btn-outline h-9"
 										onClick={() => newProjectFileInputRef.current?.click()}
-										disabled={creating}
+										disabled={creating || generatingDescription}
 									>
 										<Upload className="w-4 h-4 mr-2" />
 										选择压缩包
@@ -756,7 +806,7 @@ export default function CreateTaskDialog({
 							<AgentModeSelector
 								value={auditMode}
 								onChange={setAuditMode}
-								disabled={creating}
+								disabled={creating || generatingDescription}
 								staticTools={staticTools}
 								onStaticToolsChange={setStaticTools}
 							/>
@@ -973,7 +1023,7 @@ export default function CreateTaskDialog({
 									onOpenChange(false);
 									onReturn?.();
 								}}
-								disabled={creating}
+								disabled={creating || generatingDescription}
 								className="px-4 h-10 cyber-btn-outline font-mono"
 							>
 								返回
@@ -982,14 +1032,14 @@ export default function CreateTaskDialog({
 						<Button
 							variant="ghost"
 							onClick={() => onOpenChange(false)}
-							disabled={creating}
+							disabled={creating || generatingDescription}
 							className="px-4 h-10 font-mono text-muted-foreground hover:text-foreground hover:bg-muted"
 						>
 							取消
 						</Button>
 						<Button
 							onClick={handleStartScan}
-							disabled={!canStart || creating}
+							disabled={!canStart || creating || generatingDescription}
 							className="px-5 h-10 cyber-btn-primary font-mono font-bold uppercase"
 						>
 							{creating ? (
