@@ -37,12 +37,15 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # 下载并安装 Gitleaks 预编译二进制文件
-ENV GITLEAKS_VERSION=8.30.0
-RUN wget -q https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz && \
-    tar -xzf gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz && \
-    mv gitleaks /usr/local/bin/gitleaks && \
-    chmod +x /usr/local/bin/gitleaks && \
-    rm gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
+# ENV GITLEAKS_VERSION=8.30.0
+# RUN wget -q https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz && \
+#     tar -xzf gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz && \
+#     mv gitleaks /usr/local/bin/gitleaks && \
+#     chmod +x /usr/local/bin/gitleaks && \
+#     rm gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
+
+RUN apt-get update && apt-get install -y --no-install-recommends gitleaks \
+ && rm -rf /var/lib/apt/lists/*
 
 # 安装 uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -129,7 +132,8 @@ RUN set -eux; \
 # 从构建阶段复制虚拟环境、uv 和 gitleaks
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
-COPY --from=builder /usr/local/bin/gitleaks /usr/local/bin/gitleaks
+# COPY --from=builder /usr/local/bin/gitleaks /usr/local/bin/gitleaks
+COPY --from=builder /usr/bin/gitleaks /usr/local/bin/gitleaks
 
 # 复制应用代码
 COPY . .
