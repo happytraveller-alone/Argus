@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import insert, text
 from sqlalchemy.exc import IntegrityError
-import httpx
 from tqdm import tqdm
 
 from app.core.security import get_password_hash
@@ -63,7 +62,19 @@ DEFAULT_DEMO_EMAIL = "demo@example.com"
 DEFAULT_DEMO_PASSWORD = "demo123"
 DEFAULT_DEMO_NAME = "演示用户"
 DEFAULT_LIBPLIST_NAME = "libplist"
-DEFAULT_LIBPLIST_ZIP_URL = "https://github.com/libimobiledevice/libplist/archive/refs/tags/2.7.0.zip"
+DEFAULT_LIBPLIST_LEGACY_ZIP_URL = "https://github.com/libimobiledevice/libplist/archive/refs/tags/2.7.0.zip"
+DEFAULT_LIBPLIST_LEGACY_DESCRIPTION = "默认示例项目：libplist 2.7.0"
+DEFAULT_LIBPLIST_DESCRIPTION = (
+    "libplist 是一个小型、可移植的 C 语言库，用于读写 Apple 的 Property List（.plist）数据。"
+    "它提供统一的 API 来解析与生成多种 plist 表达形式，包括 Binary、XML、JSON、OpenStep 等格式，"
+    "并附带命令行工具 plistutil 便于在不同格式之间转换与处理。"
+    "项目同时提供基于 Cython 的 Python 绑定，并通过模糊测试与数据一致性测试提升健壮性，"
+    "适用于 iOS/macOS 工具链、设备通信与配置数据处理等场景。"
+)
+DEFAULT_LIBPLIST_ARCHIVE_NAME = "libplist-2.7.0.zip"
+DEFAULT_LIBPLIST_LOCAL_ZIP_PATH = str(
+    Path(__file__).resolve().parent / "seed_assets" / DEFAULT_LIBPLIST_ARCHIVE_NAME
+)
 
 LEGACY_DEFAULT_PROJECT_NAMES = {
     "电商平台后端",
@@ -81,15 +92,6 @@ def _sha256_file(file_path: str) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             sha256.update(chunk)
     return sha256.hexdigest()
-
-
-async def _download_zip_file(url: str, target_file_path: str) -> None:
-    timeout = httpx.Timeout(60.0, connect=20.0, read=60.0)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        with open(target_file_path, "wb") as f:
-            f.write(resp.content)
 
 
 def _collect_zip_paths(zip_file_path: str) -> list[str]:
@@ -127,7 +129,7 @@ async def cleanup_legacy_default_projects(db: AsyncSession, user_id: str) -> Non
 
 async def ensure_default_libplist_project(db: AsyncSession, user: User) -> None:
     """
-    首次初始化仅引入 libplist 默认项目，并自动下载 zip 到项目存储。
+    首次初始化仅引入 libplist 默认项目，并从本地 seed 资源导入 zip 到项目存储。
     """
     await cleanup_legacy_default_projects(db, user.id)
 
@@ -143,9 +145,9 @@ async def ensure_default_libplist_project(db: AsyncSession, user: User) -> None:
         project = Project(
             owner_id=user.id,
             name=DEFAULT_LIBPLIST_NAME,
-            description="默认示例项目：libplist 2.7.0",
+            description=DEFAULT_LIBPLIST_DESCRIPTION,
             source_type="zip",
-            repository_url=DEFAULT_LIBPLIST_ZIP_URL,
+            repository_url=None,
             repository_type="other",
             default_branch="main",
             programming_languages=json.dumps([], ensure_ascii=False),
@@ -155,40 +157,70 @@ async def ensure_default_libplist_project(db: AsyncSession, user: User) -> None:
         await db.commit()
         await db.refresh(project)
         logger.info("✓ 已创建默认项目: %s", DEFAULT_LIBPLIST_NAME)
-    elif not project.is_active:
-        project.is_active = True
-        await db.commit()
-        await db.refresh(project)
-        logger.info("✓ 已恢复默认项目: %s", DEFAULT_LIBPLIST_NAME)
+    else:
+        should_update_project = False
+        if not project.is_active:
+            project.is_active = True
+            should_update_project = True
+            logger.info("✓ 已恢复默认项目: %s", DEFAULT_LIBPLIST_NAME)
+
+        current_description = (project.description or "").strip()
+        if (
+            not current_description
+            or current_description == DEFAULT_LIBPLIST_LEGACY_DESCRIPTION
+        ):
+            project.description = DEFAULT_LIBPLIST_DESCRIPTION
+            should_update_project = True
+
+        if project.source_type != "zip":
+            project.source_type = "zip"
+            should_update_project = True
+
+        # 旧版本默认项目会写入远程 URL，迁移到离线模式后统一清空
+        if project.repository_url == DEFAULT_LIBPLIST_LEGACY_ZIP_URL:
+            project.repository_url = None
+            should_update_project = True
+
+        if should_update_project:
+            await db.commit()
+            await db.refresh(project)
 
     if await has_project_zip(project.id):
         return
 
-    with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_default_zip") as temp_dir:
-        temp_zip_path = os.path.join(temp_dir, "libplist-2.7.0.zip")
-        try:
-            await _download_zip_file(DEFAULT_LIBPLIST_ZIP_URL, temp_zip_path)
-            zip_hash = _sha256_file(temp_zip_path)
-            await save_project_zip(project.id, temp_zip_path, "libplist-2.7.0.zip")
+    if not os.path.exists(DEFAULT_LIBPLIST_LOCAL_ZIP_PATH):
+        logger.warning(
+            "默认 libplist ZIP 本地资源缺失，仅保留项目记录: %s",
+            DEFAULT_LIBPLIST_LOCAL_ZIP_PATH,
+        )
+        return
 
-            zip_paths = _collect_zip_paths(temp_zip_path)
-            detected_languages = detect_languages_from_paths(zip_paths)
-            project.programming_languages = json.dumps(
-                detected_languages or ["C"],
-                ensure_ascii=False,
-            )
-            project.zip_file_hash = zip_hash
-            try:
-                await db.commit()
-            except IntegrityError:
-                # 已存在相同 ZIP 哈希时，不阻塞默认项目初始化
-                await db.rollback()
-                project.zip_file_hash = None
-                await db.commit()
-                logger.warning("默认项目 libplist ZIP 哈希重复，已跳过去重哈希写入")
-            logger.info("✓ 默认项目 libplist ZIP 下载并导入完成")
-        except Exception as e:
-            logger.warning("默认 libplist ZIP 下载失败，仅保留项目记录: %s", e)
+    try:
+        zip_hash = _sha256_file(DEFAULT_LIBPLIST_LOCAL_ZIP_PATH)
+        await save_project_zip(
+            project.id,
+            DEFAULT_LIBPLIST_LOCAL_ZIP_PATH,
+            DEFAULT_LIBPLIST_ARCHIVE_NAME,
+        )
+
+        zip_paths = _collect_zip_paths(DEFAULT_LIBPLIST_LOCAL_ZIP_PATH)
+        detected_languages = detect_languages_from_paths(zip_paths)
+        project.programming_languages = json.dumps(
+            detected_languages or ["C"],
+            ensure_ascii=False,
+        )
+        project.zip_file_hash = zip_hash
+        try:
+            await db.commit()
+        except IntegrityError:
+            # 已存在相同 ZIP 哈希时，不阻塞默认项目初始化
+            await db.rollback()
+            project.zip_file_hash = None
+            await db.commit()
+            logger.warning("默认项目 libplist ZIP 哈希重复，已跳过去重哈希写入")
+        logger.info("✓ 默认项目 libplist ZIP 本地导入完成")
+    except Exception as e:
+        logger.warning("默认 libplist ZIP 本地导入失败，仅保留项目记录: %s", e)
 
 
 async def create_demo_user(db: AsyncSession) -> User | None:
