@@ -616,6 +616,13 @@ class AnalysisAgent(BaseAgent):
         entry_points = recon_data.get("entry_points", [])
         high_risk_areas = recon_data.get("high_risk_areas", plan.get("high_risk_areas", []))
         initial_findings = recon_data.get("initial_findings", [])
+        bootstrap_findings = previous_results.get("bootstrap_findings", [])
+        if isinstance(bootstrap_findings, list):
+            for bootstrap_item in bootstrap_findings[:20]:
+                if isinstance(bootstrap_item, dict):
+                    initial_findings.append(bootstrap_item)
+        else:
+            bootstrap_findings = []
         
         # 🔥 构建包含交接上下文的初始消息
         handoff_context = self.get_handoff_context()
@@ -661,8 +668,11 @@ class AnalysisAgent(BaseAgent):
 ## 任务
 {task_context or task or '进行全面的安全漏洞分析，发现代码中的安全问题。'}
 
+## OpenGrep 高优先候选（如有）
+{json.dumps(bootstrap_findings[:10], ensure_ascii=False, indent=2) if bootstrap_findings else "无"}
+
 ## ⚠️ 分析策略要求
-1. **首先**：使用 read_file 读取上面列出的高风险文件
+1. **首先**：优先验证 OpenGrep 高优先候选与高风险文件
 2. **然后**：分析这些文件中的安全问题
 3. **最后**：如果需要，使用 smart_scan 或其他工具扩展分析
 

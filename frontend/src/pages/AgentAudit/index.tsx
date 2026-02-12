@@ -77,6 +77,7 @@ type UnifiedAgentEvent = {
   tool_input?: unknown;
   tool_output?: unknown;
   tool_duration_ms?: number | null;
+  error?: string | null;
 };
 
 function matchProgressKey(message: string): string | null {
@@ -92,6 +93,36 @@ function eventToString(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function extractToolOutputText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value !== null) {
+    const data = value as Record<string, unknown>;
+    const resultValue = data.result;
+    if (typeof resultValue === "string") {
+      return resultValue;
+    }
+  }
+  return eventToString(value);
+}
+
+function normalizeToolStatus(
+  statusValue: unknown,
+  fallbackEventType: string,
+): "completed" | "failed" | "cancelled" {
+  const normalized = String(statusValue || "").trim().toLowerCase();
+  if (normalized === "failed" || normalized === "error") {
+    return "failed";
+  }
+  if (normalized === "cancelled" || normalized === "canceled" || normalized === "aborted") {
+    return "cancelled";
+  }
+  if (fallbackEventType === "tool_call_error") {
+    return "failed";
+  }
+  return "completed";
 }
 
 function AgentAuditPageContent() {
@@ -158,6 +189,8 @@ function AgentAuditPageContent() {
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
   const findingsContainerRef = useRef<HTMLDivElement | null>(null);
   const agentContainerRef = useRef<HTMLDivElement | null>(null);
+  const logsRef = useRef(logs);
+  const toolLogIdByCallIdRef = useRef<Map<string, string>>(new Map());
   const agentTreeRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -304,6 +337,11 @@ function AgentAuditPageContent() {
     }
     navigate("/dashboard");
   }, [navigate]);
+
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
   // 🔥 当 taskId 变化时立即重置状态（新建任务时清理旧日志）
   useEffect(() => {
     // 如果 taskId 发生变化，立即重置
@@ -338,6 +376,7 @@ function AgentAuditPageContent() {
       setHighlightedLogId(null);
       setHighlightedFindingId(null);
       setHighlightedAgentId(null);
+      toolLogIdByCallIdRef.current.clear();
     }
     previousTaskIdRef.current = taskId;
   }, [taskId, reset]);
@@ -528,13 +567,48 @@ function AgentAuditPageContent() {
       if (eventType === "tool_call" || eventType === "tool_call_start") {
         const toolName = event.tool_name || "未知";
         const inputText = eventToString(event.tool_input);
+        const toolCallId = (() => {
+          const value = metadata?.tool_call_id;
+          return typeof value === "string" && value.trim().length > 0
+            ? value.trim()
+            : null;
+        })();
+
+        const existingLogId = toolCallId
+          ? toolLogIdByCallIdRef.current.get(toolCallId)
+          : null;
+        if (existingLogId) {
+          updateLog(existingLogId, {
+            type: "tool",
+            title: `运行中：${toolName}`,
+            content: inputText ? `输入：\n${inputText}` : "",
+            tool: {
+              name: toolName,
+              status: "running",
+              callId: toolCallId,
+            },
+            agentName,
+            detail: baseDetail,
+          });
+          return;
+        }
+
+        const logId = toolCallId
+          ? `tool-${toolCallId}`
+          : `tool-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+        if (toolCallId) {
+          toolLogIdByCallIdRef.current.set(toolCallId, logId);
+        }
+
         dispatch({
           type: "ADD_LOG",
           payload: {
+            id: logId,
             type: "tool",
-            title: `工具：${toolName}`,
+            title: `运行中：${toolName}`,
             content: inputText ? `输入：\n${inputText}` : "",
-            tool: { name: toolName, status: "running" },
+            tool: { name: toolName, status: "running", callId: toolCallId || undefined },
             agentName,
             detail: baseDetail,
           },
@@ -542,19 +616,92 @@ function AgentAuditPageContent() {
         return;
       }
 
-      if (eventType === "tool_result" || eventType === "tool_call_end") {
+      if (
+        eventType === "tool_result" ||
+        eventType === "tool_call_end" ||
+        eventType === "tool_call_error"
+      ) {
         const toolName = event.tool_name || "未知";
-        const outputText = eventToString(event.tool_output);
+        const toolStatus = normalizeToolStatus(
+          metadata?.tool_status,
+          eventType,
+        );
+        const statusLabel =
+          toolStatus === "completed"
+            ? "已完成"
+            : toolStatus === "failed"
+              ? "失败"
+              : "已取消";
+        const outputText = extractToolOutputText(event.tool_output);
+        const toolCallId = (() => {
+          const value = metadata?.tool_call_id;
+          return typeof value === "string" && value.trim().length > 0
+            ? value.trim()
+            : null;
+        })();
+
+        let targetLogId: string | null = null;
+        if (toolCallId) {
+          targetLogId =
+            toolLogIdByCallIdRef.current.get(toolCallId) ?? `tool-${toolCallId}`;
+        } else {
+          const fallbackLog = [...logsRef.current]
+            .reverse()
+            .find(
+              (item) =>
+                item.type === "tool" &&
+                item.tool?.name === toolName &&
+                item.tool?.status === "running",
+            );
+          targetLogId = fallbackLog?.id || null;
+        }
+
+        if (targetLogId) {
+          const existing = logsRef.current.find((item) => item.id === targetLogId);
+          if (existing && existing.tool?.status === toolStatus && toolCallId) {
+            return;
+          }
+
+          const previousContent = existing?.content ? `${existing.content}\n\n` : "";
+          updateLog(targetLogId, {
+            type: "tool",
+            title: `${statusLabel}：${toolName}`,
+            content: outputText
+              ? `${previousContent}输出：\n${outputText}`
+              : previousContent.trim(),
+            tool: {
+              name: toolName,
+              duration: event.tool_duration_ms ?? existing?.tool?.duration ?? 0,
+              status: toolStatus,
+              callId: toolCallId ?? existing?.tool?.callId,
+            },
+            agentName: agentName || existing?.agentName,
+            detail: baseDetail,
+          });
+          if (toolCallId) {
+            toolLogIdByCallIdRef.current.set(toolCallId, targetLogId);
+          }
+          return;
+        }
+
+        const logId = toolCallId
+          ? `tool-${toolCallId}`
+          : `tool-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        if (toolCallId) {
+          toolLogIdByCallIdRef.current.set(toolCallId, logId);
+        }
         dispatch({
           type: "ADD_LOG",
           payload: {
+            id: logId,
             type: "tool",
-            title: `已完成：${toolName}`,
+            title: `${statusLabel}：${toolName}`,
             content: outputText ? `输出：\n${outputText}` : "",
             tool: {
               name: toolName,
               duration: event.tool_duration_ms ?? 0,
-              status: "completed",
+              status: toolStatus,
+              callId: toolCallId || undefined,
             },
             agentName,
             detail: baseDetail,
@@ -699,7 +846,7 @@ function AgentAuditPageContent() {
         });
       }
     },
-    [debouncedLoadAgentTree, dispatch],
+    [debouncedLoadAgentTree, dispatch, updateLog],
   );
 
   const backfillEventsSince = useCallback(

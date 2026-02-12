@@ -572,6 +572,27 @@ Action Input: {{"参数": "值"}}
 用户指定了 **{len(target_files)}** 个目标文件进行审计。
 请确保你的分析集中在这些指定的文件上，不要浪费时间分析其他文件。
 """
+
+        bootstrap_findings = config.get("bootstrap_findings", []) or []
+        bootstrap_source = config.get("bootstrap_source") or "none"
+        bootstrap_task_id = config.get("bootstrap_task_id")
+        if bootstrap_findings:
+            msg += f"""
+## 🔥 OpenGrep 预处理候选（高优先级）
+- 来源: {bootstrap_source}
+- 任务ID: {bootstrap_task_id or "N/A"}
+- 候选数量: {len(bootstrap_findings)}
+
+请优先围绕这些高危高置信候选进行验证和深挖，然后再扩展全量审计。
+候选示例（最多5条）:
+{json.dumps(bootstrap_findings[:5], ensure_ascii=False, indent=2)}
+"""
+        elif bootstrap_source and str(bootstrap_source).startswith("degraded"):
+            msg += f"""
+## ⚠️ OpenGrep 预处理降级提示
+预处理状态: {bootstrap_source}
+没有可用候选，请按常规流程执行审计。
+"""
         
         msg += f"""
 ## 用户配置
@@ -694,6 +715,18 @@ Action Input: {{"参数": "值"}}
             previous_results = {
                 "findings": self._all_findings,  # 传递已收集的发现
             }
+            bootstrap_findings = (
+                self._runtime_context.get("config", {}).get("bootstrap_findings", [])
+                or []
+            )
+            if bootstrap_findings:
+                previous_results["bootstrap_findings"] = bootstrap_findings
+                previous_results["bootstrap_source"] = (
+                    self._runtime_context.get("config", {}).get("bootstrap_source")
+                )
+                previous_results["bootstrap_task_id"] = (
+                    self._runtime_context.get("config", {}).get("bootstrap_task_id")
+                )
 
             # 🔥 将之前 Agent 的完整结果传递给后续 Agent
             for prev_agent, prev_data in self._agent_results.items():
@@ -1320,18 +1353,35 @@ Action Input: {{"参数": "值"}}
         if target_agent == "analysis" and "recon" in self._agent_handoffs:
             recon_handoff = self._agent_handoffs["recon"]
             logger.info(f"[Orchestrator] Using Recon's handoff for Analysis Agent")
+            context_data = dict(recon_handoff.context_data)
+            key_findings = list(recon_handoff.key_findings)
+            bootstrap_findings = (
+                self._runtime_context.get("config", {}).get("bootstrap_findings", [])
+                or []
+            )
+            if bootstrap_findings:
+                context_data["bootstrap_findings"] = bootstrap_findings[:20]
+                context_data["bootstrap_source"] = (
+                    self._runtime_context.get("config", {}).get("bootstrap_source")
+                )
+                context_data["bootstrap_task_id"] = (
+                    self._runtime_context.get("config", {}).get("bootstrap_task_id")
+                )
+                for item in bootstrap_findings[:10]:
+                    if isinstance(item, dict):
+                        key_findings.append(item)
             # 更新目标 Agent
             return TaskHandoff(
                 from_agent=recon_handoff.from_agent,
                 to_agent=target_agent,
                 summary=recon_handoff.summary,
                 work_completed=recon_handoff.work_completed,
-                key_findings=recon_handoff.key_findings,
+                key_findings=key_findings,
                 insights=recon_handoff.insights,
                 suggested_actions=recon_handoff.suggested_actions,
                 attention_points=recon_handoff.attention_points,
                 priority_areas=recon_handoff.priority_areas,
-                context_data=recon_handoff.context_data,
+                context_data=context_data,
                 confidence=recon_handoff.confidence,
             )
 
@@ -1342,17 +1392,33 @@ Action Input: {{"参数": "值"}}
 
             # 合并 Recon 的上下文信息（如果有）
             context_data = dict(analysis_handoff.context_data)
+            key_findings = list(analysis_handoff.key_findings)
             if "recon" in self._agent_handoffs:
                 recon_handoff = self._agent_handoffs["recon"]
                 context_data["recon_tech_stack"] = recon_handoff.context_data.get("tech_stack", {})
                 context_data["recon_entry_points"] = recon_handoff.context_data.get("entry_points", [])
+            bootstrap_findings = (
+                self._runtime_context.get("config", {}).get("bootstrap_findings", [])
+                or []
+            )
+            if bootstrap_findings:
+                context_data["bootstrap_findings"] = bootstrap_findings[:20]
+                context_data["bootstrap_source"] = (
+                    self._runtime_context.get("config", {}).get("bootstrap_source")
+                )
+                context_data["bootstrap_task_id"] = (
+                    self._runtime_context.get("config", {}).get("bootstrap_task_id")
+                )
+                for item in bootstrap_findings[:10]:
+                    if isinstance(item, dict):
+                        key_findings.append(item)
 
             return TaskHandoff(
                 from_agent=analysis_handoff.from_agent,
                 to_agent=target_agent,
                 summary=analysis_handoff.summary,
                 work_completed=analysis_handoff.work_completed,
-                key_findings=analysis_handoff.key_findings,
+                key_findings=key_findings,
                 insights=analysis_handoff.insights,
                 suggested_actions=analysis_handoff.suggested_actions,
                 attention_points=analysis_handoff.attention_points,
@@ -1372,6 +1438,21 @@ Action Input: {{"参数": "值"}}
         attention_points = []
         priority_areas = []
         context_data = {}
+        bootstrap_findings = (
+            self._runtime_context.get("config", {}).get("bootstrap_findings", [])
+            or []
+        )
+        if bootstrap_findings:
+            context_data["bootstrap_findings"] = bootstrap_findings[:20]
+            context_data["bootstrap_source"] = (
+                self._runtime_context.get("config", {}).get("bootstrap_source")
+            )
+            context_data["bootstrap_task_id"] = (
+                self._runtime_context.get("config", {}).get("bootstrap_task_id")
+            )
+            for finding in bootstrap_findings[:10]:
+                if isinstance(finding, dict):
+                    key_findings.append(finding)
 
         # 从 Recon 结果构建 handoff（给 Analysis）
         if target_agent == "analysis" and "recon" in self._agent_results:

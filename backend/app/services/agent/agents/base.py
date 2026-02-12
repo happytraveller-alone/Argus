@@ -772,27 +772,47 @@ class BaseAgent(ABC):
     
     # ============ 工具调用相关事件 ============
     
-    async def emit_tool_call(self, tool_name: str, tool_input: Dict):
+    async def emit_tool_call(
+        self,
+        tool_name: str,
+        tool_input: Dict,
+        tool_call_id: Optional[str] = None,
+    ):
         """发射工具调用事件"""
+        metadata: Dict[str, Any] = {}
+        if tool_call_id:
+            metadata["tool_call_id"] = tool_call_id
         await self.emit_event(
             "tool_call",
             f"[{self.name}] 调用工具: {tool_name}",
             tool_name=tool_name,
             tool_input=tool_input,
+            metadata=metadata,
         )
     
-    async def emit_tool_result(self, tool_name: str, result: str, duration_ms: int):
+    async def emit_tool_result(
+        self,
+        tool_name: str,
+        result: str,
+        duration_ms: int,
+        tool_call_id: Optional[str] = None,
+        tool_status: str = "completed",
+    ):
         """发射工具结果事件"""
         # 🔥 修复：确保 result 不为 None，避免显示 "None" 字符串
         safe_result = result if result and result != "None" else ""
         stored_result, truncated = _truncate_with_flag(safe_result)
         tool_output_dict = {"result": stored_result if stored_result else "", "truncated": truncated}
+        metadata: Dict[str, Any] = {"tool_status": tool_status}
+        if tool_call_id:
+            metadata["tool_call_id"] = tool_call_id
         await self.emit_event(
             "tool_result",
             f"[{self.name}] 工具 {tool_name} 完成 ({duration_ms}ms)",
             tool_name=tool_name,
             tool_output=tool_output_dict,
             tool_duration_ms=duration_ms,
+            metadata=metadata,
         )
     
     # ============ 发现相关事件 ============
@@ -853,7 +873,8 @@ class BaseAgent(ABC):
             return None
         
         self._tool_calls += 1
-        await self.emit_tool_call(tool_name, kwargs)
+        tool_call_id = str(uuid.uuid4())
+        await self.emit_tool_call(tool_name, kwargs, tool_call_id=tool_call_id)
         
         import time
         start = time.time()
@@ -861,7 +882,13 @@ class BaseAgent(ABC):
         result = await tool.execute(**kwargs)
         
         duration_ms = int((time.time() - start) * 1000)
-        await self.emit_tool_result(tool_name, str(result.data), duration_ms)
+        await self.emit_tool_result(
+            tool_name,
+            str(result.data),
+            duration_ms,
+            tool_call_id=tool_call_id,
+            tool_status="completed" if result.success else "failed",
+        )
         
         return result
     
@@ -1127,9 +1154,11 @@ class BaseAgent(ABC):
         if not tool:
             return f"错误: 工具 '{tool_name}' 不存在。可用工具: {list(self.tools.keys())}"
 
+        tool_call_id = str(uuid.uuid4())
+        start = None
         try:
             self._tool_calls += 1
-            await self.emit_tool_call(tool_name, tool_input)
+            await self.emit_tool_call(tool_name, tool_input, tool_call_id=tool_call_id)
 
             import time
             start = time.time()
@@ -1193,17 +1222,35 @@ class BaseAgent(ABC):
                 )
             except asyncio.TimeoutError:
                 duration_ms = int((time.time() - start) * 1000)
-                await self.emit_tool_result(tool_name, f"超时 ({timeout}s)", duration_ms)
+                await self.emit_tool_result(
+                    tool_name,
+                    f"超时 ({timeout}s)",
+                    duration_ms,
+                    tool_call_id=tool_call_id,
+                    tool_status="failed",
+                )
                 return f"⚠️ 工具 '{tool_name}' 执行超时 ({timeout}秒)，请尝试其他方法或减小操作范围。"
             except asyncio.CancelledError:
                 duration_ms = int((time.time() - start) * 1000)
-                await self.emit_tool_result(tool_name, "已取消", duration_ms)
+                await self.emit_tool_result(
+                    tool_name,
+                    "已取消",
+                    duration_ms,
+                    tool_call_id=tool_call_id,
+                    tool_status="cancelled",
+                )
                 return "⚠️ 任务已取消"
 
             duration_ms = int((time.time() - start) * 1000)
             # 🔥 修复：确保传递有意义的结果字符串，避免 "None"
             result_preview = str(result.data) if result.data is not None else (result.error if result.error else "")
-            await self.emit_tool_result(tool_name, result_preview, duration_ms)
+            await self.emit_tool_result(
+                tool_name,
+                result_preview,
+                duration_ms,
+                tool_call_id=tool_call_id,
+                tool_status="completed" if result.success else "failed",
+            )
 
             # 🔥 工具执行后再次检查取消
             if self.is_cancelled:
@@ -1243,6 +1290,15 @@ class BaseAgent(ABC):
         except Exception as e:
             import traceback
             logger.error(f"Tool execution error: {e}")
+            if start is not None:
+                duration_ms = int((time.time() - start) * 1000)
+                await self.emit_tool_result(
+                    tool_name,
+                    f"异常: {type(e).__name__}: {str(e)}",
+                    duration_ms,
+                    tool_call_id=tool_call_id,
+                    tool_status="failed",
+                )
             # 🔥 输出完整的原始错误信息，包括堆栈跟踪
             error_msg = f"""❌ 工具执行异常
 

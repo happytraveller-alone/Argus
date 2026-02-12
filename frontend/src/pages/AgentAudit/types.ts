@@ -18,7 +18,7 @@ export type LogType =
   | 'dispatch'
   | 'progress';
 
-export type ToolStatus = 'running' | 'completed' | 'failed';
+export type ToolStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface LogItem {
   id: string;
@@ -32,6 +32,7 @@ export interface LogItem {
     name: string;
     duration?: number;
     status?: ToolStatus;
+    callId?: string;
   };
   severity?: string;
   agentName?: string;

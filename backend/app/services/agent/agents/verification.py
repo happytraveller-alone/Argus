@@ -724,6 +724,18 @@ class VerificationAgent(BaseAgent):
                 logger.warning(f"[Verification] 无法从结构化数据获取发现，任务描述: {task[:200]}")
                 # 创建一个提示 LLM 从任务描述中理解漏洞的特殊处理
                 await self.emit_event("warning", f"无法从结构化数据获取发现列表，将基于任务描述进行验证")
+
+        if not findings_to_verify and isinstance(previous_results, dict):
+            bootstrap_findings = previous_results.get("bootstrap_findings", [])
+            if isinstance(bootstrap_findings, list):
+                for item in bootstrap_findings:
+                    if isinstance(item, dict):
+                        findings_to_verify.append(item)
+                if findings_to_verify:
+                    logger.info(
+                        "[Verification] 从 bootstrap_findings 获取 %s 个发现",
+                        len(findings_to_verify),
+                    )
         
         # 去重
         findings_to_verify = self._deduplicate(findings_to_verify)

@@ -35,17 +35,19 @@ const SEVERITY_ORDER: Record<string, number> = {
 };
 
 const SEVERITY_BADGE_CLASS: Record<string, string> = {
-  critical: "bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/40",
-  high: "bg-orange-500/20 text-orange-600 dark:text-orange-300 border-orange-500/40",
-  medium: "bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40",
+  critical:
+    "bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/40",
+  high:
+    "bg-orange-500/20 text-orange-600 dark:text-orange-300 border-orange-500/40",
+  medium:
+    "bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40",
   low: "bg-sky-500/20 text-sky-600 dark:text-sky-300 border-sky-500/40",
   info: "bg-zinc-500/20 text-zinc-700 dark:text-zinc-300 border-zinc-500/40",
 };
 
 function isFalsePositive(item: AgentFinding): boolean {
   return (
-    item.status === "false_positive" ||
-    item.authenticity === "false_positive"
+    item.status === "false_positive" || item.authenticity === "false_positive"
   );
 }
 
@@ -53,7 +55,6 @@ function formatCreatedAt(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleString("zh-CN", {
-    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -162,7 +163,18 @@ export function FindingsPanel({
     }
 
     return (
-      <div className="space-y-2 p-4">
+      <div className="p-3 space-y-2">
+        <div className="hidden lg:grid lg:grid-cols-[106px_minmax(0,2.5fr)_minmax(0,1.6fr)_92px_82px_114px_130px_auto] gap-3 px-3 py-2 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border">
+          <span>严重度</span>
+          <span>标题</span>
+          <span>文件定位</span>
+          <span>验证状态</span>
+          <span>置信度</span>
+          <span>可达性</span>
+          <span>时间</span>
+          <span>操作</span>
+        </div>
+
         {filteredFindings.map((item) => {
           const severityKey = (item.severity || "info").toLowerCase();
           const confidence =
@@ -174,46 +186,60 @@ export function FindingsPanel({
             <div
               id={anchorId}
               key={item.id}
-              className={`rounded-lg border border-border bg-card/70 px-4 py-3 ${
+              className={`rounded-lg border border-border bg-card/70 px-3 py-3 hover:border-primary/35 transition-colors ${
                 highlightedFindingId === item.id ? "ring-2 ring-primary/60" : ""
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge className={`border text-xs ${SEVERITY_BADGE_CLASS[severityKey] || SEVERITY_BADGE_CLASS.info}`}>
-                      {severityKey.toUpperCase()}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      {item.is_verified ? "已验证" : "未验证"}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      置信度 {confidence}
-                    </Badge>
-                    {item.reachability && (
-                      <Badge variant="outline" className="text-xs">
-                        可达性 {item.reachability}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="mt-2 text-sm font-semibold text-foreground whitespace-normal break-words">
-                    {item.title || "未命名漏洞"}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground whitespace-normal break-words">
-                    {formatLocation(item)}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    状态：{item.status || "new"} | 创建时间：{formatCreatedAt(item.created_at)}
-                  </div>
+              <div className="flex flex-col gap-2 lg:grid lg:grid-cols-[106px_minmax(0,2.5fr)_minmax(0,1.6fr)_92px_82px_114px_130px_auto] lg:items-start lg:gap-3">
+                <div>
+                  <Badge
+                    className={`border text-[11px] ${SEVERITY_BADGE_CLASS[severityKey] || SEVERITY_BADGE_CLASS.info}`}
+                  >
+                    {severityKey.toUpperCase()}
+                  </Badge>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onOpenDetail(item)}
-                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border hover:border-primary/40 hover:text-primary"
-                >
-                  查看详情
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </button>
+
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground leading-5 break-words line-clamp-2">
+                    {item.title || "未命名漏洞"}
+                  </p>
+                  {item.description && (
+                    <p className="mt-1 text-xs text-muted-foreground break-words line-clamp-2">
+                      {item.description}
+                    </p>
+                  )}
+                </div>
+
+                <div className="text-xs text-muted-foreground break-words leading-5">
+                  {formatLocation(item)}
+                </div>
+
+                <div>
+                  <Badge variant="outline" className="text-[11px]">
+                    {item.is_verified ? "已验证" : "未验证"}
+                  </Badge>
+                </div>
+
+                <div className="text-xs text-muted-foreground">{confidence}</div>
+
+                <div className="text-xs text-muted-foreground">
+                  {item.reachability || "-"}
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  {formatCreatedAt(item.created_at)}
+                </div>
+
+                <div className="flex justify-start lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onOpenDetail(item)}
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border hover:border-primary/40 hover:text-primary"
+                  >
+                    查看详情
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -264,14 +290,18 @@ export function FindingsPanel({
           </select>
           <button
             type="button"
-            onClick={() => onFiltersChange({ ...filters, showFiltered: !filters.showFiltered })}
+            onClick={() =>
+              onFiltersChange({ ...filters, showFiltered: !filters.showFiltered })
+            }
             className={`h-9 px-3 rounded-md border text-sm ${
               filters.showFiltered
                 ? "border-amber-500/50 text-amber-600 dark:text-amber-300 bg-amber-500/10"
                 : "border-border text-muted-foreground hover:text-foreground"
             }`}
           >
-            {filters.showFiltered ? "查看有效漏洞" : `查看已过滤(${falsePositiveCount})`}
+            {filters.showFiltered
+              ? "查看有效漏洞"
+              : `查看已过滤(${falsePositiveCount})`}
           </button>
         </div>
       </div>

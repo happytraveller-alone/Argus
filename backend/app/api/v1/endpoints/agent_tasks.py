@@ -8,6 +8,8 @@ import json
 import logging
 import os
 import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, List, Optional, Dict, Set, Tuple
 from datetime import datetime, timezone
@@ -20,6 +22,7 @@ from sqlalchemy import case
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, Field
+import yaml
 
 from app.api import deps
 from app.db.session import get_db, async_session_factory
@@ -29,6 +32,7 @@ from app.models.agent_task import (
     VulnerabilitySeverity, FindingStatus,
 )
 from app.models.project import Project
+from app.models.opengrep import OpengrepScanTask, OpengrepFinding, OpengrepRule
 from app.models.user import User
 from app.models.user_config import UserConfig
 from app.services.agent.event_manager import EventManager
@@ -238,6 +242,373 @@ _cancelled_tasks: Set[str] = set()
 def is_task_cancelled(task_id: str) -> bool:
     """检查任务是否已被取消"""
     return task_id in _cancelled_tasks
+
+
+def _normalize_bootstrap_confidence(confidence: Any) -> Optional[str]:
+    normalized = str(confidence or "").strip().upper()
+    if normalized in {"HIGH", "MEDIUM", "LOW"}:
+        return normalized
+    return None
+
+
+def _extract_bootstrap_rule_lookup_keys(check_id: Any) -> List[str]:
+    raw_check_id = str(check_id or "").strip()
+    if not raw_check_id:
+        return []
+
+    keys: List[str] = []
+
+    def _append(value: str) -> None:
+        normalized = str(value or "").strip()
+        if normalized and normalized not in keys:
+            keys.append(normalized)
+
+    _append(raw_check_id)
+    if "." in raw_check_id:
+        _append(raw_check_id.rsplit(".", 1)[-1])
+    return keys
+
+
+def _extract_bootstrap_payload_confidence(rule_data: Any) -> Optional[str]:
+    if not isinstance(rule_data, dict):
+        return None
+
+    direct_confidence = _normalize_bootstrap_confidence(rule_data.get("confidence"))
+    if direct_confidence:
+        return direct_confidence
+
+    extra = rule_data.get("extra")
+    if isinstance(extra, dict):
+        extra_confidence = _normalize_bootstrap_confidence(extra.get("confidence"))
+        if extra_confidence:
+            return extra_confidence
+
+        extra_metadata = extra.get("metadata")
+        if isinstance(extra_metadata, dict):
+            metadata_confidence = _normalize_bootstrap_confidence(
+                extra_metadata.get("confidence")
+            )
+            if metadata_confidence:
+                return metadata_confidence
+
+    metadata = rule_data.get("metadata")
+    if isinstance(metadata, dict):
+        metadata_confidence = _normalize_bootstrap_confidence(metadata.get("confidence"))
+        if metadata_confidence:
+            return metadata_confidence
+
+    return None
+
+
+def _parse_bootstrap_opengrep_output(stdout: str) -> List[Dict[str, Any]]:
+    if not stdout or not stdout.strip():
+        return []
+
+    output = json.loads(stdout)
+    if isinstance(output, dict):
+        results = output.get("results", [])
+    elif isinstance(output, list):
+        results = output
+    else:
+        raise ValueError("Unexpected opengrep output type")
+
+    if not isinstance(results, list):
+        raise ValueError("Invalid opengrep results format")
+
+    parsed: List[Dict[str, Any]] = []
+    for item in results:
+        if isinstance(item, dict):
+            parsed.append(item)
+    return parsed
+
+
+def _build_bootstrap_confidence_map_from_rules(
+    rules: List[OpengrepRule],
+) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    for rule in rules:
+        normalized_confidence = _normalize_bootstrap_confidence(rule.confidence)
+        if not normalized_confidence:
+            continue
+        lookup_values = [rule.id, rule.name]
+        for raw_value in lookup_values:
+            for key in _extract_bootstrap_rule_lookup_keys(raw_value):
+                mapping[key] = normalized_confidence
+    return mapping
+
+
+async def _build_bootstrap_confidence_map_for_scan_task(
+    db: AsyncSession,
+    scan_task: OpengrepScanTask,
+) -> Dict[str, str]:
+    rule_ids: List[str] = []
+    raw_rulesets = scan_task.rulesets
+    parsed_rulesets: Any = raw_rulesets
+
+    if isinstance(raw_rulesets, str):
+        try:
+            parsed_rulesets = json.loads(raw_rulesets)
+        except Exception:
+            parsed_rulesets = []
+
+    if isinstance(parsed_rulesets, list):
+        for item in parsed_rulesets:
+            if isinstance(item, dict):
+                rule_id = item.get("rule_id")
+                if isinstance(rule_id, str) and rule_id:
+                    rule_ids.append(rule_id)
+
+    if not rule_ids:
+        return {}
+
+    result = await db.execute(
+        select(OpengrepRule).where(OpengrepRule.id.in_(list(set(rule_ids))))
+    )
+    rules = result.scalars().all()
+    return _build_bootstrap_confidence_map_from_rules(rules)
+
+
+def _normalize_bootstrap_finding_from_opengrep(
+    finding: OpengrepFinding,
+    confidence_map: Dict[str, str],
+) -> Dict[str, Any]:
+    rule_data = finding.rule if isinstance(finding.rule, dict) else {}
+    check_id = None
+    if isinstance(rule_data, dict):
+        check_id = rule_data.get("check_id") or rule_data.get("id")
+
+    confidence = _extract_bootstrap_payload_confidence(rule_data)
+    if confidence is None:
+        for key in _extract_bootstrap_rule_lookup_keys(check_id):
+            mapped = confidence_map.get(key)
+            if mapped:
+                confidence = mapped
+                break
+
+    severity_text = str(finding.severity or "").strip().upper()
+    start_line = finding.start_line
+    extra = rule_data.get("extra") if isinstance(rule_data, dict) else {}
+    title = None
+    description = finding.description
+    if isinstance(extra, dict):
+        title = extra.get("message")
+    if not title:
+        title = finding.description or str(check_id or "OpenGrep 发现")
+
+    return {
+        "id": finding.id,
+        "title": str(title),
+        "description": description,
+        "file_path": finding.file_path,
+        "line_start": start_line,
+        "line_end": start_line,
+        "code_snippet": finding.code_snippet,
+        "severity": severity_text,
+        "confidence": confidence,
+        "vulnerability_type": str(check_id or "opengrep_rule"),
+        "source": "opengrep_bootstrap",
+    }
+
+
+def _filter_bootstrap_findings(
+    normalized_findings: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    filtered: List[Dict[str, Any]] = []
+    for item in normalized_findings:
+        severity_value = str(item.get("severity") or "").upper()
+        confidence_value = _normalize_bootstrap_confidence(item.get("confidence"))
+        if severity_value != "ERROR":
+            continue
+        if confidence_value not in {"HIGH", "MEDIUM"}:
+            continue
+        copied = dict(item)
+        copied["confidence"] = confidence_value
+        filtered.append(copied)
+    return filtered
+
+
+async def _run_bootstrap_opengrep_scan(
+    project_root: str,
+    active_rules: List[OpengrepRule],
+) -> List[Dict[str, Any]]:
+    merged_rules: List[Dict[str, Any]] = []
+    for rule in active_rules:
+        try:
+            parsed_yaml = yaml.safe_load(rule.pattern_yaml)
+        except Exception:
+            continue
+        if not isinstance(parsed_yaml, dict):
+            continue
+        rule_items = parsed_yaml.get("rules")
+        if not isinstance(rule_items, list):
+            continue
+        for item in rule_items:
+            if isinstance(item, dict):
+                merged_rules.append(item)
+
+    if not merged_rules:
+        raise ValueError("No executable opengrep rules found")
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as tf:
+        yaml.dump({"rules": merged_rules}, tf, sort_keys=False, default_flow_style=False)
+        merged_rule_path = tf.name
+
+    try:
+        cmd = ["opengrep", "--config", merged_rule_path, "--json", project_root]
+        result = await asyncio.to_thread(
+            subprocess.run,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        findings = _parse_bootstrap_opengrep_output(result.stdout or "")
+        if result.returncode != 0 and not findings:
+            stderr_text = (result.stderr or result.stdout or "unknown error").strip()
+            raise RuntimeError(f"opengrep failed: {stderr_text[:300]}")
+        return findings
+    finally:
+        try:
+            os.unlink(merged_rule_path)
+        except Exception:
+            pass
+
+
+async def _collect_bootstrap_findings_for_task(
+    db: AsyncSession,
+    scan_task: OpengrepScanTask,
+) -> List[Dict[str, Any]]:
+    confidence_map = await _build_bootstrap_confidence_map_for_scan_task(db, scan_task)
+    findings_result = await db.execute(
+        select(OpengrepFinding).where(OpengrepFinding.scan_task_id == scan_task.id)
+    )
+    findings = findings_result.scalars().all()
+    normalized = [
+        _normalize_bootstrap_finding_from_opengrep(item, confidence_map)
+        for item in findings
+    ]
+    return _filter_bootstrap_findings(normalized)
+
+
+async def _prepare_bootstrap_opengrep_findings(
+    db: AsyncSession,
+    project_id: str,
+    project_root: str,
+    event_emitter: Any,
+) -> Tuple[List[Dict[str, Any]], Optional[str], str]:
+    latest_task_result = await db.execute(
+        select(OpengrepScanTask)
+        .where(OpengrepScanTask.project_id == project_id)
+        .where(OpengrepScanTask.status == "completed")
+        .order_by(OpengrepScanTask.created_at.desc())
+        .limit(1)
+    )
+    latest_task = latest_task_result.scalar_one_or_none()
+
+    if latest_task:
+        candidates = await _collect_bootstrap_findings_for_task(db, latest_task)
+        await event_emitter.emit_info(
+            f"🔁 OpenGrep 预处理复用最近结果: task={latest_task.id}, 候选={len(candidates)}"
+        )
+        return candidates, latest_task.id, "reuse"
+
+    active_rules_result = await db.execute(
+        select(OpengrepRule).where(OpengrepRule.is_active == True)
+    )
+    active_rules = active_rules_result.scalars().all()
+    if not active_rules:
+        await event_emitter.emit_warning(
+            "⚠️ OpenGrep 预处理降级：当前没有启用规则，跳过预扫描"
+        )
+        return [], None, "degraded_no_rules"
+
+    scan_task = OpengrepScanTask(
+        project_id=project_id,
+        name=f"Agent Bootstrap OpenGrep {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        status="running",
+        target_path=".",
+        rulesets=json.dumps([{"rule_id": rule.id} for rule in active_rules]),
+    )
+    db.add(scan_task)
+    await db.commit()
+    await db.refresh(scan_task)
+
+    await event_emitter.emit_info(
+        f"🧪 OpenGrep 预处理开始：未发现可复用结果，启动阻塞式预扫描（task={scan_task.id}）"
+    )
+
+    try:
+        started_at = datetime.now(timezone.utc)
+        parsed_findings = await _run_bootstrap_opengrep_scan(project_root, active_rules)
+        finished_at = datetime.now(timezone.utc)
+        duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+
+        error_count = 0
+        warning_count = 0
+        files_scanned: Set[str] = set()
+        lines_scanned = 0
+
+        for finding in parsed_findings:
+            severity = str(
+                finding.get("extra", {}).get("severity", "INFO")
+            ).upper()
+            if severity == "ERROR":
+                error_count += 1
+            elif severity == "WARNING":
+                warning_count += 1
+
+            file_path = finding.get("path", "")
+            if file_path:
+                files_scanned.add(file_path)
+
+            start_line = int(finding.get("start", {}).get("line") or 0)
+            end_line = int(finding.get("end", {}).get("line") or start_line)
+            if end_line >= start_line > 0:
+                lines_scanned += end_line - start_line + 1
+
+            db.add(
+                OpengrepFinding(
+                    scan_task_id=scan_task.id,
+                    rule=finding,
+                    description=finding.get("extra", {}).get("message"),
+                    file_path=file_path,
+                    start_line=start_line or None,
+                    code_snippet=finding.get("extra", {}).get("lines"),
+                    severity=severity,
+                    status="open",
+                )
+            )
+
+        scan_task.status = "completed"
+        scan_task.total_findings = len(parsed_findings)
+        scan_task.error_count = error_count
+        scan_task.warning_count = warning_count
+        scan_task.scan_duration_ms = duration_ms
+        scan_task.files_scanned = len(files_scanned)
+        scan_task.lines_scanned = lines_scanned
+        await db.commit()
+
+        candidates = await _collect_bootstrap_findings_for_task(db, scan_task)
+        await event_emitter.emit_info(
+            f"✅ OpenGrep 预扫描完成: findings={len(parsed_findings)}, 候选={len(candidates)}"
+        )
+        return candidates, scan_task.id, "scan"
+    except FileNotFoundError:
+        scan_task.status = "failed"
+        scan_task.error_count = 1
+        await db.commit()
+        await event_emitter.emit_warning(
+            "⚠️ OpenGrep 预处理降级：未安装 opengrep，继续执行智能审计"
+        )
+        return [], scan_task.id, "degraded_tool_missing"
+    except Exception as exc:
+        scan_task.status = "failed"
+        scan_task.error_count = (scan_task.error_count or 0) + 1
+        await db.commit()
+        await event_emitter.emit_warning(
+            f"⚠️ OpenGrep 预处理降级：预扫描失败（{str(exc)[:160]}）"
+        )
+        return [], scan_task.id, "degraded_scan_failed"
 
 
 async def _execute_agent_task(task_id: str):
@@ -485,6 +856,29 @@ async def _execute_agent_task(task_id: str):
                 exclude_patterns=task.exclude_patterns,
                 target_files=task.target_files,
             )
+
+            bootstrap_findings: List[Dict[str, Any]] = []
+            bootstrap_task_id: Optional[str] = None
+            bootstrap_source = "none"
+            try:
+                (
+                    bootstrap_findings,
+                    bootstrap_task_id,
+                    bootstrap_source,
+                ) = await _prepare_bootstrap_opengrep_findings(
+                    db=db,
+                    project_id=str(project.id),
+                    project_root=project_root,
+                    event_emitter=event_emitter,
+                )
+            except Exception as bootstrap_error:
+                logger.warning(
+                    "[AgentTask] Bootstrap OpenGrep stage failed and downgraded: %s",
+                    bootstrap_error,
+                )
+                await event_emitter.emit_warning(
+                    f"⚠️ OpenGrep 预处理降级：{str(bootstrap_error)[:160]}"
+                )
             
             # 更新任务文件统计
             task.total_files = project_info.get("file_count", 0)
@@ -499,6 +893,9 @@ async def _execute_agent_task(task_id: str):
                     "exclude_patterns": task.exclude_patterns or [],
                     "target_files": task.target_files or [],
                     "max_iterations": task.max_iterations or 50,
+                    "bootstrap_findings": bootstrap_findings,
+                    "bootstrap_source": bootstrap_source,
+                    "bootstrap_task_id": bootstrap_task_id,
                 },
                 "project_root": project_root,
                 "task_id": task_id,

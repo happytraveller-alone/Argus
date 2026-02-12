@@ -1,5 +1,13 @@
 import { useMemo } from "react";
-import { ArrowLeft, FileCode2, ListTree, Logs } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileCode2,
+  ListTree,
+  Logs,
+  XCircle,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,11 +38,32 @@ function prettyJson(data: unknown): string {
 
 function formatLocation(finding: AgentFinding): string {
   if (!finding.file_path) return "未定位文件";
-  if (finding.line_start && finding.line_end && finding.line_end !== finding.line_start) {
+  if (
+    finding.line_start &&
+    finding.line_end &&
+    finding.line_end !== finding.line_start
+  ) {
     return `${finding.file_path}:${finding.line_start}-${finding.line_end}`;
   }
   if (finding.line_start) return `${finding.file_path}:${finding.line_start}`;
   return finding.file_path;
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-card/70 p-3.5 space-y-2">
+      <h4 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+        {title}
+      </h4>
+      {children}
+    </section>
+  );
 }
 
 export function AuditDetailDialog({
@@ -77,113 +106,154 @@ export function AuditDetailDialog({
 
         <div className="flex-1 overflow-y-auto custom-scrollbar py-4 space-y-4">
           {detailType === "log" && logItem && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline">{logItem.type}</Badge>
-                <Badge variant="outline">{logItem.time}</Badge>
-                {logItem.agentName && <Badge variant="outline">{logItem.agentName}</Badge>}
-              </div>
-              <h3 className="text-base font-semibold break-words">{logItem.title}</h3>
+            <>
+              <Section title="概览">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline">{logItem.type}</Badge>
+                  <Badge variant="outline">{logItem.time}</Badge>
+                  {logItem.agentName && (
+                    <Badge variant="outline">{logItem.agentName}</Badge>
+                  )}
+                  {logItem.tool?.status && (
+                    <Badge variant="outline">
+                      工具状态: {logItem.tool.status}
+                    </Badge>
+                  )}
+                </div>
+                <h3 className="text-sm font-semibold break-words">{logItem.title}</h3>
+              </Section>
+
               {logItem.content && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">内容</div>
-                  <pre className="text-xs font-mono bg-card border border-border rounded-md p-3 whitespace-pre-wrap break-words">
+                <Section title="详细内容">
+                  <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[35vh]">
                     {logItem.content}
                   </pre>
-                </div>
+                </Section>
               )}
+
               {logItem.detail && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">原始事件元数据</div>
-                  <pre className="text-xs font-mono bg-card border border-border rounded-md p-3 whitespace-pre-wrap break-words">
+                <Section title="原始事件元数据">
+                  <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[35vh]">
                     {prettyJson(logItem.detail)}
                   </pre>
-                </div>
+                </Section>
               )}
-            </div>
+            </>
           )}
 
           {detailType === "finding" && finding && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline">{finding.severity?.toUpperCase()}</Badge>
-                <Badge variant="outline">{finding.authenticity || "unknown"}</Badge>
-                {finding.reachability && <Badge variant="outline">{finding.reachability}</Badge>}
-              </div>
-              <h3 className="text-base font-semibold break-words">{finding.title}</h3>
-              <div className="text-sm text-muted-foreground">{formatLocation(finding)}</div>
+            <>
+              <Section title="概览">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline">{finding.severity?.toUpperCase()}</Badge>
+                  <Badge variant="outline">
+                    真实性: {finding.authenticity || "unknown"}
+                  </Badge>
+                  <Badge variant="outline">
+                    {finding.is_verified ? (
+                      <span className="inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        已验证
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        <XCircle className="w-3 h-3" />
+                        未验证
+                      </span>
+                    )}
+                  </Badge>
+                  {finding.reachability && (
+                    <Badge variant="outline">可达性: {finding.reachability}</Badge>
+                  )}
+                </div>
+                <h3 className="text-sm font-semibold break-words">{finding.title}</h3>
+                <div className="text-xs text-muted-foreground">
+                  定位: {formatLocation(finding)}
+                </div>
+              </Section>
+
               {finding.description && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">漏洞描述</div>
-                  <div className="text-sm whitespace-pre-wrap break-words">{finding.description}</div>
-                </div>
+                <Section title="漏洞描述">
+                  <div className="text-sm whitespace-pre-wrap break-words">
+                    {finding.description}
+                  </div>
+                </Section>
               )}
+
               {finding.verification_evidence && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">真实性证据</div>
-                  <div className="text-sm whitespace-pre-wrap break-words">{finding.verification_evidence}</div>
-                </div>
+                <Section title="证据">
+                  <div className="text-sm whitespace-pre-wrap break-words">
+                    {finding.verification_evidence}
+                  </div>
+                </Section>
               )}
+
               {finding.suggestion && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">修复建议</div>
-                  <div className="text-sm whitespace-pre-wrap break-words">{finding.suggestion}</div>
-                </div>
+                <Section title="修复建议">
+                  <div className="text-sm whitespace-pre-wrap break-words">
+                    {finding.suggestion}
+                  </div>
+                </Section>
               )}
+
               {finding.code_snippet && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">代码片段</div>
-                  <pre className="text-xs font-mono bg-card border border-border rounded-md p-3 whitespace-pre-wrap break-words">
+                <Section title="代码片段">
+                  <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[35vh]">
                     {finding.code_snippet}
                   </pre>
-                </div>
+                </Section>
               )}
+
               {finding.code_context && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">
-                    代码上下文 ({finding.context_start_line ?? "-"} - {finding.context_end_line ?? "-"})
-                  </div>
-                  <pre className="text-xs font-mono bg-card border border-border rounded-md p-3 whitespace-pre-wrap break-words">
+                <Section
+                  title={`代码上下文 (${finding.context_start_line ?? "-"} - ${finding.context_end_line ?? "-"})`}
+                >
+                  <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[40vh]">
                     {finding.code_context}
                   </pre>
-                </div>
+                </Section>
               )}
+
               {finding.poc_code && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">PoC</div>
-                  <pre className="text-xs font-mono bg-card border border-border rounded-md p-3 whitespace-pre-wrap break-words">
+                <Section title="PoC">
+                  <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[35vh]">
                     {finding.poc_code}
                   </pre>
-                </div>
+                </Section>
               )}
-            </div>
+            </>
           )}
 
           {detailType === "agent" && agentNode && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline">{agentNode.agent_type}</Badge>
-                <Badge variant="outline">{agentNode.status}</Badge>
-              </div>
-              <h3 className="text-base font-semibold break-words">{agentNode.agent_name}</h3>
-              <div className="text-sm text-muted-foreground">
-                迭代 {agentNode.iterations} | 工具调用 {agentNode.tool_calls} | Tokens {agentNode.tokens_used}
-              </div>
-              {agentNode.task_description && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">当前任务</div>
-                  <div className="text-sm whitespace-pre-wrap break-words">{agentNode.task_description}</div>
+            <>
+              <Section title="概览">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline">{agentNode.agent_type}</Badge>
+                  <Badge variant="outline">{agentNode.status}</Badge>
                 </div>
+                <h3 className="text-sm font-semibold break-words">{agentNode.agent_name}</h3>
+                <div className="text-xs text-muted-foreground">
+                  迭代 {agentNode.iterations} | 工具调用 {agentNode.tool_calls} | Tokens{" "}
+                  {agentNode.tokens_used}
+                </div>
+              </Section>
+
+              {agentNode.task_description && (
+                <Section title="当前任务">
+                  <div className="text-sm whitespace-pre-wrap break-words">
+                    {agentNode.task_description}
+                  </div>
+                </Section>
               )}
+
               {agentNode.result_summary && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">执行摘要</div>
-                  <pre className="text-xs font-mono bg-card border border-border rounded-md p-3 whitespace-pre-wrap break-words">
+                <Section title="执行摘要">
+                  <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[35vh]">
                     {agentNode.result_summary}
                   </pre>
-                </div>
+                </Section>
               )}
-            </div>
+            </>
           )}
         </div>
       </DialogContent>

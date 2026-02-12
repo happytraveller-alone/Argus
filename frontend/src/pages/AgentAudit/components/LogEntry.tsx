@@ -1,16 +1,8 @@
 import { memo } from "react";
-import {
-  CheckCircle2,
-  ExternalLink,
-  Loader2,
-  Play,
-  Wifi,
-  XOctagon,
-  Zap,
-} from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { LOG_TYPE_CONFIG, SEVERITY_COLORS } from "../constants";
-import type { LogEntryProps } from "../types";
+import type { LogEntryProps, ToolStatus } from "../types";
 
 const LOG_TYPE_LABELS: Record<string, string> = {
   thinking: "思考",
@@ -24,37 +16,26 @@ const LOG_TYPE_LABELS: Record<string, string> = {
   progress: "进度",
 };
 
+const TOOL_STATUS_LABELS: Record<ToolStatus, string> = {
+  running: "运行中",
+  completed: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
+
+const TOOL_STATUS_CLASS: Record<ToolStatus, string> = {
+  running: "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10",
+  completed: "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10",
+  failed: "border-rose-500/40 text-rose-600 dark:text-rose-300 bg-rose-500/10",
+  cancelled: "border-zinc-500/40 text-zinc-600 dark:text-zinc-300 bg-zinc-500/10",
+};
+
 function formatTitle(title: string): string {
   return title
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, "")
     .replace(/[\u{2600}-\u{26FF}]/gu, "")
     .replace(/[✅🔗🛑✕⚠️❌⚡🔄🔍💡📁📄🐛🛡️]/g, "")
     .trim();
-}
-
-function getStatusIcon(title: string) {
-  const lowerTitle = title.toLowerCase();
-  if (lowerTitle.includes("connect") || lowerTitle.includes("stream")) {
-    return <Wifi className="w-3 h-3 text-green-400" />;
-  }
-  if (
-    lowerTitle.includes("complete") ||
-    lowerTitle.includes("success") ||
-    lowerTitle.includes("done")
-  ) {
-    return <CheckCircle2 className="w-3 h-3 text-green-400" />;
-  }
-  if (lowerTitle.includes("cancel") || lowerTitle.includes("abort")) {
-    return <XOctagon className="w-3 h-3 text-yellow-400" />;
-  }
-  if (
-    lowerTitle.includes("start") ||
-    lowerTitle.includes("begin") ||
-    lowerTitle.includes("init")
-  ) {
-    return <Play className="w-3 h-3 text-cyan-400" />;
-  }
-  return null;
 }
 
 export const LogEntry = memo(function LogEntry({
@@ -64,77 +45,82 @@ export const LogEntry = memo(function LogEntry({
   highlighted = false,
 }: LogEntryProps) {
   const config = LOG_TYPE_CONFIG[item.type] || LOG_TYPE_CONFIG.info;
-  const isThinking = item.type === "thinking";
-  const isTool = item.type === "tool";
-  const isFinding = item.type === "finding";
-  const isError = item.type === "error";
-  const isInfo = item.type === "info";
-  const isProgress = item.type === "progress";
-  const isDispatch = item.type === "dispatch";
+  const typeLabel = LOG_TYPE_LABELS[item.type] || "日志";
+  const toolStatus = item.tool?.status;
   const formattedTitle = formatTitle(item.title) || item.title;
-  const statusIcon = isInfo ? getStatusIcon(formattedTitle) : null;
   const contentPreview = item.content
-    ? item.content.slice(0, 180) + (item.content.length > 180 ? "..." : "")
+    ? item.content.slice(0, 220) + (item.content.length > 220 ? "..." : "")
     : "";
 
   return (
     <div
       id={anchorId}
-      className={highlighted ? "rounded-lg ring-2 ring-primary/60 transition-shadow" : ""}
+      className={
+        highlighted
+          ? "rounded-lg ring-2 ring-primary/60 transition-shadow"
+          : ""
+      }
     >
-      <div
-        className={`
-          relative rounded-lg border-l-3 overflow-hidden
-          ${config.borderColor}
-          bg-card/50
-          ${isFinding ? "border border-rose-500/30 !bg-rose-950/20" : "border border-border"}
-          ${isError ? "border border-red-500/30 !bg-red-950/20" : ""}
-          ${isDispatch ? "border-sky-500/30 !bg-sky-950/20" : ""}
-          ${isThinking ? "!bg-violet-950/20 border-violet-500/30" : ""}
-          ${isTool ? "!bg-amber-950/20 border-amber-500/30" : ""}
-        `}
-      >
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex-shrink-0">{config.icon}</div>
-            <span
-              className={`
-                text-xs font-mono font-bold uppercase tracking-wider px-2 py-1 rounded-md border
-                ${isThinking ? "bg-violet-500/20 text-violet-600 dark:text-violet-300 border-violet-500/30" : ""}
-                ${isTool ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/30" : ""}
-                ${isFinding ? "bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/30" : ""}
-                ${isError ? "bg-red-500/20 text-red-600 dark:text-red-300 border-red-500/30" : ""}
-                ${isInfo ? "bg-muted/80 text-foreground border-border/50" : ""}
-                ${isProgress ? "bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 border-cyan-500/30" : ""}
-                ${isDispatch ? "bg-sky-500/20 text-sky-600 dark:text-sky-300 border-sky-500/30" : ""}
-              `}
-            >
-              {LOG_TYPE_LABELS[item.type] || "LOG"}
+      <div className="rounded-lg border border-border bg-card/80 px-3.5 py-3 hover:border-primary/30 transition-colors">
+        <div className="flex flex-col gap-2 md:grid md:grid-cols-[88px_72px_minmax(0,1fr)_130px_112px_auto] md:items-start md:gap-3">
+          <div className="text-xs font-mono text-muted-foreground tabular-nums">
+            {item.time}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground/80">{config.icon}</span>
+            <span className="text-xs font-mono uppercase text-muted-foreground tracking-wide">
+              {typeLabel}
             </span>
-            <span className="text-xs text-muted-foreground font-mono flex-shrink-0 tabular-nums">
-              {item.time}
-            </span>
-            <Zap className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
-            {statusIcon && <span className="flex-shrink-0">{statusIcon}</span>}
-            <span className="text-sm text-foreground font-medium whitespace-normal break-words flex-1 min-w-0">
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground leading-5 line-clamp-2 break-words">
               {formattedTitle}
-            </span>
-            {item.tool?.status === "running" && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+            </p>
+            {contentPreview && (
+              <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-2">
+                {contentPreview}
+              </p>
             )}
-            {item.agentName && (
+          </div>
+
+          <div className="min-w-0">
+            {item.agentName ? (
               <Badge
                 variant="outline"
-                className="h-6 px-2 text-xs uppercase tracking-wider border-primary/40 text-primary bg-primary/10 flex-shrink-0"
+                className="h-6 px-2 text-[11px] uppercase tracking-wide border-primary/40 text-primary bg-primary/10 max-w-full truncate"
               >
                 {item.agentName}
               </Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">-</span>
             )}
-            {item.severity && (
-              <Badge className={`text-xs uppercase ${SEVERITY_COLORS[item.severity] || SEVERITY_COLORS.info}`}>
+          </div>
+
+          <div className="min-w-0">
+            {toolStatus ? (
+              <Badge
+                variant="outline"
+                className={`h-6 px-2 text-[11px] font-medium ${TOOL_STATUS_CLASS[toolStatus]}`}
+              >
+                {toolStatus === "running" && (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                )}
+                {TOOL_STATUS_LABELS[toolStatus]}
+              </Badge>
+            ) : item.severity ? (
+              <Badge
+                className={`h-6 px-2 text-[11px] uppercase ${SEVERITY_COLORS[item.severity] || SEVERITY_COLORS.info}`}
+              >
                 {item.severity}
               </Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">-</span>
             )}
+          </div>
+
+          <div className="flex justify-start md:justify-end">
             <button
               type="button"
               onClick={onOpenDetail}
@@ -144,11 +130,6 @@ export const LogEntry = memo(function LogEntry({
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
           </div>
-          {contentPreview && (
-            <div className="mt-2 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words">
-              {contentPreview}
-            </div>
-          )}
         </div>
       </div>
     </div>
