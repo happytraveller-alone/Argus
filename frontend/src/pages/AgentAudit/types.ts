@@ -179,6 +179,13 @@ export interface FindingsViewFilters {
   showFiltered: boolean;
 }
 
+export interface BootstrapInputsSummary {
+  taskId: string;
+  source: string;
+  totalFindings: number;
+  candidateCount: number;
+}
+
 export interface DetailViewState {
   detailType: "log" | "finding" | "agent";
   detailId: string;

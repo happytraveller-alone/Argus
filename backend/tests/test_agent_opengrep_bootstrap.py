@@ -73,6 +73,17 @@ async def test_prepare_bootstrap_always_scan_even_when_history_exists(monkeypatc
     assert candidates == filtered_candidates
     collect_mock.assert_awaited_once()
     event_emitter.emit_info.assert_awaited()
+    last_info_call = event_emitter.emit_info.await_args_list[-1]
+    last_metadata = last_info_call.kwargs.get("metadata")
+    assert isinstance(last_metadata, dict)
+    assert last_metadata.get("bootstrap") is True
+    assert last_metadata.get("bootstrap_task_id") == "forced-scan-task-1"
+    assert last_metadata.get("bootstrap_source") == "scan_forced"
+    assert last_metadata.get("bootstrap_total_findings") == len(parsed_findings)
+    assert (
+        last_metadata.get("bootstrap_candidate_count")
+        == len(filtered_candidates)
+    )
 
 
 @pytest.mark.asyncio
@@ -139,6 +150,17 @@ async def test_prepare_bootstrap_fallback_scan_when_no_history(monkeypatch):
     assert db.add.call_count >= 3  # 1 task + findings
     assert db.commit.await_count >= 2
     event_emitter.emit_info.assert_awaited()
+    last_info_call = event_emitter.emit_info.await_args_list[-1]
+    last_metadata = last_info_call.kwargs.get("metadata")
+    assert isinstance(last_metadata, dict)
+    assert last_metadata.get("bootstrap") is True
+    assert last_metadata.get("bootstrap_task_id") == "scan-task-1"
+    assert last_metadata.get("bootstrap_source") == "scan_forced"
+    assert last_metadata.get("bootstrap_total_findings") == len(parsed_findings)
+    assert (
+        last_metadata.get("bootstrap_candidate_count")
+        == len(filtered_candidates)
+    )
 
 
 @pytest.mark.asyncio

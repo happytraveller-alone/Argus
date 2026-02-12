@@ -310,7 +310,11 @@ export default function Projects() {
                 return bestTask;
             };
 
-            const ruleScanActivities: RecentActivityItem[] = opengrepTasks.map(
+            const visibleOpengrepTasks = opengrepTasks.filter(
+                (task) => !task.name.startsWith("Agent Bootstrap OpenGrep"),
+            );
+
+            const ruleScanActivities: RecentActivityItem[] = visibleOpengrepTasks.map(
                 (task) => {
                     const pairedGitleaksTask = pickPairedGitleaksTask(task);
                     const params = new URLSearchParams();

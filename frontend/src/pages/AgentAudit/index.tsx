@@ -26,6 +26,10 @@ import {
   getAgentEvents,
   AgentEvent,
 } from "@/shared/api/agentTasks";
+import {
+  getOpengrepScanFindings,
+  type OpengrepFinding,
+} from "@/shared/api/opengrep";
 import CreateAgentTaskDialog from "@/components/agent/CreateAgentTaskDialog";
 
 // Local imports
@@ -36,6 +40,7 @@ import {
   AgentTreeNodeItem,
   StatsPanel,
   FindingsPanel,
+  BootstrapInputsPanel,
   AuditDetailDialog,
   AgentErrorBoundary,
 } from "./components";
@@ -43,11 +48,16 @@ import ReportExportDialog from "./components/ReportExportDialog";
 import { useAgentAuditState } from "./hooks";
 import { ACTION_VERBS, POLLING_INTERVALS, TASK_PHASE_LABELS } from "./constants";
 import { cleanThinkingContent } from "./utils";
-import type { DetailViewState, FindingsViewFilters } from "./types";
+import type {
+  BootstrapInputsSummary,
+  DetailViewState,
+  FindingsViewFilters,
+} from "./types";
 
 const EVENT_PAGE_SIZE = 500;
 const EVENT_BATCH_SAFETY_LIMIT = 200;
 const FINDINGS_REFRESH_INTERVAL = 10000;
+const BOOTSTRAP_FINDING_PAGE_SIZE = 200;
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -194,6 +204,15 @@ function AgentAuditPageContent() {
     verification: "all",
     showFiltered: false,
   });
+  const [bootstrapInputsSummary, setBootstrapInputsSummary] =
+    useState<BootstrapInputsSummary | null>(null);
+  const [bootstrapInputFindings, setBootstrapInputFindings] = useState<
+    OpengrepFinding[]
+  >([]);
+  const [bootstrapInputsLoading, setBootstrapInputsLoading] = useState(false);
+  const [bootstrapInputsError, setBootstrapInputsError] = useState<string | null>(
+    null,
+  );
   const [detailViewState, setDetailViewState] = useState<DetailViewState | null>(null);
   const [detailDialog, setDetailDialog] = useState<{
     type: "log" | "finding" | "agent";
@@ -465,6 +484,10 @@ function AgentAuditPageContent() {
         verification: "all",
         showFiltered: false,
       });
+      setBootstrapInputsSummary(null);
+      setBootstrapInputFindings([]);
+      setBootstrapInputsLoading(false);
+      setBootstrapInputsError(null);
       setDetailViewState(null);
       setDetailDialog(null);
       setHighlightedLogId(null);
@@ -544,6 +567,51 @@ function AgentAuditPageContent() {
     },
     [taskId, setFindings],
   );
+
+  const loadBootstrapInputFindings = useCallback(async (scanTaskId: string) => {
+    setBootstrapInputsLoading(true);
+    setBootstrapInputsError(null);
+    try {
+      const allFindings: OpengrepFinding[] = [];
+      let skip = 0;
+      for (let batch = 0; batch < EVENT_BATCH_SAFETY_LIMIT; batch += 1) {
+        const page = await getOpengrepScanFindings({
+          taskId: scanTaskId,
+          skip,
+          limit: BOOTSTRAP_FINDING_PAGE_SIZE,
+        });
+        if (!page.length) break;
+        allFindings.push(...page);
+        skip += page.length;
+        if (page.length < BOOTSTRAP_FINDING_PAGE_SIZE) break;
+      }
+
+      const filtered = allFindings.filter((item) => {
+        const severity = String(item.severity || "").trim().toUpperCase();
+        const confidence = String(item.confidence || "").trim().toUpperCase();
+        return (
+          severity === "ERROR" && (confidence === "HIGH" || confidence === "MEDIUM")
+        );
+      });
+
+      setBootstrapInputFindings(filtered);
+      setBootstrapInputsSummary((prev) =>
+        prev && prev.taskId === scanTaskId
+          ? {
+              ...prev,
+              candidateCount: Math.max(prev.candidateCount, filtered.length),
+              totalFindings: Math.max(prev.totalFindings, allFindings.length),
+            }
+          : prev,
+      );
+    } catch (error) {
+      console.error("Failed to load bootstrap input findings:", error);
+      setBootstrapInputsError("加载静态输入失败");
+      setBootstrapInputFindings([]);
+    } finally {
+      setBootstrapInputsLoading(false);
+    }
+  }, []);
 
   const loadAgentTree = useCallback(async () => {
     if (!taskId) return;
@@ -626,6 +694,28 @@ function AgentAuditPageContent() {
         tool_output: event.tool_output ?? null,
         tool_duration_ms: event.tool_duration_ms ?? null,
       };
+      const bootstrapTaskId =
+        typeof metadata?.bootstrap_task_id === "string"
+          ? metadata.bootstrap_task_id.trim()
+          : "";
+      if (
+        bootstrapTaskId &&
+        (metadata?.bootstrap === true ||
+          typeof metadata?.bootstrap_source === "string")
+      ) {
+        const totalFindings = toSafeNumber(metadata?.bootstrap_total_findings);
+        const candidateCount = toSafeNumber(metadata?.bootstrap_candidate_count);
+        const sourceValue =
+          typeof metadata?.bootstrap_source === "string"
+            ? metadata.bootstrap_source
+            : "scan_forced";
+        setBootstrapInputsSummary((prev) => ({
+          taskId: bootstrapTaskId,
+          source: sourceValue || prev?.source || "scan_forced",
+          totalFindings: totalFindings ?? prev?.totalFindings ?? 0,
+          candidateCount: candidateCount ?? prev?.candidateCount ?? 0,
+        }));
+      }
 
       if (typeof event.sequence === "number") {
         lastEventSequenceRef.current = Math.max(
@@ -1038,6 +1128,17 @@ function AgentAuditPageContent() {
       return 0;
     }
   }, [appendLogFromEvent, fetchAllHistoricalEvents, taskId]);
+
+  useEffect(() => {
+    const bootstrapTaskId = bootstrapInputsSummary?.taskId;
+    if (!bootstrapTaskId) return;
+    void loadBootstrapInputFindings(bootstrapTaskId);
+  }, [
+    bootstrapInputsSummary?.taskId,
+    bootstrapInputsSummary?.candidateCount,
+    bootstrapInputsSummary?.totalFindings,
+    loadBootstrapInputFindings,
+  ]);
 
   // ============ Stream Event Handling ============
 
@@ -1588,26 +1689,39 @@ function AgentAuditPageContent() {
               <div ref={logEndRef} />
             </div>
           ) : (
-            <div className="flex-1 overflow-hidden bg-muted/30">
-              <FindingsPanel
-                findings={findings}
-                loading={isFindingsLoading}
-                error={findingsError}
-                filters={findingsFilters}
-                highlightedFindingId={highlightedFindingId}
-                onFiltersChange={setFindingsFilters}
-                onOpenDetail={(item) =>
-                  openDetailDialog({
-                    type: "finding",
-                    id: item.id,
-                    anchorId: `finding-item-${item.id}`,
-                  })
-                }
-                containerRef={findingsContainerRef}
-                onRetry={() => {
-                  void loadFindings();
-                }}
-              />
+            <div className="flex-1 overflow-hidden bg-muted/30 flex flex-col">
+              {bootstrapInputsSummary && (
+                <BootstrapInputsPanel
+                  summary={bootstrapInputsSummary}
+                  findings={bootstrapInputFindings}
+                  loading={bootstrapInputsLoading}
+                  error={bootstrapInputsError}
+                  onRetry={() => {
+                    void loadBootstrapInputFindings(bootstrapInputsSummary.taskId);
+                  }}
+                />
+              )}
+              <div className="flex-1 overflow-hidden">
+                <FindingsPanel
+                  findings={findings}
+                  loading={isFindingsLoading}
+                  error={findingsError}
+                  filters={findingsFilters}
+                  highlightedFindingId={highlightedFindingId}
+                  onFiltersChange={setFindingsFilters}
+                  onOpenDetail={(item) =>
+                    openDetailDialog({
+                      type: "finding",
+                      id: item.id,
+                      anchorId: `finding-item-${item.id}`,
+                    })
+                  }
+                  containerRef={findingsContainerRef}
+                  onRetry={() => {
+                    void loadFindings();
+                  }}
+                />
+              </div>
             </div>
           )}
 

@@ -72,6 +72,7 @@ type ConfigSection = "llm" | "embedding" | "analysis";
 interface SystemConfigProps {
   visibleSections?: ConfigSection[];
   defaultSection?: ConfigSection;
+  mergedView?: boolean;
 }
 
 const DEFAULT_CONFIG: SystemConfigData = {
@@ -96,6 +97,7 @@ const DEFAULT_CONFIG: SystemConfigData = {
 export function SystemConfig({
   visibleSections = ["llm", "embedding", "analysis"],
   defaultSection = "llm",
+  mergedView = false,
 }: SystemConfigProps = {}) {
   const sections = visibleSections.length > 0 ? visibleSections : ["llm"];
   const [config, setConfig] = useState<SystemConfigData | null>(null);
@@ -309,7 +311,7 @@ export function SystemConfig({
       </div>
 
       <Tabs defaultValue={sections.includes(defaultSection) ? defaultSection : sections[0]} className="w-full">
-        {sections.length > 1 && (
+        {!mergedView && sections.length > 1 && (
           <TabsList className={`grid w-full ${tabsGridClass} bg-muted border border-border p-1 h-auto gap-1 rounded-lg mb-6`}>
             {sections.includes("llm") && (
               <TabsTrigger value="llm" className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2">
@@ -462,7 +464,7 @@ export function SystemConfig({
                 </div>
               )}
 
-              <details open className="pt-4 border-t border-border border-dashed">
+              <details className="pt-4 border-t border-border border-dashed">
                 <summary className="font-bold uppercase cursor-pointer hover:text-primary text-muted-foreground text-sm">高级参数</summary>
 
                 <div className="mt-4 mb-2">
@@ -520,16 +522,61 @@ export function SystemConfig({
               <p className="text-muted-foreground">• <strong className="text-muted-foreground">原生适配器</strong>: 百度、MiniMax、豆包因 API 格式特殊，使用专用适配器</p>
               <p className="text-muted-foreground">• <strong className="text-muted-foreground">API 中转站</strong>: 在 Base URL 填入中转站地址即可，API Key 填中转站提供的 Key</p>
             </div>
+
+            {mergedView && (
+              <details className="cyber-card p-4">
+                <summary className="font-bold uppercase cursor-pointer hover:text-primary text-muted-foreground text-sm">
+                  嵌入模型配置（高级）
+                </summary>
+                <div className="mt-4">
+                  <EmbeddingConfig />
+                </div>
+              </details>
+            )}
+
+            {mergedView && (
+              <details className="cyber-card p-4">
+                <summary className="font-bold uppercase cursor-pointer hover:text-primary text-muted-foreground text-sm">
+                  分析参数（高级）
+                </summary>
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">最大分析文件数</Label>
+                    <Input type="number" value={config.maxAnalyzeFiles} onChange={(event) => updateConfig("maxAnalyzeFiles", Number(event.target.value))} className="h-10 cyber-input" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">LLM 并发数</Label>
+                    <Input type="number" value={config.llmConcurrency} onChange={(event) => updateConfig("llmConcurrency", Number(event.target.value))} className="h-10 cyber-input" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">请求间隔 (毫秒)</Label>
+                    <Input type="number" value={config.llmGapMs} onChange={(event) => updateConfig("llmGapMs", Number(event.target.value))} className="h-10 cyber-input" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase">输出语言</Label>
+                    <Select value={config.outputLanguage} onValueChange={(value) => updateConfig("outputLanguage", value)}>
+                      <SelectTrigger className="h-10 cyber-input">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="cyber-dialog border-border">
+                        <SelectItem value="zh-CN" className="font-mono">🇨🇳 中文</SelectItem>
+                        <SelectItem value="en-US" className="font-mono">🇺🇸 English</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </details>
+            )}
           </TabsContent>
         )}
 
-        {sections.includes("embedding") && (
+        {!mergedView && sections.includes("embedding") && (
           <TabsContent value="embedding" className="space-y-6">
             <EmbeddingConfig />
           </TabsContent>
         )}
 
-        {sections.includes("analysis") && (
+        {!mergedView && sections.includes("analysis") && (
           <TabsContent value="analysis" className="space-y-6">
             <div className="cyber-card p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

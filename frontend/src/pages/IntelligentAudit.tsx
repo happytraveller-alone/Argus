@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, Brain, Settings, Zap } from "lucide-react";
+import { Bot, Zap } from "lucide-react";
 import { SystemConfig } from "@/components/system/SystemConfig";
 import AgentSettingsPanel from "@/components/agent/AgentSettingsPanel";
 
@@ -57,7 +57,7 @@ export default function IntelligentAudit() {
       <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
       <div className="relative z-10 space-y-6">
         <Tabs defaultValue="capability" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-muted border border-border p-1 h-auto gap-1 rounded-lg mb-6">
+          <TabsList className="grid w-full grid-cols-2 bg-muted border border-border p-1 h-auto gap-1 rounded-lg mb-6">
             <TabsTrigger
               value="capability"
               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"
@@ -70,18 +70,6 @@ export default function IntelligentAudit() {
             >
               <Zap className="w-3 h-3" /> LLM 配置
             </TabsTrigger>
-            <TabsTrigger
-              value="embedding"
-              className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"
-            >
-              <Brain className="w-3 h-3" /> 嵌入模型
-            </TabsTrigger>
-            <TabsTrigger
-              value="analysis"
-              className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"
-            >
-              <Settings className="w-3 h-3" /> 分析参数
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="capability" className="space-y-6">
@@ -89,15 +77,11 @@ export default function IntelligentAudit() {
           </TabsContent>
 
           <TabsContent value="llm" className="space-y-6">
-            <SystemConfig visibleSections={["llm"]} defaultSection="llm" />
-          </TabsContent>
-
-          <TabsContent value="embedding" className="space-y-6">
-            <SystemConfig visibleSections={["embedding"]} defaultSection="embedding" />
-          </TabsContent>
-
-          <TabsContent value="analysis" className="space-y-6">
-            <SystemConfig visibleSections={["analysis"]} defaultSection="analysis" />
+            <SystemConfig
+              visibleSections={["llm"]}
+              defaultSection="llm"
+              mergedView
+            />
           </TabsContent>
         </Tabs>
       </div>

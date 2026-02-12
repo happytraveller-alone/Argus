@@ -641,7 +641,14 @@ async def _prepare_bootstrap_opengrep_findings(
     await db.refresh(scan_task)
 
     await event_emitter.emit_info(
-        f"🧪 OpenGrep 预处理开始：已禁用历史复用，启动阻塞式预扫描（task={scan_task.id}）"
+        f"🧪 OpenGrep 预处理开始：已禁用历史复用，启动阻塞式预扫描（task={scan_task.id}）",
+        metadata={
+            "bootstrap": True,
+            "bootstrap_task_id": scan_task.id,
+            "bootstrap_source": "scan_forced",
+            "bootstrap_total_findings": 0,
+            "bootstrap_candidate_count": 0,
+        },
     )
 
     try:
@@ -697,7 +704,14 @@ async def _prepare_bootstrap_opengrep_findings(
 
         candidates = await _collect_bootstrap_findings_for_task(db, scan_task)
         await event_emitter.emit_info(
-            f"✅ OpenGrep 预扫描完成: findings={len(parsed_findings)}, 候选={len(candidates)}"
+            f"✅ OpenGrep 预扫描完成: findings={len(parsed_findings)}, 候选={len(candidates)}",
+            metadata={
+                "bootstrap": True,
+                "bootstrap_task_id": scan_task.id,
+                "bootstrap_source": "scan_forced",
+                "bootstrap_total_findings": len(parsed_findings),
+                "bootstrap_candidate_count": len(candidates),
+            },
         )
         return candidates, scan_task.id, "scan_forced"
     except FileNotFoundError as exc:
