@@ -73,9 +73,15 @@ export interface AgentFinding {
   line_start: number | null;
   line_end: number | null;
   code_snippet: string | null;
+  code_context: string | null;
+  context_start_line: number | null;
+  context_end_line: number | null;
 
   status: string;
   is_verified: boolean;
+  reachability: string | null;
+  authenticity: string | null;
+  verification_evidence: string | null;
   has_poc: boolean;
   poc_code: string | null;
 
@@ -212,9 +218,14 @@ export async function getAgentFindings(
     severity?: string;
     vulnerability_type?: string;
     is_verified?: boolean;
+    include_false_positive?: boolean;
   }
 ): Promise<AgentFinding[]> {
-  const response = await apiClient.get(`/agent-tasks/${taskId}/findings`, { params });
+  const normalizedParams =
+    params && typeof params.is_verified === "boolean"
+      ? { ...params, verified_only: params.is_verified }
+      : params;
+  const response = await apiClient.get(`/agent-tasks/${taskId}/findings`, { params: normalizedParams });
   return response.data;
 }
 

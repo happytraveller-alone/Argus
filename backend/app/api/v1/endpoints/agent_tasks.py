@@ -8,7 +8,8 @@ import json
 import logging
 import os
 import shutil
-from typing import Any, List, Optional, Dict, Set
+from pathlib import Path
+from typing import Any, List, Optional, Dict, Set, Tuple
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -185,10 +186,16 @@ class AgentFindingResponse(BaseModel):
     line_start: Optional[int]
     line_end: Optional[int]
     code_snippet: Optional[str]
+    code_context: Optional[str] = None
+    context_start_line: Optional[int] = None
+    context_end_line: Optional[int] = None
     
     is_verified: bool
     # 🔥 FIX: Map from ai_confidence in ORM, make Optional with default
     confidence: Optional[float] = Field(default=0.5, validation_alias="ai_confidence")
+    reachability: Optional[str] = None
+    authenticity: Optional[str] = None
+    verification_evidence: Optional[str] = None
     status: str
     
     suggestion: Optional[str] = None
@@ -530,6 +537,19 @@ async def _execute_agent_task(task_id: str):
                 saved_count = await _save_findings(db, task_id, findings, project_root=project_root)
                 logger.info(f"[AgentTask] Saved {saved_count}/{len(findings)} findings (filtered {len(findings) - saved_count} hallucinations)")
 
+                persisted_findings_result = await db.execute(
+                    select(AgentFinding).where(AgentFinding.task_id == task_id)
+                )
+                persisted_findings = persisted_findings_result.scalars().all()
+                effective_findings = [
+                    item for item in persisted_findings
+                    if str(item.status) != FindingStatus.FALSE_POSITIVE
+                ]
+                false_positive_findings = [
+                    item for item in persisted_findings
+                    if str(item.status) == FindingStatus.FALSE_POSITIVE
+                ]
+
                 # 更新任务统计
                 # 🔥 CRITICAL FIX: 在设置完成前再次检查取消状态
                 # 避免 "取消后后端继续运行并最终标记为完成" 的问题
@@ -540,7 +560,8 @@ async def _execute_agent_task(task_id: str):
                     task.status = AgentTaskStatus.COMPLETED
                 task.completed_at = datetime.now(timezone.utc)
                 task.current_phase = AgentTaskPhase.REPORTING
-                task.findings_count = saved_count  # 🔥 v2.1: 使用实际保存的数量（排除幻觉）
+                task.findings_count = len(effective_findings)
+                task.false_positive_count = len(false_positive_findings)
 
                 # 🔥 CRITICAL FIX: 累加所有子 Agent 的统计，而不仅仅是 Orchestrator 的
                 total_iterations = result.iterations
@@ -565,44 +586,49 @@ async def _execute_agent_task(task_id: str):
                 task.analyzed_files = task.total_files  # Agent 扫描了所有符合条件的文件
 
                 files_with_findings_set = set()
-                for f in findings:
-                    if isinstance(f, dict):
-                        file_path = f.get("file_path") or f.get("file") or f.get("location", "").split(":")[0]
-                        if file_path:
-                            files_with_findings_set.add(file_path)
+                for finding_item in effective_findings:
+                    if finding_item.file_path:
+                        files_with_findings_set.add(finding_item.file_path)
                 task.files_with_findings = len(files_with_findings_set)
 
                 # 统计严重程度和验证状态
-                verified_count = 0
-                for f in findings:
-                    if isinstance(f, dict):
-                        sev = str(f.get("severity", "low")).lower()
-                        if sev == "critical":
-                            task.critical_count += 1
-                        elif sev == "high":
-                            task.high_count += 1
-                        elif sev == "medium":
-                            task.medium_count += 1
-                        elif sev == "low":
-                            task.low_count += 1
-                        # 🔥 统计已验证的发现
-                        if f.get("is_verified") or f.get("verdict") == "confirmed":
-                            verified_count += 1
-                task.verified_count = verified_count
+                task.critical_count = 0
+                task.high_count = 0
+                task.medium_count = 0
+                task.low_count = 0
+                task.verified_count = 0
+                for finding_item in effective_findings:
+                    severity_value = str(finding_item.severity).lower()
+                    if severity_value == "critical":
+                        task.critical_count += 1
+                    elif severity_value == "high":
+                        task.high_count += 1
+                    elif severity_value == "medium":
+                        task.medium_count += 1
+                    elif severity_value == "low":
+                        task.low_count += 1
+                    if finding_item.is_verified:
+                        task.verified_count += 1
                 
                 # 计算安全评分
-                task.security_score = _calculate_security_score(findings)
+                task.security_score = _calculate_security_score(
+                    [{"severity": str(item.severity).lower()} for item in effective_findings]
+                )
                 # 🔥 注意: progress_percentage 是计算属性，不需要手动设置
                 # 当 status = COMPLETED 时会自动返回 100.0
                 
                 await db.commit()
                 
                 await event_emitter.emit_task_complete(
-                    findings_count=len(findings),
+                    findings_count=len(effective_findings),
                     duration_ms=duration_ms,
                 )
                 
-                logger.info(f"✅ Task {task_id} completed: {len(findings)} findings, {duration_ms}ms")
+                logger.info(
+                    f"✅ Task {task_id} completed: "
+                    f"effective={len(effective_findings)}, false_positive={len(false_positive_findings)}, "
+                    f"saved={saved_count}, duration={duration_ms}ms"
+                )
             else:
                 # 🔥 检查是否是取消导致的失败
                 if result.error == "任务已取消":
@@ -1162,6 +1188,187 @@ def _safe_text(value: Any) -> str:
     return str(value)
 
 
+def _to_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            return int(stripped)
+    return None
+
+
+def _normalize_optional_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = _safe_text(value).strip()
+    return text or None
+
+
+def _normalize_relative_file_path(path_value: str, project_root: Optional[str]) -> str:
+    normalized = path_value.replace("\\", "/").strip()
+    if not project_root:
+        return normalized
+    try:
+        rel = os.path.relpath(normalized, project_root)
+        if not rel.startswith(".."):
+            return rel.replace("\\", "/")
+    except Exception:
+        pass
+    return normalized
+
+
+def _resolve_finding_file_path(
+    raw_file_path: Optional[str],
+    project_root: Optional[str],
+) -> Tuple[Optional[str], Optional[str]]:
+    if not raw_file_path:
+        return None, None
+
+    candidate = raw_file_path.strip().split(":", 1)[0].strip()
+    if not candidate:
+        return None, None
+
+    candidate = candidate.replace("\\", "/")
+    path_candidates: List[Path] = []
+    raw_path = Path(candidate)
+    path_candidates.append(raw_path)
+
+    if project_root:
+        root_path = Path(project_root)
+        path_candidates.append(root_path / candidate)
+        if candidate.startswith("./"):
+            path_candidates.append(root_path / candidate[2:])
+
+    for path_obj in path_candidates:
+        try:
+            resolved = path_obj.resolve()
+        except Exception:
+            continue
+        if resolved.is_file():
+            stored = _normalize_relative_file_path(str(resolved), project_root)
+            return stored, str(resolved)
+
+    return None, None
+
+
+def _infer_line_range_from_snippet(
+    file_lines: List[str],
+    snippet: Optional[str],
+) -> Tuple[Optional[int], Optional[int]]:
+    if not snippet:
+        return None, None
+
+    snippet_text = snippet.strip("\n")
+    if not snippet_text:
+        return None, None
+
+    file_text = "\n".join(file_lines)
+    first_index = file_text.find(snippet_text)
+    if first_index < 0:
+        return None, None
+    if file_text.find(snippet_text, first_index + 1) >= 0:
+        return None, None
+
+    line_start = file_text.count("\n", 0, first_index) + 1
+    line_count = max(1, snippet_text.count("\n") + 1)
+    line_end = line_start + line_count - 1
+    return line_start, line_end
+
+
+def _extract_location_parts(finding: Dict[str, Any]) -> Tuple[Optional[str], Optional[int]]:
+    location = finding.get("location")
+    if not location or not isinstance(location, str):
+        return None, None
+    location = location.strip()
+    if not location:
+        return None, None
+
+    if ":" not in location:
+        return location, None
+
+    file_part, line_part = location.split(":", 1)
+    line_num = _to_int(line_part.split("-", 1)[0].strip())
+    return file_part.strip(), line_num
+
+
+def _build_code_windows(
+    file_lines: List[str],
+    line_start: int,
+    line_end: int,
+    radius: int = 3,
+) -> Tuple[Optional[str], Optional[str], Optional[int], Optional[int]]:
+    if not file_lines:
+        return None, None, None, None
+
+    total_lines = len(file_lines)
+    safe_start = max(1, min(line_start, total_lines))
+    safe_end = max(safe_start, min(line_end, total_lines))
+
+    snippet_start_idx = safe_start - 1
+    snippet_end_idx = safe_end
+    snippet = "\n".join(file_lines[snippet_start_idx:snippet_end_idx]).strip("\n")
+
+    context_start = max(1, safe_start - radius)
+    context_end = min(total_lines, safe_end + radius)
+    context_start_idx = context_start - 1
+    context_end_idx = context_end
+    context = "\n".join(file_lines[context_start_idx:context_end_idx]).strip("\n")
+
+    if not context:
+        return None, None, None, None
+    if not snippet:
+        snippet = context
+
+    return snippet, context, context_start, context_end
+
+
+def _normalize_authenticity_verdict(
+    finding: Dict[str, Any],
+    confidence: float,
+) -> Optional[str]:
+    verdict = finding.get("authenticity") or finding.get("verdict")
+    if isinstance(verdict, str):
+        verdict = verdict.strip().lower()
+    else:
+        verdict = None
+
+    allowed = {"confirmed", "likely", "false_positive"}
+    if verdict in allowed:
+        return verdict
+
+    if finding.get("is_verified") is True:
+        return "confirmed"
+    if confidence >= 0.85:
+        return "likely"
+    if confidence <= 0.2:
+        return "false_positive"
+    return None
+
+
+def _normalize_reachability(
+    finding: Dict[str, Any],
+    verdict: str,
+) -> Optional[str]:
+    value = finding.get("reachability")
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"reachable", "likely_reachable", "unreachable"}:
+            return normalized
+
+    if verdict == "confirmed":
+        return "reachable"
+    if verdict == "likely":
+        return "likely_reachable"
+    if verdict == "false_positive":
+        return "unreachable"
+    return None
+
+
 async def _save_findings(
     db: AsyncSession,
     task_id: str,
@@ -1171,8 +1378,9 @@ async def _save_findings(
     """
     保存发现到数据库
 
-    🔥 增强版：支持多种 Agent 输出格式，健壮的字段映射
-    🔥 v2.1: 添加文件路径验证，过滤幻觉发现
+    严格门禁版：
+    - normalize -> enrich -> validate -> persist
+    - 无文件定位、无可用上下文、无合法真实性/可达性的发现不入库
 
     Args:
         db: 数据库会话
@@ -1222,7 +1430,16 @@ async def _save_findings(
     }
 
     saved_count = 0
+    filtered_reasons: Dict[str, int] = {}
     logger.info(f"Saving {len(findings)} findings for task {task_id}")
+
+    def mark_filtered(reason: str, payload: Optional[Dict[str, Any]] = None) -> None:
+        filtered_reasons[reason] = filtered_reasons.get(reason, 0) + 1
+        if payload:
+            logger.warning(
+                f"[SaveFindings] 🚫 Filtered finding ({reason}): "
+                f"title={str(payload.get('title', 'N/A'))[:80]}"
+            )
 
     for finding in findings:
         if not isinstance(finding, dict):
@@ -1230,7 +1447,7 @@ async def _save_findings(
             continue
 
         try:
-            # 🔥 Handle severity (case-insensitive, support multiple field names)
+            # 1) normalize severity
             raw_severity = str(
                 finding.get("severity") or
                 finding.get("risk") or
@@ -1238,8 +1455,7 @@ async def _save_findings(
             ).lower().strip()
             severity_enum = severity_map.get(raw_severity, VulnerabilitySeverity.MEDIUM)
 
-            # 🔥 Handle vulnerability type (case-insensitive & snake_case normalization)
-            # Support multiple field names: vulnerability_type, type, vuln_type
+            # 2) normalize vulnerability type
             raw_type = str(
                 finding.get("vulnerability_type") or
                 finding.get("type") or
@@ -1269,59 +1485,103 @@ async def _save_findings(
             if "deserial" in raw_type:
                 type_enum = VulnerabilityType.DESERIALIZATION
 
-            # 🔥 Handle file path (support multiple field names)
-            file_path = (
-                finding.get("file_path") or
-                finding.get("file") or
-                finding.get("location", "").split(":")[0] if ":" in finding.get("location", "") else finding.get("location")
-            )
-
-            # 🔥 v2.1: 文件路径验证 - 过滤幻觉发现
-            if project_root and file_path:
-                # 清理路径（移除可能的行号）
-                clean_path = file_path.split(":")[0].strip() if ":" in file_path else file_path.strip()
-                full_path = os.path.join(project_root, clean_path)
-
-                if not os.path.isfile(full_path):
-                    # 尝试作为绝对路径
-                    if not (os.path.isabs(clean_path) and os.path.isfile(clean_path)):
-                        logger.warning(
-                            f"[SaveFindings] 🚫 跳过幻觉发现: 文件不存在 '{file_path}' "
-                            f"(title: {finding.get('title', 'N/A')[:50]})"
-                        )
-                        continue  # 跳过这个发现
-
-            # 🔥 Handle line numbers (support multiple formats)
-            line_start = finding.get("line_start") or finding.get("line")
-            if not line_start and ":" in finding.get("location", ""):
+            # 3) normalize confidence
+            confidence = finding.get("confidence") or finding.get("ai_confidence") or 0.5
+            if isinstance(confidence, str):
                 try:
-                    line_start = int(finding.get("location", "").split(":")[1])
-                except (ValueError, IndexError):
-                    line_start = None
+                    confidence = float(confidence)
+                except ValueError:
+                    confidence = 0.5
+            confidence = max(0.0, min(float(confidence), 1.0))
 
-            line_end = finding.get("line_end") or line_start
+            # 4) normalize authenticity + reachability
+            authenticity = _normalize_authenticity_verdict(finding, confidence)
+            if not authenticity:
+                mark_filtered("missing_or_invalid_authenticity", finding)
+                continue
 
-            # 🔥 Handle code snippet (support multiple field names)
+            reachability = _normalize_reachability(finding, authenticity)
+            if not reachability:
+                mark_filtered("missing_or_invalid_reachability", finding)
+                continue
+
+            # 5) normalize file location
+            location_file, location_line = _extract_location_parts(finding)
+            raw_file_path = finding.get("file_path") or finding.get("file") or location_file
+            stored_file_path, full_file_path = _resolve_finding_file_path(
+                str(raw_file_path) if raw_file_path else None,
+                project_root,
+            )
+            if not stored_file_path or not full_file_path:
+                mark_filtered("missing_or_invalid_file_path", finding)
+                continue
+
+            try:
+                file_content = Path(full_file_path).read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                mark_filtered("file_read_failed", finding)
+                continue
+
+            file_lines = file_content.splitlines()
+            if not file_lines:
+                mark_filtered("empty_file_content", finding)
+                continue
+
+            # 6) normalize line range
+            line_start = _to_int(finding.get("line_start")) or _to_int(finding.get("line")) or location_line
+            line_end = _to_int(finding.get("line_end"))
+
+            # 7) normalize snippets
             code_snippet = (
                 finding.get("code_snippet") or
                 finding.get("code") or
                 finding.get("vulnerable_code")
             )
+            code_snippet_text = _normalize_optional_text(code_snippet)
 
-            # 🔥 Handle title (generate from type if not provided)
+            if line_start is None:
+                inferred_start, inferred_end = _infer_line_range_from_snippet(file_lines, code_snippet_text)
+                line_start = inferred_start
+                if inferred_end is not None:
+                    line_end = inferred_end
+
+            if line_start is None:
+                mark_filtered("missing_line_start", finding)
+                continue
+            if line_end is None:
+                line_end = line_start
+
+            total_lines = len(file_lines)
+            line_start = max(1, min(line_start, total_lines))
+            line_end = max(line_start, min(line_end, total_lines))
+
+            snippet_text, context_text, context_start_line, context_end_line = _build_code_windows(
+                file_lines=file_lines,
+                line_start=line_start,
+                line_end=line_end,
+                radius=3,
+            )
+            if not context_text or context_start_line is None or context_end_line is None:
+                mark_filtered("missing_code_context", finding)
+                continue
+            if not snippet_text:
+                snippet_text = code_snippet_text
+            if not snippet_text:
+                mark_filtered("missing_code_snippet", finding)
+                continue
+
+            # 8) title/description/suggestion
             title = finding.get("title")
             if not title:
-                # Generate title from vulnerability type and file
                 type_display = raw_type.replace("_", " ").title()
-                if file_path:
-                    title = f"{type_display} in {os.path.basename(file_path)}"
+                if stored_file_path:
+                    title = f"{type_display} in {os.path.basename(stored_file_path)}"
                 else:
                     title = f"{type_display} Vulnerability"
             title_text = str(title).strip() if title is not None else "Unknown Vulnerability"
             if not title_text:
                 title_text = "Unknown Vulnerability"
 
-            # 🔥 Handle description (support multiple field names)
             description = (
                 finding.get("description") or
                 finding.get("details") or
@@ -1331,7 +1591,6 @@ async def _save_findings(
             )
             description_text = _safe_text(description)
 
-            # 🔥 Handle suggestion/recommendation
             suggestion = (
                 finding.get("suggestion") or
                 finding.get("recommendation") or
@@ -1339,23 +1598,30 @@ async def _save_findings(
                 finding.get("fix")
             )
             suggestion_text = _safe_text(suggestion) if suggestion is not None else None
-            code_snippet_text = _safe_text(code_snippet) if code_snippet is not None else None
-            file_path_text = str(file_path).strip() if file_path else None
 
-            # 🔥 Handle confidence (map to ai_confidence field in model)
-            confidence = finding.get("confidence") or finding.get("ai_confidence") or 0.5
-            if isinstance(confidence, str):
-                try:
-                    confidence = float(confidence)
-                except ValueError:
-                    confidence = 0.5
+            # 9) verification metadata
+            is_verified = authenticity in {"confirmed", "likely"}
+            verification_details_text = _normalize_optional_text(
+                finding.get("verification_details") or finding.get("verification_evidence")
+            )
+            verification_method_text = _normalize_optional_text(finding.get("verification_method"))
+            if not verification_method_text:
+                verification_method_text = "agent_verification"
 
-            # 🔥 Handle verification status
-            is_verified = finding.get("is_verified", False)
-            if finding.get("verdict") == "confirmed":
-                is_verified = True
+            verification_result_payload = finding.get("verification_result")
+            if not isinstance(verification_result_payload, dict):
+                verification_result_payload = {}
+            verification_result_payload.update(
+                {
+                    "reachability": reachability,
+                    "authenticity": authenticity,
+                    "evidence": verification_details_text,
+                    "context_start_line": context_start_line,
+                    "context_end_line": context_end_line,
+                }
+            )
 
-            # 🔥 Handle PoC information
+            # 10) PoC info
             poc_data = finding.get("poc", {})
             has_poc = bool(poc_data)
             poc_code = None
@@ -1369,13 +1635,7 @@ async def _save_findings(
             elif isinstance(poc_data, str):
                 poc_description = poc_data
 
-            # 🔥 Handle verification details
-            verification_method = finding.get("verification_method")
-            verification_result = None
-            if finding.get("verification_details"):
-                verification_result = {"details": finding.get("verification_details")}
-
-            # 🔥 Handle CWE and CVSS
+            # 11) optional CVSS/CWE
             cwe_id = finding.get("cwe_id") or finding.get("cwe")
             cvss_score = finding.get("cvss_score") or finding.get("cvss")
             if isinstance(cvss_score, str):
@@ -1391,23 +1651,22 @@ async def _save_findings(
                 severity=severity_enum,
                 title=title_text,
                 description=description_text,
-                file_path=file_path_text,
+                file_path=stored_file_path,
                 line_start=line_start,
                 line_end=line_end,
-                code_snippet=code_snippet_text,
+                code_snippet=snippet_text,
+                code_context=context_text,
                 suggestion=suggestion_text,
                 is_verified=is_verified,
-                ai_confidence=confidence,  # 🔥 FIX: Use ai_confidence, not confidence
-                status=FindingStatus.VERIFIED if is_verified else FindingStatus.NEW,
-                # 🔥 Additional fields
+                ai_confidence=confidence,
+                status=FindingStatus.FALSE_POSITIVE if authenticity == "false_positive" else FindingStatus.VERIFIED,
                 has_poc=has_poc,
                 poc_code=poc_code,
                 poc_description=poc_description,
                 poc_steps=poc_steps,
-                verification_method=verification_method,
-                verification_result=verification_result,
+                verification_method=verification_method_text,
+                verification_result=verification_result_payload,
                 cvss_score=cvss_score,
-                # References for CWE
                 references=[{"cwe": cwe_id}] if cwe_id else None,
             )
             db.add(db_finding)
@@ -1420,6 +1679,12 @@ async def _save_findings(
             logger.debug(f"[SaveFindings] Traceback: {traceback.format_exc()}")
 
     logger.info(f"Successfully prepared {saved_count} findings for commit")
+    if filtered_reasons:
+        logger.info(
+            "[SaveFindings] Filter summary for task %s: %s",
+            task_id,
+            json.dumps(filtered_reasons, ensure_ascii=False),
+        )
 
     try:
         await db.commit()
@@ -2107,6 +2372,7 @@ async def list_agent_findings(
     task_id: str,
     severity: Optional[str] = None,
     verified_only: bool = False,
+    include_false_positive: bool = Query(False, description="是否包含 false_positive 结果"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -2124,6 +2390,8 @@ async def list_agent_findings(
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
     query = select(AgentFinding).where(AgentFinding.task_id == task_id)
+    if not include_false_positive:
+        query = query.where(AgentFinding.status != FindingStatus.FALSE_POSITIVE)
     
     if severity:
         try:
@@ -2149,8 +2417,57 @@ async def list_agent_findings(
     
     result = await db.execute(query)
     findings = result.scalars().all()
-    
-    return findings
+
+    responses: List[AgentFindingResponse] = []
+    for item in findings:
+        verification_payload = item.verification_result if isinstance(item.verification_result, dict) else {}
+        authenticity = verification_payload.get("authenticity")
+        if not authenticity:
+            authenticity = "false_positive" if str(item.status) == FindingStatus.FALSE_POSITIVE else ("confirmed" if item.is_verified else "likely")
+        authenticity = str(authenticity).lower()
+
+        if not include_false_positive and authenticity == "false_positive":
+            continue
+
+        reachability = verification_payload.get("reachability")
+        verification_evidence = verification_payload.get("evidence") or verification_payload.get("details")
+        context_start_line = _to_int(verification_payload.get("context_start_line"))
+        context_end_line = _to_int(verification_payload.get("context_end_line"))
+
+        responses.append(
+            AgentFindingResponse.model_validate(
+                {
+                    "id": item.id,
+                    "task_id": item.task_id,
+                    "vulnerability_type": item.vulnerability_type,
+                    "severity": item.severity,
+                    "title": item.title,
+                    "description": item.description,
+                    "file_path": item.file_path,
+                    "line_start": item.line_start,
+                    "line_end": item.line_end,
+                    "code_snippet": item.code_snippet,
+                    "code_context": item.code_context,
+                    "context_start_line": context_start_line,
+                    "context_end_line": context_end_line,
+                    "is_verified": item.is_verified,
+                    "confidence": item.ai_confidence if item.ai_confidence is not None else 0.5,
+                    "reachability": reachability,
+                    "authenticity": authenticity,
+                    "verification_evidence": verification_evidence,
+                    "status": item.status,
+                    "suggestion": item.suggestion,
+                    "poc": {
+                        "code": item.poc_code,
+                        "description": item.poc_description,
+                        "steps": item.poc_steps,
+                    } if item.has_poc else None,
+                    "created_at": item.created_at,
+                }
+            )
+        )
+
+    return responses
 
 
 @router.get("/{task_id}/summary", response_model=TaskSummaryResponse)

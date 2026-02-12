@@ -49,7 +49,34 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
       if (newFinding.id && existingIds.has(newFinding.id)) {
         return state; // 已存在，不添加
       }
-      return { ...state, findings: [...state.findings, newFinding] };
+      const normalizedFinding: AgentFinding = {
+        id: newFinding.id,
+        task_id: String(newFinding.task_id || ""),
+        vulnerability_type: String(newFinding.vulnerability_type || "unknown"),
+        severity: String(newFinding.severity || "medium"),
+        title: String(newFinding.title || "发现漏洞"),
+        description: (newFinding.description as string | null) ?? null,
+        file_path: (newFinding.file_path as string | null) ?? null,
+        line_start: (newFinding.line_start as number | null) ?? null,
+        line_end: (newFinding.line_end as number | null) ?? null,
+        code_snippet: (newFinding.code_snippet as string | null) ?? null,
+        code_context: (newFinding.code_context as string | null) ?? null,
+        context_start_line: (newFinding.context_start_line as number | null) ?? null,
+        context_end_line: (newFinding.context_end_line as number | null) ?? null,
+        status: String(newFinding.status || "new"),
+        is_verified: Boolean(newFinding.is_verified),
+        reachability: (newFinding.reachability as string | null) ?? null,
+        authenticity: (newFinding.authenticity as string | null) ?? null,
+        verification_evidence: (newFinding.verification_evidence as string | null) ?? null,
+        has_poc: Boolean(newFinding.has_poc),
+        poc_code: (newFinding.poc_code as string | null) ?? null,
+        suggestion: (newFinding.suggestion as string | null) ?? null,
+        fix_code: (newFinding.fix_code as string | null) ?? null,
+        ai_explanation: (newFinding.ai_explanation as string | null) ?? null,
+        ai_confidence: (newFinding.ai_confidence as number | null) ?? null,
+        created_at: String(newFinding.created_at || new Date().toISOString()),
+      };
+      return { ...state, findings: [...state.findings, normalizedFinding] };
     }
 
     case 'SET_AGENT_TREE':

@@ -106,7 +106,12 @@ Action Input: {"file_path": "search.php"}
     "findings": [
         {
             ...原始发现字段...,
-            "verdict": "confirmed/likely/uncertain/false_positive",
+            "file_path": "必须是可读取的真实文件路径",
+            "line_start": 123,
+            "line_end": 125,
+            "reachability": "reachable|likely_reachable|unreachable",
+            "authenticity": "confirmed|likely|false_positive",
+            "verdict": "confirmed/likely/false_positive",
             "confidence": 0.0-1.0,
             "is_verified": true/false,
             "verification_method": "描述验证方法",
@@ -129,6 +134,12 @@ Action Input: {"file_path": "search.php"}
     }
 }
 ```
+
+## Final Answer 强约束（必须满足）
+1. 每条 finding 必须包含 `file_path`、`line_start`、`line_end`。
+2. 每条 finding 必须包含 `reachability` 与 `authenticity`。
+3. 每条 finding 必须包含 `verification_details` 或 `evidence`。
+4. 如果字段缺失，系统会拒绝你的 Final Answer 并要求重试。
 
 ## 验证判定标准
 - **confirmed**: 漏洞确认存在且可利用，有明确证据（如 Harness 成功触发）
@@ -604,6 +615,39 @@ class VerificationAgent(BaseAgent):
                 step.thought = response.strip()[:500]
 
         return step
+
+    def _validate_final_answer_schema(self, final_answer: Dict[str, Any]) -> tuple[bool, str]:
+        findings = final_answer.get("findings")
+        if not isinstance(findings, list) or not findings:
+            return False, "Final Answer 必须包含非空 findings 数组。"
+
+        required_fields = ["file_path", "line_start", "line_end"]
+        for index, finding in enumerate(findings, start=1):
+            if not isinstance(finding, dict):
+                return False, f"第 {index} 条 finding 不是对象。"
+
+            for field_name in required_fields:
+                if finding.get(field_name) in (None, "", []):
+                    return False, f"第 {index} 条 finding 缺少字段: {field_name}"
+
+            has_authenticity = finding.get("authenticity") or finding.get("verdict")
+            if not has_authenticity:
+                return False, f"第 {index} 条 finding 缺少 authenticity/verdict"
+            if str(has_authenticity).strip().lower() not in {"confirmed", "likely", "false_positive"}:
+                return False, f"第 {index} 条 finding authenticity/verdict 非法: {has_authenticity}"
+
+            if finding.get("reachability") in (None, "", []):
+                return False, f"第 {index} 条 finding 缺少 reachability"
+
+            has_evidence = (
+                finding.get("verification_details")
+                or finding.get("verification_evidence")
+                or finding.get("evidence")
+            )
+            if not has_evidence:
+                return False, f"第 {index} 条 finding 缺少 verification_details/evidence"
+
+        return True, ""
     
     async def run(self, input_data: Dict[str, Any]) -> AgentResult:
         """
@@ -855,6 +899,27 @@ class VerificationAgent(BaseAgent):
                         })
                         continue
 
+                    if not isinstance(step.final_answer, dict):
+                        self._conversation_history.append({
+                            "role": "user",
+                            "content": "Final Answer 不是合法 JSON 对象。请严格按约定 JSON 结构重新输出。",
+                        })
+                        continue
+
+                    schema_ok, schema_error = self._validate_final_answer_schema(step.final_answer)
+                    if not schema_ok:
+                        await self.emit_thinking(f"⚠️ Final Answer 字段不完整，要求重试: {schema_error}")
+                        self._conversation_history.append({
+                            "role": "user",
+                            "content": (
+                                "你的 Final Answer 缺少关键字段，必须重试。\n"
+                                f"错误: {schema_error}\n"
+                                "请确保每条 finding 至少包含 file_path、line_start、line_end、"
+                                "reachability、authenticity(或 verdict)、verification_details/evidence。"
+                            ),
+                        })
+                        continue
+
                     await self.emit_llm_decision("完成漏洞验证", "LLM 判断验证已充分")
                     final_result = step.final_answer
                     
@@ -1021,12 +1086,32 @@ class VerificationAgent(BaseAgent):
                             verdict = "uncertain"
                         logger.warning(f"[{self.name}] Missing/invalid verdict for {f.get('file_path', '?')}, inferred as: {verdict}")
 
+                    reachability = f.get("reachability")
+                    if reachability not in ["reachable", "likely_reachable", "unreachable"]:
+                        if verdict == "confirmed":
+                            reachability = "reachable"
+                        elif verdict == "likely":
+                            reachability = "likely_reachable"
+                        else:
+                            reachability = "unreachable"
+
+                    evidence = (
+                        f.get("verification_details")
+                        or f.get("verification_evidence")
+                        or f.get("evidence")
+                    )
+
                     verified = {
                         **f,
                         "verdict": verdict,  # 🔥 Ensure verdict is set
+                        "authenticity": verdict,
+                        "reachability": reachability,
                         "is_verified": verdict == "confirmed" or (
                             verdict == "likely" and f.get("confidence", 0) >= 0.8
                         ),
+                        "verification_evidence": evidence,
+                        "verification_details": evidence,
+                        "line_end": f.get("line_end") or f.get("line_start"),
                         "verified_at": datetime.now(timezone.utc).isoformat() if verdict in ["confirmed", "likely"] else None,
                     }
 

@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Terminal,
   Bot,
@@ -34,15 +34,16 @@ import {
   Header,
   LogEntry,
   AgentTreeNodeItem,
-  AgentDetailPanel,
   StatsPanel,
   FindingsPanel,
+  AuditDetailDialog,
   AgentErrorBoundary,
 } from "./components";
 import ReportExportDialog from "./components/ReportExportDialog";
 import { useAgentAuditState } from "./hooks";
 import { ACTION_VERBS, POLLING_INTERVALS } from "./constants";
 import { cleanThinkingContent } from "./utils";
+import type { DetailViewState, FindingsViewFilters } from "./types";
 
 const EVENT_PAGE_SIZE = 500;
 const EVENT_BATCH_SAFETY_LIMIT = 200;
@@ -96,6 +97,7 @@ function eventToString(value: unknown): string {
 function AgentAuditPageContent() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     task,
     findings,
@@ -105,7 +107,6 @@ function AgentAuditPageContent() {
     showAllLogs,
     isLoading,
     isAutoScroll,
-    expandedLogIds,
     treeNodes,
     filteredLogs,
     isRunning,
@@ -113,13 +114,11 @@ function AgentAuditPageContent() {
     setTask,
     setFindings,
     setAgentTree,
-    addLog,
     updateLog,
     removeLog,
     selectAgent,
     setLoading,
     setAutoScroll,
-    toggleLogExpanded,
     setCurrentAgentName,
     getCurrentAgentName,
     setCurrentThinkingId,
@@ -140,8 +139,25 @@ function AgentAuditPageContent() {
   );
   const [isFindingsLoading, setIsFindingsLoading] = useState(false);
   const [findingsError, setFindingsError] = useState<string | null>(null);
+  const [findingsFilters, setFindingsFilters] = useState<FindingsViewFilters>({
+    keyword: "",
+    severity: "all",
+    verification: "all",
+    showFiltered: false,
+  });
+  const [detailViewState, setDetailViewState] = useState<DetailViewState | null>(null);
+  const [detailDialog, setDetailDialog] = useState<{
+    type: "log" | "finding" | "agent";
+    id: string;
+  } | null>(null);
+  const [highlightedLogId, setHighlightedLogId] = useState<string | null>(null);
+  const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null);
+  const [highlightedAgentId, setHighlightedAgentId] = useState<string | null>(null);
 
   const logEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement | null>(null);
+  const findingsContainerRef = useRef<HTMLDivElement | null>(null);
+  const agentContainerRef = useRef<HTMLDivElement | null>(null);
   const agentTreeRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -158,6 +174,128 @@ function AgentAuditPageContent() {
   const [historicalEventsLoaded, setHistoricalEventsLoaded] =
     useState<boolean>(false);
   const { logoSrc, cycleLogoVariant } = useLogoVariant();
+  const effectiveFindingsCount = useMemo(
+    () =>
+      findings.filter(
+        (item) =>
+          item.status !== "false_positive" &&
+          item.authenticity !== "false_positive",
+      ).length,
+    [findings],
+  );
+  const selectedLogItem = useMemo(
+    () =>
+      detailDialog?.type === "log"
+        ? logs.find((item) => item.id === detailDialog.id) || null
+        : null,
+    [detailDialog, logs],
+  );
+  const selectedFinding = useMemo(
+    () =>
+      detailDialog?.type === "finding"
+        ? findings.find((item) => item.id === detailDialog.id) || null
+        : null,
+    [detailDialog, findings],
+  );
+  const selectedAgentNode = useMemo(
+    () =>
+      detailDialog?.type === "agent"
+        ? treeNodes.find((item) => item.agent_id === detailDialog.id) || null
+        : null,
+    [detailDialog, treeNodes],
+  );
+
+  const setDetailQuery = useCallback(
+    (nextDetail: { type: "log" | "finding" | "agent"; id: string } | null) => {
+      const params = new URLSearchParams(location.search);
+      if (nextDetail) {
+        params.set("detailType", nextDetail.type);
+        params.set("detailId", nextDetail.id);
+      } else {
+        params.delete("detailType");
+        params.delete("detailId");
+      }
+      const search = params.toString();
+      navigate(
+        {
+          pathname: location.pathname,
+          search: search ? `?${search}` : "",
+        },
+        { replace: true },
+      );
+    },
+    [location.pathname, location.search, navigate],
+  );
+
+  const clearHighlights = useCallback(() => {
+    setHighlightedLogId(null);
+    setHighlightedFindingId(null);
+    setHighlightedAgentId(null);
+  }, []);
+
+  const restoreAndScrollToAnchor = useCallback(
+    (state: DetailViewState | null) => {
+      if (!state) return;
+      setActiveMainTab(state.activeTab);
+      setFindingsFilters(state.filters);
+      selectAgent(null);
+
+      requestAnimationFrame(() => {
+        if (logsContainerRef.current) {
+          logsContainerRef.current.scrollTop = state.logsScrollTop;
+        }
+        if (findingsContainerRef.current) {
+          findingsContainerRef.current.scrollTop = state.findingsScrollTop;
+        }
+        if (agentContainerRef.current) {
+          agentContainerRef.current.scrollTop = state.agentScrollTop;
+        }
+
+        clearHighlights();
+        if (state.detailType === "log") {
+          setHighlightedLogId(state.detailId);
+        } else if (state.detailType === "finding") {
+          setHighlightedFindingId(state.detailId);
+        } else if (state.detailType === "agent") {
+          setHighlightedAgentId(state.detailId);
+        }
+
+        const anchor = document.getElementById(state.anchorId);
+        anchor?.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => clearHighlights(), 1800);
+      });
+    },
+    [clearHighlights, selectAgent],
+  );
+
+  const openDetailDialog = useCallback(
+    (detail: { type: "log" | "finding" | "agent"; id: string; anchorId: string }) => {
+      setDetailViewState({
+        detailType: detail.type,
+        detailId: detail.id,
+        anchorId: detail.anchorId,
+        activeTab: activeMainTab,
+        logsScrollTop: logsContainerRef.current?.scrollTop ?? 0,
+        findingsScrollTop: findingsContainerRef.current?.scrollTop ?? 0,
+        agentScrollTop: agentContainerRef.current?.scrollTop ?? 0,
+        filters: findingsFilters,
+      });
+      setDetailDialog({
+        type: detail.type,
+        id: detail.id,
+      });
+      setDetailQuery({ type: detail.type, id: detail.id });
+    },
+    [activeMainTab, findingsFilters, setDetailQuery],
+  );
+
+  const handleDetailBack = useCallback(() => {
+    if (!detailDialog) return;
+    setDetailDialog(null);
+    setDetailQuery(null);
+    restoreAndScrollToAnchor(detailViewState);
+    setDetailViewState(null);
+  }, [detailDialog, detailViewState, restoreAndScrollToAnchor, setDetailQuery]);
 
   const handleBack = useCallback(() => {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -189,9 +327,45 @@ function AgentAuditPageContent() {
       setActiveMainTab("logs");
       setFindingsError(null);
       setIsFindingsLoading(false);
+      setFindingsFilters({
+        keyword: "",
+        severity: "all",
+        verification: "all",
+        showFiltered: false,
+      });
+      setDetailViewState(null);
+      setDetailDialog(null);
+      setHighlightedLogId(null);
+      setHighlightedFindingId(null);
+      setHighlightedAgentId(null);
     }
     previousTaskIdRef.current = taskId;
   }, [taskId, reset]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const detailType = params.get("detailType");
+    const detailId = params.get("detailId");
+    if (!detailType || !detailId) return;
+    if (detailDialog?.type === detailType && detailDialog?.id === detailId) return;
+    if (detailType === "log") {
+      if (logs.some((item) => item.id === detailId)) {
+        setDetailDialog({ type: "log", id: detailId });
+      }
+      return;
+    }
+    if (detailType === "finding") {
+      if (findings.some((item) => item.id === detailId)) {
+        setDetailDialog({ type: "finding", id: detailId });
+      }
+      return;
+    }
+    if (detailType === "agent") {
+      if (treeNodes.some((item) => item.agent_id === detailId)) {
+        setDetailDialog({ type: "agent", id: detailId });
+      }
+    }
+  }, [detailDialog?.id, detailDialog?.type, findings, location.search, logs, treeNodes]);
 
   // ============ Data Loading ============
 
@@ -214,7 +388,9 @@ function AgentAuditPageContent() {
       }
       setFindingsError(null);
       try {
-        const data = await getAgentFindings(taskId);
+        const data = await getAgentFindings(taskId, {
+          include_false_positive: true,
+        });
         setFindings(data);
       } catch (err) {
         console.error(err);
@@ -299,6 +475,17 @@ function AgentAuditPageContent() {
         (typeof metadata?.agent_name === "string" && metadata.agent_name) ||
         (typeof metadata?.agent === "string" && metadata.agent) ||
         undefined;
+      const baseDetail = {
+        event_type: eventType,
+        message,
+        metadata: metadata ?? {},
+        sequence: event.sequence ?? null,
+        status: event.status ?? null,
+        tool_name: event.tool_name ?? null,
+        tool_input: event.tool_input ?? null,
+        tool_output: event.tool_output ?? null,
+        tool_duration_ms: event.tool_duration_ms ?? null,
+      };
 
       if (typeof event.sequence === "number") {
         lastEventSequenceRef.current = Math.max(
@@ -332,6 +519,7 @@ function AgentAuditPageContent() {
               content.length > 100 ? `${content.slice(0, 100)}...` : content,
             content,
             agentName,
+            detail: baseDetail,
           },
         });
         return;
@@ -348,6 +536,7 @@ function AgentAuditPageContent() {
             content: inputText ? `输入：\n${inputText}` : "",
             tool: { name: toolName, status: "running" },
             agentName,
+            detail: baseDetail,
           },
         });
         return;
@@ -368,6 +557,7 @@ function AgentAuditPageContent() {
               status: "completed",
             },
             agentName,
+            detail: baseDetail,
           },
         });
         return;
@@ -386,6 +576,7 @@ function AgentAuditPageContent() {
             title: message || eventToString(metadata?.title) || "发现漏洞",
             severity: eventToString(metadata?.severity) || "medium",
             agentName,
+            detail: baseDetail,
           },
         });
         return;
@@ -407,6 +598,7 @@ function AgentAuditPageContent() {
             type: "dispatch",
             title: message || `事件：${eventType}`,
             agentName,
+            detail: baseDetail,
           },
         });
         debouncedLoadAgentTree();
@@ -416,7 +608,12 @@ function AgentAuditPageContent() {
       if (eventType === "task_complete" || eventType === "complete") {
         dispatch({
           type: "ADD_LOG",
-          payload: { type: "info", title: message || "任务已完成", agentName },
+          payload: {
+            type: "info",
+            title: message || "任务已完成",
+            agentName,
+            detail: baseDetail,
+          },
         });
         return;
       }
@@ -427,6 +624,7 @@ function AgentAuditPageContent() {
             type: "error",
             title: message || "任务执行出错",
             agentName,
+            detail: baseDetail,
           },
         });
         return;
@@ -434,7 +632,12 @@ function AgentAuditPageContent() {
       if (eventType === "task_cancel") {
         dispatch({
           type: "ADD_LOG",
-          payload: { type: "info", title: message || "任务已取消", agentName },
+          payload: {
+            type: "info",
+            title: message || "任务已取消",
+            agentName,
+            detail: baseDetail,
+          },
         });
         return;
       }
@@ -446,6 +649,7 @@ function AgentAuditPageContent() {
             type: "info",
             title: message || `任务流已结束${status}`,
             agentName,
+            detail: baseDetail,
           },
         });
         return;
@@ -477,6 +681,7 @@ function AgentAuditPageContent() {
             type: eventType === "error" ? "error" : "info",
             title: fallback,
             agentName,
+            detail: baseDetail,
           },
         });
         return;
@@ -489,6 +694,7 @@ function AgentAuditPageContent() {
             type: "info",
             title: message,
             agentName,
+            detail: baseDetail,
           },
         });
       }
@@ -845,9 +1051,14 @@ function AgentAuditPageContent() {
         selectAgent(null);
       } else {
         selectAgent(agentId);
+        openDetailDialog({
+          type: "agent",
+          id: agentId,
+          anchorId: `agent-node-${agentId}`,
+        });
       }
     },
-    [selectedAgentId, selectAgent],
+    [openDetailDialog, selectedAgentId, selectAgent],
   );
 
   const handleCancel = async () => {
@@ -992,7 +1203,7 @@ function AgentAuditPageContent() {
                   variant="outline"
                   className="h-5 px-1.5 text-[10px] bg-transparent border-current/30"
                 >
-                  {findings.length}
+                  {effectiveFindingsCount}
                 </Badge>
               </button>
               {activeMainTab === "logs" && isConnected && (
@@ -1028,7 +1239,10 @@ function AgentAuditPageContent() {
           </div>
 
           {activeMainTab === "logs" ? (
-            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-muted/30">
+            <div
+              ref={logsContainerRef}
+              className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-muted/30"
+            >
               {selectedAgentId && !showAllLogs && (
                 <div className="mb-4 px-4 py-2.5 bg-primary/10 border border-primary/30 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-2.5 text-sm text-primary">
@@ -1071,8 +1285,15 @@ function AgentAuditPageContent() {
                     <LogEntry
                       key={item.id}
                       item={item}
-                      isExpanded={expandedLogIds.has(item.id)}
-                      onToggle={() => toggleLogExpanded(item.id)}
+                      anchorId={`log-item-${item.id}`}
+                      highlighted={highlightedLogId === item.id}
+                      onOpenDetail={() =>
+                        openDetailDialog({
+                          type: "log",
+                          id: item.id,
+                          anchorId: `log-item-${item.id}`,
+                        })
+                      }
                     />
                   ))}
                 </div>
@@ -1085,6 +1306,17 @@ function AgentAuditPageContent() {
                 findings={findings}
                 loading={isFindingsLoading}
                 error={findingsError}
+                filters={findingsFilters}
+                highlightedFindingId={highlightedFindingId}
+                onFiltersChange={setFindingsFilters}
+                onOpenDetail={(item) =>
+                  openDetailDialog({
+                    type: "finding",
+                    id: item.id,
+                    anchorId: `finding-item-${item.id}`,
+                  })
+                }
+                containerRef={findingsContainerRef}
                 onRetry={() => {
                   void loadFindings();
                 }}
@@ -1172,9 +1404,9 @@ function AgentAuditPageContent() {
               <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
                 <Bot className="w-4 h-4 text-violet-600 dark:text-violet-500" />
                 <span className="uppercase font-bold tracking-wider text-foreground text-sm">
-                  {selectedAgentId && !showAllLogs ? "Agent 详情" : "Agent 树"}
+                  Agent 树
                 </span>
-                {!selectedAgentId && agentTree && (
+                {agentTree && (
                   <Badge
                     variant="outline"
                     className="h-5 px-2 text-xs border-violet-500/30 text-violet-600 dark:text-violet-500 font-mono bg-violet-500/10"
@@ -1184,43 +1416,30 @@ function AgentAuditPageContent() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {selectedAgentId && !showAllLogs && (
-                  <button
-                    onClick={() => selectAgent(null)}
-                    className="text-xs text-primary hover:text-primary/80 font-mono uppercase px-2 py-1 rounded hover:bg-primary/10"
-                  >
-                    返回
-                  </button>
+                {agentTree && agentTree.running_agents > 0 && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                      {agentTree.running_agents}
+                    </span>
+                  </div>
                 )}
-                {!selectedAgentId &&
-                  agentTree &&
-                  agentTree.running_agents > 0 && (
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                        {agentTree.running_agents}
-                      </span>
-                    </div>
-                  )}
               </div>
             </div>
 
-            {/* Tree content or Agent Detail */}
-            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar bg-muted/20">
-              {selectedAgentId && !showAllLogs ? (
-                /* Agent Detail Panel - 覆盖整个内容区域 */
-                <AgentDetailPanel
-                  agentId={selectedAgentId}
-                  treeNodes={treeNodes}
-                  onClose={() => selectAgent(null)}
-                />
-              ) : treeNodes.length > 0 ? (
+            {/* Tree content */}
+            <div
+              ref={agentContainerRef}
+              className="flex-1 overflow-y-auto p-3 custom-scrollbar bg-muted/20"
+            >
+              {treeNodes.length > 0 ? (
                 <div className="space-y-0.5">
                   {treeNodes.map((node) => (
                     <AgentTreeNodeItem
                       key={node.agent_id}
                       node={node}
                       selectedId={selectedAgentId}
+                      highlightedId={highlightedAgentId}
                       onSelect={handleAgentSelect}
                     />
                   ))}
@@ -1266,6 +1485,20 @@ function AgentAuditPageContent() {
         onOpenChange={setShowExportDialog}
         task={task}
         findings={findings}
+      />
+
+      <AuditDetailDialog
+        open={detailDialog !== null}
+        detailType={detailDialog?.type ?? null}
+        logItem={selectedLogItem}
+        finding={selectedFinding}
+        agentNode={selectedAgentNode}
+        onBack={handleDetailBack}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleDetailBack();
+          }
+        }}
       />
     </div>
   );

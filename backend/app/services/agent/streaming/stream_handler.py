@@ -124,6 +124,8 @@ class StreamHandler:
         self._current_node = None
         self._thinking_buffer = []
         self._tool_states: Dict[str, Dict] = {}
+        self._max_payload_chars = 120000
+        self._max_collection_items = 200
     
     def _next_sequence(self) -> int:
         """获取下一个序列号"""
@@ -253,7 +255,8 @@ class StreamHandler:
             node_name=self._current_node,
             phase=self._current_phase,
             data={
-                "response": full_response[:2000],  # 截断长响应
+                "response": self._truncate_data(full_response),
+                "truncated": len(full_response) > self._max_payload_chars,
                 "usage": usage,
                 "message": "💡 思考完成",
             },
@@ -394,16 +397,33 @@ class StreamHandler:
             data=data,
         )
     
-    def _truncate_data(self, data: Any, max_length: int = 1000) -> Any:
+    def _truncate_data(self, data: Any, max_length: Optional[int] = None) -> Any:
         """截断数据"""
+        limit = max_length or self._max_payload_chars
         if isinstance(data, str):
-            return data[:max_length] + "..." if len(data) > max_length else data
+            return data[:limit] if len(data) > limit else data
         elif isinstance(data, dict):
-            return {k: self._truncate_data(v, max_length // 2) for k, v in list(data.items())[:10]}
+            items = list(data.items())
+            clipped = items[: self._max_collection_items]
+            result = {k: self._truncate_data(v, limit) for k, v in clipped}
+            if len(items) > self._max_collection_items:
+                result["__truncated__"] = True
+                result["__original_item_count__"] = len(items)
+            return result
         elif isinstance(data, list):
-            return [self._truncate_data(item, max_length // len(data)) for item in data[:10]]
+            clipped = data[: self._max_collection_items]
+            result_list = [self._truncate_data(item, limit) for item in clipped]
+            if len(data) > self._max_collection_items:
+                result_list.append(
+                    {
+                        "__truncated__": True,
+                        "__original_item_count__": len(data),
+                    }
+                )
+            return result_list
         else:
-            return str(data)[:max_length]
+            text = str(data)
+            return text[:limit] if len(text) > limit else text
     
     def create_progress_event(
         self,
@@ -458,4 +478,3 @@ class StreamHandler:
             sequence=self._sequence,  # 心跳不增加序列号
             data={"message": "ping"},
         )
-

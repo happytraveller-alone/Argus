@@ -932,6 +932,22 @@ Action Input: {{"参数": "值"}}
                     for new_f in valid_findings:
                         # Normalize the finding first
                         normalized_new = self._normalize_finding(new_f)
+                        if not normalized_new:
+                            logger.warning("[Orchestrator] Skip invalid normalized finding (None)")
+                            continue
+
+                        has_file_location = bool(normalized_new.get("file_path"))
+                        has_context_hint = bool(
+                            normalized_new.get("line_start")
+                            or normalized_new.get("line_end")
+                            or normalized_new.get("code_snippet")
+                        )
+                        if not has_file_location or not has_context_hint:
+                            logger.info(
+                                "[Orchestrator] Skip candidate finding without required location/context: "
+                                f"title={normalized_new.get('title', 'N/A')[:80]}"
+                            )
+                            continue
 
                         # Create fingerprint for deduplication (file + description similarity)
                         new_file = normalized_new.get("file_path", "").lower().strip()

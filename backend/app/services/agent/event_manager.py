@@ -13,6 +13,14 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+MAX_EVENT_PAYLOAD_CHARS = 120000
+
+
+def _truncate_payload(value: str, max_chars: int = MAX_EVENT_PAYLOAD_CHARS) -> tuple[str, bool]:
+    if len(value) <= max_chars:
+        return value, False
+    return value[:max_chars], True
+
 
 @dataclass
 class AgentEventData:
@@ -144,10 +152,12 @@ class AgentEventEmitter:
         if hasattr(tool_output, 'to_dict'):
             output_data = tool_output.to_dict()
         elif isinstance(tool_output, str):
-            output_data = {"result": tool_output[:2000]}  # 截断长输出
+            safe_result, truncated = _truncate_payload(tool_output)
+            output_data = {"result": safe_result, "truncated": truncated}
         else:
-            output_data = {"result": str(tool_output)[:2000]}
-        
+            safe_result, truncated = _truncate_payload(str(tool_output))
+            output_data = {"result": safe_result, "truncated": truncated}
+
         await self.emit(AgentEventData(
             event_type="tool_result",
             tool_name=tool_name,
@@ -544,4 +554,3 @@ class EventManager:
         self._event_callbacks.clear()
         
         logger.debug("EventManager closed")
-

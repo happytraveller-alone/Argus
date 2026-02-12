@@ -3,15 +3,24 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.api.v1.endpoints.agent_tasks import _save_findings
+import app.models.opengrep  # noqa: F401
+import app.models.gitleaks  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_save_findings_keeps_long_text_fields_without_truncation():
+async def test_save_findings_keeps_long_text_fields_without_truncation(tmp_path):
     long_title = "T" * 1200
     long_description = "D" * 12000
-    long_file_path = "src/" + ("very_long_path_segment/" * 80) + "vuln.py"
+    long_file_path = "src/module/vuln.py"
     long_suggestion = "S" * 9000
     long_snippet = "print('x')\n" * 3000
+
+    target_file = tmp_path / "src" / "module" / "vuln.py"
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    target_file.write_text(
+        "\n".join([f"line {i}" for i in range(1, 60)]),
+        encoding="utf-8",
+    )
 
     db = AsyncMock()
     db.add = MagicMock()
@@ -29,11 +38,18 @@ async def test_save_findings_keeps_long_text_fields_without_truncation():
             "line_end": 11,
             "suggestion": long_suggestion,
             "code_snippet": long_snippet,
-            "is_verified": True,
+            "verdict": "confirmed",
+            "reachability": "reachable",
+            "verification_details": "verified by unit harness",
         }
     ]
 
-    saved_count = await _save_findings(db, task_id="task-1", findings=findings, project_root=None)
+    saved_count = await _save_findings(
+        db,
+        task_id="task-1",
+        findings=findings,
+        project_root=str(tmp_path),
+    )
 
     assert saved_count == 1
     db.add.assert_called_once()
@@ -44,4 +60,7 @@ async def test_save_findings_keeps_long_text_fields_without_truncation():
     assert saved_finding.description == long_description
     assert saved_finding.file_path == long_file_path
     assert saved_finding.suggestion == long_suggestion
-    assert saved_finding.code_snippet == long_snippet
+    assert saved_finding.code_snippet
+    assert saved_finding.code_context
+    assert saved_finding.verification_result["authenticity"] == "confirmed"
+    assert saved_finding.verification_result["reachability"] == "reachable"

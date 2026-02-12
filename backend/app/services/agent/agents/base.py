@@ -26,6 +26,14 @@ from ..core.message import message_bus, MessageType, AgentMessage
 
 logger = logging.getLogger(__name__)
 
+MAX_EVENT_PAYLOAD_CHARS = 120000
+
+
+def _truncate_with_flag(text: str, max_chars: int = MAX_EVENT_PAYLOAD_CHARS) -> Tuple[str, bool]:
+    if len(text) <= max_chars:
+        return text, False
+    return text[:max_chars], True
+
 
 class AgentType(Enum):
     """Agent 类型"""
@@ -752,11 +760,13 @@ class BaseAgent(ABC):
         """发射 LLM 观察事件"""
         # 截断过长的观察结果
         display_obs = observation[:300] + "..." if len(observation) > 300 else observation
+        safe_observation, truncated = _truncate_with_flag(observation)
         await self.emit_event(
             "llm_observation",
             f"[{self.name}] 观察结果: {display_obs}",
             metadata={
-                "observation": observation[:2000],  # 限制存储长度
+                "observation": safe_observation,
+                "truncated": truncated,
             }
         )
     
@@ -775,7 +785,8 @@ class BaseAgent(ABC):
         """发射工具结果事件"""
         # 🔥 修复：确保 result 不为 None，避免显示 "None" 字符串
         safe_result = result if result and result != "None" else ""
-        tool_output_dict = {"result": safe_result[:2000] if safe_result else ""}  # 截断长输出
+        stored_result, truncated = _truncate_with_flag(safe_result)
+        tool_output_dict = {"result": stored_result if stored_result else "", "truncated": truncated}
         await self.emit_event(
             "tool_result",
             f"[{self.name}] 工具 {tool_name} 完成 ({duration_ms}ms)",
@@ -850,7 +861,7 @@ class BaseAgent(ABC):
         result = await tool.execute(**kwargs)
         
         duration_ms = int((time.time() - start) * 1000)
-        await self.emit_tool_result(tool_name, str(result.data)[:500], duration_ms)
+        await self.emit_tool_result(tool_name, str(result.data), duration_ms)
         
         return result
     
@@ -1191,7 +1202,7 @@ class BaseAgent(ABC):
 
             duration_ms = int((time.time() - start) * 1000)
             # 🔥 修复：确保传递有意义的结果字符串，避免 "None"
-            result_preview = str(result.data)[:200] if result.data is not None else (result.error[:200] if result.error else "")
+            result_preview = str(result.data) if result.data is not None else (result.error if result.error else "")
             await self.emit_tool_result(tool_name, result_preview, duration_ms)
 
             # 🔥 工具执行后再次检查取消
@@ -1208,9 +1219,12 @@ class BaseAgent(ABC):
                     if "findings" in result.metadata:
                         output += f"\n\n发现:\n{json.dumps(result.metadata['findings'][:10], ensure_ascii=False, indent=2)}"
 
-                # 截断过长输出
-                if len(output) > 6000:
-                    output = output[:6000] + f"\n\n... [输出已截断，共 {len(str(result.data))} 字符]"
+                # 超大输出保护（保持完整性优先）
+                if len(output) > MAX_EVENT_PAYLOAD_CHARS:
+                    output = (
+                        output[:MAX_EVENT_PAYLOAD_CHARS]
+                        + f"\n\n... [输出已截断，共 {len(str(result.data))} 字符]"
+                    )
                 return output
             else:
                 # 🔥 输出详细的错误信息，包括原始错误

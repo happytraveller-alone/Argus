@@ -27,6 +27,7 @@ export interface LogItem {
   title: string;
   content?: string;
   isStreaming?: boolean;
+  detail?: Record<string, unknown>;
   tool?: {
     name: string;
     duration?: number;
@@ -96,13 +97,15 @@ export interface AgentTreeNodeItemProps {
   node: AgentTreeNode;
   depth?: number;
   selectedId: string | null;
+  highlightedId?: string | null;
   onSelect: (id: string) => void;
 }
 
 export interface LogEntryProps {
   item: LogItem;
-  isExpanded: boolean;
-  onToggle: () => void;
+  onOpenDetail: () => void;
+  anchorId: string;
+  highlighted?: boolean;
 }
 
 export interface AgentDetailPanelProps {
@@ -148,6 +151,24 @@ export interface AgentTreePanelProps {
   isRunning: boolean;
   onSelectAgent: (id: string) => void;
   onClearSelection: () => void;
+}
+
+export interface FindingsViewFilters {
+  keyword: string;
+  severity: string;
+  verification: string;
+  showFiltered: boolean;
+}
+
+export interface DetailViewState {
+  detailType: "log" | "finding" | "agent";
+  detailId: string;
+  anchorId: string;
+  activeTab: "logs" | "findings";
+  logsScrollTop: number;
+  findingsScrollTop: number;
+  agentScrollTop: number;
+  filters: FindingsViewFilters;
 }
 
 // ============ Stream Event Types ============

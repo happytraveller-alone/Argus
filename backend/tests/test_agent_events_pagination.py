@@ -7,6 +7,8 @@ import pytest
 from app.api.v1.endpoints.agent_tasks import list_agent_events
 from app.models.agent_task import AgentTask
 from app.models.project import Project
+import app.models.opengrep  # noqa: F401
+import app.models.gitleaks  # noqa: F401
 
 
 class _ScalarListResult:
@@ -26,6 +28,7 @@ async def test_agent_events_pagination_fetches_all_without_duplicates():
     page_size = 500
     total_events = 1203
 
+    large_tool_output = "X" * 12000
     all_rows = [
         SimpleNamespace(
             id=f"evt-{idx}",
@@ -35,9 +38,9 @@ async def test_agent_events_pagination_fetches_all_without_duplicates():
             message=f"event-{idx}",
             sequence=idx,
             created_at=datetime(2026, 2, 12, 8, 0, 0, tzinfo=timezone.utc),
-            tool_name=None,
+            tool_name="demo_tool" if idx == 1 else None,
             tool_input=None,
-            tool_output=None,
+            tool_output={"result": large_tool_output} if idx == 1 else None,
             tool_duration_ms=None,
             progress_percent=None,
             finding_id=None,
@@ -60,12 +63,14 @@ async def test_agent_events_pagination_fetches_all_without_duplicates():
         compiled = stmt.compile()
         params = compiled.params
         after_sequence = 0
+        limit_value = page_size
         for key, value in params.items():
             if "sequence" in key and isinstance(value, int):
                 after_sequence = value
-                break
+            if "param" in key and isinstance(value, int) and value > 0:
+                limit_value = value
 
-        rows = [row for row in all_rows if row.sequence > after_sequence][:page_size]
+        rows = [row for row in all_rows if row.sequence > after_sequence][:limit_value]
         return _ScalarListResult(rows)
 
     db.get = AsyncMock(side_effect=get_side_effect)
@@ -95,3 +100,13 @@ async def test_agent_events_pagination_fetches_all_without_duplicates():
     assert len(fetched_sequences) == len(set(fetched_sequences))
     assert fetched_sequences[0] == 1
     assert fetched_sequences[-1] == total_events
+
+    first_page = await list_agent_events(
+        task_id=task_id,
+        after_sequence=0,
+        limit=1,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+    assert len(first_page) == 1
+    assert first_page[0].tool_output["result"] == large_tool_output

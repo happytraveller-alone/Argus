@@ -29,12 +29,14 @@ export const AgentTreeNodeItem = memo(function AgentTreeNodeItem({
   node,
   depth = 0,
   selectedId,
+  highlightedId,
   onSelect,
   isLast = false
 }: AgentTreeNodeItemProps & { isLast?: boolean }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === node.agent_id;
+  const isHighlighted = highlightedId === node.agent_id;
   const isRunning = node.status === 'running';
   const isCompleted = node.status === 'completed';
   const isFailed = node.status === 'failed';
@@ -72,6 +74,7 @@ export const AgentTreeNodeItem = memo(function AgentTreeNodeItem({
 
       {/* Node item */}
       <div
+        id={`agent-node-${node.agent_id}`}
         className={`
           relative flex items-center gap-2 py-2 px-2 cursor-pointer rounded-md
           ${isSelected
@@ -86,6 +89,7 @@ export const AgentTreeNodeItem = memo(function AgentTreeNodeItem({
                     ? 'bg-amber-950/20 border border-amber-500'
                     : 'bg-card/40 border border-border hover:border-slate-500'
           }
+          ${isHighlighted ? 'ring-2 ring-primary/60' : ''}
         `}
         style={{ marginLeft: `${indent}px` }}
         onClick={() => onSelect(node.agent_id)}
@@ -160,6 +164,7 @@ export const AgentTreeNodeItem = memo(function AgentTreeNodeItem({
               node={child}
               depth={depth + 1}
               selectedId={selectedId}
+              highlightedId={highlightedId}
               onSelect={onSelect}
               isLast={index === node.children.length - 1}
             />
