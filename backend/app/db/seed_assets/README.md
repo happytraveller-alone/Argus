@@ -1,5 +1,7 @@
 # Seed Assets
 
+These archives are used by the VulHunter backend during database initialization.
+
 This directory stores offline seed archives used by database initialization.
 
 ## libplist default project

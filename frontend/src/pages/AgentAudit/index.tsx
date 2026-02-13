@@ -2013,7 +2013,7 @@ function AgentAuditPageContent() {
               </div>
             </div>
           </div>
-        </div>
+        </div> 
       </div>
 
       {/* Create dialog */}
