@@ -12,81 +12,11 @@ import {
 	Repeat,
 	Zap,
 	Bug,
-	Shield,
 	AlertTriangle,
 	TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { StatsPanelProps } from "../types";
-
-// Enhanced Circular progress component with glow effect
-function CircularProgress({
-	value,
-	size = 52,
-	strokeWidth = 4,
-	color = "primary",
-}: {
-	value: number;
-	size?: number;
-	strokeWidth?: number;
-	color?: string;
-}) {
-	const radius = (size - strokeWidth) / 2;
-	const circumference = radius * 2 * Math.PI;
-	const offset = circumference - (value / 100) * circumference;
-
-	const colorMap: Record<string, { stroke: string; glow: string }> = {
-		primary: { stroke: "#FF6B2C", glow: "rgba(255,107,44,0.4)" },
-		emerald: { stroke: "#34d399", glow: "rgba(52,211,153,0.4)" },
-		rose: { stroke: "#fb7185", glow: "rgba(251,113,133,0.4)" },
-		amber: { stroke: "#fbbf24", glow: "rgba(251,191,36,0.4)" },
-	};
-
-	const colors = colorMap[color] || colorMap.primary;
-
-	return (
-		<svg width={size} height={size} className="transform -rotate-90">
-			{/* Background circle with subtle gradient */}
-			<circle
-				cx={size / 2}
-				cy={size / 2}
-				r={radius}
-				fill="none"
-				stroke="rgba(255,255,255,0.08)"
-				strokeWidth={strokeWidth}
-			/>
-			{/* Glow effect circle */}
-			<circle
-				cx={size / 2}
-				cy={size / 2}
-				r={radius}
-				fill="none"
-				stroke={colors.stroke}
-				strokeWidth={strokeWidth + 4}
-				strokeDasharray={circumference}
-				strokeDashoffset={offset}
-				strokeLinecap="round"
-				className="transition-all duration-700 ease-out opacity-20 blur-sm"
-			/>
-			{/* Progress circle */}
-			<circle
-				cx={size / 2}
-				cy={size / 2}
-				r={radius}
-				fill="none"
-				stroke={colors.stroke}
-				strokeWidth={strokeWidth}
-				strokeDasharray={circumference}
-				strokeDashoffset={offset}
-				strokeLinecap="round"
-				className="transition-all duration-700 ease-out"
-				style={{
-					filter: `drop-shadow(0 0 8px ${colors.glow})`,
-				}}
-			/>
-		</svg>
-	);
-}
 
 // Enhanced Metric card component with premium styling
 function MetricCard({
@@ -152,13 +82,6 @@ export const StatsPanel = memo(function StatsPanel({
 	};
 	const totalFindings = task.findings_count || 0;
 	const progressPercent = task.progress_percentage || 0;
-
-	// Determine score color
-	const getScoreColor = (score: number) => {
-		if (score >= 80) return "emerald";
-		if (score >= 60) return "amber";
-		return "rose";
-	};
 
 	return (
 		<div className="space-y-3">
@@ -345,79 +268,6 @@ export const StatsPanel = memo(function StatsPanel({
 									低危: {severityCounts.low}
 								</Badge>
 							)}
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Security Score with enhanced styling */}
-			{task.security_score !== null && task.security_score !== undefined && (
-				<div className="p-4 rounded-lg border border-emerald-500/20 bg-card/80 backdrop-blur-sm relative overflow-hidden">
-					{/* Background gradient based on score */}
-					<div
-						className={`absolute inset-0 bg-gradient-to-br pointer-events-none ${
-							task.security_score >= 80
-								? "from-emerald-500/5"
-								: task.security_score >= 60
-									? "from-amber-500/5"
-									: "from-rose-500/5"
-						} to-transparent`}
-					/>
-
-					<div className="relative z-10 flex items-center justify-between">
-						<div className="flex items-center gap-2.5">
-							<div
-								className={`p-1.5 rounded-md border ${
-									task.security_score >= 80
-										? "bg-emerald-500/15 border-emerald-500/30"
-										: task.security_score >= 60
-											? "bg-amber-500/15 border-amber-500/30"
-											: "bg-rose-500/15 border-rose-500/30"
-								}`}
-							>
-								<Shield
-									className={`w-4 h-4 ${
-										task.security_score >= 80
-											? "text-emerald-500"
-											: task.security_score >= 60
-												? "text-amber-500"
-												: "text-rose-500"
-									}`}
-								/>
-							</div>
-							<div>
-								<span className="text-sm text-foreground uppercase tracking-wider font-semibold block">
-									安全评分
-								</span>
-								<span className="text-xs text-muted-foreground">
-									{task.security_score >= 80
-										? "优秀"
-										: task.security_score >= 60
-											? "良好"
-											: "需重点关注"}
-								</span>
-							</div>
-						</div>
-						<div className="relative">
-							<CircularProgress
-								value={task.security_score}
-								size={56}
-								strokeWidth={4}
-								color={getScoreColor(task.security_score)}
-							/>
-							<div className="absolute inset-0 flex items-center justify-center">
-								<span
-									className={`text-base font-bold font-mono ${
-										task.security_score >= 80
-											? "text-emerald-500"
-											: task.security_score >= 60
-												? "text-amber-500"
-												: "text-rose-500"
-									}`}
-								>
-									{task.security_score.toFixed(0)}
-								</span>
-							</div>
 						</div>
 					</div>
 				</div>
