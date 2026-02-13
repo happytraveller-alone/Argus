@@ -831,6 +831,13 @@ class BaseAgent(ABC):
         import uuid
         finding_id = str(uuid.uuid4())
 
+        normalized_line_start: Optional[int] = None
+        if line_start is not None:
+            try:
+                normalized_line_start = int(line_start)
+            except Exception:
+                normalized_line_start = None
+
         # 🔥 使用 EventManager.emit_finding 发送正确的事件类型
         if self.event_emitter and hasattr(self.event_emitter, 'emit_finding'):
             await self.event_emitter.emit_finding(
@@ -839,7 +846,7 @@ class BaseAgent(ABC):
                 severity=severity,
                 vulnerability_type=vuln_type,
                 file_path=file_path or None,
-                line_start=line_start,
+                line_start=normalized_line_start,
                 is_verified=is_verified,
             )
         else:
@@ -861,7 +868,7 @@ class BaseAgent(ABC):
                     "severity": severity,
                     "vulnerability_type": vuln_type,
                     "file_path": file_path,
-                    "line_start": line_start,
+                    "line_start": normalized_line_start,
                     "is_verified": is_verified,
                 }
             )

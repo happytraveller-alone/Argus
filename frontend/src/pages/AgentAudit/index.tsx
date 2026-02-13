@@ -10,9 +10,7 @@ import {
   Terminal,
   Bot,
   Loader2,
-  Filter,
   ArrowDown,
-  ShieldAlert,
   Download,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +30,7 @@ import {
   cancelAgentTask,
   getAgentTree,
   getAgentEvents,
+  type AgentFinding,
   AgentEvent,
 } from "@/shared/api/agentTasks";
 import {
@@ -45,22 +44,22 @@ import {
   SplashScreen,
   Header,
   LogEntry,
-  AgentTreeNodeItem,
   StatsPanel,
-  FindingsPanel,
-  BootstrapInputsPanel,
   AuditDetailDialog,
   AgentErrorBoundary,
+  RealtimeFindingsPanel,
 } from "./components";
 import ReportExportDialog from "./components/ReportExportDialog";
 import { useAgentAuditState } from "./hooks";
-import { ACTION_VERBS, POLLING_INTERVALS, TASK_PHASE_LABELS } from "./constants";
+import { POLLING_INTERVALS, TASK_PHASE_LABELS } from "./constants";
 import { cleanThinkingContent } from "./utils";
 import type {
   BootstrapInputsSummary,
   DetailViewState,
   FindingsViewFilters,
 } from "./types";
+
+import type { RealtimeMergedFindingItem } from "./components/RealtimeFindingsPanel";
 
 const EVENT_PAGE_SIZE = 500;
 const EVENT_BATCH_SAFETY_LIMIT = 200;
@@ -202,6 +201,176 @@ function toSafeNumber(value: unknown): number | null {
   return null;
 }
 
+function toSafeTrimmedString(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function buildFindingFingerprint(input: {
+  vulnerability_type: unknown;
+  file_path: unknown;
+  line_start: unknown;
+  title: unknown;
+}): string {
+  const vulnerabilityType = toSafeTrimmedString(input.vulnerability_type) || "unknown";
+  const filePath = toSafeTrimmedString(input.file_path);
+  const lineStart =
+    typeof input.line_start === "number" && Number.isFinite(input.line_start)
+      ? String(input.line_start)
+      : "";
+  const title = toSafeTrimmedString(input.title);
+  return [vulnerabilityType, filePath, lineStart, title].join("|");
+}
+
+function pickNewerIsoTimestamp(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): string | null {
+  const left = typeof a === "string" ? a : "";
+  const right = typeof b === "string" ? b : "";
+  if (!left && !right) return null;
+  if (!left) return right || null;
+  if (!right) return left || null;
+  return right.localeCompare(left) > 0 ? right : left;
+}
+
+function agentFindingToRealtimeItem(finding: AgentFinding): RealtimeMergedFindingItem | null {
+  // Default: do not surface false positives in "potential defects".
+  if (finding.status === "false_positive" || finding.authenticity === "false_positive") {
+    return null;
+  }
+
+  const fingerprint = buildFindingFingerprint({
+    vulnerability_type: finding.vulnerability_type,
+    file_path: finding.file_path,
+    line_start: finding.line_start,
+    title: finding.title,
+  });
+
+  return {
+    id: finding.id,
+    fingerprint,
+    title: toSafeTrimmedString(finding.title) || "发现缺陷",
+    severity: toSafeTrimmedString(finding.severity) || "medium",
+    vulnerability_type: toSafeTrimmedString(finding.vulnerability_type) || "unknown",
+    file_path: finding.file_path ?? null,
+    line_start: finding.line_start ?? null,
+    timestamp: finding.created_at ?? null,
+    is_verified: Boolean(finding.is_verified),
+  };
+}
+
+function agentEventToRealtimeItem(event: AgentEvent): RealtimeMergedFindingItem | null {
+  const eventType = toSafeTrimmedString(event.event_type).toLowerCase();
+  if (
+    eventType !== "finding_new" &&
+    eventType !== "finding_verified" &&
+    eventType !== "finding_update" &&
+    eventType !== "finding"
+  ) {
+    return null;
+  }
+
+  const md = event.metadata ?? {};
+  const title =
+    toSafeTrimmedString((md as any).title) ||
+    toSafeTrimmedString(event.message) ||
+    "发现缺陷";
+  const vulnerabilityType = toSafeTrimmedString((md as any).vulnerability_type) || "unknown";
+  const filePath = toSafeTrimmedString((md as any).file_path) || null;
+  const lineStart =
+    typeof (md as any).line_start === "number" && Number.isFinite((md as any).line_start)
+      ? ((md as any).line_start as number)
+      : null;
+  const severity = toSafeTrimmedString((md as any).severity) || "medium";
+  const mdTimestamp =
+    typeof (md as any).timestamp === "string" ? ((md as any).timestamp as string) : null;
+  const timestamp = event.timestamp || mdTimestamp || null;
+  const isVerified =
+    eventType === "finding_verified" || (md as any).is_verified === true;
+
+  const fingerprint = buildFindingFingerprint({
+    vulnerability_type: vulnerabilityType,
+    file_path: filePath || "",
+    line_start: lineStart,
+    title,
+  });
+
+  const id =
+    toSafeTrimmedString(event.finding_id) ||
+    toSafeTrimmedString((md as any).id) ||
+    toSafeTrimmedString(event.id) ||
+    `finding-${Date.now()}`;
+
+  return {
+    id,
+    fingerprint,
+    title,
+    severity,
+    vulnerability_type: vulnerabilityType,
+    file_path: filePath,
+    line_start: lineStart,
+    timestamp,
+    is_verified: Boolean(isVerified),
+  };
+}
+
+function mergeRealtimeFindingsBatch(
+  prev: RealtimeMergedFindingItem[],
+  incoming: RealtimeMergedFindingItem[],
+  options: { source: "db" | "event" },
+): RealtimeMergedFindingItem[] {
+  if (!incoming.length) return prev;
+
+  const byFingerprint = new Map<string, RealtimeMergedFindingItem>();
+  for (const item of prev) {
+    if (!item?.fingerprint) continue;
+    if (!byFingerprint.has(item.fingerprint)) {
+      byFingerprint.set(item.fingerprint, item);
+    }
+  }
+
+  for (const item of incoming) {
+    if (!item?.fingerprint) continue;
+    const existing = byFingerprint.get(item.fingerprint);
+    if (!existing) {
+      byFingerprint.set(item.fingerprint, item);
+      continue;
+    }
+
+    const preferIncoming = options.source === "db";
+    const merged: RealtimeMergedFindingItem = {
+      ...existing,
+      // Prefer DB fields; event backfill only fills blanks.
+      id: preferIncoming ? (item.id || existing.id) : (existing.id || item.id),
+      title: preferIncoming
+        ? (item.title || existing.title)
+        : (existing.title || item.title),
+      severity: preferIncoming
+        ? (item.severity || existing.severity)
+        : (existing.severity || item.severity),
+      vulnerability_type: preferIncoming
+        ? (item.vulnerability_type || existing.vulnerability_type)
+        : (existing.vulnerability_type || item.vulnerability_type),
+      file_path: preferIncoming
+        ? (item.file_path ?? existing.file_path)
+        : (existing.file_path ?? item.file_path),
+      line_start: preferIncoming
+        ? (item.line_start ?? existing.line_start)
+        : (existing.line_start ?? item.line_start),
+      timestamp: pickNewerIsoTimestamp(existing.timestamp, item.timestamp),
+      is_verified: Boolean(existing.is_verified) || Boolean(item.is_verified),
+    };
+
+    byFingerprint.set(item.fingerprint, merged);
+  }
+
+  const merged = Array.from(byFingerprint.values());
+  merged.sort((a, b) =>
+    String(b.timestamp || "").localeCompare(String(a.timestamp || "")),
+  );
+  return merged.slice(0, 500);
+}
+
 function AgentAuditPageContent() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
@@ -211,8 +380,6 @@ function AgentAuditPageContent() {
     findings,
     agentTree,
     logs,
-    selectedAgentId,
-    showAllLogs,
     isLoading,
     isAutoScroll,
     treeNodes,
@@ -240,19 +407,19 @@ function AgentAuditPageContent() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [statusVerb, setStatusVerb] = useState(ACTION_VERBS[0]);
-  const [statusDots, setStatusDots] = useState(0);
   const [activeMainTab, setActiveMainTab] = useState<"logs" | "findings">(
     "logs",
   );
-  const [isFindingsLoading, setIsFindingsLoading] = useState(false);
-  const [findingsError, setFindingsError] = useState<string | null>(null);
+  const [, setIsFindingsLoading] = useState(false);
+  const [, setFindingsError] = useState<string | null>(null);
   const [findingsFilters, setFindingsFilters] = useState<FindingsViewFilters>({
     keyword: "",
     severity: "all",
     verification: "all",
     showFiltered: false,
   });
+  // NOTE: bootstrap (opengrep) input UI is currently not shown in the new realtime layout,
+  // but we keep the plumbing in place for future toggles.
   const [bootstrapInputsSummary, setBootstrapInputsSummary] =
     useState<BootstrapInputsSummary | null>(null);
   const [bootstrapInputFindings, setBootstrapInputFindings] = useState<
@@ -269,8 +436,12 @@ function AgentAuditPageContent() {
   } | null>(null);
   const [terminalFailureReason, setTerminalFailureReason] = useState<string | null>(null);
   const [highlightedLogId, setHighlightedLogId] = useState<string | null>(null);
-  const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null);
-  const [highlightedAgentId, setHighlightedAgentId] = useState<string | null>(null);
+  const [, setHighlightedFindingId] = useState<string | null>(null);
+  const [, setHighlightedAgentId] = useState<string | null>(null);
+
+  // Realtime panels state
+  const [realtimeFindings, setRealtimeFindings] = useState<RealtimeMergedFindingItem[]>([]);
+  const potentialFindingsManuallyClearedRef = useRef(false);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -353,52 +524,13 @@ function AgentAuditPageContent() {
     if (currentPhaseLabel) return `当前阶段：${currentPhaseLabel}`;
     return null;
   }, [task?.current_step, isRunning, currentPhaseLabel]);
-  const resultConsistency = useMemo(() => {
-    const currentStep = String(task?.current_step || "");
-    const match = currentStep.match(
-      /编排发现\s*(\d+)\s*\/\s*入库\s*(\d+)\s*\/\s*过滤\s*(\d+)/,
-    );
-    if (match) {
-      return {
-        orchestrator: Number(match[1]),
-        persisted: Number(match[2]),
-        filtered: Number(match[3]),
-        filteredReasons: null,
-      };
-    }
-
-    for (let i = logs.length - 1; i >= 0; i -= 1) {
-      const candidate = logs[i];
-      const detail = candidate.detail;
-      if (!detail || detail.event_type !== "task_complete") {
-        continue;
-      }
-      const metadata = detail.metadata as Record<string, unknown> | undefined;
-      const orchestrator = toSafeNumber(metadata?.orchestrator_findings_count);
-      const persisted = toSafeNumber(metadata?.persisted_findings_count);
-      const filtered = toSafeNumber(metadata?.filtered_findings_count);
-      if (orchestrator !== null && persisted !== null && filtered !== null) {
-        const rawReasons = metadata?.filtered_reasons;
-        const filteredReasons =
-          rawReasons && typeof rawReasons === "object" && !Array.isArray(rawReasons)
-            ? (rawReasons as Record<string, number>)
-            : null;
-        return {
-          orchestrator,
-          persisted,
-          filtered,
-          filteredReasons,
-        };
-      }
-    }
-    return null;
-  }, [logs, task?.current_step]);
-  const runningStatusText = useMemo(() => {
-    const phaseText = currentPhaseLabel ? `当前阶段：${currentPhaseLabel}` : "";
-    if (phaseHint) return phaseHint;
-    if (phaseText) return phaseText;
-    return `${statusVerb}${".".repeat(statusDots)}`;
-  }, [currentPhaseLabel, phaseHint, statusDots, statusVerb]);
+  const agentCardStatusText = useMemo(() => {
+    if (isRunning) return "运行中";
+    if (task?.status === "completed") return "完成";
+    if (task?.status === "failed") return "失败";
+    if (task?.status === "cancelled") return "已取消";
+    return "就绪";
+  }, [isRunning, task?.status]);
 
   const setDetailQuery = useCallback(
     (nextDetail: { type: "log" | "finding" | "agent"; id: string } | null) => {
@@ -431,6 +563,7 @@ function AgentAuditPageContent() {
   const restoreAndScrollToAnchor = useCallback(
     (state: DetailViewState | null) => {
       if (!state) return;
+      // Legacy: preserve stored tab state, but current UI is split into realtime+right-panel.
       setActiveMainTab(state.activeTab);
       setFindingsFilters(state.filters);
       selectAgent(null);
@@ -516,6 +649,10 @@ function AgentAuditPageContent() {
       // 2. 重置所有状态
       reset();
       setShowSplash(!taskId);
+
+      // 2.1 重置 realtime 面板
+      setRealtimeFindings([]);
+      potentialFindingsManuallyClearedRef.current = false;
       // 3. 重置事件序列号和加载状态
       lastEventSequenceRef.current = 0;
       hasConnectedRef.current = false; // 🔥 重置 SSE 连接标志
@@ -647,10 +784,10 @@ function AgentAuditPageContent() {
       setBootstrapInputsSummary((prev) =>
         prev && prev.taskId === scanTaskId
           ? {
-              ...prev,
-              candidateCount: Math.max(prev.candidateCount, filtered.length),
-              totalFindings: Math.max(prev.totalFindings, allFindings.length),
-            }
+            ...prev,
+            candidateCount: Math.max(prev.candidateCount, filtered.length),
+            totalFindings: Math.max(prev.totalFindings, allFindings.length),
+          }
           : prev,
       );
     } catch (error) {
@@ -1142,6 +1279,18 @@ function AgentAuditPageContent() {
         if (events.length === 0) {
           return;
         }
+
+        if (!potentialFindingsManuallyClearedRef.current) {
+          const findingItems = events
+            .map(agentEventToRealtimeItem)
+            .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
+          if (findingItems.length) {
+            setRealtimeFindings((prev) =>
+              mergeRealtimeFindingsBatch(prev, findingItems, { source: "event" }),
+            );
+          }
+        }
+
         events.forEach((event) => appendLogFromEvent(event));
         const lastSequence = events[events.length - 1]?.sequence ?? startAfter;
         lastEventSequenceRef.current = Math.max(
@@ -1179,6 +1328,18 @@ function AgentAuditPageContent() {
       if (!events.length) {
         return 0;
       }
+
+      if (!potentialFindingsManuallyClearedRef.current) {
+        const findingItems = events
+          .map(agentEventToRealtimeItem)
+          .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
+        if (findingItems.length) {
+          setRealtimeFindings((prev) =>
+            mergeRealtimeFindingsBatch(prev, findingItems, { source: "event" }),
+          );
+        }
+      }
+
       events.forEach((event) => appendLogFromEvent(event));
       lastEventSequenceRef.current = Math.max(
         lastEventSequenceRef.current,
@@ -1205,6 +1366,19 @@ function AgentAuditPageContent() {
     bootstrapInputsSummary?.totalFindings,
     loadBootstrapInputFindings,
   ]);
+
+  // Backfill "potential findings" from DB findings so they persist across reloads.
+  useEffect(() => {
+    if (potentialFindingsManuallyClearedRef.current) return;
+    if (!findings.length) return;
+    const items = findings
+      .map(agentFindingToRealtimeItem)
+      .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
+    if (!items.length) return;
+    setRealtimeFindings((prev) =>
+      mergeRealtimeFindingsBatch(prev, items, { source: "db" }),
+    );
+  }, [findings]);
 
   // ============ Stream Event Handling ============
 
@@ -1283,20 +1457,61 @@ function AgentAuditPageContent() {
           setCurrentThinkingId(null);
         }
       },
-      onFinding: (finding: Record<string, unknown>) => {
-        dispatch({
-          type: "ADD_FINDING",
-          payload: {
-            id: (finding.id as string) || `finding-${Date.now()}`,
-            title: (finding.title as string) || "发现漏洞",
-            severity: (finding.severity as string) || "medium",
-            vulnerability_type:
-              (finding.vulnerability_type as string) || "unknown",
-            file_path: finding.file_path as string,
-            line_start: finding.line_start as number,
-            description: finding.description as string,
-            is_verified: (finding.is_verified as boolean) || false,
-          },
+      onFinding: (finding: Record<string, unknown>, isVerified: boolean) => {
+        potentialFindingsManuallyClearedRef.current = false;
+        const safeText = (value: unknown) => String(value ?? "").trim();
+        const title = safeText(finding.title) || "发现漏洞";
+        const vulnerabilityType = safeText(finding.vulnerability_type) || "unknown";
+        const filePath = safeText(finding.file_path) || null;
+        const lineStart =
+          typeof finding.line_start === "number" && Number.isFinite(finding.line_start)
+            ? (finding.line_start as number)
+            : null;
+        const severity = safeText(finding.severity) || "medium";
+        const timestamp =
+          typeof (finding as any).timestamp === "string"
+            ? ((finding as any).timestamp as string)
+            : null;
+
+        const fingerprint = [
+          vulnerabilityType,
+          filePath || "",
+          lineStart === null ? "" : String(lineStart),
+          title,
+        ].join("|");
+
+        const streamId = safeText(finding.id) || `finding-${Date.now()}`;
+
+        const nextItem: RealtimeMergedFindingItem = {
+          id: streamId,
+          fingerprint,
+          title,
+          severity,
+          vulnerability_type: vulnerabilityType,
+          file_path: filePath,
+          line_start: lineStart,
+          timestamp,
+          is_verified: Boolean(isVerified),
+        };
+
+        setRealtimeFindings((prev) => {
+          const idx = prev.findIndex((x) => x.fingerprint === fingerprint);
+          if (idx === -1) {
+            return [nextItem, ...prev].slice(0, 500);
+          }
+
+          const existing = prev[idx];
+          const merged: RealtimeMergedFindingItem = {
+            ...existing,
+            ...nextItem,
+            id: existing.id, // keep stable key
+            is_verified: existing.is_verified || Boolean(isVerified),
+          };
+
+          const next = [...prev];
+          next.splice(idx, 1);
+          next.unshift(merged);
+          return next.slice(0, 500);
         });
       },
       onComplete: () => {
@@ -1344,21 +1559,6 @@ function AgentAuditPageContent() {
   }, [disconnectStream]);
 
   // ============ Effects ============
-
-  // Status animation
-  useEffect(() => {
-    if (!isRunning) return;
-    const dotTimer = setInterval(() => setStatusDots((d) => (d + 1) % 4), 500);
-    const verbTimer = setInterval(() => {
-      setStatusVerb(
-        ACTION_VERBS[Math.floor(Math.random() * ACTION_VERBS.length)],
-      );
-    }, 5000);
-    return () => {
-      clearInterval(dotTimer);
-      clearInterval(verbTimer);
-    };
-  }, [isRunning]);
 
   // Initial load - 🔥 加载任务数据和历史事件
   useEffect(() => {
@@ -1490,21 +1690,10 @@ function AgentAuditPageContent() {
 
   // ============ Handlers ============
 
-  const handleAgentSelect = useCallback(
-    (agentId: string) => {
-      if (selectedAgentId === agentId) {
-        selectAgent(null);
-      } else {
-        selectAgent(agentId);
-        openDetailDialog({
-          type: "agent",
-          id: agentId,
-          anchorId: `agent-node-${agentId}`,
-        });
-      }
-    },
-    [openDetailDialog, selectedAgentId, selectAgent],
-  );
+  const handleClearPotentialFindings = useCallback(() => {
+    potentialFindingsManuallyClearedRef.current = true;
+    setRealtimeFindings([]);
+  }, []);
 
   const handleCancel = async () => {
     if (!taskId || isCancelling) return;
@@ -1591,7 +1780,7 @@ function AgentAuditPageContent() {
         if (item.tool?.name) {
           lines.push(
             `- tool: ${item.tool.name} (${item.tool.status || "-"})` +
-              (item.tool.duration ? `, ${item.tool.duration}ms` : ""),
+            (item.tool.duration ? `, ${item.tool.duration}ms` : ""),
           );
         }
         if (item.content) {
@@ -1688,67 +1877,26 @@ function AgentAuditPageContent() {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Panel - Activity Log / Findings */}
-        <div className="w-3/4 flex flex-col border-r border-border relative">
-          {failedReason && (
-            <div className="mx-4 mt-3 mb-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3">
-              <div className="text-sm font-semibold text-rose-600 dark:text-rose-300">
-                智能审计失败{failedStep ? `（${failedStep}）` : ""}
-              </div>
-              <div className="mt-1 text-xs font-mono text-rose-700 dark:text-rose-200 whitespace-pre-wrap break-words">
-                {failedReason}
-              </div>
-            </div>
-          )}
-          <div className="flex-shrink-0 h-12 border-b border-border flex items-center justify-between px-4 bg-card">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveMainTab("logs")}
-                className={`h-8 px-3 rounded-md text-sm font-medium flex items-center gap-2 border transition-colors ${
-                  activeMainTab === "logs"
-                    ? "bg-primary/15 text-primary border-primary/40"
-                    : "bg-background text-muted-foreground border-border hover:text-foreground"
-                }`}
-              >
-                <Terminal className="w-4 h-4" />
-                活动日志
-                <Badge
-                  variant="outline"
-                  className="h-5 px-1.5 text-[10px] bg-transparent border-current/30"
-                >
+        {/* Left Column - Event Logs */}
+        <div className="w-[55%] min-w-0 flex flex-col border-r border-border bg-muted/20">
+          <div className="flex-shrink-0 px-4 py-3 border-b border-border bg-card">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold">事件日志</span>
+                <Badge variant="outline" className="text-[11px]">
                   {filteredLogs.length}
                 </Badge>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveMainTab("findings")}
-                className={`h-8 px-3 rounded-md text-sm font-medium flex items-center gap-2 border transition-colors ${
-                  activeMainTab === "findings"
-                    ? "bg-primary/15 text-primary border-primary/40"
-                    : "bg-background text-muted-foreground border-border hover:text-foreground"
-                }`}
-              >
-                <ShieldAlert className="w-4 h-4" />
-                审计结果
-                <Badge
-                  variant="outline"
-                  className="h-5 px-1.5 text-[10px] bg-transparent border-current/30"
-                >
-                  {effectiveFindingsCount}
-                </Badge>
-              </button>
-              {activeMainTab === "logs" && isConnected && (
-                <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-mono uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold">
-                    实时
-                  </span>
-                </div>
-              )}
-            </div>
+                {isConnected ? (
+                  <Badge
+                    variant="outline"
+                    className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                  >
+                    已连接
+                  </Badge>
+                ) : null}
+              </div>
 
-            {activeMainTab === "logs" ? (
               <div className="flex items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1768,9 +1916,7 @@ function AgentAuditPageContent() {
                       导出为 Markdown
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => toast.info("导出范围：全部活动日志")}
-                    >
+                    <DropdownMenuItem onClick={() => toast.info("导出范围：全部活动日志")}>
                       当前为全部导出
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -1780,10 +1926,9 @@ function AgentAuditPageContent() {
                   onClick={() => setAutoScroll(!isAutoScroll)}
                   className={`
                     flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider
-                    ${
-                      isAutoScroll
-                        ? "bg-primary/15 text-primary border border-primary/50"
-                        : "text-muted-foreground hover:text-foreground border border-border hover:bg-muted"
+                    ${isAutoScroll
+                      ? "bg-primary/15 text-primary border border-primary/50"
+                      : "text-muted-foreground hover:text-foreground border border-border hover:bg-muted"
                     }
                   `}
                 >
@@ -1791,33 +1936,25 @@ function AgentAuditPageContent() {
                   <span>自动滚动</span>
                 </button>
               </div>
-            ) : (
-              <div className="text-xs text-muted-foreground font-mono">
-                直接查看漏洞详情
-              </div>
-            )}
+            </div>
           </div>
 
-          {activeMainTab === "logs" ? (
+          {failedReason && (
+            <div className="mx-3 mt-3 mb-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3">
+              <div className="text-sm font-semibold text-rose-600 dark:text-rose-300">
+                智能审计失败{failedStep ? `（${failedStep}）` : ""}
+              </div>
+              <div className="mt-1 text-xs font-mono text-rose-700 dark:text-rose-200 whitespace-pre-wrap break-words">
+                {failedReason}
+              </div>
+            </div>
+          )}
+
+          <div className="flex-1 min-h-0 p-3">
             <div
               ref={logsContainerRef}
-              className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-muted/30"
+              className="h-full overflow-y-auto p-2 custom-scrollbar bg-muted/30 rounded-xl border border-border"
             >
-              {selectedAgentId && !showAllLogs && (
-                <div className="mb-4 px-4 py-2.5 bg-primary/10 border border-primary/30 rounded-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2.5 text-sm text-primary">
-                    <Filter className="w-3.5 h-3.5" />
-                    <span className="font-medium">仅显示已选 Agent 的日志</span>
-                  </div>
-                  <button
-                    onClick={() => selectAgent(null)}
-                    className="text-xs text-muted-foreground hover:text-primary font-mono uppercase px-2 py-1 rounded hover:bg-primary/10"
-                  >
-                    清除过滤
-                  </button>
-                </div>
-              )}
-
               {filteredLogs.length === 0 ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center text-muted-foreground">
@@ -1825,22 +1962,18 @@ function AgentAuditPageContent() {
                       <div className="flex flex-col items-center gap-3">
                         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                         <span className="text-sm font-mono tracking-wide">
-                          {selectedAgentId && !showAllLogs
-                            ? "等待已选 Agent 的活动日志..."
-                            : "等待 Agent 活动日志..."}
+                          等待活动日志...
                         </span>
                       </div>
                     ) : (
                       <span className="text-sm font-mono tracking-wide">
-                        {selectedAgentId && !showAllLogs
-                          ? "该 Agent 暂无活动"
-                          : "暂无活动日志"}
+                        暂无活动日志
                       </span>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 p-2">
                   {filteredLogs.map((item) => (
                     <LogEntry
                       key={item.id}
@@ -1860,191 +1993,25 @@ function AgentAuditPageContent() {
               )}
               <div ref={logEndRef} />
             </div>
-          ) : (
-            <div className="flex-1 overflow-hidden bg-muted/30 flex flex-col">
-              {bootstrapInputsSummary && (
-                <BootstrapInputsPanel
-                  summary={bootstrapInputsSummary}
-                  findings={bootstrapInputFindings}
-                  loading={bootstrapInputsLoading}
-                  error={bootstrapInputsError}
-                  onRetry={() => {
-                    void loadBootstrapInputFindings(bootstrapInputsSummary.taskId);
-                  }}
-                />
-              )}
-              <div className="flex-1 overflow-hidden">
-                <FindingsPanel
-                  findings={findings}
-                  loading={isFindingsLoading}
-                  error={findingsError}
-                  filters={findingsFilters}
-                  highlightedFindingId={highlightedFindingId}
-                  onFiltersChange={setFindingsFilters}
-                  onOpenDetail={(item) =>
-                    openDetailDialog({
-                      type: "finding",
-                      id: item.id,
-                      anchorId: `finding-item-${item.id}`,
-                    })
-                  }
-                  containerRef={findingsContainerRef}
-                  onRetry={() => {
-                    void loadFindings();
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Status bar */}
-          {task && (
-            <div className="flex-shrink-0 h-10 border-t border-border flex items-center justify-between px-5 text-xs bg-card relative overflow-hidden">
-              {/* Progress bar background */}
-              <div
-                className="absolute inset-0 bg-primary/10"
-                style={{ width: `${task.progress_percentage || 0}%` }}
-              />
-
-              <span className="relative z-10">
-                {isRunning ? (
-                  <span className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span className="font-mono font-semibold">
-                      运行中（{runningStatusText}）
-                    </span>
-                  </span>
-                ) : isComplete ? (
-                  <span className="flex items-center gap-2 text-muted-foreground font-mono">
-                    <span
-                      className={`w-2 h-2 rounded-full ${task.status === "completed" ? "bg-emerald-500" : task.status === "failed" ? "bg-rose-500" : "bg-amber-500"}`}
-                    />
-                    审计
-                    {task.status === "completed"
-                      ? "已完成"
-                      : task.status === "failed"
-                        ? `失败${failedStep ? `（${failedStep}）` : ""}`
-                        : task.status === "cancelled"
-                          ? "已取消"
-                          : task.status === "aborted"
-                            ? "已中止"
-                            : task.status === "interrupted"
-                              ? "已中断"
-                              : "结束"}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground font-mono">就绪</span>
-                )}
-              </span>
-              <div className="flex items-center gap-5 font-mono text-muted-foreground relative z-10">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-primary font-bold text-sm">
-                    {task.progress_percentage?.toFixed(0) || 0}
-                  </span>
-                  <span className="text-muted-foreground text-xs">%</span>
-                </div>
-                <div className="w-px h-4 bg-border" />
-                <div className="flex items-center gap-1.5">
-                  <span className="text-foreground font-semibold">
-                    {task.analyzed_files}
-                  </span>
-                  <span className="text-muted-foreground">
-                    / {task.total_files}
-                  </span>
-                  <span className="text-muted-foreground text-xs">文件</span>
-                </div>
-                <div className="w-px h-4 bg-border" />
-                <div className="flex items-center gap-1.5">
-                  <span className="text-foreground font-semibold">
-                    {task.tool_calls_count || 0}
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    工具调用
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
 
-        {/* Right Panel - Agent Tree + Stats */}
-        <div className="w-1/4 flex flex-col bg-background relative">
-          {/* Agent Tree section */}
-          <div className="flex-1 flex flex-col border-b border-border overflow-hidden">
-            {/* Tree header */}
-            <div className="flex-shrink-0 h-12 border-b border-border flex items-center justify-between px-4 bg-card">
-              <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
-                <Bot className="w-4 h-4 text-violet-600 dark:text-violet-500" />
-                <span className="uppercase font-bold tracking-wider text-foreground text-sm">
-                  Agent 树
-                </span>
-                {agentTree && (
-                  <Badge
-                    variant="outline"
-                    className="h-5 px-2 text-xs border-violet-500/30 text-violet-600 dark:text-violet-500 font-mono bg-violet-500/10"
-                  >
-                    {agentTree.total_agents}
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {agentTree && agentTree.running_agents > 0 && (
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                      {agentTree.running_agents}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Tree content */}
-            <div
-              ref={agentContainerRef}
-              className="flex-1 overflow-y-auto p-3 custom-scrollbar bg-muted/20"
-            >
-              {treeNodes.length > 0 ? (
-                <div className="space-y-0.5">
-                  {treeNodes.map((node) => (
-                    <AgentTreeNodeItem
-                      key={node.agent_id}
-                      node={node}
-                      selectedId={selectedAgentId}
-                      highlightedId={highlightedAgentId}
-                      onSelect={handleAgentSelect}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-xs">
-                  {isRunning ? (
-                    <div className="flex flex-col items-center gap-3 p-6">
-                      <Loader2 className="w-6 h-6 animate-spin text-violet-600 dark:text-violet-500" />
-                      <span className="font-mono text-center">
-                        正在初始化
-                        <br />
-                        AGENT...
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2 p-6 text-center">
-                      <Bot className="w-8 h-8 text-muted-foreground/50" />
-                      <span className="font-mono">暂无 AGENT</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+        {/* Right Column - Findings (top) + Agent (bottom) */}
+        <div className="w-[45%] min-w-0 flex flex-col bg-muted/10">
+          <div className="flex-1 min-h-0 p-3">
+            <RealtimeFindingsPanel
+              items={realtimeFindings}
+              isRunning={isRunning}
+              onClear={handleClearPotentialFindings}
+            />
           </div>
 
-          {/* Bottom section - Stats */}
-          <div className="flex-shrink-0 p-4 bg-card">
-            <StatsPanel
-              task={task}
-              findings={findings}
-              resultConsistency={resultConsistency}
-            />
+          <div className="flex-shrink-0 border-t border-border bg-card/50 p-3">
+            <div className="max-h-[42vh] overflow-y-auto custom-scrollbar">
+              <div className="rounded-xl border border-border bg-card p-4">
+                <StatsPanel task={task} findings={findings} />
+              </div>
+            </div>
           </div>
         </div>
       </div>

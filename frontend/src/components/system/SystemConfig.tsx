@@ -8,6 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -75,6 +81,20 @@ interface SystemConfigProps {
   mergedView?: boolean;
 }
 
+type AdvancedConfigItemId =
+  | "llmTimeout"
+  | "llmTemperature"
+  | "llmMaxTokens"
+  | "llmFirstTokenTimeout"
+  | "llmStreamTimeout"
+  | "agentTimeout"
+  | "subAgentTimeout"
+  | "toolTimeout"
+  | "maxAnalyzeFiles"
+  | "llmConcurrency"
+  | "llmGapMs"
+  | "outputLanguage";
+
 const DEFAULT_CONFIG: SystemConfigData = {
   llmProvider: "openai",
   llmApiKey: "",
@@ -94,6 +114,293 @@ const DEFAULT_CONFIG: SystemConfigData = {
   outputLanguage: "zh-CN",
 };
 
+function AdvancedConfigDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectedItemId: AdvancedConfigItemId;
+  onSelectItem: (id: AdvancedConfigItemId) => void;
+  config: SystemConfigData;
+  hasChanges: boolean;
+  onSave: () => void;
+  onUpdate: (key: keyof SystemConfigData, value: string | number) => void;
+}) {
+  const renderItemPanel = () => {
+    const cfg = props.config;
+    const update = props.onUpdate;
+    const item = props.selectedItemId;
+
+    const panelMeta: Record<
+      AdvancedConfigItemId,
+      { label: string; desc: string; input?: React.ReactNode }
+    > = {
+      llmTimeout: {
+        label: "请求超时 (毫秒)",
+        desc: "单次 LLM 请求最大允许耗时。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.llmTimeout}
+            onChange={(e) => update("llmTimeout", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      llmTemperature: {
+        label: "温度 (0-2)",
+        desc: "数值越高越发散，越低越稳定。",
+        input: (
+          <Input
+            type="number"
+            step="0.1"
+            min="0"
+            max="2"
+            value={cfg.llmTemperature}
+            onChange={(e) => update("llmTemperature", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      llmMaxTokens: {
+        label: "最大 Tokens",
+        desc: "限制单次输出 token 上限。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.llmMaxTokens}
+            onChange={(e) => update("llmMaxTokens", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      llmFirstTokenTimeout: {
+        label: "首 Token 超时 (秒)",
+        desc: "等待 LLM 首个 token 的最大时长。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.llmFirstTokenTimeout}
+            onChange={(e) => update("llmFirstTokenTimeout", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      llmStreamTimeout: {
+        label: "流式超时 (秒)",
+        desc: "流式输出期间的超时阈值。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.llmStreamTimeout}
+            onChange={(e) => update("llmStreamTimeout", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      agentTimeout: {
+        label: "Agent 总超时 (秒)",
+        desc: "智能审计任务整体超时阈值。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.agentTimeout}
+            onChange={(e) => update("agentTimeout", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      subAgentTimeout: {
+        label: "子 Agent 超时 (秒)",
+        desc: "单个子智能体执行的超时阈值。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.subAgentTimeout}
+            onChange={(e) => update("subAgentTimeout", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      toolTimeout: {
+        label: "工具超时 (秒)",
+        desc: "工具调用最大允许耗时。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.toolTimeout}
+            onChange={(e) => update("toolTimeout", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      maxAnalyzeFiles: {
+        label: "最大分析文件数",
+        desc: "限制本次分析的文件数。0 表示不限制。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.maxAnalyzeFiles}
+            onChange={(e) => update("maxAnalyzeFiles", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      llmConcurrency: {
+        label: "LLM 并发数",
+        desc: "同时发送的 LLM 请求数量。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.llmConcurrency}
+            onChange={(e) => update("llmConcurrency", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      llmGapMs: {
+        label: "请求间隔 (毫秒)",
+        desc: "两次请求之间的间隔，用于降速与稳定性。",
+        input: (
+          <Input
+            type="number"
+            value={cfg.llmGapMs}
+            onChange={(e) => update("llmGapMs", Number(e.target.value))}
+            className="h-10 cyber-input"
+          />
+        ),
+      },
+      outputLanguage: {
+        label: "输出语言",
+        desc: "智能审计输出语言。",
+        input: (
+          <Select value={cfg.outputLanguage} onValueChange={(value) => update("outputLanguage", value)}>
+            <SelectTrigger className="h-10 cyber-input">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="cyber-dialog border-border">
+              <SelectItem value="zh-CN" className="font-mono">🇨🇳 中文</SelectItem>
+              <SelectItem value="en-US" className="font-mono">🇺🇸 English</SelectItem>
+            </SelectContent>
+          </Select>
+        ),
+      },
+    };
+
+    const meta = panelMeta[item as AdvancedConfigItemId];
+    if (!meta) return null;
+
+    return (
+      <div className="p-6">
+        <div className="mb-6">
+          <div className="text-sm font-bold uppercase text-foreground">{meta.label}</div>
+          <div className="text-xs text-muted-foreground mt-1">{meta.desc}</div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs font-bold text-muted-foreground uppercase">{meta.label}</Label>
+          {meta.input}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="!w-[min(92vw,980px)] !max-w-none h-[80vh] p-0 gap-0 flex flex-col cyber-dialog border border-border rounded-lg">
+        <DialogHeader className="px-5 py-4 border-b border-border flex-shrink-0 bg-muted">
+          <div className="flex items-center justify-between gap-3">
+            <DialogTitle className="font-mono text-base font-bold uppercase tracking-wider text-foreground">
+              高级配置
+            </DialogTitle>
+            <div className="flex items-center gap-2">
+              {props.hasChanges ? (
+                <Button onClick={props.onSave} size="sm" className="cyber-btn-primary h-8">
+                  保存
+                </Button>
+              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                className="cyber-btn-ghost h-8"
+                onClick={() => props.onOpenChange(false)}
+              >
+                关闭
+              </Button>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="flex-1 min-h-0 flex">
+          <div className="w-[260px] flex-shrink-0 border-r border-border bg-muted/40 overflow-y-auto">
+            <div className="p-4 space-y-4">
+              <div>
+                <div className="text-[11px] font-mono font-bold uppercase text-muted-foreground mb-2">
+                  LLM 高级参数
+                </div>
+                <div className="space-y-1">
+                  {[
+                    ["llmTimeout", "请求超时"],
+                    ["llmTemperature", "温度"],
+                    ["llmMaxTokens", "最大 Tokens"],
+                    ["llmFirstTokenTimeout", "首 Token 超时"],
+                    ["llmStreamTimeout", "流式超时"],
+                    ["agentTimeout", "Agent 总超时"],
+                    ["subAgentTimeout", "子 Agent 超时"],
+                    ["toolTimeout", "工具超时"],
+                  ].map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => props.onSelectItem(id as AdvancedConfigItemId)}
+                      className={`w-full text-left px-3 py-2 rounded-md text-xs font-mono border transition-colors ${
+                        props.selectedItemId === id
+                          ? "bg-primary/15 text-primary border-primary/40"
+                          : "bg-background/40 text-muted-foreground border-border hover:text-foreground hover:border-border/80"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] font-mono font-bold uppercase text-muted-foreground mb-2">
+                  分析参数
+                </div>
+                <div className="space-y-1">
+                  {[
+                    ["maxAnalyzeFiles", "最大分析文件数"],
+                    ["llmConcurrency", "LLM 并发数"],
+                    ["llmGapMs", "请求间隔"],
+                    ["outputLanguage", "输出语言"],
+                  ].map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => props.onSelectItem(id as AdvancedConfigItemId)}
+                      className={`w-full text-left px-3 py-2 rounded-md text-xs font-mono border transition-colors ${
+                        props.selectedItemId === id
+                          ? "bg-primary/15 text-primary border-primary/40"
+                          : "bg-background/40 text-muted-foreground border-border hover:text-foreground hover:border-border/80"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-0 overflow-y-auto bg-background/20">
+            {renderItemPanel()}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function SystemConfig({
   visibleSections = ["llm", "embedding", "analysis"],
   defaultSection = "llm",
@@ -105,6 +412,18 @@ export function SystemConfig({
   const [showApiKey, setShowApiKey] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [testingLLM, setTestingLLM] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [selectedAdvancedItemId, setSelectedAdvancedItemId] =
+    useState<AdvancedConfigItemId>("llmTimeout");
+  const [llmProvidersFromBackend, setLlmProvidersFromBackend] = useState<
+    Array<{
+      id: string;
+      name: string;
+      defaultModel: string;
+      models: string[];
+      defaultBaseUrl: string;
+    }>
+  >([]);
   const [llmTestResult, setLlmTestResult] = useState<{
     success: boolean;
     message: string;
@@ -114,6 +433,10 @@ export function SystemConfig({
 
   useEffect(() => {
     loadConfig();
+    api
+      .getLLMProviders()
+      .then((res) => setLlmProvidersFromBackend(res.providers || []))
+      .catch(() => setLlmProvidersFromBackend([]));
   }, []);
 
   const tabsGridClass = useMemo(() => {
@@ -163,6 +486,42 @@ export function SystemConfig({
   const updateConfig = (key: keyof SystemConfigData, value: string | number) => {
     setConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
     setHasChanges(true);
+  };
+
+  const getDefaultModelForProvider = (providerId: string): string => {
+    const backend = llmProvidersFromBackend.find((p) => p.id === providerId);
+    return backend?.defaultModel || DEFAULT_MODELS[providerId] || "";
+  };
+
+  const getDefaultBaseUrlForProvider = (providerId: string): string => {
+    const backend = llmProvidersFromBackend.find((p) => p.id === providerId);
+    return backend?.defaultBaseUrl || "";
+  };
+
+  const getModelsForProvider = (providerId: string): string[] => {
+    const backend = llmProvidersFromBackend.find((p) => p.id === providerId);
+    return Array.isArray(backend?.models) ? backend!.models : [];
+  };
+
+  const handleProviderChange = (nextProvider: string) => {
+    if (!config) return;
+    const prevProvider = config.llmProvider;
+    const prevDefaultModel = getDefaultModelForProvider(prevProvider);
+    const nextDefaultModel = getDefaultModelForProvider(nextProvider);
+    const currentModel = (config.llmModel || "").trim();
+    const shouldReplaceModel = !currentModel || currentModel === prevDefaultModel;
+
+    setConfig((prev) =>
+      prev
+        ? {
+            ...prev,
+            llmProvider: nextProvider,
+            llmModel: shouldReplaceModel ? nextDefaultModel : prev.llmModel,
+          }
+        : prev,
+    );
+    setHasChanges(true);
+    setLlmTestResult(null);
   };
 
   const saveConfig = async () => {
@@ -336,7 +695,7 @@ export function SystemConfig({
             <div className="cyber-card p-6 space-y-6">
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-muted-foreground uppercase">选择 LLM 提供商</Label>
-                <Select value={config.llmProvider} onValueChange={(value) => updateConfig("llmProvider", value)}>
+                <Select value={config.llmProvider} onValueChange={handleProviderChange}>
                   <SelectTrigger className="h-12 cyber-input">
                     <SelectValue />
                   </SelectTrigger>
@@ -390,23 +749,102 @@ export function SystemConfig({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">模型名称 (可选)</Label>
-                  <Input
-                    value={config.llmModel}
-                    onChange={(event) => updateConfig("llmModel", event.target.value)}
-                    placeholder={`默认: ${DEFAULT_MODELS[config.llmProvider] || "auto"}`}
-                    className="h-10 cyber-input"
-                  />
+                  <Label className="text-xs font-bold text-muted-foreground uppercase">模型选择</Label>
+                  {(() => {
+                    const models = getModelsForProvider(config.llmProvider);
+                    const defaultModel = getDefaultModelForProvider(config.llmProvider) || "auto";
+                    const current = (config.llmModel || "").trim();
+                    const selectValue =
+                      !current ? "__default__" : models.includes(current) ? current : "__custom__";
+
+                    if (!models.length) {
+                      return (
+                        <Input
+                          value={config.llmModel}
+                          onChange={(event) => updateConfig("llmModel", event.target.value)}
+                          placeholder={`默认: ${defaultModel}`}
+                          className="h-10 cyber-input"
+                        />
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-2">
+                        <Select
+                          value={selectValue}
+                          onValueChange={(value) => {
+                            if (value === "__default__") {
+                              updateConfig("llmModel", "");
+                              return;
+                            }
+                            if (value === "__custom__") {
+                              // Keep current, show input below.
+                              if (!config.llmModel) {
+                                updateConfig("llmModel", "");
+                              }
+                              return;
+                            }
+                            updateConfig("llmModel", value);
+                          }}
+                        >
+                          <SelectTrigger className="h-10 cyber-input">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="cyber-dialog border-border">
+                            <SelectItem value="__default__" className="font-mono">
+                              默认（{defaultModel}）
+                            </SelectItem>
+                            {models.map((m) => (
+                              <SelectItem key={m} value={m} className="font-mono">
+                                {m}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="__custom__" className="font-mono">
+                              自定义模型...
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {selectValue === "__custom__" ? (
+                          <Input
+                            value={config.llmModel}
+                            onChange={(event) => updateConfig("llmModel", event.target.value)}
+                            placeholder="输入模型名称"
+                            className="h-10 cyber-input"
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">API Base URL (可选)</Label>
+                  <Label className="text-xs font-bold text-muted-foreground uppercase">API 站口</Label>
                   <Input
                     value={config.llmBaseUrl}
                     onChange={(event) => updateConfig("llmBaseUrl", event.target.value)}
-                    placeholder="留空使用官方地址，或填入中转站地址"
+                    placeholder={(() => {
+                      const baseUrl = getDefaultBaseUrlForProvider(config.llmProvider);
+                      if (baseUrl) return `留空使用默认站口，例如：${baseUrl}`;
+                      return "留空使用官方地址，或填入中转站地址";
+                    })()}
                     className="h-10 cyber-input"
                   />
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground font-mono">
+                  其他配置已收纳到高级配置中
+                </div>
+                <Button
+                  variant="outline"
+                  className="cyber-btn-ghost h-9"
+                  onClick={() => setAdvancedOpen(true)}
+                  type="button"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  高级配置
+                </Button>
               </div>
 
               <div className="pt-4 border-t border-border border-dashed flex items-center justify-between flex-wrap gap-4">
@@ -414,23 +852,36 @@ export function SystemConfig({
                   <span className="font-bold text-foreground">测试连接</span>
                   <span className="text-muted-foreground ml-2">验证配置是否正确</span>
                 </div>
-                <Button
-                  onClick={testLLMConnection}
-                  disabled={testingLLM || (!isConfigured && config.llmProvider !== "ollama")}
-                  className="cyber-btn-primary h-10"
-                >
-                  {testingLLM ? (
-                    <>
-                      <div className="loading-spinner w-4 h-4 mr-2" />
-                      测试中...
-                    </>
-                  ) : (
-                    <>
-                      <PlayCircle className="w-4 h-4 mr-2" />
-                      测试
-                    </>
-                  )}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={testLLMConnection}
+                    disabled={testingLLM || (!isConfigured && config.llmProvider !== "ollama")}
+                    className="cyber-btn-primary h-10"
+                  >
+                    {testingLLM ? (
+                      <>
+                        <div className="loading-spinner w-4 h-4 mr-2" />
+                        测试中...
+                      </>
+                    ) : (
+                      <>
+                        <PlayCircle className="w-4 h-4 mr-2" />
+                        测试
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    onClick={saveConfig}
+                    disabled={!hasChanges}
+                    variant="outline"
+                    className="cyber-btn-outline h-10"
+                    type="button"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    保存
+                  </Button>
+                </div>
               </div>
 
               {llmTestResult && (
@@ -463,54 +914,6 @@ export function SystemConfig({
                   )}
                 </div>
               )}
-
-              <details className="pt-4 border-t border-border border-dashed">
-                <summary className="font-bold uppercase cursor-pointer hover:text-primary text-muted-foreground text-sm">高级参数</summary>
-
-                <div className="mt-4 mb-2">
-                  <span className="text-xs text-muted-foreground uppercase font-semibold">LLM 基础参数</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground uppercase">请求超时 (毫秒)</Label>
-                    <Input type="number" value={config.llmTimeout} onChange={(event) => updateConfig("llmTimeout", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground uppercase">温度 (0-2)</Label>
-                    <Input type="number" step="0.1" min="0" max="2" value={config.llmTemperature} onChange={(event) => updateConfig("llmTemperature", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground uppercase">最大 Tokens</Label>
-                    <Input type="number" value={config.llmMaxTokens} onChange={(event) => updateConfig("llmMaxTokens", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                </div>
-
-                <div className="mt-6 mb-2">
-                  <span className="text-xs text-muted-foreground uppercase font-semibold">Agent 超时配置</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground uppercase">首Token超时 (秒)</Label>
-                    <Input type="number" value={config.llmFirstTokenTimeout} onChange={(event) => updateConfig("llmFirstTokenTimeout", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground uppercase">流式超时 (秒)</Label>
-                    <Input type="number" value={config.llmStreamTimeout} onChange={(event) => updateConfig("llmStreamTimeout", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground uppercase">工具超时 (秒)</Label>
-                    <Input type="number" value={config.toolTimeout} onChange={(event) => updateConfig("toolTimeout", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground uppercase">子Agent超时 (秒)</Label>
-                    <Input type="number" value={config.subAgentTimeout} onChange={(event) => updateConfig("subAgentTimeout", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground uppercase">总超时 (秒)</Label>
-                    <Input type="number" value={config.agentTimeout} onChange={(event) => updateConfig("agentTimeout", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                </div>
-              </details>
             </div>
 
             <div className="bg-muted border border-border p-4 rounded-lg text-xs space-y-2">
@@ -523,50 +926,16 @@ export function SystemConfig({
               <p className="text-muted-foreground">• <strong className="text-muted-foreground">API 中转站</strong>: 在 Base URL 填入中转站地址即可，API Key 填中转站提供的 Key</p>
             </div>
 
-            {mergedView && (
-              <details className="cyber-card p-4">
-                <summary className="font-bold uppercase cursor-pointer hover:text-primary text-muted-foreground text-sm">
-                  嵌入模型配置（高级）
-                </summary>
-                <div className="mt-4">
-                  <EmbeddingConfig />
-                </div>
-              </details>
-            )}
-
-            {mergedView && (
-              <details className="cyber-card p-4">
-                <summary className="font-bold uppercase cursor-pointer hover:text-primary text-muted-foreground text-sm">
-                  分析参数（高级）
-                </summary>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase">最大分析文件数</Label>
-                    <Input type="number" value={config.maxAnalyzeFiles} onChange={(event) => updateConfig("maxAnalyzeFiles", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase">LLM 并发数</Label>
-                    <Input type="number" value={config.llmConcurrency} onChange={(event) => updateConfig("llmConcurrency", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase">请求间隔 (毫秒)</Label>
-                    <Input type="number" value={config.llmGapMs} onChange={(event) => updateConfig("llmGapMs", Number(event.target.value))} className="h-10 cyber-input" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase">输出语言</Label>
-                    <Select value={config.outputLanguage} onValueChange={(value) => updateConfig("outputLanguage", value)}>
-                      <SelectTrigger className="h-10 cyber-input">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="cyber-dialog border-border">
-                        <SelectItem value="zh-CN" className="font-mono">🇨🇳 中文</SelectItem>
-                        <SelectItem value="en-US" className="font-mono">🇺🇸 English</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </details>
-            )}
+            <AdvancedConfigDialog
+              open={advancedOpen}
+              onOpenChange={setAdvancedOpen}
+              selectedItemId={selectedAdvancedItemId}
+              onSelectItem={setSelectedAdvancedItemId}
+              config={config}
+              hasChanges={hasChanges}
+              onSave={saveConfig}
+              onUpdate={updateConfig}
+            />
           </TabsContent>
         )}
 
@@ -610,7 +979,7 @@ export function SystemConfig({
         )}
       </Tabs>
 
-      {hasChanges && (
+      {hasChanges && !advancedOpen && (
         <div className="fixed bottom-6 right-6 cyber-card p-4 z-50">
           <Button onClick={saveConfig} className="cyber-btn-primary h-12">
             <Save className="w-4 h-4 mr-2" /> 保存所有更改

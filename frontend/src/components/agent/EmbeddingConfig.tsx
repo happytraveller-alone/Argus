@@ -315,10 +315,10 @@ export default function EmbeddingConfigPanel() {
           </div>
         )}
 
-        {/* 自定义端点 */}
+        {/* API 站口 */}
         <div className="space-y-2">
           <Label className="text-xs font-bold text-muted-foreground uppercase">
-            自定义 API 端点 <span className="text-muted-foreground">(可选)</span>
+            API 站口 <span className="text-muted-foreground">(可选)</span>
           </Label>
           <Input
             type="url"
@@ -342,42 +342,50 @@ export default function EmbeddingConfigPanel() {
           </p>
         </div>
 
-        {/* 自定义向量维度 */}
-        <div className="space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase">
-            自定义向量维度 <span className="text-muted-foreground">(可选)</span>
-          </Label>
-          <Input
-            type="number"
-            value={customDimension || ""}
-            onChange={(e) => setCustomDimension(e.target.value ? parseInt(e.target.value) : null)}
-            placeholder="留空使用默认值"
-            min={64}
-            max={8192}
-            className="h-10 cyber-input w-40"
-          />
-          <p className="text-xs text-muted-foreground">
-            适用于 Ollama 等场景：同一模型不同参数规模可能有不同维度
-            <br />
-            例如 qwen3-embedding:0.6b=1024, qwen3-embedding:8b=4096
-          </p>
-        </div>
+        <details className="pt-2 border-t border-border border-dashed">
+          <summary className="font-bold uppercase cursor-pointer hover:text-primary text-muted-foreground text-xs">
+            高级参数
+          </summary>
 
-        {/* 批处理大小 */}
-        <div className="space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase">批处理大小</Label>
-          <Input
-            type="number"
-            value={batchSize}
-            onChange={(e) => setBatchSize(parseInt(e.target.value) || 100)}
-            min={1}
-            max={500}
-            className="h-10 cyber-input w-32"
-          />
-          <p className="text-xs text-muted-foreground">
-            每批嵌入的文本数量，建议 50-100
-          </p>
-        </div>
+          <div className="mt-4 space-y-6">
+            {/* 自定义向量维度 */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase">
+                自定义向量维度 <span className="text-muted-foreground">(可选)</span>
+              </Label>
+              <Input
+                type="number"
+                value={customDimension || ""}
+                onChange={(e) => setCustomDimension(e.target.value ? parseInt(e.target.value) : null)}
+                placeholder="留空使用默认值"
+                min={64}
+                max={8192}
+                className="h-10 cyber-input w-40"
+              />
+              <p className="text-xs text-muted-foreground">
+                适用于 Ollama 等场景：同一模型不同参数规模可能有不同维度
+                <br />
+                例如 qwen3-embedding:0.6b=1024, qwen3-embedding:8b=4096
+              </p>
+            </div>
+
+            {/* 批处理大小 */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase">批处理大小</Label>
+              <Input
+                type="number"
+                value={batchSize}
+                onChange={(e) => setBatchSize(parseInt(e.target.value) || 100)}
+                min={1}
+                max={500}
+                className="h-10 cyber-input w-32"
+              />
+              <p className="text-xs text-muted-foreground">
+                每批嵌入的文本数量，建议 50-100
+              </p>
+            </div>
+          </div>
+        </details>
 
         {/* 测试结果 */}
         {testResult && (

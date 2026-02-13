@@ -746,12 +746,9 @@ class VerificationAgent(BaseAgent):
                                 verdict = item.get("verdict") or item.get("authenticity")
                                 verdict = str(verdict or "").strip().lower()
                                 if verdict not in {"confirmed", "likely", "false_positive"}:
-                                    # 默认按照 likely 处理，避免漏报
                                     verdict = "likely"
 
-                                # 仅对 confirmed/likely 推送 finding_verified
-                                is_verified = verdict in {"confirmed", "likely"}
-                                if not is_verified:
+                                if verdict == "false_positive":
                                     continue
 
                                 await self.emit_finding(

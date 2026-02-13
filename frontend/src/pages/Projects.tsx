@@ -97,6 +97,9 @@ type RecentActivityItem = {
     status: string;
     gitleaksEnabled?: boolean;
     createdAt: string;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    durationMs?: number | null;
     route: string;
 };
 
@@ -123,6 +126,18 @@ const stripArchiveSuffix = (filename: string) => {
     return filename.slice(0, filename.length - matched.length);
 };
 
+function formatDurationMs(durationMs: number): string {
+    const safe = Number.isFinite(durationMs)
+        ? Math.max(0, Math.floor(durationMs))
+        : 0;
+    const totalSeconds = Math.floor(safe / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
 const PROJECT_ACTION_BTN =
     "border border-sky-400/35 bg-gradient-to-r from-sky-500/20 via-cyan-500/16 to-blue-500/20 text-sky-100 shadow-[0_8px_22px_-14px_rgba(14,165,233,0.9)] hover:from-sky-500/30 hover:via-cyan-500/24 hover:to-blue-500/30 hover:border-sky-300/55";
 
@@ -138,6 +153,7 @@ export default function Projects() {
     >([]);
     const [activityKeyword, setActivityKeyword] = useState("");
     const [activityPage, setActivityPage] = useState(1);
+    const [nowTick, setNowTick] = useState(0);
     const [projectPage, setProjectPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
@@ -221,6 +237,13 @@ export default function Projects() {
 
     useEffect(() => {
         loadProjects();
+    }, []);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            setNowTick((prev) => prev + 1);
+        }, 1000);
+        return () => window.clearInterval(interval);
     }, []);
 
     useEffect(() => {
@@ -330,6 +353,9 @@ export default function Projects() {
                         status: task.status,
                         gitleaksEnabled: Boolean(pairedGitleaksTask),
                         createdAt: task.created_at,
+                        durationMs:
+                            (task.scan_duration_ms || 0) +
+                            (pairedGitleaksTask?.scan_duration_ms || 0),
                         route: `/static-analysis/${task.id}?${params.toString()}`,
                     };
                 },
@@ -343,6 +369,8 @@ export default function Projects() {
                     kind: "intelligent_audit" as const,
                     status: task.status,
                     createdAt: task.created_at,
+                    startedAt: task.started_at,
+                    completedAt: task.completed_at,
                     route: `/agent-audit/${task.id}?muteToast=1`,
                 })),
             ].sort(
@@ -818,6 +846,43 @@ export default function Projects() {
             default:
                 return <Folder className="w-5 h-5 text-muted-foreground" />;
         }
+    };
+
+    const getActivityDurationLabel = (activity: RecentActivityItem): string => {
+        // ensure tick is referenced so running items refresh
+        void nowTick;
+
+        if (activity.kind === "rule_scan") {
+            if (
+                typeof activity.durationMs === "number" &&
+                Number.isFinite(activity.durationMs)
+            ) {
+                return `用时：${formatDurationMs(activity.durationMs)}`;
+            }
+            return "用时：-";
+        }
+
+        const started = activity.startedAt || activity.createdAt || null;
+        const completed = activity.completedAt || null;
+
+        if (started && completed) {
+            const duration =
+                new Date(completed).getTime() - new Date(started).getTime();
+            if (Number.isFinite(duration) && duration >= 0) {
+                return `用时：${formatDurationMs(duration)}`;
+            }
+            return "用时：-";
+        }
+
+        if (activity.status === "running" && started) {
+            const elapsed = Date.now() - new Date(started).getTime();
+            if (Number.isFinite(elapsed) && elapsed >= 0) {
+                return `已运行：${formatDurationMs(elapsed)}`;
+            }
+            return "已运行：-";
+        }
+
+        return "用时：-";
     };
 
     const handleCreateTask = (projectId: string) => {
@@ -1473,6 +1538,9 @@ export default function Projects() {
                                             <span className="text-sm text-muted-foreground/80">
                                                 创建时间：{formatCreatedAt(activity.createdAt)}（
                                                 {getRelativeTime(activity.createdAt)}）
+                                            </span>
+                                            <span className="text-sm text-muted-foreground/80">
+                                                {getActivityDurationLabel(activity)}
                                             </span>
                                         </div>
                                     </Link>

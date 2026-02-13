@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Zap } from "lucide-react";
 import { SystemConfig } from "@/components/system/SystemConfig";
 import AgentSettingsPanel from "@/components/agent/AgentSettingsPanel";
+import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
 
 const AGENT_ITEMS = ["调度智能体", "侦察智能体", "分析智能体", "验证智能体"] as const;
 
@@ -77,11 +78,31 @@ export default function IntelligentAudit() {
           </TabsContent>
 
           <TabsContent value="llm" className="space-y-6">
-            <SystemConfig
-              visibleSections={["llm"]}
-              defaultSection="llm"
-              mergedView
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="cyber-card p-5 space-y-2">
+                <div>
+                  <div className="font-mono font-bold uppercase text-sm text-foreground">
+                    LLM（逻辑推理）
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    用于漏洞分析与逻辑推理。
+                  </div>
+                </div>
+                <SystemConfig visibleSections={["llm"]} defaultSection="llm" mergedView={false} />
+              </div>
+
+              <div className="cyber-card p-5 space-y-2">
+                <div>
+                  <div className="font-mono font-bold uppercase text-sm text-foreground">
+                    RAG（向量索引 / 代码向量化）
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    用于将代码向量索引化，支撑语义检索（独立于 LLM）。
+                  </div>
+                </div>
+                <EmbeddingConfig />
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
