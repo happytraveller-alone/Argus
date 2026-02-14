@@ -61,6 +61,57 @@ export interface AgentTask {
   error_message: string | null;
 }
 
+export interface TriggerFlowNode {
+  index: number;
+  file_path: string;
+  function: string;
+  start_line: number;
+  end_line: number;
+  code: string;
+  code_truncated?: boolean;
+}
+
+export interface TriggerFlow {
+  version: number;
+  path_found?: boolean;
+  path_score?: number;
+  engine?: string;
+  call_chain: string[];
+  control_conditions?: string[];
+  nodes: TriggerFlowNode[];
+  generated_at?: string;
+}
+
+export interface PocTriggerChainNode {
+  index: number;
+  file_path: string;
+  line: number;
+  function: string;
+  code: string;
+  context?: string;
+  context_start_line?: number;
+  context_end_line?: number;
+}
+
+export interface PocTriggerChain {
+  version: number;
+  engine: "joern_dataflow" | "llm_dataflow_estimate" | string;
+  source: {
+    file_path: string;
+    line: number;
+    function: string;
+    code: string;
+  };
+  sink: {
+    file_path: string;
+    line: number;
+    function: string;
+    code: string;
+  };
+  nodes: PocTriggerChainNode[];
+  generated_at?: string | null;
+}
+
 export interface AgentFinding {
   id: string;
   task_id: string;
@@ -90,6 +141,8 @@ export interface AgentFinding {
   logic_authz_evidence?: string[] | null;
   has_poc: boolean;
   poc_code: string | null;
+  trigger_flow?: TriggerFlow | null;
+  poc_trigger_chain?: PocTriggerChain | null;
 
   suggestion: string | null;
   fix_code: string | null;

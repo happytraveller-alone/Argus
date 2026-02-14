@@ -96,9 +96,6 @@ export default function IntelligentAudit() {
                   <div className="font-mono font-bold uppercase text-sm text-foreground">
                     RAG（向量索引 / 代码向量化）
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    用于将代码向量索引化，支撑语义检索（独立于 LLM）。
-                  </div>
                 </div>
                 <EmbeddingConfig />
               </div>

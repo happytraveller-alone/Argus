@@ -1,6 +1,17 @@
 """
 测试 JSON 上传单条规则功能
 """
+import os
+
+import pytest
+
+# Integration test: requires a running backend server and auth token.
+if os.environ.get("RUN_API_INTEGRATION_TESTS") != "1":
+    pytest.skip(
+        "Set RUN_API_INTEGRATION_TESTS=1 (and provide base_url/token fixtures) to run.",
+        allow_module_level=True,
+    )
+
 import json
 import requests
 import yaml

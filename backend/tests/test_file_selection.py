@@ -178,7 +178,8 @@ class TestFileSelectionWorkflow:
             # 验证过滤结果
             assert "src/main.py" in filtered_files
             assert "src/utils.py" in filtered_files
-            assert "tests/test_main.py" in filtered_files
+            # 默认策略会排除包含 test 的目录（例如 tests/、__tests__/ 等）
+            assert "tests/test_main.py" not in filtered_files
             
             # 这些应该被排除
             assert "node_modules/lib.js" not in filtered_files  # 默认排除

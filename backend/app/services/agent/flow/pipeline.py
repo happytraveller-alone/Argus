@@ -133,6 +133,17 @@ class FlowEvidencePipeline:
             )
 
         line_start = self._normalize_line(finding.get("line_start"))
+        # Optional hint: restrict entry points for path search (improves cross-file chain quality).
+        raw_entry_points = finding.get("entry_points")
+        entry_points: Optional[List[str]] = None
+        if isinstance(raw_entry_points, list):
+            normalized = [
+                str(item).strip()
+                for item in raw_entry_points
+                if isinstance(item, (str, int, float)) and str(item).strip()
+            ]
+            if normalized:
+                entry_points = normalized[:80]
 
         self.ast_index.build()
         self._ensure_code2flow()
@@ -142,6 +153,7 @@ class FlowEvidencePipeline:
             target_file=file_path,
             target_line=line_start,
             max_depth=9,
+            entry_points=entry_points,
             extra_edges=extra_edges,
         )
 

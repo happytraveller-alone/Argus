@@ -552,6 +552,25 @@ Action Input: {{"参数": "值"}}
 - 语言: {project_info.get('languages', [])}
 - 文件数量: {project_info.get('file_count', 0)}
 """
+
+        # 🔥 项目级 Markdown 长期记忆（无需 RAG/Embedding）
+        markdown_memory = config.get("markdown_memory") if isinstance(config, dict) else None
+        if isinstance(markdown_memory, dict):
+            shared_mem = str(markdown_memory.get("shared") or "").strip()
+            agent_mem = str(markdown_memory.get("orchestrator") or "").strip()
+            skills_mem = str(markdown_memory.get("skills") or "").strip()
+            if shared_mem or agent_mem or skills_mem:
+                msg += f"""
+## 🧠 项目长期记忆（Markdown，无 RAG）
+### shared.md（节选）
+{shared_mem or "(空)"}
+
+### orchestrator.md（节选）
+{agent_mem or "(空)"}
+
+### skills.md（规范摘要）
+{skills_mem or "(空)"}
+"""
         
         # 🔥 根据是否限定范围显示不同的结构信息
         if scope_limited:
@@ -589,14 +608,26 @@ Action Input: {{"参数": "值"}}
         bootstrap_task_id = config.get("bootstrap_task_id")
         if bootstrap_findings:
             msg += f"""
-## 🔥 OpenGrep 预处理候选（高优先级）
+## 🔥 候选种子（bootstrap_findings，高优先级）
 - 来源: {bootstrap_source}
 - 任务ID: {bootstrap_task_id or "N/A"}
 - 候选数量: {len(bootstrap_findings)}
 
-请优先围绕这些高危高置信候选进行验证和深挖，然后再扩展全量审计。
+请优先围绕这些候选种子进行验证和深挖，然后再扩展全量审计。
 候选示例（最多5条）:
 {json.dumps(bootstrap_findings[:5], ensure_ascii=False, indent=2)}
+"""
+            entry_points_cfg = config.get("entry_points") if isinstance(config, dict) else None
+            if isinstance(entry_points_cfg, list) and entry_points_cfg:
+                msg += f"""
+### 入口点（deterministic fallback，最多10条）
+{json.dumps(entry_points_cfg[:10], ensure_ascii=False, indent=2)}
+"""
+            entry_funcs_cfg = config.get("entry_function_names") if isinstance(config, dict) else None
+            if isinstance(entry_funcs_cfg, list) and entry_funcs_cfg:
+                msg += f"""
+### 入口函数名提示（用于调用链约束，最多20个）
+{json.dumps(entry_funcs_cfg[:20], ensure_ascii=False, indent=2)}
 """
         elif bootstrap_source and str(bootstrap_source).startswith("degraded"):
             msg += f"""
@@ -1403,7 +1434,8 @@ Action Input: {{"参数": "值"}}
 
             # 合并 Recon 的上下文信息（如果有）
             context_data = dict(analysis_handoff.context_data)
-            key_findings = list(analysis_handoff.key_findings)
+            # 🔥 强约束：Verification 只验证 OpenGrep bootstrap 的 ERROR 候选，不传递 Analysis findings 作为待验证清单
+            key_findings: List[Dict[str, Any]] = []
             if "recon" in self._agent_handoffs:
                 recon_handoff = self._agent_handoffs["recon"]
                 context_data["recon_tech_stack"] = recon_handoff.context_data.get("tech_stack", {})
@@ -1412,22 +1444,45 @@ Action Input: {{"参数": "值"}}
                 self._runtime_context.get("config", {}).get("bootstrap_findings", [])
                 or []
             )
-            if bootstrap_findings:
-                context_data["bootstrap_findings"] = bootstrap_findings[:20]
+            filtered_bootstrap: List[Dict[str, Any]] = []
+            for item in bootstrap_findings:
+                if not isinstance(item, dict):
+                    continue
+                severity_value = str(item.get("severity") or "").strip().upper()
+                confidence_value = str(item.get("confidence") or "").strip().upper()
+                if severity_value != "ERROR":
+                    continue
+                if confidence_value not in {"HIGH", "MEDIUM"}:
+                    continue
+                filtered_bootstrap.append(item)
+
+            if filtered_bootstrap:
+                context_data["bootstrap_findings"] = filtered_bootstrap[:20]
                 context_data["bootstrap_source"] = (
                     self._runtime_context.get("config", {}).get("bootstrap_source")
                 )
                 context_data["bootstrap_task_id"] = (
                     self._runtime_context.get("config", {}).get("bootstrap_task_id")
                 )
-                for item in bootstrap_findings[:10]:
-                    if isinstance(item, dict):
-                        key_findings.append(item)
+                key_findings.extend(filtered_bootstrap[:8])
+            else:
+                context_data["bootstrap_findings"] = []
+                context_data["bootstrap_source"] = (
+                    self._runtime_context.get("config", {}).get("bootstrap_source")
+                )
+                context_data["bootstrap_task_id"] = (
+                    self._runtime_context.get("config", {}).get("bootstrap_task_id")
+                )
 
+            summary_suffix = (
+                f"；验证范围：仅处理 OpenGrep ERROR 候选 {len(key_findings)} 条（上限8）"
+                if key_findings
+                else "；本次无 OpenGrep ERROR 候选，建议跳过验证"
+            )
             return TaskHandoff(
                 from_agent=analysis_handoff.from_agent,
                 to_agent=target_agent,
-                summary=analysis_handoff.summary,
+                summary=f"{analysis_handoff.summary}{summary_suffix}",
                 work_completed=analysis_handoff.work_completed,
                 key_findings=key_findings,
                 insights=analysis_handoff.insights,
@@ -1522,49 +1577,31 @@ Action Input: {{"参数": "值"}}
                 context_data["tech_stack"] = recon_data.get("tech_stack", {})
                 context_data["entry_points"] = recon_data.get("entry_points", [])[:10]
 
-            # 添加 Analysis 的信息
+            # 🔥 强约束：Verification 只验证 OpenGrep bootstrap 的 ERROR 候选
             if "analysis" in self._agent_results:
-                analysis_data = self._agent_results["analysis"]
-
-                work_completed.append("完成代码深度分析")
-
-                findings = analysis_data.get("findings", [])
-                if findings:
-                    work_completed.append(f"发现 {len(findings)} 个潜在漏洞")
-
-                    # 按严重程度排序，优先验证高危漏洞
-                    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-                    sorted_findings = sorted(
-                        findings,
-                        key=lambda x: severity_order.get(x.get("severity", "low"), 3)
-                    )
-
-                    for f in sorted_findings[:15]:
-                        if isinstance(f, dict):
-                            key_findings.append(f)
-                            suggested_actions.append({
-                                "action": "verify",
-                                "target": f.get("file_path", ""),
-                                "vulnerability_type": f.get("vulnerability_type", "unknown"),
-                                "priority": "high" if f.get("severity") in ["critical", "high"] else "normal"
-                            })
-
-                    # 统计严重程度分布
-                    severity_counts = {}
-                    for f in findings:
-                        sev = f.get("severity", "unknown")
-                        severity_counts[sev] = severity_counts.get(sev, 0) + 1
-
-                    insights.append(
-                        f"漏洞分布: Critical={severity_counts.get('critical', 0)}, "
-                        f"High={severity_counts.get('high', 0)}, "
-                        f"Medium={severity_counts.get('medium', 0)}, "
-                        f"Low={severity_counts.get('low', 0)}"
-                    )
+                work_completed.append("完成代码深度分析（Verification 将只验证 OpenGrep ERROR 候选）")
 
             # 也包含已有的发现（可能来自多个 Agent）
             if self._all_findings:
                 context_data["all_findings"] = self._all_findings[:20]
+
+            # 🔥 过滤并限制 key_findings：只保留 bootstrap ERROR 候选（上限 8）
+            bootstrap_items = context_data.get("bootstrap_findings", [])
+            filtered_bootstrap: List[Dict[str, Any]] = []
+            if isinstance(bootstrap_items, list):
+                for item in bootstrap_items:
+                    if not isinstance(item, dict):
+                        continue
+                    severity_value = str(item.get("severity") or "").strip().upper()
+                    confidence_value = str(item.get("confidence") or "").strip().upper()
+                    if severity_value != "ERROR":
+                        continue
+                    if confidence_value not in {"HIGH", "MEDIUM"}:
+                        continue
+                    filtered_bootstrap.append(item)
+
+            context_data["bootstrap_findings"] = filtered_bootstrap[:20]
+            key_findings = filtered_bootstrap[:8]
 
         # 如果没有任何工作记录，说明没有前序信息
         if not work_completed and not key_findings:

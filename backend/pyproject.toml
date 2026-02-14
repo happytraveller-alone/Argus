@@ -179,6 +179,9 @@ exclude = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+markers = [
+    "integration: integration tests that require external resources (disabled by default in CI/unit runs)",
+]
 
 [tool.coverage.run]
 source = ["app"]

@@ -3,7 +3,7 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,37 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, Brain, CheckCircle2, Eye, EyeOff, Info, PlayCircle, RotateCcw, Save, Settings, Zap } from "lucide-react";
+import { AlertCircle, Brain, CheckCircle2, Eye, EyeOff, PlayCircle, RotateCcw, Save, Settings, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/shared/api/database";
 import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
 
-const LLM_PROVIDERS = [
-  { value: "openai", label: "OpenAI GPT", icon: "🟢", category: "litellm", hint: "gpt-5, gpt-5-mini, o3 等" },
-  { value: "claude", label: "Anthropic Claude", icon: "🟣", category: "litellm", hint: "claude-sonnet-4.5, claude-opus-4 等" },
-  { value: "gemini", label: "Google Gemini", icon: "🔵", category: "litellm", hint: "gemini-3-pro, gemini-3-flash 等" },
-  { value: "deepseek", label: "DeepSeek", icon: "🔷", category: "litellm", hint: "deepseek-v3.1-terminus, deepseek-v3 等" },
-  { value: "qwen", label: "通义千问", icon: "🟠", category: "litellm", hint: "qwen3-max-instruct, qwen3-plus 等" },
-  { value: "zhipu", label: "智谱AI (GLM)", icon: "🔴", category: "litellm", hint: "glm-4.6, glm-4.5-flash 等" },
-  { value: "moonshot", label: "Moonshot (Kimi)", icon: "🌙", category: "litellm", hint: "kimi-k2, kimi-k1.5 等" },
-  { value: "ollama", label: "Ollama 本地", icon: "🖥️", category: "litellm", hint: "llama3.3-70b, qwen3-8b 等" },
-  { value: "baidu", label: "百度文心", icon: "📘", category: "native", hint: "ernie-4.5 (需要 API_KEY:SECRET_KEY)" },
-  { value: "minimax", label: "MiniMax", icon: "⚡", category: "native", hint: "minimax-m2, minimax-m1 等" },
-  { value: "doubao", label: "字节豆包", icon: "🎯", category: "native", hint: "doubao-1.6-pro, doubao-1.5-pro 等" },
-] as const;
-
 const DEFAULT_MODELS: Record<string, string> = {
   openai: "gpt-5",
-  claude: "claude-sonnet-4.5",
-  gemini: "gemini-3-pro",
-  deepseek: "deepseek-v3.1-terminus",
-  qwen: "qwen3-max-instruct",
-  zhipu: "glm-4.6",
-  moonshot: "kimi-k2",
-  ollama: "llama3.3-70b",
-  baidu: "ernie-4.5",
-  minimax: "minimax-m2",
-  doubao: "doubao-1.6-pro",
 };
 
 interface SystemConfigData {
@@ -407,9 +383,12 @@ export function SystemConfig({
   mergedView = false,
 }: SystemConfigProps = {}) {
   const sections = visibleSections.length > 0 ? visibleSections : ["llm"];
+  const forcedProvider = "openai";
   const [config, setConfig] = useState<SystemConfigData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [llmModelSelectValue, setLlmModelSelectValue] =
+    useState<string>("__default__");
   const [hasChanges, setHasChanges] = useState(false);
   const [testingLLM, setTestingLLM] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -430,6 +409,8 @@ export function SystemConfig({
     debug?: Record<string, unknown>;
   } | null>(null);
   const [showDebugInfo, setShowDebugInfo] = useState(true);
+  const hasForcedProviderSavedRef = useRef(false);
+  const llmModelSelectTouchedRef = useRef(false);
 
   useEffect(() => {
     loadConfig();
@@ -450,15 +431,15 @@ export function SystemConfig({
       setLoading(true);
       const backendConfig = await api.getUserConfig();
       if (!backendConfig) {
-        setConfig(DEFAULT_CONFIG);
+        setConfig({ ...DEFAULT_CONFIG, llmProvider: forcedProvider });
         return;
       }
 
       const llmConfig = backendConfig.llmConfig || {};
       const otherConfig = backendConfig.otherConfig || {};
 
-      setConfig({
-        llmProvider: llmConfig.llmProvider || DEFAULT_CONFIG.llmProvider,
+      const nextConfig: SystemConfigData = {
+        llmProvider: forcedProvider,
         llmApiKey: llmConfig.llmApiKey || "",
         llmModel: llmConfig.llmModel || "",
         llmBaseUrl: llmConfig.llmBaseUrl || "",
@@ -474,10 +455,53 @@ export function SystemConfig({
         llmConcurrency: otherConfig.llmConcurrency || DEFAULT_CONFIG.llmConcurrency,
         llmGapMs: otherConfig.llmGapMs || DEFAULT_CONFIG.llmGapMs,
         outputLanguage: otherConfig.outputLanguage || DEFAULT_CONFIG.outputLanguage,
-      });
+      };
+
+      setConfig(nextConfig);
+      llmModelSelectTouchedRef.current = false;
+      setLlmModelSelectValue(
+        computeLlmModelSelectValue(
+          nextConfig.llmModel,
+          getModelsForProvider(forcedProvider),
+        ),
+      );
+
+      // Force provider=openai and persist silently once.
+      if (
+        llmConfig.llmProvider !== forcedProvider &&
+        !hasForcedProviderSavedRef.current
+      ) {
+        hasForcedProviderSavedRef.current = true;
+        try {
+          await api.updateUserConfig({
+            llmConfig: {
+              llmProvider: forcedProvider,
+              llmApiKey: nextConfig.llmApiKey,
+              llmModel: nextConfig.llmModel,
+              llmBaseUrl: nextConfig.llmBaseUrl,
+              llmTimeout: nextConfig.llmTimeout,
+              llmTemperature: nextConfig.llmTemperature,
+              llmMaxTokens: nextConfig.llmMaxTokens,
+              llmFirstTokenTimeout: nextConfig.llmFirstTokenTimeout,
+              llmStreamTimeout: nextConfig.llmStreamTimeout,
+              agentTimeout: nextConfig.agentTimeout,
+              subAgentTimeout: nextConfig.subAgentTimeout,
+              toolTimeout: nextConfig.toolTimeout,
+            },
+            otherConfig: {
+              maxAnalyzeFiles: nextConfig.maxAnalyzeFiles,
+              llmConcurrency: nextConfig.llmConcurrency,
+              llmGapMs: nextConfig.llmGapMs,
+              outputLanguage: nextConfig.outputLanguage,
+            },
+          });
+        } catch (error) {
+          console.error("Failed to force llmProvider=openai:", error);
+        }
+      }
     } catch (error) {
       console.error("Failed to load config:", error);
-      setConfig(DEFAULT_CONFIG);
+      setConfig({ ...DEFAULT_CONFIG, llmProvider: forcedProvider });
     } finally {
       setLoading(false);
     }
@@ -486,6 +510,12 @@ export function SystemConfig({
   const updateConfig = (key: keyof SystemConfigData, value: string | number) => {
     setConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
     setHasChanges(true);
+  };
+
+  const computeLlmModelSelectValue = (model: string, models: string[]): string => {
+    const current = (model || "").trim();
+    if (!current) return "__default__";
+    return models.includes(current) ? current : "__custom__";
   };
 
   const getDefaultModelForProvider = (providerId: string): string => {
@@ -503,26 +533,13 @@ export function SystemConfig({
     return Array.isArray(backend?.models) ? backend!.models : [];
   };
 
-  const handleProviderChange = (nextProvider: string) => {
+  useEffect(() => {
     if (!config) return;
-    const prevProvider = config.llmProvider;
-    const prevDefaultModel = getDefaultModelForProvider(prevProvider);
-    const nextDefaultModel = getDefaultModelForProvider(nextProvider);
-    const currentModel = (config.llmModel || "").trim();
-    const shouldReplaceModel = !currentModel || currentModel === prevDefaultModel;
-
-    setConfig((prev) =>
-      prev
-        ? {
-            ...prev,
-            llmProvider: nextProvider,
-            llmModel: shouldReplaceModel ? nextDefaultModel : prev.llmModel,
-          }
-        : prev,
-    );
-    setHasChanges(true);
-    setLlmTestResult(null);
-  };
+    const models = getModelsForProvider(forcedProvider);
+    if (!models.length) return;
+    if (llmModelSelectTouchedRef.current) return;
+    setLlmModelSelectValue(computeLlmModelSelectValue(config.llmModel, models));
+  }, [config, llmProvidersFromBackend]);
 
   const saveConfig = async () => {
     if (!config) return;
@@ -530,7 +547,7 @@ export function SystemConfig({
     try {
       const savedConfig = await api.updateUserConfig({
         llmConfig: {
-          llmProvider: config.llmProvider,
+          llmProvider: forcedProvider,
           llmApiKey: config.llmApiKey,
           llmModel: config.llmModel,
           llmBaseUrl: config.llmBaseUrl,
@@ -554,8 +571,8 @@ export function SystemConfig({
       if (savedConfig) {
         const llmConfig = savedConfig.llmConfig || {};
         const otherConfig = savedConfig.otherConfig || {};
-        setConfig({
-          llmProvider: llmConfig.llmProvider || config.llmProvider,
+        const nextConfig: SystemConfigData = {
+          llmProvider: forcedProvider,
           llmApiKey: llmConfig.llmApiKey || "",
           llmModel: llmConfig.llmModel || "",
           llmBaseUrl: llmConfig.llmBaseUrl || "",
@@ -571,7 +588,15 @@ export function SystemConfig({
           llmConcurrency: otherConfig.llmConcurrency || DEFAULT_CONFIG.llmConcurrency,
           llmGapMs: otherConfig.llmGapMs || DEFAULT_CONFIG.llmGapMs,
           outputLanguage: otherConfig.outputLanguage || DEFAULT_CONFIG.outputLanguage,
-        });
+        };
+        setConfig(nextConfig);
+        llmModelSelectTouchedRef.current = false;
+        setLlmModelSelectValue(
+          computeLlmModelSelectValue(
+            nextConfig.llmModel,
+            getModelsForProvider(forcedProvider),
+          ),
+        );
       }
 
       setHasChanges(false);
@@ -595,7 +620,7 @@ export function SystemConfig({
 
   const testLLMConnection = async () => {
     if (!config) return;
-    if (!config.llmApiKey && config.llmProvider !== "ollama") {
+    if (!config.llmApiKey) {
       toast.error("请先配置 API Key");
       return;
     }
@@ -604,7 +629,7 @@ export function SystemConfig({
     setLlmTestResult(null);
     try {
       const result = await api.testLLMConnection({
-        provider: config.llmProvider,
+        provider: forcedProvider,
         apiKey: config.llmApiKey,
         model: config.llmModel || undefined,
         baseUrl: config.llmBaseUrl || undefined,
@@ -635,40 +660,10 @@ export function SystemConfig({
     );
   }
 
-  const currentProvider = LLM_PROVIDERS.find((provider) => provider.value === config.llmProvider);
-  const isConfigured = config.llmApiKey !== "" || config.llmProvider === "ollama";
+  const isConfigured = config.llmApiKey !== "";
 
   return (
     <div className="space-y-6">
-      <div className={`cyber-card p-4 ${isConfigured ? "border-emerald-500/30" : "border-amber-500/30"}`}>
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <Info className="h-5 w-5 text-sky-400" />
-            <span className="font-mono text-sm">
-              {isConfigured ? (
-                <span className="text-emerald-400 flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4" /> LLM 已配置 ({currentProvider?.label})
-                </span>
-              ) : (
-                <span className="text-amber-400 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" /> 请配置 LLM API Key
-                </span>
-              )}
-            </span>
-          </div>
-          <div className="flex gap-2">
-            {hasChanges && (
-              <Button onClick={saveConfig} size="sm" className="cyber-btn-primary h-8">
-                <Save className="w-3 h-3 mr-2" /> 保存
-              </Button>
-            )}
-            <Button onClick={resetConfig} variant="outline" size="sm" className="cyber-btn-ghost h-8">
-              <RotateCcw className="w-3 h-3 mr-2" /> 重置
-            </Button>
-          </div>
-        </div>
-      </div>
-
       <Tabs defaultValue={sections.includes(defaultSection) ? defaultSection : sections[0]} className="w-full">
         {!mergedView && sections.length > 1 && (
           <TabsList className={`grid w-full ${tabsGridClass} bg-muted border border-border p-1 h-auto gap-1 rounded-lg mb-6`}>
@@ -694,68 +689,32 @@ export function SystemConfig({
           <TabsContent value="llm" className="space-y-6">
             <div className="cyber-card p-6 space-y-6">
               <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase">选择 LLM 提供商</Label>
-                <Select value={config.llmProvider} onValueChange={handleProviderChange}>
-                  <SelectTrigger className="h-12 cyber-input">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    <div className="px-2 py-1.5 text-xs font-bold text-muted-foreground uppercase">LiteLLM 统一适配 (推荐)</div>
-                    {LLM_PROVIDERS.filter((item) => item.category === "litellm").map((provider) => (
-                      <SelectItem key={provider.value} value={provider.value} className="font-mono">
-                        <span className="flex items-center gap-2">
-                          <span>{provider.icon}</span>
-                          <span>{provider.label}</span>
-                          <span className="text-xs text-muted-foreground">- {provider.hint}</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                    <div className="px-2 py-1.5 text-xs font-bold text-muted-foreground uppercase mt-2">原生适配器</div>
-                    {LLM_PROVIDERS.filter((item) => item.category === "native").map((provider) => (
-                      <SelectItem key={provider.value} value={provider.value} className="font-mono">
-                        <span className="flex items-center gap-2">
-                          <span>{provider.icon}</span>
-                          <span>{provider.label}</span>
-                          <span className="text-xs text-muted-foreground">- {provider.hint}</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {config.llmProvider !== "ollama" && (
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase">API Key</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type={showApiKey ? "text" : "password"}
-                      value={config.llmApiKey}
-                      onChange={(event) => updateConfig("llmApiKey", event.target.value)}
-                      placeholder={config.llmProvider === "baidu" ? "API_KEY:SECRET_KEY 格式" : "输入你的 API Key"}
-                      className="h-12 cyber-input"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowApiKey((prev) => !prev)}
-                      className="h-12 w-12 cyber-btn-ghost"
-                    >
-                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  </div>
+                <Label className="text-xs font-bold text-muted-foreground uppercase">API Key</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type={showApiKey ? "text" : "password"}
+                    value={config.llmApiKey}
+                    onChange={(event) => updateConfig("llmApiKey", event.target.value)}
+                    placeholder="输入你的 API Key"
+                    className="h-12 cyber-input"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowApiKey((prev) => !prev)}
+                    className="h-12 w-12 cyber-btn-ghost"
+                  >
+                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
                 </div>
-              )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-bold text-muted-foreground uppercase">模型选择</Label>
                   {(() => {
-                    const models = getModelsForProvider(config.llmProvider);
-                    const defaultModel = getDefaultModelForProvider(config.llmProvider) || "auto";
-                    const current = (config.llmModel || "").trim();
-                    const selectValue =
-                      !current ? "__default__" : models.includes(current) ? current : "__custom__";
+                    const models = getModelsForProvider(forcedProvider);
+                    const defaultModel = getDefaultModelForProvider(forcedProvider) || "auto";
 
                     if (!models.length) {
                       return (
@@ -768,20 +727,30 @@ export function SystemConfig({
                       );
                     }
 
+                    const fallbackSelectValue = computeLlmModelSelectValue(
+                      config.llmModel,
+                      models,
+                    );
+                    const selectValue =
+                      llmModelSelectValue === "__default__" ||
+                      llmModelSelectValue === "__custom__" ||
+                      models.includes(llmModelSelectValue)
+                        ? llmModelSelectValue
+                        : fallbackSelectValue;
+
                     return (
                       <div className="space-y-2">
                         <Select
                           value={selectValue}
                           onValueChange={(value) => {
+                            llmModelSelectTouchedRef.current = true;
+                            setLlmModelSelectValue(value);
                             if (value === "__default__") {
                               updateConfig("llmModel", "");
                               return;
                             }
                             if (value === "__custom__") {
-                              // Keep current, show input below.
-                              if (!config.llmModel) {
-                                updateConfig("llmModel", "");
-                              }
+                              // Switch to custom mode, and let user edit below.
                               return;
                             }
                             updateConfig("llmModel", value);
@@ -791,6 +760,9 @@ export function SystemConfig({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="cyber-dialog border-border">
+                            <SelectItem value="__custom__" className="font-mono">
+                              自定义模型...
+                            </SelectItem>
                             <SelectItem value="__default__" className="font-mono">
                               默认（{defaultModel}）
                             </SelectItem>
@@ -799,16 +771,17 @@ export function SystemConfig({
                                 {m}
                               </SelectItem>
                             ))}
-                            <SelectItem value="__custom__" className="font-mono">
-                              自定义模型...
-                            </SelectItem>
                           </SelectContent>
                         </Select>
 
                         {selectValue === "__custom__" ? (
                           <Input
                             value={config.llmModel}
-                            onChange={(event) => updateConfig("llmModel", event.target.value)}
+                            onChange={(event) => {
+                              llmModelSelectTouchedRef.current = true;
+                              setLlmModelSelectValue("__custom__");
+                              updateConfig("llmModel", event.target.value);
+                            }}
                             placeholder="输入模型名称"
                             className="h-10 cyber-input"
                           />
@@ -823,7 +796,7 @@ export function SystemConfig({
                     value={config.llmBaseUrl}
                     onChange={(event) => updateConfig("llmBaseUrl", event.target.value)}
                     placeholder={(() => {
-                      const baseUrl = getDefaultBaseUrlForProvider(config.llmProvider);
+                      const baseUrl = getDefaultBaseUrlForProvider(forcedProvider);
                       if (baseUrl) return `留空使用默认站口，例如：${baseUrl}`;
                       return "留空使用官方地址，或填入中转站地址";
                     })()}
@@ -833,9 +806,6 @@ export function SystemConfig({
               </div>
 
               <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground font-mono">
-                  其他配置已收纳到高级配置中
-                </div>
                 <Button
                   variant="outline"
                   className="cyber-btn-ghost h-9"
@@ -855,7 +825,7 @@ export function SystemConfig({
                 <div className="flex items-center gap-2">
                   <Button
                     onClick={testLLMConnection}
-                    disabled={testingLLM || (!isConfigured && config.llmProvider !== "ollama")}
+                    disabled={testingLLM || !isConfigured}
                     className="cyber-btn-primary h-10"
                   >
                     {testingLLM ? (
@@ -880,6 +850,17 @@ export function SystemConfig({
                   >
                     <Save className="w-4 h-4 mr-2" />
                     保存
+                  </Button>
+
+                  <Button
+                    onClick={resetConfig}
+                    disabled={testingLLM}
+                    variant="ghost"
+                    className="cyber-btn-ghost h-10"
+                    type="button"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    重置
                   </Button>
                 </div>
               </div>
@@ -914,16 +895,6 @@ export function SystemConfig({
                   )}
                 </div>
               )}
-            </div>
-
-            <div className="bg-muted border border-border p-4 rounded-lg text-xs space-y-2">
-              <p className="font-bold uppercase text-muted-foreground flex items-center gap-2">
-                <Info className="w-4 h-4 text-sky-400" />
-                配置说明
-              </p>
-              <p className="text-muted-foreground">• <strong className="text-muted-foreground">LiteLLM 统一适配</strong>: 大多数提供商通过 LiteLLM 统一处理，支持自动重试和负载均衡</p>
-              <p className="text-muted-foreground">• <strong className="text-muted-foreground">原生适配器</strong>: 百度、MiniMax、豆包因 API 格式特殊，使用专用适配器</p>
-              <p className="text-muted-foreground">• <strong className="text-muted-foreground">API 中转站</strong>: 在 Base URL 填入中转站地址即可，API Key 填中转站提供的 Key</p>
             </div>
 
             <AdvancedConfigDialog

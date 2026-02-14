@@ -197,6 +197,72 @@ def mock_llm_service():
         "content": "测试响应",
         "usage": {"total_tokens": 100},
     })
+
+    # Agents use streaming API in BaseAgent.stream_llm_call. Provide a minimal async stream
+    # that yields a single "done" chunk with a ReAct-shaped response.
+    def _chat_completion_stream(*, messages, temperature=None, max_tokens=None, **kwargs):
+        system_prompt = ""
+        for m in messages or []:
+            if isinstance(m, dict) and m.get("role") == "system":
+                system_prompt = str(m.get("content") or "")
+                break
+
+        if "侦察 Agent" in system_prompt:
+            content = (
+                "Thought: 已识别到这是一个 Python 项目，包含若干高风险文件。\n"
+                "Final Answer: ```json\n"
+                "{\n"
+                '  "project_structure": {},\n'
+                '  "tech_stack": {"languages": ["Python"], "frameworks": [], "databases": []},\n'
+                '  "recommended_tools": {"must_use": ["read_file", "search_code"], "reason": "需要证据定位风险点"},\n'
+                '  "entry_points": [{"type": "route", "file": "src/app.py", "line": 1, "method": "GET"}],\n'
+                '  "high_risk_areas": ["src/sql_vuln.py:1 - 可能存在 SQL 注入风险"],\n'
+                '  "initial_findings": [{"title": "可疑 SQL 拼接", "file_path": "src/sql_vuln.py", "line_start": 1, "description": "检测到 SQL 字符串拼接，可能可控输入进入查询。", "confidence": 0.7}],\n'
+                '  "summary": "已完成基础侦察。"\n'
+                "}\n"
+                "```\n"
+            )
+        elif "漏洞分析 Agent" in system_prompt:
+            content = (
+                "Thought: 将基于高风险文件给出结构化 findings。\n"
+                "Final Answer: ```json\n"
+                "{\n"
+                '  "findings": [\n'
+                "    {\n"
+                '      "vulnerability_type": "sql_injection",\n'
+                '      "severity": "high",\n'
+                '      "title": "疑似 SQL 注入",\n'
+                '      "description": "发现可控输入参与 SQL 拼接，可能导致 SQL 注入。",\n'
+                '      "file_path": "src/sql_vuln.py",\n'
+                '      "line_start": 1,\n'
+                '      "code_snippet": "cursor.execute(\\\"SELECT ...\\\" + user_input)",\n'
+                '      "confidence": 0.8,\n'
+                '      "needs_verification": true\n'
+                "    }\n"
+                "  ],\n"
+                '  "summary": "完成基础分析。"\n'
+                "}\n"
+                "```\n"
+            )
+        elif "验证 Agent" in system_prompt:
+            content = (
+                "Thought: 将对候选项进行最小化验证并输出。\n"
+                "Final Answer: ```json\n"
+                "{\n"
+                '  "findings": [],\n'
+                '  "summary": "在单元测试中跳过实际验证。"\n'
+                "}\n"
+                "```\n"
+            )
+        else:
+            content = "Thought: ok\nFinal Answer: ```json\n{\"ok\": true}\n```\n"
+
+        async def _gen():
+            yield {"type": "done", "content": content, "usage": {"total_tokens": 100}}
+
+        return _gen()
+
+    service.chat_completion_stream = _chat_completion_stream
     return service
 
 

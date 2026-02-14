@@ -37,6 +37,18 @@ async def test_save_findings_autofill_and_diagnostics(tmp_path):
             "line_start": 2,
             "description": "query string concatenation",
             "confidence": 0.9,
+            "verification_result": {
+                "trigger_flow": {
+                    "call_chain": ["handle"],
+                    "nodes": [
+                        {
+                            "file_path": "src/service.py",
+                            "function": "handle",
+                            "code": "def handle(payload):",
+                        }
+                    ],
+                }
+            },
         },
         {
             "title": "invalid finding without file",

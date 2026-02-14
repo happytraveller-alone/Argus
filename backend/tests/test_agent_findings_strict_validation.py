@@ -71,6 +71,18 @@ async def test_save_findings_strict_validation_filters_invalid_and_keeps_enriche
             "verdict": "likely",
             "reachability": "likely_reachable",
             "verification_details": "matched dangerous call in source",
+            "verification_result": {
+                "trigger_flow": {
+                    "call_chain": ["run"],
+                    "nodes": [
+                        {
+                            "file_path": "app.py",
+                            "function": "run",
+                            "code": "def run(user_input):",
+                        }
+                    ],
+                }
+            },
         },
     ]
 

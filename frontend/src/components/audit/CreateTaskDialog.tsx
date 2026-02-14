@@ -474,7 +474,7 @@ export default function CreateTaskDialog({
 
 					if (auditMode === "agent") {
 						const preflightToast = toast.loading(
-							"正在检查智能审计配置（LLM / RAG）...",
+							"正在检查智能审计配置（LLM）...",
 						);
 						const preflight = await runAgentPreflightCheck();
 						toast.dismiss(preflightToast);
@@ -537,7 +537,7 @@ export default function CreateTaskDialog({
 
 			if (auditMode === "agent") {
 				const preflightToast = toast.loading(
-					"正在检查智能审计配置（LLM / RAG）...",
+					"正在检查智能审计配置（LLM）...",
 				);
 				const preflight = await runAgentPreflightCheck();
 				toast.dismiss(preflightToast);

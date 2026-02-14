@@ -82,6 +82,11 @@ export function AuditDetailDialog({
     return "详情";
   }, [detailType]);
 
+  const triggerFlow =
+    detailType === "finding" && finding ? finding.trigger_flow : null;
+  const pocChain =
+    detailType === "finding" && finding ? finding.poc_trigger_chain : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[88vh] overflow-hidden flex flex-col">
@@ -188,10 +193,71 @@ export function AuditDetailDialog({
                 </Section>
               )}
 
+              <Section title="PoC 触发链条（Source -> Sink）">
+                {pocChain && Array.isArray(pocChain.nodes) && pocChain.nodes.length >= 2 ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline">engine: {pocChain.engine || "-"}</Badge>
+                      <Badge variant="outline">节点数: {pocChain.nodes.length}</Badge>
+                      <Badge variant="outline">
+                        source: {pocChain.source?.file_path}:{pocChain.source?.line}
+                      </Badge>
+                      <Badge variant="outline">
+                        sink: {pocChain.sink?.file_path}:{pocChain.sink?.line}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-2">
+                      {pocChain.nodes.map((node) => (
+                        <div
+                          key={`${node.index}-${node.file_path}-${node.line}`}
+                          className="rounded-md border border-border bg-background p-3 space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="text-xs text-muted-foreground">
+                              {node.index + 1}. {node.file_path}:{node.line}
+                              {node.function ? `  ${node.function}()` : ""}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {node.index === 0 && (
+                                <Badge variant="outline">Source</Badge>
+                              )}
+                              {node.index === pocChain.nodes.length - 1 && (
+                                <Badge variant="outline">Sink</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <pre className="text-xs font-mono bg-card/60 border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[40vh]">
+                            {node.code}
+                          </pre>
+                          {node.context && (
+                            <details className="rounded-md border border-border bg-card/40 px-3 py-2">
+                              <summary className="cursor-pointer text-xs text-muted-foreground">
+                                展开上下文（{node.context_start_line}-{node.context_end_line}）
+                              </summary>
+                              <pre className="mt-2 text-xs font-mono whitespace-pre-wrap break-words overflow-auto max-h-[40vh]">
+                                {node.context}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    未生成触发链条（Joern 未命中或回退校验失败）
+                  </div>
+                )}
+              </Section>
+
               {(Boolean(finding.reachability_file || finding.reachability_function) ||
-                typeof finding.flow_path_score === "number" ||
-                (finding.flow_call_chain && finding.flow_call_chain.length > 0) ||
-                (finding.flow_control_conditions &&
+                (!triggerFlow && typeof finding.flow_path_score === "number") ||
+                (!triggerFlow &&
+                  finding.flow_call_chain &&
+                  finding.flow_call_chain.length > 0) ||
+                (!triggerFlow &&
+                  finding.flow_control_conditions &&
                   finding.flow_control_conditions.length > 0)) && (
                 <Section title="可达性证据">
                   {(finding.reachability_file || finding.reachability_function) && (
@@ -202,12 +268,14 @@ export function AuditDetailDialog({
                       <div>函数: {finding.reachability_function || "-"}</div>
                     </div>
                   )}
-                  {typeof finding.flow_path_score === "number" && (
+                  {!triggerFlow && typeof finding.flow_path_score === "number" && (
                     <div className="text-sm text-muted-foreground">
                       路径评分: {(finding.flow_path_score * 100).toFixed(1)}%
                     </div>
                   )}
-                  {finding.flow_call_chain && finding.flow_call_chain.length > 0 && (
+                  {!triggerFlow &&
+                    finding.flow_call_chain &&
+                    finding.flow_call_chain.length > 0 && (
                     <div className="space-y-1">
                       <div className="text-xs uppercase tracking-wide text-muted-foreground">
                         调用链
@@ -217,7 +285,8 @@ export function AuditDetailDialog({
                       </pre>
                     </div>
                   )}
-                  {finding.flow_control_conditions &&
+                  {!triggerFlow &&
+                    finding.flow_control_conditions &&
                     finding.flow_control_conditions.length > 0 && (
                       <div className="space-y-1">
                         <div className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -230,6 +299,70 @@ export function AuditDetailDialog({
                     )}
                 </Section>
               )}
+
+              {triggerFlow &&
+                Array.isArray(triggerFlow.nodes) &&
+                triggerFlow.nodes.length > 0 && (
+                  <Section title="漏洞触发控制流程图">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline">节点 {triggerFlow.nodes.length}</Badge>
+                      {typeof triggerFlow.path_score === "number" ? (
+                        <Badge variant="outline">
+                          评分 {(triggerFlow.path_score * 100).toFixed(1)}%
+                        </Badge>
+                      ) : null}
+                      {typeof triggerFlow.path_found === "boolean" ? (
+                        <Badge variant="outline">
+                          可达 {triggerFlow.path_found ? "是" : "否"}
+                        </Badge>
+                      ) : null}
+                      {triggerFlow.engine ? (
+                        <Badge variant="outline">{String(triggerFlow.engine)}</Badge>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 space-y-3">
+                      {triggerFlow.nodes.map((node) => {
+                        const key = `${node.file_path}:${node.function}:${node.index}`;
+                        return (
+                          <details
+                            key={key}
+                            className="rounded-md border border-border bg-background/30"
+                          >
+                            <summary className="cursor-pointer select-none px-3 py-2 text-xs font-mono flex items-center justify-between gap-2">
+                              <span className="break-words">
+                                {node.index + 1}. {node.file_path}:{node.function} (
+                                {node.start_line}-{node.end_line})
+                              </span>
+                              {node.code_truncated ? (
+                                <Badge variant="outline" className="text-[11px]">
+                                  TRUNC
+                                </Badge>
+                              ) : null}
+                            </summary>
+                            <div className="px-3 pb-3">
+                              <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[60vh]">
+                                {node.code}
+                              </pre>
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+
+                    {Array.isArray(triggerFlow.control_conditions) &&
+                    triggerFlow.control_conditions.length > 0 ? (
+                      <div className="mt-3 space-y-1">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                          控制条件
+                        </div>
+                        <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[24vh]">
+                          {triggerFlow.control_conditions.join("\n")}
+                        </pre>
+                      </div>
+                    ) : null}
+                  </Section>
+                )}
 
               {finding.logic_authz_evidence &&
                 finding.logic_authz_evidence.length > 0 && (

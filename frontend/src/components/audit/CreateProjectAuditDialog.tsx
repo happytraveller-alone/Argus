@@ -264,7 +264,7 @@ export default function CreateProjectAuditDialog({
 	};
 
 	const runAgentTaskForProject = async (project: Project) => {
-		const checkToast = toast.loading("正在检查智能审计配置（LLM / RAG）...");
+		const checkToast = toast.loading("正在检查智能审计配置（LLM）...");
 		const preflight = await runAgentPreflightCheck();
 		toast.dismiss(checkToast);
 		if (!preflight.ok) {

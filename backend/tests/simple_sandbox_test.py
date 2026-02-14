@@ -4,10 +4,18 @@
 直接测试 Docker 连接和基本命令执行
 """
 
+import os
+
+import pytest
+
+# This is a manual / environment-dependent smoke test. It requires Docker access and
+# a working sandbox image, so we skip it by default in the unit-test suite.
+if os.environ.get("RUN_SANDBOX_TESTS") != "1":
+    pytest.skip("Set RUN_SANDBOX_TESTS=1 to run sandbox smoke tests.", allow_module_level=True)
+
 import asyncio
 import logging
 import sys
-import os
 
 # 添加 app 目录到路径
 sys.path.insert(0, os.path.dirname(__file__))

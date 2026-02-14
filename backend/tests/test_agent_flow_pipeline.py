@@ -104,6 +104,52 @@ int main(int argc, char** argv) {
 
 
 @pytest.mark.asyncio
+async def test_flow_enrichment_entry_points_passthrough_sets_entry_inferred_false(tmp_path: Path):
+    (tmp_path / "app.py").write_text(
+        "\n".join(
+            [
+                "def start():",
+                "    bridge()",
+                "",
+                "def bridge():",
+                "    sink()",
+                "",
+                "def sink():",
+                "    eval(\"1\")",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    findings = [
+        {
+            "title": "Potential command injection",
+            "severity": "high",
+            "confidence": 0.8,
+            "vulnerability_type": "command_injection",
+            "file_path": "app.py",
+            "line_start": 8,
+            "line_end": 8,
+            "entry_points": ["start"],
+        }
+    ]
+
+    enriched, _ = await _enrich_findings_with_flow_and_logic(
+        findings,
+        project_root=str(tmp_path),
+        target_files=None,
+        event_emitter=None,
+    )
+
+    flow = enriched[0]["verification_result"]["flow"]
+    assert flow.get("entry_inferred") is False
+    chain = flow.get("call_chain") or []
+    assert isinstance(chain, list) and chain
+    assert chain[0].endswith(":start")
+
+
+@pytest.mark.asyncio
 async def test_joern_client_graceful_fallback_when_missing(monkeypatch):
     monkeypatch.setattr(
         "app.services.agent.flow.joern.joern_client.shutil.which",

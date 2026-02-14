@@ -36,6 +36,9 @@ VERIFICATION_SYSTEM_PROMPT = """你是漏洞验证 Agent，负责自主完成漏
 7. 不允许输出“请选择/请确认后继续”等交互语句，必须直接执行默认策略并收敛结束。
 8. 若字段缺失需先自我补全（基于证据与默认模板），再输出 Final Answer。
 9. **语言要求**：Final Answer 中 title/description/suggestion/fix_description/verification_evidence/poc_plan 必须使用简体中文，禁止输出英文段落。
+10. **验证范围强约束**：本次仅验证 `bootstrap_findings`（候选种子）列表中的项，最多验证 8 条；列表为空则应直接跳过验证并返回空 findings。不得验证或新增清单以外的发现。
+11. **工具优先门禁（强约束）**：在输出任何结论或 Final Answer 前，必须至少执行一次工具调用获取代码证据（最低要求：至少一次 `read_file` 或 `search_code`），并在结论中引用 Observation 证据，禁止无证据宣称“已验证/已读取”。
+12. **首轮强约束**：第一轮必须输出 Action（优先 `read_file`），不允许第一轮直接输出 Final Answer。
 
 ## 工作流
 1. 先读取/提取目标代码，验证文件与行号是否真实存在。
@@ -129,12 +132,55 @@ class VerificationAgent(BaseAgent):
         cleaned_response = re.sub(r'\*\*Final Answer:\*\*', 'Final Answer:', cleaned_response)
         cleaned_response = re.sub(r'\*\*Observation:\*\*', 'Observation:', cleaned_response)
 
-        # 🔥 首先尝试提取明确的 Thought 标记
+        # 🔥 首先尝试提取明确的 Thought 标记（Thought 可以不存在）
         thought_match = re.search(r'Thought:\s*(.*?)(?=Action:|Final Answer:|$)', cleaned_response, re.DOTALL)
         if thought_match:
             step.thought = thought_match.group(1).strip()
 
-        # 🔥 检查是否是最终答案
+        # 🔥 提取 Action（Action 优先于 Final Answer；避免同轮同时输出导致跳过工具）
+        action_match = re.search(r'Action:\s*(\w+)', cleaned_response)
+        if action_match:
+            step.action = action_match.group(1).strip()
+
+            # 🔥 如果没有提取到 thought，提取 Action 之前的内容作为思考
+            if not step.thought:
+                action_pos = cleaned_response.find('Action:')
+                if action_pos > 0:
+                    before_action = cleaned_response[:action_pos].strip()
+                    before_action = re.sub(r'^Thought:\s*', '', before_action)
+                    if before_action:
+                        step.thought = before_action[:500] if len(before_action) > 500 else before_action
+
+            # 🔥 提取 Action Input - 增强版，处理多种格式
+            # 注意：必须在遇到 Final Answer 前截断，否则会把 Final Answer JSON 拼进 Action Input
+            input_match = re.search(
+                r'Action Input:\s*(.*?)(?=Thought:|Action:|Observation:|Final Answer:|$)',
+                cleaned_response,
+                re.DOTALL,
+            )
+            if input_match:
+                input_text = input_match.group(1).strip()
+                input_text = re.sub(r'```json\s*', '', input_text)
+                input_text = re.sub(r'```\s*', '', input_text)
+
+                # 🔥 v2.1: 如果 Action Input 为空或只有 **，记录警告
+                if not input_text or input_text == '**' or input_text.strip() == '':
+                    logger.warning(f"[Verification] Action Input is empty or malformed: '{input_text}'")
+                    step.action_input = {}
+                else:
+                    # 使用增强的 JSON 解析器
+                    step.action_input = AgentJsonParser.parse(
+                        input_text,
+                        default={"raw_input": input_text}
+                    )
+            else:
+                # 🔥 v2.1: 有 Action 但没有 Action Input，记录警告
+                logger.warning(f"[Verification] Action '{step.action}' found but no Action Input")
+                step.action_input = {}
+
+            return step
+
+        # 🔥 检查是否是最终答案（仅当不存在 Action 时）
         final_match = re.search(r'Final Answer:\s*(.*?)$', cleaned_response, re.DOTALL)
         if final_match:
             step.is_final = True
@@ -161,42 +207,6 @@ class VerificationAgent(BaseAgent):
                     step.thought = before_final[:500] if len(before_final) > 500 else before_final
 
             return step
-
-        # 🔥 提取 Action
-        action_match = re.search(r'Action:\s*(\w+)', cleaned_response)
-        if action_match:
-            step.action = action_match.group(1).strip()
-
-            # 🔥 如果没有提取到 thought，提取 Action 之前的内容作为思考
-            if not step.thought:
-                action_pos = cleaned_response.find('Action:')
-                if action_pos > 0:
-                    before_action = cleaned_response[:action_pos].strip()
-                    before_action = re.sub(r'^Thought:\s*', '', before_action)
-                    if before_action:
-                        step.thought = before_action[:500] if len(before_action) > 500 else before_action
-
-        # 🔥 提取 Action Input - 增强版，处理多种格式
-        input_match = re.search(r'Action Input:\s*(.*?)(?=Thought:|Action:|Observation:|$)', cleaned_response, re.DOTALL)
-        if input_match:
-            input_text = input_match.group(1).strip()
-            input_text = re.sub(r'```json\s*', '', input_text)
-            input_text = re.sub(r'```\s*', '', input_text)
-
-            # 🔥 v2.1: 如果 Action Input 为空或只有 **，记录警告
-            if not input_text or input_text == '**' or input_text.strip() == '':
-                logger.warning(f"[Verification] Action Input is empty or malformed: '{input_text}'")
-                step.action_input = {}
-            else:
-                # 使用增强的 JSON 解析器
-                step.action_input = AgentJsonParser.parse(
-                    input_text,
-                    default={"raw_input": input_text}
-                )
-        elif step.action:
-            # 🔥 v2.1: 有 Action 但没有 Action Input，记录警告
-            logger.warning(f"[Verification] Action '{step.action}' found but no Action Input")
-            step.action_input = {}
 
         # 🔥 最后的 fallback：如果整个响应没有任何标记，整体作为思考
         if not step.thought and not step.action and not step.is_final:
@@ -431,77 +441,84 @@ class VerificationAgent(BaseAgent):
             if isinstance(handoff, dict):
                 handoff = TaskHandoff.from_dict(handoff)
             self.receive_handoff(handoff)
-        
-        # 收集所有待验证的发现
-        findings_to_verify = []
-        
-        # 🔥 优先从交接信息获取发现
-        if self._incoming_handoff and self._incoming_handoff.key_findings:
-            findings_to_verify = self._incoming_handoff.key_findings.copy()
-            logger.info(f"[Verification] 从交接信息获取 {len(findings_to_verify)} 个发现")
-        else:
-            # 🔥 修复：处理 Orchestrator 传递的多种数据格式
-            
-            # 格式1: Orchestrator 直接传递 {"findings": [...]}
-            if isinstance(previous_results, dict) and "findings" in previous_results:
-                direct_findings = previous_results.get("findings", [])
-                if isinstance(direct_findings, list):
-                    for f in direct_findings:
-                        if isinstance(f, dict):
-                            # 🔥 Always verify Critical/High findings to generate PoC, even if Analysis sets needs_verification=False
-                            severity = str(f.get("severity", "")).lower()
-                            needs_verify = f.get("needs_verification", True)
-                            
-                            if needs_verify or severity in ["critical", "high"]:
-                                findings_to_verify.append(f)
-                    logger.info(f"[Verification] 从 previous_results.findings 获取 {len(findings_to_verify)} 个发现")
-            
-            # 格式2: 传统格式 {"phase_name": {"data": {"findings": [...]}}}
-            if not findings_to_verify:
-                for phase_name, result in previous_results.items():
-                    if phase_name == "findings":
-                        continue  # 已处理
-                    
-                    if isinstance(result, dict):
-                        data = result.get("data", {})
-                    else:
-                        data = result.data if hasattr(result, 'data') else {}
-                    
-                    if isinstance(data, dict):
-                        phase_findings = data.get("findings", [])
-                        for f in phase_findings:
-                            if isinstance(f, dict):
-                                severity = str(f.get("severity", "")).lower()
-                                needs_verify = f.get("needs_verification", True)
-                                
-                                if needs_verify or severity in ["critical", "high"]:
-                                    findings_to_verify.append(f)
-                
-                if findings_to_verify:
-                    logger.info(f"[Verification] 从传统格式获取 {len(findings_to_verify)} 个发现")
-        
-        # 🔥 如果仍然没有发现，尝试从 input_data 的其他字段提取
-        if not findings_to_verify:
-            # 尝试从 task 或 task_context 中提取描述的漏洞
-            if task and ("发现" in task or "漏洞" in task or "findings" in task.lower()):
-                logger.warning(f"[Verification] 无法从结构化数据获取发现，任务描述: {task[:200]}")
-                # 创建一个提示 LLM 从任务描述中理解漏洞的特殊处理
-                await self.emit_event("warning", f"无法从结构化数据获取发现列表，将基于任务描述进行验证")
 
-        if not findings_to_verify and isinstance(previous_results, dict):
-            bootstrap_findings = previous_results.get("bootstrap_findings", [])
-            if isinstance(bootstrap_findings, list):
-                for item in bootstrap_findings:
-                    if isinstance(item, dict):
-                        findings_to_verify.append(item)
-                if findings_to_verify:
-                    logger.info(
-                        "[Verification] 从 bootstrap_findings 获取 %s 个发现",
-                        len(findings_to_verify),
-                    )
-        
+        # 收集待验证发现（强约束）：
+        # - 仅验证 bootstrap_findings（候选种子）列表中的项
+        # - 最多验证 8 条
+        def _coerce_bootstrap_confidence_numeric(value: Any) -> float:
+            # 入库与 flow pipeline 更偏好数值置信度；兼容 "HIGH/MEDIUM/LOW" 等字符串输入。
+            if isinstance(value, (int, float)):
+                return max(0.0, min(float(value), 1.0))
+            if isinstance(value, str):
+                text = value.strip().upper()
+                if text == "HIGH":
+                    return 0.9
+                if text == "MEDIUM":
+                    return 0.7
+                if text == "LOW":
+                    return 0.4
+                try:
+                    return max(0.0, min(float(text), 1.0))
+                except Exception:
+                    return 0.5
+            return 0.5
+
+        def _normalize_seed_severity(value: Any) -> str:
+            text = str(value or "").strip().lower()
+            if text in {"critical", "high", "medium", "low", "info"}:
+                return text
+            if text == "error":
+                return "high"
+            if text == "warning":
+                return "medium"
+            return "medium"
+
+        def _iter_bootstrap_findings_sources() -> List[Dict[str, Any]]:
+            candidates: List[Dict[str, Any]] = []
+            # 1) handoff.context_data.bootstrap_findings（优先，避免误用 analysis findings）
+            if self._incoming_handoff and isinstance(self._incoming_handoff.context_data, dict):
+                items = self._incoming_handoff.context_data.get("bootstrap_findings")
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            candidates.append(item)
+            # 2) previous_results.bootstrap_findings
+            if isinstance(previous_results, dict):
+                items = previous_results.get("bootstrap_findings")
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            candidates.append(item)
+            # 3) input_data.config.bootstrap_findings（兼容直接调用 VerificationAgent 的情况）
+            if isinstance(config, dict):
+                items = config.get("bootstrap_findings")
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            candidates.append(item)
+            return candidates
+
+        raw_bootstrap_candidates = _iter_bootstrap_findings_sources()
+        findings_to_verify: List[Dict[str, Any]] = []
+        for item in raw_bootstrap_candidates:
+            if not isinstance(item, dict):
+                continue
+            mapped = dict(item)
+            mapped["severity"] = _normalize_seed_severity(item.get("severity"))
+            mapped["confidence"] = _coerce_bootstrap_confidence_numeric(item.get("confidence"))
+            findings_to_verify.append(mapped)
+
         # 去重
         findings_to_verify = self._deduplicate(findings_to_verify)
+
+        # 优先验证高风险项（不改变“只能验证 bootstrap_findings 列表”的强约束）
+        severity_weight = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+        findings_to_verify.sort(
+            key=lambda f: (
+                -severity_weight.get(str(f.get("severity") or "medium").strip().lower(), 2),
+                -float(_coerce_bootstrap_confidence_numeric(f.get("confidence"))),
+            )
+        )
 
         # 🔥 FIX: 优先处理有明确文件路径的发现，将没有文件路径的发现放到后面
         # 这确保 Analysis 的具体发现优先于 Recon 的泛化描述
@@ -520,16 +537,36 @@ class VerificationAgent(BaseAgent):
         if findings_without_path:
             logger.info(f"[Verification] 还有 {len(findings_without_path)} 个发现需要自行定位文件")
 
+        # 强制上限：只验证候选种子的前 8 条
+        findings_to_verify = findings_to_verify[:8]
+
         if not findings_to_verify:
-            logger.warning(f"[Verification] 没有需要验证的发现! previous_results keys: {list(previous_results.keys()) if isinstance(previous_results, dict) else 'not dict'}")
-            await self.emit_event("warning", "没有需要验证的发现 - 可能是数据格式问题")
+            note = "跳过验证：本次 bootstrap_findings（候选种子）为空。"
+            logger.info(f"[Verification] {note}")
+            await self.emit_event("info", note)
+            self.record_work(note)
+            duration_ms = int((time.time() - start_time) * 1000)
+            handoff = self.create_handoff(
+                to_agent="orchestrator",
+                summary=note,
+                key_findings=[],
+                context_data={
+                    "skipped": True,
+                    "reason": "no_bootstrap_candidates",
+                    "verified_count": 0,
+                },
+            )
             return AgentResult(
                 success=True,
-                data={"findings": [], "verified_count": 0, "note": "未收到待验证的发现"},
+                data={"findings": [], "verified_count": 0, "note": note},
+                iterations=0,
+                tool_calls=self._tool_calls,
+                tokens_used=self._total_tokens,
+                duration_ms=duration_ms,
+                handoff=handoff,
             )
         
-        # 限制数量
-        findings_to_verify = findings_to_verify[:20]
+        # 数量已在上面强制限制为 <= 8
         
         await self.emit_event(
             "info",
@@ -558,7 +595,7 @@ class VerificationAgent(BaseAgent):
                     except ValueError:
                         pass
 
-            findings_summary.append(f"""
+        findings_summary.append(f"""
 ### 发现 {i+1}: {f.get('title', 'Unknown')}
 - 类型: {f.get('vulnerability_type', 'unknown')}
 - 严重度: {f.get('severity', 'medium')}
@@ -569,10 +606,31 @@ class VerificationAgent(BaseAgent):
 ```
 - 描述: {f.get('description', 'N/A')[:300]}
 """)
+
+        # 🔥 项目级 Markdown 长期记忆（无需 RAG/Embedding）
+        memory_block = ""
+        markdown_memory = config.get("markdown_memory") if isinstance(config, dict) else None
+        if isinstance(markdown_memory, dict):
+            shared_mem = str(markdown_memory.get("shared") or "").strip()
+            agent_mem = str(markdown_memory.get("verification") or "").strip()
+            skills_mem = str(markdown_memory.get("skills") or "").strip()
+            if shared_mem or agent_mem or skills_mem:
+                memory_block = f"""## 🧠 项目长期记忆（Markdown，无 RAG）
+### shared.md（节选）
+{shared_mem or "(空)"}
+
+### verification.md（节选）
+{agent_mem or "(空)"}
+
+### skills.md（规范摘要）
+{skills_mem or "(空)"}
+"""
         
         initial_message = f"""请验证以下 {len(findings_to_verify)} 个安全发现。
 
 {handoff_context if handoff_context else ''}
+
+{memory_block if memory_block else ''}
 
 ## 待验证发现
 {''.join(findings_summary)}
@@ -595,6 +653,14 @@ class VerificationAgent(BaseAgent):
 3. 判断是否为真实漏洞
 {f"特别注意 Analysis Agent 提到的关注点。" if handoff_context else ""}"""
 
+        # 🔥 Tool-first 门禁提示：第一轮必须 Action（避免模型直接 Final Answer 触发拒绝/兜底）
+        initial_message += """
+
+## ✅ 门禁（必须遵守）
+- **第一轮必须输出 Action**（优先 `read_file`，必要时可用 `search_code`），不允许第一轮直接输出 Final Answer。
+- **仅验证上述待验证发现列表**（来源：bootstrap_findings 候选种子，最多 8 条），不得新增清单外发现。
+"""
+
         # 初始化对话历史
         self._conversation_history = [
             {"role": "system", "content": self.config.system_prompt},
@@ -607,7 +673,8 @@ class VerificationAgent(BaseAgent):
         drift_retry_count = 0
         max_schema_retry = 2
         max_drift_retry = 2
-        
+        forced_min_tool_done = False  # 🔥 防死循环：首次“无工具直接 Final Answer”时由系统自动执行一次最小验证
+
         await self.emit_thinking("🔐 Verification Agent 启动，LLM 开始自主验证漏洞...")
         
         try:
@@ -682,20 +749,86 @@ class VerificationAgent(BaseAgent):
                 if step.is_final:
                     # 🔥 强制检查：必须至少调用过一次工具才能完成
                     if self._tool_calls == 0:
-                        logger.warning(f"[{self.name}] LLM tried to finish without any tool calls! Forcing tool usage.")
+                        logger.warning(
+                            f"[{self.name}] LLM tried to finish without any tool calls! Forcing tool usage."
+                        )
+
+                        # 🔥 兜底策略：首次触发时自动执行一次最小 read_file 验证，避免模型持续 Final Answer 导致死循环
+                        if not forced_min_tool_done:
+                            forced_min_tool_done = True
+                            await self.emit_thinking("⚠️ 拒绝过早完成：系统将自动执行一次 read_file 获取证据")
+
+                            target = findings_to_verify[0] if findings_to_verify else {}
+                            file_path = str(target.get("file_path") or "").strip()
+                            line_start = target.get("line_start") or 1
+
+                            # 兼容 file_path 形如 "a.py:36"
+                            if file_path and ":" in file_path:
+                                parts = file_path.split(":", 1)
+                                if len(parts) == 2 and parts[1].split()[0].isdigit():
+                                    file_path = parts[0].strip()
+                                    try:
+                                        line_start = int(parts[1].split()[0])
+                                    except Exception:
+                                        line_start = target.get("line_start") or 1
+
+                            try:
+                                line_start_int = int(line_start) if line_start is not None else 1
+                            except Exception:
+                                line_start_int = 1
+
+                            start_line = max(1, line_start_int - 20)
+                            end_line = line_start_int + 80
+
+                            if "read_file" in self.tools and file_path:
+                                observation = await self.execute_tool(
+                                    "read_file",
+                                    {
+                                        "file_path": file_path,
+                                        "start_line": start_line,
+                                        "end_line": end_line,
+                                        "max_lines": 200,
+                                    },
+                                )
+                            else:
+                                observation = (
+                                    "⚠️ 系统无法自动执行 read_file（缺少工具或 file_path 为空）。"
+                                    "请改用 search_code/extract_function 手动验证。"
+                                )
+
+                            await self.emit_llm_observation(observation)
+                            self._conversation_history.append(
+                                {"role": "user", "content": f"Observation:\n{observation}"}
+                            )
+                            self._conversation_history.append(
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        "你之前尝试在没有任何工具证据的情况下直接输出 Final Answer。"
+                                        "系统已自动执行了一次 read_file 并给出 Observation。"
+                                        "现在请基于 Observation 继续：输出 Thought + Action（继续补充证据），"
+                                        "或在证据充分时再输出 Final Answer。"
+                                    ),
+                                }
+                            )
+                            continue
+
+                        # 兜底已执行但仍无工具调用（极端情况），继续强制提示模型调用工具
                         await self.emit_thinking("⚠️ 拒绝过早完成：必须先使用工具验证漏洞")
-                        self._conversation_history.append({
-                            "role": "user",
-                            "content": (
-                                "⚠️ **系统拒绝**: 你必须先使用工具验证漏洞！\n\n"
-                                "不允许在没有调用任何工具的情况下直接输出 Final Answer。\n\n"
-                                "请立即使用以下工具之一进行验证：\n"
-                                "1. `read_file` - 读取漏洞所在文件的代码\n"
-                                # "2. `run_code` - 编写并执行 Fuzzing Harness 验证漏洞\n"
-                                "2. `extract_function` - 提取目标函数进行分析\n\n"
-                                "现在请输出 Thought 和 Action，开始验证第一个漏洞。"
-                            ),
-                        })
+                        self._conversation_history.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "⚠️ **系统拒绝**: 你必须先使用工具验证漏洞！\n\n"
+                                    "不允许在没有调用任何工具的情况下直接输出 Final Answer。\n\n"
+                                    "请立即使用以下工具之一进行验证：\n"
+                                    "1. `read_file` - 读取漏洞所在文件的代码\n"
+                                    "2. `extract_function` - 提取目标函数进行分析\n"
+                                    "3. `search_code` - 搜索关键字定位证据\n\n"
+                                    "现在请输出 Thought 和 Action，开始验证第一个漏洞。"
+                                ),
+                            }
+                        )
                         continue
 
                     if not isinstance(step.final_answer, dict):

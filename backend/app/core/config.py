@@ -119,6 +119,9 @@ class Settings(BaseSettings):
     SANDBOX_NETWORK_MODE: str = "none"  # 沙箱网络模式 (none, bridge)
     
     # RAG 配置
+    # 🔥 默认禁用 RAG（Embedding/向量索引）初始化：智能审计任务不应依赖 embedding 配置
+    # 如需启用，可通过环境变量显式开启（例如：RAG_ENABLED=true）
+    RAG_ENABLED: bool = False
     RAG_CHUNK_SIZE: int = 1500  # 代码块大小（Token）
     RAG_CHUNK_OVERLAP: int = 50  # 代码块重叠（Token）
     RAG_TOP_K: int = 10  # 检索返回数量
@@ -131,6 +134,12 @@ class Settings(BaseSettings):
     FLOW_JOERN_TRIGGER_CONFIDENCE: float = 0.7
     LOGIC_AUTHZ_ENABLED: bool = True
     FLOW_UNREACHABLE_POLICY: str = "degrade_likely"
+
+    # PoC trigger chain (source -> sink) extraction (Joern preferred, LLM fallback)
+    POC_TRIGGER_CHAIN_ENABLED: bool = True
+    POC_TRIGGER_CHAIN_MAX_FLOWS: int = 3
+    POC_TRIGGER_CHAIN_MAX_NODES: int = 80
+    POC_TRIGGER_CHAIN_LLM_FALLBACK: bool = True
 
     class Config:
         case_sensitive = True

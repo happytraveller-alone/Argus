@@ -64,7 +64,7 @@ class AgentTaskCreate(BaseModel):
         default=["sql_injection", "xss", "command_injection", "path_traversal", "ssrf"],
         description="目标漏洞类型"
     )
-    verification_level: str = Field(
+    verification_level: Optional[str] = Field(
         "analysis_with_poc_plan",
         description="验证级别（统一语义）: analysis_with_poc_plan"
     )
@@ -213,6 +213,8 @@ class AgentFindingResponse(BaseModel):
     logic_authz_evidence: Optional[List[str]] = None
     reachability_file: Optional[str] = None
     reachability_function: Optional[str] = None
+    trigger_flow: Optional[dict] = None
+    poc_trigger_chain: Optional[dict] = None
     status: str
     
     suggestion: Optional[str] = None
@@ -734,6 +736,394 @@ async def _prepare_bootstrap_opengrep_findings(
         raise RuntimeError(f"OpenGrep 预处理失败：{str(exc)[:200]}") from exc
 
 
+MAX_SEED_FINDINGS = 25
+
+
+def _normalize_seed_from_opengrep(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """将 OpenGrep bootstrap 候选统一转换为 fixed-first 的 seed findings 格式。"""
+
+    def map_severity(value: Any) -> str:
+        raw = str(value or "").strip().upper()
+        if raw == "ERROR":
+            return "high"
+        if raw == "WARNING":
+            return "medium"
+        if raw == "INFO":
+            return "low"
+        return "medium"
+
+    def map_confidence(value: Any) -> float:
+        if isinstance(value, (int, float)):
+            return max(0.0, min(float(value), 1.0))
+        raw = str(value or "").strip().upper()
+        if raw == "HIGH":
+            return 0.8
+        if raw == "MEDIUM":
+            return 0.7
+        if raw == "LOW":
+            return 0.4
+        try:
+            return max(0.0, min(float(raw), 1.0))
+        except Exception:
+            return 0.5
+
+    seeds: List[Dict[str, Any]] = []
+    for item in candidates or []:
+        if not isinstance(item, dict):
+            continue
+        file_path = str(item.get("file_path") or item.get("path") or "").strip()
+        line_start = _to_int(item.get("line_start")) or _to_int(item.get("line")) or 1
+        line_end = _to_int(item.get("line_end")) or line_start
+        vuln_type = str(item.get("vulnerability_type") or item.get("check_id") or "opengrep_rule").strip()
+
+        title = item.get("title") or item.get("description") or "OpenGrep 发现"
+        description = item.get("description") or ""
+        code_snippet = item.get("code_snippet") or item.get("code") or ""
+
+        raw_severity = item.get("severity") or item.get("extra", {}).get("severity")
+        raw_confidence = item.get("confidence")
+
+        seeds.append(
+            {
+                "id": item.get("id"),
+                "title": str(title).strip() if title is not None else "OpenGrep 发现",
+                "description": str(description).strip(),
+                "file_path": file_path,
+                "line_start": int(line_start),
+                "line_end": int(line_end),
+                "code_snippet": str(code_snippet)[:2000],
+                "severity": map_severity(raw_severity),
+                "confidence": map_confidence(raw_confidence),
+                "vulnerability_type": vuln_type or "opengrep_rule",
+                "source": str(item.get("source") or "opengrep_bootstrap"),
+                "needs_verification": True,
+                # 保留原始 OpenGrep 标记，便于溯源
+                "bootstrap_severity": str(raw_severity or "").strip(),
+                "bootstrap_confidence": str(raw_confidence or "").strip(),
+            }
+        )
+
+    # 去重与截断（按 file+line+type）
+    seen: Set[Tuple[str, int, str]] = set()
+    deduped: List[Dict[str, Any]] = []
+    for seed in seeds:
+        key = (
+            str(seed.get("file_path") or ""),
+            int(seed.get("line_start") or 0),
+            str(seed.get("vulnerability_type") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(seed)
+
+    deduped.sort(key=lambda s: (-float(s.get("confidence") or 0.0), str(s.get("file_path") or "")))
+    return deduped[:MAX_SEED_FINDINGS]
+
+
+def _discover_entry_points_deterministic(
+    project_root: str,
+    target_files: Optional[List[str]] = None,
+    exclude_patterns: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """在 OpenGrep 候选为空时，确定性发现入口点（grep-like + AST 兜底）。"""
+    import fnmatch
+    import re
+
+    root = Path(project_root)
+
+    # 默认排除目录（与 _collect_project_info 保持一致口径）
+    exclude_dirs = {
+        "node_modules",
+        "__pycache__",
+        ".git",
+        "venv",
+        ".venv",
+        "build",
+        "dist",
+        "target",
+        ".idea",
+        ".vscode",
+    }
+    if exclude_patterns:
+        for pattern in exclude_patterns:
+            if pattern.endswith("/**"):
+                exclude_dirs.add(pattern[:-3])
+            elif "/" not in pattern and "*" not in pattern:
+                exclude_dirs.add(pattern)
+
+    include_set = set(target_files) if target_files else None
+
+    code_exts = {
+        ".py",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".java",
+        ".go",
+        ".php",
+        ".rb",
+        ".rs",
+        ".c",
+        ".cc",
+        ".cpp",
+        ".h",
+        ".hpp",
+    }
+
+    patterns: List[Tuple[str, re.Pattern[str]]] = [
+        ("python_fastapi_route", re.compile(r"^\\s*@(?:app|router)\\.(get|post|put|delete|patch)\\b", re.I)),
+        ("python_flask_route", re.compile(r"^\\s*@app\\.route\\b", re.I)),
+        ("python_main", re.compile(r"__name__\\s*==\\s*[\\\"']__main__[\\\"']")),
+        ("django_urlpatterns", re.compile(r"\\burlpatterns\\s*=")),
+        ("express_route", re.compile(r"\\b(app|router)\\.(get|post|put|delete|patch)\\s*\\(", re.I)),
+        ("node_listen", re.compile(r"\\bapp\\.listen\\s*\\(", re.I)),
+        ("spring_mapping", re.compile(r"@\\s*(RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping)\\b")),
+        ("spring_controller", re.compile(r"@\\s*(RestController|Controller)\\b")),
+        ("go_http_handle", re.compile(r"\\bhttp\\.HandleFunc\\s*\\(", re.I)),
+        ("laravel_route", re.compile(r"\\bRoute::(get|post|put|delete|patch)\\s*\\(", re.I)),
+    ]
+
+    entry_points: List[Dict[str, Any]] = []
+    entry_files: List[str] = []
+
+    def consider_file(rel_path: str) -> bool:
+        if include_set is not None and rel_path not in include_set:
+            return False
+        if exclude_patterns:
+            for pat in exclude_patterns:
+                if fnmatch.fnmatch(rel_path, pat) or fnmatch.fnmatch(os.path.basename(rel_path), pat):
+                    return False
+        return True
+
+    # 1) grep-like 入口点扫描（有限扫描，避免大仓库拖慢）
+    max_scan_files = 600
+    scanned = 0
+    for dirpath, dirnames, filenames in os.walk(project_root):
+        dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
+        for name in filenames:
+            ext = Path(name).suffix.lower()
+            if ext not in code_exts:
+                continue
+            abs_path = Path(dirpath) / name
+            try:
+                rel = abs_path.relative_to(root).as_posix()
+            except Exception:
+                continue
+            if not consider_file(rel):
+                continue
+            scanned += 1
+            if scanned > max_scan_files:
+                break
+            try:
+                text = abs_path.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            for idx, line in enumerate(text.splitlines(), start=1):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                for typ, pat in patterns:
+                    m = pat.search(line)
+                    if not m:
+                        continue
+                    method = None
+                    if m.lastindex:
+                        # best-effort: common patterns capture method in group(1) or group(2)
+                        for gi in range(1, m.lastindex + 1):
+                            g = m.group(gi)
+                            if isinstance(g, str) and g.strip() and g.strip().lower() in {
+                                "get",
+                                "post",
+                                "put",
+                                "delete",
+                                "patch",
+                                "head",
+                                "options",
+                            }:
+                                method = g.strip().lower()
+                                break
+                    entry_points.append(
+                        {
+                            "type": typ,
+                            "file": rel,
+                            "line": idx,
+                            "method": method or "",
+                            "evidence": stripped[:240],
+                        }
+                    )
+                    if rel not in entry_files:
+                        entry_files.append(rel)
+                    if len(entry_points) >= 80:
+                        break
+                if len(entry_points) >= 80:
+                    break
+            if len(entry_points) >= 80:
+                break
+        if len(entry_points) >= 80 or scanned > max_scan_files:
+            break
+
+    # 2) AST 推断入口函数名（用于 flow pipeline 入口约束）
+    entry_function_names: List[str] = []
+    try:
+        from app.services.agent.flow.lightweight.ast_index import ASTCallIndex
+
+        ast_target_files = entry_files or (target_files or None)
+        ast_index = ASTCallIndex(
+            project_root=project_root,
+            target_files=ast_target_files if isinstance(ast_target_files, list) else None,
+        )
+        inferred = ast_index.infer_entry_points()
+        for sym in inferred or []:
+            name = str(getattr(sym, "name", "")).strip()
+            if name and name not in entry_function_names:
+                entry_function_names.append(name)
+            if len(entry_function_names) >= 80:
+                break
+    except Exception as exc:
+        logger.debug("[EntryPoints] AST inference failed: %s", exc)
+
+    return {
+        "entry_points": entry_points,
+        "entry_function_names": entry_function_names,
+    }
+
+
+async def _build_seed_from_entrypoints(
+    project_root: str,
+    target_vulns: Optional[List[str]],
+    entry_function_names: List[str],
+) -> List[Dict[str, Any]]:
+    """基于入口点提示，使用 SmartScanTool 生成固定数量的 seed findings。"""
+    from app.services.agent.tools import SmartScanTool
+
+    severity_weight = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+    confidence_by_severity = {"critical": 0.9, "high": 0.8, "medium": 0.6, "low": 0.4, "info": 0.3}
+
+    tool = SmartScanTool(project_root)
+    result = await tool.execute(
+        target=".",
+        quick_mode=True,
+        max_files=200,
+        focus_vulnerabilities=target_vulns or None,
+    )
+    raw_findings = []
+    if isinstance(result, object) and getattr(result, "success", False):
+        metadata = getattr(result, "metadata", {}) or {}
+        raw_findings = metadata.get("findings") if isinstance(metadata, dict) else []
+    if not isinstance(raw_findings, list):
+        raw_findings = []
+
+    seeds: List[Dict[str, Any]] = []
+    for item in raw_findings:
+        if not isinstance(item, dict):
+            continue
+        file_path = str(item.get("file_path") or "").strip()
+        line_no = _to_int(item.get("line_number")) or 1
+        vuln_type = str(item.get("vulnerability_type") or "potential_issue").strip() or "potential_issue"
+        severity = str(item.get("severity") or "medium").strip().lower()
+        if severity not in severity_weight:
+            severity = "medium"
+        confidence = float(confidence_by_severity.get(severity, 0.5))
+
+        matched_line = str(item.get("matched_line") or "").strip()
+        context = str(item.get("context") or "").strip()
+        code_snippet = matched_line or context
+
+        title = f"{vuln_type} 可疑点（入口点回退扫描）"
+        description = f"SmartScan 模式匹配：{item.get('pattern_name') or ''}".strip()
+        if context:
+            description = f"{description}\n上下文：\n{context}".strip()
+
+        seeds.append(
+            {
+                "title": title,
+                "description": description[:1200],
+                "file_path": file_path,
+                "line_start": int(line_no),
+                "line_end": int(line_no),
+                "code_snippet": str(code_snippet)[:2000],
+                "severity": severity,
+                "confidence": confidence,
+                "vulnerability_type": vuln_type,
+                "source": "fallback_entrypoints_smart_scan",
+                "needs_verification": True,
+                # 🔥 flow pipeline 入口约束（函数名列表）
+                "entry_points": list(entry_function_names[:20]),
+            }
+        )
+
+    # 去重与截断（按严重度+置信度）
+    seen: Set[Tuple[str, int, str]] = set()
+    deduped: List[Dict[str, Any]] = []
+    for seed in seeds:
+        key = (
+            str(seed.get("file_path") or ""),
+            int(seed.get("line_start") or 0),
+            str(seed.get("vulnerability_type") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(seed)
+
+    deduped.sort(
+        key=lambda s: (
+            -severity_weight.get(str(s.get("severity") or "medium").strip().lower(), 2),
+            -float(s.get("confidence") or 0.0),
+        )
+    )
+    return deduped[:MAX_SEED_FINDINGS]
+
+
+def _merge_seed_and_agent_findings(
+    seed_findings: List[Dict[str, Any]],
+    agent_findings: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """合并 fixed-first 种子与 Orchestrator 输出，保证种子不会因 LLM 空输出而丢失。"""
+    seed_findings = [f for f in (seed_findings or []) if isinstance(f, dict)]
+    agent_findings = [f for f in (agent_findings or []) if isinstance(f, dict)]
+
+    def key_for(f: Dict[str, Any]) -> Tuple[str, int, str]:
+        file_path = str(f.get("file_path") or "").replace("\\", "/").strip()
+        line_start = _to_int(f.get("line_start")) or _to_int(f.get("line")) or 0
+        vuln_type = str(f.get("vulnerability_type") or "").strip().lower()
+        title = str(f.get("title") or "").strip().lower()
+        if file_path and line_start and vuln_type:
+            return (file_path, int(line_start), vuln_type)
+        return (file_path, int(line_start), title)
+
+    seed_by_key: Dict[Tuple[str, int, str], Dict[str, Any]] = {key_for(f): f for f in seed_findings}
+    used: Set[Tuple[str, int, str]] = set()
+
+    merged: List[Dict[str, Any]] = []
+    for f in agent_findings:
+        k = key_for(f)
+        seed = seed_by_key.get(k)
+        if seed:
+            used.add(k)
+            merged.append({**seed, **f})  # LLM/Agent 输出覆盖 seed 的默认字段
+        else:
+            merged.append(f)
+
+    for k, seed in seed_by_key.items():
+        if k in used:
+            continue
+        merged.append(seed)
+
+    # 最终去重（防止 agent_findings 内部重复）
+    out: List[Dict[str, Any]] = []
+    seen: Set[Tuple[str, int, str]] = set()
+    for f in merged:
+        k = key_for(f)
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(f)
+    return out
+
+
 async def _execute_agent_task(task_id: str):
     """
     在后台执行 Agent 任务 - 使用动态 Agent 树架构
@@ -764,6 +1154,8 @@ async def _execute_agent_task(task_id: str):
 
     async with async_session_factory() as db:
         orchestrator = None
+        memory_store = None
+        markdown_memory: Dict[str, str] = {}
         start_time = time.time()
 
         try:
@@ -1025,6 +1417,58 @@ async def _execute_agent_task(task_id: str):
                 event_emitter,
                 _prepare_bootstrap_once,
             )
+
+            # ============ 🔥 Fixed-First: 生成种子候选（OpenGrep 优先，空则入口点回退） ============
+            seed_findings: List[Dict[str, Any]] = []
+            entry_points_payload: List[Dict[str, Any]] = []
+            entry_function_names: List[str] = []
+
+            if bootstrap_findings:
+                seed_findings = _normalize_seed_from_opengrep(bootstrap_findings)
+                await event_emitter.emit_info(
+                    f"🌱 固定种子候选已生成（OpenGrep）：{len(seed_findings)} 条"
+                )
+            else:
+                await event_emitter.emit_warning(
+                    "⚠️ OpenGrep 未筛选出 ERROR + HIGH/MEDIUM 候选，启动入口点回退流程"
+                )
+                entry = _discover_entry_points_deterministic(
+                    project_root=project_root,
+                    target_files=task.target_files,
+                    exclude_patterns=task.exclude_patterns,
+                )
+                entry_points_payload = (
+                    entry.get("entry_points") if isinstance(entry, dict) else []
+                ) or []
+                entry_function_names = (
+                    entry.get("entry_function_names") if isinstance(entry, dict) else []
+                ) or []
+
+                seed_findings = await _build_seed_from_entrypoints(
+                    project_root=project_root,
+                    target_vulns=task.target_vulnerabilities or [],
+                    entry_function_names=entry_function_names,
+                )
+
+                bootstrap_source = "fallback_entrypoints"
+                await event_emitter.emit_info(
+                    f"🌱 固定种子候选已生成（入口点回退）：entry_points={len(entry_points_payload)}，"
+                    f"entry_funcs={len(entry_function_names)}，seeds={len(seed_findings)}"
+                )
+
+            # ============ 🔥 Markdown 长期记忆（不依赖 embedding/RAG） ============
+            try:
+                from app.services.agent.memory.markdown_memory import MarkdownMemoryStore
+
+                memory_store = MarkdownMemoryStore(project_id=str(project.id))
+                memory_store.ensure()
+                markdown_memory = memory_store.load_bundle(
+                    max_chars=8000,
+                    skills_max_lines=60,
+                )
+            except Exception as exc:
+                logger.warning("[MarkdownMemory] init/load failed: %s", exc)
+                markdown_memory = {}
             
             # 更新任务文件统计
             task.total_files = project_info.get("file_count", 0)
@@ -1039,9 +1483,15 @@ async def _execute_agent_task(task_id: str):
                     "exclude_patterns": task.exclude_patterns or [],
                     "target_files": task.target_files or [],
                     "max_iterations": task.max_iterations or 50,
-                    "bootstrap_findings": bootstrap_findings,
+                    # 🔥 seed_findings（继续使用 bootstrap_findings 字段承载：固定优先候选种子）
+                    "bootstrap_findings": seed_findings,
                     "bootstrap_source": bootstrap_source,
                     "bootstrap_task_id": bootstrap_task_id,
+                    # 🔥 入口点信息（回退时注入，便于 Agent 展示与 flow pipeline 约束）
+                    "entry_points": entry_points_payload,
+                    "entry_function_names": entry_function_names,
+                    # 🔥 项目级 Markdown 记忆（shared + per-agent + skills 规范）
+                    "markdown_memory": markdown_memory,
                 },
                 "project_root": project_root,
                 "task_id": task_id,
@@ -1091,7 +1541,16 @@ async def _execute_agent_task(task_id: str):
                             "[AgentTask] result.data.findings is empty, fallback to orchestrator._all_findings (%s)",
                             len(findings),
                         )
-                logger.info(f"[AgentTask] Task {task_id} completed with {len(findings)} findings from Orchestrator")
+
+                # 🔥 Fixed-First 合并：确保 seed_findings 不会因 LLM 空输出而丢失
+                findings = _merge_seed_and_agent_findings(seed_findings, findings)
+                logger.info(
+                    "[AgentTask] Task %s completed: merged_findings=%s (seeds=%s, orchestrator=%s)",
+                    task_id,
+                    len(findings),
+                    len(seed_findings),
+                    len(result.data.get("findings", []) or []) if isinstance(result.data, dict) else 0,
+                )
 
                 # 🔥 Debug: Log each finding for verification
                 for i, f in enumerate(findings[:5]):  # Log first 5
@@ -1104,6 +1563,7 @@ async def _execute_agent_task(task_id: str):
                     findings=findings,
                     project_root=project_root,
                     target_files=task.target_files,
+                    llm_service=llm_service,
                     event_emitter=event_emitter,
                 )
                 logger.info(
@@ -1145,6 +1605,97 @@ async def _execute_agent_task(task_id: str):
                     item for item in persisted_findings
                     if str(item.status) == FindingStatus.FALSE_POSITIVE
                 ]
+
+                # ============ 🔥 Markdown 长期记忆写入（shared + per-agent） ============
+                try:
+                    if memory_store:
+                        # Shared: 本次任务统计 + top findings
+                        top_items = []
+                        for item in effective_findings[:10]:
+                            try:
+                                top_items.append(
+                                    {
+                                        "title": str(item.title)[:120] if getattr(item, "title", None) else "",
+                                        "severity": str(item.severity) if getattr(item, "severity", None) else "",
+                                        "vulnerability_type": str(item.vulnerability_type) if getattr(item, "vulnerability_type", None) else "",
+                                        "file_path": str(item.file_path) if getattr(item, "file_path", None) else "",
+                                        "line_start": int(item.line_start) if getattr(item, "line_start", None) else 0,
+                                    }
+                                )
+                            except Exception:
+                                continue
+
+                        memory_store.append_entry(
+                            "shared",
+                            task_id=task_id,
+                            source=str(bootstrap_source or "agent_task"),
+                            title="任务摘要",
+                            summary=(
+                                f"bootstrap_source={bootstrap_source} "
+                                f"seeds={len(seed_findings)} "
+                                f"orchestrator_findings={len(findings)} "
+                                f"persisted_effective={len(effective_findings)} "
+                                f"false_positive={len(false_positive_findings)}"
+                            ),
+                            payload={
+                                "bootstrap": {
+                                    "bootstrap_source": bootstrap_source,
+                                    "bootstrap_task_id": bootstrap_task_id,
+                                    "seed_count": len(seed_findings),
+                                    "entry_points_count": len(entry_points_payload or []),
+                                    "entry_function_names_count": len(entry_function_names or []),
+                                },
+                                "persistence": {
+                                    "orchestrator_findings_count": len(findings),
+                                    "saved_count": int(saved_count),
+                                    "effective_findings_count": len(effective_findings),
+                                    "false_positive_count": len(false_positive_findings),
+                                },
+                                "top_findings": top_items,
+                            },
+                        )
+
+                        # Per-agent: best-effort final answer summaries
+                        agent_payloads: Dict[str, Any] = {}
+                        if orchestrator and hasattr(orchestrator, "_agent_results"):
+                            agent_payloads = getattr(orchestrator, "_agent_results") or {}
+
+                        # Orchestrator
+                        memory_store.append_entry(
+                            "orchestrator",
+                            task_id=task_id,
+                            source="orchestrator",
+                            title="Final Answer 摘要",
+                            payload={
+                                "result_keys": list(result.data.keys()) if isinstance(result.data, dict) else [],
+                                "findings_count": len(findings),
+                            },
+                        )
+
+                        # Sub agents
+                        for agent_key in ("recon", "analysis", "verification"):
+                            data = agent_payloads.get(agent_key)
+                            if not isinstance(data, dict):
+                                continue
+                            summary_text = data.get("summary") or data.get("note") or ""
+                            findings_list = data.get("findings")
+                            if not isinstance(findings_list, list):
+                                findings_list = data.get("initial_findings")
+                            if not isinstance(findings_list, list):
+                                findings_list = []
+                            memory_store.append_entry(
+                                agent_key,
+                                task_id=task_id,
+                                source=agent_key,
+                                title="Final Answer 摘要",
+                                summary=str(summary_text)[:8000] if summary_text else None,
+                                payload={
+                                    "keys": list(data.keys()),
+                                    "findings_count": len([f for f in findings_list if isinstance(f, dict)]),
+                                },
+                            )
+                except Exception as exc:
+                    logger.warning("[MarkdownMemory] append failed: %s", exc)
 
                 # 更新任务统计
                 # 🔥 CRITICAL FIX: 在设置完成前再次检查取消状态
@@ -1424,6 +1975,7 @@ async def _initialize_tools(
     llm_service,
     user_config: Optional[Dict[str, Any]],
     sandbox_manager: Any, # 传递预初始化的 SandboxManager
+    rag_enabled: bool = False,
     verification_level: str = "analysis_with_poc_plan",
     exclude_patterns: Optional[List[str]] = None,
     target_files: Optional[List[str]] = None,
@@ -1482,155 +2034,161 @@ async def _initialize_tools(
 
     # ============ 🔥 初始化 RAG 系统 ============
     retriever = None
-    try:
-        await emit(f"🔍 正在初始化 RAG 系统...")
+    effective_rag_enabled = bool(rag_enabled) or bool(getattr(settings, "RAG_ENABLED", False))
+    if not effective_rag_enabled:
+        # 智能审计默认不依赖 embedding/RAG；保留接口，后续按开关启用。
+        await emit("⏭️ 跳过 RAG 初始化（已禁用）")
+    else:
+        try:
+            await emit("🔍 正在初始化 RAG 系统...")
 
-        # 从用户配置中获取 embedding 配置
-        user_llm_config = (user_config or {}).get('llmConfig', {})
-        user_other_config = (user_config or {}).get('otherConfig', {})
-        user_embedding_config = user_other_config.get('embedding_config', {})
+            # 从用户配置中获取 embedding 配置
+            user_llm_config = (user_config or {}).get("llmConfig", {})
+            user_other_config = (user_config or {}).get("otherConfig", {})
+            user_embedding_config = user_other_config.get("embedding_config", {})
 
-        # Embedding Provider 优先级：用户嵌入配置 > 环境变量
-        embedding_provider = (
-            user_embedding_config.get('provider') or
-            getattr(settings, 'EMBEDDING_PROVIDER', 'openai')
-        )
-
-        # Embedding Model 优先级：用户嵌入配置 > 环境变量
-        embedding_model = (
-            user_embedding_config.get('model') or
-            getattr(settings, 'EMBEDDING_MODEL', 'text-embedding-3-small')
-        )
-
-        # API Key 优先级：用户嵌入配置 > 环境变量 EMBEDDING_API_KEY > 用户 LLM 配置 > 环境变量 LLM_API_KEY
-        # 注意：API Key 可以共享，因为很多用户使用同一个 OpenAI Key 做 LLM 和 Embedding
-        embedding_api_key = (
-            user_embedding_config.get('api_key') or
-            getattr(settings, 'EMBEDDING_API_KEY', None) or
-            user_llm_config.get('llmApiKey') or
-            getattr(settings, 'LLM_API_KEY', '') or
-            ''
-        )
-
-        # Base URL 优先级：用户嵌入配置 > 环境变量 EMBEDDING_BASE_URL > None（使用提供商默认地址）
-        # 🔥 重要：Base URL 不应该回退到 LLM 的 base_url，因为 Embedding 和 LLM 可能使用完全不同的服务
-        # 例如：LLM 使用 SiliconFlow，但 Embedding 使用 HuggingFace
-        embedding_base_url = (
-            user_embedding_config.get('base_url') or
-            getattr(settings, 'EMBEDDING_BASE_URL', None) or
-            None
-        )
-
-        logger.info(f"RAG 配置: provider={embedding_provider}, model={embedding_model}, base_url={embedding_base_url or '(使用默认)'}")
-        await emit(f"📊 Embedding 配置: {embedding_provider}/{embedding_model}")
-
-        # 创建 Embedding 服务
-        embedding_service = EmbeddingService(
-            provider=embedding_provider,
-            model=embedding_model,
-            api_key=embedding_api_key,
-            base_url=embedding_base_url,
-        )
-
-        # 创建 collection_name（基于 project_id）
-        collection_name = f"project_{project_id}" if project_id else "default_project"
-
-        # 🔥 v2.0: 创建 CodeIndexer 并进行智能索引
-        # 智能索引会自动：
-        # - 检测 embedding 模型变更，如需要则自动重建
-        # - 对比文件 hash，只更新变化的文件（增量更新）
-        indexer = CodeIndexer(
-            collection_name=collection_name,
-            embedding_service=embedding_service,
-            persist_directory=settings.VECTOR_DB_PATH,
-        )
-
-        logger.info(f"📝 开始智能索引项目: {project_root}")
-        await emit(f"📝 正在构建代码向量索引...")
-
-        index_progress = None
-        last_progress_update = 0
-        last_embedding_progress = [0]  # 使用列表以便在闭包中修改
-        embedding_total = [0]  # 记录总数
-
-        # 🔥 嵌入进度回调函数（同步，但会调度异步任务）
-        def on_embedding_progress(processed: int, total: int):
-            embedding_total[0] = total
-            # 每处理 50 个或完成时更新
-            if processed - last_embedding_progress[0] >= 50 or processed == total:
-                last_embedding_progress[0] = processed
-                percentage = (processed / total * 100) if total > 0 else 0
-                msg = f"🔢 嵌入进度: {processed}/{total} ({percentage:.0f}%)"
-                logger.info(msg)
-                # 使用 asyncio.create_task 调度异步 emit
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(emit(msg))
-                except Exception as e:
-                    logger.warning(f"Failed to emit embedding progress: {e}")
-
-        # 🔥 创建取消检查函数，用于在嵌入批处理中检查取消状态
-        def check_cancelled() -> bool:
-            return task_id is not None and is_task_cancelled(task_id)
-
-        async for progress in indexer.smart_index_directory(
-            directory=project_root,
-            exclude_patterns=exclude_patterns or [],
-            include_patterns=target_files,  # 🔥 传递 target_files 限制索引范围
-            update_mode=IndexUpdateMode.SMART,
-            embedding_progress_callback=on_embedding_progress,
-            cancel_check=check_cancelled,  # 🔥 传递取消检查函数
-        ):
-            # 🔥 在索引过程中检查取消状态
-            if check_cancelled():
-                logger.info(f"[Cancel] RAG indexing cancelled for task {task_id}")
-                raise asyncio.CancelledError("任务已取消")
-
-            index_progress = progress
-            # 每处理 10 个文件或有重要变化时发送进度更新
-            if progress.processed_files - last_progress_update >= 10 or progress.processed_files == progress.total_files:
-                if progress.total_files > 0:
-                    await emit(
-                        f"📝 索引进度: {progress.processed_files}/{progress.total_files} 文件 "
-                        f"({progress.progress_percentage:.0f}%)"
-                    )
-                last_progress_update = progress.processed_files
-
-            # 🔥 发送状态消息（如嵌入向量生成进度）
-            if progress.status_message:
-                await emit(progress.status_message)
-                progress.status_message = ""  # 清空已发送的消息
-
-        if index_progress:
-            summary = (
-                f"✅ 索引完成: 模式={index_progress.update_mode}, "
-                f"新增={index_progress.added_files}, "
-                f"更新={index_progress.updated_files}, "
-                f"删除={index_progress.deleted_files}, "
-                f"代码块={index_progress.indexed_chunks}"
+            # Embedding Provider/Model 优先级：用户嵌入配置 > 环境变量
+            embedding_provider = user_embedding_config.get("provider") or getattr(
+                settings, "EMBEDDING_PROVIDER", "openai"
             )
-            logger.info(summary)
-            await emit(summary)
-            await emit("✅ 索引已完成，进入分析阶段")
+            embedding_model = user_embedding_config.get("model") or getattr(
+                settings, "EMBEDDING_MODEL", "text-embedding-3-small"
+            )
 
-        # 创建 CodeRetriever（用于搜索）
-        # 🔥 传递 api_key，用于自动适配 collection 的 embedding 配置
-        retriever = CodeRetriever(
-            collection_name=collection_name,
-            embedding_service=embedding_service,
-            persist_directory=settings.VECTOR_DB_PATH,
-            api_key=embedding_api_key,  # 🔥 传递 api_key 以支持自动切换 embedding
-        )
+            # API Key 优先级：用户嵌入配置 > 环境变量 EMBEDDING_API_KEY > 用户 LLM 配置 > 环境变量 LLM_API_KEY
+            embedding_api_key = (
+                user_embedding_config.get("api_key")
+                or getattr(settings, "EMBEDDING_API_KEY", None)
+                or user_llm_config.get("llmApiKey")
+                or getattr(settings, "LLM_API_KEY", "")
+                or ""
+            )
 
-        logger.info(f"✅ RAG 系统初始化成功: collection={collection_name}")
-        await emit(f"✅ RAG 系统初始化成功")
+            # Base URL 优先级：用户嵌入配置 > 环境变量 EMBEDDING_BASE_URL > None（使用提供商默认地址）
+            embedding_base_url = (
+                user_embedding_config.get("base_url")
+                or getattr(settings, "EMBEDDING_BASE_URL", None)
+                or None
+            )
 
-    except Exception as e:
-        logger.error(f"❌ RAG 系统初始化失败: {e}")
-        await emit(f"❌ RAG 系统初始化失败: {e}", "error")
-        import traceback
-        logger.debug(f"RAG 初始化异常详情:\n{traceback.format_exc()}")
-        raise RuntimeError(f"RAG 系统初始化失败: {str(e)[:300]}") from e
+            logger.info(
+                "RAG 配置: provider=%s, model=%s, base_url=%s",
+                embedding_provider,
+                embedding_model,
+                embedding_base_url or "(使用默认)",
+            )
+            await emit(f"📊 Embedding 配置: {embedding_provider}/{embedding_model}")
+
+            # 创建 Embedding 服务
+            embedding_service = EmbeddingService(
+                provider=embedding_provider,
+                model=embedding_model,
+                api_key=embedding_api_key,
+                base_url=embedding_base_url,
+            )
+
+            # 创建 collection_name（基于 project_id）
+            collection_name = f"project_{project_id}" if project_id else "default_project"
+
+            # 创建 CodeIndexer 并进行智能索引（增量更新）
+            indexer = CodeIndexer(
+                collection_name=collection_name,
+                embedding_service=embedding_service,
+                persist_directory=settings.VECTOR_DB_PATH,
+            )
+
+            logger.info("📝 开始智能索引项目: %s", project_root)
+            await emit("📝 正在构建代码向量索引...")
+
+            index_progress = None
+            last_progress_update = 0
+            last_embedding_progress = [0]  # 使用列表以便在闭包中修改
+            embedding_total = [0]  # 记录总数
+
+            # 🔥 嵌入进度回调函数（同步，但会调度异步任务）
+            def on_embedding_progress(processed: int, total: int):
+                embedding_total[0] = total
+                # 每处理 50 个或完成时更新
+                if processed - last_embedding_progress[0] >= 50 or processed == total:
+                    last_embedding_progress[0] = processed
+                    percentage = (processed / total * 100) if total > 0 else 0
+                    msg = f"🔢 嵌入进度: {processed}/{total} ({percentage:.0f}%)"
+                    logger.info(msg)
+                    # 使用 asyncio.create_task 调度异步 emit
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(emit(msg))
+                    except Exception as exc:
+                        logger.warning("Failed to emit embedding progress: %s", exc)
+
+            # 🔥 创建取消检查函数，用于在嵌入批处理中检查取消状态
+            def check_cancelled() -> bool:
+                return task_id is not None and is_task_cancelled(task_id)
+
+            async for progress in indexer.smart_index_directory(
+                directory=project_root,
+                exclude_patterns=exclude_patterns or [],
+                include_patterns=target_files,  # 🔥 传递 target_files 限制索引范围
+                update_mode=IndexUpdateMode.SMART,
+                embedding_progress_callback=on_embedding_progress,
+                cancel_check=check_cancelled,  # 🔥 传递取消检查函数
+            ):
+                # 🔥 在索引过程中检查取消状态
+                if check_cancelled():
+                    logger.info("[Cancel] RAG indexing cancelled for task %s", task_id)
+                    raise asyncio.CancelledError("任务已取消")
+
+                index_progress = progress
+                # 每处理 10 个文件或完成时发送进度更新
+                if (
+                    progress.processed_files - last_progress_update >= 10
+                    or progress.processed_files == progress.total_files
+                ):
+                    if progress.total_files > 0:
+                        await emit(
+                            f"📝 索引进度: {progress.processed_files}/{progress.total_files} 文件 "
+                            f"({progress.progress_percentage:.0f}%)"
+                        )
+                    last_progress_update = progress.processed_files
+
+                # 发送状态消息（如嵌入向量生成进度）
+                if progress.status_message:
+                    await emit(progress.status_message)
+                    progress.status_message = ""  # 清空已发送的消息
+
+            if index_progress:
+                summary = (
+                    f"✅ 索引完成: 模式={index_progress.update_mode}, "
+                    f"新增={index_progress.added_files}, "
+                    f"更新={index_progress.updated_files}, "
+                    f"删除={index_progress.deleted_files}, "
+                    f"代码块={index_progress.indexed_chunks}"
+                )
+                logger.info(summary)
+                await emit(summary)
+                await emit("✅ 索引已完成，进入分析阶段")
+
+            # 创建 CodeRetriever（用于搜索）
+            retriever = CodeRetriever(
+                collection_name=collection_name,
+                embedding_service=embedding_service,
+                persist_directory=settings.VECTOR_DB_PATH,
+                api_key=embedding_api_key,  # 🔥 传递 api_key 以支持自动切换 embedding
+            )
+
+            logger.info("✅ RAG 系统初始化成功: collection=%s", collection_name)
+            await emit("✅ RAG 系统初始化成功")
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            # 🔥 降级继续：RAG 初始化失败不再阻塞智能审计任务
+            logger.error("❌ RAG 系统初始化失败（已降级继续）: %s", e)
+            await emit(f"⚠️ RAG 系统初始化失败（已降级继续）：{e}", "warning")
+            import traceback
+
+            logger.debug("RAG 初始化异常详情:\n%s", traceback.format_exc())
+            retriever = None
 
     # 基础工具 - 传递排除模式和目标文件
     base_tools = {
@@ -2170,6 +2728,7 @@ async def _enrich_findings_with_flow_and_logic(
     *,
     project_root: Optional[str],
     target_files: Optional[List[str]],
+    llm_service: Optional[Any] = None,
     event_emitter: Optional[Any] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """三轨流分析增强（轻量主链 + Joern复核 + 逻辑漏洞图规则）。"""
@@ -2196,6 +2755,554 @@ async def _enrich_findings_with_flow_and_logic(
             target_files=target_files or [],
         )
         enriched, counters = await pipeline.enrich_findings(findings)
+
+        # Build "trigger flow" diagram evidence (file/function/code) for each finding.
+        # This is later used as a strict persistence gate in _save_findings().
+        try:
+            from datetime import datetime, timezone
+            from app.services.agent.flow.lightweight.ast_index import ASTCallIndex
+
+            def _truncate_code(
+                text: str,
+                *,
+                max_lines: int = 160,
+                max_chars: int = 15000,
+            ) -> tuple[str, bool]:
+                if not isinstance(text, str):
+                    text = str(text)
+                lines = text.splitlines()
+                truncated = False
+                if len(lines) > max_lines:
+                    lines = lines[:max_lines]
+                    truncated = True
+                out = "\n".join(lines)
+                if len(out) > max_chars:
+                    out = out[:max_chars]
+                    truncated = True
+                return out, truncated
+
+            def _parse_call_chain_item(raw: object) -> tuple[str, str] | None:
+                if not isinstance(raw, str):
+                    return None
+                value = raw.strip()
+                if not value or ":" not in value:
+                    return None
+                file_part, func_part = value.split(":", 1)
+                file_part = file_part.strip().replace("\\", "/")
+                func_part = func_part.strip()
+                if not file_part or not func_part:
+                    return None
+                return file_part, func_part
+
+            chain_files: set[str] = set()
+            for payload in enriched:
+                if not isinstance(payload, dict):
+                    continue
+                verification_result = payload.get("verification_result")
+                if not isinstance(verification_result, dict):
+                    continue
+                flow = verification_result.get("flow")
+                if not isinstance(flow, dict):
+                    continue
+                call_chain = flow.get("call_chain")
+                if not isinstance(call_chain, list) or not call_chain:
+                    continue
+                for raw_node in call_chain:
+                    parsed = _parse_call_chain_item(raw_node)
+                    if parsed:
+                        chain_files.add(parsed[0])
+
+            ast_index = ASTCallIndex(
+                project_root=project_root,
+                target_files=sorted(chain_files) if chain_files else None,
+            )
+            ast_index.build()
+
+            for payload in enriched:
+                if not isinstance(payload, dict):
+                    continue
+
+                verification_result = payload.get("verification_result")
+                if not isinstance(verification_result, dict):
+                    verification_result = {}
+                    payload["verification_result"] = verification_result
+
+                flow = verification_result.get("flow")
+                if not isinstance(flow, dict):
+                    verification_result["trigger_flow_error"] = "missing_flow"
+                    continue
+
+                call_chain = flow.get("call_chain")
+                if not isinstance(call_chain, list) or not call_chain:
+                    verification_result["trigger_flow_error"] = "missing_call_chain"
+                    continue
+
+                parsed_chain: list[tuple[str, str]] = []
+                for raw_node in call_chain:
+                    parsed = _parse_call_chain_item(raw_node)
+                    if not parsed:
+                        parsed_chain = []
+                        break
+                    parsed_chain.append(parsed)
+                if not parsed_chain:
+                    verification_result["trigger_flow_error"] = "invalid_call_chain_item"
+                    continue
+
+                line_start = payload.get("line_start")
+                try:
+                    finding_line = int(line_start) if line_start is not None else 1
+                except Exception:
+                    finding_line = 1
+
+                nodes: list[dict] = []
+                try:
+                    for idx, (file_path, func_name) in enumerate(parsed_chain):
+                        candidates = [
+                            sym
+                            for sym in ast_index.symbols_by_name.get(func_name, [])
+                            if sym.file_path == file_path
+                        ]
+
+                        chosen = None
+                        if len(candidates) == 1:
+                            chosen = candidates[0]
+                        elif len(candidates) > 1:
+                            if idx == len(parsed_chain) - 1:
+                                exact = ast_index.find_symbol_by_location(file_path, finding_line)
+                                if exact and exact.name == func_name:
+                                    chosen = exact
+                            if not chosen:
+                                chosen = min(
+                                    candidates,
+                                    key=lambda s: (
+                                        max(0, s.end_line - s.start_line),
+                                        s.start_line,
+                                    ),
+                                )
+
+                        if not chosen:
+                            raise ValueError(f"symbol_not_found:{file_path}:{func_name}")
+
+                        code_text, code_truncated = _truncate_code(chosen.content)
+                        if not code_text.strip():
+                            raise ValueError(f"empty_code:{file_path}:{func_name}")
+
+                        nodes.append(
+                            {
+                                "index": idx,
+                                "file_path": file_path,
+                                "function": func_name,
+                                "start_line": int(chosen.start_line),
+                                "end_line": int(chosen.end_line),
+                                "code": code_text,
+                                "code_truncated": bool(code_truncated),
+                            }
+                        )
+                except Exception as exc:
+                    verification_result["trigger_flow_error"] = str(exc)[:200]
+                    continue
+
+                verification_result["trigger_flow"] = {
+                    "version": 1,
+                    "path_found": bool(flow.get("path_found")),
+                    "path_score": flow.get("path_score"),
+                    "engine": flow.get("engine"),
+                    "call_chain": [
+                        str(x) for x in call_chain if isinstance(x, str) and x.strip()
+                    ],
+                    "control_conditions": [
+                        str(x)
+                        for x in (flow.get("control_conditions") or [])
+                        if isinstance(x, str) and x.strip()
+                    ],
+                    "nodes": nodes,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+        except Exception as exc:
+            logger.warning("[Flow] trigger_flow generation failed: %s", exc)
+
+        # Build PoC trigger chain (source -> sink). Joern preferred, LLM fallback (validated).
+        try:
+            from app.core.config import settings
+            from app.services.agent.flow.joern.joern_client import JoernClient
+
+            if bool(getattr(settings, "POC_TRIGGER_CHAIN_ENABLED", True)):
+                max_flows = int(getattr(settings, "POC_TRIGGER_CHAIN_MAX_FLOWS", 3))
+                max_nodes = int(getattr(settings, "POC_TRIGGER_CHAIN_MAX_NODES", 80))
+                allow_llm_fallback = bool(getattr(settings, "POC_TRIGGER_CHAIN_LLM_FALLBACK", True))
+
+                eligible: list[tuple[str, dict]] = []
+                for idx, payload in enumerate(enriched):
+                    if not isinstance(payload, dict):
+                        continue
+                    severity = str(payload.get("severity") or "").strip().lower()
+                    if severity not in {"high", "critical"} and payload.get("has_poc") is not True:
+                        continue
+                    file_path = payload.get("file_path")
+                    line_start = payload.get("line_start")
+                    if not isinstance(file_path, str) or not file_path.strip():
+                        continue
+                    try:
+                        sink_line = int(line_start)
+                    except Exception:
+                        continue
+                    if sink_line <= 0:
+                        continue
+                    key = str(payload.get("id") or idx)
+                    eligible.append((key, payload))
+
+                if eligible:
+                    items: list[dict] = []
+                    for key, payload in eligible:
+                        verification_result = payload.get("verification_result")
+                        if not isinstance(verification_result, dict):
+                            verification_result = {}
+                            payload["verification_result"] = verification_result
+
+                        sink_hint = None
+                        raw_sink = payload.get("sink")
+                        if isinstance(raw_sink, str) and raw_sink.strip():
+                            sink_hint = raw_sink.strip()[:80]
+                        if not sink_hint:
+                            raw_snippet = payload.get("code_snippet")
+                            if isinstance(raw_snippet, str) and raw_snippet.strip():
+                                sink_hint = raw_snippet.strip()[:80]
+
+                        entry_file = None
+                        entry_func = None
+                        trigger_flow = verification_result.get("trigger_flow")
+                        if isinstance(trigger_flow, dict):
+                            tf_nodes = trigger_flow.get("nodes")
+                            if isinstance(tf_nodes, list) and tf_nodes:
+                                n0 = tf_nodes[0]
+                                if isinstance(n0, dict):
+                                    ef = n0.get("file_path")
+                                    en = n0.get("function")
+                                    if isinstance(ef, str) and ef.strip():
+                                        entry_file = ef.strip()
+                                    if isinstance(en, str) and en.strip():
+                                        entry_func = en.strip()
+
+                        items.append(
+                            {
+                                "key": key,
+                                "sink_file": str(payload.get("file_path") or "").strip(),
+                                "sink_line": int(payload.get("line_start") or 0),
+                                "sink_hint": sink_hint or "",
+                                "entry_file": entry_file or "",
+                                "entry_func": entry_func or "",
+                            }
+                        )
+
+                    joern = JoernClient(
+                        enabled=bool(getattr(settings, "FLOW_JOERN_ENABLED", True)),
+                        timeout_sec=int(getattr(settings, "FLOW_JOERN_TIMEOUT_SEC", 45)),
+                    )
+                    batch = await joern.build_poc_trigger_chains_batch(
+                        project_root=project_root,
+                        items=items,
+                        max_flows=max_flows,
+                        max_nodes=max_nodes,
+                    )
+
+                    results = batch.get("results") if isinstance(batch, dict) else None
+                    errors = batch.get("errors") if isinstance(batch, dict) else None
+                    if not isinstance(results, dict):
+                        results = {}
+                    if not isinstance(errors, dict):
+                        errors = {}
+
+                    file_cache: dict[str, list[str]] = {}
+
+                    def _read_lines(rel_path: str) -> list[str] | None:
+                        rel = str(rel_path or "").replace("\\", "/").strip()
+                        if not rel:
+                            return None
+                        if rel in file_cache:
+                            return file_cache[rel]
+                        try:
+                            p = Path(project_root) / rel
+                            text = p.read_text(encoding="utf-8", errors="replace")
+                            lines = text.splitlines()
+                            file_cache[rel] = lines
+                            return lines
+                        except Exception:
+                            return None
+
+                    def _context_window(lines: list[str], line: int, radius: int = 6) -> tuple[str, int, int]:
+                        if not lines:
+                            return "", 0, 0
+                        total = len(lines)
+                        ln = max(1, min(int(line), total))
+                        start = max(1, ln - radius)
+                        end = min(total, ln + radius)
+                        ctx = "\n".join(lines[start - 1 : end])
+                        return ctx, start, end
+
+                    def _infer_function_name(lines: list[str], line: int) -> str | None:
+                        import re
+
+                        if not lines:
+                            return None
+                        idx0 = max(0, min(len(lines) - 1, int(line) - 1))
+                        patterns = [
+                            (re.compile(r"^\\s*def\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\("), 1),
+                            (re.compile(r"^\\s*(?:export\\s+)?function\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\("), 1),
+                            (re.compile(r"^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\([^)]*\\)\\s*\\{\\s*$"), 1),
+                            (re.compile(r"^\\s*class\\s+([A-Za-z_][A-Za-z0-9_]*)\\b"), 1),
+                        ]
+                        for i in range(idx0, -1, -1):
+                            line_text = lines[i]
+                            stripped = line_text.strip()
+                            if not stripped:
+                                continue
+                            if stripped.startswith(("//", "#")):
+                                continue
+                            for pat, group in patterns:
+                                m = pat.match(line_text)
+                                if m:
+                                    name = m.group(group).strip()
+                                    if name:
+                                        return name
+                        return None
+
+                    def _validate_code_at_line(lines: list[str], line: int, code: str) -> bool:
+                        if not lines or not code or not str(code).strip():
+                            return False
+                        total = len(lines)
+                        ln = max(1, min(int(line), total))
+                        start = max(1, ln - 2)
+                        end = min(total, ln + 2)
+                        region = "\n".join(lines[start - 1 : end])
+                        return str(code).strip() in region
+
+                    for key, payload in eligible:
+                        verification_result = payload.get("verification_result")
+                        if not isinstance(verification_result, dict):
+                            verification_result = {}
+                            payload["verification_result"] = verification_result
+
+                        chain = results.get(key)
+                        if isinstance(chain, dict):
+                            nodes = chain.get("nodes")
+                            if isinstance(nodes, list) and len(nodes) >= 2:
+                                fixed_nodes: list[dict] = []
+                                for i, node in enumerate(nodes[:max_nodes]):
+                                    if not isinstance(node, dict):
+                                        continue
+                                    fp = str(node.get("file_path") or "").replace("\\", "/").strip()
+                                    ln = node.get("line")
+                                    cd = str(node.get("code") or "")
+                                    try:
+                                        ln_i = int(ln)
+                                    except Exception:
+                                        continue
+                                    if not fp or ln_i <= 0:
+                                        continue
+                                    lines = _read_lines(fp)
+                                    if not lines:
+                                        continue
+                                    if not _validate_code_at_line(lines, ln_i, cd):
+                                        continue
+                                    ctx, ctx_s, ctx_e = _context_window(lines, ln_i, radius=6)
+                                    func_name = _infer_function_name(lines, ln_i) or ""
+                                    fixed_nodes.append(
+                                        {
+                                            "index": i,
+                                            "file_path": fp,
+                                            "line": ln_i,
+                                            "function": func_name,
+                                            "code": cd[:400],
+                                            "context": ctx,
+                                            "context_start_line": ctx_s,
+                                            "context_end_line": ctx_e,
+                                        }
+                                    )
+
+                                if len(fixed_nodes) >= 2:
+                                    verification_result["poc_trigger_chain"] = {
+                                        "version": 1,
+                                        "engine": "joern_dataflow",
+                                        "source": {
+                                            "file_path": fixed_nodes[0]["file_path"],
+                                            "line": fixed_nodes[0]["line"],
+                                            "function": fixed_nodes[0]["function"],
+                                            "code": fixed_nodes[0]["code"],
+                                        },
+                                        "sink": {
+                                            "file_path": fixed_nodes[-1]["file_path"],
+                                            "line": fixed_nodes[-1]["line"],
+                                            "function": fixed_nodes[-1]["function"],
+                                            "code": fixed_nodes[-1]["code"],
+                                        },
+                                        "nodes": fixed_nodes,
+                                        "generated_at": chain.get("generated_at"),
+                                    }
+                                    continue
+
+                        reason = errors.get(key)
+                        if isinstance(reason, str) and reason.strip():
+                            verification_result["poc_trigger_chain_error"] = f"joern:{reason.strip()}"
+                        elif chain is None:
+                            verification_result["poc_trigger_chain_error"] = "joern:no_result"
+
+                    if allow_llm_fallback and llm_service:
+                        async def _build_llm_chain(payload: dict) -> dict | None:
+                            verification_result = payload.get("verification_result")
+                            if not isinstance(verification_result, dict):
+                                return None
+                            sink_file = payload.get("file_path")
+                            sink_line = payload.get("line_start")
+                            if not isinstance(sink_file, str) or not sink_file.strip():
+                                return None
+                            try:
+                                sink_ln = int(sink_line)
+                            except Exception:
+                                return None
+
+                            sink_lines = _read_lines(sink_file.strip())
+                            if not sink_lines:
+                                return None
+                            sink_ctx, sink_ctx_s, sink_ctx_e = _context_window(sink_lines, sink_ln, radius=12)
+
+                            trigger_flow = verification_result.get("trigger_flow")
+                            trigger_nodes = []
+                            if isinstance(trigger_flow, dict):
+                                raw_nodes = trigger_flow.get("nodes")
+                                if isinstance(raw_nodes, list):
+                                    for n in raw_nodes[:6]:
+                                        if isinstance(n, dict):
+                                            code = n.get("code")
+                                            fp = n.get("file_path")
+                                            fn = n.get("function")
+                                            if isinstance(code, str) and isinstance(fp, str):
+                                                trigger_nodes.append(
+                                                    {
+                                                        "file_path": fp,
+                                                        "function": fn,
+                                                        "code": code[:3000],
+                                                    }
+                                                )
+
+                            allowed_files = sorted(
+                                {
+                                    sink_file.strip(),
+                                    *[
+                                        str(n.get("file_path"))
+                                        for n in trigger_nodes
+                                        if n.get("file_path")
+                                    ],
+                                }
+                            )
+
+                            prompt = f"""你是安全审计助手。请基于给定的真实代码上下文，输出一个 PoC 触发链条（source->sink）的估算路径。
+
+约束（必须遵守）：
+- 只能使用我提供的文件与代码片段，不允许猜测不存在的文件/行号。
+- 输出的每个节点必须给出 file_path、line、code，其中 code 必须是该行附近真实出现的子串。
+- file_path 必须在允许列表内。
+- nodes 至少 2 个（source + sink）。
+
+允许的 file_path 列表：
+{allowed_files}
+
+Sink 位置上下文（含行号范围 {sink_ctx_s}-{sink_ctx_e}）：
+文件：{sink_file}
+```
+{sink_ctx}
+```
+
+已知触发相关函数（仅供推理，不代表完整）：
+{json.dumps(trigger_nodes, ensure_ascii=False)}
+
+请只返回 JSON（不要额外文字），格式：
+{{
+  "source": {{"file_path": "...", "line": 0, "code": "..."}},
+  "sink": {{"file_path": "...", "line": 0, "code": "..."}},
+  "nodes": [{{"file_path": "...", "line": 0, "code": "..."}}],
+  "confidence": 0.0
+}}
+"""
+                            try:
+                                result = await llm_service.analyze_code_with_custom_prompt(
+                                    code=sink_ctx,
+                                    language="text",
+                                    custom_prompt=prompt,
+                                )
+                            except Exception:
+                                return None
+                            if not isinstance(result, dict):
+                                return None
+                            nodes = result.get("nodes")
+                            if not isinstance(nodes, list) or len(nodes) < 2:
+                                return None
+                            fixed_nodes: list[dict] = []
+                            for i, node in enumerate(nodes[:max_nodes]):
+                                if not isinstance(node, dict):
+                                    continue
+                                fp = str(node.get("file_path") or "").replace("\\", "/").strip()
+                                try:
+                                    ln_i = int(node.get("line"))
+                                except Exception:
+                                    continue
+                                cd = str(node.get("code") or "")
+                                if not fp or fp not in allowed_files:
+                                    continue
+                                lines = _read_lines(fp)
+                                if not lines:
+                                    continue
+                                if not _validate_code_at_line(lines, ln_i, cd):
+                                    continue
+                                ctx, ctx_s, ctx_e = _context_window(lines, ln_i, radius=6)
+                                func_name = _infer_function_name(lines, ln_i) or ""
+                                fixed_nodes.append(
+                                    {
+                                        "index": i,
+                                        "file_path": fp,
+                                        "line": ln_i,
+                                        "function": func_name,
+                                        "code": cd[:400],
+                                        "context": ctx,
+                                        "context_start_line": ctx_s,
+                                        "context_end_line": ctx_e,
+                                    }
+                                )
+                            if len(fixed_nodes) < 2:
+                                return None
+                            return {
+                                "version": 1,
+                                "engine": "llm_dataflow_estimate",
+                                "source": {
+                                    "file_path": fixed_nodes[0]["file_path"],
+                                    "line": fixed_nodes[0]["line"],
+                                    "function": fixed_nodes[0]["function"],
+                                    "code": fixed_nodes[0]["code"],
+                                },
+                                "sink": {
+                                    "file_path": fixed_nodes[-1]["file_path"],
+                                    "line": fixed_nodes[-1]["line"],
+                                    "function": fixed_nodes[-1]["function"],
+                                    "code": fixed_nodes[-1]["code"],
+                                },
+                                "nodes": fixed_nodes,
+                                "generated_at": None,
+                            }
+
+                        for _key, payload in eligible:
+                            verification_result = payload.get("verification_result")
+                            if not isinstance(verification_result, dict):
+                                continue
+                            if isinstance(verification_result.get("poc_trigger_chain"), dict):
+                                continue
+                            chain = await _build_llm_chain(payload)
+                            if chain:
+                                verification_result["poc_trigger_chain"] = chain
+                            else:
+                                if not verification_result.get("poc_trigger_chain_error"):
+                                    verification_result["poc_trigger_chain_error"] = "llm_invalid_or_unverifiable"
+        except Exception as exc:
+            logger.warning("[Flow] poc_trigger_chain generation failed: %s", exc)
+
         summary.update(counters or {})
         summary["enabled"] = True
 
@@ -2318,6 +3425,29 @@ async def _save_findings(
                 f"[SaveFindings] 🚫 Filtered finding ({reason}): "
                 f"title={str(payload.get('title', 'N/A'))[:80]}"
             )
+
+    def has_valid_trigger_flow(value: object) -> bool:
+        if not isinstance(value, dict):
+            return False
+        call_chain = value.get("call_chain")
+        nodes = value.get("nodes")
+        if not isinstance(call_chain, list) or not call_chain:
+            return False
+        if not isinstance(nodes, list) or len(nodes) != len(call_chain):
+            return False
+        for node in nodes:
+            if not isinstance(node, dict):
+                return False
+            file_path = node.get("file_path")
+            func_name = node.get("function")
+            code = node.get("code")
+            if not isinstance(file_path, str) or not file_path.strip():
+                return False
+            if not isinstance(func_name, str) or not func_name.strip():
+                return False
+            if not isinstance(code, str) or not code.strip():
+                return False
+        return True
 
     for finding in findings:
         if not isinstance(finding, dict):
@@ -2575,6 +3705,13 @@ async def _save_findings(
                     },
                 }
             )
+
+            # 9.5) strict gate: must provide trigger flow diagram (file + function + code) or drop.
+            trigger_flow_payload = verification_result_payload.get("trigger_flow")
+            if not has_valid_trigger_flow(trigger_flow_payload):
+                mark_filtered("missing_trigger_flow", finding)
+                continue
+
             dataflow_path = finding.get("dataflow_path")
             if not isinstance(dataflow_path, list):
                 flow_payload = verification_result_payload.get("flow")
@@ -3500,10 +4637,21 @@ async def list_agent_findings(
                     "logic_authz_evidence": logic_authz_evidence,
                     "reachability_file": reachability_file,
                     "reachability_function": reachability_function,
+                    "trigger_flow": (
+                        verification_payload.get("trigger_flow")
+                        if isinstance(verification_payload, dict)
+                        else None
+                    ),
+                    "poc_trigger_chain": (
+                        verification_payload.get("poc_trigger_chain")
+                        if isinstance(verification_payload, dict)
+                        else None
+                    ),
                     "status": item.status,
                     "suggestion": item.suggestion,
-                    "fix_code": item.fix_code,
-                    "fix_description": item.fix_description,
+                    # Backward-compatible for test stubs / older schemas.
+                    "fix_code": getattr(item, "fix_code", None),
+                    "fix_description": getattr(item, "fix_description", None),
                     "has_poc": bool(item.has_poc),
                     "poc_code": item.poc_code,
                     "poc_description": item.poc_description,
@@ -4557,15 +5705,19 @@ async def generate_audit_report(
                     "confidence": f.ai_confidence,
                     "suggestion": f.suggestion,
                     "fix_code": f.fix_code,
-                    "verification_result": f.verification_result if isinstance(f.verification_result, dict) else None,
+                    "verification_result": (
+                        getattr(f, "verification_result", None)
+                        if isinstance(getattr(f, "verification_result", None), dict)
+                        else None
+                    ),
                     "flow": (
-                        f.verification_result.get("flow")
-                        if isinstance(f.verification_result, dict)
+                        getattr(f, "verification_result", {}).get("flow")
+                        if isinstance(getattr(f, "verification_result", None), dict)
                         else None
                     ),
                     "logic_authz": (
-                        f.verification_result.get("logic_authz")
-                        if isinstance(f.verification_result, dict)
+                        getattr(f, "verification_result", {}).get("logic_authz")
+                        if isinstance(getattr(f, "verification_result", None), dict)
                         else None
                     ),
                     "created_at": f.created_at.isoformat() if f.created_at else None,
@@ -4713,8 +5865,9 @@ async def generate_audit_report(
                     md_lines.append(f"**AI 置信度:** {int(f.ai_confidence * 100)}%")
                     md_lines.append("")
 
-                if isinstance(f.verification_result, dict):
-                    flow_payload = f.verification_result.get("flow")
+                verification_result = getattr(f, "verification_result", None)
+                if isinstance(verification_result, dict):
+                    flow_payload = verification_result.get("flow")
                     if isinstance(flow_payload, dict):
                         flow_score = flow_payload.get("path_score")
                         chain = flow_payload.get("call_chain")
@@ -4731,7 +5884,7 @@ async def generate_audit_report(
                                 md_lines.append(f"- `{_escape_markdown_inline(str(call_item))}`")
                             md_lines.append("")
 
-                    logic_payload = f.verification_result.get("logic_authz")
+                    logic_payload = verification_result.get("logic_authz")
                     if isinstance(logic_payload, dict):
                         evidence = logic_payload.get("evidence")
                         if isinstance(evidence, list) and evidence:

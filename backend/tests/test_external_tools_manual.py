@@ -12,9 +12,20 @@
     python test_external_tools_manual.py --help
 """
 
+import os
+
+import pytest
+
+# This file is a CLI/manual smoke test and depends on external binaries being installed.
+# Skip it in the default pytest suite unless explicitly enabled.
+if os.environ.get("RUN_EXTERNAL_TOOLS_MANUAL_TESTS") != "1":
+    pytest.skip(
+        "Set RUN_EXTERNAL_TOOLS_MANUAL_TESTS=1 to run external tools manual tests.",
+        allow_module_level=True,
+    )
+
 import asyncio
 import argparse
-import os
 import sys
 from pathlib import Path
 

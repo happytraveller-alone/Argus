@@ -176,6 +176,9 @@ agent_checkpoints/
 data/
 *.checkpoint
 
+# Joern / CPG artifacts
+workspace/
+
 # Scan result files (temporary)
 bandit_results.json
 semgrep_results.json

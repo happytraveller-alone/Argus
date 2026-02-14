@@ -50,7 +50,7 @@ class JoernClient:
         try:
             proc = await asyncio.create_subprocess_exec(
                 self._joern_bin,
-                "--version",
+                "--help",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -69,6 +69,9 @@ class JoernClient:
     def _query_script_path(self) -> Path:
         return Path(__file__).resolve().parent / "queries" / "reachability.sc"
 
+    def _poc_chain_batch_script_path(self) -> Path:
+        return Path(__file__).resolve().parent / "queries" / "poc_trigger_chain_batch.sc"
+
     async def _run_query(
         self,
         *,
@@ -83,20 +86,24 @@ class JoernClient:
         if not script_path.exists():
             return None
 
-        params = f"project={project_root},file={file_path},line={line_start}"
-
         cmd = [
             self._joern_bin,
+            "--nocolors",
             "--script",
             str(script_path),
-            "--params",
-            params,
+            "--param",
+            f"project={project_root}",
+            "--param",
+            f"file={file_path}",
+            "--param",
+            f"line={line_start}",
         ]
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=project_root if project_root else None,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.timeout_sec)
             stdout_text = (stdout or b"").decode("utf-8", errors="replace").strip()
@@ -117,6 +124,126 @@ class JoernClient:
         except Exception as exc:
             logger.debug("Joern query exception: %s", exc)
             return None
+
+    async def build_poc_trigger_chains_batch(
+        self,
+        *,
+        project_root: str,
+        items: List[Dict[str, Any]],
+        max_flows: int = 3,
+        max_nodes: int = 80,
+    ) -> Dict[str, Any]:
+        """Batch compute source->sink dataflow chains for eligible findings.
+
+        Returns:
+          {
+            "version": 1,
+            "engine": "joern_dataflow",
+            "results": { key: chain_dict },
+            "errors": { key: reason }
+          }
+        """
+        if not self.enabled:
+            return {
+                "version": 1,
+                "engine": "joern_dataflow",
+                "results": {},
+                "errors": {str(item.get("key")): "joern_disabled" for item in (items or []) if item.get("key")},
+            }
+
+        if not await self._check_version():
+            return {
+                "version": 1,
+                "engine": "joern_dataflow",
+                "results": {},
+                "errors": {str(item.get("key")): "joern_not_available" for item in (items or []) if item.get("key")},
+            }
+
+        script_path = self._poc_chain_batch_script_path()
+        if not script_path.exists():
+            return {
+                "version": 1,
+                "engine": "joern_dataflow",
+                "results": {},
+                "errors": {str(item.get("key")): "script_missing" for item in (items or []) if item.get("key")},
+            }
+
+        import tempfile
+
+        payload = {"items": items or []}
+        marker_start = "<<<POC_TRIGGER_CHAIN_JSON_START>>>"
+        marker_end = "<<<POC_TRIGGER_CHAIN_JSON_END>>>"
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as fp:
+            json.dump(payload, fp, ensure_ascii=False)
+            input_path = fp.name
+
+        cmd = [
+            self._joern_bin,
+            "--nocolors",
+            "--script",
+            str(script_path),
+            "--param",
+            f"project={project_root}",
+            "--param",
+            f"input={input_path}",
+            "--param",
+            f"maxFlows={max(1, int(max_flows))}",
+            "--param",
+            f"maxNodes={max(10, int(max_nodes))}",
+        ]
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=project_root if project_root else None,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.timeout_sec)
+            out_text = (stdout or b"").decode("utf-8", errors="replace")
+            err_text = (stderr or b"").decode("utf-8", errors="replace")
+
+            if proc.returncode != 0:
+                logger.debug("Joern batch chain failed: %s", (err_text or out_text)[:600])
+                return {
+                    "version": 1,
+                    "engine": "joern_dataflow",
+                    "results": {},
+                    "errors": {str(item.get("key")): "joern_exec_failed" for item in (items or []) if item.get("key")},
+                }
+
+            combined = f"{out_text}\n{err_text}"
+            start_idx = combined.rfind(marker_start)
+            end_idx = combined.rfind(marker_end)
+            if start_idx == -1 or end_idx == -1 or end_idx <= start_idx:
+                logger.debug("Joern batch chain missing markers")
+                return {
+                    "version": 1,
+                    "engine": "joern_dataflow",
+                    "results": {},
+                    "errors": {str(item.get("key")): "missing_json_markers" for item in (items or []) if item.get("key")},
+                }
+
+            json_text = combined[start_idx + len(marker_start) : end_idx].strip()
+            try:
+                parsed = json.loads(json_text)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                logger.debug("Joern batch chain JSON parse failed")
+
+            return {
+                "version": 1,
+                "engine": "joern_dataflow",
+                "results": {},
+                "errors": {str(item.get("key")): "invalid_json" for item in (items or []) if item.get("key")},
+            }
+        finally:
+            try:
+                Path(input_path).unlink(missing_ok=True)
+            except Exception:
+                pass
 
     async def verify_reachability(
         self,
@@ -163,22 +290,18 @@ class JoernClient:
                 extra={"source": "joern_script"},
             )
 
-        # Fallback heuristic when Joern runtime is available but script query cannot be parsed.
-        fallback_chain = [str(item) for item in (call_chain or []) if str(item).strip()]
-        fallback_conditions = [str(item) for item in (control_conditions or []) if str(item).strip()]
-        has_path = len(fallback_chain) >= 2
-        score = 0.78 if has_path else 0.58
-
+        # If Joern is available but the script didn't yield a parseable payload, do not
+        # "upgrade" reachability. Preserve existing chain/conditions for debugging only.
         return FlowEvidence(
-            path_found=has_path,
-            path_score=score,
-            call_chain=fallback_chain,
-            control_conditions=fallback_conditions,
-            taint_paths=[f"{fallback_chain[i]} -> {fallback_chain[i + 1]}" for i in range(len(fallback_chain) - 1)],
+            path_found=False,
+            path_score=0.0,
+            call_chain=[str(item) for item in (call_chain or []) if str(item).strip()],
+            control_conditions=[str(item) for item in (control_conditions or []) if str(item).strip()],
+            taint_paths=[],
             entry_inferred=False,
             blocked_reasons=["joern_query_unavailable"],
             engine="joern",
-            extra={"source": "joern_heuristic_fallback"},
+            extra={"source": "joern_query_unavailable"},
         )
 
 

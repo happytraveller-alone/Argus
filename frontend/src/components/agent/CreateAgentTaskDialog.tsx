@@ -209,7 +209,7 @@ export default function CreateAgentTaskDialog({
 		setCreating(true);
 		try {
 			const preflightToast = toast.loading(
-				"正在检查智能审计配置（LLM / RAG）...",
+				"正在检查智能审计配置（LLM）...",
 			);
 			const preflight = await runAgentPreflightCheck();
 			toast.dismiss(preflightToast);

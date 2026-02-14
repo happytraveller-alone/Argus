@@ -108,12 +108,48 @@ class ReconAgent(BaseAgent):
         cleaned_response = re.sub(r'\*\*Final Answer:\*\*', 'Final Answer:', cleaned_response)
         cleaned_response = re.sub(r'\*\*Observation:\*\*', 'Observation:', cleaned_response)
 
-        # 🔥 首先尝试提取明确的 Thought 标记
+        # 🔥 首先尝试提取明确的 Thought 标记（Thought 可以不存在）
         thought_match = re.search(r'Thought:\s*(.*?)(?=Action:|Final Answer:|$)', cleaned_response, re.DOTALL)
         if thought_match:
             step.thought = thought_match.group(1).strip()
 
-        # 🔥 检查是否是最终答案
+        # 🔥 提取 Action（Action 优先于 Final Answer；避免同轮同时输出导致跳过工具）
+        action_match = re.search(r'Action:\s*(\w+)', cleaned_response)
+        if action_match:
+            step.action = action_match.group(1).strip()
+
+            # 🔥 如果没有提取到 thought，提取 Action 之前的内容作为思考
+            if not step.thought:
+                action_pos = cleaned_response.find('Action:')
+                if action_pos > 0:
+                    before_action = cleaned_response[:action_pos].strip()
+                    # 移除可能的 Thought: 前缀
+                    before_action = re.sub(r'^Thought:\s*', '', before_action)
+                    if before_action:
+                        step.thought = before_action[:500] if len(before_action) > 500 else before_action
+
+            # 🔥 提取 Action Input
+            # 注意：必须在遇到 Final Answer 前截断，否则会把 Final Answer JSON 拼进 Action Input
+            input_match = re.search(
+                r'Action Input:\s*(.*?)(?=Thought:|Action:|Observation:|Final Answer:|$)',
+                cleaned_response,
+                re.DOTALL,
+            )
+            if input_match:
+                input_text = input_match.group(1).strip()
+                input_text = re.sub(r'```json\s*', '', input_text)
+                input_text = re.sub(r'```\s*', '', input_text)
+                # 使用增强的 JSON 解析器
+                step.action_input = AgentJsonParser.parse(
+                    input_text,
+                    default={"raw_input": input_text}
+                )
+            else:
+                step.action_input = {}
+
+            return step
+
+        # 🔥 检查是否是最终答案（仅当不存在 Action 时）
         final_match = re.search(r'Final Answer:\s*(.*?)$', cleaned_response, re.DOTALL)
         if final_match:
             step.is_final = True
@@ -141,33 +177,6 @@ class ReconAgent(BaseAgent):
                     step.thought = before_final[:500] if len(before_final) > 500 else before_final
 
             return step
-
-        # 🔥 提取 Action
-        action_match = re.search(r'Action:\s*(\w+)', cleaned_response)
-        if action_match:
-            step.action = action_match.group(1).strip()
-
-            # 🔥 如果没有提取到 thought，提取 Action 之前的内容作为思考
-            if not step.thought:
-                action_pos = cleaned_response.find('Action:')
-                if action_pos > 0:
-                    before_action = cleaned_response[:action_pos].strip()
-                    # 移除可能的 Thought: 前缀
-                    before_action = re.sub(r'^Thought:\s*', '', before_action)
-                    if before_action:
-                        step.thought = before_action[:500] if len(before_action) > 500 else before_action
-
-        # 🔥 提取 Action Input
-        input_match = re.search(r'Action Input:\s*(.*?)(?=Thought:|Action:|Observation:|$)', cleaned_response, re.DOTALL)
-        if input_match:
-            input_text = input_match.group(1).strip()
-            input_text = re.sub(r'```json\s*', '', input_text)
-            input_text = re.sub(r'```\s*', '', input_text)
-            # 使用增强的 JSON 解析器
-            step.action_input = AgentJsonParser.parse(
-                input_text,
-                default={"raw_input": input_text}
-            )
 
         # 🔥 最后的 fallback：如果整个响应没有任何标记，整体作为思考
         if not step.thought and not step.action and not step.is_final:
@@ -202,8 +211,28 @@ class ReconAgent(BaseAgent):
 - 根目录: {project_info.get('root', '.')}
 - 文件数量: {project_info.get('file_count', 'unknown')}
 
-## 审计范围
 """
+
+        # 🔥 项目级 Markdown 长期记忆（无需 RAG/Embedding）
+        markdown_memory = config.get("markdown_memory") if isinstance(config, dict) else None
+        if isinstance(markdown_memory, dict):
+            shared_mem = str(markdown_memory.get("shared") or "").strip()
+            agent_mem = str(markdown_memory.get("recon") or "").strip()
+            skills_mem = str(markdown_memory.get("skills") or "").strip()
+            if shared_mem or agent_mem or skills_mem:
+                initial_message += f"""## 🧠 项目长期记忆（Markdown，无 RAG）
+### shared.md（节选）
+{shared_mem or "(空)"}
+
+### recon.md（节选）
+{agent_mem or "(空)"}
+
+### skills.md（规范摘要）
+{skills_mem or "(空)"}
+
+"""
+
+        initial_message += "## 审计范围\n"
         # 🔥 如果指定了目标文件，明确告知 Agent
         if target_files:
             initial_message += f"""⚠️ **重要**: 用户指定了 {len(target_files)} 个目标文件进行审计：

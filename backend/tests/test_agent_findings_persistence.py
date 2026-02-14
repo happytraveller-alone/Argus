@@ -43,6 +43,19 @@ async def test_save_findings_keeps_long_text_fields_without_truncation(tmp_path)
             "verdict": "confirmed",
             "reachability": "reachable",
             "verification_details": "verified by unit harness",
+            "verification_result": {
+                # SaveFindings strict gate requires a minimal trigger_flow diagram.
+                "trigger_flow": {
+                    "call_chain": ["handler"],
+                    "nodes": [
+                        {
+                            "file_path": long_file_path,
+                            "function": "handler",
+                            "code": "def handler():",
+                        }
+                    ],
+                }
+            },
         }
     ]
 
