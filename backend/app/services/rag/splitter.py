@@ -187,6 +187,18 @@ class TreeSitterParser:
             "interface": ["interface_declaration"],
             "import": ["import_declaration"],
         },
+        "kotlin": {
+            "class": ["class_declaration"],
+            "function": ["function_declaration"],
+            "interface": ["class_declaration"],
+            "import": ["import_header"],
+        },
+        "c": {
+            "function": ["function_definition"],
+        },
+        "cpp": {
+            "function": ["function_definition"],
+        },
         "go": {
             "struct": ["type_declaration"],
             "function": ["function_declaration", "method_declaration"],
@@ -311,19 +323,66 @@ class TreeSitterParser:
         return definitions
     
     def _extract_name(self, node: Any, language: str) -> Optional[str]:
-        """从节点提取名称"""
-        # 查找 identifier 子节点
-        for child in node.children:
-            if child.type in ["identifier", "name", "type_identifier", "property_identifier"]:
-                return child.text.decode() if isinstance(child.text, bytes) else child.text
-        
-        # 对于某些语言的特殊处理
-        if language == "python":
-            for child in node.children:
-                if child.type == "name":
-                    return child.text.decode() if isinstance(child.text, bytes) else child.text
-        
-        return None
+        """从节点提取名称（避免 C/C++ attribute 误判为函数名）。"""
+
+        def _node_text(target: Any) -> str:
+            value = target.text.decode() if isinstance(target.text, bytes) else target.text
+            return str(value or "").strip()
+
+        def _is_valid_name(name: str) -> bool:
+            lowered = str(name or "").strip().lower()
+            if not lowered:
+                return False
+            if lowered in {"__attribute__", "__declspec"}:
+                return False
+            return True
+
+        def _extract_identifier_recursive(target: Any) -> Optional[str]:
+            node_type = str(getattr(target, "type", ""))
+            if node_type in {
+                "identifier",
+                "name",
+                "type_identifier",
+                "property_identifier",
+                "simple_identifier",
+                "field_identifier",
+            }:
+                candidate = _node_text(target)
+                if _is_valid_name(candidate):
+                    return candidate
+
+            children = list(getattr(target, "children", []) or [])
+            for child in children:
+                candidate = _extract_identifier_recursive(child)
+                if candidate:
+                    return candidate
+            return None
+
+        try:
+            field_name = node.child_by_field_name("name")
+        except Exception:
+            field_name = None
+        if field_name is not None:
+            candidate = _extract_identifier_recursive(field_name)
+            if candidate:
+                return candidate
+
+        if language in {"c", "cpp"}:
+            try:
+                declarator = node.child_by_field_name("declarator")
+            except Exception:
+                declarator = None
+            if declarator is not None:
+                candidate = _extract_identifier_recursive(declarator)
+                if candidate:
+                    return candidate
+            for child in list(getattr(node, "children", []) or []):
+                if str(getattr(child, "type", "")).endswith("declarator"):
+                    candidate = _extract_identifier_recursive(child)
+                    if candidate:
+                        return candidate
+
+        return _extract_identifier_recursive(node)
 
 
 class CodeSplitter:
@@ -847,4 +906,3 @@ class CodeSplitter:
             definitions.extend(matches)
         
         return list(set(definitions))[:20]
-

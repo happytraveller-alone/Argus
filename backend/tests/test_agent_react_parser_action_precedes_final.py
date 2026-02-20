@@ -62,3 +62,27 @@ Final Answer: {"findings": [], "summary": "ok"}"""
     assert isinstance(step.final_answer, dict)
     assert step.final_answer.get("findings") == []
 
+
+@pytest.mark.parametrize(
+    "agent_factory",
+    [_make_recon_agent, _make_analysis_agent, _make_verification_agent],
+)
+def test_react_parser_supports_markdown_action_sections(agent_factory):
+    agent = agent_factory()
+    response = """## Thought
+need evidence
+
+## Action
+read_file
+
+## Action Input
+```json
+{"file_path":"src/demo.py","start_line":1,"end_line":10}
+```
+"""
+    step = agent._parse_llm_response(response)
+
+    assert step.action == "read_file"
+    assert isinstance(step.action_input, dict)
+    assert step.action_input.get("file_path") == "src/demo.py"
+    assert step.is_final is False

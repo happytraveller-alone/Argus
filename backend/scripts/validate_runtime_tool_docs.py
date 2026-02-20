@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import Any, Dict, List
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from scripts.generate_runtime_tool_docs import (  # noqa: E402
+    DOCS_ROOT,
+    SHARED_CATALOG_PATH,
+    TOOLS_DOC_DIR,
+    collect_runtime_tools,
+)
+
+
+REQUIRED_DOC_HEADINGS = [
+    "## Goal",
+    "## Task List",
+    "## Inputs",
+    "## Outputs",
+]
+
+
+def validate_runtime_tool_docs() -> Dict[str, Any]:
+    registry = collect_runtime_tools()
+    expected_tools = sorted(registry.keys())
+
+    missing_docs: List[str] = []
+    missing_headings: Dict[str, List[str]] = {}
+
+    for runtime_key in expected_tools:
+        doc_path = TOOLS_DOC_DIR / f"{runtime_key}.md"
+        if not doc_path.exists():
+            missing_docs.append(runtime_key)
+            continue
+        text = doc_path.read_text(encoding="utf-8", errors="replace")
+        missing = [heading for heading in REQUIRED_DOC_HEADINGS if heading not in text]
+        if missing:
+            missing_headings[runtime_key] = missing
+
+    missing_catalog_entries: List[str] = []
+    catalog_text = ""
+    if SHARED_CATALOG_PATH.exists():
+        catalog_text = SHARED_CATALOG_PATH.read_text(encoding="utf-8", errors="replace")
+    for runtime_key in expected_tools:
+        if f"`{runtime_key}`" not in catalog_text:
+            missing_catalog_entries.append(runtime_key)
+
+    return {
+        "expected_tool_count": len(expected_tools),
+        "missing_docs": missing_docs,
+        "missing_headings": missing_headings,
+        "missing_catalog_entries": missing_catalog_entries,
+        "docs_root": str(DOCS_ROOT),
+    }
+
+
+def main() -> None:
+    result = validate_runtime_tool_docs()
+    ok = not result["missing_docs"] and not result["missing_headings"] and not result["missing_catalog_entries"]
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    raise SystemExit(0 if ok else 1)
+
+
+if __name__ == "__main__":
+    main()
+

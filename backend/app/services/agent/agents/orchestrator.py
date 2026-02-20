@@ -13,12 +13,11 @@ import asyncio
 import json
 import logging
 import os
-import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
-from ..json_parser import AgentJsonParser
+from .react_parser import parse_react_response
 from ..prompts import MULTI_AGENT_RULES, CORE_SECURITY_PRINCIPLES
 
 logger = logging.getLogger(__name__)
@@ -279,14 +278,16 @@ class OrchestratorAgent(BaseAgent):
         self._total_tokens = 0
         self._tool_calls = 0
 
-        # Seed findings: keep bootstrap candidates visible to downstream and persistence step.
-        bootstrap_findings = config.get("bootstrap_findings") if isinstance(config, dict) else None
-        if isinstance(bootstrap_findings, list) and bootstrap_findings:
-            for f in bootstrap_findings:
-                if isinstance(f, dict):
-                    payload = dict(f)
-                    payload.setdefault("source", "bootstrap_seed")
-                    self._all_findings.append(payload)
+        analysis_agent = self.sub_agents.get("analysis")
+        analysis_tool_names: List[str] = []
+        if analysis_agent is not None and isinstance(getattr(analysis_agent, "tools", None), dict):
+            analysis_tool_names = sorted(str(name) for name in analysis_agent.tools.keys())
+        analysis_tool_hint = ", ".join(analysis_tool_names) if analysis_tool_names else "read_file, search_code"
+        analysis_task_text = (
+            "使用可用工具（"
+            f"{analysis_tool_hint}"
+            "）+ read_file 证据，产出结构化候选 findings（必须含 file_path/line_start/confidence）。"
+        )
 
         todo_list: List[TodoItem] = [
             TodoItem(
@@ -305,7 +306,7 @@ class OrchestratorAgent(BaseAgent):
                 id="analysis_1",
                 title="Analysis-1：快速扫描产出候选 findings",
                 agent="analysis",
-                task="使用 smart_scan/quick_audit + read_file 证据，产出结构化候选 findings（必须含 file_path/line_start/confidence）。",
+                task=analysis_task_text,
             ),
             TodoItem(
                 id="analysis_2",
@@ -315,9 +316,10 @@ class OrchestratorAgent(BaseAgent):
             ),
             TodoItem(
                 id="verification_1",
-                title="Verification-1：验证 bootstrap_findings（最多 8）并回填结论",
+                title="Verification-1：全量验证候选 findings 并回填结论",
                 agent="verification",
-                task="仅验证 bootstrap_findings（最多 8 条），回填真实性/可达性/修复建议/PoC 思路（不输出可直接利用 payload）。",
+                task="验证全部候选 findings，逐条回填真实性/可达性/修复建议/PoC 思路（不输出可直接利用 payload）。",
+                max_attempts=3,
             ),
             TodoItem(
                 id="orchestrator_merge",
@@ -395,16 +397,51 @@ class OrchestratorAgent(BaseAgent):
             return False
 
         def validate_verification_done() -> tuple[bool, Optional[str]]:
-            bootstrap = config.get("bootstrap_findings") if isinstance(config, dict) else None
-            if not isinstance(bootstrap, list) or not bootstrap:
-                return True, "no_bootstrap_findings"
             data = self._agent_results.get("verification")
             if not isinstance(data, dict):
                 return False, None
-            summary = data.get("summary")
-            if not isinstance(summary, str) or not summary.strip():
+            findings = data.get("findings")
+            if not isinstance(findings, list):
                 return False, None
-            # Findings may be empty in unit tests; summary is the minimal requirement.
+
+            candidate_count = data.get("candidate_count")
+            try:
+                candidate_count_int = int(candidate_count) if candidate_count is not None else None
+            except Exception:
+                candidate_count_int = None
+
+            if candidate_count_int is None:
+                # Fallback for legacy payloads: use findings length as lower bound.
+                candidate_count_int = len(findings)
+
+            if candidate_count_int == 0:
+                return True, "no_candidates"
+
+            if len(findings) != candidate_count_int:
+                return False, f"verification_incomplete:{len(findings)}/{candidate_count_int}"
+
+            for item in findings:
+                if not isinstance(item, dict):
+                    return False, "verification_invalid_item"
+                verdict = item.get("verdict") or item.get("authenticity")
+                if str(verdict or "").strip().lower() not in {"confirmed", "likely", "false_positive"}:
+                    return False, "verification_missing_verdict"
+                verification_payload = item.get("verification_result")
+                if not isinstance(verification_payload, dict):
+                    return False, "verification_missing_contract:verification_result"
+                authenticity = verification_payload.get("authenticity") or verification_payload.get("verdict")
+                if str(authenticity or "").strip().lower() not in {"confirmed", "likely", "false_positive"}:
+                    return False, "verification_missing_contract:authenticity"
+                reachability = verification_payload.get("reachability")
+                if str(reachability or "").strip().lower() not in {"reachable", "likely_reachable", "unreachable"}:
+                    return False, "verification_missing_contract:reachability"
+                evidence = (
+                    verification_payload.get("evidence")
+                    or verification_payload.get("verification_details")
+                    or verification_payload.get("verification_evidence")
+                )
+                if not isinstance(evidence, str) or not evidence.strip():
+                    return False, "verification_missing_contract:evidence"
             return True, None
 
         await self.emit_thinking("🧠 Orchestrator（TODO 模式）启动：按固定清单顺序调度子 Agent 并验收结果。")
@@ -427,6 +464,11 @@ class OrchestratorAgent(BaseAgent):
                             if validate_recon_done():
                                 item.done = True
                         elif item.agent == "analysis":
+                            analysis_payload = self._agent_results.get("analysis")
+                            if isinstance(analysis_payload, dict):
+                                degraded_reason = analysis_payload.get("degraded_reason")
+                                if isinstance(degraded_reason, str) and degraded_reason.strip():
+                                    item.blocked_reason = degraded_reason.strip()
                             if validate_analysis_done():
                                 item.done = True
                         elif item.agent == "verification":
@@ -435,10 +477,33 @@ class OrchestratorAgent(BaseAgent):
                                 item.done = True
                                 if reason:
                                     item.blocked_reason = reason
+                            elif reason:
+                                item.blocked_reason = reason
 
                     elif item.agent == "orchestrator":
                         if item.id == "orchestrator_merge":
-                            self._all_findings = self._dedup_findings(self._all_findings)
+                            verification_payload = self._agent_results.get("verification")
+                            verification_findings = (
+                                verification_payload.get("findings")
+                                if isinstance(verification_payload, dict)
+                                else []
+                            )
+                            normalized_verified: List[Dict[str, Any]] = []
+                            if isinstance(verification_findings, list):
+                                for finding in verification_findings:
+                                    if not isinstance(finding, dict):
+                                        continue
+                                    verdict = finding.get("verdict") or finding.get("authenticity")
+                                    if str(verdict or "").strip().lower() not in {
+                                        "confirmed",
+                                        "likely",
+                                        "false_positive",
+                                    }:
+                                        continue
+                                    normalized = self._normalize_finding(finding)
+                                    if isinstance(normalized, dict):
+                                        normalized_verified.append(normalized)
+                            self._all_findings = self._dedup_findings(normalized_verified)
                             item.done = True
                         elif item.id == "orchestrator_normalize":
                             self._all_findings = [
@@ -466,7 +531,11 @@ class OrchestratorAgent(BaseAgent):
 
                     if not item.done and item.attempts >= item.max_attempts:
                         item.done = True
-                        if not item.blocked_reason:
+                        if item.agent == "verification":
+                            blocked_reason = item.blocked_reason or "unknown"
+                            if not str(blocked_reason).startswith("verification_failed_after_retries:"):
+                                item.blocked_reason = f"verification_failed_after_retries:{blocked_reason}"
+                        elif not item.blocked_reason:
                             item.blocked_reason = "degraded_after_retries"
 
                 await emit_todo_update(f"✅ 完成：{item.title}")
@@ -636,43 +705,18 @@ class OrchestratorAgent(BaseAgent):
     
     def _parse_llm_response(self, response: str) -> Optional[AgentStep]:
         """解析 LLM 响应"""
-        # 🔥 v2.1: 预处理 - 移除 Markdown 格式标记（LLM 有时会输出 **Action:** 而非 Action:）
-        cleaned_response = response
-        cleaned_response = re.sub(r'\*\*Action:\*\*', 'Action:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Action Input:\*\*', 'Action Input:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Thought:\*\*', 'Thought:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Observation:\*\*', 'Observation:', cleaned_response)
-
-        # 提取 Thought
-        thought_match = re.search(r'Thought:\s*(.*?)(?=Action:|$)', cleaned_response, re.DOTALL)
-        thought = thought_match.group(1).strip() if thought_match else ""
-
-        # 提取 Action
-        action_match = re.search(r'Action:\s*(\w+)', cleaned_response)
-        if not action_match:
-            return None
-        action = action_match.group(1).strip()
-
-        # 提取 Action Input
-        input_match = re.search(r'Action Input:\s*(.*?)(?=Thought:|Observation:|$)', cleaned_response, re.DOTALL)
-        if not input_match:
-            return None
-
-        input_text = input_match.group(1).strip()
-        # 移除 markdown 代码块
-        input_text = re.sub(r'```json\s*', '', input_text)
-        input_text = re.sub(r'```\s*', '', input_text)
-
-        # 使用增强的 JSON 解析器
-        action_input = AgentJsonParser.parse(
-            input_text,
-            default={"raw": input_text}
+        parsed = parse_react_response(
+            response,
+            final_default={"raw_answer": (response or "").strip()},
+            action_input_raw_key="raw",
         )
+        if not parsed.action:
+            return None
 
         return AgentStep(
-            thought=thought,
-            action=action,
-            action_input=action_input,
+            thought=parsed.thought or "",
+            action=parsed.action,
+            action_input=parsed.action_input or {},
         )
     
     async def _dispatch_agent(self, params: Dict[str, Any]) -> str:
@@ -1174,6 +1218,45 @@ class OrchestratorAgent(BaseAgent):
 
         return False
 
+    def _normalize_vulnerability_profile(self, finding: Dict[str, Any]) -> tuple[str, str]:
+        vuln_key = (
+            str(finding.get("vulnerability_type") or "other")
+            .strip()
+            .lower()
+            .replace("-", "_")
+            .replace(" ", "_")
+        )
+        profile_map = {
+            "sql_injection": ("SQL注入漏洞", "可能导致数据库数据泄露、篡改或删除"),
+            "xss": ("跨站脚本漏洞", "可能导致会话劫持或用户敏感信息泄露"),
+            "command_injection": ("命令注入漏洞", "可能导致攻击者执行任意系统命令"),
+            "path_traversal": ("路径遍历漏洞", "可能导致未授权读取或覆盖服务器文件"),
+            "ssrf": ("服务器端请求伪造漏洞", "可能导致内网探测或云元数据泄露"),
+            "xxe": ("XML外部实体漏洞", "可能导致敏感文件泄露或发起内网请求"),
+            "deserialization": ("反序列化漏洞", "可能导致远程代码执行或对象状态篡改"),
+            "hardcoded_secret": ("硬编码密钥漏洞", "可能导致凭据泄露并引发横向渗透"),
+            "auth_bypass": ("认证绕过漏洞", "可能导致未授权访问受保护功能"),
+            "idor": ("越权访问漏洞", "可能导致访问或篡改其他用户数据"),
+            "weak_crypto": ("弱加密漏洞", "可能导致通信或存储数据被破解"),
+            "code_injection": ("代码注入漏洞", "可能导致执行恶意代码并接管服务"),
+            "nosql_injection": ("NoSQL注入漏洞", "可能导致鉴权绕过或数据泄露"),
+        }
+        return profile_map.get(vuln_key, ("安全缺陷", "可能导致系统机密性、完整性或可用性受损"))
+
+    def _build_structured_title(self, finding: Dict[str, Any], fallback: Optional[str] = None) -> str:
+        file_path = str(finding.get("file_path") or "未知路径").strip() or "未知路径"
+        function_name = str(finding.get("function_name") or "未知函数").strip() or "未知函数"
+        vuln_name, harm_text = self._normalize_vulnerability_profile(finding)
+        if fallback:
+            fallback_text = str(fallback).strip()
+            if fallback_text and ("漏洞" in fallback_text or "缺陷" in fallback_text):
+                vuln_name = fallback_text
+        return f"{file_path}中{function_name}{vuln_name}，可能造成的危害：{harm_text}"
+
+    def _is_structured_cn_title(self, title: str) -> bool:
+        text = str(title or "").strip()
+        return bool(text) and ("可能造成的危害" in text) and ("中" in text)
+
     def _normalize_finding(self, finding: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         标准化发现格式
@@ -1239,15 +1322,11 @@ class OrchestratorAgent(BaseAgent):
         if "risk" in normalized and "severity" not in normalized:
             normalized["severity"] = str(normalized["risk"]).lower()
 
-        # 🔥 生成 title 如果不存在
-        if "title" not in normalized:
-            vuln_type = normalized.get("vulnerability_type", "Unknown")
-            file_path = normalized.get("file_path", "")
-            if file_path:
-                import os
-                normalized["title"] = f"{vuln_type.replace('_', ' ').title()} in {os.path.basename(file_path)}"
-            else:
-                normalized["title"] = f"{vuln_type.replace('_', ' ').title()} Vulnerability"
+        # 生成/规范 title（四段式中文标题）
+        title_value = str(normalized.get("title") or "").strip()
+        if not self._is_structured_cn_title(title_value):
+            normalized["title"] = self._build_structured_title(normalized, fallback=title_value)
+        normalized["display_title"] = normalized.get("title")
 
         # 🔥 处理 code 字段 -> code_snippet
         if "code" in normalized and "code_snippet" not in normalized:
@@ -1407,50 +1486,48 @@ class OrchestratorAgent(BaseAgent):
 
             # 合并 Recon 的上下文信息（如果有）
             context_data = dict(analysis_handoff.context_data)
-            # 🔥 强约束：Verification 只验证 OpenGrep bootstrap 的 ERROR 候选，不传递 Analysis findings 作为待验证清单
             key_findings: List[Dict[str, Any]] = []
             if "recon" in self._agent_handoffs:
                 recon_handoff = self._agent_handoffs["recon"]
                 context_data["recon_tech_stack"] = recon_handoff.context_data.get("tech_stack", {})
                 context_data["recon_entry_points"] = recon_handoff.context_data.get("entry_points", [])
-            bootstrap_findings = (
-                self._runtime_context.get("config", {}).get("bootstrap_findings", [])
-                or []
-            )
-            filtered_bootstrap: List[Dict[str, Any]] = []
-            for item in bootstrap_findings:
-                if not isinstance(item, dict):
-                    continue
-                severity_value = str(item.get("severity") or "").strip().upper()
-                confidence_value = str(item.get("confidence") or "").strip().upper()
-                if severity_value != "ERROR":
-                    continue
-                if confidence_value not in {"HIGH", "MEDIUM"}:
-                    continue
-                filtered_bootstrap.append(item)
+            bootstrap_findings = self._runtime_context.get("config", {}).get("bootstrap_findings", []) or []
+            analysis_findings = self._agent_results.get("analysis", {}).get("findings", []) if isinstance(self._agent_results.get("analysis"), dict) else []
 
-            if filtered_bootstrap:
-                context_data["bootstrap_findings"] = filtered_bootstrap[:20]
-                context_data["bootstrap_source"] = (
-                    self._runtime_context.get("config", {}).get("bootstrap_source")
-                )
-                context_data["bootstrap_task_id"] = (
-                    self._runtime_context.get("config", {}).get("bootstrap_task_id")
-                )
-                key_findings.extend(filtered_bootstrap[:8])
-            else:
-                context_data["bootstrap_findings"] = []
-                context_data["bootstrap_source"] = (
-                    self._runtime_context.get("config", {}).get("bootstrap_source")
-                )
-                context_data["bootstrap_task_id"] = (
-                    self._runtime_context.get("config", {}).get("bootstrap_task_id")
-                )
+            candidates: List[Dict[str, Any]] = []
+            for source in (analysis_findings, bootstrap_findings):
+                if not isinstance(source, list):
+                    continue
+                for item in source:
+                    if isinstance(item, dict):
+                        candidates.append(item)
+
+            dedup_candidates: List[Dict[str, Any]] = []
+            seen_keys: set[tuple[str, int, str, str]] = set()
+            for candidate in candidates:
+                file_path = str(candidate.get("file_path") or "").strip().lower()
+                try:
+                    line_start = int(candidate.get("line_start") or candidate.get("line") or 0)
+                except Exception:
+                    line_start = 0
+                vuln_type = str(candidate.get("vulnerability_type") or "").strip().lower()
+                title = str(candidate.get("title") or "").strip().lower()
+                key = (file_path, line_start, vuln_type, title)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                dedup_candidates.append(candidate)
+
+            context_data["bootstrap_findings"] = bootstrap_findings[:50] if isinstance(bootstrap_findings, list) else []
+            context_data["candidate_findings"] = dedup_candidates[:100]
+            context_data["bootstrap_source"] = self._runtime_context.get("config", {}).get("bootstrap_source")
+            context_data["bootstrap_task_id"] = self._runtime_context.get("config", {}).get("bootstrap_task_id")
+            key_findings.extend(dedup_candidates[:20])
 
             summary_suffix = (
-                f"；验证范围：仅处理 OpenGrep ERROR 候选 {len(key_findings)} 条（上限8）"
-                if key_findings
-                else "；本次无 OpenGrep ERROR 候选，建议跳过验证"
+                f"；验证范围：全量候选 {len(dedup_candidates)} 条（analysis + bootstrap）"
+                if dedup_candidates
+                else "；本次无可验证候选，建议直接返回空验证结果"
             )
             return TaskHandoff(
                 from_agent=analysis_handoff.from_agent,
@@ -1550,31 +1627,28 @@ class OrchestratorAgent(BaseAgent):
                 context_data["tech_stack"] = recon_data.get("tech_stack", {})
                 context_data["entry_points"] = recon_data.get("entry_points", [])[:10]
 
-            # 🔥 强约束：Verification 只验证 OpenGrep bootstrap 的 ERROR 候选
             if "analysis" in self._agent_results:
-                work_completed.append("完成代码深度分析（Verification 将只验证 OpenGrep ERROR 候选）")
+                work_completed.append("完成代码深度分析（Verification 将执行全量候选验证）")
 
             # 也包含已有的发现（可能来自多个 Agent）
             if self._all_findings:
                 context_data["all_findings"] = self._all_findings[:20]
 
-            # 🔥 过滤并限制 key_findings：只保留 bootstrap ERROR 候选（上限 8）
             bootstrap_items = context_data.get("bootstrap_findings", [])
-            filtered_bootstrap: List[Dict[str, Any]] = []
-            if isinstance(bootstrap_items, list):
-                for item in bootstrap_items:
-                    if not isinstance(item, dict):
-                        continue
-                    severity_value = str(item.get("severity") or "").strip().upper()
-                    confidence_value = str(item.get("confidence") or "").strip().upper()
-                    if severity_value != "ERROR":
-                        continue
-                    if confidence_value not in {"HIGH", "MEDIUM"}:
-                        continue
-                    filtered_bootstrap.append(item)
-
-            context_data["bootstrap_findings"] = filtered_bootstrap[:20]
-            key_findings = filtered_bootstrap[:8]
+            analysis_items = (
+                self._agent_results.get("analysis", {}).get("findings", [])
+                if isinstance(self._agent_results.get("analysis"), dict)
+                else []
+            )
+            candidates: List[Dict[str, Any]] = []
+            for source in (analysis_items, bootstrap_items):
+                if not isinstance(source, list):
+                    continue
+                for item in source:
+                    if isinstance(item, dict):
+                        candidates.append(item)
+            context_data["candidate_findings"] = candidates[:100]
+            key_findings = candidates[:20]
 
         # 如果没有任何工作记录，说明没有前序信息
         if not work_completed and not key_findings:

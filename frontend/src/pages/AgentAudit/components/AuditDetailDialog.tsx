@@ -86,6 +86,15 @@ export function AuditDetailDialog({
     detailType === "finding" && finding ? finding.trigger_flow : null;
   const pocChain =
     detailType === "finding" && finding ? finding.poc_trigger_chain : null;
+  const functionTriggerFlow =
+    detailType === "finding" &&
+    finding &&
+    Array.isArray(finding.function_trigger_flow)
+      ? finding.function_trigger_flow
+          .map((step) => String(step || "").trim())
+          .filter((step) => step.length > 0)
+      : [];
+  const hasFunctionTriggerFlow = functionTriggerFlow.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -170,6 +179,9 @@ export function AuditDetailDialog({
                   {finding.reachability && (
                     <Badge variant="outline">可达性: {finding.reachability}</Badge>
                   )}
+                  {finding.cwe_id && (
+                    <Badge variant="outline">CWE: {finding.cwe_id}</Badge>
+                  )}
                 </div>
                 <h3 className="text-sm font-semibold break-words">{finding.title}</h3>
                 <div className="text-xs text-muted-foreground">
@@ -193,67 +205,100 @@ export function AuditDetailDialog({
                 </Section>
               )}
 
-              <Section title="PoC 触发链条（Source -> Sink）">
-                {pocChain && Array.isArray(pocChain.nodes) && pocChain.nodes.length >= 2 ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline">engine: {pocChain.engine || "-"}</Badge>
-                      <Badge variant="outline">节点数: {pocChain.nodes.length}</Badge>
-                      <Badge variant="outline">
-                        source: {pocChain.source?.file_path}:{pocChain.source?.line}
-                      </Badge>
-                      <Badge variant="outline">
-                        sink: {pocChain.sink?.file_path}:{pocChain.sink?.line}
-                      </Badge>
+              {finding.code_snippet && (
+                <Section title="命中代码片段">
+                  <div className="mb-2 rounded-md border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                    <div>所属函数: {finding.reachability_function || "-"}</div>
+                    <div>函数所属文件: {finding.reachability_file || finding.file_path || "-"}</div>
+                    <div>
+                      函数定义行范围: {finding.reachability_function_start_line ?? "-"} -{" "}
+                      {finding.reachability_function_end_line ?? "-"}
                     </div>
+                    <div>
+                      命中行范围: {finding.line_start ?? "-"} - {finding.line_end ?? "-"}
+                    </div>
+                  </div>
+                  <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[45vh]">
+                    {finding.code_snippet}
+                  </pre>
+                </Section>
+              )}
 
-                    <div className="space-y-2">
-                      {pocChain.nodes.map((node) => (
-                        <div
-                          key={`${node.index}-${node.file_path}-${node.line}`}
-                          className="rounded-md border border-border bg-background p-3 space-y-2"
-                        >
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="text-xs text-muted-foreground">
-                              {node.index + 1}. {node.file_path}:{node.line}
-                              {node.function ? `  ${node.function}()` : ""}
+              {hasFunctionTriggerFlow && (
+                <Section title="所属函数触发流程">
+                  <div className="text-xs text-muted-foreground">
+                    仅展示命中代码片段所属函数的触发流程。
+                  </div>
+                  <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[30vh]">
+                    {functionTriggerFlow.join("\n")}
+                  </pre>
+                </Section>
+              )}
+
+              {!hasFunctionTriggerFlow && (
+                <Section title="PoC 触发链条（Source -> Sink）">
+                  {pocChain && Array.isArray(pocChain.nodes) && pocChain.nodes.length >= 2 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline">engine: {pocChain.engine || "-"}</Badge>
+                        <Badge variant="outline">节点数: {pocChain.nodes.length}</Badge>
+                        <Badge variant="outline">
+                          source: {pocChain.source?.file_path}:{pocChain.source?.line}
+                        </Badge>
+                        <Badge variant="outline">
+                          sink: {pocChain.sink?.file_path}:{pocChain.sink?.line}
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-2">
+                        {pocChain.nodes.map((node) => (
+                          <div
+                            key={`${node.index}-${node.file_path}-${node.line}`}
+                            className="rounded-md border border-border bg-background p-3 space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="text-xs text-muted-foreground">
+                                {node.index + 1}. {node.file_path}:{node.line}
+                                {node.function ? `  ${node.function}()` : ""}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {node.index === 0 && (
+                                  <Badge variant="outline">Source</Badge>
+                                )}
+                                {node.index === pocChain.nodes.length - 1 && (
+                                  <Badge variant="outline">Sink</Badge>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              {node.index === 0 && (
-                                <Badge variant="outline">Source</Badge>
-                              )}
-                              {node.index === pocChain.nodes.length - 1 && (
-                                <Badge variant="outline">Sink</Badge>
-                              )}
-                            </div>
+                            <pre className="text-xs font-mono bg-card/60 border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[40vh]">
+                              {node.code}
+                            </pre>
+                            {node.context && (
+                              <details className="rounded-md border border-border bg-card/40 px-3 py-2">
+                                <summary className="cursor-pointer text-xs text-muted-foreground">
+                                  展开上下文（{node.context_start_line}-{node.context_end_line}）
+                                </summary>
+                                <pre className="mt-2 text-xs font-mono whitespace-pre-wrap break-words overflow-auto max-h-[40vh]">
+                                  {node.context}
+                                </pre>
+                              </details>
+                            )}
                           </div>
-                          <pre className="text-xs font-mono bg-card/60 border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[40vh]">
-                            {node.code}
-                          </pre>
-                          {node.context && (
-                            <details className="rounded-md border border-border bg-card/40 px-3 py-2">
-                              <summary className="cursor-pointer text-xs text-muted-foreground">
-                                展开上下文（{node.context_start_line}-{node.context_end_line}）
-                              </summary>
-                              <pre className="mt-2 text-xs font-mono whitespace-pre-wrap break-words overflow-auto max-h-[40vh]">
-                                {node.context}
-                              </pre>
-                            </details>
-                          )}
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    未生成触发链条（Joern 未命中或回退校验失败）
-                  </div>
-                )}
-              </Section>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      未生成触发链条（Joern 未命中或回退校验失败）
+                    </div>
+                  )}
+                </Section>
+              )}
 
               {(Boolean(finding.reachability_file || finding.reachability_function) ||
                 (!triggerFlow && typeof finding.flow_path_score === "number") ||
                 (!triggerFlow &&
+                  !hasFunctionTriggerFlow &&
                   finding.flow_call_chain &&
                   finding.flow_call_chain.length > 0) ||
                 (!triggerFlow &&
@@ -274,6 +319,7 @@ export function AuditDetailDialog({
                     </div>
                   )}
                   {!triggerFlow &&
+                    !hasFunctionTriggerFlow &&
                     finding.flow_call_chain &&
                     finding.flow_call_chain.length > 0 && (
                     <div className="space-y-1">
@@ -301,6 +347,7 @@ export function AuditDetailDialog({
               )}
 
               {triggerFlow &&
+                !hasFunctionTriggerFlow &&
                 Array.isArray(triggerFlow.nodes) &&
                 triggerFlow.nodes.length > 0 && (
                   <Section title="漏洞触发控制流程图">

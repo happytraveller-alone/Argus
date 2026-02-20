@@ -13,6 +13,31 @@ from pydantic import BaseModel, Field
 from .base import AgentTool, ToolResult
 
 
+def _normalize_rel_path(path: str) -> str:
+    normalized = str(path or "").replace("\\", "/").strip()
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    while normalized.startswith("/"):
+        normalized = normalized[1:]
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+    return normalized
+
+
+def _has_hidden_or_test_segment(path: str) -> bool:
+    normalized = _normalize_rel_path(path)
+    if not normalized:
+        return False
+    parts = [part for part in normalized.split("/") if part]
+    for part in parts[:-1]:
+        lowered = part.lower()
+        if lowered in {"test", "tests"}:
+            return True
+        if part.startswith("."):
+            return True
+    return False
+
+
 class FileReadInput(BaseModel):
     """文件读取输入"""
     file_path: str = Field(description="文件路径（相对于项目根目录）")
@@ -44,7 +69,11 @@ class FileReadTool(AgentTool):
         super().__init__()
         self.project_root = project_root
         self.exclude_patterns = exclude_patterns or []
-        self.target_files = set(target_files) if target_files else None
+        self.target_files = (
+            {_normalize_rel_path(path) for path in target_files if isinstance(path, str)}
+            if target_files
+            else None
+        )
 
     @staticmethod
     def _read_file_lines_sync(file_path: str, start_idx: int, end_idx: int) -> tuple:
@@ -103,16 +132,19 @@ class FileReadTool(AgentTool):
     
     def _should_exclude(self, file_path: str) -> bool:
         """检查文件是否应该被排除"""
+        normalized_path = _normalize_rel_path(file_path)
+        if _has_hidden_or_test_segment(normalized_path):
+            return True
         # 如果指定了目标文件，只允许读取这些文件
-        if self.target_files and file_path not in self.target_files:
+        if self.target_files and normalized_path not in self.target_files:
             return True
         
         # 检查排除模式
         for pattern in self.exclude_patterns:
-            if fnmatch.fnmatch(file_path, pattern):
+            if fnmatch.fnmatch(normalized_path, pattern):
                 return True
             # 也检查文件名
-            if fnmatch.fnmatch(os.path.basename(file_path), pattern):
+            if fnmatch.fnmatch(os.path.basename(normalized_path), pattern):
                 return True
         
         return False
@@ -260,7 +292,7 @@ class FileSearchTool(AgentTool):
     DEFAULT_EXCLUDE_DIRS = {
         "node_modules", "vendor", "dist", "build", ".git",
         "__pycache__", ".pytest_cache", "coverage", ".nyc_output",
-        ".vscode", ".idea", ".vs", "target", "venv", "env",
+        ".vscode", ".idea", ".vs", "target", "venv", "env", "test", "tests",
     }
     
     def __init__(
@@ -272,7 +304,11 @@ class FileSearchTool(AgentTool):
         super().__init__()
         self.project_root = project_root
         self.exclude_patterns = exclude_patterns or []
-        self.target_files = set(target_files) if target_files else None
+        self.target_files = (
+            {_normalize_rel_path(path) for path in target_files if isinstance(path, str)}
+            if target_files
+            else None
+        )
 
         # 从 exclude_patterns 中提取目录排除
         self.exclude_dirs = set(self.DEFAULT_EXCLUDE_DIRS)
@@ -356,7 +392,16 @@ class FileSearchTool(AgentTool):
             # 遍历文件
             for root, dirs, files in os.walk(search_dir):
                 # 排除目录
-                dirs[:] = [d for d in dirs if d not in self.exclude_dirs]
+                rel_dir = os.path.relpath(root, self.project_root).replace("\\", "/")
+                if rel_dir == ".":
+                    rel_dir = ""
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if d not in self.exclude_dirs
+                    and not d.startswith(".")
+                    and not _has_hidden_or_test_segment(f"{rel_dir}/{d}" if rel_dir else d)
+                ]
                 
                 for filename in files:
                     # 检查文件模式
@@ -365,6 +410,9 @@ class FileSearchTool(AgentTool):
                     
                     file_path = os.path.join(root, filename)
                     relative_path = os.path.relpath(file_path, self.project_root)
+                    relative_path = _normalize_rel_path(relative_path)
+                    if _has_hidden_or_test_segment(relative_path):
+                        continue
                     
                     # 检查是否在目标文件列表中
                     if self.target_files and relative_path not in self.target_files:
@@ -468,7 +516,7 @@ class ListFilesTool(AgentTool):
     
     DEFAULT_EXCLUDE_DIRS = {
         "node_modules", "vendor", "dist", "build", ".git",
-        "__pycache__", ".pytest_cache", "coverage",
+        "__pycache__", ".pytest_cache", "coverage", "test", "tests",
     }
     
     def __init__(
@@ -480,7 +528,11 @@ class ListFilesTool(AgentTool):
         super().__init__()
         self.project_root = project_root
         self.exclude_patterns = exclude_patterns or []
-        self.target_files = set(target_files) if target_files else None
+        self.target_files = (
+            {_normalize_rel_path(path) for path in target_files if isinstance(path, str)}
+            if target_files
+            else None
+        )
         
         # 从 exclude_patterns 中提取目录排除
         self.exclude_dirs = set(self.DEFAULT_EXCLUDE_DIRS)
@@ -547,7 +599,16 @@ class ListFilesTool(AgentTool):
             if recursive:
                 for root, dirnames, filenames in os.walk(target_dir):
                     # 排除目录
-                    dirnames[:] = [d for d in dirnames if d not in self.exclude_dirs]
+                    rel_dir = os.path.relpath(root, self.project_root).replace("\\", "/")
+                    if rel_dir == ".":
+                        rel_dir = ""
+                    dirnames[:] = [
+                        d
+                        for d in dirnames
+                        if d not in self.exclude_dirs
+                        and not d.startswith(".")
+                        and not _has_hidden_or_test_segment(f"{rel_dir}/{d}" if rel_dir else d)
+                    ]
                     
                     for filename in filenames:
                         if pattern and not fnmatch.fnmatch(filename, pattern):
@@ -555,6 +616,9 @@ class ListFilesTool(AgentTool):
                         
                         full_path = os.path.join(root, filename)
                         relative_path = os.path.relpath(full_path, self.project_root)
+                        relative_path = _normalize_rel_path(relative_path)
+                        if _has_hidden_or_test_segment(relative_path):
+                            continue
                         
                         # 检查是否在目标文件列表中
                         if self.target_files and relative_path not in self.target_files:
@@ -591,9 +655,14 @@ class ListFilesTool(AgentTool):
                     for item in os.listdir(target_dir):
                         if item in self.exclude_dirs:
                             continue
+                        if item.startswith("."):
+                            continue
                         
                         full_path = os.path.join(target_dir, item)
                         relative_path = os.path.relpath(full_path, self.project_root)
+                        relative_path = _normalize_rel_path(relative_path)
+                        if _has_hidden_or_test_segment(relative_path):
+                            continue
                         
                         if os.path.isdir(full_path):
                             # 只显示包含目标文件的目录
@@ -618,9 +687,14 @@ class ListFilesTool(AgentTool):
                     for item in os.listdir(target_dir):
                         if item in self.exclude_dirs:
                             continue
+                        if item.startswith("."):
+                            continue
                         
                         full_path = os.path.join(target_dir, item)
                         relative_path = os.path.relpath(full_path, self.project_root)
+                        relative_path = _normalize_rel_path(relative_path)
+                        if _has_hidden_or_test_segment(relative_path):
+                            continue
                         
                         if os.path.isdir(full_path):
                             dirs.append(relative_path + "/")
@@ -686,4 +760,3 @@ class ListFilesTool(AgentTool):
                 success=False,
                 error=f"列出文件失败: {str(e)}",
             )
-

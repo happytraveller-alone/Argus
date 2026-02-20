@@ -233,3 +233,178 @@ async def test_orchestrator_todo_mode_degrades_after_retries_and_continues():
     assert isinstance(analysis_1, dict)
     assert analysis_1.get("done") is True
     assert analysis_1.get("blocked_reason") == "degraded_after_retries"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_analysis_blocked_reason_prefers_degraded_reason_from_agent():
+    emitter = _FakeEventEmitter()
+
+    recon = _StubSubAgent(
+        [
+            AgentResult(success=True, data={"tech_stack": {"languages": ["Python"]}, "high_risk_areas": ["src/app.py:1 - entry"]}),
+            AgentResult(success=True, data={"tech_stack": {"languages": ["Python"]}, "high_risk_areas": ["src/app.py:1 - entry"]}),
+        ]
+    )
+    analysis = _StubSubAgent(
+        [
+            AgentResult(success=True, data={"findings": [], "degraded_reason": "analysis_stagnation"}),
+            AgentResult(success=True, data={"findings": [], "degraded_reason": "analysis_stagnation"}),
+            AgentResult(success=True, data={"findings": [], "degraded_reason": "analysis_stagnation"}),
+        ]
+    )
+    verification = _StubSubAgent([AgentResult(success=True, data={"summary": "ok", "findings": []})])
+
+    async def persist_findings_cb(_findings: List[Dict[str, Any]]) -> int:
+        return 0
+
+    orch = OrchestratorAgent(
+        llm_service=object(),
+        tools={},
+        event_emitter=emitter,
+        sub_agents={"recon": recon, "analysis": analysis, "verification": verification},
+    )
+
+    result = await orch.run(
+        {
+            "project_info": {"name": "demo", "root": "/tmp/demo"},
+            "config": {"bootstrap_findings": []},
+            "project_root": "/tmp/demo",
+            "task_id": "t3",
+            "persist_findings": persist_findings_cb,
+        }
+    )
+
+    assert result.success is True
+    todo_list = result.data.get("todo_list")
+    assert isinstance(todo_list, list)
+
+    analysis_1 = next((t for t in todo_list if t.get("id") == "analysis_1"), None)
+    assert isinstance(analysis_1, dict)
+    assert analysis_1.get("done") is True
+    assert analysis_1.get("blocked_reason") == "analysis_stagnation"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_verification_retries_three_times_and_reports_contract_failure():
+    emitter = _FakeEventEmitter()
+
+    recon = _StubSubAgent(
+        [
+            AgentResult(success=True, data={"tech_stack": {"languages": ["Python"]}, "high_risk_areas": ["src/app.py:1 - entry"]}),
+            AgentResult(success=True, data={"tech_stack": {"languages": ["Python"]}, "high_risk_areas": ["src/app.py:1 - entry"]}),
+        ]
+    )
+    analysis = _StubSubAgent(
+        [
+            AgentResult(
+                success=True,
+                data={
+                    "findings": [
+                        {
+                            "title": "candidate",
+                            "severity": "high",
+                            "vulnerability_type": "xss",
+                            "file_path": "src/app.py",
+                            "line_start": 10,
+                            "confidence": 0.9,
+                        }
+                    ]
+                },
+            ),
+            AgentResult(
+                success=True,
+                data={
+                    "findings": [
+                        {
+                            "title": "candidate-2",
+                            "severity": "high",
+                            "vulnerability_type": "xss",
+                            "file_path": "src/app.py",
+                            "line_start": 10,
+                            "confidence": 0.9,
+                        }
+                    ]
+                },
+            ),
+        ]
+    )
+    verification = _StubSubAgent(
+        [
+            AgentResult(
+                success=True,
+                data={
+                    "candidate_count": 1,
+                    "findings": [
+                        {
+                            "title": "invalid-contract-finding",
+                            "file_path": "src/app.py",
+                            "line_start": 10,
+                            "vulnerability_type": "xss",
+                            "verdict": "likely",
+                        }
+                    ],
+                },
+            ),
+            AgentResult(
+                success=True,
+                data={
+                    "candidate_count": 1,
+                    "findings": [
+                        {
+                            "title": "invalid-contract-finding",
+                            "file_path": "src/app.py",
+                            "line_start": 10,
+                            "vulnerability_type": "xss",
+                            "verdict": "likely",
+                        }
+                    ],
+                },
+            ),
+            AgentResult(
+                success=True,
+                data={
+                    "candidate_count": 1,
+                    "findings": [
+                        {
+                            "title": "invalid-contract-finding",
+                            "file_path": "src/app.py",
+                            "line_start": 10,
+                            "vulnerability_type": "xss",
+                            "verdict": "likely",
+                        }
+                    ],
+                },
+            ),
+        ]
+    )
+
+    async def persist_findings_cb(_findings: List[Dict[str, Any]]) -> int:
+        return 0
+
+    orch = OrchestratorAgent(
+        llm_service=object(),
+        tools={},
+        event_emitter=emitter,
+        sub_agents={"recon": recon, "analysis": analysis, "verification": verification},
+    )
+
+    result = await orch.run(
+        {
+            "project_info": {"name": "demo", "root": "/tmp/demo"},
+            "config": {"bootstrap_findings": []},
+            "project_root": "/tmp/demo",
+            "task_id": "t4",
+            "persist_findings": persist_findings_cb,
+        }
+    )
+
+    assert result.success is True
+    todo_list = result.data.get("todo_list")
+    assert isinstance(todo_list, list)
+    verification_item = next((t for t in todo_list if t.get("id") == "verification_1"), None)
+    assert isinstance(verification_item, dict)
+    assert verification_item.get("done") is True
+    assert verification_item.get("attempts") == 3
+    assert str(verification_item.get("blocked_reason") or "").startswith(
+        "verification_failed_after_retries:verification_missing_contract"
+    )

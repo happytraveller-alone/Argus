@@ -11,7 +11,7 @@ Agent 基类
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple
+from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple, Set
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime, timezone
@@ -19,6 +19,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import uuid
 
 from ..core.state import AgentState, AgentStatus
@@ -28,6 +29,21 @@ from ..core.message import message_bus, MessageType, AgentMessage
 logger = logging.getLogger(__name__)
 
 MAX_EVENT_PAYLOAD_CHARS = 120000
+
+TOOL_ALIAS_CANDIDATES: Dict[str, List[str]] = {
+    "smart_scan": ["smart_scan", "quick_audit", "opengrep_scan", "pattern_match", "search_code", "read_file"],
+    "quick_audit": ["quick_audit", "smart_scan", "opengrep_scan", "pattern_match", "search_code", "read_file"],
+    "rag_query": ["rag_query", "security_search", "search_code"],
+    "security_search": ["security_search", "rag_query", "search_code"],
+}
+
+TOOL_INPUT_REPAIR_MAP: Dict[str, str] = {
+    "query": "keyword",
+    "path": "file_path",
+    "filepath": "file_path",
+    "file": "file_path",
+    "dir": "directory",
+}
 
 
 def _truncate_with_flag(text: str, max_chars: int = MAX_EVENT_PAYLOAD_CHARS) -> Tuple[str, bool]:
@@ -317,6 +333,11 @@ class BaseAgent(ABC):
 
         # 🔥 最近一次工具输出快照（用于避免 llm_observation 复写同一段 tool_result）
         self._last_tool_result_snapshot: Optional[Dict[str, Any]] = None
+        self._last_llm_thought_digest: Optional[str] = None
+        self._llm_thought_repeat_count: int = 0
+        self._llm_thought_suppressed_count: int = 0
+        self._llm_thought_repeat_suppress_threshold: int = 2
+        self._llm_thought_repeat_summary_interval: int = 5
         
         # 🔥 是否已注册到注册表
         self._registered = False
@@ -695,6 +716,30 @@ class BaseAgent(ABC):
     
     async def emit_llm_thought(self, thought: str, iteration: int):
         """发射 LLM 思考内容事件 - 这是核心！展示 LLM 在想什么"""
+        normalized = re.sub(r"\s+", " ", (thought or "").strip())
+        thought_digest = hashlib.sha1(normalized.encode("utf-8", errors="ignore")).hexdigest() if normalized else ""
+
+        if thought_digest and thought_digest == self._last_llm_thought_digest:
+            self._llm_thought_repeat_count += 1
+        else:
+            self._last_llm_thought_digest = thought_digest or None
+            self._llm_thought_repeat_count = 0
+            self._llm_thought_suppressed_count = 0
+
+        if self._llm_thought_repeat_count >= self._llm_thought_repeat_suppress_threshold:
+            self._llm_thought_suppressed_count += 1
+            if self._llm_thought_suppressed_count % self._llm_thought_repeat_summary_interval == 0:
+                await self.emit_event(
+                    "llm_thought",
+                    f"[{self.name}] 思考重复已抑制 {self._llm_thought_suppressed_count} 条",
+                    metadata={
+                        "thought": thought,
+                        "iteration": iteration,
+                        "suppressed_repeat_count": self._llm_thought_suppressed_count,
+                    },
+                )
+            return
+
         # 截断过长的思考内容
         display_thought = thought[:500] + "..." if len(thought) > 500 else thought
         await self.emit_event(
@@ -703,6 +748,7 @@ class BaseAgent(ABC):
             metadata={
                 "thought": thought,
                 "iteration": iteration,
+                "suppressed_repeat_count": self._llm_thought_suppressed_count,
             }
         )
     
@@ -802,11 +848,20 @@ class BaseAgent(ABC):
         tool_name: str,
         tool_input: Dict,
         tool_call_id: Optional[str] = None,
+        alias_used: Optional[str] = None,
+        input_repaired: Optional[Dict[str, str]] = None,
+        validation_error: Optional[str] = None,
     ):
         """发射工具调用事件"""
         metadata: Dict[str, Any] = {}
         if tool_call_id:
             metadata["tool_call_id"] = tool_call_id
+        if alias_used:
+            metadata["alias_used"] = alias_used
+        if input_repaired:
+            metadata["input_repaired"] = input_repaired
+        if validation_error:
+            metadata["validation_error"] = validation_error
         await self.emit_event(
             "tool_call",
             f"[{self.name}] 调用工具: {tool_name}",
@@ -822,6 +877,9 @@ class BaseAgent(ABC):
         duration_ms: int,
         tool_call_id: Optional[str] = None,
         tool_status: str = "completed",
+        alias_used: Optional[str] = None,
+        input_repaired: Optional[Dict[str, str]] = None,
+        validation_error: Optional[str] = None,
     ):
         """发射工具结果事件"""
         # 🔥 修复：确保 result 不为 None，避免显示 "None" 字符串
@@ -844,6 +902,12 @@ class BaseAgent(ABC):
         metadata: Dict[str, Any] = {"tool_status": tool_status}
         if tool_call_id:
             metadata["tool_call_id"] = tool_call_id
+        if alias_used:
+            metadata["alias_used"] = alias_used
+        if input_repaired:
+            metadata["input_repaired"] = input_repaired
+        if validation_error:
+            metadata["validation_error"] = validation_error
         await self.emit_event(
             "tool_result",
             f"[{self.name}] 工具 {tool_name} 完成 ({duration_ms}ms)",
@@ -863,6 +927,16 @@ class BaseAgent(ABC):
         file_path: str = "",
         line_start: Optional[int] = None,
         is_verified: bool = False,
+        display_title: Optional[str] = None,
+        cwe_id: Optional[str] = None,
+        code_snippet: Optional[str] = None,
+        function_trigger_flow: Optional[List[str]] = None,
+        reachability_file: Optional[str] = None,
+        reachability_function: Optional[str] = None,
+        reachability_function_start_line: Optional[int] = None,
+        reachability_function_end_line: Optional[int] = None,
+        context_start_line: Optional[int] = None,
+        context_end_line: Optional[int] = None,
     ):
         """发射漏洞发现事件"""
         import uuid
@@ -874,6 +948,30 @@ class BaseAgent(ABC):
                 normalized_line_start = int(line_start)
             except Exception:
                 normalized_line_start = None
+        normalized_reachability_start: Optional[int] = None
+        if reachability_function_start_line is not None:
+            try:
+                normalized_reachability_start = int(reachability_function_start_line)
+            except Exception:
+                normalized_reachability_start = None
+        normalized_reachability_end: Optional[int] = None
+        if reachability_function_end_line is not None:
+            try:
+                normalized_reachability_end = int(reachability_function_end_line)
+            except Exception:
+                normalized_reachability_end = None
+        normalized_context_start: Optional[int] = None
+        if context_start_line is not None:
+            try:
+                normalized_context_start = int(context_start_line)
+            except Exception:
+                normalized_context_start = None
+        normalized_context_end: Optional[int] = None
+        if context_end_line is not None:
+            try:
+                normalized_context_end = int(context_end_line)
+            except Exception:
+                normalized_context_end = None
 
         # 🔥 使用 EventManager.emit_finding 发送正确的事件类型
         if self.event_emitter and hasattr(self.event_emitter, 'emit_finding'):
@@ -885,6 +983,16 @@ class BaseAgent(ABC):
                 file_path=file_path or None,
                 line_start=normalized_line_start,
                 is_verified=is_verified,
+                display_title=display_title,
+                cwe_id=cwe_id,
+                code_snippet=code_snippet,
+                function_trigger_flow=function_trigger_flow,
+                reachability_file=reachability_file,
+                reachability_function=reachability_function,
+                reachability_function_start_line=normalized_reachability_start,
+                reachability_function_end_line=normalized_reachability_end,
+                context_start_line=normalized_context_start,
+                context_end_line=normalized_context_end,
             )
         else:
             # 回退：使用通用事件发射
@@ -907,6 +1015,16 @@ class BaseAgent(ABC):
                     "file_path": file_path,
                     "line_start": normalized_line_start,
                     "is_verified": is_verified,
+                    "display_title": display_title,
+                    "cwe_id": cwe_id,
+                    "code_snippet": code_snippet,
+                    "function_trigger_flow": function_trigger_flow,
+                    "reachability_file": reachability_file,
+                    "reachability_function": reachability_function,
+                    "reachability_function_start_line": normalized_reachability_start,
+                    "reachability_function_end_line": normalized_reachability_end,
+                    "context_start_line": normalized_context_start,
+                    "context_end_line": normalized_context_end,
                 }
             )
     
@@ -1189,6 +1307,75 @@ class BaseAgent(ABC):
             logger.warning(f"[{self.name}] Empty LLM response returned (total_tokens: {total_tokens})")
         
         return accumulated, total_tokens
+
+    def _resolve_tool_name(self, requested_tool_name: str) -> Tuple[str, Optional[str]]:
+        """Resolve unknown tool names using conservative alias candidates."""
+        if requested_tool_name in self.tools:
+            return requested_tool_name, None
+
+        normalized = str(requested_tool_name or "").strip().lower()
+        candidates = TOOL_ALIAS_CANDIDATES.get(normalized, [])
+        for candidate in candidates:
+            if candidate in self.tools:
+                return candidate, requested_tool_name
+        return requested_tool_name, None
+
+    @staticmethod
+    def _get_schema_fields(args_schema: Any) -> Tuple[Set[str], Set[str]]:
+        fields: Set[str] = set()
+        required_fields: Set[str] = set()
+        if not args_schema:
+            return fields, required_fields
+
+        model_fields = getattr(args_schema, "model_fields", None)
+        if isinstance(model_fields, dict):
+            for name, info in model_fields.items():
+                fields.add(str(name))
+                is_required = False
+                checker = getattr(info, "is_required", None)
+                if callable(checker):
+                    try:
+                        is_required = bool(checker())
+                    except Exception:
+                        is_required = False
+                elif isinstance(checker, bool):
+                    is_required = checker
+                if is_required:
+                    required_fields.add(str(name))
+            return fields, required_fields
+
+        legacy_fields = getattr(args_schema, "__fields__", None)
+        if isinstance(legacy_fields, dict):
+            for name, info in legacy_fields.items():
+                fields.add(str(name))
+                if bool(getattr(info, "required", False)):
+                    required_fields.add(str(name))
+        return fields, required_fields
+
+    def _repair_tool_input(
+        self,
+        tool: Any,
+        tool_input: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any], Dict[str, str], List[str], List[str]]:
+        args_schema = getattr(tool, "args_schema", None)
+        schema_fields, required_fields = self._get_schema_fields(args_schema)
+        if not schema_fields:
+            return dict(tool_input), {}, [], []
+
+        repaired = dict(tool_input)
+        repaired_changes: Dict[str, str] = {}
+        for source_key, target_key in TOOL_INPUT_REPAIR_MAP.items():
+            if source_key in repaired and target_key not in repaired and target_key in schema_fields:
+                repaired[target_key] = repaired[source_key]
+                repaired_changes[source_key] = target_key
+
+        missing_required: List[str] = []
+        for name in sorted(required_fields):
+            value = repaired.get(name, None)
+            if value is None or value == "" or value == []:
+                missing_required.append(name)
+
+        return repaired, repaired_changes, missing_required, sorted(schema_fields)
     
     async def execute_tool(self, tool_name: str, tool_input: Dict) -> str:
         """
@@ -1205,16 +1392,62 @@ class BaseAgent(ABC):
         if self.is_cancelled:
             return "⚠️ 任务已取消"
 
-        tool = self.tools.get(tool_name)
+        requested_tool_name = str(tool_name or "").strip()
+        resolved_tool_name, alias_used = self._resolve_tool_name(requested_tool_name)
+        tool = self.tools.get(resolved_tool_name)
 
         if not tool:
-            return f"错误: 工具 '{tool_name}' 不存在。可用工具: {list(self.tools.keys())}"
+            return (
+                f"错误: 工具 '{requested_tool_name}' 不存在。"
+                f"可用工具: {list(self.tools.keys())}"
+            )
+
+        raw_tool_input = tool_input if isinstance(tool_input, dict) else {}
+        repaired_input, repaired_changes, missing_required, schema_fields = self._repair_tool_input(
+            tool,
+            raw_tool_input,
+        )
+
+        validation_error: Optional[str] = None
+        if missing_required:
+            validation_error = (
+                f"工具参数缺失，必填字段: {', '.join(missing_required)}。"
+                f" schema字段: {', '.join(schema_fields) if schema_fields else '未知'}"
+            )
 
         tool_call_id = str(uuid.uuid4())
         start = None
         try:
             self._tool_calls += 1
-            await self.emit_tool_call(tool_name, tool_input, tool_call_id=tool_call_id)
+            await self.emit_tool_call(
+                resolved_tool_name,
+                repaired_input,
+                tool_call_id=tool_call_id,
+                alias_used=alias_used,
+                input_repaired=repaired_changes or None,
+                validation_error=validation_error,
+            )
+
+            if validation_error:
+                await self.emit_tool_result(
+                    resolved_tool_name,
+                    validation_error,
+                    0,
+                    tool_call_id=tool_call_id,
+                    tool_status="failed",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
+                    validation_error=validation_error,
+                )
+                example_fields = ", ".join(f'"{name}": "..."' for name in missing_required)
+                return (
+                    "⚠️ 工具参数校验失败\n\n"
+                    f"**请求工具**: {requested_tool_name}\n"
+                    f"**实际执行工具**: {resolved_tool_name}\n"
+                    f"**缺失必填字段**: {', '.join(missing_required)}\n"
+                    f"**建议示例**: {{{example_fields}}}\n"
+                    "请补齐参数后重试。"
+                )
 
             import time
             start = time.time()
@@ -1237,13 +1470,13 @@ class BaseAgent(ABC):
             }
             # 🔥 使用用户配置的默认工具超时时间
             default_tool_timeout = self._timeout_config.get('tool_timeout', 60)
-            timeout = tool_timeouts.get(tool_name, default_tool_timeout)
+            timeout = tool_timeouts.get(resolved_tool_name, default_tool_timeout)
 
             # 🔥 使用 asyncio.wait_for 添加超时控制，同时支持取消
             async def execute_with_cancel_check():
                 """包装工具执行，定期检查取消状态"""
                 # 创建工具执行任务
-                execute_task = asyncio.create_task(tool.execute(**tool_input))
+                execute_task = asyncio.create_task(tool.execute(**repaired_input))
 
                 try:
                     # 使用循环定期检查取消状态
@@ -1279,21 +1512,28 @@ class BaseAgent(ABC):
             except asyncio.TimeoutError:
                 duration_ms = int((time.time() - start) * 1000)
                 await self.emit_tool_result(
-                    tool_name,
+                    resolved_tool_name,
                     f"超时 ({timeout}s)",
                     duration_ms,
                     tool_call_id=tool_call_id,
                     tool_status="failed",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
                 )
-                return f"⚠️ 工具 '{tool_name}' 执行超时 ({timeout}秒)，请尝试其他方法或减小操作范围。"
+                return (
+                    f"⚠️ 工具 '{resolved_tool_name}' 执行超时 ({timeout}秒)，"
+                    "请尝试其他方法或减小操作范围。"
+                )
             except asyncio.CancelledError:
                 duration_ms = int((time.time() - start) * 1000)
                 await self.emit_tool_result(
-                    tool_name,
+                    resolved_tool_name,
                     "已取消",
                     duration_ms,
                     tool_call_id=tool_call_id,
                     tool_status="cancelled",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
                 )
                 return "⚠️ 任务已取消"
 
@@ -1301,11 +1541,13 @@ class BaseAgent(ABC):
             # 🔥 修复：确保传递有意义的结果字符串，避免 "None"
             result_preview = str(result.data) if result.data is not None else (result.error if result.error else "")
             await self.emit_tool_result(
-                tool_name,
+                resolved_tool_name,
                 result_preview,
                 duration_ms,
                 tool_call_id=tool_call_id,
                 tool_status="completed" if result.success else "failed",
+                alias_used=alias_used,
+                input_repaired=repaired_changes or None,
             )
 
             # 🔥 工具执行后再次检查取消
@@ -1333,15 +1575,16 @@ class BaseAgent(ABC):
                 # 🔥 输出详细的错误信息，包括原始错误
                 error_msg = f"""⚠️ 工具执行失败
 
-**工具**: {tool_name}
-**参数**: {json.dumps(tool_input, ensure_ascii=False, indent=2) if tool_input else '无'}
+**请求工具**: {requested_tool_name}
+**实际工具**: {resolved_tool_name}
+**参数**: {json.dumps(repaired_input, ensure_ascii=False, indent=2) if repaired_input else '无'}
 **错误**: {result.error}
 
 请根据错误信息调整参数或尝试其他方法。"""
                 return error_msg
 
         except asyncio.CancelledError:
-            logger.info(f"[{self.name}] Tool '{tool_name}' execution cancelled")
+            logger.info(f"[{self.name}] Tool '{resolved_tool_name}' execution cancelled")
             return "⚠️ 任务已取消"
         except Exception as e:
             import traceback
@@ -1349,17 +1592,20 @@ class BaseAgent(ABC):
             if start is not None:
                 duration_ms = int((time.time() - start) * 1000)
                 await self.emit_tool_result(
-                    tool_name,
+                    resolved_tool_name,
                     f"异常: {type(e).__name__}: {str(e)}",
                     duration_ms,
                     tool_call_id=tool_call_id,
                     tool_status="failed",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
                 )
             # 🔥 输出完整的原始错误信息，包括堆栈跟踪
             error_msg = f"""❌ 工具执行异常
 
-**工具**: {tool_name}
-**参数**: {json.dumps(tool_input, ensure_ascii=False, indent=2) if tool_input else '无'}
+**请求工具**: {requested_tool_name}
+**实际工具**: {resolved_tool_name}
+**参数**: {json.dumps(repaired_input, ensure_ascii=False, indent=2) if repaired_input else '无'}
 **错误类型**: {type(e).__name__}
 **错误信息**: {str(e)}
 **堆栈跟踪**:

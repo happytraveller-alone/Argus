@@ -8,7 +8,7 @@ import app.models.gitleaks  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_save_findings_autofill_and_diagnostics(tmp_path):
+async def test_save_findings_requires_verification_result_and_keeps_verified_payload(tmp_path):
     source_file = tmp_path / "src" / "service.py"
     source_file.parent.mkdir(parents=True, exist_ok=True)
     source_file.write_text(
@@ -37,13 +37,29 @@ async def test_save_findings_autofill_and_diagnostics(tmp_path):
             "line_start": 2,
             "description": "query string concatenation",
             "confidence": 0.9,
-            "verification_result": {},
+            "verification_result": {
+                "authenticity": "confirmed",
+                "reachability": "reachable",
+                "evidence": "verified by controlled request replay",
+            },
         },
         {
             "title": "invalid finding without file",
             "severity": "medium",
             "vulnerability_type": "xss",
             "description": "missing location",
+            "verification_result": {
+                "authenticity": "likely",
+                "reachability": "likely_reachable",
+                "evidence": "missing file path should still be filtered",
+            },
+        },
+        {
+            "title": "missing verification payload",
+            "severity": "high",
+            "vulnerability_type": "command_injection",
+            "file_path": "src/service.py",
+            "line_start": 1,
         },
     ]
 
@@ -63,10 +79,75 @@ async def test_save_findings_autofill_and_diagnostics(tmp_path):
     assert saved_finding.file_path == "src/service.py"
     assert saved_finding.suggestion
     assert saved_finding.fix_code
-    assert saved_finding.verification_result["authenticity"] == "likely"
-    assert saved_finding.verification_result["reachability"] == "likely_reachable"
+    assert saved_finding.verification_result["authenticity"] == "confirmed"
+    assert saved_finding.verification_result["reachability"] == "reachable"
+    assert saved_finding.verification_result["evidence"] == "verified by controlled request replay"
+    reachability_target = saved_finding.verification_result.get("reachability_target")
+    assert isinstance(reachability_target, dict)
+    assert isinstance(reachability_target.get("start_line"), int)
+    assert isinstance(reachability_target.get("end_line"), int)
+    assert saved_finding.verification_result.get("function_trigger_flow")
+    assert any(
+        "handle" in step
+        for step in saved_finding.verification_result.get("function_trigger_flow", [])
+    )
+    assert saved_finding.references == [{"cwe": "CWE-89"}]
 
-    assert diagnostics["input_count"] == 2
+    assert diagnostics["input_count"] == 3
     assert diagnostics["saved_count"] == 1
-    assert diagnostics["filtered_count"] == 1
+    assert diagnostics["filtered_count"] == 2
     assert diagnostics["filtered_reasons"]["missing_or_invalid_file_path"] == 1
+    assert diagnostics["filtered_reasons"]["missing_verification_result"] == 1
+
+
+@pytest.mark.asyncio
+async def test_save_findings_filters_pseudo_c_attribute_function_name(tmp_path):
+    source_file = tmp_path / "src" / "demo.c"
+    source_file.parent.mkdir(parents=True, exist_ok=True)
+    source_file.write_text(
+        "\n".join(
+            [
+                "static __attribute__((unused)) int parse_node(int input) {",
+                "    return input + 1;",
+                "}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+
+    findings = [
+        {
+            "title": "C parsing issue",
+            "severity": "high",
+            "vulnerability_type": "memory_corruption",
+            "file_path": "src/demo.c",
+            "line_start": 2,
+            "description": "suspicious pointer behavior",
+            "confidence": 0.8,
+            "verification_result": {
+                "authenticity": "confirmed",
+                "reachability": "reachable",
+                "evidence": "verified by static control-flow checks",
+            },
+        }
+    ]
+
+    saved_count = await _save_findings(
+        db,
+        task_id="task-consistency-c-1",
+        findings=findings,
+        project_root=str(tmp_path),
+        save_diagnostics={},
+    )
+
+    assert saved_count == 1
+    saved_finding = db.add.call_args.args[0]
+    assert saved_finding.function_name == "parse_node"
+    assert saved_finding.function_name != "__attribute__"
+    reachability_target = saved_finding.verification_result.get("reachability_target") or {}
+    assert reachability_target.get("function") == "parse_node"

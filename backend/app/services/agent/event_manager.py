@@ -170,15 +170,27 @@ class AgentEventEmitter:
     
     async def emit_finding(
         self,
-        finding_id: str,
         title: str,
         severity: str,
         vulnerability_type: str,
         file_path: Optional[str] = None,
         line_start: Optional[int] = None,
+        finding_id: Optional[str] = None,
         is_verified: bool = False,
+        display_title: Optional[str] = None,
+        cwe_id: Optional[str] = None,
+        code_snippet: Optional[str] = None,
+        function_trigger_flow: Optional[List[str]] = None,
+        reachability_file: Optional[str] = None,
+        reachability_function: Optional[str] = None,
+        reachability_function_start_line: Optional[int] = None,
+        reachability_function_end_line: Optional[int] = None,
+        context_start_line: Optional[int] = None,
+        context_end_line: Optional[int] = None,
     ):
         """发射漏洞发现事件"""
+        if not finding_id:
+            finding_id = str(uuid.uuid4())
         event_type = "finding_verified" if is_verified else "finding_new"
         await self.emit(AgentEventData(
             event_type=event_type,
@@ -187,11 +199,21 @@ class AgentEventEmitter:
             metadata={
                 "id": finding_id,  # 🔥 添加 id 字段供前端使用
                 "title": title,
+                "display_title": display_title,
                 "severity": severity,
                 "vulnerability_type": vulnerability_type,
                 "file_path": file_path,
                 "line_start": line_start,
                 "is_verified": is_verified,
+                "cwe_id": cwe_id,
+                "code_snippet": code_snippet,
+                "function_trigger_flow": function_trigger_flow,
+                "reachability_file": reachability_file,
+                "reachability_function": reachability_function,
+                "reachability_function_start_line": reachability_function_start_line,
+                "reachability_function_end_line": reachability_function_end_line,
+                "context_start_line": context_start_line,
+                "context_end_line": context_end_line,
             },
         ))
     

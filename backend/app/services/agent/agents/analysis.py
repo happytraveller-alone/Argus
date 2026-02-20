@@ -18,6 +18,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
+from .react_parser import parse_react_response
 from ..json_parser import AgentJsonParser
 from ..prompts import CORE_SECURITY_PRINCIPLES, VULNERABILITY_PRIORITIES
 
@@ -36,6 +37,9 @@ ANALYSIS_SYSTEM_PROMPT = """你是漏洞分析 Agent，负责自主发现高价�
 8. **语言要求**：Final Answer 中 title/description/suggestion/fix_description/verification_evidence/poc_plan 必须使用简体中文，禁止输出英文段落。
 9. **工具优先门禁（强约束）**：在输出任何结论或 Final Answer 前，必须至少执行一次“代码证据”工具调用（最低要求：至少一次 `read_file`；并建议再执行一次 `search_code/pattern_match/opengrep_scan` 之一）。结论必须引用 Observation 证据，禁止无证据宣称“已阅读/已验证”。
 10. **首轮强约束**：第一轮必须输出 Action（优先 `read_file` 或 `search_code`），不允许第一轮直接输出 Final Answer。
+11. **标题强约束**：每条 finding 的 `title` 必须是中文四段式：`路径+函数+缺陷名称+可能造成的危害`。示例：`src/time64.c中sprintf函数缓冲区溢出漏洞，可能造成的危害：可导致内存破坏与进程崩溃`。
+12. **禁止标题漂移**：不得输出英文标题、不得只写漏洞类型；函数名必须可解析，无法定位函数的候选不得进入最终可验证结果。
+13. **输出格式约束**：禁止使用 `## Action`/`## Action Input` 标题样式，必须使用 `Action:`/`Action Input:` 行格式。
 
 ## 工作流
 1. 先读取关键文件/候选位置，确认上下文。
@@ -57,6 +61,7 @@ Final Answer: {"findings":[...], "summary":"..."}
 - title
 - description
 - file_path
+- function_name
 - line_start
 - code_snippet
 - confidence
@@ -114,90 +119,25 @@ class AnalysisAgent(BaseAgent):
 
     
     def _parse_llm_response(self, response: str) -> AnalysisStep:
-        """解析 LLM 响应 - 增强版，更健壮地提取思考内容"""
-        step = AnalysisStep(thought="")
+        """解析 LLM 响应（共享 ReAct 解析器）"""
+        parsed = parse_react_response(
+            response,
+            final_default={"findings": [], "raw_answer": (response or "").strip()},
+            action_input_raw_key="raw_input",
+        )
+        step = AnalysisStep(
+            thought=parsed.thought or "",
+            action=parsed.action,
+            action_input=parsed.action_input or {},
+            is_final=bool(parsed.is_final),
+            final_answer=parsed.final_answer if isinstance(parsed.final_answer, dict) else None,
+        )
 
-        # 🔥 v2.1: 预处理 - 移除 Markdown 格式标记（LLM 有时会输出 **Action:** 而非 Action:）
-        cleaned_response = response
-        cleaned_response = re.sub(r'\*\*Action:\*\*', 'Action:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Action Input:\*\*', 'Action Input:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Thought:\*\*', 'Thought:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Final Answer:\*\*', 'Final Answer:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Observation:\*\*', 'Observation:', cleaned_response)
-
-        # 🔥 首先尝试提取明确的 Thought 标记（Thought 可以不存在）
-        thought_match = re.search(r'Thought:\s*(.*?)(?=Action:|Final Answer:|$)', cleaned_response, re.DOTALL)
-        if thought_match:
-            step.thought = thought_match.group(1).strip()
-
-        # 🔥 提取 Action（Action 优先于 Final Answer；避免同轮同时输出导致跳过工具）
-        action_match = re.search(r'Action:\s*(\w+)', cleaned_response)
-        if action_match:
-            step.action = action_match.group(1).strip()
-
-            # 🔥 如果没有提取到 thought，提取 Action 之前的内容作为思考
-            if not step.thought:
-                action_pos = cleaned_response.find('Action:')
-                if action_pos > 0:
-                    before_action = cleaned_response[:action_pos].strip()
-                    before_action = re.sub(r'^Thought:\s*', '', before_action)
-                    if before_action:
-                        step.thought = before_action[:500] if len(before_action) > 500 else before_action
-
-            # 🔥 提取 Action Input
-            # 注意：必须在遇到 Final Answer 前截断，否则会把 Final Answer JSON 拼进 Action Input
-            input_match = re.search(
-                r'Action Input:\s*(.*?)(?=Thought:|Action:|Observation:|Final Answer:|$)',
-                cleaned_response,
-                re.DOTALL,
-            )
-            if input_match:
-                input_text = input_match.group(1).strip()
-                input_text = re.sub(r'```json\s*', '', input_text)
-                input_text = re.sub(r'```\s*', '', input_text)
-                # 使用增强的 JSON 解析器
-                step.action_input = AgentJsonParser.parse(
-                    input_text,
-                    default={"raw_input": input_text}
-                )
-            else:
-                step.action_input = {}
-
-            return step
-
-        # 🔥 检查是否是最终答案（仅当不存在 Action 时）
-        final_match = re.search(r'Final Answer:\s*(.*?)$', cleaned_response, re.DOTALL)
-        if final_match:
-            step.is_final = True
-            answer_text = final_match.group(1).strip()
-            answer_text = re.sub(r'```json\s*', '', answer_text)
-            answer_text = re.sub(r'```\s*', '', answer_text)
-            # 使用增强的 JSON 解析器
-            step.final_answer = AgentJsonParser.parse(
-                answer_text,
-                default={"findings": [], "raw_answer": answer_text}
-            )
-            # 确保 findings 格式正确
-            if "findings" in step.final_answer:
-                step.final_answer["findings"] = [
-                    f for f in step.final_answer["findings"]
-                    if isinstance(f, dict)
-                ]
-
-            # 🔥 如果没有提取到 thought，使用 Final Answer 前的内容作为思考
-            if not step.thought:
-                before_final = cleaned_response[:cleaned_response.find('Final Answer:')].strip()
-                if before_final:
-                    before_final = re.sub(r'^Thought:\s*', '', before_final)
-                    step.thought = before_final[:500] if len(before_final) > 500 else before_final
-
-            return step
-
-        # 🔥 最后的 fallback：如果整个响应没有任何标记，整体作为思考
-        if not step.thought and not step.action and not step.is_final:
-            if response.strip():
-                step.thought = response.strip()[:500]
-
+        if step.is_final and isinstance(step.final_answer, dict) and "findings" in step.final_answer:
+            step.final_answer["findings"] = [
+                f for f in step.final_answer["findings"]
+                if isinstance(f, dict)
+            ]
         return step
     
 
@@ -335,6 +275,71 @@ class AnalysisAgent(BaseAgent):
         all_findings = []
         error_message = None  # 🔥 跟踪错误信息
         forced_min_tool_done = False  # 🔥 防死循环：首次“无工具直接 Final Answer”时由系统自动执行一次最小工具调用
+        no_action_streak = 0
+        degraded_reason: Optional[str] = None
+
+        async def run_minimal_evidence_tool() -> str:
+            """执行最小证据工具调用，避免无 Action 空转。"""
+            file_path = ""
+            line_start = 1
+
+            if target_files and isinstance(target_files[0], str):
+                file_path = target_files[0].strip()
+                line_start = 1
+
+            if (not file_path) and bootstrap_findings and isinstance(bootstrap_findings[0], dict):
+                file_path = str(bootstrap_findings[0].get("file_path") or "").strip()
+                line_start = bootstrap_findings[0].get("line_start") or 1
+
+            if (not file_path) and high_risk_areas:
+                first_area = str(high_risk_areas[0])
+                if ":" in first_area:
+                    area_path, rest = first_area.split(":", 1)
+                    file_path = area_path.strip()
+                    line_token = rest.strip().split()[0] if rest.strip() else ""
+                    if line_token.isdigit():
+                        line_start = int(line_token)
+
+            if file_path and ":" in file_path:
+                parts = file_path.split(":", 1)
+                if len(parts) == 2 and parts[1].split()[0].isdigit():
+                    file_path = parts[0].strip()
+                    try:
+                        line_start = int(parts[1].split()[0])
+                    except Exception:
+                        line_start = 1
+
+            try:
+                line_start_int = int(line_start) if line_start is not None else 1
+            except Exception:
+                line_start_int = 1
+
+            start_line = max(1, line_start_int - 20)
+            end_line = line_start_int + 80
+
+            if "read_file" in self.tools and file_path:
+                return await self.execute_tool(
+                    "read_file",
+                    {
+                        "file_path": file_path,
+                        "start_line": start_line,
+                        "end_line": end_line,
+                        "max_lines": 200,
+                    },
+                )
+            if "list_files" in self.tools:
+                return await self.execute_tool(
+                    "list_files",
+                    {
+                        "directory": ".",
+                        "recursive": False,
+                        "max_files": 80,
+                    },
+                )
+            return (
+                "⚠️ 系统无法自动执行最小工具调用（缺少 read_file/list_files 或目标文件未知）。"
+                "请改用 read_file/search_code 获取证据后再总结。"
+            )
 
         await self.emit_thinking("🔬 Analysis Agent 启动，LLM 开始自主安全分析...")
         
@@ -416,6 +421,8 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                     "role": "assistant",
                     "content": llm_output,
                 })
+                if step.action or step.is_final:
+                    no_action_streak = 0
                 
                 # 检查是否完成
                 if step.is_final:
@@ -429,73 +436,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                         if not forced_min_tool_done:
                             forced_min_tool_done = True
                             await self.emit_thinking("⚠️ 拒绝过早完成：系统将自动执行一次最小工具调用获取证据")
-
-                            file_path = ""
-                            line_start = 1
-
-                            # 1) 优先 target_files[0]
-                            if target_files and isinstance(target_files[0], str):
-                                file_path = target_files[0].strip()
-                                line_start = 1
-
-                            # 2) 其次 bootstrap_findings[0].file_path + line_start
-                            if (not file_path) and bootstrap_findings and isinstance(bootstrap_findings[0], dict):
-                                file_path = str(bootstrap_findings[0].get("file_path") or "").strip()
-                                line_start = bootstrap_findings[0].get("line_start") or 1
-
-                            # 3) 其次 high_risk_areas[0]（格式可能为 "path/to/file.py:12 - desc"）
-                            if (not file_path) and high_risk_areas:
-                                first_area = str(high_risk_areas[0])
-                                # 提取 path:line
-                                if ":" in first_area:
-                                    area_path, rest = first_area.split(":", 1)
-                                    file_path = area_path.strip()
-                                    line_token = rest.strip().split()[0] if rest.strip() else ""
-                                    if line_token.isdigit():
-                                        line_start = int(line_token)
-
-                            # 兼容 file_path 形如 "a.py:36"
-                            if file_path and ":" in file_path:
-                                parts = file_path.split(":", 1)
-                                if len(parts) == 2 and parts[1].split()[0].isdigit():
-                                    file_path = parts[0].strip()
-                                    try:
-                                        line_start = int(parts[1].split()[0])
-                                    except Exception:
-                                        line_start = 1
-
-                            try:
-                                line_start_int = int(line_start) if line_start is not None else 1
-                            except Exception:
-                                line_start_int = 1
-
-                            start_line = max(1, line_start_int - 20)
-                            end_line = line_start_int + 80
-
-                            if "read_file" in self.tools and file_path:
-                                observation = await self.execute_tool(
-                                    "read_file",
-                                    {
-                                        "file_path": file_path,
-                                        "start_line": start_line,
-                                        "end_line": end_line,
-                                        "max_lines": 200,
-                                    },
-                                )
-                            elif "list_files" in self.tools:
-                                observation = await self.execute_tool(
-                                    "list_files",
-                                    {
-                                        "directory": ".",
-                                        "recursive": False,
-                                        "max_files": 80,
-                                    },
-                                )
-                            else:
-                                observation = (
-                                    "⚠️ 系统无法自动执行最小工具调用（缺少 read_file/list_files 或目标文件未知）。"
-                                    "请改用 read_file/search_code 获取证据后再总结。"
-                                )
+                            observation = await run_minimal_evidence_tool()
 
                             await self.emit_llm_observation(observation)
                             self._conversation_history.append(
@@ -525,12 +466,29 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                         # 🔥 发射每个发现的事件（用于前端实时未验证列表）
                         # 限制数量避免日志风暴，但需要足够覆盖面来体现“实时发现”。
                         for finding in all_findings[:50]:
+                            title_value = str(finding.get("title") or "Unknown")
                             await self.emit_finding(
-                                finding.get("title", "Unknown"),
+                                title_value,
                                 finding.get("severity", "medium"),
                                 finding.get("vulnerability_type", "other"),
                                 finding.get("file_path", ""),
                                 finding.get("line_start"),
+                                display_title=title_value,
+                                cwe_id=(
+                                    str(finding.get("cwe_id")).strip()
+                                    if finding.get("cwe_id") is not None
+                                    else None
+                                ),
+                                code_snippet=(
+                                    str(finding.get("code_snippet"))
+                                    if finding.get("code_snippet") is not None
+                                    else None
+                                ),
+                                function_trigger_flow=(
+                                    finding.get("function_trigger_flow")
+                                    if isinstance(finding.get("function_trigger_flow"), list)
+                                    else None
+                                ),
                             )
                             # 🔥 记录洞察
                             self.add_insight(
@@ -609,14 +567,49 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                     })
                 else:
                     # LLM 没有选择工具，提示它继续
-                    await self.emit_llm_decision("继续分析", "LLM 需要更多分析")
-                    self._conversation_history.append({
-                        "role": "user",
-                        "content": "请继续分析。你输出了 Thought 但没有输出 Action。请**立即**选择一个工具执行，或者如果分析完成，输出 Final Answer 汇总所有发现。",
-                    })
+                    no_action_streak += 1
+                    await self.emit_llm_decision("继续分析", f"LLM 未输出 Action (streak={no_action_streak})")
+
+                    if no_action_streak == 3:
+                        self._conversation_history.append({
+                            "role": "user",
+                            "content": (
+                                "你连续多轮没有输出可执行 Action。请严格按以下格式立即输出：\n"
+                                "Thought: ...\nAction: <tool_name>\nAction Input: {...}\n"
+                                "禁止使用 `## Action` 标题样式。"
+                            ),
+                        })
+                    elif no_action_streak == 5:
+                        await self.emit_thinking("⚠️ 检测到连续无 Action，系统自动执行最小证据工具以打破空转。")
+                        observation = await run_minimal_evidence_tool()
+                        await self.emit_llm_observation(observation)
+                        self._conversation_history.append({
+                            "role": "user",
+                            "content": f"Observation:\n{observation}",
+                        })
+                        self._conversation_history.append({
+                            "role": "user",
+                            "content": (
+                                "系统已自动补充证据。下一轮必须输出可执行 Action，"
+                                "或在证据充分时输出 Final Answer。"
+                            ),
+                        })
+                    elif no_action_streak >= 7:
+                        degraded_reason = "analysis_stagnation"
+                        await self.emit_event(
+                            "warning",
+                            "Analysis 连续无 Action，已触发有界收敛并降级结束。",
+                            metadata={"degraded_reason": degraded_reason, "streak": no_action_streak},
+                        )
+                        break
+                    else:
+                        self._conversation_history.append({
+                            "role": "user",
+                            "content": "请继续分析。你输出了 Thought 但没有输出 Action。请**立即**选择一个工具执行，或者如果分析完成，输出 Final Answer 汇总所有发现。",
+                        })
             
             # 🔥 如果循环结束但没有发现，强制 LLM 总结
-            if not all_findings and not self.is_cancelled and not error_message:
+            if not all_findings and not self.is_cancelled and not error_message and not degraded_reason:
                 await self.emit_thinking("📝 分析阶段结束，正在生成漏洞总结...")
                 
                 # 添加强制总结的提示
@@ -681,7 +674,10 @@ Final Answer:""",
                 return AgentResult(
                     success=False,
                     error="任务已取消",
-                    data={"findings": all_findings},
+                    data={
+                        "findings": all_findings,
+                        **({"degraded_reason": degraded_reason} if degraded_reason else {}),
+                    },
                     iterations=self._iteration,
                     tool_calls=self._tool_calls,
                     tokens_used=self._total_tokens,
@@ -697,7 +693,10 @@ Final Answer:""",
                 return AgentResult(
                     success=False,
                     error=error_message,
-                    data={"findings": all_findings},
+                    data={
+                        "findings": all_findings,
+                        **({"degraded_reason": degraded_reason} if degraded_reason else {}),
+                    },
                     iterations=self._iteration,
                     tool_calls=self._tool_calls,
                     tokens_used=self._total_tokens,
@@ -744,6 +743,7 @@ Final Answer:""",
                 success=True,
                 data={
                     "findings": standardized_findings,
+                    **({"degraded_reason": degraded_reason} if degraded_reason else {}),
                     "steps": [
                         {
                             "thought": s.thought,

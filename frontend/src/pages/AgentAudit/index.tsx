@@ -209,7 +209,7 @@ function buildFindingFingerprint(input: {
   vulnerability_type: unknown;
   file_path: unknown;
   line_start: unknown;
-  title: unknown;
+  cwe_id?: unknown;
 }): string {
   const vulnerabilityType = toSafeTrimmedString(input.vulnerability_type) || "unknown";
   const filePath = toSafeTrimmedString(input.file_path);
@@ -217,8 +217,7 @@ function buildFindingFingerprint(input: {
     typeof input.line_start === "number" && Number.isFinite(input.line_start)
       ? String(input.line_start)
       : "";
-  const title = toSafeTrimmedString(input.title);
-  return [vulnerabilityType, filePath, lineStart, title].join("|");
+  return [vulnerabilityType, filePath, lineStart].join("|");
 }
 
 function pickNewerIsoTimestamp(
@@ -238,22 +237,40 @@ function agentFindingToRealtimeItem(finding: AgentFinding): RealtimeMergedFindin
   if (finding.status === "false_positive" || finding.authenticity === "false_positive") {
     return null;
   }
+  if (!finding.is_verified) {
+    return null;
+  }
 
   const fingerprint = buildFindingFingerprint({
     vulnerability_type: finding.vulnerability_type,
     file_path: finding.file_path,
     line_start: finding.line_start,
-    title: finding.title,
+    cwe_id: finding.cwe_id,
   });
 
   return {
     id: finding.id,
     fingerprint,
     title: toSafeTrimmedString(finding.title) || "发现缺陷",
+    display_title: toSafeTrimmedString(finding.display_title) || null,
     severity: toSafeTrimmedString(finding.severity) || "medium",
     vulnerability_type: toSafeTrimmedString(finding.vulnerability_type) || "unknown",
     file_path: finding.file_path ?? null,
     line_start: finding.line_start ?? null,
+    line_end: finding.line_end ?? null,
+    cwe_id: toSafeTrimmedString(finding.cwe_id) || null,
+    code_snippet: finding.code_snippet ?? null,
+    function_trigger_flow:
+      Array.isArray(finding.function_trigger_flow) && finding.function_trigger_flow.length > 0
+        ? finding.function_trigger_flow.map((step) => String(step))
+        : null,
+    verification_evidence: finding.verification_evidence ?? null,
+    reachability_file: finding.reachability_file ?? null,
+    reachability_function: finding.reachability_function ?? null,
+    reachability_function_start_line: finding.reachability_function_start_line ?? null,
+    reachability_function_end_line: finding.reachability_function_end_line ?? null,
+    context_start_line: finding.context_start_line ?? null,
+    context_end_line: finding.context_end_line ?? null,
     timestamp: finding.created_at ?? null,
     is_verified: Boolean(finding.is_verified),
   };
@@ -261,17 +278,13 @@ function agentFindingToRealtimeItem(finding: AgentFinding): RealtimeMergedFindin
 
 function agentEventToRealtimeItem(event: AgentEvent): RealtimeMergedFindingItem | null {
   const eventType = toSafeTrimmedString(event.event_type).toLowerCase();
-  if (
-    eventType !== "finding_new" &&
-    eventType !== "finding_verified" &&
-    eventType !== "finding_update" &&
-    eventType !== "finding"
-  ) {
+  if (eventType !== "finding_verified" && eventType !== "finding_update" && eventType !== "finding") {
     return null;
   }
 
   const md = event.metadata ?? {};
   const title =
+    toSafeTrimmedString((md as any).display_title) ||
     toSafeTrimmedString((md as any).title) ||
     toSafeTrimmedString(event.message) ||
     "发现缺陷";
@@ -287,12 +300,13 @@ function agentEventToRealtimeItem(event: AgentEvent): RealtimeMergedFindingItem 
   const timestamp = event.timestamp || mdTimestamp || null;
   const isVerified =
     eventType === "finding_verified" || (md as any).is_verified === true;
+  if (!isVerified) return null;
 
   const fingerprint = buildFindingFingerprint({
     vulnerability_type: vulnerabilityType,
     file_path: filePath || "",
     line_start: lineStart,
-    title,
+    cwe_id: (md as any).cwe_id,
   });
 
   const id =
@@ -304,11 +318,44 @@ function agentEventToRealtimeItem(event: AgentEvent): RealtimeMergedFindingItem 
   return {
     id,
     fingerprint,
-    title,
+    title: toSafeTrimmedString((md as any).title) || title,
+    display_title: toSafeTrimmedString((md as any).display_title) || null,
     severity,
     vulnerability_type: vulnerabilityType,
     file_path: filePath,
     line_start: lineStart,
+    line_end:
+      typeof (md as any).line_end === "number" && Number.isFinite((md as any).line_end)
+        ? ((md as any).line_end as number)
+        : null,
+    cwe_id: toSafeTrimmedString((md as any).cwe_id) || null,
+    code_snippet: toSafeTrimmedString((md as any).code_snippet) || null,
+    function_trigger_flow: Array.isArray((md as any).function_trigger_flow)
+      ? ((md as any).function_trigger_flow as unknown[]).map((step) => String(step))
+      : null,
+    verification_evidence: toSafeTrimmedString((md as any).verification_evidence) || null,
+    reachability_file: toSafeTrimmedString((md as any).reachability_file) || null,
+    reachability_function: toSafeTrimmedString((md as any).reachability_function) || null,
+    reachability_function_start_line:
+      typeof (md as any).reachability_function_start_line === "number" &&
+      Number.isFinite((md as any).reachability_function_start_line)
+        ? ((md as any).reachability_function_start_line as number)
+        : null,
+    reachability_function_end_line:
+      typeof (md as any).reachability_function_end_line === "number" &&
+      Number.isFinite((md as any).reachability_function_end_line)
+        ? ((md as any).reachability_function_end_line as number)
+        : null,
+    context_start_line:
+      typeof (md as any).context_start_line === "number" &&
+      Number.isFinite((md as any).context_start_line)
+        ? ((md as any).context_start_line as number)
+        : null,
+    context_end_line:
+      typeof (md as any).context_end_line === "number" &&
+      Number.isFinite((md as any).context_end_line)
+        ? ((md as any).context_end_line as number)
+        : null,
     timestamp,
     is_verified: Boolean(isVerified),
   };
@@ -351,12 +398,48 @@ function mergeRealtimeFindingsBatch(
       vulnerability_type: preferIncoming
         ? (item.vulnerability_type || existing.vulnerability_type)
         : (existing.vulnerability_type || item.vulnerability_type),
+      display_title: preferIncoming
+        ? (item.display_title ?? existing.display_title)
+        : (existing.display_title ?? item.display_title),
       file_path: preferIncoming
         ? (item.file_path ?? existing.file_path)
         : (existing.file_path ?? item.file_path),
       line_start: preferIncoming
         ? (item.line_start ?? existing.line_start)
         : (existing.line_start ?? item.line_start),
+      line_end: preferIncoming
+        ? (item.line_end ?? existing.line_end)
+        : (existing.line_end ?? item.line_end),
+      cwe_id: preferIncoming
+        ? (item.cwe_id ?? existing.cwe_id)
+        : (existing.cwe_id ?? item.cwe_id),
+      code_snippet: preferIncoming
+        ? (item.code_snippet ?? existing.code_snippet)
+        : (existing.code_snippet ?? item.code_snippet),
+      function_trigger_flow: preferIncoming
+        ? (item.function_trigger_flow ?? existing.function_trigger_flow)
+        : (existing.function_trigger_flow ?? item.function_trigger_flow),
+      verification_evidence: preferIncoming
+        ? (item.verification_evidence ?? existing.verification_evidence)
+        : (existing.verification_evidence ?? item.verification_evidence),
+      reachability_file: preferIncoming
+        ? (item.reachability_file ?? existing.reachability_file)
+        : (existing.reachability_file ?? item.reachability_file),
+      reachability_function: preferIncoming
+        ? (item.reachability_function ?? existing.reachability_function)
+        : (existing.reachability_function ?? item.reachability_function),
+      reachability_function_start_line: preferIncoming
+        ? (item.reachability_function_start_line ?? existing.reachability_function_start_line)
+        : (existing.reachability_function_start_line ?? item.reachability_function_start_line),
+      reachability_function_end_line: preferIncoming
+        ? (item.reachability_function_end_line ?? existing.reachability_function_end_line)
+        : (existing.reachability_function_end_line ?? item.reachability_function_end_line),
+      context_start_line: preferIncoming
+        ? (item.context_start_line ?? existing.context_start_line)
+        : (existing.context_start_line ?? item.context_start_line),
+      context_end_line: preferIncoming
+        ? (item.context_end_line ?? existing.context_end_line)
+        : (existing.context_end_line ?? item.context_end_line),
       timestamp: pickNewerIsoTimestamp(existing.timestamp, item.timestamp),
       is_verified: Boolean(existing.is_verified) || Boolean(item.is_verified),
     };
@@ -1458,9 +1541,13 @@ function AgentAuditPageContent() {
         }
       },
       onFinding: (finding: Record<string, unknown>, isVerified: boolean) => {
+        if (!isVerified) {
+          return;
+        }
         potentialFindingsManuallyClearedRef.current = false;
         const safeText = (value: unknown) => String(value ?? "").trim();
-        const title = safeText(finding.title) || "发现漏洞";
+        const displayTitle = safeText((finding as any).display_title) || null;
+        const title = safeText(finding.title) || displayTitle || "发现漏洞";
         const vulnerabilityType = safeText(finding.vulnerability_type) || "unknown";
         const filePath = safeText(finding.file_path) || null;
         const lineStart =
@@ -1468,17 +1555,18 @@ function AgentAuditPageContent() {
             ? (finding.line_start as number)
             : null;
         const severity = safeText(finding.severity) || "medium";
+        const cweId = safeText((finding as any).cwe_id) || null;
         const timestamp =
           typeof (finding as any).timestamp === "string"
             ? ((finding as any).timestamp as string)
             : null;
 
-        const fingerprint = [
-          vulnerabilityType,
-          filePath || "",
-          lineStart === null ? "" : String(lineStart),
-          title,
-        ].join("|");
+        const fingerprint = buildFindingFingerprint({
+          vulnerability_type: vulnerabilityType,
+          file_path: filePath || "",
+          line_start: lineStart,
+          cwe_id: cweId,
+        });
 
         const streamId = safeText(finding.id) || `finding-${Date.now()}`;
 
@@ -1486,10 +1574,43 @@ function AgentAuditPageContent() {
           id: streamId,
           fingerprint,
           title,
+          display_title: displayTitle,
           severity,
           vulnerability_type: vulnerabilityType,
           file_path: filePath,
           line_start: lineStart,
+          line_end:
+            typeof (finding as any).line_end === "number" && Number.isFinite((finding as any).line_end)
+              ? ((finding as any).line_end as number)
+              : null,
+          cwe_id: cweId,
+          code_snippet: safeText((finding as any).code_snippet) || null,
+          function_trigger_flow: Array.isArray((finding as any).function_trigger_flow)
+            ? ((finding as any).function_trigger_flow as unknown[]).map((step) => String(step))
+            : null,
+          verification_evidence: safeText((finding as any).verification_evidence) || null,
+          reachability_file: safeText((finding as any).reachability_file) || null,
+          reachability_function: safeText((finding as any).reachability_function) || null,
+          reachability_function_start_line:
+            typeof (finding as any).reachability_function_start_line === "number" &&
+            Number.isFinite((finding as any).reachability_function_start_line)
+              ? ((finding as any).reachability_function_start_line as number)
+              : null,
+          reachability_function_end_line:
+            typeof (finding as any).reachability_function_end_line === "number" &&
+            Number.isFinite((finding as any).reachability_function_end_line)
+              ? ((finding as any).reachability_function_end_line as number)
+              : null,
+          context_start_line:
+            typeof (finding as any).context_start_line === "number" &&
+            Number.isFinite((finding as any).context_start_line)
+              ? ((finding as any).context_start_line as number)
+              : null,
+          context_end_line:
+            typeof (finding as any).context_end_line === "number" &&
+            Number.isFinite((finding as any).context_end_line)
+              ? ((finding as any).context_end_line as number)
+              : null,
           timestamp,
           is_verified: Boolean(isVerified),
         };

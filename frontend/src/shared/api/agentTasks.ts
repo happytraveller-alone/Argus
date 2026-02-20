@@ -118,6 +118,7 @@ export interface AgentFinding {
   vulnerability_type: string;
   severity: string;
   title: string;
+  display_title?: string | null;
   description: string | null;
 
   file_path: string | null;
@@ -125,6 +126,8 @@ export interface AgentFinding {
   line_end: number | null;
   code_snippet: string | null;
   code_context: string | null;
+  cwe_id?: string | null;
+  cwe_name?: string | null;
   context_start_line: number | null;
   context_end_line: number | null;
 
@@ -135,8 +138,11 @@ export interface AgentFinding {
   verification_evidence: string | null;
   reachability_file?: string | null;
   reachability_function?: string | null;
+  reachability_function_start_line?: number | null;
+  reachability_function_end_line?: number | null;
   flow_path_score?: number | null;
   flow_call_chain?: string[] | null;
+  function_trigger_flow?: string[] | null;
   flow_control_conditions?: string[] | null;
   logic_authz_evidence?: string[] | null;
   has_poc: boolean;

@@ -23,6 +23,26 @@ class Settings(BaseSettings):
             return v
         raise ValueError(v)
 
+    @validator("FUNCTION_LOCATOR_LANGUAGES", pre=True)
+    def assemble_function_locator_languages(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            text = v.strip()
+            if not text:
+                return []
+            if text.startswith("[") and text.endswith("]"):
+                try:
+                    import json
+
+                    parsed = json.loads(text)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except Exception:
+                    pass
+            return [item.strip() for item in text.split(",") if item.strip()]
+        if isinstance(v, list):
+            return [str(item).strip() for item in v if str(item).strip()]
+        return []
+
     # POSTGRES
     POSTGRES_SERVER: str = "db"
     POSTGRES_USER: str = "postgres"
@@ -134,6 +154,21 @@ class Settings(BaseSettings):
     FLOW_JOERN_TRIGGER_CONFIDENCE: float = 0.7
     LOGIC_AUTHZ_ENABLED: bool = True
     FLOW_UNREACHABLE_POLICY: str = "degrade_likely"
+
+    # 命中代码归属函数定位配置
+    FUNCTION_LOCATOR_LANGUAGES: List[str] = [
+        "python",
+        "javascript",
+        "typescript",
+        "java",
+        "kotlin",
+        "c",
+        "cpp",
+    ]
+
+    # 工具文档同步到 Markdown Memory（shared.md）
+    TOOL_DOC_SYNC_ENABLED: bool = True
+    TOOL_DOC_SYNC_MAX_CHARS: int = 8000
 
     # Joern MCP (CodeBadger) configuration
     # - Default: prefer local `joern` binary if present.

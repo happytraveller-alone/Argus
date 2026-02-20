@@ -15,10 +15,22 @@ export type RealtimeMergedFindingItem = {
   id: string;
   fingerprint: string;
   title: string;
+  display_title?: string | null;
   severity: string;
   vulnerability_type: string;
   file_path?: string | null;
   line_start?: number | null;
+  line_end?: number | null;
+  cwe_id?: string | null;
+  code_snippet?: string | null;
+  function_trigger_flow?: string[] | null;
+  reachability_file?: string | null;
+  reachability_function?: string | null;
+  reachability_function_start_line?: number | null;
+  reachability_function_end_line?: number | null;
+  context_start_line?: number | null;
+  context_end_line?: number | null;
+  verification_evidence?: string | null;
   timestamp?: string | null;
   is_verified: boolean;
 };
@@ -79,11 +91,7 @@ export default function RealtimeFindingsPanel(props: {
   const [detailItem, setDetailItem] = useState<RealtimeMergedFindingItem | null>(null);
 
   const counts = useMemo(() => {
-    let verified = 0;
-    for (const item of props.items) {
-      if (item.is_verified) verified += 1;
-    }
-    return { total: props.items.length, verified, unverified: props.items.length - verified };
+    return { total: props.items.length };
   }, [props.items]);
 
   const severityCounts = useMemo(() => {
@@ -143,13 +151,7 @@ export default function RealtimeFindingsPanel(props: {
               variant="outline"
               className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
             >
-              已验证 {counts.verified}
-            </Badge>
-            <Badge
-              variant="outline"
-              className="text-[11px] border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10"
-            >
-              未验证 {counts.unverified}
+              全部已验证
             </Badge>
             {props.isRunning ? (
               <Badge
@@ -315,7 +317,7 @@ export default function RealtimeFindingsPanel(props: {
                             {severityToZh(sevKey)}
                           </Badge>
                           <span className="text-sm font-semibold break-words line-clamp-2">
-                            {item.title || "未命名缺陷"}
+                            {item.display_title || item.title || "未命名缺陷"}
                           </span>
                         </div>
 
@@ -326,21 +328,12 @@ export default function RealtimeFindingsPanel(props: {
                       </div>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {item.is_verified ? (
-                          <Badge
-                            variant="outline"
-                            className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                          >
-                            已验证
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-[11px] border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10"
-                          >
-                            未验证
-                          </Badge>
-                        )}
+                        <Badge
+                          variant="outline"
+                          className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                        >
+                          已验证
+                        </Badge>
 
                         <Button
                           size="sm"
@@ -408,15 +401,50 @@ export default function RealtimeFindingsPanel(props: {
                 </div>
 
                 <h3 className="text-sm font-semibold break-words">
-                  {detailItem.title || "未命名缺陷"}
+                  {detailItem.display_title || detailItem.title || "未命名缺陷"}
                 </h3>
 
                 <div className="text-xs text-muted-foreground space-y-1">
                   <div>类型: {detailItem.vulnerability_type || "-"}</div>
                   <div>定位: {formatLocation(detailItem)}</div>
+                  <div>
+                    所属函数: {detailItem.reachability_function || "-"} @{" "}
+                    {detailItem.reachability_file || detailItem.file_path || "-"}
+                  </div>
+                  <div>
+                    函数行范围:{" "}
+                    {detailItem.reachability_function_start_line ?? "-"} -{" "}
+                    {detailItem.reachability_function_end_line ?? "-"}
+                  </div>
+                  <div>
+                    命中行范围: {detailItem.line_start ?? "-"} - {detailItem.line_end ?? "-"}
+                  </div>
+                  <div>CWE: {detailItem.cwe_id || "等待落库补全"}</div>
                   <div className="font-mono break-all">
                     fingerprint: {detailItem.fingerprint || "-"}
                   </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <div className="text-xs font-semibold text-muted-foreground">命中代码片段</div>
+                  {detailItem.code_snippet ? (
+                    <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[32vh]">
+                      {detailItem.code_snippet}
+                    </pre>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">等待落库补全</div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <div className="text-xs font-semibold text-muted-foreground">所属函数触发流程</div>
+                  {detailItem.function_trigger_flow && detailItem.function_trigger_flow.length > 0 ? (
+                    <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[24vh]">
+                      {detailItem.function_trigger_flow.join("\n")}
+                    </pre>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">等待落库补全</div>
+                  )}
                 </div>
               </section>
             ) : null}

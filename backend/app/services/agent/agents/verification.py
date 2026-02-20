@@ -13,16 +13,22 @@ LLM 是验证的大脑！
 import asyncio
 import json
 import logging
+import os
 import re
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
+from .react_parser import parse_react_response
 from ..json_parser import AgentJsonParser
+from ..flow.lightweight.function_locator import EnclosingFunctionLocator
 from ..prompts import CORE_SECURITY_PRINCIPLES, VULNERABILITY_PRIORITIES
 
 logger = logging.getLogger(__name__)
+
+_PSEUDO_FUNCTION_NAMES = {"__attribute__", "__declspec"}
 
 VERIFICATION_SYSTEM_PROMPT = """你是漏洞验证 Agent，负责自主完成漏洞真实性校验与修复建议输出。
 
@@ -36,9 +42,12 @@ VERIFICATION_SYSTEM_PROMPT = """你是漏洞验证 Agent，负责自主完成漏
 7. 不允许输出“请选择/请确认后继续”等交互语句，必须直接执行默认策略并收敛结束。
 8. 若字段缺失需先自我补全（基于证据与默认模板），再输出 Final Answer。
 9. **语言要求**：Final Answer 中 title/description/suggestion/fix_description/verification_evidence/poc_plan 必须使用简体中文，禁止输出英文段落。
-10. **验证范围强约束**：本次仅验证 `bootstrap_findings`（候选种子）列表中的项，最多验证 8 条；列表为空则应直接跳过验证并返回空 findings。不得验证或新增清单以外的发现。
+10. **验证范围强约束**：必须验证全部候选项（候选来源：`previous_results.findings` 与 `bootstrap_findings` 合并去重）；列表为空时直接返回空 findings。不得新增清单以外的发现。
 11. **工具优先门禁（强约束）**：在输出任何结论或 Final Answer 前，必须至少执行一次工具调用获取代码证据（最低要求：至少一次 `read_file` 或 `search_code`），并在结论中引用 Observation 证据，禁止无证据宣称“已验证/已读取”。
 12. **首轮强约束**：第一轮必须输出 Action（优先 `read_file`），不允许第一轮直接输出 Final Answer。
+13. **标题强约束**：每条 finding 的 `title` 必须是中文四段式：`路径+函数+缺陷名称+可能造成的危害`。
+14. **CWE 要求**：每条 finding 必须输出 `cwe_id`（如 `CWE-79`），若无法精确判断，给出最接近的 CWE 并在证据中说明。
+15. **输出格式约束**：禁止使用 `## Action`/`## Action Input` 标题样式，必须使用 `Action:`/`Action Input:` 行格式。
 
 ## 工作流
 1. 先读取/提取目标代码，验证文件与行号是否真实存在。
@@ -62,6 +71,7 @@ Final Answer: {...}
 - reachability: reachable|likely_reachable|unreachable
 - authenticity/verdict: confirmed|likely|false_positive
 - verification_details/evidence
+- cwe_id
 - suggestion
 - fix_code
 
@@ -121,98 +131,28 @@ class VerificationAgent(BaseAgent):
 
     
     def _parse_llm_response(self, response: str) -> VerificationStep:
-        """解析 LLM 响应 - 增强版，更健壮地提取思考内容"""
-        step = VerificationStep(thought="")
+        """解析 LLM 响应（共享 ReAct 解析器）"""
+        parsed = parse_react_response(
+            response,
+            final_default={"findings": [], "raw_answer": (response or "").strip()},
+            action_input_raw_key="raw_input",
+        )
+        step = VerificationStep(
+            thought=parsed.thought or "",
+            action=parsed.action,
+            action_input=parsed.action_input or {},
+            is_final=bool(parsed.is_final),
+            final_answer=parsed.final_answer if isinstance(parsed.final_answer, dict) else None,
+        )
 
-        # 🔥 v2.1: 预处理 - 移除 Markdown 格式标记（LLM 有时会输出 **Action:** 而非 Action:）
-        cleaned_response = response
-        cleaned_response = re.sub(r'\*\*Action:\*\*', 'Action:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Action Input:\*\*', 'Action Input:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Thought:\*\*', 'Thought:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Final Answer:\*\*', 'Final Answer:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Observation:\*\*', 'Observation:', cleaned_response)
+        if step.action and not step.action_input:
+            logger.warning(f"[Verification] Action '{step.action}' found but Action Input is empty")
 
-        # 🔥 首先尝试提取明确的 Thought 标记（Thought 可以不存在）
-        thought_match = re.search(r'Thought:\s*(.*?)(?=Action:|Final Answer:|$)', cleaned_response, re.DOTALL)
-        if thought_match:
-            step.thought = thought_match.group(1).strip()
-
-        # 🔥 提取 Action（Action 优先于 Final Answer；避免同轮同时输出导致跳过工具）
-        action_match = re.search(r'Action:\s*(\w+)', cleaned_response)
-        if action_match:
-            step.action = action_match.group(1).strip()
-
-            # 🔥 如果没有提取到 thought，提取 Action 之前的内容作为思考
-            if not step.thought:
-                action_pos = cleaned_response.find('Action:')
-                if action_pos > 0:
-                    before_action = cleaned_response[:action_pos].strip()
-                    before_action = re.sub(r'^Thought:\s*', '', before_action)
-                    if before_action:
-                        step.thought = before_action[:500] if len(before_action) > 500 else before_action
-
-            # 🔥 提取 Action Input - 增强版，处理多种格式
-            # 注意：必须在遇到 Final Answer 前截断，否则会把 Final Answer JSON 拼进 Action Input
-            input_match = re.search(
-                r'Action Input:\s*(.*?)(?=Thought:|Action:|Observation:|Final Answer:|$)',
-                cleaned_response,
-                re.DOTALL,
-            )
-            if input_match:
-                input_text = input_match.group(1).strip()
-                input_text = re.sub(r'```json\s*', '', input_text)
-                input_text = re.sub(r'```\s*', '', input_text)
-
-                # 🔥 v2.1: 如果 Action Input 为空或只有 **，记录警告
-                if not input_text or input_text == '**' or input_text.strip() == '':
-                    logger.warning(f"[Verification] Action Input is empty or malformed: '{input_text}'")
-                    step.action_input = {}
-                else:
-                    # 使用增强的 JSON 解析器
-                    step.action_input = AgentJsonParser.parse(
-                        input_text,
-                        default={"raw_input": input_text}
-                    )
-            else:
-                # 🔥 v2.1: 有 Action 但没有 Action Input，记录警告
-                logger.warning(f"[Verification] Action '{step.action}' found but no Action Input")
-                step.action_input = {}
-
-            return step
-
-        # 🔥 检查是否是最终答案（仅当不存在 Action 时）
-        final_match = re.search(r'Final Answer:\s*(.*?)$', cleaned_response, re.DOTALL)
-        if final_match:
-            step.is_final = True
-            answer_text = final_match.group(1).strip()
-            answer_text = re.sub(r'```json\s*', '', answer_text)
-            answer_text = re.sub(r'```\s*', '', answer_text)
-            # 使用增强的 JSON 解析器
-            step.final_answer = AgentJsonParser.parse(
-                answer_text,
-                default={"findings": [], "raw_answer": answer_text}
-            )
-            # 确保 findings 格式正确
-            if "findings" in step.final_answer:
-                step.final_answer["findings"] = [
-                    f for f in step.final_answer["findings"]
-                    if isinstance(f, dict)
-                ]
-
-            # 🔥 如果没有提取到 thought，使用 Final Answer 前的内容作为思考
-            if not step.thought:
-                before_final = cleaned_response[:cleaned_response.find('Final Answer:')].strip()
-                if before_final:
-                    before_final = re.sub(r'^Thought:\s*', '', before_final)
-                    step.thought = before_final[:500] if len(before_final) > 500 else before_final
-
-            return step
-
-        # 🔥 最后的 fallback：如果整个响应没有任何标记，整体作为思考
-        if not step.thought and not step.action and not step.is_final:
-            if response.strip():
-                step.thought = response.strip()[:500]
-
+        if step.is_final and isinstance(step.final_answer, dict) and "findings" in step.final_answer:
+            step.final_answer["findings"] = [
+                f for f in step.final_answer["findings"]
+                if isinstance(f, dict)
+            ]
         return step
 
     def _validate_final_answer_schema(self, final_answer: Dict[str, Any]) -> tuple[bool, str]:
@@ -245,6 +185,10 @@ class VerificationAgent(BaseAgent):
             )
             if not has_evidence:
                 return False, f"第 {index} 条 finding 缺少 verification_details/evidence"
+
+            cwe_id = finding.get("cwe_id") or finding.get("cwe")
+            if not isinstance(cwe_id, str) or not cwe_id.strip():
+                return False, f"第 {index} 条 finding 缺少 cwe_id"
 
         return True, ""
 
@@ -295,6 +239,77 @@ class VerificationAgent(BaseAgent):
             return "likely_reachable"
         return "unreachable"
 
+    def _normalize_vulnerability_key(self, finding: Dict[str, Any]) -> str:
+        return (
+            str(finding.get("vulnerability_type") or "other")
+            .strip()
+            .lower()
+            .replace("-", "_")
+            .replace(" ", "_")
+        )
+
+    def _infer_cwe_id(self, finding: Dict[str, Any]) -> str:
+        explicit = finding.get("cwe_id") or finding.get("cwe")
+        if isinstance(explicit, str) and explicit.strip():
+            text = explicit.strip().upper()
+            return text if text.startswith("CWE-") else f"CWE-{text}"
+        mapping = {
+            "sql_injection": "CWE-89",
+            "xss": "CWE-79",
+            "command_injection": "CWE-78",
+            "path_traversal": "CWE-22",
+            "ssrf": "CWE-918",
+            "xxe": "CWE-611",
+            "deserialization": "CWE-502",
+            "hardcoded_secret": "CWE-798",
+            "auth_bypass": "CWE-287",
+            "idor": "CWE-639",
+            "weak_crypto": "CWE-327",
+            "nosql_injection": "CWE-943",
+            "code_injection": "CWE-94",
+        }
+        return mapping.get(self._normalize_vulnerability_key(finding), "CWE-20")
+
+    def _build_structured_title(self, finding: Dict[str, Any]) -> str:
+        vulnerability_key = self._normalize_vulnerability_key(finding)
+        vuln_name_map = {
+            "sql_injection": "SQL注入漏洞",
+            "xss": "跨站脚本漏洞",
+            "command_injection": "命令注入漏洞",
+            "path_traversal": "路径遍历漏洞",
+            "ssrf": "服务器端请求伪造漏洞",
+            "xxe": "XML外部实体漏洞",
+            "deserialization": "反序列化漏洞",
+            "hardcoded_secret": "硬编码密钥漏洞",
+            "auth_bypass": "认证绕过漏洞",
+            "idor": "越权访问漏洞",
+            "weak_crypto": "弱加密漏洞",
+            "nosql_injection": "NoSQL注入漏洞",
+            "code_injection": "代码注入漏洞",
+            "other": "安全缺陷",
+        }
+        harm_map = {
+            "sql_injection": "可能导致数据库数据泄露、篡改或删除",
+            "xss": "可能导致会话劫持或用户敏感信息泄露",
+            "command_injection": "可能导致攻击者执行任意系统命令",
+            "path_traversal": "可能导致未授权读取或覆盖服务器文件",
+            "ssrf": "可能导致内网探测或云元数据泄露",
+            "xxe": "可能导致敏感文件泄露或发起内网请求",
+            "deserialization": "可能导致远程代码执行或对象状态篡改",
+            "hardcoded_secret": "可能导致凭据泄露并引发横向渗透",
+            "auth_bypass": "可能导致未授权访问受保护功能",
+            "idor": "可能导致访问或篡改其他用户数据",
+            "weak_crypto": "可能导致通信或存储数据被破解",
+            "nosql_injection": "可能导致鉴权绕过或数据泄露",
+            "code_injection": "可能导致执行恶意代码并接管服务",
+            "other": "可能导致系统机密性、完整性或可用性受损",
+        }
+        path_text = str(finding.get("file_path") or "未知路径")
+        function_text = str(finding.get("function_name") or "未知函数")
+        vuln_name = vuln_name_map.get(vulnerability_key, "安全缺陷")
+        harm = harm_map.get(vulnerability_key, harm_map["other"])
+        return f"{path_text}中{function_text}{vuln_name}，可能造成的危害：{harm}"
+
     def _build_default_fix_code(self, finding: Dict[str, Any]) -> str:
         vuln_type = str(finding.get("vulnerability_type") or "general_issue")
         code_snippet = str(finding.get("code_snippet") or "").strip()
@@ -331,41 +346,324 @@ class VerificationAgent(BaseAgent):
             ],
         }
 
+    def _normalize_int_line(self, value: Any, default: int) -> int:
+        try:
+            line = int(value)
+            if line > 0:
+                return line
+        except Exception:
+            pass
+        return default
+
+    def _normalize_file_location(self, finding: Dict[str, Any]) -> tuple[str, int, int]:
+        file_path = str(finding.get("file_path") or finding.get("file") or "").strip()
+        line_start_raw = finding.get("line_start") or finding.get("line")
+        line_end_raw = finding.get("line_end")
+        if file_path and ":" in file_path:
+            prefix, suffix = file_path.split(":", 1)
+            token = suffix.split()[0] if suffix.split() else ""
+            if token.isdigit():
+                file_path = prefix.strip()
+                if line_start_raw in (None, "", 0):
+                    line_start_raw = int(token)
+        line_start = self._normalize_int_line(line_start_raw, 1)
+        line_end = self._normalize_int_line(line_end_raw, line_start)
+        if line_end < line_start:
+            line_end = line_start
+        return file_path, line_start, line_end
+
+    def _resolve_file_paths(
+        self,
+        file_path: str,
+        project_root: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+        clean = str(file_path or "").strip().replace("\\", "/")
+        if not clean:
+            return None, None
+        candidates = [clean]
+        if clean.startswith("./"):
+            candidates.append(clean[2:])
+        if "/" in clean:
+            candidates.append(clean.split("/", 1)[1])
+
+        if os.path.isabs(clean) and os.path.isfile(clean):
+            if project_root:
+                try:
+                    rel = os.path.relpath(clean, project_root).replace("\\", "/")
+                    if not rel.startswith("../"):
+                        return rel, clean
+                except Exception:
+                    pass
+            return clean, clean
+
+        if project_root:
+            root = Path(project_root)
+            for candidate in candidates:
+                full = root / candidate
+                if full.is_file():
+                    return candidate.replace("\\", "/"), str(full)
+        return clean, None
+
+    def _extract_function_name_from_title(self, title: Any) -> Optional[str]:
+        text = str(title or "").strip()
+        if not text:
+            return None
+        patterns = [
+            r"中([A-Za-z_][A-Za-z0-9_]*)函数",
+            r"中([A-Za-z_][A-Za-z0-9_]*)"
+            r"(?:SQL注入漏洞|跨站脚本漏洞|命令注入漏洞|路径遍历漏洞|服务器端请求伪造漏洞|XML外部实体漏洞|"
+            r"反序列化漏洞|硬编码密钥漏洞|认证绕过漏洞|越权访问漏洞|弱加密漏洞|NoSQL注入漏洞|代码注入漏洞|安全缺陷)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                candidate = match.group(1).strip()
+                if candidate.lower() in _PSEUDO_FUNCTION_NAMES:
+                    continue
+                return candidate
+        return None
+
+    def _infer_function_by_regex(
+        self,
+        file_lines: List[str],
+        line_start: int,
+    ) -> tuple[Optional[str], Optional[int], Optional[int]]:
+        if not file_lines:
+            return None, None, None
+        start_idx = max(0, min(len(file_lines) - 1, line_start - 1))
+        patterns = [
+            ("python", re.compile(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            ("javascript", re.compile(r"^\s*(?:export\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            ("c_like", re.compile(r"^\s*[A-Za-z_][\w\s\*:&<>]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*\{")),
+        ]
+        for idx in range(start_idx, -1, -1):
+            line = file_lines[idx]
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("//", "#")):
+                continue
+            for lang, pattern in patterns:
+                match = pattern.match(line)
+                if not match:
+                    continue
+                name = match.group(1).strip()
+                if not name:
+                    continue
+                start_line = idx + 1
+                end_line = start_line
+                if lang == "python":
+                    indent = len(line) - len(line.lstrip())
+                    for cursor in range(idx + 1, len(file_lines)):
+                        probe = file_lines[cursor]
+                        probe_stripped = probe.strip()
+                        if not probe_stripped:
+                            continue
+                        probe_indent = len(probe) - len(probe.lstrip())
+                        if probe_indent <= indent and not probe_stripped.startswith(("@", "#")):
+                            break
+                        end_line = cursor + 1
+                elif "{" in line:
+                    balance = line.count("{") - line.count("}")
+                    end_line = idx + 1
+                    for cursor in range(idx + 1, len(file_lines)):
+                        probe = file_lines[cursor]
+                        balance += probe.count("{") - probe.count("}")
+                        end_line = cursor + 1
+                        if balance <= 0:
+                            break
+                return name, start_line, end_line
+        return None, None, None
+
+    def _resolve_function_metadata(
+        self,
+        finding: Dict[str, Any],
+        project_root: Optional[str],
+        ast_cache: Dict[str, tuple[Optional[str], Optional[int], Optional[int]]],
+        file_cache: Dict[str, List[str]],
+        locator: Optional[EnclosingFunctionLocator] = None,
+    ) -> Dict[str, Any]:
+        file_path, line_start, line_end = self._normalize_file_location(finding)
+        resolved_file_path, full_file_path = self._resolve_file_paths(file_path, project_root)
+
+        reachability_target = finding.get("reachability_target")
+        if not isinstance(reachability_target, dict):
+            verification_payload = finding.get("verification_result")
+            if isinstance(verification_payload, dict):
+                maybe_target = verification_payload.get("reachability_target")
+                if isinstance(maybe_target, dict):
+                    reachability_target = maybe_target
+        explicit_function = None
+        for candidate in (
+            finding.get("function_name"),
+            finding.get("function"),
+            reachability_target.get("function") if isinstance(reachability_target, dict) else None,
+            self._extract_function_name_from_title(finding.get("title")),
+        ):
+            if not isinstance(candidate, str):
+                continue
+            text = candidate.strip()
+            if text and text.lower() not in {"unknown", "未知函数", "n/a", "-", "__attribute__", "__declspec"}:
+                explicit_function = text
+                break
+
+        start_from_target: Optional[int] = None
+        end_from_target: Optional[int] = None
+        resolution_method = "explicit"
+        if isinstance(reachability_target, dict):
+            raw_start = reachability_target.get("start_line")
+            raw_end = reachability_target.get("end_line")
+            try:
+                start_from_target = int(raw_start) if raw_start is not None else None
+            except Exception:
+                start_from_target = None
+            try:
+                end_from_target = int(raw_end) if raw_end is not None else None
+            except Exception:
+                end_from_target = None
+        if explicit_function:
+            return {
+                "file_path": resolved_file_path or file_path,
+                "function": explicit_function,
+                "start_line": start_from_target,
+                "end_line": end_from_target,
+                "resolution_method": resolution_method,
+                "resolution_engine": "explicit",
+                "language": reachability_target.get("language") if isinstance(reachability_target, dict) else None,
+                "diagnostics": (
+                    reachability_target.get("diagnostics")
+                    if isinstance(reachability_target, dict)
+                    else None
+                ),
+                "line_start": line_start,
+                "line_end": line_end,
+            }
+
+        if project_root and resolved_file_path and full_file_path and locator:
+            lines = file_cache.get(full_file_path)
+            if lines is None:
+                try:
+                    lines = Path(full_file_path).read_text(encoding="utf-8", errors="replace").splitlines()
+                except Exception:
+                    lines = []
+                file_cache[full_file_path] = lines
+
+            located = locator.locate(
+                full_file_path=full_file_path,
+                line_start=line_start,
+                relative_file_path=resolved_file_path,
+                file_lines=lines,
+            )
+            function_name = located.get("function")
+            if isinstance(function_name, str) and function_name.strip():
+                return {
+                    "file_path": resolved_file_path,
+                    "function": function_name.strip(),
+                    "start_line": located.get("start_line"),
+                    "end_line": located.get("end_line"),
+                    "resolution_method": located.get("resolution_method") or "python_tree_sitter",
+                    "resolution_engine": located.get("resolution_engine") or "python_tree_sitter",
+                    "language": located.get("language"),
+                    "diagnostics": located.get("diagnostics"),
+                    "line_start": line_start,
+                    "line_end": line_end,
+                }
+            return {
+                "file_path": resolved_file_path,
+                "function": None,
+                "start_line": None,
+                "end_line": None,
+                "resolution_method": "missing_enclosing_function",
+                "resolution_engine": located.get("resolution_engine") or "missing_enclosing_function",
+                "language": located.get("language"),
+                "diagnostics": located.get("diagnostics"),
+                "line_start": line_start,
+                "line_end": line_end,
+            }
+
+        return {
+            "file_path": resolved_file_path or file_path,
+            "function": None,
+            "start_line": None,
+            "end_line": None,
+            "resolution_method": "missing_enclosing_function",
+            "resolution_engine": "missing_enclosing_function",
+            "language": None,
+            "diagnostics": None,
+            "line_start": line_start,
+            "line_end": line_end,
+        }
+
+    def _build_min_function_trigger_flow(
+        self,
+        existing_flow: Any,
+        file_path: str,
+        function_name: Optional[str],
+        function_start_line: Optional[int],
+        function_end_line: Optional[int],
+        line_start: int,
+        line_end: int,
+    ) -> List[str]:
+        if isinstance(existing_flow, list):
+            normalized = [str(step).strip() for step in existing_flow if str(step).strip()]
+            if normalized:
+                return normalized
+        flow: List[str] = []
+        if function_name:
+            if function_start_line and function_end_line:
+                flow.append(
+                    f"{file_path}:{function_name} ({function_start_line}-{function_end_line})"
+                )
+            else:
+                flow.append(f"{file_path}:{function_name}")
+        hit_line_text = f"{line_start}-{line_end}" if line_end >= line_start else str(line_start)
+        flow.append(f"命中位置: {file_path}:{hit_line_text}")
+        return flow
+
     def _repair_final_answer(
         self,
         final_answer: Dict[str, Any],
         findings_to_verify: List[Dict[str, Any]],
         verification_level: str,
+        project_root: Optional[str] = None,
     ) -> Dict[str, Any]:
         findings = final_answer.get("findings")
         if not isinstance(findings, list):
             findings = []
 
-        fallback_findings = findings_to_verify or []
+        fallback_findings = [item for item in (findings_to_verify or []) if isinstance(item, dict)]
+        llm_findings = [item for item in findings if isinstance(item, dict)]
         repaired_findings: List[Dict[str, Any]] = []
-        source_findings = findings if findings else fallback_findings
+        source_findings = fallback_findings if fallback_findings else llm_findings
 
-        for index, finding in enumerate(source_findings):
-            if not isinstance(finding, dict):
-                continue
-            base = fallback_findings[index] if index < len(fallback_findings) and isinstance(fallback_findings[index], dict) else {}
-            merged = {**base, **finding}
+        llm_by_key: Dict[tuple[str, str, int], Dict[str, Any]] = {}
+        for item in llm_findings:
+            file_path, line_start, _line_end = self._normalize_file_location(item)
+            key = (self._normalize_vulnerability_key(item), file_path, line_start)
+            llm_by_key.setdefault(key, item)
 
-            file_path = str(merged.get("file_path") or merged.get("file") or "").strip()
-            line_start = merged.get("line_start") or merged.get("line")
-            line_end = merged.get("line_end")
-            try:
-                line_start = int(line_start) if line_start is not None else None
-            except Exception:
-                line_start = None
-            try:
-                line_end = int(line_end) if line_end is not None else None
-            except Exception:
-                line_end = None
-            if line_start is None:
-                line_start = 1
-            if line_end is None:
-                line_end = line_start
+        ast_cache: Dict[str, tuple[Optional[str], Optional[int], Optional[int]]] = {}
+        file_cache: Dict[str, List[str]] = {}
+        locator = EnclosingFunctionLocator(project_root=project_root) if project_root else None
+        for index, base in enumerate(source_findings):
+            file_path, line_start, _line_end = self._normalize_file_location(base)
+            key = (self._normalize_vulnerability_key(base), file_path, line_start)
+            llm_item = llm_by_key.get(key)
+            if llm_item is None and index < len(llm_findings):
+                llm_item = llm_findings[index]
+            merged = {**base, **(llm_item or {})}
+
+            normalized_file_path, line_start, line_end = self._normalize_file_location(merged)
+            function_meta = self._resolve_function_metadata(
+                merged,
+                project_root=project_root,
+                ast_cache=ast_cache,
+                file_cache=file_cache,
+                locator=locator,
+            )
+            resolved_file_path = (
+                str(function_meta.get("file_path") or normalized_file_path or "").strip()
+                or str(base.get("file_path") or "").strip()
+            )
+            function_name = function_meta.get("function")
 
             verdict = self._normalize_verdict(merged)
             reachability = self._normalize_reachability_value(merged.get("reachability"), verdict)
@@ -375,6 +673,9 @@ class VerificationAgent(BaseAgent):
                 or merged.get("evidence")
                 or "基于代码上下文与工具输出完成验证。"
             )
+            if not function_name:
+                verdict = "false_positive"
+                reachability = "unreachable"
 
             suggestion = (
                 merged.get("suggestion")
@@ -382,23 +683,116 @@ class VerificationAgent(BaseAgent):
                 or self._get_recommendation(str(merged.get("vulnerability_type") or ""))
             )
             fix_code = merged.get("fix_code") or self._build_default_fix_code(merged)
+            if not suggestion:
+                suggestion = self._get_recommendation(str(merged.get("vulnerability_type") or ""))
 
             allow_poc = verdict in {"confirmed", "likely"}
             poc_value = merged.get("poc") if allow_poc else None
             if allow_poc and not poc_value:
                 poc_value = self._build_default_poc_plan(merged)
 
+            cwe_id = self._infer_cwe_id(merged)
+            flow = self._build_min_function_trigger_flow(
+                existing_flow=(
+                    merged.get("function_trigger_flow")
+                    if isinstance(merged.get("function_trigger_flow"), list)
+                    else (
+                        merged.get("verification_result", {}).get("function_trigger_flow")
+                        if isinstance(merged.get("verification_result"), dict)
+                        else None
+                    )
+                ),
+                file_path=resolved_file_path or normalized_file_path,
+                function_name=function_name,
+                function_start_line=function_meta.get("start_line"),
+                function_end_line=function_meta.get("end_line"),
+                line_start=line_start,
+                line_end=line_end,
+            )
+            context_start_line = self._normalize_int_line(
+                (
+                    merged.get("context_start_line")
+                    or (
+                        merged.get("verification_result", {}).get("context_start_line")
+                        if isinstance(merged.get("verification_result"), dict)
+                        else None
+                    )
+                    or max(1, line_start - 12)
+                ),
+                max(1, line_start - 12),
+            )
+            context_end_line = self._normalize_int_line(
+                (
+                    merged.get("context_end_line")
+                    or (
+                        merged.get("verification_result", {}).get("context_end_line")
+                        if isinstance(merged.get("verification_result"), dict)
+                        else None
+                    )
+                    or (line_end + 12)
+                ),
+                line_end + 12,
+            )
+            if context_end_line < context_start_line:
+                context_end_line = context_start_line
+
+            verification_result = (
+                dict(merged.get("verification_result"))
+                if isinstance(merged.get("verification_result"), dict)
+                else {}
+            )
+            verification_result.update(
+                {
+                    "authenticity": verdict,
+                    "verdict": verdict,
+                    "reachability": reachability,
+                    "evidence": str(evidence),
+                    "verification_details": str(evidence),
+                    "verification_evidence": str(evidence),
+                    "context_start_line": context_start_line,
+                    "context_end_line": context_end_line,
+                    "reachability_target": {
+                        "file_path": resolved_file_path or normalized_file_path,
+                        "function": function_name,
+                        "start_line": function_meta.get("start_line"),
+                        "end_line": function_meta.get("end_line"),
+                        "resolution_method": function_meta.get("resolution_method"),
+                        "language": function_meta.get("language"),
+                        "resolution_engine": function_meta.get("resolution_engine"),
+                        "diagnostics": function_meta.get("diagnostics"),
+                    },
+                    "function_trigger_flow": flow,
+                }
+            )
+            if not function_name:
+                verification_result["validation_reason"] = "missing_enclosing_function"
+
+            structured_title = self._build_structured_title(
+                {
+                    **merged,
+                    "file_path": resolved_file_path or normalized_file_path,
+                    "function_name": function_name or "未知函数",
+                }
+            )
+
             repaired_findings.append(
                 {
                     **merged,
-                    "file_path": file_path or str(base.get("file_path") or "").strip(),
+                    "title": structured_title,
+                    "display_title": structured_title,
+                    "file_path": resolved_file_path or normalized_file_path,
                     "line_start": line_start,
                     "line_end": line_end,
+                    "function_name": function_name,
                     "verdict": verdict,
                     "authenticity": verdict,
                     "reachability": reachability,
+                    "is_verified": verdict in {"confirmed", "likely"},
+                    "cwe_id": cwe_id,
                     "verification_details": str(evidence),
                     "verification_evidence": str(evidence),
+                    "verification_result": verification_result,
+                    "function_trigger_flow": flow,
                     "suggestion": str(suggestion),
                     "fix_code": str(fix_code),
                     "poc": poc_value,
@@ -431,6 +825,9 @@ class VerificationAgent(BaseAgent):
         verification_level = str(
             config.get("verification_level", "analysis_with_poc_plan")
         ).strip().lower()
+        project_root = input_data.get("project_root")
+        if not isinstance(project_root, str) or not project_root.strip():
+            project_root = None
         task = input_data.get("task", "")
         task_context = input_data.get("task_context", "")
         
@@ -443,8 +840,7 @@ class VerificationAgent(BaseAgent):
             self.receive_handoff(handoff)
 
         # 收集待验证发现（强约束）：
-        # - 仅验证 bootstrap_findings（候选种子）列表中的项
-        # - 最多验证 8 条
+        # - 验证全部候选（previous_results.findings + bootstrap_findings 合并去重）
         def _coerce_bootstrap_confidence_numeric(value: Any) -> float:
             # 入库与 flow pipeline 更偏好数值置信度；兼容 "HIGH/MEDIUM/LOW" 等字符串输入。
             if isinstance(value, (int, float)):
@@ -473,17 +869,39 @@ class VerificationAgent(BaseAgent):
                 return "medium"
             return "medium"
 
-        def _iter_bootstrap_findings_sources() -> List[Dict[str, Any]]:
+        def _extract_findings_from_agent_result(data: Any) -> List[Dict[str, Any]]:
+            if not isinstance(data, dict):
+                return []
+            direct = data.get("findings")
+            if isinstance(direct, list):
+                return [item for item in direct if isinstance(item, dict)]
+            nested = data.get("data")
+            if isinstance(nested, dict):
+                nested_findings = nested.get("findings")
+                if isinstance(nested_findings, list):
+                    return [item for item in nested_findings if isinstance(item, dict)]
+            return []
+
+        def _iter_candidate_findings_sources() -> List[Dict[str, Any]]:
             candidates: List[Dict[str, Any]] = []
-            # 1) handoff.context_data.bootstrap_findings（优先，避免误用 analysis findings）
+            # 1) handoff.context_data.findings / all_findings / bootstrap_findings
             if self._incoming_handoff and isinstance(self._incoming_handoff.context_data, dict):
-                items = self._incoming_handoff.context_data.get("bootstrap_findings")
-                if isinstance(items, list):
-                    for item in items:
+                for key in ("findings", "all_findings", "bootstrap_findings"):
+                    items = self._incoming_handoff.context_data.get(key)
+                    if isinstance(items, list):
+                        for item in items:
+                            if isinstance(item, dict):
+                                candidates.append(item)
+            # 2) previous_results.findings / analysis.findings / verification.findings
+            if isinstance(previous_results, dict):
+                direct = previous_results.get("findings")
+                if isinstance(direct, list):
+                    for item in direct:
                         if isinstance(item, dict):
                             candidates.append(item)
-            # 2) previous_results.bootstrap_findings
-            if isinstance(previous_results, dict):
+                for key in ("analysis", "verification"):
+                    for item in _extract_findings_from_agent_result(previous_results.get(key)):
+                        candidates.append(item)
                 items = previous_results.get("bootstrap_findings")
                 if isinstance(items, list):
                     for item in items:
@@ -498,7 +916,7 @@ class VerificationAgent(BaseAgent):
                             candidates.append(item)
             return candidates
 
-        raw_bootstrap_candidates = _iter_bootstrap_findings_sources()
+        raw_bootstrap_candidates = _iter_candidate_findings_sources()
         findings_to_verify: List[Dict[str, Any]] = []
         for item in raw_bootstrap_candidates:
             if not isinstance(item, dict):
@@ -511,7 +929,7 @@ class VerificationAgent(BaseAgent):
         # 去重
         findings_to_verify = self._deduplicate(findings_to_verify)
 
-        # 优先验证高风险项（不改变“只能验证 bootstrap_findings 列表”的强约束）
+        # 优先验证高风险项（不改变“仅验证候选列表本身，不新增清单外发现”的强约束）
         severity_weight = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
         findings_to_verify.sort(
             key=lambda f: (
@@ -537,11 +955,8 @@ class VerificationAgent(BaseAgent):
         if findings_without_path:
             logger.info(f"[Verification] 还有 {len(findings_without_path)} 个发现需要自行定位文件")
 
-        # 强制上限：只验证候选种子的前 8 条
-        findings_to_verify = findings_to_verify[:8]
-
         if not findings_to_verify:
-            note = "跳过验证：本次 bootstrap_findings（候选种子）为空。"
+            note = "跳过验证：本次候选列表为空。"
             logger.info(f"[Verification] {note}")
             await self.emit_event("info", note)
             self.record_work(note)
@@ -552,21 +967,20 @@ class VerificationAgent(BaseAgent):
                 key_findings=[],
                 context_data={
                     "skipped": True,
-                    "reason": "no_bootstrap_candidates",
+                    "reason": "no_candidates",
                     "verified_count": 0,
+                    "candidate_count": 0,
                 },
             )
             return AgentResult(
                 success=True,
-                data={"findings": [], "verified_count": 0, "note": note},
+                data={"findings": [], "verified_count": 0, "candidate_count": 0, "note": note},
                 iterations=0,
                 tool_calls=self._tool_calls,
                 tokens_used=self._total_tokens,
                 duration_ms=duration_ms,
                 handoff=handoff,
             )
-        
-        # 数量已在上面强制限制为 <= 8
         
         await self.emit_event(
             "info",
@@ -595,7 +1009,7 @@ class VerificationAgent(BaseAgent):
                     except ValueError:
                         pass
 
-        findings_summary.append(f"""
+            findings_summary.append(f"""
 ### 发现 {i+1}: {f.get('title', 'Unknown')}
 - 类型: {f.get('vulnerability_type', 'unknown')}
 - 严重度: {f.get('severity', 'medium')}
@@ -658,7 +1072,7 @@ class VerificationAgent(BaseAgent):
 
 ## ✅ 门禁（必须遵守）
 - **第一轮必须输出 Action**（优先 `read_file`，必要时可用 `search_code`），不允许第一轮直接输出 Final Answer。
-- **仅验证上述待验证发现列表**（来源：bootstrap_findings 候选种子，最多 8 条），不得新增清单外发现。
+- **仅验证上述待验证发现列表**，不得新增清单外发现。
 """
 
         # 初始化对话历史
@@ -723,6 +1137,7 @@ class VerificationAgent(BaseAgent):
                             {"findings": findings_to_verify},
                             findings_to_verify,
                             verification_level,
+                            project_root=project_root,
                         )
                         await self.emit_llm_decision("强制收敛", "交互漂移超过阈值，使用自动修复结果收敛")
                         break
@@ -842,6 +1257,7 @@ class VerificationAgent(BaseAgent):
                         step.final_answer,
                         findings_to_verify,
                         verification_level,
+                        project_root=project_root,
                     )
                     schema_ok, schema_error = self._validate_final_answer_schema(repaired_answer)
                     if not schema_ok:
@@ -854,6 +1270,7 @@ class VerificationAgent(BaseAgent):
                                 {"findings": findings_to_verify},
                                 findings_to_verify,
                                 verification_level,
+                                project_root=project_root,
                             )
                             await self.emit_llm_decision("强制收敛", "结构化重试超过阈值，使用自动修复结果")
                             break
@@ -883,6 +1300,23 @@ class VerificationAgent(BaseAgent):
 
                                 if verdict == "false_positive":
                                     continue
+                                verification_payload = (
+                                    item.get("verification_result")
+                                    if isinstance(item.get("verification_result"), dict)
+                                    else {}
+                                )
+                                reachability_target = (
+                                    verification_payload.get("reachability_target")
+                                    if isinstance(verification_payload, dict)
+                                    else None
+                                )
+                                if not isinstance(reachability_target, dict):
+                                    reachability_target = {}
+                                flow_payload = (
+                                    item.get("function_trigger_flow")
+                                    if isinstance(item.get("function_trigger_flow"), list)
+                                    else verification_payload.get("function_trigger_flow")
+                                )
 
                                 await self.emit_finding(
                                     title=str(item.get("title") or "已验证漏洞"),
@@ -891,6 +1325,26 @@ class VerificationAgent(BaseAgent):
                                     file_path=str(item.get("file_path") or ""),
                                     line_start=item.get("line_start"),
                                     is_verified=True,
+                                    display_title=str(item.get("title") or "已验证漏洞"),
+                                    cwe_id=str(item.get("cwe_id") or "") or None,
+                                    code_snippet=(
+                                        str(item.get("code_snippet"))
+                                        if item.get("code_snippet") is not None
+                                        else None
+                                    ),
+                                    function_trigger_flow=flow_payload if isinstance(flow_payload, list) else None,
+                                    reachability_file=(
+                                        str(reachability_target.get("file_path") or item.get("file_path") or "").strip()
+                                        or None
+                                    ),
+                                    reachability_function=(
+                                        str(reachability_target.get("function") or item.get("function_name") or "").strip()
+                                        or None
+                                    ),
+                                    reachability_function_start_line=reachability_target.get("start_line"),
+                                    reachability_function_end_line=reachability_target.get("end_line"),
+                                    context_start_line=verification_payload.get("context_start_line"),
+                                    context_end_line=verification_payload.get("context_end_line"),
                                 )
                     except Exception as emit_error:
                         logger.warning(
@@ -1039,8 +1493,12 @@ class VerificationAgent(BaseAgent):
 
             if not llm_findings and findings_to_verify:
                 logger.warning(f"[{self.name}] LLM returned empty findings despite {len(findings_to_verify)} inputs. Falling back to originals.")
-                # Fallback to logic below (else branch)
-                final_result = None
+                final_result = self._repair_final_answer(
+                    {"findings": findings_to_verify},
+                    findings_to_verify,
+                    verification_level,
+                    project_root=project_root,
+                )
 
             if final_result and "findings" in final_result:
                 # 🔥 DEBUG: Log what LLM returned for verdict diagnosis
@@ -1059,7 +1517,7 @@ class VerificationAgent(BaseAgent):
                         elif f.get("confidence", 0) <= 0.3:
                             verdict = "false_positive"
                         else:
-                            verdict = "uncertain"
+                            verdict = "likely"
                         logger.warning(f"[{self.name}] Missing/invalid verdict for {f.get('file_path', '?')}, inferred as: {verdict}")
 
                     reachability = f.get("reachability")
@@ -1082,9 +1540,7 @@ class VerificationAgent(BaseAgent):
                         "verdict": verdict,  # 🔥 Ensure verdict is set
                         "authenticity": verdict,
                         "reachability": reachability,
-                        "is_verified": verdict == "confirmed" or (
-                            verdict == "likely" and f.get("confidence", 0) >= 0.8
-                        ),
+                        "is_verified": verdict in {"confirmed", "likely"},
                         "verification_evidence": evidence,
                         "verification_details": evidence,
                         "line_end": f.get("line_end") or f.get("line_start"),
@@ -1108,29 +1564,49 @@ class VerificationAgent(BaseAgent):
                         verified["poc_code"] = None
                         verified["poc_description"] = None
                         verified["poc_steps"] = None
+                    verification_result = verified.get("verification_result")
+                    if not isinstance(verification_result, dict):
+                        verification_result = {}
+                    verification_result.setdefault("authenticity", verdict)
+                    verification_result.setdefault("verdict", verdict)
+                    verification_result.setdefault("reachability", reachability)
+                    verification_result.setdefault(
+                        "evidence",
+                        str(evidence or "基于代码上下文与工具输出完成验证。"),
+                    )
+                    verification_result.setdefault(
+                        "function_trigger_flow",
+                        verified.get("function_trigger_flow")
+                        if isinstance(verified.get("function_trigger_flow"), list)
+                        else [],
+                    )
+                    verification_result.setdefault(
+                        "context_start_line",
+                        max(1, int(verified.get("line_start") or 1) - 12),
+                    )
+                    verification_result.setdefault(
+                        "context_end_line",
+                        int(verified.get("line_end") or verified.get("line_start") or 1) + 12,
+                    )
+                    reachability_target = verification_result.get("reachability_target")
+                    if not isinstance(reachability_target, dict):
+                        reachability_target = {}
+                    reachability_target.setdefault("file_path", verified.get("file_path"))
+                    reachability_target.setdefault("function", verified.get("function_name"))
+                    verification_result["reachability_target"] = reachability_target
+                    verified["verification_result"] = verification_result
 
                     verified_findings.append(verified)
             else:
-                # 如果没有最终结果，使用原始发现
-                for f in findings_to_verify:
-                    suggestion = self._get_recommendation(f.get("vulnerability_type", ""))
-                    verified_findings.append({
-                        **f,
-                        "verdict": "likely",
-                        "confidence": 0.6,
-                        "is_verified": True,
-                        "authenticity": "likely",
-                        "reachability": "likely_reachable",
-                        "verification_details": "模型未返回完整结果，系统已自动生成保守验证结论。",
-                        "verification_evidence": "模型未返回完整结果，系统已自动生成保守验证结论。",
-                        "suggestion": suggestion,
-                        "recommendation": suggestion,
-                        "fix_code": self._build_default_fix_code(f),
-                        "poc": None,
-                        "poc_code": None,
-                        "poc_description": None,
-                        "poc_steps": None,
-                    })
+                fallback_result = self._repair_final_answer(
+                    {"findings": findings_to_verify},
+                    findings_to_verify,
+                    verification_level,
+                    project_root=project_root,
+                )
+                verified_findings.extend(
+                    [item for item in fallback_result.get("findings", []) if isinstance(item, dict)]
+                )
             
             # 统计
             confirmed_count = len([f for f in verified_findings if f.get("verdict") == "confirmed"])
@@ -1147,7 +1623,11 @@ class VerificationAgent(BaseAgent):
 
             # 🔥 创建 TaskHandoff - 记录验证结果，供 Orchestrator 汇总
             handoff = self._create_verification_handoff(
-                verified_findings, confirmed_count, likely_count, false_positive_count
+                verified_findings,
+                confirmed_count,
+                likely_count,
+                false_positive_count,
+                candidate_count=len(findings_to_verify),
             )
 
             return AgentResult(
@@ -1157,6 +1637,8 @@ class VerificationAgent(BaseAgent):
                     "verified_count": confirmed_count,
                     "likely_count": likely_count,
                     "false_positive_count": false_positive_count,
+                    "candidate_count": len(findings_to_verify),
+                    "verified_output_count": len(verified_findings),
                 },
                 iterations=self._iteration,
                 tool_calls=self._tool_calls,
@@ -1215,6 +1697,7 @@ class VerificationAgent(BaseAgent):
         confirmed_count: int,
         likely_count: int,
         false_positive_count: int,
+        candidate_count: Optional[int] = None,
     ) -> TaskHandoff:
         """
         创建 Verification Agent 的任务交接信息
@@ -1297,6 +1780,8 @@ class VerificationAgent(BaseAgent):
             "confirmed_count": confirmed_count,
             "likely_count": likely_count,
             "false_positive_count": false_positive_count,
+            "candidate_count": int(candidate_count or len(verified_findings)),
+            "verified_output_count": len(verified_findings),
             "vulnerability_types": type_counts,
             "files_with_confirmed": files_with_confirmed,
             "poc_generated": len([f for f in verified_findings if f.get("poc_code")]),

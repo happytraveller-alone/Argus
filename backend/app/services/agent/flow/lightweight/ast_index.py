@@ -15,6 +15,8 @@ SUPPORTED_EXTENSIONS = {
     ".ts",
     ".tsx",
     ".java",
+    ".kt",
+    ".kts",
     ".c",
     ".cc",
     ".cpp",
@@ -170,6 +172,10 @@ class ASTCallIndex:
             patterns = [
                 re.compile(r"^\s*(?:public|private|protected)?\s*(?:static\s+)?[\w<>\[\],\s]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
             ]
+        elif language == "kotlin":
+            patterns = [
+                re.compile(r"^\s*(?:public|private|protected|internal|open|override|suspend|inline|tailrec|operator|infix|\s)*fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
+            ]
         elif language in {"c", "cpp"}:
             patterns = [
                 re.compile(r"^\s*[A-Za-z_][\w\s\*:&<>]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*\{")
@@ -183,6 +189,8 @@ class ASTCallIndex:
                     matched_name = m.group(1)
                     break
             if not matched_name:
+                continue
+            if str(matched_name).strip().lower() in {"__attribute__", "__declspec"}:
                 continue
 
             start = idx + 1

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import BaseModel
 
 from app.services.agent.agents.base import AgentConfig, AgentResult, AgentType, BaseAgent
 import app.models.opengrep  # noqa: F401
@@ -33,6 +34,17 @@ class _SlowTool:
     async def execute(self, **kwargs):
         await asyncio.sleep(2)
         return SimpleNamespace(success=True, data="late", error=None, metadata={})
+
+
+class _RequiredKeywordSchema(BaseModel):
+    keyword: str
+
+
+class _SearchLikeTool:
+    args_schema = _RequiredKeywordSchema
+
+    async def execute(self, **kwargs):
+        return SimpleNamespace(success=True, data={"keyword": kwargs.get("keyword")}, error=None, metadata={})
 
 
 def _make_agent(tool_name: str, tool_impl):
@@ -117,3 +129,17 @@ async def test_tool_status_terminal_cancelled():
     tool_result_events = _get_events_by_type(emitter, "tool_result")
     assert len(tool_result_events) == 1
     assert tool_result_events[0].metadata.get("tool_status") == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_tool_validation_missing_required_field_returns_recoverable_error():
+    agent, emitter = _make_agent("search_code", _SearchLikeTool())
+
+    output = await agent.execute_tool("search_code", {})
+
+    assert "工具参数校验失败" in output
+    assert "keyword" in output
+    tool_result_events = _get_events_by_type(emitter, "tool_result")
+    assert len(tool_result_events) == 1
+    assert tool_result_events[0].metadata.get("tool_status") == "failed"
+    assert tool_result_events[0].metadata.get("validation_error")

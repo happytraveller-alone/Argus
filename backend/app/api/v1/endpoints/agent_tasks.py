@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -189,12 +190,15 @@ class AgentFindingResponse(BaseModel):
     vulnerability_type: str
     severity: str
     title: str
+    display_title: Optional[str] = None
     description: Optional[str]
     file_path: Optional[str]
     line_start: Optional[int]
     line_end: Optional[int]
     code_snippet: Optional[str]
     code_context: Optional[str] = None
+    cwe_id: Optional[str] = None
+    cwe_name: Optional[str] = None
     context_start_line: Optional[int] = None
     context_end_line: Optional[int] = None
     
@@ -209,10 +213,13 @@ class AgentFindingResponse(BaseModel):
     verification_evidence: Optional[str] = None
     flow_path_score: Optional[float] = None
     flow_call_chain: Optional[List[str]] = None
+    function_trigger_flow: Optional[List[str]] = None
     flow_control_conditions: Optional[List[str]] = None
     logic_authz_evidence: Optional[List[str]] = None
     reachability_file: Optional[str] = None
     reachability_function: Optional[str] = None
+    reachability_function_start_line: Optional[int] = None
+    reachability_function_end_line: Optional[int] = None
     trigger_flow: Optional[dict] = None
     poc_trigger_chain: Optional[dict] = None
     status: str
@@ -539,9 +546,13 @@ def _normalize_bootstrap_finding_from_opengrep(
 
 def _filter_bootstrap_findings(
     normalized_findings: List[Dict[str, Any]],
+    exclude_patterns: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     filtered: List[Dict[str, Any]] = []
     for item in normalized_findings:
+        file_path = str(item.get("file_path") or "").strip()
+        if file_path and _is_core_ignored_path(file_path, exclude_patterns):
+            continue
         severity_value = str(item.get("severity") or "").upper()
         confidence_value = _normalize_bootstrap_confidence(item.get("confidence"))
         if severity_value != "ERROR":
@@ -604,6 +615,7 @@ async def _run_bootstrap_opengrep_scan(
 async def _collect_bootstrap_findings_for_task(
     db: AsyncSession,
     scan_task: OpengrepScanTask,
+    exclude_patterns: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     confidence_map = await _build_bootstrap_confidence_map_for_scan_task(db, scan_task)
     findings_result = await db.execute(
@@ -614,7 +626,7 @@ async def _collect_bootstrap_findings_for_task(
         _normalize_bootstrap_finding_from_opengrep(item, confidence_map)
         for item in findings
     ]
-    return _filter_bootstrap_findings(normalized)
+    return _filter_bootstrap_findings(normalized, exclude_patterns=exclude_patterns)
 
 
 async def _prepare_bootstrap_opengrep_findings(
@@ -622,6 +634,7 @@ async def _prepare_bootstrap_opengrep_findings(
     project_id: str,
     project_root: str,
     event_emitter: Any,
+    exclude_patterns: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Optional[str], str]:
     active_rules_result = await db.execute(
         select(OpengrepRule).where(OpengrepRule.is_active == True)
@@ -706,7 +719,11 @@ async def _prepare_bootstrap_opengrep_findings(
         scan_task.lines_scanned = lines_scanned
         await db.commit()
 
-        candidates = await _collect_bootstrap_findings_for_task(db, scan_task)
+        candidates = await _collect_bootstrap_findings_for_task(
+            db,
+            scan_task,
+            exclude_patterns=exclude_patterns,
+        )
         await event_emitter.emit_info(
             f"✅ OpenGrep 预扫描完成: findings={len(parsed_findings)}, 候选={len(candidates)}",
             metadata={
@@ -737,6 +754,123 @@ async def _prepare_bootstrap_opengrep_findings(
 
 
 MAX_SEED_FINDINGS = 25
+
+_CORE_AUDIT_EXCLUDE_PATTERNS: List[str] = [
+    "test/**",
+    "tests/**",
+    "**/test/**",
+    "**/tests/**",
+    ".*/**",
+    "**/.*/**",
+    "*config*.*",
+    "**/*config*.*",
+    "*settings*.*",
+    "**/*settings*.*",
+    ".env*",
+    "**/.env*",
+    "*.yml",
+    "**/*.yml",
+    "*.yaml",
+    "**/*.yaml",
+    "*.json",
+    "**/*.json",
+    "*.ini",
+    "**/*.ini",
+    "*.conf",
+    "**/*.conf",
+    "*.toml",
+    "**/*.toml",
+    "*.properties",
+    "**/*.properties",
+    "*.plist",
+    "**/*.plist",
+    "*.xml",
+    "**/*.xml",
+]
+
+
+def _build_core_audit_exclude_patterns(
+    user_patterns: Optional[List[str]],
+) -> List[str]:
+    merged: List[str] = []
+    seen: Set[str] = set()
+    raw_patterns = list(user_patterns or []) + _CORE_AUDIT_EXCLUDE_PATTERNS
+    for raw in raw_patterns:
+        if not isinstance(raw, str):
+            continue
+        normalized = raw.strip().replace("\\", "/")
+        if not normalized:
+            continue
+        lowered = normalized.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        merged.append(normalized)
+    return merged
+
+
+def _normalize_scan_path(path: str) -> str:
+    normalized = str(path or "").replace("\\", "/").strip()
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    while normalized.startswith("/"):
+        normalized = normalized[1:]
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+    return normalized
+
+
+def _path_components(path: str) -> List[str]:
+    normalized = _normalize_scan_path(path)
+    if not normalized:
+        return []
+    return [part for part in normalized.split("/") if part not in {"", ".", ".."}]
+
+
+def _match_exclude_patterns(path: str, patterns: Optional[List[str]]) -> bool:
+    import fnmatch
+
+    normalized = _normalize_scan_path(path)
+    basename = os.path.basename(normalized)
+    for pattern in patterns or []:
+        if not isinstance(pattern, str):
+            continue
+        candidate = pattern.strip().replace("\\", "/")
+        if not candidate:
+            continue
+        if fnmatch.fnmatch(normalized, candidate) or fnmatch.fnmatch(basename, candidate):
+            return True
+    return False
+
+
+def _is_core_ignored_path(
+    path: str,
+    exclude_patterns: Optional[List[str]] = None,
+) -> bool:
+    normalized = _normalize_scan_path(path)
+    if not normalized:
+        return False
+
+    parts = _path_components(normalized)
+    for part in parts[:-1]:
+        lowered = part.lower()
+        if lowered in {"test", "tests"}:
+            return True
+        if part.startswith("."):
+            return True
+
+    if parts:
+        last = parts[-1]
+        if last.lower() in {"test", "tests"}:
+            return True
+        if last.startswith("."):
+            return True
+
+    effective_patterns = _build_core_audit_exclude_patterns(exclude_patterns)
+    if _match_exclude_patterns(normalized, effective_patterns):
+        return True
+
+    return False
 
 
 def _normalize_seed_from_opengrep(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -827,32 +961,16 @@ def _discover_entry_points_deterministic(
     exclude_patterns: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """在 OpenGrep 候选为空时，确定性发现入口点（grep-like + AST 兜底）。"""
-    import fnmatch
     import re
 
     root = Path(project_root)
+    effective_exclude_patterns = _build_core_audit_exclude_patterns(exclude_patterns)
 
-    # 默认排除目录（与 _collect_project_info 保持一致口径）
-    exclude_dirs = {
-        "node_modules",
-        "__pycache__",
-        ".git",
-        "venv",
-        ".venv",
-        "build",
-        "dist",
-        "target",
-        ".idea",
-        ".vscode",
-    }
-    if exclude_patterns:
-        for pattern in exclude_patterns:
-            if pattern.endswith("/**"):
-                exclude_dirs.add(pattern[:-3])
-            elif "/" not in pattern and "*" not in pattern:
-                exclude_dirs.add(pattern)
-
-    include_set = set(target_files) if target_files else None
+    include_set = (
+        {_normalize_scan_path(path) for path in target_files if isinstance(path, str)}
+        if target_files
+        else None
+    )
 
     code_exts = {
         ".py",
@@ -873,16 +991,16 @@ def _discover_entry_points_deterministic(
     }
 
     patterns: List[Tuple[str, re.Pattern[str]]] = [
-        ("python_fastapi_route", re.compile(r"^\\s*@(?:app|router)\\.(get|post|put|delete|patch)\\b", re.I)),
-        ("python_flask_route", re.compile(r"^\\s*@app\\.route\\b", re.I)),
-        ("python_main", re.compile(r"__name__\\s*==\\s*[\\\"']__main__[\\\"']")),
-        ("django_urlpatterns", re.compile(r"\\burlpatterns\\s*=")),
-        ("express_route", re.compile(r"\\b(app|router)\\.(get|post|put|delete|patch)\\s*\\(", re.I)),
-        ("node_listen", re.compile(r"\\bapp\\.listen\\s*\\(", re.I)),
-        ("spring_mapping", re.compile(r"@\\s*(RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping)\\b")),
-        ("spring_controller", re.compile(r"@\\s*(RestController|Controller)\\b")),
-        ("go_http_handle", re.compile(r"\\bhttp\\.HandleFunc\\s*\\(", re.I)),
-        ("laravel_route", re.compile(r"\\bRoute::(get|post|put|delete|patch)\\s*\\(", re.I)),
+        ("python_fastapi_route", re.compile(r"^\s*@(?:app|router)\.(get|post|put|delete|patch)\b", re.I)),
+        ("python_flask_route", re.compile(r"^\s*@app\.route\b", re.I)),
+        ("python_main", re.compile(r"__name__\s*==\s*[\"']__main__[\"']")),
+        ("django_urlpatterns", re.compile(r"\burlpatterns\s*=")),
+        ("express_route", re.compile(r"\b(app|router)\.(get|post|put|delete|patch)\s*\(", re.I)),
+        ("node_listen", re.compile(r"\bapp\.listen\s*\(", re.I)),
+        ("spring_mapping", re.compile(r"@\s*(RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping)\b")),
+        ("spring_controller", re.compile(r"@\s*(RestController|Controller)\b")),
+        ("go_http_handle", re.compile(r"\bhttp\.HandleFunc\s*\(", re.I)),
+        ("laravel_route", re.compile(r"\bRoute::(get|post|put|delete|patch)\s*\(", re.I)),
     ]
 
     entry_points: List[Dict[str, Any]] = []
@@ -891,17 +1009,25 @@ def _discover_entry_points_deterministic(
     def consider_file(rel_path: str) -> bool:
         if include_set is not None and rel_path not in include_set:
             return False
-        if exclude_patterns:
-            for pat in exclude_patterns:
-                if fnmatch.fnmatch(rel_path, pat) or fnmatch.fnmatch(os.path.basename(rel_path), pat):
-                    return False
+        if _is_core_ignored_path(rel_path, effective_exclude_patterns):
+            return False
         return True
 
     # 1) grep-like 入口点扫描（有限扫描，避免大仓库拖慢）
     max_scan_files = 600
     scanned = 0
     for dirpath, dirnames, filenames in os.walk(project_root):
-        dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
+        rel_dir = os.path.relpath(dirpath, project_root).replace("\\", "/")
+        if rel_dir == ".":
+            rel_dir = ""
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if not _is_core_ignored_path(
+                f"{rel_dir}/{d}" if rel_dir else d,
+                effective_exclude_patterns,
+            )
+        ]
         for name in filenames:
             ext = Path(name).suffix.lower()
             if ext not in code_exts:
@@ -911,7 +1037,9 @@ def _discover_entry_points_deterministic(
                 rel = abs_path.relative_to(root).as_posix()
             except Exception:
                 continue
-            if not consider_file(rel):
+            if _is_core_ignored_path(rel, effective_exclude_patterns):
+                continue
+            if not consider_file(_normalize_scan_path(rel)):
                 continue
             scanned += 1
             if scanned > max_scan_files:
@@ -994,6 +1122,7 @@ async def _build_seed_from_entrypoints(
     project_root: str,
     target_vulns: Optional[List[str]],
     entry_function_names: List[str],
+    exclude_patterns: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """基于入口点提示，使用 SmartScanTool 生成固定数量的 seed findings。"""
     from app.services.agent.tools import SmartScanTool
@@ -1001,7 +1130,7 @@ async def _build_seed_from_entrypoints(
     severity_weight = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
     confidence_by_severity = {"critical": 0.9, "high": 0.8, "medium": 0.6, "low": 0.4, "info": 0.3}
 
-    tool = SmartScanTool(project_root)
+    tool = SmartScanTool(project_root, exclude_patterns=exclude_patterns or [])
     result = await tool.execute(
         target=".",
         quick_mode=True,
@@ -1081,7 +1210,10 @@ def _merge_seed_and_agent_findings(
     seed_findings: List[Dict[str, Any]],
     agent_findings: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """合并 fixed-first 种子与 Orchestrator 输出，保证种子不会因 LLM 空输出而丢失。"""
+    """合并 seed 与 agent findings。
+
+    严格门禁模式下，不再将未匹配 seed 兜底入库，避免未验证候选泄漏到最终结果。
+    """
     seed_findings = [f for f in (seed_findings or []) if isinstance(f, dict)]
     agent_findings = [f for f in (agent_findings or []) if isinstance(f, dict)]
 
@@ -1106,11 +1238,6 @@ def _merge_seed_and_agent_findings(
             merged.append({**seed, **f})  # LLM/Agent 输出覆盖 seed 的默认字段
         else:
             merged.append(f)
-
-    for k, seed in seed_by_key.items():
-        if k in used:
-            continue
-        merged.append(seed)
 
     # 最终去重（防止 agent_findings 内部重复）
     out: List[Dict[str, Any]] = []
@@ -1405,6 +1532,7 @@ async def _execute_agent_task(task_id: str):
                     project_id=str(project.id),
                     project_root=project_root,
                     event_emitter=event_emitter,
+                    exclude_patterns=task.exclude_patterns,
                 )
 
             (
@@ -1448,6 +1576,7 @@ async def _execute_agent_task(task_id: str):
                     project_root=project_root,
                     target_vulns=task.target_vulnerabilities or [],
                     entry_function_names=entry_function_names,
+                    exclude_patterns=task.exclude_patterns or [],
                 )
 
                 bootstrap_source = "fallback_entrypoints"
@@ -1459,9 +1588,16 @@ async def _execute_agent_task(task_id: str):
             # ============ 🔥 Markdown 长期记忆（不依赖 embedding/RAG） ============
             try:
                 from app.services.agent.memory.markdown_memory import MarkdownMemoryStore
+                from app.core.config import settings
 
                 memory_store = MarkdownMemoryStore(project_id=str(project.id))
                 memory_store.ensure()
+                if bool(getattr(settings, "TOOL_DOC_SYNC_ENABLED", True)):
+                    _sync_tool_catalog_to_memory(
+                        memory_store=memory_store,
+                        task_id=task_id,
+                        max_chars=int(getattr(settings, "TOOL_DOC_SYNC_MAX_CHARS", 8000)),
+                    )
                 markdown_memory = memory_store.load_bundle(
                     max_chars=8000,
                     skills_max_lines=60,
@@ -1641,7 +1777,7 @@ async def _execute_agent_task(task_id: str):
                 persisted_findings = persisted_findings_result.scalars().all()
                 effective_findings = [
                     item for item in persisted_findings
-                    if str(item.status) != FindingStatus.FALSE_POSITIVE
+                    if str(item.status) != FindingStatus.FALSE_POSITIVE and bool(item.is_verified)
                 ]
                 false_positive_findings = [
                     item for item in persisted_findings
@@ -2012,6 +2148,44 @@ async def _get_user_config(db: AsyncSession, user_id: Optional[str]) -> Optional
     return None
 
 
+def _sync_tool_catalog_to_memory(
+    *,
+    memory_store: Any,
+    task_id: str,
+    max_chars: int,
+) -> None:
+    """同步共享工具目录到 Markdown memory shared.md（追加式，保留历史）。"""
+    catalog_path = Path(__file__).resolve().parents[4] / "docs" / "agent-tools" / "TOOL_SHARED_CATALOG.md"
+    if not catalog_path.exists():
+        return
+
+    try:
+        content = catalog_path.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        logger.warning("[ToolDocSync] read catalog failed: %s", exc)
+        return
+
+    clipped = content[: max(0, int(max_chars))]
+    if not clipped.strip():
+        return
+
+    try:
+        memory_store.append_entry(
+            "shared",
+            task_id=task_id,
+            source="tool_catalog_sync",
+            title="工具共享目录同步",
+            summary="将 TOOL_SHARED_CATALOG.md 摘要同步到 shared memory，供各 Agent 提示词检出。",
+            payload={
+                "catalog_path": str(catalog_path),
+                "max_chars": int(max_chars),
+                "content": clipped,
+            },
+        )
+    except Exception as exc:
+        logger.warning("[ToolDocSync] append shared entry failed: %s", exc)
+
+
 async def _initialize_tools(
     project_root: str,
     llm_service,
@@ -2268,7 +2442,7 @@ async def _initialize_tools(
     analysis_tools = {
         **base_tools,
         # 🔥 智能扫描工具（推荐首先使用）
-        "smart_scan": SmartScanTool(project_root),
+        "smart_scan": SmartScanTool(project_root, exclude_patterns=exclude_patterns or []),
         "quick_audit": QuickAuditTool(project_root),
         # 模式匹配工具（增强版）
         "pattern_match": PatternMatchTool(project_root),
@@ -2394,8 +2568,8 @@ async def _collect_project_info(
     🔥 重要：当指定了 target_files 时，返回的项目结构应该只包含目标文件相关的信息，
     以确保 Orchestrator 和子 Agent 看到的是一致的、过滤后的视图。
     """
-    import fnmatch
-    
+    effective_exclude_patterns = _build_core_audit_exclude_patterns(exclude_patterns)
+
     info = {
         "name": project_name,
         "root": project_root,
@@ -2405,22 +2579,12 @@ async def _collect_project_info(
     }
     
     try:
-        # 默认排除目录
-        exclude_dirs = {
-            "node_modules", "__pycache__", ".git", "venv", ".venv",
-            "build", "dist", "target", ".idea", ".vscode",
-        }
-        
-        # 从用户配置的排除模式中提取目录
-        if exclude_patterns:
-            for pattern in exclude_patterns:
-                if pattern.endswith("/**"):
-                    exclude_dirs.add(pattern[:-3])
-                elif "/" not in pattern and "*" not in pattern:
-                    exclude_dirs.add(pattern)
-        
         # 目标文件集合
-        target_files_set = set(target_files) if target_files else None
+        target_files_set = (
+            {_normalize_scan_path(path) for path in target_files if isinstance(path, str)}
+            if target_files
+            else None
+        )
         
         lang_map = {
             ".py": "Python", ".js": "JavaScript", ".ts": "TypeScript",
@@ -2433,23 +2597,26 @@ async def _collect_project_info(
         filtered_dirs = set()
         
         for root, dirs, files in os.walk(project_root):
-            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            rel_dir = os.path.relpath(root, project_root).replace("\\", "/")
+            if rel_dir == ".":
+                rel_dir = ""
+            dirs[:] = [
+                d
+                for d in dirs
+                if not _is_core_ignored_path(
+                    f"{rel_dir}/{d}" if rel_dir else d,
+                    effective_exclude_patterns,
+                )
+            ]
             
             for f in files:
                 relative_path = os.path.relpath(os.path.join(root, f), project_root)
+                relative_path = relative_path.replace("\\", "/")
                 
                 # 检查是否在目标文件列表中
-                if target_files_set and relative_path not in target_files_set:
+                if target_files_set and _normalize_scan_path(relative_path) not in target_files_set:
                     continue
-                
-                # 检查排除模式
-                should_skip = False
-                if exclude_patterns:
-                    for pattern in exclude_patterns:
-                        if fnmatch.fnmatch(relative_path, pattern) or fnmatch.fnmatch(f, pattern):
-                            should_skip = True
-                            break
-                if should_skip:
+                if _is_core_ignored_path(relative_path, effective_exclude_patterns):
                     continue
                 
                 info["file_count"] += 1
@@ -2481,8 +2648,18 @@ async def _collect_project_info(
             try:
                 top_items = os.listdir(project_root)
                 info["structure"] = {
-                    "directories": [d for d in top_items if os.path.isdir(os.path.join(project_root, d)) and d not in exclude_dirs],
-                    "files": [f for f in top_items if os.path.isfile(os.path.join(project_root, f))][:20],
+                    "directories": [
+                        d
+                        for d in top_items
+                        if os.path.isdir(os.path.join(project_root, d))
+                        and not _is_core_ignored_path(d, effective_exclude_patterns)
+                    ],
+                    "files": [
+                        f
+                        for f in top_items
+                        if os.path.isfile(os.path.join(project_root, f))
+                        and not _is_core_ignored_path(f, effective_exclude_patterns)
+                    ][:20],
                     "scope_limited": False,
                 }
             except Exception:
@@ -2736,6 +2913,307 @@ def _normalize_reachability(
     return "likely_reachable"
 
 
+_CWE_PATTERN = re.compile(r"(CWE-\d+)", re.IGNORECASE)
+_VULN_PROFILE_MAP: Dict[str, Dict[str, str]] = {
+    "sql_injection": {
+        "name": "SQL注入",
+        "harm": "可能导致数据库数据泄露、篡改或删除。",
+        "cwe": "CWE-89",
+    },
+    "nosql_injection": {
+        "name": "NoSQL注入",
+        "harm": "可能导致鉴权绕过或敏感数据被恶意查询。",
+        "cwe": "CWE-943",
+    },
+    "xss": {
+        "name": "跨站脚本攻击",
+        "harm": "可能导致会话劫持、页面篡改或用户数据泄露。",
+        "cwe": "CWE-79",
+    },
+    "command_injection": {
+        "name": "命令注入",
+        "harm": "可能导致攻击者执行任意系统命令并控制服务器。",
+        "cwe": "CWE-78",
+    },
+    "code_injection": {
+        "name": "代码注入",
+        "harm": "可能导致执行恶意代码并接管应用运行环境。",
+        "cwe": "CWE-94",
+    },
+    "path_traversal": {
+        "name": "路径遍历",
+        "harm": "可能导致读取或覆盖未授权文件。",
+        "cwe": "CWE-22",
+    },
+    "file_inclusion": {
+        "name": "文件包含",
+        "harm": "可能导致加载恶意文件并执行非预期代码。",
+        "cwe": "CWE-98",
+    },
+    "ssrf": {
+        "name": "服务器端请求伪造",
+        "harm": "可能导致内网探测、未授权访问内部服务或云元数据泄露。",
+        "cwe": "CWE-918",
+    },
+    "xxe": {
+        "name": "XML外部实体注入",
+        "harm": "可能导致敏感文件泄露或内网请求伪造。",
+        "cwe": "CWE-611",
+    },
+    "deserialization": {
+        "name": "不安全反序列化",
+        "harm": "可能导致远程代码执行或业务对象被恶意篡改。",
+        "cwe": "CWE-502",
+    },
+    "auth_bypass": {
+        "name": "认证绕过",
+        "harm": "可能导致未授权访问敏感功能或管理接口。",
+        "cwe": "CWE-287",
+    },
+    "idor": {
+        "name": "越权访问",
+        "harm": "可能导致攻击者访问或修改其他用户数据。",
+        "cwe": "CWE-639",
+    },
+    "sensitive_data_exposure": {
+        "name": "敏感信息泄露",
+        "harm": "可能导致账号凭据、隐私数据或密钥信息泄露。",
+        "cwe": "CWE-200",
+    },
+    "hardcoded_secret": {
+        "name": "硬编码密钥",
+        "harm": "可能导致凭据泄露并被用于横向渗透。",
+        "cwe": "CWE-798",
+    },
+    "weak_crypto": {
+        "name": "弱加密算法",
+        "harm": "可能导致通信或存储数据被破解。",
+        "cwe": "CWE-327",
+    },
+    "race_condition": {
+        "name": "竞态条件",
+        "harm": "可能导致权限绕过、数据竞争或状态错乱。",
+        "cwe": "CWE-362",
+    },
+    "business_logic": {
+        "name": "业务逻辑缺陷",
+        "harm": "可能导致流程被绕过并造成业务损失。",
+        "cwe": "CWE-840",
+    },
+    "memory_corruption": {
+        "name": "内存破坏",
+        "harm": "可能导致程序崩溃、信息泄露或任意代码执行。",
+        "cwe": "CWE-119",
+    },
+    "other": {
+        "name": "安全缺陷",
+        "harm": "可能导致系统机密性、完整性或可用性受损。",
+        "cwe": "CWE-20",
+    },
+}
+_VULN_KEYWORD_HINTS: List[Tuple[Tuple[str, ...], str]] = [
+    (("sqli", "sql注入", "sql injection"), "sql_injection"),
+    (("nosql", "mongodb注入", "nosql injection"), "nosql_injection"),
+    (("xss", "跨站脚本"), "xss"),
+    (("command injection", "命令注入", "rce", "os command"), "command_injection"),
+    (("code injection", "代码注入", "eval"), "code_injection"),
+    (("path traversal", "目录遍历", "路径遍历", "lfi", "rfi"), "path_traversal"),
+    (("file inclusion", "文件包含"), "file_inclusion"),
+    (("ssrf", "请求伪造"), "ssrf"),
+    (("xxe", "外部实体"), "xxe"),
+    (("deserial", "反序列化"), "deserialization"),
+    (("auth bypass", "认证绕过", "鉴权绕过"), "auth_bypass"),
+    (("idor", "越权"), "idor"),
+    (("secret", "credential", "password", "token", "密钥"), "hardcoded_secret"),
+    (("crypto", "cipher", "弱加密"), "weak_crypto"),
+    (("race", "竞态"), "race_condition"),
+]
+
+
+def _normalize_cwe_id(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        for item in value:
+            normalized = _normalize_cwe_id(item)
+            if normalized:
+                return normalized
+        return None
+    if isinstance(value, dict):
+        for key in ("cwe", "cwe_id", "id"):
+            if key in value:
+                normalized = _normalize_cwe_id(value.get(key))
+                if normalized:
+                    return normalized
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    matched = _CWE_PATTERN.search(text)
+    if not matched:
+        return None
+    return matched.group(1).upper()
+
+
+def _extract_cwe_from_references(references: Any) -> Optional[str]:
+    if references is None:
+        return None
+    if isinstance(references, list):
+        for item in references:
+            normalized = _normalize_cwe_id(item)
+            if normalized:
+                return normalized
+        return None
+    return _normalize_cwe_id(references)
+
+
+def _resolve_vulnerability_profile(
+    vulnerability_type: Optional[str],
+    *,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+) -> Dict[str, str]:
+    normalized = (
+        str(vulnerability_type or "")
+        .lower()
+        .strip()
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
+    if normalized in _VULN_PROFILE_MAP:
+        return _VULN_PROFILE_MAP[normalized]
+
+    merged_text = " ".join(
+        [
+            normalized,
+            str(title or "").lower(),
+            str(description or "").lower(),
+        ]
+    )
+    for keywords, mapped_type in _VULN_KEYWORD_HINTS:
+        if any(keyword in merged_text for keyword in keywords):
+            return _VULN_PROFILE_MAP.get(mapped_type, _VULN_PROFILE_MAP["other"])
+
+    return _VULN_PROFILE_MAP["other"]
+
+
+def _resolve_cwe_id(
+    explicit_cwe: Any,
+    vulnerability_type: Optional[str],
+    *,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+) -> Optional[str]:
+    normalized = _normalize_cwe_id(explicit_cwe)
+    if normalized:
+        return normalized
+    profile = _resolve_vulnerability_profile(
+        vulnerability_type,
+        title=title,
+        description=description,
+    )
+    return profile.get("cwe")
+
+
+def _build_structured_cn_description(
+    *,
+    file_path: Optional[str],
+    function_name: Optional[str],
+    vulnerability_name: str,
+    harm_text: str,
+    cwe_id: Optional[str],
+    raw_description: Optional[str],
+) -> str:
+    path_text = file_path or "未知路径"
+    function_text = function_name or "未知函数"
+    summary = (
+        f"路径：{path_text} + 函数：{function_text} + "
+        f"缺陷名称：{vulnerability_name} + 可能造成的危害：{harm_text}"
+    )
+    lines = [summary]
+    if cwe_id:
+        lines.append(f"对应CWE：{cwe_id}")
+    normalized_raw = _normalize_optional_text(raw_description)
+    if normalized_raw:
+        lines.append(f"补充说明：{normalized_raw}")
+    return "\n".join(lines)
+
+
+def _build_structured_cn_display_title(
+    *,
+    file_path: Optional[str],
+    function_name: Optional[str],
+    vulnerability_name: str,
+    harm_text: str,
+) -> str:
+    path_text = file_path or "未知路径"
+    function_text = function_name or "未知函数"
+    vuln_text = vulnerability_name or "安全缺陷"
+    if not vuln_text.endswith("漏洞") and not vuln_text.endswith("缺陷"):
+        vuln_text = f"{vuln_text}漏洞"
+    return f"{path_text}中{function_text}{vuln_text}，可能造成的危害：{harm_text}"
+
+
+def _extract_flow_call_chain(
+    verification_payload: Dict[str, Any],
+    dataflow_path: Optional[List[str]],
+) -> List[str]:
+    if isinstance(verification_payload, dict):
+        flow_payload = verification_payload.get("flow")
+        if isinstance(flow_payload, dict):
+            raw_chain = flow_payload.get("call_chain")
+            if isinstance(raw_chain, list):
+                chain = [str(item).strip() for item in raw_chain if str(item).strip()]
+                if chain:
+                    return chain
+    if isinstance(dataflow_path, list):
+        chain = [str(item).strip() for item in dataflow_path if str(item).strip()]
+        if chain:
+            return chain
+    return []
+
+
+def _build_function_trigger_flow(
+    *,
+    call_chain: List[str],
+    function_name: Optional[str],
+    file_path: Optional[str],
+    line_start: Optional[int],
+    line_end: Optional[int],
+) -> List[str]:
+    filtered: List[str] = []
+    if call_chain:
+        if function_name:
+            needle = function_name.lower()
+            hit_index = -1
+            for idx, step in enumerate(call_chain):
+                if needle and needle in step.lower():
+                    hit_index = idx
+                    break
+            if hit_index >= 0:
+                filtered = call_chain[: hit_index + 1]
+            else:
+                filtered = call_chain[: min(3, len(call_chain))]
+        else:
+            filtered = call_chain[: min(3, len(call_chain))]
+
+    location_text = file_path or "未知路径"
+    if line_start is not None:
+        if line_end is not None and line_end != line_start:
+            location_text = f"{location_text}:{line_start}-{line_end}"
+        else:
+            location_text = f"{location_text}:{line_start}"
+
+    terminal = (
+        f"命中函数：{function_name}（{location_text}）"
+        if function_name
+        else f"命中位置：{location_text}"
+    )
+    if not filtered or filtered[-1] != terminal:
+        filtered.append(terminal)
+    return filtered
+
+
 def _build_default_remediation(vuln_type: str) -> Tuple[str, str]:
     normalized = (vuln_type or "").lower()
     mapping: Dict[str, Tuple[str, str]] = {
@@ -2859,33 +3337,15 @@ async def _save_findings(
     filtered_reasons: Dict[str, int] = {}
     logger.info(f"Saving {len(findings)} findings for task {task_id}")
 
-    # Build an AST index once for all candidate files to enforce: file + enclosing function.
-    ast_index = None
+    function_locator = None
     if project_root:
         try:
-            from app.services.agent.flow.lightweight.ast_index import ASTCallIndex
+            from app.services.agent.flow.lightweight.function_locator import EnclosingFunctionLocator
 
-            candidate_files: Set[str] = set()
-            for raw in findings:
-                if not isinstance(raw, dict):
-                    continue
-                location_file, _location_line = _extract_location_parts(raw)
-                raw_file_path = raw.get("file_path") or raw.get("file") or location_file
-                stored_file_path, _full_file_path = _resolve_finding_file_path(
-                    str(raw_file_path) if raw_file_path else None,
-                    project_root,
-                )
-                if stored_file_path:
-                    candidate_files.add(stored_file_path)
-
-            ast_index = ASTCallIndex(
-                project_root=project_root,
-                target_files=sorted(candidate_files) if candidate_files else None,
-            )
-            ast_index.build()
+            function_locator = EnclosingFunctionLocator(project_root=project_root)
         except Exception as exc:
-            logger.warning("[SaveFindings] AST index build failed: %s", exc)
-            ast_index = None
+            logger.warning("[SaveFindings] Function locator init failed: %s", exc)
+            function_locator = None
 
     def mark_filtered(reason: str, payload: Optional[Dict[str, Any]] = None) -> None:
         filtered_reasons[reason] = filtered_reasons.get(reason, 0) + 1
@@ -2948,14 +3408,46 @@ async def _save_findings(
                     confidence = 0.5
             confidence = max(0.0, min(float(confidence), 1.0))
 
-            # 4) normalize authenticity + reachability
-            authenticity = _normalize_authenticity_verdict(finding, confidence)
-            if not authenticity:
-                authenticity = "likely"
+            verification_result_payload_input = finding.get("verification_result")
+            if not isinstance(verification_result_payload_input, dict):
+                mark_filtered("missing_verification_result", finding)
+                continue
 
-            reachability = _normalize_reachability(finding, authenticity)
-            if not reachability:
-                reachability = "likely_reachable"
+            # 4) strict verification gate
+            authenticity_raw = (
+                finding.get("authenticity")
+                or finding.get("verdict")
+                or verification_result_payload_input.get("authenticity")
+                or verification_result_payload_input.get("verdict")
+            )
+            reachability_raw = (
+                finding.get("reachability")
+                or verification_result_payload_input.get("reachability")
+            )
+            evidence_raw = (
+                finding.get("verification_details")
+                or finding.get("verification_evidence")
+                or verification_result_payload_input.get("verification_details")
+                or verification_result_payload_input.get("verification_evidence")
+                or verification_result_payload_input.get("evidence")
+            )
+            if not authenticity_raw or not reachability_raw or not evidence_raw:
+                mark_filtered("missing_verification_result", finding)
+                continue
+
+            authenticity = str(authenticity_raw).strip().lower()
+            if authenticity not in {"confirmed", "likely", "false_positive"}:
+                mark_filtered("missing_verification_result", finding)
+                continue
+
+            reachability = str(reachability_raw).strip().lower()
+            if reachability not in {"reachable", "likely_reachable", "unreachable"}:
+                mark_filtered("missing_verification_result", finding)
+                continue
+            verification_details_text = _normalize_optional_text(evidence_raw)
+            if not verification_details_text:
+                mark_filtered("missing_verification_result", finding)
+                continue
 
             # 5) normalize file location
             location_file, location_line = _extract_location_parts(finding)
@@ -2966,6 +3458,9 @@ async def _save_findings(
             )
             if not stored_file_path or not full_file_path:
                 mark_filtered("missing_or_invalid_file_path", finding)
+                continue
+            if _is_core_ignored_path(stored_file_path):
+                mark_filtered("ignored_scope_path", finding)
                 continue
 
             try:
@@ -3022,57 +3517,30 @@ async def _save_findings(
                 snippet_text = "\n".join(file_lines[line_start - 1 : line_end]).strip()
 
             # 7.5) enforce enclosing function evidence (file + function)
-            def _fallback_infer_function_name() -> Optional[str]:
-                # Heuristic fallback to avoid dropping all findings if AST index is unavailable.
-                # Still enforces "file + function" requirement.
-                import re
-                if not file_lines:
-                    return None
-                start_idx = max(0, min(len(file_lines) - 1, line_start - 1))
-                patterns = [
-                    # python
-                    (re.compile(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("), 1),
-                    # js/ts
-                    (re.compile(r"^\s*(?:export\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("), 1),
-                    # c/cpp/java-like
-                    (re.compile(r"^\s*[A-Za-z_][\w\s\*:&<>]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*\{"), 1),
-                ]
-                for idx in range(start_idx, -1, -1):
-                    line = file_lines[idx]
-                    stripped = line.strip()
-                    if not stripped:
-                        continue
-                    if stripped.startswith(("//", "#")):
-                        continue
-                    for pattern, group in patterns:
-                        m = pattern.match(line)
-                        if m:
-                            name = m.group(group).strip()
-                            if name:
-                                return name
-                return None
-
             reachability_target_function = None
-            if ast_index:
-                try:
-                    normalized_file = str(stored_file_path).replace("\\", "/")
-                    candidates = [
-                        sym
-                        for sym in ast_index.symbols_by_id.values()
-                        if sym.file_path == normalized_file
-                        and sym.start_line <= line_start <= sym.end_line
-                    ]
-                    if candidates:
-                        best = min(
-                            candidates,
-                            key=lambda s: (max(0, s.end_line - s.start_line), s.start_line),
-                        )
-                        reachability_target_function = str(best.name).strip() or None
-                except Exception:
-                    reachability_target_function = None
+            reachability_target_start_line = None
+            reachability_target_end_line = None
+            locator_language = None
+            locator_resolution_engine = None
+            locator_diagnostics = None
+            locator_resolution_method = None
 
-            if not reachability_target_function:
-                reachability_target_function = _fallback_infer_function_name()
+            if function_locator:
+                located = function_locator.locate(
+                    full_file_path=full_file_path,
+                    line_start=line_start,
+                    relative_file_path=stored_file_path,
+                    file_lines=file_lines,
+                )
+                func_name = located.get("function")
+                if isinstance(func_name, str) and func_name.strip():
+                    reachability_target_function = func_name.strip()
+                    reachability_target_start_line = _to_int(located.get("start_line"))
+                    reachability_target_end_line = _to_int(located.get("end_line"))
+                locator_language = located.get("language")
+                locator_resolution_engine = located.get("resolution_engine")
+                locator_resolution_method = located.get("resolution_method")
+                locator_diagnostics = located.get("diagnostics")
 
             if not reachability_target_function:
                 mark_filtered("missing_enclosing_function", finding)
@@ -3128,16 +3596,18 @@ async def _save_findings(
 
             # 9) verification metadata
             is_verified = authenticity in {"confirmed", "likely"}
-            verification_details_text = _normalize_optional_text(
-                finding.get("verification_details") or finding.get("verification_evidence")
-            )
             verification_method_text = _normalize_optional_text(finding.get("verification_method"))
             if not verification_method_text:
                 verification_method_text = "agent_verification"
 
-            verification_result_payload = finding.get("verification_result")
-            if not isinstance(verification_result_payload, dict):
-                verification_result_payload = {}
+            verification_result_payload = dict(verification_result_payload_input)
+            existing_reachability_target = (
+                verification_result_payload_input.get("reachability_target")
+                if isinstance(verification_result_payload_input, dict)
+                else None
+            )
+            if not isinstance(existing_reachability_target, dict):
+                existing_reachability_target = {}
             verification_result_payload.update(
                 {
                     "reachability": reachability,
@@ -3148,6 +3618,15 @@ async def _save_findings(
                     "reachability_target": {
                         "file_path": stored_file_path,
                         "function": reachability_target_function,
+                        "start_line": reachability_target_start_line,
+                        "end_line": reachability_target_end_line,
+                        "resolution_method": (
+                            locator_resolution_method
+                            or existing_reachability_target.get("resolution_method")
+                        ),
+                        "language": locator_language or existing_reachability_target.get("language"),
+                        "resolution_engine": locator_resolution_engine or existing_reachability_target.get("resolution_engine"),
+                        "diagnostics": locator_diagnostics or existing_reachability_target.get("diagnostics"),
                     },
                 }
             )
@@ -3163,6 +3642,19 @@ async def _save_findings(
                         dataflow_path = [str(item) for item in chain if str(item).strip()]
             if not isinstance(dataflow_path, list):
                 dataflow_path = None
+            flow_chain = _extract_flow_call_chain(
+                verification_payload=verification_result_payload,
+                dataflow_path=dataflow_path,
+            )
+            function_trigger_flow = _build_function_trigger_flow(
+                call_chain=flow_chain,
+                function_name=reachability_target_function,
+                file_path=stored_file_path,
+                line_start=line_start,
+                line_end=line_end,
+            )
+            verification_result_payload["function_trigger_flow"] = function_trigger_flow
+            dataflow_path = function_trigger_flow if function_trigger_flow else dataflow_path
             source_text = _normalize_optional_text(finding.get("source"))
             sink_text = _normalize_optional_text(finding.get("sink"))
 
@@ -3188,7 +3680,12 @@ async def _save_findings(
                 poc_steps = None
 
             # 11) optional CVSS/CWE
-            cwe_id = finding.get("cwe_id") or finding.get("cwe")
+            cwe_id = _resolve_cwe_id(
+                finding.get("cwe_id") or finding.get("cwe"),
+                raw_type,
+                title=title_text,
+                description=description_text,
+            )
             cvss_score = finding.get("cvss_score") or finding.get("cvss")
             if isinstance(cvss_score, str):
                 try:
@@ -3208,6 +3705,7 @@ async def _save_findings(
                 line_end=line_end,
                 code_snippet=snippet_text,
                 code_context=context_text,
+                function_name=reachability_target_function,
                 source=source_text,
                 sink=sink_text,
                 dataflow_path=dataflow_path,
@@ -3396,6 +3894,7 @@ async def create_agent_task(
         for item in (request.target_files or [])
         if isinstance(item, str) and item.strip()
     ]
+    merged_exclude_patterns = _build_core_audit_exclude_patterns(request.exclude_patterns)
     
     # 创建任务
     task = AgentTask(
@@ -3408,7 +3907,7 @@ async def create_agent_task(
         target_vulnerabilities=request.target_vulnerabilities,
         verification_level=verification_level,
         branch_name=request.branch_name,  # 保存用户选择的分支
-        exclude_patterns=request.exclude_patterns,
+        exclude_patterns=merged_exclude_patterns,
         target_files=normalized_target_files or None,
         agent_config={
             "authorization_confirmed": bool(request.authorization_confirmed),
@@ -4015,6 +4514,8 @@ async def list_agent_findings(
         context_end_line = _to_int(verification_payload.get("context_end_line"))
         reachability_file = None
         reachability_function = None
+        reachability_function_start_line = None
+        reachability_function_end_line = None
         reachability_target = (
             verification_payload.get("reachability_target")
             if isinstance(verification_payload, dict)
@@ -4027,9 +4528,16 @@ async def list_agent_findings(
                 reachability_file = file_value.strip()
             if isinstance(func_value, str) and func_value.strip():
                 reachability_function = func_value.strip()
+            reachability_function_start_line = _to_int(reachability_target.get("start_line"))
+            reachability_function_end_line = _to_int(reachability_target.get("end_line"))
+        if not reachability_function:
+            raw_function_name = getattr(item, "function_name", None)
+            if isinstance(raw_function_name, str) and raw_function_name.strip():
+                reachability_function = raw_function_name.strip()
         flow_payload = verification_payload.get("flow") if isinstance(verification_payload, dict) else None
         flow_path_score = None
         flow_call_chain = None
+        function_trigger_flow = None
         flow_control_conditions = None
         if isinstance(flow_payload, dict):
             try:
@@ -4039,9 +4547,26 @@ async def list_agent_findings(
             raw_chain = flow_payload.get("call_chain")
             if isinstance(raw_chain, list):
                 flow_call_chain = [str(item) for item in raw_chain if str(item).strip()]
+            raw_function_chain = flow_payload.get("function_trigger_flow")
+            if isinstance(raw_function_chain, list):
+                function_trigger_flow = [str(step) for step in raw_function_chain if str(step).strip()]
             raw_controls = flow_payload.get("control_conditions")
             if isinstance(raw_controls, list):
                 flow_control_conditions = [str(item) for item in raw_controls if str(item).strip()]
+        if not function_trigger_flow:
+            raw_function_chain = verification_payload.get("function_trigger_flow")
+            if isinstance(raw_function_chain, list):
+                function_trigger_flow = [str(step) for step in raw_function_chain if str(step).strip()]
+        if not function_trigger_flow:
+            function_trigger_flow = _build_function_trigger_flow(
+                call_chain=flow_call_chain or [],
+                function_name=reachability_function,
+                file_path=reachability_file or item.file_path,
+                line_start=item.line_start,
+                line_end=item.line_end,
+            )
+        if function_trigger_flow:
+            flow_call_chain = function_trigger_flow
 
         logic_payload = verification_payload.get("logic_authz") if isinstance(verification_payload, dict) else None
         logic_authz_evidence = None
@@ -4052,6 +4577,34 @@ async def list_agent_findings(
             elif isinstance(raw_logic_evidence, str) and raw_logic_evidence.strip():
                 logic_authz_evidence = [raw_logic_evidence.strip()]
 
+        cwe_id = _extract_cwe_from_references(getattr(item, "references", None))
+        if not cwe_id:
+            cwe_id = _resolve_cwe_id(
+                verification_payload.get("cwe_id") or verification_payload.get("cwe"),
+                item.vulnerability_type,
+                title=item.title,
+                description=item.description,
+            )
+        profile = _resolve_vulnerability_profile(
+            item.vulnerability_type,
+            title=item.title,
+            description=item.description,
+        )
+        structured_description = _build_structured_cn_description(
+            file_path=item.file_path,
+            function_name=reachability_function,
+            vulnerability_name=profile["name"],
+            harm_text=profile["harm"],
+            cwe_id=cwe_id,
+            raw_description=item.description,
+        )
+        display_title = _build_structured_cn_display_title(
+            file_path=item.file_path,
+            function_name=reachability_function,
+            vulnerability_name=profile["name"],
+            harm_text=profile["harm"],
+        )
+
         responses.append(
             AgentFindingResponse.model_validate(
                 {
@@ -4060,12 +4613,15 @@ async def list_agent_findings(
                     "vulnerability_type": item.vulnerability_type,
                     "severity": item.severity,
                     "title": item.title,
-                    "description": item.description,
+                    "display_title": display_title,
+                    "description": structured_description,
                     "file_path": item.file_path,
                     "line_start": item.line_start,
                     "line_end": item.line_end,
                     "code_snippet": item.code_snippet,
                     "code_context": item.code_context,
+                    "cwe_id": cwe_id,
+                    "cwe_name": profile["name"],
                     "context_start_line": context_start_line,
                     "context_end_line": context_end_line,
                     "is_verified": item.is_verified,
@@ -4075,10 +4631,13 @@ async def list_agent_findings(
                     "verification_evidence": verification_evidence,
                     "flow_path_score": flow_path_score,
                     "flow_call_chain": flow_call_chain,
+                    "function_trigger_flow": function_trigger_flow,
                     "flow_control_conditions": flow_control_conditions,
                     "logic_authz_evidence": logic_authz_evidence,
                     "reachability_file": reachability_file,
                     "reachability_function": reachability_function,
+                    "reachability_function_start_line": reachability_function_start_line,
+                    "reachability_function_end_line": reachability_function_end_line,
                     "trigger_flow": (
                         verification_payload.get("trigger_flow")
                         if isinstance(verification_payload, dict)

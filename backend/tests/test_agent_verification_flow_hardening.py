@@ -52,6 +52,7 @@ def test_verification_repair_final_answer_fills_required_fields_and_defaults():
             "vulnerability_type": "sql_injection",
             "severity": "high",
             "file_path": "src/api/query.py",
+            "function_name": "query_endpoint",
             "line_start": 88,
             "line_end": 89,
             "code_snippet": "cursor.execute(f\"SELECT * FROM t WHERE id = '{user_id}'\")",
@@ -84,6 +85,65 @@ def test_verification_repair_final_answer_fills_required_fields_and_defaults():
     assert finding["suggestion"]
     assert finding["fix_code"]
     assert finding.get("poc") is not None
+    assert isinstance(finding.get("verification_result"), dict)
+    assert finding["verification_result"].get("authenticity") in {"confirmed", "likely", "false_positive"}
+    assert finding["verification_result"].get("reachability") in {"reachable", "likely_reachable", "unreachable"}
+    assert isinstance(finding["verification_result"].get("function_trigger_flow"), list)
+    reachability_target = finding["verification_result"].get("reachability_target")
+    assert isinstance(reachability_target, dict)
+    assert reachability_target.get("file_path")
+    assert reachability_target.get("function")
+
+
+def test_verification_repair_final_answer_keeps_full_candidate_coverage_when_llm_partial():
+    agent = _make_agent()
+    findings_to_verify = [
+        {
+            "title": "candidate-1",
+            "vulnerability_type": "sql_injection",
+            "severity": "high",
+            "file_path": "src/a.py",
+            "function_name": "build_query",
+            "line_start": 10,
+            "line_end": 10,
+            "code_snippet": "query = user_input",
+        },
+        {
+            "title": "candidate-2",
+            "vulnerability_type": "xss",
+            "severity": "medium",
+            "file_path": "src/b.py",
+            "function_name": "render_html",
+            "line_start": 20,
+            "line_end": 20,
+            "code_snippet": "innerHTML = value",
+        },
+    ]
+    raw_answer = {
+        "findings": [
+            {
+                "title": "candidate-1",
+                "vulnerability_type": "sql_injection",
+                "severity": "high",
+                "file_path": "src/a.py",
+                "line_start": 10,
+                "line_end": 10,
+                "verdict": "confirmed",
+                "reachability": "reachable",
+                "verification_details": "ok",
+            }
+        ]
+    }
+
+    repaired = agent._repair_final_answer(
+        raw_answer,
+        findings_to_verify,
+        "analysis_with_poc_plan",
+    )
+    findings = repaired.get("findings")
+    assert isinstance(findings, list)
+    assert len(findings) == 2
+    assert all(isinstance(item.get("verification_result"), dict) for item in findings)
 
 
 def test_verification_repair_final_answer_adds_poc_plan_for_confirmed_or_likely():
@@ -94,6 +154,7 @@ def test_verification_repair_final_answer_adds_poc_plan_for_confirmed_or_likely(
             "vulnerability_type": "command_injection",
             "severity": "critical",
             "file_path": "src/cmd.py",
+            "function_name": "run_cmd",
             "line_start": 10,
             "line_end": 10,
         },
@@ -102,6 +163,7 @@ def test_verification_repair_final_answer_adds_poc_plan_for_confirmed_or_likely(
             "vulnerability_type": "xss",
             "severity": "medium",
             "file_path": "src/view.py",
+            "function_name": "render_view",
             "line_start": 20,
             "line_end": 20,
         },
@@ -146,15 +208,14 @@ def test_verification_repair_final_answer_adds_poc_plan_for_confirmed_or_likely(
 
 
 @pytest.mark.asyncio
-async def test_verification_skips_when_no_opengrep_error_candidates_even_if_analysis_findings_exist(monkeypatch):
+async def test_verification_uses_analysis_findings_when_bootstrap_empty(monkeypatch):
     agent = _make_agent_for_run()
 
-    # Should not call LLM when no candidates.
-    monkeypatch.setattr(
-        agent,
-        "stream_llm_call",
-        AsyncMock(side_effect=AssertionError("stream_llm_call should not be called")),
-    )
+    llm_side_effects = [
+        ("Thought: done\nFinal Answer: {}", 10),
+        ("Thought: done\nFinal Answer: {}", 10),
+    ]
+    monkeypatch.setattr(agent, "stream_llm_call", AsyncMock(side_effect=llm_side_effects))
 
     result = await agent.run(
         {
@@ -182,9 +243,10 @@ async def test_verification_skips_when_no_opengrep_error_candidates_even_if_anal
     )
 
     assert result.success is True
-    assert result.iterations == 0
-    assert result.data["verified_count"] == 0
-    assert result.data["findings"] == []
+    assert result.tool_calls >= 1
+    assert result.data["candidate_count"] == 1
+    assert len(result.data["findings"]) == 1
+    assert result.data["findings"][0]["file_path"] == "src/from_analysis.py"
 
 
 @pytest.mark.asyncio
@@ -228,7 +290,7 @@ async def test_verification_forces_min_tool_call_when_llm_tries_to_finish_withou
 
 
 @pytest.mark.asyncio
-async def test_verification_scope_uses_only_bootstrap_candidates_and_caps_at_8(monkeypatch):
+async def test_verification_scope_merges_all_candidates_without_hard_cap(monkeypatch):
     agent = _make_agent_for_run()
 
     bootstrap_findings = []
@@ -292,6 +354,7 @@ async def test_verification_scope_uses_only_bootstrap_candidates_and_caps_at_8(m
     assert result.success is True
     findings = result.data.get("findings")
     assert isinstance(findings, list)
-    assert len(findings) == 8  # cap enforced
-    assert all(f.get("file_path", "").startswith("src/candidate_") for f in findings)
-    assert all(f.get("file_path") != "src/from_analysis.py" for f in findings)
+    assert len(findings) == 12
+    assert any(f.get("file_path") == "src/from_analysis.py" for f in findings)
+    assert any(f.get("file_path") == "src/ignored.py" for f in findings)
+    assert result.data.get("candidate_count") == 12

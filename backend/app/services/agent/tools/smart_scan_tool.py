@@ -12,6 +12,7 @@ import os
 import re
 import asyncio
 import logging
+import fnmatch
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from dataclasses import dataclass, field
@@ -71,12 +72,6 @@ class SmartScanTool(AgentTool):
         r'.*file.*\.(py|js|ts|tsx|jsx|java|php|swift|m|mm|kt|rs|go)$',
         r'.*exec.*\.(py|js|ts|tsx|jsx|java|php|swift|m|mm|kt|rs|go)$',
         r'.*admin.*\.(py|js|ts|tsx|jsx|java|php|swift|m|mm|kt|rs|go)$',
-        r'.*config.*\.(py|js|ts|tsx|jsx|json|yaml|yml|xml|properties|plist)$',
-        r'.*setting.*\.(py|js|ts|tsx|jsx|json|yaml|yml|xml|properties|plist)$',
-        r'.*secret.*\.(py|js|ts|tsx|jsx|json|yaml|yml|xml|properties|plist)$',
-        r'.*\.env.*$',
-        r'.*Info\.plist$',
-        r'.*AndroidManifest\.xml$',
     ]
     
     # 危险模式库（精简版，用于快速扫描）
@@ -124,9 +119,31 @@ class SmartScanTool(AgentTool):
         ],
     }
     
-    def __init__(self, project_root: str):
+    def __init__(self, project_root: str, exclude_patterns: Optional[List[str]] = None):
         super().__init__()
         self.project_root = project_root
+        self.exclude_patterns = [str(p).strip().replace("\\", "/") for p in (exclude_patterns or []) if str(p).strip()]
+
+    def _should_exclude_path(self, path: str) -> bool:
+        normalized = str(path or "").replace("\\", "/").strip()
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+        while normalized.startswith("/"):
+            normalized = normalized[1:]
+        if not normalized:
+            return False
+        parts = [part for part in normalized.split("/") if part]
+        for part in parts[:-1]:
+            lowered = part.lower()
+            if lowered in {"test", "tests"}:
+                return True
+            if part.startswith("."):
+                return True
+        basename = os.path.basename(normalized)
+        for pattern in self.exclude_patterns:
+            if fnmatch.fnmatch(normalized, pattern) or fnmatch.fnmatch(basename, pattern):
+                return True
+        return False
     
     @property
     def name(self) -> str:
@@ -219,7 +236,7 @@ class SmartScanTool(AgentTool):
         exclude_dirs = {
             'node_modules', '__pycache__', '.git', 'venv', '.venv',
             'build', 'dist', 'target', '.idea', '.vscode', 'vendor',
-            'coverage', '.pytest_cache', '.mypy_cache',
+            'coverage', '.pytest_cache', '.mypy_cache', 'test', 'tests',
         }
         
         # 支持的代码文件扩展名
@@ -230,17 +247,23 @@ class SmartScanTool(AgentTool):
             '.vue', '.html', '.htm', '.xml', '.gradle', '.properties'
         }
         
-        # 配置文件扩展名
-        config_extensions = {'.json', '.yaml', '.yml', '.env', '.ini', '.cfg', '.plist', '.conf'}
-        
-        all_extensions = code_extensions | config_extensions
+        all_extensions = code_extensions
         
         if os.path.isfile(full_path):
             return [os.path.relpath(full_path, self.project_root)]
         
         for root, dirs, filenames in os.walk(full_path):
             # 过滤排除目录
-            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            rel_dir = os.path.relpath(root, self.project_root).replace("\\", "/")
+            if rel_dir == ".":
+                rel_dir = ""
+            dirs[:] = [
+                d
+                for d in dirs
+                if d not in exclude_dirs
+                and not d.startswith(".")
+                and not self._should_exclude_path(f"{rel_dir}/{d}" if rel_dir else d)
+            ]
             
             for filename in filenames:
                 ext = os.path.splitext(filename)[1].lower()
@@ -249,6 +272,9 @@ class SmartScanTool(AgentTool):
                 
                 file_path = os.path.join(root, filename)
                 rel_path = os.path.relpath(file_path, self.project_root)
+                rel_path = rel_path.replace("\\", "/")
+                if self._should_exclude_path(rel_path):
+                    continue
                 
                 # 快速模式：只扫描高风险文件
                 if quick_mode:

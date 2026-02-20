@@ -18,8 +18,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
+from .react_parser import parse_react_response
 from ..json_parser import AgentJsonParser
-from ..prompts import TOOL_USAGE_GUIDE
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +81,17 @@ class ReconAgent(BaseAgent):
         tools: Dict[str, Any],
         event_emitter=None,
     ):
-        # 组合增强的系统提示词
-        full_system_prompt = f"{RECON_SYSTEM_PROMPT}\n\n{TOOL_USAGE_GUIDE}"
+        # 仅注入运行时白名单，避免提示词指导调用不存在工具
+        tool_whitelist = ", ".join(sorted(tools.keys())) if tools else "无"
+        full_system_prompt = (
+            f"{RECON_SYSTEM_PROMPT}\n\n"
+            f"## 当前工具白名单\n{tool_whitelist}\n"
+            "只能调用以上工具，禁止调用未在白名单中的工具。\n\n"
+            "## 最小调用规范\n"
+            "每轮必须输出：Thought + Action + Action Input。\n"
+            "Action 必须是白名单中的工具名，Action Input 必须是 JSON 对象。\n"
+            "禁止使用 `## Action`/`## Action Input` 标题样式。"
+        )
         
         config = AgentConfig(
             name="Recon",
@@ -97,92 +106,25 @@ class ReconAgent(BaseAgent):
         self._steps: List[ReconStep] = []
     
     def _parse_llm_response(self, response: str) -> ReconStep:
-        """解析 LLM 响应 - 增强版，更健壮地提取思考内容"""
-        step = ReconStep(thought="")
+        """解析 LLM 响应（共享 ReAct 解析器）"""
+        parsed = parse_react_response(
+            response,
+            final_default={"raw_answer": (response or "").strip()},
+            action_input_raw_key="raw_input",
+        )
+        step = ReconStep(
+            thought=parsed.thought or "",
+            action=parsed.action,
+            action_input=parsed.action_input or {},
+            is_final=bool(parsed.is_final),
+            final_answer=parsed.final_answer if isinstance(parsed.final_answer, dict) else None,
+        )
 
-        # 🔥 v2.1: 预处理 - 移除 Markdown 格式标记（LLM 有时会输出 **Action:** 而非 Action:）
-        cleaned_response = response
-        cleaned_response = re.sub(r'\*\*Action:\*\*', 'Action:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Action Input:\*\*', 'Action Input:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Thought:\*\*', 'Thought:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Final Answer:\*\*', 'Final Answer:', cleaned_response)
-        cleaned_response = re.sub(r'\*\*Observation:\*\*', 'Observation:', cleaned_response)
-
-        # 🔥 首先尝试提取明确的 Thought 标记（Thought 可以不存在）
-        thought_match = re.search(r'Thought:\s*(.*?)(?=Action:|Final Answer:|$)', cleaned_response, re.DOTALL)
-        if thought_match:
-            step.thought = thought_match.group(1).strip()
-
-        # 🔥 提取 Action（Action 优先于 Final Answer；避免同轮同时输出导致跳过工具）
-        action_match = re.search(r'Action:\s*(\w+)', cleaned_response)
-        if action_match:
-            step.action = action_match.group(1).strip()
-
-            # 🔥 如果没有提取到 thought，提取 Action 之前的内容作为思考
-            if not step.thought:
-                action_pos = cleaned_response.find('Action:')
-                if action_pos > 0:
-                    before_action = cleaned_response[:action_pos].strip()
-                    # 移除可能的 Thought: 前缀
-                    before_action = re.sub(r'^Thought:\s*', '', before_action)
-                    if before_action:
-                        step.thought = before_action[:500] if len(before_action) > 500 else before_action
-
-            # 🔥 提取 Action Input
-            # 注意：必须在遇到 Final Answer 前截断，否则会把 Final Answer JSON 拼进 Action Input
-            input_match = re.search(
-                r'Action Input:\s*(.*?)(?=Thought:|Action:|Observation:|Final Answer:|$)',
-                cleaned_response,
-                re.DOTALL,
-            )
-            if input_match:
-                input_text = input_match.group(1).strip()
-                input_text = re.sub(r'```json\s*', '', input_text)
-                input_text = re.sub(r'```\s*', '', input_text)
-                # 使用增强的 JSON 解析器
-                step.action_input = AgentJsonParser.parse(
-                    input_text,
-                    default={"raw_input": input_text}
-                )
-            else:
-                step.action_input = {}
-
-            return step
-
-        # 🔥 检查是否是最终答案（仅当不存在 Action 时）
-        final_match = re.search(r'Final Answer:\s*(.*?)$', cleaned_response, re.DOTALL)
-        if final_match:
-            step.is_final = True
-            answer_text = final_match.group(1).strip()
-            answer_text = re.sub(r'```json\s*', '', answer_text)
-            answer_text = re.sub(r'```\s*', '', answer_text)
-            # 使用增强的 JSON 解析器
-            step.final_answer = AgentJsonParser.parse(
-                answer_text,
-                default={"raw_answer": answer_text}
-            )
-            # 确保 findings 格式正确
-            if "initial_findings" in step.final_answer:
-                step.final_answer["initial_findings"] = [
-                    f for f in step.final_answer["initial_findings"]
-                    if isinstance(f, dict)
-                ]
-
-            # 🔥 如果没有提取到 thought，使用 Final Answer 前的内容作为思考
-            if not step.thought:
-                before_final = cleaned_response[:cleaned_response.find('Final Answer:')].strip()
-                if before_final:
-                    # 移除可能的 Thought: 前缀
-                    before_final = re.sub(r'^Thought:\s*', '', before_final)
-                    step.thought = before_final[:500] if len(before_final) > 500 else before_final
-
-            return step
-
-        # 🔥 最后的 fallback：如果整个响应没有任何标记，整体作为思考
-        if not step.thought and not step.action and not step.is_final:
-            if response.strip():
-                step.thought = response.strip()[:500]
-
+        if step.is_final and isinstance(step.final_answer, dict) and "initial_findings" in step.final_answer:
+            step.final_answer["initial_findings"] = [
+                f for f in step.final_answer["initial_findings"]
+                if isinstance(f, dict)
+            ]
         return step
     
 

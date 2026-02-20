@@ -49,3 +49,25 @@ async def test_create_agent_task_normalizes_verification_level(verification_leve
     assert task.verification_level == "analysis_with_poc_plan"
     assert task.target_files == ["src/app.py"]
     db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_agent_task_merges_system_core_exclude_patterns():
+    db = _mock_db_with_project()
+    request = AgentTaskCreate(
+        project_id="project-1",
+        verification_level="analysis_with_poc_plan",
+        exclude_patterns=["custom/**", "test/**"],
+    )
+
+    task = await create_agent_task(
+        request=request,
+        background_tasks=BackgroundTasks(),
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert "custom/**" in (task.exclude_patterns or [])
+    assert "test/**" in (task.exclude_patterns or [])
+    assert "**/.*/**" in (task.exclude_patterns or [])
+    assert "**/*.yaml" in (task.exclude_patterns or [])
