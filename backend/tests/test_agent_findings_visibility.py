@@ -34,7 +34,7 @@ async def test_list_agent_findings_hides_false_positive_by_default():
         severity="high",
         title="confirmed issue",
         description="confirmed",
-        file_path="app.py",
+        file_path="/tmp/audit-workspace/app.py",
         line_start=10,
         line_end=11,
         code_snippet="dangerous()",
@@ -54,7 +54,7 @@ async def test_list_agent_findings_hides_false_positive_by_default():
             "context_start_line": 8,
             "context_end_line": 13,
             "reachability_target": {
-                "file_path": "app.py",
+                "file_path": "/tmp/audit-workspace/app.py",
                 "function": "dangerous",
                 "start_line": 7,
                 "end_line": 18,
@@ -69,7 +69,7 @@ async def test_list_agent_findings_hides_false_positive_by_default():
         severity="low",
         title="false positive issue",
         description="false positive",
-        file_path="app.py",
+        file_path="/tmp/audit-workspace/app.py",
         line_start=20,
         line_end=20,
         code_snippet="safe()",
@@ -114,8 +114,11 @@ async def test_list_agent_findings_hides_false_positive_by_default():
     )
     assert len(only_effective) == 1
     assert only_effective[0].id == "finding-1"
-    assert "路径：" in (only_effective[0].description or "")
-    assert "缺陷名称：" in (only_effective[0].description or "")
+    assert only_effective[0].file_path == "app.py"
+    assert only_effective[0].reachability_file == "app.py"
+    assert "该缺陷位于app.py:10-11的dangerous函数中" in (only_effective[0].description or "")
+    assert "程序在该路径上缺少必要的输入约束或边界校验处理" in (only_effective[0].description or "")
+    assert "漏洞详情：" not in (only_effective[0].description or "")
     assert only_effective[0].cwe_id == "CWE-79"
     assert only_effective[0].function_trigger_flow
     assert only_effective[0].reachability_function_start_line == 7

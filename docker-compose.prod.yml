@@ -40,6 +40,8 @@ services:
     restart: unless-stopped
     volumes:
       - backend_uploads:/app/uploads
+      - mcp_data:/app/data/mcp
+      - qmd_data:/app/data/qmd
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8000:8000"
@@ -49,6 +51,20 @@ services:
       - AGENT_ENABLED=true
       - SANDBOX_ENABLED=true
       - SANDBOX_IMAGE=ghcr.io/lintsinghua/deepaudit-sandbox:latest
+      - MCP_ENABLED=true
+      - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
+      - MCP_REQUIRED_RUNTIME_DOMAIN=all
+      - MCP_FILESYSTEM_ENABLED=true
+      - MCP_FILESYSTEM_SANDBOX_ENABLED=true
+      - MCP_CODE_INDEX_ENABLED=true
+      - MCP_CODE_INDEX_SANDBOX_ENABLED=true
+      - MCP_MEMORY_ENABLED=true
+      - MCP_MEMORY_SANDBOX_ENABLED=true
+      - MCP_SEQUENTIAL_THINKING_ENABLED=true
+      - MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED=true
+      - MCP_QMD_ENABLED=true
+      - MCP_QMD_SANDBOX_ENABLED=true
+      - QMD_DATA_DIR=/app/data/qmd
       # LLM 配置 - 请根据需要修改
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o}
@@ -118,4 +134,6 @@ networks:
 volumes:
   postgres_data:
   backend_uploads:
+  mcp_data:
+  qmd_data:
   redis_data:

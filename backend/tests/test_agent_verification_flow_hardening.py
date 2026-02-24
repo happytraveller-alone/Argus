@@ -81,6 +81,10 @@ def test_verification_repair_final_answer_fills_required_fields_and_defaults():
     assert finding["file_path"] == "src/api/query.py"
     assert finding["line_start"] == 88
     assert finding["line_end"] == 89
+    assert finding["title"] == "src/api/query.py中query_endpointSQL注入漏洞"
+    assert finding["display_title"] == finding["title"]
+    assert finding["vulnerability_type"] == "sql_injection"
+    assert "可能造成的危害" not in finding["title"]
     assert finding["reachability"] in {"reachable", "likely_reachable", "unreachable"}
     assert finding["suggestion"]
     assert finding["fix_code"]
@@ -358,3 +362,61 @@ async def test_verification_scope_merges_all_candidates_without_hard_cap(monkeyp
     assert any(f.get("file_path") == "src/from_analysis.py" for f in findings)
     assert any(f.get("file_path") == "src/ignored.py" for f in findings)
     assert result.data.get("candidate_count") == 12
+
+
+@pytest.mark.asyncio
+async def test_verification_cancel_message_uses_current_run_iteration(monkeypatch):
+    agent = _make_agent_for_run()
+    agent._iteration = 14
+    agent._cancelled = True
+
+    emit_spy = AsyncMock()
+    monkeypatch.setattr(agent, "emit_event", emit_spy)
+
+    result = await agent.run(
+        {
+            "config": {},
+            "previous_results": {
+                "bootstrap_findings": [
+                    {
+                        "severity": "high",
+                        "confidence": 0.9,
+                        "file_path": "src/a.py",
+                        "line_start": 10,
+                        "vulnerability_type": "sql_injection",
+                        "title": "bootstrap candidate",
+                    }
+                ]
+            },
+            "task": "verify",
+        }
+    )
+
+    assert result.success is False
+    assert result.error == "任务已取消"
+    assert result.iterations == 0
+
+    cancel_messages = [
+        call.args[1]
+        for call in emit_spy.await_args_list
+        if len(call.args) >= 2
+        and call.args[0] == "info"
+        and isinstance(call.args[1], str)
+        and "Verification Agent 已取消" in call.args[1]
+    ]
+    assert cancel_messages
+    assert "Verification Agent 已取消: 本次迭代 0" in cancel_messages[-1]
+    assert "当前漏洞 0/1" in cancel_messages[-1]
+
+    cancel_metadata = [
+        call.kwargs.get("metadata")
+        for call in emit_spy.await_args_list
+        if len(call.args) >= 2
+        and call.args[0] == "info"
+        and isinstance(call.args[1], str)
+        and "Verification Agent 已取消" in call.args[1]
+    ]
+    assert cancel_metadata
+    latest_metadata = cancel_metadata[-1] or {}
+    assert latest_metadata.get("run_iteration_count") == 0
+    assert latest_metadata.get("total_todos") == 1

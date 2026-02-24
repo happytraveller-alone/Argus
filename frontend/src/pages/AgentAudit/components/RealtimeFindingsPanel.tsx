@@ -10,12 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import FindingCodeWindow from "./FindingCodeWindow";
 
 export type RealtimeMergedFindingItem = {
   id: string;
   fingerprint: string;
   title: string;
   display_title?: string | null;
+  description?: string | null;
   severity: string;
   vulnerability_type: string;
   file_path?: string | null;
@@ -23,6 +25,7 @@ export type RealtimeMergedFindingItem = {
   line_end?: number | null;
   cwe_id?: string | null;
   code_snippet?: string | null;
+  code_context?: string | null;
   function_trigger_flow?: string[] | null;
   reachability_file?: string | null;
   reachability_function?: string | null;
@@ -81,6 +84,36 @@ function formatLocation(item: RealtimeMergedFindingItem): string {
   return "-";
 }
 
+function getRootCauseParagraph(item: RealtimeMergedFindingItem): string {
+  const description = String(item.description || "").trim();
+  if (description) return description;
+  return "后端暂未返回漏洞根因文段。";
+}
+
+function pickRealtimeCode(item: RealtimeMergedFindingItem): {
+  code: string;
+  lineStart: number | null;
+  lineEnd: number | null;
+} | null {
+  const context = String(item.code_context || "").trim();
+  if (context) {
+    return {
+      code: context,
+      lineStart: item.context_start_line ?? item.line_start ?? null,
+      lineEnd: item.context_end_line ?? item.line_end ?? null,
+    };
+  }
+  const snippet = String(item.code_snippet || "").trim();
+  if (snippet) {
+    return {
+      code: snippet,
+      lineStart: item.line_start ?? null,
+      lineEnd: item.line_end ?? null,
+    };
+  }
+  return null;
+}
+
 export default function RealtimeFindingsPanel(props: {
   items: RealtimeMergedFindingItem[];
   isRunning: boolean;
@@ -89,6 +122,10 @@ export default function RealtimeFindingsPanel(props: {
   const [keyword, setKeyword] = useState("");
   const [severity, setSeverity] = useState<"all" | string>("all");
   const [detailItem, setDetailItem] = useState<RealtimeMergedFindingItem | null>(null);
+  const detailText = useMemo(
+    () => (detailItem ? getRootCauseParagraph(detailItem) : ""),
+    [detailItem],
+  );
 
   const counts = useMemo(() => {
     return { total: props.items.length };
@@ -385,67 +422,37 @@ export default function RealtimeFindingsPanel(props: {
                   <Badge variant="outline">
                     {severityToZh(detailItem.severity)}
                   </Badge>
-                  <Badge
-                    variant="outline"
-                    className={
-                      detailItem.is_verified
-                        ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                        : "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10"
-                    }
-                  >
-                    {detailItem.is_verified ? "已验证" : "未验证"}
-                  </Badge>
-                  {detailItem.timestamp ? (
-                    <Badge variant="outline">{detailItem.timestamp}</Badge>
-                  ) : null}
                 </div>
 
                 <h3 className="text-sm font-semibold break-words">
                   {detailItem.display_title || detailItem.title || "未命名缺陷"}
                 </h3>
 
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div>类型: {detailItem.vulnerability_type || "-"}</div>
-                  <div>定位: {formatLocation(detailItem)}</div>
-                  <div>
-                    所属函数: {detailItem.reachability_function || "-"} @{" "}
-                    {detailItem.reachability_file || detailItem.file_path || "-"}
+                <div className="space-y-2 pt-2">
+                  <div className="text-xs font-semibold text-muted-foreground">漏洞详情（根因）</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    根因文段由后端统一生成并下发，前端仅做展示。
                   </div>
-                  <div>
-                    函数行范围:{" "}
-                    {detailItem.reachability_function_start_line ?? "-"} -{" "}
-                    {detailItem.reachability_function_end_line ?? "-"}
-                  </div>
-                  <div>
-                    命中行范围: {detailItem.line_start ?? "-"} - {detailItem.line_end ?? "-"}
-                  </div>
-                  <div>CWE: {detailItem.cwe_id || "等待落库补全"}</div>
-                  <div className="font-mono break-all">
-                    fingerprint: {detailItem.fingerprint || "-"}
+                  <div className="text-sm bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words leading-6">
+                    {detailText}
                   </div>
                 </div>
 
-                <div className="space-y-2 pt-2">
-                  <div className="text-xs font-semibold text-muted-foreground">命中代码片段</div>
-                  {detailItem.code_snippet ? (
-                    <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[32vh]">
-                      {detailItem.code_snippet}
-                    </pre>
-                  ) : (
-                    <div className="text-xs text-muted-foreground">等待落库补全</div>
-                  )}
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <div className="text-xs font-semibold text-muted-foreground">所属函数触发流程</div>
-                  {detailItem.function_trigger_flow && detailItem.function_trigger_flow.length > 0 ? (
-                    <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[24vh]">
-                      {detailItem.function_trigger_flow.join("\n")}
-                    </pre>
-                  ) : (
-                    <div className="text-xs text-muted-foreground">等待落库补全</div>
-                  )}
-                </div>
+                {(() => {
+                  const code = pickRealtimeCode(detailItem);
+                  if (!code) return null;
+                  return (
+                    <div className="pt-2">
+                      <FindingCodeWindow
+                        code={code.code}
+                        filePath={detailItem.file_path}
+                        lineStart={code.lineStart}
+                        lineEnd={code.lineEnd}
+                        title="命中代码"
+                      />
+                    </div>
+                  );
+                })()}
               </section>
             ) : null}
           </div>

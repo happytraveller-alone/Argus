@@ -311,9 +311,6 @@ class ExtractFunctionTool(AgentTool):
         **kwargs
     ) -> ToolResult:
         """提取函数代码"""
-        import ast
-        import re
-
         full_path = os.path.join(self.project_root, file_path)
         if not os.path.exists(full_path):
             return ToolResult(success=False, error=f"文件不存在: {file_path}")
@@ -330,6 +327,10 @@ class ExtractFunctionTool(AgentTool):
             result = self._extract_php(code, function_name)
         elif ext in [".js", ".ts"]:
             result = self._extract_javascript(code, function_name)
+        elif ext in [".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh"]:
+            result = self._extract_c_like(code, function_name, include_imports)
+            if not result.get("success"):
+                result = self._extract_generic(code, function_name)
         else:
             result = self._extract_generic(code, function_name)
 
@@ -471,6 +472,208 @@ class ExtractFunctionTool(AgentTool):
                     "success": True,
                     "code": func_code,
                 }
+
+        return {"success": False, "error": f"未找到函数 '{function_name}'"}
+
+    @staticmethod
+    def _find_matching_delimiter(code: str, start_pos: int, opener: str, closer: str) -> int:
+        """查找匹配的结束分隔符（忽略字符串/注释）。"""
+        if start_pos < 0 or start_pos >= len(code) or code[start_pos] != opener:
+            return -1
+
+        depth = 0
+        i = start_pos
+        in_single = False
+        in_double = False
+        in_line_comment = False
+        in_block_comment = False
+        escape = False
+
+        while i < len(code):
+            ch = code[i]
+            nxt = code[i + 1] if i + 1 < len(code) else ""
+
+            if in_line_comment:
+                if ch == "\n":
+                    in_line_comment = False
+                i += 1
+                continue
+
+            if in_block_comment:
+                if ch == "*" and nxt == "/":
+                    in_block_comment = False
+                    i += 2
+                    continue
+                i += 1
+                continue
+
+            if in_single:
+                if ch == "\\" and not escape:
+                    escape = True
+                    i += 1
+                    continue
+                if ch == "'" and not escape:
+                    in_single = False
+                escape = False
+                i += 1
+                continue
+
+            if in_double:
+                if ch == "\\" and not escape:
+                    escape = True
+                    i += 1
+                    continue
+                if ch == '"' and not escape:
+                    in_double = False
+                escape = False
+                i += 1
+                continue
+
+            if ch == "/" and nxt == "/":
+                in_line_comment = True
+                i += 2
+                continue
+            if ch == "/" and nxt == "*":
+                in_block_comment = True
+                i += 2
+                continue
+            if ch == "'":
+                in_single = True
+                i += 1
+                continue
+            if ch == '"':
+                in_double = True
+                i += 1
+                continue
+
+            if ch == opener:
+                depth += 1
+            elif ch == closer:
+                depth -= 1
+                if depth == 0:
+                    return i
+
+            i += 1
+
+        return -1
+
+    @staticmethod
+    def _skip_c_whitespace_and_comments(code: str, start_pos: int) -> int:
+        pos = start_pos
+        while pos < len(code):
+            if code[pos].isspace():
+                pos += 1
+                continue
+            if code.startswith("//", pos):
+                newline = code.find("\n", pos + 2)
+                if newline == -1:
+                    return len(code)
+                pos = newline + 1
+                continue
+            if code.startswith("/*", pos):
+                end_comment = code.find("*/", pos + 2)
+                if end_comment == -1:
+                    return len(code)
+                pos = end_comment + 2
+                continue
+            break
+        return pos
+
+    @staticmethod
+    def _extract_c_parameters(params_block: str) -> list[str]:
+        import re
+
+        params: list[str] = []
+        current: list[str] = []
+        depth = 0
+        for ch in params_block:
+            if ch == "," and depth == 0:
+                segment = "".join(current).strip()
+                if segment:
+                    params.append(segment)
+                current = []
+                continue
+            if ch == "(":
+                depth += 1
+            elif ch == ")" and depth > 0:
+                depth -= 1
+            current.append(ch)
+
+        tail = "".join(current).strip()
+        if tail:
+            params.append(tail)
+
+        normalized: list[str] = []
+        for raw in params:
+            clean = re.sub(r"/\*[\s\S]*?\*/", "", raw).strip()
+            if not clean or clean == "void":
+                continue
+            clean = clean.split("=")[0].strip()
+            name_match = re.search(r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$", clean)
+            normalized.append(name_match.group(1) if name_match else clean)
+
+        return normalized
+
+    def _extract_c_like(self, code: str, function_name: str, include_imports: bool) -> Dict:
+        """提取 C/C++ 风格函数定义。"""
+        import re
+
+        function_pattern = re.compile(rf"\b{re.escape(function_name)}\s*\(")
+
+        for match in function_pattern.finditer(code):
+            name_start = match.start()
+            prev_idx = name_start - 1
+            while prev_idx >= 0 and code[prev_idx].isspace():
+                prev_idx -= 1
+            if prev_idx >= 0 and code[prev_idx] in {".", ">"}:
+                # Skip method calls like obj.fn(...) / ptr->fn(...)
+                continue
+
+            paren_pos = match.end() - 1
+            close_paren = self._find_matching_delimiter(code, paren_pos, "(", ")")
+            if close_paren == -1:
+                continue
+
+            body_start = self._skip_c_whitespace_and_comments(code, close_paren + 1)
+            if body_start >= len(code) or code[body_start] != "{":
+                continue
+
+            body_end = self._find_matching_delimiter(code, body_start, "{", "}")
+            if body_end == -1:
+                continue
+
+            # Try to include multi-line return type/qualifier lines above function name.
+            signature_start = code.rfind("\n", 0, name_start) + 1
+            while signature_start > 0:
+                prev_line_end = signature_start - 1
+                prev_line_start = code.rfind("\n", 0, prev_line_end) + 1
+                prev_line = code[prev_line_start:prev_line_end].strip()
+                if not prev_line:
+                    break
+                if prev_line.startswith("#") or prev_line.endswith(("{", "}", ";")):
+                    break
+                signature_start = prev_line_start
+
+            func_code = code[signature_start:body_end + 1]
+            imports = None
+            if include_imports:
+                include_lines = [
+                    line.strip()
+                    for line in code.splitlines()
+                    if line.strip().startswith("#include")
+                ]
+                imports = "\n".join(include_lines) if include_lines else None
+
+            parameters = self._extract_c_parameters(code[paren_pos + 1:close_paren])
+
+            return {
+                "success": True,
+                "code": func_code,
+                "imports": imports,
+                "parameters": parameters,
+                "line_start": code.count("\n", 0, signature_start) + 1,
+                "line_end": code.count("\n", 0, body_end) + 1,
+            }
 
         return {"success": False, "error": f"未找到函数 '{function_name}'"}
 

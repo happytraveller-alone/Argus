@@ -15,6 +15,7 @@ from app.models.user_config import UserConfig
 from app.models.user import User
 from app.core.config import settings
 from app.core.encryption import encrypt_sensitive_data, decrypt_sensitive_data
+from app.services.agent.mcp.catalog import build_mcp_catalog
 
 router = APIRouter()
 
@@ -25,6 +26,188 @@ SENSITIVE_LLM_FIELDS = [
     'baiduApiKey', 'minimaxApiKey', 'doubaoApiKey'
 ]
 SENSITIVE_OTHER_FIELDS = ['githubToken', 'gitlabToken']
+
+_VALID_MCP_RUNTIME_MODES = {
+    "backend_only",
+    "sandbox_only",
+    "prefer_backend",
+    "prefer_sandbox",
+    "backend_then_sandbox",
+    "sandbox_then_backend",
+}
+
+
+def _default_mcp_write_policy() -> dict:
+    hard_limit = max(1, int(getattr(settings, "MCP_WRITE_HARD_LIMIT", 50)))
+    default_limit = int(
+        getattr(settings, "MCP_DEFAULT_MAX_WRITABLE_FILES_PER_TASK", hard_limit)
+    )
+    default_limit = max(1, min(default_limit, hard_limit))
+    return {
+        "all_agents_writable": bool(getattr(settings, "MCP_ALL_AGENTS_WRITABLE", True)),
+        "max_writable_files_per_task": default_limit,
+        "require_evidence_binding": bool(
+            getattr(settings, "MCP_REQUIRE_EVIDENCE_BINDING", True)
+        ),
+        "forbid_project_wide_writes": bool(
+            getattr(settings, "MCP_FORBID_PROJECT_WIDE_WRITES", True)
+        ),
+    }
+
+
+def _default_mcp_runtime_policy() -> dict:
+    def _entry(
+        *,
+        runtime_mode: str,
+        backend_enabled: bool,
+        sandbox_enabled: bool,
+    ) -> dict:
+        return {
+            "runtime_mode": runtime_mode,
+            "backend_enabled": bool(backend_enabled),
+            "sandbox_enabled": bool(sandbox_enabled),
+        }
+
+    return {
+        "default_mode": str(
+            getattr(settings, "MCP_RUNTIME_MODE_DEFAULT", "backend_then_sandbox")
+            or "backend_then_sandbox"
+        ),
+        "filesystem": _entry(
+            runtime_mode=str(getattr(settings, "MCP_FILESYSTEM_RUNTIME_MODE", "backend_then_sandbox")),
+            backend_enabled=bool(getattr(settings, "MCP_FILESYSTEM_ENABLED", True)),
+            sandbox_enabled=bool(getattr(settings, "MCP_FILESYSTEM_SANDBOX_ENABLED", True)),
+        ),
+        "code_index": _entry(
+            runtime_mode=str(getattr(settings, "MCP_CODE_INDEX_RUNTIME_MODE", "backend_then_sandbox")),
+            backend_enabled=bool(getattr(settings, "MCP_CODE_INDEX_ENABLED", False)),
+            sandbox_enabled=bool(getattr(settings, "MCP_CODE_INDEX_SANDBOX_ENABLED", False)),
+        ),
+        "memory": _entry(
+            runtime_mode=str(getattr(settings, "MCP_MEMORY_RUNTIME_MODE", "backend_then_sandbox")),
+            backend_enabled=bool(getattr(settings, "MCP_MEMORY_ENABLED", False)),
+            sandbox_enabled=bool(getattr(settings, "MCP_MEMORY_SANDBOX_ENABLED", False)),
+        ),
+        "sequentialthinking": _entry(
+            runtime_mode=str(
+                getattr(settings, "MCP_SEQUENTIAL_THINKING_RUNTIME_MODE", "backend_then_sandbox")
+            ),
+            backend_enabled=bool(getattr(settings, "MCP_SEQUENTIAL_THINKING_ENABLED", False)),
+            sandbox_enabled=bool(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED", False)),
+        ),
+        "qmd": _entry(
+            runtime_mode=str(getattr(settings, "MCP_QMD_RUNTIME_MODE", "backend_then_sandbox")),
+            backend_enabled=bool(getattr(settings, "MCP_QMD_ENABLED", False)),
+            sandbox_enabled=bool(getattr(settings, "MCP_QMD_SANDBOX_ENABLED", False)),
+        ),
+        "codebadger": _entry(
+            runtime_mode=str(getattr(settings, "MCP_CODEBADGER_RUNTIME_MODE", "backend_only")),
+            backend_enabled=bool(getattr(settings, "MCP_CODEBADGER_ENABLED", False)),
+            sandbox_enabled=bool(bool(getattr(settings, "MCP_CODEBADGER_SANDBOX_URL", None))),
+        ),
+    }
+
+
+def _sanitize_runtime_mode(raw_mode: Any, default_mode: str) -> str:
+    mode = str(raw_mode or "").strip().lower()
+    if mode in _VALID_MCP_RUNTIME_MODES:
+        return mode
+    fallback = str(default_mode or "").strip().lower()
+    if fallback in _VALID_MCP_RUNTIME_MODES:
+        return fallback
+    return "backend_then_sandbox"
+
+
+def _sanitize_mcp_runtime_policy(raw_policy: Any) -> dict:
+    default_policy = _default_mcp_runtime_policy()
+    candidate = raw_policy if isinstance(raw_policy, dict) else {}
+    default_mode = _sanitize_runtime_mode(
+        candidate.get("default_mode"),
+        default_policy.get("default_mode", "backend_then_sandbox"),
+    )
+
+    sanitized: dict = {"default_mode": default_mode}
+    for mcp_name, mcp_default in default_policy.items():
+        if mcp_name == "default_mode":
+            continue
+        custom = candidate.get(mcp_name) if isinstance(candidate.get(mcp_name), dict) else {}
+        sanitized[mcp_name] = {
+            "runtime_mode": _sanitize_runtime_mode(
+                custom.get("runtime_mode"),
+                mcp_default.get("runtime_mode", default_mode),
+            ),
+            "backend_enabled": bool(
+                custom.get("backend_enabled", mcp_default.get("backend_enabled", False))
+            ),
+            "sandbox_enabled": bool(
+                custom.get("sandbox_enabled", mcp_default.get("sandbox_enabled", False))
+            ),
+        }
+    return sanitized
+
+
+def _build_mcp_runtime_persistence() -> dict:
+    return {
+        "backend_data_dir": "/app/data/mcp",
+        "sandbox_data_dir": "/tmp/deepaudit/mcp-cache",
+        "qmd_data_dir": str(getattr(settings, "QMD_DATA_DIR", "./data/qmd") or "./data/qmd"),
+    }
+
+
+def _sanitize_mcp_write_policy(raw_policy: Any) -> dict:
+    default_policy = _default_mcp_write_policy()
+    candidate = raw_policy if isinstance(raw_policy, dict) else {}
+    hard_limit = max(1, int(getattr(settings, "MCP_WRITE_HARD_LIMIT", 50)))
+
+    raw_max = candidate.get(
+        "max_writable_files_per_task",
+        default_policy["max_writable_files_per_task"],
+    )
+    try:
+        max_value = int(raw_max)
+    except Exception:
+        max_value = int(default_policy["max_writable_files_per_task"])
+    max_value = max(1, min(max_value, hard_limit))
+
+    return {
+        # Hard lock: all agents keep write entrypoint enabled.
+        "all_agents_writable": True,
+        "max_writable_files_per_task": max_value,
+        "require_evidence_binding": bool(
+            candidate.get(
+                "require_evidence_binding",
+                default_policy["require_evidence_binding"],
+            )
+        ),
+        # Hard lock: project-wide writes are permanently forbidden.
+        "forbid_project_wide_writes": True,
+    }
+
+
+def _sanitize_mcp_config(raw_mcp_config: Any) -> dict:
+    candidate = raw_mcp_config if isinstance(raw_mcp_config, dict) else {}
+    enabled = bool(candidate.get("enabled", getattr(settings, "MCP_ENABLED", True)))
+    runtime_policy = _sanitize_mcp_runtime_policy(candidate.get("runtimePolicy"))
+    return {
+        "enabled": enabled,
+        "preferMcp": bool(
+            candidate.get("preferMcp", getattr(settings, "MCP_PREFER", True))
+        ),
+        "writePolicy": _sanitize_mcp_write_policy(candidate.get("writePolicy")),
+        "runtimePolicy": runtime_policy,
+        "runtimePersistence": _build_mcp_runtime_persistence(),
+        # Read-only catalog: always generated by backend.
+        "catalog": build_mcp_catalog(
+            mcp_enabled=enabled,
+            runtime_policy=runtime_policy,
+        ),
+    }
+
+
+def _sanitize_other_config(raw_other_config: Any) -> dict:
+    candidate = dict(raw_other_config) if isinstance(raw_other_config, dict) else {}
+    candidate["mcpConfig"] = _sanitize_mcp_config(candidate.get("mcpConfig"))
+    return candidate
 
 
 def encrypt_config(config: dict, sensitive_fields: list) -> dict:
@@ -85,6 +268,7 @@ class OtherConfigSchema(BaseModel):
     llmConcurrency: Optional[int] = None
     llmGapMs: Optional[int] = None
     outputLanguage: Optional[str] = None
+    mcpConfig: Optional[dict] = None
 
 
 class UserConfigRequest(BaseModel):
@@ -144,6 +328,7 @@ def get_default_config() -> dict:
             "llmConcurrency": settings.LLM_CONCURRENCY,
             "llmGapMs": settings.LLM_GAP_MS,
             "outputLanguage": settings.OUTPUT_LANGUAGE,
+            "mcpConfig": _sanitize_mcp_config({}),
         }
     }
 
@@ -193,7 +378,9 @@ async def get_my_config(
     print(f"  - llmModel: {user_llm_config.get('llmModel')}")
     
     merged_llm_config = {**default_config["llmConfig"], **user_llm_config}
-    merged_other_config = {**default_config["otherConfig"], **user_other_config}
+    merged_other_config = _sanitize_other_config(
+        {**default_config["otherConfig"], **user_other_config}
+    )
     
     return UserConfigResponse(
         id=config.id,
@@ -220,6 +407,11 @@ async def update_my_config(
     # 准备要保存的配置数据（加密敏感字段）
     llm_data = config_in.llmConfig.dict(exclude_none=True) if config_in.llmConfig else {}
     other_data = config_in.otherConfig.dict(exclude_none=True) if config_in.otherConfig else {}
+    if other_data:
+        other_data = _sanitize_other_config(other_data)
+        if isinstance(other_data.get("mcpConfig"), dict):
+            # Prevent frontend overrides for read-only catalog.
+            other_data["mcpConfig"].pop("catalog", None)
     
     # 加密敏感字段
     llm_data_encrypted = encrypt_config(llm_data, SENSITIVE_LLM_FIELDS)
@@ -246,7 +438,10 @@ async def update_my_config(
             existing_other = json.loads(config.other_config) if config.other_config else {}
             # 先解密现有数据，再合并新数据，最后加密
             existing_other = decrypt_config(existing_other, SENSITIVE_OTHER_FIELDS)
+            if isinstance(existing_other.get("mcpConfig"), dict):
+                existing_other["mcpConfig"].pop("catalog", None)
             existing_other.update(other_data)  # 使用未加密的新数据合并
+            existing_other = _sanitize_other_config(existing_other)
             config.other_config = json.dumps(encrypt_config(existing_other, SENSITIVE_OTHER_FIELDS))
     
     await db.commit()
@@ -262,7 +457,9 @@ async def update_my_config(
     user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
     
     merged_llm_config = {**default_config["llmConfig"], **user_llm_config}
-    merged_other_config = {**default_config["otherConfig"], **user_other_config}
+    merged_other_config = _sanitize_other_config(
+        {**default_config["otherConfig"], **user_other_config}
+    )
     
     return UserConfigResponse(
         id=config.id,

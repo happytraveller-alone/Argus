@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -38,6 +39,21 @@ from app.models.user import User
 from app.models.user_config import UserConfig
 from app.services.agent.event_manager import EventManager
 from app.services.agent.streaming import StreamHandler, StreamEvent, StreamEventType
+from app.services.agent.utils.vulnerability_naming import (
+    build_cn_structured_description,
+    build_cn_structured_title,
+    normalize_cwe_id as normalize_cwe_id_util,
+    resolve_cwe_id as resolve_cwe_id_util,
+    resolve_vulnerability_profile as resolve_vulnerability_profile_util,
+)
+from app.services.agent.mcp import (
+    HARD_MAX_WRITABLE_FILES_PER_TASK,
+    FastMCPStdioAdapter,
+    MCPRuntime,
+    MCPVirtualWriteTool,
+    QmdLazyIndexAdapter,
+    TaskWriteScopeGuard,
+)
 from app.services.git_ssh_service import GitSSHOperations
 from app.core.encryption import decrypt_sensitive_data
 
@@ -328,6 +344,362 @@ def _normalize_verification_level(value: Optional[str]) -> str:
     if not raw_value:
         return "analysis_with_poc_plan"
     return _VERIFICATION_LEVEL_ALIASES.get(raw_value, "analysis_with_poc_plan")
+
+
+def _parse_mcp_args(raw_args: Any) -> List[str]:
+    if isinstance(raw_args, list):
+        return [str(item) for item in raw_args if str(item).strip()]
+    text = str(raw_args or "").strip()
+    if not text:
+        return []
+    try:
+        return [str(item) for item in shlex.split(text) if str(item).strip()]
+    except Exception:
+        return [item for item in text.split(" ") if item]
+
+
+def _build_task_mcp_runtime(
+    *,
+    project_root: str,
+    user_config: Optional[Dict[str, Any]],
+    target_files: Optional[List[str]],
+    bootstrap_findings: Optional[List[Dict[str, Any]]] = None,
+    project_id: Optional[str] = None,
+) -> MCPRuntime:
+    from app.core.config import settings
+
+    user_other_config = (user_config or {}).get("otherConfig", {})
+    mcp_config = user_other_config.get("mcpConfig") if isinstance(user_other_config, dict) else {}
+    if not isinstance(mcp_config, dict):
+        mcp_config = {}
+    write_policy = mcp_config.get("writePolicy") if isinstance(mcp_config.get("writePolicy"), dict) else {}
+    if not isinstance(write_policy, dict):
+        write_policy = {}
+
+    hard_limit = max(1, int(getattr(settings, "MCP_WRITE_HARD_LIMIT", HARD_MAX_WRITABLE_FILES_PER_TASK)))
+    configured_max = write_policy.get(
+        "max_writable_files_per_task",
+        getattr(settings, "MCP_DEFAULT_MAX_WRITABLE_FILES_PER_TASK", hard_limit),
+    )
+    try:
+        max_writable_files = int(configured_max)
+    except Exception:
+        max_writable_files = int(getattr(settings, "MCP_DEFAULT_MAX_WRITABLE_FILES_PER_TASK", hard_limit))
+    max_writable_files = max(1, min(max_writable_files, hard_limit))
+
+    write_guard = TaskWriteScopeGuard(
+        project_root=project_root,
+        max_writable_files_per_task=max_writable_files,
+        require_evidence_binding=bool(
+            write_policy.get(
+                "require_evidence_binding",
+                getattr(settings, "MCP_REQUIRE_EVIDENCE_BINDING", True),
+            )
+        ),
+        # hard lock: always forbid project-wide writes
+        forbid_project_wide_writes=True,
+    )
+    write_guard.seed_from_task_inputs(
+        target_files=target_files,
+        findings=bootstrap_findings or [],
+    )
+
+    runtime_policy = mcp_config.get("runtimePolicy") if isinstance(mcp_config.get("runtimePolicy"), dict) else {}
+    if not isinstance(runtime_policy, dict):
+        runtime_policy = {}
+
+    def _policy_for(name: str) -> Dict[str, Any]:
+        candidate = runtime_policy.get(name)
+        if isinstance(candidate, dict):
+            return candidate
+        return {}
+
+    def _runtime_mode(name: str, setting_name: str, default: str = "backend_then_sandbox") -> str:
+        policy_value = _policy_for(name).get("runtime_mode")
+        if isinstance(policy_value, str) and policy_value.strip():
+            return policy_value.strip()
+        setting_value = getattr(settings, setting_name, default)
+        return str(setting_value or default).strip() or default
+
+    def _domain_enabled(
+        name: str,
+        domain: str,
+        default_setting_name: str,
+    ) -> bool:
+        policy_value = _policy_for(name).get(f"{domain}_enabled")
+        if isinstance(policy_value, bool):
+            return policy_value
+        return bool(getattr(settings, default_setting_name, False))
+
+    adapters: Dict[str, Any] = {}
+    domain_adapters: Dict[str, Dict[str, Any]] = {}
+    runtime_modes: Dict[str, str] = {}
+    required_mcps: List[str] = []
+
+    def _register_domain_adapter(name: str, domain: str, adapter: Any) -> None:
+        domain_map = domain_adapters.setdefault(name, {})
+        domain_map[domain] = adapter
+        # Backward-compatible adapter map exposure for tests and diagnostics.
+        if domain == "backend" or name not in adapters:
+            adapters[name] = adapter
+
+    # ============ filesystem ============
+    if bool(getattr(settings, "MCP_FILESYSTEM_ENABLED", True)):
+        backend_enabled = _domain_enabled("filesystem", "backend", "MCP_FILESYSTEM_ENABLED")
+        sandbox_enabled = _domain_enabled(
+            "filesystem",
+            "sandbox",
+            "MCP_FILESYSTEM_SANDBOX_ENABLED",
+        )
+        if backend_enabled:
+            _register_domain_adapter(
+                "filesystem",
+                "backend",
+                FastMCPStdioAdapter(
+                    command=str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "npx") or "npx"),
+                    args=_parse_mcp_args(
+                        getattr(
+                            settings,
+                            "MCP_FILESYSTEM_ARGS",
+                            "-y @modelcontextprotocol/server-filesystem .",
+                        )
+                    ),
+                    cwd=project_root,
+                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                    runtime_domain="backend",
+                ),
+            )
+        if sandbox_enabled:
+            _register_domain_adapter(
+                "filesystem",
+                "sandbox",
+                FastMCPStdioAdapter(
+                    command=str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "npx") or "npx"),
+                    args=_parse_mcp_args(
+                        getattr(
+                            settings,
+                            "MCP_FILESYSTEM_SANDBOX_ARGS",
+                            "-y @modelcontextprotocol/server-filesystem .",
+                        )
+                    ),
+                    cwd=project_root,
+                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                    runtime_domain="sandbox",
+                ),
+            )
+        if backend_enabled or sandbox_enabled:
+            runtime_modes["filesystem"] = _runtime_mode(
+                "filesystem",
+                "MCP_FILESYSTEM_RUNTIME_MODE",
+            )
+            required_mcps.append("filesystem")
+
+    # ============ code_index ============
+    if bool(getattr(settings, "MCP_CODE_INDEX_ENABLED", False)):
+        backend_enabled = _domain_enabled("code_index", "backend", "MCP_CODE_INDEX_ENABLED")
+        sandbox_enabled = _domain_enabled(
+            "code_index",
+            "sandbox",
+            "MCP_CODE_INDEX_SANDBOX_ENABLED",
+        )
+        if backend_enabled:
+            _register_domain_adapter(
+                "code_index",
+                "backend",
+                FastMCPStdioAdapter(
+                    command=str(getattr(settings, "MCP_CODE_INDEX_COMMAND", "code-index-mcp") or "code-index-mcp"),
+                    args=_parse_mcp_args(
+                        getattr(settings, "MCP_CODE_INDEX_ARGS", "--indexer-path /app/data/mcp/code-index")
+                    ),
+                    cwd=project_root,
+                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                    runtime_domain="backend",
+                ),
+            )
+        if sandbox_enabled:
+            _register_domain_adapter(
+                "code_index",
+                "sandbox",
+                FastMCPStdioAdapter(
+                    command=str(
+                        getattr(settings, "MCP_CODE_INDEX_SANDBOX_COMMAND", "code-index-mcp") or "code-index-mcp"
+                    ),
+                    args=_parse_mcp_args(
+                        getattr(settings, "MCP_CODE_INDEX_SANDBOX_ARGS", "--indexer-path /app/data/mcp/code-index")
+                    ),
+                    cwd=project_root,
+                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                    runtime_domain="sandbox",
+                ),
+            )
+        if backend_enabled or sandbox_enabled:
+            runtime_modes["code_index"] = _runtime_mode(
+                "code_index",
+                "MCP_CODE_INDEX_RUNTIME_MODE",
+            )
+            required_mcps.append("code_index")
+
+    # ============ memory ============
+    if bool(getattr(settings, "MCP_MEMORY_ENABLED", False)):
+        backend_enabled = _domain_enabled("memory", "backend", "MCP_MEMORY_ENABLED")
+        sandbox_enabled = _domain_enabled("memory", "sandbox", "MCP_MEMORY_SANDBOX_ENABLED")
+        if backend_enabled:
+            _register_domain_adapter(
+                "memory",
+                "backend",
+                FastMCPStdioAdapter(
+                    command=str(getattr(settings, "MCP_MEMORY_COMMAND", "npx") or "npx"),
+                    args=_parse_mcp_args(getattr(settings, "MCP_MEMORY_ARGS", "-y @modelcontextprotocol/server-memory")),
+                    cwd=project_root,
+                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                    runtime_domain="backend",
+                ),
+            )
+        if sandbox_enabled:
+            _register_domain_adapter(
+                "memory",
+                "sandbox",
+                FastMCPStdioAdapter(
+                    command=str(getattr(settings, "MCP_MEMORY_SANDBOX_COMMAND", "npx") or "npx"),
+                    args=_parse_mcp_args(
+                        getattr(settings, "MCP_MEMORY_SANDBOX_ARGS", "-y @modelcontextprotocol/server-memory")
+                    ),
+                    cwd=project_root,
+                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                    runtime_domain="sandbox",
+                ),
+            )
+        if backend_enabled or sandbox_enabled:
+            runtime_modes["memory"] = _runtime_mode("memory", "MCP_MEMORY_RUNTIME_MODE")
+            required_mcps.append("memory")
+
+    # ============ sequentialthinking ============
+    if bool(getattr(settings, "MCP_SEQUENTIAL_THINKING_ENABLED", False)):
+        backend_enabled = _domain_enabled(
+            "sequentialthinking",
+            "backend",
+            "MCP_SEQUENTIAL_THINKING_ENABLED",
+        )
+        sandbox_enabled = _domain_enabled(
+            "sequentialthinking",
+            "sandbox",
+            "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
+        )
+        if backend_enabled:
+            _register_domain_adapter(
+                "sequentialthinking",
+                "backend",
+                FastMCPStdioAdapter(
+                    command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "npx") or "npx"),
+                    args=_parse_mcp_args(
+                        getattr(
+                            settings,
+                            "MCP_SEQUENTIAL_THINKING_ARGS",
+                            "-y @modelcontextprotocol/server-sequential-thinking",
+                        )
+                    ),
+                    cwd=project_root,
+                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                    runtime_domain="backend",
+                ),
+            )
+        if sandbox_enabled:
+            _register_domain_adapter(
+                "sequentialthinking",
+                "sandbox",
+                FastMCPStdioAdapter(
+                    command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "npx") or "npx"),
+                    args=_parse_mcp_args(
+                        getattr(
+                            settings,
+                            "MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS",
+                            "-y @modelcontextprotocol/server-sequential-thinking",
+                        )
+                    ),
+                    cwd=project_root,
+                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                    runtime_domain="sandbox",
+                ),
+            )
+        if backend_enabled or sandbox_enabled:
+            runtime_modes["sequentialthinking"] = _runtime_mode(
+                "sequentialthinking",
+                "MCP_SEQUENTIAL_THINKING_RUNTIME_MODE",
+            )
+            required_mcps.append("sequentialthinking")
+
+    # ============ qmd ============
+    if bool(getattr(settings, "MCP_QMD_ENABLED", False)):
+        qmd_project_id = str(project_id or "default")
+        qmd_prefix = str(getattr(settings, "QMD_COLLECTION_PREFIX", "project") or "project")
+        qmd_glob = str(getattr(settings, "QMD_INDEX_GLOB", "**/*") or "**/*")
+        qmd_lazy = bool(getattr(settings, "QMD_LAZY_INDEX_ENABLED", True))
+        qmd_auto_embed = bool(getattr(settings, "QMD_AUTO_EMBED_ON_FIRST_USE", False))
+        backend_enabled = _domain_enabled("qmd", "backend", "MCP_QMD_ENABLED")
+        sandbox_enabled = _domain_enabled("qmd", "sandbox", "MCP_QMD_SANDBOX_ENABLED")
+
+        if backend_enabled:
+            backend_qmd = FastMCPStdioAdapter(
+                command=str(getattr(settings, "MCP_QMD_COMMAND", "qmd") or "qmd"),
+                args=_parse_mcp_args(getattr(settings, "MCP_QMD_ARGS", "mcp")),
+                cwd=project_root,
+                timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                runtime_domain="backend",
+            )
+            _register_domain_adapter(
+                "qmd",
+                "backend",
+                QmdLazyIndexAdapter(
+                    adapter=backend_qmd,
+                    project_root=project_root,
+                    project_id=qmd_project_id,
+                    command=str(getattr(settings, "MCP_QMD_COMMAND", "qmd") or "qmd"),
+                    collection_prefix=qmd_prefix,
+                    index_glob=qmd_glob,
+                    lazy_enabled=qmd_lazy,
+                    auto_embed_on_first_use=qmd_auto_embed,
+                ),
+            )
+        if sandbox_enabled:
+            sandbox_qmd = FastMCPStdioAdapter(
+                command=str(getattr(settings, "MCP_QMD_SANDBOX_COMMAND", "qmd") or "qmd"),
+                args=_parse_mcp_args(getattr(settings, "MCP_QMD_SANDBOX_ARGS", "mcp")),
+                cwd=project_root,
+                timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                runtime_domain="sandbox",
+            )
+            _register_domain_adapter(
+                "qmd",
+                "sandbox",
+                QmdLazyIndexAdapter(
+                    adapter=sandbox_qmd,
+                    project_root=project_root,
+                    project_id=qmd_project_id,
+                    command=str(getattr(settings, "MCP_QMD_SANDBOX_COMMAND", "qmd") or "qmd"),
+                    collection_prefix=qmd_prefix,
+                    index_glob=qmd_glob,
+                    lazy_enabled=qmd_lazy,
+                    auto_embed_on_first_use=qmd_auto_embed,
+                ),
+            )
+        if backend_enabled or sandbox_enabled:
+            runtime_modes["qmd"] = _runtime_mode("qmd", "MCP_QMD_RUNTIME_MODE")
+            required_mcps.append("qmd")
+
+    return MCPRuntime(
+        enabled=bool(mcp_config.get("enabled", getattr(settings, "MCP_ENABLED", True))),
+        prefer_mcp=bool(mcp_config.get("preferMcp", getattr(settings, "MCP_PREFER", True))),
+        adapters=adapters,
+        domain_adapters=domain_adapters,
+        runtime_modes=runtime_modes,
+        required_mcps=required_mcps,
+        write_scope_guard=write_guard,
+        default_runtime_mode=str(
+            runtime_policy.get("default_mode", getattr(settings, "MCP_RUNTIME_MODE_DEFAULT", "backend_then_sandbox"))
+            if isinstance(runtime_policy, dict)
+            else getattr(settings, "MCP_RUNTIME_MODE_DEFAULT", "backend_then_sandbox")
+        ),
+    )
 
 
 async def _run_with_retries(
@@ -1281,6 +1653,7 @@ async def _execute_agent_task(task_id: str):
 
     async with async_session_factory() as db:
         orchestrator = None
+        mcp_runtime: Optional[MCPRuntime] = None
         memory_store = None
         markdown_memory: Dict[str, str] = {}
         start_time = time.time()
@@ -1451,6 +1824,44 @@ async def _execute_agent_task(task_id: str):
             task.current_step = "索引已完成，进入分析阶段"
             await db.commit()
 
+            mcp_runtime = _build_task_mcp_runtime(
+                project_root=project_root,
+                user_config=user_config,
+                target_files=task.target_files,
+                bootstrap_findings=None,
+                project_id=str(project.id),
+            )
+
+            # MCP 全量就绪硬门禁：后端/沙盒域未准备完成时拒绝任务继续执行。
+            if (
+                mcp_runtime
+                and bool(getattr(settings, "MCP_REQUIRE_ALL_READY_ON_STARTUP", True))
+            ):
+                required_domain = str(
+                    getattr(settings, "MCP_REQUIRED_RUNTIME_DOMAIN", "all") or "all"
+                ).strip().lower()
+                readiness = mcp_runtime.ensure_all_mcp_ready(required_domain)
+                if not bool(readiness.get("ready")):
+                    not_ready = readiness.get("not_ready") or []
+                    detail = "; ".join(
+                        f"{item.get('mcp')}@{item.get('runtime_domain')}:{item.get('reason')}"
+                        for item in not_ready[:10]
+                        if isinstance(item, dict)
+                    )
+                    message = (
+                        "MCP 启动检查失败：全量 MCP 未就绪，任务已阻断。"
+                        + (f" 明细: {detail}" if detail else "")
+                    )
+                    await event_emitter.emit_error(
+                        message,
+                        metadata={
+                            "mcp_ready": False,
+                            "mcp_required_domain": required_domain,
+                            "mcp_not_ready": not_ready,
+                        },
+                    )
+                    raise RuntimeError(message)
+
             # 🔥 初始化工具后检查取消
             if is_task_cancelled(task_id):
                 logger.info(f"[Cancel] Task {task_id} cancelled after tools initialization")
@@ -1475,6 +1886,10 @@ async def _execute_agent_task(task_id: str):
                 event_emitter=event_emitter,
             )
 
+            for agent in (recon_agent, analysis_agent, verification_agent):
+                if hasattr(agent, "set_mcp_runtime"):
+                    agent.set_mcp_runtime(mcp_runtime)
+
             # 创建 Orchestrator Agent
             orchestrator = OrchestratorAgent(
                 llm_service=llm_service,
@@ -1486,6 +1901,8 @@ async def _execute_agent_task(task_id: str):
                     "verification": verification_agent,
                 },
             )
+            if hasattr(orchestrator, "set_mcp_runtime"):
+                orchestrator.set_mcp_runtime(mcp_runtime)
 
             # 🔥 设置外部取消检查回调
             # 这确保即使 runner.cancel() 失败，Agent 也能通过 checking 全局标志感知取消
@@ -1584,6 +2001,15 @@ async def _execute_agent_task(task_id: str):
                     f"🌱 固定种子候选已生成（入口点回退）：entry_points={len(entry_points_payload)}，"
                     f"entry_funcs={len(entry_function_names)}，seeds={len(seed_findings)}"
                 )
+
+            if mcp_runtime:
+                seed_paths: List[str] = []
+                for item in seed_findings:
+                    if isinstance(item, dict):
+                        file_path = item.get("file_path")
+                        if isinstance(file_path, str) and file_path.strip():
+                            seed_paths.append(file_path.strip())
+                mcp_runtime.register_evidence_paths(seed_paths)
 
             # ============ 🔥 Markdown 长期记忆（不依赖 embedding/RAG） ============
             try:
@@ -1783,6 +2209,20 @@ async def _execute_agent_task(task_id: str):
                     item for item in persisted_findings
                     if str(item.status) == FindingStatus.FALSE_POSITIVE
                 ]
+                filtered_reasons = (
+                    finding_save_diagnostics.get("filtered_reasons")
+                    if isinstance(finding_save_diagnostics, dict)
+                    else {}
+                )
+                false_positive_discarded_count = (
+                    int(filtered_reasons.get("false_positive_discarded", 0))
+                    if isinstance(filtered_reasons, dict)
+                    else 0
+                )
+                false_positive_count = max(
+                    len(false_positive_findings),
+                    false_positive_discarded_count,
+                )
 
                 # ============ 🔥 Markdown 长期记忆写入（shared + per-agent） ============
                 try:
@@ -1813,7 +2253,7 @@ async def _execute_agent_task(task_id: str):
                                 f"seeds={len(seed_findings)} "
                                 f"orchestrator_findings={len(findings)} "
                                 f"persisted_effective={len(effective_findings)} "
-                                f"false_positive={len(false_positive_findings)}"
+                                f"false_positive={false_positive_count}"
                             ),
                             payload={
                                 "bootstrap": {
@@ -1827,7 +2267,7 @@ async def _execute_agent_task(task_id: str):
                                     "orchestrator_findings_count": len(findings),
                                     "saved_count": int(saved_count),
                                     "effective_findings_count": len(effective_findings),
-                                    "false_positive_count": len(false_positive_findings),
+                                    "false_positive_count": false_positive_count,
                                 },
                                 "top_findings": top_items,
                             },
@@ -1886,7 +2326,7 @@ async def _execute_agent_task(task_id: str):
                 task.completed_at = datetime.now(timezone.utc)
                 task.current_phase = AgentTaskPhase.REPORTING
                 task.findings_count = len(effective_findings)
-                task.false_positive_count = len(false_positive_findings)
+                task.false_positive_count = false_positive_count
                 orchestrator_findings_count = len(findings)
                 persisted_findings_count = len(effective_findings)
                 filtered_findings_count = max(
@@ -1894,11 +2334,6 @@ async def _execute_agent_task(task_id: str):
                     0,
                 )
                 filter_reason_text = ""
-                filtered_reasons = (
-                    finding_save_diagnostics.get("filtered_reasons")
-                    if isinstance(finding_save_diagnostics, dict)
-                    else {}
-                )
                 if isinstance(filtered_reasons, dict) and filtered_reasons:
                     sorted_reasons = sorted(
                         filtered_reasons.items(),
@@ -2008,7 +2443,7 @@ async def _execute_agent_task(task_id: str):
                 
                 logger.info(
                     f"✅ Task {task_id} completed: "
-                    f"effective={len(effective_findings)}, false_positive={len(false_positive_findings)}, "
+                    f"effective={len(effective_findings)}, false_positive={false_positive_count}, "
                     f"saved={saved_count}, duration={duration_ms}ms"
                 )
             else:
@@ -2123,7 +2558,8 @@ async def _get_user_config(db: AsyncSession, user_id: Optional[str]) -> Optional
     try:
         from app.api.v1.endpoints.config import (
             decrypt_config, 
-            SENSITIVE_LLM_FIELDS, SENSITIVE_OTHER_FIELDS
+            SENSITIVE_LLM_FIELDS, SENSITIVE_OTHER_FIELDS,
+            _sanitize_other_config,
         )
         
         result = await db.execute(
@@ -2137,6 +2573,7 @@ async def _get_user_config(db: AsyncSession, user_id: Optional[str]) -> Optional
             
             user_llm_config = decrypt_config(user_llm_config, SENSITIVE_LLM_FIELDS)
             user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
+            user_other_config = _sanitize_other_config(user_other_config)
             
             return {
                 "llmConfig": user_llm_config,
@@ -2253,7 +2690,7 @@ async def _initialize_tools(
     effective_rag_enabled = bool(rag_enabled) or bool(getattr(settings, "RAG_ENABLED", False))
     if not effective_rag_enabled:
         # 智能审计默认不依赖 embedding/RAG；保留接口，后续按开关启用。
-        await emit("⏭️ 跳过 RAG 初始化（已禁用）")
+        pass
     else:
         try:
             await emit("🔍 正在初始化 RAG 系统...")
@@ -2414,10 +2851,34 @@ async def _initialize_tools(
         "think": ThinkTool(),
         "reflect": ReflectTool(),
     }
+
+    user_other_config = (user_config or {}).get("otherConfig", {})
+    mcp_config = user_other_config.get("mcpConfig") if isinstance(user_other_config, dict) else {}
+    write_policy = mcp_config.get("writePolicy") if isinstance(mcp_config, dict) else {}
+    all_agents_writable = True
+    mcp_write_tools: Dict[str, Any] = {}
+    if all_agents_writable:
+        mcp_write_tools = {
+            "edit_file": MCPVirtualWriteTool(
+                name="edit_file",
+                description=(
+                    "通过 MCP 对证据绑定文件执行受控编辑。"
+                    "必须遵守写入白名单和单任务文件上限。"
+                ),
+            ),
+            "write_file": MCPVirtualWriteTool(
+                name="write_file",
+                description=(
+                    "通过 MCP 对证据绑定文件执行受控写入。"
+                    "禁止目录级/通配写入，且受单任务文件上限限制。"
+                ),
+            ),
+        }
     
     # Recon 工具
     recon_tools = {
         **base_tools,
+        **mcp_write_tools,
         # 🔥 外部侦察工具 (Recon 阶段也需要使用这些工具来收集初步信息)
         # "opengrep_scan": OpengrepTool(project_root, sandbox_manager),
         # "bandit_scan": BanditTool(project_root, sandbox_manager),
@@ -2441,13 +2902,14 @@ async def _initialize_tools(
     
     analysis_tools = {
         **base_tools,
+        **mcp_write_tools,
         # 🔥 智能扫描工具（推荐首先使用）
         "smart_scan": SmartScanTool(project_root, exclude_patterns=exclude_patterns or []),
         "quick_audit": QuickAuditTool(project_root),
         # 模式匹配工具（增强版）
         "pattern_match": PatternMatchTool(project_root),
         # 数据流分析
-        "dataflow_analysis": DataFlowAnalysisTool(llm_service),
+        "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
         # 三轨流分析主链
         "controlflow_analysis_light": ControlFlowAnalysisLightTool(
             project_root=project_root,
@@ -2497,6 +2959,7 @@ async def _initialize_tools(
 
     verification_tools = {
         **base_tools,
+        **mcp_write_tools,
         # 🔥 沙箱验证工具
         #"sandbox_exec": SandboxTool(sandbox_manager),
         #"sandbox_http": SandboxHttpTool(sandbox_manager),
@@ -2523,6 +2986,11 @@ async def _initialize_tools(
 
         # 🔥 新增：通用代码执行工具 (LLM 驱动的 Fuzzing Harness)
         "extract_function": ExtractFunctionTool(project_root),
+        "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
+        "controlflow_analysis_light": ControlFlowAnalysisLightTool(
+            project_root=project_root,
+            target_files=target_files,
+        ),
         "joern_reachability_verify": JoernReachabilityVerifyTool(
             project_root=project_root,
             enabled=bool(getattr(settings, "FLOW_JOERN_ENABLED", True)),
@@ -2541,6 +3009,7 @@ async def _initialize_tools(
     orchestrator_tools = {
         "think": ThinkTool(),
         "reflect": ReflectTool(),
+        **mcp_write_tools,
     }
     
     return {
@@ -2708,7 +3177,13 @@ def _normalize_optional_text(value: Any) -> Optional[str]:
 
 def _normalize_relative_file_path(path_value: str, project_root: Optional[str]) -> str:
     normalized = path_value.replace("\\", "/").strip()
+    if not normalized:
+        return normalized
     if not project_root:
+        if os.path.isabs(normalized):
+            return os.path.basename(normalized)
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
         return normalized
     try:
         rel = os.path.relpath(normalized, project_root)
@@ -2716,7 +3191,31 @@ def _normalize_relative_file_path(path_value: str, project_root: Optional[str]) 
             return rel.replace("\\", "/")
     except Exception:
         pass
+    if os.path.isabs(normalized):
+        return os.path.basename(normalized)
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
     return normalized
+
+
+_ABS_PATH_IN_TEXT_RE = re.compile(r"(?P<path>(?:[A-Za-z]:[\\/]|/)[^\s:]+)")
+
+
+def _sanitize_text_paths(value: Any, project_root: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value)
+    if not text.strip():
+        return None
+    normalized_text = text.replace("\\", "/")
+
+    def _replace(match: re.Match[str]) -> str:
+        matched_path = str(match.group("path") or "")
+        if not matched_path:
+            return match.group(0)
+        return _normalize_relative_file_path(matched_path, project_root)
+
+    return _ABS_PATH_IN_TEXT_RE.sub(_replace, normalized_text)
 
 
 def _resolve_finding_file_path(
@@ -2913,146 +3412,8 @@ def _normalize_reachability(
     return "likely_reachable"
 
 
-_CWE_PATTERN = re.compile(r"(CWE-\d+)", re.IGNORECASE)
-_VULN_PROFILE_MAP: Dict[str, Dict[str, str]] = {
-    "sql_injection": {
-        "name": "SQL注入",
-        "harm": "可能导致数据库数据泄露、篡改或删除。",
-        "cwe": "CWE-89",
-    },
-    "nosql_injection": {
-        "name": "NoSQL注入",
-        "harm": "可能导致鉴权绕过或敏感数据被恶意查询。",
-        "cwe": "CWE-943",
-    },
-    "xss": {
-        "name": "跨站脚本攻击",
-        "harm": "可能导致会话劫持、页面篡改或用户数据泄露。",
-        "cwe": "CWE-79",
-    },
-    "command_injection": {
-        "name": "命令注入",
-        "harm": "可能导致攻击者执行任意系统命令并控制服务器。",
-        "cwe": "CWE-78",
-    },
-    "code_injection": {
-        "name": "代码注入",
-        "harm": "可能导致执行恶意代码并接管应用运行环境。",
-        "cwe": "CWE-94",
-    },
-    "path_traversal": {
-        "name": "路径遍历",
-        "harm": "可能导致读取或覆盖未授权文件。",
-        "cwe": "CWE-22",
-    },
-    "file_inclusion": {
-        "name": "文件包含",
-        "harm": "可能导致加载恶意文件并执行非预期代码。",
-        "cwe": "CWE-98",
-    },
-    "ssrf": {
-        "name": "服务器端请求伪造",
-        "harm": "可能导致内网探测、未授权访问内部服务或云元数据泄露。",
-        "cwe": "CWE-918",
-    },
-    "xxe": {
-        "name": "XML外部实体注入",
-        "harm": "可能导致敏感文件泄露或内网请求伪造。",
-        "cwe": "CWE-611",
-    },
-    "deserialization": {
-        "name": "不安全反序列化",
-        "harm": "可能导致远程代码执行或业务对象被恶意篡改。",
-        "cwe": "CWE-502",
-    },
-    "auth_bypass": {
-        "name": "认证绕过",
-        "harm": "可能导致未授权访问敏感功能或管理接口。",
-        "cwe": "CWE-287",
-    },
-    "idor": {
-        "name": "越权访问",
-        "harm": "可能导致攻击者访问或修改其他用户数据。",
-        "cwe": "CWE-639",
-    },
-    "sensitive_data_exposure": {
-        "name": "敏感信息泄露",
-        "harm": "可能导致账号凭据、隐私数据或密钥信息泄露。",
-        "cwe": "CWE-200",
-    },
-    "hardcoded_secret": {
-        "name": "硬编码密钥",
-        "harm": "可能导致凭据泄露并被用于横向渗透。",
-        "cwe": "CWE-798",
-    },
-    "weak_crypto": {
-        "name": "弱加密算法",
-        "harm": "可能导致通信或存储数据被破解。",
-        "cwe": "CWE-327",
-    },
-    "race_condition": {
-        "name": "竞态条件",
-        "harm": "可能导致权限绕过、数据竞争或状态错乱。",
-        "cwe": "CWE-362",
-    },
-    "business_logic": {
-        "name": "业务逻辑缺陷",
-        "harm": "可能导致流程被绕过并造成业务损失。",
-        "cwe": "CWE-840",
-    },
-    "memory_corruption": {
-        "name": "内存破坏",
-        "harm": "可能导致程序崩溃、信息泄露或任意代码执行。",
-        "cwe": "CWE-119",
-    },
-    "other": {
-        "name": "安全缺陷",
-        "harm": "可能导致系统机密性、完整性或可用性受损。",
-        "cwe": "CWE-20",
-    },
-}
-_VULN_KEYWORD_HINTS: List[Tuple[Tuple[str, ...], str]] = [
-    (("sqli", "sql注入", "sql injection"), "sql_injection"),
-    (("nosql", "mongodb注入", "nosql injection"), "nosql_injection"),
-    (("xss", "跨站脚本"), "xss"),
-    (("command injection", "命令注入", "rce", "os command"), "command_injection"),
-    (("code injection", "代码注入", "eval"), "code_injection"),
-    (("path traversal", "目录遍历", "路径遍历", "lfi", "rfi"), "path_traversal"),
-    (("file inclusion", "文件包含"), "file_inclusion"),
-    (("ssrf", "请求伪造"), "ssrf"),
-    (("xxe", "外部实体"), "xxe"),
-    (("deserial", "反序列化"), "deserialization"),
-    (("auth bypass", "认证绕过", "鉴权绕过"), "auth_bypass"),
-    (("idor", "越权"), "idor"),
-    (("secret", "credential", "password", "token", "密钥"), "hardcoded_secret"),
-    (("crypto", "cipher", "弱加密"), "weak_crypto"),
-    (("race", "竞态"), "race_condition"),
-]
-
-
 def _normalize_cwe_id(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    if isinstance(value, list):
-        for item in value:
-            normalized = _normalize_cwe_id(item)
-            if normalized:
-                return normalized
-        return None
-    if isinstance(value, dict):
-        for key in ("cwe", "cwe_id", "id"):
-            if key in value:
-                normalized = _normalize_cwe_id(value.get(key))
-                if normalized:
-                    return normalized
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    matched = _CWE_PATTERN.search(text)
-    if not matched:
-        return None
-    return matched.group(1).upper()
+    return normalize_cwe_id_util(value)
 
 
 def _extract_cwe_from_references(references: Any) -> Optional[str]:
@@ -3072,29 +3433,14 @@ def _resolve_vulnerability_profile(
     *,
     title: Optional[str] = None,
     description: Optional[str] = None,
+    code_snippet: Optional[str] = None,
 ) -> Dict[str, str]:
-    normalized = (
-        str(vulnerability_type or "")
-        .lower()
-        .strip()
-        .replace("-", "_")
-        .replace(" ", "_")
+    return resolve_vulnerability_profile_util(
+        vulnerability_type,
+        title=title,
+        description=description,
+        code_snippet=code_snippet,
     )
-    if normalized in _VULN_PROFILE_MAP:
-        return _VULN_PROFILE_MAP[normalized]
-
-    merged_text = " ".join(
-        [
-            normalized,
-            str(title or "").lower(),
-            str(description or "").lower(),
-        ]
-    )
-    for keywords, mapped_type in _VULN_KEYWORD_HINTS:
-        if any(keyword in merged_text for keyword in keywords):
-            return _VULN_PROFILE_MAP.get(mapped_type, _VULN_PROFILE_MAP["other"])
-
-    return _VULN_PROFILE_MAP["other"]
 
 
 def _resolve_cwe_id(
@@ -3103,55 +3449,65 @@ def _resolve_cwe_id(
     *,
     title: Optional[str] = None,
     description: Optional[str] = None,
+    code_snippet: Optional[str] = None,
 ) -> Optional[str]:
-    normalized = _normalize_cwe_id(explicit_cwe)
-    if normalized:
-        return normalized
-    profile = _resolve_vulnerability_profile(
+    return resolve_cwe_id_util(
+        explicit_cwe,
         vulnerability_type,
         title=title,
         description=description,
+        code_snippet=code_snippet,
     )
-    return profile.get("cwe")
 
 
 def _build_structured_cn_description(
     *,
     file_path: Optional[str],
     function_name: Optional[str],
-    vulnerability_name: str,
-    harm_text: str,
+    vulnerability_type: Optional[str],
+    title: Optional[str],
+    description: Optional[str],
+    code_snippet: Optional[str],
     cwe_id: Optional[str],
     raw_description: Optional[str],
+    line_start: Optional[int] = None,
+    line_end: Optional[int] = None,
+    verification_evidence: Optional[str] = None,
+    function_trigger_flow: Optional[List[str]] = None,
 ) -> str:
-    path_text = file_path or "未知路径"
-    function_text = function_name or "未知函数"
-    summary = (
-        f"路径：{path_text} + 函数：{function_text} + "
-        f"缺陷名称：{vulnerability_name} + 可能造成的危害：{harm_text}"
+    return build_cn_structured_description(
+        file_path=file_path,
+        function_name=function_name,
+        vulnerability_type=vulnerability_type,
+        title=title,
+        description=description,
+        code_snippet=code_snippet,
+        cwe_id=cwe_id,
+        raw_description=raw_description,
+        line_start=line_start,
+        line_end=line_end,
+        verification_evidence=verification_evidence,
+        function_trigger_flow=function_trigger_flow,
     )
-    lines = [summary]
-    if cwe_id:
-        lines.append(f"对应CWE：{cwe_id}")
-    normalized_raw = _normalize_optional_text(raw_description)
-    if normalized_raw:
-        lines.append(f"补充说明：{normalized_raw}")
-    return "\n".join(lines)
 
 
 def _build_structured_cn_display_title(
     *,
     file_path: Optional[str],
     function_name: Optional[str],
-    vulnerability_name: str,
-    harm_text: str,
+    vulnerability_type: Optional[str],
+    title: Optional[str],
+    description: Optional[str],
+    code_snippet: Optional[str],
 ) -> str:
-    path_text = file_path or "未知路径"
-    function_text = function_name or "未知函数"
-    vuln_text = vulnerability_name or "安全缺陷"
-    if not vuln_text.endswith("漏洞") and not vuln_text.endswith("缺陷"):
-        vuln_text = f"{vuln_text}漏洞"
-    return f"{path_text}中{function_text}{vuln_text}，可能造成的危害：{harm_text}"
+    return build_cn_structured_title(
+        file_path=file_path,
+        function_name=function_name,
+        vulnerability_type=vulnerability_type,
+        title=title,
+        description=description,
+        code_snippet=code_snippet,
+    )
 
 
 def _extract_flow_call_chain(
@@ -3376,6 +3732,13 @@ async def _save_findings(
                 finding.get("vuln_type") or
                 "other"
             ).lower().strip().replace(" ", "_").replace("-", "_")
+            type_profile = resolve_vulnerability_profile_util(
+                raw_type,
+                title=str(finding.get("title") or ""),
+                description=str(finding.get("description") or ""),
+                code_snippet=str(finding.get("code_snippet") or ""),
+            )
+            raw_type = str(type_profile.get("key") or raw_type)
 
             type_enum = type_map.get(raw_type, VulnerabilityType.OTHER)
 
@@ -3398,6 +3761,18 @@ async def _save_findings(
                 type_enum = VulnerabilityType.HARDCODED_SECRET
             if "deserial" in raw_type:
                 type_enum = VulnerabilityType.DESERIALIZATION
+            if raw_type in {
+                "buffer_overflow",
+                "stack_overflow",
+                "heap_overflow",
+                "use_after_free",
+                "double_free",
+                "out_of_bounds",
+                "integer_overflow",
+                "format_string",
+                "null_pointer_deref",
+            }:
+                type_enum = VulnerabilityType.MEMORY_CORRUPTION
 
             # 3) normalize confidence
             confidence = finding.get("confidence") or finding.get("ai_confidence") or 0.5
@@ -3438,6 +3813,9 @@ async def _save_findings(
             authenticity = str(authenticity_raw).strip().lower()
             if authenticity not in {"confirmed", "likely", "false_positive"}:
                 mark_filtered("missing_verification_result", finding)
+                continue
+            if authenticity == "false_positive":
+                mark_filtered("false_positive_discarded", finding)
                 continue
 
             reachability = str(reachability_raw).strip().lower()
@@ -3685,6 +4063,7 @@ async def _save_findings(
                 raw_type,
                 title=title_text,
                 description=description_text,
+                code_snippet=snippet_text,
             )
             cvss_score = finding.get("cvss_score") or finding.get("cvss")
             if isinstance(cvss_score, str):
@@ -4500,6 +4879,10 @@ async def list_agent_findings(
     responses: List[AgentFindingResponse] = []
     for item in findings:
         verification_payload = item.verification_result if isinstance(item.verification_result, dict) else {}
+        normalized_item_file_path = _normalize_relative_file_path(
+            str(item.file_path or ""),
+            None,
+        )
         authenticity = verification_payload.get("authenticity")
         if not authenticity:
             authenticity = "false_positive" if str(item.status) == FindingStatus.FALSE_POSITIVE else ("confirmed" if item.is_verified else "likely")
@@ -4525,7 +4908,7 @@ async def list_agent_findings(
             file_value = reachability_target.get("file_path")
             func_value = reachability_target.get("function")
             if isinstance(file_value, str) and file_value.strip():
-                reachability_file = file_value.strip()
+                reachability_file = _normalize_relative_file_path(file_value.strip(), None)
             if isinstance(func_value, str) and func_value.strip():
                 reachability_function = func_value.strip()
             reachability_function_start_line = _to_int(reachability_target.get("start_line"))
@@ -4534,6 +4917,8 @@ async def list_agent_findings(
             raw_function_name = getattr(item, "function_name", None)
             if isinstance(raw_function_name, str) and raw_function_name.strip():
                 reachability_function = raw_function_name.strip()
+        if not reachability_file and normalized_item_file_path:
+            reachability_file = normalized_item_file_path
         flow_payload = verification_payload.get("flow") if isinstance(verification_payload, dict) else None
         flow_path_score = None
         flow_call_chain = None
@@ -4546,25 +4931,51 @@ async def list_agent_findings(
                 flow_path_score = None
             raw_chain = flow_payload.get("call_chain")
             if isinstance(raw_chain, list):
-                flow_call_chain = [str(item) for item in raw_chain if str(item).strip()]
+                flow_call_chain = [
+                    _sanitize_text_paths(step, None) or ""
+                    for step in raw_chain
+                    if str(step).strip()
+                ]
+                flow_call_chain = [step for step in flow_call_chain if step]
             raw_function_chain = flow_payload.get("function_trigger_flow")
             if isinstance(raw_function_chain, list):
-                function_trigger_flow = [str(step) for step in raw_function_chain if str(step).strip()]
+                function_trigger_flow = [
+                    _sanitize_text_paths(step, None) or ""
+                    for step in raw_function_chain
+                    if str(step).strip()
+                ]
+                function_trigger_flow = [step for step in function_trigger_flow if step]
             raw_controls = flow_payload.get("control_conditions")
             if isinstance(raw_controls, list):
-                flow_control_conditions = [str(item) for item in raw_controls if str(item).strip()]
+                flow_control_conditions = [
+                    _sanitize_text_paths(ctrl, None) or ""
+                    for ctrl in raw_controls
+                    if str(ctrl).strip()
+                ]
+                flow_control_conditions = [ctrl for ctrl in flow_control_conditions if ctrl]
         if not function_trigger_flow:
             raw_function_chain = verification_payload.get("function_trigger_flow")
             if isinstance(raw_function_chain, list):
-                function_trigger_flow = [str(step) for step in raw_function_chain if str(step).strip()]
+                function_trigger_flow = [
+                    _sanitize_text_paths(step, None) or ""
+                    for step in raw_function_chain
+                    if str(step).strip()
+                ]
+                function_trigger_flow = [step for step in function_trigger_flow if step]
         if not function_trigger_flow:
             function_trigger_flow = _build_function_trigger_flow(
                 call_chain=flow_call_chain or [],
                 function_name=reachability_function,
-                file_path=reachability_file or item.file_path,
+                file_path=reachability_file or normalized_item_file_path,
                 line_start=item.line_start,
                 line_end=item.line_end,
             )
+        function_trigger_flow = [
+            _sanitize_text_paths(step, None) or ""
+            for step in (function_trigger_flow or [])
+            if str(step).strip()
+        ]
+        function_trigger_flow = [step for step in function_trigger_flow if step]
         if function_trigger_flow:
             flow_call_chain = function_trigger_flow
 
@@ -4584,25 +4995,35 @@ async def list_agent_findings(
                 item.vulnerability_type,
                 title=item.title,
                 description=item.description,
+                code_snippet=item.code_snippet,
             )
         profile = _resolve_vulnerability_profile(
             item.vulnerability_type,
             title=item.title,
             description=item.description,
+            code_snippet=item.code_snippet,
         )
         structured_description = _build_structured_cn_description(
-            file_path=item.file_path,
+            file_path=normalized_item_file_path,
             function_name=reachability_function,
-            vulnerability_name=profile["name"],
-            harm_text=profile["harm"],
+            vulnerability_type=profile["key"],
+            title=item.title,
+            description=item.description,
+            code_snippet=item.code_snippet,
             cwe_id=cwe_id,
             raw_description=item.description,
+            line_start=item.line_start,
+            line_end=item.line_end,
+            verification_evidence=verification_evidence,
+            function_trigger_flow=function_trigger_flow,
         )
         display_title = _build_structured_cn_display_title(
-            file_path=item.file_path,
+            file_path=normalized_item_file_path,
             function_name=reachability_function,
-            vulnerability_name=profile["name"],
-            harm_text=profile["harm"],
+            vulnerability_type=profile["key"],
+            title=item.title,
+            description=item.description,
+            code_snippet=item.code_snippet,
         )
 
         responses.append(
@@ -4610,12 +5031,12 @@ async def list_agent_findings(
                 {
                     "id": item.id,
                     "task_id": item.task_id,
-                    "vulnerability_type": item.vulnerability_type,
+                    "vulnerability_type": profile["key"],
                     "severity": item.severity,
                     "title": item.title,
                     "display_title": display_title,
                     "description": structured_description,
-                    "file_path": item.file_path,
+                    "file_path": normalized_item_file_path,
                     "line_start": item.line_start,
                     "line_end": item.line_end,
                     "code_snippet": item.code_snippet,

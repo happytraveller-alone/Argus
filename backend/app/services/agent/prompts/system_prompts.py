@@ -173,6 +173,8 @@ TOOL_USAGE_GUIDE = """
 |------|------|
 | `pattern_match` | 正则模式匹配（补充定位/交叉验证） |
 | `dataflow_analysis` | 数据流追踪验证 |
+| `controlflow_analysis_light` | 轻量控制流/可达性打分与调用链验证 |
+| `logic_authz_analysis` | 认证/授权与业务逻辑边界验证 |
 | `code_analysis` | 代码结构分析 |
 
 #### 辅助工具（RAG 优先！）
@@ -181,6 +183,12 @@ TOOL_USAGE_GUIDE = """
 | `rag_query` | **🔥 首选代码搜索工具** - 语义搜索，查找业务逻辑和漏洞上下文 |
 | `security_search` | **🔥 首选安全搜索工具** - 查找特定的安全敏感代码模式 |
 | `function_context` | **🔥 理解代码结构** - 获取函数调用关系和定义 |
+| `code_search` | **🔥 执行层虚拟 Skill** - 自动路由到 `read_file` / `search_code` / `list_files` |
+| `verify_reachability` | **🔥 执行层虚拟 Skill** - 自动路由到 `controlflow_analysis_light` / `dataflow_analysis` / `extract_function` / `read_file` |
+| `brainstorming` | **🔥 序列化思考模板** - 使用 sequentialthinking MCP 进行分步推理 |
+| `file_planning` | **🔥 文件规划模板** - 参考 planning-with-files 按文件拆解任务 |
+| `mcp_builder` | MCP 设计模板（能力清单/输入输出契约/安全边界），用于新 MCP 方案设计 |
+| `skill_creator` | Skill 设计模板（提示词/误用约束/示例），用于新 skill 规范化创建 |
 | `read_file` | 读取文件内容验证发现 |
 | `list_files` | ⚠️ **仅用于** 了解根目录结构，**严禁** 用于遍历代码查找内容 |
 | `search_code` | ⚠️ **仅用于** 查找非常具体的字符串常量，**严禁** 作为主要代码搜索手段 |
@@ -192,6 +200,10 @@ TOOL_USAGE_GUIDE = """
 | `rag_query` | **🔥 语义搜索**，理解代码含义 | **首选！** 查找"处理用户输入的函数"、"数据库查询逻辑" |
 | `security_search` | **🔥 安全专用搜索** | **首选！** 查找"SQL注入相关代码"、"认证授权代码" |
 | `function_context` | **🔥 函数上下文** | 查找某函数的调用者和被调用者 |
+| `code_search` | **🔥 自动路由** 到读文件/关键词搜索 | 推荐作为统一入口，减少工具切换和参数错误 |
+| `verify_reachability` | **🔥 自动路由** 到控制流/数据流/函数提取 | 验证“命中代码在所属函数可达且可触发”时优先使用 |
+| `brainstorming` | **🔥 顺序推理模板** | 复杂策略讨论、候选优先级权衡 |
+| `file_planning` | **🔥 文件执行计划模板** | 多文件漏洞链路的拆解与执行排程 |
 | `search_code` | **❌ 关键词搜索**，仅精确匹配 | **不推荐**，仅用于查找确定的常量或变量名 |
 
 **❌ 严禁行为**：
@@ -201,7 +213,11 @@ TOOL_USAGE_GUIDE = """
 **✅ 推荐行为**：
 1. **始终优先使用 RAG 工具** (`rag_query`, `security_search`)
 2. `rag_query` 可以理解自然语言，如 "Show me the login function"
-3. 仅在确实需要精确匹配特定字符串时才使用 `search_code`
+3. 代码定位优先使用 `code_search`，由系统自动选择 `read_file/search_code/list_files`
+4. 可达性验证优先使用 `verify_reachability`，由系统自动选择 flow 工具
+5. 仅在确实需要精确匹配特定字符串时才使用 `search_code`
+6. 需要复杂策略时先使用 `brainstorming` 产出序列化思路，再执行工具调用
+7. 多文件执行前使用 `file_planning` 先生成文件级 TODO，避免重复读写
 
 ### 📋 推荐分析流程
 
@@ -230,8 +246,16 @@ Action Input: {"target_path": "."}
 #### 第三步：深度分析（25%时间）
 对外部工具发现的问题进行深入分析：
 - 使用 `read_file` 查看完整上下文
-- 使用 `dataflow_analysis` 追踪数据流
+- 使用 `dataflow_analysis` 追踪 Source -> Sink
+- 使用 `controlflow_analysis_light` 验证可达性与控制条件
+- 在验证阶段优先调用 `verify_reachability`，由执行层自动路由并避免无效重试
+- 对鉴权/越权场景使用 `logic_authz_analysis` 补齐业务约束证据
 - 验证是否为真实漏洞
+
+### ⛔ 停止重试规则（验证阶段）
+- 同一漏洞同一参数连续失败 2 次后，必须改参数或切换工具，禁止原样重试。
+- 当 `read_file` 与 flow 工具均给出确定性失败时，将该候选标记为 `blocked/false_positive` 并推进下一个候选。
+- 每个候选必须输出“代码证据 + 流证据”两类信息；证据不足不能直接给 `confirmed`。
 
 #### 第四步：验证和报告（10%时间）
 - 确认漏洞可利用性

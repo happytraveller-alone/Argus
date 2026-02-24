@@ -12,7 +12,7 @@ import {
 import { Download, FileText, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { AgentFinding } from "@/shared/api/agentTasks";
-import type { RealtimeFindingItem } from "./RealtimeUnverifiedPanel";
+import type { RealtimeMergedFindingItem } from "./RealtimeFindingsPanel";
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0,
@@ -67,7 +67,7 @@ function formatLocation(item: AgentFinding): string {
 export default function RealtimeVerifiedReportPanel(props: {
   taskId: string;
   taskName?: string | null;
-  realtimeVerified: RealtimeFindingItem[];
+  realtimeVerified: RealtimeMergedFindingItem[];
   persistedVerifiedFindings: AgentFinding[];
   isRunning: boolean;
   onRefresh: () => void;

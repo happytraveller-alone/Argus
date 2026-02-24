@@ -172,10 +172,16 @@ class CodeAnalysisTool(AgentTool):
 
 class DataFlowAnalysisInput(BaseModel):
     """数据流分析输入"""
-    source_code: str = Field(description="包含数据源的代码")
+    source_code: Optional[str] = Field(default=None, description="包含数据源的代码")
     sink_code: Optional[str] = Field(default=None, description="包含数据汇的代码（如危险函数）")
-    variable_name: str = Field(description="要追踪的变量名")
+    variable_name: str = Field(default="user_input", description="要追踪的变量名")
     file_path: str = Field(default="unknown", description="文件路径")
+    start_line: Optional[int] = Field(default=None, description="源码起始行")
+    end_line: Optional[int] = Field(default=None, description="源码结束行")
+    source_hints: Optional[List[str]] = Field(default=None, description="Source 提示词列表")
+    sink_hints: Optional[List[str]] = Field(default=None, description="Sink 提示词列表")
+    language: Optional[str] = Field(default=None, description="编程语言")
+    max_hops: int = Field(default=5, ge=1, le=20, description="最大传播步数")
 
 
 class DataFlowAnalysisTool(AgentTool):
@@ -184,9 +190,10 @@ class DataFlowAnalysisTool(AgentTool):
     追踪变量从源到汇的数据流
     """
     
-    def __init__(self, llm_service):
+    def __init__(self, llm_service, project_root: Optional[str] = None):
         super().__init__()
         self.llm_service = llm_service
+        self.project_root = project_root
     
     @property
     def name(self) -> str:
@@ -205,7 +212,9 @@ class DataFlowAnalysisTool(AgentTool):
 - source_code: 包含数据源的代码
 - sink_code: 包含数据汇的代码（可选）
 - variable_name: 要追踪的变量名
-- file_path: 文件路径"""
+- file_path: 文件路径
+- start_line/end_line: 可选，限定分析片段
+- source_hints/sink_hints: 可选，补充语义提示"""
     
     @property
     def args_schema(self):
@@ -213,240 +222,439 @@ class DataFlowAnalysisTool(AgentTool):
     
     async def _execute(
         self,
+        source_code: Optional[str] = None,
+        variable_name: str = "user_input",
+        sink_code: Optional[str] = None,
+        file_path: str = "unknown",
+        start_line: Optional[int] = None,
+        end_line: Optional[int] = None,
+        source_hints: Optional[List[str]] = None,
+        sink_hints: Optional[List[str]] = None,
+        language: Optional[str] = None,
+        max_hops: int = 5,
+        **kwargs
+    ) -> ToolResult:
+        """执行数据流分析（规则优先，LLM 细化，失败回退）。"""
+        import asyncio
+        source_text = str(source_code or "").strip()
+        resolved_start_line = start_line
+        resolved_end_line = end_line
+
+        if (not source_text) and str(file_path or "").strip() and str(file_path).strip() != "unknown":
+            loaded = self._load_source_code_from_file(file_path, start_line=start_line, end_line=end_line)
+            if not loaded.get("ok"):
+                return ToolResult(success=False, error=str(loaded.get("error") or "读取源码失败"))
+            source_text = str(loaded.get("code") or "")
+            file_path = str(loaded.get("file_path") or file_path)
+            resolved_start_line = loaded.get("start_line")
+            resolved_end_line = loaded.get("end_line")
+
+        if not source_text:
+            return ToolResult(
+                success=False,
+                error="必须提供 source_code，或提供可读取的 file_path（可选 start_line/end_line）",
+            )
+
+        normalized_variable = str(variable_name or "user_input").strip() or "user_input"
+        quick_analysis = self._quick_pattern_analysis(
+            source_code=source_text,
+            variable_name=normalized_variable,
+            sink_code=sink_code,
+            source_hints=source_hints,
+            sink_hints=sink_hints,
+            max_hops=max_hops,
+        )
+
+        llm_analysis: Optional[Dict[str, Any]] = None
+        try:
+            prompt = self._build_analysis_prompt(
+                source_code=source_text,
+                sink_code=sink_code,
+                variable_name=normalized_variable,
+                source_hints=source_hints,
+                sink_hints=sink_hints,
+            )
+            raw_result = await asyncio.wait_for(
+                self.llm_service.analyze_code_with_custom_prompt(
+                    code=source_text,
+                    language=language or "text",
+                    custom_prompt=prompt,
+                ),
+                timeout=120.0,
+            )
+            llm_analysis = self._normalize_llm_analysis(raw_result)
+        except asyncio.TimeoutError:
+            logger.warning("dataflow_analysis LLM 调用超时，回退规则分析")
+        except Exception as exc:
+            logger.warning("dataflow_analysis LLM 调用失败，回退规则分析: %s", exc)
+
+        merged_analysis = self._merge_analysis(quick_analysis, llm_analysis)
+        output_text = self._format_analysis_result(
+            analysis=merged_analysis,
+            variable_name=normalized_variable,
+            file_path=file_path,
+        )
+
+        return ToolResult(
+            success=True,
+            data=output_text,
+            metadata={
+                "variable": normalized_variable,
+                "file_path": file_path,
+                "start_line": resolved_start_line,
+                "end_line": resolved_end_line,
+                "analysis": merged_analysis,
+                "fallback_used": llm_analysis is None,
+            },
+        )
+    
+    def _quick_pattern_analysis(
+        self,
         source_code: str,
         variable_name: str,
         sink_code: Optional[str] = None,
-        file_path: str = "unknown",
-        **kwargs
-    ) -> ToolResult:
-        """执行数据流分析 - 增强版，带超时保护和回退逻辑"""
-        import asyncio
-        import re
-        
-        # 🔥 首先尝试基于规则的快速分析（不依赖 LLM）
-        quick_analysis = self._quick_pattern_analysis(source_code, variable_name, sink_code)
-        
-        try:
-            # 构建分析 prompt
-            analysis_prompt = f"""分析以下代码中变量 '{variable_name}' 的数据流。
-
-源代码:
-```
-{source_code}
-```
-"""
-            if sink_code:
-                analysis_prompt += f"""
-汇代码（可能的危险函数）:
-```
-{sink_code}
-```
-"""
-
-            analysis_prompt += f"""
-请分析:
-1. 变量 '{variable_name}' 的来源是什么？（用户输入、配置、数据库等）
-2. 变量在传递过程中是否经过了净化/验证？
-3. 变量最终流向了哪些危险函数？
-4. 是否存在安全风险？
-
-请返回 JSON 格式的分析结果，包含:
-- source_type: 数据源类型
-- sanitized: 是否经过净化
-- sanitization_methods: 使用的净化方法
-- dangerous_sinks: 流向的危险函数列表
-- risk_level: 风险等级 (high/medium/low/none)
-- explanation: 详细解释
-- recommendation: 建议
-"""
-            
-            # 🔥 添加超时保护（2分钟）
-            try:
-                result = await asyncio.wait_for(
-                    self.llm_service.analyze_code_with_custom_prompt(
-                        code=source_code,
-                        language="text",
-                        custom_prompt=analysis_prompt,
-                    ),
-                    timeout=120.0  # 2分钟超时
-                )
-            except asyncio.TimeoutError:
-                logger.warning(f"数据流分析 LLM 调用超时，使用快速分析结果")
-                return self._format_quick_analysis_result(quick_analysis, variable_name, file_path, "LLM调用超时，使用规则分析")
-            
-            # 🔥 检查结果是否有效
-            if not result or (isinstance(result, dict) and not result.get("source_type") and not result.get("risk_level")):
-                logger.warning(f"数据流分析 LLM 返回无效结果，使用快速分析结果")
-                return self._format_quick_analysis_result(quick_analysis, variable_name, file_path, "LLM返回无效，使用规则分析")
-            
-            # 格式化输出
-            output_parts = [f"📊 数据流分析结果 - 变量: {variable_name}\n"]
-            
-            if isinstance(result, dict):
-                if result.get("source_type"):
-                    output_parts.append(f"数据源: {result.get('source_type')}")
-                if result.get("sanitized") is not None:
-                    sanitized = "✅ 是" if result.get("sanitized") else "❌ 否"
-                    output_parts.append(f"是否净化: {sanitized}")
-                if result.get("sanitization_methods"):
-                    methods = result.get('sanitization_methods', [])
-                    if isinstance(methods, list):
-                        output_parts.append(f"净化方法: {', '.join(methods)}")
-                    else:
-                        output_parts.append(f"净化方法: {methods}")
-                if result.get("dangerous_sinks"):
-                    sinks = result.get('dangerous_sinks', [])
-                    if isinstance(sinks, list):
-                        output_parts.append(f"危险函数: {', '.join(sinks)}")
-                    else:
-                        output_parts.append(f"危险函数: {sinks}")
-                if result.get("risk_level"):
-                    risk_icons = {"high": "🔴", "medium": "🟠", "low": "🟡", "none": "🟢"}
-                    icon = risk_icons.get(result.get("risk_level", ""), "⚪")
-                    output_parts.append(f"风险等级: {icon} {result.get('risk_level', '').upper()}")
-                if result.get("explanation"):
-                    output_parts.append(f"\n分析: {result.get('explanation')}")
-                if result.get("recommendation"):
-                    output_parts.append(f"\n建议: {result.get('recommendation')}")
-            else:
-                output_parts.append(str(result))
-            
-            return ToolResult(
-                success=True,
-                data="\n".join(output_parts),
-                metadata={
-                    "variable": variable_name,
-                    "file_path": file_path,
-                    "analysis": result,
-                }
-            )
-            
-        except Exception as e:
-            logger.error(f"数据流分析失败: {e}")
-            # 🔥 回退到快速分析
-            return self._format_quick_analysis_result(
-                quick_analysis, 
-                variable_name, 
-                file_path, 
-                f"LLM调用失败({str(e)[:50]}...)，使用规则分析"
-            )
-    
-    def _quick_pattern_analysis(
-        self, 
-        source_code: str, 
-        variable_name: str,
-        sink_code: Optional[str] = None
+        source_hints: Optional[List[str]] = None,
+        sink_hints: Optional[List[str]] = None,
+        max_hops: int = 5,
     ) -> Dict[str, Any]:
-        """基于规则的快速数据流分析（不依赖 LLM）"""
+        """基于规则的快速数据流分析（不依赖 LLM）。"""
         import re
-        
-        result = {
-            "source_type": "unknown",
-            "sanitized": False,
-            "sanitization_methods": [],
-            "dangerous_sinks": [],
-            "risk_level": "low",
-        }
-        
-        code_to_analyze = source_code + (sink_code or "")
-        
-        # 检测数据源类型
-        source_patterns = {
-            "user_input_get": r'\$_GET\[',
-            "user_input_post": r'\$_POST\[',
-            "user_input_request": r'\$_REQUEST\[',
-            "user_input_cookie": r'\$_COOKIE\[',
-            "request_param": r'request\.(GET|POST|args|form|data)',
-            "input_func": r'\binput\s*\(',
-        }
-        
-        for source_name, pattern in source_patterns.items():
-            if re.search(pattern, source_code, re.IGNORECASE):
-                result["source_type"] = source_name
-                break
-        
-        # 检测净化方法
-        sanitize_patterns = [
-            (r'htmlspecialchars\s*\(', "htmlspecialchars"),
-            (r'mysqli_real_escape_string\s*\(', "mysqli_escape"),
-            (r'addslashes\s*\(', "addslashes"),
-            (r'strip_tags\s*\(', "strip_tags"),
-            (r'filter_var\s*\(', "filter_var"),
-            (r'escape\s*\(', "escape"),
-            (r'sanitize', "sanitize"),
-            (r'validate', "validate"),
+
+        code_to_analyze = f"{source_code}\n{sink_code or ''}"
+        lower_code = code_to_analyze.lower()
+        hints_source = self._normalize_hints(source_hints)
+        hints_sink = self._normalize_hints(sink_hints)
+
+        source_patterns: List[tuple[str, str]] = [
+            (r"\$_GET\[|\$_POST\[|\$_REQUEST\[|\$_COOKIE\[", "http_request_input"),
+            (r"request\.(args|form|get_json|values|data)|ctx\.query|ctx\.params", "http_request_input"),
+            (r"\binput\s*\(|argv\\b|getenv\s*\(", "runtime_input"),
+            (r"\brecv\s*\(|\bread\s*\(|\bfgets\s*\(", "io_input"),
         ]
-        
-        for pattern, name in sanitize_patterns:
-            if re.search(pattern, code_to_analyze, re.IGNORECASE):
-                result["sanitized"] = True
-                result["sanitization_methods"].append(name)
-        
-        # 检测危险 sink
-        sink_patterns = [
-            (r'mysql_query\s*\(', "mysql_query"),
-            (r'mysqli_query\s*\(', "mysqli_query"),
-            (r'execute\s*\(', "execute"),
-            (r'shell_exec\s*\(', "shell_exec"),
-            (r'system\s*\(', "system"),
-            (r'exec\s*\(', "exec"),
-            (r'eval\s*\(', "eval"),
-            (r'include\s*\(', "include"),
-            (r'require\s*\(', "require"),
-            (r'file_get_contents\s*\(', "file_get_contents"),
-            (r'echo\s+', "echo"),
-            (r'print\s*\(', "print"),
+        sink_patterns: List[tuple[str, str]] = [
+            (r"execute\s*\(|query\s*\(|rawquery", "sql_sink"),
+            (r"system\s*\(|exec\s*\(|popen\s*\(|shell_exec", "command_sink"),
+            (r"eval\s*\(|new\\s+Function", "code_exec_sink"),
+            (r"innerHTML|dangerouslySetInnerHTML|document\.write", "xss_sink"),
+            (r"strcpy\s*\(|strcat\s*\(|sprintf\s*\(", "stack_overflow_risk"),
+            (r"memcpy\s*\(|memmove\s*\(", "buffer_overflow_risk"),
+            (r"gets\s*\(|scanf\s*\(", "unsafe_io_sink"),
         ]
-        
-        for pattern, name in sink_patterns:
-            if re.search(pattern, code_to_analyze, re.IGNORECASE):
-                result["dangerous_sinks"].append(name)
-        
-        # 计算风险等级
-        if result["source_type"].startswith("user_input") and result["dangerous_sinks"]:
-            if not result["sanitized"]:
-                result["risk_level"] = "high"
-            else:
-                result["risk_level"] = "medium"
-        elif result["dangerous_sinks"]:
-            result["risk_level"] = "medium"
-        
-        return result
-    
-    def _format_quick_analysis_result(
-        self, 
-        analysis: Dict[str, Any], 
-        variable_name: str,
+        sanitizer_patterns: List[tuple[str, str]] = [
+            (r"htmlspecialchars\s*\(|escape\(|encodeURIComponent", "output_encoding"),
+            (r"filter_var\s*\(|validate|sanitize", "input_validation"),
+            (r"preparedstatement|bindparam|parameterized|execute\s*\([^)]*[,)]", "parameter_binding"),
+            (r"snprintf\s*\(|strncpy\s*\(|memcpy_s\s*\(|strlcpy\s*\(", "bounds_checked_copy"),
+        ]
+
+        source_nodes = [
+            name for pattern, name in source_patterns if re.search(pattern, code_to_analyze, re.IGNORECASE)
+        ] + hints_source
+        sink_nodes = [name for pattern, name in sink_patterns if re.search(pattern, code_to_analyze, re.IGNORECASE)] + hints_sink
+        sanitizers = [name for pattern, name in sanitizer_patterns if re.search(pattern, code_to_analyze, re.IGNORECASE)]
+
+        source_nodes = self._unique_list(source_nodes)
+        sink_nodes = self._unique_list(sink_nodes)
+        sanitizers = self._unique_list(sanitizers)
+
+        if source_nodes and sink_nodes and not sanitizers:
+            risk_level = "high"
+        elif source_nodes and sink_nodes and sanitizers:
+            risk_level = "medium"
+        elif sink_nodes:
+            risk_level = "low"
+        else:
+            risk_level = "none"
+
+        evidence_patterns = [
+            variable_name,
+            "strcpy(",
+            "sprintf(",
+            "memcpy(",
+            "execute(",
+            "query(",
+            "system(",
+            "eval(",
+        ]
+        evidence_lines = self._collect_evidence_lines(source_code, evidence_patterns)
+        taint_steps = self._build_taint_steps(source_nodes, sanitizers, sink_nodes, variable_name, max_hops=max_hops)
+        confidence = self._estimate_confidence(risk_level, source_nodes, sink_nodes, sanitizers)
+
+        next_actions: List[str] = []
+        if risk_level in {"high", "medium"}:
+            next_actions.append("结合 controlflow_analysis_light 验证可达性和控制条件。")
+        if any(node in {"stack_overflow_risk", "buffer_overflow_risk"} for node in sink_nodes):
+            next_actions.append("提取目标函数并检查缓冲区长度边界与目标缓冲区大小。")
+        if not sanitizers and risk_level in {"high", "medium"}:
+            next_actions.append("补充输入验证或边界检查，并在汇点前进行约束。")
+        if not next_actions:
+            next_actions.append("未发现明确高风险链路，建议结合上下文继续交叉验证。")
+
+        return {
+            "source_nodes": source_nodes,
+            "sink_nodes": sink_nodes,
+            "sanitizers": sanitizers,
+            "taint_steps": taint_steps,
+            "risk_level": risk_level,
+            "confidence": confidence,
+            "evidence_lines": evidence_lines,
+            "next_actions": next_actions,
+            "analysis_engine": "rules",
+        }
+
+    def _load_source_code_from_file(
+        self,
         file_path: str,
-        note: str
-    ) -> ToolResult:
-        """格式化快速分析结果"""
-        output_parts = [f"📊 数据流分析结果 - 变量: {variable_name}"]
-        output_parts.append(f"⚠️ 注意: {note}\n")
-        
-        output_parts.append(f"数据源: {analysis.get('source_type', 'unknown')}")
-        output_parts.append(f"是否净化: {'✅ 是' if analysis.get('sanitized') else '❌ 否'}")
-        
-        if analysis.get("sanitization_methods"):
-            output_parts.append(f"净化方法: {', '.join(analysis['sanitization_methods'])}")
-        
-        if analysis.get("dangerous_sinks"):
-            output_parts.append(f"危险函数: {', '.join(analysis['dangerous_sinks'])}")
-        
-        risk_icons = {"high": "🔴", "medium": "🟠", "low": "🟡", "none": "🟢"}
-        risk = analysis.get("risk_level", "low")
-        output_parts.append(f"风险等级: {risk_icons.get(risk, '⚪')} {risk.upper()}")
-        
-        return ToolResult(
-            success=True,
-            data="\n".join(output_parts),
-            metadata={
-                "variable": variable_name,
-                "file_path": file_path,
-                "analysis": analysis,
-                "fallback_used": True,
-            }
+        *,
+        start_line: Optional[int],
+        end_line: Optional[int],
+    ) -> Dict[str, Any]:
+        import os
+
+        normalized = str(file_path or "").strip()
+        if not normalized:
+            return {"ok": False, "error": "file_path 为空"}
+
+        candidates: List[str] = []
+        if self.project_root:
+            candidates.append(os.path.normpath(os.path.join(self.project_root, normalized)))
+        candidates.append(os.path.normpath(normalized))
+
+        full_path = None
+        for candidate in candidates:
+            if self.project_root:
+                root_norm = os.path.normpath(self.project_root)
+                if candidate.startswith(root_norm) and os.path.isfile(candidate):
+                    full_path = candidate
+                    break
+            elif os.path.isfile(candidate):
+                full_path = candidate
+                break
+
+        if not full_path:
+            return {"ok": False, "error": f"无法读取文件: {normalized}"}
+
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as file_obj:
+                lines = file_obj.readlines()
+        except Exception as exc:
+            return {"ok": False, "error": f"读取文件失败: {exc}"}
+
+        total_lines = len(lines)
+        if total_lines == 0:
+            return {"ok": True, "code": "", "file_path": normalized, "start_line": 1, "end_line": 1}
+
+        start = max(1, int(start_line)) if start_line is not None else 1
+        end = max(start, int(end_line)) if end_line is not None else min(total_lines, start + 299)
+        end = min(end, total_lines)
+        selected = lines[start - 1 : end]
+        return {
+            "ok": True,
+            "code": "".join(selected),
+            "file_path": normalized,
+            "start_line": start,
+            "end_line": end,
+        }
+
+    @staticmethod
+    def _normalize_hints(value: Optional[List[str]]) -> List[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    @staticmethod
+    def _unique_list(values: List[str]) -> List[str]:
+        output: List[str] = []
+        seen = set()
+        for item in values:
+            key = str(item).strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            output.append(key)
+        return output
+
+    @staticmethod
+    def _collect_evidence_lines(source_code: str, patterns: List[str], max_lines: int = 12) -> List[int]:
+        lines = source_code.splitlines()
+        results: List[int] = []
+        for idx, line in enumerate(lines, start=1):
+            if any(pattern and pattern.lower() in line.lower() for pattern in patterns):
+                results.append(idx)
+            if len(results) >= max_lines:
+                break
+        return results
+
+    def _build_taint_steps(
+        self,
+        source_nodes: List[str],
+        sanitizers: List[str],
+        sink_nodes: List[str],
+        variable_name: str,
+        *,
+        max_hops: int,
+    ) -> List[str]:
+        hops = max(2, min(max_hops, 12))
+        steps: List[str] = [f"source -> {variable_name}"]
+        if sanitizers:
+            for sanitizer in sanitizers[: max(1, hops - 2)]:
+                steps.append(f"{variable_name} -> {sanitizer}")
+        else:
+            steps.append(f"{variable_name} -> unsanitized_flow")
+        if sink_nodes:
+            steps.append(f"{variable_name} -> {sink_nodes[0]}")
+        return self._unique_list(steps)[:hops]
+
+    @staticmethod
+    def _estimate_confidence(
+        risk_level: str,
+        source_nodes: List[str],
+        sink_nodes: List[str],
+        sanitizers: List[str],
+    ) -> float:
+        base = {"high": 0.85, "medium": 0.72, "low": 0.55, "none": 0.35}.get(risk_level, 0.5)
+        if source_nodes and sink_nodes:
+            base += 0.05
+        if sanitizers:
+            base -= 0.08
+        return max(0.0, min(base, 1.0))
+
+    def _build_analysis_prompt(
+        self,
+        *,
+        source_code: str,
+        sink_code: Optional[str],
+        variable_name: str,
+        source_hints: Optional[List[str]],
+        sink_hints: Optional[List[str]],
+    ) -> str:
+        source_hint_text = ", ".join(self._normalize_hints(source_hints)) or "无"
+        sink_hint_text = ", ".join(self._normalize_hints(sink_hints)) or "无"
+        prompt = f"""你是代码数据流分析器，请分析变量 `{variable_name}` 的 Source->Sink 传播链路。\n\n源码:\n```\n{source_code}\n```\n"""
+        if sink_code:
+            prompt += f"""候选汇点代码:\n```\n{sink_code}\n```\n"""
+        prompt += f"""提示:\n- source_hints: {source_hint_text}\n- sink_hints: {sink_hint_text}\n\n请输出 JSON，字段必须包含：\n- source_nodes: string[]\n- sink_nodes: string[]\n- sanitizers: string[]\n- taint_steps: string[]\n- risk_level: high|medium|low|none\n- confidence: 0-1\n- evidence_lines: integer[]\n- next_actions: string[]\n"""
+        return prompt
+
+    def _normalize_llm_analysis(self, result: Any) -> Optional[Dict[str, Any]]:
+        if not isinstance(result, dict):
+            return None
+        source_nodes = result.get("source_nodes")
+        if not isinstance(source_nodes, list):
+            source_type = result.get("source_type")
+            source_nodes = [source_type] if isinstance(source_type, str) and source_type.strip() else []
+        sink_nodes = result.get("sink_nodes")
+        if not isinstance(sink_nodes, list):
+            sink_nodes = result.get("dangerous_sinks") if isinstance(result.get("dangerous_sinks"), list) else []
+        sanitizers = result.get("sanitizers")
+        if not isinstance(sanitizers, list):
+            sanitizers = result.get("sanitization_methods") if isinstance(result.get("sanitization_methods"), list) else []
+        taint_steps = result.get("taint_steps") if isinstance(result.get("taint_steps"), list) else []
+        risk_level = str(result.get("risk_level") or "low").strip().lower()
+        if risk_level not in {"high", "medium", "low", "none"}:
+            risk_level = "low"
+        confidence = result.get("confidence")
+        try:
+            confidence_value = float(confidence) if confidence is not None else 0.65
+        except Exception:
+            confidence_value = 0.65
+        evidence_lines_raw = result.get("evidence_lines")
+        evidence_lines: List[int] = []
+        if isinstance(evidence_lines_raw, list):
+            for item in evidence_lines_raw:
+                try:
+                    line_value = int(item)
+                except Exception:
+                    continue
+                if line_value > 0:
+                    evidence_lines.append(line_value)
+        next_actions = result.get("next_actions")
+        if not isinstance(next_actions, list):
+            recommendation = result.get("recommendation")
+            next_actions = [str(recommendation)] if isinstance(recommendation, str) and recommendation.strip() else []
+
+        return {
+            "source_nodes": self._unique_list([str(item).strip() for item in source_nodes if str(item).strip()]),
+            "sink_nodes": self._unique_list([str(item).strip() for item in sink_nodes if str(item).strip()]),
+            "sanitizers": self._unique_list([str(item).strip() for item in sanitizers if str(item).strip()]),
+            "taint_steps": self._unique_list([str(item).strip() for item in taint_steps if str(item).strip()]),
+            "risk_level": risk_level,
+            "confidence": max(0.0, min(confidence_value, 1.0)),
+            "evidence_lines": sorted(set(evidence_lines)),
+            "next_actions": self._unique_list([str(item).strip() for item in next_actions if str(item).strip()]),
+            "analysis_engine": "llm",
+        }
+
+    @staticmethod
+    def _merge_risk_level(primary: str, secondary: Optional[str]) -> str:
+        ranking = {"none": 0, "low": 1, "medium": 2, "high": 3}
+        if not secondary:
+            return primary
+        left = ranking.get(primary, 1)
+        right = ranking.get(str(secondary).strip().lower(), 1)
+        return primary if left >= right else str(secondary).strip().lower()
+
+    @staticmethod
+    def _coerce_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return default
+
+    def _merge_analysis(
+        self,
+        quick_analysis: Dict[str, Any],
+        llm_analysis: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if not isinstance(llm_analysis, dict):
+            return quick_analysis
+
+        merged = dict(quick_analysis)
+        merged["source_nodes"] = self._unique_list(list(quick_analysis.get("source_nodes", [])) + list(llm_analysis.get("source_nodes", [])))
+        merged["sink_nodes"] = self._unique_list(list(quick_analysis.get("sink_nodes", [])) + list(llm_analysis.get("sink_nodes", [])))
+        merged["sanitizers"] = self._unique_list(list(quick_analysis.get("sanitizers", [])) + list(llm_analysis.get("sanitizers", [])))
+        merged["taint_steps"] = self._unique_list(list(quick_analysis.get("taint_steps", [])) + list(llm_analysis.get("taint_steps", [])))
+        merged["risk_level"] = self._merge_risk_level(
+            str(quick_analysis.get("risk_level") or "low"),
+            str(llm_analysis.get("risk_level") or "").strip().lower() or None,
         )
+        merged["confidence"] = max(
+            self._coerce_float(quick_analysis.get("confidence"), 0.0),
+            self._coerce_float(llm_analysis.get("confidence"), 0.0),
+        )
+        merged["evidence_lines"] = sorted(
+            set(list(quick_analysis.get("evidence_lines", [])) + list(llm_analysis.get("evidence_lines", [])))
+        )
+        merged["next_actions"] = self._unique_list(
+            list(quick_analysis.get("next_actions", [])) + list(llm_analysis.get("next_actions", []))
+        )
+        merged["analysis_engine"] = "rules+llm"
+        return merged
+
+    @staticmethod
+    def _format_analysis_result(analysis: Dict[str, Any], variable_name: str, file_path: str) -> str:
+        lines = [
+            "数据流分析结果",
+            f"变量: {variable_name}",
+            f"文件: {file_path}",
+            f"风险等级: {analysis.get('risk_level', 'low')}",
+            f"置信度: {analysis.get('confidence', 0.0):.2f}",
+            f"Source 节点: {', '.join(analysis.get('source_nodes', [])) or '无'}",
+            f"Sink 节点: {', '.join(analysis.get('sink_nodes', [])) or '无'}",
+            f"净化节点: {', '.join(analysis.get('sanitizers', [])) or '无'}",
+        ]
+        taint_steps = analysis.get("taint_steps") or []
+        if taint_steps:
+            lines.append("传播路径:")
+            lines.extend([f"- {step}" for step in taint_steps[:10]])
+        evidence_lines = analysis.get("evidence_lines") or []
+        if evidence_lines:
+            lines.append(f"证据行: {', '.join(str(item) for item in evidence_lines[:20])}")
+        next_actions = analysis.get("next_actions") or []
+        if next_actions:
+            lines.append("建议动作:")
+            lines.extend([f"- {item}" for item in next_actions[:6]])
+        return "\n".join(lines)
 
 
 class VulnerabilityValidationInput(BaseModel):
@@ -595,4 +803,3 @@ class VulnerabilityValidationTool(AgentTool):
                 success=False,
                 error=f"漏洞验证失败: {str(e)}",
             )
-

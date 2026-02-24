@@ -11,14 +11,16 @@ Agent 基类
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple, Set
+from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple, Set, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
+from collections import deque
 from datetime import datetime, timezone
 import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import uuid
 
@@ -44,6 +46,23 @@ TOOL_INPUT_REPAIR_MAP: Dict[str, str] = {
     "file": "file_path",
     "dir": "directory",
 }
+
+RETRY_GUARD_TOOLS: Set[str] = {"read_file", "search_code", "pattern_match"}
+WRITE_TOOL_GUARD_NAMES: Set[str] = {"edit_file", "write_file", "move_file", "create_directory"}
+DETERMINISTIC_ERROR_HINTS: Tuple[str, ...] = (
+    "文件不存在",
+    "不是文件",
+    "目录不存在",
+    "安全错误",
+    "无效的搜索模式",
+    "必须提供",
+    "参数校验失败",
+    "工具参数缺失",
+)
+
+if TYPE_CHECKING:
+    from ..mcp.runtime import MCPRuntime
+    from ..mcp.write_scope import TaskWriteScopeGuard, WriteScopeDecision
 
 
 def _truncate_with_flag(text: str, max_chars: int = MAX_EVENT_PAYLOAD_CHARS) -> Tuple[str, bool]:
@@ -338,6 +357,16 @@ class BaseAgent(ABC):
         self._llm_thought_suppressed_count: int = 0
         self._llm_thought_repeat_suppress_threshold: int = 2
         self._llm_thought_repeat_summary_interval: int = 5
+        self._tool_repeat_call_counts: Dict[str, int] = {}
+        self._deterministic_failure_counts: Dict[str, int] = {}
+        self._deterministic_failure_last_error: Dict[str, str] = {}
+        self._recent_thought_texts: deque[str] = deque(maxlen=6)
+        self._tool_success_cache: Dict[str, str] = {}
+        self._recent_read_file_paths: deque[str] = deque(maxlen=12)
+        self._recent_reason_dirs: deque[str] = deque(maxlen=16)
+        self._recent_search_directories: deque[str] = deque(maxlen=12)
+        self._mcp_runtime: Optional["MCPRuntime"] = None
+        self._write_scope_guard: Optional["TaskWriteScopeGuard"] = None
         
         # 🔥 是否已注册到注册表
         self._registered = False
@@ -548,6 +577,16 @@ class BaseAgent(ABC):
         # 🔥 外部取消检查回调
         self._cancel_callback = None
 
+    def reset_cancellation_state(self) -> None:
+        """
+        重置取消状态（用于同一 Agent 实例的重试场景）。
+
+        仅重置内部 `_cancelled` 标志，不重置统计字段，确保任务级统计连续。
+        """
+        if self._cancelled:
+            logger.info(f"[{self.name}] Reset cancellation state for retry")
+        self._cancelled = False
+
     def set_cancel_callback(self, callback) -> None:
         """设置外部取消检查回调"""
         self._cancel_callback = callback
@@ -564,6 +603,88 @@ class BaseAgent(ABC):
             logger.info(f"[{self.name}] Detected cancellation from callback")
             return True
         return False
+
+    def set_mcp_runtime(self, runtime: Optional["MCPRuntime"]) -> None:
+        """设置 MCP 运行时（可选）。"""
+        self._mcp_runtime = runtime
+        if runtime and hasattr(runtime, "get_write_scope_guard"):
+            try:
+                self._write_scope_guard = runtime.get_write_scope_guard()
+            except Exception:
+                self._write_scope_guard = None
+
+    def set_write_scope_guard(self, guard: Optional["TaskWriteScopeGuard"]) -> None:
+        """单独设置写入作用域守卫。"""
+        self._write_scope_guard = guard
+
+    @staticmethod
+    def _build_write_scope_error(reason: str) -> str:
+        normalized = str(reason or "").strip()
+        if normalized == "write_scope_limit_reached":
+            return "写入被拒绝：当前任务可写文件数已达上限，请仅修改已授权文件。"
+        if normalized == "write_scope_path_forbidden":
+            return "写入被拒绝：不允许目录级/通配/越界/敏感目录写入。"
+        return "写入被拒绝：目标文件不在证据绑定白名单中，请提供 finding_id/todo_id/reason。"
+
+    def _is_write_tool(self, tool_name: str) -> bool:
+        normalized = str(tool_name or "").strip().lower()
+        if normalized in WRITE_TOOL_GUARD_NAMES:
+            return True
+        guard = self._write_scope_guard
+        if guard and hasattr(guard, "is_write_tool"):
+            try:
+                return bool(guard.is_write_tool(normalized))
+            except Exception:
+                return normalized in WRITE_TOOL_GUARD_NAMES
+        return False
+
+    def _enforce_write_scope(
+        self,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], Optional[str]]:
+        """执行写入作用域校验，并返回规范化后的输入与事件 metadata。"""
+        normalized_input = dict(tool_input or {})
+        guard = self._write_scope_guard
+        if not guard:
+            return normalized_input, {}, None
+
+        if not self._is_write_tool(tool_name):
+            return normalized_input, {}, None
+
+        if not hasattr(guard, "evaluate_write_request"):
+            return normalized_input, {}, None
+
+        try:
+            decision = guard.evaluate_write_request(tool_name=tool_name, tool_input=normalized_input)
+        except Exception as exc:
+            logger.warning("[%s] write scope guard evaluation failed: %s", self.name, exc)
+            return normalized_input, {}, None
+
+        metadata: Dict[str, Any] = {}
+        if hasattr(guard, "decision_metadata"):
+            try:
+                metadata = dict(guard.decision_metadata(decision))  # type: ignore[arg-type]
+            except Exception:
+                metadata = {}
+        if not metadata:
+            metadata = {
+                "write_scope_allowed": bool(getattr(decision, "allowed", False)),
+                "write_scope_reason": str(getattr(decision, "reason", "") or ""),
+                "write_scope_file": getattr(decision, "file_path", None),
+                "write_scope_total_files": int(getattr(decision, "total_files", 0) or 0),
+            }
+
+        normalized_file = getattr(decision, "file_path", None)
+        if bool(getattr(decision, "allowed", False)) and isinstance(normalized_file, str) and normalized_file:
+            if "file_path" in normalized_input or "path" not in normalized_input:
+                normalized_input["file_path"] = normalized_file
+            if "path" in normalized_input:
+                normalized_input["path"] = normalized_file
+            return normalized_input, metadata, None
+
+        reason = str(getattr(decision, "reason", "") or "write_scope_not_allowed")
+        return normalized_input, metadata, self._build_write_scope_error(reason)
     
     # ============ 协作方法 ============
     
@@ -716,6 +837,14 @@ class BaseAgent(ABC):
     
     async def emit_llm_thought(self, thought: str, iteration: int):
         """发射 LLM 思考内容事件 - 这是核心！展示 LLM 在想什么"""
+        thought_text = str(thought or "").strip()
+        if thought_text:
+            self._recent_thought_texts.append(thought_text)
+            hint = self._extract_file_hint_from_context([thought_text])
+            hinted_path = str(hint.get("file_path") or "").strip()
+            if hinted_path:
+                self._remember_reason_path(hinted_path)
+
         normalized = re.sub(r"\s+", " ", (thought or "").strip())
         thought_digest = hashlib.sha1(normalized.encode("utf-8", errors="ignore")).hexdigest() if normalized else ""
 
@@ -880,6 +1009,10 @@ class BaseAgent(ABC):
         alias_used: Optional[str] = None,
         input_repaired: Optional[Dict[str, str]] = None,
         validation_error: Optional[str] = None,
+        cache_hit: Optional[bool] = None,
+        cache_key: Optional[str] = None,
+        cache_policy: Optional[str] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射工具结果事件"""
         # 🔥 修复：确保 result 不为 None，避免显示 "None" 字符串
@@ -908,6 +1041,14 @@ class BaseAgent(ABC):
             metadata["input_repaired"] = input_repaired
         if validation_error:
             metadata["validation_error"] = validation_error
+        if cache_hit is not None:
+            metadata["cache_hit"] = bool(cache_hit)
+        if cache_key:
+            metadata["cache_key"] = cache_key
+        if cache_policy:
+            metadata["cache_policy"] = cache_policy
+        if isinstance(extra_metadata, dict):
+            metadata.update(extra_metadata)
         await self.emit_event(
             "tool_result",
             f"[{self.name}] 工具 {tool_name} 完成 ({duration_ms}ms)",
@@ -926,9 +1067,12 @@ class BaseAgent(ABC):
         vuln_type: str,
         file_path: str = "",
         line_start: Optional[int] = None,
+        line_end: Optional[int] = None,
         is_verified: bool = False,
         display_title: Optional[str] = None,
         cwe_id: Optional[str] = None,
+        description: Optional[str] = None,
+        verification_evidence: Optional[str] = None,
         code_snippet: Optional[str] = None,
         function_trigger_flow: Optional[List[str]] = None,
         reachability_file: Optional[str] = None,
@@ -948,6 +1092,12 @@ class BaseAgent(ABC):
                 normalized_line_start = int(line_start)
             except Exception:
                 normalized_line_start = None
+        normalized_line_end: Optional[int] = None
+        if line_end is not None:
+            try:
+                normalized_line_end = int(line_end)
+            except Exception:
+                normalized_line_end = None
         normalized_reachability_start: Optional[int] = None
         if reachability_function_start_line is not None:
             try:
@@ -982,9 +1132,12 @@ class BaseAgent(ABC):
                 vulnerability_type=vuln_type,
                 file_path=file_path or None,
                 line_start=normalized_line_start,
+                line_end=normalized_line_end,
                 is_verified=is_verified,
                 display_title=display_title,
                 cwe_id=cwe_id,
+                description=description,
+                verification_evidence=verification_evidence,
                 code_snippet=code_snippet,
                 function_trigger_flow=function_trigger_flow,
                 reachability_file=reachability_file,
@@ -1014,9 +1167,12 @@ class BaseAgent(ABC):
                     "vulnerability_type": vuln_type,
                     "file_path": file_path,
                     "line_start": normalized_line_start,
+                    "line_end": normalized_line_end,
                     "is_verified": is_verified,
                     "display_title": display_title,
                     "cwe_id": cwe_id,
+                    "description": description,
+                    "verification_evidence": verification_evidence,
                     "code_snippet": code_snippet,
                     "function_trigger_flow": function_trigger_flow,
                     "reachability_file": reachability_file,
@@ -1321,6 +1477,382 @@ class BaseAgent(ABC):
         return requested_tool_name, None
 
     @staticmethod
+    def _split_multi_patterns(raw_value: Any) -> List[str]:
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, list):
+            return [str(item).strip() for item in raw_value if str(item).strip()]
+        text = str(raw_value).strip()
+        if not text:
+            return []
+        parts = [item.strip() for item in re.split(r"[|,;]", text) if item.strip()]
+        return parts or [text]
+
+    @staticmethod
+    def _normalize_pattern_types(raw_value: Any) -> List[str]:
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, list):
+            return sorted({str(item).strip() for item in raw_value if str(item).strip()})
+        text = str(raw_value).strip()
+        if not text:
+            return []
+        parts = [item.strip() for item in re.split(r"[|,;]", text) if item.strip()]
+        return sorted(set(parts))
+
+    @staticmethod
+    def _normalize_path_key(path: Any) -> str:
+        value = str(path or "").strip().replace("\\", "/")
+        while value.startswith("./"):
+            value = value[2:]
+        while "//" in value:
+            value = value.replace("//", "/")
+        return value
+
+    @staticmethod
+    def _looks_like_line_suffix(value: str) -> bool:
+        return bool(re.fullmatch(r"\d+(?:-\d+)?", str(value or "")))
+
+    def _append_recent_unique(self, queue: deque[str], value: str) -> None:
+        normalized = self._normalize_path_key(value).strip("/")
+        if not normalized:
+            return
+        try:
+            queue.remove(normalized)
+        except ValueError:
+            pass
+        queue.appendleft(normalized)
+
+    def _remember_reason_path(self, raw_value: Any) -> None:
+        value = self._normalize_path_key(raw_value)
+        if not value:
+            return
+        if ":" in value:
+            maybe_path, maybe_line = value.rsplit(":", 1)
+            if maybe_path and self._looks_like_line_suffix(maybe_line):
+                value = maybe_path
+        value = value.strip("/")
+        if not value:
+            return
+
+        basename = os.path.basename(value)
+        if "." in basename:
+            self._append_recent_unique(self._recent_read_file_paths, value)
+            dir_part = os.path.dirname(value)
+            self._append_recent_unique(self._recent_reason_dirs, dir_part or ".")
+            return
+        self._append_recent_unique(self._recent_reason_dirs, value)
+
+    def _remember_search_directory(self, raw_value: Any) -> None:
+        value = self._normalize_path_key(raw_value)
+        if not value:
+            return
+        value = value.strip("/")
+        if not value:
+            value = "."
+        self._append_recent_unique(self._recent_search_directories, value)
+        self._append_recent_unique(self._recent_reason_dirs, value)
+
+    def _collect_reason_paths_for_read(self, file_hint: Dict[str, Any]) -> List[str]:
+        candidates: List[str] = []
+        hinted_path = str(file_hint.get("file_path") or "").strip()
+        if hinted_path:
+            self._remember_reason_path(hinted_path)
+            candidates.append(hinted_path)
+
+        candidates.extend(list(self._recent_read_file_paths))
+        candidates.extend(list(self._recent_reason_dirs))
+        candidates.extend(list(self._recent_search_directories))
+
+        deduped: List[str] = []
+        seen: Set[str] = set()
+        for item in candidates:
+            normalized = self._normalize_path_key(item).strip("/")
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+            if len(deduped) >= 12:
+                break
+        return deduped
+
+    def _record_tool_context(
+        self,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+        tool_metadata: Dict[str, Any],
+    ) -> None:
+        self._record_evidence_paths_from_tool_context(tool_name, tool_input, tool_metadata)
+        if tool_name == "read_file":
+            for value in (tool_metadata.get("file_path"), tool_input.get("file_path")):
+                self._remember_reason_path(value)
+            return
+        if tool_name == "search_code":
+            for value in (
+                tool_metadata.get("effective_directory"),
+                tool_input.get("directory"),
+                tool_metadata.get("original_directory"),
+            ):
+                self._remember_search_directory(value)
+
+    def _register_evidence_path(self, file_path: Any) -> None:
+        guard = self._write_scope_guard
+        if guard and hasattr(guard, "register_evidence_path"):
+            try:
+                guard.register_evidence_path(file_path)
+            except Exception:
+                pass
+        runtime = self._mcp_runtime
+        if runtime and hasattr(runtime, "register_evidence_path"):
+            try:
+                runtime.register_evidence_path(file_path)
+            except Exception:
+                pass
+
+    def _record_evidence_paths_from_tool_context(
+        self,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+        tool_metadata: Dict[str, Any],
+    ) -> None:
+        normalized_tool = str(tool_name or "").strip().lower()
+        candidates: List[Any] = []
+
+        if normalized_tool in {
+            "read_file",
+            "extract_function",
+            "controlflow_analysis_light",
+            "locate_enclosing_function",
+        }:
+            candidates.extend(
+                [
+                    tool_metadata.get("file_path"),
+                    tool_metadata.get("resolved_file_path"),
+                    tool_input.get("file_path"),
+                    tool_input.get("path"),
+                ]
+            )
+
+        if normalized_tool == "search_code":
+            candidates.extend(
+                [
+                    tool_input.get("directory"),
+                    tool_metadata.get("effective_directory"),
+                    tool_metadata.get("original_directory"),
+                ]
+            )
+            raw_results = tool_metadata.get("results")
+            if isinstance(raw_results, list):
+                for item in raw_results[:30]:
+                    if isinstance(item, dict):
+                        candidates.append(item.get("file"))
+                        candidates.append(item.get("file_path"))
+
+        if normalized_tool == "pattern_match":
+            candidates.extend([tool_input.get("scan_file"), tool_metadata.get("scan_file")])
+            matched_files = tool_metadata.get("matched_files")
+            if isinstance(matched_files, list):
+                candidates.extend(matched_files[:30])
+
+        if normalized_tool in {"dataflow_analysis", "logic_authz_analysis"}:
+            candidates.extend(
+                [
+                    tool_input.get("file_path"),
+                    tool_metadata.get("file_path"),
+                    tool_metadata.get("reachability_file"),
+                ]
+            )
+            evidence_lines = tool_metadata.get("evidence_lines")
+            if isinstance(evidence_lines, list):
+                for item in evidence_lines[:20]:
+                    if isinstance(item, dict):
+                        candidates.append(item.get("file_path"))
+                    elif isinstance(item, str):
+                        candidates.append(item.split(":", 1)[0])
+
+        for value in candidates:
+            self._register_evidence_path(value)
+
+    def _extract_file_hint_from_context(self, texts: List[str]) -> Dict[str, Any]:
+        if not texts:
+            return {}
+
+        pattern = re.compile(
+            r"(?P<path>[A-Za-z0-9_./-]+\.(?:c|h|cc|cpp|cxx|hpp|hh|py|js|ts|java|go|rs|php|rb|swift))"
+            r"(?::(?P<start>\d+)(?:-(?P<end>\d+))?)?"
+        )
+        fallback: Dict[str, Any] = {}
+        for text in reversed(texts):
+            for match in pattern.finditer(str(text or "")):
+                raw_path = str(match.group("path") or "").strip()
+                cleaned_path = raw_path.strip("`'\"()[]{}<>，,。！？；;")
+                if not cleaned_path:
+                    continue
+                start_raw = match.group("start")
+                end_raw = match.group("end")
+                start_line = int(start_raw) if start_raw else None
+                end_line = int(end_raw) if end_raw else (start_line if start_line is not None else None)
+                if start_line and end_line and end_line < start_line:
+                    start_line, end_line = end_line, start_line
+                candidate = {
+                    "file_path": cleaned_path,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                }
+                if start_line is not None:
+                    return candidate
+                if not fallback:
+                    fallback = candidate
+        return fallback
+
+    @staticmethod
+    def _normalize_keyword_candidate(candidate: Any) -> Optional[str]:
+        text = str(candidate or "").strip().strip("`'\"")
+        text = text.strip("，,。！？；;")
+        if not text:
+            return None
+        if len(text) < 2 or len(text) > 220:
+            return None
+        if "\n" in text:
+            return None
+        if not re.search(r"[A-Za-z_]", text):
+            return None
+        if text.count(" ") > 4:
+            return None
+        return text
+
+    def _extract_keyword_hint_from_context(self, texts: List[str]) -> Optional[str]:
+        if not texts:
+            return None
+
+        quoted_pipe_patterns = (
+            r'"([^"\n]{1,220}\|[^"\n]{1,220})"',
+            r"'([^'\n]{1,220}\|[^'\n]{1,220})'",
+            r"`([^`\n]{1,220}\|[^`\n]{1,220})`",
+        )
+        plain_pipe_pattern = r"\b[A-Za-z_][A-Za-z0-9_]*(?:\|[A-Za-z_][A-Za-z0-9_]*)+\b"
+        chinese_list_pattern = r"([A-Za-z_][A-Za-z0-9_]*(?:、[A-Za-z_][A-Za-z0-9_]*){2,})"
+        quoted_candidate_patterns = (
+            r'"([A-Za-z0-9_\\|()\[\]{}*+.\-\s]{2,220})"',
+            r"'([A-Za-z0-9_\\|()\[\]{}*+.\-\s]{2,220})'",
+            r"`([A-Za-z0-9_\\|()\[\]{}*+.\-\s]{2,220})`",
+        )
+
+        for text in reversed(texts):
+            text_value = str(text or "")
+            for pattern in quoted_pipe_patterns:
+                for candidate in re.findall(pattern, text_value):
+                    normalized = self._normalize_keyword_candidate(candidate)
+                    if normalized:
+                        return normalized
+            for candidate in re.findall(plain_pipe_pattern, text_value):
+                normalized = self._normalize_keyword_candidate(candidate)
+                if normalized:
+                    return normalized
+            for candidate in re.findall(chinese_list_pattern, text_value):
+                normalized = self._normalize_keyword_candidate(str(candidate).replace("、", "|"))
+                if normalized:
+                    return normalized
+            for pattern in quoted_candidate_patterns:
+                for candidate in re.findall(pattern, text_value):
+                    normalized = self._normalize_keyword_candidate(candidate)
+                    if normalized:
+                        return normalized
+
+        return None
+
+    @staticmethod
+    def _keyword_prefers_regex(keyword: str) -> bool:
+        text = str(keyword or "")
+        return any(token in text for token in ("|", "(", r"\s"))
+
+    def _resolve_virtual_tool_name(
+        self,
+        requested_tool_name: str,
+        tool_input: Dict[str, Any],
+    ) -> Tuple[str, Optional[str]]:
+        normalized = str(requested_tool_name or "").strip().lower()
+        input_dict = tool_input if isinstance(tool_input, dict) else {}
+
+        if normalized == "code_search":
+            read_keys = {"file_path", "path", "start_line", "end_line", "max_lines"}
+            search_keys = {"keyword", "query", "is_regex", "file_pattern", "directory", "case_sensitive"}
+
+            target_name = "list_files"
+            if any(key in input_dict for key in read_keys):
+                target_name = "read_file"
+            elif any(key in input_dict for key in search_keys):
+                target_name = "search_code"
+
+            if target_name in self.tools:
+                return target_name, requested_tool_name
+            return requested_tool_name, None
+
+        if normalized == "verify_reachability":
+            dataflow_keys = {"source_hints", "sink_hints", "variable_name", "max_hops"}
+            controlflow_keys = {
+                "file_path",
+                "line_start",
+                "line_end",
+                "function_name",
+                "vulnerability_type",
+                "call_chain_hint",
+                "control_conditions_hint",
+                "entry_points_hint",
+            }
+
+            if "dataflow_analysis" in self.tools and any(key in input_dict for key in dataflow_keys):
+                return "dataflow_analysis", requested_tool_name
+
+            if "controlflow_analysis_light" in self.tools and any(
+                key in input_dict for key in controlflow_keys
+            ):
+                return "controlflow_analysis_light", requested_tool_name
+
+            if "extract_function" in self.tools and any(
+                key in input_dict for key in {"function_name", "file_path", "path"}
+            ):
+                return "extract_function", requested_tool_name
+
+            if "read_file" in self.tools:
+                return "read_file", requested_tool_name
+
+        if normalized == "locate_enclosing_function":
+            return "locate_enclosing_function", requested_tool_name
+
+        return requested_tool_name, None
+
+    def _build_retry_guard_key(self, tool_name: str, tool_input: Dict[str, Any]) -> Optional[str]:
+        if tool_name not in RETRY_GUARD_TOOLS:
+            return None
+
+        if tool_name == "read_file":
+            file_path = self._normalize_path_key(tool_input.get("file_path"))
+            return f"{tool_name}|{file_path}" if file_path else None
+
+        if tool_name == "search_code":
+            keyword = str(tool_input.get("keyword") or "").strip()
+            directory = self._normalize_path_key(tool_input.get("directory"))
+            patterns = ",".join(sorted(self._split_multi_patterns(tool_input.get("file_pattern"))))
+            if not keyword:
+                return None
+            return f"{tool_name}|{keyword}|{directory}|{patterns}"
+
+        if tool_name == "pattern_match":
+            scan_file = self._normalize_path_key(tool_input.get("scan_file"))
+            pattern_types = ",".join(self._normalize_pattern_types(tool_input.get("pattern_types")))
+            if not scan_file:
+                return None
+            return f"{tool_name}|{scan_file}|{pattern_types}"
+
+        return None
+
+    @staticmethod
+    def _is_deterministic_error_message(error_text: str) -> bool:
+        text = str(error_text or "")
+        return any(hint in text for hint in DETERMINISTIC_ERROR_HINTS)
+
+    @staticmethod
     def _get_schema_fields(args_schema: Any) -> Tuple[Set[str], Set[str]]:
         fields: Set[str] = set()
         required_fields: Set[str] = set()
@@ -1356,6 +1888,7 @@ class BaseAgent(ABC):
         self,
         tool: Any,
         tool_input: Dict[str, Any],
+        resolved_tool_name: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, str], List[str], List[str]]:
         args_schema = getattr(tool, "args_schema", None)
         schema_fields, required_fields = self._get_schema_fields(args_schema)
@@ -1368,6 +1901,65 @@ class BaseAgent(ABC):
             if source_key in repaired and target_key not in repaired and target_key in schema_fields:
                 repaired[target_key] = repaired[source_key]
                 repaired_changes[source_key] = target_key
+
+        tool_name = str(getattr(tool, "name", "") or resolved_tool_name or "")
+        if tool_name == "pattern_match":
+            has_code = bool(str(repaired.get("code") or "").strip())
+            scan_file = str(repaired.get("scan_file") or "").strip()
+            if not has_code and not scan_file and "scan_file" in schema_fields:
+                for source_key in ("file_path", "path", "file", "filepath"):
+                    candidate = str(repaired.get(source_key) or "").strip()
+                    if candidate and candidate != "unknown":
+                        repaired["scan_file"] = candidate
+                        repaired_changes[source_key] = "scan_file"
+                        break
+
+            if "pattern_types" in repaired and isinstance(repaired.get("pattern_types"), str):
+                normalized_pattern_types = [
+                    item.strip()
+                    for item in re.split(r"[|,;]", str(repaired["pattern_types"]))
+                    if item.strip()
+                ]
+                repaired["pattern_types"] = normalized_pattern_types
+                repaired_changes["pattern_types"] = "pattern_types(normalized)"
+
+        context_texts = [text for text in self._recent_thought_texts if isinstance(text, str) and text.strip()]
+        if tool_name == "read_file" and "file_path" in schema_fields:
+            file_hint: Dict[str, Any] = {}
+            file_path = str(repaired.get("file_path") or "").strip()
+            if not file_path:
+                file_hint = self._extract_file_hint_from_context(context_texts)
+                hinted_path = str(file_hint.get("file_path") or "").strip()
+                if hinted_path:
+                    repaired["file_path"] = hinted_path
+                    repaired_changes["__context.file_path"] = "file_path"
+                    if "start_line" in schema_fields and repaired.get("start_line") in (None, "") and file_hint.get("start_line") is not None:
+                        repaired["start_line"] = int(file_hint["start_line"])
+                        if "end_line" in schema_fields and repaired.get("end_line") in (None, "") and file_hint.get("end_line") is not None:
+                            repaired["end_line"] = int(file_hint["end_line"])
+                            repaired_changes["__context.line_range"] = "start_line,end_line"
+            else:
+                file_hint = {"file_path": file_path}
+
+            if "reason_paths" in schema_fields and not repaired.get("reason_paths"):
+                reason_paths = self._collect_reason_paths_for_read(file_hint)
+                if reason_paths:
+                    repaired["reason_paths"] = reason_paths
+                    repaired_changes["__context.reason_paths"] = "reason_paths"
+            if "project_scope" in schema_fields and "project_scope" not in repaired:
+                repaired["project_scope"] = True
+                repaired_changes["__context.project_scope"] = "project_scope"
+
+        if tool_name == "search_code" and "keyword" in schema_fields:
+            keyword = str(repaired.get("keyword") or "").strip()
+            if not keyword:
+                hinted_keyword = self._extract_keyword_hint_from_context(context_texts)
+                if hinted_keyword:
+                    repaired["keyword"] = hinted_keyword
+                    repaired_changes["__context.keyword"] = "keyword"
+                    if "is_regex" in schema_fields and "is_regex" not in repaired and self._keyword_prefers_regex(hinted_keyword):
+                        repaired["is_regex"] = True
+                        repaired_changes["__context.regex_hint"] = "is_regex"
 
         missing_required: List[str] = []
         for name in sorted(required_fields):
@@ -1393,19 +1985,62 @@ class BaseAgent(ABC):
             return "⚠️ 任务已取消"
 
         requested_tool_name = str(tool_name or "").strip()
-        resolved_tool_name, alias_used = self._resolve_tool_name(requested_tool_name)
-        tool = self.tools.get(resolved_tool_name)
+        raw_tool_input = tool_input if isinstance(tool_input, dict) else {}
 
-        if not tool:
+        virtual_resolved_name, virtual_alias = self._resolve_virtual_tool_name(
+            requested_tool_name,
+            raw_tool_input,
+        )
+        resolved_tool_name, alias_used = self._resolve_tool_name(virtual_resolved_name)
+        if virtual_alias:
+            alias_used = virtual_alias
+
+        tool = self.tools.get(resolved_tool_name)
+        local_tool_available = bool(tool and hasattr(tool, "execute"))
+
+        mcp_runtime = self._mcp_runtime
+        mcp_can_handle = bool(
+            mcp_runtime
+            and hasattr(mcp_runtime, "can_handle")
+            and mcp_runtime.can_handle(resolved_tool_name)
+        )
+
+        if not local_tool_available and not mcp_can_handle:
             return (
                 f"错误: 工具 '{requested_tool_name}' 不存在。"
                 f"可用工具: {list(self.tools.keys())}"
             )
 
-        raw_tool_input = tool_input if isinstance(tool_input, dict) else {}
-        repaired_input, repaired_changes, missing_required, schema_fields = self._repair_tool_input(
-            tool,
-            raw_tool_input,
+        if local_tool_available:
+            repaired_input, repaired_changes, missing_required, schema_fields = self._repair_tool_input(
+                tool,
+                raw_tool_input,
+                resolved_tool_name=resolved_tool_name,
+            )
+        else:
+            repaired_input = dict(raw_tool_input)
+            repaired_changes = {}
+            missing_required = []
+            schema_fields = []
+
+        repaired_input, write_scope_metadata, write_scope_error = self._enforce_write_scope(
+            resolved_tool_name,
+            repaired_input,
+        )
+        is_write_tool = self._is_write_tool(resolved_tool_name)
+
+        serialized_input = json.dumps(repaired_input, ensure_ascii=False, sort_keys=True)
+        tool_call_key = f"{resolved_tool_name}:{serialized_input}"
+        call_count = self._tool_repeat_call_counts.get(tool_call_key, 0) + 1
+        self._tool_repeat_call_counts[tool_call_key] = call_count
+
+        retry_guard_key = self._build_retry_guard_key(resolved_tool_name, repaired_input)
+        if retry_guard_key is None and resolved_tool_name in RETRY_GUARD_TOOLS:
+            retry_guard_key = f"{resolved_tool_name}:{serialized_input}"
+        deterministic_fail_count = (
+            self._deterministic_failure_counts.get(retry_guard_key, 0)
+            if retry_guard_key
+            else 0
         )
 
         validation_error: Optional[str] = None
@@ -1428,7 +2063,73 @@ class BaseAgent(ABC):
                 validation_error=validation_error,
             )
 
+            if write_scope_error:
+                await self.emit_tool_result(
+                    resolved_tool_name,
+                    write_scope_error,
+                    0,
+                    tool_call_id=tool_call_id,
+                    tool_status="failed",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
+                    extra_metadata=write_scope_metadata or None,
+                )
+                return (
+                    "⚠️ 写入策略校验失败\n\n"
+                    f"**请求工具**: {requested_tool_name}\n"
+                    f"**实际工具**: {resolved_tool_name}\n"
+                    f"**原因**: {write_scope_error}\n"
+                    "请改用证据绑定的文件并缩小写入范围。"
+                )
+
+            cached_output = self._tool_success_cache.get(tool_call_key)
+            if not is_write_tool and call_count >= 2 and cached_output is not None:
+                await self.emit_tool_result(
+                    resolved_tool_name,
+                    cached_output,
+                    0,
+                    tool_call_id=tool_call_id,
+                    tool_status="completed",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
+                    cache_hit=True,
+                    cache_key=tool_call_key,
+                    cache_policy="same_input_success_reuse",
+                    extra_metadata=write_scope_metadata or None,
+                )
+                return cached_output
+
+            if retry_guard_key and deterministic_fail_count >= 2:
+                last_error = self._deterministic_failure_last_error.get(retry_guard_key, "")
+                short_circuit_msg = (
+                    "同一输入已出现至少 2 次确定性失败，系统已短路以避免无效重试。"
+                )
+                if last_error:
+                    short_circuit_msg += f" 最近错误: {last_error}"
+                await self.emit_tool_result(
+                    resolved_tool_name,
+                    short_circuit_msg,
+                    0,
+                    tool_call_id=tool_call_id,
+                    tool_status="failed",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
+                    extra_metadata=write_scope_metadata or None,
+                )
+                return (
+                    "⚠️ 工具调用已短路\n\n"
+                    f"**请求工具**: {requested_tool_name}\n"
+                    f"**实际工具**: {resolved_tool_name}\n"
+                    f"**原因**: {short_circuit_msg}\n"
+                    "请更换参数或改用其他工具。"
+                )
+
             if validation_error:
+                if retry_guard_key:
+                    self._deterministic_failure_counts[retry_guard_key] = (
+                        self._deterministic_failure_counts.get(retry_guard_key, 0) + 1
+                    )
+                    self._deterministic_failure_last_error[retry_guard_key] = validation_error
                 await self.emit_tool_result(
                     resolved_tool_name,
                     validation_error,
@@ -1438,6 +2139,7 @@ class BaseAgent(ABC):
                     alias_used=alias_used,
                     input_repaired=repaired_changes or None,
                     validation_error=validation_error,
+                    extra_metadata=write_scope_metadata or None,
                 )
                 example_fields = ", ".join(f'"{name}": "..."' for name in missing_required)
                 return (
@@ -1447,6 +2149,110 @@ class BaseAgent(ABC):
                     f"**缺失必填字段**: {', '.join(missing_required)}\n"
                     f"**建议示例**: {{{example_fields}}}\n"
                     "请补齐参数后重试。"
+                )
+
+            use_mcp_first = bool(
+                mcp_can_handle
+                and mcp_runtime
+                and (
+                    not local_tool_available
+                    or (
+                        hasattr(mcp_runtime, "should_prefer_mcp")
+                        and mcp_runtime.should_prefer_mcp()
+                    )
+                )
+            )
+            mcp_fallback_metadata: Dict[str, Any] = {}
+            if use_mcp_first and mcp_runtime:
+                mcp_result = await mcp_runtime.execute_tool(
+                    tool_name=resolved_tool_name,
+                    tool_input=repaired_input,
+                    agent_name=self.name,
+                    alias_used=alias_used,
+                )
+                mcp_result_meta = (
+                    dict(mcp_result.metadata)
+                    if isinstance(mcp_result.metadata, dict)
+                    else {}
+                )
+                merged_meta = {**write_scope_metadata, **mcp_result_meta}
+
+                if mcp_result.handled:
+                    mcp_output = str(mcp_result.data or mcp_result.error or "")
+                    if mcp_result.success:
+                        await self.emit_tool_result(
+                            resolved_tool_name,
+                            mcp_output,
+                            0,
+                            tool_call_id=tool_call_id,
+                            tool_status="completed",
+                            alias_used=alias_used,
+                            input_repaired=repaired_changes or None,
+                            extra_metadata=merged_meta or None,
+                        )
+                        self._record_tool_context(
+                            tool_name=resolved_tool_name,
+                            tool_input=repaired_input,
+                            tool_metadata=mcp_result_meta,
+                        )
+                        if not is_write_tool:
+                            self._tool_success_cache[tool_call_key] = mcp_output
+                            if len(self._tool_success_cache) > 500:
+                                oldest_key = next(iter(self._tool_success_cache))
+                                self._tool_success_cache.pop(oldest_key, None)
+                        return mcp_output
+
+                    if mcp_result.should_fallback and local_tool_available:
+                        mcp_fallback_metadata = {
+                            **merged_meta,
+                            "mcp_fallback_used": True,
+                            "mcp_fallback_error": mcp_result.error or "unknown",
+                            "mcp_runtime_fallback_used": True,
+                            "mcp_runtime_fallback_from": mcp_result_meta.get("mcp_runtime_domain"),
+                        }
+                    elif not mcp_result.should_fallback:
+                        await self.emit_tool_result(
+                            resolved_tool_name,
+                            mcp_output,
+                            0,
+                            tool_call_id=tool_call_id,
+                            tool_status="failed",
+                            alias_used=alias_used,
+                            input_repaired=repaired_changes or None,
+                            extra_metadata=merged_meta or None,
+                        )
+                        return (
+                            "⚠️ MCP 工具执行失败\n\n"
+                            f"**请求工具**: {requested_tool_name}\n"
+                            f"**实际工具**: {resolved_tool_name}\n"
+                            f"**错误**: {mcp_result.error or 'unknown'}\n"
+                            "请调整参数后重试。"
+                        )
+
+                    elif not local_tool_available:
+                        await self.emit_tool_result(
+                            resolved_tool_name,
+                            mcp_output,
+                            0,
+                            tool_call_id=tool_call_id,
+                            tool_status="failed",
+                            alias_used=alias_used,
+                            input_repaired=repaired_changes or None,
+                            extra_metadata=merged_meta or None,
+                        )
+                        return (
+                            "⚠️ MCP 工具执行失败且无本地回退\n\n"
+                            f"**请求工具**: {requested_tool_name}\n"
+                            f"**实际工具**: {resolved_tool_name}\n"
+                            f"**错误**: {mcp_result.error or 'unknown'}"
+                        )
+
+            if not local_tool_available:
+                return (
+                    "⚠️ 工具不可用\n\n"
+                    f"**请求工具**: {requested_tool_name}\n"
+                    f"**实际工具**: {resolved_tool_name}\n"
+                    "MCP 未处理且本地工具不可用。"
                 )
 
             import time
@@ -1519,6 +2325,11 @@ class BaseAgent(ABC):
                     tool_status="failed",
                     alias_used=alias_used,
                     input_repaired=repaired_changes or None,
+                    extra_metadata=(
+                        {**write_scope_metadata, **mcp_fallback_metadata}
+                        if (write_scope_metadata or mcp_fallback_metadata)
+                        else None
+                    ),
                 )
                 return (
                     f"⚠️ 工具 '{resolved_tool_name}' 执行超时 ({timeout}秒)，"
@@ -1534,6 +2345,11 @@ class BaseAgent(ABC):
                     tool_status="cancelled",
                     alias_used=alias_used,
                     input_repaired=repaired_changes or None,
+                    extra_metadata=(
+                        {**write_scope_metadata, **mcp_fallback_metadata}
+                        if (write_scope_metadata or mcp_fallback_metadata)
+                        else None
+                    ),
                 )
                 return "⚠️ 任务已取消"
 
@@ -1548,13 +2364,34 @@ class BaseAgent(ABC):
                 tool_status="completed" if result.success else "failed",
                 alias_used=alias_used,
                 input_repaired=repaired_changes or None,
+                extra_metadata=(
+                    {**write_scope_metadata, **mcp_fallback_metadata}
+                    if (write_scope_metadata or mcp_fallback_metadata)
+                    else None
+                ),
             )
+
+            if retry_guard_key:
+                if result.success:
+                    self._deterministic_failure_counts.pop(retry_guard_key, None)
+                    self._deterministic_failure_last_error.pop(retry_guard_key, None)
+                elif self._is_deterministic_error_message(str(result.error or "")):
+                    self._deterministic_failure_counts[retry_guard_key] = (
+                        self._deterministic_failure_counts.get(retry_guard_key, 0) + 1
+                    )
+                    self._deterministic_failure_last_error[retry_guard_key] = str(result.error or "")
 
             # 🔥 工具执行后再次检查取消
             if self.is_cancelled:
                 return "⚠️ 任务已取消"
 
             if result.success:
+                metadata_dict = dict(result.metadata) if isinstance(result.metadata, dict) else {}
+                self._record_tool_context(
+                    tool_name=resolved_tool_name,
+                    tool_input=repaired_input,
+                    tool_metadata=metadata_dict,
+                )
                 output = str(result.data)
 
                 # 包含 metadata 中的额外信息
@@ -1570,9 +2407,20 @@ class BaseAgent(ABC):
                         output[:MAX_EVENT_PAYLOAD_CHARS]
                         + f"\n\n... [输出已截断，共 {len(str(result.data))} 字符]"
                     )
+                if not is_write_tool:
+                    self._tool_success_cache[tool_call_key] = output
+                    if len(self._tool_success_cache) > 500:
+                        oldest_key = next(iter(self._tool_success_cache))
+                        self._tool_success_cache.pop(oldest_key, None)
                 return output
             else:
                 # 🔥 输出详细的错误信息，包括原始错误
+                guard_hint = ""
+                if retry_guard_key and self._deterministic_failure_counts.get(retry_guard_key, 0) >= 2:
+                    guard_hint = (
+                        "\n\n同一输入已连续出现确定性失败。"
+                        "后续相同输入将被系统短路，请修改参数或改用其他工具。"
+                    )
                 error_msg = f"""⚠️ 工具执行失败
 
 **请求工具**: {requested_tool_name}
@@ -1580,7 +2428,7 @@ class BaseAgent(ABC):
 **参数**: {json.dumps(repaired_input, ensure_ascii=False, indent=2) if repaired_input else '无'}
 **错误**: {result.error}
 
-请根据错误信息调整参数或尝试其他方法。"""
+请根据错误信息调整参数或尝试其他方法。{guard_hint}"""
                 return error_msg
 
         except asyncio.CancelledError:
@@ -1599,6 +2447,11 @@ class BaseAgent(ABC):
                     tool_status="failed",
                     alias_used=alias_used,
                     input_repaired=repaired_changes or None,
+                    extra_metadata=(
+                        {**write_scope_metadata, **mcp_fallback_metadata}
+                        if (write_scope_metadata or mcp_fallback_metadata)
+                        else None
+                    ),
                 )
             # 🔥 输出完整的原始错误信息，包括堆栈跟踪
             error_msg = f"""❌ 工具执行异常

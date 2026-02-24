@@ -5,6 +5,7 @@
 """
 
 import logging
+import math
 import os
 import uuid
 from datetime import datetime, timezone
@@ -97,6 +98,44 @@ class CreateVulnerabilityReportTool(AgentTool):
     @property
     def args_schema(self):
         return VulnerabilityReportInput
+
+    @staticmethod
+    def _coerce_optional_float(value: Any) -> Optional[float]:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            numeric = float(value)
+            return numeric if math.isfinite(numeric) else None
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            try:
+                numeric = float(text)
+            except ValueError:
+                return None
+            return numeric if math.isfinite(numeric) else None
+        return None
+
+    @classmethod
+    def _coerce_confidence(cls, value: Any) -> float:
+        confidence_map = {
+            "critical": 0.95,
+            "high": 0.85,
+            "medium": 0.65,
+            "low": 0.35,
+            "info": 0.2,
+        }
+
+        if isinstance(value, str):
+            label = value.strip().lower()
+            if label in confidence_map:
+                return confidence_map[label]
+
+        numeric = cls._coerce_optional_float(value)
+        if numeric is None:
+            numeric = 0.8
+        return max(0.0, min(1.0, numeric))
     
     async def _execute(
         self,
@@ -113,9 +152,9 @@ class CreateVulnerabilityReportTool(AgentTool):
         poc: Optional[str] = None,
         impact: Optional[str] = None,
         recommendation: Optional[str] = None,
-        confidence: float = 0.8,
+        confidence: Any = 0.8,
         cwe_id: Optional[str] = None,
-        cvss_score: Optional[float] = None,
+        cvss_score: Any = None,
         **kwargs
     ) -> ToolResult:
         """创建漏洞报告"""
@@ -139,7 +178,7 @@ class CreateVulnerabilityReportTool(AgentTool):
             if not os.path.isfile(full_path):
                 # 尝试作为绝对路径
                 if not (os.path.isabs(clean_path) and os.path.isfile(clean_path)):
-                    logger.warning(f"[ReportTool] 🚫 拒绝报告: 文件不存在 '{file_path}'")
+                    logger.warning(f"[ReportTool] 拒绝报告: 文件不存在 '{file_path}'")
                     return ToolResult(
                         success=False,
                         error=f"无法创建报告：文件 '{file_path}' 在项目中不存在。"
@@ -159,6 +198,7 @@ class CreateVulnerabilityReportTool(AgentTool):
         valid_types = [
             "sql_injection", "nosql_injection", "xss", "ssrf", 
             "command_injection", "code_injection", "path_traversal",
+            "buffer_overflow",
             "file_inclusion", "idor", "auth_bypass", "broken_auth",
             "sensitive_data_exposure", "hardcoded_secret", "weak_crypto",
             "xxe", "deserialization", "race_condition", "business_logic",
@@ -169,8 +209,8 @@ class CreateVulnerabilityReportTool(AgentTool):
             # 允许未知类型，但记录警告
             logger.warning(f"Unknown vulnerability type: {vulnerability_type}")
         
-        # 验证置信度
-        confidence = max(0.0, min(1.0, confidence))
+        confidence_value = self._coerce_confidence(confidence)
+        cvss_score_value = self._coerce_optional_float(cvss_score)
         
         # 生成报告ID
         report_id = f"vuln_{uuid.uuid4().hex[:8]}"
@@ -191,9 +231,9 @@ class CreateVulnerabilityReportTool(AgentTool):
             "poc": poc,
             "impact": impact,
             "recommendation": recommendation or self._get_default_recommendation(vulnerability_type),
-            "confidence": confidence,
+            "confidence": confidence_value,
             "cwe_id": cwe_id,
-            "cvss_score": cvss_score,
+            "cvss_score": cvss_score_value,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "is_verified": True,  # 通过此工具创建的都视为已验证
         }
@@ -205,18 +245,10 @@ class CreateVulnerabilityReportTool(AgentTool):
         logger.info(f"Created vulnerability report: [{severity.upper()}] {title}")
         
         # 返回结果
-        severity_emoji = {
-            "critical": "🔴",
-            "high": "🟠",
-            "medium": "🟡",
-            "low": "🟢",
-            "info": "🔵",
-        }.get(severity, "⚪")
-        
         return ToolResult(
             success=True,
             data={
-                "message": f"漏洞报告已创建: {severity_emoji} [{severity.upper()}] {title}",
+                "message": f"漏洞报告已创建: [{severity.upper()}] {title}",
                 "report_id": report_id,
                 "severity": severity,
             },

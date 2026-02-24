@@ -3,6 +3,7 @@ import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { LOG_TYPE_CONFIG, SEVERITY_COLORS } from "../constants";
 import type { LogEntryProps, ToolStatus } from "../types";
+import { sanitizeAuditText } from "../utils";
 
 const LOG_TYPE_LABELS: Record<string, string> = {
   thinking: "思考",
@@ -31,11 +32,7 @@ const TOOL_STATUS_CLASS: Record<ToolStatus, string> = {
 };
 
 function formatTitle(title: string): string {
-  return title
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, "")
-    .replace(/[\u{2600}-\u{26FF}]/gu, "")
-    .replace(/[✅🔗🛑✕⚠️❌⚡🔄🔍💡📁📄🐛🛡️]/g, "")
-    .trim();
+  return sanitizeAuditText(title);
 }
 
 export const LogEntry = memo(function LogEntry({
@@ -59,10 +56,18 @@ export const LogEntry = memo(function LogEntry({
     ) : (
       config.icon
     );
-  const formattedTitle = formatTitle(item.title) || item.title;
-  const contentPreview = item.content
-    ? item.content.slice(0, 220) + (item.content.length > 220 ? "..." : "")
+  const formattedTitle = formatTitle(item.title) || sanitizeAuditText(item.title);
+  const sanitizedContent = item.content ? sanitizeAuditText(item.content) : "";
+  const contentPreview = sanitizedContent
+    ? sanitizedContent.slice(0, 220) + (sanitizedContent.length > 220 ? "..." : "")
     : "";
+  const normalizedTitle = formattedTitle.replace(/\.\.\.$/, "").trim();
+  const normalizedPreview = contentPreview.replace(/\.\.\.$/, "").trim();
+  const shouldRenderPreview =
+    Boolean(contentPreview) &&
+    normalizedPreview !== formattedTitle &&
+    normalizedPreview !== normalizedTitle &&
+    !(normalizedTitle && normalizedPreview.startsWith(normalizedTitle));
 
   return (
     <div
@@ -90,7 +95,7 @@ export const LogEntry = memo(function LogEntry({
             <p className="text-sm font-semibold text-foreground leading-5 line-clamp-2 break-words">
               {formattedTitle}
             </p>
-            {contentPreview && (
+            {shouldRenderPreview && (
               <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-2">
                 {contentPreview}
               </p>

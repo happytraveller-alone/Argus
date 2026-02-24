@@ -32,13 +32,21 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
     llvm \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Node.js (用于 JavaScript/TypeScript 代码执行 和 npm audit)
+# 安装 Node.js 22+ (用于 JavaScript/TypeScript 代码执行、npm audit、qmd)
 # 使用淘宝/阿里云镜像加速
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && npm config set registry https://registry.npmmirror.com \
+    && node --version && npm --version \
     && rm -rf /var/lib/apt/lists/*
+
+# 安装 MCP 与 qmd CLI（供沙盒域运行时调用）
+RUN npm install -g \
+    @modelcontextprotocol/server-filesystem \
+    @modelcontextprotocol/server-memory \
+    @modelcontextprotocol/server-sequential-thinking \
+    @tobilu/qmd
 
 # 安装 Go (使用阿里云镜像)
 ENV PATH=$PATH:/usr/local/go/bin
@@ -73,6 +81,10 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
     sqlparse \
     bandit \
     safety
+
+# code-index-mcp 是 Python 包（非 npm 包）
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+    pip install --no-cache-dir -i https://pypi.org/simple code-index-mcp
 
 # 安装 Opengrep CLI（仅使用官方安装脚本）
 ARG OPENGREP_VERSION=v1.15.1
@@ -115,7 +127,11 @@ RUN groupadd -g 1000 sandbox && \
     useradd -u 1000 -g sandbox -m -s /bin/bash sandbox
 
 # 创建工作目录
-RUN mkdir -p /workspace /tmp/sandbox && \
+RUN mkdir -p /workspace /tmp/sandbox \
+    /workspace/.deepaudit/mcp/code-index \
+    /workspace/.deepaudit/mcp/xdg-data \
+    /workspace/.deepaudit/mcp/xdg-cache \
+    /workspace/.deepaudit/qmd && \
     chown -R sandbox:sandbox /workspace /tmp/sandbox
 
 # 设置环境变量
@@ -123,6 +139,10 @@ ENV HOME=/home/sandbox
 ENV PATH=/home/sandbox/.local/bin:$PATH
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV XDG_DATA_HOME=/workspace/.deepaudit/mcp/xdg-data
+ENV XDG_CACHE_HOME=/workspace/.deepaudit/mcp/xdg-cache
+ENV QMD_DATA_DIR=/workspace/.deepaudit/qmd
+ENV CODE_INDEX_INDEXER_PATH=/workspace/.deepaudit/mcp/code-index
 
 # 限制 Python 导入路径
 ENV PYTHONPATH=/workspace

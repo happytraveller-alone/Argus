@@ -179,6 +179,74 @@ class Settings(BaseSettings):
     JOERN_MCP_QUERY_TIMEOUT_SEC: int = 60
     JOERN_MCP_PREFER: bool = False
 
+    # Generic MCP runtime configuration
+    MCP_ENABLED: bool = True
+    MCP_PREFER: bool = True
+    MCP_TIMEOUT_SECONDS: int = 30
+    MCP_REQUIRE_ALL_READY_ON_STARTUP: bool = True
+    MCP_REQUIRED_RUNTIME_DOMAIN: str = "all"  # backend | sandbox | all
+    MCP_RUNTIME_MODE_DEFAULT: str = "backend_then_sandbox"
+
+    # Write policy hard constraints (applies to every task)
+    MCP_WRITE_HARD_LIMIT: int = 50
+    MCP_DEFAULT_MAX_WRITABLE_FILES_PER_TASK: int = 50
+    MCP_ALL_AGENTS_WRITABLE: bool = True
+    MCP_REQUIRE_EVIDENCE_BINDING: bool = True
+    MCP_FORBID_PROJECT_WIDE_WRITES: bool = True
+
+    # MCP adapters (stdio)
+    MCP_FILESYSTEM_ENABLED: bool = True
+    MCP_FILESYSTEM_RUNTIME_MODE: str = "backend_then_sandbox"
+    MCP_FILESYSTEM_COMMAND: str = "npx"
+    MCP_FILESYSTEM_ARGS: str = "-y @modelcontextprotocol/server-filesystem ."
+    MCP_FILESYSTEM_SANDBOX_ENABLED: bool = True
+    MCP_FILESYSTEM_SANDBOX_COMMAND: str = "npx"
+    MCP_FILESYSTEM_SANDBOX_ARGS: str = "-y @modelcontextprotocol/server-filesystem ."
+
+    MCP_CODE_INDEX_ENABLED: bool = False
+    MCP_CODE_INDEX_RUNTIME_MODE: str = "backend_then_sandbox"
+    MCP_CODE_INDEX_COMMAND: str = "code-index-mcp"
+    MCP_CODE_INDEX_ARGS: str = "--indexer-path /app/data/mcp/code-index"
+    MCP_CODE_INDEX_SANDBOX_ENABLED: bool = False
+    MCP_CODE_INDEX_SANDBOX_COMMAND: str = "code-index-mcp"
+    MCP_CODE_INDEX_SANDBOX_ARGS: str = "--indexer-path /app/data/mcp/code-index"
+
+    MCP_MEMORY_ENABLED: bool = False
+    MCP_MEMORY_RUNTIME_MODE: str = "backend_then_sandbox"
+    MCP_MEMORY_COMMAND: str = "npx"
+    MCP_MEMORY_ARGS: str = "-y @modelcontextprotocol/server-memory"
+    MCP_MEMORY_SANDBOX_ENABLED: bool = False
+    MCP_MEMORY_SANDBOX_COMMAND: str = "npx"
+    MCP_MEMORY_SANDBOX_ARGS: str = "-y @modelcontextprotocol/server-memory"
+
+    MCP_SEQUENTIAL_THINKING_ENABLED: bool = False
+    MCP_SEQUENTIAL_THINKING_RUNTIME_MODE: str = "backend_then_sandbox"
+    MCP_SEQUENTIAL_THINKING_COMMAND: str = "npx"
+    MCP_SEQUENTIAL_THINKING_ARGS: str = "-y @modelcontextprotocol/server-sequential-thinking"
+    MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED: bool = False
+    MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND: str = "npx"
+    MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS: str = "-y @modelcontextprotocol/server-sequential-thinking"
+
+    MCP_QMD_ENABLED: bool = False
+    MCP_QMD_RUNTIME_MODE: str = "backend_then_sandbox"
+    MCP_QMD_COMMAND: str = "qmd"
+    MCP_QMD_ARGS: str = "mcp"
+    MCP_QMD_SANDBOX_ENABLED: bool = False
+    MCP_QMD_SANDBOX_COMMAND: str = "qmd"
+    MCP_QMD_SANDBOX_ARGS: str = "mcp"
+    QMD_COLLECTION_PREFIX: str = "project"
+    QMD_INDEX_GLOB: str = "**/*.{c,cc,cpp,cxx,h,hpp,hh,py,js,ts,tsx,java,go,rs,php,rb,swift}"
+    QMD_LAZY_INDEX_ENABLED: bool = True
+    QMD_AUTO_EMBED_ON_FIRST_USE: bool = False
+    QMD_DATA_DIR: str = "./data/qmd"
+
+    MCP_CODEBADGER_ENABLED: bool = False
+    MCP_CODEBADGER_RUNTIME_MODE: str = "backend_only"
+    MCP_CODEBADGER_BACKEND_URL: Optional[str] = None
+    MCP_CODEBADGER_SANDBOX_URL: Optional[str] = None
+
+    MCP_CATALOG_SOURCE_URL: str = ""
+
     # PoC trigger chain (source -> sink) extraction (Joern preferred, LLM fallback)
     POC_TRIGGER_CHAIN_ENABLED: bool = True
     POC_TRIGGER_CHAIN_MAX_FLOWS: int = 3

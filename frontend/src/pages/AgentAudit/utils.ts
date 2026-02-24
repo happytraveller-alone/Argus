@@ -5,6 +5,82 @@
 
 import type { AgentTreeNode, LogItem } from "./types";
 
+const AUDIT_EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F\u200D]/gu;
+const AUDIT_DECORATION_REGEX = /[◆◇■□●○★☆▶▷◀◁►◄•▪▫◉◎◌⏭⏮⏯⏹⏺⏸⏵⏴⏩⏪]/g;
+
+/**
+ * Remove emoji/decorative symbols from audit logs while preserving readable text.
+ */
+export function sanitizeAuditText(value: string): string {
+  if (!value) return "";
+  return String(value)
+    .replace(AUDIT_EMOJI_REGEX, "")
+    .replace(AUDIT_DECORATION_REGEX, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+/**
+ * Normalize finding path for UI display:
+ * - Prefer project-relative style
+ * - Strip absolute path prefix when fallback is needed
+ */
+export function normalizeAuditRelativePath(
+  value: string | null | undefined,
+): string | null {
+  const raw = sanitizeAuditText(String(value ?? ""))
+    .replace(/\\/g, "/")
+    .replace(/^file:\/\//i, "")
+    .trim();
+  if (!raw) return null;
+
+  const windowsAbsolute = /^[A-Za-z]:\//.test(raw);
+  let pathPart = raw;
+  let suffix = "";
+  if (!windowsAbsolute) {
+    const lineMatch = raw.match(/^(.*?):(\d+(?:-\d+)?)$/);
+    if (lineMatch) {
+      pathPart = String(lineMatch[1] || "").trim();
+      suffix = `:${lineMatch[2]}`;
+    }
+  }
+
+  if (!pathPart) return null;
+  while (pathPart.startsWith("./")) {
+    pathPart = pathPart.slice(2);
+  }
+
+  if (pathPart.startsWith("/")) {
+    const segments = pathPart.split("/").filter(Boolean);
+    if (!segments.length) return null;
+    const anchors = [
+      "src",
+      "app",
+      "backend",
+      "frontend",
+      "lib",
+      "include",
+      "tests",
+      "test",
+      "config",
+    ];
+    const anchorIndex = segments.findIndex((seg) => anchors.includes(seg));
+    if (anchorIndex >= 0) {
+      return `${segments.slice(anchorIndex).join("/")}${suffix}`;
+    }
+    return `${segments[segments.length - 1]}${suffix}`;
+  }
+
+  if (windowsAbsolute) {
+    const segments = pathPart.split("/").filter(Boolean);
+    const filename = segments[segments.length - 1] || pathPart;
+    return `${filename}${suffix}`;
+  }
+
+  return `${pathPart}${suffix}`;
+}
+
 /**
  * Build tree structure from flat node list
  */

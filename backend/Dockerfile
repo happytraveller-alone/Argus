@@ -108,6 +108,15 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
+# 安装 Node.js 22+（qmd 要求 >=22）
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends nodejs && \
+    node --version && npm --version && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
 # 安装 Opengrep CLI（仅使用官方安装脚本）
 ARG OPENGREP_VERSION=v1.15.1
 
@@ -127,6 +136,20 @@ RUN set -eux; \
     chmod +x /usr/local/bin/opengrep; \
     opengrep --version
 
+# 安装 MCP 相关运行时（npx + qmd CLI）
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm install -g \
+      @modelcontextprotocol/server-filesystem \
+      @modelcontextprotocol/server-memory \
+      @modelcontextprotocol/server-sequential-thinking \
+      @tobilu/qmd
+
+# MCP / QMD 持久化目录
+ENV XDG_DATA_HOME=/app/data/mcp/xdg-data
+ENV XDG_CACHE_HOME=/app/data/mcp/xdg-cache
+ENV QMD_DATA_DIR=/app/data/qmd
+ENV CODE_INDEX_INDEXER_PATH=/app/data/mcp/code-index
+
 
 
 # 从构建阶段复制虚拟环境、uv 和 gitleaks
@@ -135,11 +158,14 @@ COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 # COPY --from=builder /usr/local/bin/gitleaks /usr/local/bin/gitleaks
 COPY --from=builder /usr/bin/gitleaks /usr/local/bin/gitleaks
 
+# code-index-mcp 是 Python 包（非 npm 包），安装到系统 PATH
+RUN pip install --no-cache-dir code-index-mcp
+
 # 复制应用代码
 COPY . .
 
 # 创建上传目录并设置启动脚本权限
-RUN mkdir -p /app/uploads/zip_files && \
+RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/code-index /app/data/qmd && \
     chmod +x /app/docker-entrypoint.sh
 
 # 暴露端口

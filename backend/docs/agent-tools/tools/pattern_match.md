@@ -4,7 +4,7 @@
 🔍 快速扫描代码中的危险模式和常见漏洞。
 
 支持两种使用方式：
-1. ⭐ 推荐：直接扫描文件 - 使用 scan_file 参数指定文件路径
+1. ⭐ 推荐：直接扫描文件或目录 - 使用 scan_file 参数指定文件路径或目录
 2. 传入代码内容 - 使用 code 参数传入已读取的代码
 
 支持的漏洞类型: sql_injection, xss, command_injection, path_traversal, ssrf, deserialization, hardcoded_secret, weak_crypto
@@ -14,7 +14,7 @@
 - 方式2: {"code": "...", "file_path": "app/views.py"}
 
 输入参数:
-- scan_file (推荐): 要扫描的文件路径（相对于项目根目录）
+- scan_file (推荐): 要扫描的文件或目录路径（相对于项目根目录）
 - code: 要扫描的代码内容（与 scan_file 二选一）
 - file_path: 文件路径（用于上下文，如果使用 code 模式）
 - pattern_types: 要检测的漏洞类型列表
@@ -33,7 +33,7 @@
 
 ## Inputs
 - `code` (any, optional): 要扫描的代码内容（与 scan_file 二选一）
-- `scan_file` (any, optional): 要扫描的文件路径（相对于项目根目录，与 code 二选一）
+- `scan_file` (any, optional): 要扫描的文件或目录路径（相对于项目根目录，与 code 二选一）
 - `file_path` (string, optional): 文件路径（用于上下文）
 - `pattern_types` (any, optional): 要检测的漏洞类型列表，如 ['sql_injection', 'xss']。为空则检测所有类型
 - `language` (any, optional): 编程语言，用于选择特定模式
@@ -42,9 +42,9 @@
 ### Example Input
 ```json
 {
-  "code": null,
-  "scan_file": null,
-  "file_path": "unknown"
+  "scan_file": "src",
+  "pattern_types": ["command_injection", "path_traversal"],
+  "language": "c"
 }
 ```
 

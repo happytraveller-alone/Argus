@@ -67,6 +67,23 @@ class PatternMatchTool(AgentTool):
         """
         super().__init__()
         self.project_root = project_root
+
+    MAX_SCAN_FILES = 200
+    MAX_FILE_SIZE_BYTES = 1024 * 1024
+    SCAN_EXCLUDE_DIRS = {
+        ".git", "node_modules", "vendor", "dist", "build", "__pycache__", ".pytest_cache"
+    }
+    SCAN_TEXT_EXTENSIONS = {
+        ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".php", ".go", ".rb", ".rs",
+        ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".swift", ".kt", ".kts",
+        ".m", ".mm", ".cs", ".scala", ".sh", ".bash", ".zsh", ".sql", ".yaml", ".yml",
+        ".xml", ".json", ".toml", ".ini", ".cfg", ".conf",
+    }
+    BINARY_EXTENSIONS = {
+        ".so", ".dll", ".dylib", ".a", ".o", ".obj", ".class", ".jar", ".war",
+        ".exe", ".bin", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg",
+        ".pdf", ".zip", ".tar", ".gz", ".7z", ".rar",
+    }
     
     # 危险模式定义
     PATTERNS: Dict[str, Dict[str, Any]] = {
@@ -341,8 +358,9 @@ class PatternMatchTool(AgentTool):
         **kwargs
     ) -> ToolResult:
         """执行模式匹配 - 支持直接文件扫描或代码内容扫描"""
-        
-        # 🔥 模式1: 直接扫描文件
+        normalized_pattern_types = self._normalize_pattern_types(pattern_types)
+
+        # 🔥 模式1: 直接扫描文件 / 目录
         if scan_file:
             if not self.project_root:
                 return ToolResult(
@@ -364,7 +382,15 @@ class PatternMatchTool(AgentTool):
                     success=False,
                     error=f"文件不存在: {scan_file}"
                 )
-            
+
+            if os.path.isdir(full_path):
+                return self._scan_directory(
+                    full_path=full_path,
+                    scan_root=scan_file,
+                    pattern_types=normalized_pattern_types,
+                    language=language,
+                )
+
             try:
                 with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                     code = f.read()
@@ -381,47 +407,81 @@ class PatternMatchTool(AgentTool):
                 success=False,
                 error="必须提供 scan_file（文件路径）或 code（代码内容）其中之一"
             )
-        
+
+        matches = self._scan_code_content(
+            code=code,
+            file_path=file_path,
+            pattern_types=normalized_pattern_types,
+            language=language,
+        )
+
+        if not matches:
+            return ToolResult(
+                success=True,
+                data="没有检测到已知的危险模式",
+                metadata={"patterns_checked": len(normalized_pattern_types), "matches": 0}
+            )
+        return self._build_result(
+            matches=matches,
+            patterns_checked=len(normalized_pattern_types),
+        )
+
+    @staticmethod
+    def _normalize_pattern_types(pattern_types: Optional[Any]) -> List[str]:
+        if pattern_types is None:
+            return list(PatternMatchTool.PATTERNS.keys())
+
+        normalized: List[str] = []
+        if isinstance(pattern_types, str):
+            candidates = re.split(r"[|,;]", pattern_types)
+            normalized = [item.strip() for item in candidates if item.strip()]
+        elif isinstance(pattern_types, list):
+            normalized = [str(item).strip() for item in pattern_types if str(item).strip()]
+        else:
+            normalized = [str(pattern_types).strip()] if str(pattern_types).strip() else []
+
+        known = [item for item in normalized if item in PatternMatchTool.PATTERNS]
+        return known or list(PatternMatchTool.PATTERNS.keys())
+
+    def _scan_code_content(
+        self,
+        code: str,
+        file_path: str,
+        pattern_types: List[str],
+        language: Optional[str],
+    ) -> List[PatternMatch]:
         matches: List[PatternMatch] = []
         lines = code.split('\n')
-        
-        # 确定要检查的漏洞类型
+
+        language_value = language or self._detect_language(file_path)
         types_to_check = pattern_types or list(self.PATTERNS.keys())
-        
-        # 自动检测语言
-        if not language:
-            language = self._detect_language(file_path)
-        
+
         for vuln_type in types_to_check:
             if vuln_type not in self.PATTERNS:
                 continue
-            
+
             pattern_config = self.PATTERNS[vuln_type]
             patterns_dict = pattern_config["patterns"]
-            
-            # 获取语言特定模式和通用模式
+
             patterns_to_use = []
-            if language and language in patterns_dict:
-                patterns_to_use.extend(patterns_dict[language])
+            if language_value and language_value in patterns_dict:
+                patterns_to_use.extend(patterns_dict[language_value])
             if "_common" in patterns_dict:
                 patterns_to_use.extend(patterns_dict["_common"])
-            
-            # 如果没有特定语言模式，尝试使用所有模式
+
             if not patterns_to_use:
                 for lang, pats in patterns_dict.items():
                     if lang != "_common":
                         patterns_to_use.extend(pats)
-            
-            # 执行匹配
+
             for pattern, pattern_name in patterns_to_use:
                 try:
                     for i, line in enumerate(lines):
                         if re.search(pattern, line, re.IGNORECASE):
-                            # 获取上下文
                             start = max(0, i - 2)
                             end = min(len(lines), i + 3)
                             context = '\n'.join(f"{j+1}: {lines[j]}" for j in range(start, end))
-                            
+
                             matches.append(PatternMatch(
                                 pattern_name=pattern_name,
                                 pattern_type=vuln_type,
@@ -434,49 +494,162 @@ class PatternMatchTool(AgentTool):
                             ))
                 except re.error:
                     continue
-        
+
+        return matches
+
+    def _scan_directory(
+        self,
+        full_path: str,
+        scan_root: str,
+        pattern_types: List[str],
+        language: Optional[str],
+    ) -> ToolResult:
+        base_root = os.path.normpath(self.project_root or "")
+        matches: List[PatternMatch] = []
+        files_scanned = 0
+        skipped_files: List[Dict[str, str]] = []
+        reached_limit = False
+
+        for root, dirs, files in os.walk(full_path):
+            rel_dir = os.path.relpath(root, base_root).replace("\\", "/")
+            if rel_dir == ".":
+                rel_dir = ""
+            dirs[:] = [
+                d for d in dirs
+                if d not in self.SCAN_EXCLUDE_DIRS
+                and not d.startswith(".")
+            ]
+
+            for filename in files:
+                if files_scanned >= self.MAX_SCAN_FILES:
+                    reached_limit = True
+                    break
+
+                ext = os.path.splitext(filename)[1].lower()
+                if ext in self.BINARY_EXTENSIONS:
+                    continue
+                if ext and ext not in self.SCAN_TEXT_EXTENSIONS:
+                    continue
+
+                file_full_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(file_full_path, base_root).replace("\\", "/")
+
+                try:
+                    file_size = os.path.getsize(file_full_path)
+                except Exception:
+                    skipped_files.append({"file": rel_path, "reason": "无法读取文件大小"})
+                    continue
+
+                if file_size > self.MAX_FILE_SIZE_BYTES:
+                    skipped_files.append({
+                        "file": rel_path,
+                        "reason": f"文件过大({file_size} bytes)",
+                    })
+                    continue
+
+                try:
+                    with open(file_full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                except Exception as exc:
+                    skipped_files.append({"file": rel_path, "reason": f"读取失败: {exc}"})
+                    continue
+
+                files_scanned += 1
+                matches.extend(
+                    self._scan_code_content(
+                        code=content,
+                        file_path=rel_path,
+                        pattern_types=pattern_types,
+                        language=language,
+                    )
+                )
+
+            if reached_limit:
+                break
+
+        if files_scanned == 0:
+            reason = (
+                "目录中没有可扫描的源码文件，请传入具体源码文件，或确认目录下存在可读文本源码。"
+            )
+            return ToolResult(
+                success=False,
+                error=reason,
+                metadata={
+                    "scan_root": scan_root,
+                    "files_scanned": 0,
+                    "skipped_files": skipped_files[:20],
+                },
+            )
+
         if not matches:
             return ToolResult(
                 success=True,
                 data="没有检测到已知的危险模式",
-                metadata={"patterns_checked": len(types_to_check), "matches": 0}
+                metadata={
+                    "patterns_checked": len(pattern_types),
+                    "matches": 0,
+                    "scan_root": scan_root,
+                    "files_scanned": files_scanned,
+                    "skipped_files": skipped_files[:20],
+                    "scan_limited": reached_limit,
+                },
             )
-        
-        # 格式化输出
-        output_parts = [f"⚠️ 检测到 {len(matches)} 个潜在问题:\n"]
-        
-        # 按严重程度排序
+
+        return self._build_result(
+            matches=matches,
+            patterns_checked=len(pattern_types),
+            extra_metadata={
+                "scan_root": scan_root,
+                "files_scanned": files_scanned,
+                "skipped_files": skipped_files[:20],
+                "scan_limited": reached_limit,
+            },
+        )
+
+    def _build_result(
+        self,
+        matches: List[PatternMatch],
+        patterns_checked: int,
+        extra_metadata: Optional[Dict[str, Any]] = None,
+    ) -> ToolResult:
+        output_parts = [f"检测到 {len(matches)} 个潜在问题:\n"]
+
         severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
         matches.sort(key=lambda x: severity_order.get(x.severity, 4))
-        
+
         for match in matches:
-            severity_icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(match.severity, "⚪")
-            output_parts.append(f"\n{severity_icon} [{match.severity.upper()}] {match.pattern_type}")
+            output_parts.append(f"\n[{match.severity.upper()}] {match.pattern_type}")
             output_parts.append(f"   位置: {match.file_path}:{match.line_number}")
             output_parts.append(f"   模式: {match.pattern_name}")
             output_parts.append(f"   描述: {match.description}")
             output_parts.append(f"   匹配: {match.matched_text}")
             output_parts.append(f"   上下文:\n{match.context}")
-        
+
+        metadata = {
+            "patterns_checked": patterns_checked,
+            "matches": len(matches),
+            "by_severity": {
+                s: len([m for m in matches if m.severity == s])
+                for s in ["critical", "high", "medium", "low"]
+            },
+            "details": [
+                {
+                    "type": m.pattern_type,
+                    "severity": m.severity,
+                    "line": m.line_number,
+                    "pattern": m.pattern_name,
+                    "file_path": m.file_path,
+                }
+                for m in matches
+            ],
+        }
+        if extra_metadata:
+            metadata.update(extra_metadata)
+
         return ToolResult(
             success=True,
             data="\n".join(output_parts),
-            metadata={
-                "matches": len(matches),
-                "by_severity": {
-                    s: len([m for m in matches if m.severity == s])
-                    for s in ["critical", "high", "medium", "low"]
-                },
-                "details": [
-                    {
-                        "type": m.pattern_type,
-                        "severity": m.severity,
-                        "line": m.line_number,
-                        "pattern": m.pattern_name,
-                    }
-                    for m in matches
-                ]
-            }
+            metadata=metadata,
         )
     
     def _detect_language(self, file_path: str) -> Optional[str]:
@@ -498,4 +671,3 @@ class PatternMatchTool(AgentTool):
                 return lang
         
         return None
-

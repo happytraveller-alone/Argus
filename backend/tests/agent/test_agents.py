@@ -53,6 +53,8 @@ class TestReconAgent:
         # 验证返回数据结构
         data = result.data
         assert "tech_stack" in data
+        assert "project_profile" in data
+        assert isinstance(data.get("project_profile"), dict)
         assert "entry_points" in data or "high_risk_areas" in data
     
     @pytest.mark.asyncio
@@ -210,4 +212,3 @@ class TestAgentConfig:
         assert config.pattern == AgentPattern.PLAN_AND_EXECUTE
         assert config.max_iterations == 50
         assert config.temperature == 0.5
-

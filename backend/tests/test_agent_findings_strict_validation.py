@@ -94,3 +94,67 @@ async def test_save_findings_strict_validation_filters_invalid_and_keeps_enriche
     assert saved_finding.code_context
     assert saved_finding.verification_result["authenticity"] == "likely"
     assert saved_finding.verification_result["reachability"] == "likely_reachable"
+
+
+@pytest.mark.asyncio
+async def test_save_findings_discards_false_positive_payload(tmp_path):
+    source_file = tmp_path / "app.py"
+    source_file.write_text(
+        "\n".join(
+            [
+                "def run(user_input):",
+                "    dangerous_call(user_input)",
+                "    return user_input",
+                "",
+                "def dangerous_call(value):",
+                "    return value",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+
+    diagnostics = {}
+    findings = [
+        {
+            "title": "valid likely finding",
+            "file_path": "app.py",
+            "line_start": 2,
+            "line_end": 2,
+            "description": "dangerous call is reachable",
+            "code_snippet": "dangerous_call(user_input)",
+            "verdict": "likely",
+            "reachability": "likely_reachable",
+            "verification_details": "matched dangerous call in source",
+            "verification_result": {},
+        },
+        {
+            "title": "false positive should be discarded",
+            "file_path": "app.py",
+            "line_start": 2,
+            "line_end": 2,
+            "description": "cannot reproduce",
+            "code_snippet": "dangerous_call(user_input)",
+            "verdict": "false_positive",
+            "reachability": "unreachable",
+            "verification_details": "flow shows unreachable",
+            "verification_result": {},
+        },
+    ]
+
+    saved_count = await _save_findings(
+        db,
+        task_id="task-fp-discard",
+        findings=findings,
+        project_root=str(tmp_path),
+        save_diagnostics=diagnostics,
+    )
+
+    assert saved_count == 1
+    db.add.assert_called_once()
+    assert diagnostics["saved_count"] == 1
+    assert diagnostics["filtered_reasons"]["false_positive_discarded"] == 1

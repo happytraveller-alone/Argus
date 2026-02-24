@@ -43,6 +43,8 @@ services:
     volumes:
       # - ./backend/app:/app/app:ro  # 挂载代码目录，修改后自动生效
       - backend_uploads:/app/uploads
+      - mcp_data:/app/data/mcp
+      - qmd_data:/app/data/qmd
       - /tmp/deepaudit:/tmp/deepaudit # ZIP/Repo 工作目录必须对宿主机可见（供沙箱/Joern MCP 挂载）
       - /var/run/docker.sock:/var/run/docker.sock # 沙箱执行必须
     ports:
@@ -57,6 +59,20 @@ services:
       - AGENT_ENABLED=true
       - SANDBOX_ENABLED=true
       - SANDBOX_IMAGE=deepaudit/sandbox:latest  # 使用本地构建的沙箱镜像
+      - MCP_ENABLED=true
+      - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
+      - MCP_REQUIRED_RUNTIME_DOMAIN=all
+      - MCP_FILESYSTEM_ENABLED=true
+      - MCP_FILESYSTEM_SANDBOX_ENABLED=true
+      - MCP_CODE_INDEX_ENABLED=true
+      - MCP_CODE_INDEX_SANDBOX_ENABLED=true
+      - MCP_MEMORY_ENABLED=true
+      - MCP_MEMORY_SANDBOX_ENABLED=true
+      - MCP_SEQUENTIAL_THINKING_ENABLED=true
+      - MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED=true
+      - MCP_QMD_ENABLED=true
+      - MCP_QMD_SANDBOX_ENABLED=true
+      - QMD_DATA_DIR=/app/data/qmd
       # Enable Joern MCP fallback (CodeBadger). Best-effort when the profile isn't enabled.
       - JOERN_MCP_ENABLED=true
       # 禁用代理设置，防止容器内无法连接外部 API
@@ -199,5 +215,7 @@ networks:
 volumes:
   postgres_data:
   backend_uploads:
+  mcp_data:
+  qmd_data:
   redis_data:
   codebadger_playground:

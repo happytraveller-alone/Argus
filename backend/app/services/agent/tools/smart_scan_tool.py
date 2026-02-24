@@ -484,7 +484,7 @@ class QuickAuditTool(AgentTool):
     
     @property
     def description(self) -> str:
-        return """🎯 快速文件审计工具 - 对单个文件进行全面安全分析
+        return """快速文件审计工具 - 对单个文件进行全面安全分析
 
 当 smart_scan 发现高风险文件后，使用此工具进行深入审计。
 

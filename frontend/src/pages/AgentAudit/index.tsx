@@ -52,11 +52,16 @@ import {
 import ReportExportDialog from "./components/ReportExportDialog";
 import { useAgentAuditState } from "./hooks";
 import { POLLING_INTERVALS, TASK_PHASE_LABELS } from "./constants";
-import { cleanThinkingContent } from "./utils";
+import {
+  cleanThinkingContent,
+  normalizeAuditRelativePath,
+  sanitizeAuditText,
+} from "./utils";
 import type {
   BootstrapInputsSummary,
   DetailViewState,
   FindingsViewFilters,
+  LogItem,
 } from "./types";
 
 import type { RealtimeMergedFindingItem } from "./components/RealtimeFindingsPanel";
@@ -65,6 +70,8 @@ const EVENT_PAGE_SIZE = 500;
 const EVENT_BATCH_SAFETY_LIMIT = 200;
 const FINDINGS_REFRESH_INTERVAL = 10000;
 const BOOTSTRAP_FINDING_PAGE_SIZE = 200;
+const AUTO_SCROLL_BY_PROJECT_STORAGE_KEY = "agentAudit.autoScrollByProject.v1";
+const EVENT_DEDUP_WINDOW_SIZE = 5000;
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -94,6 +101,51 @@ const LOG_TYPE_LABELS: Record<string, string> = {
   user: "用户",
   progress: "进度",
 };
+
+type AutoScrollByProjectState = Record<string, boolean>;
+
+function loadAutoScrollByProjectState(): AutoScrollByProjectState {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(AUTO_SCROLL_BY_PROJECT_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const normalized: AutoScrollByProjectState = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "boolean" && key.trim()) {
+        normalized[key] = value;
+      }
+    }
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+function getPersistedAutoScroll(projectId: string): boolean {
+  const state = loadAutoScrollByProjectState();
+  if (Object.prototype.hasOwnProperty.call(state, projectId)) {
+    return state[projectId];
+  }
+  return true;
+}
+
+function persistAutoScroll(projectId: string, enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    const state = loadAutoScrollByProjectState();
+    state[projectId] = enabled;
+    window.localStorage.setItem(
+      AUTO_SCROLL_BY_PROJECT_STORAGE_KEY,
+      JSON.stringify(state),
+    );
+  } catch {
+    // ignore storage errors to avoid blocking runtime behavior
+  }
+}
 
 type UnifiedAgentEvent = {
   type?: string;
@@ -146,6 +198,45 @@ function extractToolOutputText(value: unknown): string {
     }
   }
   return eventToString(value);
+}
+
+function extractToolCallId(metadata: Record<string, unknown> | undefined): string | null {
+  const value = metadata?.tool_call_id;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function buildEventDedupKey(
+  eventType: string,
+  sequence: number | undefined,
+  toolCallId: string | null,
+  message: string,
+): string {
+  if (typeof sequence === "number" && Number.isFinite(sequence)) {
+    return `seq:${sequence}`;
+  }
+  const source = `${eventType}|${toolCallId || "none"}|${message}`;
+  let hash = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+  }
+  return `fallback:${eventType}:${toolCallId || "none"}:${hash.toString(16)}`;
+}
+
+function sanitizeAuditValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return sanitizeAuditText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeAuditValue(item));
+  }
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      output[key] = sanitizeAuditValue(item);
+    }
+    return output;
+  }
+  return value;
 }
 
 function extractStepName(message: string): string | null {
@@ -212,12 +303,18 @@ function buildFindingFingerprint(input: {
   cwe_id?: unknown;
 }): string {
   const vulnerabilityType = toSafeTrimmedString(input.vulnerability_type) || "unknown";
-  const filePath = toSafeTrimmedString(input.file_path);
+  const filePath =
+    normalizeAuditRelativePath(toSafeTrimmedString(input.file_path)) || "";
   const lineStart =
     typeof input.line_start === "number" && Number.isFinite(input.line_start)
       ? String(input.line_start)
       : "";
   return [vulnerabilityType, filePath, lineStart].join("|");
+}
+
+function normalizeFindingPath(value: unknown): string | null {
+  const normalized = normalizeAuditRelativePath(toSafeTrimmedString(value));
+  return normalized || null;
 }
 
 function pickNewerIsoTimestamp(
@@ -241,9 +338,10 @@ function agentFindingToRealtimeItem(finding: AgentFinding): RealtimeMergedFindin
     return null;
   }
 
+  const normalizedFilePath = normalizeFindingPath(finding.file_path);
   const fingerprint = buildFindingFingerprint({
     vulnerability_type: finding.vulnerability_type,
-    file_path: finding.file_path,
+    file_path: normalizedFilePath,
     line_start: finding.line_start,
     cwe_id: finding.cwe_id,
   });
@@ -253,19 +351,21 @@ function agentFindingToRealtimeItem(finding: AgentFinding): RealtimeMergedFindin
     fingerprint,
     title: toSafeTrimmedString(finding.title) || "发现缺陷",
     display_title: toSafeTrimmedString(finding.display_title) || null,
+    description: toSafeTrimmedString(finding.description) || null,
     severity: toSafeTrimmedString(finding.severity) || "medium",
     vulnerability_type: toSafeTrimmedString(finding.vulnerability_type) || "unknown",
-    file_path: finding.file_path ?? null,
+    file_path: normalizedFilePath,
     line_start: finding.line_start ?? null,
     line_end: finding.line_end ?? null,
     cwe_id: toSafeTrimmedString(finding.cwe_id) || null,
     code_snippet: finding.code_snippet ?? null,
+    code_context: finding.code_context ?? null,
     function_trigger_flow:
       Array.isArray(finding.function_trigger_flow) && finding.function_trigger_flow.length > 0
         ? finding.function_trigger_flow.map((step) => String(step))
         : null,
     verification_evidence: finding.verification_evidence ?? null,
-    reachability_file: finding.reachability_file ?? null,
+    reachability_file: normalizeFindingPath(finding.reachability_file),
     reachability_function: finding.reachability_function ?? null,
     reachability_function_start_line: finding.reachability_function_start_line ?? null,
     reachability_function_end_line: finding.reachability_function_end_line ?? null,
@@ -289,7 +389,7 @@ function agentEventToRealtimeItem(event: AgentEvent): RealtimeMergedFindingItem 
     toSafeTrimmedString(event.message) ||
     "发现缺陷";
   const vulnerabilityType = toSafeTrimmedString((md as any).vulnerability_type) || "unknown";
-  const filePath = toSafeTrimmedString((md as any).file_path) || null;
+  const filePath = normalizeFindingPath((md as any).file_path);
   const lineStart =
     typeof (md as any).line_start === "number" && Number.isFinite((md as any).line_start)
       ? ((md as any).line_start as number)
@@ -320,6 +420,7 @@ function agentEventToRealtimeItem(event: AgentEvent): RealtimeMergedFindingItem 
     fingerprint,
     title: toSafeTrimmedString((md as any).title) || title,
     display_title: toSafeTrimmedString((md as any).display_title) || null,
+    description: toSafeTrimmedString((md as any).description) || null,
     severity,
     vulnerability_type: vulnerabilityType,
     file_path: filePath,
@@ -330,11 +431,12 @@ function agentEventToRealtimeItem(event: AgentEvent): RealtimeMergedFindingItem 
         : null,
     cwe_id: toSafeTrimmedString((md as any).cwe_id) || null,
     code_snippet: toSafeTrimmedString((md as any).code_snippet) || null,
+    code_context: toSafeTrimmedString((md as any).code_context) || null,
     function_trigger_flow: Array.isArray((md as any).function_trigger_flow)
       ? ((md as any).function_trigger_flow as unknown[]).map((step) => String(step))
       : null,
     verification_evidence: toSafeTrimmedString((md as any).verification_evidence) || null,
-    reachability_file: toSafeTrimmedString((md as any).reachability_file) || null,
+    reachability_file: normalizeFindingPath((md as any).reachability_file),
     reachability_function: toSafeTrimmedString((md as any).reachability_function) || null,
     reachability_function_start_line:
       typeof (md as any).reachability_function_start_line === "number" &&
@@ -401,6 +503,9 @@ function mergeRealtimeFindingsBatch(
       display_title: preferIncoming
         ? (item.display_title ?? existing.display_title)
         : (existing.display_title ?? item.display_title),
+      description: preferIncoming
+        ? (item.description ?? existing.description)
+        : (existing.description ?? item.description),
       file_path: preferIncoming
         ? (item.file_path ?? existing.file_path)
         : (existing.file_path ?? item.file_path),
@@ -416,6 +521,9 @@ function mergeRealtimeFindingsBatch(
       code_snippet: preferIncoming
         ? (item.code_snippet ?? existing.code_snippet)
         : (existing.code_snippet ?? item.code_snippet),
+      code_context: preferIncoming
+        ? (item.code_context ?? existing.code_context)
+        : (existing.code_context ?? item.code_context),
       function_trigger_flow: preferIncoming
         ? (item.function_trigger_flow ?? existing.function_trigger_flow)
         : (existing.function_trigger_flow ?? item.function_trigger_flow),
@@ -461,14 +569,12 @@ function AgentAuditPageContent() {
   const {
     task,
     findings,
-    agentTree,
     logs,
     isLoading,
     isAutoScroll,
     treeNodes,
     filteredLogs,
     isRunning,
-    isComplete,
     setTask,
     setFindings,
     setAgentTree,
@@ -524,7 +630,7 @@ function AgentAuditPageContent() {
 
   // Realtime panels state
   const [realtimeFindings, setRealtimeFindings] = useState<RealtimeMergedFindingItem[]>([]);
-  const potentialFindingsManuallyClearedRef = useRef(false);
+  const verifiedFindingsManuallyClearedRef = useRef(false);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -539,10 +645,13 @@ function AgentAuditPageContent() {
   const previousTaskIdRef = useRef<string | undefined>(undefined);
   const disconnectStreamRef = useRef<(() => void) | null>(null);
   const lastEventSequenceRef = useRef<number>(0);
+  const seenEventKeysRef = useRef<Set<string>>(new Set());
+  const seenEventOrderRef = useRef<string[]>([]);
   const hasConnectedRef = useRef<boolean>(false); // 🔥 追踪是否已连接 SSE
   const hasLoadedHistoricalEventsRef = useRef<boolean>(false); // 🔥 追踪是否已加载历史事件
   const isBackfillingRef = useRef(false);
   const previousTaskStatusRef = useRef<string | undefined>(undefined);
+  const taskStatusRef = useRef<string | undefined>(undefined);
   // 🔥 使用 state 来标记历史事件加载状态和触发 streamOptions 重新计算
   const [afterSequence, setAfterSequence] = useState<number>(0);
   const [historicalEventsLoaded, setHistoricalEventsLoaded] =
@@ -588,6 +697,10 @@ function AgentAuditPageContent() {
     () => (failedReason ? extractStepName(failedReason) : null),
     [failedReason],
   );
+  const currentProjectId = useMemo(() => {
+    const value = typeof task?.project_id === "string" ? task.project_id.trim() : "";
+    return value || null;
+  }, [task?.project_id]);
   const currentPhaseLabel = useMemo(() => {
     const phaseKey = String(task?.current_phase || "")
       .trim()
@@ -607,14 +720,6 @@ function AgentAuditPageContent() {
     if (currentPhaseLabel) return `当前阶段：${currentPhaseLabel}`;
     return null;
   }, [task?.current_step, isRunning, currentPhaseLabel]);
-  const agentCardStatusText = useMemo(() => {
-    if (isRunning) return "运行中";
-    if (task?.status === "completed") return "完成";
-    if (task?.status === "failed") return "失败";
-    if (task?.status === "cancelled") return "已取消";
-    return "就绪";
-  }, [isRunning, task?.status]);
-
   const setDetailQuery = useCallback(
     (nextDetail: { type: "log" | "finding" | "agent"; id: string } | null) => {
       const params = new URLSearchParams(location.search);
@@ -720,6 +825,15 @@ function AgentAuditPageContent() {
     logsRef.current = logs;
   }, [logs]);
 
+  useEffect(() => {
+    taskStatusRef.current = task?.status;
+  }, [task?.status]);
+
+  useEffect(() => {
+    if (!currentProjectId) return;
+    setAutoScroll(getPersistedAutoScroll(currentProjectId));
+  }, [currentProjectId, setAutoScroll]);
+
   // 🔥 当 taskId 变化时立即重置状态（新建任务时清理旧日志）
   useEffect(() => {
     // 如果 taskId 发生变化，立即重置
@@ -735,7 +849,7 @@ function AgentAuditPageContent() {
 
       // 2.1 重置 realtime 面板
       setRealtimeFindings([]);
-      potentialFindingsManuallyClearedRef.current = false;
+      verifiedFindingsManuallyClearedRef.current = false;
       // 3. 重置事件序列号和加载状态
       lastEventSequenceRef.current = 0;
       hasConnectedRef.current = false; // 🔥 重置 SSE 连接标志
@@ -764,6 +878,8 @@ function AgentAuditPageContent() {
       setHighlightedAgentId(null);
       setTerminalFailureReason(null);
       toolLogIdByCallIdRef.current.clear();
+      seenEventKeysRef.current.clear();
+      seenEventOrderRef.current = [];
     }
     previousTaskIdRef.current = taskId;
   }, [taskId, reset]);
@@ -821,7 +937,7 @@ function AgentAuditPageContent() {
       setFindingsError(null);
       try {
         const data = await getAgentFindings(taskId, {
-          include_false_positive: true,
+          include_false_positive: false,
         });
         setFindings(data);
       } catch (err) {
@@ -941,13 +1057,105 @@ function AgentAuditPageContent() {
     [],
   );
 
+  const reconcileTerminalLogs = useCallback(
+    (finalStatus: string, terminalSequence?: number) => {
+      const normalized = String(finalStatus || "").trim().toLowerCase();
+      if (!TERMINAL_STATUSES.has(normalized)) {
+        return;
+      }
+
+      const nextToolStatus: "completed" | "failed" | "cancelled" =
+        normalized === "completed"
+          ? "completed"
+          : normalized === "failed"
+            ? "failed"
+            : "cancelled";
+      const nextToolLabel =
+        nextToolStatus === "completed"
+          ? "已完成"
+          : nextToolStatus === "failed"
+            ? "失败"
+            : "已取消";
+
+      let changed = false;
+      const reconciled = logsRef.current.map((item) => {
+        let nextItem: LogItem = item;
+        if (item.type === "tool" && item.tool?.status === "running") {
+          const title =
+            item.title.startsWith("运行中：") && item.tool?.name
+              ? `${nextToolLabel}：${item.tool.name}`
+              : item.title;
+          nextItem = {
+            ...item,
+            title,
+            tool: {
+              ...item.tool,
+              status: nextToolStatus,
+            },
+            detail: {
+              ...(item.detail || {}),
+              terminal_reconciled: true,
+              terminal_status: normalized,
+              terminal_sequence:
+                typeof terminalSequence === "number" ? terminalSequence : undefined,
+            },
+          };
+          changed = true;
+        } else if (
+          item.type === "progress" &&
+          item.progressStatus === "running"
+        ) {
+          nextItem = {
+            ...item,
+            progressStatus: "completed",
+            detail: {
+              ...(item.detail || {}),
+              terminal_reconciled: true,
+              terminal_status: normalized,
+              terminal_sequence:
+                typeof terminalSequence === "number" ? terminalSequence : undefined,
+            },
+          };
+          changed = true;
+        }
+        return nextItem;
+      });
+
+      if (changed) {
+        logsRef.current = reconciled;
+        dispatch({ type: "SET_LOGS", payload: reconciled });
+      }
+    },
+    [dispatch],
+  );
+
   const appendLogFromEvent = useCallback(
     (event: UnifiedAgentEvent) => {
       const eventType = String(
         event.event_type ?? event.type ?? "",
       ).toLowerCase();
-      const message = eventToString(event.message).trim();
-      const metadata = event.metadata ?? undefined;
+      const rawMessage = eventToString(event.message).trim();
+      const message = sanitizeAuditText(rawMessage);
+      const metadata = (event.metadata ?? undefined) as Record<string, unknown> | undefined;
+      const eventKey = buildEventDedupKey(
+        eventType,
+        event.sequence,
+        extractToolCallId(metadata),
+        message,
+      );
+      if (seenEventKeysRef.current.has(eventKey)) {
+        return;
+      }
+      seenEventKeysRef.current.add(eventKey);
+      seenEventOrderRef.current.push(eventKey);
+      if (seenEventOrderRef.current.length > EVENT_DEDUP_WINDOW_SIZE) {
+        const expired = seenEventOrderRef.current.shift();
+        if (expired) {
+          seenEventKeysRef.current.delete(expired);
+        }
+      }
+
+      const sanitizedMetadata = sanitizeAuditValue(metadata ?? {}) as Record<string, unknown>;
       const agentRawName =
         (typeof metadata?.agent_name === "string" && metadata.agent_name) ||
         (typeof metadata?.agent === "string" && metadata.agent) ||
@@ -959,12 +1167,15 @@ function AgentAuditPageContent() {
       const baseDetail = {
         event_type: eventType,
         message,
-        metadata: metadata ?? {},
+        metadata: sanitizedMetadata,
         sequence: event.sequence ?? null,
         status: event.status ?? null,
-        tool_name: event.tool_name ?? null,
-        tool_input: event.tool_input ?? null,
-        tool_output: event.tool_output ?? null,
+        tool_name:
+          typeof event.tool_name === "string"
+            ? sanitizeAuditText(event.tool_name)
+            : event.tool_name ?? null,
+        tool_input: sanitizeAuditValue(event.tool_input ?? null),
+        tool_output: sanitizeAuditValue(event.tool_output ?? null),
         tool_duration_ms: event.tool_duration_ms ?? null,
       };
       const bootstrapTaskId =
@@ -1001,6 +1212,10 @@ function AgentAuditPageContent() {
         return;
       }
 
+      if (eventType === "llm_observation" && metadata?.deduped === true) {
+        return;
+      }
+
       if (
         eventType === "thinking_start" ||
         eventType === "thinking_end" ||
@@ -1011,7 +1226,9 @@ function AgentAuditPageContent() {
 
       if (eventType.startsWith("llm_") || eventType === "thinking") {
         const thought =
-          typeof metadata?.thought === "string" ? metadata.thought : "";
+          typeof metadata?.thought === "string"
+            ? sanitizeAuditText(metadata.thought)
+            : "";
         const content = thought || message || "";
         if (!content) {
           return;
@@ -1032,14 +1249,24 @@ function AgentAuditPageContent() {
       }
 
       if (eventType === "tool_call" || eventType === "tool_call_start") {
-        const toolName = event.tool_name || "未知";
-        const inputText = eventToString(event.tool_input);
-        const toolCallId = (() => {
-          const value = metadata?.tool_call_id;
-          return typeof value === "string" && value.trim().length > 0
-            ? value.trim()
-            : null;
-        })();
+        const toolName = sanitizeAuditText(event.tool_name || "未知") || "未知";
+        const statusSnapshot = String(taskStatusRef.current || "").toLowerCase();
+        if (TERMINAL_STATUSES.has(statusSnapshot)) {
+          dispatch({
+            type: "ADD_LOG",
+            payload: {
+              type: "info",
+              title: `终态后忽略迟到工具调用：${toolName}`,
+              content: message || "",
+              agentName,
+              agentRawName: agentRawName || undefined,
+              detail: baseDetail,
+            },
+          });
+          return;
+        }
+        const inputText = sanitizeAuditText(eventToString(event.tool_input));
+        const toolCallId = extractToolCallId(metadata);
 
         const existingLogId = toolCallId
           ? toolLogIdByCallIdRef.current.get(toolCallId)
@@ -1089,7 +1316,7 @@ function AgentAuditPageContent() {
         eventType === "tool_call_end" ||
         eventType === "tool_call_error"
       ) {
-        const toolName = event.tool_name || "未知";
+        const toolName = sanitizeAuditText(event.tool_name || "未知") || "未知";
         const toolStatus = normalizeToolStatus(
           metadata?.tool_status,
           eventType,
@@ -1100,28 +1327,40 @@ function AgentAuditPageContent() {
             : toolStatus === "failed"
               ? "失败"
               : "已取消";
-        const outputText = extractToolOutputText(event.tool_output);
-        const toolCallId = (() => {
-          const value = metadata?.tool_call_id;
-          return typeof value === "string" && value.trim().length > 0
-            ? value.trim()
+        const outputText = sanitizeAuditText(extractToolOutputText(event.tool_output));
+        const toolCallId = extractToolCallId(metadata);
+        const writeScopeAllowed =
+          typeof metadata?.write_scope_allowed === "boolean"
+            ? (metadata.write_scope_allowed as boolean)
             : null;
-        })();
+        const writeScopeReason = toSafeTrimmedString(metadata?.write_scope_reason);
+        const writeScopeFile = toSafeTrimmedString(metadata?.write_scope_file);
+        const writeScopeTotal = toSafeNumber(metadata?.write_scope_total_files);
+        const writeScopeHint =
+          writeScopeAllowed === false
+            ? `写入已拒绝（${writeScopeReason || "write_scope_not_allowed"}）` +
+              (writeScopeFile ? ` 文件: ${writeScopeFile}` : "") +
+              (writeScopeTotal !== null ? `，当前可写文件数: ${writeScopeTotal}` : "")
+            : "";
 
         let targetLogId: string | null = null;
         if (toolCallId) {
-          targetLogId =
-            toolLogIdByCallIdRef.current.get(toolCallId) ?? `tool-${toolCallId}`;
-        } else {
-          const fallbackLog = [...logsRef.current]
-            .reverse()
-            .find(
-              (item) =>
-                item.type === "tool" &&
-                item.tool?.name === toolName &&
-                item.tool?.status === "running",
-            );
+          const mappedId = toolLogIdByCallIdRef.current.get(toolCallId);
+          if (mappedId) {
+            targetLogId = mappedId;
+          }
+        }
+        if (!targetLogId) {
+          const fallbackLog = [...logsRef.current].reverse().find((item) => {
+            if (item.type !== "tool" || item.tool?.status !== "running") return false;
+            if (item.tool?.name !== toolName) return false;
+            if (agentName && item.agentName && item.agentName !== agentName) return false;
+            return true;
+          });
           targetLogId = fallbackLog?.id || null;
+        }
+        if (targetLogId && !logsRef.current.some((item) => item.id === targetLogId)) {
+          targetLogId = null;
         }
 
         if (targetLogId) {
@@ -1135,8 +1374,8 @@ function AgentAuditPageContent() {
             type: "tool",
             title: `${statusLabel}：${toolName}`,
             content: outputText
-              ? `${previousContent}输出：\n${outputText}`
-              : previousContent.trim(),
+              ? `${previousContent}输出：\n${outputText}${writeScopeHint ? `\n\n${writeScopeHint}` : ""}`
+              : `${previousContent.trim()}${writeScopeHint ? `\n${writeScopeHint}` : ""}`.trim(),
             tool: {
               name: toolName,
               duration: event.tool_duration_ms ?? existing?.tool?.duration ?? 0,
@@ -1164,7 +1403,9 @@ function AgentAuditPageContent() {
             id: logId,
             type: "tool",
             title: `${statusLabel}：${toolName}`,
-            content: outputText ? `输出：\n${outputText}` : "",
+            content: outputText
+              ? `输出：\n${outputText}${writeScopeHint ? `\n\n${writeScopeHint}` : ""}`
+              : writeScopeHint,
             tool: {
               name: toolName,
               duration: event.tool_duration_ms ?? 0,
@@ -1185,12 +1426,65 @@ function AgentAuditPageContent() {
         eventType === "finding_verified" ||
         eventType === "finding_update"
       ) {
+        const isVerifiedFinding =
+          eventType === "finding_verified" || metadata?.is_verified === true;
+        if (isVerifiedFinding) {
+          const mergedVerifiedItem = agentEventToRealtimeItem({
+            id: "",
+            sequence: Number(event.sequence || 0),
+            task_id: "",
+            event_type: eventType,
+            phase: null,
+            message: message || null,
+            metadata: metadata || null,
+            tool_name: null,
+            tool_input: null,
+            tool_output: null,
+            tool_duration_ms: null,
+            finding_id: null,
+            tokens_used: null,
+            created_at: null,
+            timestamp: null,
+          } as AgentEvent);
+          if (mergedVerifiedItem) {
+            setRealtimeFindings((prev) =>
+              mergeRealtimeFindingsBatch(prev, [mergedVerifiedItem], { source: "event" }),
+            );
+          }
+        }
+
         dispatch({
           type: "ADD_LOG",
           payload: {
             type: "finding",
-            title: message || eventToString(metadata?.title) || "发现漏洞",
-            severity: eventToString(metadata?.severity) || "medium",
+            title: message || sanitizeAuditText(eventToString(metadata?.title)) || "发现漏洞",
+            severity: sanitizeAuditText(eventToString(metadata?.severity)) || "medium",
+            agentName,
+            agentRawName: agentRawName || undefined,
+            detail: baseDetail,
+          },
+        });
+        return;
+      }
+
+      if (eventType === "todo_update" && metadata?.todo_scope === "verification") {
+        const todoList = Array.isArray(metadata?.todo_list)
+          ? (metadata?.todo_list as Array<Record<string, unknown>>)
+          : [];
+        const verifiedCount = todoList.filter((item) => item?.status === "verified").length;
+        const pendingCount = todoList.filter(
+          (item) => item?.status === "pending" || item?.status === "running",
+        ).length;
+        const falsePositiveCount = todoList.filter(
+          (item) => item?.status === "false_positive",
+        ).length;
+        const compactProgress = `逐漏洞验证进度: verified=${verifiedCount}, pending=${pendingCount}, false_positive=${falsePositiveCount}`;
+        dispatch({
+          type: "ADD_LOG",
+          payload: {
+            type: "progress",
+            title: compactProgress,
+            content: message || "",
             agentName,
             agentRawName: agentRawName || undefined,
             detail: baseDetail,
@@ -1224,6 +1518,8 @@ function AgentAuditPageContent() {
       }
 
       if (eventType === "task_complete" || eventType === "complete") {
+        taskStatusRef.current = "completed";
+        reconcileTerminalLogs("completed", event.sequence);
         dispatch({
           type: "ADD_LOG",
           payload: {
@@ -1239,7 +1535,7 @@ function AgentAuditPageContent() {
       if (eventType === "task_error") {
         const taskErrorMessage =
           message ||
-          eventToString(metadata?.error).trim() ||
+          sanitizeAuditText(eventToString(metadata?.error)) ||
           "任务执行出错";
         if (taskErrorMessage) {
           setTerminalFailureReason(taskErrorMessage);
@@ -1270,6 +1566,11 @@ function AgentAuditPageContent() {
         return;
       }
       if (eventType === "task_end") {
+        const terminalStatus = String(event.status || "").toLowerCase();
+        if (TERMINAL_STATUSES.has(terminalStatus)) {
+          taskStatusRef.current = terminalStatus;
+          reconcileTerminalLogs(terminalStatus, event.sequence);
+        }
         const status = event.status ? `（${event.status}）` : "";
         dispatch({
           type: "ADD_LOG",
@@ -1350,7 +1651,7 @@ function AgentAuditPageContent() {
         });
       }
     },
-    [debouncedLoadAgentTree, dispatch, updateLog],
+    [debouncedLoadAgentTree, dispatch, reconcileTerminalLogs, updateLog],
   );
 
   const backfillEventsSince = useCallback(
@@ -1363,7 +1664,7 @@ function AgentAuditPageContent() {
           return;
         }
 
-        if (!potentialFindingsManuallyClearedRef.current) {
+        if (!verifiedFindingsManuallyClearedRef.current) {
           const findingItems = events
             .map(agentEventToRealtimeItem)
             .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
@@ -1373,7 +1674,6 @@ function AgentAuditPageContent() {
             );
           }
         }
-
         events.forEach((event) => appendLogFromEvent(event));
         const lastSequence = events[events.length - 1]?.sequence ?? startAfter;
         lastEventSequenceRef.current = Math.max(
@@ -1412,7 +1712,7 @@ function AgentAuditPageContent() {
         return 0;
       }
 
-      if (!potentialFindingsManuallyClearedRef.current) {
+      if (!verifiedFindingsManuallyClearedRef.current) {
         const findingItems = events
           .map(agentEventToRealtimeItem)
           .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
@@ -1422,7 +1722,6 @@ function AgentAuditPageContent() {
           );
         }
       }
-
       events.forEach((event) => appendLogFromEvent(event));
       lastEventSequenceRef.current = Math.max(
         lastEventSequenceRef.current,
@@ -1452,15 +1751,17 @@ function AgentAuditPageContent() {
 
   // Backfill "potential findings" from DB findings so they persist across reloads.
   useEffect(() => {
-    if (potentialFindingsManuallyClearedRef.current) return;
     if (!findings.length) return;
-    const items = findings
-      .map(agentFindingToRealtimeItem)
-      .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
-    if (!items.length) return;
-    setRealtimeFindings((prev) =>
-      mergeRealtimeFindingsBatch(prev, items, { source: "db" }),
-    );
+    if (!verifiedFindingsManuallyClearedRef.current) {
+      const items = findings
+        .map(agentFindingToRealtimeItem)
+        .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
+      if (items.length) {
+        setRealtimeFindings((prev) =>
+          mergeRealtimeFindingsBatch(prev, items, { source: "db" }),
+        );
+      }
+    }
   }, [findings]);
 
   // ============ Stream Event Handling ============
@@ -1491,7 +1792,7 @@ function AgentAuditPageContent() {
       },
       onThinkingToken: (_token: string, accumulated: string) => {
         if (!accumulated?.trim()) return;
-        const cleanContent = cleanThinkingContent(accumulated);
+        const cleanContent = sanitizeAuditText(cleanThinkingContent(accumulated));
         if (!cleanContent) return;
 
         const currentId = getCurrentThinkingId();
@@ -1518,7 +1819,7 @@ function AgentAuditPageContent() {
         }
       },
       onThinkingEnd: (response: string) => {
-        const cleanResponse = cleanThinkingContent(response || "");
+        const cleanResponse = sanitizeAuditText(cleanThinkingContent(response || ""));
         const currentId = getCurrentThinkingId();
 
         if (!cleanResponse) {
@@ -1541,15 +1842,11 @@ function AgentAuditPageContent() {
         }
       },
       onFinding: (finding: Record<string, unknown>, isVerified: boolean) => {
-        if (!isVerified) {
-          return;
-        }
-        potentialFindingsManuallyClearedRef.current = false;
-        const safeText = (value: unknown) => String(value ?? "").trim();
+        const safeText = (value: unknown) => sanitizeAuditText(String(value ?? ""));
         const displayTitle = safeText((finding as any).display_title) || null;
-        const title = safeText(finding.title) || displayTitle || "发现漏洞";
+        const title = safeText(finding.title) || displayTitle || "发现缺陷";
         const vulnerabilityType = safeText(finding.vulnerability_type) || "unknown";
-        const filePath = safeText(finding.file_path) || null;
+        const filePath = normalizeFindingPath(safeText(finding.file_path));
         const lineStart =
           typeof finding.line_start === "number" && Number.isFinite(finding.line_start)
             ? (finding.line_start as number)
@@ -1569,71 +1866,64 @@ function AgentAuditPageContent() {
         });
 
         const streamId = safeText(finding.id) || `finding-${Date.now()}`;
-
-        const nextItem: RealtimeMergedFindingItem = {
-          id: streamId,
-          fingerprint,
-          title,
-          display_title: displayTitle,
-          severity,
-          vulnerability_type: vulnerabilityType,
-          file_path: filePath,
-          line_start: lineStart,
-          line_end:
-            typeof (finding as any).line_end === "number" && Number.isFinite((finding as any).line_end)
-              ? ((finding as any).line_end as number)
+        if (isVerified) {
+          verifiedFindingsManuallyClearedRef.current = false;
+          const nextItem: RealtimeMergedFindingItem = {
+            id: streamId,
+            fingerprint,
+            title,
+            display_title: displayTitle,
+            description: safeText((finding as any).description) || null,
+            severity,
+            vulnerability_type: vulnerabilityType,
+            file_path: filePath,
+            line_start: lineStart,
+            line_end:
+              typeof (finding as any).line_end === "number" && Number.isFinite((finding as any).line_end)
+                ? ((finding as any).line_end as number)
+                : null,
+            cwe_id: cweId,
+            code_snippet: safeText((finding as any).code_snippet) || null,
+            code_context: safeText((finding as any).code_context) || null,
+            function_trigger_flow: Array.isArray((finding as any).function_trigger_flow)
+              ? ((finding as any).function_trigger_flow as unknown[]).map((step) => String(step))
               : null,
-          cwe_id: cweId,
-          code_snippet: safeText((finding as any).code_snippet) || null,
-          function_trigger_flow: Array.isArray((finding as any).function_trigger_flow)
-            ? ((finding as any).function_trigger_flow as unknown[]).map((step) => String(step))
-            : null,
-          verification_evidence: safeText((finding as any).verification_evidence) || null,
-          reachability_file: safeText((finding as any).reachability_file) || null,
-          reachability_function: safeText((finding as any).reachability_function) || null,
-          reachability_function_start_line:
-            typeof (finding as any).reachability_function_start_line === "number" &&
-            Number.isFinite((finding as any).reachability_function_start_line)
-              ? ((finding as any).reachability_function_start_line as number)
-              : null,
-          reachability_function_end_line:
-            typeof (finding as any).reachability_function_end_line === "number" &&
-            Number.isFinite((finding as any).reachability_function_end_line)
-              ? ((finding as any).reachability_function_end_line as number)
-              : null,
-          context_start_line:
-            typeof (finding as any).context_start_line === "number" &&
-            Number.isFinite((finding as any).context_start_line)
-              ? ((finding as any).context_start_line as number)
-              : null,
-          context_end_line:
-            typeof (finding as any).context_end_line === "number" &&
-            Number.isFinite((finding as any).context_end_line)
-              ? ((finding as any).context_end_line as number)
-              : null,
-          timestamp,
-          is_verified: Boolean(isVerified),
-        };
-
-        setRealtimeFindings((prev) => {
-          const idx = prev.findIndex((x) => x.fingerprint === fingerprint);
-          if (idx === -1) {
-            return [nextItem, ...prev].slice(0, 500);
-          }
-
-          const existing = prev[idx];
-          const merged: RealtimeMergedFindingItem = {
-            ...existing,
-            ...nextItem,
-            id: existing.id, // keep stable key
-            is_verified: existing.is_verified || Boolean(isVerified),
+            verification_evidence: safeText((finding as any).verification_evidence) || null,
+            reachability_file: normalizeFindingPath(
+              safeText((finding as any).reachability_file),
+            ),
+            reachability_function: safeText((finding as any).reachability_function) || null,
+            reachability_function_start_line:
+              typeof (finding as any).reachability_function_start_line === "number" &&
+              Number.isFinite((finding as any).reachability_function_start_line)
+                ? ((finding as any).reachability_function_start_line as number)
+                : null,
+            reachability_function_end_line:
+              typeof (finding as any).reachability_function_end_line === "number" &&
+              Number.isFinite((finding as any).reachability_function_end_line)
+                ? ((finding as any).reachability_function_end_line as number)
+                : null,
+            context_start_line:
+              typeof (finding as any).context_start_line === "number" &&
+              Number.isFinite((finding as any).context_start_line)
+                ? ((finding as any).context_start_line as number)
+                : null,
+            context_end_line:
+              typeof (finding as any).context_end_line === "number" &&
+              Number.isFinite((finding as any).context_end_line)
+                ? ((finding as any).context_end_line as number)
+                : null,
+            timestamp,
+            is_verified: true,
           };
 
-          const next = [...prev];
-          next.splice(idx, 1);
-          next.unshift(merged);
-          return next.slice(0, 500);
-        });
+          setRealtimeFindings((prev) =>
+            mergeRealtimeFindingsBatch(prev, [nextItem], { source: "event" }),
+          );
+        } else {
+          // Unverified findings are no longer rendered in a dedicated panel.
+          return;
+        }
       },
       onComplete: () => {
         void backfillEventsSince(lastEventSequenceRef.current, "on_complete");
@@ -1789,10 +2079,11 @@ function AgentAuditPageContent() {
     const previousStatus = previousTaskStatusRef.current;
     const currentStatus = task?.status;
     if (
-      previousStatus === "running" &&
+      (previousStatus === "running" || previousStatus === "pending") &&
       currentStatus &&
       TERMINAL_STATUSES.has(currentStatus)
     ) {
+      reconcileTerminalLogs(currentStatus, lastEventSequenceRef.current);
       void backfillEventsSince(
         lastEventSequenceRef.current,
         "status_transition_to_terminal",
@@ -1800,7 +2091,14 @@ function AgentAuditPageContent() {
       void loadFindings({ silent: true });
     }
     previousTaskStatusRef.current = currentStatus;
-  }, [task?.status, backfillEventsSince, loadFindings]);
+  }, [task?.status, backfillEventsSince, loadFindings, reconcileTerminalLogs]);
+
+  useEffect(() => {
+    if (!historicalEventsLoaded) return;
+    const currentStatus = String(task?.status || "").toLowerCase();
+    if (!TERMINAL_STATUSES.has(currentStatus)) return;
+    reconcileTerminalLogs(currentStatus, lastEventSequenceRef.current);
+  }, [historicalEventsLoaded, reconcileTerminalLogs, task?.status]);
 
   // Auto scroll
   useEffect(() => {
@@ -1812,7 +2110,7 @@ function AgentAuditPageContent() {
   // ============ Handlers ============
 
   const handleClearPotentialFindings = useCallback(() => {
-    potentialFindingsManuallyClearedRef.current = true;
+    verifiedFindingsManuallyClearedRef.current = true;
     setRealtimeFindings([]);
   }, []);
 
@@ -1924,6 +2222,14 @@ function AgentAuditPageContent() {
     },
     [logs, task],
   );
+
+  const handleToggleAutoScroll = useCallback(() => {
+    const nextEnabled = !isAutoScroll;
+    setAutoScroll(nextEnabled);
+    if (currentProjectId) {
+      persistAutoScroll(currentProjectId, nextEnabled);
+    }
+  }, [currentProjectId, isAutoScroll, setAutoScroll]);
 
   // ============ Render ============
 
@@ -2044,7 +2350,7 @@ function AgentAuditPageContent() {
                 </DropdownMenu>
 
                 <button
-                  onClick={() => setAutoScroll(!isAutoScroll)}
+                  onClick={handleToggleAutoScroll}
                   className={`
                     flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider
                     ${isAutoScroll
@@ -2119,7 +2425,7 @@ function AgentAuditPageContent() {
 
         {/* Right Column - Findings (top) + Agent (bottom) */}
         <div className="w-[45%] min-w-0 flex flex-col bg-muted/10">
-          <div className="flex-1 min-h-0 p-3">
+          <div className="flex-1 min-h-0 p-3 pb-2">
             <RealtimeFindingsPanel
               items={realtimeFindings}
               isRunning={isRunning}

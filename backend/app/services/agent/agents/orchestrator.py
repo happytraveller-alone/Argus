@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
 from .react_parser import parse_react_response
 from ..prompts import MULTI_AGENT_RULES, CORE_SECURITY_PRINCIPLES
+from ..utils.vulnerability_naming import build_cn_structured_title, is_structured_cn_title, resolve_vulnerability_profile
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,7 @@ Action Input: [JSON 参数]
 5. 完成前必须给出可解释统计：编排发现数、验证处理数、剩余待验证数。
 6. 严禁输出“请用户选择下一步”；若信息不完美，按默认策略继续推进并结束。
 7. **语言要求**：所有输出字段（Thought 除外）必须使用简体中文，禁止输出英文段落。
+8. 高危候选在最终确认前必须具备 flow 证据（`dataflow_analysis` 或 `controlflow_analysis_light`）。
 
 ## 重要原则
 1. **你是大脑，不是执行器** - 每一步都要思考
@@ -226,6 +228,129 @@ class OrchestratorAgent(BaseAgent):
             seen.add(key)
             out.append(item)
         return out
+
+    def _infer_verification_dispatch_reason(
+        self,
+        dispatch_observation: str,
+        verification_payload: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """从调度返回文本与运行诊断中提取 Verification 失败原因。"""
+        payload = verification_payload if isinstance(verification_payload, dict) else {}
+        run_error = str(payload.get("_run_error") or "").strip()
+        if run_error:
+            lowered = run_error.lower()
+            if "取消" in run_error or "cancel" in lowered:
+                return "verification_cancelled"
+            if "超时" in run_error or "timeout" in lowered:
+                return "verification_timeout"
+            return "verification_agent_error"
+
+        todo_summary = payload.get("verification_todo_summary")
+        if isinstance(todo_summary, dict):
+            blocked_reasons = todo_summary.get("blocked_reasons_top")
+            if isinstance(blocked_reasons, list) and blocked_reasons:
+                first = blocked_reasons[0]
+                if isinstance(first, dict):
+                    reason = str(first.get("reason") or "").strip()
+                else:
+                    reason = str(first).strip()
+                if reason:
+                    return f"verification_blocked:{reason}"
+
+        text = str(dispatch_observation or "")
+        lowered = text.lower()
+        if "执行超时" in text or "timeout" in lowered:
+            return "verification_timeout"
+        if "执行取消" in text or "任务已取消" in text or "cancel" in lowered:
+            return "verification_cancelled"
+        if "执行失败" in text or "错误" in text:
+            return "verification_agent_error"
+        return None
+
+    def _build_degraded_verified_findings(
+        self,
+        analysis_candidates: List[Dict[str, Any]],
+        degraded_reason: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        在 Verification 重试耗尽时，用 Analysis 候选生成可入库的降级验证结果。
+        """
+        if not isinstance(analysis_candidates, list) or not analysis_candidates:
+            return []
+
+        degraded_findings: List[Dict[str, Any]] = []
+        for candidate in analysis_candidates:
+            if not isinstance(candidate, dict):
+                continue
+
+            file_path = str(candidate.get("file_path") or "").strip()
+            if not file_path:
+                continue
+            try:
+                line_start = int(candidate.get("line_start") or candidate.get("line") or 0)
+            except Exception:
+                line_start = 0
+            if line_start <= 0:
+                continue
+            try:
+                line_end = int(candidate.get("line_end") or line_start)
+            except Exception:
+                line_end = line_start
+            if line_end < line_start:
+                line_end = line_start
+
+            description_text = str(candidate.get("description") or "").strip()
+            snippet_text = str(candidate.get("code_snippet") or "").strip()
+            evidence_lines = [
+                f"Verification 阶段降级: {degraded_reason}",
+                "基于 Analysis 候选证据生成 likely 结论。",
+                f"证据位置: {file_path}:{line_start}-{line_end}",
+            ]
+            if description_text:
+                evidence_lines.append(f"Analysis 描述: {description_text[:800]}")
+            if snippet_text:
+                evidence_lines.append(f"Analysis 代码片段:\n{snippet_text[:1200]}")
+            evidence_text = "\n".join(evidence_lines).strip()
+
+            verification_payload = (
+                dict(candidate.get("verification_result"))
+                if isinstance(candidate.get("verification_result"), dict)
+                else {}
+            )
+            verification_payload.update(
+                {
+                    "authenticity": "likely",
+                    "verdict": "likely",
+                    "reachability": "likely_reachable",
+                    "evidence": evidence_text,
+                    "verification_details": evidence_text,
+                    "verification_evidence": evidence_text,
+                    "degraded": True,
+                    "degraded_reason": degraded_reason,
+                }
+            )
+
+            degraded_candidate = {
+                **candidate,
+                "line_start": line_start,
+                "line_end": line_end,
+                "verdict": "likely",
+                "authenticity": "likely",
+                "reachability": "likely_reachable",
+                "is_verified": True,
+                "degraded": True,
+                "degraded_reason": degraded_reason,
+                "verification_method": "degraded_from_analysis",
+                "verification_details": evidence_text,
+                "verification_evidence": evidence_text,
+                "verification_result": verification_payload,
+                "source": candidate.get("source") or "analysis_degraded_verification",
+            }
+            normalized = self._normalize_finding(degraded_candidate)
+            if isinstance(normalized, dict):
+                degraded_findings.append(normalized)
+
+        return self._dedup_findings(degraded_findings)
     
     def cancel(self):
         """
@@ -312,13 +437,19 @@ class OrchestratorAgent(BaseAgent):
                 id="analysis_2",
                 title="Analysis-2：深挖 Top 风险区域并补齐证据",
                 agent="analysis",
-                task="围绕高风险区域/候选种子深挖，补齐证据链并输出高价值 findings（避免无证据推测）。",
+                task=(
+                    "围绕高风险区域/候选种子深挖，按“候选收敛 -> 流证据补齐 -> 真实性结论 -> 报告落地”输出结果。"
+                    "高危候选至少补齐一条 flow 证据（dataflow_analysis 或 controlflow_analysis_light）。"
+                ),
             ),
             TodoItem(
                 id="verification_1",
                 title="Verification-1：全量验证候选 findings 并回填结论",
                 agent="verification",
-                task="验证全部候选 findings，逐条回填真实性/可达性/修复建议/PoC 思路（不输出可直接利用 payload）。",
+                task=(
+                    "验证全部候选 findings，逐条回填真实性/可达性/修复建议/PoC 思路（不输出可直接利用 payload）。"
+                    "高危候选必须包含 flow 证据字段（verification_result.flow 或 function_trigger_flow）。"
+                ),
                 max_attempts=3,
             ),
             TodoItem(
@@ -442,6 +573,26 @@ class OrchestratorAgent(BaseAgent):
                 )
                 if not isinstance(evidence, str) or not evidence.strip():
                     return False, "verification_missing_contract:evidence"
+                severity_text = str(item.get("severity") or "").strip().lower()
+                if severity_text in {"critical", "high"}:
+                    flow_payload = verification_payload.get("flow")
+                    function_flow = verification_payload.get("function_trigger_flow")
+                    has_flow_payload = isinstance(flow_payload, dict)
+                    has_path_flag = bool(has_flow_payload and flow_payload.get("path_found"))
+                    has_chain = bool(
+                        isinstance(flow_payload, dict)
+                        and isinstance(flow_payload.get("call_chain"), list)
+                        and flow_payload.get("call_chain")
+                    )
+                    has_score = False
+                    if has_flow_payload and flow_payload.get("path_score") is not None:
+                        try:
+                            has_score = float(flow_payload.get("path_score")) >= 0.2
+                        except Exception:
+                            has_score = False
+                    has_function_flow = bool(isinstance(function_flow, list) and function_flow)
+                    if not (has_path_flag or has_chain or has_score or has_function_flow):
+                        return False, "verification_missing_contract:flow_evidence"
             return True, None
 
         await self.emit_thinking("🧠 Orchestrator（TODO 模式）启动：按固定清单顺序调度子 Agent 并验收结果。")
@@ -457,7 +608,7 @@ class OrchestratorAgent(BaseAgent):
                     await emit_todo_update(f"▶️ 开始执行：{item.title} (attempt {item.attempts}/{item.max_attempts})")
 
                     if item.agent in {"recon", "analysis", "verification"}:
-                        _ = await self._dispatch_agent(
+                        dispatch_observation = await self._dispatch_agent(
                             {"agent": item.agent, "task": item.task, "context": item.context}
                         )
                         if item.agent == "recon":
@@ -472,13 +623,23 @@ class OrchestratorAgent(BaseAgent):
                             if validate_analysis_done():
                                 item.done = True
                         elif item.agent == "verification":
+                            verification_payload = (
+                                self._agent_results.get("verification")
+                                if isinstance(self._agent_results.get("verification"), dict)
+                                else {}
+                            )
+                            dispatch_reason = self._infer_verification_dispatch_reason(
+                                dispatch_observation,
+                                verification_payload,
+                            )
                             ok, reason = validate_verification_done()
                             if ok:
                                 item.done = True
-                                if reason:
-                                    item.blocked_reason = reason
+                                item.blocked_reason = reason if reason else None
                             elif reason:
                                 item.blocked_reason = reason
+                            elif dispatch_reason:
+                                item.blocked_reason = dispatch_reason
 
                     elif item.agent == "orchestrator":
                         if item.id == "orchestrator_merge":
@@ -503,6 +664,39 @@ class OrchestratorAgent(BaseAgent):
                                     normalized = self._normalize_finding(finding)
                                     if isinstance(normalized, dict):
                                         normalized_verified.append(normalized)
+                            verification_item = next(
+                                (todo for todo in todo_list if todo.id == "verification_1"),
+                                None,
+                            )
+                            verification_blocked_reason = ""
+                            if isinstance(verification_item, TodoItem):
+                                verification_blocked_reason = str(
+                                    verification_item.blocked_reason or ""
+                                ).strip()
+
+                            should_degrade = (
+                                not normalized_verified
+                                and verification_blocked_reason.startswith(
+                                    "verification_failed_after_retries:"
+                                )
+                            )
+                            if should_degrade:
+                                analysis_payload = self._agent_results.get("analysis")
+                                analysis_candidates = (
+                                    analysis_payload.get("findings")
+                                    if isinstance(analysis_payload, dict)
+                                    else []
+                                )
+                                degraded_verified = self._build_degraded_verified_findings(
+                                    analysis_candidates if isinstance(analysis_candidates, list) else [],
+                                    verification_blocked_reason,
+                                )
+                                if degraded_verified:
+                                    normalized_verified.extend(degraded_verified)
+                                    logger.warning(
+                                        "[Orchestrator] verification degraded fallback applied: %s findings",
+                                        len(degraded_verified),
+                                    )
                             self._all_findings = self._dedup_findings(normalized_verified)
                             item.done = True
                         elif item.id == "orchestrator_normalize":
@@ -532,7 +726,7 @@ class OrchestratorAgent(BaseAgent):
                     if not item.done and item.attempts >= item.max_attempts:
                         item.done = True
                         if item.agent == "verification":
-                            blocked_reason = item.blocked_reason or "unknown"
+                            blocked_reason = item.blocked_reason or "verification_agent_error"
                             if not str(blocked_reason).startswith("verification_failed_after_retries:"):
                                 item.blocked_reason = f"verification_failed_after_retries:{blocked_reason}"
                         elif not item.blocked_reason:
@@ -806,7 +1000,23 @@ class OrchestratorAgent(BaseAgent):
 
             # 🔥 执行子 Agent 前检查取消状态
             if self.is_cancelled:
+                self._agent_results[agent_name] = {
+                    "_run_success": False,
+                    "_run_error": "任务已取消",
+                }
                 return f"## {agent_name} Agent 执行取消\n\n任务已被用户取消"
+
+            # 🔥 重试隔离：同一实例在新 attempt 前重置取消状态，避免取消标志粘连。
+            if hasattr(agent, "reset_cancellation_state"):
+                try:
+                    agent.reset_cancellation_state()
+                except Exception as exc:
+                    logger.warning(
+                        "[%s] Failed to reset cancellation state for %s: %s",
+                        self.name,
+                        agent_name,
+                        exc,
+                    )
 
             # 🔥 执行子 Agent - 支持取消和超时
             # 使用用户配置的子Agent超时时间
@@ -867,25 +1077,51 @@ class OrchestratorAgent(BaseAgent):
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"[{self.name}] Sub-agent {agent_name} timed out after {timeout}s")
+                self._agent_results[agent_name] = {
+                    "_run_success": False,
+                    "_run_error": f"sub_agent_timeout:{timeout}s",
+                }
                 return f"## {agent_name} Agent 执行超时\n\n子 Agent 执行超过 {timeout} 秒，已强制终止。请尝试更具体的任务或使用其他 Agent。"
             except asyncio.CancelledError:
                 logger.info(f"[{self.name}] Sub-agent {agent_name} was cancelled")
+                self._agent_results[agent_name] = {
+                    "_run_success": False,
+                    "_run_error": "任务已取消",
+                }
                 return f"## {agent_name} Agent 执行取消\n\n任务已被用户取消"
 
             # 🔥 执行后再次检查取消状态
             if self.is_cancelled:
+                self._agent_results[agent_name] = {
+                    "_run_success": False,
+                    "_run_error": "任务已取消",
+                }
                 return f"## {agent_name} Agent 执行中断\n\n任务已被用户取消"
 
             # 🔥 处理子 Agent 结果 - 不同 Agent 返回不同的数据结构
             # 🔥 DEBUG: 添加诊断日志
-            logger.info(f"[Orchestrator] Processing {agent_name} result: success={result.success}, data_type={type(result.data).__name__}, data_keys={list(result.data.keys()) if isinstance(result.data, dict) else 'N/A'}")
+            logger.info(
+                f"[Orchestrator] Processing {agent_name} result: success={result.success}, "
+                f"data_type={type(result.data).__name__}, "
+                f"data_keys={list(result.data.keys()) if isinstance(result.data, dict) else 'N/A'}"
+            )
 
-            if result.success and result.data:
-                data = result.data
+            result_payload: Dict[str, Any] = {}
+            if isinstance(result.data, dict):
+                result_payload.update(result.data)
+            result_payload["_run_success"] = bool(result.success)
+            if result.error:
+                result_payload["_run_error"] = str(result.error)
+            self._agent_results[agent_name] = result_payload
+            logger.info(
+                "[Orchestrator] Saved %s runtime diagnostics: success=%s, error=%s",
+                agent_name,
+                bool(result.success),
+                result_payload.get("_run_error"),
+            )
 
-                # 🔥 FIX: 保存 Agent 的完整结果，供后续 Agent 使用
-                self._agent_results[agent_name] = data
-                logger.info(f"[Orchestrator] Saved {agent_name} result with keys: {list(data.keys())}")
+            if result.success and isinstance(result.data, dict):
+                data = result_payload
 
                 # 🔥 保存 Agent 返回的 handoff，用于传递给后续 Agent
                 if result.handoff:
@@ -1183,6 +1419,10 @@ class OrchestratorAgent(BaseAgent):
                 
         except Exception as e:
             logger.error(f"Sub-agent dispatch failed: {e}", exc_info=True)
+            self._agent_results[agent_name] = {
+                "_run_success": False,
+                "_run_error": str(e),
+            }
             return f"## 调度失败\n\n错误: {str(e)}"
 
     def _validate_file_path(self, file_path: str) -> bool:
@@ -1218,44 +1458,19 @@ class OrchestratorAgent(BaseAgent):
 
         return False
 
-    def _normalize_vulnerability_profile(self, finding: Dict[str, Any]) -> tuple[str, str]:
-        vuln_key = (
-            str(finding.get("vulnerability_type") or "other")
-            .strip()
-            .lower()
-            .replace("-", "_")
-            .replace(" ", "_")
-        )
-        profile_map = {
-            "sql_injection": ("SQL注入漏洞", "可能导致数据库数据泄露、篡改或删除"),
-            "xss": ("跨站脚本漏洞", "可能导致会话劫持或用户敏感信息泄露"),
-            "command_injection": ("命令注入漏洞", "可能导致攻击者执行任意系统命令"),
-            "path_traversal": ("路径遍历漏洞", "可能导致未授权读取或覆盖服务器文件"),
-            "ssrf": ("服务器端请求伪造漏洞", "可能导致内网探测或云元数据泄露"),
-            "xxe": ("XML外部实体漏洞", "可能导致敏感文件泄露或发起内网请求"),
-            "deserialization": ("反序列化漏洞", "可能导致远程代码执行或对象状态篡改"),
-            "hardcoded_secret": ("硬编码密钥漏洞", "可能导致凭据泄露并引发横向渗透"),
-            "auth_bypass": ("认证绕过漏洞", "可能导致未授权访问受保护功能"),
-            "idor": ("越权访问漏洞", "可能导致访问或篡改其他用户数据"),
-            "weak_crypto": ("弱加密漏洞", "可能导致通信或存储数据被破解"),
-            "code_injection": ("代码注入漏洞", "可能导致执行恶意代码并接管服务"),
-            "nosql_injection": ("NoSQL注入漏洞", "可能导致鉴权绕过或数据泄露"),
-        }
-        return profile_map.get(vuln_key, ("安全缺陷", "可能导致系统机密性、完整性或可用性受损"))
-
     def _build_structured_title(self, finding: Dict[str, Any], fallback: Optional[str] = None) -> str:
-        file_path = str(finding.get("file_path") or "未知路径").strip() or "未知路径"
-        function_name = str(finding.get("function_name") or "未知函数").strip() or "未知函数"
-        vuln_name, harm_text = self._normalize_vulnerability_profile(finding)
-        if fallback:
-            fallback_text = str(fallback).strip()
-            if fallback_text and ("漏洞" in fallback_text or "缺陷" in fallback_text):
-                vuln_name = fallback_text
-        return f"{file_path}中{function_name}{vuln_name}，可能造成的危害：{harm_text}"
+        return build_cn_structured_title(
+            file_path=finding.get("file_path"),
+            function_name=finding.get("function_name"),
+            vulnerability_type=finding.get("vulnerability_type"),
+            title=finding.get("title"),
+            description=finding.get("description"),
+            code_snippet=finding.get("code_snippet"),
+            fallback_vulnerability_name=fallback,
+        )
 
     def _is_structured_cn_title(self, title: str) -> bool:
-        text = str(title or "").strip()
-        return bool(text) and ("可能造成的危害" in text) and ("中" in text)
+        return is_structured_cn_title(title)
 
     def _normalize_finding(self, finding: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -1322,11 +1537,20 @@ class OrchestratorAgent(BaseAgent):
         if "risk" in normalized and "severity" not in normalized:
             normalized["severity"] = str(normalized["risk"]).lower()
 
-        # 生成/规范 title（四段式中文标题）
+        # 生成/规范 title（三段式中文标题）
         title_value = str(normalized.get("title") or "").strip()
         if not self._is_structured_cn_title(title_value):
             normalized["title"] = self._build_structured_title(normalized, fallback=title_value)
         normalized["display_title"] = normalized.get("title")
+
+        # 统一细化类型，避免保留“安全缺陷/other”。
+        profile = resolve_vulnerability_profile(
+            normalized.get("vulnerability_type"),
+            title=normalized.get("title"),
+            description=normalized.get("description"),
+            code_snippet=normalized.get("code_snippet"),
+        )
+        normalized["vulnerability_type"] = profile.get("key", "other")
 
         # 🔥 处理 code 字段 -> code_snippet
         if "code" in normalized and "code_snippet" not in normalized:
