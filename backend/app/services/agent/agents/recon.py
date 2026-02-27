@@ -245,6 +245,10 @@ class ReconAgent(BaseAgent):
         self._steps = []
         final_result = None
         error_message = None  # 🔥 跟踪错误信息
+        last_action_signature: Optional[str] = None
+        repeated_action_streak = 0
+        llm_timeout_streak = 0
+        no_action_streak = 0
         
         await self.emit_thinking("Recon Agent 启动，LLM 开始自主收集信息...")
         
@@ -271,6 +275,21 @@ class ReconAgent(BaseAgent):
                     break
                 
                 self._total_tokens += tokens_this_round
+
+                timeout_like_output = str(llm_output or "").strip().startswith("[超时错误:")
+                if timeout_like_output:
+                    llm_timeout_streak += 1
+                else:
+                    llm_timeout_streak = 0
+
+                if llm_timeout_streak >= 3:
+                    await self.emit_event(
+                        "warning",
+                        "LLM 连续超时，进入降级收敛并输出当前已收集结果",
+                        metadata={"timeout_streak": llm_timeout_streak},
+                    )
+                    final_result = self._summarize_from_steps()
+                    break
                 
                 # 🔥 Enhanced: Handle empty LLM response with better diagnostics
                 if not llm_output or not llm_output.strip():
@@ -328,6 +347,7 @@ Final Answer: [JSON格式的结果]"""
                 
                 # 检查是否完成
                 if step.is_final:
+                    no_action_streak = 0
                     await self.emit_llm_decision("完成信息收集", "LLM 判断已收集足够信息")
                     await self.emit_llm_complete(
                         f"信息收集完成，共 {self._iteration} 轮思考",
@@ -338,8 +358,33 @@ Final Answer: [JSON格式的结果]"""
                 
                 # 执行工具
                 if step.action:
+                    no_action_streak = 0
                     # 🔥 发射 LLM 动作决策事件
                     await self.emit_llm_action(step.action, step.action_input or {})
+
+                    action_signature = (
+                        f"{step.action}:{json.dumps(step.action_input or {}, ensure_ascii=False, sort_keys=True)}"
+                    )
+                    if action_signature == last_action_signature:
+                        repeated_action_streak += 1
+                    else:
+                        repeated_action_streak = 1
+                        last_action_signature = action_signature
+
+                    if repeated_action_streak >= 3:
+                        observation = (
+                            "⚠️ 检测到连续重复工具调用，已自动跳过本次执行以避免无效消耗。"
+                            "请更换参数、切换工具或直接输出 Final Answer。"
+                        )
+                        step.observation = observation
+                        await self.emit_llm_observation(observation)
+                        self._conversation_history.append(
+                            {
+                                "role": "user",
+                                "content": f"Observation:\n{observation}",
+                            }
+                        )
+                        continue
                     
                     # 🔥 循环检测：追踪工具调用失败历史
                     tool_call_key = f"{step.action}:{json.dumps(step.action_input or {}, sort_keys=True)}"
@@ -396,8 +441,19 @@ Final Answer: [JSON格式的结果]"""
                         "content": f"Observation:\n{observation}",
                     })
                 else:
+                    no_action_streak += 1
+                    repeated_action_streak = 0
+                    last_action_signature = None
                     # LLM 没有选择工具，提示它继续
                     await self.emit_llm_decision("继续思考", "LLM 需要更多信息")
+                    if no_action_streak >= 5:
+                        await self.emit_event(
+                            "warning",
+                            "连续多轮未给出有效 Action，进入降级收敛并输出当前结果",
+                            metadata={"no_action_streak": no_action_streak},
+                        )
+                        final_result = self._summarize_from_steps()
+                        break
                     self._conversation_history.append({
                         "role": "user",
                         "content": "请继续。你输出了 Thought 但没有输出 Action。请**立即**选择一个工具执行（Action: ...），或者如果信息收集完成，输出 Final Answer。",

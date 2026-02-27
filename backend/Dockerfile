@@ -142,11 +142,16 @@ RUN npm config set registry https://registry.npmmirror.com && \
       @modelcontextprotocol/server-filesystem \
       @modelcontextprotocol/server-memory \
       @modelcontextprotocol/server-sequential-thinking \
-      @tobilu/qmd
+      @tobilu/qmd && \
+    mkdir -p /app/mcp-src && \
+    cp -R "$(npm root -g)/@modelcontextprotocol/server-filesystem" /app/mcp-src/filesystem && \
+    cp -R "$(npm root -g)/@modelcontextprotocol/server-sequential-thinking" /app/mcp-src/sequential-thinking && \
+    cp -R "$(npm root -g)/@tobilu/qmd" /app/mcp-src/qmd
 
 # MCP / QMD 持久化目录
 ENV XDG_DATA_HOME=/app/data/mcp/xdg-data
 ENV XDG_CACHE_HOME=/app/data/mcp/xdg-cache
+ENV XDG_CONFIG_HOME=/app/data/mcp/xdg-config
 ENV QMD_DATA_DIR=/app/data/qmd
 ENV CODE_INDEX_INDEXER_PATH=/app/data/mcp/code-index
 
@@ -160,13 +165,31 @@ COPY --from=builder /usr/bin/gitleaks /usr/local/bin/gitleaks
 
 # code-index-mcp 是 Python 包（非 npm 包），安装到系统 PATH
 RUN pip install --no-cache-dir code-index-mcp
+RUN python - <<'PY'
+from pathlib import Path
+import importlib.util
+import shutil
+
+target = Path("/app/mcp-src/code-index-mcp")
+target.mkdir(parents=True, exist_ok=True)
+spec = importlib.util.find_spec("code_index_mcp")
+if spec and spec.submodule_search_locations:
+    source_root = Path(list(spec.submodule_search_locations)[0]).resolve()
+    package_root = source_root.parent
+    dst = target / "code_index_mcp"
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(source_root, dst)
+    marker = target / ".source_snapshot"
+    marker.write_text(f"{package_root}\n", encoding="utf-8")
+PY
 
 # 复制应用代码
 COPY . .
 
 # 创建上传目录并设置启动脚本权限
-RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/code-index /app/data/qmd && \
-    chmod +x /app/docker-entrypoint.sh
+RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/code-index /app/data/mcp/xdg-config /app/data/qmd /app/mcp-src/filesystem /app/mcp-src/sequential-thinking /app/mcp-src/qmd /app/mcp-src/code-index-mcp && \
+    chmod +x /app/docker-entrypoint.sh /app/scripts/sync_mcp_sources.sh
 
 # 暴露端口
 EXPOSE 8000

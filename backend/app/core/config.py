@@ -170,18 +170,10 @@ class Settings(BaseSettings):
     TOOL_DOC_SYNC_ENABLED: bool = True
     TOOL_DOC_SYNC_MAX_CHARS: int = 8000
 
-    # Joern MCP (CodeBadger) configuration
-    # - Default: prefer local `joern` binary if present.
-    # - When local `joern` is missing, JoernClient can fall back to CodeBadger MCP.
-    JOERN_MCP_ENABLED: bool = False
-    JOERN_MCP_URL: str = "http://codebadger-mcp:4242/mcp"
-    JOERN_MCP_CPG_TIMEOUT_SEC: int = 600
-    JOERN_MCP_QUERY_TIMEOUT_SEC: int = 60
-    JOERN_MCP_PREFER: bool = False
-
     # Generic MCP runtime configuration
     MCP_ENABLED: bool = True
     MCP_PREFER: bool = True
+    MCP_STRICT_MODE: bool = True
     MCP_TIMEOUT_SECONDS: int = 30
     MCP_REQUIRE_ALL_READY_ON_STARTUP: bool = True
     MCP_REQUIRED_RUNTIME_DOMAIN: str = "all"  # backend | sandbox | all
@@ -195,55 +187,90 @@ class Settings(BaseSettings):
     MCP_FORBID_PROJECT_WIDE_WRITES: bool = True
 
     # MCP adapters (stdio)
-    MCP_FILESYSTEM_ENABLED: bool = True
-    MCP_FILESYSTEM_RUNTIME_MODE: str = "backend_then_sandbox"
+    MCP_FILESYSTEM_ENABLED: bool = False
+    MCP_FILESYSTEM_RUNTIME_MODE: str = "sandbox_only"
     MCP_FILESYSTEM_COMMAND: str = "npx"
-    MCP_FILESYSTEM_ARGS: str = "-y @modelcontextprotocol/server-filesystem ."
+    MCP_FILESYSTEM_ARGS: str = "-y @modelcontextprotocol/server-filesystem"
     MCP_FILESYSTEM_SANDBOX_ENABLED: bool = True
     MCP_FILESYSTEM_SANDBOX_COMMAND: str = "npx"
-    MCP_FILESYSTEM_SANDBOX_ARGS: str = "-y @modelcontextprotocol/server-filesystem ."
+    MCP_FILESYSTEM_SANDBOX_ARGS: str = "-y @modelcontextprotocol/server-filesystem"
+    MCP_FILESYSTEM_FORCE_STDIO: bool = True
+    MCP_FILESYSTEM_BACKEND_URL: Optional[str] = None
+    MCP_FILESYSTEM_SANDBOX_URL: Optional[str] = None
+    MCP_FILESYSTEM_DAEMON_HOST: str = "127.0.0.1"
+    MCP_FILESYSTEM_DAEMON_PORT: int = 8770
+    MCP_FILESYSTEM_DAEMON_COMMAND: str = "fastmcp"
+    MCP_FILESYSTEM_DAEMON_ARGS: str = ""
+    MCP_FILESYSTEM_DAEMON_ALLOWED_DIRS: str = "/tmp,/app"
+    MCP_FILESYSTEM_DAEMON_SOURCE_DIR: str = "/app/mcp-src/filesystem"
+    MCP_FILESYSTEM_DAEMON_STARTUP_TIMEOUT_SECONDS: int = 45
 
-    MCP_CODE_INDEX_ENABLED: bool = False
+    MCP_CODE_INDEX_ENABLED: bool = True
     MCP_CODE_INDEX_RUNTIME_MODE: str = "backend_then_sandbox"
     MCP_CODE_INDEX_COMMAND: str = "code-index-mcp"
     MCP_CODE_INDEX_ARGS: str = "--indexer-path /app/data/mcp/code-index"
-    MCP_CODE_INDEX_SANDBOX_ENABLED: bool = False
+    MCP_CODE_INDEX_SANDBOX_ENABLED: bool = True
     MCP_CODE_INDEX_SANDBOX_COMMAND: str = "code-index-mcp"
     MCP_CODE_INDEX_SANDBOX_ARGS: str = "--indexer-path /app/data/mcp/code-index"
+    MCP_CODE_INDEX_BACKEND_URL: Optional[str] = None
+    MCP_CODE_INDEX_SANDBOX_URL: Optional[str] = None
 
-    MCP_MEMORY_ENABLED: bool = False
-    MCP_MEMORY_RUNTIME_MODE: str = "backend_then_sandbox"
-    MCP_MEMORY_COMMAND: str = "npx"
-    MCP_MEMORY_ARGS: str = "-y @modelcontextprotocol/server-memory"
-    MCP_MEMORY_SANDBOX_ENABLED: bool = False
-    MCP_MEMORY_SANDBOX_COMMAND: str = "npx"
-    MCP_MEMORY_SANDBOX_ARGS: str = "-y @modelcontextprotocol/server-memory"
+    MCP_DAEMON_AUTOSTART: bool = True
+    MCP_DAEMON_LOG_DIR: str = "/tmp/deepaudit/mcp-daemons"
 
-    MCP_SEQUENTIAL_THINKING_ENABLED: bool = False
+    MCP_CODE_INDEX_DAEMON_HOST: str = "127.0.0.1"
+    MCP_CODE_INDEX_DAEMON_PORT: int = 8765
+    MCP_CODE_INDEX_DAEMON_COMMAND: str = "code-index-mcp"
+    MCP_CODE_INDEX_DAEMON_ARGS: str = "--transport streamable-http"
+    MCP_CODE_INDEX_DAEMON_INDEXER_PATH: str = "/app/data/mcp/code-index"
+    MCP_CODE_INDEX_DAEMON_SOURCE_DIR: str = "/app/mcp-src/code-index-mcp"
+    MCP_CODE_INDEX_DAEMON_STARTUP_TIMEOUT_SECONDS: int = 45
+
+    MCP_SEQUENTIAL_THINKING_ENABLED: bool = True
     MCP_SEQUENTIAL_THINKING_RUNTIME_MODE: str = "backend_then_sandbox"
     MCP_SEQUENTIAL_THINKING_COMMAND: str = "npx"
     MCP_SEQUENTIAL_THINKING_ARGS: str = "-y @modelcontextprotocol/server-sequential-thinking"
-    MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED: bool = False
+    MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED: bool = True
     MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND: str = "npx"
     MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS: str = "-y @modelcontextprotocol/server-sequential-thinking"
+    MCP_SEQUENTIAL_THINKING_BACKEND_URL: Optional[str] = None
+    MCP_SEQUENTIAL_THINKING_SANDBOX_URL: Optional[str] = None
+    MCP_SEQUENTIAL_THINKING_DAEMON_HOST: str = "127.0.0.1"
+    MCP_SEQUENTIAL_THINKING_DAEMON_PORT: int = 8771
+    MCP_SEQUENTIAL_THINKING_DAEMON_COMMAND: str = "node"
+    MCP_SEQUENTIAL_THINKING_DAEMON_ARGS: str = "dist/index.js --transport streamable-http --port 8771"
+    MCP_SEQUENTIAL_THINKING_DAEMON_SOURCE_DIR: str = "/app/mcp-src/sequential-thinking"
+    MCP_SEQUENTIAL_THINKING_DAEMON_STARTUP_TIMEOUT_SECONDS: int = 45
 
     MCP_QMD_ENABLED: bool = False
-    MCP_QMD_RUNTIME_MODE: str = "backend_then_sandbox"
+    MCP_QMD_RUNTIME_MODE: str = "sandbox_only"
     MCP_QMD_COMMAND: str = "qmd"
     MCP_QMD_ARGS: str = "mcp"
     MCP_QMD_SANDBOX_ENABLED: bool = False
     MCP_QMD_SANDBOX_COMMAND: str = "qmd"
     MCP_QMD_SANDBOX_ARGS: str = "mcp"
+    MCP_QMD_BACKEND_URL: Optional[str] = None
+    MCP_QMD_SANDBOX_URL: Optional[str] = None
+    MCP_QMD_DAEMON_HOST: str = "localhost"
+    MCP_QMD_DAEMON_PORT: int = 8181
+    MCP_QMD_DAEMON_COMMAND: str = "node"
+    MCP_QMD_DAEMON_ARGS: str = "dist/index.js mcp --transport streamable-http"
+    MCP_QMD_DAEMON_SOURCE_DIR: str = "/app/mcp-src/qmd"
+    MCP_QMD_DAEMON_STARTUP_TIMEOUT_SECONDS: int = 60
     QMD_COLLECTION_PREFIX: str = "project"
     QMD_INDEX_GLOB: str = "**/*.{c,cc,cpp,cxx,h,hpp,hh,py,js,ts,tsx,java,go,rs,php,rb,swift}"
     QMD_LAZY_INDEX_ENABLED: bool = True
     QMD_AUTO_EMBED_ON_FIRST_USE: bool = False
     QMD_DATA_DIR: str = "./data/qmd"
-
-    MCP_CODEBADGER_ENABLED: bool = False
-    MCP_CODEBADGER_RUNTIME_MODE: str = "backend_only"
-    MCP_CODEBADGER_BACKEND_URL: Optional[str] = None
-    MCP_CODEBADGER_SANDBOX_URL: Optional[str] = None
+    QMD_CLI_COMMAND: str = "npx -y @tobilu/qmd"
+    QMD_CLI_TIMEOUT_SECONDS: int = 120
+    QMD_TASK_KB_ENABLED: bool = True
+    QMD_TASK_ROOT_REL: str = ".deepaudit/qmd"
+    QMD_TASK_COLLECTION_PREFIX: str = "task"
+    QMD_TASK_DOC_GLOB: str = "**/*.{md,txt,json,yml,yaml}"
+    QMD_TASK_AUTO_EMBED: bool = False
+    QMD_TASK_QUERY_CACHE: bool = True
+    XDG_CONFIG_HOME: str = "/app/data/mcp/xdg-config"
 
     MCP_CATALOG_SOURCE_URL: str = ""
 

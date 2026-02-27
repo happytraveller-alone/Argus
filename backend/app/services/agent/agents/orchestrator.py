@@ -199,6 +199,7 @@ class OrchestratorAgent(BaseAgent):
 
         # 🔥 保存各个 Agent 返回的 TaskHandoff，用于 Agent 间通信
         self._agent_handoffs: Dict[str, TaskHandoff] = {}  # agent_name -> TaskHandoff
+        self._phase_planning_applied: Dict[str, bool] = {}
     
     def register_sub_agent(self, name: str, agent: BaseAgent):
         """注册子 Agent"""
@@ -399,6 +400,7 @@ class OrchestratorAgent(BaseAgent):
         self._all_findings = []
         self._agent_results = {}
         self._agent_handoffs = {}
+        self._phase_planning_applied = {}
         self._iteration = 0
         self._total_tokens = 0
         self._tool_calls = 0
@@ -604,6 +606,8 @@ class OrchestratorAgent(BaseAgent):
                     break
 
                 while not item.done and item.attempts < item.max_attempts:
+                    if self.is_cancelled:
+                        break
                     item.attempts += 1
                     await emit_todo_update(f"▶️ 开始执行：{item.title} (attempt {item.attempts}/{item.max_attempts})")
 
@@ -912,6 +916,40 @@ class OrchestratorAgent(BaseAgent):
             action=parsed.action,
             action_input=parsed.action_input or {},
         )
+
+    def _build_file_planning_template(
+        self,
+        *,
+        agent_name: str,
+        task: str,
+        context: str,
+    ) -> Dict[str, Any]:
+        config = self._runtime_context.get("config", {})
+        target_files = config.get("target_files") if isinstance(config, dict) else []
+        if not isinstance(target_files, list):
+            target_files = []
+        normalized_targets = [
+            str(path).strip()
+            for path in target_files
+            if str(path).strip()
+        ][:20]
+        return {
+            "template": "planning_with_files",
+            "phase": str(agent_name or "").strip().lower(),
+            "goal": str(task or "").strip(),
+            "task_context": str(context or "").strip(),
+            "file_targets": normalized_targets,
+            "checklist": [
+                "先确认输入面与信任边界，再进入漏洞验证。",
+                "优先复用已有证据，禁止重复检索同一输入。",
+                "每条结论必须绑定 file_path 与 line_start。",
+            ],
+            "constraints": [
+                "仅分析当前项目范围内文件。",
+                "禁止产出未绑定证据的结论。",
+                "优先调用 MCP 工具链执行。",
+            ],
+        }
     
     async def _dispatch_agent(self, params: Dict[str, Any]) -> str:
         """调度子 Agent"""
@@ -940,6 +978,7 @@ class OrchestratorAgent(BaseAgent):
         # 不再使用“同一 agent 调度次数上限”作为门禁（否则会阻断 todo 重试逻辑）。
         dispatch_count = self._dispatched_tasks.get(agent_name, 0)
         self._dispatched_tasks[agent_name] = dispatch_count + 1
+        is_phase_first_dispatch = dispatch_count == 0
         
         # 🔥 设置父 Agent ID 并注册到注册表（动态 Agent 树）
         logger.debug(f"[Orchestrator] 准备调度 {agent_name} Agent, agent._registered={agent._registered}")
@@ -988,15 +1027,51 @@ class OrchestratorAgent(BaseAgent):
             # 🔥 构建 TaskHandoff - Agent 间的结构化通信协议
             handoff = self._build_handoff_for_agent(agent_name, task, context)
 
+            runtime_config = (
+                dict(self._runtime_context.get("config", {}))
+                if isinstance(self._runtime_context.get("config"), dict)
+                else {}
+            )
+            planning_template_applied = False
+            file_planning_payload = params.get("file_planning")
+            if not isinstance(file_planning_payload, dict):
+                candidate = runtime_config.get("file_planning")
+                file_planning_payload = candidate if isinstance(candidate, dict) else None
+            if (
+                agent_name in {"recon", "analysis", "verification"}
+                and is_phase_first_dispatch
+                and not isinstance(file_planning_payload, dict)
+            ):
+                file_planning_payload = self._build_file_planning_template(
+                    agent_name=agent_name,
+                    task=task,
+                    context=context,
+                )
+                planning_template_applied = True
+                self._phase_planning_applied[agent_name] = True
+            if isinstance(file_planning_payload, dict):
+                runtime_config["file_planning"] = file_planning_payload
+
             sub_input = {
                 "task": task,
                 "task_context": context,
                 "project_info": project_info,
-                "config": self._runtime_context.get("config", {}),
+                "config": runtime_config,
                 "project_root": self._runtime_context.get("project_root", "."),
                 "previous_results": previous_results,
                 "handoff": handoff.to_dict() if handoff else None,  # 🔥 传递 TaskHandoff
+                "file_planning": file_planning_payload,
             }
+
+            if planning_template_applied:
+                await self.emit_event(
+                    "info",
+                    f"📐 已自动应用 Planning With Files 模板：{agent_name}",
+                    metadata={
+                        "planning_template_applied": True,
+                        "planning_phase": agent_name,
+                    },
+                )
 
             # 🔥 执行子 Agent 前检查取消状态
             if self.is_cancelled:

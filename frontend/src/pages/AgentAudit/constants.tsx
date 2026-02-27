@@ -38,6 +38,8 @@ export const SEVERITY_COLORS: Record<string, string> = {
 	medium:
 		"text-amber-700 dark:text-amber-300 bg-amber-500/20 border border-amber-500/40",
 	low: "text-sky-700 dark:text-sky-300 bg-sky-500/20 border border-sky-500/40",
+	invalid:
+		"text-zinc-700 dark:text-zinc-300 bg-zinc-500/20 border border-zinc-500/40",
 	info: "text-foreground bg-muted/20 border border-border",
 };
 
@@ -196,28 +198,28 @@ export const AGENT_TYPE_CONFIG: Record<
 		icon: React.createElement(Cpu, {
 			className: "w-4 h-4 text-violet-600 dark:text-violet-400",
 		}),
-		label: "编排器",
+		label: "编排智能体",
 		color: "violet",
 	},
 	recon: {
 		icon: React.createElement(Scan, {
 			className: "w-4 h-4 text-teal-600 dark:text-teal-400",
 		}),
-		label: "侦察",
+		label: "侦查智能体",
 		color: "teal",
 	},
 	analysis: {
 		icon: React.createElement(FileSearch, {
 			className: "w-4 h-4 text-amber-600 dark:text-amber-400",
 		}),
-		label: "分析",
+		label: "分析智能体",
 		color: "amber",
 	},
 	verification: {
 		icon: React.createElement(ShieldCheck, {
 			className: "w-4 h-4 text-emerald-600 dark:text-emerald-400",
 		}),
-		label: "验证",
+		label: "验证智能体",
 		color: "emerald",
 	},
 };
@@ -262,7 +264,7 @@ export const TASK_STATUS_CONFIG: Record<
 export const TASK_PHASE_LABELS: Record<string, string> = {
 	planning: "规划",
 	indexing: "索引",
-	reconnaissance: "侦察",
+	reconnaissance: "侦查",
 	analysis: "分析",
 	verification: "验证",
 	reporting: "报告",

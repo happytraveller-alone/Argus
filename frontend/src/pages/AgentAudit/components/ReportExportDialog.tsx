@@ -29,7 +29,6 @@ import {
   AlertTriangle,
   RefreshCw,
   Eye,
-  Terminal,
   Shield,
   Bug,
   CheckCircle2,
@@ -48,6 +47,7 @@ import {
 import { apiClient } from "@/shared/api/serverClient";
 import { downloadAgentReport } from "@/shared/api/agentTasks";
 import type { AgentTask, AgentFinding } from "@/shared/api/agentTasks";
+import FindingNarrativeMarkdown from "./FindingNarrativeMarkdown";
 
 // ============ Types ============
 
@@ -523,7 +523,7 @@ const PreviewSkeleton = memo(function PreviewSkeleton() {
   );
 });
 
-// Markdown preview renderer - Enhanced with search highlighting
+// Markdown preview renderer (shared with finding narrative detail)
 const MarkdownPreview = memo(function MarkdownPreview({
   content,
   searchQuery = "",
@@ -531,203 +531,12 @@ const MarkdownPreview = memo(function MarkdownPreview({
   content: string;
   searchQuery?: string;
 }) {
-  // 高亮搜索匹配文本
-  const highlightText = useCallback((text: string, query: string) => {
-    if (!query) return text;
-    const regex = new RegExp(
-      `(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-      "gi",
-    );
-    const parts = text.split(regex);
-    return parts.map((part, i) =>
-      regex.test(part) ? (
-        <mark key={i} className="bg-primary/40 text-foreground px-0.5 rounded">
-          {part}
-        </mark>
-      ) : (
-        part
-      ),
-    );
-  }, []);
-
-  // Simple markdown to styled elements renderer
-  const renderMarkdown = (text: string) => {
-    const lines = text.split("\n");
-    const elements: React.ReactNode[] = [];
-    let inCodeBlock = false;
-    let codeContent: string[] = [];
-    let codeLanguage = "";
-
-    lines.forEach((line, index) => {
-      // Code block handling
-      if (line.startsWith("```")) {
-        if (inCodeBlock) {
-          elements.push(
-            <div
-              key={`code-${index}`}
-              className="my-4 rounded-xl bg-card border border-border/50 overflow-hidden shadow-lg"
-            >
-              <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-muted to-muted/40 border-b border-border/50">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-                  </div>
-                  <span className="text-xs text-muted-foreground uppercase tracking-wider font-mono ml-2">
-                    {codeLanguage || "code"}
-                  </span>
-                </div>
-                <Terminal className="w-3.5 h-3.5 text-muted-foreground" />
-              </div>
-              <div className="relative">
-                {/* 行号 */}
-                <div className="absolute left-0 top-0 bottom-0 w-10 bg-background border-r border-border select-none">
-                  <div className="p-3 text-xs font-mono text-muted-foreground leading-5">
-                    {codeContent.map((_, i) => (
-                      <div key={i}>{i + 1}</div>
-                    ))}
-                  </div>
-                </div>
-                <pre className="p-3 pl-14 text-xs font-mono text-foreground overflow-x-auto leading-5 whitespace-pre-wrap break-all">
-                  {codeContent.map((codeLine, i) => (
-                    <div key={i}>
-                      {highlightText(codeLine, searchQuery) || " "}
-                    </div>
-                  ))}
-                </pre>
-              </div>
-            </div>,
-          );
-          codeContent = [];
-          codeLanguage = "";
-          inCodeBlock = false;
-        } else {
-          inCodeBlock = true;
-          codeLanguage = line.slice(3).trim();
-        }
-        return;
-      }
-
-      if (inCodeBlock) {
-        codeContent.push(line);
-        return;
-      }
-
-      // Headers with decorative elements
-      if (line.startsWith("# ")) {
-        elements.push(
-          <h1
-            key={index}
-            className="text-xl font-bold text-foreground mt-8 mb-4 pb-3 border-b border-border/50 flex items-center gap-3"
-          >
-            <span className="w-1 h-6 bg-primary rounded-full" />
-            {highlightText(line.slice(2), searchQuery)}
-          </h1>,
-        );
-        return;
-      }
-      if (line.startsWith("## ")) {
-        elements.push(
-          <h2
-            key={index}
-            className="text-lg font-bold text-foreground mt-6 mb-3 flex items-center gap-2"
-          >
-            <Sparkles className="w-4 h-4 text-primary/60" />
-            {highlightText(line.slice(3), searchQuery)}
-          </h2>,
-        );
-        return;
-      }
-      if (line.startsWith("### ")) {
-        elements.push(
-          <h3
-            key={index}
-            className="text-base font-semibold text-foreground mt-5 mb-2 pl-2 border-l-2 border-border"
-          >
-            {highlightText(line.slice(4), searchQuery)}
-          </h3>,
-        );
-        return;
-      }
-
-      // Horizontal rule with style
-      if (line.match(/^---+$/)) {
-        elements.push(
-          <div key={index} className="my-6 flex items-center gap-3">
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-            <div className="w-1.5 h-1.5 rounded-full bg-muted" />
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-          </div>,
-        );
-        return;
-      }
-
-      // List items with better styling
-      if (line.match(/^[-*]\s/)) {
-        elements.push(
-          <div
-            key={index}
-            className="flex gap-3 text-sm text-foreground ml-3 my-1 group"
-          >
-            <span className="text-primary mt-1.5 text-xs group-hover:scale-125 transition-transform">
-              ●
-            </span>
-            <span className="flex-1 break-words">
-              {highlightText(line.slice(2), searchQuery)}
-            </span>
-          </div>,
-        );
-        return;
-      }
-
-      // Bold text handling
-      if (line.includes("**")) {
-        const parts = line.split(/\*\*(.+?)\*\*/g);
-        const lineElements = parts.map((part, i) => {
-          if (i % 2 === 1) {
-            return (
-              <strong key={i} className="text-foreground font-semibold">
-                {highlightText(part, searchQuery)}
-              </strong>
-            );
-          }
-          return highlightText(part, searchQuery);
-        });
-        elements.push(
-          <p
-            key={index}
-            className="text-sm text-foreground my-1.5 leading-relaxed break-words"
-          >
-            {lineElements}
-          </p>,
-        );
-        return;
-      }
-
-      // Empty lines
-      if (line.trim() === "") {
-        elements.push(<div key={index} className="h-3" />);
-        return;
-      }
-
-      // Regular paragraphs
-      elements.push(
-        <p
-          key={index}
-          className="text-sm text-foreground my-1.5 leading-relaxed break-words"
-        >
-          {highlightText(line, searchQuery)}
-        </p>,
-      );
-    });
-
-    return elements;
-  };
-
   return (
     <div className="prose prose-invert max-w-none break-words overflow-wrap-anywhere">
-      {renderMarkdown(content)}
+      <FindingNarrativeMarkdown
+        finding={{ description_markdown: content }}
+        searchQuery={searchQuery}
+      />
     </div>
   );
 });

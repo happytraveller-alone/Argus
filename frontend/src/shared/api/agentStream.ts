@@ -32,6 +32,7 @@ export type StreamEventType =
   // 发现相关
   | 'finding'          // Backward compatibility
   | 'finding_new'
+  | 'finding_update'
   | 'finding_verified'
   // 状态相关
   | 'progress'
@@ -401,10 +402,11 @@ export class AgentStreamHandler {
       // 发现
       case 'finding':  // 🔥 向后兼容旧的事件类型
       case 'finding_new':
+      case 'finding_update':
       case 'finding_verified':
         this.options.onFinding?.(
           event.metadata || {},
-          event.type === 'finding_verified'
+          event.type === 'finding_verified' || event.metadata?.is_verified === true
         );
         break;
 

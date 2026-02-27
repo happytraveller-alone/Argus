@@ -38,8 +38,9 @@ def test_verification_prompt_requires_flow_fields_and_report_preconditions():
     assert "src/time64.c中asctime64_r栈溢出漏洞" in VERIFICATION_SYSTEM_PROMPT
 
 
-def test_shared_tool_usage_prompt_includes_flow_tools_and_code_search_alias():
+def test_shared_tool_usage_prompt_includes_flow_tools_and_strict_read_rule():
     assert "dataflow_analysis" in TOOL_USAGE_GUIDE
     assert "controlflow_analysis_light" in TOOL_USAGE_GUIDE
     assert "logic_authz_analysis" in TOOL_USAGE_GUIDE
-    assert "code_search" in TOOL_USAGE_GUIDE
+    assert "code_search" not in TOOL_USAGE_GUIDE
+    assert "先用 `search_code` 定位到 `file_path:line`" in TOOL_USAGE_GUIDE

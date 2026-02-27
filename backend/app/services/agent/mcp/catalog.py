@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import os
+import socket
 import shutil
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import urlparse, urlunparse
+
+import httpx
 
 from app.core.config import settings
+from .daemon_manager import (
+    resolve_code_index_backend_url,
+    resolve_filesystem_backend_url,
+    resolve_sequential_backend_url,
+)
+from .probe_specs import get_verification_tools
 
 
 MCPCatalogType = Literal["mcp-server", "skill-pack"]
@@ -32,6 +42,7 @@ class McpCatalogItem:
     inputInterface: List[str]
     outputInterface: List[str]
     includedSkills: List[str]
+    verificationTools: List[str]
     source: str
     runtime_mode: str = "backend_then_sandbox"
     backend: Optional[McpDomainStatus] = None
@@ -63,10 +74,48 @@ def _command_ready(command: str) -> tuple[bool, Optional[str]]:
 
 
 def _http_endpoint_ready(url: Optional[str]) -> tuple[bool, Optional[str]]:
+    ready, reason = _validate_http_endpoint(url)
+    if not ready:
+        return False, reason
+
+    endpoint = str(url or "").strip()
+    parsed = urlparse(endpoint)
+    health_url = urlunparse(parsed._replace(path="/health", params="", query="", fragment=""))
+    fallback_to_tcp_probe = False
+    try:
+        with httpx.Client(timeout=1.5, follow_redirects=True) as client:
+            response = client.get(health_url)
+        if response.status_code == 200:
+            return True, None
+        if int(response.status_code) in {404, 405, 501}:
+            fallback_to_tcp_probe = True
+        else:
+            return False, f"healthcheck_failed:status_{int(response.status_code)}@{health_url}"
+    except Exception as exc:
+        if isinstance(exc, httpx.RemoteProtocolError):
+            fallback_to_tcp_probe = True
+        else:
+            return False, f"healthcheck_failed:{exc.__class__.__name__}@{health_url}"
+    if fallback_to_tcp_probe:
+        host = str(parsed.hostname or "").strip()
+        if not host:
+            return False, f"healthcheck_failed:tcp_unreachable:missing_host@{health_url}"
+        port = int(parsed.port) if parsed.port else (443 if str(parsed.scheme).lower() == "https" else 80)
+        try:
+            with socket.create_connection((host, port), timeout=1.5):
+                return True, None
+        except Exception as exc:
+            return False, f"healthcheck_failed:tcp_unreachable:{exc.__class__.__name__}@{health_url}"
+    return True, None
+
+
+def _validate_http_endpoint(url: Optional[str]) -> tuple[bool, Optional[str]]:
     endpoint = str(url or "").strip()
     if not endpoint:
         return False, "missing_endpoint"
-    return True, None
+    if endpoint.startswith(("http://", "https://")):
+        return True, None
+    return False, "invalid_endpoint"
 
 
 def _runtime_entry(
@@ -102,10 +151,48 @@ def _build_domain_status(
     return McpDomainStatus(enabled=True, startup_ready=bool(ready), startup_error=reason)
 
 
+def _build_domain_status_with_stdio_fallback(
+    *,
+    enabled: bool,
+    http_checker: tuple[bool, Optional[str]],
+    stdio_command: str,
+) -> McpDomainStatus:
+    if not enabled:
+        return McpDomainStatus(enabled=False, startup_ready=False, startup_error="disabled")
+    http_ready, http_reason = http_checker
+    if http_ready:
+        return McpDomainStatus(enabled=True, startup_ready=True, startup_error=None)
+
+    stdio_ready, stdio_reason = _command_ready(stdio_command)
+    if stdio_ready:
+        fallback_reason = "http_unreachable_stdio_fallback"
+        if http_reason:
+            fallback_reason = f"{fallback_reason}:{http_reason}"
+        return McpDomainStatus(
+            enabled=True,
+            startup_ready=True,
+            startup_error=fallback_reason,
+        )
+
+    combined_reason = "; ".join(
+        str(item).strip()
+        for item in (http_reason, stdio_reason)
+        if str(item).strip()
+    )
+    return McpDomainStatus(
+        enabled=True,
+        startup_ready=False,
+        startup_error=combined_reason or "startup_check_failed",
+    )
+
+
 def _combine_startup_status(domains: List[McpDomainStatus], enabled: bool) -> tuple[bool, Optional[str]]:
     if not enabled:
         return False, "disabled"
-    errors = [domain.startup_error for domain in domains if not domain.startup_ready]
+    active_domains = [domain for domain in domains if domain.enabled]
+    if not active_domains:
+        return False, "disabled"
+    errors = [domain.startup_error for domain in active_domains if not domain.startup_ready]
     if errors:
         return False, "; ".join(str(item) for item in errors if item)
     return True, None
@@ -142,14 +229,22 @@ def build_mcp_catalog(
             return bool(entry[policy_key])
         return bool(getattr(settings, setting_name, False))
 
+    filesystem_backend_url = resolve_filesystem_backend_url(settings)
     filesystem_backend = _build_domain_status(
         enabled=runtime_enabled and _domain_enabled_for("filesystem", "backend", "MCP_FILESYSTEM_ENABLED"),
-        checker=_command_ready(str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "npx"))),
+        checker=_http_endpoint_ready(filesystem_backend_url)
+        if filesystem_backend_url
+        else _command_ready(str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "npx"))),
     )
+    filesystem_sandbox_url = str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_URL", "") or "").strip()
+    if not filesystem_sandbox_url:
+        filesystem_sandbox_url = filesystem_backend_url
     filesystem_sandbox = _build_domain_status(
         enabled=runtime_enabled
         and _domain_enabled_for("filesystem", "sandbox", "MCP_FILESYSTEM_SANDBOX_ENABLED"),
-        checker=_command_ready(str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "npx"))),
+        checker=_http_endpoint_ready(filesystem_sandbox_url)
+        if filesystem_sandbox_url
+        else _command_ready(str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "npx"))),
     )
     filesystem_enabled = bool(filesystem_backend.enabled or filesystem_sandbox.enabled)
     filesystem_startup_ready, filesystem_startup_error = _combine_startup_status(
@@ -157,14 +252,22 @@ def build_mcp_catalog(
         filesystem_enabled,
     )
 
+    code_index_backend_url = resolve_code_index_backend_url(settings)
     code_index_backend = _build_domain_status(
         enabled=runtime_enabled and _domain_enabled_for("code_index", "backend", "MCP_CODE_INDEX_ENABLED"),
-        checker=_command_ready(str(getattr(settings, "MCP_CODE_INDEX_COMMAND", "code-index-mcp"))),
+        checker=_http_endpoint_ready(code_index_backend_url)
+        if code_index_backend_url
+        else _command_ready(str(getattr(settings, "MCP_CODE_INDEX_COMMAND", "code-index-mcp"))),
     )
+    code_index_sandbox_url = str(getattr(settings, "MCP_CODE_INDEX_SANDBOX_URL", "") or "").strip()
+    if not code_index_sandbox_url:
+        code_index_sandbox_url = code_index_backend_url
     code_index_sandbox = _build_domain_status(
         enabled=runtime_enabled
         and _domain_enabled_for("code_index", "sandbox", "MCP_CODE_INDEX_SANDBOX_ENABLED"),
-        checker=_command_ready(str(getattr(settings, "MCP_CODE_INDEX_SANDBOX_COMMAND", "code-index-mcp"))),
+        checker=_http_endpoint_ready(code_index_sandbox_url)
+        if code_index_sandbox_url
+        else _command_ready(str(getattr(settings, "MCP_CODE_INDEX_SANDBOX_COMMAND", "code-index-mcp"))),
     )
     code_index_enabled = bool(code_index_backend.enabled or code_index_sandbox.enabled)
     code_index_startup_ready, code_index_startup_error = _combine_startup_status(
@@ -172,70 +275,34 @@ def build_mcp_catalog(
         code_index_enabled,
     )
 
-    memory_backend = _build_domain_status(
-        enabled=runtime_enabled and _domain_enabled_for("memory", "backend", "MCP_MEMORY_ENABLED"),
-        checker=_command_ready(str(getattr(settings, "MCP_MEMORY_COMMAND", "npx"))),
-    )
-    memory_sandbox = _build_domain_status(
-        enabled=runtime_enabled and _domain_enabled_for("memory", "sandbox", "MCP_MEMORY_SANDBOX_ENABLED"),
-        checker=_command_ready(str(getattr(settings, "MCP_MEMORY_SANDBOX_COMMAND", "npx"))),
-    )
-    memory_enabled = bool(memory_backend.enabled or memory_sandbox.enabled)
-    memory_startup_ready, memory_startup_error = _combine_startup_status(
-        [memory_backend, memory_sandbox],
-        memory_enabled,
-    )
-
-    seq_backend = _build_domain_status(
+    seq_backend_url = resolve_sequential_backend_url(settings)
+    seq_backend = _build_domain_status_with_stdio_fallback(
         enabled=runtime_enabled
         and _domain_enabled_for(
             "sequentialthinking",
             "backend",
             "MCP_SEQUENTIAL_THINKING_ENABLED",
         ),
-        checker=_command_ready(str(getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "npx"))),
+        http_checker=_http_endpoint_ready(seq_backend_url),
+        stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "npx")),
     )
-    seq_sandbox = _build_domain_status(
+    seq_sandbox_url = str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "") or "").strip()
+    if not seq_sandbox_url:
+        seq_sandbox_url = seq_backend_url
+    seq_sandbox = _build_domain_status_with_stdio_fallback(
         enabled=runtime_enabled
         and _domain_enabled_for(
             "sequentialthinking",
             "sandbox",
             "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
         ),
-        checker=_command_ready(str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "npx"))),
+        http_checker=_http_endpoint_ready(seq_sandbox_url),
+        stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "npx")),
     )
     seq_enabled = bool(seq_backend.enabled or seq_sandbox.enabled)
     seq_startup_ready, seq_startup_error = _combine_startup_status(
         [seq_backend, seq_sandbox],
         seq_enabled,
-    )
-
-    qmd_backend = _build_domain_status(
-        enabled=runtime_enabled and _domain_enabled_for("qmd", "backend", "MCP_QMD_ENABLED"),
-        checker=_command_ready(str(getattr(settings, "MCP_QMD_COMMAND", "qmd"))),
-    )
-    qmd_sandbox = _build_domain_status(
-        enabled=runtime_enabled and _domain_enabled_for("qmd", "sandbox", "MCP_QMD_SANDBOX_ENABLED"),
-        checker=_command_ready(str(getattr(settings, "MCP_QMD_SANDBOX_COMMAND", "qmd"))),
-    )
-    qmd_enabled = bool(qmd_backend.enabled or qmd_sandbox.enabled)
-    qmd_startup_ready, qmd_startup_error = _combine_startup_status(
-        [qmd_backend, qmd_sandbox],
-        qmd_enabled,
-    )
-
-    codebadger_backend = _build_domain_status(
-        enabled=runtime_enabled and _domain_enabled_for("codebadger", "backend", "MCP_CODEBADGER_ENABLED"),
-        checker=_http_endpoint_ready(getattr(settings, "MCP_CODEBADGER_BACKEND_URL", None)),
-    )
-    codebadger_sandbox = _build_domain_status(
-        enabled=runtime_enabled and _domain_enabled_for("codebadger", "sandbox", "MCP_CODEBADGER_ENABLED"),
-        checker=_http_endpoint_ready(getattr(settings, "MCP_CODEBADGER_SANDBOX_URL", None)),
-    )
-    codebadger_enabled = bool(codebadger_backend.enabled or codebadger_sandbox.enabled)
-    codebadger_startup_ready, codebadger_startup_error = _combine_startup_status(
-        [codebadger_backend, codebadger_sandbox],
-        codebadger_enabled,
     )
 
     items = [
@@ -244,11 +311,12 @@ def build_mcp_catalog(
             name="Filesystem MCP",
             type="mcp-server",
             enabled=filesystem_enabled,
-            description="项目文件读取、目录查看与受控写入执行。",
-            executionFunctions=["read_file", "list_directory", "edit_file", "write_file"],
-            inputInterface=["path/file_path", "start_line/end_line", "old_text/new_text"],
-            outputInterface=["content", "metadata.file_path", "metadata.write_scope_*"],
-            includedSkills=["read_file", "list_files", "edit_file", "write_file"],
+            description="任务解压目录挂载（只读），支持项目文件读取与目录查看。",
+            executionFunctions=["read_file", "list_directory", "search_files", "get_file_info"],
+            inputInterface=["path/file_path", "directory", "pattern"],
+            outputInterface=["content", "metadata.file_path", "entries"],
+            includedSkills=["read_file", "search_code"],
+            verificationTools=get_verification_tools("filesystem"),
             source="https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
             runtime_mode=_runtime_mode_for("filesystem", "MCP_FILESYSTEM_RUNTIME_MODE"),
             backend=filesystem_backend,
@@ -263,15 +331,15 @@ def build_mcp_catalog(
             type="mcp-server",
             enabled=code_index_enabled,
             description="代码检索、符号提取、文件摘要与函数定位能力。",
-            executionFunctions=["search_code_advanced", "get_symbol_body", "get_file_summary"],
+            executionFunctions=["find_files", "search_code_advanced", "get_symbol_body", "get_file_summary"],
             inputInterface=["query/keyword", "path/file_path", "glob/file_pattern", "line_start"],
             outputInterface=["matches", "symbols", "file_summary", "metadata.engine"],
             includedSkills=[
-                "search_code",
                 "extract_function",
+                "list_files",
                 "locate_enclosing_function",
-                "code_search",
             ],
+            verificationTools=get_verification_tools("code_index"),
             source="https://github.com/johnhuang316/code-index-mcp",
             runtime_mode=_runtime_mode_for("code_index", "MCP_CODE_INDEX_RUNTIME_MODE"),
             backend=code_index_backend,
@@ -279,24 +347,6 @@ def build_mcp_catalog(
             required=True,
             startup_ready=code_index_startup_ready,
             startup_error=code_index_startup_error,
-        ),
-        McpCatalogItem(
-            id="memory",
-            name="Memory MCP",
-            type="mcp-server",
-            enabled=memory_enabled,
-            description="模型记忆管理与任务摘要持久化。",
-            executionFunctions=["memory_store", "memory_query", "memory_append"],
-            inputInterface=["task_id", "agent_name", "summary", "payload"],
-            outputInterface=["memory_entries", "memory_hit", "summary_text"],
-            includedSkills=["memory_sync", "task_memory"],
-            source="https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
-            runtime_mode=_runtime_mode_for("memory", "MCP_MEMORY_RUNTIME_MODE"),
-            backend=memory_backend,
-            sandbox=memory_sandbox,
-            required=True,
-            startup_ready=memory_startup_ready,
-            startup_error=memory_startup_error,
         ),
         McpCatalogItem(
             id="sequentialthinking",
@@ -307,7 +357,8 @@ def build_mcp_catalog(
             executionFunctions=["sequential_thinking", "reasoning_trace"],
             inputInterface=["goal", "constraints", "step_index"],
             outputInterface=["reasoning_steps", "next_action", "stop_signal"],
-            includedSkills=["brainstorming", "step_reasoning"],
+            includedSkills=["sequential_thinking", "reasoning_trace", "brainstorming", "step_reasoning"],
+            verificationTools=get_verification_tools("sequentialthinking"),
             source="https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
             runtime_mode=_runtime_mode_for(
                 "sequentialthinking",
@@ -315,109 +366,9 @@ def build_mcp_catalog(
             ),
             backend=seq_backend,
             sandbox=seq_sandbox,
-            required=True,
+            required=False,
             startup_ready=seq_startup_ready,
             startup_error=seq_startup_error,
-        ),
-        McpCatalogItem(
-            id="qmd",
-            name="QMD MCP",
-            type="mcp-server",
-            enabled=qmd_enabled,
-            description="模型上下文快速检索与语义召回。",
-            executionFunctions=["qmd_query", "qmd_get", "qmd_multi_get", "qmd_status"],
-            inputInterface=["query/searches", "collections", "ids"],
-            outputInterface=["hits", "documents", "metadata.collections"],
-            includedSkills=["qmd_query", "qmd_get", "qmd_multi_get", "qmd_status"],
-            source="https://github.com/tobi/qmd",
-            runtime_mode=_runtime_mode_for("qmd", "MCP_QMD_RUNTIME_MODE"),
-            backend=qmd_backend,
-            sandbox=qmd_sandbox,
-            required=True,
-            startup_ready=qmd_startup_ready,
-            startup_error=qmd_startup_error,
-        ),
-        McpCatalogItem(
-            id="codebadger",
-            name="CodeBadger MCP",
-            type="mcp-server",
-            enabled=codebadger_enabled,
-            description="基于 CPG 的深度流分析与可达性验证能力。",
-            executionFunctions=["joern_reachability_verify", "cpg_query"],
-            inputInterface=["file_path", "line_start", "call_chain", "query"],
-            outputInterface=["flow_paths", "control_conditions", "metadata.path_score"],
-            includedSkills=["joern_reachability_verify", "controlflow_analysis_light"],
-            source="https://github.com/codebadger-io/mcp",
-            runtime_mode=_runtime_mode_for("codebadger", "MCP_CODEBADGER_RUNTIME_MODE"),
-            backend=codebadger_backend,
-            sandbox=codebadger_sandbox,
-            required=True,
-            startup_ready=codebadger_startup_ready,
-            startup_error=codebadger_startup_error,
-        ),
-        McpCatalogItem(
-            id="mcp-builder",
-            name="MCP Builder",
-            type="skill-pack",
-            enabled=True,
-            description="快速创建 MCP 服务的规范化模板与流程。",
-            executionFunctions=["template_guidance", "spec_scaffold"],
-            inputInterface=["server_goal", "io_schema", "security_constraints"],
-            outputInterface=["mcp_design_plan", "integration_checklist"],
-            includedSkills=["mcp-builder"],
-            source="https://github.com/anthropics/skills/tree/main/skills/mcp-builder",
-            runtime_mode="n/a",
-            required=False,
-            startup_ready=True,
-            startup_error=None,
-        ),
-        McpCatalogItem(
-            id="skill-creator",
-            name="Skill Creator",
-            type="skill-pack",
-            enabled=True,
-            description="快速创建与维护 skill 的模板化能力。",
-            executionFunctions=["skill_design", "prompt_contract", "usage_examples"],
-            inputInterface=["skill_goal", "tool_bindings", "safety_rules"],
-            outputInterface=["skill_definition", "example_prompts", "pitfalls"],
-            includedSkills=["skill-creator"],
-            source="https://github.com/anthropics/skills/tree/main/skills/skill-creator",
-            runtime_mode="n/a",
-            required=False,
-            startup_ready=True,
-            startup_error=None,
-        ),
-        McpCatalogItem(
-            id="planning-with-files",
-            name="Planning With Files",
-            type="skill-pack",
-            enabled=True,
-            description="面向文件目标的任务拆解与执行规划。",
-            executionFunctions=["file_planning", "task_breakdown", "execution_queue"],
-            inputInterface=["file_targets", "goal", "constraints"],
-            outputInterface=["plan_steps", "file_actions", "progress_rules"],
-            includedSkills=["file_planning", "execution_planning"],
-            source="https://github.com/OthmanAdi/planning-with-files",
-            runtime_mode="n/a",
-            required=False,
-            startup_ready=True,
-            startup_error=None,
-        ),
-        McpCatalogItem(
-            id="superpowers",
-            name="Superpowers",
-            type="skill-pack",
-            enabled=True,
-            description="头脑风暴与协作执行策略模板集合。",
-            executionFunctions=["brainstorming", "strategy_generation", "review_loop"],
-            inputInterface=["problem_statement", "tradeoffs", "evidence"],
-            outputInterface=["strategy_options", "decision_rationale"],
-            includedSkills=["brainstorming", "strategy-superpowers"],
-            source="https://github.com/obra/superpowers",
-            runtime_mode="n/a",
-            required=False,
-            startup_ready=True,
-            startup_error=None,
         ),
     ]
 

@@ -1,0 +1,19 @@
+[Unit]
+Description=DeepAudit Compose Service
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/etc/deepaudit
+ExecStart=/usr/bin/deepauditctl start
+ExecStop=/usr/bin/deepauditctl stop
+ExecReload=/usr/bin/deepauditctl restart
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

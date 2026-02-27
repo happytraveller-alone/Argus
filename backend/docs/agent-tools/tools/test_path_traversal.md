@@ -1,21 +1,7 @@
 # Tool: `test_path_traversal`
 
 ## Tool Purpose
-专门测试路径遍历/LFI/RFI 漏洞的工具。
-
-输入:
-- target_file: 目标文件路径
-- param_name: 文件参数名 (默认 'file')
-- payload: 路径遍历 payload (默认 "../../../etc/passwd")
-
-常用 Payload:
-- Unix: ../../../etc/passwd
-- 编码绕过: ..%2f..%2f..%2fetc/passwd
-- 双写绕过: ....//....//....//etc/passwd
-- Windows: ..\..\..\windows\win.ini
-
-示例:
-{"target_file": "download.php", "param_name": "file", "payload": "../../../etc/passwd"}
+该工具已下线，仅用于兼容历史调用。
 
 ## Goal
 执行非武器化验证步骤并收集可复现实验信号。
@@ -27,18 +13,13 @@
 
 
 ## Inputs
-- `target_file` (string, required): 目标文件路径
-- `param_name` (string, optional): 文件参数名
-- `payload` (string, optional): 路径遍历 payload
-- `language` (string, optional): 语言
+- `reason` (any, optional): 兼容占位参数
 
 
 ### Example Input
 ```json
 {
-  "target_file": "<text>",
-  "param_name": "file",
-  "payload": "../../../etc/passwd"
+  "reason": null
 }
 ```
 
@@ -51,7 +32,7 @@
 
 ## Typical Triggers
 - 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `verification`。
+- 常见阶段: `analysis, orchestrator, recon, verification`。
 - 分类: `漏洞验证与 PoC 规划`。
 - 可选工具: `否`。
 

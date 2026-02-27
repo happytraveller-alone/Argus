@@ -62,17 +62,67 @@ services:
       - MCP_ENABLED=true
       - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
       - MCP_REQUIRED_RUNTIME_DOMAIN=all
-      - MCP_FILESYSTEM_ENABLED=true
+      - MCP_DAEMON_AUTOSTART=true
+      - MCP_DAEMON_LOG_DIR=/tmp/deepaudit/mcp-daemons
+      - MCP_SOURCE_SYNC_ENABLED=true
+      - MCP_SOURCE_ROOT=/app/data/mcp/sources
+      - MCP_SOURCE_SYNC_DEPTH=1
+      - MCP_SOURCE_SYNC_STRICT=false
+      - MCP_FILESYSTEM_ENABLED=false
       - MCP_FILESYSTEM_SANDBOX_ENABLED=true
+      - MCP_FILESYSTEM_RUNTIME_MODE=sandbox_only
+      - MCP_FILESYSTEM_FORCE_STDIO=${MCP_FILESYSTEM_FORCE_STDIO:-true}
+      - MCP_FILESYSTEM_BACKEND_URL=${MCP_FILESYSTEM_BACKEND_URL:-http://127.0.0.1:8770/mcp}
+      - MCP_FILESYSTEM_SANDBOX_URL=${MCP_FILESYSTEM_SANDBOX_URL:-http://127.0.0.1:8770/mcp}
+      - MCP_FILESYSTEM_DAEMON_HOST=${MCP_FILESYSTEM_DAEMON_HOST:-127.0.0.1}
+      - MCP_FILESYSTEM_DAEMON_PORT=${MCP_FILESYSTEM_DAEMON_PORT:-8770}
+      - MCP_FILESYSTEM_DAEMON_COMMAND=${MCP_FILESYSTEM_DAEMON_COMMAND:-fastmcp}
+      - MCP_FILESYSTEM_DAEMON_ARGS=${MCP_FILESYSTEM_DAEMON_ARGS:-}
+      - MCP_FILESYSTEM_DAEMON_ALLOWED_DIRS=${MCP_FILESYSTEM_DAEMON_ALLOWED_DIRS:-/tmp,/app}
+      - MCP_FILESYSTEM_DAEMON_SOURCE_DIR=${MCP_FILESYSTEM_DAEMON_SOURCE_DIR:-/app/mcp-src/filesystem}
+      - MCP_FILESYSTEM_DAEMON_STARTUP_TIMEOUT_SECONDS=${MCP_FILESYSTEM_DAEMON_STARTUP_TIMEOUT_SECONDS:-45}
       - MCP_CODE_INDEX_ENABLED=true
       - MCP_CODE_INDEX_SANDBOX_ENABLED=true
-      - MCP_MEMORY_ENABLED=true
-      - MCP_MEMORY_SANDBOX_ENABLED=true
+      - MCP_CODE_INDEX_BACKEND_URL=http://127.0.0.1:8765/mcp
+      - MCP_CODE_INDEX_SANDBOX_URL=http://127.0.0.1:8765/mcp
+      - MCP_CODE_INDEX_DAEMON_HOST=127.0.0.1
+      - MCP_CODE_INDEX_DAEMON_PORT=8765
+      - MCP_CODE_INDEX_DAEMON_COMMAND=code-index-mcp
+      - MCP_CODE_INDEX_DAEMON_ARGS=--transport streamable-http --port 8765 --indexer-path /app/data/mcp/code-index
+      - MCP_CODE_INDEX_DAEMON_INDEXER_PATH=/app/data/mcp/code-index
+      - MCP_CODE_INDEX_DAEMON_SOURCE_DIR=${MCP_CODE_INDEX_DAEMON_SOURCE_DIR:-/app/mcp-src/code-index-mcp}
+      - MCP_CODE_INDEX_DAEMON_STARTUP_TIMEOUT_SECONDS=45
       - MCP_SEQUENTIAL_THINKING_ENABLED=true
       - MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED=true
-      - MCP_QMD_ENABLED=true
-      - MCP_QMD_SANDBOX_ENABLED=true
+      - MCP_SEQUENTIAL_THINKING_BACKEND_URL=${MCP_SEQUENTIAL_THINKING_BACKEND_URL:-http://127.0.0.1:8771/mcp}
+      - MCP_SEQUENTIAL_THINKING_SANDBOX_URL=${MCP_SEQUENTIAL_THINKING_SANDBOX_URL:-http://127.0.0.1:8771/mcp}
+      - MCP_SEQUENTIAL_THINKING_DAEMON_HOST=${MCP_SEQUENTIAL_THINKING_DAEMON_HOST:-127.0.0.1}
+      - MCP_SEQUENTIAL_THINKING_DAEMON_PORT=${MCP_SEQUENTIAL_THINKING_DAEMON_PORT:-8771}
+      - MCP_SEQUENTIAL_THINKING_DAEMON_COMMAND=${MCP_SEQUENTIAL_THINKING_DAEMON_COMMAND:-node}
+      - MCP_SEQUENTIAL_THINKING_DAEMON_ARGS=${MCP_SEQUENTIAL_THINKING_DAEMON_ARGS:-dist/index.js --transport streamable-http --port 8771}
+      - MCP_SEQUENTIAL_THINKING_DAEMON_SOURCE_DIR=${MCP_SEQUENTIAL_THINKING_DAEMON_SOURCE_DIR:-/app/mcp-src/sequential-thinking}
+      - MCP_SEQUENTIAL_THINKING_DAEMON_STARTUP_TIMEOUT_SECONDS=${MCP_SEQUENTIAL_THINKING_DAEMON_STARTUP_TIMEOUT_SECONDS:-45}
+      - MCP_QMD_ENABLED=false
+      - MCP_QMD_SANDBOX_ENABLED=false
+      - MCP_QMD_RUNTIME_MODE=sandbox_only
+      - MCP_QMD_BACKEND_URL=http://localhost:8181/mcp
+      - MCP_QMD_SANDBOX_URL=http://localhost:8181/mcp
+      - MCP_QMD_DAEMON_HOST=localhost
+      - MCP_QMD_DAEMON_PORT=8181
+      - MCP_QMD_DAEMON_COMMAND=node
+      - MCP_QMD_DAEMON_ARGS=dist/index.js mcp --transport streamable-http --port 8181
+      - MCP_QMD_DAEMON_SOURCE_DIR=${MCP_QMD_DAEMON_SOURCE_DIR:-/app/mcp-src/qmd}
+      - MCP_QMD_DAEMON_STARTUP_TIMEOUT_SECONDS=60
       - QMD_DATA_DIR=/app/data/qmd
+      - QMD_CLI_COMMAND=npx -y @tobilu/qmd
+      - QMD_CLI_TIMEOUT_SECONDS=120
+      - QMD_TASK_KB_ENABLED=true
+      - QMD_TASK_ROOT_REL=.deepaudit/qmd
+      - QMD_TASK_COLLECTION_PREFIX=task
+      - QMD_TASK_DOC_GLOB=**/*.{md,txt,json,yml,yaml}
+      - QMD_TASK_AUTO_EMBED=false
+      - QMD_TASK_QUERY_CACHE=true
+      - XDG_CONFIG_HOME=/app/data/mcp/xdg-config
       # Enable Joern MCP fallback (CodeBadger). Best-effort when the profile isn't enabled.
       - JOERN_MCP_ENABLED=true
       # 禁用代理设置，防止容器内无法连接外部 API
@@ -87,14 +137,19 @@ services:
       redis:
         condition: service_healthy
     # 开发模式：启用 --reload 热重载
-    command: sh -c ".venv/bin/alembic upgrade head && if [ \"$$RESET_STATIC_SCAN_TABLES_ON_DEPLOY\" = \"true\" ] || [ \"$$RESET_STATIC_SCAN_TABLES_ON_DEPLOY\" = \"1\" ]; then .venv/bin/python scripts/reset_static_scan_tables.py; fi && .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "if [ -x /app/scripts/sync_mcp_sources.sh ]; then /app/scripts/sync_mcp_sources.sh || true; fi && .venv/bin/alembic upgrade head && if [ \"$$RESET_STATIC_SCAN_TABLES_ON_DEPLOY\" = \"true\" ] || [ \"$$RESET_STATIC_SCAN_TABLES_ON_DEPLOY\" = \"1\" ]; then .venv/bin/python scripts/reset_static_scan_tables.py; fi && .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     networks:
       - deepaudit-network
 
   frontend:
     build:
       context: ./frontend
+      dockerfile: ${FRONTEND_DOCKERFILE:-Dockerfile}
       args:
+        - FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}
+        - PNPM_VERSION=${PNPM_VERSION:-9.15.4}
+        - BUILD_WEAK_NETWORK=${BUILD_WEAK_NETWORK:-false}
+        - BUILD_ARCH=${BUILD_ARCH:-}
         - http_proxy=
         - https_proxy=
         - HTTP_PROXY=
@@ -153,61 +208,6 @@ services:
     restart: "no"
     command: echo "Sandbox image built successfully"
 
-  # =============================================
-  # Joern MCP (可选 - 仅 profiles: ["joern"] 启用)
-  # =============================================
-
-  # CodeBadger Joern server container (Joern CLI + server pool)
-  codebadger-joern-server:
-    build:
-      context: ./docker/codebadger-joern-server
-      dockerfile: Dockerfile
-    container_name: codebadger-joern-server
-    restart: unless-stopped
-    volumes:
-      - codebadger_playground:/playground
-    ports:
-      - "2000-2999:2000-2999"
-    profiles: ["joern"]
-    networks:
-      - deepaudit-network
-
-  # CodeBadger MCP service (streamable HTTP)
-  codebadger-mcp:
-    build:
-      context: ./docker/codebadger-mcp
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      - codebadger-joern-server
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - codebadger_playground:/playground
-      - /tmp/deepaudit:/tmp/deepaudit:ro
-    ports:
-      - "4242:4242"
-    environment:
-      - CODEBADGER_HOST=0.0.0.0
-      - CODEBADGER_PORT=4242
-      - CODEBADGER_LOG_LEVEL=INFO
-      - JOERN_CONTAINER_NAME=codebadger-joern-server
-      - DOCKER_SOCKET_PATH=/var/run/docker.sock
-      - PLAYGROUND_PATH=/playground
-      # Ensure tempfile dirs are created on the shared /playground volume so the
-      # joern-server container can access copied source paths passed to build_cpg.py.
-      - TMPDIR=/playground/tmp
-      - TEMP=/playground/tmp
-      - TMP=/playground/tmp
-      - HTTP_PROXY=
-      - HTTPS_PROXY=
-      - http_proxy=
-      - https_proxy=
-      - NO_PROXY=*
-    command: sh -c "mkdir -p /playground/tmp && python main.py"
-    profiles: ["joern"]
-    networks:
-      - deepaudit-network
-
 networks:
   deepaudit-network:
     driver: bridge
@@ -218,4 +218,3 @@ volumes:
   mcp_data:
   qmd_data:
   redis_data:
-  codebadger_playground:

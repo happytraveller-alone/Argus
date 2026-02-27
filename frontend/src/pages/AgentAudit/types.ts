@@ -20,10 +20,35 @@ export type LogType =
 
 export type ToolStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 export type ProgressStatus = 'running' | 'completed';
+export type TerminalFailureClass =
+  | 'timeout'
+  | 'mcp'
+  | 'network'
+  | 'validation_repairable'
+  | 'cancelled_user'
+  | 'cancelled_system'
+  | 'non_retryable'
+  | 'unknown';
+
+export type LateToolCallPolicy = 'ignore' | 'recovery';
+
+export interface TerminalRecoveryState {
+  active: boolean;
+  attempts: number;
+  reasonKey: string;
+  triggeredAt: number;
+}
+
+export interface FindingCodeHighlightRange {
+  highlightStartLine?: number | null;
+  highlightEndLine?: number | null;
+  focusLine?: number | null;
+}
 
 export interface LogItem {
   id: string;
   time: string;
+  eventTimestamp?: string | null;
   type: LogType;
   title: string;
   content?: string;
@@ -81,7 +106,14 @@ export type AgentAuditAction =
   | { type: 'ADD_FINDING'; payload: Partial<AgentFinding> & { id: string } }
   | { type: 'SET_AGENT_TREE'; payload: AgentTreeResponse }
   | { type: 'SET_LOGS'; payload: LogItem[] }
-  | { type: 'ADD_LOG'; payload: Omit<LogItem, 'id' | 'time'> & { id?: string } }
+  | {
+      type: 'ADD_LOG';
+      payload: Omit<LogItem, 'id' | 'time'> & {
+        id?: string;
+        time?: string;
+        eventTimestamp?: string | null;
+      };
+    }
   | { type: 'UPDATE_LOG'; payload: { id: string; updates: Partial<LogItem> } }
   | {
       type: 'UPDATE_OR_ADD_PROGRESS_LOG';
@@ -90,6 +122,8 @@ export type AgentAuditAction =
         title: string;
         agentName?: string;
         progressStatus?: ProgressStatus;
+        time?: string;
+        eventTimestamp?: string | null;
       };
     }
   | { type: 'COMPLETE_TOOL_LOG'; payload: { toolName: string; output: string; duration: number } }

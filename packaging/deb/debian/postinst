@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ENV_FILE="/etc/deepaudit/deepaudit.env"
+RUNTIME_STATE_FILE="/var/lib/deepaudit/runtime.json"
+
+ensure_compose() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "[ERROR] docker is required but not installed"
+    exit 1
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    echo "[ERROR] docker compose plugin is required but not installed"
+    exit 1
+  fi
+}
+
+port_in_use() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "( sport = :${port} )" | grep -q ":${port}"
+    return $?
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP -sTCP:LISTEN -P | awk '{print $9}' | grep -q ":${port}$"
+    return $?
+  fi
+  return 1
+}
+
+pick_port() {
+  local selected=""
+  for p in "$@"; do
+    if ! port_in_use "$p"; then
+      selected="$p"
+      break
+    fi
+  done
+  if [[ -z "$selected" ]]; then
+    echo "[ERROR] no available ports in candidate set: $*"
+    exit 1
+  fi
+  echo "$selected"
+}
+
+update_env_kv() {
+  local key="$1"
+  local value="$2"
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    sed -i "s#^${key}=.*#${key}=${value}#" "$ENV_FILE"
+  else
+    echo "${key}=${value}" >> "$ENV_FILE"
+  fi
+}
+
+read_env_value() {
+  local key="$1"
+  if [[ ! -f "$ENV_FILE" ]]; then
+    return 0
+  fi
+  awk -F= -v target="$key" '$1==target {print $2}' "$ENV_FILE" | tail -n 1
+}
+
+case "${1:-configure}" in
+  configure|triggered)
+    mkdir -p /etc/deepaudit /var/log/deepaudit /var/lib/deepaudit
+
+    ensure_compose
+
+    frontend_port="$(read_env_value DEEPAUDIT_FRONTEND_PORT || true)"
+    backend_port="$(read_env_value DEEPAUDIT_BACKEND_PORT || true)"
+
+    if [[ -z "$frontend_port" ]]; then
+      frontend_port="$(pick_port 3000 13000 23000 33000)"
+    fi
+    if [[ -z "$backend_port" ]]; then
+      backend_port="$(pick_port 8000 18000 28000 38000)"
+    fi
+
+    update_env_kv "DEEPAUDIT_FRONTEND_PORT" "$frontend_port"
+    update_env_kv "DEEPAUDIT_BACKEND_PORT" "$backend_port"
+
+    cat > "$RUNTIME_STATE_FILE" <<JSON
+{"frontend_port":${frontend_port},"backend_port":${backend_port}}
+JSON
+
+    if grep -q "^LLM_API_KEY=your-api-key-here" "$ENV_FILE"; then
+      echo "[WARN] LLM_API_KEY is not configured. Edit /etc/deepaudit/deepaudit.env after install."
+    fi
+
+    systemctl daemon-reload
+    systemctl enable --now deepaudit.service
+
+    echo "[INFO] DeepAudit installed"
+    echo "[INFO] Frontend: http://localhost:${frontend_port}"
+    echo "[INFO] Backend: http://localhost:${backend_port}/docs"
+    ;;
+esac
+
+exit 0

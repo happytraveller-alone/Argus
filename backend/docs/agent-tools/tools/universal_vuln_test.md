@@ -1,27 +1,7 @@
 # Tool: `universal_vuln_test`
 
 ## Tool Purpose
-通用漏洞测试工具，支持多种漏洞类型的自动化测试。
-
-支持的漏洞类型:
-- command_injection (cmd/rce): 命令注入
-- sql_injection (sqli): SQL 注入
-- xss: 跨站脚本
-- path_traversal (lfi/rfi): 路径遍历
-- ssti: 服务端模板注入
-- deserialization: 不安全反序列化
-
-输入:
-- target_file: 目标文件路径
-- vuln_type: 漏洞类型
-- param_name: 参数名
-- payload: 自定义 payload (可选)
-- language: 语言 (auto 自动检测)
-
-示例:
-1. 命令注入: {"target_file": "api.php", "vuln_type": "command_injection", "param_name": "cmd"}
-2. SQL 注入: {"target_file": "login.php", "vuln_type": "sql_injection", "param_name": "username", "payload": "admin'--"}
-3. XSS: {"target_file": "search.php", "vuln_type": "xss", "param_name": "q"}
+该工具已下线，仅用于兼容历史调用。
 
 ## Goal
 执行非武器化验证步骤并收集可复现实验信号。
@@ -33,19 +13,13 @@
 
 
 ## Inputs
-- `target_file` (string, required): 目标文件路径
-- `vuln_type` (string, required): 漏洞类型: command_injection, sql_injection, xss, path_traversal, ssti, deserialization
-- `param_name` (string, optional): 参数名
-- `payload` (any, optional): 自定义 payload
-- `language` (string, optional): 语言
+- `reason` (any, optional): 兼容占位参数
 
 
 ### Example Input
 ```json
 {
-  "target_file": "<text>",
-  "vuln_type": "<text>",
-  "param_name": "input"
+  "reason": null
 }
 ```
 
@@ -58,7 +32,7 @@
 
 ## Typical Triggers
 - 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `verification`。
+- 常见阶段: `analysis, orchestrator, recon, verification`。
 - 分类: `漏洞验证与 PoC 规划`。
 - 可选工具: `否`。
 

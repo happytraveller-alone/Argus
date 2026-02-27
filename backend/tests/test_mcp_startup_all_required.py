@@ -1,5 +1,6 @@
 import pytest
 
+from app.api.v1.endpoints.agent_tasks import _probe_required_mcp_runtime
 from app.services.agent.mcp.runtime import MCPRuntime
 
 
@@ -13,6 +14,21 @@ class _DummyAdapter:
 
     async def call_tool(self, tool_name, arguments):
         return {"success": True, "data": f"{tool_name}:{arguments}"}
+
+
+class _ProbeInfraFailAdapter(_DummyAdapter):
+    async def call_tool(self, tool_name, arguments):
+        raise RuntimeError("Server disconnected without sending a response.")
+
+
+class _RecorderAdapter(_DummyAdapter):
+    def __init__(self, *, runtime_domain: str, available: bool = True):
+        super().__init__(runtime_domain=runtime_domain, available=available)
+        self.calls = []
+
+    async def call_tool(self, tool_name, arguments):
+        self.calls.append((tool_name, dict(arguments or {})))
+        return {"success": True, "data": "ok"}
 
 
 def test_ensure_all_mcp_ready_requires_all_domains_when_domain_is_all():
@@ -43,6 +59,48 @@ def test_ensure_all_mcp_ready_requires_all_domains_when_domain_is_all():
         and item.get("reason") == "domain_adapter_missing"
         for item in not_ready
     )
+
+
+def test_ensure_all_mcp_ready_all_respects_backend_only_runtime_mode():
+    runtime = MCPRuntime(
+        enabled=True,
+        domain_adapters={
+            "qmd": {
+                "backend": _DummyAdapter(runtime_domain="backend"),
+            },
+        },
+        runtime_modes={"qmd": "backend_only"},
+        required_mcps=["qmd"],
+    )
+
+    readiness = runtime.ensure_all_mcp_ready("all")
+    assert readiness["ready"] is True
+    assert readiness.get("not_ready") == []
+
+
+def test_ensure_all_mcp_ready_all_passes_when_dual_domains_ready():
+    runtime = MCPRuntime(
+        enabled=True,
+        domain_adapters={
+            "code_index": {
+                "backend": _DummyAdapter(runtime_domain="backend"),
+                "sandbox": _DummyAdapter(runtime_domain="sandbox"),
+            },
+            "qmd": {
+                "backend": _DummyAdapter(runtime_domain="backend"),
+                "sandbox": _DummyAdapter(runtime_domain="sandbox"),
+            },
+        },
+        runtime_modes={
+            "code_index": "backend_then_sandbox",
+            "qmd": "backend_then_sandbox",
+        },
+        required_mcps=["code_index", "qmd"],
+    )
+
+    readiness = runtime.ensure_all_mcp_ready("all")
+    assert readiness["ready"] is True
+    assert readiness.get("not_ready") == []
 
 
 def test_ensure_all_mcp_ready_backend_only_passes_when_backend_ready():
@@ -92,3 +150,38 @@ async def test_execute_tool_returns_skip_reason_when_runtime_domain_has_no_adapt
     assert result.should_fallback is True
     assert (result.metadata or {}).get("mcp_skipped") is True
     assert (result.metadata or {}).get("mcp_skip_reason") == "adapter_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_probe_required_mcp_runtime_reports_infra_failure():
+    runtime = MCPRuntime(
+        enabled=True,
+        adapters={"filesystem": _ProbeInfraFailAdapter(runtime_domain="backend")},
+        required_mcps=["filesystem"],
+    )
+
+    probe = await _probe_required_mcp_runtime(runtime, runtime_domain="backend")
+
+    assert probe["ready"] is False
+    not_ready = probe.get("not_ready") or []
+    assert any(item.get("mcp") == "filesystem" for item in not_ready)
+
+
+@pytest.mark.asyncio
+async def test_probe_required_mcp_runtime_uses_qmd_and_sequential_tools():
+    qmd = _RecorderAdapter(runtime_domain="backend")
+    sequential = _RecorderAdapter(runtime_domain="backend")
+    runtime = MCPRuntime(
+        enabled=True,
+        adapters={
+            "qmd": qmd,
+            "sequentialthinking": sequential,
+        },
+        required_mcps=["qmd", "sequentialthinking"],
+    )
+
+    probe = await _probe_required_mcp_runtime(runtime, runtime_domain="backend")
+
+    assert probe["ready"] is True
+    assert qmd.calls and qmd.calls[0][0] == "status"
+    assert sequential.calls and sequential.calls[0][0] == "sequentialthinking"

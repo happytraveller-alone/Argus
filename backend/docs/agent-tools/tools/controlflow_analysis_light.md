@@ -1,45 +1,54 @@
 # Tool: `controlflow_analysis_light`
 
 ## Tool Purpose
-轻量控制流/可达性分析：基于 tree-sitter + code2flow 推断调用链、控制条件和路径分值。
+轻量控制流/数据流分析：基于 tree-sitter 和 code2flow 推断从入口到漏洞位置的调用链、控制条件和可达性分值。适用于不完整代码和不可编译项目。
 
 ## Goal
-给出可解释的可达性结论，作为验证阶段的 flow 证据门禁。
+判断漏洞是否可达、是否受逻辑/授权路径约束。
+
+## Task List
+- 分析源到汇的数据流链路。
+- 计算控制流可达路径与关键条件。
+- 验证授权边界和业务逻辑约束。
+
 
 ## Inputs
-- `file_path` (string, required): 目标文件路径，支持 `file_path:line` 简写。
-- `line_start` (integer, optional): 目标起始行。
-- `line_end` (integer, optional): 目标结束行。
-- `function_name` (string, optional): 缺少行号时用于函数定位。
-- `severity` (string, optional): 漏洞严重度。
-- `confidence` (float, optional): 置信度 0-1。
-- `vulnerability_type` (string, optional): 漏洞类型。
-- `entry_points` (array[string], optional): 入口函数候选。
-- `entry_points_hint` (array[string], optional): 入口提示。
-- `call_chain_hint` (array[string], optional): 调用链提示。
-- `control_conditions_hint` (array[string], optional): 控制条件提示。
+- `file_path` (string, required): 目标文件路径
+- `line_start` (any, optional): 目标起始行
+- `line_end` (any, optional): 目标结束行
+- `severity` (any, optional): 漏洞严重度
+- `confidence` (any, optional): 漏洞置信度 0-1
+- `entry_points` (any, optional): 候选入口函数
+- `function_name` (any, optional): 目标函数名（缺少 line_start 时可选）
+- `vulnerability_type` (any, optional): 漏洞类型
+- `call_chain_hint` (any, optional): 已知调用链提示
+- `control_conditions_hint` (any, optional): 已知控制条件提示
+- `entry_points_hint` (any, optional): 入口函数提示
 
-## Example Input
+
+### Example Input
 ```json
 {
-  "file_path": "src/time64.c:168",
-  "function_name": "asctime64_r",
-  "severity": "high",
-  "confidence": 0.88,
-  "entry_points_hint": ["main"]
+  "file_path": "<text>",
+  "line_start": null,
+  "line_end": null
 }
 ```
 
 ## Outputs
-- `data.flow`: 路径证据（`path_found/path_score/call_chain/control_conditions/blocked_reasons`）
-- `data.logic_authz`: 鉴权逻辑证据
-- `metadata.summary`: `path_found/path_score/blocked_reasons/entry_inferred` 摘要
+- `success` (bool): 执行是否成功。
+- `data` (any): 工具主结果载荷。
+- `error` (string|null): 失败时错误信息。
+- `duration_ms` (int): 执行耗时（毫秒）。
+- `metadata` (object): 补充上下文信息。
 
-## Trigger Guidance
-- 已有候选漏洞定位点，需要确认是否从入口可达。
-- 高危候选准备进入 `confirmed` 前，补齐 flow 证据。
+## Typical Triggers
+- 当 Agent 需要完成“判断漏洞是否可达、是否受逻辑/授权路径约束。”时触发。
+- 常见阶段: `analysis, verification`。
+- 分类: `可达性与逻辑分析`。
+- 可选工具: `否`。
 
-## Pitfalls
-- 缺少 `line_start` 且无法由 `function_name` 定位时会失败。
-- `path_found=false` 不等于漏洞不存在，需要结合代码证据与逻辑证据复核。
-- 同一失败输入不应重复重试，需调整定位参数。
+## Pitfalls And Forbidden Use
+- 不要在输入缺失关键参数时盲目调用。
+- 不要将该工具输出直接当作最终结论，必须结合上下文复核。
+- 不要在权限不足或路径不合法时重复重试同一输入。

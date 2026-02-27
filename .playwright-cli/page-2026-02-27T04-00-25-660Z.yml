@@ -1,0 +1,159 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - link "VulHunter VulHunter" [ref=e8] [cursor=pointer]:
+            - /url: /
+            - img "VulHunter" [ref=e11]
+            - generic [ref=e14]: VulHunter
+          - button [ref=e15] [cursor=pointer]:
+            - img [ref=e16]
+        - navigation [ref=e18]:
+          - generic [ref=e19]:
+            - link "首页" [ref=e20] [cursor=pointer]:
+              - /url: /
+              - img [ref=e22]
+              - generic [ref=e25]: 首页
+              - img [ref=e27]
+            - link "仪表盘" [ref=e29] [cursor=pointer]:
+              - /url: /dashboard
+              - img [ref=e31]
+              - generic [ref=e36]: 仪表盘
+              - img [ref=e38]
+            - link "项目管理" [ref=e40] [cursor=pointer]:
+              - /url: /projects
+              - img [ref=e42]
+              - generic [ref=e47]: 项目管理
+              - img [ref=e49]
+            - link "审计规则" [ref=e51] [cursor=pointer]:
+              - /url: /opengrep-rules
+              - img [ref=e53]
+              - generic [ref=e56]: 审计规则
+              - img [ref=e58]
+            - link "智能审计" [ref=e60] [cursor=pointer]:
+              - /url: /intelligent-audit
+              - img [ref=e63]
+              - generic [ref=e66]: 智能审计
+            - link "系统管理" [ref=e67] [cursor=pointer]:
+              - /url: /admin
+              - img [ref=e69]
+              - generic [ref=e72]: 系统管理
+              - img [ref=e74]
+        - generic [ref=e79]:
+          - img [ref=e80]
+          - button "中文" [ref=e84] [cursor=pointer]
+          - button "EN" [ref=e85] [cursor=pointer]
+    - main [ref=e86]:
+      - generic [ref=e89]:
+        - tablist [ref=e90]:
+          - tab "LLM 配置" [selected] [ref=e91] [cursor=pointer]:
+            - img
+            - text: LLM 配置
+          - tab "MCP 配置" [ref=e92] [cursor=pointer]:
+            - img
+            - text: MCP 配置
+          - tab "SKILL 配置" [ref=e93] [cursor=pointer]:
+            - img
+            - text: SKILL 配置
+        - tabpanel "LLM 配置" [ref=e94]:
+          - generic [ref=e95]:
+            - generic [ref=e96]:
+              - generic [ref=e97]:
+                - generic [ref=e98]: LLM（逻辑推理 / 编排决策）
+                - generic [ref=e99]: 配置模型参数与超时预算。
+              - tabpanel [ref=e112]:
+                - generic [ref=e113]:
+                  - generic [ref=e114]:
+                    - generic [ref=e115]: 提供商
+                    - combobox [ref=e116] [cursor=pointer]:
+                      - generic: OpenAI (兼容)
+                      - img [ref=e117]
+                    - paragraph [ref=e119]: OpenAI 官方及 OpenAI 兼容接口。
+                  - generic [ref=e120]:
+                    - generic [ref=e121]:
+                      - text: API Key
+                      - generic [ref=e122]: "*"
+                    - generic [ref=e123]:
+                      - textbox "输入你的 API Key" [ref=e124]: sk-KtCNCWiWAicOj8EJE9C08470Ad92458c8b0f9299BaAc8f7e
+                      - button [ref=e125] [cursor=pointer]:
+                        - img
+                  - generic [ref=e126]:
+                    - generic [ref=e127]: API 站口
+                    - textbox "留空使用默认站口，例如：https://api.openai.com/v1" [ref=e128]: https://api.rcouyi.com/v1
+                  - generic [ref=e129]:
+                    - generic [ref=e130]:
+                      - generic [ref=e131]: 模型选择
+                      - button "一键获取模型" [ref=e132] [cursor=pointer]
+                    - generic [ref=e133]:
+                      - combobox [ref=e134] [cursor=pointer]:
+                        - generic [ref=e135]: 自定义：gemini-3-flash-preview-thinking
+                        - img
+                      - textbox "输入模型名称" [ref=e136]: gemini-3-flash-preview-thinking
+                      - generic [ref=e138]: "推荐 max tokens: 8192（静态映射）"
+                  - generic [ref=e140]:
+                    - button "漏洞挖掘-长推理预设" [ref=e141] [cursor=pointer]:
+                      - img
+                      - text: 漏洞挖掘-长推理预设
+                    - button "高级配置" [ref=e142] [cursor=pointer]:
+                      - img
+                      - text: 高级配置
+                  - generic [ref=e143]:
+                    - generic [ref=e144]: 测试连接验证配置是否正确
+                    - generic [ref=e145]:
+                      - button "测试" [ref=e146] [cursor=pointer]
+                      - button "保存" [disabled]:
+                        - img
+                        - text: 保存
+                      - button "重置" [ref=e147] [cursor=pointer]:
+                        - img
+                        - text: 重置
+            - generic [ref=e104]:
+              - generic [ref=e106]: RAG（向量索引 / 代码向量化）
+              - generic [ref=e108]:
+                - generic [ref=e109]:
+                  - generic [ref=e148]: 提供商
+                  - combobox [ref=e149] [cursor=pointer]:
+                    - generic:
+                      - generic:
+                        - generic: OpenAI (兼容 DeepSeek/Moonshot/智谱 等)
+                        - img
+                    - img [ref=e150]
+                  - paragraph [ref=e152]:
+                    - img [ref=e153]
+                    - text: OpenAI 官方或兼容 API，填写自定义端点可接入其他服务商
+                - generic [ref=e155]:
+                  - generic [ref=e156]:
+                    - text: API Key
+                    - generic [ref=e157]: "*"
+                  - generic [ref=e158]:
+                    - textbox "输入你的 API Key" [ref=e159]: sk-your-api-key
+                    - button [ref=e160] [cursor=pointer]:
+                      - img
+                  - paragraph [ref=e161]: API Key 将安全存储，不会显示在页面上
+                - generic [ref=e162]:
+                  - generic [ref=e163]:
+                    - generic [ref=e164]: 模型选择
+                    - combobox [ref=e166] [cursor=pointer]:
+                      - generic: 默认（text-embedding-3-small）
+                      - img [ref=e167]
+                  - generic [ref=e169]:
+                    - generic [ref=e170]:
+                      - text: API 站口
+                      - generic [ref=e171]: (可选)
+                    - textbox "https://api.openai.com/v1" [ref=e172]
+                    - paragraph [ref=e173]: 用于 API 代理或自托管服务
+                - button "高级配置" [ref=e175] [cursor=pointer]:
+                  - img
+                  - text: 高级配置
+                - generic [ref=e176]:
+                  - generic [ref=e177]: 测试连接验证配置是否正确
+                  - generic [ref=e178]:
+                    - button "测试" [ref=e179] [cursor=pointer]
+                    - button "保存" [disabled]:
+                      - img
+                      - text: 保存
+                    - button "重置" [ref=e180] [cursor=pointer]:
+                      - img
+                      - text: 重置

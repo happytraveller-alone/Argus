@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Dict, Set, Tuple
 from datetime import datetime, timezone
@@ -41,18 +42,31 @@ from app.services.agent.event_manager import EventManager
 from app.services.agent.streaming import StreamHandler, StreamEvent, StreamEventType
 from app.services.agent.utils.vulnerability_naming import (
     build_cn_structured_description,
+    build_cn_structured_description_markdown,
     build_cn_structured_title,
+    infer_code_fence_language,
     normalize_cwe_id as normalize_cwe_id_util,
     resolve_cwe_id as resolve_cwe_id_util,
     resolve_vulnerability_profile as resolve_vulnerability_profile_util,
 )
 from app.services.agent.mcp import (
     HARD_MAX_WRITABLE_FILES_PER_TASK,
+    FastMCPHttpAdapter,
     FastMCPStdioAdapter,
     MCPRuntime,
-    MCPVirtualWriteTool,
+    MCPDeprecatedTool,
+    MCPVirtualReadTool,
     QmdLazyIndexAdapter,
     TaskWriteScopeGuard,
+    build_mcp_catalog,
+)
+from app.services.agent.mcp.daemon_manager import (
+    MCPDaemonManager,
+    normalize_qmd_loopback_url,
+    resolve_code_index_backend_url,
+    resolve_filesystem_backend_url,
+    resolve_qmd_backend_url,
+    resolve_sequential_backend_url,
 )
 from app.services.git_ssh_service import GitSSHOperations
 from app.core.encryption import decrypt_sensitive_data
@@ -208,6 +222,7 @@ class AgentFindingResponse(BaseModel):
     title: str
     display_title: Optional[str] = None
     description: Optional[str]
+    description_markdown: Optional[str] = None
     file_path: Optional[str]
     line_start: Optional[int]
     line_end: Optional[int]
@@ -281,11 +296,137 @@ _running_orchestrators: Dict[str, Any] = {}
 _running_event_managers: Dict[str, EventManager] = {}
 # 🔥 已取消的任务集合（用于前置操作的取消检查）
 _cancelled_tasks: Set[str] = set()
+TOOL_DRAIN_TIMEOUT_SECONDS = 180
 
 
 def is_task_cancelled(task_id: str) -> bool:
     """检查任务是否已被取消"""
     return task_id in _cancelled_tasks
+
+
+def _build_tool_drain_metadata(drain_result: Dict[str, Any]) -> Dict[str, Any]:
+    pending_calls = drain_result.get("pending_tool_calls")
+    if not isinstance(pending_calls, list):
+        pending_calls = []
+    return {
+        "tool_drain_wait_ms": int(drain_result.get("elapsed_ms") or 0),
+        "tool_drain_timeout": bool(drain_result.get("timed_out", False)),
+        "pending_tool_calls": pending_calls[:50],
+    }
+
+
+def _compute_verification_pending_gate(
+    verification_payload: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    candidate_count = 0
+    pending_count = 0
+    pending_examples: List[Dict[str, Any]] = []
+    payload = verification_payload if isinstance(verification_payload, dict) else {}
+    todo_summary = (
+        payload.get("verification_todo_summary")
+        if isinstance(payload.get("verification_todo_summary"), dict)
+        else {}
+    )
+
+    candidate_raw = payload.get("candidate_count")
+    if candidate_raw is None and isinstance(todo_summary, dict):
+        candidate_raw = todo_summary.get("total")
+    if candidate_raw is None:
+        findings_snapshot = payload.get("findings")
+        if isinstance(findings_snapshot, list):
+            candidate_raw = len(findings_snapshot)
+    try:
+        candidate_count = max(0, int(candidate_raw or 0))
+    except Exception:
+        candidate_count = 0
+
+    pending_raw = (
+        todo_summary.get("pending")
+        if isinstance(todo_summary, dict)
+        else None
+    )
+    try:
+        pending_count = max(0, int(pending_raw or 0))
+    except Exception:
+        pending_count = 0
+
+    compact_items = (
+        todo_summary.get("per_item_compact")
+        if isinstance(todo_summary, dict)
+        else None
+    )
+    if not isinstance(compact_items, list):
+        compact_items = payload.get("todo_list")
+    if isinstance(compact_items, list):
+        for item in compact_items:
+            if not isinstance(item, dict):
+                continue
+            status_text = str(item.get("status") or "").strip().lower()
+            if status_text not in {"pending", "running", "unverified", "verifying"}:
+                continue
+            pending_examples.append(
+                {
+                    "id": str(item.get("id") or ""),
+                    "status": status_text,
+                    "title": str(item.get("title") or "")[:200],
+                }
+            )
+        if pending_count <= 0:
+            pending_count = len(pending_examples)
+    if pending_examples:
+        pending_examples = pending_examples[:5]
+
+    triggered = candidate_count > 0 and pending_count > 0
+    message = ""
+    if triggered:
+        message = (
+            "verification_pending_gate:"
+            f"candidate_count={candidate_count},"
+            f"pending_count={pending_count}"
+        )
+    return {
+        "triggered": triggered,
+        "message": message,
+        "candidate_count": candidate_count,
+        "pending_count": pending_count,
+        "pending_examples": pending_examples,
+    }
+
+
+async def _wait_for_terminal_tool_drain(
+    *,
+    event_manager: Optional[EventManager],
+    task_id: str,
+    skip_wait: bool = False,
+    timeout_seconds: int = TOOL_DRAIN_TIMEOUT_SECONDS,
+) -> Dict[str, Any]:
+    if skip_wait:
+        return {
+            "ready": True,
+            "timed_out": False,
+            "elapsed_ms": 0,
+            "pending_tool_calls": [],
+        }
+    if not event_manager:
+        return {
+            "ready": True,
+            "timed_out": False,
+            "elapsed_ms": 0,
+            "pending_tool_calls": [],
+        }
+    try:
+        return await event_manager.wait_for_tool_drain(
+            task_id,
+            timeout_seconds=timeout_seconds,
+        )
+    except Exception as exc:
+        logger.warning("[TaskDrain] wait_for_tool_drain failed for %s: %s", task_id, exc)
+        return {
+            "ready": False,
+            "timed_out": True,
+            "elapsed_ms": 0,
+            "pending_tool_calls": [],
+        }
 
 
 class StepRetryExceededError(RuntimeError):
@@ -330,6 +471,116 @@ def _build_retry_message(
     )
 
 
+def _classify_retry_error(exc_or_text: Any) -> Dict[str, Any]:
+    text = str(exc_or_text or "").strip()
+    lowered = text.lower()
+
+    def _contains(*tokens: str) -> bool:
+        return any(token in lowered for token in tokens if token)
+
+    if _contains(
+        "schema",
+        "jsonschema",
+        "validationerror",
+        "pydantic",
+        "type_error",
+        "is not of type",
+        "extra fields not permitted",
+        "unexpected field",
+    ):
+        return {
+            "code": "schema_hard_error",
+            "category": "schema_validation",
+            "retryable": False,
+        }
+
+    if _contains(
+        "permission denied",
+        "forbidden",
+        "路径不在允许范围",
+        "安全错误",
+        "outside allowed scope",
+        "write_scope_path_forbidden",
+        "write_scope_not_allowed",
+    ):
+        return {
+            "code": "permission_or_scope_error",
+            "category": "permission",
+            "retryable": False,
+        }
+
+    if _contains("timeout", "timed out", "超时", "deadline exceeded"):
+        return {
+            "code": "timeout_error",
+            "category": "timeout",
+            "retryable": True,
+        }
+
+    if _contains(
+        "mcp",
+        "adapter_unavailable",
+        "domain_adapter_missing",
+        "command_not_found",
+        "mcp_tool_failed",
+        "missing_mcp_stdio_command",
+    ):
+        return {
+            "code": "mcp_runtime_error",
+            "category": "mcp",
+            "retryable": True,
+        }
+
+    if _contains(
+        "connection reset",
+        "connection aborted",
+        "temporary failure",
+        "network",
+        "dns",
+        "503",
+        "502",
+        "429",
+        "too many requests",
+        "rate limit",
+    ):
+        return {
+            "code": "network_transient_error",
+            "category": "network",
+            "retryable": True,
+        }
+
+    if _contains(
+        "参数校验失败",
+        "必须提供",
+        "missing required",
+        "required field",
+        "工具参数缺失",
+        "missing parameter",
+        "input_repaired",
+    ):
+        return {
+            "code": "repairable_validation_error",
+            "category": "validation_repairable",
+            "retryable": True,
+        }
+
+    return {
+        "code": "unknown_error",
+        "category": "unknown",
+        "retryable": True,
+    }
+
+
+def _detect_cancel_origin(task_id: str, error: Optional[BaseException] = None) -> str:
+    # task_cancel 事件会先写入 _cancelled_tasks，优先视为用户取消。
+    if is_task_cancelled(task_id):
+        return "user"
+    lowered = str(error or "").strip().lower()
+    if "system_cancelled" in lowered or "cancel_origin=system" in lowered:
+        return "system"
+    # 无明确系统取消标识时，按用户取消处理，避免误重试。
+    return "user"
+
+
 _VERIFICATION_LEVEL_ALIASES = {
     "analysis_with_poc_plan": "analysis_with_poc_plan",
     "analysis_only": "analysis_with_poc_plan",
@@ -365,6 +616,9 @@ def _build_task_mcp_runtime(
     target_files: Optional[List[str]],
     bootstrap_findings: Optional[List[Dict[str, Any]]] = None,
     project_id: Optional[str] = None,
+    prefer_stdio_when_http_unavailable: bool = False,
+    active_mcp_ids: Optional[List[str]] = None,
+    enforce_mcp_only: bool = False,
 ) -> MCPRuntime:
     from app.core.config import settings
 
@@ -431,10 +685,110 @@ def _build_task_mcp_runtime(
             return policy_value
         return bool(getattr(settings, default_setting_name, False))
 
+    def _ensure_writable_dir(path_value: Any, *, label: str) -> str:
+        raw = str(path_value or "").strip()
+        if not raw:
+            raise RuntimeError(f"{label} 未配置持久化目录")
+        candidate = raw
+        if not os.path.isabs(candidate):
+            candidate = os.path.normpath(os.path.join(project_root, candidate))
+        try:
+            os.makedirs(candidate, exist_ok=True)
+        except Exception as exc:
+            can_fallback = (
+                os.path.isabs(candidate)
+                and candidate.startswith("/app/")
+                and not os.path.exists("/.dockerenv")
+            )
+            if not can_fallback:
+                raise RuntimeError(f"{label} 创建目录失败: {candidate} ({exc})") from exc
+            fallback_path = os.path.normpath(
+                os.path.join(
+                    project_root,
+                    ".mcp_data",
+                    candidate.lstrip("/"),
+                )
+            )
+            try:
+                os.makedirs(fallback_path, exist_ok=True)
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    f"{label} 创建目录失败: {candidate} (fallback={fallback_path}, err={fallback_exc})"
+                ) from fallback_exc
+            candidate = fallback_path
+        if not os.path.isdir(candidate):
+            raise RuntimeError(f"{label} 不是目录: {candidate}")
+        if not os.access(candidate, os.W_OK):
+            raise RuntimeError(f"{label} 目录不可写: {candidate}")
+        return candidate
+
+    def _extract_indexer_path(args: List[str]) -> Optional[str]:
+        for idx, item in enumerate(args):
+            text = str(item or "").strip()
+            if not text:
+                continue
+            if text.startswith("--indexer-path="):
+                value = text.split("=", 1)[1].strip()
+                return value or None
+            if text == "--indexer-path" and idx + 1 < len(args):
+                value = str(args[idx + 1] or "").strip()
+                return value or None
+        return None
+
+    def _upsert_indexer_path(args: List[str], indexer_path: str) -> List[str]:
+        updated = [str(item) for item in (args or [])]
+        path_value = str(indexer_path or "").strip()
+        if not path_value:
+            return updated
+        for idx, item in enumerate(updated):
+            text = str(item or "").strip()
+            if text.startswith("--indexer-path="):
+                updated[idx] = f"--indexer-path={path_value}"
+                return updated
+            if text == "--indexer-path":
+                if idx + 1 < len(updated):
+                    updated[idx + 1] = path_value
+                else:
+                    updated.append(path_value)
+                return updated
+        updated.extend(["--indexer-path", path_value])
+        return updated
+
+    def _build_filesystem_args(raw_args: Any) -> List[str]:
+        parsed = _parse_mcp_args(raw_args)
+        if not parsed:
+            parsed = ["-y", "@modelcontextprotocol/server-filesystem"]
+        last = str(parsed[-1] or "").strip() if parsed else ""
+        looks_like_package_name = bool(last.startswith("@") and "/" in last)
+        looks_like_mount_path = bool(
+            last
+            and not looks_like_package_name
+            and not last.startswith("-")
+            and (
+                last in {".", "..", "./", "../"}
+                or "/" in last
+                or "\\" in last
+                or last.startswith("~")
+            )
+        )
+        if looks_like_mount_path:
+            parsed = parsed[:-1]
+        return [*parsed, str(project_root)]
+
     adapters: Dict[str, Any] = {}
     domain_adapters: Dict[str, Dict[str, Any]] = {}
     runtime_modes: Dict[str, str] = {}
     required_mcps: List[str] = []
+    active_mcp_filter = {
+        str(item).strip().lower()
+        for item in (active_mcp_ids or [])
+        if str(item).strip()
+    }
+
+    def _is_active_mcp(mcp_name: str) -> bool:
+        if not active_mcp_filter:
+            return True
+        return str(mcp_name or "").strip().lower() in active_mcp_filter
 
     def _register_domain_adapter(name: str, domain: str, adapter: Any) -> None:
         domain_map = domain_adapters.setdefault(name, {})
@@ -443,208 +797,263 @@ def _build_task_mcp_runtime(
         if domain == "backend" or name not in adapters:
             adapters[name] = adapter
 
-    # ============ filesystem ============
-    if bool(getattr(settings, "MCP_FILESYSTEM_ENABLED", True)):
-        backend_enabled = _domain_enabled("filesystem", "backend", "MCP_FILESYSTEM_ENABLED")
-        sandbox_enabled = _domain_enabled(
-            "filesystem",
-            "sandbox",
-            "MCP_FILESYSTEM_SANDBOX_ENABLED",
+    def _choose_http_or_stdio_adapter(
+        *,
+        mcp_name: str,
+        domain: str,
+        url: str,
+        headers: Optional[Dict[str, str]] = None,
+        stdio_command: str,
+        stdio_args: List[str],
+        allow_stdio_fallback: bool = True,
+    ) -> Any:
+        endpoint = str(url or "").strip()
+        if endpoint:
+            http_adapter = FastMCPHttpAdapter(
+                url=endpoint,
+                timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                runtime_domain=domain,
+                headers=headers,
+            )
+            if not allow_stdio_fallback:
+                return http_adapter
+            if (not prefer_stdio_when_http_unavailable) or http_adapter.is_available():
+                return http_adapter
+            logger.warning(
+                "MCP endpoint unavailable; fallback to stdio (%s/%s -> %s)",
+                mcp_name,
+                domain,
+                endpoint,
+            )
+        if not allow_stdio_fallback:
+            return FastMCPHttpAdapter(
+                url=endpoint,
+                timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+                runtime_domain=domain,
+                headers=headers,
+            )
+        return FastMCPStdioAdapter(
+            command=str(stdio_command or "").strip(),
+            args=[str(item) for item in (stdio_args or [])],
+            cwd=project_root,
+            timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+            runtime_domain=domain,
         )
-        if backend_enabled:
+
+    # ============ filesystem ============
+    filesystem_backend_enabled = _domain_enabled("filesystem", "backend", "MCP_FILESYSTEM_ENABLED")
+    filesystem_sandbox_enabled = _domain_enabled(
+        "filesystem",
+        "sandbox",
+        "MCP_FILESYSTEM_SANDBOX_ENABLED",
+    )
+    if _is_active_mcp("filesystem") and (filesystem_backend_enabled or filesystem_sandbox_enabled):
+        filesystem_force_stdio = bool(getattr(settings, "MCP_FILESYSTEM_FORCE_STDIO", True))
+        filesystem_backend_url = "" if filesystem_force_stdio else resolve_filesystem_backend_url(settings)
+        filesystem_sandbox_url = "" if filesystem_force_stdio else str(
+            getattr(settings, "MCP_FILESYSTEM_SANDBOX_URL", "") or ""
+        ).strip()
+        if (not filesystem_force_stdio) and (not filesystem_sandbox_url):
+            filesystem_sandbox_url = filesystem_backend_url
+        if filesystem_backend_enabled:
             _register_domain_adapter(
                 "filesystem",
                 "backend",
-                FastMCPStdioAdapter(
-                    command=str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "npx") or "npx"),
-                    args=_parse_mcp_args(
+                _choose_http_or_stdio_adapter(
+                    mcp_name="filesystem",
+                    domain="backend",
+                    url=filesystem_backend_url,
+                    stdio_command=str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "npx") or "npx"),
+                    stdio_args=_build_filesystem_args(
                         getattr(
                             settings,
                             "MCP_FILESYSTEM_ARGS",
-                            "-y @modelcontextprotocol/server-filesystem .",
+                            "-y @modelcontextprotocol/server-filesystem",
                         )
                     ),
-                    cwd=project_root,
-                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                    runtime_domain="backend",
                 ),
             )
-        if sandbox_enabled:
+        if filesystem_sandbox_enabled:
             _register_domain_adapter(
                 "filesystem",
                 "sandbox",
-                FastMCPStdioAdapter(
-                    command=str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "npx") or "npx"),
-                    args=_parse_mcp_args(
+                _choose_http_or_stdio_adapter(
+                    mcp_name="filesystem",
+                    domain="sandbox",
+                    url=filesystem_sandbox_url,
+                    stdio_command=str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "npx") or "npx"),
+                    stdio_args=_build_filesystem_args(
                         getattr(
                             settings,
                             "MCP_FILESYSTEM_SANDBOX_ARGS",
-                            "-y @modelcontextprotocol/server-filesystem .",
+                            "-y @modelcontextprotocol/server-filesystem",
                         )
                     ),
-                    cwd=project_root,
-                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                    runtime_domain="sandbox",
                 ),
             )
-        if backend_enabled or sandbox_enabled:
-            runtime_modes["filesystem"] = _runtime_mode(
-                "filesystem",
-                "MCP_FILESYSTEM_RUNTIME_MODE",
-            )
-            required_mcps.append("filesystem")
+        runtime_modes["filesystem"] = _runtime_mode(
+            "filesystem",
+            "MCP_FILESYSTEM_RUNTIME_MODE",
+        )
 
     # ============ code_index ============
-    if bool(getattr(settings, "MCP_CODE_INDEX_ENABLED", False)):
-        backend_enabled = _domain_enabled("code_index", "backend", "MCP_CODE_INDEX_ENABLED")
-        sandbox_enabled = _domain_enabled(
-            "code_index",
-            "sandbox",
-            "MCP_CODE_INDEX_SANDBOX_ENABLED",
+    code_index_backend_enabled = _domain_enabled("code_index", "backend", "MCP_CODE_INDEX_ENABLED")
+    code_index_sandbox_enabled = _domain_enabled(
+        "code_index",
+        "sandbox",
+        "MCP_CODE_INDEX_SANDBOX_ENABLED",
+    )
+    if _is_active_mcp("code_index") and (code_index_backend_enabled or code_index_sandbox_enabled):
+        code_index_backend_url = resolve_code_index_backend_url(settings)
+        code_index_sandbox_url = str(getattr(settings, "MCP_CODE_INDEX_SANDBOX_URL", "") or "").strip()
+        if not code_index_sandbox_url:
+            code_index_sandbox_url = code_index_backend_url
+        code_index_headers = (
+            {"Mcp-Project-Path": str(project_root)}
+            if str(project_root or "").strip()
+            else {}
         )
-        if backend_enabled:
+
+        backend_code_index_args = _parse_mcp_args(
+            getattr(settings, "MCP_CODE_INDEX_ARGS", "--indexer-path /app/data/mcp/code-index")
+        )
+        sandbox_code_index_args = _parse_mcp_args(
+            getattr(settings, "MCP_CODE_INDEX_SANDBOX_ARGS", "--indexer-path /app/data/mcp/code-index")
+        )
+        if code_index_backend_enabled:
+            backend_index_path = _extract_indexer_path(backend_code_index_args)
+            ensured_backend_path = _ensure_writable_dir(
+                backend_index_path or "/app/data/mcp/code-index",
+                label="MCP_CODE_INDEX_ARGS.indexer_path",
+            )
+            backend_code_index_args = _upsert_indexer_path(backend_code_index_args, ensured_backend_path)
+        if code_index_sandbox_enabled:
+            sandbox_index_path = _extract_indexer_path(sandbox_code_index_args)
+            ensured_sandbox_path = _ensure_writable_dir(
+                sandbox_index_path or "/app/data/mcp/code-index",
+                label="MCP_CODE_INDEX_SANDBOX_ARGS.indexer_path",
+            )
+            sandbox_code_index_args = _upsert_indexer_path(sandbox_code_index_args, ensured_sandbox_path)
+        if code_index_backend_enabled:
             _register_domain_adapter(
                 "code_index",
                 "backend",
-                FastMCPStdioAdapter(
-                    command=str(getattr(settings, "MCP_CODE_INDEX_COMMAND", "code-index-mcp") or "code-index-mcp"),
-                    args=_parse_mcp_args(
-                        getattr(settings, "MCP_CODE_INDEX_ARGS", "--indexer-path /app/data/mcp/code-index")
-                    ),
-                    cwd=project_root,
-                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                    runtime_domain="backend",
+                _choose_http_or_stdio_adapter(
+                    mcp_name="code_index",
+                    domain="backend",
+                    url=code_index_backend_url,
+                    headers=code_index_headers,
+                    stdio_command=str(getattr(settings, "MCP_CODE_INDEX_COMMAND", "code-index-mcp") or "code-index-mcp"),
+                    stdio_args=backend_code_index_args,
                 ),
             )
-        if sandbox_enabled:
+        if code_index_sandbox_enabled:
             _register_domain_adapter(
                 "code_index",
                 "sandbox",
-                FastMCPStdioAdapter(
-                    command=str(
+                _choose_http_or_stdio_adapter(
+                    mcp_name="code_index",
+                    domain="sandbox",
+                    url=code_index_sandbox_url,
+                    headers=code_index_headers,
+                    stdio_command=str(
                         getattr(settings, "MCP_CODE_INDEX_SANDBOX_COMMAND", "code-index-mcp") or "code-index-mcp"
                     ),
-                    args=_parse_mcp_args(
-                        getattr(settings, "MCP_CODE_INDEX_SANDBOX_ARGS", "--indexer-path /app/data/mcp/code-index")
-                    ),
-                    cwd=project_root,
-                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                    runtime_domain="sandbox",
+                    stdio_args=sandbox_code_index_args,
                 ),
             )
-        if backend_enabled or sandbox_enabled:
-            runtime_modes["code_index"] = _runtime_mode(
-                "code_index",
-                "MCP_CODE_INDEX_RUNTIME_MODE",
-            )
-            required_mcps.append("code_index")
-
-    # ============ memory ============
-    if bool(getattr(settings, "MCP_MEMORY_ENABLED", False)):
-        backend_enabled = _domain_enabled("memory", "backend", "MCP_MEMORY_ENABLED")
-        sandbox_enabled = _domain_enabled("memory", "sandbox", "MCP_MEMORY_SANDBOX_ENABLED")
-        if backend_enabled:
-            _register_domain_adapter(
-                "memory",
-                "backend",
-                FastMCPStdioAdapter(
-                    command=str(getattr(settings, "MCP_MEMORY_COMMAND", "npx") or "npx"),
-                    args=_parse_mcp_args(getattr(settings, "MCP_MEMORY_ARGS", "-y @modelcontextprotocol/server-memory")),
-                    cwd=project_root,
-                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                    runtime_domain="backend",
-                ),
-            )
-        if sandbox_enabled:
-            _register_domain_adapter(
-                "memory",
-                "sandbox",
-                FastMCPStdioAdapter(
-                    command=str(getattr(settings, "MCP_MEMORY_SANDBOX_COMMAND", "npx") or "npx"),
-                    args=_parse_mcp_args(
-                        getattr(settings, "MCP_MEMORY_SANDBOX_ARGS", "-y @modelcontextprotocol/server-memory")
-                    ),
-                    cwd=project_root,
-                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                    runtime_domain="sandbox",
-                ),
-            )
-        if backend_enabled or sandbox_enabled:
-            runtime_modes["memory"] = _runtime_mode("memory", "MCP_MEMORY_RUNTIME_MODE")
-            required_mcps.append("memory")
+        runtime_modes["code_index"] = _runtime_mode(
+            "code_index",
+            "MCP_CODE_INDEX_RUNTIME_MODE",
+        )
 
     # ============ sequentialthinking ============
-    if bool(getattr(settings, "MCP_SEQUENTIAL_THINKING_ENABLED", False)):
-        backend_enabled = _domain_enabled(
-            "sequentialthinking",
-            "backend",
-            "MCP_SEQUENTIAL_THINKING_ENABLED",
-        )
-        sandbox_enabled = _domain_enabled(
-            "sequentialthinking",
-            "sandbox",
-            "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
-        )
-        if backend_enabled:
+    sequential_backend_enabled = _domain_enabled(
+        "sequentialthinking",
+        "backend",
+        "MCP_SEQUENTIAL_THINKING_ENABLED",
+    )
+    sequential_sandbox_enabled = _domain_enabled(
+        "sequentialthinking",
+        "sandbox",
+        "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
+    )
+    if _is_active_mcp("sequentialthinking") and (sequential_backend_enabled or sequential_sandbox_enabled):
+        sequential_backend_url = resolve_sequential_backend_url(settings)
+        sequential_sandbox_url = str(
+            getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "") or ""
+        ).strip()
+        if not sequential_sandbox_url:
+            sequential_sandbox_url = sequential_backend_url
+        if sequential_backend_enabled:
             _register_domain_adapter(
                 "sequentialthinking",
                 "backend",
-                FastMCPStdioAdapter(
-                    command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "npx") or "npx"),
-                    args=_parse_mcp_args(
+                _choose_http_or_stdio_adapter(
+                    mcp_name="sequentialthinking",
+                    domain="backend",
+                    url=sequential_backend_url,
+                    stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "npx") or "npx"),
+                    stdio_args=_parse_mcp_args(
                         getattr(
                             settings,
                             "MCP_SEQUENTIAL_THINKING_ARGS",
                             "-y @modelcontextprotocol/server-sequential-thinking",
                         )
                     ),
-                    cwd=project_root,
-                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                    runtime_domain="backend",
                 ),
             )
-        if sandbox_enabled:
+        if sequential_sandbox_enabled:
             _register_domain_adapter(
                 "sequentialthinking",
                 "sandbox",
-                FastMCPStdioAdapter(
-                    command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "npx") or "npx"),
-                    args=_parse_mcp_args(
+                _choose_http_or_stdio_adapter(
+                    mcp_name="sequentialthinking",
+                    domain="sandbox",
+                    url=sequential_sandbox_url,
+                    stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "npx") or "npx"),
+                    stdio_args=_parse_mcp_args(
                         getattr(
                             settings,
                             "MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS",
                             "-y @modelcontextprotocol/server-sequential-thinking",
                         )
                     ),
-                    cwd=project_root,
-                    timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                    runtime_domain="sandbox",
                 ),
             )
-        if backend_enabled or sandbox_enabled:
-            runtime_modes["sequentialthinking"] = _runtime_mode(
-                "sequentialthinking",
-                "MCP_SEQUENTIAL_THINKING_RUNTIME_MODE",
-            )
-            required_mcps.append("sequentialthinking")
+        runtime_modes["sequentialthinking"] = _runtime_mode(
+            "sequentialthinking",
+            "MCP_SEQUENTIAL_THINKING_RUNTIME_MODE",
+        )
 
     # ============ qmd ============
-    if bool(getattr(settings, "MCP_QMD_ENABLED", False)):
+    qmd_backend_enabled = _domain_enabled("qmd", "backend", "MCP_QMD_ENABLED")
+    qmd_sandbox_enabled = _domain_enabled("qmd", "sandbox", "MCP_QMD_SANDBOX_ENABLED")
+    if _is_active_mcp("qmd") and (qmd_backend_enabled or qmd_sandbox_enabled):
         qmd_project_id = str(project_id or "default")
         qmd_prefix = str(getattr(settings, "QMD_COLLECTION_PREFIX", "project") or "project")
         qmd_glob = str(getattr(settings, "QMD_INDEX_GLOB", "**/*") or "**/*")
         qmd_lazy = bool(getattr(settings, "QMD_LAZY_INDEX_ENABLED", True))
         qmd_auto_embed = bool(getattr(settings, "QMD_AUTO_EMBED_ON_FIRST_USE", False))
-        backend_enabled = _domain_enabled("qmd", "backend", "MCP_QMD_ENABLED")
-        sandbox_enabled = _domain_enabled("qmd", "sandbox", "MCP_QMD_SANDBOX_ENABLED")
+        _ensure_writable_dir(
+            getattr(settings, "QMD_DATA_DIR", "./data/qmd"),
+            label="QMD_DATA_DIR",
+        )
+        qmd_backend_url = normalize_qmd_loopback_url(resolve_qmd_backend_url(settings))
+        qmd_sandbox_url = normalize_qmd_loopback_url(
+            str(getattr(settings, "MCP_QMD_SANDBOX_URL", "") or "").strip()
+        )
+        if not qmd_sandbox_url:
+            qmd_sandbox_url = qmd_backend_url
 
-        if backend_enabled:
-            backend_qmd = FastMCPStdioAdapter(
-                command=str(getattr(settings, "MCP_QMD_COMMAND", "qmd") or "qmd"),
-                args=_parse_mcp_args(getattr(settings, "MCP_QMD_ARGS", "mcp")),
-                cwd=project_root,
-                timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                runtime_domain="backend",
+        if qmd_backend_enabled:
+            backend_qmd = _choose_http_or_stdio_adapter(
+                mcp_name="qmd",
+                domain="backend",
+                url=qmd_backend_url,
+                stdio_command=str(getattr(settings, "MCP_QMD_COMMAND", "qmd") or "qmd"),
+                stdio_args=_parse_mcp_args(getattr(settings, "MCP_QMD_ARGS", "mcp")),
+                allow_stdio_fallback=True,
             )
             _register_domain_adapter(
                 "qmd",
@@ -660,13 +1069,14 @@ def _build_task_mcp_runtime(
                     auto_embed_on_first_use=qmd_auto_embed,
                 ),
             )
-        if sandbox_enabled:
-            sandbox_qmd = FastMCPStdioAdapter(
-                command=str(getattr(settings, "MCP_QMD_SANDBOX_COMMAND", "qmd") or "qmd"),
-                args=_parse_mcp_args(getattr(settings, "MCP_QMD_SANDBOX_ARGS", "mcp")),
-                cwd=project_root,
-                timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-                runtime_domain="sandbox",
+        if qmd_sandbox_enabled:
+            sandbox_qmd = _choose_http_or_stdio_adapter(
+                mcp_name="qmd",
+                domain="sandbox",
+                url=qmd_sandbox_url,
+                stdio_command=str(getattr(settings, "MCP_QMD_SANDBOX_COMMAND", "qmd") or "qmd"),
+                stdio_args=_parse_mcp_args(getattr(settings, "MCP_QMD_SANDBOX_ARGS", "mcp")),
+                allow_stdio_fallback=True,
             )
             _register_domain_adapter(
                 "qmd",
@@ -682,24 +1092,219 @@ def _build_task_mcp_runtime(
                     auto_embed_on_first_use=qmd_auto_embed,
                 ),
             )
-        if backend_enabled or sandbox_enabled:
-            runtime_modes["qmd"] = _runtime_mode("qmd", "MCP_QMD_RUNTIME_MODE")
-            required_mcps.append("qmd")
+        runtime_modes["qmd"] = _runtime_mode("qmd", "MCP_QMD_RUNTIME_MODE")
+
+    required_gate_mcps = ["filesystem", "code_index"]
+    required_mcps = []
+    for name in required_gate_mcps:
+        normalized_name = str(name).strip()
+        if not normalized_name or not _is_active_mcp(normalized_name):
+            continue
+        if normalized_name in domain_adapters or normalized_name in adapters:
+            required_mcps.append(normalized_name)
 
     return MCPRuntime(
         enabled=bool(mcp_config.get("enabled", getattr(settings, "MCP_ENABLED", True))),
-        prefer_mcp=bool(mcp_config.get("preferMcp", getattr(settings, "MCP_PREFER", True))),
+        prefer_mcp=(
+            True
+            if enforce_mcp_only
+            else bool(mcp_config.get("preferMcp", getattr(settings, "MCP_PREFER", True)))
+        ),
         adapters=adapters,
         domain_adapters=domain_adapters,
         runtime_modes=runtime_modes,
         required_mcps=required_mcps,
         write_scope_guard=write_guard,
+        allow_filesystem_writes=False,
         default_runtime_mode=str(
             runtime_policy.get("default_mode", getattr(settings, "MCP_RUNTIME_MODE_DEFAULT", "backend_then_sandbox"))
             if isinstance(runtime_policy, dict)
             else getattr(settings, "MCP_RUNTIME_MODE_DEFAULT", "backend_then_sandbox")
         ),
+        strict_mode=bool(
+            True
+            if enforce_mcp_only
+            else mcp_config.get("strictMode", getattr(settings, "MCP_STRICT_MODE", True))
+        ),
+        project_root=project_root,
     )
+
+
+async def _probe_required_mcp_runtime(
+    runtime: MCPRuntime,
+    *,
+    runtime_domain: str = "all",
+) -> Dict[str, Any]:
+    probe_specs: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {
+        "filesystem": [("search_code", {"keyword": "__mcp_probe__", "directory": ".", "max_results": 1})],
+        "code_index": [("list_files", {"directory": ".", "pattern": "*"})],
+        "sequentialthinking": [
+            (
+                "sequentialthinking",
+                {
+                    "thought": "startup_probe",
+                    "nextThoughtNeeded": False,
+                    "thoughtNumber": 1,
+                    "totalThoughts": 1,
+                },
+            )
+        ],
+        "qmd": [("qmd_status", {})],
+    }
+    probe_policy: Dict[str, Dict[str, float]] = {}
+
+    required_mcps: List[str] = []
+    if hasattr(runtime, "_required_mcp_names"):
+        try:
+            required_mcps = list(runtime._required_mcp_names())  # type: ignore[attr-defined]
+        except Exception:
+            required_mcps = []
+    if not required_mcps:
+        required_mcps = list(getattr(runtime, "required_mcps", []) or [])
+
+    not_ready: List[Dict[str, Any]] = []
+    details: Dict[str, Dict[str, Any]] = {}
+    domain_value = str(runtime_domain or "all").strip().lower() or "all"
+
+    probe_runtime = runtime
+    try:
+        adapter_failure_threshold = max(
+            6,
+            int(getattr(runtime, "adapter_failure_threshold", 2) or 2) + 2,
+        )
+        probe_runtime = MCPRuntime(
+            enabled=bool(getattr(runtime, "enabled", True)),
+            prefer_mcp=bool(getattr(runtime, "prefer_mcp", True)),
+            adapters=dict(getattr(runtime, "adapters", {}) or {}),
+            domain_adapters=dict(getattr(runtime, "domain_adapters", {}) or {}),
+            runtime_modes=dict(getattr(runtime, "runtime_modes", {}) or {}),
+            required_mcps=list(getattr(runtime, "required_mcps", []) or []),
+            write_scope_guard=getattr(runtime, "write_scope_guard", None),
+            default_runtime_mode=str(
+                getattr(runtime, "default_runtime_mode", "backend_then_sandbox")
+                or "backend_then_sandbox"
+            ),
+            strict_mode=bool(getattr(runtime, "strict_mode", True)),
+            adapter_failure_threshold=adapter_failure_threshold,
+        )
+    except Exception:
+        probe_runtime = runtime
+
+    def _is_infra_failed(result: Any) -> Tuple[bool, Dict[str, Any], str, str]:
+        metadata = dict(result.metadata) if isinstance(result.metadata, dict) else {}
+        error_text = str(result.error or "").strip()
+        skip_reason = str(metadata.get("mcp_skip_reason") or "").strip()
+        infra_failed = (
+            not bool(result.handled)
+            or error_text.startswith("mcp_call_failed:")
+            or error_text.startswith("mcp_adapter_unavailable:")
+            or skip_reason in {
+                "adapter_unavailable",
+                "adapter_disabled_after_failures",
+                "domain_adapter_missing",
+                "command_not_found",
+            }
+        )
+        return infra_failed, metadata, error_text, skip_reason
+
+    for mcp_name in required_mcps:
+        specs = probe_specs.get(str(mcp_name))
+        if not specs:
+            details[str(mcp_name)] = {
+                "probe_ready": True,
+                "reason": "probe_not_defined_skip",
+            }
+            continue
+        policy = probe_policy.get(str(mcp_name), {})
+        max_attempts = max(1, int(policy.get("attempts", 1) or 1))
+        backoff_seconds = max(0.0, float(policy.get("backoff_seconds", 0.0) or 0.0))
+
+        probe_ok = False
+        last_failure: Dict[str, Any] = {}
+        for tool_name, tool_input in specs:
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    result = await probe_runtime.execute_tool(
+                        tool_name=tool_name,
+                        tool_input=dict(tool_input or {}),
+                        agent_name="MCP_RUNTIME_PROBE",
+                        alias_used=f"startup_probe:{tool_name}",
+                    )
+                except Exception as exc:
+                    reason = f"probe_exception:{exc.__class__.__name__}"
+                    last_failure = {
+                        "probe_ready": False,
+                        "reason": reason,
+                        "tool_name": tool_name,
+                        "attempt": attempt,
+                    }
+                    if attempt < max_attempts:
+                        if backoff_seconds > 0:
+                            await asyncio.sleep(backoff_seconds * (2 ** (attempt - 1)))
+                        continue
+                    break
+
+                infra_failed, metadata, error_text, skip_reason = _is_infra_failed(result)
+                if infra_failed:
+                    reason = skip_reason or error_text or "probe_failed"
+                    last_failure = {
+                        "probe_ready": False,
+                        "reason": reason,
+                        "tool_name": tool_name,
+                        "attempt": attempt,
+                        "mcp_runtime_domain": metadata.get("mcp_runtime_domain"),
+                    }
+                    if attempt < max_attempts and skip_reason != "adapter_disabled_after_failures":
+                        if backoff_seconds > 0:
+                            await asyncio.sleep(backoff_seconds * (2 ** (attempt - 1)))
+                        continue
+                    break
+
+                details[str(mcp_name)] = {
+                    "probe_ready": True,
+                    "tool_name": tool_name,
+                    "tool_success": bool(result.success),
+                    "mcp_runtime_domain": metadata.get("mcp_runtime_domain"),
+                    "reason": "probe_ok",
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                }
+                probe_ok = True
+                break
+
+            if probe_ok:
+                break
+
+        if probe_ok:
+            continue
+
+        reason = str(last_failure.get("reason") or "probe_failed")
+        runtime_domain_value = str(
+            last_failure.get("mcp_runtime_domain") or domain_value
+        )
+        details[str(mcp_name)] = {
+            "probe_ready": False,
+            "reason": reason,
+            "tool_name": str(last_failure.get("tool_name") or ""),
+            "attempt": int(last_failure.get("attempt") or max_attempts),
+            "max_attempts": max_attempts,
+            "mcp_runtime_domain": last_failure.get("mcp_runtime_domain"),
+        }
+        not_ready.append(
+            {
+                "mcp": str(mcp_name),
+                "runtime_domain": runtime_domain_value,
+                "reason": reason,
+            }
+        )
+
+    return {
+        "ready": len(not_ready) == 0,
+        "runtime_domain": domain_value,
+        "required_mcps": required_mcps,
+        "not_ready": not_ready,
+        "details": details,
+    }
 
 
 async def _run_with_retries(
@@ -717,10 +1322,54 @@ async def _run_with_retries(
     for attempt in range(1, safe_attempts + 1):
         try:
             return await func()
-        except asyncio.CancelledError:
-            raise
+        except asyncio.CancelledError as exc:
+            cancel_origin = _detect_cancel_origin(task_id, exc)
+            classification = {
+                "code": "cancelled_user" if cancel_origin == "user" else "cancelled_system",
+                "category": "cancel",
+                "retryable": cancel_origin == "system",
+            }
+            retryable = bool(classification["retryable"])
+            is_terminal = cancel_origin == "user" or attempt >= safe_attempts or not retryable
+            message = (
+                f"[{step_name}] 第 {attempt}/{safe_attempts} 次取消: "
+                f"origin={cancel_origin}; {'已中止任务' if is_terminal else '准备重试'}"
+            )
+            metadata = {
+                "task_id": task_id,
+                "step_name": step_name,
+                "attempt": attempt,
+                "retry_attempt": attempt,
+                "max_attempts": safe_attempts,
+                "is_terminal": is_terminal,
+                "retry_error_class": classification["code"],
+                "retryable": retryable,
+                "cancel_origin": cancel_origin,
+            }
+            if event_emitter:
+                if is_terminal:
+                    await event_emitter.emit_error(message, metadata=metadata)
+                else:
+                    await event_emitter.emit_warning(message, metadata=metadata)
+
+            # 用户主动取消不做重试，直接中断。
+            if cancel_origin == "user":
+                raise
+
+            if is_terminal:
+                raise StepRetryExceededError(
+                    step_name,
+                    attempt,
+                    RuntimeError("系统取消后重试耗尽"),
+                    max_attempts=safe_attempts,
+                ) from exc
+            await asyncio.sleep(min(2, attempt))
+            continue
         except Exception as exc:
-            retryable = True if retryable_predicate is None else bool(retryable_predicate(exc))
+            classification = _classify_retry_error(exc)
+            retryable = bool(classification["retryable"])
+            if retryable_predicate is not None:
+                retryable = bool(retryable_predicate(exc)) and retryable
             is_terminal = attempt >= safe_attempts or not retryable
             message = _build_retry_message(
                 step_name,
@@ -733,8 +1382,12 @@ async def _run_with_retries(
                 "task_id": task_id,
                 "step_name": step_name,
                 "attempt": attempt,
+                "retry_attempt": attempt,
                 "max_attempts": safe_attempts,
                 "is_terminal": is_terminal,
+                "retry_error_class": classification["code"],
+                "retryable": retryable,
+                "cancel_origin": "none",
             }
             if event_emitter:
                 if is_terminal:
@@ -1656,7 +2309,20 @@ async def _execute_agent_task(task_id: str):
         mcp_runtime: Optional[MCPRuntime] = None
         memory_store = None
         markdown_memory: Dict[str, str] = {}
+        qmd_task_kb = None
         start_time = time.time()
+
+        async def _qmd_upsert_json(relative_path: str, payload: Any) -> bool:
+            del relative_path, payload
+            return False
+
+        async def _qmd_upsert_text(relative_path: str, text: str) -> bool:
+            del relative_path, text
+            return False
+
+        async def _qmd_update_index(force: bool = False) -> bool:
+            del force
+            return False
 
         try:
             # 获取任务
@@ -1793,6 +2459,102 @@ async def _execute_agent_task(task_id: str):
                 logger.info(f"[Cancel] Task {task_id} cancelled after project preparation")
                 raise asyncio.CancelledError("任务已取消")
 
+            async def _qmd_upsert_json(relative_path: str, payload: Any) -> bool:
+                if qmd_task_kb is None:
+                    return False
+                try:
+                    return bool(
+                        await asyncio.to_thread(
+                            qmd_task_kb.upsert_json,
+                            relative_path,
+                            payload,
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("[QMD TaskKB] upsert_json failed (%s): %s", relative_path, exc)
+                    return False
+
+            async def _qmd_upsert_text(relative_path: str, text: str) -> bool:
+                if qmd_task_kb is None:
+                    return False
+                try:
+                    return bool(
+                        await asyncio.to_thread(
+                            qmd_task_kb.upsert_text,
+                            relative_path,
+                            text,
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("[QMD TaskKB] upsert_text failed (%s): %s", relative_path, exc)
+                    return False
+
+            async def _qmd_update_index(force: bool = False) -> bool:
+                if qmd_task_kb is None:
+                    return False
+                try:
+                    result = await asyncio.to_thread(qmd_task_kb.update_index, force=bool(force))
+                except Exception as exc:
+                    logger.warning("[QMD TaskKB] update_index failed: %s", exc)
+                    return False
+                if not bool(result.get("success")):
+                    logger.warning("[QMD TaskKB] update_index unsuccessful: %s", result.get("error"))
+                    return False
+                return bool(result.get("updated")) or bool(force)
+
+            if bool(getattr(settings, "QMD_TASK_KB_ENABLED", True)):
+                try:
+                    from app.services.agent.qmd.task_kb import QmdTaskKnowledgeBase
+
+                    qmd_task_kb = QmdTaskKnowledgeBase(
+                        project_root=project_root,
+                        task_id=task_id,
+                        command=str(getattr(settings, "QMD_CLI_COMMAND", "npx -y @tobilu/qmd") or "npx -y @tobilu/qmd"),
+                        task_root_rel=str(getattr(settings, "QMD_TASK_ROOT_REL", ".deepaudit/qmd") or ".deepaudit/qmd"),
+                        collection_prefix=str(getattr(settings, "QMD_TASK_COLLECTION_PREFIX", "task") or "task"),
+                        doc_glob=str(
+                            getattr(
+                                settings,
+                                "QMD_TASK_DOC_GLOB",
+                                "**/*.{md,txt,json,yml,yaml}",
+                            )
+                            or "**/*.{md,txt,json,yml,yaml}"
+                        ),
+                        auto_embed=bool(getattr(settings, "QMD_TASK_AUTO_EMBED", False)),
+                        query_cache=bool(getattr(settings, "QMD_TASK_QUERY_CACHE", True)),
+                        timeout_seconds=int(getattr(settings, "QMD_CLI_TIMEOUT_SECONDS", 120) or 120),
+                    )
+                    qmd_ready_result = await asyncio.to_thread(qmd_task_kb.ensure_ready)
+                    if bool(qmd_ready_result.get("success")):
+                        await event_emitter.emit_info(
+                            f"🧠 QMD 任务知识库已启用: {qmd_task_kb.task_root}"
+                        )
+                        await _qmd_upsert_json(
+                            "artifacts/task_context.json",
+                            {
+                                "task_id": task_id,
+                                "project_id": str(project.id),
+                                "project_name": project.name,
+                                "project_root": project_root,
+                                "target_files_count": len(task.target_files or []),
+                            },
+                        )
+                        await _qmd_update_index(force=False)
+                    else:
+                        await event_emitter.emit_warning(
+                            "⚠️ QMD 任务知识库初始化失败，已降级为普通审计流程"
+                        )
+                        logger.warning(
+                            "[QMD TaskKB] ensure_ready failed: %s",
+                            qmd_ready_result.get("error"),
+                        )
+                except Exception as exc:
+                    qmd_task_kb = None
+                    logger.warning("[QMD TaskKB] initialize failed: %s", exc)
+                    await event_emitter.emit_warning(
+                        "⚠️ QMD 任务知识库初始化失败，已降级为普通审计流程"
+                    )
+
             # 创建 LLM 服务
             llm_service = LLMService(user_config=user_config)
 
@@ -1813,6 +2575,7 @@ async def _execute_agent_task(task_id: str):
                     project_id=str(project.id),  # 🔥 传递 project_id 用于 RAG
                     event_emitter=event_emitter,  # 🔥 新增
                     task_id=task_id,  # 🔥 新增：用于取消检查
+                    qmd_task_kb=qmd_task_kb,
                 )
 
             tools = await _run_with_retries(
@@ -1830,13 +2593,98 @@ async def _execute_agent_task(task_id: str):
                 target_files=task.target_files,
                 bootstrap_findings=None,
                 project_id=str(project.id),
+                prefer_stdio_when_http_unavailable=True,
+                enforce_mcp_only=True,
             )
 
-            # MCP 全量就绪硬门禁：后端/沙盒域未准备完成时拒绝任务继续执行。
+            if mcp_runtime and hasattr(mcp_runtime, "register_local_tools"):
+                local_proxy_registry: Dict[str, Any] = {}
+                for bucket_name in ("recon", "analysis", "verification", "orchestrator"):
+                    bucket_tools = tools.get(bucket_name)
+                    if not isinstance(bucket_tools, dict):
+                        continue
+                    for tool_name, tool_obj in bucket_tools.items():
+                        normalized_name = str(tool_name or "").strip()
+                        if not normalized_name or not hasattr(tool_obj, "execute"):
+                            continue
+                        local_proxy_registry[normalized_name] = tool_obj
+                registered_local_tools = mcp_runtime.register_local_tools(local_proxy_registry)
+                await event_emitter.emit_info(
+                    f"🧩 MCP Local-Proxy 已注册 {registered_local_tools} 个本地工具"
+                )
+
+            if mcp_runtime:
+                adapter_entries: List[str] = []
+                domain_adapters = getattr(mcp_runtime, "domain_adapters", {}) or {}
+                if isinstance(domain_adapters, dict):
+                    for mcp_name, domain_map in sorted(domain_adapters.items()):
+                        if not isinstance(domain_map, dict) or not domain_map:
+                            continue
+                        domains = ",".join(sorted(str(domain).strip() for domain in domain_map.keys() if str(domain).strip()))
+                        if domains:
+                            adapter_entries.append(f"{mcp_name}[{domains}]")
+                if not adapter_entries:
+                    flat_adapters = getattr(mcp_runtime, "adapters", {}) or {}
+                    if isinstance(flat_adapters, dict):
+                        adapter_entries = sorted(str(name).strip() for name in flat_adapters.keys() if str(name).strip())
+                adapters_text = ", ".join(adapter_entries) if adapter_entries else "(none)"
+                await event_emitter.emit_info(
+                    "🛰️ MCP Runtime 已就绪: "
+                    f"strict_mode={bool(getattr(mcp_runtime, 'strict_mode', False))}, "
+                    f"prefer_mcp={bool(getattr(mcp_runtime, 'prefer_mcp', True))}, "
+                    f"adapters={adapters_text}"
+                )
+
+            # MCP 启动门禁：默认可启动，仅 required MCP 明确未就绪时阻断。
             if (
                 mcp_runtime
                 and bool(getattr(settings, "MCP_REQUIRE_ALL_READY_ON_STARTUP", True))
             ):
+                required_gate_mcps = [
+                    str(item).strip()
+                    for item in (getattr(mcp_runtime, "required_mcps", []) or [])
+                    if str(item).strip()
+                ]
+                if bool(getattr(settings, "MCP_DAEMON_AUTOSTART", False)) and required_gate_mcps:
+                    daemon_manager = MCPDaemonManager()
+                    daemon_specs = {
+                        spec.name: spec
+                        for spec in daemon_manager.build_specs(
+                            settings,
+                            project_root=project_root,
+                        )
+                    }
+                    prewarm_not_ready: list[str] = []
+                    for daemon_name in required_gate_mcps:
+                        spec = daemon_specs.get(daemon_name)
+                        if spec is None:
+                            prewarm_not_ready.append(f"{daemon_name}:spec_missing")
+                            continue
+                        timeout_seconds = max(
+                            5,
+                            int(getattr(spec, "startup_timeout_seconds", 10) or 10) + 2,
+                        )
+                        try:
+                            launch_result = await asyncio.wait_for(
+                                asyncio.to_thread(daemon_manager.ensure_daemon, spec),
+                                timeout=timeout_seconds,
+                            )
+                        except asyncio.TimeoutError:
+                            prewarm_not_ready.append(f"{daemon_name}:prewarm_timeout")
+                            continue
+                        if not bool(getattr(launch_result, "ready", False)):
+                            reason = str(getattr(launch_result, "reason", "") or "prewarm_failed")
+                            prewarm_not_ready.append(f"{daemon_name}:{reason}")
+                    if prewarm_not_ready:
+                        await event_emitter.emit_warning(
+                            "⚠️ required MCP 预热未全部就绪: "
+                            + "; ".join(prewarm_not_ready[:8])
+                        )
+                    else:
+                        await event_emitter.emit_info(
+                            "✅ required MCP daemon 预热完成"
+                        )
+
                 required_domain = str(
                     getattr(settings, "MCP_REQUIRED_RUNTIME_DOMAIN", "all") or "all"
                 ).strip().lower()
@@ -1849,18 +2697,49 @@ async def _execute_agent_task(task_id: str):
                         if isinstance(item, dict)
                     )
                     message = (
-                        "MCP 启动检查失败：全量 MCP 未就绪，任务已阻断。"
+                        "MCP 启动检查失败：required MCP 未就绪，任务已阻断。"
                         + (f" 明细: {detail}" if detail else "")
                     )
                     await event_emitter.emit_error(
                         message,
                         metadata={
                             "mcp_ready": False,
+                            "mcp_required_unavailable": True,
                             "mcp_required_domain": required_domain,
                             "mcp_not_ready": not_ready,
+                            "required": readiness.get("required_mcps") or [],
+                            "runtime_domain": required_domain,
                         },
                     )
                     raise RuntimeError(message)
+
+                probe_result = await _probe_required_mcp_runtime(
+                    mcp_runtime,
+                    runtime_domain=required_domain,
+                )
+                if not bool(probe_result.get("ready")):
+                    probe_not_ready = probe_result.get("not_ready") or []
+                    probe_detail = "; ".join(
+                        f"{item.get('mcp')}@{item.get('runtime_domain')}:{item.get('reason')}"
+                        for item in probe_not_ready[:10]
+                        if isinstance(item, dict)
+                    )
+                    probe_message = (
+                        "MCP 运行时自检失败：required MCP probe 不可用，任务已阻断。"
+                        + (f" 明细: {probe_detail}" if probe_detail else "")
+                    )
+                    await event_emitter.emit_error(
+                        probe_message,
+                        metadata={
+                            "mcp_probe_ready": False,
+                            "mcp_probe_not_ready": probe_not_ready,
+                            "mcp_probe_details": probe_result.get("details") or {},
+                            "required": probe_result.get("required_mcps") or [],
+                            "runtime_domain": required_domain,
+                        },
+                    )
+                    raise RuntimeError(probe_message)
+                await event_emitter.emit_info("✅ MCP 启动检查与运行时自检通过")
 
             # 🔥 初始化工具后检查取消
             if is_task_cancelled(task_id):
@@ -1886,7 +2765,17 @@ async def _execute_agent_task(task_id: str):
                 event_emitter=event_emitter,
             )
 
+            audit_runtime_metadata = {
+                "smart_audit_mode": True,
+                "audit_mode": "smart_audit",
+                "disable_virtual_routing": True,
+                "mcp_only_enforced": True,
+                "read_scope_policy": "strict_anchor",
+            }
+
             for agent in (recon_agent, analysis_agent, verification_agent):
+                if isinstance(getattr(agent.config, "metadata", None), dict):
+                    agent.config.metadata.update(audit_runtime_metadata)
                 if hasattr(agent, "set_mcp_runtime"):
                     agent.set_mcp_runtime(mcp_runtime)
 
@@ -1901,6 +2790,8 @@ async def _execute_agent_task(task_id: str):
                     "verification": verification_agent,
                 },
             )
+            if isinstance(getattr(orchestrator.config, "metadata", None), dict):
+                orchestrator.config.metadata.update(audit_runtime_metadata)
             if hasattr(orchestrator, "set_mcp_runtime"):
                 orchestrator.set_mcp_runtime(mcp_runtime)
 
@@ -2002,6 +2893,21 @@ async def _execute_agent_task(task_id: str):
                     f"entry_funcs={len(entry_function_names)}，seeds={len(seed_findings)}"
                 )
 
+            await _qmd_upsert_json("artifacts/project_info.json", project_info)
+            await _qmd_upsert_json(
+                "artifacts/bootstrap_seed.json",
+                {
+                    "bootstrap_source": bootstrap_source,
+                    "bootstrap_task_id": bootstrap_task_id,
+                    "bootstrap_findings_count": len(bootstrap_findings or []),
+                    "seed_findings_count": len(seed_findings or []),
+                    "entry_points_count": len(entry_points_payload or []),
+                    "entry_function_names_count": len(entry_function_names or []),
+                    "target_vulnerabilities": list(task.target_vulnerabilities or []),
+                },
+            )
+            await _qmd_update_index(force=False)
+
             if mcp_runtime:
                 seed_paths: List[str] = []
                 for item in seed_findings:
@@ -2024,13 +2930,27 @@ async def _execute_agent_task(task_id: str):
                         task_id=task_id,
                         max_chars=int(getattr(settings, "TOOL_DOC_SYNC_MAX_CHARS", 8000)),
                     )
+                    _sync_mcp_tool_playbook_to_memory(
+                        memory_store=memory_store,
+                        task_id=task_id,
+                        max_chars=int(getattr(settings, "TOOL_DOC_SYNC_MAX_CHARS", 8000)),
+                    )
+                    _sync_tool_skills_to_memory(
+                        memory_store=memory_store,
+                        task_id=task_id,
+                        max_chars=int(getattr(settings, "TOOL_DOC_SYNC_MAX_CHARS", 8000)),
+                    )
                 markdown_memory = memory_store.load_bundle(
                     max_chars=8000,
-                    skills_max_lines=60,
+                    skills_max_lines=int(getattr(settings, "TOOL_SKILLS_MAX_LINES", 180)),
                 )
             except Exception as exc:
                 logger.warning("[MarkdownMemory] init/load failed: %s", exc)
                 markdown_memory = {}
+
+            if markdown_memory:
+                await _qmd_upsert_json("artifacts/markdown_memory_bundle.json", markdown_memory)
+                await _qmd_update_index(force=False)
             
             # 更新任务文件统计
             task.total_files = project_info.get("file_count", 0)
@@ -2058,6 +2978,17 @@ async def _execute_agent_task(task_id: str):
                 "project_root": project_root,
                 "task_id": task_id,
             }
+
+            await _qmd_upsert_json(
+                "artifacts/task_input.json",
+                {
+                    "project_root": project_root,
+                    "task_id": task_id,
+                    "project_info": project_info,
+                    "config": input_data["config"],
+                },
+            )
+            await _qmd_update_index(force=False)
 
             # Provide deterministic persistence callback for Orchestrator TODO mode.
             # The callback is idempotent per task run to avoid double inserts on retries.
@@ -2223,6 +3154,7 @@ async def _execute_agent_task(task_id: str):
                     len(false_positive_findings),
                     false_positive_discarded_count,
                 )
+                agent_payloads: Dict[str, Any] = {}
 
                 # ============ 🔥 Markdown 长期记忆写入（shared + per-agent） ============
                 try:
@@ -2274,7 +3206,6 @@ async def _execute_agent_task(task_id: str):
                         )
 
                         # Per-agent: best-effort final answer summaries
-                        agent_payloads: Dict[str, Any] = {}
                         if orchestrator and hasattr(orchestrator, "_agent_results"):
                             agent_payloads = getattr(orchestrator, "_agent_results") or {}
 
@@ -2315,14 +3246,73 @@ async def _execute_agent_task(task_id: str):
                 except Exception as exc:
                     logger.warning("[MarkdownMemory] append failed: %s", exc)
 
+                await _qmd_upsert_json(
+                    "artifacts/final_summary.json",
+                    {
+                        "task_id": task_id,
+                        "bootstrap_source": bootstrap_source,
+                        "seed_findings_count": len(seed_findings or []),
+                        "orchestrator_findings_count": len(findings or []),
+                        "persisted_effective_findings_count": len(effective_findings or []),
+                        "false_positive_count": false_positive_count,
+                        "filtered_reasons": filtered_reasons or {},
+                    },
+                )
+                await _qmd_upsert_json(
+                    "agents/orchestrator.json",
+                    {
+                        "result_keys": list(result.data.keys()) if isinstance(result.data, dict) else [],
+                        "findings_count": len(findings or []),
+                    },
+                )
+                for agent_key in ("recon", "analysis", "verification"):
+                    payload = agent_payloads.get(agent_key)
+                    if not isinstance(payload, dict):
+                        continue
+                    await _qmd_upsert_json(f"agents/{agent_key}.json", payload)
+                    summary_text = str(payload.get("summary") or payload.get("note") or "").strip()
+                    if summary_text:
+                        await _qmd_upsert_text(f"agents/{agent_key}.md", summary_text + "\n")
+                await _qmd_update_index(force=False)
+
                 # 更新任务统计
                 # 🔥 CRITICAL FIX: 在设置完成前再次检查取消状态
                 # 避免 "取消后后端继续运行并最终标记为完成" 的问题
+                verification_pending_gate_triggered = False
+                verification_pending_gate_message = ""
+                verification_pending_gate_metadata: Dict[str, Any] = {}
+
+                verification_payload: Dict[str, Any] = {}
+                if orchestrator and hasattr(orchestrator, "_agent_results"):
+                    agent_results = getattr(orchestrator, "_agent_results", {})
+                    if isinstance(agent_results, dict):
+                        verification_candidate = agent_results.get("verification")
+                        if isinstance(verification_candidate, dict):
+                            verification_payload = dict(verification_candidate)
+                if not verification_payload and isinstance(result.data, dict):
+                    verification_candidate = result.data.get("verification")
+                    if isinstance(verification_candidate, dict):
+                        verification_payload = dict(verification_candidate)
+
+                gate_stats = _compute_verification_pending_gate(verification_payload)
+                verification_pending_gate_triggered = bool(gate_stats.get("triggered"))
+                verification_pending_gate_message = str(gate_stats.get("message") or "")
+                verification_pending_gate_metadata = {
+                    "candidate_count": int(gate_stats.get("candidate_count") or 0),
+                    "pending_count": int(gate_stats.get("pending_count") or 0),
+                    "pending_examples": gate_stats.get("pending_examples") or [],
+                }
+
                 if is_task_cancelled(task_id):
                     logger.info(f"[AgentTask] Task {task_id} was cancelled, overriding success result")
                     task.status = AgentTaskStatus.CANCELLED
+                    task.error_message = None
+                elif verification_pending_gate_triggered:
+                    task.status = AgentTaskStatus.FAILED
+                    task.error_message = verification_pending_gate_message
                 else:
                     task.status = AgentTaskStatus.COMPLETED
+                    task.error_message = None
                 task.completed_at = datetime.now(timezone.utc)
                 task.current_phase = AgentTaskPhase.REPORTING
                 task.findings_count = len(effective_findings)
@@ -2350,22 +3340,22 @@ async def _execute_agent_task(task_id: str):
                 if filter_reason_text:
                     task.current_step += f"（主要过滤原因：{filter_reason_text}）"
 
-                # 🔥 CRITICAL FIX: 累加所有子 Agent 的统计，而不仅仅是 Orchestrator 的
-                total_iterations = result.iterations
-                tool_calls_count = result.tool_calls
-                tokens_used = result.tokens_used
-
-                if hasattr(orchestrator, 'sub_agents'):
-                    for agent in orchestrator.sub_agents.values():
-                        if hasattr(agent, 'get_stats'):
-                            sub_stats = agent.get_stats()
-                            total_iterations += sub_stats.get("iterations", 0)
-                            tool_calls_count += sub_stats.get("tool_calls", 0)
-                            tokens_used += sub_stats.get("tokens_used", 0)
-
-                task.total_iterations = total_iterations
-                task.tool_calls_count = tool_calls_count
-                task.tokens_used = tokens_used
+                runtime_snapshot = _snapshot_runtime_stats_to_task(task, orchestrator)
+                task.total_iterations = max(
+                    int(task.total_iterations or 0),
+                    int(result.iterations or 0),
+                    int(runtime_snapshot["iterations"]),
+                )
+                task.tool_calls_count = max(
+                    int(task.tool_calls_count or 0),
+                    int(result.tool_calls or 0),
+                    int(runtime_snapshot["tool_calls"]),
+                )
+                task.tokens_used = max(
+                    int(task.tokens_used or 0),
+                    int(result.tokens_used or 0),
+                    int(runtime_snapshot["tokens_used"]),
+                )
 
                 # 🔥 统计文件数量
                 # analyzed_files = 实际扫描过的文件数（任务完成时等于 total_files）
@@ -2413,22 +3403,80 @@ async def _execute_agent_task(task_id: str):
                     event_emitter,
                     _commit_summary_once,
                 )
-                
-                await event_emitter.emit_task_complete(
-                    findings_count=persisted_findings_count,
-                    duration_ms=duration_ms,
-                    message=(
-                        f"✅ 审计完成：编排发现 {orchestrator_findings_count}，"
-                        f"入库 {persisted_findings_count}，过滤 {filtered_findings_count}，"
-                        f"耗时 {duration_ms/1000:.1f} 秒"
-                    ),
-                    extra_metadata={
-                        "orchestrator_findings_count": orchestrator_findings_count,
-                        "persisted_findings_count": persisted_findings_count,
-                        "filtered_findings_count": filtered_findings_count,
-                        "filtered_reasons": filtered_reasons or {},
-                    },
+
+                drain_result = await _wait_for_terminal_tool_drain(
+                    event_manager=event_manager,
+                    task_id=task_id,
+                    skip_wait=bool(task.status == AgentTaskStatus.CANCELLED or is_task_cancelled(task_id)),
+                    timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
                 )
+                drain_metadata = _build_tool_drain_metadata(drain_result)
+
+                terminal_failure_message: Optional[str] = None
+                terminal_failure_metadata: Dict[str, Any] = {}
+                if bool(drain_result.get("timed_out")):
+                    timeout_message = (
+                        "终态收敛超时：存在未完成工具调用，已将任务标记为失败。"
+                    )
+                    task.status = AgentTaskStatus.FAILED
+                    task.error_message = timeout_message
+                    task.completed_at = datetime.now(timezone.utc)
+                    await db.commit()
+                    terminal_failure_message = timeout_message
+                    terminal_failure_metadata = {
+                        "step_name": "TERMINAL_TOOL_DRAIN",
+                        "attempt": 1,
+                        "retry_attempt": 1,
+                        "max_attempts": 1,
+                        "is_terminal": True,
+                        "retry_error_class": "tool_drain_timeout",
+                        "retryable": False,
+                        "cancel_origin": "none",
+                        **drain_metadata,
+                    }
+                elif verification_pending_gate_triggered:
+                    terminal_failure_message = (
+                        "终态门禁阻断：verification 队列仍有待验证候选，任务已标记失败。"
+                    )
+                    terminal_failure_metadata = {
+                        "step_name": "VERIFICATION_PENDING_GATE",
+                        "attempt": 1,
+                        "retry_attempt": 1,
+                        "max_attempts": 1,
+                        "is_terminal": True,
+                        "retry_error_class": "verification_pending_gate",
+                        "retryable": False,
+                        "cancel_origin": "none",
+                        **verification_pending_gate_metadata,
+                        **drain_metadata,
+                    }
+                if terminal_failure_message:
+                    await event_emitter.emit_task_error(
+                        terminal_failure_message,
+                        message=f"❌ 任务失败: {terminal_failure_message}",
+                        metadata=terminal_failure_metadata,
+                    )
+                    await event_emitter.emit_error(
+                        terminal_failure_message,
+                        metadata=terminal_failure_metadata,
+                    )
+                else:
+                    await event_emitter.emit_task_complete(
+                        findings_count=persisted_findings_count,
+                        duration_ms=duration_ms,
+                        message=(
+                            f"✅ 审计完成：编排发现 {orchestrator_findings_count}，"
+                            f"入库 {persisted_findings_count}，过滤 {filtered_findings_count}，"
+                            f"耗时 {duration_ms/1000:.1f} 秒"
+                        ),
+                        extra_metadata={
+                            "orchestrator_findings_count": orchestrator_findings_count,
+                            "persisted_findings_count": persisted_findings_count,
+                            "filtered_findings_count": filtered_findings_count,
+                            "filtered_reasons": filtered_reasons or {},
+                            **drain_metadata,
+                        },
+                    )
                 if orchestrator_findings_count > 0 and persisted_findings_count == 0:
                     await event_emitter.emit_warning(
                         "⚠️ 编排阶段识别到漏洞，但入库结果为 0，疑似全部被门禁过滤",
@@ -2437,45 +3485,94 @@ async def _execute_agent_task(task_id: str):
                             "persisted_findings_count": persisted_findings_count,
                             "filtered_findings_count": filtered_findings_count,
                             "filtered_reasons": filtered_reasons or {},
+                            **drain_metadata,
                             "is_terminal": True,
                         },
                     )
                 
-                logger.info(
-                    f"✅ Task {task_id} completed: "
-                    f"effective={len(effective_findings)}, false_positive={false_positive_count}, "
-                    f"saved={saved_count}, duration={duration_ms}ms"
-                )
+                if bool(drain_result.get("timed_out")):
+                    logger.error(
+                        "[TaskDrain] Task %s failed due to tool drain timeout: pending=%s",
+                        task_id,
+                        len(drain_metadata.get("pending_tool_calls", [])),
+                    )
+                elif verification_pending_gate_triggered:
+                    logger.error(
+                        "[VerificationGate] Task %s blocked: candidate=%s pending=%s",
+                        task_id,
+                        verification_pending_gate_metadata.get("candidate_count", 0),
+                        verification_pending_gate_metadata.get("pending_count", 0),
+                    )
+                else:
+                    logger.info(
+                        f"✅ Task {task_id} completed: "
+                        f"effective={len(effective_findings)}, false_positive={false_positive_count}, "
+                        f"saved={saved_count}, duration={duration_ms}ms"
+                    )
             else:
                 # 🔥 检查是否是取消导致的失败
                 if result.error == "任务已取消":
                     # 状态可能已经被 cancel API 更新，只需确保一致性
+                    _snapshot_runtime_stats_to_task(task, orchestrator)
                     if task.status != AgentTaskStatus.CANCELLED:
                         task.status = AgentTaskStatus.CANCELLED
                         task.completed_at = datetime.now(timezone.utc)
                         await db.commit()
+                    await _qmd_upsert_json(
+                        "artifacts/task_terminal_state.json",
+                        {
+                            "task_id": task_id,
+                            "status": "cancelled",
+                            "error": result.error,
+                        },
+                    )
+                    await _qmd_update_index(force=False)
                     logger.info(f"🛑 Task {task_id} cancelled")
                 else:
+                    _snapshot_runtime_stats_to_task(task, orchestrator)
                     task.status = AgentTaskStatus.FAILED
                     task.error_message = result.error or "Unknown error"
                     task.completed_at = datetime.now(timezone.utc)
                     await db.commit()
 
                     failure_message = task.error_message
+                    retry_diag = _classify_retry_error(failure_message)
                     failure_metadata = {
                         "step_name": "ORCHESTRATOR_RUN",
                         "attempt": 1,
+                        "retry_attempt": 1,
                         "max_attempts": 1,
                         "is_terminal": True,
+                        "retry_error_class": retry_diag["code"],
+                        "retryable": bool(retry_diag["retryable"]),
+                        "cancel_origin": "none",
                     }
+                    drain_result = await _wait_for_terminal_tool_drain(
+                        event_manager=event_manager,
+                        task_id=task_id,
+                        skip_wait=bool(is_task_cancelled(task_id)),
+                        timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
+                    )
+                    failure_metadata.update(_build_tool_drain_metadata(drain_result))
                     await event_emitter.emit_task_error(
                         failure_message,
                         message=f"❌ 任务失败: {failure_message}",
+                        metadata=failure_metadata,
                     )
                     await event_emitter.emit_error(
                         failure_message,
                         metadata=failure_metadata,
                     )
+                    await _qmd_upsert_json(
+                        "artifacts/task_terminal_state.json",
+                        {
+                            "task_id": task_id,
+                            "status": "failed",
+                            "error": failure_message,
+                            "metadata": failure_metadata,
+                        },
+                    )
+                    await _qmd_update_index(force=False)
                     logger.error(f"❌ Task {task_id} failed: {result.error}")
             
         except asyncio.CancelledError:
@@ -2483,6 +3580,7 @@ async def _execute_agent_task(task_id: str):
             try:
                 task = await db.get(AgentTask, task_id)
                 if task:
+                    _snapshot_runtime_stats_to_task(task, _running_orchestrators.get(task_id))
                     task.status = AgentTaskStatus.CANCELLED
                     task.completed_at = datetime.now(timezone.utc)
                     await db.commit()
@@ -2491,25 +3589,40 @@ async def _execute_agent_task(task_id: str):
                 
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
+            retry_diag = _classify_retry_error(e)
             failure_metadata = {
                 "step_name": "UNKNOWN",
                 "attempt": 1,
+                "retry_attempt": 1,
                 "max_attempts": 1,
                 "is_terminal": True,
+                "retry_error_class": retry_diag["code"],
+                "retryable": bool(retry_diag["retryable"]),
+                "cancel_origin": "none",
             }
             failure_message = str(e)[:1000]
             if isinstance(e, StepRetryExceededError):
+                final_diag = _classify_retry_error(e.last_error)
                 failure_metadata = {
                     "step_name": e.step_name,
                     "attempt": e.attempts,
+                    "retry_attempt": e.attempts,
                     "max_attempts": e.max_attempts,
                     "is_terminal": True,
+                    "retry_error_class": final_diag["code"],
+                    "retryable": bool(final_diag["retryable"]),
+                    "cancel_origin": (
+                        "user"
+                        if "cancelled_user" in str(final_diag.get("code"))
+                        else "none"
+                    ),
                 }
                 failure_message = e.final_message[:1000]
 
             try:
                 task = await db.get(AgentTask, task_id)
                 if task:
+                    _snapshot_runtime_stats_to_task(task, _running_orchestrators.get(task_id))
                     task.status = AgentTaskStatus.FAILED
                     task.error_message = failure_message
                     task.completed_at = datetime.now(timezone.utc)
@@ -2518,9 +3631,21 @@ async def _execute_agent_task(task_id: str):
                 logger.error(f"Failed to update task status: {db_error}")
 
             try:
+                skip_drain_wait = bool(
+                    is_task_cancelled(task_id)
+                    or str(failure_metadata.get("cancel_origin") or "").strip().lower() == "user"
+                )
+                drain_result = await _wait_for_terminal_tool_drain(
+                    event_manager=event_manager,
+                    task_id=task_id,
+                    skip_wait=skip_drain_wait,
+                    timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
+                )
+                failure_metadata.update(_build_tool_drain_metadata(drain_result))
                 await event_emitter.emit_task_error(
                     failure_message,
                     message=f"❌ 任务失败: {failure_message}",
+                    metadata=failure_metadata,
                 )
                 await event_emitter.emit_error(
                     failure_message,
@@ -2528,6 +3653,19 @@ async def _execute_agent_task(task_id: str):
                 )
             except Exception as emit_error:
                 logger.warning(f"Failed to emit terminal task error event: {emit_error}")
+            try:
+                await _qmd_upsert_json(
+                    "artifacts/task_terminal_state.json",
+                    {
+                        "task_id": task_id,
+                        "status": "failed",
+                        "error": failure_message,
+                        "metadata": failure_metadata,
+                    },
+                )
+                await _qmd_update_index(force=False)
+            except Exception as qmd_error:
+                logger.debug("[QMD TaskKB] failed to persist terminal state: %s", qmd_error)
         
         finally:
             # 🔥 在清理之前保存 Agent 树到数据库
@@ -2623,6 +3761,126 @@ def _sync_tool_catalog_to_memory(
         logger.warning("[ToolDocSync] append shared entry failed: %s", exc)
 
 
+def _load_mcp_tool_playbook(*, max_chars: int) -> Tuple[Optional[Path], str]:
+    docs_root = Path(__file__).resolve().parents[4] / "docs" / "agent-tools"
+    playbook_path = docs_root / "MCP_TOOL_PLAYBOOK.md"
+    if not playbook_path.exists():
+        return None, ""
+    try:
+        content = playbook_path.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        logger.warning("[ToolDocSync] read MCP tool playbook failed: %s", exc)
+        return playbook_path, ""
+    clipped = content[: max(0, int(max_chars))]
+    return playbook_path, clipped
+
+
+def _sync_mcp_tool_playbook_to_memory(
+    *,
+    memory_store: Any,
+    task_id: str,
+    max_chars: int,
+) -> None:
+    playbook_path, playbook_content = _load_mcp_tool_playbook(max_chars=max_chars)
+    if not playbook_path or not playbook_content.strip():
+        return
+    try:
+        memory_store.append_entry(
+            "shared",
+            task_id=task_id,
+            source="mcp_tool_playbook_sync",
+            title="MCP 工具说明同步",
+            summary="将 MCP_TOOL_PLAYBOOK.md 同步到 shared memory，供各 Agent 快速检索标准工具调用方式。",
+            payload={
+                "playbook_path": str(playbook_path),
+                "max_chars": int(max_chars),
+                "content": playbook_content,
+            },
+        )
+    except Exception as exc:
+        logger.warning("[ToolDocSync] append MCP playbook failed: %s", exc)
+
+
+def _build_tool_skills_snapshot(*, max_chars: int) -> str:
+    docs_root = Path(__file__).resolve().parents[4] / "docs" / "agent-tools"
+    index_path = docs_root / "SKILLS_INDEX.md"
+    skills_dir = docs_root / "skills"
+    preferred_skill_order = [
+        "read_file.skill.md",
+        "search_code.skill.md",
+        "list_files.skill.md",
+        "extract_function.skill.md",
+        "locate_enclosing_function.skill.md",
+        "function_context.skill.md",
+    ]
+
+    fragments: List[str] = []
+    _playbook_path, playbook_content = _load_mcp_tool_playbook(max_chars=max_chars)
+    if playbook_content.strip():
+        fragments.append(playbook_content.strip())
+
+    if index_path.exists():
+        try:
+            fragments.append(index_path.read_text(encoding="utf-8", errors="replace").strip())
+        except Exception as exc:
+            logger.warning("[ToolDocSync] read skills index failed: %s", exc)
+
+    if skills_dir.exists():
+        all_skill_docs = {doc.name: doc for doc in skills_dir.glob("*.skill.md")}
+        ordered_skill_docs: List[Path] = []
+        for preferred_name in preferred_skill_order:
+            preferred_doc = all_skill_docs.pop(preferred_name, None)
+            if preferred_doc is not None:
+                ordered_skill_docs.append(preferred_doc)
+        ordered_skill_docs.extend(all_skill_docs[name] for name in sorted(all_skill_docs.keys()))
+
+        for skill_doc in ordered_skill_docs:
+            try:
+                fragments.append(skill_doc.read_text(encoding="utf-8", errors="replace").strip())
+            except Exception as exc:
+                logger.warning("[ToolDocSync] read skill doc failed (%s): %s", skill_doc, exc)
+
+    snapshot = "\n\n---\n\n".join(item for item in fragments if str(item or "").strip())
+    if not snapshot.strip():
+        return ""
+    return snapshot[: max(0, int(max_chars))]
+
+
+def _sync_tool_skills_to_memory(
+    *,
+    memory_store: Any,
+    task_id: str,
+    max_chars: int,
+) -> None:
+    skill_snapshot = _build_tool_skills_snapshot(max_chars=max_chars)
+    if not skill_snapshot:
+        return
+
+    if hasattr(memory_store, "write_skills_snapshot"):
+        try:
+            memory_store.write_skills_snapshot(
+                skill_snapshot,
+                source="tool_skill_sync",
+                task_id=task_id,
+            )
+            return
+        except Exception as exc:
+            logger.warning("[ToolDocSync] write skills snapshot failed: %s", exc)
+
+    # Backward-compatible fallback.
+    try:
+        memory_store.append_entry(
+            "skills",
+            task_id=task_id,
+            source="tool_skill_sync",
+            title="工具 skill 规范同步",
+            summary="将文件读取相关 skill 文档同步到 skills memory。",
+            payload={"content": skill_snapshot},
+        )
+    except Exception as exc:
+        logger.warning("[ToolDocSync] append skills entry failed: %s", exc)
+
+
 async def _initialize_tools(
     project_root: str,
     llm_service,
@@ -2635,6 +3893,7 @@ async def _initialize_tools(
     project_id: Optional[str] = None,  # 🔥 用于 RAG collection_name
     event_emitter: Optional[Any] = None,  # 🔥 新增：用于发送实时日志
     task_id: Optional[str] = None,  # 🔥 新增：用于取消检查
+    qmd_task_kb: Optional[Any] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """初始化工具集
 
@@ -2649,24 +3908,27 @@ async def _initialize_tools(
         project_id: 项目 ID（用于 RAG collection_name）
         event_emitter: 事件发送器（用于发送实时日志）
         task_id: 任务 ID（用于取消检查）
+        qmd_task_kb: 任务级 QMD 知识库实例（可选）
     """
     from app.services.agent.tools import (
-        FileReadTool, FileSearchTool, ListFilesTool,
-        PatternMatchTool, CodeAnalysisTool, DataFlowAnalysisTool,
-        OpengrepTool, BanditTool, GitleaksTool,
-        NpmAuditTool, SafetyTool, TruffleHogTool, OSVScannerTool,  # 🔥 Added missing tools
-        ThinkTool, ReflectTool,
+        FileReadTool,
+        FileSearchTool,
+        ListFilesTool,
+        PatternMatchTool,
+        DataFlowAnalysisTool,
+        ThinkTool,
+        ReflectTool,
         CreateVulnerabilityReportTool,
-        VulnerabilityValidationTool,
         ControlFlowAnalysisLightTool,
         JoernReachabilityVerifyTool,
         LogicAuthzAnalysisTool,
-        # 🔥 RAG 工具
-        RAGQueryTool, SecurityCodeSearchTool, FunctionContextTool,
+        ExtractFunctionTool,
     )
-    from app.services.agent.knowledge import (
-        SecurityKnowledgeQueryTool,
-        GetVulnerabilityKnowledgeTool,
+    from app.services.agent.tools.qmd_cli_tools import (
+        QmdGetTool,
+        QmdMultiGetTool,
+        QmdQueryTool,
+        QmdStatusTool,
     )
     # 🔥 RAG 相关导入
     from app.services.rag import CodeIndexer, CodeRetriever, EmbeddingService, IndexUpdateMode
@@ -2845,7 +4107,12 @@ async def _initialize_tools(
 
     # 基础工具 - 传递排除模式和目标文件
     base_tools = {
-        "read_file": FileReadTool(project_root, exclude_patterns, target_files),
+        "read_file": FileReadTool(
+            project_root,
+            exclude_patterns,
+            target_files,
+            strict_anchor_mode=True,
+        ),
         "list_files": ListFilesTool(project_root, exclude_patterns, target_files),
         "search_code": FileSearchTool(project_root, exclude_patterns, target_files),
         "think": ThinkTool(),
@@ -2854,31 +4121,106 @@ async def _initialize_tools(
 
     user_other_config = (user_config or {}).get("otherConfig", {})
     mcp_config = user_other_config.get("mcpConfig") if isinstance(user_other_config, dict) else {}
-    write_policy = mcp_config.get("writePolicy") if isinstance(mcp_config, dict) else {}
-    all_agents_writable = True
+    if not isinstance(mcp_config, dict):
+        mcp_config = {}
+    runtime_policy = mcp_config.get("runtimePolicy") if isinstance(mcp_config.get("runtimePolicy"), dict) else {}
+    catalog_items = build_mcp_catalog(
+        mcp_enabled=bool(mcp_config.get("enabled", getattr(settings, "MCP_ENABLED", True))),
+        runtime_policy=runtime_policy if isinstance(runtime_policy, dict) else None,
+    )
+    catalog_by_id: Dict[str, Dict[str, Any]] = {
+        str(item.get("id")): item
+        for item in catalog_items
+        if isinstance(item, dict) and str(item.get("id", "")).strip()
+    }
+
+    def _mcp_ready(mcp_id: str) -> bool:
+        item = catalog_by_id.get(mcp_id, {})
+        return bool(item.get("enabled")) and bool(item.get("startup_ready"))
+
+    qmd_ready = _mcp_ready("qmd")
+    code_index_ready = _mcp_ready("code_index")
+    sequential_ready = _mcp_ready("sequentialthinking")
+
+    # 智能审计场景强制 Filesystem 只读：不向 Agent 暴露 MCP 写入入口。
     mcp_write_tools: Dict[str, Any] = {}
-    if all_agents_writable:
-        mcp_write_tools = {
-            "edit_file": MCPVirtualWriteTool(
-                name="edit_file",
-                description=(
-                    "通过 MCP 对证据绑定文件执行受控编辑。"
-                    "必须遵守写入白名单和单任务文件上限。"
+
+    mcp_read_tools: Dict[str, Any] = {}
+    qmd_cli_enabled = bool(getattr(settings, "QMD_TASK_KB_ENABLED", True))
+    if qmd_cli_enabled and qmd_task_kb is not None:
+        mcp_read_tools.update(
+            {
+                "qmd_query": QmdQueryTool(qmd_task_kb),
+                "qmd_get": QmdGetTool(qmd_task_kb),
+                "qmd_multi_get": QmdMultiGetTool(qmd_task_kb),
+                "qmd_status": QmdStatusTool(qmd_task_kb),
+            }
+        )
+    elif qmd_ready:
+        mcp_read_tools.update(
+            {
+                "qmd_query": MCPVirtualReadTool(
+                    name="qmd_query",
+                    description="通过 QMD MCP 执行语义检索。",
                 ),
-            ),
-            "write_file": MCPVirtualWriteTool(
-                name="write_file",
-                description=(
-                    "通过 MCP 对证据绑定文件执行受控写入。"
-                    "禁止目录级/通配写入，且受单任务文件上限限制。"
+                "qmd_get": MCPVirtualReadTool(
+                    name="qmd_get",
+                    description="通过 QMD MCP 获取文档详情。",
                 ),
-            ),
-        }
+                "qmd_multi_get": MCPVirtualReadTool(
+                    name="qmd_multi_get",
+                    description="通过 QMD MCP 批量获取文档。",
+                ),
+                "qmd_status": MCPVirtualReadTool(
+                    name="qmd_status",
+                    description="查询 QMD 集合状态。",
+                ),
+            }
+        )
+
+    if code_index_ready:
+        mcp_read_tools.update(
+            {
+                "locate_enclosing_function": MCPVirtualReadTool(
+                    name="locate_enclosing_function",
+                    description="通过 Code Index MCP 定位命中代码所属函数。",
+                ),
+            }
+        )
+
+    if sequential_ready:
+        mcp_read_tools.update(
+            {
+                "sequential_thinking": MCPVirtualReadTool(
+                    name="sequential_thinking",
+                    description="通过 SequentialThinking MCP 执行分步推理。",
+                ),
+                "reasoning_trace": MCPVirtualReadTool(
+                    name="reasoning_trace",
+                    description="通过 SequentialThinking MCP 生成推理轨迹。",
+                ),
+            }
+        )
+
+    deprecated_skill_tools: Dict[str, Any] = {
+        skill_name: MCPDeprecatedTool(name=skill_name, message="该 skill 已下线，请改用 verify_reachability + flow 证据链。")
+        for skill_name in [
+            "test_command_injection",
+            "test_deserialization",
+            "test_path_traversal",
+            "test_sql_injection",
+            "test_ssti",
+            "test_xss",
+            "universal_vuln_test",
+        ]
+    }
     
     # Recon 工具
     recon_tools = {
         **base_tools,
+        **mcp_read_tools,
         **mcp_write_tools,
+        **deprecated_skill_tools,
         # 🔥 外部侦察工具 (Recon 阶段也需要使用这些工具来收集初步信息)
         # "opengrep_scan": OpengrepTool(project_root, sandbox_manager),
         # "bandit_scan": BanditTool(project_root, sandbox_manager),
@@ -2891,18 +4233,15 @@ async def _initialize_tools(
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
     }
 
-    # 🔥 注册 RAG 工具到 Recon Agent
-    if retriever:
-        recon_tools["rag_query"] = RAGQueryTool(retriever)
-        logger.info("✅ RAG 工具 (rag_query) 已注册到 Recon Agent")
-    
     # Analysis 工具
     # 🔥 导入智能扫描工具
     from app.services.agent.tools import SmartScanTool, QuickAuditTool
     
     analysis_tools = {
         **base_tools,
+        **mcp_read_tools,
         **mcp_write_tools,
+        **deprecated_skill_tools,
         # 🔥 智能扫描工具（推荐首先使用）
         "smart_scan": SmartScanTool(project_root, exclude_patterns=exclude_patterns or []),
         "quick_audit": QuickAuditTool(project_root),
@@ -2928,37 +4267,12 @@ async def _initialize_tools(
         # "safety_scan": SafetyTool(project_root, sandbox_manager),
         # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
-        # 安全知识查询
-        "query_security_knowledge": SecurityKnowledgeQueryTool(),
-        "get_vulnerability_knowledge": GetVulnerabilityKnowledgeTool(),
     }
-
-    # 🔥 注册 RAG 工具到 Analysis Agent
-    if retriever:
-        analysis_tools["rag_query"] = RAGQueryTool(retriever)
-        analysis_tools["security_search"] = SecurityCodeSearchTool(retriever)
-        analysis_tools["function_context"] = FunctionContextTool(retriever)
-        logger.info("✅ RAG 工具 (rag_query, security_search, function_context) 已注册到 Analysis Agent")
-    else:
-        logger.warning("⚠️ RAG 未初始化，rag_query/security_search/function_context 工具不可用")
     
     # Verification 工具
-    # 🔥 导入沙箱工具
-    from app.services.agent.tools import (
-        SandboxTool, SandboxHttpTool, VulnerabilityVerifyTool,
-        # 多语言代码测试工具
-        PhpTestTool, PythonTestTool, JavaScriptTestTool, JavaTestTool,
-        GoTestTool, RubyTestTool, ShellTestTool, UniversalCodeTestTool,
-        # 漏洞验证专用工具
-        CommandInjectionTestTool, SqlInjectionTestTool, XssTestTool,
-        PathTraversalTestTool, SstiTestTool, DeserializationTestTool,
-        UniversalVulnTestTool,
-        # 🔥 新增：函数提取工具
-        ExtractFunctionTool,
-    )
-
     verification_tools = {
         **base_tools,
+        **mcp_read_tools,
         **mcp_write_tools,
         # 🔥 沙箱验证工具
         #"sandbox_exec": SandboxTool(sandbox_manager),
@@ -2975,16 +4289,6 @@ async def _initialize_tools(
         #"shell_test": ShellTestTool(sandbox_manager, project_root),
         #"universal_code_test": UniversalCodeTestTool(sandbox_manager, project_root),
 
-        # 🔥 漏洞验证专用工具
-        "test_command_injection": CommandInjectionTestTool(sandbox_manager, project_root),
-        "test_sql_injection": SqlInjectionTestTool(sandbox_manager, project_root),
-        "test_xss": XssTestTool(sandbox_manager, project_root),
-        "test_path_traversal": PathTraversalTestTool(sandbox_manager, project_root),
-        "test_ssti": SstiTestTool(sandbox_manager, project_root),
-        "test_deserialization": DeserializationTestTool(sandbox_manager, project_root),
-        "universal_vuln_test": UniversalVulnTestTool(sandbox_manager, project_root),
-
-        # 🔥 新增：通用代码执行工具 (LLM 驱动的 Fuzzing Harness)
         "extract_function": ExtractFunctionTool(project_root),
         "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
         "controlflow_analysis_light": ControlFlowAnalysisLightTool(
@@ -3004,12 +4308,15 @@ async def _initialize_tools(
         # 报告工具 - 🔥 v2.1: 传递 project_root 用于文件验证
         "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
     }
+    verification_tools.update(deprecated_skill_tools)
 
     # Orchestrator 工具（主要是思考工具）
     orchestrator_tools = {
         "think": ThinkTool(),
         "reflect": ReflectTool(),
+        **mcp_read_tools,
         **mcp_write_tools,
+        **deprecated_skill_tools,
     }
     
     return {
@@ -3474,6 +4781,7 @@ def _build_structured_cn_description(
     line_end: Optional[int] = None,
     verification_evidence: Optional[str] = None,
     function_trigger_flow: Optional[List[str]] = None,
+    code_context: Optional[str] = None,
 ) -> str:
     return build_cn_structured_description(
         file_path=file_path,
@@ -3482,6 +4790,40 @@ def _build_structured_cn_description(
         title=title,
         description=description,
         code_snippet=code_snippet,
+        cwe_id=cwe_id,
+        raw_description=raw_description,
+        line_start=line_start,
+        line_end=line_end,
+        verification_evidence=verification_evidence,
+        function_trigger_flow=function_trigger_flow,
+        code_context=code_context,
+    )
+
+
+def _build_structured_cn_description_markdown(
+    *,
+    file_path: Optional[str],
+    function_name: Optional[str],
+    vulnerability_type: Optional[str],
+    title: Optional[str],
+    description: Optional[str],
+    code_snippet: Optional[str],
+    code_context: Optional[str],
+    cwe_id: Optional[str],
+    raw_description: Optional[str],
+    line_start: Optional[int] = None,
+    line_end: Optional[int] = None,
+    verification_evidence: Optional[str] = None,
+    function_trigger_flow: Optional[List[str]] = None,
+) -> str:
+    return build_cn_structured_description_markdown(
+        file_path=file_path,
+        function_name=function_name,
+        vulnerability_type=vulnerability_type,
+        title=title,
+        description=description,
+        code_snippet=code_snippet,
+        code_context=code_context,
         cwe_id=cwe_id,
         raw_description=raw_description,
         line_start=line_start,
@@ -4164,6 +5506,59 @@ def _calculate_security_score(findings: List[Dict]) -> float:
     return float(score)
 
 
+def _collect_orchestrator_stats(orchestrator: Any) -> Dict[str, int]:
+    """
+    收集 orchestrator + sub agents 统计快照。
+
+    返回字段：
+    - iterations
+    - tool_calls
+    - tokens_used
+    """
+    totals = {
+        "iterations": 0,
+        "tool_calls": 0,
+        "tokens_used": 0,
+    }
+    if not orchestrator or not hasattr(orchestrator, "get_stats"):
+        return totals
+
+    try:
+        stats = orchestrator.get_stats() or {}
+    except Exception:
+        stats = {}
+
+    totals["iterations"] = int(stats.get("iterations") or 0)
+    totals["tool_calls"] = int(stats.get("tool_calls") or 0)
+    totals["tokens_used"] = int(stats.get("tokens_used") or 0)
+
+    if hasattr(orchestrator, "sub_agents"):
+        for agent in (getattr(orchestrator, "sub_agents", {}) or {}).values():
+            if not hasattr(agent, "get_stats"):
+                continue
+            try:
+                sub_stats = agent.get_stats() or {}
+            except Exception:
+                continue
+            totals["iterations"] += int(sub_stats.get("iterations") or 0)
+            totals["tool_calls"] += int(sub_stats.get("tool_calls") or 0)
+            totals["tokens_used"] += int(sub_stats.get("tokens_used") or 0)
+
+    return totals
+
+
+def _snapshot_runtime_stats_to_task(task: AgentTask, orchestrator: Any) -> Dict[str, int]:
+    """
+    将运行时统计快照写入 task，并使用 max 保留历史更大值。
+    """
+    snapshot = _collect_orchestrator_stats(orchestrator)
+
+    task.total_iterations = max(int(task.total_iterations or 0), int(snapshot["iterations"]))
+    task.tool_calls_count = max(int(task.tool_calls_count or 0), int(snapshot["tool_calls"]))
+    task.tokens_used = max(int(task.tokens_used or 0), int(snapshot["tokens_used"]))
+    return snapshot
+
+
 async def _save_agent_tree(db: AsyncSession, task_id: str) -> None:
     """
     保存 Agent 树到数据库
@@ -4374,36 +5769,24 @@ async def get_agent_task(
     
     # 构建响应，确保所有字段都包含
     try:
-        # 计算进度百分比
-        progress = 0.0
-        if hasattr(task, 'progress_percentage'):
-            progress = task.progress_percentage
-        elif task.status == AgentTaskStatus.COMPLETED:
-            progress = 100.0
-        elif task.status in [AgentTaskStatus.FAILED, AgentTaskStatus.CANCELLED]:
-            progress = 0.0
-        
-        # 🔥 从运行中的 Orchestrator 获取实时统计
-        total_iterations = task.total_iterations or 0
-        tool_calls_count = task.tool_calls_count or 0
-        tokens_used = task.tokens_used or 0
-        
+        # 计算进度百分比（由模型属性统一计算，终态不强制归零）
+        progress = float(task.progress_percentage) if hasattr(task, "progress_percentage") else 0.0
+
+        # 任务统计：DB 持久值 + 运行时值取 max，避免中断瞬间出现统计回退
+        total_iterations = int(task.total_iterations or 0)
+        tool_calls_count = int(task.tool_calls_count or 0)
+        tokens_used = int(task.tokens_used or 0)
+
         orchestrator = _running_orchestrators.get(task_id)
-        if orchestrator and task.status == AgentTaskStatus.RUNNING:
-            # 从 Orchestrator 获取统计
-            stats = orchestrator.get_stats()
-            total_iterations = stats.get("iterations", 0)
-            tool_calls_count = stats.get("tool_calls", 0)
-            tokens_used = stats.get("tokens_used", 0)
-            
-            # 累加子 Agent 的统计
-            if hasattr(orchestrator, 'sub_agents'):
-                for agent in orchestrator.sub_agents.values():
-                    if hasattr(agent, 'get_stats'):
-                        sub_stats = agent.get_stats()
-                        total_iterations += sub_stats.get("iterations", 0)
-                        tool_calls_count += sub_stats.get("tool_calls", 0)
-                        tokens_used += sub_stats.get("tokens_used", 0)
+        if orchestrator and task.status in (
+            AgentTaskStatus.RUNNING,
+            AgentTaskStatus.CANCELLED,
+            AgentTaskStatus.FAILED,
+        ):
+            runtime_stats = _collect_orchestrator_stats(orchestrator)
+            total_iterations = max(total_iterations, int(runtime_stats["iterations"]))
+            tool_calls_count = max(tool_calls_count, int(runtime_stats["tool_calls"]))
+            tokens_used = max(tokens_used, int(runtime_stats["tokens_used"]))
         
         # 手动构建响应数据
         response_data = {
@@ -4496,6 +5879,10 @@ async def cancel_agent_task(
     if asyncio_task and not asyncio_task.done():
         asyncio_task.cancel()
         logger.info(f"[Cancel] Cancelled asyncio task for {task_id}")
+
+    # 取消前固化运行时统计，避免中断后查询显示归零
+    orchestrator = _running_orchestrators.get(task_id)
+    _snapshot_runtime_stats_to_task(task, orchestrator)
 
     # 更新状态
     task.status = AgentTaskStatus.CANCELLED
@@ -5010,6 +6397,22 @@ async def list_agent_findings(
             title=item.title,
             description=item.description,
             code_snippet=item.code_snippet,
+            code_context=item.code_context,
+            cwe_id=cwe_id,
+            raw_description=item.description,
+            line_start=item.line_start,
+            line_end=item.line_end,
+            verification_evidence=verification_evidence,
+            function_trigger_flow=function_trigger_flow,
+        )
+        structured_description_markdown = _build_structured_cn_description_markdown(
+            file_path=normalized_item_file_path,
+            function_name=reachability_function,
+            vulnerability_type=profile["key"],
+            title=item.title,
+            description=item.description,
+            code_snippet=item.code_snippet,
+            code_context=item.code_context,
             cwe_id=cwe_id,
             raw_description=item.description,
             line_start=item.line_start,
@@ -5036,6 +6439,7 @@ async def list_agent_findings(
                     "title": item.title,
                     "display_title": display_title,
                     "description": structured_description,
+                    "description_markdown": structured_description_markdown,
                     "file_path": normalized_item_file_path,
                     "line_start": item.line_start,
                     "line_end": item.line_end,
@@ -6079,6 +7483,111 @@ async def generate_audit_report(
     if findings:
         for i, f in enumerate(findings[:3]):  # Log first 3
             logger.debug(f"[Report] Finding {i+1}: severity='{f.severity}', title='{f.title[:50] if f.title else 'N/A'}'")
+
+    def _build_report_descriptions(
+        finding_row: AgentFinding,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        verification_payload = (
+            finding_row.verification_result
+            if isinstance(finding_row.verification_result, dict)
+            else {}
+        )
+        verification_evidence = (
+            verification_payload.get("evidence")
+            or verification_payload.get("verification_evidence")
+            or verification_payload.get("verification_details")
+            or verification_payload.get("details")
+        )
+        flow_payload = verification_payload.get("flow") if isinstance(verification_payload, dict) else None
+        function_trigger_flow: Optional[List[str]] = None
+        if isinstance(flow_payload, dict):
+            raw_flow = flow_payload.get("function_trigger_flow")
+            if isinstance(raw_flow, list):
+                function_trigger_flow = [
+                    str(step).strip()
+                    for step in raw_flow
+                    if isinstance(step, str) and str(step).strip()
+                ]
+            if not function_trigger_flow:
+                raw_chain = flow_payload.get("call_chain")
+                if isinstance(raw_chain, list):
+                    function_trigger_flow = [
+                        str(step).strip()
+                        for step in raw_chain
+                        if isinstance(step, str) and str(step).strip()
+                    ]
+        if not function_trigger_flow:
+            raw_flow = verification_payload.get("function_trigger_flow")
+            if isinstance(raw_flow, list):
+                function_trigger_flow = [
+                    str(step).strip()
+                    for step in raw_flow
+                    if isinstance(step, str) and str(step).strip()
+                ]
+
+        normalized_file_path = _normalize_relative_file_path(
+            str(finding_row.file_path or ""),
+            None,
+        )
+        cwe_id = _extract_cwe_from_references(getattr(finding_row, "references", None))
+        if not cwe_id:
+            cwe_id = _resolve_cwe_id(
+                verification_payload.get("cwe_id") or verification_payload.get("cwe"),
+                finding_row.vulnerability_type,
+                title=finding_row.title,
+                description=finding_row.description,
+                code_snippet=finding_row.code_snippet,
+            )
+        profile = _resolve_vulnerability_profile(
+            finding_row.vulnerability_type,
+            title=finding_row.title,
+            description=finding_row.description,
+            code_snippet=finding_row.code_snippet,
+        )
+        function_name = (
+            str(verification_payload.get("function") or "").strip()
+            or str(getattr(finding_row, "function_name", "") or "").strip()
+            or None
+        )
+        structured_text = _build_structured_cn_description(
+            file_path=normalized_file_path,
+            function_name=function_name,
+            vulnerability_type=profile["key"],
+            title=finding_row.title,
+            description=finding_row.description,
+            code_snippet=finding_row.code_snippet,
+            code_context=finding_row.code_context,
+            cwe_id=cwe_id,
+            raw_description=finding_row.description,
+            line_start=finding_row.line_start,
+            line_end=finding_row.line_end,
+            verification_evidence=verification_evidence,
+            function_trigger_flow=function_trigger_flow,
+        )
+        structured_markdown = _build_structured_cn_description_markdown(
+            file_path=normalized_file_path,
+            function_name=function_name,
+            vulnerability_type=profile["key"],
+            title=finding_row.title,
+            description=finding_row.description,
+            code_snippet=finding_row.code_snippet,
+            code_context=finding_row.code_context,
+            cwe_id=cwe_id,
+            raw_description=finding_row.description,
+            line_start=finding_row.line_start,
+            line_end=finding_row.line_end,
+            verification_evidence=verification_evidence,
+            function_trigger_flow=function_trigger_flow,
+        )
+        return structured_text, structured_markdown
+
+    report_descriptions: Dict[str, Dict[str, Optional[str]]] = {}
+    for finding_row in findings:
+        structured_text, structured_markdown = _build_report_descriptions(finding_row)
+        report_descriptions[str(finding_row.id)] = {
+            "description": structured_text,
+            "description_markdown": structured_markdown,
+        }
     
     if format == "json":
         # Enhanced JSON report with full metadata
@@ -6115,6 +7624,7 @@ async def generate_audit_report(
                     "severity": f.severity,
                     "vulnerability_type": f.vulnerability_type,
                     "description": f.description,
+                    "description_markdown": report_descriptions.get(str(f.id), {}).get("description_markdown"),
                     "file_path": f.file_path,
                     "line_start": f.line_start,
                     "line_end": f.line_end,
@@ -6316,62 +7826,19 @@ async def generate_audit_report(
                                 md_lines.append(f"- {_escape_markdown_inline(str(evidence_item))}")
                             md_lines.append("")
 
-                if f.description:
+                finding_markdown = (
+                    report_descriptions.get(str(f.id), {}).get("description_markdown")
+                    or report_descriptions.get(str(f.id), {}).get("description")
+                    or f.description
+                )
+                if finding_markdown:
                     md_lines.append("**漏洞描述:**")
                     md_lines.append("")
-                    md_lines.append(f.description)
+                    md_lines.append(str(finding_markdown))
                     md_lines.append("")
 
+                lang = infer_code_fence_language(f.file_path)
                 if f.code_snippet:
-                    # 🔥 v2.1: 增强语言检测，避免默认 python 标记错误
-                    lang = "text"  # 默认使用 text 而非 python
-                    if f.file_path:
-                        ext = f.file_path.split('.')[-1].lower()
-                        lang_map = {
-                            # Python
-                            'py': 'python', 'pyw': 'python', 'pyi': 'python',
-                            # JavaScript/TypeScript
-                            'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
-                            'ts': 'typescript', 'mts': 'typescript',
-                            'jsx': 'jsx', 'tsx': 'tsx',
-                            # Web
-                            'html': 'html', 'htm': 'html',
-                            'css': 'css', 'scss': 'scss', 'sass': 'sass', 'less': 'less',
-                            'vue': 'vue', 'svelte': 'svelte',
-                            # Backend
-                            'java': 'java', 'kt': 'kotlin', 'kts': 'kotlin',
-                            'go': 'go', 'rs': 'rust',
-                            'rb': 'ruby', 'erb': 'erb',
-                            'php': 'php', 'phtml': 'php',
-                            # C-family
-                            'c': 'c', 'h': 'c',
-                            'cpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp', 'hpp': 'cpp',
-                            'cs': 'csharp',
-                            # Shell/Script
-                            'sh': 'bash', 'bash': 'bash', 'zsh': 'zsh',
-                            'ps1': 'powershell', 'psm1': 'powershell',
-                            # Config
-                            'json': 'json', 'yaml': 'yaml', 'yml': 'yaml',
-                            'toml': 'toml', 'ini': 'ini', 'cfg': 'ini',
-                            'xml': 'xml', 'xhtml': 'xml',
-                            # Database
-                            'sql': 'sql',
-                            # Other
-                            'md': 'markdown', 'markdown': 'markdown',
-                            'sol': 'solidity',
-                            'swift': 'swift',
-                            'r': 'r', 'R': 'r',
-                            'lua': 'lua',
-                            'pl': 'perl', 'pm': 'perl',
-                            'ex': 'elixir', 'exs': 'elixir',
-                            'erl': 'erlang',
-                            'hs': 'haskell',
-                            'scala': 'scala', 'sc': 'scala',
-                            'clj': 'clojure', 'cljs': 'clojure',
-                            'dart': 'dart',
-                            'groovy': 'groovy', 'gradle': 'groovy',
-                        }
-                        lang = lang_map.get(ext, 'text')
                     md_lines.append("**漏洞代码:**")
                     md_lines.append("")
                     md_lines.append(f"```{lang}")

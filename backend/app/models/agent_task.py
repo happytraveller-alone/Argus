@@ -148,8 +148,6 @@ class AgentTask(Base):
         """计算进度百分比"""
         if self.status == AgentTaskStatus.COMPLETED:
             return 100.0
-        if self.status in [AgentTaskStatus.FAILED, AgentTaskStatus.CANCELLED]:
-            return 0.0
         
         phase_weights = {
             AgentTaskPhase.PLANNING: 5,

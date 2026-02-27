@@ -14,14 +14,17 @@ class _DummyAgent(BaseAgent):
 
 
 class _RecorderTool:
-    def __init__(self, name: str):
+    def __init__(self, name: str, output: str):
         self.name = name
         self.description = f"tool:{name}"
         self.calls = 0
+        self.call_inputs = []
+        self._output = output
 
     async def execute(self, **kwargs):
         self.calls += 1
-        return SimpleNamespace(success=True, data={"tool": self.name, "kwargs": kwargs}, error=None, metadata={})
+        self.call_inputs.append(kwargs)
+        return SimpleNamespace(success=True, data=self._output, error=None, metadata={})
 
 
 def _events_by_type(emitter, event_type: str):
@@ -46,66 +49,132 @@ def _make_agent(tools):
 
 
 @pytest.mark.asyncio
-async def test_verify_reachability_routes_to_controlflow():
-    read_tool = _RecorderTool("read_file")
-    flow_tool = _RecorderTool("controlflow_analysis_light")
+async def test_verify_reachability_runs_pipeline_sequence():
+    read_tool = _RecorderTool("read_file", "文件: src/time64.c\n行数: 128-180 / 360")
+    locate_tool = _RecorderTool(
+        "locate_enclosing_function",
+        "{'symbols':[{'name':'asctime64_r','kind':'function','start_line':120,'end_line':240}]}",
+    )
+    extract_tool = _RecorderTool("extract_function", "function body")
+    dataflow_tool = _RecorderTool(
+        "dataflow_analysis",
+        '{"risk_level":"medium","taint_steps":["source->asctime64_r","asctime64_r->stack_overflow_risk"]}',
+    )
+    controlflow_tool = _RecorderTool(
+        "controlflow_analysis_light",
+        '{"flow":{"path_found":true,"path_score":0.72}}',
+    )
+    joern_tool = _RecorderTool(
+        "joern_reachability_verify",
+        '{"path_found": true, "call_chain": ["main->asctime64_r"]}',
+    )
+    cpg_tool = _RecorderTool("cpg_query", '{"path_found": true}')
     agent, emitter = _make_agent(
         {
             "read_file": read_tool,
-            "controlflow_analysis_light": flow_tool,
-        }
-    )
-
-    output = await agent.execute_tool(
-        "verify_reachability",
-        {"file_path": "src/time64.c", "line_start": 168, "function_name": "asctime64_r"},
-    )
-
-    assert "controlflow_analysis_light" in output
-    assert flow_tool.calls == 1
-    assert read_tool.calls == 0
-
-    tool_call_events = _events_by_type(emitter, "tool_call")
-    assert len(tool_call_events) == 1
-    metadata = tool_call_events[0].metadata or {}
-    assert metadata.get("alias_used") == "verify_reachability"
-
-
-@pytest.mark.asyncio
-async def test_verify_reachability_routes_to_dataflow_when_source_sink_hints_present():
-    dataflow_tool = _RecorderTool("dataflow_analysis")
-    controlflow_tool = _RecorderTool("controlflow_analysis_light")
-    agent, _emitter = _make_agent(
-        {
+            "locate_enclosing_function": locate_tool,
+            "extract_function": extract_tool,
             "dataflow_analysis": dataflow_tool,
             "controlflow_analysis_light": controlflow_tool,
+            "joern_reachability_verify": joern_tool,
+            "cpg_query": cpg_tool,
         }
     )
 
     output = await agent.execute_tool(
         "verify_reachability",
-        {
-            "source_hints": "user_input",
-            "sink_hints": "sprintf",
-            "variable_name": "buf",
-            "file_path": "src/time64.c",
-        },
+        {"file_path": "src/time64.c", "line_start": 168, "line_end": 168},
     )
 
-    assert "dataflow_analysis" in output
+    assert "verify_reachability pipeline completed" in output
+    assert "reachability: reachable" in output
+    assert read_tool.calls == 1
+    assert locate_tool.calls == 1
+    assert extract_tool.calls == 1
     assert dataflow_tool.calls == 1
-    assert controlflow_tool.calls == 0
+    assert controlflow_tool.calls == 1
+    assert joern_tool.calls == 1
+    assert cpg_tool.calls == 0
+
+    tool_call_events = _events_by_type(emitter, "tool_call")
+    ordered_names = [event.tool_name for event in tool_call_events]
+    assert ordered_names == [
+        "verify_reachability",
+        "read_file",
+        "locate_enclosing_function",
+        "extract_function",
+        "dataflow_analysis",
+        "controlflow_analysis_light",
+        "joern_reachability_verify",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_verify_reachability_falls_back_to_read_file_when_flow_tools_absent():
-    read_tool = _RecorderTool("read_file")
-    agent, _emitter = _make_agent({"read_file": read_tool})
+async def test_verify_reachability_uses_search_when_location_missing():
+    search_tool = _RecorderTool("search_code", "src/authz.c:88\n`if (!is_admin(user)) return`")
+    read_tool = _RecorderTool("read_file", "文件: src/authz.c\n行数: 48-120 / 320")
+    locate_tool = _RecorderTool("locate_enclosing_function", "{'symbols':[]}")
+    dataflow_tool = _RecorderTool("dataflow_analysis", '{"risk_level":"low"}')
+    controlflow_tool = _RecorderTool("controlflow_analysis_light", '{"flow":{"path_found":true}}')
+    joern_tool = _RecorderTool(
+        "joern_reachability_verify",
+        '{"engine": "joern"}',
+    )
+    cpg_tool = _RecorderTool(
+        "cpg_query",
+        '{"path_found": true, "call_chain": ["main->authz_check"]}',
+    )
+    agent, _emitter = _make_agent(
+        {
+            "search_code": search_tool,
+            "read_file": read_tool,
+            "locate_enclosing_function": locate_tool,
+            "dataflow_analysis": dataflow_tool,
+            "controlflow_analysis_light": controlflow_tool,
+            "joern_reachability_verify": joern_tool,
+            "cpg_query": cpg_tool,
+        }
+    )
 
     output = await agent.execute_tool(
         "verify_reachability",
-        {"file_path": "src/a.c", "line_start": 10},
+        {"vulnerability_type": "authz_bypass", "sink_hints": ["is_admin"]},
     )
 
-    assert "read_file" in output
-    assert read_tool.calls == 1
+    assert search_tool.calls == 1
+    assert "location: src/authz.c:88" in output
+    assert "verify_reachability pipeline completed" in output
+    assert "reachability: reachable" in output
+
+
+@pytest.mark.asyncio
+async def test_verify_reachability_runs_cpg_query_when_joern_inconclusive():
+    read_tool = _RecorderTool("read_file", "文件: src/demo.c\n行数: 1-80 / 200")
+    locate_tool = _RecorderTool("locate_enclosing_function", "{'symbols':[]}")
+    dataflow_tool = _RecorderTool("dataflow_analysis", '{"risk_level":"low"}')
+    controlflow_tool = _RecorderTool("controlflow_analysis_light", '{"flow":{"path_found":false}}')
+    joern_tool = _RecorderTool("joern_reachability_verify", '{"engine": "joern"}')
+    cpg_tool = _RecorderTool(
+        "cpg_query",
+        '{"path_found": true, "call_chain": ["entry->target"]}',
+    )
+    agent, _ = _make_agent(
+        {
+            "read_file": read_tool,
+            "locate_enclosing_function": locate_tool,
+            "dataflow_analysis": dataflow_tool,
+            "controlflow_analysis_light": controlflow_tool,
+            "joern_reachability_verify": joern_tool,
+            "cpg_query": cpg_tool,
+        }
+    )
+
+    output = await agent.execute_tool(
+        "verify_reachability",
+        {"file_path": "src/demo.c", "line_start": 12, "line_end": 12},
+    )
+
+    assert joern_tool.calls == 1
+    assert cpg_tool.calls == 1
+    assert "cpg_query" in output
+    assert "reachability: reachable" in output

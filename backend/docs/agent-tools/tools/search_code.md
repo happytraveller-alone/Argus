@@ -10,18 +10,12 @@
 
 输入:
 - keyword: 搜索关键字或正则表达式
-- file_pattern: 可选，文件名模式（如 *.py，支持多模式：*.c|*.h / *.c,*.h / *.c;*.h）
+- file_pattern: 可选，文件名模式（如 *.py）
 - directory: 可选，搜索目录
 - case_sensitive: 是否区分大小写
 - is_regex: 是否使用正则表达式
 
 这是一个快速搜索工具，结果包含匹配行和上下文。
-
-执行引擎:
-- 优先 `rg`（line number + context）
-- 回退 `grep -RIn`
-- 最后回退 Python 遍历
-- 若指定子目录无命中，会自动扩域到项目根目录再执行一次同参搜索
 
 ## Goal
 定位目标代码、函数上下文与证据位置。
@@ -34,7 +28,7 @@
 
 ## Inputs
 - `keyword` (string, required): 搜索关键字或正则表达式
-- `file_pattern` (any, optional): 文件名模式，如 *.py, *.js；支持多模式分隔符 `|` `,` `;`
+- `file_pattern` (any, optional): 文件名模式，如 *.py, *.js
 - `directory` (any, optional): 搜索目录（相对路径）
 - `case_sensitive` (boolean, optional): 是否区分大小写
 - `max_results` (integer, optional): 最大结果数
@@ -45,8 +39,8 @@
 ```json
 {
   "keyword": "<text>",
-  "file_pattern": "*.c|*.h",
-  "directory": "src"
+  "file_pattern": null,
+  "directory": null
 }
 ```
 
@@ -56,10 +50,6 @@
 - `error` (string|null): 失败时错误信息。
 - `duration_ms` (int): 执行耗时（毫秒）。
 - `metadata` (object): 补充上下文信息。
-  - `engine`: 实际执行引擎（`rg|grep|python`）
-  - `scope_fallback_applied`: 是否触发“子目录无命中 -> 项目根目录”扩域
-  - `original_directory`: 原始搜索目录（归一化后）
-  - `effective_directory`: 实际生效目录
 
 ## Typical Triggers
 - 当 Agent 需要完成“定位目标代码、函数上下文与证据位置。”时触发。
@@ -71,4 +61,3 @@
 - 不要在输入缺失关键参数时盲目调用。
 - 不要将该工具输出直接当作最终结论，必须结合上下文复核。
 - 不要在权限不足或路径不合法时重复重试同一输入。
-- 当目录无命中时优先接收工具扩域结果，避免手工重复同参重试。

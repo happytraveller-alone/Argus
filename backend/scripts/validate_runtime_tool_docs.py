@@ -13,6 +13,10 @@ if str(BACKEND_DIR) not in sys.path:
 
 from scripts.generate_runtime_tool_docs import (  # noqa: E402
     DOCS_ROOT,
+    FILE_TOOL_SKILL_SPECS,
+    PLAYBOOK_PATH,
+    SKILLS_DOC_DIR,
+    SKILLS_INDEX_PATH,
     SHARED_CATALOG_PATH,
     TOOLS_DOC_DIR,
     collect_runtime_tools,
@@ -52,22 +56,40 @@ def validate_runtime_tool_docs() -> Dict[str, Any]:
         if f"`{runtime_key}`" not in catalog_text:
             missing_catalog_entries.append(runtime_key)
 
+    missing_skill_docs: List[str] = []
+    for tool_name in sorted(FILE_TOOL_SKILL_SPECS.keys()):
+        skill_path = SKILLS_DOC_DIR / f"{tool_name}.skill.md"
+        if not skill_path.exists():
+            missing_skill_docs.append(tool_name)
+
+    missing_skills_index = not SKILLS_INDEX_PATH.exists()
+    missing_playbook = not PLAYBOOK_PATH.exists()
+
     return {
         "expected_tool_count": len(expected_tools),
         "missing_docs": missing_docs,
         "missing_headings": missing_headings,
         "missing_catalog_entries": missing_catalog_entries,
+        "missing_skill_docs": missing_skill_docs,
+        "missing_skills_index": missing_skills_index,
+        "missing_playbook": missing_playbook,
         "docs_root": str(DOCS_ROOT),
     }
 
 
 def main() -> None:
     result = validate_runtime_tool_docs()
-    ok = not result["missing_docs"] and not result["missing_headings"] and not result["missing_catalog_entries"]
+    ok = (
+        not result["missing_docs"]
+        and not result["missing_headings"]
+        and not result["missing_catalog_entries"]
+        and not result["missing_skill_docs"]
+        and not result["missing_skills_index"]
+        and not result["missing_playbook"]
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     raise SystemExit(0 if ok else 1)
 
 
 if __name__ == "__main__":
     main()
-

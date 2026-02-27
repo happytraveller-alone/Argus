@@ -13,13 +13,8 @@
 - start_line: 可选，起始行号
 - end_line: 可选，结束行号
 - max_lines: 最大返回行数（默认500）
-- reason_paths: 可选，基于前序分析得到的优先目录/文件线索
-- project_scope: 可选，是否启用全项目路径补全（默认 true）
 
-执行要点:
-- 先尝试原路径读取，再做全项目 suffix/basename 匹配。
-- 对命中的候选按 `reason_paths` 优先级评分，自动选最可能文件。
-- 有明确行号时优先 `sed -n`，头部读取优先 `head -n`，失败自动回退 Python 读取。
+注意: 为避免输出过长，建议指定行范围或使用 RAG 搜索定位代码。
 
 ## Goal
 定位目标代码、函数上下文与证据位置。
@@ -35,8 +30,10 @@
 - `start_line` (any, optional): 起始行号（从1开始）
 - `end_line` (any, optional): 结束行号
 - `max_lines` (integer, optional): 最大返回行数
-- `reason_paths` (array, optional): 前序分析得到的候选目录/路径
-- `project_scope` (boolean, optional): 是否启用全项目补全（默认 true）
+- `reason_paths` (any, optional): 可选，基于上文推断的优先路径
+- `project_scope` (boolean, optional): 可选，启用全项目路径补全
+- `strict_anchor` (boolean, optional): 严格锚点模式：仅允许窗口化读取
+- `allow_file_header_fallback` (boolean, optional): 严格锚点模式下允许回退读取文件头部窗口（防御性兜底）。
 
 
 ### Example Input
@@ -65,4 +62,3 @@
 - 不要在输入缺失关键参数时盲目调用。
 - 不要将该工具输出直接当作最终结论，必须结合上下文复核。
 - 不要在权限不足或路径不合法时重复重试同一输入。
-- 不要将项目外绝对路径作为有效输入；工具会按安全策略拒绝。

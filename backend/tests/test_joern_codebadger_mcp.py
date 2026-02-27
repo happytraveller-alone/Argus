@@ -12,14 +12,6 @@ from app.services.agent.flow.joern.codebadger_reachability_query import build_re
 async def test_reachability_engine_selection_no_local_joern_mcp_enabled_but_unreachable(monkeypatch):
     monkeypatch.setattr("app.services.agent.flow.joern.joern_client.shutil.which", lambda _name: None)
 
-    async def _fake_ping(self) -> bool:  # noqa: ANN001
-        return False
-
-    monkeypatch.setattr(
-        "app.services.agent.flow.joern.codebadger_mcp_client.CodeBadgerMCPClient.ping",
-        _fake_ping,
-    )
-
     client = JoernClient(enabled=True, timeout_sec=5, mcp_enabled=True, mcp_url="http://127.0.0.1:4242/mcp")
     evidence = await client.verify_reachability(
         project_root="/tmp/deepaudit/test",
@@ -29,7 +21,7 @@ async def test_reachability_engine_selection_no_local_joern_mcp_enabled_but_unre
     )
 
     assert evidence.path_found is False
-    assert "joern_mcp_unavailable" in (evidence.blocked_reasons or [])
+    assert "joern_not_available" in (evidence.blocked_reasons or [])
 
 
 def test_codebadger_reachability_query_builder_payload_safe():

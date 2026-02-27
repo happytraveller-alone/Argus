@@ -23,11 +23,13 @@ from datetime import datetime, timezone
 
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
 from .react_parser import parse_react_response
+from .verification_table import VerificationFindingTable
 from ..json_parser import AgentJsonParser
 from ..flow.lightweight.function_locator import EnclosingFunctionLocator
 from ..prompts import CORE_SECURITY_PRINCIPLES, VULNERABILITY_PRIORITIES
 from ..utils.vulnerability_naming import (
     build_cn_structured_description,
+    build_cn_structured_description_markdown,
     build_cn_structured_title,
     normalize_vulnerability_type,
     resolve_cwe_id,
@@ -60,11 +62,11 @@ VERIFICATION_SYSTEM_PROMPT = """你是漏洞验证 Agent，负责自主完成漏
 17. **输出格式约束**：禁止使用 `## Action`/`## Action Input` 标题样式，必须使用 `Action:`/`Action Input:` 行格式。
 18. **根因描述约束**：`description` 必须说明漏洞根本成因，并绑定真实 `file_path/line/code_snippet` 证据，禁止虚构代码细节。
 19. **逐漏洞状态机约束**：必须按候选列表逐条推进（pending -> running -> verified/false_positive），禁止跨候选混合结论。
-20. **可达性证明约束**：每个候选至少提供一条代码证据（`read_file`/`extract_function`）和一条流证据（优先 `verify_reachability`）。
+20. **可达性证明约束**：每个候选至少提供一条代码证据（`read_file`/`extract_function`）和一条流证据（优先 `verify_reachability` 固定编排流程）。
 
 ## 工作流
 1. 先读取/提取目标代码，验证文件与行号是否真实存在。
-2. 使用 `verify_reachability`（或 flow 工具）证明所属函数可达性与触发可能性。
+2. 使用 `verify_reachability`（固定执行 `search/read -> locate/extract -> joern(/cpg)`）证明所属函数可达性与触发可能性。
 3. 单候选结论写回 TODO 状态，再进入下一个候选。
 4. 输出非武器化 PoC 思路（步骤、前置条件、观测信号），禁止提供可直接利用的 payload/命令。
 5. 汇总输出 Final Answer。
@@ -1130,6 +1132,8 @@ class VerificationAgent(BaseAgent):
         lowered = text.lower()
         if "任务已取消" in text or "cancel" in lowered:
             return "cancelled"
+        if "阻断" in text or "blocked_reason" in lowered:
+            return "blocked"
         if "短路" in text:
             return "retry_guard_short_circuit"
         if "参数校验失败" in text or "必填字段" in text:
@@ -1144,11 +1148,79 @@ class VerificationAgent(BaseAgent):
             "invalid",
             "错误",
             "异常",
+            "阻断",
         ]
         for hint in deterministic_hints:
             if hint in text or hint in lowered:
                 return "deterministic_tool_error"
         return None
+
+    @staticmethod
+    def _extract_verify_pipeline_blocked_reason(observation: str) -> Optional[str]:
+        text = str(observation or "")
+        lowered = text.lower()
+        mcp_hints = (
+            "mcp_call_failed:",
+            "mcp_adapter_unavailable:",
+            "adapter_disabled_after_failures",
+            "mcp_runtime_unavailable_strict_mode",
+            "server disconnected without sending a response",
+            "remoteprotocolerror",
+            "connecterror",
+            "readtimeout",
+            "connection refused",
+            "connection reset",
+            "status_502",
+            "status_503",
+            "status_504",
+            "bad gateway",
+            "service unavailable",
+            "gateway timeout",
+            "healthcheck_failed",
+        )
+        if any(hint in lowered for hint in mcp_hints):
+            return "mcp_unavailable"
+        known = {
+            "mcp_unavailable",
+            "insufficient_flow_evidence",
+            "missing_location",
+            "read_budget_exhausted",
+            "cancelled",
+        }
+        for reason in known:
+            if reason in lowered:
+                return reason
+
+        marker = "verify_pipeline_json:"
+        marker_index = lowered.rfind(marker)
+        if marker_index < 0:
+            return None
+        json_part = text[marker_index + len(marker) :].strip()
+        try:
+            payload = json.loads(json_part)
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        candidate = str(payload.get("verify_pipeline_blocked_reason") or "").strip().lower()
+        if candidate in known:
+            return candidate
+        return None
+
+    @staticmethod
+    def _map_flow_error_to_blocked_reason(
+        flow_error_reason: Optional[str],
+        pipeline_blocked_reason: Optional[str],
+    ) -> str:
+        if pipeline_blocked_reason:
+            return pipeline_blocked_reason
+        if flow_error_reason in {"cancelled"}:
+            return "cancelled"
+        if flow_error_reason in {"empty_observation", "blocked", "deterministic_tool_error"}:
+            return "insufficient_flow_evidence"
+        if flow_error_reason in {"input_validation_failed"}:
+            return "insufficient_flow_evidence"
+        return "insufficient_flow_evidence"
 
     @staticmethod
     def _is_flow_evidence_positive(flow_observation: str) -> bool:
@@ -1234,17 +1306,72 @@ class VerificationAgent(BaseAgent):
             },
         )
 
+    async def _emit_finding_table_update(
+        self,
+        finding_table: VerificationFindingTable,
+        message: str,
+        *,
+        round_index: int,
+        queue_size: int,
+        newly_discovered_count: int,
+    ) -> Dict[str, Any]:
+        summary = finding_table.summary(
+            round_index=round_index,
+            queue_size=queue_size,
+            newly_discovered_count=newly_discovered_count,
+        )
+        await self.emit_event(
+            "todo_update",
+            message,
+            metadata={
+                "todo_scope": "finding_table",
+                "todo_list": finding_table.to_todo_list(),
+                "finding_table_summary": summary,
+                **summary,
+            },
+        )
+        return summary
+
     async def _emit_unverified_finding_event(
         self,
         finding: Dict[str, Any],
         status: str = "new",
         project_root: Optional[str] = None,
+        verification_todo_id: Optional[str] = None,
+        verification_fingerprint: Optional[str] = None,
     ) -> None:
         title = str(finding.get("title") or "待验证缺陷").strip() or "待验证缺陷"
         severity = str(finding.get("severity") or "medium").strip() or "medium"
         vuln_type = str(finding.get("vulnerability_type") or "unknown").strip() or "unknown"
         file_path, line_start, line_end = self._normalize_file_location(finding)
         file_path = self._to_display_file_path(file_path, project_root)
+        description_text = (
+            str(finding.get("description"))
+            if finding.get("description") is not None
+            else None
+        )
+        description_markdown = build_cn_structured_description_markdown(
+            file_path=file_path,
+            function_name=finding.get("function_name"),
+            vulnerability_type=vuln_type,
+            title=title,
+            description=description_text,
+            code_snippet=(
+                str(finding.get("code_snippet"))
+                if finding.get("code_snippet") is not None
+                else None
+            ),
+            code_context=(
+                str(finding.get("code_context"))
+                if finding.get("code_context") is not None
+                else None
+            ),
+            cwe_id=self._infer_cwe_id(finding),
+            raw_description=description_text,
+            line_start=line_start,
+            line_end=line_end,
+            verification_evidence=description_text,
+        )
         await self.emit_event(
             "finding_new" if status == "new" else "finding_update",
             f"[Verification] 未验证候选: {title}",
@@ -1258,8 +1385,13 @@ class VerificationAgent(BaseAgent):
                 "line_end": line_end,
                 "is_verified": False,
                 "status": status,
-                "description": finding.get("description"),
+                "description": description_text,
+                "description_markdown": description_markdown,
                 "code_snippet": finding.get("code_snippet"),
+                "finding_scope": "verification_queue",
+                "verification_todo_id": verification_todo_id,
+                "verification_fingerprint": verification_fingerprint,
+                "verification_status": status if status in {"new", "running"} else "new",
             },
         )
     
@@ -1405,6 +1537,134 @@ class VerificationAgent(BaseAgent):
         if findings_without_path:
             logger.info(f"[Verification] 还有 {len(findings_without_path)} 个发现需要自行定位文件")
 
+        finding_table = VerificationFindingTable(
+            max_rounds=max(1, int(config.get("finding_table_max_rounds", 10))),
+            max_items=max(1, int(config.get("finding_table_max_items", 200))),
+        )
+        candidate_by_fingerprint: Dict[str, Dict[str, Any]] = {}
+        for idx, candidate in enumerate(findings_to_verify):
+            item = finding_table.add_candidate(
+                candidate,
+                source="seed",
+                index=idx,
+                discovered_by="seed_candidates",
+            )
+            if item is not None:
+                candidate_by_fingerprint[item.fingerprint] = dict(candidate)
+
+        finding_table_summary = await self._emit_finding_table_update(
+            finding_table,
+            "初始化缺陷表：开始上下文收敛",
+            round_index=0,
+            queue_size=len(finding_table.pending_context_items()),
+            newly_discovered_count=0,
+        )
+
+        context_round = 0
+        while (
+            not self.is_cancelled
+            and finding_table.pending_context_items()
+            and context_round < finding_table.max_rounds
+        ):
+            context_round += 1
+            pending_items = finding_table.pending_context_items()
+            newly_discovered_count = 0
+
+            for pending in pending_items:
+                source_candidate = dict(candidate_by_fingerprint.get(pending.fingerprint) or {})
+                finding_table.mark_context(
+                    pending.fingerprint,
+                    status="collecting",
+                    context_round=context_round,
+                    context_bundle=source_candidate,
+                )
+
+                file_path, line_start, line_end = self._normalize_file_location(source_candidate)
+                resolved_file_path, _full_path = self._resolve_file_paths(file_path, project_root)
+                effective_file_path = resolved_file_path or file_path
+                if not effective_file_path or line_start <= 0:
+                    finding_table.mark_context(
+                        pending.fingerprint,
+                        status="failed",
+                        context_round=context_round,
+                        blocked_reason="missing_file_or_line",
+                        context_bundle={
+                            **source_candidate,
+                            "file_path": effective_file_path or file_path,
+                            "line_start": max(1, int(line_start or 1)),
+                            "line_end": max(1, int(line_end or line_start or 1)),
+                        },
+                    )
+                    continue
+
+                function_name = (
+                    str(source_candidate.get("function_name") or "").strip()
+                    or self._extract_function_name_from_title(source_candidate.get("title"))
+                )
+                context_bundle = {
+                    **source_candidate,
+                    "file_path": effective_file_path,
+                    "line_start": max(1, int(line_start)),
+                    "line_end": max(int(line_end or line_start), int(line_start)),
+                    "function_name": function_name or None,
+                }
+                finding_table.mark_context(
+                    pending.fingerprint,
+                    status="ready",
+                    context_round=context_round,
+                    context_bundle=context_bundle,
+                )
+                candidate_by_fingerprint[pending.fingerprint] = context_bundle
+
+                discovered = source_candidate.get("discovered_findings")
+                if isinstance(discovered, list):
+                    for idx, discovered_item in enumerate(discovered):
+                        if not isinstance(discovered_item, dict):
+                            continue
+                        mapped_discovered = dict(discovered_item)
+                        mapped_discovered.setdefault("severity", "medium")
+                        mapped_discovered.setdefault("confidence", 0.5)
+                        added = finding_table.add_candidate(
+                            mapped_discovered,
+                            source="context_discovery",
+                            index=idx,
+                            parent_fingerprint=pending.fingerprint,
+                            discovered_by="context_collection",
+                        )
+                        if added is None:
+                            continue
+                        if added.fingerprint not in candidate_by_fingerprint:
+                            candidate_by_fingerprint[added.fingerprint] = mapped_discovered
+                            newly_discovered_count += 1
+
+            finding_table_summary = await self._emit_finding_table_update(
+                finding_table,
+                f"缺陷表上下文收敛轮次 {context_round} 完成",
+                round_index=context_round,
+                queue_size=len(finding_table.pending_context_items()),
+                newly_discovered_count=newly_discovered_count,
+            )
+
+        findings_to_verify = []
+        for item in finding_table.iter_items():
+            candidate = dict(candidate_by_fingerprint.get(item.fingerprint) or {})
+            if not isinstance(candidate, dict):
+                candidate = {}
+            candidate.setdefault("title", item.title)
+            candidate.setdefault("file_path", item.file_path)
+            candidate.setdefault("line_start", item.line_start)
+            candidate.setdefault("line_end", item.line_end)
+            candidate.setdefault("function_name", item.function_name)
+            candidate.setdefault("vulnerability_type", item.vulnerability_type)
+            candidate.setdefault("severity", item.severity)
+            if isinstance(item.context_bundle, dict) and item.context_bundle:
+                candidate.update(item.context_bundle)
+            candidate["_finding_table_fingerprint"] = item.fingerprint
+            candidate["_finding_table_context_status"] = item.context_status
+            if item.blocked_reason:
+                candidate["_finding_table_blocked_reason"] = item.blocked_reason
+            findings_to_verify.append(candidate)
+
         if not findings_to_verify:
             note = "跳过验证：本次候选列表为空。"
             logger.info(f"[Verification] {note}")
@@ -1420,11 +1680,18 @@ class VerificationAgent(BaseAgent):
                     "reason": "no_candidates",
                     "verified_count": 0,
                     "candidate_count": 0,
+                    "finding_table_summary": finding_table_summary,
                 },
             )
             return AgentResult(
                 success=True,
-                data={"findings": [], "verified_count": 0, "candidate_count": 0, "note": note},
+                data={
+                    "findings": [],
+                    "verified_count": 0,
+                    "candidate_count": 0,
+                    "note": note,
+                    "finding_table_summary": finding_table_summary,
+                },
                 iterations=0,
                 tool_calls=self._tool_calls,
                 tokens_used=self._total_tokens,
@@ -1456,11 +1723,13 @@ class VerificationAgent(BaseAgent):
         )
 
         # 初始化时所有候选均标记为未验证，推送给前端未验证面板。
-        for candidate in findings_to_verify:
+        for todo_item, candidate in zip(todo_items, findings_to_verify):
             await self._emit_unverified_finding_event(
                 candidate,
                 status="new",
                 project_root=project_root,
+                verification_todo_id=todo_item.id,
+                verification_fingerprint=todo_item.fingerprint,
             )
 
         run_iteration_count = 0
@@ -1479,11 +1748,27 @@ class VerificationAgent(BaseAgent):
                 current_todo_index = idx
                 current_todo_id = todo_item.id
                 todo_item.status = "running"
+                table_fingerprint = str(
+                    candidate.get("_finding_table_fingerprint") or todo_item.fingerprint
+                ).strip()
+                if table_fingerprint:
+                    finding_table.mark_verify(
+                        table_fingerprint,
+                        status="verifying",
+                        attempts=todo_item.attempts,
+                    )
                 await self._emit_verification_todo_update(
                     todo_items,
                     f"开始逐漏洞验证：{idx}/{total_todos} {todo_item.title}",
                     current_index=idx,
                     total_todos=total_todos,
+                )
+                await self._emit_unverified_finding_event(
+                    candidate,
+                    status="running",
+                    project_root=project_root,
+                    verification_todo_id=todo_item.id,
+                    verification_fingerprint=todo_item.fingerprint,
                 )
 
                 file_path, line_start, line_end = self._normalize_file_location(candidate)
@@ -1531,9 +1816,9 @@ class VerificationAgent(BaseAgent):
 
                     read_input = {
                         "file_path": file_path,
-                        "start_line": max(1, int(line_start) - 20),
-                        "end_line": max(int(line_end or line_start), int(line_start)) + 80,
-                        "max_lines": 280,
+                        "start_line": max(1, int(line_start) - 12),
+                        "end_line": max(int(line_end or line_start), int(line_start)) + 28,
+                        "max_lines": 160,
                     }
                     last_action = "collect_code_evidence"
                     last_tool_name = "read_file"
@@ -1565,8 +1850,12 @@ class VerificationAgent(BaseAgent):
                         "line_end": line_end,
                         "function_name": function_name or None,
                         "vulnerability_type": candidate.get("vulnerability_type"),
-                        "source_hints": candidate.get("description"),
-                        "sink_hints": candidate.get("code_snippet"),
+                        "source_hints": [str(candidate.get("description") or "").strip()]
+                        if str(candidate.get("description") or "").strip()
+                        else [],
+                        "sink_hints": [str(candidate.get("code_snippet") or "").strip()]
+                        if str(candidate.get("code_snippet") or "").strip()
+                        else [],
                     }
                     last_action = "collect_flow_evidence"
                     last_tool_name = "verify_reachability"
@@ -1580,6 +1869,9 @@ class VerificationAgent(BaseAgent):
                         )
                     )
                     flow_error_reason = self._extract_tool_error_reason(flow_observation)
+                    pipeline_blocked_reason = self._extract_verify_pipeline_blocked_reason(
+                        flow_observation
+                    )
                     todo_item.evidence_refs.append("verify_reachability")
                     if flow_observation:
                         evidence_blocks.append(
@@ -1588,6 +1880,17 @@ class VerificationAgent(BaseAgent):
 
                     if flow_error_reason == "cancelled":
                         break
+
+                    if (
+                        flow_error_reason is None
+                        and pipeline_blocked_reason in {
+                            "mcp_unavailable",
+                            "missing_location",
+                            "insufficient_flow_evidence",
+                            "read_budget_exhausted",
+                        }
+                    ):
+                        flow_error_reason = "blocked"
 
                     flow_text_lower = str(flow_observation or "").lower()
                     flow_positive = flow_error_reason is None and self._is_flow_evidence_positive(flow_observation)
@@ -1612,7 +1915,12 @@ class VerificationAgent(BaseAgent):
                         break
 
                     # flow 工具失败：保留 read_file 证据，继续下一次 attempt 或降级。
-                    blocked_reason = f"flow_{flow_error_reason or 'insufficient'}"
+                    blocked_reason = self._map_flow_error_to_blocked_reason(
+                        flow_error_reason,
+                        pipeline_blocked_reason,
+                    )
+                    if blocked_reason in {"mcp_unavailable", "missing_location", "read_budget_exhausted"}:
+                        break
 
                 if self.is_cancelled:
                     break
@@ -1635,6 +1943,22 @@ class VerificationAgent(BaseAgent):
                     if not todo_item.blocked_reason and blocked_reason:
                         todo_item.blocked_reason = blocked_reason
 
+                if table_fingerprint:
+                    finding_table.mark_verify(
+                        table_fingerprint,
+                        status=(
+                            "verified"
+                            if todo_item.status == "verified"
+                            else "false_positive"
+                        ),
+                        attempts=todo_item.attempts,
+                        blocked_reason=todo_item.blocked_reason,
+                        verification_result={
+                            "verdict": final_verdict,
+                            "reachability": reachability,
+                        },
+                    )
+
                 evidence_text = "\n\n".join([block for block in evidence_blocks if block]).strip()
                 if not evidence_text:
                     evidence_text = "未采集到充分证据，按保守策略降级为 false_positive。"
@@ -1655,6 +1979,22 @@ class VerificationAgent(BaseAgent):
                     title=candidate.get("title"),
                     description=candidate.get("description"),
                     code_snippet=candidate.get("code_snippet"),
+                    code_context=candidate.get("code_context"),
+                    cwe_id=self._infer_cwe_id(candidate),
+                    raw_description=evidence_text,
+                    line_start=line_start_int,
+                    line_end=line_end_int,
+                    verification_evidence=evidence_text,
+                    function_trigger_flow=function_trigger_flow,
+                )
+                root_cause_description_markdown = build_cn_structured_description_markdown(
+                    file_path=file_path,
+                    function_name=function_name,
+                    vulnerability_type=candidate.get("vulnerability_type"),
+                    title=candidate.get("title"),
+                    description=candidate.get("description"),
+                    code_snippet=candidate.get("code_snippet"),
+                    code_context=candidate.get("code_context"),
                     cwe_id=self._infer_cwe_id(candidate),
                     raw_description=evidence_text,
                     line_start=line_start_int,
@@ -1711,12 +2051,27 @@ class VerificationAgent(BaseAgent):
                             if provisional.get("description") is not None
                             else None
                         ),
+                        description_markdown=root_cause_description_markdown,
                         verification_evidence=evidence_text,
                         code_snippet=(
                             str(provisional.get("code_snippet"))
                             if provisional.get("code_snippet") is not None
                             else None
                         ),
+                        code_context=(
+                            str(provisional.get("code_context"))
+                            if provisional.get("code_context") is not None
+                            else None
+                        ),
+                        finding_scope="verification_queue",
+                        verification_todo_id=todo_item.id,
+                        verification_fingerprint=todo_item.fingerprint,
+                        verification_status="verified",
+                        extra_metadata={
+                            "status": "verified",
+                            "verdict": final_verdict,
+                            "authenticity": final_verdict,
+                        },
                     )
                 else:
                     await self.emit_event(
@@ -1736,7 +2091,12 @@ class VerificationAgent(BaseAgent):
                             "verdict": "false_positive",
                             "verification_evidence": evidence_text,
                             "description": root_cause_description,
+                            "description_markdown": root_cause_description_markdown,
                             "blocked_reason": todo_item.blocked_reason,
+                            "finding_scope": "verification_queue",
+                            "verification_todo_id": todo_item.id,
+                            "verification_fingerprint": todo_item.fingerprint,
+                            "verification_status": "false_positive",
                         },
                     )
 
@@ -1756,6 +2116,11 @@ class VerificationAgent(BaseAgent):
 
             if self.is_cancelled:
                 todo_summary = self._build_verification_todo_summary(todo_items)
+                finding_table_summary = finding_table.summary(
+                    round_index=context_round,
+                    queue_size=len(finding_table.pending_context_items()),
+                    newly_discovered_count=0,
+                )
                 completed_count = todo_summary.get("verified", 0) + todo_summary.get("false_positive", 0) + todo_summary.get("blocked", 0)
                 pending_count = todo_summary.get("pending", 0)
                 cancel_message = (
@@ -1777,6 +2142,7 @@ class VerificationAgent(BaseAgent):
                         "last_tool_name": last_tool_name,
                         "todo_scope": "verification",
                         "verification_todo_summary": todo_summary,
+                        "finding_table_summary": finding_table_summary,
                     },
                 )
                 return AgentResult(
@@ -1786,6 +2152,7 @@ class VerificationAgent(BaseAgent):
                         "findings": provisional_findings if provisional_findings else findings_to_verify,
                         "candidate_count": len(findings_to_verify),
                         "verification_todo_summary": todo_summary,
+                        "finding_table_summary": finding_table_summary,
                     },
                     iterations=run_iteration_count,
                     tool_calls=self._tool_calls,
@@ -1843,6 +2210,11 @@ class VerificationAgent(BaseAgent):
             likely_count = len([f for f in verified_findings if f.get("verdict") == "likely"])
             false_positive_count = len([f for f in verified_findings if f.get("verdict") == "false_positive"])
             todo_summary = self._build_verification_todo_summary(todo_items)
+            finding_table_summary = finding_table.summary(
+                round_index=context_round,
+                queue_size=len(finding_table.pending_context_items()),
+                newly_discovered_count=0,
+            )
 
             await self.emit_event(
                 "info",
@@ -1854,6 +2226,7 @@ class VerificationAgent(BaseAgent):
                 metadata={
                     "todo_scope": "verification",
                     "verification_todo_summary": todo_summary,
+                    "finding_table_summary": finding_table_summary,
                 },
             )
             await self._emit_verification_todo_update(
@@ -1874,6 +2247,7 @@ class VerificationAgent(BaseAgent):
             )
             if isinstance(handoff.context_data, dict):
                 handoff.context_data["verification_todo_summary"] = todo_summary
+                handoff.context_data["finding_table_summary"] = finding_table_summary
 
             return AgentResult(
                 success=True,
@@ -1884,8 +2258,12 @@ class VerificationAgent(BaseAgent):
                     "false_positive_count": false_positive_count,
                     "candidate_count": len(findings_to_verify),
                     "verified_output_count": len(verified_findings),
-                    "summary": {"verification_todo_summary": todo_summary},
+                    "summary": {
+                        "verification_todo_summary": todo_summary,
+                        "finding_table_summary": finding_table_summary,
+                    },
                     "verification_todo_summary": todo_summary,
+                    "finding_table_summary": finding_table_summary,
                 },
                 iterations=run_iteration_count,
                 tool_calls=self._tool_calls,

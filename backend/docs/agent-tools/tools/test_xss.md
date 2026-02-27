@@ -1,23 +1,7 @@
 # Tool: `test_xss`
 
 ## Tool Purpose
-专门测试 XSS (跨站脚本) 漏洞的工具。
-
-支持类型: Reflected XSS, Stored XSS, DOM XSS
-
-输入:
-- target_file: 目标文件路径
-- param_name: 注入参数名 (默认 'input')
-- payload: XSS payload (默认 "<script>alert('XSS')</script>")
-- xss_type: XSS 类型 (reflected, stored, dom)
-
-常用 Payload:
-- Script 标签: <script>alert('XSS')</script>
-- 事件处理: <img src=x onerror=alert('XSS')>
-- SVG: <svg onload=alert('XSS')>
-
-示例:
-{"target_file": "search.php", "param_name": "q", "payload": "<script>alert(1)</script>"}
+该工具已下线，仅用于兼容历史调用。
 
 ## Goal
 执行非武器化验证步骤并收集可复现实验信号。
@@ -29,19 +13,13 @@
 
 
 ## Inputs
-- `target_file` (string, required): 目标文件路径
-- `param_name` (string, optional): 注入参数名
-- `payload` (string, optional): XSS payload
-- `xss_type` (string, optional): XSS 类型: reflected, stored, dom
-- `language` (string, optional): 语言: auto, php, python, javascript
+- `reason` (any, optional): 兼容占位参数
 
 
 ### Example Input
 ```json
 {
-  "target_file": "<text>",
-  "param_name": "input",
-  "payload": "<script>alert('XSS')</script>"
+  "reason": null
 }
 ```
 
@@ -54,7 +32,7 @@
 
 ## Typical Triggers
 - 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `verification`。
+- 常见阶段: `analysis, orchestrator, recon, verification`。
 - 分类: `漏洞验证与 PoC 规划`。
 - 可选工具: `否`。
 

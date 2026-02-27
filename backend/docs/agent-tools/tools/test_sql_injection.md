@@ -1,25 +1,7 @@
 # Tool: `test_sql_injection`
 
 ## Tool Purpose
-专门测试 SQL 注入漏洞的工具。
-
-支持数据库: MySQL, PostgreSQL, SQLite, Oracle, MSSQL
-
-输入:
-- target_file: 目标文件路径
-- param_name: 注入参数名 (默认 'id')
-- payload: SQL 注入 payload (默认 "1' OR '1'='1")
-- language: 语言 (auto 自动检测)
-- db_type: 数据库类型 (默认 mysql)
-
-常用 Payload:
-- 布尔盲注: "1' AND '1'='1"
-- 联合查询: "1' UNION SELECT 1,2,3--"
-- 报错注入: "1' AND extractvalue(1,concat(0x7e,version()))--"
-- 时间盲注: "1' AND SLEEP(5)--"
-
-示例:
-{"target_file": "login.php", "param_name": "username", "payload": "admin'--"}
+该工具已下线，仅用于兼容历史调用。
 
 ## Goal
 执行非武器化验证步骤并收集可复现实验信号。
@@ -31,19 +13,13 @@
 
 
 ## Inputs
-- `target_file` (string, required): 目标文件路径
-- `param_name` (string, optional): 注入参数名
-- `payload` (string, optional): SQL 注入 payload
-- `language` (string, optional): 语言: auto, php, python, javascript, java, go, ruby
-- `db_type` (string, optional): 数据库类型: mysql, postgresql, sqlite, oracle, mssql
+- `reason` (any, optional): 兼容占位参数
 
 
 ### Example Input
 ```json
 {
-  "target_file": "<text>",
-  "param_name": "id",
-  "payload": "1' OR '1'='1"
+  "reason": null
 }
 ```
 
@@ -56,7 +32,7 @@
 
 ## Typical Triggers
 - 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `verification`。
+- 常见阶段: `analysis, orchestrator, recon, verification`。
 - 分类: `漏洞验证与 PoC 规划`。
 - 可选工具: `否`。
 

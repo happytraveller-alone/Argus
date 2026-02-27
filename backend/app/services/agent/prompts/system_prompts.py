@@ -157,7 +157,7 @@ TOOL_USAGE_GUIDE = """
 
 ### ⚠️ 核心原则：优先使用外部专业工具
 
-智能审计默认优先使用**智能扫描 + 代码证据工具**（`smart_scan`/`quick_audit` + `read_file`/`rag_query` 等），
+智能审计默认优先使用**智能扫描 + 代码证据工具**（`smart_scan`/`quick_audit` + `read_file`/`qmd_query` 等），
 以确保可复现的代码定位与证据链。外部工具可能依赖环境（Docker/二进制），因此不作为“每次必用”强约束。
 
 ### 🔧 工具优先级（从高到低）
@@ -177,31 +177,26 @@ TOOL_USAGE_GUIDE = """
 | `logic_authz_analysis` | 认证/授权与业务逻辑边界验证 |
 | `code_analysis` | 代码结构分析 |
 
-#### 辅助工具（RAG 优先！）
+#### 辅助工具（MCP 检索优先）
 | 工具 | 用途 |
 |------|------|
-| `rag_query` | **🔥 首选代码搜索工具** - 语义搜索，查找业务逻辑和漏洞上下文 |
-| `security_search` | **🔥 首选安全搜索工具** - 查找特定的安全敏感代码模式 |
-| `function_context` | **🔥 理解代码结构** - 获取函数调用关系和定义 |
-| `code_search` | **🔥 执行层虚拟 Skill** - 自动路由到 `read_file` / `search_code` / `list_files` |
-| `verify_reachability` | **🔥 执行层虚拟 Skill** - 自动路由到 `controlflow_analysis_light` / `dataflow_analysis` / `extract_function` / `read_file` |
+| `qmd_query` | **🔥 首选语义检索工具** - MCP 检索上下文 |
+| `locate_enclosing_function` | **🔥 函数归属定位** - 基于 Code Index MCP 定位命中代码所属函数 |
+| `verify_reachability` | **🔥 执行层编排 Skill** - 固定执行 `search/read -> locate/extract -> joern(/cpg)`，并限制读取范围预算 |
 | `brainstorming` | **🔥 序列化思考模板** - 使用 sequentialthinking MCP 进行分步推理 |
 | `file_planning` | **🔥 文件规划模板** - 参考 planning-with-files 按文件拆解任务 |
 | `mcp_builder` | MCP 设计模板（能力清单/输入输出契约/安全边界），用于新 MCP 方案设计 |
 | `skill_creator` | Skill 设计模板（提示词/误用约束/示例），用于新 skill 规范化创建 |
-| `read_file` | 读取文件内容验证发现 |
+| `read_file` | 严格锚点窗口读取（先定位行号，再读局部上下文） |
 | `list_files` | ⚠️ **仅用于** 了解根目录结构，**严禁** 用于遍历代码查找内容 |
 | `search_code` | ⚠️ **仅用于** 查找非常具体的字符串常量，**严禁** 作为主要代码搜索手段 |
-| `query_security_knowledge` | 查询安全知识库 |
 
 ### 🔍 代码搜索工具对比
 | 工具 | 特点 | 适用场景 |
 |------|------|---------|
-| `rag_query` | **🔥 语义搜索**，理解代码含义 | **首选！** 查找"处理用户输入的函数"、"数据库查询逻辑" |
-| `security_search` | **🔥 安全专用搜索** | **首选！** 查找"SQL注入相关代码"、"认证授权代码" |
-| `function_context` | **🔥 函数上下文** | 查找某函数的调用者和被调用者 |
-| `code_search` | **🔥 自动路由** 到读文件/关键词搜索 | 推荐作为统一入口，减少工具切换和参数错误 |
-| `verify_reachability` | **🔥 自动路由** 到控制流/数据流/函数提取 | 验证“命中代码在所属函数可达且可触发”时优先使用 |
+| `qmd_query` | **🔥 语义搜索**，理解代码含义 | **首选！** 查找“处理用户输入的函数”“数据库查询逻辑” |
+| `locate_enclosing_function` | **🔥 函数归属定位** | 命中代码归属函数定位、函数范围定位 |
+| `verify_reachability` | **🔥 固定证据链编排**（先代码后流） | 验证“命中代码在所属函数可达且可触发”时优先使用 |
 | `brainstorming` | **🔥 顺序推理模板** | 复杂策略讨论、候选优先级权衡 |
 | `file_planning` | **🔥 文件执行计划模板** | 多文件漏洞链路的拆解与执行排程 |
 | `search_code` | **❌ 关键词搜索**，仅精确匹配 | **不推荐**，仅用于查找确定的常量或变量名 |
@@ -211,13 +206,14 @@ TOOL_USAGE_GUIDE = """
 2. **不要** 使用 `search_code` 搜索通用关键词（如 "function", "user"），这会产生大量无用结果
 
 **✅ 推荐行为**：
-1. **始终优先使用 RAG 工具** (`rag_query`, `security_search`)
-2. `rag_query` 可以理解自然语言，如 "Show me the login function"
-3. 代码定位优先使用 `code_search`，由系统自动选择 `read_file/search_code/list_files`
-4. 可达性验证优先使用 `verify_reachability`，由系统自动选择 flow 工具
+1. **始终优先使用 MCP 检索工具** (`qmd_query`, `search_code`)
+2. `qmd_query` 可以理解自然语言，如 "Show me the login function"
+3. 先用 `search_code` 定位到 `file_path:line`，再使用 `read_file` 做窗口化阅读
+4. 可达性验证优先使用 `verify_reachability`，由系统按固定流程执行并收敛 read_file 范围
 5. 仅在确实需要精确匹配特定字符串时才使用 `search_code`
 6. 需要复杂策略时先使用 `brainstorming` 产出序列化思路，再执行工具调用
 7. 多文件执行前使用 `file_planning` 先生成文件级 TODO，避免重复读写
+8. `read_file` 禁止无锚点直接读取，必须提供行号或先完成定位
 
 ### 📋 推荐分析流程
 
@@ -231,7 +227,7 @@ Action Input: {"directory": ".", "max_depth": 2}
 
 **🔥 RAG 搜索关键逻辑（RAG 优先！）：**
 ```
-Action: rag_query
+Action: qmd_query
 Action Input: {"query": "用户的登录认证逻辑在哪里？", "top_k": 5}
 ```
 
@@ -248,7 +244,7 @@ Action Input: {"target_path": "."}
 - 使用 `read_file` 查看完整上下文
 - 使用 `dataflow_analysis` 追踪 Source -> Sink
 - 使用 `controlflow_analysis_light` 验证可达性与控制条件
-- 在验证阶段优先调用 `verify_reachability`，由执行层自动路由并避免无效重试
+- 在验证阶段优先调用 `verify_reachability`，由执行层按固定证据链编排并避免无效重试
 - 对鉴权/越权场景使用 `logic_authz_analysis` 补齐业务约束证据
 - 验证是否为真实漏洞
 
@@ -358,23 +354,20 @@ TOOL_USAGE_GUIDE = """
 | `dataflow_analysis` | 数据流追踪验证 |
 | `code_analysis` | 代码结构分析 |
 
-#### 辅助工具（RAG 优先！）
+#### 辅助工具（MCP 检索优先）
 | 工具 | 用途 |
 |------|------|
-| `rag_query` | **🔥 首选代码搜索工具** - 语义搜索，查找业务逻辑和漏洞上下文 |
-| `security_search` | **🔥 首选安全搜索工具** - 查找特定的安全敏感代码模式 |
-| `function_context` | **🔥 理解代码结构** - 获取函数调用关系和定义 |
-| `read_file` | 读取文件内容验证发现 |
+| `qmd_query` | **🔥 首选语义检索工具** - MCP 检索上下文 |
+| `locate_enclosing_function` | **🔥 函数归属定位** - 基于 Code Index MCP 定位命中代码所属函数 |
+| `read_file` | 严格锚点窗口读取（先定位行号，再读局部上下文） |
 | `list_files` | ⚠️ **仅用于** 了解根目录结构，**严禁** 用于遍历代码查找内容 |
 | `search_code` | ⚠️ **仅用于** 查找非常具体的字符串常量，**严禁** 作为主要代码搜索手段 |
-| `query_security_knowledge` | 查询安全知识库 |
 
 ### 🔍 代码搜索工具对比
 | 工具 | 特点 | 适用场景 |
 |------|------|---------|
-| `rag_query` | **🔥 语义搜索**，理解代码含义 | **首选！** 查找"处理用户输入的函数"、"数据库查询逻辑" |
-| `security_search` | **🔥 安全专用搜索** | **首选！** 查找"SQL注入相关代码"、"认证授权代码" |
-| `function_context` | **🔥 函数上下文** | 查找某函数的调用者和被调用者 |
+| `qmd_query` | **🔥 语义搜索**，理解代码含义 | **首选！** 查找"处理用户输入的函数"、"数据库查询逻辑" |
+| `locate_enclosing_function` | **🔥 函数归属定位** | 查找命中代码所属函数和范围 |
 | `search_code` | **❌ 关键词搜索**，仅精确匹配 | **不推荐**，仅用于查找确定的常量或变量名 |
 
 **❌ 严禁行为**：
@@ -382,9 +375,10 @@ TOOL_USAGE_GUIDE = """
 2. **不要** 使用 `search_code` 搜索通用关键词（如 "function", "user"），这会产生大量无用结果
 
 **✅ 推荐行为**：
-1. **始终优先使用 RAG 工具** (`rag_query`, `security_search`)
-2. `rag_query` 可以理解自然语言，如 "Show me the login function"
-3. 仅在确实需要精确匹配特定字符串时才使用 `search_code`
+1. **始终优先使用 MCP 检索工具** (`qmd_query`, `search_code`)
+2. `qmd_query` 可以理解自然语言，如 "Show me the login function"
+3. 先用 `search_code` 定位到 `file_path:line`，再使用 `read_file` 做窗口化阅读
+4. `read_file` 禁止无锚点直接读取，必须提供行号或先完成定位
 
 ### 📋 推荐分析流程
 
@@ -396,9 +390,9 @@ Action Input: {"directory": ".", "max_depth": 2}
 ```
 了解项目根目录结构（不要遍历全项目）
 
-**🔥 RAG 搜索关键逻辑（RAG 优先！）：**
+**🔥 MCP 检索关键逻辑（QMD 优先）：**
 ```
-Action: rag_query
+Action: qmd_query
 Action Input: {"query": "用户的登录认证逻辑在哪里？", "top_k": 5}
 ```
 

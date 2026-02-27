@@ -163,14 +163,53 @@ export function getTimeString(): string {
   });
 }
 
+function formatDurationHms(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600)
+    .toString()
+    .padStart(2, "0");
+  const minutes = Math.floor((safe % 3600) / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (safe % 60).toString().padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+export function formatRelativeFromStart(
+  startedAtIso: string,
+  eventIso: string,
+): string {
+  const startedMs = new Date(startedAtIso).getTime();
+  const eventMs = new Date(eventIso).getTime();
+  if (!Number.isFinite(startedMs) || !Number.isFinite(eventMs)) {
+    return "00:00:00";
+  }
+  return formatDurationHms((eventMs - startedMs) / 1000);
+}
+
+export function resolveLogDisplayTime(
+  startedAtIso: string | null | undefined,
+  eventIso: string | null | undefined,
+  fallbackNow = getTimeString(),
+): string {
+  const started = String(startedAtIso || "").trim();
+  const eventTs = String(eventIso || "").trim();
+  if (!started || !eventTs) {
+    return fallbackNow;
+  }
+  return formatRelativeFromStart(started, eventTs);
+}
+
 /**
  * Create a log item
  */
-export function createLogItem(item: Omit<LogItem, "id" | "time">): LogItem {
+export function createLogItem(
+  item: Omit<LogItem, "id" | "time"> & { time?: string; eventTimestamp?: string | null },
+): LogItem {
   return {
     ...item,
     id: generateLogId(),
-    time: getTimeString(),
+    time: typeof item.time === "string" && item.time.trim() ? item.time : getTimeString(),
   };
 }
 

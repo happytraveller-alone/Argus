@@ -1,0 +1,158 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - link "VulHunter VulHunter" [ref=e8] [cursor=pointer]:
+            - /url: /
+            - img "VulHunter" [ref=e11]
+            - generic [ref=e14]: VulHunter
+          - button [ref=e15] [cursor=pointer]:
+            - img [ref=e16]
+        - navigation [ref=e18]:
+          - generic [ref=e19]:
+            - link "首页" [ref=e20] [cursor=pointer]:
+              - /url: /
+              - img [ref=e22]
+              - generic [ref=e25]: 首页
+              - img [ref=e27]
+            - link "仪表盘" [ref=e29] [cursor=pointer]:
+              - /url: /dashboard
+              - img [ref=e31]
+              - generic [ref=e36]: 仪表盘
+              - img [ref=e38]
+            - link "项目管理" [ref=e40] [cursor=pointer]:
+              - /url: /projects
+              - img [ref=e42]
+              - generic [ref=e47]: 项目管理
+              - img [ref=e49]
+            - link "审计规则" [ref=e51] [cursor=pointer]:
+              - /url: /opengrep-rules
+              - img [ref=e53]
+              - generic [ref=e56]: 审计规则
+              - img [ref=e58]
+            - link "智能审计" [ref=e60] [cursor=pointer]:
+              - /url: /intelligent-audit
+              - img [ref=e62]
+              - generic [ref=e65]: 智能审计
+              - img [ref=e67]
+            - link "系统管理" [ref=e69] [cursor=pointer]:
+              - /url: /admin
+              - img [ref=e71]
+              - generic [ref=e74]: 系统管理
+              - img [ref=e76]
+        - generic [ref=e81]:
+          - img [ref=e82]
+          - button "中文" [ref=e86] [cursor=pointer]
+          - button "EN" [ref=e87] [cursor=pointer]
+    - main [ref=e88]:
+      - generic [ref=e89]:
+        - generic [ref=e90]:
+          - generic [ref=e93]:
+            - generic [ref=e94]:
+              - generic [ref=e95]:
+                - img [ref=e96]
+                - generic [ref=e102]: 任务
+              - generic [ref=e103]:
+                - generic [ref=e104]: superpowers-ui-e2e-040413
+                - generic [ref=e105]:
+                  - img [ref=e106]
+                  - generic [ref=e108]: 运行中
+                - generic [ref=e109]: "阶段: 分析"
+            - generic [ref=e110]: 分析阶段进行中
+          - generic [ref=e111]:
+            - button "返回" [ref=e112] [cursor=pointer]:
+              - img
+              - generic [ref=e113]: 返回
+            - button "中止" [ref=e114] [cursor=pointer]:
+              - img
+              - generic [ref=e115]: 中止
+            - button "导出报告" [ref=e117] [cursor=pointer]:
+              - img
+              - generic [ref=e118]: 导出报告
+            - button "新建审计" [ref=e119] [cursor=pointer]:
+              - img
+              - generic [ref=e120]: 新建审计
+        - generic [ref=e123]:
+          - generic [ref=e124]:
+            - generic [ref=e126]:
+              - generic [ref=e127]:
+                - img [ref=e128]
+                - generic [ref=e130]: 事件日志
+                - generic [ref=e131]: "0"
+              - generic [ref=e132]:
+                - button "导出日志" [ref=e133] [cursor=pointer]:
+                  - img [ref=e134]
+                  - generic [ref=e137]: 导出日志
+                - button "自动滚动" [ref=e138] [cursor=pointer]:
+                  - img [ref=e139]
+                  - generic [ref=e141]: 自动滚动
+            - generic [ref=e146]:
+              - img [ref=e147]
+              - generic [ref=e149]: 等待活动日志...
+          - generic [ref=e150]:
+            - generic [ref=e152]:
+              - generic [ref=e153]:
+                - generic [ref=e154]:
+                  - generic [ref=e155]:
+                    - generic [ref=e156]: 潜在缺陷
+                    - generic [ref=e157]: "0"
+                    - generic [ref=e158]: 待验证 0
+                    - generic [ref=e159]: 已验证 0
+                    - generic [ref=e160]: 实时
+                  - button "清空" [disabled]:
+                    - img
+                    - text: 清空
+                - generic [ref=e161]:
+                  - generic [ref=e162]:
+                    - img [ref=e163]
+                    - textbox "搜索标题/类型/文件..." [ref=e166]
+                  - generic [ref=e167]:
+                    - combobox [ref=e168] [cursor=pointer]:
+                      - generic: 全部
+                      - img [ref=e169]
+                    - combobox [ref=e171] [cursor=pointer]:
+                      - generic: 全部
+                      - img [ref=e172]
+                - generic [ref=e174]:
+                  - generic [ref=e175]: 严重 0
+                  - generic [ref=e176]: 高危 0
+                  - generic [ref=e177]: 中危 0
+                  - generic [ref=e178]: 低危 0
+                  - generic [ref=e179]: 无效 0
+              - generic [ref=e182]:
+                - img [ref=e183]
+                - generic [ref=e185]: 等待新缺陷...
+            - generic [ref=e189]:
+              - generic [ref=e191]:
+                - generic [ref=e192]:
+                  - generic [ref=e193]:
+                    - img [ref=e195]
+                    - generic [ref=e197]: 进度
+                  - generic [ref=e198]:
+                    - generic [ref=e199]: "30"
+                    - generic [ref=e200]: "%"
+                - generic [ref=e205]:
+                  - generic [ref=e206]:
+                    - img [ref=e207]
+                    - generic [ref=e212]: 已扫描文件
+                  - generic [ref=e213]:
+                    - text: "0"
+                    - generic [ref=e214]: / 1
+              - generic [ref=e215]:
+                - generic [ref=e216]:
+                  - img [ref=e218]
+                  - generic [ref=e223]:
+                    - generic [ref=e224]: 迭代次数
+                    - generic [ref=e225]: "20"
+                - generic [ref=e226]:
+                  - img [ref=e228]
+                  - generic [ref=e230]:
+                    - generic [ref=e231]: 工具调用
+                    - generic [ref=e232]: "26"
+                - generic [ref=e233]:
+                  - img [ref=e235]
+                  - generic [ref=e238]:
+                    - generic [ref=e239]: Token
+                    - generic [ref=e240]: 342.7k

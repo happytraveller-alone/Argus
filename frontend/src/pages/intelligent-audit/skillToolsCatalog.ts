@@ -1,4 +1,5 @@
 export type SkillToolCategory =
+  "模型基础增强类" |
   "代码读取与定位" |
   "候选发现与模式扫描" |
   "可达性与逻辑分析" |
@@ -17,6 +18,7 @@ export interface SkillToolCatalogItem {
 }
 
 export const SKILL_TOOL_CATEGORY_ORDER: SkillToolCategory[] = [
+  "模型基础增强类",
   "代码读取与定位",
   "候选发现与模式扫描",
   "可达性与逻辑分析",
@@ -24,6 +26,118 @@ export const SKILL_TOOL_CATEGORY_ORDER: SkillToolCategory[] = [
 ];
 
 const SKILL_TOOLS_CATALOG_RAW: SkillToolCatalogItem[] = [
+  {
+    id: "mcp-builder",
+    category: "模型基础增强类",
+    summary: `MCP 设计模板技能：用于定义服务能力边界、输入输出契约与安全约束。`,
+    goal: "为新 MCP 能力设计提供结构化模板，减少接口遗漏与集成返工。",
+    taskList: [
+      "梳理 MCP server 的目标能力与执行函数清单。",
+      "定义输入输出接口、失败模式与降级策略。",
+      "输出可执行的接入检查项与联调计划。",
+    ],
+    inputChecklist: [
+      "`server_goal` (string, required): MCP 服务目标",
+      "`io_schema` (any, optional): 输入输出契约草案",
+      "`security_constraints` (any, optional): 安全边界与限制条件",
+    ],
+    exampleInput: `\`\`\`json
+{
+  "server_goal": "为代码检索提供统一 MCP 接口",
+  "io_schema": null,
+  "security_constraints": ["只读调用", "参数白名单"]
+}
+\`\`\``,
+    pitfalls: [
+      "不要跳过输入输出契约定义直接开始实现。",
+      "不要忽略失败场景与降级路径设计。",
+      "不要产出无法映射到现有路由/配置体系的方案。",
+    ],
+  },
+  {
+    id: "skill-creator",
+    category: "模型基础增强类",
+    summary: `Skill 设计模板技能：用于规范化创建/维护 skill 的提示词、约束和示例。`,
+    goal: "沉淀可复用的 skill 规范，提升模型工具调用一致性与可维护性。",
+    taskList: [
+      "明确 skill 的触发场景与职责边界。",
+      "生成结构化提示词与误用防护规则。",
+      "提供最小可运行示例与验收标准。",
+    ],
+    inputChecklist: [
+      "`skill_goal` (string, required): skill 目标",
+      "`tool_bindings` (any, optional): 关联工具或能力",
+      "`safety_rules` (any, optional): 安全与误用限制",
+    ],
+    exampleInput: `\`\`\`json
+{
+  "skill_goal": "规范化漏洞验证阶段的工具调用",
+  "tool_bindings": ["read_file", "search_code"],
+  "safety_rules": ["禁止无证据结论"]
+}
+\`\`\``,
+    pitfalls: [
+      "不要将 schedule/环境信息混入 skill 任务描述。",
+      "不要只写高层描述而缺少可执行输入输出约束。",
+      "不要忽略误用提示与失败回退策略。",
+    ],
+  },
+  {
+    id: "planning-with-files",
+    category: "模型基础增强类",
+    summary: `文件规划模板技能：围绕文件清单拆解任务步骤，生成可执行计划。`,
+    goal: "将多文件分析任务转化为清晰的执行顺序与文件级动作。",
+    taskList: [
+      "根据目标文件集合生成阶段化执行计划。",
+      "为每个文件指定读取/分析/验证动作。",
+      "输出可追踪的进度规则与完成标准。",
+    ],
+    inputChecklist: [
+      "`file_targets` (array, required): 目标文件清单",
+      "`goal` (string, required): 任务目标",
+      "`constraints` (any, optional): 执行约束与优先级",
+    ],
+    exampleInput: `\`\`\`json
+{
+  "file_targets": ["src/auth.py", "src/user.py"],
+  "goal": "定位认证绕过风险点",
+  "constraints": ["先读后验", "单次最多2个文件"]
+}
+\`\`\``,
+    pitfalls: [
+      "不要输出无法映射到具体文件动作的抽象计划。",
+      "不要忽略文件间依赖导致执行顺序错误。",
+      "不要在计划中混入与当前目标无关的文件。",
+    ],
+  },
+  {
+    id: "superpowers",
+    category: "模型基础增强类",
+    summary: `高阶协作模板技能：支持头脑风暴、策略对比与决策收敛。`,
+    goal: "在复杂问题下快速生成多方案并输出可解释决策。",
+    taskList: [
+      "围绕问题生成多个可行策略选项。",
+      "比较 tradeoff 并给出推荐路径。",
+      "形成带依据的决策结论与后续动作。",
+    ],
+    inputChecklist: [
+      "`problem_statement` (string, required): 问题描述",
+      "`tradeoffs` (any, optional): 关键取舍条件",
+      "`evidence` (any, optional): 现有证据与约束",
+    ],
+    exampleInput: `\`\`\`json
+{
+  "problem_statement": "MCP 与 Skill 目录需要重新归类",
+  "tradeoffs": ["兼容历史调用", "保持界面清晰"],
+  "evidence": ["当前目录混入 skill-pack"]
+}
+\`\`\``,
+    pitfalls: [
+      "不要只给单一路径而缺少备选方案。",
+      "不要给出与现有证据矛盾的决策结论。",
+      "不要省略推荐方案的原因与风险说明。",
+    ],
+  },
   {
     id: "controlflow_analysis_light",
     category: "可达性与逻辑分析",
@@ -153,14 +267,18 @@ const SKILL_TOOLS_CATALOG_RAW: SkillToolCatalogItem[] = [
       "提取函数级上下文供后续验证链路使用。",
     ],
     inputChecklist: [
-      "`file_path` (string, required): 源文件路径",
-      "`function_name` (string, required): 要提取的函数名",
+      "`code` (string, required): 目标函数代码片段（用于推断符号名）",
+      "`file_name` (string, required): 所在文件名",
+      "`file_path` (string, required): 所在文件路径",
+      "`line` (integer, optional): 函数附近行号",
       "`include_imports` (boolean, optional): 是否包含 import 语句",
     ],
     exampleInput: `\`\`\`json
 {
-  "file_path": "<text>",
-  "function_name": "<text>",
+  "code": "def process_command(cmd):\\n    return cmd",
+  "file_name": "api.py",
+  "file_path": "app/api.py",
+  "line": 12,
   "include_imports": true
 }
 \`\`\``,
@@ -168,6 +286,7 @@ const SKILL_TOOLS_CATALOG_RAW: SkillToolCatalogItem[] = [
       "不要在输入缺失关键参数时盲目调用。",
       "不要将该工具输出直接当作最终结论，必须结合上下文复核。",
       "不要在权限不足或路径不合法时重复重试同一输入。",
+      "旧参数 function_name 仅兼容保留，优先使用 code+file_name+file_path。",
     ],
   },
   {
@@ -813,6 +932,11 @@ const SKILL_TOOLS_CATALOG_RAW: SkillToolCatalogItem[] = [
 ];
 
 const REMOVED_SKILL_IDS = new Set<string>([
+  "function_context",
+  "get_vulnerability_knowledge",
+  "query_security_knowledge",
+  "rag_query",
+  "security_search",
   "test_command_injection",
   "test_deserialization",
   "test_path_traversal",

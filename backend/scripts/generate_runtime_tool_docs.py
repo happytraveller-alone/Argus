@@ -15,18 +15,90 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.api.v1.endpoints.agent_tasks import _initialize_tools  # noqa: E402
-from app.services.agent.tools import FunctionContextTool, RAGQueryTool, SecurityCodeSearchTool  # noqa: E402
 
 
 DOCS_ROOT = BACKEND_DIR / "docs" / "agent-tools"
 TOOLS_DOC_DIR = DOCS_ROOT / "tools"
+SKILLS_DOC_DIR = DOCS_ROOT / "skills"
 SHARED_CATALOG_PATH = DOCS_ROOT / "TOOL_SHARED_CATALOG.md"
 INDEX_PATH = DOCS_ROOT / "INDEX.md"
+SKILLS_INDEX_PATH = DOCS_ROOT / "SKILLS_INDEX.md"
+PLAYBOOK_PATH = DOCS_ROOT / "MCP_TOOL_PLAYBOOK.md"
 
-OPTIONAL_RUNTIME_TOOLS = {
-    "rag_query": ("analysis", RAGQueryTool(SimpleNamespace())),
-    "security_search": ("analysis", SecurityCodeSearchTool(SimpleNamespace())),
-    "function_context": ("analysis", FunctionContextTool(SimpleNamespace())),
+OPTIONAL_RUNTIME_TOOLS: Dict[str, Tuple[str, Any]] = {}
+
+FILE_TOOL_SKILL_SPECS: Dict[str, Dict[str, Any]] = {
+    "read_file": {
+        "goal": "在已定位代码行附近读取最小必要上下文，形成可复核证据。",
+        "contracts": [
+            "必填: `file_path`, `start_line`, `end_line`。",
+            "严格模式: 禁止无锚点读取；必须先定位再读取。",
+        ],
+        "workflow": [
+            "`search_code` 定位 `file_path:line`。",
+            "`read_file` 读取窗口 (`line-60` 到 `line+99`)。",
+            "必要时补 `locate_enclosing_function`。",
+        ],
+    },
+    "list_files": {
+        "goal": "确认目录结构与候选路径，不做大范围遍历。",
+        "contracts": [
+            "推荐: `directory`。",
+            "可选: `pattern`, `recursive`, `max_files`。",
+        ],
+        "workflow": [
+            "`list_files` 确认路径存在。",
+            "`search_code` 精确定位关键词。",
+            "`read_file` 读取局部窗口。",
+        ],
+    },
+    "search_code": {
+        "goal": "快速定位证据行，作为 `read_file` 锚点来源。",
+        "contracts": [
+            "必填: `keyword`。",
+            "可选: `directory`, `file_pattern`, `is_regex`, `max_results`。",
+        ],
+        "workflow": [
+            "`search_code` 获取 `file:line`。",
+            "`read_file` 做窗口化验证。",
+            "必要时补 `locate_enclosing_function`。",
+        ],
+    },
+    "extract_function": {
+        "goal": "提取函数体，支撑漏洞根因与修复分析。",
+        "contracts": [
+            "必填: `file_path`, `function_name`。",
+        ],
+        "workflow": [
+            "`search_code` 定位函数符号。",
+            "`locate_enclosing_function` 确认范围。",
+            "`extract_function` 提取函数体。",
+        ],
+    },
+    "locate_enclosing_function": {
+        "goal": "将命中行绑定到所属函数，补齐函数级证据。",
+        "contracts": [
+            "必填: `file_path`。",
+            "推荐: `line_start`（或 `line`）。",
+        ],
+        "workflow": [
+            "`search_code` 找到命中行。",
+            "`locate_enclosing_function` 获取函数名与范围。",
+            "`read_file`/`extract_function` 深入验证。",
+        ],
+    },
+    "function_context": {
+        "goal": "保留函数上下文技能规范，执行时改用标准 MCP 工具名。",
+        "contracts": [
+            "兼容参数: `file_path`, `line_start`, `function_name`。",
+            "建议路径: `locate_enclosing_function + extract_function`。",
+        ],
+        "workflow": [
+            "先定位函数归属。",
+            "再提取函数体。",
+            "最后窗口化补证据。",
+        ],
+    },
 }
 
 CATEGORY_ORDER = [
@@ -303,10 +375,149 @@ def _build_index(registry: Dict[str, Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _build_skill_doc(tool_name: str, spec: Dict[str, Any]) -> str:
+    goal = str(spec.get("goal") or "").strip() or "N/A"
+    contracts = spec.get("contracts") if isinstance(spec.get("contracts"), list) else []
+    workflow = spec.get("workflow") if isinstance(spec.get("workflow"), list) else []
+
+    contract_lines = "".join(f"- {str(item).strip()}\n" for item in contracts if str(item).strip()) or "- N/A\n"
+    workflow_entries = [str(item).strip() for item in workflow if str(item).strip()]
+    workflow_lines = (
+        "".join(f"{idx}. {item}\n" for idx, item in enumerate(workflow_entries, start=1))
+        if workflow_entries
+        else "1. N/A\n"
+    )
+
+    return f"""# Skill: {tool_name}
+
+## 目标
+- {goal}
+
+## 输入契约
+{contract_lines}
+## 推荐调用链
+{workflow_lines}
+## 禁止用法
+- 不要在无有效输入时重复调用。
+- 不要跳过定位步骤直接下结论。
+
+## 最小示例
+```json
+{{"tool":"{tool_name}","note":"请按项目实际参数替换"}}
+```
+
+## 失败恢复
+- 先核对输入参数与路径范围。
+- 必要时回到 `search_code -> read_file` 重新建立证据链。
+"""
+
+
+def _build_skills_index() -> str:
+    lines = [
+        "# Agent Tool Skills Index",
+        "",
+        f"- Skill 文档目录: `{SKILLS_DOC_DIR.relative_to(BACKEND_DIR)}`",
+        "",
+    ]
+    for tool_name in sorted(FILE_TOOL_SKILL_SPECS):
+        rel = (SKILLS_DOC_DIR / f"{tool_name}.skill.md").relative_to(BACKEND_DIR)
+        lines.append(f"- `{tool_name}` -> `{rel}`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_mcp_tool_playbook() -> str:
+    return """# MCP Tool Playbook
+
+> 目标：让所有 Agent 按需直接调用标准 MCP 工具，避免无效参数和错误路由。
+
+## 1) 工具总览矩阵
+
+| 标准工具名 | MCP Server | MCP Tool | 必填参数 | 典型输出 |
+| --- | --- | --- | --- | --- |
+| `search_code` | `code_index` (fallback `filesystem`) | `search_code_advanced` (`search_files`) | `keyword/pattern` | 命中位置（含 file_path 与 line） |
+| `read_file` | `filesystem` | `read_file` | `file_path + start_line/end_line` | 窗口化代码片段 |
+| `list_files` | `code_index` | `find_files` | `directory/path` | 文件列表 |
+| `locate_enclosing_function` | `code_index` | `get_file_summary` | `file_path`, `line_start` | 所属函数与范围 |
+| `extract_function` | `code_index` | `get_symbol_body` | `file_path`, `function_name/symbol_name` | 函数代码 |
+| `qmd_query` | `qmd` | `deep_search` | `query/searches` | 语义检索结果 |
+| `qmd_get` | `qmd` | `get` | `doc_id/id` | 文档详情 |
+| `qmd_multi_get` | `qmd` | `multi_get` | `ids` | 批量文档结果 |
+| `qmd_status` | `qmd` | `status` | 无 | 集合与索引状态 |
+| `sequential_thinking` / `reasoning_trace` | `sequentialthinking` | `sequentialthinking` | `thought` | 分步推理轨迹 |
+
+## 2) 文件读取链路（强约束）
+
+1. 先 `search_code` 定位：拿到 `file_path:line`。
+2. 再 `read_file` 窗口读取：优先 `line-60 ~ line+99`（最多 200 行）。
+3. 需要函数级证据时：调用 `locate_enclosing_function`，再按需 `extract_function`。
+
+## 3) QMD / SequentialThinking 最小调用模板
+
+```json
+{
+  "tool": "qmd_query",
+  "input": {
+    "query": "查找与认证绕过相关的入口函数",
+    "top_k": 5
+  }
+}
+```
+
+```json
+{
+  "tool": "sequential_thinking",
+  "input": {
+    "thought": "先定位入口，再验证可达性，再评估影响",
+    "thoughtNumber": 1,
+    "totalThoughts": 3,
+    "nextThoughtNeeded": true
+  }
+}
+```
+
+## 4) 常见误用与纠偏
+
+- 误用：`read_file` 不带行号直接读全文。
+  - 纠偏：先 `search_code`；若仍无法定位且已给定 `file_path`，仅允许读取 `1..120` 文件头窗口。
+- 误用：`search_code` 用泛化关键词（如 `function`, `user`）。
+  - 纠偏：优先用符号名/常量名，并补 `directory` 与 `file_pattern` 缩小范围。
+- 误用：使用虚拟工具名（如 `code_search`、`rag_query`）直接执行。
+  - 纠偏：改用标准工具名（`search_code`, `read_file`, `qmd_query` 等）。
+
+## 5) 可复制 Action Input 示例
+
+```json
+{
+  "action": "search_code",
+  "action_input": {
+    "keyword": "TM64_ASCTIME_FORMAT",
+    "directory": "src",
+    "file_pattern": "time64*",
+    "max_results": 8
+  }
+}
+```
+
+```json
+{
+  "action": "read_file",
+  "action_input": {
+    "file_path": "src/time64.c",
+    "start_line": 760,
+    "end_line": 840,
+    "max_lines": 120
+  }
+}
+```
+"""
+
+
 def generate_runtime_tool_docs() -> Dict[str, Any]:
     registry = collect_runtime_tools()
     DOCS_ROOT.mkdir(parents=True, exist_ok=True)
     TOOLS_DOC_DIR.mkdir(parents=True, exist_ok=True)
+    SKILLS_DOC_DIR.mkdir(parents=True, exist_ok=True)
 
     tool_categories: Dict[str, str] = {}
     for runtime_key in sorted(registry):
@@ -322,12 +533,22 @@ def generate_runtime_tool_docs() -> Dict[str, Any]:
 
     SHARED_CATALOG_PATH.write_text(_build_shared_catalog(registry, tool_categories), encoding="utf-8")
     INDEX_PATH.write_text(_build_index(registry), encoding="utf-8")
+    for tool_name, spec in FILE_TOOL_SKILL_SPECS.items():
+        (SKILLS_DOC_DIR / f"{tool_name}.skill.md").write_text(
+            _build_skill_doc(tool_name, spec),
+            encoding="utf-8",
+        )
+    SKILLS_INDEX_PATH.write_text(_build_skills_index(), encoding="utf-8")
+    PLAYBOOK_PATH.write_text(_build_mcp_tool_playbook(), encoding="utf-8")
 
     return {
         "tool_count": len(registry),
         "tools_dir": str(TOOLS_DOC_DIR),
+        "skills_dir": str(SKILLS_DOC_DIR),
         "shared_catalog": str(SHARED_CATALOG_PATH),
         "index": str(INDEX_PATH),
+        "skills_index": str(SKILLS_INDEX_PATH),
+        "playbook": str(PLAYBOOK_PATH),
     }
 
 
@@ -338,4 +559,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

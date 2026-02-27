@@ -7,10 +7,8 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.core.config import settings
 from app.services.agent.flow.models import FlowEvidence
 
-from .codebadger_mcp_client import CodeBadgerMCPClient
 from .codebadger_poc_query import (
     build_poc_trigger_chain_batch_cpgql_query,
     infer_codebadger_language,
@@ -44,18 +42,14 @@ class JoernClient:
         self._joern_bin = shutil.which("joern")
         self._version_checked = False
         self._version_ok = False
-        self._mcp_enabled = bool(settings.JOERN_MCP_ENABLED) if mcp_enabled is None else bool(mcp_enabled)
-        self._mcp_prefer = bool(settings.JOERN_MCP_PREFER) if mcp_prefer is None else bool(mcp_prefer)
-        self._mcp_url = str(settings.JOERN_MCP_URL) if mcp_url is None else str(mcp_url)
-        self._mcp_cpg_timeout_sec = (
-            int(settings.JOERN_MCP_CPG_TIMEOUT_SEC) if mcp_cpg_timeout_sec is None else int(mcp_cpg_timeout_sec)
-        )
-        self._mcp_query_timeout_sec = (
-            int(settings.JOERN_MCP_QUERY_TIMEOUT_SEC) if mcp_query_timeout_sec is None else int(mcp_query_timeout_sec)
-        )
+        self._mcp_enabled = False
+        self._mcp_prefer = False
+        self._mcp_url = str(mcp_url or "")
+        self._mcp_cpg_timeout_sec = int(mcp_cpg_timeout_sec or 0)
+        self._mcp_query_timeout_sec = int(mcp_query_timeout_sec or 0)
         self._mcp_checked = False
         self._mcp_ok = False
-        self._mcp = CodeBadgerMCPClient(url=self._mcp_url)
+        self._mcp = None
         # In-process cache to avoid regenerating CPG for repeated verifications
         # within the same task execution (project_root, language) -> codebase_hash.
         self._mcp_codebase_hash_cache: dict[tuple[str, str], str] = {}

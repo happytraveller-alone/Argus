@@ -181,6 +181,7 @@ class AgentEventEmitter:
         display_title: Optional[str] = None,
         cwe_id: Optional[str] = None,
         description: Optional[str] = None,
+        description_markdown: Optional[str] = None,
         verification_evidence: Optional[str] = None,
         code_snippet: Optional[str] = None,
         function_trigger_flow: Optional[List[str]] = None,
@@ -190,37 +191,54 @@ class AgentEventEmitter:
         reachability_function_end_line: Optional[int] = None,
         context_start_line: Optional[int] = None,
         context_end_line: Optional[int] = None,
+        finding_scope: Optional[str] = None,
+        verification_todo_id: Optional[str] = None,
+        verification_fingerprint: Optional[str] = None,
+        verification_status: Optional[str] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射漏洞发现事件"""
         if not finding_id:
             finding_id = str(uuid.uuid4())
         event_type = "finding_verified" if is_verified else "finding_new"
+        metadata = {
+            "id": finding_id,  # 🔥 添加 id 字段供前端使用
+            "title": title,
+            "display_title": display_title,
+            "severity": severity,
+            "vulnerability_type": vulnerability_type,
+            "file_path": file_path,
+            "line_start": line_start,
+            "line_end": line_end,
+            "is_verified": is_verified,
+            "cwe_id": cwe_id,
+            "description": description,
+            "description_markdown": description_markdown,
+            "verification_evidence": verification_evidence,
+            "code_snippet": code_snippet,
+            "function_trigger_flow": function_trigger_flow,
+            "reachability_file": reachability_file,
+            "reachability_function": reachability_function,
+            "reachability_function_start_line": reachability_function_start_line,
+            "reachability_function_end_line": reachability_function_end_line,
+            "context_start_line": context_start_line,
+            "context_end_line": context_end_line,
+        }
+        if finding_scope:
+            metadata["finding_scope"] = str(finding_scope)
+        if verification_todo_id:
+            metadata["verification_todo_id"] = str(verification_todo_id)
+        if verification_fingerprint:
+            metadata["verification_fingerprint"] = str(verification_fingerprint)
+        if verification_status:
+            metadata["verification_status"] = str(verification_status)
+        if isinstance(extra_metadata, dict):
+            metadata.update(extra_metadata)
         await self.emit(AgentEventData(
             event_type=event_type,
             finding_id=finding_id,
             message=f"{'✅ 已验证' if is_verified else '🔍 新发现'}: [{severity.upper()}] {title}",
-            metadata={
-                "id": finding_id,  # 🔥 添加 id 字段供前端使用
-                "title": title,
-                "display_title": display_title,
-                "severity": severity,
-                "vulnerability_type": vulnerability_type,
-                "file_path": file_path,
-                "line_start": line_start,
-                "line_end": line_end,
-                "is_verified": is_verified,
-                "cwe_id": cwe_id,
-                "description": description,
-                "verification_evidence": verification_evidence,
-                "code_snippet": code_snippet,
-                "function_trigger_flow": function_trigger_flow,
-                "reachability_file": reachability_file,
-                "reachability_function": reachability_function,
-                "reachability_function_start_line": reachability_function_start_line,
-                "reachability_function_end_line": reachability_function_end_line,
-                "context_start_line": context_start_line,
-                "context_end_line": context_end_line,
-            },
+            metadata=metadata,
         ))
     
     async def emit_info(self, message: str, metadata: Optional[Dict] = None):
@@ -285,12 +303,20 @@ class AgentEventEmitter:
             metadata=metadata,
         ))
     
-    async def emit_task_error(self, error: str, message: Optional[str] = None):
+    async def emit_task_error(
+        self,
+        error: str,
+        message: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
         """发射任务错误事件"""
+        payload = {"error": error}
+        if isinstance(metadata, dict):
+            payload.update(metadata)
         await self.emit(AgentEventData(
             event_type="task_error",
             message=message or f"❌ 任务失败: {error}",
-            metadata={"error": error},
+            metadata=payload,
         ))
     
     async def emit_task_cancelled(self, message: Optional[str] = None):
@@ -311,6 +337,127 @@ class EventManager:
         self.db_session_factory = db_session_factory
         self._event_queues: Dict[str, asyncio.Queue] = {}
         self._event_callbacks: Dict[str, List[Callable]] = {}
+        self._inflight_tool_calls: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self._tool_drain_waiters: Dict[str, asyncio.Event] = {}
+        self._inflight_lock = asyncio.Lock()
+
+    @staticmethod
+    def _normalize_tool_call_key(
+        tool_name: Optional[str],
+        tool_input: Optional[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]],
+    ) -> Optional[str]:
+        meta = metadata if isinstance(metadata, dict) else {}
+        tool_call_id = str(meta.get("tool_call_id") or "").strip()
+        if tool_call_id:
+            return f"id:{tool_call_id}"
+        name = str(tool_name or "").strip()
+        if not name:
+            return None
+        try:
+            serialized_input = json.dumps(tool_input or {}, ensure_ascii=False, sort_keys=True, default=str)
+        except Exception:
+            serialized_input = str(tool_input or "")
+        return f"sig:{name}:{serialized_input}"
+
+    def _ensure_tool_drain_waiter(self, task_id: str) -> asyncio.Event:
+        waiter = self._tool_drain_waiters.get(task_id)
+        if waiter is None:
+            waiter = asyncio.Event()
+            waiter.set()
+            self._tool_drain_waiters[task_id] = waiter
+        return waiter
+
+    async def _track_tool_event(
+        self,
+        *,
+        task_id: str,
+        event_type: str,
+        tool_name: Optional[str],
+        tool_input: Optional[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]],
+        timestamp: str,
+    ) -> None:
+        normalized_type = str(event_type or "").strip().lower()
+        if normalized_type not in {
+            "tool_call",
+            "tool_call_start",
+            "tool_result",
+            "tool_call_end",
+            "tool_call_error",
+        }:
+            return
+
+        key = self._normalize_tool_call_key(tool_name, tool_input, metadata)
+        if not key:
+            return
+
+        async with self._inflight_lock:
+            inflight = self._inflight_tool_calls.setdefault(task_id, {})
+            waiter = self._ensure_tool_drain_waiter(task_id)
+
+            if normalized_type in {"tool_call", "tool_call_start"}:
+                inflight[key] = {
+                    "key": key,
+                    "tool_name": str(tool_name or "").strip(),
+                    "tool_call_id": str((metadata or {}).get("tool_call_id") or "").strip() or None,
+                    "started_at": timestamp,
+                }
+                waiter.clear()
+                return
+
+            popped = inflight.pop(key, None)
+            if popped is None and key.startswith("sig:"):
+                tool_prefix = f"sig:{str(tool_name or '').strip()}:"
+                fallback_key = next(
+                    (candidate for candidate in list(inflight.keys()) if candidate.startswith(tool_prefix)),
+                    None,
+                )
+                if fallback_key:
+                    inflight.pop(fallback_key, None)
+
+            if not inflight:
+                waiter.set()
+
+    async def wait_for_tool_drain(
+        self,
+        task_id: str,
+        timeout_seconds: int = 180,
+    ) -> Dict[str, Any]:
+        safe_timeout = max(1, int(timeout_seconds or 180))
+        waiter = self._ensure_tool_drain_waiter(task_id)
+
+        async with self._inflight_lock:
+            pending_before = list(self._inflight_tool_calls.get(task_id, {}).values())
+            if not pending_before:
+                waiter.set()
+                return {
+                    "ready": True,
+                    "timed_out": False,
+                    "elapsed_ms": 0,
+                    "pending_tool_calls": [],
+                }
+            waiter.clear()
+
+        start = datetime.now(timezone.utc)
+        timed_out = False
+        try:
+            await asyncio.wait_for(waiter.wait(), timeout=safe_timeout)
+        except asyncio.TimeoutError:
+            timed_out = True
+
+        elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
+        async with self._inflight_lock:
+            pending_after = list(self._inflight_tool_calls.get(task_id, {}).values())
+            ready = len(pending_after) == 0
+            if ready:
+                waiter.set()
+        return {
+            "ready": ready,
+            "timed_out": timed_out and not ready,
+            "elapsed_ms": elapsed_ms,
+            "pending_tool_calls": pending_after,
+        }
     
     async def add_event(
         self,
@@ -347,6 +494,15 @@ class EventManager:
             "metadata": metadata,
             "timestamp": timestamp.isoformat(),
         }
+
+        await self._track_tool_event(
+            task_id=task_id,
+            event_type=event_type,
+            tool_name=tool_name,
+            tool_input=tool_input,
+            metadata=metadata,
+            timestamp=event_data["timestamp"],
+        )
         
         # 保存到数据库（跳过高频事件如 thinking_token）
         skip_db_events = {"thinking_token"}
@@ -442,6 +598,10 @@ class EventManager:
         """移除事件队列"""
         if task_id in self._event_queues:
             del self._event_queues[task_id]
+        self._inflight_tool_calls.pop(task_id, None)
+        waiter = self._tool_drain_waiters.pop(task_id, None)
+        if waiter is not None:
+            waiter.set()
     
     def add_callback(self, task_id: str, callback: Callable):
         """添加事件回调"""
@@ -590,5 +750,9 @@ class EventManager:
         
         # 清理所有回调
         self._event_callbacks.clear()
+        self._inflight_tool_calls.clear()
+        for waiter in self._tool_drain_waiters.values():
+            waiter.set()
+        self._tool_drain_waiters.clear()
         
         logger.debug("EventManager closed")

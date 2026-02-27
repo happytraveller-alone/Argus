@@ -475,6 +475,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                                 finding.get("file_path", ""),
                                 finding.get("line_start"),
                                 line_end=finding.get("line_end"),
+                                finding_scope="analysis_preview",
                                 display_title=title_value,
                                 cwe_id=(
                                     str(finding.get("cwe_id")).strip()
@@ -484,6 +485,11 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                                 description=(
                                     str(finding.get("description"))
                                     if finding.get("description") is not None
+                                    else None
+                                ),
+                                description_markdown=(
+                                    str(finding.get("description_markdown"))
+                                    if finding.get("description_markdown") is not None
                                     else None
                                 ),
                                 verification_evidence=(
@@ -502,6 +508,11 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                                 code_snippet=(
                                     str(finding.get("code_snippet"))
                                     if finding.get("code_snippet") is not None
+                                    else None
+                                ),
+                                code_context=(
+                                    str(finding.get("code_context"))
+                                    if finding.get("code_context") is not None
                                     else None
                                 ),
                                 function_trigger_flow=(

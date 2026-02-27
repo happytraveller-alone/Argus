@@ -1,0 +1,69 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - link "VulHunter VulHunter" [ref=e8] [cursor=pointer]:
+            - /url: /
+            - img "VulHunter" [ref=e11]
+            - generic [ref=e14]: VulHunter
+          - button [ref=e15] [cursor=pointer]:
+            - img [ref=e16]
+        - navigation [ref=e18]:
+          - generic [ref=e19]:
+            - link "首页" [ref=e20] [cursor=pointer]:
+              - /url: /
+              - img [ref=e22]
+              - generic [ref=e25]: 首页
+              - img [ref=e27]
+            - link "仪表盘" [ref=e29] [cursor=pointer]:
+              - /url: /dashboard
+              - img [ref=e31]
+              - generic [ref=e36]: 仪表盘
+              - img [ref=e38]
+            - link "项目管理" [ref=e40] [cursor=pointer]:
+              - /url: /projects
+              - img [ref=e42]
+              - generic [ref=e47]: 项目管理
+              - img [ref=e49]
+            - link "审计规则" [ref=e51] [cursor=pointer]:
+              - /url: /opengrep-rules
+              - img [ref=e53]
+              - generic [ref=e56]: 审计规则
+              - img [ref=e58]
+            - link "智能审计" [ref=e60] [cursor=pointer]:
+              - /url: /intelligent-audit
+              - img [ref=e63]
+              - generic [ref=e66]: 智能审计
+            - link "系统管理" [ref=e67] [cursor=pointer]:
+              - /url: /admin
+              - img [ref=e69]
+              - generic [ref=e72]: 系统管理
+              - img [ref=e74]
+        - generic [ref=e79]:
+          - img [ref=e80]
+          - button "中文" [ref=e84] [cursor=pointer]
+          - button "EN" [ref=e85] [cursor=pointer]
+    - main [ref=e86]:
+      - generic [ref=e89]:
+        - tablist [ref=e90]:
+          - tab "LLM 配置" [selected] [ref=e91] [cursor=pointer]:
+            - img
+            - text: LLM 配置
+          - tab "MCP 配置" [ref=e92] [cursor=pointer]:
+            - img
+            - text: MCP 配置
+          - tab "SKILL 配置" [ref=e93] [cursor=pointer]:
+            - img
+            - text: SKILL 配置
+        - tabpanel "LLM 配置" [ref=e94]:
+          - generic [ref=e95]:
+            - generic [ref=e96]:
+              - generic [ref=e97]:
+                - generic [ref=e98]: LLM（逻辑推理 / 编排决策）
+                - generic [ref=e99]: 配置模型参数与超时预算。
+              - paragraph [ref=e103]: 加载配置中...
+            - generic [ref=e104]:
+              - generic [ref=e106]: RAG（向量索引 / 代码向量化）
+              - paragraph [ref=e110]: 加载配置中...

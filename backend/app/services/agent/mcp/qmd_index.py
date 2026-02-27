@@ -11,10 +11,53 @@ from typing import Any, Dict, List, Optional, Protocol
 logger = logging.getLogger(__name__)
 
 
+def _normalize_tool_descriptor(tool: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(tool, dict):
+        source = dict(tool)
+    elif hasattr(tool, "model_dump"):
+        try:
+            dumped = tool.model_dump()  # type: ignore[attr-defined]
+        except Exception:
+            dumped = None
+        if not isinstance(dumped, dict):
+            return None
+        source = dict(dumped)
+    else:
+        source = {
+            "name": getattr(tool, "name", None),
+            "description": getattr(tool, "description", None),
+            "inputSchema": getattr(tool, "inputSchema", getattr(tool, "input_schema", None)),
+        }
+
+    name = str(source.get("name") or source.get("tool") or source.get("id") or "").strip()
+    if not name:
+        return None
+    schema = (
+        source.get("inputSchema")
+        or source.get("input_schema")
+        or source.get("schema")
+        or source.get("parameters")
+    )
+    if not isinstance(schema, dict):
+        schema = {}
+    return {
+        "name": name,
+        "description": str(source.get("description") or "").strip(),
+        "inputSchema": dict(schema),
+    }
+
+
 class _QmdAdapter(Protocol):
     runtime_domain: str
 
     def is_available(self) -> bool:
+        ...
+
+    @property
+    def availability_reason(self) -> Optional[str]:
+        ...
+
+    async def list_tools(self) -> List[Dict[str, Any]]:
         ...
 
     async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -73,11 +116,45 @@ class QmdLazyIndexAdapter:
             return bool(checker())
         return True
 
+    @property
+    def availability_reason(self) -> Optional[str]:
+        reason = getattr(self._adapter, "availability_reason", None)
+        reason_text = str(reason or "").strip()
+        return reason_text or None
+
+    async def list_tools(self) -> List[Dict[str, Any]]:
+        list_tools = getattr(self._adapter, "list_tools", None)
+        if not callable(list_tools):
+            return []
+        raw_tools = await list_tools()
+        if not isinstance(raw_tools, list):
+            return []
+        normalized: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in raw_tools:
+            tool = _normalize_tool_descriptor(item)
+            if not tool:
+                continue
+            tool_name = str(tool.get("name") or "").strip()
+            if not tool_name or tool_name in seen:
+                continue
+            seen.add(tool_name)
+            normalized.append(tool)
+        return normalized
+
     async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         payload = dict(arguments or {})
-        payload.setdefault("collections", [self._collection])
+        normalized_tool = str(tool_name or "").strip().lower()
+        collection_scoped_tools = {
+            "query",
+            "search",
+            "vector_search",
+            "deep_search",
+        }
+        if normalized_tool in collection_scoped_tools:
+            payload.setdefault("collection", self._collection)
 
-        if self.lazy_enabled and tool_name in {"query", "get", "multi_get", "status"}:
+        if self.lazy_enabled and normalized_tool in collection_scoped_tools:
             ensure_result = await self.ensure_project_collection()
             if not ensure_result.ok:
                 logger.warning(
@@ -111,7 +188,7 @@ class QmdLazyIndexAdapter:
             str(root),
             "--name",
             self._collection,
-            "--pattern",
+            "--mask",
             self.index_glob,
         ]
         completed = self._run_qmd_cmd(add_cmd)

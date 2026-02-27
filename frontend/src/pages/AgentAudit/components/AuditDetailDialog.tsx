@@ -2,10 +2,16 @@ import { useMemo } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowLeft,
+  ChevronDown,
   FileCode2,
   ListTree,
   Logs,
 } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +21,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type { AgentFinding, AgentTreeNode } from "@/shared/api/agentTasks";
 import type { LogItem } from "../types";
+import {
+  localizeAuditText,
+  toZhAgentName,
+  toZhLogType,
+  toZhSeverityLabel,
+  toZhStatus,
+} from "../localization";
 import FindingCodeWindow from "./FindingCodeWindow";
+import FindingNarrativeMarkdown from "./FindingNarrativeMarkdown";
+import { collectRawEvidenceEntries } from "./findingNarrative";
 
 interface AuditDetailDialogProps {
   open: boolean;
@@ -48,12 +63,6 @@ function formatLocation(finding: AgentFinding): string {
   return finding.file_path;
 }
 
-function buildFindingDetailText(finding: AgentFinding): string {
-  const description = String(finding.description || "").trim();
-  if (description) return description;
-  return "后端暂未返回漏洞根因文段。";
-}
-
 function pickFindingCode(finding: AgentFinding): {
   code: string;
   lineStart: number | null;
@@ -82,6 +91,18 @@ function pickFindingCode(finding: AgentFinding): {
     };
   }
   return null;
+}
+
+function getRawEvidenceFromFinding(finding: AgentFinding) {
+  return collectRawEvidenceEntries({
+    description: finding.description,
+    verification_evidence: finding.verification_evidence,
+    function_trigger_flow: finding.function_trigger_flow,
+    reachability_file: finding.reachability_file,
+    reachability_function: finding.reachability_function,
+    reachability_function_start_line: finding.reachability_function_start_line,
+    reachability_function_end_line: finding.reachability_function_end_line,
+  });
 }
 
 function Section({
@@ -113,7 +134,7 @@ export function AuditDetailDialog({
   const title = useMemo(() => {
     if (detailType === "log") return "日志详情";
     if (detailType === "finding") return "漏洞详情";
-    if (detailType === "agent") return "Agent 详情";
+    if (detailType === "agent") return "智能体详情";
     return "详情";
   }, [detailType]);
 
@@ -144,24 +165,26 @@ export function AuditDetailDialog({
             <>
               <Section title="概览">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline">{logItem.type}</Badge>
+                  <Badge variant="outline">{toZhLogType(logItem.type)}</Badge>
                   <Badge variant="outline">{logItem.time}</Badge>
                   {logItem.agentName && (
                     <Badge variant="outline">{logItem.agentName}</Badge>
                   )}
                   {logItem.tool?.status && (
                     <Badge variant="outline">
-                      工具状态: {logItem.tool.status}
+                      工具状态: {toZhStatus(logItem.tool.status)}
                     </Badge>
                   )}
                 </div>
-                <h3 className="text-sm font-semibold break-words">{logItem.title}</h3>
+                <h3 className="text-sm font-semibold break-words">
+                  {localizeAuditText(logItem.title)}
+                </h3>
               </Section>
 
               {logItem.content && (
                 <Section title="详细内容">
                   <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[60vh]">
-                    {logItem.content}
+                    {localizeAuditText(logItem.content)}
                   </pre>
                 </Section>
               )}
@@ -187,6 +210,9 @@ export function AuditDetailDialog({
                     filePath={finding.file_path}
                     lineStart={code.lineStart}
                     lineEnd={code.lineEnd}
+                    highlightStartLine={finding.line_start ?? code.lineStart}
+                    highlightEndLine={finding.line_end ?? code.lineEnd}
+                    focusLine={finding.line_start ?? code.lineStart}
                     title="命中代码"
                   />
                 );
@@ -194,21 +220,57 @@ export function AuditDetailDialog({
 
               <Section title="概览">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline">{finding.severity?.toUpperCase()}</Badge>
+                  <Badge variant="outline">{toZhSeverityLabel(finding.severity)}</Badge>
                 </div>
-                <h3 className="text-sm font-semibold break-words">{finding.title}</h3>
+                <h3 className="text-sm font-semibold break-words">
+                  {localizeAuditText(finding.title)}
+                </h3>
                 <div className="text-xs text-muted-foreground">
                   定位: {formatLocation(finding)}
                 </div>
               </Section>
 
               <Section title="漏洞详情（根因）">
-                <div className="text-[11px] text-muted-foreground">
-                  根因文段由后端统一生成并下发，前端仅做展示。
-                </div>
-                <div className="text-sm bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words leading-6">
-                  {buildFindingDetailText(finding)}
-                </div>
+                <FindingNarrativeMarkdown
+                  finding={{
+                    description: finding.description,
+                    description_markdown: finding.description_markdown,
+                    code_context: finding.code_context,
+                    code_snippet: finding.code_snippet,
+                    file_path: finding.file_path,
+                    line_start: finding.line_start,
+                    line_end: finding.line_end,
+                    function_trigger_flow: finding.function_trigger_flow,
+                    verification_evidence: finding.verification_evidence,
+                    reachability_file: finding.reachability_file,
+                    reachability_function: finding.reachability_function,
+                    reachability_function_start_line:
+                      finding.reachability_function_start_line,
+                    reachability_function_end_line:
+                      finding.reachability_function_end_line,
+                  }}
+                  className="rounded-md border border-border bg-background p-3"
+                />
+
+                <Collapsible className="rounded-md border border-border bg-card/60">
+                  <CollapsibleTrigger className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                    <span>原始证据</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="px-3 pb-3 space-y-2">
+                    {getRawEvidenceFromFinding(finding).map((item) => (
+                      <div key={item.key} className="space-y-1">
+                        <div className="text-[11px] text-muted-foreground font-mono">
+                          {item.label}
+                          {item.truncated ? " (已截断至 2000 字)" : ""}
+                        </div>
+                        <pre className="text-xs font-mono bg-background border border-border rounded-md p-2 whitespace-pre-wrap break-words">
+                          {item.value}
+                        </pre>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
               </Section>
             </>
           )}
@@ -217,8 +279,8 @@ export function AuditDetailDialog({
             <>
               <Section title="概览">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline">{agentNode.agent_type}</Badge>
-                  <Badge variant="outline">{agentNode.status}</Badge>
+                  <Badge variant="outline">{toZhAgentName(agentNode.agent_type)}</Badge>
+                  <Badge variant="outline">{toZhStatus(agentNode.status)}</Badge>
                 </div>
                 <h3 className="text-sm font-semibold break-words">{agentNode.agent_name}</h3>
                 <div className="text-xs text-muted-foreground">

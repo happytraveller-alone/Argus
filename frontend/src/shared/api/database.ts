@@ -394,6 +394,93 @@ export const api = {
     await apiClient.delete('/config/me');
   },
 
+  async listMcpTools(params?: {
+    mcp_ids?: string[];
+    include_internal?: boolean;
+  }): Promise<{
+    results: Array<{
+      mcp_id: string;
+      success: boolean;
+      tools: Array<{
+        name: string;
+        description: string;
+        inputSchema: Record<string, unknown>;
+      }>;
+      error?: string | null;
+      runtime_domain?: string | null;
+      listed_count: number;
+      visible_count: number;
+    }>;
+  }> {
+    const payload = {
+      mcp_ids: Array.isArray(params?.mcp_ids) ? params?.mcp_ids : undefined,
+      include_internal: Boolean(params?.include_internal),
+    };
+    const res = await apiClient.post('/config/mcp/tools/list', payload);
+    return res.data;
+  },
+
+  async verifyMcp(mcpId: string): Promise<{
+    success: boolean;
+    mcp_id: string;
+    checks: Array<{
+      step: string;
+      action: "tools/list" | "tools/call" | "policy/skip" | string;
+      success: boolean;
+      tool?: string | null;
+      runtime_domain?: string | null;
+      duration_ms: number;
+      error?: string | null;
+    }>;
+    verification_tools: string[];
+    discovered_tools: Array<{
+      name: string;
+      description?: string;
+      inputSchema?: Record<string, unknown>;
+    }>;
+    protocol_summary: {
+      mcp_id?: string;
+      list_tools_success?: boolean;
+      discovered_count?: number;
+      called_count?: number;
+      call_success_count?: number;
+      call_failed_count?: number;
+      arg_failed_count?: number;
+      skipped_unsupported_count?: number;
+      runtime_domains?: string[];
+      required_gate?: string[];
+      [key: string]: unknown;
+    };
+    project_context: {
+      project_id?: string;
+      project_name?: string;
+      source_type?: string;
+      project_root?: string;
+      fallback_used?: boolean;
+    };
+  }> {
+    const res = await apiClient.post('/config/mcp/verify', { mcp_id: mcpId });
+    return res.data;
+  },
+
+  async testQmdCli(): Promise<{
+    success: boolean;
+    command_base: string[];
+    checks: Array<{
+      name: string;
+      success: boolean;
+      command: string[];
+      exit_code?: number | null;
+      duration_ms: number;
+      stdout?: string;
+      stderr?: string;
+      error?: string | null;
+    }>;
+  }> {
+    const res = await apiClient.post('/config/qmd/cli/test');
+    return res.data;
+  },
+
   async testLLMConnection(params: {
     provider: string;
     apiKey: string;
@@ -413,12 +500,44 @@ export const api = {
     providers: Array<{
       id: string;
       name: string;
+      description: string;
       defaultModel: string;
       models: string[];
       defaultBaseUrl: string;
+      requiresApiKey: boolean;
+      supportsModelFetch: boolean;
+      fetchStyle: "openai_compatible" | "anthropic" | "azure_openai" | "native_static";
     }>;
   }> {
     const res = await apiClient.get('/config/llm-providers');
+    return res.data;
+  },
+
+  async fetchLLMModels(params: {
+    provider: string;
+    apiKey: string;
+    baseUrl?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    provider: string;
+    resolvedProvider: string;
+    models: string[];
+    defaultModel: string;
+    source: "online" | "fallback_static";
+    baseUrlUsed?: string;
+    modelMetadata?: Record<
+      string,
+      {
+        contextWindow?: number | null;
+        maxOutputTokens?: number | null;
+        recommendedMaxTokens?: number | null;
+        source?: string;
+      }
+    >;
+    tokenRecommendationSource?: string;
+  }> {
+    const res = await apiClient.post('/config/fetch-llm-models', params);
     return res.data;
   },
 

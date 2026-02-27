@@ -4,6 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { LOG_TYPE_CONFIG, SEVERITY_COLORS } from "../constants";
 import type { LogEntryProps, ToolStatus } from "../types";
 import { sanitizeAuditText } from "../utils";
+import {
+  localizeAuditText,
+  normalizeSeverityKey,
+  toZhSeverityLabel,
+} from "../localization";
 
 const LOG_TYPE_LABELS: Record<string, string> = {
   thinking: "思考",
@@ -32,7 +37,7 @@ const TOOL_STATUS_CLASS: Record<ToolStatus, string> = {
 };
 
 function formatTitle(title: string): string {
-  return sanitizeAuditText(title);
+  return sanitizeAuditText(localizeAuditText(title));
 }
 
 export const LogEntry = memo(function LogEntry({
@@ -56,8 +61,12 @@ export const LogEntry = memo(function LogEntry({
     ) : (
       config.icon
     );
-  const formattedTitle = formatTitle(item.title) || sanitizeAuditText(item.title);
-  const sanitizedContent = item.content ? sanitizeAuditText(item.content) : "";
+  const formattedTitle =
+    formatTitle(item.title) || sanitizeAuditText(localizeAuditText(item.title));
+  const sanitizedContent = item.content
+    ? sanitizeAuditText(localizeAuditText(item.content))
+    : "";
+  const severityKey = item.severity ? normalizeSeverityKey(item.severity) : null;
   const contentPreview = sanitizedContent
     ? sanitizedContent.slice(0, 220) + (sanitizedContent.length > 220 ? "..." : "")
     : "";
@@ -139,9 +148,9 @@ export const LogEntry = memo(function LogEntry({
               </Badge>
             ) : item.severity ? (
               <Badge
-                className={`h-6 px-2 text-[11px] uppercase ${SEVERITY_COLORS[item.severity] || SEVERITY_COLORS.info}`}
+                className={`h-6 px-2 text-[11px] ${SEVERITY_COLORS[severityKey || "medium"] || SEVERITY_COLORS.info}`}
               >
-                {item.severity}
+                {toZhSeverityLabel(severityKey)}
               </Badge>
             ) : (
               <span className="text-xs text-muted-foreground">-</span>

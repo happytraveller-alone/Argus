@@ -3,7 +3,26 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, ArrowLeft, ExternalLink, Search, Trash2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ChevronDown,
+  ExternalLink,
+  Search,
+  Trash2,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,14 +30,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import FindingCodeWindow from "./FindingCodeWindow";
+import FindingNarrativeMarkdown from "./FindingNarrativeMarkdown";
+import { collectRawEvidenceEntries } from "./findingNarrative";
+
+export type RealtimeVerificationProgress = "pending" | "verified";
+export type RealtimeDisplaySeverity =
+  | "critical"
+  | "high"
+  | "medium"
+  | "low"
+  | "invalid";
 
 export type RealtimeMergedFindingItem = {
   id: string;
+  merge_key?: string;
   fingerprint: string;
   title: string;
   display_title?: string | null;
   description?: string | null;
+  description_markdown?: string | null;
   severity: string;
+  display_severity: RealtimeDisplaySeverity;
+  verification_progress: RealtimeVerificationProgress;
   vulnerability_type: string;
   file_path?: string | null;
   line_start?: number | null;
@@ -43,7 +76,7 @@ const SEVERITY_ORDER: Record<string, number> = {
   high: 1,
   medium: 2,
   low: 3,
-  info: 4,
+  invalid: 4,
 };
 
 const SEVERITY_BADGE_CLASS: Record<string, string> = {
@@ -51,7 +84,8 @@ const SEVERITY_BADGE_CLASS: Record<string, string> = {
   high: "bg-orange-500/20 text-orange-600 dark:text-orange-300 border-orange-500/40",
   medium: "bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40",
   low: "bg-sky-500/20 text-sky-600 dark:text-sky-300 border-sky-500/40",
-  info: "bg-zinc-500/20 text-zinc-700 dark:text-zinc-300 border-zinc-500/40",
+  invalid:
+    "bg-zinc-500/20 text-zinc-700 dark:text-zinc-300 border-zinc-500/40",
 };
 
 const SEVERITY_LABEL_ZH: Record<string, string> = {
@@ -59,19 +93,42 @@ const SEVERITY_LABEL_ZH: Record<string, string> = {
   high: "高危",
   medium: "中危",
   low: "低危",
-  info: "信息",
+  invalid: "无效",
 };
 
-function normalizeSeverity(value: string): string {
+function normalizeDisplaySeverity(value: string): RealtimeDisplaySeverity {
   const key = String(value || "").trim().toLowerCase();
-  if (!key) return "info";
+  if (!key) return "medium";
   if (key in SEVERITY_ORDER) return key;
-  return "info";
+  if (key === "info") return "low";
+  return "medium";
 }
 
-function severityToZh(value: string): string {
-  const key = normalizeSeverity(value);
-  return SEVERITY_LABEL_ZH[key] || SEVERITY_LABEL_ZH.info;
+function normalizeVerificationProgress(
+  value: string,
+): RealtimeVerificationProgress {
+  return String(value || "").trim().toLowerCase() === "verified"
+    ? "verified"
+    : "pending";
+}
+
+function severityToZh(value: RealtimeDisplaySeverity): string {
+  return SEVERITY_LABEL_ZH[value] || SEVERITY_LABEL_ZH.medium;
+}
+
+function getItemDisplaySeverity(
+  item: RealtimeMergedFindingItem,
+): RealtimeDisplaySeverity {
+  return normalizeDisplaySeverity(item.display_severity || item.severity);
+}
+
+function getItemVerificationProgress(
+  item: RealtimeMergedFindingItem,
+): RealtimeVerificationProgress {
+  if (item.verification_progress) {
+    return normalizeVerificationProgress(item.verification_progress);
+  }
+  return item.is_verified ? "verified" : "pending";
 }
 
 function formatLocation(item: RealtimeMergedFindingItem): string {
@@ -82,12 +139,6 @@ function formatLocation(item: RealtimeMergedFindingItem): string {
   }
   if (path) return path;
   return "-";
-}
-
-function getRootCauseParagraph(item: RealtimeMergedFindingItem): string {
-  const description = String(item.description || "").trim();
-  if (description) return description;
-  return "后端暂未返回漏洞根因文段。";
 }
 
 function pickRealtimeCode(item: RealtimeMergedFindingItem): {
@@ -114,21 +165,43 @@ function pickRealtimeCode(item: RealtimeMergedFindingItem): {
   return null;
 }
 
+function getRawEvidenceFromRealtimeItem(item: RealtimeMergedFindingItem) {
+  return collectRawEvidenceEntries({
+    description: item.description,
+    verification_evidence: item.verification_evidence,
+    function_trigger_flow: item.function_trigger_flow,
+    reachability_file: item.reachability_file,
+    reachability_function: item.reachability_function,
+    reachability_function_start_line: item.reachability_function_start_line,
+    reachability_function_end_line: item.reachability_function_end_line,
+  });
+}
+
 export default function RealtimeFindingsPanel(props: {
   items: RealtimeMergedFindingItem[];
   isRunning: boolean;
   onClear: () => void;
 }) {
   const [keyword, setKeyword] = useState("");
-  const [severity, setSeverity] = useState<"all" | string>("all");
-  const [detailItem, setDetailItem] = useState<RealtimeMergedFindingItem | null>(null);
-  const detailText = useMemo(
-    () => (detailItem ? getRootCauseParagraph(detailItem) : ""),
-    [detailItem],
+  const [severity, setSeverity] = useState<"all" | RealtimeDisplaySeverity>(
+    "all",
   );
+  const [verification, setVerification] = useState<
+    "all" | RealtimeVerificationProgress
+  >("all");
+  const [detailItem, setDetailItem] = useState<RealtimeMergedFindingItem | null>(null);
 
   const counts = useMemo(() => {
-    return { total: props.items.length };
+    let pending = 0;
+    let verified = 0;
+    for (const item of props.items) {
+      if (getItemVerificationProgress(item) === "verified") {
+        verified += 1;
+      } else {
+        pending += 1;
+      }
+    }
+    return { total: props.items.length, pending, verified };
   }, [props.items]);
 
   const severityCounts = useMemo(() => {
@@ -137,15 +210,15 @@ export default function RealtimeFindingsPanel(props: {
       high: 0,
       medium: 0,
       low: 0,
-      info: 0,
+      invalid: 0,
     };
     for (const item of props.items) {
-      const key = normalizeSeverity(item.severity);
+      const key = getItemDisplaySeverity(item);
       if (key === "critical") next.critical += 1;
       else if (key === "high") next.high += 1;
       else if (key === "medium") next.medium += 1;
       else if (key === "low") next.low += 1;
-      else next.info += 1;
+      else next.invalid += 1;
     }
     return next;
   }, [props.items]);
@@ -153,8 +226,8 @@ export default function RealtimeFindingsPanel(props: {
   const filtered = useMemo(() => {
     const key = keyword.trim().toLowerCase();
     const sorted = [...props.items].sort((a, b) => {
-      const aKey = normalizeSeverity(a.severity);
-      const bKey = normalizeSeverity(b.severity);
+      const aKey = getItemDisplaySeverity(a);
+      const bKey = getItemDisplaySeverity(b);
       const aOrder = SEVERITY_ORDER[aKey] ?? 99;
       const bOrder = SEVERITY_ORDER[bKey] ?? 99;
       if (aOrder !== bOrder) return aOrder - bOrder;
@@ -163,9 +236,12 @@ export default function RealtimeFindingsPanel(props: {
     });
 
     return sorted.filter((item) => {
-      const sevKey = normalizeSeverity(item.severity);
+      const sevKey = getItemDisplaySeverity(item);
+      const verificationKey = getItemVerificationProgress(item);
       const okSeverity = severity === "all" || sevKey === severity;
-      if (!okSeverity) return false;
+      const okVerification =
+        verification === "all" || verificationKey === verification;
+      if (!okSeverity || !okVerification) return false;
       if (!key) return true;
       return (
         String(item.title || "").toLowerCase().includes(key) ||
@@ -173,7 +249,7 @@ export default function RealtimeFindingsPanel(props: {
         String(item.file_path || "").toLowerCase().includes(key)
       );
     });
-  }, [props.items, keyword, severity]);
+  }, [props.items, keyword, severity, verification]);
 
   return (
     <div className="h-full flex flex-col border border-border rounded-xl bg-card/70 overflow-hidden">
@@ -186,9 +262,15 @@ export default function RealtimeFindingsPanel(props: {
             </Badge>
             <Badge
               variant="outline"
+              className="text-[11px] border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10"
+            >
+              待验证 {counts.pending}
+            </Badge>
+            <Badge
+              variant="outline"
               className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
             >
-              全部已验证
+              已验证 {counts.verified}
             </Badge>
             {props.isRunning ? (
               <Badge
@@ -223,105 +305,74 @@ export default function RealtimeFindingsPanel(props: {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant={severity === "all" ? "default" : "outline"}
-              onClick={() => setSeverity("all")}
+            <Select
+              value={severity}
+              onValueChange={(value) =>
+                setSeverity(value as "all" | RealtimeDisplaySeverity)
+              }
             >
-              全部
-            </Button>
-            <Button
-              size="sm"
-              variant={severity === "critical" ? "default" : "outline"}
-              onClick={() => setSeverity("critical")}
+              <SelectTrigger className="h-9 min-w-[112px] px-3 py-1.5 text-sm font-normal">
+                <SelectValue placeholder="严重度" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="critical">严重</SelectItem>
+                <SelectItem value="high">高危</SelectItem>
+                <SelectItem value="medium">中危</SelectItem>
+                <SelectItem value="low">低危</SelectItem>
+                <SelectItem value="invalid">无效</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={verification}
+              onValueChange={(value) =>
+                setVerification(value as "all" | RealtimeVerificationProgress)
+              }
             >
-              严重
-            </Button>
-            <Button
-              size="sm"
-              variant={severity === "high" ? "default" : "outline"}
-              onClick={() => setSeverity("high")}
-            >
-              高危
-            </Button>
-            <Button
-              size="sm"
-              variant={severity === "medium" ? "default" : "outline"}
-              onClick={() => setSeverity("medium")}
-            >
-              中危
-            </Button>
-            <Button
-              size="sm"
-              variant={severity === "low" ? "default" : "outline"}
-              onClick={() => setSeverity("low")}
-            >
-              低危
-            </Button>
+              <SelectTrigger className="h-9 min-w-[112px] px-3 py-1.5 text-sm font-normal">
+                <SelectValue placeholder="验证进度" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="pending">待验证</SelectItem>
+                <SelectItem value="verified">已验证</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {severityCounts.critical > 0 ? (
-            <button type="button" onClick={() => setSeverity("critical")}>
-              <Badge
-                variant="outline"
-                className={`text-[11px] border ${SEVERITY_BADGE_CLASS.critical} ${
-                  severity === "critical" ? "ring-1 ring-primary/40" : ""
-                }`}
-              >
-                严重 {severityCounts.critical}
-              </Badge>
-            </button>
-          ) : null}
-          {severityCounts.high > 0 ? (
-            <button type="button" onClick={() => setSeverity("high")}>
-              <Badge
-                variant="outline"
-                className={`text-[11px] border ${SEVERITY_BADGE_CLASS.high} ${
-                  severity === "high" ? "ring-1 ring-primary/40" : ""
-                }`}
-              >
-                高危 {severityCounts.high}
-              </Badge>
-            </button>
-          ) : null}
-          {severityCounts.medium > 0 ? (
-            <button type="button" onClick={() => setSeverity("medium")}>
-              <Badge
-                variant="outline"
-                className={`text-[11px] border ${SEVERITY_BADGE_CLASS.medium} ${
-                  severity === "medium" ? "ring-1 ring-primary/40" : ""
-                }`}
-              >
-                中危 {severityCounts.medium}
-              </Badge>
-            </button>
-          ) : null}
-          {severityCounts.low > 0 ? (
-            <button type="button" onClick={() => setSeverity("low")}>
-              <Badge
-                variant="outline"
-                className={`text-[11px] border ${SEVERITY_BADGE_CLASS.low} ${
-                  severity === "low" ? "ring-1 ring-primary/40" : ""
-                }`}
-              >
-                低危 {severityCounts.low}
-              </Badge>
-            </button>
-          ) : null}
-          {severityCounts.info > 0 ? (
-            <button type="button" onClick={() => setSeverity("info")}>
-              <Badge
-                variant="outline"
-                className={`text-[11px] border ${SEVERITY_BADGE_CLASS.info} ${
-                  severity === "info" ? "ring-1 ring-primary/40" : ""
-                }`}
-              >
-                信息 {severityCounts.info}
-              </Badge>
-            </button>
-          ) : null}
+          <Badge
+            variant="outline"
+            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.critical}`}
+          >
+            严重 {severityCounts.critical}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.high}`}
+          >
+            高危 {severityCounts.high}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.medium}`}
+          >
+            中危 {severityCounts.medium}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.low}`}
+          >
+            低危 {severityCounts.low}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.invalid}`}
+          >
+            无效 {severityCounts.invalid}
+          </Badge>
         </div>
       </div>
 
@@ -339,7 +390,8 @@ export default function RealtimeFindingsPanel(props: {
           <ScrollArea className="h-full">
             <div className="p-3 space-y-2">
               {filtered.map((item) => {
-                const sevKey = normalizeSeverity(item.severity);
+                const sevKey = getItemDisplaySeverity(item);
+                const verificationKey = getItemVerificationProgress(item);
                 return (
                   <div
                     key={item.id}
@@ -349,7 +401,7 @@ export default function RealtimeFindingsPanel(props: {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <Badge
-                            className={`border text-[11px] ${SEVERITY_BADGE_CLASS[sevKey] || SEVERITY_BADGE_CLASS.info}`}
+                            className={`border text-[11px] ${SEVERITY_BADGE_CLASS[sevKey] || SEVERITY_BADGE_CLASS.medium}`}
                           >
                             {severityToZh(sevKey)}
                           </Badge>
@@ -367,9 +419,13 @@ export default function RealtimeFindingsPanel(props: {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <Badge
                           variant="outline"
-                          className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                          className={`text-[11px] ${
+                            verificationKey === "verified"
+                              ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                              : "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10"
+                          }`}
                         >
-                          已验证
+                          {verificationKey === "verified" ? "已验证" : "待验证"}
                         </Badge>
 
                         <Button
@@ -420,23 +476,13 @@ export default function RealtimeFindingsPanel(props: {
               <section className="rounded-lg border border-border bg-card/70 p-3.5 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline">
-                    {severityToZh(detailItem.severity)}
+                    {severityToZh(getItemDisplaySeverity(detailItem))}
                   </Badge>
                 </div>
 
                 <h3 className="text-sm font-semibold break-words">
                   {detailItem.display_title || detailItem.title || "未命名缺陷"}
                 </h3>
-
-                <div className="space-y-2 pt-2">
-                  <div className="text-xs font-semibold text-muted-foreground">漏洞详情（根因）</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    根因文段由后端统一生成并下发，前端仅做展示。
-                  </div>
-                  <div className="text-sm bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words leading-6">
-                    {detailText}
-                  </div>
-                </div>
 
                 {(() => {
                   const code = pickRealtimeCode(detailItem);
@@ -448,11 +494,60 @@ export default function RealtimeFindingsPanel(props: {
                         filePath={detailItem.file_path}
                         lineStart={code.lineStart}
                         lineEnd={code.lineEnd}
+                        highlightStartLine={detailItem.line_start ?? code.lineStart}
+                        highlightEndLine={detailItem.line_end ?? code.lineEnd}
+                        focusLine={detailItem.line_start ?? code.lineStart}
                         title="命中代码"
                       />
                     </div>
                   );
                 })()}
+
+                <div className="space-y-2 pt-2">
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    漏洞详情（根因）
+                  </div>
+                  <FindingNarrativeMarkdown
+                    finding={{
+                      description: detailItem.description,
+                      description_markdown: detailItem.description_markdown,
+                      code_context: detailItem.code_context,
+                      code_snippet: detailItem.code_snippet,
+                      file_path: detailItem.file_path,
+                      line_start: detailItem.line_start,
+                      line_end: detailItem.line_end,
+                      function_trigger_flow: detailItem.function_trigger_flow,
+                      verification_evidence: detailItem.verification_evidence,
+                      reachability_file: detailItem.reachability_file,
+                      reachability_function: detailItem.reachability_function,
+                      reachability_function_start_line:
+                        detailItem.reachability_function_start_line,
+                      reachability_function_end_line:
+                        detailItem.reachability_function_end_line,
+                    }}
+                    className="rounded-md border border-border bg-background p-3"
+                  />
+
+                  <Collapsible className="rounded-md border border-border bg-card/60">
+                    <CollapsibleTrigger className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                      <span>原始证据</span>
+                      <ChevronDown className="w-4 h-4" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-3 pb-3 space-y-2">
+                      {getRawEvidenceFromRealtimeItem(detailItem).map((item) => (
+                        <div key={item.key} className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground font-mono">
+                            {item.label}
+                            {item.truncated ? " (已截断至 2000 字)" : ""}
+                          </div>
+                          <pre className="text-xs font-mono bg-background border border-border rounded-md p-2 whitespace-pre-wrap break-words">
+                            {item.value}
+                          </pre>
+                        </div>
+                      ))}
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
               </section>
             ) : null}
           </div>

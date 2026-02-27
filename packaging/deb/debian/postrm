@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  purge)
+    rm -rf /etc/deepaudit /var/log/deepaudit /var/lib/deepaudit
+    ;;
+esac
+
+exit 0

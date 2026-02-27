@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/shared/api/database";
 import { SKILL_TOOLS_CATALOG, SKILL_TOOL_CATEGORY_ORDER, type SkillToolCategory, buildSkillToolPrompt } from "./skillToolsCatalog";
 import {
@@ -10,43 +13,207 @@ import {
 } from "./mcpCatalog";
 
 const CATEGORY_DESC: Partial<Record<SkillToolCategory, string>> = {
+  "模型基础增强类": "用于提供模型基础能力增强模板，包括 MCP/Skill 设计、文件规划与策略协作。",
   "代码读取与定位": "用于读取代码、检索关键位置、提取函数上下文，形成后续分析证据链起点。",
   "候选发现与模式扫描": "用于快速拉取候选风险点，缩小审计范围并为验证阶段提供高优先级线索。",
   "可达性与逻辑分析": "用于验证漏洞链路是否真实可达，识别控制条件、授权边界与业务约束。",
   "报告与协作编排": "用于审计过程编排、结论沉淀与最终报告输出，保障任务可交付性。",
 };
 
-export default function SkillToolsPanel() {
+const MCP_ERROR_TEXT: Record<string, string> = {
+  missing_endpoint: "未配置 MCP 端点 URL",
+  invalid_endpoint: "MCP 端点 URL 非法（需 http/https）",
+  disabled: "已禁用",
+  command_not_found: "命令不存在或不可执行",
+  missing_command: "未配置启动命令",
+  adapter_unavailable: "适配器不可用",
+};
+
+const MCP_NAME_MAP: Record<string, string> = {
+  filesystem: "Filesystem MCP",
+  code_index: "Code Index MCP",
+  sequentialthinking: "Sequential Thinking MCP",
+};
+
+function toMcpName(mcpId?: string): string {
+  const normalized = String(mcpId || "").trim().toLowerCase();
+  return MCP_NAME_MAP[normalized] || normalized || "MCP";
+}
+
+function formatMcpErrorToken(rawToken: string, mcpId?: string): string {
+  const token = String(rawToken || "").trim();
+  if (!token) return "";
+
+  if (token.startsWith("mcp_adapter_unavailable:")) {
+    const unavailableMcpId = token.split(":", 2)[1];
+    return `${toMcpName(unavailableMcpId || mcpId)} 适配器不可用`;
+  }
+
+  if (token === "mcp_adapter_unavailable") {
+    return `${toMcpName(mcpId)} 适配器不可用`;
+  }
+
+  if (token.startsWith("healthcheck_failed:")) {
+    const detail = token.slice("healthcheck_failed:".length);
+    if (!detail) return "健康检查失败";
+    const [reason] = detail.split("@", 2);
+    return `健康检查失败（${reason}）`;
+  }
+
+  if (token.startsWith("tools_list_failed:")) {
+    return "tools/list 调用异常";
+  }
+
+  if (token.startsWith("mcp_list_tools_failed:")) {
+    return "tools/list 调用失败";
+  }
+
+  if (MCP_ERROR_TEXT[token]) {
+    return MCP_ERROR_TEXT[token];
+  }
+
+  const [prefix, ...rest] = token.split(":");
+  if (prefix && MCP_ERROR_TEXT[prefix]) {
+    if (!rest.length) return MCP_ERROR_TEXT[prefix];
+    return `${MCP_ERROR_TEXT[prefix]}（${rest.join(":")}）`;
+  }
+
+  return token;
+}
+
+function formatMcpErrorMessage(errorValue?: string | null, mcpId?: string): string {
+  const parts = String(errorValue || "")
+    .split(";")
+    .map((part) => formatMcpErrorToken(part, mcpId))
+    .filter((part) => part.length > 0);
+  return parts.join("；");
+}
+
+type SkillToolsPanelMode = "all" | "skill" | "mcp";
+
+type SkillAvailabilityMap = Record<
+  string,
+  {
+    enabled?: boolean;
+    reason?: string;
+  }
+>;
+
+type McpVerifyResult = {
+  success: boolean;
+  mcp_id: string;
+  checks: Array<{
+    step: string;
+    action: "tools/list" | "tools/call" | "policy/skip" | string;
+    success: boolean;
+    tool?: string | null;
+    runtime_domain?: string | null;
+    duration_ms: number;
+    error?: string | null;
+  }>;
+  verification_tools: string[];
+  discovered_tools?: Array<{
+    name: string;
+    description?: string;
+    inputSchema?: Record<string, unknown>;
+  }>;
+  protocol_summary?: {
+    list_tools_success?: boolean;
+    discovered_count?: number;
+    called_count?: number;
+    call_success_count?: number;
+    call_failed_count?: number;
+    arg_failed_count?: number;
+    skipped_unsupported_count?: number;
+    required_gate?: string[];
+    [key: string]: unknown;
+  };
+  project_context?: {
+    project_name?: string;
+    fallback_used?: boolean;
+  };
+};
+
+type McpToolItem = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
+export default function SkillToolsPanel({
+  mode = "all",
+}: {
+  mode?: SkillToolsPanelMode;
+}) {
   const [mcpCatalog, setMcpCatalog] = useState<McpCatalogItem[]>(
     DEFAULT_MCP_CATALOG,
   );
+  const [skillAvailability, setSkillAvailability] = useState<SkillAvailabilityMap>({});
   const [mcpCatalogLoading, setMcpCatalogLoading] = useState(false);
+  const [mcpCatalogFallbackNotice, setMcpCatalogFallbackNotice] = useState<string | null>(null);
+  const [verifyingMcpId, setVerifyingMcpId] = useState<string | null>(null);
+  const [verifyResults, setVerifyResults] = useState<Record<string, McpVerifyResult>>({});
+  const [verifyErrors, setVerifyErrors] = useState<Record<string, string>>({});
+  const [mcpToolsById, setMcpToolsById] = useState<Record<string, McpToolItem[]>>({});
+  const [mcpToolsLoading, setMcpToolsLoading] = useState<Record<string, boolean>>({});
+  const [mcpToolsErrors, setMcpToolsErrors] = useState<Record<string, string>>({});
+  const showSkillCatalog = mode === "all" || mode === "skill";
+  const showMcpCatalog = mode === "all" || mode === "mcp";
 
   const groupedTools = useMemo(() => {
+    const filteredTools = SKILL_TOOLS_CATALOG.filter((item) => {
+      const runtimeState = skillAvailability[item.id];
+      if (!runtimeState) return true;
+      return runtimeState.enabled !== false;
+    });
     const grouped = new Map<SkillToolCategory, typeof SKILL_TOOLS_CATALOG>();
     for (const category of SKILL_TOOL_CATEGORY_ORDER) {
       grouped.set(
         category,
-        SKILL_TOOLS_CATALOG.filter((item) => item.category === category),
+        filteredTools.filter((item) => item.category === category),
       );
     }
     return grouped;
-  }, []);
+  }, [skillAvailability]);
+  const visibleSkillToolsCount = useMemo(
+    () =>
+      SKILL_TOOLS_CATALOG.filter((item) => {
+        const runtimeState = skillAvailability[item.id];
+        if (!runtimeState) return true;
+        return runtimeState.enabled !== false;
+      }).length,
+    [skillAvailability],
+  );
 
   useEffect(() => {
+    if (!showMcpCatalog) {
+      return;
+    }
     let mounted = true;
     const loadMcpCatalog = async () => {
       setMcpCatalogLoading(true);
       try {
         const config = await api.getUserConfig();
         if (!mounted) return;
-        const serverCatalog =
-          config?.otherConfig?.mcpConfig?.catalog ??
-          DEFAULT_MCP_CATALOG;
-        setMcpCatalog(normalizeMcpCatalog(serverCatalog));
+        const serverCatalog = config?.otherConfig?.mcpConfig?.catalog;
+        const runtimeSkillAvailability = config?.otherConfig?.mcpConfig?.skillAvailability;
+        if (runtimeSkillAvailability && typeof runtimeSkillAvailability === "object") {
+          setSkillAvailability(runtimeSkillAvailability as SkillAvailabilityMap);
+        } else {
+          setSkillAvailability({});
+        }
+        if (Array.isArray(serverCatalog) && serverCatalog.length > 0) {
+          setMcpCatalog(normalizeMcpCatalog(serverCatalog));
+          setMcpCatalogFallbackNotice(null);
+        } else {
+          setMcpCatalog(DEFAULT_MCP_CATALOG);
+          setMcpCatalogFallbackNotice("后端未返回 MCP 目录，当前展示默认目录（非实时状态）。");
+        }
       } catch {
         if (!mounted) return;
+        setSkillAvailability({});
         setMcpCatalog(DEFAULT_MCP_CATALOG);
+        setMcpCatalogFallbackNotice("MCP 目录加载失败，当前展示默认目录（非实时状态）。");
       } finally {
         if (mounted) {
           setMcpCatalogLoading(false);
@@ -58,309 +225,588 @@ export default function SkillToolsPanel() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [showMcpCatalog]);
 
-  const mcpServerCount = useMemo(
-    () => mcpCatalog.filter((item) => item.type === "mcp-server").length,
+  const mcpServers = useMemo(
+    () => mcpCatalog.filter((item) => item.type === "mcp-server"),
     [mcpCatalog],
   );
-  const mcpSkillPackCount = useMemo(
-    () => mcpCatalog.filter((item) => item.type === "skill-pack").length,
-    [mcpCatalog],
+  const mcpServerCount = mcpServers.length;
+  const requiredNotReadyMcps = useMemo(
+    () =>
+      mcpServers.filter(
+        (item) =>
+          item.required !== false &&
+          item.enabled &&
+          item.startup_ready === false,
+      ),
+    [mcpServers],
   );
+  const hasRequiredMcpNotReady = useMemo(
+    () => requiredNotReadyMcps.length > 0,
+    [requiredNotReadyMcps],
+  );
+  const hasOptionalMcpNotReady = useMemo(
+    () =>
+      mcpServers.some(
+        (item) =>
+          item.required === false &&
+          item.enabled &&
+          item.startup_ready === false,
+      ),
+    [mcpServers],
+  );
+
+  const loadMcpTools = useCallback(
+    async (mcpIds?: string[]) => {
+      const targetIds =
+        Array.isArray(mcpIds) && mcpIds.length
+          ? mcpIds
+          : mcpServers.map((item) => item.id);
+      const normalizedIds = [
+        ...new Set(
+          targetIds
+            .map((item) => String(item || "").trim())
+            .filter((item) => item.length > 0),
+        ),
+      ];
+      if (!normalizedIds.length) return;
+
+      setMcpToolsLoading((prev) => {
+        const next = { ...prev };
+        for (const mcpId of normalizedIds) {
+          next[mcpId] = true;
+        }
+        return next;
+      });
+      setMcpToolsErrors((prev) => {
+        const next = { ...prev };
+        for (const mcpId of normalizedIds) {
+          next[mcpId] = "";
+        }
+        return next;
+      });
+
+      try {
+        const response = await api.listMcpTools({
+          mcp_ids: normalizedIds,
+          include_internal: false,
+        });
+        const resultMap = new Map(
+          (response?.results || []).map((item) => [item.mcp_id, item]),
+        );
+        setMcpToolsById((prev) => {
+          const next = { ...prev };
+          for (const mcpId of normalizedIds) {
+            const item = resultMap.get(mcpId);
+            if (item?.success) {
+              next[mcpId] = Array.isArray(item.tools)
+                ? item.tools.map((tool) => ({
+                    name: String(tool?.name || ""),
+                    description: String(tool?.description || ""),
+                    inputSchema:
+                      tool?.inputSchema &&
+                      typeof tool.inputSchema === "object" &&
+                      !Array.isArray(tool.inputSchema)
+                        ? (tool.inputSchema as Record<string, unknown>)
+                        : {},
+                  }))
+                : [];
+            } else {
+              next[mcpId] = [];
+            }
+          }
+          return next;
+        });
+        setMcpToolsErrors((prev) => {
+          const next = { ...prev };
+          for (const mcpId of normalizedIds) {
+            const item = resultMap.get(mcpId);
+            if (item?.success) {
+              next[mcpId] = "";
+            } else {
+              next[mcpId] = String(item?.error || "工具列表拉取失败");
+            }
+          }
+          return next;
+        });
+      } catch (error: any) {
+        const detail =
+          error?.response?.data?.detail ||
+          error?.message ||
+          "工具列表拉取失败";
+        setMcpToolsErrors((prev) => {
+          const next = { ...prev };
+          for (const mcpId of normalizedIds) {
+            next[mcpId] = String(detail);
+          }
+          return next;
+        });
+      } finally {
+        setMcpToolsLoading((prev) => {
+          const next = { ...prev };
+          for (const mcpId of normalizedIds) {
+            next[mcpId] = false;
+          }
+          return next;
+        });
+      }
+    },
+    [mcpServers],
+  );
+
+  useEffect(() => {
+    if (!showMcpCatalog || mcpCatalogLoading || !mcpServers.length) {
+      return;
+    }
+    void loadMcpTools(mcpServers.map((item) => item.id));
+  }, [loadMcpTools, mcpCatalogLoading, mcpServers, showMcpCatalog]);
+
+  const handleVerifyMcp = async (mcpId: string) => {
+    setVerifyingMcpId(mcpId);
+    setVerifyErrors((prev) => ({ ...prev, [mcpId]: "" }));
+    try {
+      const result = await api.verifyMcp(mcpId);
+      setVerifyResults((prev) => ({ ...prev, [mcpId]: result }));
+      if (result?.success) {
+        void loadMcpTools([mcpId]);
+      }
+    } catch (error: any) {
+      const detail =
+        error?.response?.data?.detail ||
+        error?.message ||
+        "MCP 验证失败，请检查后端日志。";
+      setVerifyErrors((prev) => ({ ...prev, [mcpId]: String(detail) }));
+    } finally {
+      setVerifyingMcpId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <Card className="cyber-card p-5 gap-3">
-        <CardHeader className="border-b border-border pb-3">
-          <CardTitle className="text-base">智能审计 Skill 工具目录</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-3">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            本页展示智能审计运行时可调用的全量工具（{SKILL_TOOLS_CATALOG.length} 个），每个工具包含简介、使用目标、详细 prompt 用法、示例输入和误用提示。
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">
-              工具总数
-            </Badge>
-            <span className="font-mono text-sm text-foreground">
-              {SKILL_TOOLS_CATALOG.length}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+      {showSkillCatalog ? (
+        <>
+          <Card className="cyber-card p-5 gap-3">
+            <CardHeader className="border-b border-border pb-3">
+              <CardTitle className="text-base">智能审计 Skill 工具目录</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-3">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                本页展示智能审计运行时可调用的全量工具（{visibleSkillToolsCount} 个），每个工具包含简介、使用目标、详细 prompt 用法、示例输入和误用提示。
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  工具总数
+                </Badge>
+                <span className="font-mono text-sm text-foreground">
+                  {visibleSkillToolsCount}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
 
-      {SKILL_TOOL_CATEGORY_ORDER.map((category) => {
-        const tools = groupedTools.get(category) ?? [];
-        return (
-          <section key={category} className="space-y-3">
+          {SKILL_TOOL_CATEGORY_ORDER.map((category) => {
+            const tools = groupedTools.get(category) ?? [];
+            return (
+              <section key={category} className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-mono text-sm font-bold uppercase text-foreground">
+                    {category}
+                  </h3>
+                  <Badge variant="secondary" className="text-xs">
+                    {tools.length} 个工具
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{CATEGORY_DESC[category] || "该分类用于智能审计流程中的关键步骤。"} </p>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {tools.map((tool) => (
+                    <Card key={tool.id} className="cyber-card p-4 gap-3">
+                      <CardHeader className="pb-2 border-b border-border">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <code className="font-mono text-sm text-foreground">{tool.id}</code>
+                          <Badge variant="outline" className="text-[10px] uppercase">
+                            skill tool
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {tool.summary}
+                        </p>
+                      </CardHeader>
+
+                      <CardContent className="space-y-3 pt-1">
+                        <div className="rounded-md border border-border bg-muted/30 p-3">
+                          <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
+                            使用目标
+                          </div>
+                          <div className="text-sm text-foreground">{tool.goal}</div>
+                          <ul className="mt-2 space-y-1 text-xs text-muted-foreground list-disc pl-4">
+                            {tool.taskList.map((task) => (
+                              <li key={task}>{task}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <details className="rounded-md border border-border bg-card/70 p-3">
+                          <summary className="cursor-pointer list-none font-mono text-xs uppercase text-primary">
+                            查看详细使用方法 Prompt
+                          </summary>
+                          <div className="mt-3 space-y-3">
+                            <div>
+                              <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
+                                Prompt 模板
+                              </div>
+                              <pre className="text-xs whitespace-pre-wrap break-words rounded-md border border-border bg-muted/30 p-3 font-mono leading-relaxed">
+                                {buildSkillToolPrompt(tool)}
+                              </pre>
+                            </div>
+
+                            <div>
+                              <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
+                                示例输入
+                              </div>
+                              <pre className="text-xs whitespace-pre-wrap break-words rounded-md border border-border bg-muted/30 p-3 font-mono leading-relaxed">
+                                {tool.exampleInput}
+                              </pre>
+                            </div>
+
+                            <div>
+                              <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
+                                参数清单
+                              </div>
+                              <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
+                                {tool.inputChecklist.map((input) => (
+                                  <li key={input}>{input}</li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <div>
+                              <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
+                                误用提示
+                              </div>
+                              <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
+                                {tool.pitfalls.map((pitfall) => (
+                                  <li key={pitfall}>{pitfall}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </details>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </>
+      ) : null}
+
+      {showMcpCatalog ? (
+        <Card className="cyber-card p-5 gap-3">
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="text-base">智能审计 MCP 目录</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-3 space-y-3">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              展示当前集成 MCP Server 的启用状态、实时可用 Tool 列表与验证结果。
+            </p>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-mono text-sm font-bold uppercase text-foreground">
-                {category}
-              </h3>
-              <Badge variant="secondary" className="text-xs">
-                {tools.length} 个工具
+              <Badge variant="outline" className="text-xs">
+                MCP Server {mcpServerCount}
               </Badge>
+              <Badge variant="outline" className="text-xs">
+                总数 {mcpServerCount}
+              </Badge>
+              {mcpCatalogLoading ? (
+                <Badge variant="secondary" className="text-xs">
+                  目录加载中
+                </Badge>
+              ) : null}
+              {mcpCatalogFallbackNotice ? (
+                <Badge
+                  variant="outline"
+                  className="text-xs border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10"
+                >
+                  使用默认目录（非实时）
+                </Badge>
+              ) : null}
+              {hasRequiredMcpNotReady ? (
+                <Badge
+                  variant="outline"
+                  className="text-xs border-rose-500/40 text-rose-600 dark:text-rose-300 bg-rose-500/10"
+                >
+                  required MCP 未就绪，任务不可启动
+                </Badge>
+              ) : hasOptionalMcpNotReady ? (
+                <Badge
+                  variant="outline"
+                  className="text-xs border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10"
+                >
+                  required MCP 已就绪，optional MCP 存在异常（不阻断）
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                >
+                  required MCP 已就绪，任务可启动
+                </Badge>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">{CATEGORY_DESC[category] || "该分类用于智能审计流程中的关键步骤。"} </p>
-
+            {mcpCatalogFallbackNotice ? (
+              <div className="text-xs text-amber-700 dark:text-amber-300">
+                {mcpCatalogFallbackNotice}
+              </div>
+            ) : null}
+            {hasRequiredMcpNotReady ? (
+              <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs space-y-1">
+                <div className="text-rose-700 dark:text-rose-300">
+                  未就绪 required MCP:{" "}
+                  {requiredNotReadyMcps.map((item) => item.id).join(", ")}
+                </div>
+                {requiredNotReadyMcps.map((item) => (
+                  <div key={`required-error-${item.id}`} className="text-rose-700/90 dark:text-rose-200/90 break-words">
+                    {item.id}: {formatMcpErrorMessage(item.startup_error, item.id) || "启动未就绪"}
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 gap-3">
-              {tools.map((tool) => (
-                <Card key={tool.id} className="cyber-card p-4 gap-3">
+              {mcpServers.map((item) => (
+                <Card key={item.id} className="cyber-card p-4 gap-3">
                   <CardHeader className="pb-2 border-b border-border">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <code className="font-mono text-sm text-foreground">{tool.id}</code>
-                      <Badge variant="outline" className="text-[10px] uppercase">
-                        skill tool
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-sm text-foreground">{item.id}</code>
+                        <span className="text-sm text-foreground">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] uppercase">
+                          mcp server
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] uppercase ${
+                            item.enabled
+                              ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                              : "border-zinc-500/40 text-zinc-600 dark:text-zinc-300 bg-zinc-500/10"
+                          }`}
+                        >
+                          {item.enabled ? "enabled" : "disabled"}
+                        </Badge>
+                        {item.enabled ? (
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] uppercase ${
+                              item.startup_ready === false
+                                ? item.required === false
+                                  ? "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10"
+                                  : "border-rose-500/40 text-rose-600 dark:text-rose-300 bg-rose-500/10"
+                                : "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                            }`}
+                          >
+                            {item.startup_ready === false
+                              ? item.required === false
+                                ? "optional warning"
+                                : "required error"
+                              : "startup ready"}
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      {tool.summary}
+                      {item.description}
                     </p>
+                    <div className="text-xs text-muted-foreground">
+                      runtime_mode: {item.runtime_mode || "n/a"}
+                    </div>
+                    <div className="text-xs space-y-1">
+                      <div
+                        className={`${
+                          item.startup_ready === false
+                            ? "text-rose-600 dark:text-rose-300"
+                            : "text-emerald-600 dark:text-emerald-300"
+                        }`}
+                      >
+                        启动诊断:{" "}
+                        {item.startup_ready === false
+                          ? formatMcpErrorMessage(item.startup_error, item.id) || "启动未就绪"
+                          : "启动正常"}
+                      </div>
+                      {item.startup_ready === false && item.startup_error ? (
+                        <div className="text-muted-foreground break-words">
+                          原始错误: {item.startup_error}
+                        </div>
+                      ) : null}
+                      {mcpToolsErrors[item.id] && !mcpToolsLoading[item.id] ? (
+                        <div className="text-amber-700 dark:text-amber-300 break-words">
+                          工具列表诊断: {formatMcpErrorMessage(mcpToolsErrors[item.id], item.id) || "工具列表拉取失败"}
+                        </div>
+                      ) : null}
+                    </div>
                   </CardHeader>
 
                   <CardContent className="space-y-3 pt-1">
-                    <div className="rounded-md border border-border bg-muted/30 p-3">
-                      <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                        使用目标
+                    <div className="rounded-md border border-border bg-card/70 p-3 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs font-mono uppercase text-muted-foreground">
+                          所有可用 Tool
+                        </div>
+                        {mcpToolsLoading[item.id] ? (
+                          <Badge variant="outline" className="text-[10px] uppercase">
+                            工具列表加载中
+                          </Badge>
+                        ) : null}
                       </div>
-                      <div className="text-sm text-foreground">{tool.goal}</div>
-                      <ul className="mt-2 space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                        {tool.taskList.map((task) => (
-                          <li key={task}>{task}</li>
-                        ))}
-                      </ul>
+                      {mcpToolsLoading[item.id] ? (
+                        <div className="text-xs text-muted-foreground">工具列表加载中</div>
+                      ) : mcpToolsErrors[item.id] ? (
+                        <div className="space-y-2">
+                          <div className="text-xs text-rose-600 dark:text-rose-300 break-words">
+                            工具列表拉取失败：{formatMcpErrorMessage(mcpToolsErrors[item.id], item.id) || "工具列表拉取失败"}
+                          </div>
+                          <div className="text-xs text-muted-foreground break-words">
+                            原始错误: {mcpToolsErrors[item.id]}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void loadMcpTools([item.id])}
+                          >
+                            重试加载
+                          </Button>
+                        </div>
+                      ) : (mcpToolsById[item.id] || []).length ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {(mcpToolsById[item.id] || []).map((tool) => (
+                            <div
+                              key={`${item.id}-tool-${tool.name}`}
+                              className="rounded border border-border bg-muted/20 p-2 space-y-2 min-h-[84px]"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <code className="text-xs font-mono text-foreground">{tool.name}</code>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                                      aria-label="查看工具说明"
+                                    >
+                                      <Info className="h-3.5 w-3.5" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" sideOffset={6} className="max-w-xs px-3 py-2 text-xs leading-relaxed">
+                                    {tool.description || "暂无工具说明"}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                              <details className="rounded border border-border bg-card/70 p-2">
+                                <summary className="cursor-pointer list-none text-xs text-primary">
+                                  查看 Input Schema
+                                </summary>
+                                <pre className="mt-2 text-[11px] whitespace-pre-wrap break-words rounded border border-border bg-muted/30 p-2 font-mono leading-relaxed">
+                                  {JSON.stringify(tool.inputSchema || {}, null, 2)}
+                                </pre>
+                              </details>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">暂无可用 Tool</div>
+                      )}
+                      <div className="text-xs text-muted-foreground break-all">
+                        Source: {item.source}
+                      </div>
                     </div>
 
-                    <details className="rounded-md border border-border bg-card/70 p-3">
-                      <summary className="cursor-pointer list-none font-mono text-xs uppercase text-primary">
-                        查看详细使用方法 Prompt
-                      </summary>
-                      <div className="mt-3 space-y-3">
-                        <div>
-                          <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                            Prompt 模板
-                          </div>
-                          <pre className="text-xs whitespace-pre-wrap break-words rounded-md border border-border bg-muted/30 p-3 font-mono leading-relaxed">
-                            {buildSkillToolPrompt(tool)}
-                          </pre>
+                    <div className="rounded-md border border-border bg-card/70 p-3 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs font-mono uppercase text-muted-foreground">
+                          执行验证
                         </div>
-
-                        <div>
-                          <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                            示例输入
-                          </div>
-                          <pre className="text-xs whitespace-pre-wrap break-words rounded-md border border-border bg-muted/30 p-3 font-mono leading-relaxed">
-                            {tool.exampleInput}
-                          </pre>
-                        </div>
-
-                        <div>
-                          <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                            参数清单
-                          </div>
-                          <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                            {tool.inputChecklist.map((input) => (
-                              <li key={input}>{input}</li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        <div>
-                          <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                            误用提示
-                          </div>
-                          <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                            {tool.pitfalls.map((pitfall) => (
-                              <li key={pitfall}>{pitfall}</li>
-                            ))}
-                          </ul>
-                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={verifyingMcpId === item.id}
+                          onClick={() => void handleVerifyMcp(item.id)}
+                        >
+                          {verifyingMcpId === item.id ? "验证中..." : "执行验证"}
+                        </Button>
                       </div>
-                    </details>
+                      {verifyErrors[item.id] ? (
+                        <div className="text-xs text-rose-600 dark:text-rose-300 break-words">
+                          {verifyErrors[item.id]}
+                        </div>
+                      ) : null}
+                      {verifyResults[item.id] ? (
+                        <div className="space-y-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={
+                                verifyResults[item.id].success
+                                  ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                                  : "border-rose-500/40 text-rose-600 dark:text-rose-300 bg-rose-500/10"
+                              }
+                            >
+                              {verifyResults[item.id].success ? "验证通过" : "验证失败"}
+                            </Badge>
+                            {verifyResults[item.id].project_context?.project_name ? (
+                              <span className="text-muted-foreground">
+                                项目: {verifyResults[item.id].project_context?.project_name}
+                                {verifyResults[item.id].project_context?.fallback_used
+                                  ? "（fallback）"
+                                  : ""}
+                              </span>
+                            ) : null}
+                            {typeof verifyResults[item.id].protocol_summary?.skipped_unsupported_count === "number" &&
+                            verifyResults[item.id].protocol_summary?.skipped_unsupported_count ? (
+                              <Badge variant="outline" className="text-[10px] border-zinc-500/40 text-zinc-600 dark:text-zinc-300 bg-zinc-500/10">
+                                skip {verifyResults[item.id].protocol_summary?.skipped_unsupported_count}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          {verifyResults[item.id].protocol_summary?.required_gate?.length ? (
+                            <div className="text-muted-foreground">
+                              required_gate: {verifyResults[item.id].protocol_summary?.required_gate?.join(", ")}
+                            </div>
+                          ) : null}
+                          <div className="space-y-1">
+                            {verifyResults[item.id].checks.map((check) => (
+                              <div key={`${item.id}-${check.step}`} className="rounded border border-border px-2 py-1">
+                                <span
+                                  className={
+                                    check.action === "policy/skip"
+                                      ? "text-zinc-600 dark:text-zinc-300"
+                                      : check.success
+                                      ? "text-emerald-600 dark:text-emerald-300"
+                                      : "text-rose-600 dark:text-rose-300"
+                                  }
+                                >
+                                  {check.action === "policy/skip" ? "○" : check.success ? "✓" : "✗"}
+                                </span>{" "}
+                                {check.step}
+                                {check.tool ? ` · ${check.tool}` : ""}
+                                {check.runtime_domain ? ` · ${check.runtime_domain}` : ""}
+                                {` · ${check.duration_ms}ms`}
+                                {check.error ? ` · ${check.error}` : ""}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
-          </section>
-        );
-      })}
-
-      <Card className="cyber-card p-5 gap-3">
-        <CardHeader className="border-b border-border pb-3">
-          <CardTitle className="text-base">智能审计 MCP 目录</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-3 space-y-3">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            展示当前集成 MCP 与 Skill Pack 能力，包括执行功能、输入输出接口、包含的 skill 以及启用状态。
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="text-xs">
-              MCP Server {mcpServerCount}
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              Skill Pack {mcpSkillPackCount}
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              总数 {mcpCatalog.length}
-            </Badge>
-            {mcpCatalogLoading ? (
-              <Badge variant="secondary" className="text-xs">
-                目录加载中
-              </Badge>
-            ) : null}
-            {mcpCatalog.some(
-              (item) =>
-                item.type === "mcp-server" &&
-                item.required !== false &&
-                item.startup_ready === false,
-            ) ? (
-              <Badge
-                variant="outline"
-                className="text-xs border-rose-500/40 text-rose-600 dark:text-rose-300 bg-rose-500/10"
-              >
-                全量 MCP 未就绪，任务不可启动
-              </Badge>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-1 gap-3">
-            {mcpCatalog.map((item) => (
-              <Card key={item.id} className="cyber-card p-4 gap-3">
-                <CardHeader className="pb-2 border-b border-border">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <code className="font-mono text-sm text-foreground">{item.id}</code>
-                      <span className="text-sm text-foreground">{item.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] uppercase">
-                        {item.type === "mcp-server" ? "mcp server" : "skill pack"}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] uppercase ${
-                          item.enabled
-                            ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                            : "border-zinc-500/40 text-zinc-600 dark:text-zinc-300 bg-zinc-500/10"
-                        }`}
-                      >
-                        {item.enabled ? "enabled" : "disabled"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {item.description}
-                  </p>
-                  <div className="text-xs text-muted-foreground">
-                    runtime_mode: {item.runtime_mode || "n/a"}
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-3 pt-1">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-                    <div className="rounded-md border border-border bg-muted/30 p-3">
-                      <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                        执行功能
-                      </div>
-                      <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                        {item.executionFunctions.map((func) => (
-                          <li key={func}>{func}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div className="rounded-md border border-border bg-muted/30 p-3">
-                      <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                        输入接口
-                      </div>
-                      <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                        {item.inputInterface.map((field) => (
-                          <li key={field}>{field}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div className="rounded-md border border-border bg-muted/30 p-3">
-                      <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                        输出接口
-                      </div>
-                      <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                        {item.outputInterface.map((field) => (
-                          <li key={field}>{field}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-
-                  <div className="rounded-md border border-border bg-card/70 p-3">
-                    <div className="text-xs font-mono uppercase text-muted-foreground mb-1">
-                      包含 Skill
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {item.includedSkills.map((skill) => (
-                        <Badge key={skill} variant="secondary" className="text-[10px]">
-                          {skill}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground break-all">
-                      Source: {item.source}
-                    </div>
-                  </div>
-
-                  {item.type === "mcp-server" ? (
-                    <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
-                      <div className="text-xs font-mono uppercase text-muted-foreground">
-                        域状态
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                        <div className="rounded border border-border p-2">
-                          <div className="font-mono text-muted-foreground">backend</div>
-                          <div>
-                            enabled: {item.backend?.enabled ? "true" : "false"}
-                          </div>
-                          <div>
-                            startup_ready: {item.backend?.startup_ready ? "true" : "false"}
-                          </div>
-                          {item.backend?.startup_error ? (
-                            <div className="text-rose-600 dark:text-rose-300 break-words">
-                              error: {item.backend.startup_error}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="rounded border border-border p-2">
-                          <div className="font-mono text-muted-foreground">sandbox</div>
-                          <div>
-                            enabled: {item.sandbox?.enabled ? "true" : "false"}
-                          </div>
-                          <div>
-                            startup_ready: {item.sandbox?.startup_ready ? "true" : "false"}
-                          </div>
-                          {item.sandbox?.startup_error ? (
-                            <div className="text-rose-600 dark:text-rose-300 break-words">
-                              error: {item.sandbox.startup_error}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="text-xs">
-                        required: {item.required === false ? "false" : "true"} | startup_ready:{" "}
-                        {item.startup_ready === false ? "false" : "true"}
-                      </div>
-                      {item.startup_error ? (
-                        <div className="text-xs text-rose-600 dark:text-rose-300 break-words">
-                          startup_error: {item.startup_error}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

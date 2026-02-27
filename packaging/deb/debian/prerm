@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  remove|deconfigure|upgrade|failed-upgrade)
+    systemctl disable --now deepaudit.service || true
+    ;;
+esac
+
+exit 0

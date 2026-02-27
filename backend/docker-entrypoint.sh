@@ -3,6 +3,11 @@ set -e
 
 echo "🚀 DeepAudit 后端启动中..."
 
+# 启动前同步 MCP 源码（持久化到数据卷，供后续验证）
+if [ -x "/app/scripts/sync_mcp_sources.sh" ]; then
+    /app/scripts/sync_mcp_sources.sh || true
+fi
+
 # 等待 PostgreSQL 就绪
 echo "⏳ 等待数据库连接..."
 max_retries=30

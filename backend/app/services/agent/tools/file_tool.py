@@ -137,6 +137,11 @@ class FileReadInput(BaseModel):
     max_lines: int = Field(default=500, description="最大返回行数")
     reason_paths: Optional[List[str]] = Field(default=None, description="可选，基于上文推断的优先路径")
     project_scope: bool = Field(default=True, description="可选，启用全项目路径补全")
+    strict_anchor: bool = Field(default=False, description="严格锚点模式：仅允许窗口化读取")
+    allow_file_header_fallback: bool = Field(
+        default=False,
+        description="严格锚点模式下允许回退读取文件头部窗口（防御性兜底）。",
+    )
 
 
 class FileReadTool(AgentTool):
@@ -150,6 +155,7 @@ class FileReadTool(AgentTool):
         project_root: str,
         exclude_patterns: Optional[List[str]] = None,
         target_files: Optional[List[str]] = None,
+        strict_anchor_mode: bool = False,
     ):
         """
         初始化文件读取工具
@@ -167,6 +173,7 @@ class FileReadTool(AgentTool):
             if target_files
             else None
         )
+        self.strict_anchor_mode = bool(strict_anchor_mode)
 
     @staticmethod
     def _read_all_lines_sync(file_path: str) -> List[str]:
@@ -448,6 +455,8 @@ class FileReadTool(AgentTool):
         max_lines: int = 500,
         reason_paths: Optional[List[str]] = None,
         project_scope: bool = True,
+        strict_anchor: bool = False,
+        allow_file_header_fallback: bool = False,
         **kwargs
     ) -> ToolResult:
         try:
@@ -456,6 +465,21 @@ class FileReadTool(AgentTool):
             if start_line is None and end_line is None and parsed_start_line is not None:
                 start_line = parsed_start_line
                 end_line = parsed_end_line
+
+            strict_anchor_enabled = bool(strict_anchor) or bool(self.strict_anchor_mode)
+            if strict_anchor_enabled and start_line is None and end_line is None:
+                if bool(allow_file_header_fallback) and str(file_path or "").strip():
+                    start_line = 1
+                    end_line = 120
+                else:
+                    return ToolResult(
+                        success=False,
+                        error="read_file 严格锚点模式要求提供 start_line/end_line，禁止无定位全文读取。",
+                        metadata={
+                            "strict_anchor": True,
+                            "read_scope_policy": "strict_anchor",
+                        },
+                    )
 
             resolved_rel_path, full_path, resolve_error, normalized_reason_dirs = await asyncio.to_thread(
                 self._resolve_file_with_context,
@@ -491,6 +515,7 @@ class FileReadTool(AgentTool):
                         "end_line": 0,
                         "language": "text",
                         "reason_paths_used": normalized_reason_dirs,
+                        "strict_anchor": strict_anchor_enabled,
                     },
                 )
 
@@ -547,6 +572,12 @@ class FileReadTool(AgentTool):
                     "language": language,
                     "reason_paths_used": normalized_reason_dirs,
                     "project_scope": bool(project_scope),
+                    "strict_anchor": strict_anchor_enabled,
+                    "read_anchor_source": (
+                        "file_header_fallback"
+                        if bool(allow_file_header_fallback) and int(display_start) == 1 and int(display_end) <= 120
+                        else "input"
+                    ),
                 },
             )
         except Exception as e:

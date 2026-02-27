@@ -99,9 +99,18 @@ async def test_verification_todo_state_machine_initial_pending_and_final_transit
     todo_summary = result.data.get("verification_todo_summary") or {}
     assert todo_summary.get("total") == 2
     assert todo_summary.get("pending") == 0
-    assert todo_summary.get("verified", 0) >= 1
+    assert (
+        todo_summary.get("verified", 0)
+        + todo_summary.get("false_positive", 0)
+        + todo_summary.get("blocked", 0)
+    ) == 2
 
-    todo_updates = [ev for ev in emitter.events if getattr(ev, "event_type", "") == "todo_update"]
+    todo_updates = [
+        ev
+        for ev in emitter.events
+        if getattr(ev, "event_type", "") == "todo_update"
+        and ((getattr(ev, "metadata", {}) or {}).get("todo_scope") == "verification")
+    ]
     assert todo_updates
 
     init_todo = (getattr(todo_updates[0], "metadata", {}) or {}).get("todo_list") or []
@@ -115,7 +124,32 @@ async def test_verification_todo_state_machine_initial_pending_and_final_transit
     finding_new_events = [ev for ev in emitter.events if getattr(ev, "event_type", "") == "finding_new"]
     assert len(finding_new_events) >= 2
 
-    finding_verified_events = [
-        ev for ev in emitter.events if getattr(ev, "event_type", "") == "finding_verified"
-    ]
-    assert finding_verified_events
+    verification_lifecycle_by_todo: Dict[str, set[str]] = {}
+    for ev in emitter.events:
+        if getattr(ev, "event_type", "") not in {"finding_new", "finding_update", "finding_verified"}:
+            continue
+        metadata = getattr(ev, "metadata", {}) or {}
+        if metadata.get("finding_scope") != "verification_queue":
+            continue
+        todo_id = str(metadata.get("verification_todo_id") or "").strip()
+        if not todo_id:
+            continue
+        status = str(metadata.get("verification_status") or metadata.get("status") or "").strip().lower()
+        if not status and getattr(ev, "event_type", "") == "finding_verified":
+            status = "verified"
+        verification_lifecycle_by_todo.setdefault(todo_id, set()).add(status)
+
+    assert verification_lifecycle_by_todo, "verification finding 事件必须携带 verification_todo_id"
+    for statuses in verification_lifecycle_by_todo.values():
+        assert "new" in statuses
+        assert ("verified" in statuses) or ("false_positive" in statuses)
+
+    terminal_event_count = 0
+    for ev in emitter.events:
+        if getattr(ev, "event_type", "") not in {"finding_update", "finding_verified"}:
+            continue
+        metadata = getattr(ev, "metadata", {}) or {}
+        status = str(metadata.get("verification_status") or metadata.get("status") or "").strip().lower()
+        if status in {"verified", "false_positive"}:
+            terminal_event_count += 1
+    assert terminal_event_count >= 2

@@ -166,6 +166,14 @@ class LLMService:
     
     def _parse_provider(self, provider_str: str) -> LLMProvider:
         """解析provider字符串"""
+        normalized = (provider_str or "").strip().lower()
+        alias_map = {
+            "anthropic": "claude",
+            "openrouter": "openai",
+            "azure_openai": "openai",
+            "custom": "openai",
+        }
+        resolved = alias_map.get(normalized, normalized)
         provider_map = {
             'gemini': LLMProvider.GEMINI,
             'openai': LLMProvider.OPENAI,
@@ -179,7 +187,7 @@ class LLMService:
             'doubao': LLMProvider.DOUBAO,
             'ollama': LLMProvider.OLLAMA,
         }
-        return provider_map.get(provider_str.lower(), LLMProvider.OPENAI)
+        return provider_map.get(resolved, LLMProvider.OPENAI)
     
     def _get_output_language(self) -> str:
         """获取输出语言配置（优先使用用户配置）"""

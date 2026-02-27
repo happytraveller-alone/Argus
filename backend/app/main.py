@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
 from app.services.llm_rule.repo_cache_manager import GlobalRepoCacheManager
+from app.services.agent.mcp.daemon_manager import MCPDaemonManager
 from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
 from sqlalchemy.future import select
@@ -114,6 +115,17 @@ async def recover_interrupted_static_scan_tasks() -> None:
             await db.rollback()
 
 
+async def _autostart_mcp_daemons_non_blocking(app: FastAPI, mcp_daemon_manager: MCPDaemonManager, daemon_specs):
+    try:
+        results = await asyncio.to_thread(mcp_daemon_manager.autostart, daemon_specs)
+        app.state.mcp_daemon_status = {
+            key: value.to_dict()
+            for key, value in results.items()
+        }
+    except Exception as e:
+        logger.warning(f"MCP 守护进程后台启动失败: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -170,6 +182,37 @@ async def lifespan(app: FastAPI):
     logger.info("无需账号即可使用")
     logger.info("=" * 50)
 
+    mcp_daemon_manager = MCPDaemonManager()
+    app.state.mcp_daemon_manager = mcp_daemon_manager
+    app.state.mcp_daemon_status = {}
+    app.state.mcp_daemon_autostart_task = None
+    try:
+        daemon_specs = mcp_daemon_manager.build_specs(
+            settings,
+            project_root=str(Path.cwd()),
+        )
+        if daemon_specs:
+            app.state.mcp_daemon_status = {
+                spec.name: {
+                    "name": spec.name,
+                    "ready": False,
+                    "started": False,
+                    "reason": "starting_in_background",
+                    "url": spec.url,
+                    "pid": None,
+                    "command": None,
+                }
+                for spec in daemon_specs
+            }
+            app.state.mcp_daemon_autostart_task = asyncio.create_task(
+                _autostart_mcp_daemons_non_blocking(app, mcp_daemon_manager, daemon_specs)
+            )
+            logger.info("MCP 守护进程后台启动中（不阻塞 API 启动）")
+        else:
+            logger.info("MCP 守护进程自动驻留已禁用")
+    except Exception as e:
+        logger.warning(f"MCP 守护进程启动失败: {e}")
+
     # 启动每日定时清理任务
     stop_event = asyncio.Event()
     app.state.cache_cleanup_stop = stop_event
@@ -190,6 +233,23 @@ async def lifespan(app: FastAPI):
             await task
     except Exception as e:
         logger.warning(f"停止定时清理任务失败: {e}")
+
+    try:
+        daemon_autostart_task = getattr(app.state, "mcp_daemon_autostart_task", None)
+        if daemon_autostart_task is not None:
+            await asyncio.wait_for(daemon_autostart_task, timeout=1.0)
+    except asyncio.TimeoutError:
+        logger.warning("MCP 守护进程后台启动任务仍在执行，退出时跳过等待")
+    except Exception as e:
+        logger.warning(f"等待 MCP 守护进程后台启动任务失败: {e}")
+
+    try:
+        daemon_manager = getattr(app.state, "mcp_daemon_manager", None)
+        if daemon_manager is not None:
+            daemon_manager.stop_all()
+    except Exception as e:
+        logger.warning(f"停止 MCP 守护进程失败: {e}")
+
     try:
         # 可选：清理过期的 git 缓存（超过30天未使用的缓存）
         cleaned = GlobalRepoCacheManager.cleanup_unused_caches(

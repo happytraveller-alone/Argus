@@ -94,4 +94,6 @@ async def test_run_with_retries_does_not_retry_cancelled_error():
 
     assert attempts["count"] == 1
     assert len(emitter.warnings) == 0
-    assert len(emitter.errors) == 0
+    assert len(emitter.errors) == 1
+    assert emitter.errors[0][1]["cancel_origin"] == "user"
+    assert emitter.errors[0][1]["retryable"] is False

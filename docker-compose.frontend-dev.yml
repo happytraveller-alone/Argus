@@ -1,0 +1,32 @@
+# =============================================
+# DeepAudit 前端增量开发配置
+# =============================================
+# 用法:
+# docker compose -f docker-compose.yml -f docker-compose.frontend-dev.yml up -d frontend-dev
+
+services:
+  frontend-dev:
+    image: node:20-slim
+    working_dir: /app
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_pnpm_store:/pnpm/store
+    command: sh -lc "bash /app/scripts/dev-entrypoint.sh"
+    environment:
+      - VITE_API_TARGET=http://backend:8000
+      - FRONTEND_DEV_PORT=5173
+      - FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}
+      - FRONTEND_DEV_INSTALL_MODE=${FRONTEND_DEV_INSTALL_MODE:-auto}
+      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - deepaudit-network
+
+volumes:
+  frontend_node_modules:
+  frontend_pnpm_store:

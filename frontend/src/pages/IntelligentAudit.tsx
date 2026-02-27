@@ -10,7 +10,7 @@ export default function IntelligentAudit() {
       <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
       <div className="relative z-10 space-y-6">
         <Tabs defaultValue="llm" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-muted border border-border p-1 h-auto gap-1 rounded-lg mb-6">
+          <TabsList className="grid w-full grid-cols-3 bg-muted border border-border p-1 h-auto gap-1 rounded-lg mb-6">
             <TabsTrigger
               value="llm"
               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"
@@ -18,10 +18,16 @@ export default function IntelligentAudit() {
               <Zap className="w-3 h-3" /> LLM 配置
             </TabsTrigger>
             <TabsTrigger
-              value="tools"
+              value="mcp"
               className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"
             >
-              <Wrench className="w-3 h-3" /> 审计工具
+              <Wrench className="w-3 h-3" /> MCP 配置
+            </TabsTrigger>
+            <TabsTrigger
+              value="skill"
+              className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"
+            >
+              <Wrench className="w-3 h-3" /> SKILL 配置
             </TabsTrigger>
           </TabsList>
 
@@ -30,13 +36,17 @@ export default function IntelligentAudit() {
               <div className="cyber-card p-5 space-y-2">
                 <div>
                   <div className="font-mono font-bold uppercase text-sm text-foreground">
-                    LLM 与 MCP（逻辑推理 / 工具执行）
+                    LLM（逻辑推理 / 编排决策）
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    配置模型参数与 MCP 运行时写入约束策略。
+                    配置模型参数与超时预算。
                   </div>
                 </div>
-                <SystemConfig visibleSections={["llm", "mcp"]} defaultSection="llm" mergedView={false} />
+                <SystemConfig
+                  visibleSections={["llm"]}
+                  defaultSection="llm"
+                  mergedView={false}
+                />
               </div>
 
               <div className="cyber-card p-5 space-y-2">
@@ -50,8 +60,27 @@ export default function IntelligentAudit() {
             </div>
           </TabsContent>
 
-          <TabsContent value="tools" className="space-y-6">
-            <SkillToolsPanel />
+          <TabsContent value="mcp" className="space-y-6">
+            <div className="cyber-card p-5 space-y-2">
+              <div>
+                <div className="font-mono font-bold uppercase text-sm text-foreground">
+                  MCP 运行时配置
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  管理 MCP 启停策略、运行域和写入约束。
+                </div>
+              </div>
+              <SystemConfig
+                visibleSections={["mcp"]}
+                defaultSection="mcp"
+                mergedView={false}
+              />
+            </div>
+            <SkillToolsPanel mode="mcp" />
+          </TabsContent>
+
+          <TabsContent value="skill" className="space-y-6">
+            <SkillToolsPanel mode="skill" />
           </TabsContent>
         </Tabs>
       </div>

@@ -115,6 +115,15 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
       const newLog = providedId
         ? { ...createLogItem(logData), id: providedId }
         : createLogItem(logData);
+      if (providedId) {
+        const existingIndex = state.logs.findIndex((item) => item.id === providedId);
+        if (existingIndex >= 0) {
+          const mergedLog = { ...state.logs[existingIndex], ...newLog, id: providedId };
+          const nextLogs = [...state.logs];
+          nextLogs[existingIndex] = mergedLog;
+          return { ...state, logs: nextLogs };
+        }
+      }
       return { ...state, logs: [...state.logs, newLog] };
     }
 
@@ -154,7 +163,7 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
     }
 
     case 'UPDATE_OR_ADD_PROGRESS_LOG': {
-      const { progressKey, title, agentName, progressStatus } = action.payload;
+      const { progressKey, title, agentName, progressStatus, time, eventTimestamp } = action.payload;
       const nextStatus = progressStatus || inferProgressStatus(progressKey, title);
       // 查找是否已存在相同 progressKey 的进度日志
       const existingIndex = state.logs.findIndex(
@@ -167,7 +176,14 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
         updatedLogs[existingIndex] = {
           ...updatedLogs[existingIndex],
           title,
-          time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+          time:
+            typeof time === "string" && time.trim()
+              ? time
+              : new Date().toLocaleTimeString('en-US', { hour12: false }),
+          eventTimestamp:
+            typeof eventTimestamp === "string" && eventTimestamp.trim()
+              ? eventTimestamp
+              : updatedLogs[existingIndex].eventTimestamp ?? null,
           progressStatus:
             updatedLogs[existingIndex].progressStatus === "completed"
               ? "completed"
@@ -182,6 +198,8 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
           progressKey,
           agentName,
           progressStatus: nextStatus,
+          time,
+          eventTimestamp,
         });
         return { ...state, logs: [...state.logs, newLog] };
       }
@@ -252,11 +270,14 @@ export function useAgentAuditState() {
     dispatch({ type: 'SET_AGENT_TREE', payload: tree });
   }, []);
 
-  const addLog = useCallback((log: Omit<LogItem, 'id' | 'time'>): string => {
+  const addLog = useCallback(
+    (log: Omit<LogItem, "id" | "time"> & { time?: string; eventTimestamp?: string | null }): string => {
     const newLog = createLogItem(log);
     dispatch({ type: 'SET_LOGS', payload: [...state.logs, newLog] });
     return newLog.id;
-  }, [state.logs]);
+    },
+    [state.logs],
+  );
 
   const updateLog = useCallback((id: string, updates: Partial<LogItem>) => {
     dispatch({ type: 'UPDATE_LOG', payload: { id, updates } });

@@ -1,0 +1,11 @@
+Package: deepaudit
+Version: __VERSION__
+Section: utils
+Priority: optional
+Architecture: __ARCH__
+Depends: bash, coreutils, sed, grep, gawk, systemd, docker.io | docker-ce | moby-engine, docker-compose-plugin | docker-compose-v2
+Maintainer: DeepAudit Team <noreply@deepaudit.local>
+Description: DeepAudit one-click docker compose deployment
+ DeepAudit is a source-code security audit platform.
+ This package installs systemd wrappers and compose templates for
+ one-click deployment on Ubuntu.

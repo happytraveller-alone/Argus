@@ -177,7 +177,7 @@ class MarkdownMemoryStore:
             head = head[:max_chars]
         return head
 
-    def load_bundle(self, *, max_chars: int = 8000, skills_max_lines: int = 60) -> Dict[str, str]:
+    def load_bundle(self, *, max_chars: int = 8000, skills_max_lines: int = 180) -> Dict[str, str]:
         """Load memory excerpts to inject into agent prompts."""
         self.ensure()
         bundle: Dict[str, str] = {}
@@ -189,6 +189,31 @@ class MarkdownMemoryStore:
             max_chars=int(max_chars),
         )
         return bundle
+
+    def write_skills_snapshot(
+        self,
+        content: str,
+        *,
+        source: str = "runtime_sync",
+        task_id: Optional[str] = None,
+    ) -> None:
+        self.ensure()
+        file_path = self._path("skills")
+        body = str(content or "").strip()
+        if not body:
+            return
+        header = (
+            "# Agent Tool Skills Snapshot\n\n"
+            f"- generated_at: {datetime.now(timezone.utc).isoformat()}\n"
+            f"- source: {str(source or 'runtime_sync').strip()}\n"
+            f"- task_id: {str(task_id or '').strip() or 'unknown'}\n\n"
+        )
+        text = header + body + "\n"
+        with self._lock():
+            try:
+                file_path.write_text(text, encoding="utf-8")
+            except Exception as exc:
+                logger.warning("[MarkdownMemory] write skills snapshot failed (%s): %s", file_path, exc)
 
     def append_entry(
         self,
@@ -226,4 +251,3 @@ class MarkdownMemoryStore:
                     fp.write(content)
             except Exception as exc:
                 logger.warning("[MarkdownMemory] append failed (%s): %s", file_path, exc)
-

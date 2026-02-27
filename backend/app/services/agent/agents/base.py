@@ -23,10 +23,16 @@ import logging
 import os
 import re
 import uuid
+import copy
+import ast
 
 from ..core.state import AgentState, AgentStatus
 from ..core.registry import agent_registry
 from ..core.message import message_bus, MessageType, AgentMessage
+from ..utils.vulnerability_naming import (
+    build_cn_structured_description_markdown,
+    normalize_cwe_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +41,35 @@ MAX_EVENT_PAYLOAD_CHARS = 120000
 TOOL_ALIAS_CANDIDATES: Dict[str, List[str]] = {
     "smart_scan": ["smart_scan", "quick_audit", "opengrep_scan", "pattern_match", "search_code", "read_file"],
     "quick_audit": ["quick_audit", "smart_scan", "opengrep_scan", "pattern_match", "search_code", "read_file"],
-    "rag_query": ["rag_query", "security_search", "search_code"],
-    "security_search": ["security_search", "rag_query", "search_code"],
+    "rag_query": ["qmd_query", "search_code", "read_file"],
+    "security_search": ["qmd_query", "search_code", "read_file"],
+    "query_security_knowledge": ["qmd_query", "search_code"],
+    "get_vulnerability_knowledge": ["qmd_get", "qmd_query", "search_code"],
+    "function_context": ["locate_enclosing_function", "extract_function", "read_file"],
+}
+VIRTUAL_TOOL_NAMES: Set[str] = {
+    "code_search",
+    "rag_query",
+    "security_search",
+    "query_security_knowledge",
+    "get_vulnerability_knowledge",
+    "function_context",
+}
+
+DOWNLINED_TOOL_MESSAGES: Dict[str, str] = {
+    "test_command_injection": "该 skill 已下线，请改用 verify_reachability + flow 证据链。",
+    "test_sql_injection": "该 skill 已下线，请改用 verify_reachability + flow 证据链。",
+    "test_xss": "该 skill 已下线，请改用 verify_reachability + flow 证据链。",
+    "test_path_traversal": "该 skill 已下线，请改用 verify_reachability + flow 证据链。",
+    "test_ssti": "该 skill 已下线，请改用 verify_reachability + flow 证据链。",
+    "test_deserialization": "该 skill 已下线，请改用 verify_reachability + flow 证据链。",
+    "universal_vuln_test": "该 skill 已下线，请改用 verify_reachability + flow 证据链。",
 }
 
 TOOL_INPUT_REPAIR_MAP: Dict[str, str] = {
     "query": "keyword",
+    "pattern": "keyword",
+    "glob": "file_pattern",
     "path": "file_path",
     "filepath": "file_path",
     "file": "file_path",
@@ -59,6 +88,7 @@ DETERMINISTIC_ERROR_HINTS: Tuple[str, ...] = (
     "参数校验失败",
     "工具参数缺失",
 )
+SUPERPOWERS_MAX_RETRIES = 3
 
 if TYPE_CHECKING:
     from ..mcp.runtime import MCPRuntime
@@ -613,6 +643,57 @@ class BaseAgent(ABC):
             except Exception:
                 self._write_scope_guard = None
 
+    @staticmethod
+    def _is_mcp_strict_mode(runtime: Optional["MCPRuntime"]) -> bool:
+        if not runtime:
+            return False
+        return bool(getattr(runtime, "strict_mode", False))
+
+    def _runtime_metadata(self) -> Dict[str, Any]:
+        metadata = getattr(self.config, "metadata", None)
+        if isinstance(metadata, dict):
+            return metadata
+        return {}
+
+    @staticmethod
+    def _metadata_bool(metadata: Dict[str, Any], key: str, default: bool = False) -> bool:
+        value = metadata.get(key)
+        if isinstance(value, bool):
+            return value
+        return bool(default)
+
+    def _is_smart_audit_mode(self) -> bool:
+        metadata = self._runtime_metadata()
+        if self._metadata_bool(metadata, "smart_audit_mode", False):
+            return True
+        mode = str(metadata.get("audit_mode") or "").strip().lower()
+        return mode in {"smart_audit", "agent_audit"}
+
+    def _disable_virtual_routing(self) -> bool:
+        metadata = self._runtime_metadata()
+        return self._metadata_bool(
+            metadata,
+            "disable_virtual_routing",
+            default=self._is_smart_audit_mode(),
+        )
+
+    def _enforce_mcp_only(self) -> bool:
+        metadata = self._runtime_metadata()
+        return self._metadata_bool(
+            metadata,
+            "mcp_only_enforced",
+            default=self._is_smart_audit_mode(),
+        )
+
+    def _read_scope_policy(self) -> str:
+        metadata = self._runtime_metadata()
+        value = str(metadata.get("read_scope_policy") or "").strip().lower()
+        if value:
+            return value
+        if self._is_smart_audit_mode():
+            return "strict_anchor"
+        return ""
+
     def set_write_scope_guard(self, guard: Optional["TaskWriteScopeGuard"]) -> None:
         """单独设置写入作用域守卫。"""
         self._write_scope_guard = guard
@@ -980,6 +1061,7 @@ class BaseAgent(ABC):
         alias_used: Optional[str] = None,
         input_repaired: Optional[Dict[str, str]] = None,
         validation_error: Optional[str] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射工具调用事件"""
         metadata: Dict[str, Any] = {}
@@ -991,9 +1073,16 @@ class BaseAgent(ABC):
             metadata["input_repaired"] = input_repaired
         if validation_error:
             metadata["validation_error"] = validation_error
+        if isinstance(extra_metadata, dict):
+            metadata.update(extra_metadata)
+        route_suffix = ""
+        adapter_name = str(metadata.get("mcp_adapter") or "").strip()
+        mcp_tool_name = str(metadata.get("mcp_tool") or "").strip()
+        if adapter_name and mcp_tool_name:
+            route_suffix = f"（MCP: {adapter_name}/{mcp_tool_name}）"
         await self.emit_event(
             "tool_call",
-            f"[{self.name}] 调用工具: {tool_name}",
+            f"[{self.name}] 调用工具: {tool_name}{route_suffix}",
             tool_name=tool_name,
             tool_input=tool_input,
             metadata=metadata,
@@ -1032,7 +1121,10 @@ class BaseAgent(ABC):
             "prefix": stored_result[:256] if isinstance(stored_result, str) else "",
         }
 
-        metadata: Dict[str, Any] = {"tool_status": tool_status}
+        metadata: Dict[str, Any] = {
+            "tool_status": tool_status,
+            "mcp_used": False,
+        }
         if tool_call_id:
             metadata["tool_call_id"] = tool_call_id
         if alias_used:
@@ -1072,8 +1164,10 @@ class BaseAgent(ABC):
         display_title: Optional[str] = None,
         cwe_id: Optional[str] = None,
         description: Optional[str] = None,
+        description_markdown: Optional[str] = None,
         verification_evidence: Optional[str] = None,
         code_snippet: Optional[str] = None,
+        code_context: Optional[str] = None,
         function_trigger_flow: Optional[List[str]] = None,
         reachability_file: Optional[str] = None,
         reachability_function: Optional[str] = None,
@@ -1081,6 +1175,11 @@ class BaseAgent(ABC):
         reachability_function_end_line: Optional[int] = None,
         context_start_line: Optional[int] = None,
         context_end_line: Optional[int] = None,
+        finding_scope: Optional[str] = None,
+        verification_todo_id: Optional[str] = None,
+        verification_fingerprint: Optional[str] = None,
+        verification_status: Optional[str] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射漏洞发现事件"""
         import uuid
@@ -1123,6 +1222,32 @@ class BaseAgent(ABC):
             except Exception:
                 normalized_context_end = None
 
+        normalized_cwe_id = normalize_cwe_id(cwe_id)
+        generated_description_markdown: Optional[str] = (
+            str(description_markdown).strip()
+            if description_markdown is not None and str(description_markdown).strip()
+            else None
+        )
+        if not generated_description_markdown:
+            try:
+                generated_description_markdown = build_cn_structured_description_markdown(
+                    file_path=file_path or reachability_file,
+                    function_name=reachability_function,
+                    vulnerability_type=vuln_type,
+                    title=display_title or title,
+                    description=description,
+                    code_snippet=code_snippet,
+                    code_context=code_context,
+                    cwe_id=normalized_cwe_id,
+                    raw_description=description,
+                    line_start=normalized_line_start,
+                    line_end=normalized_line_end,
+                    verification_evidence=verification_evidence,
+                    function_trigger_flow=function_trigger_flow,
+                )
+            except Exception:
+                generated_description_markdown = None
+
         # 🔥 使用 EventManager.emit_finding 发送正确的事件类型
         if self.event_emitter and hasattr(self.event_emitter, 'emit_finding'):
             await self.event_emitter.emit_finding(
@@ -1135,8 +1260,9 @@ class BaseAgent(ABC):
                 line_end=normalized_line_end,
                 is_verified=is_verified,
                 display_title=display_title,
-                cwe_id=cwe_id,
+                cwe_id=normalized_cwe_id,
                 description=description,
+                description_markdown=generated_description_markdown,
                 verification_evidence=verification_evidence,
                 code_snippet=code_snippet,
                 function_trigger_flow=function_trigger_flow,
@@ -1146,6 +1272,11 @@ class BaseAgent(ABC):
                 reachability_function_end_line=normalized_reachability_end,
                 context_start_line=normalized_context_start,
                 context_end_line=normalized_context_end,
+                finding_scope=finding_scope,
+                verification_todo_id=verification_todo_id,
+                verification_fingerprint=verification_fingerprint,
+                verification_status=verification_status,
+                extra_metadata=extra_metadata,
             )
         else:
             # 回退：使用通用事件发射
@@ -1170,8 +1301,9 @@ class BaseAgent(ABC):
                     "line_end": normalized_line_end,
                     "is_verified": is_verified,
                     "display_title": display_title,
-                    "cwe_id": cwe_id,
+                    "cwe_id": normalized_cwe_id,
                     "description": description,
+                    "description_markdown": generated_description_markdown,
                     "verification_evidence": verification_evidence,
                     "code_snippet": code_snippet,
                     "function_trigger_flow": function_trigger_flow,
@@ -1181,6 +1313,11 @@ class BaseAgent(ABC):
                     "reachability_function_end_line": normalized_reachability_end,
                     "context_start_line": normalized_context_start,
                     "context_end_line": normalized_context_end,
+                    "finding_scope": finding_scope,
+                    "verification_todo_id": verification_todo_id,
+                    "verification_fingerprint": verification_fingerprint,
+                    "verification_status": verification_status,
+                    **(extra_metadata if isinstance(extra_metadata, dict) else {}),
                 }
             )
     
@@ -1469,12 +1606,189 @@ class BaseAgent(ABC):
         if requested_tool_name in self.tools:
             return requested_tool_name, None
 
+        if self._disable_virtual_routing():
+            return requested_tool_name, None
+
         normalized = str(requested_tool_name or "").strip().lower()
         candidates = TOOL_ALIAS_CANDIDATES.get(normalized, [])
         for candidate in candidates:
             if candidate in self.tools:
                 return candidate, requested_tool_name
         return requested_tool_name, None
+
+    @staticmethod
+    def _looks_like_tool_failure_output(output: str) -> bool:
+        text = str(output or "").strip()
+        if not text:
+            return True
+        lowered = text.lower()
+        if lowered.startswith(("⚠️", "❌", "错误:", "error:", "failed:", "失败")):
+            return True
+        failure_hints = (
+            "工具执行失败",
+            "工具参数校验失败",
+            "工具参数缺失",
+            "工具不可用",
+            "写入策略校验失败",
+            "mcp 工具执行失败",
+            "无本地回退",
+        )
+        return any(hint in text for hint in failure_hints)
+
+    @staticmethod
+    def _infer_search_keyword_from_input(tool_input: Dict[str, Any]) -> str:
+        direct = str(tool_input.get("keyword") or "").strip()
+        if direct:
+            return direct
+
+        query = str(tool_input.get("query") or "").strip()
+        if query:
+            return query
+
+        searches = tool_input.get("searches")
+        if isinstance(searches, list):
+            for item in searches:
+                if isinstance(item, dict):
+                    candidate = str(item.get("query") or item.get("text") or "").strip()
+                    if candidate:
+                        return candidate
+
+        vuln_type = str(
+            tool_input.get("vulnerability_type")
+            or tool_input.get("type")
+            or tool_input.get("doc_id")
+            or ""
+        ).strip()
+        return vuln_type
+
+    def _build_mcp_proxy_fallback_requests(
+        self,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+        tool_obj: Optional[Any] = None,
+    ) -> List[Tuple[str, Dict[str, Any]]]:
+        fallback_names: List[str] = []
+        configured_fallbacks = getattr(tool_obj, "mcp_fallback_tools", None) if tool_obj is not None else None
+        if isinstance(configured_fallbacks, list):
+            fallback_names.extend(
+                [
+                    str(item).strip()
+                    for item in configured_fallbacks
+                    if str(item).strip()
+                ]
+            )
+
+        normalized_tool = str(tool_name or "").strip().lower()
+        if not fallback_names:
+            fallback_map: Dict[str, List[str]] = {
+                "qmd_query": ["search_code", "read_file"],
+                "qmd_get": ["read_file", "search_code"],
+                "qmd_multi_get": ["search_code", "read_file"],
+                "qmd_status": ["search_code"],
+                "rag_query": ["search_code", "read_file"],
+                "security_search": ["search_code", "read_file"],
+                "query_security_knowledge": ["search_code"],
+                "get_vulnerability_knowledge": ["search_code", "read_file"],
+                "function_context": [
+                    "locate_enclosing_function",
+                    "extract_function",
+                    "read_file",
+                ],
+            }
+            fallback_names.extend(fallback_map.get(normalized_tool, []))
+
+        fallback_requests: List[Tuple[str, Dict[str, Any]]] = []
+        source_input = dict(tool_input or {})
+        for candidate in fallback_names:
+            if candidate == normalized_tool:
+                continue
+            payload = copy.deepcopy(source_input)
+            if candidate == "search_code":
+                keyword = self._infer_search_keyword_from_input(source_input)
+                if not keyword:
+                    continue
+                payload = {"keyword": keyword}
+                directory = str(
+                    source_input.get("directory")
+                    or source_input.get("path")
+                    or source_input.get("file_path")
+                    or ""
+                ).strip()
+                if directory:
+                    payload["directory"] = directory
+            elif candidate == "read_file":
+                file_path = str(
+                    source_input.get("file_path")
+                    or source_input.get("path")
+                    or ""
+                ).strip()
+                if not file_path:
+                    continue
+                payload = {"file_path": file_path}
+                if source_input.get("line_start") is not None:
+                    payload["start_line"] = source_input.get("line_start")
+                if source_input.get("line_end") is not None:
+                    payload["end_line"] = source_input.get("line_end")
+            elif candidate == "locate_enclosing_function":
+                file_path = str(
+                    source_input.get("file_path")
+                    or source_input.get("path")
+                    or ""
+                ).strip()
+                if not file_path:
+                    continue
+                payload = {
+                    "file_path": file_path,
+                }
+                line_start = source_input.get("line_start") or source_input.get("line")
+                if line_start is not None:
+                    payload["line_start"] = line_start
+            elif candidate == "extract_function":
+                file_path = str(
+                    source_input.get("file_path")
+                    or source_input.get("path")
+                    or ""
+                ).strip()
+                function_name = str(source_input.get("function_name") or "").strip()
+                if not file_path or not function_name:
+                    continue
+                payload = {"file_path": file_path, "function_name": function_name}
+            fallback_requests.append((candidate, payload))
+        return fallback_requests
+
+    async def _execute_mcp_soft_fallback(
+        self,
+        *,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+        tool_obj: Optional[Any],
+        fallback_depth: int,
+    ) -> Optional[Tuple[str, str]]:
+        if fallback_depth >= 2:
+            return None
+
+        fallback_requests = self._build_mcp_proxy_fallback_requests(
+            tool_name=tool_name,
+            tool_input=tool_input,
+            tool_obj=tool_obj,
+        )
+        if not fallback_requests:
+            return None
+
+        for fallback_tool_name, fallback_input in fallback_requests:
+            if fallback_tool_name == tool_name:
+                continue
+            try:
+                fallback_output = await self.execute_tool(
+                    fallback_tool_name,
+                    fallback_input,
+                    _fallback_depth=fallback_depth + 1,
+                )
+            except Exception:
+                continue
+            if not self._looks_like_tool_failure_output(fallback_output):
+                return fallback_tool_name, fallback_output
+        return None
 
     @staticmethod
     def _split_multi_patterns(raw_value: Any) -> List[str]:
@@ -1623,6 +1937,7 @@ class BaseAgent(ABC):
             "extract_function",
             "controlflow_analysis_light",
             "locate_enclosing_function",
+            "verify_reachability",
         }:
             candidates.extend(
                 [
@@ -1766,6 +2081,885 @@ class BaseAgent(ABC):
         text = str(keyword or "")
         return any(token in text for token in ("|", "(", r"\s"))
 
+    @staticmethod
+    def _coerce_positive_int(value: Any) -> Optional[int]:
+        try:
+            parsed = int(value)
+        except Exception:
+            return None
+        if parsed <= 0:
+            return None
+        return parsed
+
+    @staticmethod
+    def _normalize_hint_list(raw_value: Any) -> List[str]:
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, list):
+            return [
+                str(item).strip()
+                for item in raw_value
+                if str(item).strip()
+            ][:8]
+        text = str(raw_value).strip()
+        if not text:
+            return []
+        return [text[:240]]
+
+    def _normalize_verify_reachability_input(
+        self,
+        tool_input: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        payload = dict(tool_input or {})
+        file_path = str(payload.get("file_path") or payload.get("path") or "").strip()
+        line_start = self._coerce_positive_int(payload.get("line_start") or payload.get("line"))
+        line_end = self._coerce_positive_int(payload.get("line_end") or payload.get("end_line"))
+        if line_start is not None and line_end is None:
+            line_end = line_start
+        if line_start is not None and line_end is not None and line_end < line_start:
+            line_end = line_start
+
+        function_name = str(payload.get("function_name") or "").strip() or None
+        source_hints = self._normalize_hint_list(payload.get("source_hints"))
+        sink_hints = self._normalize_hint_list(payload.get("sink_hints"))
+        vulnerability_type = str(payload.get("vulnerability_type") or "").strip() or None
+        call_chain_hint = self._normalize_hint_list(payload.get("call_chain_hint"))
+        control_conditions_hint = self._normalize_hint_list(payload.get("control_conditions_hint"))
+
+        return {
+            "file_path": file_path,
+            "line_start": line_start,
+            "line_end": line_end,
+            "function_name": function_name,
+            "source_hints": source_hints,
+            "sink_hints": sink_hints,
+            "vulnerability_type": vulnerability_type,
+            "call_chain_hint": call_chain_hint,
+            "control_conditions_hint": control_conditions_hint,
+        }
+
+    def _build_verify_reachability_keyword(self, payload: Dict[str, Any]) -> Optional[str]:
+        for candidate in (
+            payload.get("function_name"),
+            payload.get("vulnerability_type"),
+            (payload.get("sink_hints") or [None])[0],
+            (payload.get("source_hints") or [None])[0],
+        ):
+            text = str(candidate or "").strip()
+            if text:
+                return text[:120]
+        return None
+
+    @staticmethod
+    def _extract_jsonish_dict(text: str) -> Optional[Dict[str, Any]]:
+        raw_text = str(text or "").strip()
+        if not raw_text:
+            return None
+        candidate = raw_text
+        if "{" in raw_text and "}" in raw_text:
+            start = raw_text.find("{")
+            end = raw_text.rfind("}")
+            if end > start:
+                candidate = raw_text[start : end + 1]
+        for loader in (json.loads, ast.literal_eval):
+            try:
+                parsed = loader(candidate)  # type: ignore[arg-type]
+            except Exception:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
+
+    def _extract_location_from_search_output(
+        self,
+        output: str,
+    ) -> Tuple[Optional[str], Optional[int]]:
+        text = str(output or "")
+        path_line_patterns = (
+            re.compile(
+                r"(?P<path>[A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+):(?P<line>\d+)(?::\d+)?"
+            ),
+            re.compile(
+                r"(?P<path>[A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+)\s*\(\s*line\s*(?P<line>\d+)\s*\)",
+                re.IGNORECASE,
+            ),
+        )
+        for pattern in path_line_patterns:
+            for match in pattern.finditer(text):
+                file_path = str(match.group("path") or "").strip()
+                line_start = self._coerce_positive_int(match.group("line"))
+                if file_path and line_start is not None:
+                    return file_path, line_start
+
+        payload = self._extract_jsonish_dict(text)
+        if isinstance(payload, dict):
+            search_lists: List[Any] = []
+            for key in ("results", "matches", "items"):
+                if isinstance(payload.get(key), list):
+                    search_lists.append(payload.get(key))
+            nested_data = payload.get("data")
+            if isinstance(nested_data, dict):
+                for key in ("results", "matches", "items"):
+                    if isinstance(nested_data.get(key), list):
+                        search_lists.append(nested_data.get(key))
+            for raw_list in search_lists:
+                for item in raw_list:
+                    location = self._extract_search_location_from_item(item)
+                    if location:
+                        return location
+        return None, None
+
+    def _extract_search_location_from_item(
+        self,
+        item: Any,
+    ) -> Optional[Tuple[str, int]]:
+        if isinstance(item, str):
+            return self._extract_location_from_search_output(item)
+        if not isinstance(item, dict):
+            return None
+
+        file_path = str(
+            item.get("file")
+            or item.get("file_path")
+            or item.get("path")
+            or item.get("filename")
+            or ""
+        ).strip()
+        line_start = self._coerce_positive_int(
+            item.get("line")
+            or item.get("line_start")
+            or item.get("lineNumber")
+            or item.get("startLine")
+        )
+        if file_path and line_start is not None:
+            return file_path, int(line_start)
+
+        location = item.get("location")
+        if isinstance(location, dict):
+            nested_path = str(
+                location.get("file")
+                or location.get("file_path")
+                or location.get("path")
+                or ""
+            ).strip()
+            nested_line = self._coerce_positive_int(
+                location.get("line")
+                or location.get("line_start")
+                or location.get("lineNumber")
+                or location.get("startLine")
+            )
+            if nested_path and nested_line is not None:
+                return nested_path, int(nested_line)
+        return None
+
+    def _estimate_search_hit_count(
+        self,
+        output: str,
+    ) -> int:
+        text = str(output or "").strip()
+        if not text:
+            return 0
+        lowered = text.lower()
+        if "no matches found" in lowered or "没有找到匹配" in text:
+            return 0
+
+        payload = self._extract_jsonish_dict(text)
+        if isinstance(payload, dict):
+            for key in ("results", "matches", "items"):
+                raw_list = payload.get(key)
+                if isinstance(raw_list, list):
+                    return len(raw_list)
+            nested_data = payload.get("data")
+            if isinstance(nested_data, dict):
+                for key in ("results", "matches", "items"):
+                    raw_list = nested_data.get(key)
+                    if isinstance(raw_list, list):
+                        return len(raw_list)
+
+        match_count = len(
+            re.findall(r"[A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+:\d+(?::\d+)?", text)
+        )
+        if match_count > 0:
+            return match_count
+        return 1
+
+    def _extract_function_locator_result(
+        self,
+        output: str,
+        *,
+        target_line: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        payload = self._extract_jsonish_dict(output)
+        best_name: Optional[str] = None
+        best_start: Optional[int] = None
+        best_end: Optional[int] = None
+
+        if isinstance(payload, dict):
+            symbols = payload.get("symbols")
+            if isinstance(symbols, list):
+                candidates: List[Dict[str, Any]] = []
+                for symbol in symbols:
+                    if not isinstance(symbol, dict):
+                        continue
+                    symbol_name = str(
+                        symbol.get("name")
+                        or symbol.get("function")
+                        or symbol.get("symbol")
+                        or ""
+                    ).strip()
+                    if not symbol_name:
+                        continue
+                    symbol_kind = str(symbol.get("kind") or "").strip().lower()
+                    if symbol_kind and "function" not in symbol_kind and symbol_kind != "method":
+                        continue
+                    start_line = self._coerce_positive_int(
+                        symbol.get("start_line") or symbol.get("startLine")
+                    )
+                    end_line = self._coerce_positive_int(
+                        symbol.get("end_line") or symbol.get("endLine")
+                    )
+                    if start_line is not None and end_line is not None and end_line < start_line:
+                        end_line = start_line
+                    distance = 10**9
+                    if target_line is not None and start_line is not None:
+                        if end_line is not None and start_line <= target_line <= end_line:
+                            distance = 0
+                        else:
+                            distance = abs(start_line - target_line)
+                    candidates.append(
+                        {
+                            "name": symbol_name,
+                            "start_line": start_line,
+                            "end_line": end_line,
+                            "distance": distance,
+                        }
+                    )
+                if candidates:
+                    candidates.sort(
+                        key=lambda item: (
+                            int(item.get("distance") or 10**9),
+                            int(item.get("start_line") or 10**9),
+                        )
+                    )
+                    best = candidates[0]
+                    best_name = str(best.get("name") or "").strip() or None
+                    best_start = self._coerce_positive_int(best.get("start_line"))
+                    best_end = self._coerce_positive_int(best.get("end_line"))
+
+            if best_name is None:
+                direct_name = str(
+                    payload.get("function")
+                    or payload.get("name")
+                    or payload.get("symbol")
+                    or ""
+                ).strip()
+                if direct_name:
+                    best_name = direct_name
+                    best_start = self._coerce_positive_int(payload.get("start_line"))
+                    best_end = self._coerce_positive_int(payload.get("end_line"))
+
+        if best_name is None:
+            match = re.search(
+                r"(?:function|函数)\s*[:=]\s*([A-Za-z_][A-Za-z0-9_$]*)",
+                str(output or ""),
+                re.IGNORECASE,
+            )
+            if match:
+                best_name = str(match.group(1) or "").strip() or None
+
+        if best_start is not None and best_end is not None and best_end < best_start:
+            best_end = best_start
+        return {
+            "function_name": best_name,
+            "function_start_line": best_start,
+            "function_end_line": best_end,
+        }
+
+    @staticmethod
+    def _classify_flow_observation(text: str) -> str:
+        lowered = str(text or "").lower()
+        positive_markers = (
+            '"path_found": true',
+            "'path_found': true",
+            "likely_reachable",
+            "reachable",
+            "可达",
+            "path_found=true",
+        )
+        negative_markers = (
+            '"path_found": false',
+            "'path_found': false",
+            "unreachable",
+            "不可达",
+            "no_flow",
+            "path_found=false",
+            "not reachable",
+        )
+        has_positive = any(marker in lowered for marker in positive_markers)
+        has_negative = any(marker in lowered for marker in negative_markers)
+        if has_negative and not has_positive:
+            return "negative"
+        if has_positive and not has_negative:
+            return "positive"
+        if has_negative and has_positive:
+            if "unreachable" in lowered or "不可达" in lowered:
+                return "negative"
+            return "positive"
+        return "unknown"
+
+    @staticmethod
+    def _classify_verify_blocked_reason(output: str) -> Optional[str]:
+        text = str(output or "")
+        lowered = text.lower()
+        if not text.strip():
+            return "insufficient_flow_evidence"
+        mcp_unavailable_hints = (
+            "mcp_call_failed:",
+            "mcp_adapter_unavailable:",
+            "adapter_disabled_after_failures",
+            "server disconnected without sending a response",
+            "remoteprotocolerror",
+            "connecterror",
+            "readtimeout",
+            "connect timeout",
+            "connection reset",
+            "connection refused",
+            "healthcheck_failed",
+            "status_502",
+            "status_503",
+            "status_504",
+            "bad gateway",
+            "service unavailable",
+            "gateway timeout",
+        )
+        if any(hint in lowered for hint in mcp_unavailable_hints):
+            return "mcp_unavailable"
+        if "mcp 严格模式阻断" in text or "mcp_runtime_unavailable_strict_mode" in lowered:
+            return "mcp_unavailable"
+        if "mcp 未成功处理" in text or "mcp route" in lowered:
+            return "mcp_unavailable"
+        if "mcp 未处理且本地工具不可用" in text:
+            return "mcp_unavailable"
+        if "verify_pipeline_blocked_reason" in lowered and "mcp_unavailable" in lowered:
+            return "mcp_unavailable"
+        if "missing_location" in lowered or "missing_file_or_line" in lowered:
+            return "missing_location"
+        if "read_budget_exhausted" in lowered:
+            return "read_budget_exhausted"
+        if "insufficient_flow_evidence" in lowered:
+            return "insufficient_flow_evidence"
+        if "任务已取消" in text or "cancel" in lowered:
+            return "cancelled"
+        if "参数校验失败" in text or "工具参数缺失" in text:
+            return "insufficient_flow_evidence"
+        return None
+
+    def _build_cpg_query_text(
+        self,
+        payload: Dict[str, Any],
+        *,
+        file_path: str,
+        line_start: int,
+        function_name: Optional[str],
+    ) -> str:
+        source_hint = " | ".join(payload.get("source_hints") or [])
+        sink_hint = " | ".join(payload.get("sink_hints") or [])
+        vuln_type = str(payload.get("vulnerability_type") or "").strip()
+        segments = [
+            f"file={file_path}",
+            f"line={line_start}",
+            f"function={function_name or 'unknown'}",
+        ]
+        if vuln_type:
+            segments.append(f"type={vuln_type}")
+        if source_hint:
+            segments.append(f"source_hint={source_hint[:160]}")
+        if sink_hint:
+            segments.append(f"sink_hint={sink_hint[:160]}")
+        return "verify_reachability_cpg_query: " + "; ".join(segments)
+
+    async def _execute_verify_reachability_pipeline(
+        self,
+        *,
+        raw_tool_input: Dict[str, Any],
+        fallback_depth: int = 0,
+    ) -> str:
+        normalized_input = self._normalize_verify_reachability_input(raw_tool_input)
+        tool_call_id = str(uuid.uuid4())
+        self._tool_calls += 1
+        await self.emit_tool_call(
+            "verify_reachability",
+            normalized_input,
+            tool_call_id=tool_call_id,
+        )
+
+        import time
+
+        started_at = time.time()
+        max_rounds = 2
+        max_lines_per_read = 160
+        max_total_read_lines = 600
+        rounds_executed = 0
+        pipeline_steps: List[str] = []
+        flow_tools_used: List[str] = []
+        read_scope_lines_total = 0
+        read_scope_ranges: List[Dict[str, int]] = []
+        blocked_reason: Optional[str] = None
+        blocked_stage: Optional[str] = None
+        reachability = "likely_reachable"
+        authenticity_hint = "likely"
+        location_source = "input"
+        file_path = str(normalized_input.get("file_path") or "").strip()
+        line_start = self._coerce_positive_int(normalized_input.get("line_start"))
+        line_end = self._coerce_positive_int(normalized_input.get("line_end")) or line_start
+        function_name = str(normalized_input.get("function_name") or "").strip() or None
+        function_start_line: Optional[int] = None
+        function_end_line: Optional[int] = None
+        flow_observation_text = ""
+        round_success = False
+        mcp_failures: List[Dict[str, Any]] = []
+
+        def _record_mcp_failure(stage: str, observation: str) -> None:
+            if len(mcp_failures) >= 12:
+                return
+            mcp_failures.append(
+                {
+                    "stage": stage,
+                    "reason": "mcp_unavailable",
+                    "observation_excerpt": str(observation or "")[:260],
+                }
+            )
+
+        for round_index in range(1, max_rounds + 1):
+            if self.is_cancelled:
+                blocked_reason = "cancelled"
+                break
+            rounds_executed = round_index
+
+            if not file_path or line_start is None:
+                keyword = self._build_verify_reachability_keyword(normalized_input)
+                if not keyword:
+                    blocked_reason = "missing_location"
+                    break
+                location_source = "search_code"
+                search_input: Dict[str, Any] = {"keyword": keyword, "max_results": 10}
+                directory_hint = str(file_path or "").strip()
+                if directory_hint and "/" in directory_hint:
+                    search_input["directory"] = os.path.dirname(directory_hint) or "."
+                pipeline_steps.append("search_code")
+                search_output = await self.execute_tool(
+                    "search_code",
+                    search_input,
+                    _fallback_depth=fallback_depth + 1,
+                )
+                if self._looks_like_tool_failure_output(search_output):
+                    blocked_reason = self._classify_verify_blocked_reason(search_output) or "missing_location"
+                    blocked_stage = "search_code"
+                    if blocked_reason == "mcp_unavailable":
+                        _record_mcp_failure("search_code", search_output)
+                    break
+                located_file, located_line = self._extract_location_from_search_output(search_output)
+                if located_file:
+                    file_path = located_file
+                if located_line is not None:
+                    line_start = located_line
+                    line_end = line_start if line_end is None else max(line_start, line_end)
+                if not file_path or line_start is None:
+                    blocked_reason = "missing_location"
+                    break
+
+            if line_end is None:
+                line_end = line_start
+
+            remaining_budget = max_total_read_lines - read_scope_lines_total
+            if remaining_budget <= 0:
+                blocked_reason = "read_budget_exhausted"
+                break
+
+            if (
+                function_start_line is not None
+                and function_end_line is not None
+                and function_end_line >= function_start_line
+                and (function_end_line - function_start_line + 1) <= max_lines_per_read
+            ):
+                read_start = function_start_line
+                read_end = function_end_line
+            else:
+                before_radius = 40 if round_index == 1 else 70
+                read_start = max(1, int(line_start) - before_radius)
+                read_end = max(int(line_end or line_start), int(line_start)) + 119
+
+            if read_end < read_start:
+                read_end = read_start
+
+            desired_span = read_end - read_start + 1
+            bounded_span = min(max_lines_per_read, remaining_budget, desired_span)
+            if bounded_span <= 0:
+                blocked_reason = "read_budget_exhausted"
+                break
+            read_end = read_start + bounded_span - 1
+            read_scope_lines_total += bounded_span
+            read_scope_ranges.append(
+                {
+                    "round": int(round_index),
+                    "start_line": int(read_start),
+                    "end_line": int(read_end),
+                    "max_lines": int(bounded_span),
+                }
+            )
+
+            read_input = {
+                "file_path": file_path,
+                "start_line": read_start,
+                "end_line": read_end,
+                "max_lines": bounded_span,
+            }
+            pipeline_steps.append("read_file")
+            read_output = await self.execute_tool(
+                "read_file",
+                read_input,
+                _fallback_depth=fallback_depth + 1,
+            )
+            if self._looks_like_tool_failure_output(read_output):
+                blocked_reason = self._classify_verify_blocked_reason(read_output)
+                if blocked_reason is None:
+                    blocked_reason = "missing_location"
+                blocked_stage = "read_file"
+                if blocked_reason == "mcp_unavailable":
+                    _record_mcp_failure("read_file", read_output)
+                break
+
+            locate_input = {
+                "file_path": file_path,
+                "line_start": int(line_start),
+            }
+            pipeline_steps.append("locate_enclosing_function")
+            locate_output = await self.execute_tool(
+                "locate_enclosing_function",
+                locate_input,
+                _fallback_depth=fallback_depth + 1,
+            )
+            if self._looks_like_tool_failure_output(locate_output):
+                locate_blocked = self._classify_verify_blocked_reason(locate_output)
+                if locate_blocked == "mcp_unavailable":
+                    blocked_reason = locate_blocked
+                    blocked_stage = "locate_enclosing_function"
+                    _record_mcp_failure("locate_enclosing_function", locate_output)
+                    break
+            else:
+                located_function = self._extract_function_locator_result(
+                    locate_output,
+                    target_line=line_start,
+                )
+                if str(located_function.get("function_name") or "").strip():
+                    function_name = str(located_function["function_name"]).strip()
+                function_start_line = self._coerce_positive_int(
+                    located_function.get("function_start_line")
+                ) or function_start_line
+                function_end_line = self._coerce_positive_int(
+                    located_function.get("function_end_line")
+                ) or function_end_line
+                if function_name:
+                    extract_input = {
+                        "file_path": file_path,
+                        "function_name": function_name,
+                    }
+                    pipeline_steps.append("extract_function")
+                    extract_output = await self.execute_tool(
+                        "extract_function",
+                        extract_input,
+                        _fallback_depth=fallback_depth + 1,
+                    )
+                    if self._looks_like_tool_failure_output(extract_output):
+                        extract_blocked = self._classify_verify_blocked_reason(extract_output)
+                        if extract_blocked == "mcp_unavailable":
+                            blocked_reason = extract_blocked
+                            blocked_stage = "extract_function"
+                            _record_mcp_failure("extract_function", extract_output)
+                            break
+
+            analysis_start_line = (
+                function_start_line
+                if function_start_line is not None
+                else int(read_start)
+            )
+            analysis_end_line = (
+                function_end_line
+                if function_end_line is not None
+                else int(read_end)
+            )
+            if analysis_end_line < analysis_start_line:
+                analysis_end_line = analysis_start_line
+
+            dataflow_input = {
+                "file_path": file_path,
+                "start_line": int(analysis_start_line),
+                "end_line": int(analysis_end_line),
+                "source_hints": normalized_input.get("source_hints") or [],
+                "sink_hints": normalized_input.get("sink_hints") or [],
+                "variable_name": function_name or "user_input",
+                "max_hops": 8,
+            }
+            pipeline_steps.append("dataflow_analysis")
+            flow_tools_used.append("dataflow_analysis")
+            dataflow_output = await self.execute_tool(
+                "dataflow_analysis",
+                dataflow_input,
+                _fallback_depth=fallback_depth + 1,
+            )
+            if self._looks_like_tool_failure_output(dataflow_output):
+                dataflow_blocked = self._classify_verify_blocked_reason(dataflow_output)
+                if dataflow_blocked in {"mcp_unavailable", "cancelled"}:
+                    blocked_reason = dataflow_blocked
+                    blocked_stage = "dataflow_analysis"
+                    if dataflow_blocked == "mcp_unavailable":
+                        _record_mcp_failure("dataflow_analysis", dataflow_output)
+                    break
+            else:
+                flow_observation_text = (
+                    f"{flow_observation_text}\n\n[dataflow_analysis]\n{str(dataflow_output or '')}"
+                ).strip()
+
+            controlflow_input = {
+                "file_path": file_path,
+                "line_start": int(line_start),
+                "line_end": int(line_end or line_start),
+                "function_name": function_name,
+                "vulnerability_type": normalized_input.get("vulnerability_type"),
+                "call_chain_hint": normalized_input.get("call_chain_hint") or [],
+                "control_conditions_hint": normalized_input.get("control_conditions_hint") or [],
+            }
+            pipeline_steps.append("controlflow_analysis_light")
+            flow_tools_used.append("controlflow_analysis_light")
+            controlflow_output = await self.execute_tool(
+                "controlflow_analysis_light",
+                controlflow_input,
+                _fallback_depth=fallback_depth + 1,
+            )
+            if self._looks_like_tool_failure_output(controlflow_output):
+                controlflow_blocked = self._classify_verify_blocked_reason(controlflow_output)
+                if controlflow_blocked in {"mcp_unavailable", "cancelled"}:
+                    blocked_reason = controlflow_blocked
+                    blocked_stage = "controlflow_analysis_light"
+                    if controlflow_blocked == "mcp_unavailable":
+                        _record_mcp_failure("controlflow_analysis_light", controlflow_output)
+                    break
+            else:
+                flow_observation_text = (
+                    f"{flow_observation_text}\n\n[controlflow_analysis_light]\n{str(controlflow_output or '')}"
+                ).strip()
+
+            joern_input: Dict[str, Any] = {
+                "file_path": file_path,
+                "line_start": int(line_start),
+            }
+            call_chain_hint = normalized_input.get("call_chain_hint") or []
+            if call_chain_hint:
+                joern_input["call_chain"] = call_chain_hint
+            control_conditions_hint = normalized_input.get("control_conditions_hint") or []
+            if control_conditions_hint:
+                joern_input["control_conditions"] = control_conditions_hint
+
+            pipeline_steps.append("joern_reachability_verify")
+            flow_tools_used.append("joern_reachability_verify")
+            joern_output = await self.execute_tool(
+                "joern_reachability_verify",
+                joern_input,
+                _fallback_depth=fallback_depth + 1,
+            )
+            flow_observation_text = (
+                f"{flow_observation_text}\n\n[joern_reachability_verify]\n{str(joern_output or '')}"
+            ).strip()
+            if self._looks_like_tool_failure_output(joern_output):
+                flow_blocked = self._classify_verify_blocked_reason(joern_output)
+                if flow_blocked in {
+                    "mcp_unavailable",
+                    "missing_location",
+                    "read_budget_exhausted",
+                    "cancelled",
+                }:
+                    blocked_reason = flow_blocked
+                    blocked_stage = "joern_reachability_verify"
+                    if flow_blocked == "mcp_unavailable":
+                        _record_mcp_failure("joern_reachability_verify", joern_output)
+                    break
+                blocked_reason = flow_blocked or "insufficient_flow_evidence"
+                if round_index < max_rounds and blocked_reason == "insufficient_flow_evidence":
+                    blocked_reason = None
+                    continue
+                blocked_stage = "joern_reachability_verify"
+                break
+
+            flow_state = self._classify_flow_observation(flow_observation_text)
+            if flow_state == "negative":
+                reachability = "unreachable"
+                authenticity_hint = "false_positive"
+                round_success = True
+                break
+            if flow_state == "positive":
+                reachability = "reachable"
+                authenticity_hint = "likely"
+                round_success = True
+                break
+
+            cpg_input = {
+                "file_path": file_path,
+                "line_start": int(line_start),
+                "query": self._build_cpg_query_text(
+                    normalized_input,
+                    file_path=file_path,
+                    line_start=int(line_start),
+                    function_name=function_name,
+                ),
+            }
+            pipeline_steps.append("cpg_query")
+            flow_tools_used.append("cpg_query")
+            cpg_output = await self.execute_tool(
+                "cpg_query",
+                cpg_input,
+                _fallback_depth=fallback_depth + 1,
+            )
+            if self._looks_like_tool_failure_output(cpg_output):
+                flow_blocked = self._classify_verify_blocked_reason(cpg_output)
+                if flow_blocked in {
+                    "mcp_unavailable",
+                    "missing_location",
+                    "read_budget_exhausted",
+                    "cancelled",
+                }:
+                    blocked_reason = flow_blocked
+                    blocked_stage = "cpg_query"
+                    if flow_blocked == "mcp_unavailable":
+                        _record_mcp_failure("cpg_query", cpg_output)
+                    break
+                blocked_reason = flow_blocked or "insufficient_flow_evidence"
+                if round_index < max_rounds and blocked_reason == "insufficient_flow_evidence":
+                    blocked_reason = None
+                    continue
+                blocked_stage = "cpg_query"
+                break
+
+            flow_observation_text = f"{flow_observation_text}\n\n[cpg_query]\n{cpg_output}"
+            flow_state = self._classify_flow_observation(flow_observation_text)
+            if flow_state == "negative":
+                reachability = "unreachable"
+                authenticity_hint = "false_positive"
+                round_success = True
+                break
+            if flow_state == "positive":
+                reachability = "reachable"
+                authenticity_hint = "likely"
+                round_success = True
+                break
+
+            blocked_reason = "insufficient_flow_evidence"
+            if round_index < max_rounds:
+                blocked_reason = None
+                continue
+            blocked_stage = "cpg_query"
+            break
+
+        if not round_success and blocked_reason is None:
+            blocked_reason = "insufficient_flow_evidence"
+            blocked_stage = "flow_conclusion"
+
+        unique_flow_tools: List[str] = []
+        for item in flow_tools_used:
+            normalized = str(item or "").strip()
+            if normalized and normalized not in unique_flow_tools:
+                unique_flow_tools.append(normalized)
+        flow_tools_used = unique_flow_tools
+
+        pipeline_metadata: Dict[str, Any] = {
+            "verify_pipeline_steps": list(pipeline_steps),
+            "verify_pipeline_rounds": int(rounds_executed),
+            "read_scope_lines_total": int(read_scope_lines_total),
+            "read_scope_ranges": list(read_scope_ranges),
+            "flow_tools_used": list(flow_tools_used),
+            "location_source": location_source,
+            "mcp_failures": list(mcp_failures),
+        }
+        if blocked_reason:
+            pipeline_metadata["verify_pipeline_blocked_reason"] = blocked_reason
+        if blocked_stage:
+            pipeline_metadata["verify_pipeline_blocked_stage"] = blocked_stage
+
+        payload = {
+            "reachability": reachability,
+            "authenticity_hint": authenticity_hint,
+            "file_path": file_path,
+            "line_start": line_start,
+            "line_end": line_end,
+            "function_name": function_name,
+            "verify_pipeline_steps": pipeline_metadata["verify_pipeline_steps"],
+            "verify_pipeline_rounds": pipeline_metadata["verify_pipeline_rounds"],
+            "verify_pipeline_blocked_reason": blocked_reason,
+            "verify_pipeline_blocked_stage": blocked_stage,
+            "read_scope_lines_total": pipeline_metadata["read_scope_lines_total"],
+            "read_scope_ranges": pipeline_metadata["read_scope_ranges"],
+            "flow_tools_used": pipeline_metadata["flow_tools_used"],
+            "location_source": location_source,
+            "mcp_failures": pipeline_metadata["mcp_failures"],
+        }
+
+        if blocked_reason:
+            output_lines = [
+                "⚠️ verify_reachability 执行错误",
+                f"blocked_reason: {blocked_reason}",
+                f"location: {file_path or 'unknown'}:{line_start or 'unknown'}",
+                "verify_pipeline_json:",
+                json.dumps(payload, ensure_ascii=False),
+            ]
+            final_output = "\n".join(output_lines)
+            duration_ms = int((time.time() - started_at) * 1000)
+            await self.emit_tool_result(
+                "verify_reachability",
+                final_output,
+                duration_ms,
+                tool_call_id=tool_call_id,
+                tool_status="failed",
+                extra_metadata=pipeline_metadata,
+            )
+            return final_output
+
+        if reachability not in {"reachable", "likely_reachable", "unreachable"}:
+            reachability = "likely_reachable"
+
+        output_lines = [
+            "verify_reachability pipeline completed",
+            f"reachability: {reachability}",
+            f"authenticity_hint: {authenticity_hint}",
+            f"location: {file_path}:{line_start}",
+            "verify_pipeline_json:",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        if flow_observation_text:
+            output_lines.append("flow_observation_excerpt:")
+            output_lines.append(flow_observation_text[:1200])
+        final_output = "\n".join(output_lines)
+
+        duration_ms = int((time.time() - started_at) * 1000)
+        await self.emit_tool_result(
+            "verify_reachability",
+            final_output,
+            duration_ms,
+            tool_call_id=tool_call_id,
+            tool_status="completed",
+            extra_metadata=pipeline_metadata,
+        )
+        self._record_tool_context(
+            tool_name="verify_reachability",
+            tool_input=normalized_input,
+            tool_metadata={
+                "file_path": file_path,
+                "resolved_file_path": file_path,
+                "line_start": line_start,
+                "line_end": line_end,
+                **pipeline_metadata,
+            },
+        )
+        return final_output
+
     def _resolve_virtual_tool_name(
         self,
         requested_tool_name: str,
@@ -1788,39 +2982,310 @@ class BaseAgent(ABC):
                 return target_name, requested_tool_name
             return requested_tool_name, None
 
-        if normalized == "verify_reachability":
-            dataflow_keys = {"source_hints", "sink_hints", "variable_name", "max_hops"}
-            controlflow_keys = {
-                "file_path",
-                "line_start",
-                "line_end",
-                "function_name",
-                "vulnerability_type",
-                "call_chain_hint",
-                "control_conditions_hint",
-                "entry_points_hint",
-            }
-
-            if "dataflow_analysis" in self.tools and any(key in input_dict for key in dataflow_keys):
-                return "dataflow_analysis", requested_tool_name
-
-            if "controlflow_analysis_light" in self.tools and any(
-                key in input_dict for key in controlflow_keys
-            ):
-                return "controlflow_analysis_light", requested_tool_name
-
-            if "extract_function" in self.tools and any(
-                key in input_dict for key in {"function_name", "file_path", "path"}
-            ):
-                return "extract_function", requested_tool_name
-
-            if "read_file" in self.tools:
-                return "read_file", requested_tool_name
-
         if normalized == "locate_enclosing_function":
             return "locate_enclosing_function", requested_tool_name
 
         return requested_tool_name, None
+
+    def _build_mcp_route_metadata(
+        self,
+        *,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        runtime = self._mcp_runtime
+        if (
+            not runtime
+            or not bool(getattr(runtime, "enabled", False))
+            or not hasattr(runtime, "router")
+        ):
+            return {}
+        router = getattr(runtime, "router", None)
+        route = None
+        try:
+            if router is not None and hasattr(router, "route"):
+                route = router.route(tool_name, dict(tool_input or {}))
+        except Exception:
+            route = None
+        if not route:
+            return {}
+
+        metadata: Dict[str, Any] = {
+            "mcp_route_enabled": True,
+            "mcp_adapter": str(route.adapter_name or ""),
+            "mcp_tool": str(route.mcp_tool_name or ""),
+        }
+        route_adapter = str(route.adapter_name or "").strip()
+        route_tool = str(route.mcp_tool_name or "").strip()
+        if route_adapter and route_tool:
+            metadata["mcp_route_primary"] = f"{route_adapter}.{route_tool}"
+        if (
+            str(tool_name or "").strip().lower() == "search_code"
+            and route_adapter == "code_index"
+            and route_tool == "search_code_advanced"
+        ):
+            metadata["mcp_route_fallback"] = "filesystem.search_files"
+        get_runtime_mode = getattr(runtime, "_get_runtime_mode", None)
+        runtime_mode = ""
+        if callable(get_runtime_mode):
+            try:
+                runtime_mode = str(get_runtime_mode(route.adapter_name) or "").strip()
+            except Exception:
+                runtime_mode = ""
+        if runtime_mode:
+            metadata["mcp_runtime_mode"] = runtime_mode
+        candidate_domains_fn = getattr(runtime, "_candidate_domains_for_mode", None)
+        if runtime_mode and callable(candidate_domains_fn):
+            try:
+                candidate_domains = candidate_domains_fn(runtime_mode)
+            except Exception:
+                candidate_domains = []
+            if isinstance(candidate_domains, list) and candidate_domains:
+                metadata["mcp_runtime_candidates"] = [
+                    str(item).strip()
+                    for item in candidate_domains
+                    if str(item).strip()
+                ]
+        return metadata
+
+    @staticmethod
+    def _compact_retry_input(raw_input: Dict[str, Any]) -> Dict[str, Any]:
+        normalized: Dict[str, Any] = {}
+        for key, value in dict(raw_input or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, str):
+                text = value.strip()
+                if not text:
+                    continue
+                normalized[str(key)] = text
+                continue
+            if isinstance(value, (list, dict)) and not value:
+                continue
+            normalized[str(key)] = value
+        return normalized
+
+    def _build_superpowers_solutions(
+        self,
+        *,
+        requested_tool_name: str,
+        resolved_tool_name: str,
+        tool_input: Dict[str, Any],
+        error_text: str,
+    ) -> List[Dict[str, Any]]:
+        normalized_tool = str(resolved_tool_name or requested_tool_name).strip().lower()
+        compact_input = self._compact_retry_input(tool_input)
+        solutions: List[Dict[str, Any]] = []
+
+        if normalized_tool == "read_file":
+            line_anchor = compact_input.get("line_start") or compact_input.get("start_line")
+            variant_1 = dict(compact_input)
+            if line_anchor is not None:
+                try:
+                    start_line = max(1, int(line_anchor))
+                except Exception:
+                    start_line = 1
+                variant_1["start_line"] = start_line
+                variant_1["end_line"] = start_line + 119
+                variant_1["max_lines"] = 120
+            variant_2 = dict(compact_input)
+            if "start_line" in variant_2:
+                try:
+                    start_line = max(1, int(variant_2["start_line"]))
+                except Exception:
+                    start_line = 1
+                variant_2["start_line"] = start_line
+                variant_2["end_line"] = start_line + 79
+                variant_2["max_lines"] = 80
+            variant_3 = {
+                key: value
+                for key, value in compact_input.items()
+                if key in {"file_path", "path", "start_line", "end_line", "max_lines", "line_start", "line_end"}
+            }
+            if not variant_3:
+                variant_3 = dict(compact_input)
+            solutions.extend(
+                [
+                    {
+                        "title": "缩小读取窗口并保留定位锚点",
+                        "detail": "将读取范围限制到 120 行以内，降低超时和无效全文读取概率。",
+                        "retry_input": variant_1,
+                    },
+                    {
+                        "title": "简化参数并重试最小必要字段",
+                        "detail": "仅保留路径和行号相关字段，避免冗余参数触发校验冲突。",
+                        "retry_input": variant_2,
+                    },
+                    {
+                        "title": "保留核心参数并切换保守读取策略",
+                        "detail": "如果仍失败，继续使用最保守参数形态重试。",
+                        "retry_input": variant_3,
+                    },
+                ]
+            )
+
+        elif normalized_tool == "search_code":
+            keyword = str(
+                compact_input.get("keyword")
+                or compact_input.get("query")
+                or compact_input.get("pattern")
+                or ""
+            ).strip()
+            variant_1 = dict(compact_input)
+            if keyword:
+                variant_1["keyword"] = keyword
+            variant_1.setdefault("max_results", 20)
+            variant_2 = dict(variant_1)
+            variant_2.setdefault("directory", ".")
+            if "file_pattern" not in variant_2:
+                variant_2["file_pattern"] = "*"
+            variant_3 = {
+                key: value
+                for key, value in variant_2.items()
+                if key in {"keyword", "query", "pattern", "directory", "file_pattern", "max_results", "case_sensitive"}
+            }
+            if not variant_3:
+                variant_3 = dict(variant_2)
+            solutions.extend(
+                [
+                    {
+                        "title": "归一化关键词并限制返回数量",
+                        "detail": "统一 keyword/query/pattern 字段，减少模糊请求导致的执行失败。",
+                        "retry_input": variant_1,
+                    },
+                    {
+                        "title": "补齐目录与文件模式边界",
+                        "detail": "增加 directory/file_pattern，缩小搜索范围提升稳定性。",
+                        "retry_input": variant_2,
+                    },
+                    {
+                        "title": "使用最小查询参数重试",
+                        "detail": "保留最小必要字段，避免多参数冲突。",
+                        "retry_input": variant_3,
+                    },
+                ]
+            )
+        else:
+            variant_1 = dict(compact_input)
+            variant_2 = {
+                key: value
+                for key, value in compact_input.items()
+                if key not in {"reason", "notes", "comment", "description"}
+            }
+            if not variant_2:
+                variant_2 = dict(compact_input)
+            variant_3 = dict(compact_input)
+            solutions.extend(
+                [
+                    {
+                        "title": "使用清洗后的参数原样重试",
+                        "detail": "剔除空值参数，优先验证是否为瞬时故障。",
+                        "retry_input": variant_1,
+                    },
+                    {
+                        "title": "移除非关键说明字段后重试",
+                        "detail": "减少非关键输入，避免 schema/路由歧义。",
+                        "retry_input": variant_2,
+                    },
+                    {
+                        "title": "保守重试并保持当前工具链",
+                        "detail": "在不改变工具类型前提下进行最后一次重试。",
+                        "retry_input": variant_3,
+                    },
+                ]
+            )
+
+        if len(solutions) < 3:
+            fallback_solution = {
+                "title": "检查 MCP 路由与工具入参后重试",
+                "detail": "核对 mcp/tool 路由、必填参数与路径范围。",
+                "retry_input": dict(compact_input),
+            }
+            while len(solutions) < 3:
+                solutions.append(dict(fallback_solution))
+
+        # error_text 参与上下文，避免未使用告警并帮助后续诊断。
+        if error_text and isinstance(solutions[0], dict):
+            solutions[0].setdefault("reason", str(error_text)[:240])
+        return solutions[:3]
+
+    @staticmethod
+    def _format_superpowers_solutions(solutions: List[Dict[str, Any]]) -> str:
+        lines = ["", "### superpowers skill 建议（Top 3）"]
+        for index, item in enumerate(solutions[:3], start=1):
+            title = str(item.get("title") or "").strip() or "调整参数后重试"
+            detail = str(item.get("detail") or "").strip() or "保持工具不变并缩小输入范围。"
+            lines.append(f"{index}. {title}：{detail}")
+        return "\n".join(lines)
+
+    async def _maybe_retry_with_superpowers(
+        self,
+        *,
+        requested_tool_name: str,
+        resolved_tool_name: str,
+        tool_input: Dict[str, Any],
+        failure_text: str,
+        fallback_depth: int,
+        superpowers_retry: int,
+    ) -> Optional[str]:
+        if superpowers_retry >= SUPERPOWERS_MAX_RETRIES:
+            return None
+        if self.is_cancelled:
+            return None
+
+        solutions = self._build_superpowers_solutions(
+            requested_tool_name=requested_tool_name,
+            resolved_tool_name=resolved_tool_name,
+            tool_input=tool_input,
+            error_text=failure_text,
+        )
+        if not solutions:
+            return None
+
+        if superpowers_retry == 0:
+            await self.emit_event(
+                "info",
+                f"[{self.name}] superpowers skill 已启动：为 {resolved_tool_name} 生成 3 个可行方案",
+                metadata={
+                    "skill": "superpowers",
+                    "tool_name": resolved_tool_name,
+                    "requested_tool_name": requested_tool_name,
+                    "solutions": [
+                        {
+                            "rank": idx + 1,
+                            "title": str(item.get("title") or ""),
+                            "detail": str(item.get("detail") or ""),
+                        }
+                        for idx, item in enumerate(solutions[:3])
+                    ],
+                },
+            )
+
+        selected = solutions[min(superpowers_retry, len(solutions) - 1)]
+        retry_input = dict(selected.get("retry_input") or tool_input or {})
+        retry_step = superpowers_retry + 1
+        await self.emit_event(
+            "info",
+            (
+                f"[{self.name}] superpowers 重试 {retry_step}/{SUPERPOWERS_MAX_RETRIES}: "
+                f"{selected.get('title') or '调整参数重试'}"
+            ),
+            metadata={
+                "skill": "superpowers",
+                "tool_name": resolved_tool_name,
+                "requested_tool_name": requested_tool_name,
+                "retry_step": retry_step,
+                "max_retries": SUPERPOWERS_MAX_RETRIES,
+                "retry_input": retry_input,
+                "failure_excerpt": str(failure_text or "")[:500],
+            },
+        )
+        return await self.execute_tool(
+            requested_tool_name,
+            retry_input,
+            _fallback_depth=fallback_depth,
+            _superpowers_retry=superpowers_retry + 1,
+        )
 
     def _build_retry_guard_key(self, tool_name: str, tool_input: Dict[str, Any]) -> Optional[str]:
         if tool_name not in RETRY_GUARD_TOOLS:
@@ -1828,7 +3293,34 @@ class BaseAgent(ABC):
 
         if tool_name == "read_file":
             file_path = self._normalize_path_key(tool_input.get("file_path"))
-            return f"{tool_name}|{file_path}" if file_path else None
+            if not file_path:
+                return None
+            start_line = self._coerce_positive_int(
+                tool_input.get("start_line") or tool_input.get("line_start")
+            ) or 0
+            end_line = self._coerce_positive_int(
+                tool_input.get("end_line") or tool_input.get("line_end")
+            ) or 0
+            anchor_keyword = str(
+                tool_input.get("keyword")
+                or tool_input.get("pattern")
+                or tool_input.get("query")
+                or ""
+            ).strip()
+            fingerprint_payload = {
+                "file": file_path,
+                "start_line": int(start_line),
+                "end_line": int(end_line),
+                "anchor_keyword": anchor_keyword[:120],
+            }
+            fingerprint = hashlib.sha1(
+                json.dumps(
+                    fingerprint_payload,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8", errors="ignore")
+            ).hexdigest()[:12]
+            return f"{tool_name}|{file_path}|{start_line}|{end_line}|{fingerprint}"
 
         if tool_name == "search_code":
             keyword = str(tool_input.get("keyword") or "").strip()
@@ -1884,6 +3376,53 @@ class BaseAgent(ABC):
                     required_fields.add(str(name))
         return fields, required_fields
 
+    @staticmethod
+    def _extract_raw_input_text(
+        tool_input: Dict[str, Any],
+        repaired_input: Dict[str, Any],
+    ) -> str:
+        for source in (repaired_input, tool_input):
+            if not isinstance(source, dict):
+                continue
+            for key in ("raw_input", "raw", "input"):
+                candidate = source.get(key)
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+        return ""
+
+    def _extract_keyword_from_raw_input(self, raw_input_text: str) -> Optional[str]:
+        text = str(raw_input_text or "").strip()
+        if not text:
+            return None
+
+        for key in ("keyword", "pattern", "query"):
+            pattern = rf'["\']{re.escape(key)}["\']\s*:\s*["\']([^"\']{{1,220}})["\']'
+            for candidate in re.findall(pattern, text):
+                normalized = self._normalize_keyword_candidate(candidate)
+                if normalized:
+                    return normalized
+
+        return self._extract_keyword_hint_from_context([text])
+
+    def _extract_file_hint_from_raw_input(self, raw_input_text: str) -> Dict[str, Any]:
+        text = str(raw_input_text or "").strip()
+        if not text:
+            return {}
+
+        for key in ("file_path", "path", "file", "filepath"):
+            pattern = rf'["\']{re.escape(key)}["\']\s*:\s*["\']([^"\']{{1,500}})["\']'
+            for candidate in re.findall(pattern, text):
+                normalized_path = str(candidate or "").strip().strip("`'\"")
+                if not normalized_path:
+                    continue
+                hint = self._extract_file_hint_from_context([normalized_path])
+                if hint:
+                    return hint
+                if "\n" not in normalized_path:
+                    return {"file_path": normalized_path}
+
+        return self._extract_file_hint_from_context([text])
+
     def _repair_tool_input(
         self,
         tool: Any,
@@ -1897,11 +3436,29 @@ class BaseAgent(ABC):
 
         repaired = dict(tool_input)
         repaired_changes: Dict[str, str] = {}
+        envelope_sources: List[Tuple[str, Dict[str, Any]]] = []
+        arguments_payload = tool_input.get("arguments")
+        if isinstance(arguments_payload, dict):
+            envelope_sources.append(("arguments", arguments_payload))
+        items_payload = tool_input.get("items")
+        if isinstance(items_payload, list):
+            first_item = next((item for item in items_payload if isinstance(item, dict)), None)
+            if isinstance(first_item, dict):
+                envelope_sources.append(("items", first_item))
+
+        for source_name, source_payload in envelope_sources:
+            for source_key, source_value in source_payload.items():
+                if source_key in repaired:
+                    continue
+                repaired[source_key] = source_value
+                repaired_changes[f"__envelope.{source_name}.{source_key}"] = source_key
+
         for source_key, target_key in TOOL_INPUT_REPAIR_MAP.items():
             if source_key in repaired and target_key not in repaired and target_key in schema_fields:
                 repaired[target_key] = repaired[source_key]
                 repaired_changes[source_key] = target_key
 
+        raw_input_text = self._extract_raw_input_text(tool_input, repaired)
         tool_name = str(getattr(tool, "name", "") or resolved_tool_name or "")
         if tool_name == "pattern_match":
             has_code = bool(str(repaired.get("code") or "").strip())
@@ -1925,19 +3482,33 @@ class BaseAgent(ABC):
 
         context_texts = [text for text in self._recent_thought_texts if isinstance(text, str) and text.strip()]
         if tool_name == "read_file" and "file_path" in schema_fields:
+            def _safe_positive_int(value: Any) -> Optional[int]:
+                try:
+                    parsed = int(value)
+                except Exception:
+                    return None
+                return parsed if parsed > 0 else None
+
             file_hint: Dict[str, Any] = {}
             file_path = str(repaired.get("file_path") or "").strip()
             if not file_path:
+                used_raw_input_hint = False
                 file_hint = self._extract_file_hint_from_context(context_texts)
                 hinted_path = str(file_hint.get("file_path") or "").strip()
+                if not hinted_path and raw_input_text:
+                    file_hint = self._extract_file_hint_from_raw_input(raw_input_text)
+                    hinted_path = str(file_hint.get("file_path") or "").strip()
+                    used_raw_input_hint = bool(hinted_path)
                 if hinted_path:
                     repaired["file_path"] = hinted_path
-                    repaired_changes["__context.file_path"] = "file_path"
+                    source_label = "__raw_input.file_path" if used_raw_input_hint else "__context.file_path"
+                    repaired_changes[source_label] = "file_path"
                     if "start_line" in schema_fields and repaired.get("start_line") in (None, "") and file_hint.get("start_line") is not None:
                         repaired["start_line"] = int(file_hint["start_line"])
                         if "end_line" in schema_fields and repaired.get("end_line") in (None, "") and file_hint.get("end_line") is not None:
                             repaired["end_line"] = int(file_hint["end_line"])
-                            repaired_changes["__context.line_range"] = "start_line,end_line"
+                            line_source_label = "__raw_input.line_range" if used_raw_input_hint else "__context.line_range"
+                            repaired_changes[line_source_label] = "start_line,end_line"
             else:
                 file_hint = {"file_path": file_path}
 
@@ -1950,16 +3521,67 @@ class BaseAgent(ABC):
                 repaired["project_scope"] = True
                 repaired_changes["__context.project_scope"] = "project_scope"
 
+            start_value = _safe_positive_int(repaired.get("start_line"))
+            end_value = _safe_positive_int(repaired.get("end_line"))
+            if start_value is None and end_value is None:
+                hint_start = _safe_positive_int(file_hint.get("start_line"))
+                hint_end = _safe_positive_int(file_hint.get("end_line"))
+                if hint_start is not None:
+                    start_value = hint_start
+                if hint_end is not None:
+                    end_value = hint_end
+
+            if start_value is not None and end_value is None:
+                window_start = max(1, start_value - 80)
+                window_end = max(start_value, start_value + 119)
+                if window_end - window_start + 1 > 200:
+                    window_end = window_start + 199
+                start_value, end_value = window_start, window_end
+                repaired_changes.setdefault("__read_scope.single_line_window", "start_line,end_line")
+            elif start_value is not None and end_value is not None and start_value == end_value:
+                window_start = max(1, start_value - 80)
+                window_end = max(start_value, start_value + 119)
+                if window_end - window_start + 1 > 200:
+                    window_end = window_start + 199
+                start_value, end_value = window_start, window_end
+                repaired_changes.setdefault("__read_scope.single_point_expand", "start_line,end_line")
+            elif start_value is None and end_value is not None:
+                start_value = max(1, end_value - 199)
+                repaired_changes.setdefault("__read_scope.infer_start_from_end", "start_line")
+
+            if start_value is not None and end_value is not None and end_value < start_value:
+                end_value = start_value
+            if start_value is not None and end_value is not None and (end_value - start_value + 1) > 200:
+                end_value = start_value + 199
+                repaired_changes.setdefault("__read_scope.clamp_span", "end_line")
+
+            if "start_line" in schema_fields and start_value is not None:
+                repaired["start_line"] = int(start_value)
+            if "end_line" in schema_fields and end_value is not None:
+                repaired["end_line"] = int(end_value)
+
+            if "max_lines" in schema_fields:
+                max_lines_value = _safe_positive_int(repaired.get("max_lines")) or 200
+                if max_lines_value > 200:
+                    max_lines_value = 200
+                    repaired_changes.setdefault("__read_scope.max_lines_clamped", "max_lines")
+                repaired["max_lines"] = int(max_lines_value)
+
         if tool_name == "search_code" and "keyword" in schema_fields:
             keyword = str(repaired.get("keyword") or "").strip()
             if not keyword:
                 hinted_keyword = self._extract_keyword_hint_from_context(context_texts)
+                source_label = "__context.keyword"
+                if not hinted_keyword and raw_input_text:
+                    hinted_keyword = self._extract_keyword_from_raw_input(raw_input_text)
+                    source_label = "__raw_input.keyword"
                 if hinted_keyword:
                     repaired["keyword"] = hinted_keyword
-                    repaired_changes["__context.keyword"] = "keyword"
+                    repaired_changes[source_label] = "keyword"
                     if "is_regex" in schema_fields and "is_regex" not in repaired and self._keyword_prefers_regex(hinted_keyword):
                         repaired["is_regex"] = True
-                        repaired_changes["__context.regex_hint"] = "is_regex"
+                        regex_label = "__context.regex_hint" if source_label == "__context.keyword" else "__raw_input.regex_hint"
+                        repaired_changes[regex_label] = "is_regex"
 
         missing_required: List[str] = []
         for name in sorted(required_fields):
@@ -1968,8 +3590,266 @@ class BaseAgent(ABC):
                 missing_required.append(name)
 
         return repaired, repaired_changes, missing_required, sorted(schema_fields)
+
+    @staticmethod
+    def _strict_read_window(line_number: int) -> Tuple[int, int, int]:
+        safe_line = max(1, int(line_number))
+        start_line = max(1, safe_line - 60)
+        end_line = max(safe_line, safe_line + 99)
+        if (end_line - start_line + 1) > 200:
+            end_line = start_line + 199
+        max_lines = end_line - start_line + 1
+        return start_line, end_line, max_lines
+
+    def _extract_read_anchor_keyword(
+        self,
+        repaired_input: Dict[str, Any],
+        raw_input_text: str,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        for field in ("keyword", "pattern", "query"):
+            candidate = self._normalize_keyword_candidate(repaired_input.get(field))
+            if candidate:
+                return candidate, "input"
+
+        if raw_input_text:
+            candidate = self._extract_keyword_from_raw_input(raw_input_text)
+            if candidate:
+                return candidate, "raw_input"
+
+        context_texts = [text for text in self._recent_thought_texts if isinstance(text, str) and text.strip()]
+        if context_texts:
+            candidate = self._extract_keyword_hint_from_context(context_texts)
+            if candidate:
+                return candidate, "context"
+        return None, None
+
+    @staticmethod
+    def _build_include_guard_hint(file_path: str) -> Optional[str]:
+        basename = os.path.basename(str(file_path or "").strip())
+        stem = os.path.splitext(basename)[0]
+        normalized = re.sub(r"[^A-Za-z0-9]+", "_", stem).strip("_")
+        if not normalized:
+            return None
+        guard = f"{normalized}_H".upper()
+        return guard if len(guard) >= 4 else None
+
+    def _build_read_anchor_candidates(
+        self,
+        repaired_input: Dict[str, Any],
+        raw_input_text: str,
+    ) -> List[Tuple[str, str]]:
+        candidates: List[Tuple[str, str]] = []
+        seen: Set[str] = set()
+
+        def _append(raw_value: Any, source: str) -> None:
+            normalized = self._normalize_keyword_candidate(raw_value)
+            if not normalized:
+                return
+            key = normalized.lower()
+            if key in seen:
+                return
+            seen.add(key)
+            candidates.append((normalized, source))
+
+        for field in ("keyword", "pattern", "query"):
+            _append(repaired_input.get(field), "input")
+
+        if raw_input_text:
+            _append(self._extract_keyword_from_raw_input(raw_input_text), "raw_input")
+
+        file_path = str(repaired_input.get("file_path") or repaired_input.get("path") or "").strip()
+        if file_path:
+            stem = os.path.splitext(os.path.basename(file_path))[0]
+            _append(stem, "file_path_stem")
+            _append(self._build_include_guard_hint(file_path), "file_path_guard")
+
+        context_texts = [text for text in self._recent_thought_texts if isinstance(text, str) and text.strip()]
+        if context_texts:
+            _append(self._extract_keyword_hint_from_context(context_texts), "context")
+
+        return candidates
+
+    @staticmethod
+    def _coerce_read_line(value: Any) -> Optional[int]:
+        try:
+            parsed = int(value)
+        except Exception:
+            return None
+        if parsed <= 0:
+            return None
+        return parsed
+
+    def _infer_search_directory_for_read(self, repaired_input: Dict[str, Any]) -> Optional[str]:
+        file_path = str(repaired_input.get("file_path") or repaired_input.get("path") or "").strip()
+        if file_path and "/" in file_path:
+            directory = os.path.dirname(file_path).strip()
+            if directory:
+                return directory
+
+        reason_paths = repaired_input.get("reason_paths")
+        if isinstance(reason_paths, list):
+            for item in reason_paths:
+                candidate = str(item or "").strip().replace("\\", "/").strip("/")
+                if not candidate:
+                    continue
+                if "." in os.path.basename(candidate):
+                    candidate = os.path.dirname(candidate)
+                candidate = candidate.strip("/")
+                if candidate:
+                    return candidate
+        return None
+
+    async def _apply_strict_read_scope_policy(
+        self,
+        *,
+        requested_tool_name: str,
+        repaired_input: Dict[str, Any],
+        repaired_changes: Dict[str, str],
+        raw_input_text: str,
+        fallback_depth: int,
+    ) -> Tuple[Dict[str, Any], Dict[str, str], Optional[str], Dict[str, Any]]:
+        policy = self._read_scope_policy()
+        if policy != "strict_anchor":
+            return repaired_input, repaired_changes, None, {}
+
+        normalized_tool = str(requested_tool_name or "").strip().lower()
+        if normalized_tool != "read_file":
+            return repaired_input, repaired_changes, None, {}
+
+        output_input = dict(repaired_input)
+        output_changes = dict(repaired_changes)
+        metadata: Dict[str, Any] = {"read_scope_policy": "strict_anchor"}
+        output_input["strict_anchor"] = True
+
+        start_line = self._coerce_read_line(output_input.get("start_line"))
+        end_line = self._coerce_read_line(output_input.get("end_line"))
+
+        if start_line is None and end_line is None:
+            file_path_hint = str(output_input.get("file_path") or output_input.get("path") or "").strip()
+            search_directory = self._infer_search_directory_for_read(output_input)
+            file_pattern_hint = ""
+            if file_path_hint:
+                basename = os.path.basename(file_path_hint).strip()
+                if basename:
+                    file_pattern_hint = basename
+                if not search_directory:
+                    directory = os.path.dirname(file_path_hint).strip()
+                    if directory:
+                        search_directory = directory
+
+            search_candidates = self._build_read_anchor_candidates(output_input, raw_input_text)
+            search_candidates = search_candidates[:5]
+
+            located_file: Optional[str] = None
+            located_line: Optional[int] = None
+            last_search_failure: Optional[str] = None
+            if search_candidates:
+                for keyword, source in search_candidates:
+                    search_payload: Dict[str, Any] = {
+                        "keyword": keyword,
+                        "max_results": int(output_input.get("max_results") or 8),
+                    }
+                    if search_directory:
+                        search_payload["directory"] = search_directory
+                    if file_pattern_hint:
+                        search_payload["file_pattern"] = file_pattern_hint
+
+                    metadata["strict_anchor_search_payload"] = dict(search_payload)
+                    search_output = await self.execute_tool(
+                        "search_code",
+                        search_payload,
+                        _fallback_depth=fallback_depth + 1,
+                    )
+                    metadata["strict_anchor_search_hit_count"] = self._estimate_search_hit_count(search_output)
+                    if self._looks_like_tool_failure_output(search_output):
+                        last_search_failure = (
+                            "read_file 严格锚点模式：无法通过 search_code 定位目标代码，请先提供明确 file_path:line。"
+                        )
+                        continue
+
+                    located_file, located_line = self._extract_location_from_search_output(search_output)
+                    if located_line:
+                        metadata["read_anchor_keyword_source"] = source
+                        break
+
+                if located_line:
+                    if located_file and not str(output_input.get("file_path") or "").strip():
+                        output_input["file_path"] = located_file
+                        output_changes.setdefault("__strict_anchor.search.file_path", "file_path")
+
+                    start_line, end_line, max_lines = self._strict_read_window(located_line)
+                    output_input["start_line"] = int(start_line)
+                    output_input["end_line"] = int(end_line)
+                    output_input["max_lines"] = int(max_lines)
+                    output_changes.setdefault("__strict_anchor.search.window", "start_line,end_line,max_lines")
+                    metadata["read_anchor_source"] = "search_code"
+                    return output_input, output_changes, None, metadata
+
+            if file_path_hint:
+                fallback_start, fallback_end, fallback_max = 1, 120, 120
+                output_input["start_line"] = fallback_start
+                output_input["end_line"] = fallback_end
+                output_input["max_lines"] = fallback_max
+                output_input["allow_file_header_fallback"] = True
+                output_changes.setdefault(
+                    "__strict_anchor.file_header_fallback",
+                    "start_line,end_line,max_lines,allow_file_header_fallback",
+                )
+                metadata["read_anchor_source"] = "file_header_fallback"
+                metadata.setdefault("strict_anchor_search_hit_count", 0)
+                return output_input, output_changes, None, metadata
+
+            if last_search_failure:
+                return output_input, output_changes, last_search_failure, metadata
+
+            return (
+                output_input,
+                output_changes,
+                "read_file 严格锚点模式：缺少行号/锚点。请先使用 search_code 定位后再 read_file。",
+                metadata,
+            )
+
+        if start_line is None and end_line is not None:
+            start_line = max(1, int(end_line) - 199)
+        if start_line is not None and end_line is None:
+            end_line = start_line
+        if start_line is None:
+            return (
+                output_input,
+                output_changes,
+                "read_file 严格锚点模式：必须提供有效行号。",
+                metadata,
+            )
+        if end_line is None:
+            end_line = start_line
+
+        if end_line < start_line:
+            end_line = start_line
+        if (end_line - start_line + 1) > 200:
+            end_line = start_line + 199
+            output_changes.setdefault("__strict_anchor.span_clamped", "end_line")
+
+        max_lines = end_line - start_line + 1
+        output_input["start_line"] = int(start_line)
+        output_input["end_line"] = int(end_line)
+        output_input["max_lines"] = int(max_lines)
+        output_changes.setdefault("__strict_anchor.window", "start_line,end_line,max_lines")
+
+        anchor_source = "input"
+        if "__raw_input.line_range" in output_changes:
+            anchor_source = "raw_input"
+        elif "__context.line_range" in output_changes:
+            anchor_source = "context"
+        metadata["read_anchor_source"] = anchor_source
+        return output_input, output_changes, None, metadata
     
-    async def execute_tool(self, tool_name: str, tool_input: Dict) -> str:
+    async def execute_tool(
+        self,
+        tool_name: str,
+        tool_input: Dict,
+        _fallback_depth: int = 0,
+        _superpowers_retry: int = 0,
+    ) -> str:
         """
         统一的工具执行方法 - 支持取消和超时
 
@@ -1985,27 +3865,82 @@ class BaseAgent(ABC):
             return "⚠️ 任务已取消"
 
         requested_tool_name = str(tool_name or "").strip()
+        if requested_tool_name in DOWNLINED_TOOL_MESSAGES and requested_tool_name not in self.tools:
+            return f"⚠️ {DOWNLINED_TOOL_MESSAGES[requested_tool_name]}"
         raw_tool_input = tool_input if isinstance(tool_input, dict) else {}
+        raw_input_text = self._extract_raw_input_text(raw_tool_input, raw_tool_input)
 
-        virtual_resolved_name, virtual_alias = self._resolve_virtual_tool_name(
-            requested_tool_name,
-            raw_tool_input,
-        )
-        resolved_tool_name, alias_used = self._resolve_tool_name(virtual_resolved_name)
-        if virtual_alias:
-            alias_used = virtual_alias
+        disable_virtual_routing = self._disable_virtual_routing()
+        mcp_only_enforced = self._enforce_mcp_only()
+        runtime_policy_metadata: Dict[str, Any] = {}
+        if mcp_only_enforced:
+            runtime_policy_metadata["mcp_only_enforced"] = True
+
+        if str(requested_tool_name).strip().lower() == "verify_reachability":
+            return await self._execute_verify_reachability_pipeline(
+                raw_tool_input=raw_tool_input,
+                fallback_depth=_fallback_depth,
+            )
+
+        alias_used: Optional[str] = None
+        if disable_virtual_routing:
+            resolved_tool_name = requested_tool_name
+        else:
+            virtual_resolved_name, virtual_alias = self._resolve_virtual_tool_name(
+                requested_tool_name,
+                raw_tool_input,
+            )
+            resolved_tool_name, alias_used = self._resolve_tool_name(virtual_resolved_name)
+            if virtual_alias:
+                alias_used = virtual_alias
 
         tool = self.tools.get(resolved_tool_name)
         local_tool_available = bool(tool and hasattr(tool, "execute"))
 
         mcp_runtime = self._mcp_runtime
+        mcp_strict_mode = self._is_mcp_strict_mode(mcp_runtime) or mcp_only_enforced
         mcp_can_handle = bool(
             mcp_runtime
             and hasattr(mcp_runtime, "can_handle")
             and mcp_runtime.can_handle(resolved_tool_name)
         )
 
+        normalized_requested_tool = str(requested_tool_name or "").strip().lower()
+        alias_blocked = bool(
+            disable_virtual_routing
+            and normalized_requested_tool in VIRTUAL_TOOL_NAMES
+            and not local_tool_available
+            and not mcp_can_handle
+        )
+        if alias_blocked:
+            tool_call_id = str(uuid.uuid4())
+            blocked_message = (
+                "⚠️ 工具名不可用（需标准名）\n\n"
+                f"**请求工具**: {requested_tool_name}\n"
+                "请改用标准 MCP 工具名（如 qmd_query、search_code、read_file、locate_enclosing_function）。"
+            )
+            await self.emit_tool_call(
+                requested_tool_name,
+                raw_tool_input,
+                tool_call_id=tool_call_id,
+                alias_used=None,
+            )
+            await self.emit_tool_result(
+                requested_tool_name,
+                blocked_message,
+                0,
+                tool_call_id=tool_call_id,
+                tool_status="failed",
+                extra_metadata={
+                    **runtime_policy_metadata,
+                    "alias_blocked": True,
+                },
+            )
+            return blocked_message
+
         if not local_tool_available and not mcp_can_handle:
+            if requested_tool_name in DOWNLINED_TOOL_MESSAGES:
+                return f"⚠️ {DOWNLINED_TOOL_MESSAGES[requested_tool_name]}"
             return (
                 f"错误: 工具 '{requested_tool_name}' 不存在。"
                 f"可用工具: {list(self.tools.keys())}"
@@ -2023,10 +3958,43 @@ class BaseAgent(ABC):
             missing_required = []
             schema_fields = []
 
+        strict_read_error: Optional[str] = None
+        strict_read_metadata: Dict[str, Any] = {}
+        if str(resolved_tool_name or "").strip().lower() == "read_file":
+            (
+                repaired_input,
+                repaired_changes,
+                strict_read_error,
+                strict_read_metadata,
+            ) = await self._apply_strict_read_scope_policy(
+                requested_tool_name=resolved_tool_name,
+                repaired_input=repaired_input,
+                repaired_changes=repaired_changes,
+                raw_input_text=raw_input_text,
+                fallback_depth=_fallback_depth,
+            )
+            if strict_read_metadata:
+                runtime_policy_metadata.update(strict_read_metadata)
+
+        if local_tool_available and missing_required:
+            missing_required = [
+                name
+                for name in missing_required
+                if repaired_input.get(name) in (None, "", [])
+            ]
+
         repaired_input, write_scope_metadata, write_scope_error = self._enforce_write_scope(
             resolved_tool_name,
             repaired_input,
         )
+        route_metadata = self._build_mcp_route_metadata(
+            tool_name=resolved_tool_name,
+            tool_input=repaired_input,
+        )
+        if route_metadata:
+            runtime_policy_metadata = {**runtime_policy_metadata, **route_metadata}
+        if runtime_policy_metadata:
+            write_scope_metadata = {**runtime_policy_metadata, **write_scope_metadata}
         is_write_tool = self._is_write_tool(resolved_tool_name)
 
         serialized_input = json.dumps(repaired_input, ensure_ascii=False, sort_keys=True)
@@ -2043,8 +4011,8 @@ class BaseAgent(ABC):
             else 0
         )
 
-        validation_error: Optional[str] = None
-        if missing_required:
+        validation_error: Optional[str] = strict_read_error
+        if not validation_error and missing_required:
             validation_error = (
                 f"工具参数缺失，必填字段: {', '.join(missing_required)}。"
                 f" schema字段: {', '.join(schema_fields) if schema_fields else '未知'}"
@@ -2061,6 +4029,7 @@ class BaseAgent(ABC):
                 alias_used=alias_used,
                 input_repaired=repaired_changes or None,
                 validation_error=validation_error,
+                extra_metadata=route_metadata or None,
             )
 
             if write_scope_error:
@@ -2074,16 +4043,34 @@ class BaseAgent(ABC):
                     input_repaired=repaired_changes or None,
                     extra_metadata=write_scope_metadata or None,
                 )
-                return (
+                failure_output = (
                     "⚠️ 写入策略校验失败\n\n"
                     f"**请求工具**: {requested_tool_name}\n"
                     f"**实际工具**: {resolved_tool_name}\n"
                     f"**原因**: {write_scope_error}\n"
                     "请改用证据绑定的文件并缩小写入范围。"
                 )
+                return failure_output + self._format_superpowers_solutions(
+                    self._build_superpowers_solutions(
+                        requested_tool_name=requested_tool_name,
+                        resolved_tool_name=resolved_tool_name,
+                        tool_input=repaired_input,
+                        error_text=str(write_scope_error),
+                    )
+                )
 
             cached_output = self._tool_success_cache.get(tool_call_key)
-            if not is_write_tool and call_count >= 2 and cached_output is not None:
+            runtime_cache_priority = bool(
+                mcp_runtime
+                and str(resolved_tool_name or "").strip().lower()
+                in {"qmd_query", "read_file", "search_code"}
+            )
+            if (
+                not is_write_tool
+                and call_count >= 2
+                and cached_output is not None
+                and not runtime_cache_priority
+            ):
                 await self.emit_tool_result(
                     resolved_tool_name,
                     cached_output,
@@ -2130,6 +4117,12 @@ class BaseAgent(ABC):
                         self._deterministic_failure_counts.get(retry_guard_key, 0) + 1
                     )
                     self._deterministic_failure_last_error[retry_guard_key] = validation_error
+                validation_metadata = {
+                    **(write_scope_metadata or {}),
+                    "mcp_used": False,
+                    "mcp_dispatch_skipped": True,
+                    "mcp_dispatch_skip_reason": "validation_error",
+                }
                 await self.emit_tool_result(
                     resolved_tool_name,
                     validation_error,
@@ -2139,16 +4132,212 @@ class BaseAgent(ABC):
                     alias_used=alias_used,
                     input_repaired=repaired_changes or None,
                     validation_error=validation_error,
-                    extra_metadata=write_scope_metadata or None,
+                    extra_metadata=validation_metadata or None,
                 )
+                if strict_read_error and not missing_required:
+                    failure_output = (
+                        "⚠️ 工具参数校验失败\n\n"
+                        f"**请求工具**: {requested_tool_name}\n"
+                        f"**实际执行工具**: {resolved_tool_name}\n"
+                        f"**错误**: {validation_error}\n"
+                        "请先通过 search_code 获取定位锚点后再重试 read_file。"
+                    )
+                    return failure_output + self._format_superpowers_solutions(
+                        self._build_superpowers_solutions(
+                            requested_tool_name=requested_tool_name,
+                            resolved_tool_name=resolved_tool_name,
+                            tool_input=repaired_input,
+                            error_text=str(validation_error),
+                        )
+                    )
                 example_fields = ", ".join(f'"{name}": "..."' for name in missing_required)
-                return (
+                failure_output = (
                     "⚠️ 工具参数校验失败\n\n"
                     f"**请求工具**: {requested_tool_name}\n"
                     f"**实际执行工具**: {resolved_tool_name}\n"
                     f"**缺失必填字段**: {', '.join(missing_required)}\n"
                     f"**建议示例**: {{{example_fields}}}\n"
                     "请补齐参数后重试。"
+                )
+                return failure_output + self._format_superpowers_solutions(
+                    self._build_superpowers_solutions(
+                        requested_tool_name=requested_tool_name,
+                        resolved_tool_name=resolved_tool_name,
+                        tool_input=repaired_input,
+                        error_text=str(validation_error),
+                    )
+                )
+
+            if mcp_strict_mode:
+                strict_metadata = {
+                    **write_scope_metadata,
+                    "mcp_strict_mode": True,
+                }
+                if not mcp_runtime:
+                    strict_error = "mcp_runtime_unavailable_strict_mode"
+                    await self.emit_tool_result(
+                        resolved_tool_name,
+                        strict_error,
+                        0,
+                        tool_call_id=tool_call_id,
+                        tool_status="failed",
+                        alias_used=alias_used,
+                        input_repaired=repaired_changes or None,
+                        extra_metadata=strict_metadata or None,
+                    )
+                    return (
+                        "⚠️ MCP 严格模式阻断\n\n"
+                        f"**请求工具**: {requested_tool_name}\n"
+                        f"**实际工具**: {resolved_tool_name}\n"
+                        "原因: MCP Runtime 未就绪，禁止本地回退。"
+                    )
+
+                if not mcp_can_handle:
+                    strict_error = f"mcp_route_missing:{resolved_tool_name}"
+                    await self.emit_tool_result(
+                        resolved_tool_name,
+                        strict_error,
+                        0,
+                        tool_call_id=tool_call_id,
+                        tool_status="failed",
+                        alias_used=alias_used,
+                        input_repaired=repaired_changes or None,
+                        extra_metadata=strict_metadata or None,
+                    )
+                    return (
+                        "⚠️ MCP 严格模式阻断\n\n"
+                        f"**请求工具**: {requested_tool_name}\n"
+                        f"**实际工具**: {resolved_tool_name}\n"
+                        "原因: MCP Router 未匹配该工具，禁止本地执行。"
+                    )
+
+                mcp_result = await mcp_runtime.execute_tool(
+                    tool_name=resolved_tool_name,
+                    tool_input=repaired_input,
+                    agent_name=self.name,
+                    alias_used=alias_used,
+                )
+                mcp_result_meta = (
+                    dict(mcp_result.metadata)
+                    if isinstance(mcp_result.metadata, dict)
+                    else {}
+                )
+                merged_meta = {**strict_metadata, **mcp_result_meta}
+                mcp_output = str(mcp_result.data or mcp_result.error or "")
+
+                if mcp_result.handled and mcp_result.success:
+                    await self.emit_tool_result(
+                        resolved_tool_name,
+                        mcp_output,
+                        0,
+                        tool_call_id=tool_call_id,
+                        tool_status="completed",
+                        alias_used=alias_used,
+                        input_repaired=repaired_changes or None,
+                        extra_metadata=merged_meta or None,
+                    )
+                    self._record_tool_context(
+                        tool_name=resolved_tool_name,
+                        tool_input=repaired_input,
+                        tool_metadata=mcp_result_meta,
+                    )
+                    if not is_write_tool:
+                        self._tool_success_cache[tool_call_key] = mcp_output
+                        if len(self._tool_success_cache) > 500:
+                            oldest_key = next(iter(self._tool_success_cache))
+                            self._tool_success_cache.pop(oldest_key, None)
+                    return mcp_output
+
+                strict_error = mcp_result.error or "mcp_unhandled_in_strict_mode"
+                await self.emit_tool_result(
+                    resolved_tool_name,
+                    mcp_output or strict_error,
+                    0,
+                    tool_call_id=tool_call_id,
+                    tool_status="failed",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
+                    extra_metadata=merged_meta or None,
+                )
+                failure_output = (
+                    "⚠️ MCP 严格模式执行失败\n\n"
+                    f"**请求工具**: {requested_tool_name}\n"
+                    f"**实际工具**: {resolved_tool_name}\n"
+                    f"**错误**: {strict_error}\n"
+                    "MCP 未成功处理，已按严格策略阻断。"
+                )
+                retry_output = await self._maybe_retry_with_superpowers(
+                    requested_tool_name=requested_tool_name,
+                    resolved_tool_name=resolved_tool_name,
+                    tool_input=repaired_input,
+                    failure_text=failure_output,
+                    fallback_depth=_fallback_depth,
+                    superpowers_retry=_superpowers_retry,
+                )
+                if retry_output is not None:
+                    return retry_output
+                return failure_output + self._format_superpowers_solutions(
+                    self._build_superpowers_solutions(
+                        requested_tool_name=requested_tool_name,
+                        resolved_tool_name=resolved_tool_name,
+                        tool_input=repaired_input,
+                        error_text=str(strict_error),
+                    )
+                )
+
+            is_mcp_proxy_tool = bool(local_tool_available and getattr(tool, "mcp_proxy_only", False))
+            if is_mcp_proxy_tool and not mcp_can_handle:
+                fallback_hit = await self._execute_mcp_soft_fallback(
+                    tool_name=resolved_tool_name,
+                    tool_input=repaired_input,
+                    tool_obj=tool,
+                    fallback_depth=_fallback_depth,
+                )
+                if fallback_hit:
+                    fallback_tool_name, fallback_output = fallback_hit
+                    proxy_metadata = {
+                        **write_scope_metadata,
+                        "mcp_soft_fallback": True,
+                        "mcp_soft_fallback_target": fallback_tool_name,
+                        "skill_not_ready": True,
+                    }
+                    await self.emit_tool_result(
+                        resolved_tool_name,
+                        fallback_output,
+                        0,
+                        tool_call_id=tool_call_id,
+                        tool_status="completed",
+                        alias_used=alias_used,
+                        input_repaired=repaired_changes or None,
+                        extra_metadata=proxy_metadata,
+                    )
+                    if not is_write_tool:
+                        self._tool_success_cache[tool_call_key] = fallback_output
+                        if len(self._tool_success_cache) > 500:
+                            oldest_key = next(iter(self._tool_success_cache))
+                            self._tool_success_cache.pop(oldest_key, None)
+                    return fallback_output
+
+                not_ready_message = f"skill_not_ready:{resolved_tool_name}"
+                await self.emit_tool_result(
+                    resolved_tool_name,
+                    not_ready_message,
+                    0,
+                    tool_call_id=tool_call_id,
+                    tool_status="failed",
+                    alias_used=alias_used,
+                    input_repaired=repaired_changes or None,
+                    extra_metadata={
+                        **write_scope_metadata,
+                        "skill_not_ready": True,
+                    }
+                    or None,
+                )
+                return (
+                    "⚠️ 工具不可用\n\n"
+                    f"**请求工具**: {requested_tool_name}\n"
+                    f"**实际工具**: {resolved_tool_name}\n"
+                    "MCP 运行时未就绪，且未命中本地回退。"
                 )
 
             use_mcp_first = bool(
@@ -2202,6 +4391,40 @@ class BaseAgent(ABC):
                                 self._tool_success_cache.pop(oldest_key, None)
                         return mcp_output
 
+                    fallback_hit = await self._execute_mcp_soft_fallback(
+                        tool_name=resolved_tool_name,
+                        tool_input=repaired_input,
+                        tool_obj=tool if local_tool_available else None,
+                        fallback_depth=_fallback_depth,
+                    )
+                    if fallback_hit and mcp_result.should_fallback:
+                        fallback_tool_name, fallback_output = fallback_hit
+                        merged_fallback_metadata = {
+                            **merged_meta,
+                            "mcp_fallback_used": True,
+                            "mcp_fallback_error": mcp_result.error or "unknown",
+                            "mcp_runtime_fallback_used": True,
+                            "mcp_runtime_fallback_from": mcp_result_meta.get("mcp_runtime_domain"),
+                            "mcp_soft_fallback": True,
+                            "mcp_soft_fallback_target": fallback_tool_name,
+                        }
+                        await self.emit_tool_result(
+                            resolved_tool_name,
+                            fallback_output,
+                            0,
+                            tool_call_id=tool_call_id,
+                            tool_status="completed",
+                            alias_used=alias_used,
+                            input_repaired=repaired_changes or None,
+                            extra_metadata=merged_fallback_metadata or None,
+                        )
+                        if not is_write_tool:
+                            self._tool_success_cache[tool_call_key] = fallback_output
+                            if len(self._tool_success_cache) > 500:
+                                oldest_key = next(iter(self._tool_success_cache))
+                                self._tool_success_cache.pop(oldest_key, None)
+                        return fallback_output
+
                     if mcp_result.should_fallback and local_tool_available:
                         mcp_fallback_metadata = {
                             **merged_meta,
@@ -2221,12 +4444,30 @@ class BaseAgent(ABC):
                             input_repaired=repaired_changes or None,
                             extra_metadata=merged_meta or None,
                         )
-                        return (
+                        failure_output = (
                             "⚠️ MCP 工具执行失败\n\n"
                             f"**请求工具**: {requested_tool_name}\n"
                             f"**实际工具**: {resolved_tool_name}\n"
                             f"**错误**: {mcp_result.error or 'unknown'}\n"
                             "请调整参数后重试。"
+                        )
+                        retry_output = await self._maybe_retry_with_superpowers(
+                            requested_tool_name=requested_tool_name,
+                            resolved_tool_name=resolved_tool_name,
+                            tool_input=repaired_input,
+                            failure_text=failure_output,
+                            fallback_depth=_fallback_depth,
+                            superpowers_retry=_superpowers_retry,
+                        )
+                        if retry_output is not None:
+                            return retry_output
+                        return failure_output + self._format_superpowers_solutions(
+                            self._build_superpowers_solutions(
+                                requested_tool_name=requested_tool_name,
+                                resolved_tool_name=resolved_tool_name,
+                                tool_input=repaired_input,
+                                error_text=str(mcp_result.error or "unknown"),
+                            )
                         )
 
                     elif not local_tool_available:
@@ -2240,11 +4481,29 @@ class BaseAgent(ABC):
                             input_repaired=repaired_changes or None,
                             extra_metadata=merged_meta or None,
                         )
-                        return (
+                        failure_output = (
                             "⚠️ MCP 工具执行失败且无本地回退\n\n"
                             f"**请求工具**: {requested_tool_name}\n"
                             f"**实际工具**: {resolved_tool_name}\n"
                             f"**错误**: {mcp_result.error or 'unknown'}"
+                        )
+                        retry_output = await self._maybe_retry_with_superpowers(
+                            requested_tool_name=requested_tool_name,
+                            resolved_tool_name=resolved_tool_name,
+                            tool_input=repaired_input,
+                            failure_text=failure_output,
+                            fallback_depth=_fallback_depth,
+                            superpowers_retry=_superpowers_retry,
+                        )
+                        if retry_output is not None:
+                            return retry_output
+                        return failure_output + self._format_superpowers_solutions(
+                            self._build_superpowers_solutions(
+                                requested_tool_name=requested_tool_name,
+                                resolved_tool_name=resolved_tool_name,
+                                tool_input=repaired_input,
+                                error_text=str(mcp_result.error or "unknown"),
+                            )
                         )
 
             if not local_tool_available:
@@ -2331,9 +4590,27 @@ class BaseAgent(ABC):
                         else None
                     ),
                 )
-                return (
+                failure_output = (
                     f"⚠️ 工具 '{resolved_tool_name}' 执行超时 ({timeout}秒)，"
                     "请尝试其他方法或减小操作范围。"
+                )
+                retry_output = await self._maybe_retry_with_superpowers(
+                    requested_tool_name=requested_tool_name,
+                    resolved_tool_name=resolved_tool_name,
+                    tool_input=repaired_input,
+                    failure_text=failure_output,
+                    fallback_depth=_fallback_depth,
+                    superpowers_retry=_superpowers_retry,
+                )
+                if retry_output is not None:
+                    return retry_output
+                return failure_output + self._format_superpowers_solutions(
+                    self._build_superpowers_solutions(
+                        requested_tool_name=requested_tool_name,
+                        resolved_tool_name=resolved_tool_name,
+                        tool_input=repaired_input,
+                        error_text=f"timeout:{timeout}",
+                    )
                 )
             except asyncio.CancelledError:
                 duration_ms = int((time.time() - start) * 1000)
@@ -2429,7 +4706,24 @@ class BaseAgent(ABC):
 **错误**: {result.error}
 
 请根据错误信息调整参数或尝试其他方法。{guard_hint}"""
-                return error_msg
+                retry_output = await self._maybe_retry_with_superpowers(
+                    requested_tool_name=requested_tool_name,
+                    resolved_tool_name=resolved_tool_name,
+                    tool_input=repaired_input,
+                    failure_text=error_msg,
+                    fallback_depth=_fallback_depth,
+                    superpowers_retry=_superpowers_retry,
+                )
+                if retry_output is not None:
+                    return retry_output
+                return error_msg + self._format_superpowers_solutions(
+                    self._build_superpowers_solutions(
+                        requested_tool_name=requested_tool_name,
+                        resolved_tool_name=resolved_tool_name,
+                        tool_input=repaired_input,
+                        error_text=str(result.error or ""),
+                    )
+                )
 
         except asyncio.CancelledError:
             logger.info(f"[{self.name}] Tool '{resolved_tool_name}' execution cancelled")
@@ -2470,7 +4764,24 @@ class BaseAgent(ABC):
 1. 检查参数格式是否正确
 2. 尝试使用其他工具
 3. 如果是权限或资源问题，跳过该操作"""
-            return error_msg
+            retry_output = await self._maybe_retry_with_superpowers(
+                requested_tool_name=requested_tool_name,
+                resolved_tool_name=resolved_tool_name,
+                tool_input=repaired_input if isinstance(repaired_input, dict) else {},
+                failure_text=error_msg,
+                fallback_depth=_fallback_depth,
+                superpowers_retry=_superpowers_retry,
+            )
+            if retry_output is not None:
+                return retry_output
+            return error_msg + self._format_superpowers_solutions(
+                self._build_superpowers_solutions(
+                    requested_tool_name=requested_tool_name,
+                    resolved_tool_name=resolved_tool_name,
+                    tool_input=repaired_input if isinstance(repaired_input, dict) else {},
+                    error_text=str(e),
+                )
+            )
     
     def get_tools_description(self) -> str:
         """生成工具描述文本（用于 prompt）"""

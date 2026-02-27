@@ -1,0 +1,20 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - img [ref=e6]
+      - generic [ref=e8]: "404"
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - img [ref=e11]
+          - generic [ref=e13]: ERROR_LOG
+        - generic [ref=e14]:
+          - generic [ref=e16]: "[2026-02-27T04:00:50.912Z]"
+          - generic [ref=e17]: "ERROR: PAGE_NOT_FOUND"
+          - generic [ref=e18]: "STATUS: 404"
+          - generic [ref=e19]: "MESSAGE: 请求的页面不存在或已被移除"
+      - paragraph [ref=e20]: 页面可能已被删除或不存在，请检查网址是否正确。
+      - link "返回首页" [ref=e21] [cursor=pointer]:
+        - /url: /
+        - button "返回首页" [ref=e22]
+    - paragraph [ref=e23]: © 2026 VulHunter

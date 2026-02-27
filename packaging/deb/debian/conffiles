@@ -1,0 +1,4 @@
+/etc/deepaudit/deepaudit.env
+/etc/deepaudit/docker-compose.prod.yml
+/etc/deepaudit/docker-compose.prod.cn.yml
+/etc/deepaudit/docker-compose.override.yml

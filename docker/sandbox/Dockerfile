@@ -41,6 +41,10 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
     && node --version && npm --version \
     && rm -rf /var/lib/apt/lists/*
 
+# bullseye 自带 cmake 版本过低（arm64 下 qmd 依赖 node-llama-cpp 需要 >=3.19）
+RUN python3 -m pip install --no-cache-dir "cmake>=3.27,<4" && \
+    cmake --version
+
 # 安装 MCP 与 qmd CLI（供沙盒域运行时调用）
 RUN npm install -g \
     @modelcontextprotocol/server-filesystem \
@@ -131,6 +135,7 @@ RUN mkdir -p /workspace /tmp/sandbox \
     /workspace/.deepaudit/mcp/code-index \
     /workspace/.deepaudit/mcp/xdg-data \
     /workspace/.deepaudit/mcp/xdg-cache \
+    /workspace/.deepaudit/mcp/xdg-config \
     /workspace/.deepaudit/qmd && \
     chown -R sandbox:sandbox /workspace /tmp/sandbox
 
@@ -141,6 +146,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV XDG_DATA_HOME=/workspace/.deepaudit/mcp/xdg-data
 ENV XDG_CACHE_HOME=/workspace/.deepaudit/mcp/xdg-cache
+ENV XDG_CONFIG_HOME=/workspace/.deepaudit/mcp/xdg-config
 ENV QMD_DATA_DIR=/workspace/.deepaudit/qmd
 ENV CODE_INDEX_INDEXER_PATH=/workspace/.deepaudit/mcp/code-index
 

@@ -30,22 +30,22 @@ const AGENT_TYPE_CONFIG: Record<
 > = {
 	orchestrator: {
 		icon: <Cpu className="w-4 h-4" />,
-		label: "编排器",
+		label: "编排智能体",
 		color: "purple",
 	},
 	recon: {
 		icon: <Scan className="w-4 h-4" />,
-		label: "侦察",
+		label: "侦查智能体",
 		color: "cyan",
 	},
 	analysis: {
 		icon: <FileSearch className="w-4 h-4" />,
-		label: "分析",
+		label: "分析智能体",
 		color: "amber",
 	},
 	verification: {
 		icon: <ShieldCheck className="w-4 h-4" />,
-		label: "验证",
+		label: "验证智能体",
 		color: "green",
 	},
 };

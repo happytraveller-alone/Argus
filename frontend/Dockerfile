@@ -1,7 +1,7 @@
+# syntax=docker/dockerfile:1.7
 # =============================================
-# DeepAudit Frontend Docker 构建
+# DeepAudit Frontend Docker 构建（BuildKit 缓存优化）
 # =============================================
-# 使用 Nginx 提供静态文件和反向代理 (支持 SSE 流式传输)
 
 FROM node:20-slim AS builder
 
@@ -17,23 +17,40 @@ ENV ALL_PROXY=""
 ENV no_proxy="*"
 ENV NO_PROXY="*"
 
-# 配置国内 npm 镜像源
-RUN npm config set registry https://registry.npmmirror.com && \
-    npm install -g pnpm && \
-    pnpm config set registry https://registry.npmmirror.com
+ARG FRONTEND_NPM_REGISTRY=https://registry.npmmirror.com
+ARG PNPM_VERSION=9.15.4
+ARG BUILD_WEAK_NETWORK=false
+ARG BUILD_ARCH=
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:${PATH}
+
+# 使用 corepack 管理 pnpm，避免全局 npm install 带来的层抖动
+RUN corepack enable && \
+    corepack prepare pnpm@${PNPM_VERSION} --activate && \
+    npm config set registry ${FRONTEND_NPM_REGISTRY} && \
+    pnpm config set registry ${FRONTEND_NPM_REGISTRY} && \
+    pnpm config set store-dir /pnpm/store
 
 # 复制依赖文件
 COPY package.json pnpm-lock.yaml ./
 
-# 增加网络超时设置和并发数限制，防止 ARM 架构构建卡死
-RUN pnpm config set network-timeout 300000 && \
-    pnpm config set fetch-retries 5 && \
-    pnpm install --no-frozen-lockfile --network-concurrency 1
+# 利用 BuildKit 缓存 mount 复用 pnpm store，减少重复下载
+RUN --mount=type=cache,id=deepaudit-frontend-pnpm,target=/pnpm/store \
+    set -eux; \
+    pnpm config set network-timeout 300000; \
+    pnpm config set fetch-retries 5; \
+    pnpm fetch --frozen-lockfile; \
+    if [ "${BUILD_WEAK_NETWORK}" = "true" ] || [ "${BUILD_ARCH}" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then \
+      pnpm install --frozen-lockfile --offline --prefer-offline --network-concurrency 1; \
+    else \
+      pnpm install --frozen-lockfile --offline --prefer-offline; \
+    fi
 
 # 复制源代码
 COPY . .
 
-# 🔥 构建时使用占位符 - 实现 Build Once Run Anywhere
+# 构建时使用占位符，运行时由 entrypoint 注入 API 地址
 ENV VITE_API_BASE_URL=__API_BASE_URL__
 
 # 构建生产版本

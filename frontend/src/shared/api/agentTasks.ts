@@ -120,6 +120,7 @@ export interface AgentFinding {
   title: string;
   display_title?: string | null;
   description: string | null;
+  description_markdown?: string | null;
 
   file_path: string | null;
   line_start: number | null;
