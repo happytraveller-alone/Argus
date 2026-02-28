@@ -79,6 +79,9 @@ from .agent_tools import (
 # 🔥 新增：智能扫描工具
 from .smart_scan_tool import SmartScanTool, QuickAuditTool
 
+# 🔥 新增：业务逻辑漏洞扫描工具
+from .business_logic_scan_tool import BusinessLogicScanTool
+
 # 🔥 新增：Kunlun-M 静态代码分析工具 (MIT License)
 from .kunlun_tool import KunlunMTool, KunlunRuleListTool, KunlunPluginTool
 
@@ -165,6 +168,9 @@ __all__ = [
     # 🔥 智能扫描工具
     "SmartScanTool",
     "QuickAuditTool",
+
+    # 🔥 业务逻辑漏洞扫描工具
+    "BusinessLogicScanTool",
 
     # 🔥 Kunlun-M 工具 (MIT License - https://github.com/LoRexxar/Kunlun-M)
     "KunlunMTool",
