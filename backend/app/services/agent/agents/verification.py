@@ -463,54 +463,139 @@ class VerificationAgent(BaseAgent):
         file_lines: List[str],
         line_start: int,
     ) -> tuple[Optional[str], Optional[int], Optional[int]]:
+        """
+        增强的多语言函数定位正则推断
+        支持: Python, JavaScript/TypeScript, PHP, Ruby, Go, Java, C/C++, Bash/Shell
+        """
         if not file_lines:
             return None, None, None
         start_idx = max(0, min(len(file_lines) - 1, line_start - 1))
+        
+        # 增强的多语言模式
         patterns = [
-            ("python", re.compile(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
-            ("javascript", re.compile(r"^\s*(?:export\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
-            (
-                "c_like",
-                re.compile(
-                    r"^\s*[A-Za-z_][\w\s\*:&<>]*\s+[*&\s]*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*\{"
-                ),
-            ),
+            # Python: def, async def, @decorator 修饰
+            ("python", re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            
+            # JavaScript/TypeScript: function, async function, arrow, methods
+            ("javascript", re.compile(r"^\s*(?:export\s+)?(?:async\s+)?(?:function\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*[(:=]")),
+            ("javascript_method", re.compile(r"^\s*(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^)]*\)\s*[{:]")),
+            
+            # PHP: function, public/private/protected, static
+            ("php", re.compile(r"^\s*(?:public|private|protected|static)?\s*(?:function|async\s+function)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            ("php_class_method", re.compile(r"^\s*(?:public|private|protected)?\s*(?:static)?\s*(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            
+            # Ruby: def
+            ("ruby", re.compile(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_?!]*)")),
+            
+            # Go: func
+            ("go", re.compile(r"^\s*func\s*(?:\([^)]*\))?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            
+            # Java: modifiers + return type + method name
+            ("java", re.compile(r"^\s*(?:public|private|protected|static|final|synchronized)?\s*(?:[\w<>]+\s+)*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(?:throws\s+[\w,\s]+)?\s*\{")),
+            
+            # Bash/Shell: function
+            ("bash", re.compile(r"^\s*(?:function\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(\)\s*\{")),
+            
+            # C/C++ 改进版: 支持复杂签名（指针、const、引用、模板等）
+            ("c_cpp", re.compile(
+                r"^\s*(?:inline|virtual|static|const|volatile|explicit|constexpr)?\s*"
+                r"(?:[\w:&*<>, ]+\s+)*?"  # complex return types with templates  
+                r"(\w+)\s*\([^;]*\)\s*(?:const)?\s*(?:noexcept)?\s*\{?"
+            )),
         ]
+        
+        failure_reasons = []
+        
         for idx in range(start_idx, -1, -1):
             line = file_lines[idx]
             stripped = line.strip()
-            if not stripped or stripped.startswith(("//", "#")):
+            
+            # 跳过注释和空行
+            if not stripped:
                 continue
+            if stripped.startswith(("//", "#", "/*", "*", "--")):
+                continue
+            if stripped.startswith(("import ", "require ", "include ", "using ")):
+                continue
+                
+            # 尝试所有模式
             for lang, pattern in patterns:
-                match = pattern.match(line)
-                if not match:
+                try:
+                    match = pattern.match(line)
+                    if not match:
+                        continue
+                    
+                    name = match.group(1).strip()
+                    if not name or len(name) < 1 or name in _PSEUDO_FUNCTION_NAMES:
+                        continue
+                    
+                    start_line = idx + 1
+                    end_line = start_line
+                    
+                    # 根据语言类型确定函数体范围
+                    if lang == "python":
+                        # Python: 基于缩进
+                        indent = len(line) - len(line.lstrip())
+                        for cursor in range(idx + 1, min(len(file_lines), idx + 500)):
+                            probe = file_lines[cursor]
+                            probe_stripped = probe.strip()
+                            if not probe_stripped or probe_stripped.startswith("#"):
+                                continue
+                            probe_indent = len(probe) - len(probe.lstrip())
+                            if probe_indent <= indent and not probe_stripped.startswith(("@", "#")):
+                                break
+                            end_line = cursor + 1
+                    
+                    elif lang == "ruby":
+                        # Ruby: 查找 end 关键字
+                        for cursor in range(idx + 1, min(len(file_lines), idx + 500)):
+                            probe = file_lines[cursor].strip()
+                            if probe == "end" or probe.startswith("end "):
+                                end_line = cursor + 1
+                                break
+                            end_line = cursor + 1
+                    
+                    elif "{" in line:
+                        # C/C++/Java/Go/JavaScript/PHP/Bash: 基于括号平衡
+                        balance = line.count("{") - line.count("}")
+                        end_line = idx + 1
+                        for cursor in range(idx + 1, min(len(file_lines), idx + 500)):
+                            probe = file_lines[cursor]
+                            balance += probe.count("{") - probe.count("}")
+                            end_line = cursor + 1
+                            if balance <= 0:
+                                break
+                    else:
+                        # 多行函数声明（无开括号）
+                        looking_for_brace = True
+                        for cursor in range(idx + 1, min(len(file_lines), idx + 20)):
+                            probe = file_lines[cursor]
+                            if "{" in probe:
+                                balance = probe.count("{") - probe.count("}")
+                                end_line = cursor + 1
+                                for cursor2 in range(cursor + 1, min(len(file_lines), cursor + 500)):
+                                    probe2 = file_lines[cursor2]
+                                    balance += probe2.count("{") - probe2.count("}")
+                                    end_line = cursor2 + 1
+                                    if balance <= 0:
+                                        break
+                                looking_for_brace = False
+                                break
+                            end_line = cursor + 1
+                    
+                    logger.debug(
+                        f"[Verification] 函数定位成功 (regex): {name} @ {start_line}-{end_line} (语言={lang})"
+                    )
+                    return name, start_line, end_line
+                    
+                except Exception as e:
+                    logger.debug(f"[Verification] regex 模式 {lang} 匹配失败: {e}")
+                    failure_reasons.append(f"{lang}: {str(e)[:50]}")
                     continue
-                name = match.group(1).strip()
-                if not name:
-                    continue
-                start_line = idx + 1
-                end_line = start_line
-                if lang == "python":
-                    indent = len(line) - len(line.lstrip())
-                    for cursor in range(idx + 1, len(file_lines)):
-                        probe = file_lines[cursor]
-                        probe_stripped = probe.strip()
-                        if not probe_stripped:
-                            continue
-                        probe_indent = len(probe) - len(probe.lstrip())
-                        if probe_indent <= indent and not probe_stripped.startswith(("@", "#")):
-                            break
-                        end_line = cursor + 1
-                elif "{" in line:
-                    balance = line.count("{") - line.count("}")
-                    end_line = idx + 1
-                    for cursor in range(idx + 1, len(file_lines)):
-                        probe = file_lines[cursor]
-                        balance += probe.count("{") - probe.count("}")
-                        end_line = cursor + 1
-                        if balance <= 0:
-                            break
-                return name, start_line, end_line
+        
+        logger.debug(
+            f"[Verification] regex 函数定位全部失败 (line_start={line_start}, 失败原因={failure_reasons})"
+        )
         return None, None, None
 
     @staticmethod
@@ -664,49 +749,105 @@ class VerificationAgent(BaseAgent):
         findings_to_verify: List[Dict[str, Any]],
         project_root: Optional[str],
     ) -> None:
+        """
+        改进的 MCP 函数定位辅助方法：增强容错与诊断日志
+        当 MCP 失败时，不再静默跳过，而是记录原因并标记状态
+        """
         if not findings_to_verify:
             return
 
-        for finding in findings_to_verify:
+        mcp_success_count = 0
+        mcp_fail_count = 0
+        
+        for idx, finding in enumerate(findings_to_verify):
             if not isinstance(finding, dict):
+                logger.debug(f"[Verification] MCP enrichment跳过非字典项 #{idx}")
                 continue
+            
             existing_name = str(finding.get("function_name") or "").strip()
             if existing_name and existing_name.lower() not in {"unknown", "未知函数"}:
+                logger.debug(f"[Verification] MCP enrichment跳过已有函数名: {existing_name}")
                 continue
 
             file_path, line_start, _line_end = self._normalize_file_location(finding)
             resolved_file_path, _full = self._resolve_file_paths(file_path, project_root)
             request_path = resolved_file_path or file_path
+            
             if not request_path or line_start <= 0:
+                logger.debug(f"[Verification] MCP enrichment跳过无效路径: {request_path}:{line_start}")
                 continue
 
             locator_input = {
                 "file_path": request_path,
                 "line_start": int(line_start),
             }
-            locator_output = await self.execute_tool(
-                "locate_enclosing_function",
-                locator_input,
-            )
-            payload = self._extract_locator_payload(locator_output)
-            if not payload:
-                continue
-            located = self._extract_function_from_locator_payload(payload, int(line_start))
-            if not located:
-                continue
+            
+            try:
+                logger.debug(f"[Verification] 调用 MCP locate_enclosing_function: {request_path}:{line_start}")
+                locator_output = await self.execute_tool(
+                    "locate_enclosing_function",
+                    locator_input,
+                )
+                
+                payload = self._extract_locator_payload(locator_output)
+                if not payload:
+                    mcp_fail_count += 1
+                    logger.warning(
+                        f"[Verification] MCP返回空payload: {request_path}:{line_start} | "
+                        f"raw_output={str(locator_output)[:200]}"
+                    )
+                    # 标记MCP尝试但失败
+                    finding["_mcp_attempt"] = "failed_empty_payload"
+                    continue
+                
+                located = self._extract_function_from_locator_payload(payload, int(line_start))
+                if not located:
+                    mcp_fail_count += 1
+                    logger.warning(
+                        f"[Verification] MCP payload解析失败: {request_path}:{line_start} | "
+                        f"payload_keys={list(payload.keys())}"
+                    )
+                    finding["_mcp_attempt"] = "failed_payload_parsing"
+                    continue
 
-            located_name = str(located.get("function") or "").strip()
-            if not located_name:
+                located_name = str(located.get("function") or "").strip()
+                if not located_name:
+                    mcp_fail_count += 1
+                    logger.warning(
+                        f"[Verification] MCP返回空函数名: {request_path}:{line_start}"
+                    )
+                    finding["_mcp_attempt"] = "failed_empty_function_name"
+                    continue
+                
+                # MCP 成功
+                mcp_success_count += 1
+                finding["function_name"] = located_name
+                finding["function_start_line"] = self._safe_int(located.get("start_line"))
+                finding["function_end_line"] = self._safe_int(located.get("end_line"))
+                finding["function_resolution_method"] = "mcp_symbol_index"
+                finding["function_resolution_engine"] = "mcp_symbol_index"
+                if located.get("language"):
+                    finding["function_language"] = located.get("language")
+                if located.get("diagnostics") is not None:
+                    finding["function_resolution_diagnostics"] = located.get("diagnostics")
+                
+                logger.info(
+                    f"[Verification] MCP定位成功: '{located_name}' @ {request_path}:{line_start}"
+                )
+                
+            except Exception as e:
+                mcp_fail_count += 1
+                logger.error(
+                    f"[Verification] MCP调用异常: {request_path}:{line_start} | 错误: {e}",
+                    exc_info=True
+                )
+                finding["_mcp_attempt"] = f"exception: {str(e)[:100]}"
                 continue
-            finding["function_name"] = located_name
-            finding["function_start_line"] = self._safe_int(located.get("start_line"))
-            finding["function_end_line"] = self._safe_int(located.get("end_line"))
-            finding["function_resolution_method"] = "mcp_symbol_index"
-            finding["function_resolution_engine"] = "mcp_symbol_index"
-            if located.get("language"):
-                finding["function_language"] = located.get("language")
-            if located.get("diagnostics") is not None:
-                finding["function_resolution_diagnostics"] = located.get("diagnostics")
+        
+        logger.info(
+            f"[Verification] MCP enrichment 完成: 成功={mcp_success_count}, 失败={mcp_fail_count}, "
+            f"总数={len(findings_to_verify)}"
+        )
 
     def _resolve_function_metadata(
         self,
@@ -716,9 +857,16 @@ class VerificationAgent(BaseAgent):
         file_cache: Dict[str, List[str]],
         locator: Optional[EnclosingFunctionLocator] = None,
     ) -> Dict[str, Any]:
+        """
+        改进的函数定位方法：4层降级策略 + 详细诊断日志
+        层级1: 显式函数名 → 层级2: TreeSitter → 层级3: Regex → 层级4: 诊断失败
+        """
         file_path, line_start, line_end = self._normalize_file_location(finding)
         resolved_file_path, full_file_path = self._resolve_file_paths(file_path, project_root)
+        
+        diagnostics_trace = []
 
+        # === 层级 1: 显式函数名提取 ===
         reachability_target = finding.get("reachability_target")
         if not isinstance(reachability_target, dict):
             verification_payload = finding.get("verification_result")
@@ -726,6 +874,7 @@ class VerificationAgent(BaseAgent):
                 maybe_target = verification_payload.get("reachability_target")
                 if isinstance(maybe_target, dict):
                     reachability_target = maybe_target
+        
         explicit_function = None
         for candidate in (
             finding.get("function_name"),
@@ -738,6 +887,8 @@ class VerificationAgent(BaseAgent):
             text = candidate.strip()
             if text and text.lower() not in {"unknown", "未知函数", "n/a", "-", "__attribute__", "__declspec"}:
                 explicit_function = text
+                diagnostics_trace.append(f"层级1-命中: 显式函数名 '{explicit_function}'")
+                logger.info(f"[Verification] 函数定位成功 (显式): {explicit_function} @ {file_path}:{line_start}")
                 break
 
         start_from_target: Optional[int] = None
@@ -753,6 +904,7 @@ class VerificationAgent(BaseAgent):
                 end_from_target = int(raw_end) if raw_end is not None else None
             except Exception:
                 end_from_target = None
+        
         explicit_start = (
             self._safe_int(finding.get("function_start_line"))
             or self._safe_int(finding.get("function_start"))
@@ -781,6 +933,7 @@ class VerificationAgent(BaseAgent):
             )
             or "explicit"
         )
+        
         if explicit_function:
             return {
                 "file_path": resolved_file_path or file_path,
@@ -799,10 +952,14 @@ class VerificationAgent(BaseAgent):
                     if isinstance(reachability_target, dict)
                     else None
                 ),
+                "localization_status": "explicit",
                 "line_start": line_start,
                 "line_end": line_end,
             }
+        else:
+            diagnostics_trace.append("层级1-无: 未找到有效的显式函数名")
 
+        # === 层级 2: TreeSitter AST 定位 ===
         lines: List[str] = []
         if full_file_path:
             lines = file_cache.get(full_file_path) or []
@@ -812,55 +969,103 @@ class VerificationAgent(BaseAgent):
                         encoding="utf-8",
                         errors="replace",
                     ).splitlines()
-                except Exception:
+                except Exception as e:
+                    diagnostics_trace.append(f"层级2-错误: 读取文件失败 ({str(e)[:50]})")
+                    logger.warning(f"[Verification] 读文件失败: {full_file_path}: {e}")
                     lines = []
                 file_cache[full_file_path] = lines
 
         tree_sitter_language: Optional[str] = None
         tree_sitter_diagnostics: Any = None
-        if project_root and resolved_file_path and full_file_path and locator:
-            located = locator.locate(
-                full_file_path=full_file_path,
-                line_start=line_start,
-                relative_file_path=resolved_file_path,
-                file_lines=lines,
-            )
-            tree_sitter_language = located.get("language")
-            tree_sitter_diagnostics = located.get("diagnostics")
-            function_name = located.get("function")
-            if isinstance(function_name, str) and function_name.strip():
-                return {
-                    "file_path": resolved_file_path,
-                    "function": function_name.strip(),
-                    "start_line": located.get("start_line"),
-                    "end_line": located.get("end_line"),
-                    "resolution_method": located.get("resolution_method") or "python_tree_sitter",
-                    "resolution_engine": located.get("resolution_engine") or "python_tree_sitter",
-                    "language": located.get("language"),
-                    "diagnostics": located.get("diagnostics"),
-                    "line_start": line_start,
-                    "line_end": line_end,
-                }
+        
+        if locator and project_root and resolved_file_path and full_file_path:
+            try:
+                logger.debug(f"[Verification] 尝试 TreeSitter 定位: {full_file_path}:{line_start}")
+                located = locator.locate(
+                    full_file_path=full_file_path,
+                    line_start=line_start,
+                    relative_file_path=resolved_file_path,
+                    file_lines=lines,
+                )
+                tree_sitter_language = located.get("language")
+                tree_sitter_diagnostics = located.get("diagnostics")
+                function_name = located.get("function")
+                
+                if isinstance(function_name, str) and function_name.strip():
+                    diagnostics_trace.append(f"层级2-命中: TreeSitter 定位 '{function_name}'")
+                    logger.info(f"[Verification] 函数定位成功 (TreeSitter): {function_name} @ {file_path}:{line_start}")
+                    return {
+                        "file_path": resolved_file_path,
+                        "function": function_name.strip(),
+                        "start_line": located.get("start_line"),
+                        "end_line": located.get("end_line"),
+                        "resolution_method": located.get("resolution_method") or "python_tree_sitter",
+                        "resolution_engine": located.get("resolution_engine") or "python_tree_sitter",
+                        "language": located.get("language"),
+                        "diagnostics": located.get("diagnostics"),
+                        "localization_status": "tree_sitter",
+                        "line_start": line_start,
+                        "line_end": line_end,
+                    }
+                else:
+                    diagnostics_trace.append("层级2-无: TreeSitter 未找到函数")
+                    logger.debug(f"[Verification] TreeSitter 返回空函数: {file_path}:{line_start}")
+            except Exception as e:
+                diagnostics_trace.append(f"层级2-错误: TreeSitter 异常 ({str(e)[:50]})")
+                logger.debug(f"[Verification] TreeSitter 异常: {e}")
+        else:
+            reason = []
+            if not locator:
+                reason.append("无locator")
+            if not project_root:
+                reason.append("无project_root")
+            if not resolved_file_path:
+                reason.append("无resolved_file_path")
+            if not full_file_path:
+                reason.append("无full_file_path")
+            diagnostics_trace.append(f"层级2-跳过: {', '.join(reason)}")
 
+        # === 层级 3: Regex 推断 ===
+        regex_name: Optional[str] = None
+        regex_start: Optional[int] = None
+        regex_end: Optional[int] = None
+        
         if lines:
-            regex_name, regex_start, regex_end = self._infer_function_by_regex(
-                lines,
-                line_start,
-            )
-            if regex_name:
-                return {
-                    "file_path": resolved_file_path or file_path,
-                    "function": regex_name,
-                    "start_line": regex_start,
-                    "end_line": regex_end,
-                    "resolution_method": "regex_fallback",
-                    "resolution_engine": "regex_fallback",
-                    "language": tree_sitter_language,
-                    "diagnostics": tree_sitter_diagnostics,
-                    "line_start": line_start,
-                    "line_end": line_end,
-                }
+            try:
+                logger.debug(f"[Verification] 尝试 Regex 定位: {file_path}:{line_start}")
+                regex_name, regex_start, regex_end = self._infer_function_by_regex(lines, line_start)
+                
+                if regex_name:
+                    diagnostics_trace.append(f"层级3-命中: Regex 推断 '{regex_name}'")
+                    logger.info(f"[Verification] 函数定位成功 (Regex): {regex_name} @ {file_path}:{line_start}")
+                    return {
+                        "file_path": resolved_file_path or file_path,
+                        "function": regex_name,
+                        "start_line": regex_start,
+                        "end_line": regex_end,
+                        "resolution_method": "regex_fallback",
+                        "resolution_engine": "regex_fallback",
+                        "language": tree_sitter_language,
+                        "diagnostics": tree_sitter_diagnostics,
+                        "localization_status": "regex",
+                        "line_start": line_start,
+                        "line_end": line_end,
+                    }
+                else:
+                    diagnostics_trace.append("层级3-无: Regex 未找到函数")
+                    logger.debug(f"[Verification] Regex 未能定位函数: {file_path}:{line_start}")
+            except Exception as e:
+                diagnostics_trace.append(f"层级3-错误: Regex 异常 ({str(e)[:50]})")
+                logger.warning(f"[Verification] Regex 定位异常: {e}")
+        else:
+            diagnostics_trace.append("层级3-跳过: 无文件行内容")
 
+        # === 层级 4: 全部失败 - 返回诊断信息 ===
+        logger.warning(
+            f"[Verification] 所有函数定位方法失败: {file_path}:{line_start} | "
+            f"诊断链: {' → '.join(diagnostics_trace)}"
+        )
+        
         return {
             "file_path": resolved_file_path or file_path,
             "function": None,
@@ -870,6 +1075,9 @@ class VerificationAgent(BaseAgent):
             "resolution_engine": "missing_enclosing_function",
             "language": tree_sitter_language,
             "diagnostics": tree_sitter_diagnostics,
+            "localization_status": "failed",
+            "localization_failure_trace": diagnostics_trace,
+            "file_readable": bool(lines),
             "line_start": line_start,
             "line_end": line_end,
         }
@@ -946,7 +1154,10 @@ class VerificationAgent(BaseAgent):
                 or str(base.get("file_path") or "").strip()
             )
             function_name = function_meta.get("function")
+            localization_status = function_meta.get("localization_status", "unknown")
+            file_readable = function_meta.get("file_readable", False)
 
+            # === 改进的验证逻辑：解耦函数定位与验证判定 ===
             verdict = self._normalize_verdict(merged)
             reachability = self._normalize_reachability_value(merged.get("reachability"), verdict)
             evidence = (
@@ -955,9 +1166,37 @@ class VerificationAgent(BaseAgent):
                 or merged.get("evidence")
                 or "基于代码上下文与工具输出完成验证。"
             )
+            
+            # === 新规则：不再因缺少函数名就自动标记为false_positive ===
+            # 只有在以下情况才标记为false_positive：
+            # 1. 文件不可读（真正的无法验证）
+            # 2. OR LLM明确判定为false_positive
+            
             if not function_name:
-                verdict = "false_positive"
-                reachability = "unreachable"
+                if not file_readable:
+                    # 文件不可读 → 无法确认存在 → false_positive
+                    verdict = "false_positive"
+                    reachability = "unreachable"
+                    logger.warning(
+                        f"[Verification] 标记为 false_positive (原因: 文件不可读): {normalized_file_path}:{line_start}"
+                    )
+                elif verdict == "false_positive":
+                    # LLM已经判定为false_positive，保持不变
+                    logger.debug(
+                        f"[Verification] LLM判定false_positive，虽未定位函数: {normalized_file_path}:{line_start}"
+                    )
+                else:
+                    # 文件可读但未能定位函数 → 保留LLM判定，添加локalization标记
+                    logger.info(
+                        f"[Verification] 未定位函数但保留 LLM 判定 ({verdict}), "
+                        f"localization_status={localization_status}, file_readable={file_readable}: "
+                        f"{normalized_file_path}:{line_start}"
+                    )
+            else:
+                logger.debug(
+                    f"[Verification] 成功定位函数 '{function_name}' "
+                    f"(方法={localization_status}): {normalized_file_path}:{line_start}"
+                )
 
             suggestion = (
                 merged.get("suggestion")
@@ -1053,13 +1292,21 @@ class VerificationAgent(BaseAgent):
                 }
             )
             if not function_name:
+                # 添加定位失败的诊断信息
                 verification_result["validation_reason"] = "missing_enclosing_function"
+                verification_result["localization_status"] = localization_status
+                verification_result["localization_failure_trace"] = (
+                    function_meta.get("localization_failure_trace") or []
+                )
 
             structured_title = self._build_structured_title(
                 {
                     **merged,
                     "file_path": resolved_file_path or normalized_file_path,
-                    "function_name": function_name or "未知函数",
+                    # 改进：不再无条件使用"未知函数"，而是基于定位状态
+                    "function_name": function_name or (
+                        f"[{localization_status}]" if localization_status != "unknown" else "未知函数"
+                    ),
                 }
             )
 
@@ -1085,6 +1332,9 @@ class VerificationAgent(BaseAgent):
                     "suggestion": str(suggestion),
                     "fix_code": str(fix_code),
                     "poc": poc_value,
+                    # === 新字段：函数定位状态透明度 ===
+                    "localization_status": localization_status,
+                    "file_readable": file_readable,
                 }
             )
 
