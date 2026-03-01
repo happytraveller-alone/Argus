@@ -1,42 +1,46 @@
 # Tool: `test_command_injection`
 
 ## Tool Purpose
-该工具已下线，仅用于兼容历史调用。
-
-## Goal
-执行非武器化验证步骤并收集可复现实验信号。
-
-## Task List
-- 构造安全可控的测试输入。
-- 观察返回、日志与行为差异。
-- 输出验证结果与证据摘要。
-
+专门测试命令注入（Command Injection / RCE）漏洞的工具，支持多语言自动化测试。
 
 ## Inputs
-- `reason` (any, optional): 兼容占位参数
-
+- `target_file` (string, required): 目标文件路径
+- `param_name` (string, optional): 注入参数名，默认 `"cmd"`
+- `test_command` (string, optional): 测试命令，默认 `"id"`
+  - `"id"` - 显示用户ID
+  - `"whoami"` - 显示用户名
+  - `"cat /etc/passwd"` - 读取密码文件
+  - `"echo VULN_TEST"` - 输出测试字符串
+- `language` (string, optional): 语言类型，默认 `"auto"`（支持 php, python, javascript, java, go, ruby, shell）
+- `injection_point` (string, optional): 注入点描述
 
 ### Example Input
 ```json
 {
-  "reason": null
+  "target_file": "app/api.php",
+  "param_name": "cmd",
+  "test_command": "whoami",
+  "language": "auto"
 }
 ```
 
 ## Outputs
-- `success` (bool): 执行是否成功。
-- `data` (any): 工具主结果载荷。
-- `error` (string|null): 失败时错误信息。
-- `duration_ms` (int): 执行耗时（毫秒）。
-- `metadata` (object): 补充上下文信息。
+- `success` (bool): 执行是否成功
+- `data` (string): 测试结果摘要（包含退出码、命令输出、漏洞确认状态）
+- `metadata` (object):
+  - `vulnerability_type`: `"command_injection"`
+  - `is_vulnerable` (bool): 是否确认漏洞
+  - `evidence` (string|null): 漏洞证据描述
+  - `poc` (string|null): PoC 命令
+  - `language` (string): 检测到的语言
 
 ## Typical Triggers
-- 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `analysis, orchestrator, recon, verification`。
-- 分类: `漏洞验证与 PoC 规划`。
-- 可选工具: `否`。
+- 分析阶段发现可疑的命令执行函数（shell_exec, exec, system, subprocess, eval 等）
+- 验证阶段需要确认命令注入漏洞是否可利用
+- 需要构造 PoC 证明命令执行成功
 
 ## Pitfalls And Forbidden Use
-- 不要在输入缺失关键参数时盲目调用。
-- 不要将该工具输出直接当作最终结论，必须结合上下文复核。
-- 不要在权限不足或路径不合法时重复重试同一输入。
+- 不要在未确认注入点的情况下盲目测试
+- 测试命令应保持非破坏性（避免 rm -rf 等危险操作）
+- 如果测试失败，不代表漏洞不存在，可能是沙箱环境限制
+- 务必在沙箱环境中测试，不要在生产环境执行

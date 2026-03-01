@@ -40,60 +40,73 @@ logger = logging.getLogger(__name__)
 
 _PSEUDO_FUNCTION_NAMES = {"__attribute__", "__declspec"}
 
-VERIFICATION_SYSTEM_PROMPT = """你是漏洞验证 Agent，负责自主完成漏洞真实性校验与修复建议输出。
+VERIFICATION_SYSTEM_PROMPT = """你是 DeepAudit 的漏洞验证 Agent，一个自主的安全验证专家。
+
+## 你的角色
+你是漏洞验证的大脑，而不是机械验证器。你必须：
+1. 理解每个漏洞候选的代码上下文与可利用条件。
+2. 自主制定验证策略，不向用户追问“是否继续/如何选择”。
+3. 优先编写并执行 Fuzzing Harness 进行动态验证。
+4. 给出有证据支撑的真实性判断与影响分析。
+5. 输出可复核的 PoC 思路与修复建议。
+
+## 核心理念：Fuzzing Harness（强制优先）
+即使项目无法整体运行，也要尽量完成验证：
+1. 提取目标函数（`extract_function`）。
+2. Mock 依赖（数据库/HTTP/文件系统/危险函数）。
+3. 编写测试脚本并构造多组 payload。
+4. 用 `run_code` 执行 Harness，基于输出判定。
+
+## 工具优先级
+1. 核心：`run_code`、`extract_function`
+2. 文件证据：`read_file`（必要时 `search_code`）
+3. 沙箱辅助：`sandbox_exec`、`sandbox_http`、`verify_vulnerability`
+4. 语言专项：`php_test`/`python_test`/`javascript_test`/`java_test`/`go_test`/`ruby_test`/`shell_test`/`universal_code_test`
 
 ## 执行原则（强约束）
-1. 禁止向用户追问“下一步选项/是否生成补丁/是否继续”等问题，必须自主推进。
-2. 信息不足时使用默认策略补齐并继续，不得停在“等待用户确认”。
-3. 只能调用运行时提供的工具白名单；未提供的工具不能调用。
-4. 输出必须包含 `suggestion` 与 `fix_code`（允许简化补丁，但不能为空）。
-5. 若发现无法定位到真实文件或无法形成证据，结论应为 `false_positive` 或 `likely`，不得强行 `confirmed`。
-6. 若存在 `bootstrap_findings`，优先验证其高风险项并回填真实性/可达性。
-7. 不允许输出“请选择/请确认后继续”等交互语句，必须直接执行默认策略并收敛结束。
-8. 若字段缺失需先自我补全（基于证据与默认模板），再输出 Final Answer。
-9. **语言要求**：Final Answer 中 title/description/suggestion/fix_description/verification_evidence/poc_plan 必须使用简体中文，禁止输出英文段落。
-10. **验证范围强约束**：必须验证全部候选项（候选来源：`previous_results.findings` 与 `bootstrap_findings` 合并去重）；列表为空时直接返回空 findings。不得新增清单以外的发现。
-11. **工具优先门禁（强约束）**：在输出任何结论或 Final Answer 前，必须至少执行一次工具调用获取代码证据（最低要求：至少一次 `read_file` 或 `search_code`），并在结论中引用 Observation 证据，禁止无证据宣称“已验证/已读取”。
-12. **首轮强约束**：第一轮必须输出 Action（优先 `read_file`），不允许第一轮直接输出 Final Answer。
-13. **标题强约束**：每条 finding 的 `title` 必须是中文三段式：`路径+函数+具体漏洞名`，例如 `src/time64.c中asctime64_r栈溢出漏洞`。
-14. **CWE 要求**：每条 finding 必须输出 `cwe_id`（如 `CWE-79`），若无法精确判断，给出最接近的 CWE 并在证据中说明。
-15. **Flow 证据要求**：高危候选必须补齐 flow 证据（`verification_result.flow` 或 `function_trigger_flow`），否则不得判定为 `confirmed`。
-16. **报告前置条件**：调用 `create_vulnerability_report` 前，必须完成标题结构化、类型细化、证据字段完整化。
-17. **输出格式约束**：禁止使用 `## Action`/`## Action Input` 标题样式，必须使用 `Action:`/`Action Input:` 行格式。
-18. **根因描述约束**：`description` 必须说明漏洞根本成因，并绑定真实 `file_path/line/code_snippet` 证据，禁止虚构代码细节。
-19. **逐漏洞状态机约束**：必须按候选列表逐条推进（pending -> running -> verified/false_positive），禁止跨候选混合结论。
-20. **可达性证明约束**：每个候选至少提供一条代码证据（`read_file`/`extract_function`）和一条流证据（优先 `verify_reachability` 固定编排流程）。
+1. 只能调用运行时工具白名单中的工具，禁止编造工具名。
+2. 必须验证全部候选（来源：`previous_results.findings` 与 `bootstrap_findings` 去重合并），不得新增清单外漏洞。
+3. 在输出任何结论或 Final Answer 前，必须先完成至少一次工具调用，并包含代码证据。
+4. 首轮必须输出 Action，不允许首轮直接 Final Answer。
+5. 如果 `read_file` 证明目标文件不存在，该候选必须判定为 `false_positive`。
+6. 如果关键字段缺失且无法补齐证据，按保守策略输出 `false_positive` 或 `likely`，不得强行 `confirmed`。
+7. 输出语言必须为简体中文（title/description/suggestion/fix_description/verification_evidence/poc_plan）。
+8. 禁止 Markdown 样式的 `**Thought:**`，必须使用纯文本 `Thought:` / `Action:` / `Action Input:` / `Final Answer:`。
+9. 不允许“请选择/请确认后继续”等交互漂移语句。
+
+## 真实性与置信度
+- verdict: `confirmed` | `likely` | `false_positive`
+- confidence_level: `must` | `probably` | `unlikely`
+    - `confirmed` 通常对应 `must`
+    - `likely` 通常对应 `probably`
+    - `false_positive` 通常对应 `unlikely`
+
+## 逆向/函数级分析补充约束
+1. 优先基于目标函数本体分析；若证据不足，再扩展到子函数与调用链。
+2. 若子函数存在风险，必须判断当前函数是否满足其触发条件；不满足则视为不可触发。
+3. 重点关注可利用高危漏洞：SQL 注入、XSS、命令执行、路径遍历、文件上传、业务逻辑绕过等。
+4. 对具备调用关系的候选，至少向上追溯 3 层调用关系（能力允许范围内）。
+5. 若输出触发条件结构，条件键优先使用“参数1/参数2/外部输入1”这类规范命名。
+6. 对函数外部输入（HTTP 请求、环境变量、配置、文件）先判断可控性，再判断是否可触发漏洞。
 
 ## 工作流
-1. 先读取/提取目标代码，验证文件与行号是否真实存在。
-2. 使用 `verify_reachability`（固定执行 `search/read -> locate/extract -> joern(/cpg)`）证明所属函数可达性与触发可能性。
-3. 单候选结论写回 TODO 状态，再进入下一个候选。
-4. 输出非武器化 PoC 思路（步骤、前置条件、观测信号），禁止提供可直接利用的 payload/命令。
-5. 汇总输出 Final Answer。
+1. 读取目标文件并校验定位（文件/行号/代码片段）。
+2. 提取目标函数，构建 Harness，优先动态验证（`run_code`）。
+3. 按单候选状态机推进：pending -> running -> verified/false_positive。
+4. 汇总证据，输出 Final Answer JSON。
 
-## 输出格式
-使用纯文本 ReAct：
-Thought: ...
-Action: ...
-Action Input: {...}
-
-完成后输出：
-Thought: ...
-Final Answer: {...}
-
-## Final Answer 字段要求
+## Final Answer 要求
 每条 finding 至少包含：
 - file_path, line_start, line_end
-- reachability: reachable|likely_reachable|unreachable
-- authenticity/verdict: confirmed|likely|false_positive
-- verification_details/evidence
+- authenticity/verdict
+- reachability
+- verification_details 或 verification_evidence
 - cwe_id
-- suggestion
-- fix_code
+- suggestion, fix_code
+- verification_method
 
 PoC 约束：
-- 仅输出“思路级”PoC，不输出可直接执行的利用代码或命令。
-- 建议至少对 confirmed/likely 的发现提供 poc 字段。"""
+- 仅授权场景下输出非武器化步骤；不要输出针对真实系统的攻击性操作指令。"""
 
 @dataclass
 class VerificationStep:
@@ -1237,6 +1250,77 @@ class VerificationAgent(BaseAgent):
         return any(marker in text for marker in positive_markers)
 
     @staticmethod
+    def _infer_language_from_path(file_path: str) -> str:
+        ext = str(Path(str(file_path or "")).suffix or "").lower()
+        mapping = {
+            ".py": "python",
+            ".php": "php",
+            ".js": "javascript",
+            ".jsx": "javascript",
+            ".ts": "javascript",
+            ".tsx": "javascript",
+            ".rb": "ruby",
+            ".go": "go",
+            ".java": "java",
+            ".sh": "bash",
+            ".bash": "bash",
+        }
+        return mapping.get(ext, "python")
+
+    @staticmethod
+    def _extract_code_block(observation: str) -> str:
+        text = str(observation or "")
+        if not text.strip():
+            return ""
+        fence_match = re.search(r"```(?:[a-zA-Z0-9_+-]+)?\n([\s\S]*?)\n```", text)
+        if fence_match:
+            return str(fence_match.group(1) or "").strip()
+        return text.strip()
+
+    def _build_fuzzing_harness(
+        self,
+        *,
+        vulnerability_type: str,
+        language: str,
+        function_name: Optional[str],
+        extracted_code: str,
+        code_context: str,
+        file_path: str,
+        line_start: int,
+    ) -> str:
+        vuln = str(vulnerability_type or "general_issue").strip().lower()
+        payloads = {
+            "command_injection": ["test", "; id", "| whoami", "`id`", "$(id)", "&& ls"],
+            "sql_injection": ["1", "1'", "1' OR '1'='1", "1 UNION SELECT 1", "1'; DROP TABLE t--"],
+            "xss": ["test", "<script>alert(1)</script>", "<img src=x onerror=alert(1)>", "{{7*7}}"],
+            "path_traversal": ["a.txt", "../etc/passwd", "../../../../etc/hosts", "..\\..\\windows\\win.ini"],
+            "ssrf": ["http://example.com", "http://127.0.0.1:80", "http://169.254.169.254/latest/meta-data"],
+            "deserialization": ["{}", "O:8:\"Exploit\":0:{}", "!!python/object/apply:os.system ['id']"],
+        }
+        selected_payloads = payloads.get(vuln, ["test", "' OR '1'='1", "<script>alert(1)</script>"])
+
+        if language == "python" and function_name and extracted_code.strip():
+            return f'''import inspect\nimport os\nimport subprocess\n\nTARGET_FILE = {json.dumps(file_path)}\nTARGET_LINE = {int(line_start)}\nVULN_TYPE = {json.dumps(vuln)}\nPAYLOADS = {json.dumps(selected_payloads, ensure_ascii=False)}\n\nexecuted_calls = []\n\ndef _record(tag, value):\n    executed_calls.append((tag, str(value)))\n    print(f"[DETECTED] {{tag}}: {{value}}")\n\n_orig_system = os.system\n_orig_popen = os.popen\n_orig_run = subprocess.run\n_orig_popen2 = subprocess.Popen\n\ndef _mock_system(cmd):\n    _record("os.system", cmd)\n    return 0\n\ndef _mock_popen(cmd, *args, **kwargs):\n    _record("os.popen", cmd)\n    class _Dummy:\n        def read(self):\n            return "mock"\n    return _Dummy()\n\ndef _mock_run(*args, **kwargs):\n    _record("subprocess.run", args[0] if args else kwargs.get("args"))\n    class _Result:\n        returncode = 0\n        stdout = "mock"\n        stderr = ""\n    return _Result()\n\ndef _mock_popen2(*args, **kwargs):\n    _record("subprocess.Popen", args[0] if args else kwargs.get("args"))\n    class _Proc:\n        returncode = 0\n        def communicate(self):\n            return ("mock", "")\n    return _Proc()\n\nos.system = _mock_system\nos.popen = _mock_popen\nsubprocess.run = _mock_run\nsubprocess.Popen = _mock_popen2\n\n# === extracted function code ===\n{extracted_code}\n\nif {json.dumps(function_name)} not in globals():\n    print("[SAFE] target function not found in extracted code")\nelse:\n    fn = globals()[{json.dumps(function_name)}]\n    sig = inspect.signature(fn)\n    required = [\n        p for p in sig.parameters.values()\n        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)\n        and p.default is inspect._empty\n    ]\n\n    print("=== FUZZING START ===")\n    for payload in PAYLOADS:\n        executed_calls.clear()\n        args = [payload for _ in required]\n        print(f"\\n[PAYLOAD] {{payload}}")\n        try:\n            result = fn(*args)\n            print(f"[RETURN] {{result}}")\n            if executed_calls:\n                print("[VULN] dangerous sink invoked")\n            rendered = str(result) if result is not None else ""\n            if VULN_TYPE in {{"xss", "ssti"}} and payload in rendered and ("<" in payload or "{{" in payload):\n                print("[VULN] unsanitized reflection")\n            if VULN_TYPE == "sql_injection" and ("'" in payload or " union " in payload.lower() or " or " in payload.lower()):\n                if payload in rendered:\n                    print("[VULN] payload reflected in output")\n        except Exception as exc:\n            print(f"[ERROR] {{exc}}")\n\n# restore\nos.system = _orig_system\nos.popen = _orig_popen\nsubprocess.run = _orig_run\nsubprocess.Popen = _orig_popen2\n'''
+
+        code_blob = extracted_code.strip() or code_context.strip()
+        return f'''# Lightweight harness fallback\n# language={language}, vuln={vuln}\nCODE = {json.dumps(code_blob[:12000], ensure_ascii=False)}\nPAYLOADS = {json.dumps(selected_payloads, ensure_ascii=False)}\nprint("=== HARNESS FALLBACK ===")\nprint("code_length=", len(CODE))\npositive = False\nfor p in PAYLOADS:\n    if p and p in CODE:\n        print("[VULN] payload token appears in code:", p)\n        positive = True\nfor marker in ["eval(", "exec(", "system(", "Runtime.getRuntime().exec", "shell_exec(", "subprocess", "SELECT", "innerHTML", "document.write", "../", "..\\\\"]:\n    if marker.lower() in CODE.lower():\n        print("[SIGNAL] dangerous marker:", marker)\n        positive = True\nif not positive:\n    print("[SAFE] no direct exploit signal in fallback harness")\n'''
+
+    @staticmethod
+    def _is_harness_evidence_positive(observation: str) -> bool:
+        text = str(observation or "").lower()
+        positive_markers = [
+            "[vuln]",
+            "dangerous sink invoked",
+            "unsanitized reflection",
+            "payload reflected",
+            "[detected]",
+            "漏洞已确认",
+            "is_vulnerable": true,
+            '"is_vulnerable": true',
+        ]
+        return any(marker in text for marker in positive_markers)
+
+    @staticmethod
     def _shorten_observation(observation: str, max_chars: int = 1200) -> str:
         text = str(observation or "").strip()
         if len(text) <= max_chars:
@@ -1786,7 +1870,7 @@ class VerificationAgent(BaseAgent):
                 reachability: str = "unreachable"
                 blocked_reason: Optional[str] = None
                 evidence_blocks: List[str] = []
-                flow_observation: str = ""
+                harness_observation: str = ""
                 remaining_item_iterations = max_iterations_per_item
 
                 for attempt in range(1, todo_item.max_attempts + 1):
@@ -1844,83 +1928,103 @@ class VerificationAgent(BaseAgent):
                         blocked_reason = read_error_reason
                         continue
 
-                    reachability_input = {
-                        "file_path": file_path,
-                        "line_start": line_start,
-                        "line_end": line_end,
-                        "function_name": function_name or None,
-                        "vulnerability_type": candidate.get("vulnerability_type"),
-                        "source_hints": [str(candidate.get("description") or "").strip()]
-                        if str(candidate.get("description") or "").strip()
-                        else [],
-                        "sink_hints": [str(candidate.get("code_snippet") or "").strip()]
-                        if str(candidate.get("code_snippet") or "").strip()
-                        else [],
+                    extracted_code = ""
+                    if function_name:
+                        extract_input = {
+                            "file_path": file_path,
+                            "function_name": function_name,
+                            "include_imports": True,
+                        }
+                        last_action = "extract_target_function"
+                        last_tool_name = "extract_function"
+                        extract_observation = await self.execute_tool("extract_function", extract_input)
+                        self._steps.append(
+                            VerificationStep(
+                                thought=f"提取目标函数构建 Harness: {function_name}",
+                                action="extract_function",
+                                action_input=extract_input,
+                                observation=extract_observation,
+                            )
+                        )
+                        todo_item.evidence_refs.append("extract_function")
+                        if extract_observation:
+                            evidence_blocks.append(
+                                "[函数提取/extract_function]\n" + self._shorten_observation(extract_observation, 1000)
+                            )
+                        extract_error = self._extract_tool_error_reason(extract_observation)
+                        if extract_error == "cancelled":
+                            break
+                        if extract_error is None:
+                            extracted_code = self._extract_code_block(extract_observation)
+
+                    language = self._infer_language_from_path(file_path)
+                    harness_code = self._build_fuzzing_harness(
+                        vulnerability_type=str(candidate.get("vulnerability_type") or ""),
+                        language=language,
+                        function_name=function_name,
+                        extracted_code=extracted_code,
+                        code_context=read_observation,
+                        file_path=file_path,
+                        line_start=int(line_start),
+                    )
+
+                    run_code_input = {
+                        "code": harness_code,
+                        "language": language,
+                        "timeout": 90,
+                        "description": (
+                            f"verification harness for {candidate.get('vulnerability_type') or 'unknown'} "
+                            f"at {file_path}:{line_start}"
+                        ),
                     }
-                    last_action = "collect_flow_evidence"
-                    last_tool_name = "verify_reachability"
-                    flow_observation = await self.execute_tool("verify_reachability", reachability_input)
+                    last_action = "execute_fuzzing_harness"
+                    last_tool_name = "run_code"
+                    harness_observation = await self.execute_tool("run_code", run_code_input)
                     self._steps.append(
                         VerificationStep(
-                            thought=f"验证所属函数可达性与触发条件: {file_path}:{line_start}",
-                            action="verify_reachability",
-                            action_input=reachability_input,
-                            observation=flow_observation,
+                            thought=f"执行 Fuzzing Harness 进行动态验证: {file_path}:{line_start}",
+                            action="run_code",
+                            action_input=run_code_input,
+                            observation=harness_observation,
                         )
                     )
-                    flow_error_reason = self._extract_tool_error_reason(flow_observation)
-                    pipeline_blocked_reason = self._extract_verify_pipeline_blocked_reason(
-                        flow_observation
-                    )
-                    todo_item.evidence_refs.append("verify_reachability")
-                    if flow_observation:
+                    todo_item.evidence_refs.append("run_code")
+                    if harness_observation:
                         evidence_blocks.append(
-                            "[流证据/verify_reachability]\n" + self._shorten_observation(flow_observation, 1200)
+                            "[动态验证/run_code]\n" + self._shorten_observation(harness_observation, 1400)
                         )
 
-                    if flow_error_reason == "cancelled":
+                    run_error = self._extract_tool_error_reason(harness_observation)
+                    if run_error == "cancelled":
                         break
+                    if run_error is not None:
+                        blocked_reason = "harness_execution_failed"
+                        continue
 
-                    if (
-                        flow_error_reason is None
-                        and pipeline_blocked_reason in {
-                            "mcp_unavailable",
-                            "missing_location",
-                            "insufficient_flow_evidence",
-                            "read_budget_exhausted",
-                        }
-                    ):
-                        flow_error_reason = "blocked"
+                    harness_positive = self._is_harness_evidence_positive(harness_observation)
+                    harness_negative = "[safe]" in str(harness_observation or "").lower()
 
-                    flow_text_lower = str(flow_observation or "").lower()
-                    flow_positive = flow_error_reason is None and self._is_flow_evidence_positive(flow_observation)
-                    flow_negative = (
-                        flow_error_reason is None
-                        and ("unreachable" in flow_text_lower or "不可达" in flow_text_lower)
-                    )
-
-                    if flow_negative:
-                        final_verdict = "false_positive"
-                        reachability = "unreachable"
-                        break
-
-                    if flow_positive and confidence >= 0.8:
+                    if harness_positive and confidence >= 0.7:
                         final_verdict = "confirmed"
                         reachability = "reachable"
                         break
 
-                    if flow_positive or flow_error_reason is None:
+                    if harness_positive:
                         final_verdict = "likely"
                         reachability = "likely_reachable"
                         break
 
-                    # flow 工具失败：保留 read_file 证据，继续下一次 attempt 或降级。
-                    blocked_reason = self._map_flow_error_to_blocked_reason(
-                        flow_error_reason,
-                        pipeline_blocked_reason,
-                    )
-                    if blocked_reason in {"mcp_unavailable", "missing_location", "read_budget_exhausted"}:
+                    if harness_negative:
+                        final_verdict = "false_positive"
+                        reachability = "unreachable"
+                        blocked_reason = blocked_reason or "no_exploit_signal"
                         break
+
+                    # 无明确阳性信号但有代码证据时，保守给 likely。
+                    final_verdict = "likely"
+                    reachability = "likely_reachable"
+                    blocked_reason = blocked_reason or "insufficient_dynamic_signal"
+                    break
 
                 if self.is_cancelled:
                     break
@@ -1968,9 +2072,9 @@ class VerificationAgent(BaseAgent):
                 if line_end_int < line_start_int:
                     line_end_int = line_start_int
                 function_trigger_flow = (
-                    [self._shorten_observation(flow_observation, 800)]
-                    if flow_observation
-                    else [f"flow_evidence_unavailable:{todo_item.blocked_reason or 'not_collected'}"]
+                    [self._shorten_observation(harness_observation, 800)]
+                    if harness_observation
+                    else [f"harness_evidence_unavailable:{todo_item.blocked_reason or 'not_collected'}"]
                 )
                 root_cause_description = build_cn_structured_description(
                     file_path=file_path,

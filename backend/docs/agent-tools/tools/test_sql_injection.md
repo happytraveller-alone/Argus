@@ -1,42 +1,46 @@
 # Tool: `test_sql_injection`
 
 ## Tool Purpose
-该工具已下线，仅用于兼容历史调用。
-
-## Goal
-执行非武器化验证步骤并收集可复现实验信号。
-
-## Task List
-- 构造安全可控的测试输入。
-- 观察返回、日志与行为差异。
-- 输出验证结果与证据摘要。
-
+专门测试 SQL 注入漏洞的工具，支持多种数据库类型和注入 payload。
 
 ## Inputs
-- `reason` (any, optional): 兼容占位参数
-
+- `target_file` (string, required): 目标文件路径
+- `param_name` (string, optional): 注入参数名，默认 `"id"`
+- `payload` (string, optional): SQL 注入 payload，默认 `"1' OR '1'='1"`
+  - 布尔盲注: `"1' AND '1'='1"`
+  - 联合查询: `"1' UNION SELECT 1,2,3--"`
+  - 报错注入: `"1' AND extractvalue(1,concat(0x7e,version()))--"`
+  - 时间盲注: `"1' AND SLEEP(5)--"`
+- `language` (string, optional): 语言类型，默认 `"auto"`
+- `db_type` (string, optional): 数据库类型，默认 `"mysql"`（支持 mysql, postgresql, sqlite, oracle, mssql）
 
 ### Example Input
 ```json
 {
-  "reason": null
+  "target_file": "app/login.php",
+  "param_name": "username",
+  "payload": "admin'--",
+  "db_type": "mysql"
 }
 ```
 
 ## Outputs
-- `success` (bool): 执行是否成功。
-- `data` (any): 工具主结果载荷。
-- `error` (string|null): 失败时错误信息。
-- `duration_ms` (int): 执行耗时（毫秒）。
-- `metadata` (object): 补充上下文信息。
+- `success` (bool): 执行是否成功
+- `data` (string): 测试结果摘要（包含输出、SQL 错误信息、漏洞确认状态）
+- `metadata` (object):
+  - `vulnerability_type`: `"sql_injection"`
+  - `is_vulnerable` (bool): 是否确认漏洞
+  - `evidence` (string|null): 漏洞证据（SQL 错误特征或数据泄露）
+  - `poc` (string|null): PoC 命令
+  - `db_type` (string): 数据库类型
 
 ## Typical Triggers
-- 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `analysis, orchestrator, recon, verification`。
-- 分类: `漏洞验证与 PoC 规划`。
-- 可选工具: `否`。
+- 分析阶段发现 SQL 查询拼接用户输入
+- 验证阶段需要确认 SQL 注入是否可利用
+- 检测是否存在 SQL 错误信息泄露
 
 ## Pitfalls And Forbidden Use
-- 不要在输入缺失关键参数时盲目调用。
-- 不要将该工具输出直接当作最终结论，必须结合上下文复核。
-- 不要在权限不足或路径不合法时重复重试同一输入。
+- payload 应避免破坏性操作（DROP, DELETE, UPDATE）
+- 不要使用真实密码或敏感数据
+- SQL 错误不一定意味着漏洞可利用，需要进一步分析
+- 注意转义字符和特殊符号的处理

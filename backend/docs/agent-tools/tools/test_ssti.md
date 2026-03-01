@@ -1,42 +1,45 @@
 # Tool: `test_ssti`
 
 ## Tool Purpose
-该工具已下线，仅用于兼容历史调用。
-
-## Goal
-执行非武器化验证步骤并收集可复现实验信号。
-
-## Task List
-- 构造安全可控的测试输入。
-- 观察返回、日志与行为差异。
-- 输出验证结果与证据摘要。
-
+专门测试 SSTI（服务端模板注入）漏洞的工具，支持多种模板引擎。
 
 ## Inputs
-- `reason` (any, optional): 兼容占位参数
-
+- `target_file` (string, required): 目标文件路径
+- `param_name` (string, optional): 注入参数名，默认 `"name"`
+- `payload` (string, optional): SSTI payload，默认 `"{{7*7}}"`
+  - Jinja2/Twig: `{{7*7}}`, `{{config}}`
+  - Freemarker: `${7*7}`
+  - Velocity: `#set($x=7*7)$x`
+  - Smarty: `{7*7}`
+- `template_engine` (string, optional): 模板引擎类型，默认 `"auto"`（支持 jinja2, twig, freemarker, velocity, smarty）
 
 ### Example Input
 ```json
 {
-  "reason": null
+  "target_file": "app/render.py",
+  "param_name": "name",
+  "payload": "{{7*7}}",
+  "template_engine": "jinja2"
 }
 ```
 
 ## Outputs
-- `success` (bool): 执行是否成功。
-- `data` (any): 工具主结果载荷。
-- `error` (string|null): 失败时错误信息。
-- `duration_ms` (int): 执行耗时（毫秒）。
-- `metadata` (object): 补充上下文信息。
+- `success` (bool): 执行是否成功
+- `data` (string): 测试结果摘要（包含模板渲染输出）
+- `metadata` (object):
+  - `vulnerability_type`: `"ssti"`
+  - `template_engine` (string): 检测到的模板引擎
+  - `is_vulnerable` (bool): 是否确认漏洞
+  - `evidence` (string|null): 漏洞证据（表达式计算结果、配置泄露等）
+  - `poc` (string|null): PoC 命令
 
 ## Typical Triggers
-- 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `analysis, orchestrator, recon, verification`。
-- 分类: `漏洞验证与 PoC 规划`。
-- 可选工具: `否`。
+- 分析阶段发现用户输入进入模板渲染
+- 验证阶段需要确认 SSTI 是否可利用
+- 检测模板表达式计算或配置访问
 
 ## Pitfalls And Forbidden Use
-- 不要在输入缺失关键参数时盲目调用。
-- 不要将该工具输出直接当作最终结论，必须结合上下文复核。
-- 不要在权限不足或路径不合法时重复重试同一输入。
+- 不要使用破坏性 payload（文件系统操作、反弹 shell 等）
+- 数学表达式计算成功是 SSTI 的强信号
+- 不同模板引擎语法不同，需要针对性 payload
+- 某些模板引擎有沙箱保护机制

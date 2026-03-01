@@ -1,42 +1,46 @@
 # Tool: `test_xss`
 
 ## Tool Purpose
-该工具已下线，仅用于兼容历史调用。
-
-## Goal
-执行非武器化验证步骤并收集可复现实验信号。
-
-## Task List
-- 构造安全可控的测试输入。
-- 观察返回、日志与行为差异。
-- 输出验证结果与证据摘要。
-
+专门测试 XSS（跨站脚本）漏洞的工具，支持 Reflected、Stored、DOM XSS 检测。
 
 ## Inputs
-- `reason` (any, optional): 兼容占位参数
-
+- `target_file` (string, required): 目标文件路径
+- `param_name` (string, optional): 注入参数名，默认 `"input"`
+- `payload` (string, optional): XSS payload，默认 `"<script>alert('XSS')</script>"` 
+  - Script 标签: `<script>alert('XSS')</script>`
+  - 事件处理: `<img src=x onerror=alert('XSS')>`
+  - SVG: `<svg onload=alert('XSS')>`
+  - JavaScript 协议: `javascript:alert('XSS')`
+- `xss_type` (string, optional): XSS 类型，默认 `"reflected"`（支持 reflected, stored, dom）
+- `language` (string, optional): 语言类型，默认 `"auto"`
 
 ### Example Input
 ```json
 {
-  "reason": null
+  "target_file": "app/search.php",
+  "param_name": "q",
+  "payload": "<script>alert(1)</script>",
+  "xss_type": "reflected"
 }
 ```
 
 ## Outputs
-- `success` (bool): 执行是否成功。
-- `data` (any): 工具主结果载荷。
-- `error` (string|null): 失败时错误信息。
-- `duration_ms` (int): 执行耗时（毫秒）。
-- `metadata` (object): 补充上下文信息。
+- `success` (bool): 执行是否成功
+- `data` (string): 测试结果摘要（包含 HTML 输出、payload 反射状态）
+- `metadata` (object):
+  - `vulnerability_type`: `"xss"`
+  - `xss_type` (string): XSS 类型
+  - `is_vulnerable` (bool): 是否确认漏洞
+  - `evidence` (string|null): 漏洞证据（payload 被反射或编码情况）
+  - `poc` (string|null): PoC 命令
 
 ## Typical Triggers
-- 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `analysis, orchestrator, recon, verification`。
-- 分类: `漏洞验证与 PoC 规划`。
-- 可选工具: `否`。
+- 分析阶段发现用户输入直接输出到 HTML
+- 验证阶段需要确认 XSS 是否可触发
+- 检测输出编码/过滤机制是否有效
 
 ## Pitfalls And Forbidden Use
-- 不要在输入缺失关键参数时盲目调用。
-- 不要将该工具输出直接当作最终结论，必须结合上下文复核。
-- 不要在权限不足或路径不合法时重复重试同一输入。
+- payload 被 HTML 编码不一定代表完全防护（可能存在其他上下文注入）
+- 不要使用破坏性或恶意 payload
+- 注意检查不同输出上下文（HTML 标签、属性、JS 代码块）
+- DOM XSS 可能需要浏览器环境才能完整验证

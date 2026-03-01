@@ -1,42 +1,39 @@
 # Tool: `test_deserialization`
 
 ## Tool Purpose
-该工具已下线，仅用于兼容历史调用。
-
-## Goal
-执行非武器化验证步骤并收集可复现实验信号。
-
-## Task List
-- 构造安全可控的测试输入。
-- 观察返回、日志与行为差异。
-- 输出验证结果与证据摘要。
-
+检测不安全反序列化漏洞的工具，支持多语言静态分析。
 
 ## Inputs
-- `reason` (any, optional): 兼容占位参数
-
+- `target_file` (string, required): 目标文件路径
+- `language` (string, optional): 语言类型，默认 `"auto"`（支持 php, python, java, ruby）
+- `payload_type` (string, optional): payload 类型，默认 `"detect"`（支持 detect, pickle, yaml, php_serialize）
 
 ### Example Input
 ```json
 {
-  "reason": null
+  "target_file": "app/api.py",
+  "language": "python",
+  "payload_type": "detect"
 }
 ```
 
 ## Outputs
-- `success` (bool): 执行是否成功。
-- `data` (any): 工具主结果载荷。
-- `error` (string|null): 失败时错误信息。
-- `duration_ms` (int): 执行耗时（毫秒）。
-- `metadata` (object): 补充上下文信息。
+- `success` (bool): 执行是否成功
+- `data` (string): 检测结果摘要（包含危险函数调用列表）
+- `metadata` (object):
+  - `vulnerability_type`: `"deserialization"`
+  - `language` (string): 检测到的语言
+  - `is_vulnerable` (bool): 是否确认漏洞风险
+  - `evidence` (string|null): 漏洞证据
+  - `dangerous_calls` (array): 危险函数调用列表
 
 ## Typical Triggers
-- 当 Agent 需要完成“执行非武器化验证步骤并收集可复现实验信号。”时触发。
-- 常见阶段: `analysis, orchestrator, recon, verification`。
-- 分类: `漏洞验证与 PoC 规划`。
-- 可选工具: `否`。
+- 分析阶段发现反序列化函数调用（unserialize, pickle.loads, readObject 等）
+- 验证阶段需要评估反序列化风险
+- 检测用户可控数据是否进入反序列化函数
 
 ## Pitfalls And Forbidden Use
-- 不要在输入缺失关键参数时盲目调用。
-- 不要将该工具输出直接当作最终结论，必须结合上下文复核。
-- 不要在权限不足或路径不合法时重复重试同一输入。
+- 这是静态分析工具，主要检测危险模式而非实际执行
+- 发现危险调用不一定意味着可利用（需要检查数据来源）
+- 不同语言的反序列化利用链差异很大
+- 建议避免反序列化不可信数据，改用 JSON 等安全格式

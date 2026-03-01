@@ -1,9 +1,7 @@
-# Tool: `universal_vuln_test`
+# Tool: `vuln_test`
 
 ## Tool Purpose
 通用漏洞测试工具，支持多种漏洞类型的自动化测试，自动选择合适的专门测试器。
-
-**注意**：此工具在代码内部的名称为 `vuln_test`，但在 Agent 工具注册表中以 `universal_vuln_test` 暴露。
 
 ## Inputs
 - `target_file` (string, required): 目标文件路径
@@ -64,4 +62,4 @@
 - 这是统一入口工具，实际执行由各专门测试器完成
 - 不支持的漏洞类型会返回错误
 - 自定义 payload 需要符合对应漏洞类型的格式要求
-- 优先使用专门工具（如 test_command_injection）以获得更精细的控制
+- 优先使用专门工具以获得更精细的控制
