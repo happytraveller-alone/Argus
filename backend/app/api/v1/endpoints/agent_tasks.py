@@ -4242,16 +4242,16 @@ async def _initialize_tools(
         )
 
     deprecated_skill_tools: Dict[str, Any] = {
-        skill_name: MCPDeprecatedTool(name=skill_name, message="该 skill 已下线，请改用 verify_reachability + flow 证据链。")
-        for skill_name in [
-            "test_command_injection",
-            "test_deserialization",
-            "test_path_traversal",
-            "test_sql_injection",
-            "test_ssti",
-            "test_xss",
-            "universal_vuln_test",
-        ]
+        # skill_name: MCPDeprecatedTool(name=skill_name, message="该 skill 已下线，请改用 verify_reachability + flow 证据链。")
+        # for skill_name in [
+        #     "test_command_injection",
+        #     "test_deserialization",
+        #     "test_path_traversal",
+        #     "test_sql_injection",
+        #     "test_ssti",
+        #     "test_xss",
+        #     "universal_vuln_test",
+        # ]
     }
     
     # Recon 工具
@@ -4284,13 +4284,7 @@ async def _initialize_tools(
     # Phase 4 (污点分析): dataflow_analysis, controlflow_analysis_light, read_file
     # Phase 5 (漏洞确认): read_file, 综合前4阶段结果
     business_logic_scan_core_tools = {
-        # 基础工具（所有阶段）
-        "read_file": base_tools["read_file"],
-        "search_code": base_tools["search_code"],
-        "list_files": base_tools["list_files"],
-        "think": base_tools["think"],
-        "reflect": base_tools["reflect"],
-        # MCP 工具（如果启用）
+        **base_tools,
         **mcp_read_tools,
     }
     
