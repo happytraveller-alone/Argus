@@ -1003,7 +1003,7 @@ def _filter_internal_tools(
 
 
 def _split_qmd_cli_command(raw_command: Any) -> list[str]:
-    fallback = "pnpm dlx @tobilu/qmd"
+    fallback = "qmd"
     text = str(raw_command or "").strip() or fallback
     try:
         parts = shlex.split(text)
@@ -1485,7 +1485,7 @@ async def list_mcp_tools_runtime(
 async def verify_qmd_cli_runtime(
     _current_user: User = Depends(deps.get_current_user),
 ) -> Any:
-    command_base = _split_qmd_cli_command(getattr(settings, "QMD_CLI_COMMAND", "pnpm dlx @tobilu/qmd"))
+    command_base = _split_qmd_cli_command(getattr(settings, "QMD_CLI_COMMAND", "qmd"))
     timeout_seconds = int(getattr(settings, "QMD_CLI_TIMEOUT_SECONDS", 120) or 120)
     checks_to_run = [
         ("help", [*command_base, "--help"]),

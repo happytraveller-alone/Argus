@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
@@ -21,7 +22,7 @@ def _safe_name(value: Any, *, fallback: str) -> str:
 
 
 def _split_qmd_command(raw_command: Any) -> list[str]:
-    fallback = "pnpm dlx @tobilu/qmd"
+    fallback = "qmd"
     text = str(raw_command or "").strip() or fallback
     try:
         parts = shlex.split(text)
@@ -291,12 +292,60 @@ class QmdTaskKnowledgeBase:
                     "stderr": "",
                 }
 
-        full_command = [
-            *self.command_base,
+        command_args = [
             "--index",
             self.index_name,
             *[str(item) for item in args],
         ]
+        primary_result = self._run_cli_once(
+            self.command_base,
+            command_args,
+            expect_json=expect_json,
+        )
+        if primary_result.get("success"):
+            return primary_result
+
+        should_retry, retry_reason = self._should_retry_with_qmd(
+            primary_result,
+            primary_command=self.command_base,
+        )
+        qmd_binary = shutil.which("qmd")
+        if not should_retry or not qmd_binary:
+            return primary_result
+        primary_bin = str(self.command_base[0]).strip() if self.command_base else ""
+        if primary_bin and os.path.abspath(primary_bin) == os.path.abspath(qmd_binary):
+            return primary_result
+
+        fallback_result = self._run_cli_once(
+            [qmd_binary],
+            command_args,
+            expect_json=expect_json,
+        )
+        fallback_result["fallback_command_used"] = qmd_binary
+        fallback_result["fallback_reason"] = retry_reason
+        fallback_result["primary_error"] = primary_result.get("error")
+        if fallback_result.get("success"):
+            return fallback_result
+        fallback_result.setdefault("primary_stdout", primary_result.get("stdout"))
+        fallback_result.setdefault("primary_stderr", primary_result.get("stderr"))
+        return fallback_result
+
+    def _run_cli_once(
+        self,
+        command_base: Iterable[str],
+        command_args: list[str],
+        *,
+        expect_json: bool,
+    ) -> Dict[str, Any]:
+        base_parts = [str(item).strip() for item in command_base if str(item).strip()]
+        if not base_parts:
+            return {
+                "success": False,
+                "error": "missing_qmd_command",
+                "stdout": "",
+                "stderr": "",
+            }
+        full_command = [*base_parts, *command_args]
         try:
             completed = subprocess.run(
                 full_command,
@@ -354,6 +403,50 @@ class QmdTaskKnowledgeBase:
         else:
             payload["data"] = stdout.strip()
         return payload
+
+    @staticmethod
+    def _is_dlx_qmd_command(command_parts: Iterable[str]) -> bool:
+        normalized = [str(item).strip().lower() for item in command_parts if str(item).strip()]
+        if not normalized:
+            return False
+        command_name = os.path.basename(normalized[0])
+        if command_name not in {"pnpm", "npm", "npx"}:
+            return False
+        has_qmd_pkg = "@tobilu/qmd" in normalized
+        has_exec = any(token in {"dlx", "exec"} for token in normalized[1:])
+        return has_qmd_pkg and has_exec
+
+    @staticmethod
+    def _is_dlx_binding_failure(result: Dict[str, Any]) -> bool:
+        error_blob = "\n".join(
+            [
+                str(result.get("error") or ""),
+                str(result.get("stdout") or ""),
+                str(result.get("stderr") or ""),
+            ]
+        ).lower()
+        markers = (
+            "ignored build scripts",
+            "could not locate the bindings file",
+            "better-sqlite3",
+            "node-v127",
+        )
+        return any(marker in error_blob for marker in markers)
+
+    def _should_retry_with_qmd(
+        self,
+        result: Dict[str, Any],
+        *,
+        primary_command: Iterable[str],
+    ) -> tuple[bool, str]:
+        if bool(result.get("success")):
+            return False, ""
+        if self._is_dlx_binding_failure(result):
+            return True, "dlx_native_binding_failure"
+        error_text = str(result.get("error") or "").strip().lower()
+        if self._is_dlx_qmd_command(primary_command) and error_text.startswith("command_not_found:"):
+            return True, "dlx_command_not_found"
+        return False, ""
 
     @staticmethod
     def build_multiline_query(searches: list[dict[str, Any]]) -> str:

@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 from app.services.agent.qmd.task_kb import QmdTaskKnowledgeBase
 
@@ -7,7 +8,7 @@ def test_task_kb_upsert_deduplicates_and_uses_mask(tmp_path):
     kb = QmdTaskKnowledgeBase(
         project_root=str(tmp_path),
         task_id="task-1",
-        command="pnpm dlx @tobilu/qmd",
+        command="qmd",
     )
     calls: list[list[str]] = []
 
@@ -36,7 +37,7 @@ def test_task_kb_query_falls_back_to_search(tmp_path):
     kb = QmdTaskKnowledgeBase(
         project_root=str(tmp_path),
         task_id="task-2",
-        command="pnpm dlx @tobilu/qmd",
+        command="qmd",
     )
     kb._collection_ready = True
 
@@ -69,7 +70,7 @@ def test_task_kb_prevents_path_escape(tmp_path):
     kb = QmdTaskKnowledgeBase(
         project_root=str(tmp_path),
         task_id="task-3",
-        command="pnpm dlx @tobilu/qmd",
+        command="qmd",
     )
     kb._collection_ready = True
     kb.ensure_ready = lambda: {"success": True}  # type: ignore[method-assign]
@@ -83,3 +84,38 @@ def test_task_kb_prevents_path_escape(tmp_path):
         raise AssertionError("expected ValueError for path traversal")
 
     assert not Path(tmp_path / "escape.txt").exists()
+
+
+def test_task_kb_retries_with_qmd_when_dlx_binding_missing(tmp_path, monkeypatch):
+    kb = QmdTaskKnowledgeBase(
+        project_root=str(tmp_path),
+        task_id="task-4",
+        command="pnpm dlx @tobilu/qmd",
+    )
+    kb._collection_ready = True
+    kb.ensure_ready = lambda: {"success": True}  # type: ignore[method-assign]
+
+    def _fake_which(binary: str):
+        if binary == "qmd":
+            return "/usr/local/bin/qmd"
+        return None
+
+    def _fake_run(command, **kwargs):
+        del kwargs
+        if command and str(command[0]).endswith("pnpm"):
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=1,
+                stdout="",
+                stderr="Ignored build scripts for better-sqlite3; Could not locate the bindings file node-v127",
+            )
+        return subprocess.CompletedProcess(args=command, returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("app.services.agent.qmd.task_kb.shutil.which", _fake_which)
+    monkeypatch.setattr("app.services.agent.qmd.task_kb.subprocess.run", _fake_run)
+
+    result = kb.status()
+
+    assert result["success"] is True
+    assert result.get("fallback_command_used") == "/usr/local/bin/qmd"
+    assert result.get("fallback_reason") == "dlx_native_binding_failure"

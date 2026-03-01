@@ -266,7 +266,7 @@ class Settings(BaseSettings):
     QMD_LAZY_INDEX_ENABLED: bool = True
     QMD_AUTO_EMBED_ON_FIRST_USE: bool = False
     QMD_DATA_DIR: str = "./data/qmd"
-    QMD_CLI_COMMAND: str = "pnpm dlx @tobilu/qmd"
+    QMD_CLI_COMMAND: str = "qmd"
     QMD_CLI_TIMEOUT_SECONDS: int = 120
     QMD_TASK_KB_ENABLED: bool = True
     QMD_TASK_ROOT_REL: str = ".deepaudit/qmd"

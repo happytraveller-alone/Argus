@@ -8,7 +8,7 @@ from app.api.v1.endpoints.config import verify_qmd_cli_runtime
 
 @pytest.mark.asyncio
 async def test_qmd_cli_runtime_returns_success(monkeypatch):
-    monkeypatch.setattr(config_module.settings, "QMD_CLI_COMMAND", "pnpm dlx @tobilu/qmd")
+    monkeypatch.setattr(config_module.settings, "QMD_CLI_COMMAND", "qmd")
 
     def _fake_run_qmd_cli_check(*, name, command, timeout_seconds, cwd=None):
         del timeout_seconds, cwd
@@ -28,14 +28,14 @@ async def test_qmd_cli_runtime_returns_success(monkeypatch):
     response = await verify_qmd_cli_runtime(_current_user=SimpleNamespace(id="user-1"))
 
     assert response.success is True
-    assert response.command_base == ["pnpm", "dlx", "@tobilu/qmd"]
+    assert response.command_base == ["qmd"]
     assert [item.name for item in response.checks] == ["help", "status", "collection_list"]
     assert all(item.success is True for item in response.checks)
 
 
 @pytest.mark.asyncio
 async def test_qmd_cli_runtime_reports_partial_failure(monkeypatch):
-    monkeypatch.setattr(config_module.settings, "QMD_CLI_COMMAND", "pnpm dlx @tobilu/qmd")
+    monkeypatch.setattr(config_module.settings, "QMD_CLI_COMMAND", "qmd")
 
     def _fake_run_qmd_cli_check(*, name, command, timeout_seconds, cwd=None):
         del command, timeout_seconds, cwd
@@ -43,7 +43,7 @@ async def test_qmd_cli_runtime_reports_partial_failure(monkeypatch):
             return {
                 "name": name,
                 "success": False,
-                "command": ["pnpm", "dlx", "@tobilu/qmd", "status"],
+                "command": ["qmd", "status"],
                 "exit_code": 1,
                 "duration_ms": 8,
                 "stdout": "",
@@ -53,7 +53,7 @@ async def test_qmd_cli_runtime_reports_partial_failure(monkeypatch):
         return {
             "name": name,
             "success": True,
-            "command": ["pnpm", "dlx", "@tobilu/qmd", name],
+            "command": ["qmd", name],
             "exit_code": 0,
             "duration_ms": 5,
             "stdout": "ok",

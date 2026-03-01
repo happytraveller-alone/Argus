@@ -229,22 +229,38 @@ def build_mcp_catalog(
             return bool(entry[policy_key])
         return bool(getattr(settings, setting_name, False))
 
-    filesystem_backend_url = resolve_filesystem_backend_url(settings)
+    filesystem_force_stdio = bool(getattr(settings, "MCP_FILESYSTEM_FORCE_STDIO", True))
+    filesystem_backend_url = "" if filesystem_force_stdio else resolve_filesystem_backend_url(settings)
+    filesystem_sandbox_url = "" if filesystem_force_stdio else str(
+        getattr(settings, "MCP_FILESYSTEM_SANDBOX_URL", "") or ""
+    ).strip()
+    if (not filesystem_force_stdio) and (not filesystem_sandbox_url):
+        filesystem_sandbox_url = filesystem_backend_url
+
     filesystem_backend = _build_domain_status(
         enabled=runtime_enabled and _domain_enabled_for("filesystem", "backend", "MCP_FILESYSTEM_ENABLED"),
-        checker=_http_endpoint_ready(filesystem_backend_url)
-        if filesystem_backend_url
-        else _command_ready(str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm"))),
+        checker=(
+            _command_ready(str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm")))
+            if filesystem_force_stdio
+            else (
+                _http_endpoint_ready(filesystem_backend_url)
+                if filesystem_backend_url
+                else _command_ready(str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm")))
+            )
+        ),
     )
-    filesystem_sandbox_url = str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_URL", "") or "").strip()
-    if not filesystem_sandbox_url:
-        filesystem_sandbox_url = filesystem_backend_url
     filesystem_sandbox = _build_domain_status(
         enabled=runtime_enabled
         and _domain_enabled_for("filesystem", "sandbox", "MCP_FILESYSTEM_SANDBOX_ENABLED"),
-        checker=_http_endpoint_ready(filesystem_sandbox_url)
-        if filesystem_sandbox_url
-        else _command_ready(str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "pnpm"))),
+        checker=(
+            _command_ready(str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "pnpm")))
+            if filesystem_force_stdio
+            else (
+                _http_endpoint_ready(filesystem_sandbox_url)
+                if filesystem_sandbox_url
+                else _command_ready(str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "pnpm")))
+            )
+        ),
     )
     filesystem_enabled = bool(filesystem_backend.enabled or filesystem_sandbox.enabled)
     filesystem_startup_ready, filesystem_startup_error = _combine_startup_status(

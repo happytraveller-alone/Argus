@@ -1136,8 +1136,36 @@ async def _probe_required_mcp_runtime(
     *,
     runtime_domain: str = "all",
 ) -> Dict[str, Any]:
+    def _resolve_filesystem_probe_file() -> str:
+        fallback = "README.md"
+        project_root = str(getattr(runtime, "project_root", "") or "").strip()
+        if not project_root:
+            return fallback
+        probe_rel = "tmp/.mcp_required_filesystem_probe.txt"
+        probe_abs = os.path.join(project_root, probe_rel)
+        try:
+            os.makedirs(os.path.dirname(probe_abs), exist_ok=True)
+            with open(probe_abs, "w", encoding="utf-8") as handle:
+                handle.write("mcp required filesystem probe\n")
+            return probe_rel
+        except Exception:
+            pass
+        try:
+            for root, _dirs, files in os.walk(project_root):
+                for filename in files:
+                    candidate = os.path.join(root, filename)
+                    if not os.path.isfile(candidate):
+                        continue
+                    rel = os.path.relpath(candidate, project_root).replace("\\", "/")
+                    if rel and not rel.startswith("../"):
+                        return rel
+        except Exception:
+            pass
+        return fallback
+
+    filesystem_probe_file = _resolve_filesystem_probe_file()
     probe_specs: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {
-        "filesystem": [("search_code", {"keyword": "__mcp_probe__", "directory": ".", "max_results": 1})],
+        "filesystem": [("read_file", {"file_path": filesystem_probe_file})],
         "code_index": [("list_files", {"directory": ".", "pattern": "*"})],
         "sequentialthinking": [
             (
@@ -2511,7 +2539,7 @@ async def _execute_agent_task(task_id: str):
                         project_root=project_root,
                         task_id=task_id,
                         command=str(
-                            getattr(settings, "QMD_CLI_COMMAND", "pnpm dlx @tobilu/qmd") or "pnpm dlx @tobilu/qmd"
+                            getattr(settings, "QMD_CLI_COMMAND", "qmd") or "qmd"
                         ),
                         task_root_rel=str(getattr(settings, "QMD_TASK_ROOT_REL", ".deepaudit/qmd") or ".deepaudit/qmd"),
                         collection_prefix=str(getattr(settings, "QMD_TASK_COLLECTION_PREFIX", "task") or "task"),
@@ -2544,6 +2572,7 @@ async def _execute_agent_task(task_id: str):
                         )
                         await _qmd_update_index(force=False)
                     else:
+                        qmd_task_kb = None
                         await event_emitter.emit_warning(
                             "⚠️ QMD 任务知识库初始化失败，已降级为普通审计流程"
                         )
@@ -2659,6 +2688,11 @@ async def _execute_agent_task(task_id: str):
                     }
                     prewarm_not_ready: list[str] = []
                     for daemon_name in required_gate_mcps:
+                        if (
+                            daemon_name == "filesystem"
+                            and bool(getattr(settings, "MCP_FILESYSTEM_FORCE_STDIO", True))
+                        ):
+                            continue
                         spec = daemon_specs.get(daemon_name)
                         if spec is None:
                             prewarm_not_ready.append(f"{daemon_name}:spec_missing")

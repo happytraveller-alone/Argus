@@ -113,7 +113,7 @@ services:
       - GIT_MIRROR_HOSTS=${GIT_MIRROR_HOSTS:-github.com}
       - GIT_MIRROR_ALLOW_AUTH_URL=${GIT_MIRROR_ALLOW_AUTH_URL:-false}
       - QMD_DATA_DIR=/app/data/qmd
-      - QMD_CLI_COMMAND=pnpm dlx @tobilu/qmd
+      - QMD_CLI_COMMAND=qmd
       - QMD_CLI_TIMEOUT_SECONDS=120
       - QMD_TASK_KB_ENABLED=true
       - QMD_TASK_ROOT_REL=.deepaudit/qmd

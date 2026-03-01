@@ -168,6 +168,24 @@ async def test_probe_required_mcp_runtime_reports_infra_failure():
 
 
 @pytest.mark.asyncio
+async def test_probe_required_mcp_runtime_uses_filesystem_read_file_tool(tmp_path):
+    filesystem = _RecorderAdapter(runtime_domain="backend")
+    runtime = MCPRuntime(
+        enabled=True,
+        adapters={"filesystem": filesystem},
+        required_mcps=["filesystem"],
+        project_root=str(tmp_path),
+    )
+
+    probe = await _probe_required_mcp_runtime(runtime, runtime_domain="backend")
+
+    assert probe["ready"] is True
+    assert filesystem.calls and filesystem.calls[0][0] == "read_file"
+    assert ".mcp_required_filesystem_probe.txt" in str(filesystem.calls[0][1]["file_path"])
+    assert ".mcp_required_filesystem_probe.txt" in str(filesystem.calls[0][1]["path"])
+
+
+@pytest.mark.asyncio
 async def test_probe_required_mcp_runtime_uses_qmd_and_sequential_tools():
     qmd = _RecorderAdapter(runtime_domain="backend")
     sequential = _RecorderAdapter(runtime_domain="backend")
