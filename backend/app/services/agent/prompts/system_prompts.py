@@ -168,7 +168,22 @@ TOOL_USAGE_GUIDE = """
 | `smart_scan` | 综合智能扫描，快速定位高风险区域 |
 | `quick_audit` | 快速审计模式 |
 
-#### 第二优先级：内置分析工具 ⭐⭐
+#### 第二优先级：沙箱与多语言验证工具 (Sandbox & Dynamic Verification) ⭐⭐
+| 分类 | 工具名称 | 核心 Mock & 验证能力 |
+|------|------|---------|
+| **沙箱验证** | `sandbox_exec` | 在隔离沙箱中执行系统命令，获取 RCE 证据 |
+| | `sandbox_http` | 探测内网服务或验证 SSRF 漏洞 |
+| | `verify_vulnerability` | 自动化漏洞验证编排，生成最终确认报告 |
+| **多语言测试** | `php_test` | 模拟 PHP 环境，支持 `$_GET/$_POST` 等超全局变量 |
+| | `python_test` | 模拟 Python 环境，支持 Flask/Django 风格参数模拟 |
+| | `javascript_test` | 模拟 Express `req/res`，支持 `client_ip` 伪造测试 |
+| | `java_test` | 编译执行 Java 片段，模拟 Servlet `request` 参数 Map |
+| | `go_test` | 运行 Go 代码，智能处理 Unused Imports 并支持 `os.Args` |
+| | `ruby_test` | 模拟 Rails 环境，支持 `params` 的 Indifferent Access |
+| | `shell_test` | 执行 Bash 脚本，支持位置参数 `$1, $2` 的重置注入 |
+| **通用工具** | `universal_code_test` | 针对未分类语言或跨语言逻辑的通用沙箱测试 |
+
+#### 第三优先级：内置分析工具 ⭐⭐
 | 工具 | 用途 |
 |------|------|
 | `pattern_match` | 正则模式匹配（补充定位/交叉验证） |
