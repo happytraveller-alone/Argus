@@ -91,6 +91,7 @@ def test_catalog_sequential_falls_back_to_stdio_when_http_unreachable(monkeypatc
     monkeypatch.setattr("app.core.config.settings.MCP_CODE_INDEX_SANDBOX_ENABLED", False)
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_ENABLED", True)
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED", True)
+    monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_FORCE_STDIO", False)
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_COMMAND", "python3")
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "python3")
 
@@ -104,31 +105,48 @@ def test_catalog_sequential_falls_back_to_stdio_when_http_unreachable(monkeypatc
     assert str(sequential["backend"]["startup_error"]).startswith("http_unreachable_stdio_fallback")
 
 
-class _HealthyHttpClient:
-    def __init__(self, *args, **kwargs):
-        pass
+def test_catalog_sequential_force_stdio_skips_http_probe(monkeypatch):
+    def _no_http_probe(url, **_kwargs):
+        if "8771" in str(url or ""):
+            raise AssertionError("http probe should not be called")
+        return True, None
 
-    def __enter__(self):
-        return self
+    monkeypatch.setattr("app.core.config.settings.MCP_DAEMON_AUTOSTART", True)
+    monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_ENABLED", False)
+    monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_SANDBOX_ENABLED", False)
+    monkeypatch.setattr("app.core.config.settings.MCP_CODE_INDEX_ENABLED", False)
+    monkeypatch.setattr("app.core.config.settings.MCP_CODE_INDEX_SANDBOX_ENABLED", False)
+    monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_ENABLED", True)
+    monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED", True)
+    monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_FORCE_STDIO", True)
+    monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_COMMAND", "python3")
+    monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "python3")
+    monkeypatch.setattr(
+        "app.services.agent.mcp.catalog.probe_mcp_endpoint_readiness",
+        _no_http_probe,
+    )
 
-    def __exit__(self, exc_type, exc, tb):
-        return False
+    catalog = build_mcp_catalog(mcp_enabled=True)
+    by_id = {item["id"]: item for item in catalog}
+    sequential = by_id["sequentialthinking"]
 
-    def get(self, url):
-        class _Response:
-            status_code = 200
-
-        return _Response()
+    assert sequential["startup_ready"] is True
+    assert sequential["backend"]["startup_error"] is None
+    assert sequential["sandbox"]["startup_error"] is None
 
 
 def test_catalog_prefers_http_probe_for_filesystem_code_index_and_sequential(monkeypatch):
-    monkeypatch.setattr("app.services.agent.mcp.catalog.httpx.Client", _HealthyHttpClient)
+    monkeypatch.setattr(
+        "app.services.agent.mcp.catalog.probe_mcp_endpoint_readiness",
+        lambda *_args, **_kwargs: (True, None),
+    )
     monkeypatch.setattr("app.core.config.settings.MCP_DAEMON_AUTOSTART", False)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_FORCE_STDIO", False)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_ENABLED", True)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_SANDBOX_ENABLED", True)
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_ENABLED", True)
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED", True)
+    monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_FORCE_STDIO", False)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_BACKEND_URL", "http://127.0.0.1:8111/mcp")
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_SANDBOX_URL", "http://127.0.0.1:8112/mcp")
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_BACKEND_URL", "http://127.0.0.1:8121/mcp")
@@ -151,7 +169,10 @@ def test_catalog_prefers_http_probe_for_filesystem_code_index_and_sequential(mon
 
 
 def test_catalog_filesystem_uses_daemon_default_url_when_explicit_missing(monkeypatch):
-    monkeypatch.setattr("app.services.agent.mcp.catalog.httpx.Client", _HealthyHttpClient)
+    monkeypatch.setattr(
+        "app.services.agent.mcp.catalog.probe_mcp_endpoint_readiness",
+        lambda *_args, **_kwargs: (True, None),
+    )
     monkeypatch.setattr("app.core.config.settings.MCP_DAEMON_AUTOSTART", True)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_FORCE_STDIO", False)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_ENABLED", True)
@@ -171,10 +192,14 @@ def test_catalog_filesystem_uses_daemon_default_url_when_explicit_missing(monkey
 
 
 def test_catalog_sequential_uses_daemon_default_url_when_explicit_missing(monkeypatch):
-    monkeypatch.setattr("app.services.agent.mcp.catalog.httpx.Client", _HealthyHttpClient)
+    monkeypatch.setattr(
+        "app.services.agent.mcp.catalog.probe_mcp_endpoint_readiness",
+        lambda *_args, **_kwargs: (True, None),
+    )
     monkeypatch.setattr("app.core.config.settings.MCP_DAEMON_AUTOSTART", True)
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_ENABLED", True)
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED", True)
+    monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_FORCE_STDIO", False)
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_BACKEND_URL", "")
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "")
     monkeypatch.setattr("app.core.config.settings.MCP_SEQUENTIAL_THINKING_DAEMON_HOST", "127.0.0.1")
@@ -189,7 +214,10 @@ def test_catalog_sequential_uses_daemon_default_url_when_explicit_missing(monkey
 
 
 def test_catalog_disabled_domain_does_not_mark_startup_failed(monkeypatch):
-    monkeypatch.setattr("app.services.agent.mcp.catalog.httpx.Client", _HealthyHttpClient)
+    monkeypatch.setattr(
+        "app.services.agent.mcp.catalog.probe_mcp_endpoint_readiness",
+        lambda *_args, **_kwargs: (True, None),
+    )
     monkeypatch.setattr("app.core.config.settings.MCP_DAEMON_AUTOSTART", False)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_FORCE_STDIO", False)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_ENABLED", True)

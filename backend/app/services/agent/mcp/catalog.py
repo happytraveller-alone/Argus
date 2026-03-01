@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 import os
-import socket
 import shutil
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Literal, Optional
-from urllib.parse import urlparse, urlunparse
-
-import httpx
 
 from app.core.config import settings
 from .daemon_manager import (
@@ -15,6 +11,7 @@ from .daemon_manager import (
     resolve_filesystem_backend_url,
     resolve_sequential_backend_url,
 )
+from .health_probe import probe_mcp_endpoint_readiness
 from .probe_specs import get_verification_tools
 
 
@@ -74,48 +71,7 @@ def _command_ready(command: str) -> tuple[bool, Optional[str]]:
 
 
 def _http_endpoint_ready(url: Optional[str]) -> tuple[bool, Optional[str]]:
-    ready, reason = _validate_http_endpoint(url)
-    if not ready:
-        return False, reason
-
-    endpoint = str(url or "").strip()
-    parsed = urlparse(endpoint)
-    health_url = urlunparse(parsed._replace(path="/health", params="", query="", fragment=""))
-    fallback_to_tcp_probe = False
-    try:
-        with httpx.Client(timeout=1.5, follow_redirects=True) as client:
-            response = client.get(health_url)
-        if response.status_code == 200:
-            return True, None
-        if int(response.status_code) in {404, 405, 501}:
-            fallback_to_tcp_probe = True
-        else:
-            return False, f"healthcheck_failed:status_{int(response.status_code)}@{health_url}"
-    except Exception as exc:
-        if isinstance(exc, httpx.RemoteProtocolError):
-            fallback_to_tcp_probe = True
-        else:
-            return False, f"healthcheck_failed:{exc.__class__.__name__}@{health_url}"
-    if fallback_to_tcp_probe:
-        host = str(parsed.hostname or "").strip()
-        if not host:
-            return False, f"healthcheck_failed:tcp_unreachable:missing_host@{health_url}"
-        port = int(parsed.port) if parsed.port else (443 if str(parsed.scheme).lower() == "https" else 80)
-        try:
-            with socket.create_connection((host, port), timeout=1.5):
-                return True, None
-        except Exception as exc:
-            return False, f"healthcheck_failed:tcp_unreachable:{exc.__class__.__name__}@{health_url}"
-    return True, None
-
-
-def _validate_http_endpoint(url: Optional[str]) -> tuple[bool, Optional[str]]:
-    endpoint = str(url or "").strip()
-    if not endpoint:
-        return False, "missing_endpoint"
-    if endpoint.startswith(("http://", "https://")):
-        return True, None
-    return False, "invalid_endpoint"
+    return probe_mcp_endpoint_readiness(url, timeout=1.5)
 
 
 def _runtime_entry(
@@ -237,30 +193,31 @@ def build_mcp_catalog(
     if (not filesystem_force_stdio) and (not filesystem_sandbox_url):
         filesystem_sandbox_url = filesystem_backend_url
 
-    filesystem_backend = _build_domain_status(
-        enabled=runtime_enabled and _domain_enabled_for("filesystem", "backend", "MCP_FILESYSTEM_ENABLED"),
-        checker=(
-            _command_ready(str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm")))
-            if filesystem_force_stdio
-            else (
-                _http_endpoint_ready(filesystem_backend_url)
-                if filesystem_backend_url
-                else _command_ready(str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm")))
-            )
-        ),
+    filesystem_backend = (
+        _build_domain_status(
+            enabled=runtime_enabled and _domain_enabled_for("filesystem", "backend", "MCP_FILESYSTEM_ENABLED"),
+            checker=_command_ready(str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm"))),
+        )
+        if filesystem_force_stdio
+        else _build_domain_status_with_stdio_fallback(
+            enabled=runtime_enabled and _domain_enabled_for("filesystem", "backend", "MCP_FILESYSTEM_ENABLED"),
+            http_checker=_http_endpoint_ready(filesystem_backend_url),
+            stdio_command=str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm")),
+        )
     )
-    filesystem_sandbox = _build_domain_status(
-        enabled=runtime_enabled
-        and _domain_enabled_for("filesystem", "sandbox", "MCP_FILESYSTEM_SANDBOX_ENABLED"),
-        checker=(
-            _command_ready(str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "pnpm")))
-            if filesystem_force_stdio
-            else (
-                _http_endpoint_ready(filesystem_sandbox_url)
-                if filesystem_sandbox_url
-                else _command_ready(str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "pnpm")))
-            )
-        ),
+    filesystem_sandbox = (
+        _build_domain_status(
+            enabled=runtime_enabled
+            and _domain_enabled_for("filesystem", "sandbox", "MCP_FILESYSTEM_SANDBOX_ENABLED"),
+            checker=_command_ready(str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "pnpm"))),
+        )
+        if filesystem_force_stdio
+        else _build_domain_status_with_stdio_fallback(
+            enabled=runtime_enabled
+            and _domain_enabled_for("filesystem", "sandbox", "MCP_FILESYSTEM_SANDBOX_ENABLED"),
+            http_checker=_http_endpoint_ready(filesystem_sandbox_url),
+            stdio_command=str(getattr(settings, "MCP_FILESYSTEM_SANDBOX_COMMAND", "pnpm")),
+        )
     )
     filesystem_enabled = bool(filesystem_backend.enabled or filesystem_sandbox.enabled)
     filesystem_startup_ready, filesystem_startup_error = _combine_startup_status(
@@ -291,29 +248,78 @@ def build_mcp_catalog(
         code_index_enabled,
     )
 
-    seq_backend_url = resolve_sequential_backend_url(settings)
-    seq_backend = _build_domain_status_with_stdio_fallback(
-        enabled=runtime_enabled
-        and _domain_enabled_for(
-            "sequentialthinking",
-            "backend",
-            "MCP_SEQUENTIAL_THINKING_ENABLED",
-        ),
-        http_checker=_http_endpoint_ready(seq_backend_url),
-        stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "pnpm")),
+    sequential_force_stdio = bool(
+        getattr(settings, "MCP_SEQUENTIAL_THINKING_FORCE_STDIO", True)
     )
-    seq_sandbox_url = str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "") or "").strip()
-    if not seq_sandbox_url:
+    seq_backend_url = "" if sequential_force_stdio else resolve_sequential_backend_url(settings)
+    seq_backend = (
+        _build_domain_status(
+            enabled=runtime_enabled
+            and _domain_enabled_for(
+                "sequentialthinking",
+                "backend",
+                "MCP_SEQUENTIAL_THINKING_ENABLED",
+            ),
+            checker=_command_ready(
+                str(
+                    getattr(
+                        settings,
+                        "MCP_SEQUENTIAL_THINKING_COMMAND",
+                        "mcp-server-sequential-thinking",
+                    )
+                )
+            ),
+        )
+        if sequential_force_stdio
+        else _build_domain_status_with_stdio_fallback(
+            enabled=runtime_enabled
+            and _domain_enabled_for(
+                "sequentialthinking",
+                "backend",
+                "MCP_SEQUENTIAL_THINKING_ENABLED",
+            ),
+            http_checker=_http_endpoint_ready(seq_backend_url),
+            stdio_command=str(
+                getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "mcp-server-sequential-thinking")
+            ),
+        )
+    )
+    seq_sandbox_url = "" if sequential_force_stdio else str(
+        getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "") or ""
+    ).strip()
+    if (not sequential_force_stdio) and (not seq_sandbox_url):
         seq_sandbox_url = seq_backend_url
-    seq_sandbox = _build_domain_status_with_stdio_fallback(
-        enabled=runtime_enabled
-        and _domain_enabled_for(
-            "sequentialthinking",
-            "sandbox",
-            "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
-        ),
-        http_checker=_http_endpoint_ready(seq_sandbox_url),
-        stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "pnpm")),
+    seq_sandbox = (
+        _build_domain_status(
+            enabled=runtime_enabled
+            and _domain_enabled_for(
+                "sequentialthinking",
+                "sandbox",
+                "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
+            ),
+            checker=_command_ready(
+                str(
+                    getattr(
+                        settings,
+                        "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND",
+                        "mcp-server-sequential-thinking",
+                    )
+                )
+            ),
+        )
+        if sequential_force_stdio
+        else _build_domain_status_with_stdio_fallback(
+            enabled=runtime_enabled
+            and _domain_enabled_for(
+                "sequentialthinking",
+                "sandbox",
+                "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
+            ),
+            http_checker=_http_endpoint_ready(seq_sandbox_url),
+            stdio_command=str(
+                getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "mcp-server-sequential-thinking")
+            ),
+        )
     )
     seq_enabled = bool(seq_backend.enabled or seq_sandbox.enabled)
     seq_startup_ready, seq_startup_error = _combine_startup_status(

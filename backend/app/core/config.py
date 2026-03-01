@@ -218,9 +218,11 @@ class Settings(BaseSettings):
     MCP_DAEMON_AUTOSTART: bool = True
     MCP_DAEMON_LOG_DIR: str = "/tmp/deepaudit/mcp-daemons"
     GIT_MIRROR_ENABLED: bool = True
-    GIT_MIRROR_PREFIX: str = "https://ghfast.top"
+    GIT_MIRROR_PREFIX: str = "https://gh-proxy.com"
+    GIT_MIRROR_PREFIXES: str = "https://gh-proxy.com,https://v6.gh-proxy.org"
     GIT_MIRROR_HOSTS: str = "github.com"
     GIT_MIRROR_ALLOW_AUTH_URL: bool = False
+    GIT_MIRROR_FALLBACK_TO_ORIGIN: bool = False
 
     MCP_CODE_INDEX_DAEMON_HOST: str = "127.0.0.1"
     MCP_CODE_INDEX_DAEMON_PORT: int = 8765
@@ -232,11 +234,12 @@ class Settings(BaseSettings):
 
     MCP_SEQUENTIAL_THINKING_ENABLED: bool = True
     MCP_SEQUENTIAL_THINKING_RUNTIME_MODE: str = "backend_then_sandbox"
-    MCP_SEQUENTIAL_THINKING_COMMAND: str = "pnpm"
-    MCP_SEQUENTIAL_THINKING_ARGS: str = "dlx @modelcontextprotocol/server-sequential-thinking"
+    MCP_SEQUENTIAL_THINKING_FORCE_STDIO: bool = True
+    MCP_SEQUENTIAL_THINKING_COMMAND: str = "mcp-server-sequential-thinking"
+    MCP_SEQUENTIAL_THINKING_ARGS: str = ""
     MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED: bool = True
-    MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND: str = "pnpm"
-    MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS: str = "dlx @modelcontextprotocol/server-sequential-thinking"
+    MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND: str = "mcp-server-sequential-thinking"
+    MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS: str = ""
     MCP_SEQUENTIAL_THINKING_BACKEND_URL: Optional[str] = None
     MCP_SEQUENTIAL_THINKING_SANDBOX_URL: Optional[str] = None
     MCP_SEQUENTIAL_THINKING_DAEMON_HOST: str = "127.0.0.1"

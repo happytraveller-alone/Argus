@@ -980,12 +980,21 @@ def _build_task_mcp_runtime(
         "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
     )
     if _is_active_mcp("sequentialthinking") and (sequential_backend_enabled or sequential_sandbox_enabled):
-        sequential_backend_url = resolve_sequential_backend_url(settings)
-        sequential_sandbox_url = str(
-            getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "") or ""
-        ).strip()
-        if not sequential_sandbox_url:
-            sequential_sandbox_url = sequential_backend_url
+        sequential_force_stdio = bool(
+            getattr(settings, "MCP_SEQUENTIAL_THINKING_FORCE_STDIO", True)
+        )
+        sequential_backend_url = (
+            ""
+            if sequential_force_stdio
+            else resolve_sequential_backend_url(settings)
+        )
+        sequential_sandbox_url = ""
+        if not sequential_force_stdio:
+            sequential_sandbox_url = str(
+                getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "") or ""
+            ).strip()
+            if not sequential_sandbox_url:
+                sequential_sandbox_url = sequential_backend_url
         if sequential_backend_enabled:
             _register_domain_adapter(
                 "sequentialthinking",
@@ -994,12 +1003,19 @@ def _build_task_mcp_runtime(
                     mcp_name="sequentialthinking",
                     domain="backend",
                     url=sequential_backend_url,
-                    stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "pnpm") or "pnpm"),
+                    stdio_command=str(
+                        getattr(
+                            settings,
+                            "MCP_SEQUENTIAL_THINKING_COMMAND",
+                            "mcp-server-sequential-thinking",
+                        )
+                        or "mcp-server-sequential-thinking"
+                    ),
                     stdio_args=_parse_mcp_args(
                         getattr(
                             settings,
                             "MCP_SEQUENTIAL_THINKING_ARGS",
-                            "dlx @modelcontextprotocol/server-sequential-thinking",
+                            "",
                         )
                     ),
                 ),
@@ -1012,12 +1028,19 @@ def _build_task_mcp_runtime(
                     mcp_name="sequentialthinking",
                     domain="sandbox",
                     url=sequential_sandbox_url,
-                    stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "pnpm") or "pnpm"),
+                    stdio_command=str(
+                        getattr(
+                            settings,
+                            "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND",
+                            "mcp-server-sequential-thinking",
+                        )
+                        or "mcp-server-sequential-thinking"
+                    ),
                     stdio_args=_parse_mcp_args(
                         getattr(
                             settings,
                             "MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS",
-                            "dlx @modelcontextprotocol/server-sequential-thinking",
+                            "",
                         )
                     ),
                 ),
@@ -6859,10 +6882,15 @@ async def _get_project_root(
                 zip_url_candidates = get_mirror_candidates(
                     zip_url,
                     enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
-                    mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://ghfast.top"),
+                    mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.com"),
+                    mirror_prefixes=getattr(
+                        settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.com,https://v6.gh-proxy.org"
+                    ),
                     allow_hosts=getattr(settings, "GIT_MIRROR_HOSTS", "github.com"),
                     allow_auth_url=getattr(settings, "GIT_MIRROR_ALLOW_AUTH_URL", False),
+                    fallback_to_origin=getattr(settings, "GIT_MIRROR_FALLBACK_TO_ORIGIN", False),
                 )
+                zip_has_origin_url = zip_url in zip_url_candidates
 
                 logger.info(f"📦 尝试下载 ZIP 归档 (分支: {branch})...")
                 await emit(f"📦 尝试下载 ZIP 归档 (分支: {branch})")
@@ -6873,7 +6901,7 @@ async def _get_project_root(
                     error = None
 
                     for idx, candidate_zip_url in enumerate(zip_url_candidates):
-                        using_mirror = idx == 0 and len(zip_url_candidates) > 1
+                        using_mirror = candidate_zip_url != zip_url
 
                         async def download_zip():
                             async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
@@ -6903,11 +6931,22 @@ async def _get_project_root(
                         if success:
                             break
                         if using_mirror:
-                            logger.warning(
-                                "ZIP 镜像下载失败，原因: %s，回源重试: %s",
-                                error,
-                                zip_url_candidates[-1],
-                            )
+                            if idx < len(zip_url_candidates) - 1:
+                                next_candidate = zip_url_candidates[idx + 1]
+                                if next_candidate == zip_url:
+                                    logger.warning(
+                                        "ZIP 镜像下载失败，原因: %s，回源重试: %s",
+                                        error,
+                                        next_candidate,
+                                    )
+                                else:
+                                    logger.warning(
+                                        "ZIP 镜像下载失败，原因: %s，切换候选重试: %s",
+                                        error,
+                                        next_candidate,
+                                    )
+                            elif not zip_has_origin_url:
+                                logger.warning("ZIP 镜像全部失败，已按策略终止当前候选（未启用回源）")
 
                     if success and os.path.exists(zip_temp_path):
                         # 解压 ZIP
@@ -7020,10 +7059,15 @@ async def _get_project_root(
             clone_url_candidates = [auth_url] if is_ssh_url else get_mirror_candidates(
                 auth_url,
                 enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
-                mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://ghfast.top"),
+                mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.com"),
+                mirror_prefixes=getattr(
+                    settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.com,https://v6.gh-proxy.org"
+                ),
                 allow_hosts=getattr(settings, "GIT_MIRROR_HOSTS", "github.com"),
                 allow_auth_url=getattr(settings, "GIT_MIRROR_ALLOW_AUTH_URL", False),
+                fallback_to_origin=getattr(settings, "GIT_MIRROR_FALLBACK_TO_ORIGIN", False),
             )
+            clone_has_origin_url = auth_url in clone_url_candidates
 
             for branch in branches_to_try:
                 check_cancelled()
@@ -7069,7 +7113,7 @@ async def _get_project_root(
                     else:
                         result = None
                         for idx, candidate_clone_url in enumerate(clone_url_candidates):
-                            using_mirror = idx == 0 and len(clone_url_candidates) > 1
+                            using_mirror = candidate_clone_url != auth_url
 
                             async def run_clone():
                                 return await asyncio.to_thread(
@@ -7097,12 +7141,24 @@ async def _get_project_root(
 
                             last_error = result.stderr
                             if using_mirror:
-                                logger.warning(
-                                    "Git 镜像 clone 失败 (分支 %s): %s，回源重试: %s",
-                                    branch,
-                                    (last_error or "")[:200],
-                                    clone_url_candidates[-1],
-                                )
+                                if idx < len(clone_url_candidates) - 1:
+                                    next_candidate = clone_url_candidates[idx + 1]
+                                    if next_candidate == auth_url:
+                                        logger.warning(
+                                            "Git 镜像 clone 失败 (分支 %s): %s，回源重试: %s",
+                                            branch,
+                                            (last_error or "")[:200],
+                                            next_candidate,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "Git 镜像 clone 失败 (分支 %s): %s，切换候选重试: %s",
+                                            branch,
+                                            (last_error or "")[:200],
+                                            next_candidate,
+                                        )
+                                elif not clone_has_origin_url:
+                                    logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
 
                         if result is not None and result.returncode == 0:
                             logger.info(f"✅ Git 克隆成功 (分支: {branch})")
@@ -7159,7 +7215,7 @@ async def _get_project_root(
                     else:
                         result = None
                         for idx, candidate_clone_url in enumerate(clone_url_candidates):
-                            using_mirror = idx == 0 and len(clone_url_candidates) > 1
+                            using_mirror = candidate_clone_url != auth_url
 
                             async def run_default_clone():
                                 return await asyncio.to_thread(
@@ -7187,11 +7243,22 @@ async def _get_project_root(
 
                             last_error = result.stderr
                             if using_mirror:
-                                logger.warning(
-                                    "Git 镜像默认分支 clone 失败: %s，回源重试: %s",
-                                    (last_error or "")[:200],
-                                    clone_url_candidates[-1],
-                                )
+                                if idx < len(clone_url_candidates) - 1:
+                                    next_candidate = clone_url_candidates[idx + 1]
+                                    if next_candidate == auth_url:
+                                        logger.warning(
+                                            "Git 镜像默认分支 clone 失败: %s，回源重试: %s",
+                                            (last_error or "")[:200],
+                                            next_candidate,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "Git 镜像默认分支 clone 失败: %s，切换候选重试: %s",
+                                            (last_error or "")[:200],
+                                            next_candidate,
+                                        )
+                                elif not clone_has_origin_url:
+                                    logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
 
                         if result is not None and result.returncode == 0:
                             logger.info(f"✅ Git 克隆成功 (默认分支)")

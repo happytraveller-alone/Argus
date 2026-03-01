@@ -380,30 +380,32 @@ async def test_runtime_marks_adapter_disabled_after_repeated_infra_failures():
 
 
 def test_fastmcp_http_adapter_checks_health_endpoint(monkeypatch):
-    monkeypatch.setattr("app.services.agent.mcp.runtime.httpx.Client", _HealthyHttpClient)
+    monkeypatch.setattr(
+        "app.services.agent.mcp.runtime.probe_mcp_endpoint_readiness",
+        lambda *_args, **_kwargs: (True, None),
+    )
     adapter = FastMCPHttpAdapter(url="http://codebadger-mcp:4242/mcp")
     assert adapter.is_available() is True
     assert adapter.availability_reason is None
 
 
 def test_fastmcp_http_adapter_reports_healthcheck_failure(monkeypatch):
-    monkeypatch.setattr("app.services.agent.mcp.runtime.httpx.Client", _UnhealthyHttpClient)
+    monkeypatch.setattr(
+        "app.services.agent.mcp.runtime.probe_mcp_endpoint_readiness",
+        lambda *_args, **_kwargs: (
+            False,
+            "healthcheck_failed:status_503@http://codebadger-mcp:4242/health",
+        ),
+    )
     adapter = FastMCPHttpAdapter(url="http://codebadger-mcp:4242/mcp")
     assert adapter.is_available() is False
     assert "healthcheck_failed:status_503" in str(adapter.availability_reason or "")
 
 
 def test_fastmcp_http_adapter_remote_protocol_falls_back_to_tcp(monkeypatch):
-    import httpx
-
-    class _RemoteProtocolErrorClient(_HealthyHttpClient):
-        def get(self, url, headers=None):
-            raise httpx.RemoteProtocolError("server disconnected")
-
-    monkeypatch.setattr("app.services.agent.mcp.runtime.httpx.Client", _RemoteProtocolErrorClient)
     monkeypatch.setattr(
-        "app.services.agent.mcp.runtime.socket.create_connection",
-        lambda *args, **kwargs: _TcpOnlySocket(),
+        "app.services.agent.mcp.runtime.probe_mcp_endpoint_readiness",
+        lambda *_args, **_kwargs: (True, None),
     )
 
     adapter = FastMCPHttpAdapter(url="http://codebadger-mcp:4242/mcp")

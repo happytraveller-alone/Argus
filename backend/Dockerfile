@@ -1,7 +1,8 @@
 # ============================================
 # 多阶段构建 - 构建阶段
 # ============================================
-FROM python:3.12-slim AS builder
+ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -69,7 +70,7 @@ RUN uv sync --frozen --no-dev
 # ============================================
 # 多阶段构建 - 运行阶段
 # ============================================
-FROM python:3.12-slim AS runtime
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.12-slim AS runtime
 
 WORKDIR /app
 

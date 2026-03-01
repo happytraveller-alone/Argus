@@ -4,7 +4,6 @@ import hashlib
 import json
 import logging
 import os
-import socket
 import shutil
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol, Tuple
@@ -16,6 +15,7 @@ from urllib.parse import urlparse, urlunparse
 
 from app.core.config import settings
 
+from .health_probe import probe_mcp_endpoint_readiness
 from .local_proxy import LocalMCPProxyAdapter
 from .router import MCPToolRoute, MCPToolRouter
 from .write_scope import TaskWriteScopeGuard, WriteScopeDecision
@@ -468,10 +468,6 @@ class FastMCPHttpAdapter:
         self._available = False
         self._availability_reason: Optional[str] = None
 
-    def _health_url(self) -> str:
-        parsed = urlparse(self.url)
-        return urlunparse(parsed._replace(path="/health", params="", query="", fragment=""))
-
     def _candidate_urls(self) -> List[str]:
         endpoint = str(self.url or "").strip()
         if not endpoint:
@@ -573,85 +569,18 @@ class FastMCPHttpAdapter:
                 return True
         return False
 
-    def _tcp_reachable(self) -> Tuple[bool, Optional[str]]:
-        parsed = urlparse(self.url)
-        host = str(parsed.hostname or "").strip()
-        if not host:
-            return False, "missing_host"
-        if parsed.port:
-            port = int(parsed.port)
-        elif str(parsed.scheme or "").strip().lower() == "https":
-            port = 443
-        else:
-            port = 80
-        timeout_sec = max(1.0, min(float(self.timeout), 3.0))
-        try:
-            with socket.create_connection((host, port), timeout=timeout_sec):
-                return True, None
-        except Exception as exc:
-            return False, f"{exc.__class__.__name__}"
-
     def is_available(self) -> bool:
         if self._availability_checked:
             return self._available
-        if not self.url:
-            self._available = False
-            self._availability_reason = "missing_endpoint"
-            self._availability_checked = True
-            return False
-        if not self.url.startswith(("http://", "https://")):
-            self._available = False
-            self._availability_reason = "invalid_endpoint"
-            self._availability_checked = True
-            return False
-        health_url = self._health_url()
-        health_timeout = max(1.0, min(float(self.timeout), 3.0))
-        fallback_to_tcp_probe = False
-        try:
-            with httpx.Client(timeout=health_timeout, follow_redirects=True) as client:
-                response = client.get(health_url, headers=self.headers)
-            if response.status_code == 200:
-                self._available = True
-                self._availability_reason = None
-                self._availability_checked = True
-                return True
-            if int(response.status_code) in {404, 405, 501}:
-                fallback_to_tcp_probe = True
-            else:
-                self._available = False
-                self._availability_reason = (
-                    f"healthcheck_failed:status_{int(response.status_code)}@{health_url}"
-                )
-                self._availability_checked = True
-                return False
-        except Exception as exc:
-            fallback_to_tcp_probe = isinstance(exc, httpx.RemoteProtocolError)
-            if not fallback_to_tcp_probe:
-                self._available = False
-                self._availability_reason = (
-                    f"healthcheck_failed:{exc.__class__.__name__}@{health_url}"
-                )
-                self._availability_checked = True
-                return False
-
-        if fallback_to_tcp_probe:
-            reachable, tcp_reason = self._tcp_reachable()
-            if reachable:
-                self._available = True
-                self._availability_reason = None
-                self._availability_checked = True
-                return True
-            self._available = False
-            self._availability_reason = (
-                f"healthcheck_failed:tcp_unreachable:{tcp_reason or 'unknown'}@{health_url}"
-            )
-            self._availability_checked = True
-            return False
-
-        self._available = True
-        self._availability_reason = None
+        ready, reason = probe_mcp_endpoint_readiness(
+            self.url,
+            timeout=max(1.0, min(float(self.timeout), 3.0)),
+            headers=self.headers,
+        )
+        self._available = bool(ready)
+        self._availability_reason = None if ready else reason
         self._availability_checked = True
-        return True
+        return bool(ready)
 
     @property
     def availability_reason(self) -> Optional[str]:

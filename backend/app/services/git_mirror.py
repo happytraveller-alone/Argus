@@ -14,9 +14,28 @@ def _as_bool(value: Any, default: bool = False) -> bool:
     return text in {"1", "true", "yes", "on"}
 
 
-def _split_hosts(raw_hosts: Any) -> List[str]:
-    values = [str(item).strip().lower() for item in str(raw_hosts or "").split(",")]
+def _split_csv(raw_values: Any) -> List[str]:
+    values = [str(item).strip() for item in str(raw_values or "").split(",")]
     return [item for item in values if item]
+
+
+def _split_hosts(raw_hosts: Any) -> List[str]:
+    return [item.lower() for item in _split_csv(raw_hosts)]
+
+
+def _split_prefixes(raw_prefixes: Any) -> List[str]:
+    return _split_csv(raw_prefixes)
+
+
+def _unique_keep_order(values: List[str]) -> List[str]:
+    deduped: List[str] = []
+    seen = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
 
 
 def is_ssh_git_url(url: str) -> bool:
@@ -82,8 +101,10 @@ def get_mirror_candidates(
     *,
     enabled: Any = None,
     mirror_prefix: Any = None,
+    mirror_prefixes: Any = None,
     allow_hosts: Any = None,
     allow_auth_url: Any = None,
+    fallback_to_origin: Any = None,
 ) -> List[str]:
     raw_url = str(original_url or "").strip()
     if not raw_url:
@@ -93,11 +114,12 @@ def get_mirror_candidates(
         enabled if enabled is not None else os.getenv("GIT_MIRROR_ENABLED", "true"),
         default=True,
     )
-    prefix_value = str(
-        mirror_prefix
-        if mirror_prefix is not None
-        else os.getenv("GIT_MIRROR_PREFIX", "https://ghfast.top")
-    ).strip()
+    fallback_to_origin_value = _as_bool(
+        fallback_to_origin
+        if fallback_to_origin is not None
+        else os.getenv("GIT_MIRROR_FALLBACK_TO_ORIGIN", "false"),
+        default=False,
+    )
     hosts_value = _split_hosts(
         allow_hosts if allow_hosts is not None else os.getenv("GIT_MIRROR_HOSTS", "github.com")
     )
@@ -115,7 +137,30 @@ def get_mirror_candidates(
     ):
         return [raw_url]
 
-    mirror_url = build_mirror_url(raw_url, prefix_value)
-    if not mirror_url or mirror_url == raw_url:
+    prefixes_value = _split_prefixes(
+        mirror_prefixes
+        if mirror_prefixes is not None
+        else os.getenv("GIT_MIRROR_PREFIXES", "")
+    )
+    if not prefixes_value:
+        prefix_value = str(
+            mirror_prefix
+            if mirror_prefix is not None
+            else os.getenv("GIT_MIRROR_PREFIX", "https://gh-proxy.com")
+        ).strip()
+        if prefix_value:
+            prefixes_value = [prefix_value]
+
+    candidates: List[str] = []
+    for prefix in prefixes_value:
+        mirror_url = build_mirror_url(raw_url, prefix)
+        if mirror_url:
+            candidates.append(mirror_url)
+
+    candidates = _unique_keep_order(candidates)
+    if fallback_to_origin_value:
+        candidates = _unique_keep_order(candidates + [raw_url])
+
+    if not candidates:
         return [raw_url]
-    return [mirror_url, raw_url]
+    return candidates

@@ -139,6 +139,26 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - The backend mounts `/var/run/docker.sock` for sandbox execution. Review security boundaries before using in production.
 - The default dev flow uses local image builds from `docker-compose.yml`; `docker-compose.prod.yml` / `docker-compose.prod.cn.yml` are for prebuilt-image deployment.
 - `docker-compose.prod.yml` and `docker-compose.prod.cn.yml` use the Nanjing University GHCR mirror (`ghcr.nju.edu.cn/lintsinghua/*`) for faster pulls in CN regions. Replace with your own images/registry for production deployments if needed.
+- The dev build path (`docker compose up -d --build`) defaults to CN mirrors: Docker Hub via `docker.m.daocloud.io/library`, GHCR via `ghcr.nju.edu.cn`.
+- You can override mirror endpoints with `DOCKERHUB_LIBRARY_MIRROR` and `SANDBOX_IMAGE`.
+- GitHub source sync and task repo download/clone now use a two-step proxy chain by default: `https://gh-proxy.com` -> `https://v6.gh-proxy.org`.
+- Fallback to origin GitHub is disabled by default (`GIT_MIRROR_FALLBACK_TO_ORIGIN=false`); enable it only for troubleshooting.
+
+Example:
+
+```bash
+DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library \
+SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest \
+docker compose up -d --build
+```
+
+GitHub proxy chain example:
+
+```bash
+GIT_MIRROR_PREFIXES=https://gh-proxy.com,https://v6.gh-proxy.org \
+GIT_MIRROR_FALLBACK_TO_ORIGIN=false \
+docker compose up -d --build
+```
 
 ### Common startup error: `Can't locate revision identified by 'xxx'`
 

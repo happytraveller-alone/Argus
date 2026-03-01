@@ -58,6 +58,7 @@ def _build_settings():
         MCP_SEQUENTIAL_THINKING_DAEMON_ARGS="dist/index.js --transport streamable-http --port 8771",
         MCP_SEQUENTIAL_THINKING_DAEMON_SOURCE_DIR="/app/mcp-src/sequential-thinking",
         MCP_SEQUENTIAL_THINKING_DAEMON_STARTUP_TIMEOUT_SECONDS=10,
+        MCP_SEQUENTIAL_THINKING_FORCE_STDIO=False,
         MCP_QMD_DAEMON_HOST="127.0.0.1",
         MCP_QMD_DAEMON_PORT=8181,
         MCP_QMD_DAEMON_COMMAND="node",
@@ -97,6 +98,18 @@ def test_build_specs_contains_filesystem_code_index_sequential_and_qmd(tmp_path)
     assert "--transport" in by_name["qmd"].args
     assert "streamable-http" in by_name["qmd"].args
     assert by_name["qmd"].url == "http://localhost:8181/mcp"
+
+
+def test_build_specs_skips_sequential_when_force_stdio_enabled(tmp_path):
+    settings = _build_settings()
+    settings.MCP_SEQUENTIAL_THINKING_FORCE_STDIO = True
+    manager = MCPDaemonManager()
+
+    specs = manager.build_specs(settings, project_root=str(tmp_path))
+    by_name = {spec.name: spec for spec in specs}
+
+    assert {"filesystem", "code_index", "qmd"} == set(by_name.keys())
+    assert "sequentialthinking" not in by_name
 
 
 def test_filesystem_fallback_command_drops_dist_entry():
@@ -153,6 +166,15 @@ def test_resolve_sequential_backend_url_defaults_when_autostart_enabled():
     settings.MCP_SEQUENTIAL_THINKING_BACKEND_URL = ""
 
     assert resolve_sequential_backend_url(settings) == get_default_sequential_daemon_url(settings)
+
+
+def test_resolve_sequential_backend_url_empty_when_force_stdio_enabled():
+    settings = _build_settings()
+    settings.MCP_DAEMON_AUTOSTART = True
+    settings.MCP_SEQUENTIAL_THINKING_BACKEND_URL = "http://127.0.0.1:9771/mcp"
+    settings.MCP_SEQUENTIAL_THINKING_FORCE_STDIO = True
+
+    assert resolve_sequential_backend_url(settings) == ""
 
 
 def test_prepare_filesystem_source_requires_fastmcp(tmp_path, monkeypatch):

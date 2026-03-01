@@ -11,7 +11,7 @@ services:
   # =============================================
 
   db:
-    image: postgres:15-alpine
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:15-alpine
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -33,6 +33,7 @@ services:
     build:
       context: ./backend
       args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
         - http_proxy=
         - https_proxy=
         - HTTP_PROXY=
@@ -59,7 +60,7 @@ services:
       - RESET_STATIC_SCAN_TABLES_ON_DEPLOY=false
       - AGENT_ENABLED=true
       - SANDBOX_ENABLED=true
-      - SANDBOX_IMAGE=deepaudit/sandbox:latest  # 使用本地构建的沙箱镜像
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest}
       - MCP_ENABLED=true
       - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
       - MCP_REQUIRED_RUNTIME_DOMAIN=all
@@ -95,6 +96,11 @@ services:
       - MCP_CODE_INDEX_DAEMON_STARTUP_TIMEOUT_SECONDS=45
       - MCP_SEQUENTIAL_THINKING_ENABLED=true
       - MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED=true
+      - MCP_SEQUENTIAL_THINKING_FORCE_STDIO=${MCP_SEQUENTIAL_THINKING_FORCE_STDIO:-true}
+      - MCP_SEQUENTIAL_THINKING_COMMAND=${MCP_SEQUENTIAL_THINKING_COMMAND:-mcp-server-sequential-thinking}
+      - MCP_SEQUENTIAL_THINKING_ARGS=${MCP_SEQUENTIAL_THINKING_ARGS:-}
+      - MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND=${MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND:-mcp-server-sequential-thinking}
+      - MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS=${MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS:-}
       - MCP_SEQUENTIAL_THINKING_BACKEND_URL=${MCP_SEQUENTIAL_THINKING_BACKEND_URL:-http://127.0.0.1:8771/mcp}
       - MCP_SEQUENTIAL_THINKING_SANDBOX_URL=${MCP_SEQUENTIAL_THINKING_SANDBOX_URL:-http://127.0.0.1:8771/mcp}
       - MCP_SEQUENTIAL_THINKING_DAEMON_HOST=${MCP_SEQUENTIAL_THINKING_DAEMON_HOST:-127.0.0.1}
@@ -115,9 +121,11 @@ services:
       - MCP_QMD_DAEMON_SOURCE_DIR=${MCP_QMD_DAEMON_SOURCE_DIR:-/app/mcp-src/qmd}
       - MCP_QMD_DAEMON_STARTUP_TIMEOUT_SECONDS=60
       - GIT_MIRROR_ENABLED=${GIT_MIRROR_ENABLED:-true}
-      - GIT_MIRROR_PREFIX=${GIT_MIRROR_PREFIX:-https://ghfast.top}
+      - GIT_MIRROR_PREFIX=${GIT_MIRROR_PREFIX:-https://gh-proxy.com}
+      - GIT_MIRROR_PREFIXES=${GIT_MIRROR_PREFIXES:-https://gh-proxy.com,https://v6.gh-proxy.org}
       - GIT_MIRROR_HOSTS=${GIT_MIRROR_HOSTS:-github.com}
       - GIT_MIRROR_ALLOW_AUTH_URL=${GIT_MIRROR_ALLOW_AUTH_URL:-false}
+      - GIT_MIRROR_FALLBACK_TO_ORIGIN=${GIT_MIRROR_FALLBACK_TO_ORIGIN:-false}
       - QMD_DATA_DIR=/app/data/qmd
       - QMD_CLI_COMMAND=qmd
       - QMD_CLI_TIMEOUT_SECONDS=120
@@ -151,6 +159,7 @@ services:
       context: ./frontend
       dockerfile: ${FRONTEND_DOCKERFILE:-Dockerfile}
       args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
         - FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}
         - PNPM_VERSION=${PNPM_VERSION:-9.15.4}
         - BUILD_WEAK_NETWORK=${BUILD_WEAK_NETWORK:-false}
@@ -189,7 +198,7 @@ services:
 
   # Redis (Agent 任务队列 - 必须)
   redis:
-    image: redis:7-alpine
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:7-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"

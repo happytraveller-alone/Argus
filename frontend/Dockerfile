@@ -1,9 +1,10 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker.m.daocloud.io/docker/dockerfile:1.7
 # =============================================
 # DeepAudit Frontend Docker 构建（BuildKit 缓存优化）
 # =============================================
 
-FROM node:20-slim AS builder
+ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:20-slim AS builder
 
 WORKDIR /app
 
@@ -59,7 +60,7 @@ RUN pnpm build
 # =============================================
 # 生产镜像 - 使用 Nginx (支持 SSE 反向代理)
 # =============================================
-FROM nginx:alpine
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/nginx:alpine
 
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html

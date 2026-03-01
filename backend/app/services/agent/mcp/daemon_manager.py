@@ -5,7 +5,6 @@ import logging
 import os
 import shlex
 import shutil
-import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -13,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlparse, urlunparse
 
-import httpx
+from .health_probe import probe_mcp_endpoint_readiness
 
 
 logger = logging.getLogger(__name__)
@@ -161,6 +160,8 @@ def resolve_qmd_backend_url(settings: Any) -> str:
 
 
 def resolve_sequential_backend_url(settings: Any) -> str:
+    if bool(getattr(settings, "MCP_SEQUENTIAL_THINKING_FORCE_STDIO", True)):
+        return ""
     explicit = str(getattr(settings, "MCP_SEQUENTIAL_THINKING_BACKEND_URL", "") or "").strip()
     if explicit:
         return explicit
@@ -233,44 +234,10 @@ class MCPDaemonManager:
         self._processes: Dict[str, subprocess.Popen[Any]] = {}
         self._log_handles: Dict[str, Any] = {}
 
-    @staticmethod
-    def _tcp_reachable(url: str) -> bool:
-        parsed = urlparse(str(url or "").strip())
-        host = str(parsed.hostname or "").strip()
-        if not host:
-            return False
-        port = int(parsed.port) if parsed.port else (443 if str(parsed.scheme).lower() == "https" else 80)
-        try:
-            with socket.create_connection((host, port), timeout=1.5):
-                return True
-        except Exception:
-            return False
-
     @classmethod
     def _endpoint_ready(cls, url: str) -> bool:
-        endpoint = str(url or "").strip()
-        if not endpoint.startswith(("http://", "https://")):
-            return False
-        parsed = urlparse(endpoint)
-        health_url = urlunparse(parsed._replace(path="/health", params="", query="", fragment=""))
-        fallback_to_tcp = False
-        try:
-            with httpx.Client(timeout=1.5, follow_redirects=True) as client:
-                response = client.get(health_url)
-            if response.status_code == 200:
-                return True
-            if int(response.status_code) in {404, 405, 501}:
-                fallback_to_tcp = True
-            else:
-                return False
-        except Exception as exc:
-            if isinstance(exc, httpx.RemoteProtocolError):
-                fallback_to_tcp = True
-            else:
-                return False
-        if fallback_to_tcp:
-            return cls._tcp_reachable(endpoint)
-        return True
+        ready, _reason = probe_mcp_endpoint_readiness(url, timeout=1.5)
+        return bool(ready)
 
     @staticmethod
     def _build_code_index_args(settings: Any) -> List[str]:
@@ -500,20 +467,25 @@ class MCPDaemonManager:
             )
             or "/app/mcp-src/sequential-thinking"
         )
-        sequential_spec = MCPDaemonSpec(
-            name="sequentialthinking",
-            url=sequential_url,
-            command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_DAEMON_COMMAND", "node") or "node"),
-            args=cls._build_sequential_args(settings),
-            fallback_commands=[["mcp-server-sequential-thinking"]],
-            cwd=sequential_source_dir,
-            env={},
-            startup_timeout_seconds=max(
-                10,
-                int(getattr(settings, "MCP_SEQUENTIAL_THINKING_DAEMON_STARTUP_TIMEOUT_SECONDS", 45) or 45),
-            ),
-            log_file=str(Path(log_dir) / "sequentialthinking.log"),
+        sequential_force_stdio = bool(
+            getattr(settings, "MCP_SEQUENTIAL_THINKING_FORCE_STDIO", True)
         )
+        sequential_spec = None
+        if not sequential_force_stdio:
+            sequential_spec = MCPDaemonSpec(
+                name="sequentialthinking",
+                url=sequential_url,
+                command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_DAEMON_COMMAND", "node") or "node"),
+                args=cls._build_sequential_args(settings),
+                fallback_commands=[["mcp-server-sequential-thinking"]],
+                cwd=sequential_source_dir,
+                env={},
+                startup_timeout_seconds=max(
+                    10,
+                    int(getattr(settings, "MCP_SEQUENTIAL_THINKING_DAEMON_STARTUP_TIMEOUT_SECONDS", 45) or 45),
+                ),
+                log_file=str(Path(log_dir) / "sequentialthinking.log"),
+            )
 
         code_index_source_dir = str(
             getattr(
@@ -569,7 +541,11 @@ class MCPDaemonManager:
             ),
             log_file=str(Path(log_dir) / "qmd.log"),
         )
-        return [filesystem_spec, code_index_spec, sequential_spec, qmd_spec]
+        specs: List[MCPDaemonSpec] = [filesystem_spec, code_index_spec]
+        if sequential_spec is not None:
+            specs.append(sequential_spec)
+        specs.append(qmd_spec)
+        return specs
 
     @staticmethod
     def _strip_node_entrypoint(args: List[str]) -> List[str]:

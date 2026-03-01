@@ -8,7 +8,7 @@ Provides consistent, queryable logs with automatic context injection.
 import logging
 import sys
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Union
 from functools import wraps
 from enum import Enum
@@ -52,7 +52,7 @@ class StructuredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # Base log entry
         log_entry: Dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -131,7 +131,7 @@ class HumanReadableFormatter(logging.Formatter):
             agent = "-"
 
         # Format: [TIME] LEVEL [CID] [AGENT] message
-        timestamp = datetime.utcnow().strftime("%H:%M:%S.%f")[:-3]
+        timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3]
         level = f"{color}{record.levelname:8s}{reset}"
 
         formatted = f"[{timestamp}] {level} [{cid}] [{agent:12s}] {record.getMessage()}"
@@ -507,16 +507,16 @@ def log_execution(
             if logger is None:
                 logger = get_logger(func.__module__)
 
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
             logger.debug(f"Starting {operation}")
 
             try:
                 result = await func(*args, **kwargs)
-                duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+                duration_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
                 logger.debug(f"Completed {operation} in {duration_ms}ms")
                 return result
             except Exception as e:
-                duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+                duration_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
                 logger.error(
                     f"Failed {operation} after {duration_ms}ms: {e}",
                     exc_info=True,
