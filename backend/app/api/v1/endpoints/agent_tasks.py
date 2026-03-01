@@ -3960,6 +3960,8 @@ async def _initialize_tools(
         JoernReachabilityVerifyTool,
         LogicAuthzAnalysisTool,
         ExtractFunctionTool,
+        OpengrepTool, BanditTool, GitleaksTool,
+        NpmAuditTool, SafetyTool, TruffleHogTool, OSVScannerTool,
     )
     from app.services.agent.tools.qmd_cli_tools import (
         QmdGetTool,
@@ -4274,61 +4276,6 @@ async def _initialize_tools(
     # 🔥 导入智能扫描工具
     from app.services.agent.tools import SmartScanTool, QuickAuditTool, BusinessLogicScanTool
     
-    # 🔥 检测项目是否为 Web 项目（简化版，在工具初始化时使用）
-    def _is_web_project_for_tools(project_root: str, target_files: Optional[List[str]] = None) -> bool:
-        """检测项目是否为 Web 项目（基于框架文件存在）"""
-        web_framework_markers = [
-            # Django
-            ("**", "manage.py"),
-            ("**", "django.conf"),
-            ("**", "wsgi.py"),
-            # FastAPI / Starlette
-            ("**", "main.py"),
-            ("**", "app.py"),
-            # Flask
-            ("**", "requirements.txt"),
-            ("**", "package.json"),
-            # Express / Node.js
-            ("**", "server.js"),
-            ("**", "index.js"),
-            # Spring Boot / Java
-            ("**", "application.properties"),
-            ("**", "application.yml"),
-            # Ruby on Rails
-            ("**", "config.ru"),
-            ("**", "Gemfile"),
-            # Go / Gin
-            ("**", "go.mod"),
-            ("**", "main.go"),
-            # PHP
-            ("**", "index.php"),
-            ("**", "composer.json"),
-        ]
-        
-        # 检查框架标记
-        for pattern_dir, pattern_file in web_framework_markers:
-            if pattern_file in ("manage.py", "wsgi.py", "main.py", "app.py", "requirements.txt", 
-                               "package.json", "server.js", "index.js", "application.properties",
-                               "application.yml", "config.ru", "Gemfile", "go.mod", "main.go",
-                               "index.php", "composer.json"):
-                # 简单检查：查看根目录或一级子目录是否存在这些文件
-                try:
-                    for root, dirs, files in os.walk(project_root):
-                        # 只检查前两层目录
-                        depth = root.count(os.sep) - project_root.count(os.sep)
-                        if depth > 2:
-                            continue
-                        if pattern_file in files:
-                            return True
-                        dirs[:] = dirs[:3]  # 限制遍历的子目录数
-                except Exception:
-                    pass
-        
-        return False
-    
-    # 🔥 条件地检测项目是否为 Web 项目
-    is_web_project = _is_web_project_for_tools(project_root, target_files)
-    
     analysis_tools = {
         **base_tools,
         **mcp_read_tools,
@@ -4337,6 +4284,11 @@ async def _initialize_tools(
         # 🔥 智能扫描工具（推荐首先使用）
         "smart_scan": SmartScanTool(project_root, exclude_patterns=exclude_patterns or []),
         "quick_audit": QuickAuditTool(project_root),
+        "business_logic_scan": BusinessLogicScanTool(
+            project_root=project_root,
+            llm_service=llm_service,
+            tools_registry=None,
+        ),
         # 模式匹配工具（增强版）
         "pattern_match": PatternMatchTool(project_root),
         # 数据流分析
@@ -4360,16 +4312,8 @@ async def _initialize_tools(
         # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
     }
-    
-    # 🔥 为 Web 项目添加业务逻辑漏洞扫描工具
-    if is_web_project:
-        analysis_tools["business_logic_scan"] = BusinessLogicScanTool(
-            project_root=project_root,
-            llm_service=llm_service,
-            tools_registry=analysis_tools,
-        )
-        logger.info("[Tools] Business Logic Scanner enabled for Web project: %s", project_root)
-    
+    analysis_tools["business_logic_scan"].tools_registry = analysis_tools
+    logger.info("[Tools] Business Logic Scanner enabled: %s", project_root)
     # Verification 工具
     verification_tools = {
         **base_tools,
