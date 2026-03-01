@@ -1315,7 +1315,6 @@ class VerificationAgent(BaseAgent):
             "payload reflected",
             "[detected]",
             "漏洞已确认",
-            "is_vulnerable": true,
             '"is_vulnerable": true',
         ]
         return any(marker in text for marker in positive_markers)
