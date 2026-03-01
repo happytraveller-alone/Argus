@@ -8,7 +8,7 @@ Provides structured error types with recovery strategies and metadata.
 from enum import Enum
 from typing import Any, Dict, Optional, Type
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ErrorSeverity(str, Enum):
@@ -38,7 +38,7 @@ class ErrorContext:
     task_id: Optional[str] = None
     iteration: Optional[int] = None
     tool_name: Optional[str] = None
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     additional_data: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:

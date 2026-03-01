@@ -5,25 +5,32 @@ from app.services.agent.mcp.runtime import MCPRuntime
 
 
 class _DummyAdapter:
-    def __init__(self, *, runtime_domain: str, available: bool = True):
+    def __init__(self, *, runtime_domain: str, available: bool = True, tools=None):
         self.runtime_domain = runtime_domain
         self._available = available
+        self._tools = list(tools or [{"name": "status", "description": "", "inputSchema": {}}])
 
     def is_available(self) -> bool:
         return self._available
+
+    async def list_tools(self):
+        return list(self._tools)
 
     async def call_tool(self, tool_name, arguments):
         return {"success": True, "data": f"{tool_name}:{arguments}"}
 
 
 class _ProbeInfraFailAdapter(_DummyAdapter):
+    async def list_tools(self):
+        return [{"name": "read_file", "description": "", "inputSchema": {"type": "object"}}]
+
     async def call_tool(self, tool_name, arguments):
         raise RuntimeError("Server disconnected without sending a response.")
 
 
 class _RecorderAdapter(_DummyAdapter):
-    def __init__(self, *, runtime_domain: str, available: bool = True):
-        super().__init__(runtime_domain=runtime_domain, available=available)
+    def __init__(self, *, runtime_domain: str, available: bool = True, tools=None):
+        super().__init__(runtime_domain=runtime_domain, available=available, tools=tools)
         self.calls = []
 
     async def call_tool(self, tool_name, arguments):
@@ -31,7 +38,7 @@ class _RecorderAdapter(_DummyAdapter):
         return {"success": True, "data": "ok"}
 
 
-def test_ensure_all_mcp_ready_requires_all_domains_when_domain_is_all():
+def test_ensure_all_mcp_ready_all_passes_when_any_domain_ready():
     runtime = MCPRuntime(
         enabled=True,
         domain_adapters={
@@ -51,14 +58,8 @@ def test_ensure_all_mcp_ready_requires_all_domains_when_domain_is_all():
     )
 
     readiness = runtime.ensure_all_mcp_ready("all")
-    assert readiness["ready"] is False
-    not_ready = readiness.get("not_ready") or []
-    assert any(
-        item.get("mcp") == "qmd"
-        and item.get("runtime_domain") == "sandbox"
-        and item.get("reason") == "domain_adapter_missing"
-        for item in not_ready
-    )
+    assert readiness["ready"] is True
+    assert readiness.get("not_ready") == []
 
 
 def test_ensure_all_mcp_ready_all_respects_backend_only_runtime_mode():
@@ -169,7 +170,20 @@ async def test_probe_required_mcp_runtime_reports_infra_failure():
 
 @pytest.mark.asyncio
 async def test_probe_required_mcp_runtime_uses_filesystem_read_file_tool(tmp_path):
-    filesystem = _RecorderAdapter(runtime_domain="backend")
+    filesystem = _RecorderAdapter(
+        runtime_domain="backend",
+        tools=[
+            {
+                "name": "read_file",
+                "description": "",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                },
+            }
+        ],
+    )
     runtime = MCPRuntime(
         enabled=True,
         adapters={"filesystem": filesystem},
@@ -181,14 +195,29 @@ async def test_probe_required_mcp_runtime_uses_filesystem_read_file_tool(tmp_pat
 
     assert probe["ready"] is True
     assert filesystem.calls and filesystem.calls[0][0] == "read_file"
-    assert ".mcp_required_filesystem_probe.txt" in str(filesystem.calls[0][1]["file_path"])
     assert ".mcp_required_filesystem_probe.txt" in str(filesystem.calls[0][1]["path"])
 
 
 @pytest.mark.asyncio
 async def test_probe_required_mcp_runtime_uses_qmd_and_sequential_tools():
-    qmd = _RecorderAdapter(runtime_domain="backend")
-    sequential = _RecorderAdapter(runtime_domain="backend")
+    qmd = _RecorderAdapter(
+        runtime_domain="backend",
+        tools=[{"name": "status", "description": "", "inputSchema": {}}],
+    )
+    sequential = _RecorderAdapter(
+        runtime_domain="backend",
+        tools=[
+            {
+                "name": "sequentialthinking",
+                "description": "",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"thought": {"type": "string"}},
+                    "required": ["thought"],
+                },
+            }
+        ],
+    )
     runtime = MCPRuntime(
         enabled=True,
         adapters={

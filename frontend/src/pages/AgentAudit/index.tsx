@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { useAgentStream } from "@/hooks/useAgentStream";
 import { useLogoVariant } from "@/shared/branding/useLogoVariant";
+import type { StreamErrorContext } from "@/shared/api/agentStream";
 import {
   getAgentTask,
   getAgentFindings,
@@ -87,6 +88,7 @@ const EVENT_DEDUP_WINDOW_SIZE = 5000;
 const TERMINAL_RECOVERY_MAX_ATTEMPTS = 2;
 const TERMINAL_RECOVERY_RETRY_INTERVAL_MS = 1500;
 const TERMINAL_RECOVERY_DEBOUNCE_MS = 30_000;
+const STREAM_SELF_HEAL_RETRY_MS = 4000;
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -679,6 +681,7 @@ function AgentAuditPageContent() {
   const terminalBoundarySequenceRef = useRef<number | null>(null);
   const taskStartedAtRef = useRef<string | null>(null);
   const userCancelSeenRef = useRef(false);
+  const lastStreamSelfHealAttemptRef = useRef(0);
   const terminalRecoveryStateRef = useRef<TerminalRecoveryState>({
     active: false,
     attempts: 0,
@@ -961,6 +964,7 @@ function AgentAuditPageContent() {
       seenEventKeysRef.current.clear();
       seenEventOrderRef.current = [];
       userCancelSeenRef.current = false;
+      lastStreamSelfHealAttemptRef.current = 0;
       terminalRecoveryStateRef.current = {
         active: false,
         attempts: 0,
@@ -2384,15 +2388,45 @@ function AgentAuditPageContent() {
         void loadFindings({ silent: true });
         void loadAgentTree();
       },
-      onError: (err: string) => {
-        const nowTime = buildNowRelativeLogTime();
-        dispatch({
-          type: "ADD_LOG",
-          payload: { ...nowTime, type: "error", title: `错误：${err}` },
-        });
-        void backfillEventsSince(lastEventSequenceRef.current, "on_error");
-        void loadTask();
-        void loadFindings({ silent: true });
+      onError: (err: string, context: StreamErrorContext) => {
+        const source = context?.source ?? "event";
+        const isTerminal = Boolean(context?.terminal);
+        if (source === "event" && !isTerminal) {
+          console.warn("[AgentAudit] non_terminal_error", {
+            message: err,
+            context,
+          });
+          return;
+        }
+
+        if (source === "event" && isTerminal) {
+          console.error("[AgentAudit] terminal_error", {
+            message: err,
+            context,
+          });
+          if (err) {
+            setTerminalFailureReason(err);
+          }
+        } else if (source === "transport" || source === "stream_end") {
+          const nowTime = buildNowRelativeLogTime();
+          dispatch({
+            type: "ADD_LOG",
+            payload: {
+              ...nowTime,
+              type: "error",
+              title:
+                source === "transport"
+                  ? `事件流连接失败：${err}`
+                  : `事件流连接中断：${err}`,
+            },
+          });
+        }
+
+        if (isTerminal || source === "transport" || source === "stream_end") {
+          void backfillEventsSince(lastEventSequenceRef.current, "on_error");
+          void loadTask();
+          void loadFindings({ silent: true });
+        }
       },
     }),
     [
@@ -2509,6 +2543,37 @@ function AgentAuditPageContent() {
     disconnectStream,
     dispatch,
     buildNowRelativeLogTime,
+  ]);
+
+  useEffect(() => {
+    if (!taskId || task?.status !== "running") return;
+    if (!historicalEventsLoaded) return;
+    if (!hasConnectedRef.current) return;
+    if (isConnected) return;
+
+    const elapsed = Date.now() - lastStreamSelfHealAttemptRef.current;
+    const delay = elapsed >= STREAM_SELF_HEAL_RETRY_MS
+      ? 0
+      : STREAM_SELF_HEAL_RETRY_MS - elapsed;
+    const timer = setTimeout(() => {
+      if (taskStatusRef.current !== "running") return;
+      lastStreamSelfHealAttemptRef.current = Date.now();
+      console.warn("[AgentAudit] stream_self_heal_reconnect", {
+        taskId,
+        lastSequence: lastEventSequenceRef.current,
+      });
+      connectStream();
+    }, delay);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [
+    taskId,
+    task?.status,
+    historicalEventsLoaded,
+    isConnected,
+    connectStream,
   ]);
 
   // Polling

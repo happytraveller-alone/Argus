@@ -209,11 +209,15 @@ export function useAgentStream(
         callbackOptionsRef.current.onComplete?.(data);
       },
 
-      onError: (err) => {
+      onError: (err, context) => {
         setError(err);
-        setIsComplete(true);
-        setIsConnected(false);
-        callbackOptionsRef.current.onError?.(err);
+        if (context.terminal) {
+          setIsComplete(true);
+          setIsConnected(false);
+        } else if (context.source === 'transport' || context.source === 'stream_end') {
+          setIsConnected(false);
+        }
+        callbackOptionsRef.current.onError?.(err, context);
       },
 
       onHeartbeat: () => {

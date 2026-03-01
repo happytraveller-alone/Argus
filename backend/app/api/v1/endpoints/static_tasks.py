@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import threading
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -1424,7 +1424,7 @@ _scan_progress_store: Dict[str, Dict[str, Any]] = {}
 
 
 def _utc_now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _dt_to_iso(dt: Optional[datetime]) -> Optional[str]:

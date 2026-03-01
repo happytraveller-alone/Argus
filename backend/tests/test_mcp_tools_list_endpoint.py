@@ -1,13 +1,17 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from app.api.v1.endpoints import agent_tasks as agent_tasks_module
 from app.api.v1.endpoints import config as config_module
 from app.api.v1.endpoints.config import (
+    MCPToolsCallRequest,
     MCPToolsListRequest,
+    call_mcp_tool_runtime,
     list_mcp_tools_runtime,
 )
+from app.services.agent.mcp.runtime import MCPExecutionResult
 
 
 class _FakeExecuteResult:
@@ -21,14 +25,33 @@ class _FakeDB:
 
 
 class _FakeRuntime:
-    def __init__(self, payload_by_mcp):
+    def __init__(self, payload_by_mcp, call_payload=None):
         self.payload_by_mcp = payload_by_mcp
+        self.call_payload = call_payload or MCPExecutionResult(
+            handled=True,
+            success=True,
+            data="ok",
+            metadata={"mcp_runtime_domain": "backend"},
+        )
         self.calls = []
+        self.call_invocations = []
 
     async def list_mcp_tools(self, mcp_name: str):
         key = str(mcp_name or "").strip().lower()
         self.calls.append(key)
         return dict(self.payload_by_mcp.get(key) or {})
+
+    async def call_mcp_tool(self, *, mcp_name: str, tool_name: str, arguments, agent_name=None, alias_used=None):
+        self.call_invocations.append(
+            {
+                "mcp_name": mcp_name,
+                "tool_name": tool_name,
+                "arguments": dict(arguments or {}),
+                "agent_name": agent_name,
+                "alias_used": alias_used,
+            }
+        )
+        return self.call_payload
 
 
 def _setup_common(monkeypatch, runtime, *, catalog):
@@ -163,3 +186,53 @@ async def test_list_mcp_tools_single_mcp_failure_does_not_block_others(monkeypat
     assert by_id["filesystem"].tools == []
     assert by_id["code_index"].success is True
     assert by_id["code_index"].visible_count == 1
+
+
+@pytest.mark.asyncio
+async def test_call_mcp_tool_runtime_returns_unified_payload(monkeypatch):
+    catalog = [{"id": "filesystem", "type": "mcp-server"}]
+    call_payload = MCPExecutionResult(
+        handled=True,
+        success=True,
+        data="probe-ok",
+        metadata={"mcp_runtime_domain": "sandbox", "mcp_used": True},
+    )
+    runtime = _FakeRuntime({"filesystem": {"success": True, "tools": []}}, call_payload=call_payload)
+    _setup_common(monkeypatch, runtime, catalog=catalog)
+
+    response = await call_mcp_tool_runtime(
+        MCPToolsCallRequest(
+            mcp_id="filesystem",
+            tool_name="list_directory",
+            arguments={"path": "."},
+        ),
+        db=_FakeDB(),
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert response.success is True
+    assert response.handled is True
+    assert response.runtime_domain == "sandbox"
+    assert response.data == "probe-ok"
+    assert runtime.call_invocations
+    assert runtime.call_invocations[0]["tool_name"] == "list_directory"
+
+
+@pytest.mark.asyncio
+async def test_call_mcp_tool_runtime_blocks_internal_tool_by_default(monkeypatch):
+    catalog = [{"id": "code_index", "type": "mcp-server"}]
+    runtime = _FakeRuntime({"code_index": {"success": True, "tools": []}})
+    _setup_common(monkeypatch, runtime, catalog=catalog)
+
+    with pytest.raises(HTTPException) as excinfo:
+        await call_mcp_tool_runtime(
+            MCPToolsCallRequest(
+                mcp_id="code_index",
+                tool_name="set_project_path",
+                arguments={"path": "."},
+            ),
+            db=_FakeDB(),
+            current_user=SimpleNamespace(id="user-1"),
+        )
+    assert excinfo.value.status_code == 400
+    assert "internal tool blocked" in str(excinfo.value.detail)

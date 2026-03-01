@@ -68,6 +68,10 @@ from app.services.agent.mcp.daemon_manager import (
     resolve_qmd_backend_url,
     resolve_sequential_backend_url,
 )
+from app.services.agent.mcp.protocol_verify import (
+    build_tool_args as build_mcp_probe_tool_args,
+    normalize_listed_tools as normalize_mcp_listed_tools,
+)
 from app.services.git_mirror import get_mirror_candidates
 from app.services.git_ssh_service import GitSSHOperations
 from app.core.encryption import decrypt_sensitive_data
@@ -980,12 +984,21 @@ def _build_task_mcp_runtime(
         "MCP_SEQUENTIAL_THINKING_SANDBOX_ENABLED",
     )
     if _is_active_mcp("sequentialthinking") and (sequential_backend_enabled or sequential_sandbox_enabled):
-        sequential_backend_url = resolve_sequential_backend_url(settings)
-        sequential_sandbox_url = str(
-            getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "") or ""
-        ).strip()
-        if not sequential_sandbox_url:
-            sequential_sandbox_url = sequential_backend_url
+        sequential_force_stdio = bool(
+            getattr(settings, "MCP_SEQUENTIAL_THINKING_FORCE_STDIO", True)
+        )
+        sequential_backend_url = (
+            ""
+            if sequential_force_stdio
+            else resolve_sequential_backend_url(settings)
+        )
+        sequential_sandbox_url = ""
+        if not sequential_force_stdio:
+            sequential_sandbox_url = str(
+                getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_URL", "") or ""
+            ).strip()
+            if not sequential_sandbox_url:
+                sequential_sandbox_url = sequential_backend_url
         if sequential_backend_enabled:
             _register_domain_adapter(
                 "sequentialthinking",
@@ -994,12 +1007,19 @@ def _build_task_mcp_runtime(
                     mcp_name="sequentialthinking",
                     domain="backend",
                     url=sequential_backend_url,
-                    stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_COMMAND", "pnpm") or "pnpm"),
+                    stdio_command=str(
+                        getattr(
+                            settings,
+                            "MCP_SEQUENTIAL_THINKING_COMMAND",
+                            "mcp-server-sequential-thinking",
+                        )
+                        or "mcp-server-sequential-thinking"
+                    ),
                     stdio_args=_parse_mcp_args(
                         getattr(
                             settings,
                             "MCP_SEQUENTIAL_THINKING_ARGS",
-                            "dlx @modelcontextprotocol/server-sequential-thinking",
+                            "",
                         )
                     ),
                 ),
@@ -1012,12 +1032,19 @@ def _build_task_mcp_runtime(
                     mcp_name="sequentialthinking",
                     domain="sandbox",
                     url=sequential_sandbox_url,
-                    stdio_command=str(getattr(settings, "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND", "pnpm") or "pnpm"),
+                    stdio_command=str(
+                        getattr(
+                            settings,
+                            "MCP_SEQUENTIAL_THINKING_SANDBOX_COMMAND",
+                            "mcp-server-sequential-thinking",
+                        )
+                        or "mcp-server-sequential-thinking"
+                    ),
                     stdio_args=_parse_mcp_args(
                         getattr(
                             settings,
                             "MCP_SEQUENTIAL_THINKING_SANDBOX_ARGS",
-                            "dlx @modelcontextprotocol/server-sequential-thinking",
+                            "",
                         )
                     ),
                 ),
@@ -1136,51 +1163,91 @@ async def _probe_required_mcp_runtime(
     *,
     runtime_domain: str = "all",
 ) -> Dict[str, Any]:
-    def _resolve_filesystem_probe_file() -> str:
-        fallback = "README.md"
+    INTERNAL_TOOLS = {
+        "set_project_path",
+        "configure_file_watcher",
+        "refresh_index",
+        "build_deep_index",
+    }
+    WRITE_TOOL_PREFIXES = ("write", "edit", "create", "move", "delete")
+    CALL_RETRY_COUNT = 2
+    CALL_BACKOFF_SECONDS = 0.3
+
+    def _prepare_probe_context() -> Dict[str, Any]:
         project_root = str(getattr(runtime, "project_root", "") or "").strip()
         if not project_root:
-            return fallback
-        probe_rel = "tmp/.mcp_required_filesystem_probe.txt"
-        probe_abs = os.path.join(project_root, probe_rel)
+            return {
+                "project_root": "",
+                "filesystem_probe_file": "README.md",
+                "filesystem_media_probe_file": "tmp/.mcp_required_media_probe.png",
+                "qmd_probe_file": "tmp/.mcp_required_qmd_probe.md",
+                "code_probe_file": "tmp/.mcp_required_code_probe.c",
+                "code_probe_function": "mcp_required_probe_sum",
+                "code_probe_line": 2,
+            }
+        probe_dir = os.path.join(project_root, "tmp")
+        os.makedirs(probe_dir, exist_ok=True)
+        filesystem_probe_abs = os.path.join(probe_dir, ".mcp_required_filesystem_probe.txt")
+        filesystem_media_abs = os.path.join(probe_dir, ".mcp_required_media_probe.png")
+        code_probe_abs = os.path.join(probe_dir, ".mcp_required_code_probe.c")
+        qmd_probe_abs = os.path.join(probe_dir, ".mcp_required_qmd_probe.md")
         try:
-            os.makedirs(os.path.dirname(probe_abs), exist_ok=True)
-            with open(probe_abs, "w", encoding="utf-8") as handle:
+            with open(filesystem_probe_abs, "w", encoding="utf-8") as handle:
                 handle.write("mcp required filesystem probe\n")
-            return probe_rel
         except Exception:
             pass
         try:
-            for root, _dirs, files in os.walk(project_root):
-                for filename in files:
-                    candidate = os.path.join(root, filename)
-                    if not os.path.isfile(candidate):
-                        continue
-                    rel = os.path.relpath(candidate, project_root).replace("\\", "/")
-                    if rel and not rel.startswith("../"):
-                        return rel
+            with open(filesystem_media_abs, "wb") as handle:
+                handle.write(b"PNG")
         except Exception:
             pass
-        return fallback
+        try:
+            with open(code_probe_abs, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "#include <stdio.h>\n"
+                    "int mcp_required_probe_sum(int a, int b) {\n"
+                    "    return a + b;\n"
+                    "}\n"
+                )
+        except Exception:
+            pass
+        try:
+            with open(qmd_probe_abs, "w", encoding="utf-8") as handle:
+                handle.write("# mcp required qmd probe\n")
+        except Exception:
+            pass
+        return {
+            "project_root": project_root,
+            "filesystem_probe_file": os.path.relpath(filesystem_probe_abs, project_root).replace("\\", "/"),
+            "filesystem_media_probe_file": os.path.relpath(filesystem_media_abs, project_root).replace("\\", "/"),
+            "qmd_probe_file": os.path.relpath(qmd_probe_abs, project_root).replace("\\", "/"),
+            "code_probe_file": os.path.relpath(code_probe_abs, project_root).replace("\\", "/"),
+            "code_probe_function": "mcp_required_probe_sum",
+            "code_probe_line": 2,
+        }
 
-    filesystem_probe_file = _resolve_filesystem_probe_file()
-    probe_specs: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {
-        "filesystem": [("read_file", {"file_path": filesystem_probe_file})],
-        "code_index": [("list_files", {"directory": ".", "pattern": "*"})],
-        "sequentialthinking": [
-            (
-                "sequentialthinking",
-                {
-                    "thought": "startup_probe",
-                    "nextThoughtNeeded": False,
-                    "thoughtNumber": 1,
-                    "totalThoughts": 1,
-                },
-            )
-        ],
-        "qmd": [("qmd_status", {})],
-    }
-    probe_policy: Dict[str, Dict[str, float]] = {}
+    def _is_write_tool(tool_name: str) -> bool:
+        normalized = str(tool_name or "").strip().lower()
+        if not normalized:
+            return True
+        if normalized in INTERNAL_TOOLS:
+            return True
+        return normalized.startswith(WRITE_TOOL_PREFIXES)
+
+    def _tool_priority(tool_name: str) -> int:
+        normalized = str(tool_name or "").strip().lower()
+        if not normalized:
+            return -999
+        if _is_write_tool(normalized):
+            return -500
+        score = 0
+        if normalized.startswith(("search", "list", "read", "get", "status", "sequential")):
+            score += 100
+        if "summary" in normalized or "info" in normalized:
+            score += 20
+        if "media" in normalized:
+            score -= 20
+        return score
 
     required_mcps: List[str] = []
     if hasattr(runtime, "_required_mcp_names"):
@@ -1194,6 +1261,7 @@ async def _probe_required_mcp_runtime(
     not_ready: List[Dict[str, Any]] = []
     details: Dict[str, Dict[str, Any]] = {}
     domain_value = str(runtime_domain or "all").strip().lower() or "all"
+    probe_context = _prepare_probe_context()
 
     probe_runtime = runtime
     try:
@@ -1215,115 +1283,218 @@ async def _probe_required_mcp_runtime(
             ),
             strict_mode=bool(getattr(runtime, "strict_mode", True)),
             adapter_failure_threshold=adapter_failure_threshold,
+            project_root=probe_context.get("project_root"),
         )
     except Exception:
         probe_runtime = runtime
 
-    def _is_infra_failed(result: Any) -> Tuple[bool, Dict[str, Any], str, str]:
-        metadata = dict(result.metadata) if isinstance(result.metadata, dict) else {}
-        error_text = str(result.error or "").strip()
-        skip_reason = str(metadata.get("mcp_skip_reason") or "").strip()
-        infra_failed = (
-            not bool(result.handled)
-            or error_text.startswith("mcp_call_failed:")
-            or error_text.startswith("mcp_adapter_unavailable:")
-            or skip_reason in {
-                "adapter_unavailable",
-                "adapter_disabled_after_failures",
-                "domain_adapter_missing",
-                "command_not_found",
-            }
-        )
-        return infra_failed, metadata, error_text, skip_reason
-
     for mcp_name in required_mcps:
-        specs = probe_specs.get(str(mcp_name))
-        if not specs:
-            details[str(mcp_name)] = {
-                "probe_ready": True,
-                "reason": "probe_not_defined_skip",
-            }
-            continue
-        policy = probe_policy.get(str(mcp_name), {})
-        max_attempts = max(1, int(policy.get("attempts", 1) or 1))
-        backoff_seconds = max(0.0, float(policy.get("backoff_seconds", 0.0) or 0.0))
-
-        probe_ok = False
-        last_failure: Dict[str, Any] = {}
-        for tool_name, tool_input in specs:
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    result = await probe_runtime.execute_tool(
-                        tool_name=tool_name,
-                        tool_input=dict(tool_input or {}),
-                        agent_name="MCP_RUNTIME_PROBE",
-                        alias_used=f"startup_probe:{tool_name}",
-                    )
-                except Exception as exc:
-                    reason = f"probe_exception:{exc.__class__.__name__}"
-                    last_failure = {
-                        "probe_ready": False,
-                        "reason": reason,
-                        "tool_name": tool_name,
-                        "attempt": attempt,
-                    }
-                    if attempt < max_attempts:
-                        if backoff_seconds > 0:
-                            await asyncio.sleep(backoff_seconds * (2 ** (attempt - 1)))
-                        continue
-                    break
-
-                infra_failed, metadata, error_text, skip_reason = _is_infra_failed(result)
-                if infra_failed:
-                    reason = skip_reason or error_text or "probe_failed"
-                    last_failure = {
-                        "probe_ready": False,
-                        "reason": reason,
-                        "tool_name": tool_name,
-                        "attempt": attempt,
-                        "mcp_runtime_domain": metadata.get("mcp_runtime_domain"),
-                    }
-                    if attempt < max_attempts and skip_reason != "adapter_disabled_after_failures":
-                        if backoff_seconds > 0:
-                            await asyncio.sleep(backoff_seconds * (2 ** (attempt - 1)))
-                        continue
-                    break
-
-                details[str(mcp_name)] = {
-                    "probe_ready": True,
-                    "tool_name": tool_name,
-                    "tool_success": bool(result.success),
-                    "mcp_runtime_domain": metadata.get("mcp_runtime_domain"),
-                    "reason": "probe_ok",
-                    "attempt": attempt,
-                    "max_attempts": max_attempts,
-                }
-                probe_ok = True
-                break
-
-            if probe_ok:
-                break
-
-        if probe_ok:
+        normalized_mcp = str(mcp_name or "").strip().lower()
+        if not normalized_mcp:
             continue
 
-        reason = str(last_failure.get("reason") or "probe_failed")
-        runtime_domain_value = str(
-            last_failure.get("mcp_runtime_domain") or domain_value
-        )
-        details[str(mcp_name)] = {
+        mcp_detail: Dict[str, Any] = {
             "probe_ready": False,
-            "reason": reason,
-            "tool_name": str(last_failure.get("tool_name") or ""),
-            "attempt": int(last_failure.get("attempt") or max_attempts),
-            "max_attempts": max_attempts,
-            "mcp_runtime_domain": last_failure.get("mcp_runtime_domain"),
+            "reason": "probe_not_started",
+            "tools_list_success": False,
+            "tools_call_success": False,
+            "call_retry_count": CALL_RETRY_COUNT,
+            "call_backoff_seconds": CALL_BACKOFF_SECONDS,
         }
+
+        list_started = time.perf_counter()
+        try:
+            list_result = await probe_runtime.list_mcp_tools(normalized_mcp)
+        except Exception as exc:
+            list_result = {
+                "success": False,
+                "tools": [],
+                "error": f"mcp_list_tools_failed:{exc}",
+                "metadata": {},
+            }
+        list_duration_ms = int((time.perf_counter() - list_started) * 1000)
+
+        list_metadata = list_result.get("metadata")
+        if not isinstance(list_metadata, dict):
+            list_metadata = {}
+        list_runtime_domain = str(list_metadata.get("mcp_runtime_domain") or "").strip() or None
+        discovered_tools = normalize_mcp_listed_tools(list_result.get("tools"))
+        visible_tools = [
+            tool
+            for tool in discovered_tools
+            if not _is_write_tool(str(tool.get("name") or ""))
+        ]
+
+        if not bool(list_result.get("success")):
+            reason = str(list_result.get("error") or "mcp_tools_list_failed")
+            mcp_detail.update(
+                {
+                    "probe_ready": False,
+                    "reason": reason,
+                    "tools_list_success": False,
+                    "tools_list_duration_ms": list_duration_ms,
+                    "mcp_runtime_domain": list_runtime_domain,
+                }
+            )
+            details[normalized_mcp] = mcp_detail
+            not_ready.append(
+                {
+                    "mcp": normalized_mcp,
+                    "runtime_domain": list_runtime_domain or domain_value,
+                    "reason": reason,
+                    "step": "tools/list",
+                }
+            )
+            continue
+
+        mcp_detail["tools_list_success"] = True
+        mcp_detail["tools_list_duration_ms"] = list_duration_ms
+        mcp_detail["discovered_tools"] = [str(item.get("name") or "") for item in discovered_tools]
+
+        if not visible_tools:
+            reason = "mcp_probe_tool_unavailable"
+            mcp_detail.update(
+                {
+                    "probe_ready": False,
+                    "reason": reason,
+                    "mcp_runtime_domain": list_runtime_domain,
+                }
+            )
+            details[normalized_mcp] = mcp_detail
+            not_ready.append(
+                {
+                    "mcp": normalized_mcp,
+                    "runtime_domain": list_runtime_domain or domain_value,
+                    "reason": reason,
+                    "step": "tools/select",
+                }
+            )
+            continue
+
+        selected_tool = sorted(
+            visible_tools,
+            key=lambda item: _tool_priority(str(item.get("name") or "")),
+            reverse=True,
+        )[0]
+        selected_tool_name = str(selected_tool.get("name") or "").strip()
+        selected_input_schema = (
+            dict(selected_tool.get("inputSchema"))
+            if isinstance(selected_tool.get("inputSchema"), dict)
+            else {}
+        )
+
+        tool_args, args_error = build_mcp_probe_tool_args(
+            mcp_id=normalized_mcp,
+            tool_name=selected_tool_name,
+            input_schema=selected_input_schema,
+            project_root=str(probe_context.get("project_root") or ""),
+            filesystem_probe_file=str(probe_context.get("filesystem_probe_file") or "README.md"),
+            filesystem_media_probe_file=str(
+                probe_context.get("filesystem_media_probe_file") or "tmp/.mcp_required_media_probe.png"
+            ),
+            qmd_probe_file=str(probe_context.get("qmd_probe_file") or "tmp/.mcp_required_qmd_probe.md"),
+            code_probe_file=str(probe_context.get("code_probe_file") or "tmp/.mcp_required_code_probe.c"),
+            code_probe_function=str(probe_context.get("code_probe_function") or "mcp_required_probe_sum"),
+            code_probe_line=int(probe_context.get("code_probe_line") or 2),
+        )
+        if args_error is not None or not isinstance(tool_args, dict):
+            reason = str(args_error or "mcp_probe_arg_generation_failed")
+            mcp_detail.update(
+                {
+                    "probe_ready": False,
+                    "reason": reason,
+                    "selected_tool": selected_tool_name,
+                    "mcp_runtime_domain": list_runtime_domain,
+                }
+            )
+            details[normalized_mcp] = mcp_detail
+            not_ready.append(
+                {
+                    "mcp": normalized_mcp,
+                    "runtime_domain": list_runtime_domain or domain_value,
+                    "reason": reason,
+                    "step": "tools/call",
+                    "tool_name": selected_tool_name,
+                }
+            )
+            continue
+
+        total_attempts = 1 + int(CALL_RETRY_COUNT)
+        last_error = "mcp_probe_call_failed"
+        last_runtime_domain = list_runtime_domain
+        call_ok = False
+        for attempt in range(1, total_attempts + 1):
+            call_started = time.perf_counter()
+            try:
+                call_result = await probe_runtime.call_mcp_tool(
+                    mcp_name=normalized_mcp,
+                    tool_name=selected_tool_name,
+                    arguments=dict(tool_args),
+                    agent_name="MCP_RUNTIME_PROBE",
+                    alias_used=f"startup_probe:{selected_tool_name}",
+                )
+            except Exception as exc:
+                call_result = None
+                call_duration_ms = int((time.perf_counter() - call_started) * 1000)
+                last_error = f"mcp_call_exception:{exc.__class__.__name__}"
+                mcp_detail["tools_call_duration_ms"] = call_duration_ms
+                if attempt < total_attempts:
+                    await asyncio.sleep(CALL_BACKOFF_SECONDS)
+                    continue
+                break
+
+            call_duration_ms = int((time.perf_counter() - call_started) * 1000)
+            call_metadata = dict(call_result.metadata) if isinstance(call_result.metadata, dict) else {}
+            call_runtime_domain = str(call_metadata.get("mcp_runtime_domain") or "").strip() or list_runtime_domain
+            last_runtime_domain = call_runtime_domain
+            if bool(call_result.handled and call_result.success):
+                mcp_detail.update(
+                    {
+                        "probe_ready": True,
+                        "reason": "probe_ok",
+                        "tools_call_success": True,
+                        "tools_call_duration_ms": call_duration_ms,
+                        "selected_tool": selected_tool_name,
+                        "mcp_runtime_domain": call_runtime_domain,
+                        "attempt": attempt,
+                        "max_attempts": total_attempts,
+                    }
+                )
+                call_ok = True
+                break
+
+            last_error = str(call_result.error or "mcp_call_failed")
+            mcp_detail.update(
+                {
+                    "tools_call_duration_ms": call_duration_ms,
+                    "selected_tool": selected_tool_name,
+                    "mcp_runtime_domain": call_runtime_domain,
+                    "attempt": attempt,
+                    "max_attempts": total_attempts,
+                }
+            )
+            if attempt < total_attempts:
+                await asyncio.sleep(CALL_BACKOFF_SECONDS)
+
+        if call_ok:
+            details[normalized_mcp] = mcp_detail
+            continue
+
+        mcp_detail.update(
+            {
+                "probe_ready": False,
+                "reason": last_error,
+                "tools_call_success": False,
+            }
+        )
+        details[normalized_mcp] = mcp_detail
         not_ready.append(
             {
-                "mcp": str(mcp_name),
-                "runtime_domain": runtime_domain_value,
-                "reason": reason,
+                "mcp": normalized_mcp,
+                "runtime_domain": last_runtime_domain or domain_value,
+                "reason": last_error,
+                "step": "tools/call",
+                "tool_name": selected_tool_name,
             }
         )
 
@@ -4242,16 +4413,16 @@ async def _initialize_tools(
         )
 
     deprecated_skill_tools: Dict[str, Any] = {
-        skill_name: MCPDeprecatedTool(name=skill_name, message="该 skill 已下线，请改用 verify_reachability + flow 证据链。")
-        for skill_name in [
-            "test_command_injection",
-            "test_deserialization",
-            "test_path_traversal",
-            "test_sql_injection",
-            "test_ssti",
-            "test_xss",
-            "universal_vuln_test",
-        ]
+        # skill_name: MCPDeprecatedTool(name=skill_name, message="该 skill 已下线，请改用 verify_reachability + flow 证据链。")
+        # for skill_name in [
+        #     "test_command_injection",
+        #     "test_deserialization",
+        #     "test_path_traversal",
+        #     "test_sql_injection",
+        #     "test_ssti",
+        #     "test_xss",
+        #     "universal_vuln_test",
+        # ]
     }
     
     # Recon 工具
@@ -4274,7 +4445,19 @@ async def _initialize_tools(
 
     # Analysis 工具
     # 🔥 导入智能扫描工具
-    from app.services.agent.tools import SmartScanTool, QuickAuditTool, BusinessLogicScanTool
+    from app.services.agent.tools import SmartScanTool, QuickAuditTool, BusinessLogicScanTool, ExtractFunctionTool, PatternMatchTool
+    
+    # 🔥 业务逻辑扫描核心工具集
+    # BusinessLogicScanAgent 5 个阶段需要的分析工具
+    # Phase 1 (HTTP 入口发现): search_code, read_file, extract_function
+    # Phase 2 (入口分析): read_file, extract_function, logic_authz_analysis
+    # Phase 3 (敏感操作): read_file, search_code, pattern_match
+    # Phase 4 (污点分析): dataflow_analysis, controlflow_analysis_light, read_file
+    # Phase 5 (漏洞确认): read_file, 综合前4阶段结果
+    business_logic_scan_core_tools = {
+        **base_tools,
+        **mcp_read_tools,
+    }
     
     analysis_tools = {
         **base_tools,
@@ -4287,10 +4470,13 @@ async def _initialize_tools(
         "business_logic_scan": BusinessLogicScanTool(
             project_root=project_root,
             llm_service=llm_service,
-            tools_registry=None,
+            tools_registry=business_logic_scan_core_tools,
+            event_emitter=event_emitter,
         ),
         # 模式匹配工具（增强版）
         "pattern_match": PatternMatchTool(project_root),
+        # 函数提取工具（用于业务逻辑扫描等分析任务）
+        "extract_function": ExtractFunctionTool(project_root=project_root),
         # 数据流分析
         "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
         # 三轨流分析主链
@@ -4312,8 +4498,22 @@ async def _initialize_tools(
         # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
     }
-    analysis_tools["business_logic_scan"].tools_registry = analysis_tools
-    logger.info("[Tools] Business Logic Scanner enabled: %s", project_root)
+    
+    # 🔥 完成工具集构建后，补充完整工具集给 business_logic_scan
+    # 这确保 Sub Agent 有足够的工具在各个分析阶段使用
+    business_logic_scan_core_tools.update({
+        "extract_function": analysis_tools["extract_function"],
+        "pattern_match": analysis_tools["pattern_match"],
+        "dataflow_analysis": analysis_tools["dataflow_analysis"],
+        "controlflow_analysis_light": analysis_tools["controlflow_analysis_light"],
+        "logic_authz_analysis": analysis_tools["logic_authz_analysis"],
+    })
+    analysis_tools["business_logic_scan"].tools_registry = business_logic_scan_core_tools
+    logger.info(
+        "[Tools] Business Logic Scanner enabled with %d tools: %s",
+        len(business_logic_scan_core_tools),
+        project_root,
+    )
     # 🔥 导入沙箱工具
     from app.services.agent.tools import (
         SandboxTool, SandboxHttpTool, VulnerabilityVerifyTool,
@@ -6830,10 +7030,15 @@ async def _get_project_root(
                 zip_url_candidates = get_mirror_candidates(
                     zip_url,
                     enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
-                    mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://ghfast.top"),
+                    mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.com"),
+                    mirror_prefixes=getattr(
+                        settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.com,https://v6.gh-proxy.org"
+                    ),
                     allow_hosts=getattr(settings, "GIT_MIRROR_HOSTS", "github.com"),
                     allow_auth_url=getattr(settings, "GIT_MIRROR_ALLOW_AUTH_URL", False),
+                    fallback_to_origin=getattr(settings, "GIT_MIRROR_FALLBACK_TO_ORIGIN", False),
                 )
+                zip_has_origin_url = zip_url in zip_url_candidates
 
                 logger.info(f"📦 尝试下载 ZIP 归档 (分支: {branch})...")
                 await emit(f"📦 尝试下载 ZIP 归档 (分支: {branch})")
@@ -6844,7 +7049,7 @@ async def _get_project_root(
                     error = None
 
                     for idx, candidate_zip_url in enumerate(zip_url_candidates):
-                        using_mirror = idx == 0 and len(zip_url_candidates) > 1
+                        using_mirror = candidate_zip_url != zip_url
 
                         async def download_zip():
                             async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
@@ -6874,11 +7079,22 @@ async def _get_project_root(
                         if success:
                             break
                         if using_mirror:
-                            logger.warning(
-                                "ZIP 镜像下载失败，原因: %s，回源重试: %s",
-                                error,
-                                zip_url_candidates[-1],
-                            )
+                            if idx < len(zip_url_candidates) - 1:
+                                next_candidate = zip_url_candidates[idx + 1]
+                                if next_candidate == zip_url:
+                                    logger.warning(
+                                        "ZIP 镜像下载失败，原因: %s，回源重试: %s",
+                                        error,
+                                        next_candidate,
+                                    )
+                                else:
+                                    logger.warning(
+                                        "ZIP 镜像下载失败，原因: %s，切换候选重试: %s",
+                                        error,
+                                        next_candidate,
+                                    )
+                            elif not zip_has_origin_url:
+                                logger.warning("ZIP 镜像全部失败，已按策略终止当前候选（未启用回源）")
 
                     if success and os.path.exists(zip_temp_path):
                         # 解压 ZIP
@@ -6991,10 +7207,15 @@ async def _get_project_root(
             clone_url_candidates = [auth_url] if is_ssh_url else get_mirror_candidates(
                 auth_url,
                 enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
-                mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://ghfast.top"),
+                mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.com"),
+                mirror_prefixes=getattr(
+                    settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.com,https://v6.gh-proxy.org"
+                ),
                 allow_hosts=getattr(settings, "GIT_MIRROR_HOSTS", "github.com"),
                 allow_auth_url=getattr(settings, "GIT_MIRROR_ALLOW_AUTH_URL", False),
+                fallback_to_origin=getattr(settings, "GIT_MIRROR_FALLBACK_TO_ORIGIN", False),
             )
+            clone_has_origin_url = auth_url in clone_url_candidates
 
             for branch in branches_to_try:
                 check_cancelled()
@@ -7040,7 +7261,7 @@ async def _get_project_root(
                     else:
                         result = None
                         for idx, candidate_clone_url in enumerate(clone_url_candidates):
-                            using_mirror = idx == 0 and len(clone_url_candidates) > 1
+                            using_mirror = candidate_clone_url != auth_url
 
                             async def run_clone():
                                 return await asyncio.to_thread(
@@ -7068,12 +7289,24 @@ async def _get_project_root(
 
                             last_error = result.stderr
                             if using_mirror:
-                                logger.warning(
-                                    "Git 镜像 clone 失败 (分支 %s): %s，回源重试: %s",
-                                    branch,
-                                    (last_error or "")[:200],
-                                    clone_url_candidates[-1],
-                                )
+                                if idx < len(clone_url_candidates) - 1:
+                                    next_candidate = clone_url_candidates[idx + 1]
+                                    if next_candidate == auth_url:
+                                        logger.warning(
+                                            "Git 镜像 clone 失败 (分支 %s): %s，回源重试: %s",
+                                            branch,
+                                            (last_error or "")[:200],
+                                            next_candidate,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "Git 镜像 clone 失败 (分支 %s): %s，切换候选重试: %s",
+                                            branch,
+                                            (last_error or "")[:200],
+                                            next_candidate,
+                                        )
+                                elif not clone_has_origin_url:
+                                    logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
 
                         if result is not None and result.returncode == 0:
                             logger.info(f"✅ Git 克隆成功 (分支: {branch})")
@@ -7130,7 +7363,7 @@ async def _get_project_root(
                     else:
                         result = None
                         for idx, candidate_clone_url in enumerate(clone_url_candidates):
-                            using_mirror = idx == 0 and len(clone_url_candidates) > 1
+                            using_mirror = candidate_clone_url != auth_url
 
                             async def run_default_clone():
                                 return await asyncio.to_thread(
@@ -7158,11 +7391,22 @@ async def _get_project_root(
 
                             last_error = result.stderr
                             if using_mirror:
-                                logger.warning(
-                                    "Git 镜像默认分支 clone 失败: %s，回源重试: %s",
-                                    (last_error or "")[:200],
-                                    clone_url_candidates[-1],
-                                )
+                                if idx < len(clone_url_candidates) - 1:
+                                    next_candidate = clone_url_candidates[idx + 1]
+                                    if next_candidate == auth_url:
+                                        logger.warning(
+                                            "Git 镜像默认分支 clone 失败: %s，回源重试: %s",
+                                            (last_error or "")[:200],
+                                            next_candidate,
+                                        )
+                                    else:
+                                        logger.warning(
+                                            "Git 镜像默认分支 clone 失败: %s，切换候选重试: %s",
+                                            (last_error or "")[:200],
+                                            next_candidate,
+                                        )
+                                elif not clone_has_origin_url:
+                                    logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
 
                         if result is not None and result.returncode == 0:
                             logger.info(f"✅ Git 克隆成功 (默认分支)")

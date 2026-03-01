@@ -9,7 +9,7 @@ services:
   # 开发者调试服务
   # =============================================
   adminer:
-    image: adminer:latest
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
     restart: unless-stopped
     ports:
       - "8081:8080"

@@ -4,10 +4,9 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse, urlunparse
 
-import httpx
 from fastmcp import Client as MCPClient
+from app.services.agent.mcp.health_probe import probe_mcp_endpoint_readiness
 
 logger = logging.getLogger(__name__)
 
@@ -86,15 +85,16 @@ class CodeBadgerMCPClient:
     poll_interval_sec: float = 1.0
     health_timeout_sec: float = 3.0
 
-    def _health_url(self) -> str:
-        parsed = urlparse(self.url)
-        return urlunparse(parsed._replace(path="/health", params="", query="", fragment=""))
-
     async def ping(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=self.health_timeout_sec) as client:
-                resp = await client.get(self._health_url())
-                return resp.status_code == 200
+            ready, reason = await asyncio.to_thread(
+                probe_mcp_endpoint_readiness,
+                self.url,
+                timeout=self.health_timeout_sec,
+            )
+            if not ready:
+                logger.debug("CodeBadger MCP ping failed: %s", reason)
+            return bool(ready)
         except Exception as exc:
             logger.debug("CodeBadger MCP ping failed: %s", exc)
             return False
@@ -184,4 +184,3 @@ class CodeBadgerMCPClient:
         except Exception as exc:
             logger.warning("CodeBadger MCP run_cpgql_query failed: %s", exc)
             return {"success": False, "error": "exception", "message": str(exc)}
-

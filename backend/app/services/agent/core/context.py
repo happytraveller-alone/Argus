@@ -7,7 +7,7 @@ Enables tracking of requests across agents, tools, and services.
 
 import contextvars
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -118,7 +118,7 @@ class ExecutionContext:
     trace_path: List[str] = field(default_factory=list)
     iteration: int = 0
     depth: int = 0
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def child_context(
@@ -230,7 +230,7 @@ class ExecutionContext:
             trace_path=data.get("trace_path", []),
             iteration=data.get("iteration", 0),
             depth=data.get("depth", 0),
-            created_at=data.get("created_at", datetime.utcnow().isoformat()),
+            created_at=data.get("created_at", datetime.now(timezone.utc).isoformat()),
             metadata=data.get("metadata", {}),
         )
 

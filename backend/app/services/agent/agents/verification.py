@@ -40,6 +40,13 @@ logger = logging.getLogger(__name__)
 
 _PSEUDO_FUNCTION_NAMES = {"__attribute__", "__declspec"}
 
+# === 全局置信度阈值常量 ===
+# 统一所有地方的置信度判定逻辑，避免阈值不一致导致的误判
+CONFIDENCE_THRESHOLD_LIKELY = 0.7  # >= 0.7 判定为 likely
+CONFIDENCE_THRESHOLD_FALSE_POSITIVE = 0.3  # <= 0.3 判定为 false_positive
+CONFIDENCE_DEFAULT_ON_MISSING = None  # 缺失置信度时：None表示保留LLM原始verdict，不强制降级
+CONFIDENCE_DEFAULT_FALLBACK = 0.5  # 最后兜底：信息不足时使用0.5作为中立值
+
 VERIFICATION_SYSTEM_PROMPT = """你是 DeepAudit 的漏洞验证 Agent，一个自主的安全验证专家。
 
 ## 你的角色
@@ -69,17 +76,40 @@ VERIFICATION_SYSTEM_PROMPT = """你是 DeepAudit 的漏洞验证 Agent，一个�
 3. 在输出任何结论或 Final Answer 前，必须先完成至少一次工具调用，并包含代码证据。
 4. 首轮必须输出 Action，不允许首轮直接 Final Answer。
 5. 如果 `read_file` 证明目标文件不存在，该候选必须判定为 `false_positive`。
-6. 如果关键字段缺失且无法补齐证据，按保守策略输出 `false_positive` 或 `likely`，不得强行 `confirmed`。
+6. 关键字段缺失或证据不足时的决策规则:
+   a) 文件/代码存在且已验证代码逻辑有风险 → 输出`likely`，confidence >= 0.5
+   b) 关键信息缺失(如文件无读权限/函数定位失败)但代码理论上存在 → 输出`uncertain`，confidence 0.3-0.7
+   c) 文件/代码确实不存在或验证否定了风险 → 输出`false_positive`，confidence <= 0.3
+   d) **禁止矛盾判定**：不允许 (verdict=confirmed AND confidence<=0.3) 或类似常识违背的组合
+   e) **禁止省略confidence**: 任何finding都必须附带confidence数值，即使无法精确计算也要基于证据估计
 7. 输出语言必须为简体中文（title/description/suggestion/fix_description/verification_evidence/poc_plan）。
 8. 禁止 Markdown 样式的 `**Thought:**`，必须使用纯文本 `Thought:` / `Action:` / `Action Input:` / `Final Answer:`。
 9. 不允许“请选择/请确认后继续”等交互漂移语句。
 
-## 真实性与置信度
-- verdict: `confirmed` | `likely` | `false_positive`
-- confidence_level: `must` | `probably` | `unlikely`
-    - `confirmed` 通常对应 `must`
-    - `likely` 通常对应 `probably`
-    - `false_positive` 通常对应 `unlikely`
+## 真实性与置信度判定
+
+### Verdict定义（必填，每条finding必须有）
+- `confirmed`: 已通过多重验证确认，有强有力的证据支持，confidence >= 0.8
+- `likely`: 初步验证表明漏洞很可能存在，证据充分，confidence >= 0.7
+- `uncertain`: 信息不足，无法明确判定真假（如文件无读权限但存在），confidence 0.3-0.7
+- `false_positive`: 经验证为误报或不存在，confidence <= 0.3
+
+### Confidence数值（必填！0.0-1.0浮点数，每条finding必须有）
+指verdict的置信度，计算方式如下：
+
+**基础分值** (每条finding初始0.0):
+- 通过fuzzing/动态执行验证: +0.3 (验证方法最可靠)
+- 通过代码静态分析验证: +0.2
+- 通过多个独立工具验证: +0.2 (去重后)
+- 证据明确一致: +0.15
+- 代码逻辑可达(沿调用链追溯): +0.1
+
+**减分规则** (每条finding):
+- 关键信息缺失(如文件无读权限): -0.1
+- 证据有矛盾或模糊: -0.1 per issue
+- 环境限制导致验证不完整: -0.05
+
+示例: fuzzing验证通过(+0.3) + 代码可达(+0.1) + 证据明确(+0.15) = 0.55 → uncertain | fuzzing验证通过(+0.3) + 多工具验证(+0.2) + 可达(+0.1) + 证据明确(+0.15) = 0.75 → likely
 
 ## 逆向/函数级分析补充约束
 1. 优先基于目标函数本体分析；若证据不足，再扩展到子函数与调用链。
@@ -95,15 +125,55 @@ VERIFICATION_SYSTEM_PROMPT = """你是 DeepAudit 的漏洞验证 Agent，一个�
 3. 按单候选状态机推进：pending -> running -> verified/false_positive。
 4. 汇总证据，输出 Final Answer JSON。
 
-## Final Answer 要求
-每条 finding 至少包含：
-- file_path, line_start, line_end
-- authenticity/verdict
-- reachability
-- verification_details 或 verification_evidence
-- cwe_id
-- suggestion, fix_code
-- verification_method
+## Final Answer 要求（JSON格式）
+
+**重要：分层结构说明**：
+- Finding层级字段：`file_path`, `line_start`, `line_end`, `title`, `cwe_id`, `suggestion`等
+- **verification_result嵌套dict中（缺一不可）**：`verdict`, `confidence`, `reachability`, `verification_evidence`
+
+**Finding层级必需字段**:
+1. `file_path`: 完整文件路径
+2. `line_start`, `line_end`: 代码行号范围
+3. `title`: 漏洞标题
+4. `cwe_id`: CWE编号(如"CWE-89"、"CWE-1333"等)
+
+**verification_result嵌套dict中的必需字段（每条finding必须有，缺一不可）**:
+1. `verdict`: 真实性判定(confirmed|likely|uncertain|false_positive)，不可省略
+2. `confidence`: 置信度 [0.0-1.0浮点数] ← **必填！必须是数值而非文本**，计算见"真实性与置信度判定"
+3. `reachability`: 可达性判定(reachable|likely_reachable|unknown|unreachable)
+4. `verification_evidence`: 验证证据，必须包含：
+   - 使用的验证方法（fuzzing/static_analysis/symbols/dynamic等）
+   - 关键代码片段或执行输出
+   - 漏洞存在或不存在的理由
+
+**可选字段** (但强烈建议填写):
+- `suggestion`: 修复建议
+- `fix_code`: 修复代码片段
+- `poc_plan`: 非武器化PoC思路
+- `verification_method`: 验证方法详述
+- `code_snippet`: 相关代码片段
+
+**JSON示例** (正确格式):
+```json
+{
+  "findings": [
+    {
+      "file_path": "server/app.py",
+      "line_start": 36,
+      "line_end": 36,
+      "title": "search_posts函数正则表达式拒绝服务(ReDoS)漏洞",
+      "cwe_id": "CWE-1333",
+      "verification_result": {
+        "verdict": "confirmed",
+        "confidence": 0.92,
+        "reachability": "reachable",
+        "verification_evidence": "通过fuzzing动态执行验证：构造payload='(a+)+b'*31,执行时间从0.7s升至22.4s"
+      },
+      "suggestion": "使用regex库替代re.search，或对用户输入进行正则表达式复杂度检查"
+    }
+  ]
+}
+```
 
 PoC 约束：
 - 仅授权场景下输出非武器化步骤；不要输出针对真实系统的攻击性操作指令。"""
@@ -269,6 +339,14 @@ class VerificationAgent(BaseAgent):
         return any(pattern in normalized for pattern in patterns)
 
     def _normalize_verdict(self, finding: Dict[str, Any]) -> str:
+        """改进的真实性判定方法
+        
+        规则：
+        1. 如果有明确的verdict字段，直接返回（confirmed/likely/false_positive）
+        2. 如果is_verified=True，返回confirmed
+        3. 如果有有效的confidence值，按阈值判定
+        4. 如果confidence缺失，保留原始LLM的verdict而非强制降级
+        """
         verdict = finding.get("verdict") or finding.get("authenticity")
         if isinstance(verdict, str):
             verdict = verdict.strip().lower()
@@ -276,28 +354,57 @@ class VerificationAgent(BaseAgent):
             verdict = None
         if verdict in {"confirmed", "likely", "false_positive"}:
             return verdict
-        confidence = finding.get("confidence", 0.0)
-        try:
-            confidence = float(confidence)
-        except Exception:
-            confidence = 0.0
+        
+        # === 改进：缺失confidence时保留LLM原始verdict ===
+        confidence_raw = finding.get("confidence")
+        confidence = None
+        confidence_source = "missing"
+        
+        if confidence_raw is not None:
+            try:
+                confidence = float(confidence_raw)
+                confidence_source = "direct"
+            except Exception:
+                logger.warning(
+                    f"[Verification] confidence 类型转换失败: {confidence_raw} (type: {type(confidence_raw).__name__})"
+                )
+        
+        # 规则1: is_verified=True 优先级最高
         if finding.get("is_verified") is True:
             return "confirmed"
-        if confidence >= 0.8:
+        
+        # 规则2: 有有效的confidence值时按阈值判定
+        if confidence is not None:
+            if confidence >= CONFIDENCE_THRESHOLD_LIKELY:
+                return "likely"
+            if confidence <= CONFIDENCE_THRESHOLD_FALSE_POSITIVE:
+                return "false_positive"
+            # 0.3 < confidence < 0.7 的灰色地带
             return "likely"
-        if confidence <= 0.2:
-            return "false_positive"
+        
+        # 规则3: 缺失confidence且无明确verdict时的兜底策略
+        # 不再强制降级为false_positive，而是保守估计为likely
+        logger.debug(
+            f"[Verification] confidence缺失且无明确verdict，保留为likely: "
+            f"{finding.get('file_path')}:{finding.get('line_start')}"
+        )
         return "likely"
 
     def _normalize_reachability_value(self, value: Any, verdict: str) -> str:
+        """规范化可达性判定
+        
+        改进：添加对'uncertain'状态的支持
+        """
         if isinstance(value, str):
             normalized = value.strip().lower()
-            if normalized in {"reachable", "likely_reachable", "unreachable"}:
+            if normalized in {"reachable", "likely_reachable", "unreachable", "unknown"}:
                 return normalized
         if verdict == "confirmed":
             return "reachable"
         if verdict == "likely":
             return "likely_reachable"
+        if verdict == "uncertain":
+            return "unknown"
         return "unreachable"
 
     def _normalize_vulnerability_key(self, finding: Dict[str, Any]) -> str:
@@ -322,6 +429,7 @@ class VerificationAgent(BaseAgent):
             description=finding.get("description"),
             code_snippet=finding.get("code_snippet"),
             fallback_vulnerability_name=finding.get("title"),
+            localization_status=finding.get("localization_status"),
         )
 
     def _build_default_fix_code(self, finding: Dict[str, Any]) -> str:
@@ -463,54 +571,139 @@ class VerificationAgent(BaseAgent):
         file_lines: List[str],
         line_start: int,
     ) -> tuple[Optional[str], Optional[int], Optional[int]]:
+        """
+        增强的多语言函数定位正则推断
+        支持: Python, JavaScript/TypeScript, PHP, Ruby, Go, Java, C/C++, Bash/Shell
+        """
         if not file_lines:
             return None, None, None
         start_idx = max(0, min(len(file_lines) - 1, line_start - 1))
+        
+        # 增强的多语言模式
         patterns = [
-            ("python", re.compile(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
-            ("javascript", re.compile(r"^\s*(?:export\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
-            (
-                "c_like",
-                re.compile(
-                    r"^\s*[A-Za-z_][\w\s\*:&<>]*\s+[*&\s]*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*\{"
-                ),
-            ),
+            # Python: def, async def, @decorator 修饰
+            ("python", re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            
+            # JavaScript/TypeScript: function, async function, arrow, methods
+            ("javascript", re.compile(r"^\s*(?:export\s+)?(?:async\s+)?(?:function\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*[(:=]")),
+            ("javascript_method", re.compile(r"^\s*(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^)]*\)\s*[{:]")),
+            
+            # PHP: function, public/private/protected, static
+            ("php", re.compile(r"^\s*(?:public|private|protected|static)?\s*(?:function|async\s+function)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            ("php_class_method", re.compile(r"^\s*(?:public|private|protected)?\s*(?:static)?\s*(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            
+            # Ruby: def
+            ("ruby", re.compile(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_?!]*)")),
+            
+            # Go: func
+            ("go", re.compile(r"^\s*func\s*(?:\([^)]*\))?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")),
+            
+            # Java: modifiers + return type + method name
+            ("java", re.compile(r"^\s*(?:public|private|protected|static|final|synchronized)?\s*(?:[\w<>]+\s+)*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(?:throws\s+[\w,\s]+)?\s*\{")),
+            
+            # Bash/Shell: function
+            ("bash", re.compile(r"^\s*(?:function\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(\)\s*\{")),
+            
+            # C/C++ 改进版: 支持复杂签名（指针、const、引用、模板等）
+            ("c_cpp", re.compile(
+                r"^\s*(?:inline|virtual|static|const|volatile|explicit|constexpr)?\s*"
+                r"(?:[\w:&*<>, ]+\s+)*?"  # complex return types with templates  
+                r"(\w+)\s*\([^;]*\)\s*(?:const)?\s*(?:noexcept)?\s*\{?"
+            )),
         ]
+        
+        failure_reasons = []
+        
         for idx in range(start_idx, -1, -1):
             line = file_lines[idx]
             stripped = line.strip()
-            if not stripped or stripped.startswith(("//", "#")):
+            
+            # 跳过注释和空行
+            if not stripped:
                 continue
+            if stripped.startswith(("//", "#", "/*", "*", "--")):
+                continue
+            if stripped.startswith(("import ", "require ", "include ", "using ")):
+                continue
+                
+            # 尝试所有模式
             for lang, pattern in patterns:
-                match = pattern.match(line)
-                if not match:
+                try:
+                    match = pattern.match(line)
+                    if not match:
+                        continue
+                    
+                    name = match.group(1).strip()
+                    if not name or len(name) < 1 or name in _PSEUDO_FUNCTION_NAMES:
+                        continue
+                    
+                    start_line = idx + 1
+                    end_line = start_line
+                    
+                    # 根据语言类型确定函数体范围
+                    if lang == "python":
+                        # Python: 基于缩进
+                        indent = len(line) - len(line.lstrip())
+                        for cursor in range(idx + 1, min(len(file_lines), idx + 500)):
+                            probe = file_lines[cursor]
+                            probe_stripped = probe.strip()
+                            if not probe_stripped or probe_stripped.startswith("#"):
+                                continue
+                            probe_indent = len(probe) - len(probe.lstrip())
+                            if probe_indent <= indent and not probe_stripped.startswith(("@", "#")):
+                                break
+                            end_line = cursor + 1
+                    
+                    elif lang == "ruby":
+                        # Ruby: 查找 end 关键字
+                        for cursor in range(idx + 1, min(len(file_lines), idx + 500)):
+                            probe = file_lines[cursor].strip()
+                            if probe == "end" or probe.startswith("end "):
+                                end_line = cursor + 1
+                                break
+                            end_line = cursor + 1
+                    
+                    elif "{" in line:
+                        # C/C++/Java/Go/JavaScript/PHP/Bash: 基于括号平衡
+                        balance = line.count("{") - line.count("}")
+                        end_line = idx + 1
+                        for cursor in range(idx + 1, min(len(file_lines), idx + 500)):
+                            probe = file_lines[cursor]
+                            balance += probe.count("{") - probe.count("}")
+                            end_line = cursor + 1
+                            if balance <= 0:
+                                break
+                    else:
+                        # 多行函数声明（无开括号）
+                        looking_for_brace = True
+                        for cursor in range(idx + 1, min(len(file_lines), idx + 20)):
+                            probe = file_lines[cursor]
+                            if "{" in probe:
+                                balance = probe.count("{") - probe.count("}")
+                                end_line = cursor + 1
+                                for cursor2 in range(cursor + 1, min(len(file_lines), cursor + 500)):
+                                    probe2 = file_lines[cursor2]
+                                    balance += probe2.count("{") - probe2.count("}")
+                                    end_line = cursor2 + 1
+                                    if balance <= 0:
+                                        break
+                                looking_for_brace = False
+                                break
+                            end_line = cursor + 1
+                    
+                    logger.debug(
+                        f"[Verification] 函数定位成功 (regex): {name} @ {start_line}-{end_line} (语言={lang})"
+                    )
+                    return name, start_line, end_line
+                    
+                except Exception as e:
+                    logger.debug(f"[Verification] regex 模式 {lang} 匹配失败: {e}")
+                    failure_reasons.append(f"{lang}: {str(e)[:50]}")
                     continue
-                name = match.group(1).strip()
-                if not name:
-                    continue
-                start_line = idx + 1
-                end_line = start_line
-                if lang == "python":
-                    indent = len(line) - len(line.lstrip())
-                    for cursor in range(idx + 1, len(file_lines)):
-                        probe = file_lines[cursor]
-                        probe_stripped = probe.strip()
-                        if not probe_stripped:
-                            continue
-                        probe_indent = len(probe) - len(probe.lstrip())
-                        if probe_indent <= indent and not probe_stripped.startswith(("@", "#")):
-                            break
-                        end_line = cursor + 1
-                elif "{" in line:
-                    balance = line.count("{") - line.count("}")
-                    end_line = idx + 1
-                    for cursor in range(idx + 1, len(file_lines)):
-                        probe = file_lines[cursor]
-                        balance += probe.count("{") - probe.count("}")
-                        end_line = cursor + 1
-                        if balance <= 0:
-                            break
-                return name, start_line, end_line
+        
+        logger.debug(
+            f"[Verification] regex 函数定位全部失败 (line_start={line_start}, 失败原因={failure_reasons})"
+        )
         return None, None, None
 
     @staticmethod
@@ -664,49 +857,105 @@ class VerificationAgent(BaseAgent):
         findings_to_verify: List[Dict[str, Any]],
         project_root: Optional[str],
     ) -> None:
+        """
+        改进的 MCP 函数定位辅助方法：增强容错与诊断日志
+        当 MCP 失败时，不再静默跳过，而是记录原因并标记状态
+        """
         if not findings_to_verify:
             return
 
-        for finding in findings_to_verify:
+        mcp_success_count = 0
+        mcp_fail_count = 0
+        
+        for idx, finding in enumerate(findings_to_verify):
             if not isinstance(finding, dict):
+                logger.debug(f"[Verification] MCP enrichment跳过非字典项 #{idx}")
                 continue
+            
             existing_name = str(finding.get("function_name") or "").strip()
             if existing_name and existing_name.lower() not in {"unknown", "未知函数"}:
+                logger.debug(f"[Verification] MCP enrichment跳过已有函数名: {existing_name}")
                 continue
 
             file_path, line_start, _line_end = self._normalize_file_location(finding)
             resolved_file_path, _full = self._resolve_file_paths(file_path, project_root)
             request_path = resolved_file_path or file_path
+            
             if not request_path or line_start <= 0:
+                logger.debug(f"[Verification] MCP enrichment跳过无效路径: {request_path}:{line_start}")
                 continue
 
             locator_input = {
                 "file_path": request_path,
                 "line_start": int(line_start),
             }
-            locator_output = await self.execute_tool(
-                "locate_enclosing_function",
-                locator_input,
-            )
-            payload = self._extract_locator_payload(locator_output)
-            if not payload:
-                continue
-            located = self._extract_function_from_locator_payload(payload, int(line_start))
-            if not located:
-                continue
+            
+            try:
+                logger.debug(f"[Verification] 调用 MCP locate_enclosing_function: {request_path}:{line_start}")
+                locator_output = await self.execute_tool(
+                    "locate_enclosing_function",
+                    locator_input,
+                )
+                
+                payload = self._extract_locator_payload(locator_output)
+                if not payload:
+                    mcp_fail_count += 1
+                    logger.warning(
+                        f"[Verification] MCP返回空payload: {request_path}:{line_start} | "
+                        f"raw_output={str(locator_output)[:200]}"
+                    )
+                    # 标记MCP尝试但失败
+                    finding["_mcp_attempt"] = "failed_empty_payload"
+                    continue
+                
+                located = self._extract_function_from_locator_payload(payload, int(line_start))
+                if not located:
+                    mcp_fail_count += 1
+                    logger.warning(
+                        f"[Verification] MCP payload解析失败: {request_path}:{line_start} | "
+                        f"payload_keys={list(payload.keys())}"
+                    )
+                    finding["_mcp_attempt"] = "failed_payload_parsing"
+                    continue
 
-            located_name = str(located.get("function") or "").strip()
-            if not located_name:
+                located_name = str(located.get("function") or "").strip()
+                if not located_name:
+                    mcp_fail_count += 1
+                    logger.warning(
+                        f"[Verification] MCP返回空函数名: {request_path}:{line_start}"
+                    )
+                    finding["_mcp_attempt"] = "failed_empty_function_name"
+                    continue
+                
+                # MCP 成功
+                mcp_success_count += 1
+                finding["function_name"] = located_name
+                finding["function_start_line"] = self._safe_int(located.get("start_line"))
+                finding["function_end_line"] = self._safe_int(located.get("end_line"))
+                finding["function_resolution_method"] = "mcp_symbol_index"
+                finding["function_resolution_engine"] = "mcp_symbol_index"
+                if located.get("language"):
+                    finding["function_language"] = located.get("language")
+                if located.get("diagnostics") is not None:
+                    finding["function_resolution_diagnostics"] = located.get("diagnostics")
+                
+                logger.info(
+                    f"[Verification] MCP定位成功: '{located_name}' @ {request_path}:{line_start}"
+                )
+                
+            except Exception as e:
+                mcp_fail_count += 1
+                logger.error(
+                    f"[Verification] MCP调用异常: {request_path}:{line_start} | 错误: {e}",
+                    exc_info=True
+                )
+                finding["_mcp_attempt"] = f"exception: {str(e)[:100]}"
                 continue
-            finding["function_name"] = located_name
-            finding["function_start_line"] = self._safe_int(located.get("start_line"))
-            finding["function_end_line"] = self._safe_int(located.get("end_line"))
-            finding["function_resolution_method"] = "mcp_symbol_index"
-            finding["function_resolution_engine"] = "mcp_symbol_index"
-            if located.get("language"):
-                finding["function_language"] = located.get("language")
-            if located.get("diagnostics") is not None:
-                finding["function_resolution_diagnostics"] = located.get("diagnostics")
+        
+        logger.info(
+            f"[Verification] MCP enrichment 完成: 成功={mcp_success_count}, 失败={mcp_fail_count}, "
+            f"总数={len(findings_to_verify)}"
+        )
 
     def _resolve_function_metadata(
         self,
@@ -716,9 +965,16 @@ class VerificationAgent(BaseAgent):
         file_cache: Dict[str, List[str]],
         locator: Optional[EnclosingFunctionLocator] = None,
     ) -> Dict[str, Any]:
+        """
+        改进的函数定位方法：4层降级策略 + 详细诊断日志
+        层级1: 显式函数名 → 层级2: TreeSitter → 层级3: Regex → 层级4: 诊断失败
+        """
         file_path, line_start, line_end = self._normalize_file_location(finding)
         resolved_file_path, full_file_path = self._resolve_file_paths(file_path, project_root)
+        
+        diagnostics_trace = []
 
+        # === 层级 1: 显式函数名提取 ===
         reachability_target = finding.get("reachability_target")
         if not isinstance(reachability_target, dict):
             verification_payload = finding.get("verification_result")
@@ -726,6 +982,7 @@ class VerificationAgent(BaseAgent):
                 maybe_target = verification_payload.get("reachability_target")
                 if isinstance(maybe_target, dict):
                     reachability_target = maybe_target
+        
         explicit_function = None
         for candidate in (
             finding.get("function_name"),
@@ -738,6 +995,8 @@ class VerificationAgent(BaseAgent):
             text = candidate.strip()
             if text and text.lower() not in {"unknown", "未知函数", "n/a", "-", "__attribute__", "__declspec"}:
                 explicit_function = text
+                diagnostics_trace.append(f"层级1-命中: 显式函数名 '{explicit_function}'")
+                logger.info(f"[Verification] 函数定位成功 (显式): {explicit_function} @ {file_path}:{line_start}")
                 break
 
         start_from_target: Optional[int] = None
@@ -753,6 +1012,7 @@ class VerificationAgent(BaseAgent):
                 end_from_target = int(raw_end) if raw_end is not None else None
             except Exception:
                 end_from_target = None
+        
         explicit_start = (
             self._safe_int(finding.get("function_start_line"))
             or self._safe_int(finding.get("function_start"))
@@ -781,6 +1041,7 @@ class VerificationAgent(BaseAgent):
             )
             or "explicit"
         )
+        
         if explicit_function:
             return {
                 "file_path": resolved_file_path or file_path,
@@ -799,10 +1060,14 @@ class VerificationAgent(BaseAgent):
                     if isinstance(reachability_target, dict)
                     else None
                 ),
+                "localization_status": "explicit",
                 "line_start": line_start,
                 "line_end": line_end,
             }
+        else:
+            diagnostics_trace.append("层级1-无: 未找到有效的显式函数名")
 
+        # === 层级 2: TreeSitter AST 定位 ===
         lines: List[str] = []
         if full_file_path:
             lines = file_cache.get(full_file_path) or []
@@ -812,55 +1077,121 @@ class VerificationAgent(BaseAgent):
                         encoding="utf-8",
                         errors="replace",
                     ).splitlines()
-                except Exception:
+                except Exception as e:
+                    diagnostics_trace.append(f"层级2-错误: 读取文件失败 ({str(e)[:50]})")
+                    logger.warning(f"[Verification] 读文件失败: {full_file_path}: {e}")
                     lines = []
                 file_cache[full_file_path] = lines
 
         tree_sitter_language: Optional[str] = None
         tree_sitter_diagnostics: Any = None
-        if project_root and resolved_file_path and full_file_path and locator:
-            located = locator.locate(
-                full_file_path=full_file_path,
-                line_start=line_start,
-                relative_file_path=resolved_file_path,
-                file_lines=lines,
-            )
-            tree_sitter_language = located.get("language")
-            tree_sitter_diagnostics = located.get("diagnostics")
-            function_name = located.get("function")
-            if isinstance(function_name, str) and function_name.strip():
-                return {
-                    "file_path": resolved_file_path,
-                    "function": function_name.strip(),
-                    "start_line": located.get("start_line"),
-                    "end_line": located.get("end_line"),
-                    "resolution_method": located.get("resolution_method") or "python_tree_sitter",
-                    "resolution_engine": located.get("resolution_engine") or "python_tree_sitter",
-                    "language": located.get("language"),
-                    "diagnostics": located.get("diagnostics"),
-                    "line_start": line_start,
-                    "line_end": line_end,
-                }
+        
+        if locator and project_root and resolved_file_path and full_file_path:
+            try:
+                logger.debug(f"[Verification] 尝试 TreeSitter 定位: {full_file_path}:{line_start}")
+                located = locator.locate(
+                    full_file_path=full_file_path,
+                    line_start=line_start,
+                    relative_file_path=resolved_file_path,
+                    file_lines=lines,
+                )
+                tree_sitter_language = located.get("language")
+                tree_sitter_diagnostics = located.get("diagnostics")
+                function_name = located.get("function")
+                
+                if isinstance(function_name, str) and function_name.strip():
+                    diagnostics_trace.append(f"层级2-命中: TreeSitter 定位 '{function_name}'")
+                    logger.info(f"[Verification] 函数定位成功 (TreeSitter): {function_name} @ {file_path}:{line_start}")
+                    return {
+                        "file_path": resolved_file_path,
+                        "function": function_name.strip(),
+                        "start_line": located.get("start_line"),
+                        "end_line": located.get("end_line"),
+                        "resolution_method": located.get("resolution_method") or "python_tree_sitter",
+                        "resolution_engine": located.get("resolution_engine") or "python_tree_sitter",
+                        "language": located.get("language"),
+                        "diagnostics": located.get("diagnostics"),
+                        "localization_status": "tree_sitter",
+                        "line_start": line_start,
+                        "line_end": line_end,
+                    }
+                else:
+                    diagnostics_trace.append("层级2-无: TreeSitter 未找到函数")
+                    logger.debug(f"[Verification] TreeSitter 返回空函数: {file_path}:{line_start}")
+            except Exception as e:
+                diagnostics_trace.append(f"层级2-错误: TreeSitter 异常 ({str(e)[:50]})")
+                logger.debug(f"[Verification] TreeSitter 异常: {e}")
+        else:
+            reason = []
+            if not locator:
+                reason.append("无locator")
+            if not project_root:
+                reason.append("无project_root")
+            if not resolved_file_path:
+                reason.append("无resolved_file_path")
+            if not full_file_path:
+                reason.append("无full_file_path")
+            diagnostics_trace.append(f"层级2-跳过: {', '.join(reason)}")
 
+        # === 层级 3: Regex 推断 ===
+        regex_name: Optional[str] = None
+        regex_start: Optional[int] = None
+        regex_end: Optional[int] = None
+        
         if lines:
-            regex_name, regex_start, regex_end = self._infer_function_by_regex(
-                lines,
-                line_start,
-            )
-            if regex_name:
-                return {
-                    "file_path": resolved_file_path or file_path,
-                    "function": regex_name,
-                    "start_line": regex_start,
-                    "end_line": regex_end,
-                    "resolution_method": "regex_fallback",
-                    "resolution_engine": "regex_fallback",
-                    "language": tree_sitter_language,
-                    "diagnostics": tree_sitter_diagnostics,
-                    "line_start": line_start,
-                    "line_end": line_end,
-                }
+            try:
+                logger.debug(f"[Verification] 尝试 Regex 定位: {file_path}:{line_start}")
+                regex_name, regex_start, regex_end = self._infer_function_by_regex(lines, line_start)
+                
+                if regex_name:
+                    diagnostics_trace.append(f"层级3-命中: Regex 推断 '{regex_name}'")
+                    logger.info(f"[Verification] 函数定位成功 (Regex): {regex_name} @ {file_path}:{line_start}")
+                    return {
+                        "file_path": resolved_file_path or file_path,
+                        "function": regex_name,
+                        "start_line": regex_start,
+                        "end_line": regex_end,
+                        "resolution_method": "regex_fallback",
+                        "resolution_engine": "regex_fallback",
+                        "language": tree_sitter_language,
+                        "diagnostics": tree_sitter_diagnostics,
+                        "localization_status": "regex",
+                        "line_start": line_start,
+                        "line_end": line_end,
+                    }
+                else:
+                    diagnostics_trace.append("层级3-无: Regex 未找到函数")
+                    logger.debug(f"[Verification] Regex 未能定位函数: {file_path}:{line_start}")
+            except Exception as e:
+                diagnostics_trace.append(f"层级3-错误: Regex 异常 ({str(e)[:50]})")
+                logger.warning(f"[Verification] Regex 定位异常: {e}")
+        else:
+            diagnostics_trace.append("层级3-跳过: 无文件行内容")
 
+        # === 层级 4: 全部失败 - 返回诊断信息 ===
+        logger.warning(
+            f"[Verification] 所有函数定位方法失败: {file_path}:{line_start} | "
+            f"诊断链: {' → '.join(diagnostics_trace)}"
+        )
+        
+        # === 改进的文件可读性判定 ===
+        # 区分三种情况：文件存在但为空、文件存在且可读、文件不存在
+        file_exists = False
+        if full_file_path:
+            try:
+                file_exists = Path(full_file_path).exists()
+            except Exception as e:
+                logger.debug(f"[Verification] 检查文件存在性失败: {e}")
+        
+        file_readable = bool(lines) and file_exists
+        if not file_readable:
+            if file_exists and not lines:
+                read_error_reason = "file_is_empty"
+            elif not file_exists:
+                read_error_reason = "file_not_exists"
+            else:
+                read_error_reason = "read_failed_unknown_reason"
+        
         return {
             "file_path": resolved_file_path or file_path,
             "function": None,
@@ -870,6 +1201,11 @@ class VerificationAgent(BaseAgent):
             "resolution_engine": "missing_enclosing_function",
             "language": tree_sitter_language,
             "diagnostics": tree_sitter_diagnostics,
+            "localization_status": "failed",
+            "localization_failure_trace": diagnostics_trace,
+            "file_readable": file_readable,
+            "file_exists": file_exists,
+            "read_error_reason": read_error_reason,
             "line_start": line_start,
             "line_end": line_end,
         }
@@ -946,7 +1282,10 @@ class VerificationAgent(BaseAgent):
                 or str(base.get("file_path") or "").strip()
             )
             function_name = function_meta.get("function")
+            localization_status = function_meta.get("localization_status", "unknown")
+            file_readable = function_meta.get("file_readable", False)
 
+            # === 改进的验证逻辑：解耦函数定位与验证判定 ===
             verdict = self._normalize_verdict(merged)
             reachability = self._normalize_reachability_value(merged.get("reachability"), verdict)
             evidence = (
@@ -955,9 +1294,49 @@ class VerificationAgent(BaseAgent):
                 or merged.get("evidence")
                 or "基于代码上下文与工具输出完成验证。"
             )
+            
+            # === 新规则：不再因缺少函数名就自动标记为false_positive ===
+            # 只有在以下情况才标记为false_positive：
+            # 1. 文件不可读（真正的无法验证）
+            # 2. OR LLM明确判定为false_positive
+            
             if not function_name:
-                verdict = "false_positive"
-                reachability = "unreachable"
+                # === 改进的规则：区分文件状态，避免误判 ===
+                if not file_readable:
+                    # 情况1: 文件确实不存在 → false_positive（真实文件丢失）
+                    file_exists = function_meta.get("file_exists")
+                    if file_exists is False:
+                        verdict = "false_positive"
+                        reachability = "unreachable"
+                        logger.warning(
+                            f"[Verification] 标记为 false_positive (原因: 文件不存在): {normalized_file_path}:{line_start}"
+                        )
+                    else:
+                        # 情况2: 文件存在但为空或读不了 → uncertain（信息不足）
+                        verdict = "uncertain"
+                        reachability = "unknown"
+                        read_reason = function_meta.get("read_error_reason")
+                        logger.warning(
+                            f"[Verification] 标记为 uncertain (原因: 文件不可读, read_reason={read_reason}): "
+                            f"{normalized_file_path}:{line_start}"
+                        )
+                elif verdict == "false_positive":
+                    # LLM已经判定为false_positive，保持不变
+                    logger.debug(
+                        f"[Verification] LLM判定false_positive，虽未定位函数: {normalized_file_path}:{line_start}"
+                    )
+                else:
+                    # 文件可读但未能定位函数 → 保留LLM判定，添加локalization标记
+                    logger.info(
+                        f"[Verification] 未定位函数但保留 LLM 判定 ({verdict}), "
+                        f"localization_status={localization_status}, file_readable={file_readable}: "
+                        f"{normalized_file_path}:{line_start}"
+                    )
+            else:
+                logger.debug(
+                    f"[Verification] 成功定位函数 '{function_name}' "
+                    f"(方法={localization_status}): {normalized_file_path}:{line_start}"
+                )
 
             suggestion = (
                 merged.get("suggestion")
@@ -1029,6 +1408,14 @@ class VerificationAgent(BaseAgent):
                 if isinstance(merged.get("verification_result"), dict)
                 else {}
             )
+            
+            # === 诊断追踪：记录置信度与文件状态 ===
+            confidence_for_tracking = merged.get("confidence")
+            if confidence_for_tracking is None:
+                confidence_source_for_tracking = "missing"
+            else:
+                confidence_source_for_tracking = "direct"
+            
             verification_result.update(
                 {
                     "authenticity": verdict,
@@ -1050,16 +1437,32 @@ class VerificationAgent(BaseAgent):
                         "diagnostics": function_meta.get("diagnostics"),
                     },
                     "function_trigger_flow": flow,
+                    # === 新增诊断追踪字段 ===
+                    "confidence_source": confidence_source_for_tracking,
+                    "confidence_value": confidence_for_tracking,
+                    "file_status": {
+                        "file_exists": function_meta.get("file_exists"),
+                        "file_readable": file_readable,
+                        "read_error_reason": function_meta.get("read_error_reason"),
+                    },
                 }
             )
             if not function_name:
+                # 添加定位失败的诊断信息
                 verification_result["validation_reason"] = "missing_enclosing_function"
+                verification_result["localization_status"] = localization_status
+                verification_result["localization_failure_trace"] = (
+                    function_meta.get("localization_failure_trace") or []
+                )
 
             structured_title = self._build_structured_title(
                 {
                     **merged,
                     "file_path": resolved_file_path or normalized_file_path,
-                    "function_name": function_name or "未知函数",
+                    # 改进：不再无条件使用"未知函数"，而是基于定位状态
+                    "function_name": function_name or (
+                        f"[{localization_status}]" if localization_status != "unknown" else "未知函数"
+                    ),
                 }
             )
 
@@ -1085,6 +1488,9 @@ class VerificationAgent(BaseAgent):
                     "suggestion": str(suggestion),
                     "fix_code": str(fix_code),
                     "poc": poc_value,
+                    # === 新字段：函数定位状态透明度 ===
+                    "localization_status": localization_status,
+                    "file_readable": file_readable,
                 }
             )
 
@@ -1094,6 +1500,7 @@ class VerificationAgent(BaseAgent):
         summary.setdefault("total", len(repaired_findings))
         summary.setdefault("confirmed", len([f for f in repaired_findings if f.get("verdict") == "confirmed"]))
         summary.setdefault("likely", len([f for f in repaired_findings if f.get("verdict") == "likely"]))
+        summary.setdefault("uncertain", len([f for f in repaired_findings if f.get("verdict") == "uncertain"]))  # 新增
         summary.setdefault("false_positive", len([f for f in repaired_findings if f.get("verdict") == "false_positive"]))
 
         return {
@@ -1454,6 +1861,7 @@ class VerificationAgent(BaseAgent):
             line_start=line_start,
             line_end=line_end,
             verification_evidence=description_text,
+            localization_status=finding.get("localization_status"),
         )
         await self.emit_event(
             "finding_new" if status == "new" else "finding_update",
@@ -1480,27 +1888,20 @@ class VerificationAgent(BaseAgent):
     
     async def run(self, input_data: Dict[str, Any]) -> AgentResult:
         """
-        执行漏洞验证（逐漏洞 TODO 状态机）。
+        执行漏洞验证 - LLM 全程参与！
         """
         import time
         start_time = time.time()
 
-        # 每次 run 都重置会话语义状态，避免重试间状态粘连。
-        self._conversation_history = []
-        self._steps = []
-
         previous_results = input_data.get("previous_results", {})
         config = input_data.get("config", {})
-        verification_level = str(
-            config.get("verification_level", "analysis_with_poc_plan")
-        ).strip().lower()
-        max_iterations_per_item = max(1, int(config.get("verification_max_iterations_per_item", 6)))
-        max_attempts_per_item = max(1, int(config.get("verification_max_attempts_per_item", 2)))
+        task = input_data.get("task", "")
+        task_context = input_data.get("task_context", "")
         project_root = input_data.get("project_root")
         if not isinstance(project_root, str) or not project_root.strip():
             project_root = None
+        max_attempts_per_item = max(1, int(config.get("verification_max_attempts_per_item", 2)))
 
-        # 🔥 处理交接信息
         handoff = input_data.get("handoff")
         if handoff:
             from .base import TaskHandoff
@@ -1508,111 +1909,75 @@ class VerificationAgent(BaseAgent):
                 handoff = TaskHandoff.from_dict(handoff)
             self.receive_handoff(handoff)
 
-        def _coerce_bootstrap_confidence_numeric(value: Any) -> float:
-            if isinstance(value, (int, float)):
-                return max(0.0, min(float(value), 1.0))
-            if isinstance(value, str):
-                text = value.strip().upper()
-                if text == "HIGH":
-                    return 0.9
-                if text == "MEDIUM":
-                    return 0.7
-                if text == "LOW":
-                    return 0.4
-                try:
-                    return max(0.0, min(float(text), 1.0))
-                except Exception:
-                    return 0.5
-            return 0.5
+        findings_to_verify = []
 
-        def _normalize_seed_severity(value: Any) -> str:
-            text = str(value or "").strip().lower()
-            if text in {"critical", "high", "medium", "low", "info"}:
-                return text
-            if text == "error":
-                return "high"
-            if text == "warning":
-                return "medium"
-            return "medium"
+        if self._incoming_handoff and self._incoming_handoff.key_findings:
+            findings_to_verify = self._incoming_handoff.key_findings.copy()
+            logger.info(f"[Verification] 从交接信息获取 {len(findings_to_verify)} 个发现")
+        else:
+            if isinstance(previous_results, dict) and "findings" in previous_results:
+                direct_findings = previous_results.get("findings", [])
+                if isinstance(direct_findings, list):
+                    for finding in direct_findings:
+                        if isinstance(finding, dict):
+                            severity = str(finding.get("severity", "")).lower()
+                            needs_verify = finding.get("needs_verification", True)
+                            if needs_verify or severity in ["critical", "high"]:
+                                findings_to_verify.append(finding)
+                    logger.info(f"[Verification] 从 previous_results.findings 获取 {len(findings_to_verify)} 个发现")
 
-        def _extract_findings_from_agent_result(data: Any) -> List[Dict[str, Any]]:
-            if not isinstance(data, dict):
-                return []
-            direct = data.get("findings")
-            if isinstance(direct, list):
-                return [item for item in direct if isinstance(item, dict)]
-            nested = data.get("data")
-            if isinstance(nested, dict):
-                nested_findings = nested.get("findings")
-                if isinstance(nested_findings, list):
-                    return [item for item in nested_findings if isinstance(item, dict)]
-            return []
+            if not findings_to_verify:
+                bootstrap_findings = previous_results.get("bootstrap_findings", []) if isinstance(previous_results, dict) else []
+                if isinstance(bootstrap_findings, list):
+                    for finding in bootstrap_findings:
+                        if isinstance(finding, dict):
+                            findings_to_verify.append(finding)
 
-        def _iter_candidate_findings_sources() -> List[Dict[str, Any]]:
-            candidates: List[Dict[str, Any]] = []
-            # 1) handoff.context_data.findings / all_findings / bootstrap_findings
-            if self._incoming_handoff and isinstance(self._incoming_handoff.context_data, dict):
-                for key in ("findings", "all_findings", "bootstrap_findings"):
-                    items = self._incoming_handoff.context_data.get(key)
-                    if isinstance(items, list):
-                        for item in items:
-                            if isinstance(item, dict):
-                                candidates.append(item)
-            # 2) previous_results.findings / analysis.findings / verification.findings
+            if not findings_to_verify:
+                for phase_name, result in previous_results.items():
+                    if phase_name == "findings":
+                        continue
+                    if isinstance(result, dict):
+                        data = result.get("data", {})
+                    else:
+                        data = result.data if hasattr(result, "data") else {}
+
+                    if isinstance(data, dict):
+                        phase_findings = data.get("findings", [])
+                        for finding in phase_findings:
+                            if isinstance(finding, dict):
+                                severity = str(finding.get("severity", "")).lower()
+                                needs_verify = finding.get("needs_verification", True)
+                                if needs_verify or severity in ["critical", "high"]:
+                                    findings_to_verify.append(finding)
+
+                if findings_to_verify:
+                    logger.info(f"[Verification] 从传统格式获取 {len(findings_to_verify)} 个发现")
+
             if isinstance(previous_results, dict):
-                direct = previous_results.get("findings")
-                if isinstance(direct, list):
-                    for item in direct:
-                        if isinstance(item, dict):
-                            candidates.append(item)
-                for key in ("analysis", "verification"):
-                    for item in _extract_findings_from_agent_result(previous_results.get(key)):
-                        candidates.append(item)
-                items = previous_results.get("bootstrap_findings")
-                if isinstance(items, list):
-                    for item in items:
-                        if isinstance(item, dict):
-                            candidates.append(item)
-            # 3) input_data.config.bootstrap_findings（兼容直接调用 VerificationAgent 的情况）
-            if isinstance(config, dict):
-                items = config.get("bootstrap_findings")
-                if isinstance(items, list):
-                    for item in items:
-                        if isinstance(item, dict):
-                            candidates.append(item)
-            return candidates
+                analysis_result = previous_results.get("analysis")
+                if isinstance(analysis_result, dict):
+                    analysis_data = analysis_result.get("data", {})
+                    if isinstance(analysis_data, dict):
+                        analysis_findings = analysis_data.get("findings", [])
+                        if isinstance(analysis_findings, list):
+                            for finding in analysis_findings:
+                                if isinstance(finding, dict):
+                                    findings_to_verify.append(finding)
 
-        raw_bootstrap_candidates = _iter_candidate_findings_sources()
-        findings_to_verify: List[Dict[str, Any]] = []
-        for item in raw_bootstrap_candidates:
-            if not isinstance(item, dict):
-                continue
-            mapped = dict(item)
-            mapped["severity"] = _normalize_seed_severity(item.get("severity"))
-            mapped["confidence"] = _coerce_bootstrap_confidence_numeric(item.get("confidence"))
-            findings_to_verify.append(mapped)
+        if not findings_to_verify:
+            if task and ("发现" in task or "漏洞" in task or "findings" in task.lower()):
+                logger.warning(f"[Verification] 无法从结构化数据获取发现，任务描述: {task[:200]}")
+                await self.emit_event("warning", "无法从结构化数据获取发现列表，将基于任务描述进行验证")
 
-        # 去重
         findings_to_verify = self._deduplicate(findings_to_verify)
 
-        # 优先验证高风险项（不改变“仅验证候选列表本身，不新增清单外发现”的强约束）
-        severity_weight = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
-        findings_to_verify.sort(
-            key=lambda f: (
-                -severity_weight.get(str(f.get("severity") or "medium").strip().lower(), 2),
-                -float(_coerce_bootstrap_confidence_numeric(f.get("confidence"))),
-            )
-        )
-
-        # 🔥 FIX: 优先处理有明确文件路径的发现，将没有文件路径的发现放到后面
-        # 这确保 Analysis 的具体发现优先于 Recon 的泛化描述
         def has_valid_file_path(finding: Dict) -> bool:
             file_path = finding.get("file_path", "")
             return bool(file_path and file_path.strip() and file_path.lower() not in ["unknown", "n/a", ""])
 
-        findings_with_path = [f for f in findings_to_verify if has_valid_file_path(f)]
-        findings_without_path = [f for f in findings_to_verify if not has_valid_file_path(f)]
-
+        findings_with_path = [item for item in findings_to_verify if has_valid_file_path(item)]
+        findings_without_path = [item for item in findings_to_verify if not has_valid_file_path(item)]
         findings_to_verify = findings_with_path + findings_without_path
 
         if findings_with_path:
@@ -1620,178 +1985,30 @@ class VerificationAgent(BaseAgent):
         if findings_without_path:
             logger.info(f"[Verification] 还有 {len(findings_without_path)} 个发现需要自行定位文件")
 
-        finding_table = VerificationFindingTable(
-            max_rounds=max(1, int(config.get("finding_table_max_rounds", 10))),
-            max_items=max(1, int(config.get("finding_table_max_items", 200))),
-        )
-        candidate_by_fingerprint: Dict[str, Dict[str, Any]] = {}
-        for idx, candidate in enumerate(findings_to_verify):
-            item = finding_table.add_candidate(
-                candidate,
-                source="seed",
-                index=idx,
-                discovered_by="seed_candidates",
-            )
-            if item is not None:
-                candidate_by_fingerprint[item.fingerprint] = dict(candidate)
-
-        finding_table_summary = await self._emit_finding_table_update(
-            finding_table,
-            "初始化缺陷表：开始上下文收敛",
-            round_index=0,
-            queue_size=len(finding_table.pending_context_items()),
-            newly_discovered_count=0,
-        )
-
-        context_round = 0
-        while (
-            not self.is_cancelled
-            and finding_table.pending_context_items()
-            and context_round < finding_table.max_rounds
-        ):
-            context_round += 1
-            pending_items = finding_table.pending_context_items()
-            newly_discovered_count = 0
-
-            for pending in pending_items:
-                source_candidate = dict(candidate_by_fingerprint.get(pending.fingerprint) or {})
-                finding_table.mark_context(
-                    pending.fingerprint,
-                    status="collecting",
-                    context_round=context_round,
-                    context_bundle=source_candidate,
-                )
-
-                file_path, line_start, line_end = self._normalize_file_location(source_candidate)
-                resolved_file_path, _full_path = self._resolve_file_paths(file_path, project_root)
-                effective_file_path = resolved_file_path or file_path
-                if not effective_file_path or line_start <= 0:
-                    finding_table.mark_context(
-                        pending.fingerprint,
-                        status="failed",
-                        context_round=context_round,
-                        blocked_reason="missing_file_or_line",
-                        context_bundle={
-                            **source_candidate,
-                            "file_path": effective_file_path or file_path,
-                            "line_start": max(1, int(line_start or 1)),
-                            "line_end": max(1, int(line_end or line_start or 1)),
-                        },
-                    )
-                    continue
-
-                function_name = (
-                    str(source_candidate.get("function_name") or "").strip()
-                    or self._extract_function_name_from_title(source_candidate.get("title"))
-                )
-                context_bundle = {
-                    **source_candidate,
-                    "file_path": effective_file_path,
-                    "line_start": max(1, int(line_start)),
-                    "line_end": max(int(line_end or line_start), int(line_start)),
-                    "function_name": function_name or None,
-                }
-                finding_table.mark_context(
-                    pending.fingerprint,
-                    status="ready",
-                    context_round=context_round,
-                    context_bundle=context_bundle,
-                )
-                candidate_by_fingerprint[pending.fingerprint] = context_bundle
-
-                discovered = source_candidate.get("discovered_findings")
-                if isinstance(discovered, list):
-                    for idx, discovered_item in enumerate(discovered):
-                        if not isinstance(discovered_item, dict):
-                            continue
-                        mapped_discovered = dict(discovered_item)
-                        mapped_discovered.setdefault("severity", "medium")
-                        mapped_discovered.setdefault("confidence", 0.5)
-                        added = finding_table.add_candidate(
-                            mapped_discovered,
-                            source="context_discovery",
-                            index=idx,
-                            parent_fingerprint=pending.fingerprint,
-                            discovered_by="context_collection",
-                        )
-                        if added is None:
-                            continue
-                        if added.fingerprint not in candidate_by_fingerprint:
-                            candidate_by_fingerprint[added.fingerprint] = mapped_discovered
-                            newly_discovered_count += 1
-
-            finding_table_summary = await self._emit_finding_table_update(
-                finding_table,
-                f"缺陷表上下文收敛轮次 {context_round} 完成",
-                round_index=context_round,
-                queue_size=len(finding_table.pending_context_items()),
-                newly_discovered_count=newly_discovered_count,
-            )
-
-        findings_to_verify = []
-        for item in finding_table.iter_items():
-            candidate = dict(candidate_by_fingerprint.get(item.fingerprint) or {})
-            if not isinstance(candidate, dict):
-                candidate = {}
-            candidate.setdefault("title", item.title)
-            candidate.setdefault("file_path", item.file_path)
-            candidate.setdefault("line_start", item.line_start)
-            candidate.setdefault("line_end", item.line_end)
-            candidate.setdefault("function_name", item.function_name)
-            candidate.setdefault("vulnerability_type", item.vulnerability_type)
-            candidate.setdefault("severity", item.severity)
-            if isinstance(item.context_bundle, dict) and item.context_bundle:
-                candidate.update(item.context_bundle)
-            candidate["_finding_table_fingerprint"] = item.fingerprint
-            candidate["_finding_table_context_status"] = item.context_status
-            if item.blocked_reason:
-                candidate["_finding_table_blocked_reason"] = item.blocked_reason
-            findings_to_verify.append(candidate)
-
         if not findings_to_verify:
-            note = "跳过验证：本次候选列表为空。"
-            logger.info(f"[Verification] {note}")
-            await self.emit_event("info", note)
-            self.record_work(note)
-            duration_ms = int((time.time() - start_time) * 1000)
-            handoff = self.create_handoff(
-                to_agent="orchestrator",
-                summary=note,
-                key_findings=[],
-                context_data={
-                    "skipped": True,
-                    "reason": "no_candidates",
-                    "verified_count": 0,
-                    "candidate_count": 0,
-                    "finding_table_summary": finding_table_summary,
-                },
+            logger.warning(
+                "[Verification] 没有需要验证的发现! previous_results keys: %s",
+                list(previous_results.keys()) if isinstance(previous_results, dict) else "not dict",
             )
+            await self.emit_event("warning", "没有需要验证的发现 - 可能是数据格式问题")
             return AgentResult(
                 success=True,
                 data={
                     "findings": [],
                     "verified_count": 0,
                     "candidate_count": 0,
-                    "note": note,
-                    "finding_table_summary": finding_table_summary,
+                    "verification_todo_summary": {
+                        "total": 0,
+                        "verified": 0,
+                        "false_positive": 0,
+                        "blocked": 0,
+                        "pending": 0,
+                        "blocked_reasons_top": [],
+                        "per_item_compact": [],
+                    },
+                    "note": "未收到待验证的发现",
                 },
-                iterations=0,
-                tool_calls=self._tool_calls,
-                tokens_used=self._total_tokens,
-                duration_ms=duration_ms,
-                handoff=handoff,
             )
-
-        try:
-            await self._enrich_function_metadata_with_locator(
-                findings_to_verify=findings_to_verify,
-                project_root=project_root,
-            )
-        except Exception as exc:
-            logger.warning("[Verification] MCP 函数定位预处理失败: %s", exc)
-
-        await self.emit_event("info", f"开始逐漏洞验证 {len(findings_to_verify)} 个候选")
-        self.record_work(f"开始逐漏洞验证 {len(findings_to_verify)} 个漏洞候选")
 
         todo_items = self._build_verification_todo_items(
             findings_to_verify=findings_to_verify,
@@ -1804,8 +2021,6 @@ class VerificationAgent(BaseAgent):
             current_index=0,
             total_todos=len(todo_items),
         )
-
-        # 初始化时所有候选均标记为未验证，推送给前端未验证面板。
         for todo_item, candidate in zip(todo_items, findings_to_verify):
             await self._emit_unverified_finding_event(
                 candidate,
@@ -1815,416 +2030,242 @@ class VerificationAgent(BaseAgent):
                 verification_fingerprint=todo_item.fingerprint,
             )
 
-        run_iteration_count = 0
-        provisional_findings: List[Dict[str, Any]] = []
+        await self.emit_event("info", f"开始验证 {len(findings_to_verify)} 个发现")
+        self.record_work(f"开始验证 {len(findings_to_verify)} 个漏洞发现")
+
+        handoff_context = self.get_handoff_context()
+        findings_summary = []
+        for index, finding in enumerate(findings_to_verify):
+            file_path = finding.get("file_path", "unknown")
+            line_start = finding.get("line_start", 0)
+
+            if isinstance(file_path, str) and ":" in file_path:
+                parts = file_path.split(":", 1)
+                if len(parts) == 2 and parts[1].split()[0].isdigit():
+                    file_path = parts[0]
+                    try:
+                        line_start = int(parts[1].split()[0])
+                    except ValueError:
+                        pass
+
+            findings_summary.append(f"""
+### 发现 {index + 1}: {finding.get('title', 'Unknown')}
+- 类型: {finding.get('vulnerability_type', 'unknown')}
+- 严重度: {finding.get('severity', 'medium')}
+- 文件: {file_path} (行 {line_start})
+- 代码:
+```
+{finding.get('code_snippet', 'N/A')[:500]}
+```
+- 描述: {finding.get('description', 'N/A')[:300]}
+""")
+
+        initial_message = f"""请验证以下 {len(findings_to_verify)} 个安全发现。
+
+{handoff_context if handoff_context else ''}
+
+## 待验证发现
+{''.join(findings_summary)}
+
+## ⚠️ 重要验证指南
+1. **直接使用上面列出的文件路径** - 不要猜测或搜索其他路径
+2. **如果文件路径包含冒号和行号** (如 "app.py:36"), 请提取文件名 "app.py" 并使用 read_file 读取
+3. **先读取文件内容，再判断漏洞是否存在**
+4. **不要假设文件在子目录中** - 使用发现中提供的精确路径
+
+## 验证要求
+- 验证级别: {config.get('verification_level', 'standard')}
+
+## 可用工具
+{self.get_tools_description()}
+
+请开始验证。对于每个发现：
+1. 首先使用 read_file 读取发现中指定的文件（使用精确路径）
+2. 分析代码上下文
+3. 判断是否为真实漏洞
+{f'特别注意 Analysis Agent 提到的关注点。' if handoff_context else ''}"""
+
+        self._conversation_history = [
+            {"role": "system", "content": self.config.system_prompt},
+            {"role": "user", "content": initial_message},
+        ]
+
+        self._steps = []
+        final_result = None
         current_todo_index = 0
         current_todo_id: Optional[str] = None
-        last_action: Optional[str] = None
-        last_tool_name: Optional[str] = None
+        run_iteration_count = 0
+
+        await self.emit_thinking("🔐 Verification Agent 启动，LLM 开始自主验证漏洞...")
 
         try:
-            total_todos = len(todo_items)
-            for idx, (todo_item, candidate) in enumerate(zip(todo_items, findings_to_verify), start=1):
+            for iteration in range(self.config.max_iterations):
                 if self.is_cancelled:
                     break
 
-                current_todo_index = idx
-                current_todo_id = todo_item.id
-                todo_item.status = "running"
-                table_fingerprint = str(
-                    candidate.get("_finding_table_fingerprint") or todo_item.fingerprint
-                ).strip()
-                if table_fingerprint:
-                    finding_table.mark_verify(
-                        table_fingerprint,
-                        status="verifying",
-                        attempts=todo_item.attempts,
-                    )
-                await self._emit_verification_todo_update(
-                    todo_items,
-                    f"开始逐漏洞验证：{idx}/{total_todos} {todo_item.title}",
-                    current_index=idx,
-                    total_todos=total_todos,
-                )
-                await self._emit_unverified_finding_event(
-                    candidate,
-                    status="running",
-                    project_root=project_root,
-                    verification_todo_id=todo_item.id,
-                    verification_fingerprint=todo_item.fingerprint,
-                )
+                self._iteration = iteration + 1
+                run_iteration_count = self._iteration
+                if self.is_cancelled:
+                    await self.emit_thinking("🛑 任务已取消，停止执行")
+                    break
 
-                file_path, line_start, line_end = self._normalize_file_location(candidate)
-                resolved_file_path, _full_file_path = self._resolve_file_paths(file_path, project_root)
-                if resolved_file_path:
-                    file_path = resolved_file_path
-                severity = str(candidate.get("severity") or "medium").strip().lower()
-                confidence = _coerce_bootstrap_confidence_numeric(candidate.get("confidence"))
-                function_name = (
-                    str(candidate.get("function_name") or "").strip()
-                    or self._extract_function_name_from_title(candidate.get("title"))
-                )
+                try:
+                    llm_output, tokens_this_round = await self.stream_llm_call(self._conversation_history)
+                except asyncio.CancelledError:
+                    logger.info(f"[{self.name}] LLM call cancelled")
+                    break
+                except StopAsyncIteration:
+                    logger.warning(f"[{self.name}] stream_llm_call side_effect exhausted, stopping iterations")
+                    break
 
-                final_verdict: Optional[str] = None
-                reachability: str = "unreachable"
-                blocked_reason: Optional[str] = None
-                evidence_blocks: List[str] = []
-                harness_observation: str = ""
-                remaining_item_iterations = max_iterations_per_item
+                self._total_tokens += tokens_this_round
 
-                for attempt in range(1, todo_item.max_attempts + 1):
-                    if self.is_cancelled:
-                        break
-                    if remaining_item_iterations <= 0:
-                        blocked_reason = "iteration_budget_exhausted"
-                        break
-
-                    todo_item.attempts = attempt
-                    remaining_item_iterations -= 1
-                    run_iteration_count += 1
-                    self._iteration = run_iteration_count
-
-                    await self.emit_llm_thought(
-                        (
-                            f"逐漏洞验证 {idx}/{total_todos}（attempt {attempt}/{todo_item.max_attempts}）："
-                            "先读取命中代码，再验证所属函数可达性与触发可能性。"
-                        ),
-                        run_iteration_count,
-                    )
-
-                    if not file_path or line_start <= 0:
-                        blocked_reason = "missing_file_or_line"
-                        evidence_blocks.append("缺少可定位的 file_path/line_start，无法执行代码与流证据验证。")
-                        continue
-
-                    read_input = {
-                        "file_path": file_path,
-                        "start_line": max(1, int(line_start) - 12),
-                        "end_line": max(int(line_end or line_start), int(line_start)) + 28,
-                        "max_lines": 160,
-                    }
-                    last_action = "collect_code_evidence"
-                    last_tool_name = "read_file"
-                    read_observation = await self.execute_tool("read_file", read_input)
-                    self._steps.append(
-                        VerificationStep(
-                            thought=f"读取命中代码用于验证: {file_path}:{line_start}",
-                            action="read_file",
-                            action_input=read_input,
-                            observation=read_observation,
-                        )
-                    )
-                    read_error_reason = self._extract_tool_error_reason(read_observation)
-                    todo_item.evidence_refs.append("read_file")
-                    if read_observation:
-                        evidence_blocks.append(
-                            "[代码证据/read_file]\n" + self._shorten_observation(read_observation, 900)
-                        )
-
-                    if read_error_reason == "cancelled":
-                        break
-                    if read_error_reason is not None:
-                        blocked_reason = read_error_reason
-                        continue
-
-                    extracted_code = ""
-                    if function_name:
-                        extract_input = {
-                            "file_path": file_path,
-                            "function_name": function_name,
-                            "include_imports": True,
+                if not llm_output or not llm_output.strip():
+                    logger.warning(f"[{self.name}] Empty LLM response in iteration {self._iteration}")
+                    await self.emit_llm_decision("收到空响应", "LLM 返回内容为空，尝试重试通过提示")
+                    self._conversation_history.append(
+                        {
+                            "role": "user",
+                            "content": "Received empty response. Please output your Thought and Action.",
                         }
-                        last_action = "extract_target_function"
-                        last_tool_name = "extract_function"
-                        extract_observation = await self.execute_tool("extract_function", extract_input)
-                        self._steps.append(
-                            VerificationStep(
-                                thought=f"提取目标函数构建 Harness: {function_name}",
-                                action="extract_function",
-                                action_input=extract_input,
-                                observation=extract_observation,
-                            )
-                        )
-                        todo_item.evidence_refs.append("extract_function")
-                        if extract_observation:
-                            evidence_blocks.append(
-                                "[函数提取/extract_function]\n" + self._shorten_observation(extract_observation, 1000)
-                            )
-                        extract_error = self._extract_tool_error_reason(extract_observation)
-                        if extract_error == "cancelled":
-                            break
-                        if extract_error is None:
-                            extracted_code = self._extract_code_block(extract_observation)
-
-                    language = self._infer_language_from_path(file_path)
-                    harness_code = self._build_fuzzing_harness(
-                        vulnerability_type=str(candidate.get("vulnerability_type") or ""),
-                        language=language,
-                        function_name=function_name,
-                        extracted_code=extracted_code,
-                        code_context=read_observation,
-                        file_path=file_path,
-                        line_start=int(line_start),
                     )
+                    continue
 
-                    run_code_input = {
-                        "code": harness_code,
-                        "language": language,
-                        "timeout": 90,
-                        "description": (
-                            f"verification harness for {candidate.get('vulnerability_type') or 'unknown'} "
-                            f"at {file_path}:{line_start}"
-                        ),
-                    }
-                    last_action = "execute_fuzzing_harness"
-                    last_tool_name = "run_code"
-                    harness_observation = await self.execute_tool("run_code", run_code_input)
-                    self._steps.append(
-                        VerificationStep(
-                            thought=f"执行 Fuzzing Harness 进行动态验证: {file_path}:{line_start}",
-                            action="run_code",
-                            action_input=run_code_input,
-                            observation=harness_observation,
-                        )
-                    )
-                    todo_item.evidence_refs.append("run_code")
-                    if harness_observation:
-                        evidence_blocks.append(
-                            "[动态验证/run_code]\n" + self._shorten_observation(harness_observation, 1400)
-                        )
+                step = self._parse_llm_response(llm_output)
+                self._steps.append(step)
 
-                    run_error = self._extract_tool_error_reason(harness_observation)
-                    if run_error == "cancelled":
-                        break
-                    if run_error is not None:
-                        blocked_reason = "harness_execution_failed"
+                if step.thought:
+                    await self.emit_llm_thought(step.thought, iteration + 1)
+
+                self._conversation_history.append({"role": "assistant", "content": llm_output})
+
+                if step.is_final:
+                    if self._tool_calls == 0:
+                        logger.warning(f"[{self.name}] LLM tried to finish without any tool calls! Forcing tool usage.")
+                        await self.emit_thinking("⚠️ 拒绝过早完成：必须先使用工具验证漏洞")
+                        if findings_to_verify:
+                            forced_target = findings_to_verify[0]
+                            forced_file = str(forced_target.get("file_path") or "").strip()
+                            forced_line = int(forced_target.get("line_start") or 1)
+                            if forced_file:
+                                forced_input = {
+                                    "file_path": forced_file,
+                                    "start_line": max(1, forced_line - 8),
+                                    "end_line": max(forced_line + 20, forced_line),
+                                }
+                                forced_observation = await self.execute_tool("read_file", forced_input)
+                                self._conversation_history.append(
+                                    {
+                                        "role": "user",
+                                        "content": f"Observation:\n{forced_observation}",
+                                    }
+                                )
+                        self._conversation_history.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "⚠️ **系统拒绝**: 你必须先使用工具验证漏洞！\n\n"
+                                    "不允许在没有调用任何工具的情况下直接输出 Final Answer。\n\n"
+                                    "请立即使用以下工具之一进行验证：\n"
+                                    "1. `read_file` - 读取漏洞所在文件的代码\n"
+                                    "2. `run_code` - 编写并执行 Fuzzing Harness 验证漏洞\n"
+                                    "3. `extract_function` - 提取目标函数进行分析\n\n"
+                                    "现在请输出 Thought 和 Action，开始验证第一个漏洞。"
+                                ),
+                            }
+                        )
                         continue
 
-                    harness_positive = self._is_harness_evidence_positive(harness_observation)
-                    harness_negative = "[safe]" in str(harness_observation or "").lower()
+                    await self.emit_llm_decision("完成漏洞验证", "LLM 判断验证已充分")
+                    final_result = step.final_answer
 
-                    if harness_positive and confidence >= 0.7:
-                        final_verdict = "confirmed"
-                        reachability = "reachable"
-                        break
+                    if final_result and "findings" in final_result:
+                        verified_count = len([item for item in final_result["findings"] if item.get("is_verified")])
+                        fp_count = len([item for item in final_result["findings"] if item.get("verdict") == "false_positive"])
+                        self.add_insight(
+                            f"验证了 {len(final_result['findings'])} 个发现，{verified_count} 个确认，{fp_count} 个误报"
+                        )
+                        self.record_work(f"完成漏洞验证: {verified_count} 个确认, {fp_count} 个误报")
 
-                    if harness_positive:
-                        final_verdict = "likely"
-                        reachability = "likely_reachable"
-                        break
-
-                    if harness_negative:
-                        final_verdict = "false_positive"
-                        reachability = "unreachable"
-                        blocked_reason = blocked_reason or "no_exploit_signal"
-                        break
-
-                    # 无明确阳性信号但有代码证据时，保守给 likely。
-                    final_verdict = "likely"
-                    reachability = "likely_reachable"
-                    blocked_reason = blocked_reason or "insufficient_dynamic_signal"
+                    await self.emit_llm_complete("验证完成", self._total_tokens)
                     break
 
-                if self.is_cancelled:
-                    break
+                if step.action:
+                    await self.emit_llm_action(step.action, step.action_input or {})
+                    tool_call_key = f"{step.action}:{json.dumps(step.action_input or {}, sort_keys=True)}"
 
-                if not final_verdict:
-                    todo_item.status = "false_positive"
-                    todo_item.blocked_reason = blocked_reason or "insufficient_evidence"
-                    todo_item.final_verdict = "false_positive"
-                    final_verdict = "false_positive"
-                    reachability = "unreachable"
-                    evidence_blocks.append(
-                        f"验证受阻：{todo_item.blocked_reason}。已达到单项重试上限 {todo_item.max_attempts}。"
+                    if not hasattr(self, "_tool_call_counts"):
+                        self._tool_call_counts = {}
+                    self._tool_call_counts[tool_call_key] = self._tool_call_counts.get(tool_call_key, 0) + 1
+
+                    if self._tool_call_counts[tool_call_key] > 3:
+                        logger.warning(f"[{self.name}] Detected repetitive tool call loop: {tool_call_key}")
+                        observation = (
+                            f"⚠️ **系统干预**: 你已经使用完全相同的参数调用了工具 '{step.action}' 超过3次。\n"
+                            "请**不要**重复尝试相同的操作。这是无效的。\n"
+                            "请尝试：\n"
+                            "1. 修改参数 (例如改变 input payload)\n"
+                            "2. 使用不同的工具 (例如从 sandbox_exec 换到 php_test)\n"
+                            "3. 如果之前的尝试都失败了，请尝试 analyze_file 重新分析代码\n"
+                            "4. 如果无法验证，请输出 Final Answer 并标记为 uncertain"
+                        )
+                        step.observation = observation
+                        await self.emit_llm_observation(observation)
+                        self._conversation_history.append({"role": "user", "content": f"Observation:\n{observation}"})
+                        continue
+
+                    if not hasattr(self, "_failed_tool_calls"):
+                        self._failed_tool_calls = {}
+
+                    observation = await self.execute_tool(step.action, step.action_input or {})
+                    is_tool_error = (
+                        "失败" in observation
+                        or "错误" in observation
+                        or "不存在" in observation
+                        or "文件过大" in observation
+                        or "Error" in observation
                     )
-                elif final_verdict in {"confirmed", "likely"}:
-                    todo_item.status = "verified"
-                    todo_item.final_verdict = final_verdict
+
+                    if is_tool_error:
+                        self._failed_tool_calls[tool_call_key] = self._failed_tool_calls.get(tool_call_key, 0) + 1
+                        fail_count = self._failed_tool_calls[tool_call_key]
+                        if fail_count >= 3:
+                            logger.warning(f"[{self.name}] Tool call failed {fail_count} times: {tool_call_key}")
+                            observation += f"\n\n⚠️ **系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
+                            observation += "1. 尝试使用不同的参数（如指定较小的行范围）\n"
+                            observation += "2. 使用 search_code 工具定位关键代码片段\n"
+                            observation += "3. 跳过此发现的验证，继续验证其他发现\n"
+                            observation += "4. 如果已有足够验证结果，直接输出 Final Answer"
+                            self._failed_tool_calls[tool_call_key] = 0
+                    else:
+                        if tool_call_key in self._failed_tool_calls:
+                            del self._failed_tool_calls[tool_call_key]
+
+                    if self.is_cancelled:
+                        logger.info(f"[{self.name}] Cancelled after tool execution")
+                        break
+
+                    step.observation = observation
+                    await self.emit_llm_observation(observation)
+                    self._conversation_history.append({"role": "user", "content": f"Observation:\n{observation}"})
                 else:
-                    todo_item.status = "false_positive"
-                    todo_item.final_verdict = "false_positive"
-                    if not todo_item.blocked_reason and blocked_reason:
-                        todo_item.blocked_reason = blocked_reason
-
-                if table_fingerprint:
-                    finding_table.mark_verify(
-                        table_fingerprint,
-                        status=(
-                            "verified"
-                            if todo_item.status == "verified"
-                            else "false_positive"
-                        ),
-                        attempts=todo_item.attempts,
-                        blocked_reason=todo_item.blocked_reason,
-                        verification_result={
-                            "verdict": final_verdict,
-                            "reachability": reachability,
-                        },
+                    await self.emit_llm_decision("继续验证", "LLM 需要更多验证")
+                    self._conversation_history.append(
+                        {
+                            "role": "user",
+                            "content": "请继续验证。你输出了 Thought 但没有输出 Action。请**立即**选择一个工具执行，或者如果验证完成，输出 Final Answer 汇总所有验证结果。",
+                        }
                     )
-
-                evidence_text = "\n\n".join([block for block in evidence_blocks if block]).strip()
-                if not evidence_text:
-                    evidence_text = "未采集到充分证据，按保守策略降级为 false_positive。"
-
-                line_start_int = self._normalize_int_line(line_start, 1)
-                line_end_int = self._normalize_int_line(line_end, line_start_int)
-                if line_end_int < line_start_int:
-                    line_end_int = line_start_int
-                function_trigger_flow = (
-                    [self._shorten_observation(harness_observation, 800)]
-                    if harness_observation
-                    else [f"harness_evidence_unavailable:{todo_item.blocked_reason or 'not_collected'}"]
-                )
-                root_cause_description = build_cn_structured_description(
-                    file_path=file_path,
-                    function_name=function_name,
-                    vulnerability_type=candidate.get("vulnerability_type"),
-                    title=candidate.get("title"),
-                    description=candidate.get("description"),
-                    code_snippet=candidate.get("code_snippet"),
-                    code_context=candidate.get("code_context"),
-                    cwe_id=self._infer_cwe_id(candidate),
-                    raw_description=evidence_text,
-                    line_start=line_start_int,
-                    line_end=line_end_int,
-                    verification_evidence=evidence_text,
-                    function_trigger_flow=function_trigger_flow,
-                )
-                root_cause_description_markdown = build_cn_structured_description_markdown(
-                    file_path=file_path,
-                    function_name=function_name,
-                    vulnerability_type=candidate.get("vulnerability_type"),
-                    title=candidate.get("title"),
-                    description=candidate.get("description"),
-                    code_snippet=candidate.get("code_snippet"),
-                    code_context=candidate.get("code_context"),
-                    cwe_id=self._infer_cwe_id(candidate),
-                    raw_description=evidence_text,
-                    line_start=line_start_int,
-                    line_end=line_end_int,
-                    verification_evidence=evidence_text,
-                    function_trigger_flow=function_trigger_flow,
-                )
-
-                provisional = {
-                    **candidate,
-                    "file_path": file_path,
-                    "line_start": line_start_int,
-                    "line_end": line_end_int,
-                    "function_name": function_name,
-                    "description": root_cause_description,
-                    "verdict": final_verdict,
-                    "authenticity": final_verdict,
-                    "reachability": reachability,
-                    "is_verified": final_verdict in {"confirmed", "likely"},
-                    "verification_details": evidence_text,
-                    "verification_evidence": evidence_text,
-                    "verification_result": {
-                        "authenticity": final_verdict,
-                        "verdict": final_verdict,
-                        "reachability": reachability,
-                        "evidence": evidence_text,
-                        "verification_details": evidence_text,
-                        "verification_evidence": evidence_text,
-                        "todo_id": todo_item.id,
-                        "todo_status": todo_item.status,
-                        "blocked_reason": todo_item.blocked_reason,
-                        "function_trigger_flow": function_trigger_flow,
-                    },
-                }
-                provisional_findings.append(provisional)
-
-                structured_title = self._build_structured_title(provisional)
-                severity_text = str(provisional.get("severity") or "medium")
-                vuln_type = str(provisional.get("vulnerability_type") or "unknown")
-
-                if final_verdict in {"confirmed", "likely"}:
-                    await self.emit_finding(
-                        title=structured_title,
-                        severity=severity_text,
-                        vuln_type=vuln_type,
-                        file_path=file_path,
-                        line_start=line_start_int,
-                        line_end=line_end_int,
-                        is_verified=True,
-                        display_title=structured_title,
-                        cwe_id=self._infer_cwe_id(provisional),
-                        description=(
-                            str(provisional.get("description"))
-                            if provisional.get("description") is not None
-                            else None
-                        ),
-                        description_markdown=root_cause_description_markdown,
-                        verification_evidence=evidence_text,
-                        code_snippet=(
-                            str(provisional.get("code_snippet"))
-                            if provisional.get("code_snippet") is not None
-                            else None
-                        ),
-                        code_context=(
-                            str(provisional.get("code_context"))
-                            if provisional.get("code_context") is not None
-                            else None
-                        ),
-                        finding_scope="verification_queue",
-                        verification_todo_id=todo_item.id,
-                        verification_fingerprint=todo_item.fingerprint,
-                        verification_status="verified",
-                        extra_metadata={
-                            "status": "verified",
-                            "verdict": final_verdict,
-                            "authenticity": final_verdict,
-                        },
-                    )
-                else:
-                    await self.emit_event(
-                        "finding_update",
-                        f"[Verification] {structured_title} -> {todo_item.status}",
-                        metadata={
-                            "title": structured_title,
-                            "display_title": structured_title,
-                            "severity": severity_text,
-                            "vulnerability_type": vuln_type,
-                            "file_path": file_path,
-                            "line_start": line_start_int,
-                            "line_end": line_end_int,
-                            "is_verified": False,
-                            "status": todo_item.status,
-                            "authenticity": "false_positive",
-                            "verdict": "false_positive",
-                            "verification_evidence": evidence_text,
-                            "description": root_cause_description,
-                            "description_markdown": root_cause_description_markdown,
-                            "blocked_reason": todo_item.blocked_reason,
-                            "finding_scope": "verification_queue",
-                            "verification_todo_id": todo_item.id,
-                            "verification_fingerprint": todo_item.fingerprint,
-                            "verification_status": "false_positive",
-                        },
-                    )
-
-                await self._emit_verification_todo_update(
-                    todo_items,
-                    (
-                        f"完成逐漏洞验证：{idx}/{total_todos} {todo_item.title} "
-                        f"-> {todo_item.status}"
-                    ),
-                    current_index=idx,
-                    total_todos=total_todos,
-                    last_action=last_action,
-                    last_tool_name=last_tool_name,
-                )
 
             duration_ms = int((time.time() - start_time) * 1000)
 
             if self.is_cancelled:
                 todo_summary = self._build_verification_todo_summary(todo_items)
-                finding_table_summary = finding_table.summary(
-                    round_index=context_round,
-                    queue_size=len(finding_table.pending_context_items()),
-                    newly_discovered_count=0,
+                completed_count = (
+                    todo_summary.get("verified", 0)
+                    + todo_summary.get("false_positive", 0)
+                    + todo_summary.get("blocked", 0)
                 )
-                completed_count = todo_summary.get("verified", 0) + todo_summary.get("false_positive", 0) + todo_summary.get("blocked", 0)
                 pending_count = todo_summary.get("pending", 0)
                 cancel_message = (
                     f"Verification Agent 已取消: 本次迭代 {run_iteration_count}，"
@@ -2241,21 +2282,17 @@ class VerificationAgent(BaseAgent):
                         "total_todos": len(todo_items),
                         "verified_count": todo_summary.get("verified", 0),
                         "pending_count": pending_count,
-                        "last_action": last_action,
-                        "last_tool_name": last_tool_name,
                         "todo_scope": "verification",
                         "verification_todo_summary": todo_summary,
-                        "finding_table_summary": finding_table_summary,
                     },
                 )
                 return AgentResult(
                     success=False,
                     error="任务已取消",
                     data={
-                        "findings": provisional_findings if provisional_findings else findings_to_verify,
+                        "findings": findings_to_verify,
                         "candidate_count": len(findings_to_verify),
                         "verification_todo_summary": todo_summary,
-                        "finding_table_summary": finding_table_summary,
                     },
                     iterations=run_iteration_count,
                     tool_calls=self._tool_calls,
@@ -2263,94 +2300,183 @@ class VerificationAgent(BaseAgent):
                     duration_ms=duration_ms,
                 )
 
-            repaired_result = self._repair_final_answer(
-                {"findings": provisional_findings},
-                findings_to_verify,
-                verification_level,
-                project_root=project_root,
-            )
-            verified_findings = [
-                item for item in repaired_result.get("findings", [])
-                if isinstance(item, dict)
-            ]
+            verified_findings = []
+            llm_findings = []
+            if final_result and "findings" in final_result:
+                llm_findings = final_result["findings"]
 
-            # 用 TODO 状态机结果回填最终 finding，确保状态语义一致。
-            for idx, finding in enumerate(verified_findings):
-                if idx >= len(todo_items):
-                    continue
-                todo_item = todo_items[idx]
-                verdict = str(finding.get("verdict") or finding.get("authenticity") or "").strip().lower()
-                if todo_item.status == "verified":
-                    if verdict not in {"confirmed", "likely"}:
-                        verdict = "likely"
-                    finding["verdict"] = verdict
-                    finding["authenticity"] = verdict
-                    finding["is_verified"] = True
-                    if verdict == "confirmed":
-                        finding["reachability"] = "reachable"
-                    elif str(finding.get("reachability") or "").strip().lower() not in {"reachable", "likely_reachable"}:
-                        finding["reachability"] = "likely_reachable"
-                else:
-                    finding["verdict"] = "false_positive"
-                    finding["authenticity"] = "false_positive"
-                    finding["reachability"] = "unreachable"
-                    finding["is_verified"] = False
-
-                verification_payload = (
-                    dict(finding.get("verification_result"))
-                    if isinstance(finding.get("verification_result"), dict)
-                    else {}
+            if not llm_findings and findings_to_verify:
+                logger.warning(
+                    f"[{self.name}] LLM returned empty findings despite {len(findings_to_verify)} inputs. Falling back to originals."
                 )
-                verification_payload["todo_id"] = todo_item.id
-                verification_payload["todo_status"] = todo_item.status
-                verification_payload["blocked_reason"] = todo_item.blocked_reason
-                if todo_item.status == "false_positive" and todo_item.blocked_reason:
-                    verification_payload["degraded"] = True
-                    verification_payload["degraded_reason"] = todo_item.blocked_reason or "verification_blocked"
-                finding["verification_result"] = verification_payload
+                final_result = None
 
-            confirmed_count = len([f for f in verified_findings if f.get("verdict") == "confirmed"])
-            likely_count = len([f for f in verified_findings if f.get("verdict") == "likely"])
-            false_positive_count = len([f for f in verified_findings if f.get("verdict") == "false_positive"])
+            if final_result and "findings" in final_result:
+                verdicts_debug = [
+                    (
+                        item.get("file_path", "?"),
+                        (item.get("verification_result") or {}).get("verdict") or item.get("verdict"),
+                        (item.get("verification_result") or {}).get("confidence") or item.get("confidence")
+                    )
+                    for item in final_result["findings"]
+                ]
+                logger.info(f"[{self.name}] LLM returned verdicts: {verdicts_debug}")
+
+                for finding in final_result["findings"]:
+                    # === 适配新的verification_result嵌套结构 ===
+                    # 优先从verification_result中获取，向后兼容finding层级
+                    verification_result = finding.get("verification_result", {})
+                    if not isinstance(verification_result, dict):
+                        verification_result = {}
+                    
+                    verdict = verification_result.get("verdict") or finding.get("verdict")
+                    confidence = verification_result.get("confidence") or finding.get("confidence")
+                    reachability = verification_result.get("reachability") or finding.get("reachability")
+                    verification_evidence = verification_result.get("verification_evidence") or finding.get("verification_evidence")
+                    
+                    if not verdict or verdict not in ["confirmed", "likely", "uncertain", "false_positive"]:
+                        # === 使用全局阈值常量统一判定 ===
+                        if finding.get("is_verified") is True:
+                            verdict = "confirmed"
+                        else:
+                            if confidence is None:
+                                # confidence缺失时保存原始值用于诊断
+                                verdict = "likely"  # 保守估计为likely而非false_positive
+                                logger.debug(
+                                    f"[{self.name}] confidence缺失，保留为likely: {finding.get('file_path', '?')}"
+                                )
+                            else:
+                                try:
+                                    confidence_val = float(confidence)
+                                except Exception:
+                                    confidence_val = CONFIDENCE_DEFAULT_FALLBACK
+                                
+                                if confidence_val >= CONFIDENCE_THRESHOLD_LIKELY:
+                                    verdict = "likely"
+                                elif confidence_val <= CONFIDENCE_THRESHOLD_FALSE_POSITIVE:
+                                    verdict = "false_positive"
+                                else:
+                                    verdict = "likely"
+                        
+                        logger.warning(
+                            f"[{self.name}] Missing/invalid verdict for {finding.get('file_path', '?')}, inferred as: {verdict}"
+                        )
+
+                    verified = {
+                        **finding,
+                        "verdict": verdict,
+                        "confidence": confidence,
+                        "reachability": reachability,
+                        "verification_result": {
+                            **(verification_result or {}),
+                            "verdict": verdict,
+                            "confidence": confidence,
+                            "reachability": reachability,
+                            "verification_evidence": verification_evidence,
+                        },
+                        "is_verified": verdict == "confirmed" or (verdict == "likely" and (confidence or 0) >= CONFIDENCE_THRESHOLD_LIKELY),
+                        "verified_at": datetime.now(timezone.utc).isoformat() if verdict in ["confirmed", "likely"] else None,
+                    }
+
+                    if not verified.get("recommendation"):
+                        verified["recommendation"] = self._get_recommendation(finding.get("vulnerability_type", ""))
+
+                    verified_findings.append(verified)
+            else:
+                for finding in findings_to_verify:
+                    verified_findings.append({
+                        **finding,
+                        "verdict": "uncertain",
+                        "confidence": 0.5,
+                        "is_verified": False,
+                    })
+
+            for idx, todo_item in enumerate(todo_items):
+                current_todo_index = idx + 1
+                current_todo_id = todo_item.id
+                if idx >= len(verified_findings):
+                    todo_item.status = "false_positive"
+                    todo_item.final_verdict = "false_positive"
+                    todo_item.blocked_reason = "missing_verification_output"
+                    continue
+                verdict = str(verified_findings[idx].get("verdict") or "uncertain").strip().lower()
+                if verdict in {"confirmed", "likely"}:
+                    todo_item.status = "verified"
+                    todo_item.final_verdict = verdict
+                else:
+                    todo_item.status = "false_positive"
+                    todo_item.final_verdict = "false_positive"
+                meta_title = str(verified_findings[idx].get("title") or todo_item.title)
+                meta_vuln = str(verified_findings[idx].get("vulnerability_type") or "unknown")
+                meta_sev = str(verified_findings[idx].get("severity") or "medium")
+                meta_file = str(verified_findings[idx].get("file_path") or todo_item.file_path)
+                meta_line_start = int(verified_findings[idx].get("line_start") or todo_item.line_start)
+                meta_line_end = int(verified_findings[idx].get("line_end") or meta_line_start)
+                if todo_item.status == "verified":
+                    await self.emit_event(
+                        "finding_verified",
+                        f"[Verification] 已确认漏洞: {meta_title}",
+                        metadata={
+                            "title": meta_title,
+                            "display_title": meta_title,
+                            "severity": meta_sev,
+                            "vulnerability_type": meta_vuln,
+                            "file_path": meta_file,
+                            "line_start": meta_line_start,
+                            "line_end": meta_line_end,
+                            "is_verified": True,
+                            "finding_scope": "verification_queue",
+                            "verification_todo_id": todo_item.id,
+                            "verification_fingerprint": todo_item.fingerprint,
+                            "verification_status": "verified",
+                            "status": "verified",
+                        },
+                    )
+                else:
+                    await self.emit_event(
+                        "finding_update",
+                        f"[Verification] 标记误报: {meta_title}",
+                        metadata={
+                            "title": meta_title,
+                            "display_title": meta_title,
+                            "severity": meta_sev,
+                            "vulnerability_type": meta_vuln,
+                            "file_path": meta_file,
+                            "line_start": meta_line_start,
+                            "line_end": meta_line_end,
+                            "is_verified": False,
+                            "finding_scope": "verification_queue",
+                            "verification_todo_id": todo_item.id,
+                            "verification_fingerprint": todo_item.fingerprint,
+                            "verification_status": "false_positive",
+                            "status": "false_positive",
+                        },
+                    )
+
+            confirmed_count = len([item for item in verified_findings if item.get("verdict") == "confirmed"])
+            likely_count = len([item for item in verified_findings if item.get("verdict") == "likely"])
+            false_positive_count = len([item for item in verified_findings if item.get("verdict") == "false_positive"])
             todo_summary = self._build_verification_todo_summary(todo_items)
-            finding_table_summary = finding_table.summary(
-                round_index=context_round,
-                queue_size=len(finding_table.pending_context_items()),
-                newly_discovered_count=0,
-            )
-
-            await self.emit_event(
-                "info",
-                (
-                    f"Verification Agent 完成: confirmed={confirmed_count}, "
-                    f"likely={likely_count}, false_positive={false_positive_count}, "
-                    f"blocked={todo_summary.get('blocked', 0)}"
-                ),
-                metadata={
-                    "todo_scope": "verification",
-                    "verification_todo_summary": todo_summary,
-                    "finding_table_summary": finding_table_summary,
-                },
-            )
             await self._emit_verification_todo_update(
                 todo_items,
                 "逐漏洞验证完成",
                 current_index=len(todo_items),
                 total_todos=len(todo_items),
-                last_action=last_action,
-                last_tool_name=last_tool_name,
             )
+
+            await self.emit_event(
+                "info",
+                f"Verification Agent 完成: {confirmed_count} 确认, {likely_count} 可能, {false_positive_count} 误报",
+            )
+
+            logger.info(f"[{self.name}] Returning {len(verified_findings)} verified findings")
 
             handoff = self._create_verification_handoff(
                 verified_findings,
                 confirmed_count,
                 likely_count,
                 false_positive_count,
-                candidate_count=len(findings_to_verify),
             )
-            if isinstance(handoff.context_data, dict):
-                handoff.context_data["verification_todo_summary"] = todo_summary
-                handoff.context_data["finding_table_summary"] = finding_table_summary
 
             return AgentResult(
                 success=True,
@@ -2360,15 +2486,9 @@ class VerificationAgent(BaseAgent):
                     "likely_count": likely_count,
                     "false_positive_count": false_positive_count,
                     "candidate_count": len(findings_to_verify),
-                    "verified_output_count": len(verified_findings),
-                    "summary": {
-                        "verification_todo_summary": todo_summary,
-                        "finding_table_summary": finding_table_summary,
-                    },
                     "verification_todo_summary": todo_summary,
-                    "finding_table_summary": finding_table_summary,
                 },
-                iterations=run_iteration_count,
+                iterations=self._iteration,
                 tool_calls=self._tool_calls,
                 tokens_used=self._total_tokens,
                 duration_ms=duration_ms,

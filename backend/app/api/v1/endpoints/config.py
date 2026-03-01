@@ -7,7 +7,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import json
 import os
 import shlex
@@ -943,6 +943,24 @@ class MCPToolsListResponse(BaseModel):
     results: list[MCPToolsListItem]
 
 
+class MCPToolsCallRequest(BaseModel):
+    mcp_id: str
+    tool_name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    include_internal: bool = False
+
+
+class MCPToolsCallResponse(BaseModel):
+    success: bool
+    handled: bool
+    mcp_id: str
+    tool_name: str
+    data: Optional[str] = None
+    error: Optional[str] = None
+    runtime_domain: Optional[str] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class QmdCliCheckResult(BaseModel):
     name: str
     success: bool
@@ -1477,6 +1495,69 @@ async def list_mcp_tools_runtime(
                 )
             )
         return MCPToolsListResponse(results=results)
+    finally:
+        shutil.rmtree(temp_project_root, ignore_errors=True)
+
+
+@router.post("/mcp/tools/call", response_model=MCPToolsCallResponse)
+async def call_mcp_tool_runtime(
+    request: MCPToolsCallRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    default_config = get_default_config()
+    result = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
+    saved_config = result.scalar_one_or_none()
+
+    user_other_config = {}
+    if saved_config and saved_config.other_config:
+        user_other_config = decrypt_config(
+            json.loads(saved_config.other_config),
+            SENSITIVE_OTHER_FIELDS,
+        )
+
+    merged_other_config = _sanitize_other_config(
+        {**default_config["otherConfig"], **user_other_config}
+    )
+    effective_user_config = {"otherConfig": merged_other_config}
+
+    mcp_id = str(request.mcp_id or "").strip().lower()
+    tool_name = str(request.tool_name or "").strip()
+    if not mcp_id or not tool_name:
+        raise HTTPException(status_code=400, detail="mcp_id and tool_name are required")
+    if not bool(request.include_internal) and tool_name in _MCP_INTERNAL_TOOLS:
+        raise HTTPException(status_code=400, detail=f"internal tool blocked: {tool_name}")
+
+    temp_project_root = tempfile.mkdtemp(prefix="mcp-tools-call-")
+    os.makedirs(os.path.join(temp_project_root, "tmp"), exist_ok=True)
+    try:
+        from app.api.v1.endpoints.agent_tasks import _build_task_mcp_runtime
+
+        runtime = _build_task_mcp_runtime(
+            project_root=temp_project_root,
+            user_config=effective_user_config,
+            target_files=[],
+            prefer_stdio_when_http_unavailable=True,
+            active_mcp_ids=[mcp_id],
+        )
+        call_result = await runtime.call_mcp_tool(
+            mcp_name=mcp_id,
+            tool_name=tool_name,
+            arguments=dict(request.arguments or {}),
+            agent_name="mcp_tools_call_api",
+        )
+        metadata = dict(call_result.metadata) if isinstance(call_result.metadata, dict) else {}
+        runtime_domain = str(metadata.get("mcp_runtime_domain") or "").strip() or None
+        return MCPToolsCallResponse(
+            success=bool(call_result.success),
+            handled=bool(call_result.handled),
+            mcp_id=mcp_id,
+            tool_name=tool_name,
+            data=str(call_result.data or "") or None,
+            error=str(call_result.error or "").strip() or None,
+            runtime_domain=runtime_domain,
+            metadata=metadata,
+        )
     finally:
         shutil.rmtree(temp_project_root, ignore_errors=True)
 

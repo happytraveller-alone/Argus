@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,6 +25,15 @@ logger = logging.getLogger(__name__)
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 logging.getLogger("litellm").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+warnings.filterwarnings(
+    "ignore",
+    message=r".*enable_cleanup_closed ignored because .*",
+    category=DeprecationWarning,
+    module=r"aiohttp\.connector",
+)
 
 
 async def check_agent_services():

@@ -85,6 +85,13 @@ export interface StreamEventData {
 // 事件回调类型
 export type StreamEventCallback = (event: StreamEventData) => void;
 
+export interface StreamErrorContext {
+  source: 'event' | 'transport' | 'stream_end';
+  terminal: boolean;
+  eventType?: 'error' | 'task_error';
+  metadata?: Record<string, unknown>;
+}
+
 // 流式选项
 export interface StreamOptions {
   includeThinking?: boolean;
@@ -100,7 +107,7 @@ export interface StreamOptions {
   onFinding?: (finding: Record<string, unknown>, isVerified: boolean) => void;
   onProgress?: (current: number, total: number, message: string) => void;
   onComplete?: (data: { findingsCount: number; securityScore: number }) => void;
-  onError?: (error: string) => void;
+  onError?: (error: string, context: StreamErrorContext) => void;
   onHeartbeat?: () => void;
   onEvent?: StreamEventCallback;  // 通用事件回调
 }
@@ -120,6 +127,7 @@ export class AgentStreamHandler {
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null; // 🔥 保存 reader 引用
   private abortController: AbortController | null = null; // 🔥 用于取消请求
   private isDisconnecting = false; // 🔥 标记是否正在断开
+  private terminalEventReceived = false;
 
   constructor(taskId: string, options: StreamOptions = {}) {
     this.taskId = taskId;
@@ -137,6 +145,7 @@ export class AgentStreamHandler {
   connect(): void {
     // 🔥 重置断开标志，允许新的连接
     this.isDisconnecting = false;
+    this.terminalEventReceived = false;
 
     // 🔥 如果已经连接，不重复连接
     if (this.isConnected) {
@@ -150,6 +159,69 @@ export class AgentStreamHandler {
     });
 
     this.connectWithFetch(params);
+  }
+
+  private bumpAfterSequence(sequence: unknown): void {
+    const seq = typeof sequence === 'number' ? sequence : Number(sequence);
+    if (!Number.isFinite(seq)) return;
+    const normalized = Math.floor(seq);
+    const current =
+      typeof this.options.afterSequence === 'number'
+        ? this.options.afterSequence
+        : Number(this.options.afterSequence || 0);
+    if (!Number.isFinite(current) || normalized > current) {
+      this.options.afterSequence = normalized;
+    }
+  }
+
+  private scheduleReconnect(
+    source: 'transport' | 'stream_end',
+    failureMessage: string
+  ): void {
+    if (this.isDisconnecting || this.terminalEventReceived) {
+      return;
+    }
+
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts += 1;
+      const delay = this.reconnectDelay * this.reconnectAttempts;
+      if (source === 'stream_end') {
+        console.info('[AgentStream] stream_done_reconnect', {
+          attempt: this.reconnectAttempts,
+          maxAttempts: this.maxReconnectAttempts,
+          delayMs: delay,
+        });
+      } else {
+        console.warn('[AgentStream] transport_reconnect', {
+          attempt: this.reconnectAttempts,
+          maxAttempts: this.maxReconnectAttempts,
+          delayMs: delay,
+        });
+      }
+      setTimeout(() => {
+        if (!this.isDisconnecting && !this.terminalEventReceived) {
+          this.connect();
+        }
+      }, delay);
+      return;
+    }
+
+    this.isConnected = false;
+    if (source === 'transport') {
+      console.error('[AgentStream] transport_reconnect_exhausted', {
+        attempts: this.reconnectAttempts,
+        maxAttempts: this.maxReconnectAttempts,
+      });
+    } else {
+      console.error('[AgentStream] stream_end_reconnect_exhausted', {
+        attempts: this.reconnectAttempts,
+        maxAttempts: this.maxReconnectAttempts,
+      });
+    }
+    this.options.onError?.(failureMessage, {
+      source,
+      terminal: false,
+    });
   }
 
   /**
@@ -200,6 +272,11 @@ export class AgentStreamHandler {
 
         if (done) {
           console.log('[AgentStream] Reader done, stream ended');
+          this.isConnected = false;
+          this.scheduleReconnect(
+            'stream_end',
+            '事件流连接中断，自动重连失败'
+          );
           break;
         }
 
@@ -217,6 +294,7 @@ export class AgentStreamHandler {
 
         // 🔥 逐个处理事件，添加微延迟确保 React 能逐个渲染
         for (const event of events.parsed) {
+          this.bumpAfterSequence(event.sequence);
           this.handleEvent(event);
           // 为 thinking_token 添加微延迟确保打字效果
           if (event.type === 'thinking_token') {
@@ -238,18 +316,8 @@ export class AgentStreamHandler {
 
       this.isConnected = false;
       console.error('Stream connection error:', error);
-
-      // 🔥 只有在未断开时才尝试重连
-      if (!this.isDisconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
-        this.reconnectAttempts++;
-        setTimeout(() => {
-          if (!this.isDisconnecting) {
-            this.connect();
-          }
-        }, this.reconnectDelay * this.reconnectAttempts);
-      } else {
-        this.options.onError?.(`连接失败: ${error}`);
-      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.scheduleReconnect('transport', `连接失败: ${message}`);
     } finally {
       // 🔥 清理 reader
       if (this.reader) {
@@ -432,11 +500,58 @@ export class AgentStreamHandler {
         break;
 
       // 错误
-      case 'task_error':
-      case 'error':
-        this.options.onError?.(event.error || event.message || '未知错误');
+      case 'task_error': {
+        const errorMessage = event.error || event.message || '未知错误';
+        this.terminalEventReceived = true;
+        console.error('[AgentStream] terminal_error', {
+          eventType: 'task_error',
+          message: errorMessage,
+          metadata: event.metadata,
+        });
+        this.options.onError?.(errorMessage, {
+          source: 'event',
+          terminal: true,
+          eventType: 'task_error',
+          metadata: event.metadata,
+        });
         this.disconnect();
         break;
+      }
+
+      case 'error': {
+        const errorMessage = event.error || event.message || '未知错误';
+        const terminalFromMetadata =
+          event.metadata?.is_terminal === true ||
+          String(event.metadata?.is_terminal || '').toLowerCase() === 'true';
+        if (terminalFromMetadata) {
+          this.terminalEventReceived = true;
+          console.error('[AgentStream] terminal_error', {
+            eventType: 'error',
+            message: errorMessage,
+            metadata: event.metadata,
+          });
+          this.options.onError?.(errorMessage, {
+            source: 'event',
+            terminal: true,
+            eventType: 'error',
+            metadata: event.metadata,
+          });
+          this.disconnect();
+          break;
+        }
+        console.warn('[AgentStream] non_terminal_error', {
+          eventType: 'error',
+          message: errorMessage,
+          metadata: event.metadata,
+        });
+        this.options.onError?.(errorMessage, {
+          source: 'event',
+          terminal: false,
+          eventType: 'error',
+          metadata: event.metadata,
+        });
+        break;
+      }
 
       // 心跳
       case 'heartbeat':
@@ -631,8 +746,12 @@ export function createAgentStreamWithState(
     onComplete: () => {
       updateState({ isComplete: true });
     },
-    onError: (error) => {
-      updateState({ error, isComplete: true });
+    onError: (error, context) => {
+      const updates: Partial<AgentStreamState> = { error };
+      if (context.terminal) {
+        updates.isComplete = true;
+      }
+      updateState(updates);
     },
   });
 }
