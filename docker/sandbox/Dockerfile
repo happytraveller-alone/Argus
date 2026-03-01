@@ -37,6 +37,8 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:${PATH}
 
 # 安装 Node.js 22+ 与 pnpm（用于 JavaScript/TypeScript 代码执行、npm audit、qmd）
 # 使用 npmmirror 节点二进制下载，避免额外 apt 源
@@ -75,7 +77,10 @@ RUN python3 -m pip install --no-cache-dir "cmake>=3.27,<4" && \
     cmake --version
 
 # 安装 MCP 与 qmd CLI（供沙盒域运行时调用）
-RUN pnpm add -g \
+RUN mkdir -p /pnpm /pnpm/global && \
+    pnpm config set global-bin-dir /pnpm && \
+    pnpm config set global-dir /pnpm/global && \
+    pnpm add -g \
     @modelcontextprotocol/server-filesystem \
     @modelcontextprotocol/server-memory \
     @modelcontextprotocol/server-sequential-thinking \

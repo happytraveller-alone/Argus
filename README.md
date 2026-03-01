@@ -117,10 +117,18 @@ cp backend/env.example backend/.env
 
 注意：不要将真实 API Key 提交到仓库。
 
-### 3) 一键启动（构建并后台运行）
+### 3) 一键启动（后台运行，默认本地源码构建）
 
 ```bash
 docker compose up -d --build
+```
+
+如需使用预构建镜像部署（生产/快速拉起）：
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+# 或（国内加速版）
+docker compose -f docker-compose.prod.cn.yml up -d
 ```
 
 ### 4) 访问服务
@@ -131,7 +139,30 @@ docker compose up -d --build
 ### 重要说明
 
 - 后端需要访问 Docker，用于沙箱验证，因此默认会挂载 `/var/run/docker.sock`。生产环境请评估权限边界与隔离策略。
-- `docker-compose.prod.yml` 当前仍引用上游 GHCR 镜像地址（`ghcr.io/lintsinghua/*`）。如需生产镜像部署，请替换为你们自己的镜像地址/私有仓库。
+- 默认开发流程使用 `docker-compose.yml` 本地构建业务镜像；`docker-compose.prod.yml` / `docker-compose.prod.cn.yml` 用于预构建镜像部署。
+- `docker-compose.prod.yml` 与 `docker-compose.prod.cn.yml` 默认使用南京大学 GHCR 镜像站（`ghcr.nju.edu.cn/lintsinghua/*`）加速拉取。如需生产镜像部署，可替换为你们自己的镜像地址/私有仓库。
+
+### 常见启动报错：`Can't locate revision identified by 'xxx'`
+
+这通常是数据库卷里的 Alembic 版本记录与当前后端镜像迁移文件不一致导致的（例如从预构建镜像切换到本地源码构建）。
+
+建议按以下顺序处理：
+
+1. 先确保使用本地源码构建启动：
+
+```bash
+docker compose up -d --build
+```
+
+2. 若仍报错，且你确认可以丢弃本地测试数据，再执行一次性清理 PostgreSQL 卷后重建：
+
+```bash
+docker compose down
+docker volume rm audittool_postgres_data
+docker compose up -d --build
+```
+
+⚠️ 以上会删除本地数据库数据；请先备份重要数据。
 
 ## 🧑‍💻 源码开发
 

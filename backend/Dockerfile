@@ -53,7 +53,7 @@ RUN apt-get update && \
 #     rm gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
 
 # 安装 uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.nju.edu.cn/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # 配置 uv/pip 使用阿里云 PyPI 镜像
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
@@ -88,6 +88,8 @@ ENV NO_PROXY="*"
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:${PATH}
 
 # 配置使用阿里云 Debian 镜像源并清除 apt 代理（包含 security 源）
 RUN set -eux; \
@@ -176,12 +178,17 @@ RUN set -eux; \
     opengrep --version
 
 # 安装 MCP 相关运行时（pnpm + qmd CLI）
-RUN pnpm config set registry https://registry.npmmirror.com && \
+RUN mkdir -p /pnpm /pnpm/global && \
+    pnpm config set registry https://registry.npmmirror.com && \
+    pnpm config set global-bin-dir /pnpm && \
+    pnpm config set global-dir /pnpm/global && \
     pnpm add -g \
       @modelcontextprotocol/server-filesystem \
       @modelcontextprotocol/server-memory \
       @modelcontextprotocol/server-sequential-thinking \
       @tobilu/qmd && \
+    pnpm bin -g && \
+    command -v qmd && \
     PNPM_GLOBAL_ROOT="$(pnpm root -g)" && \
     mkdir -p /app/mcp-src && \
     cp -R "${PNPM_GLOBAL_ROOT}/@modelcontextprotocol/server-filesystem" /app/mcp-src/filesystem && \
@@ -228,7 +235,7 @@ PY
 COPY . .
 
 # 创建上传目录并设置启动脚本权限
-RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/code-index /app/data/mcp/xdg-config /app/data/qmd /app/mcp-src/filesystem /app/mcp-src/sequential-thinking /app/mcp-src/qmd /app/mcp-src/code-index-mcp && \
+RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/code-index /app/data/mcp/xdg-config /app/data/qmd /app/mcp-src /app/mcp-src/code-index-mcp && \
     chmod +x /app/docker-entrypoint.sh /app/scripts/sync_mcp_sources.sh
 
 # 暴露端口

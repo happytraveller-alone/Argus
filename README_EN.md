@@ -115,10 +115,18 @@ cp backend/env.example backend/.env
 
 Do not commit real API keys into the repository.
 
-### 3) Build and run
+### 3) Run (default: local source build)
 
 ```bash
 docker compose up -d --build
+```
+
+If you want prebuilt-image deployment (production / quick bootstrap), use:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+# or (CN-accelerated variant)
+docker compose -f docker-compose.prod.cn.yml up -d
 ```
 
 ### 4) Open
@@ -129,7 +137,30 @@ docker compose up -d --build
 ### Notes
 
 - The backend mounts `/var/run/docker.sock` for sandbox execution. Review security boundaries before using in production.
-- `docker-compose.prod.yml` currently references upstream GHCR images (`ghcr.io/lintsinghua/*`). Replace them with your own images/registry for production deployments.
+- The default dev flow uses local image builds from `docker-compose.yml`; `docker-compose.prod.yml` / `docker-compose.prod.cn.yml` are for prebuilt-image deployment.
+- `docker-compose.prod.yml` and `docker-compose.prod.cn.yml` use the Nanjing University GHCR mirror (`ghcr.nju.edu.cn/lintsinghua/*`) for faster pulls in CN regions. Replace with your own images/registry for production deployments if needed.
+
+### Common startup error: `Can't locate revision identified by 'xxx'`
+
+This usually means the Alembic revision stored in the DB volume does not match the migration files in the current backend image (for example, after switching from prebuilt images to local source builds).
+
+Recommended recovery order:
+
+1. Ensure startup uses local source build:
+
+```bash
+docker compose up -d --build
+```
+
+2. If it still fails and you can discard local test data, do a one-time PostgreSQL volume reset and rebuild:
+
+```bash
+docker compose down
+docker volume rm audittool_postgres_data
+docker compose up -d --build
+```
+
+⚠️ This removes local DB data. Back up important data first.
 
 ## Development
 

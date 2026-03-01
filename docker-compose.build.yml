@@ -1,0 +1,43 @@
+# =============================================
+# DeepAudit 本地源码构建覆盖配置（可选）
+# =============================================
+# 使用方式:
+# docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+services:
+  backend:
+    image: deepaudit/backend-local:latest
+    build:
+      context: ./backend
+      args:
+        - http_proxy=
+        - https_proxy=
+        - HTTP_PROXY=
+        - HTTPS_PROXY=
+        - all_proxy=
+        - ALL_PROXY=
+    environment:
+      SANDBOX_IMAGE: deepaudit/sandbox:latest
+
+  frontend:
+    image: deepaudit/frontend-local:latest
+    build:
+      context: ./frontend
+      dockerfile: ${FRONTEND_DOCKERFILE:-Dockerfile}
+      args:
+        - FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}
+        - PNPM_VERSION=${PNPM_VERSION:-9.15.4}
+        - BUILD_WEAK_NETWORK=${BUILD_WEAK_NETWORK:-false}
+        - BUILD_ARCH=${BUILD_ARCH:-}
+        - http_proxy=
+        - https_proxy=
+        - HTTP_PROXY=
+        - HTTPS_PROXY=
+        - all_proxy=
+        - ALL_PROXY=
+
+  sandbox:
+    image: deepaudit/sandbox:latest
+    build:
+      context: ./docker/sandbox
+      dockerfile: Dockerfile

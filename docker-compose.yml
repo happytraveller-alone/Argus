@@ -1,9 +1,9 @@
 # =============================================
 # DeepAudit v3.0.4 Docker Compose 配置
 # =============================================
-# 部署: docker compose up -d
+# 部署: docker compose up -d --build
 # 查看日志: docker compose logs -f
-# 注意: Agent 服务和沙箱环境是必须的核心组件
+# 说明: 开发默认本地源码构建；预构建镜像部署请使用 docker-compose.prod.yml / docker-compose.prod.cn.yml
 
 services:
   # =============================================
@@ -39,6 +39,7 @@ services:
         - HTTPS_PROXY=
         - all_proxy=
         - ALL_PROXY=
+    image: deepaudit/backend-local:latest
     restart: unless-stopped
     volumes:
       # - ./backend/app:/app/app:ro  # 挂载代码目录，修改后自动生效
@@ -160,6 +161,7 @@ services:
         - HTTPS_PROXY=
         - all_proxy=
         - ALL_PROXY=
+    image: deepaudit/frontend-local:latest
     restart: unless-stopped
     volumes:
       # - ./frontend/dist:/usr/share/nginx/html:ro  # 挂载构建产物，本地 pnpm build 后自动生效
