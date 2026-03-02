@@ -30,8 +30,6 @@ import { Progress } from "@/components/ui/progress";
 import {
     Tabs,
     TabsContent,
-    TabsList,
-    TabsTrigger,
 } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
@@ -83,12 +81,6 @@ const STATUS_CLASSES: Record<string, string> = {
     completed: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
     failed: "bg-rose-500/20 text-rose-300 border-rose-500/30",
     interrupted: "bg-orange-500/20 text-orange-300 border-orange-500/30",
-};
-
-const SEVERITY_CLASSES: Record<string, string> = {
-    ERROR: "bg-rose-500/20 text-rose-300 border-rose-500/30",
-    WARNING: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-    INFO: "bg-sky-500/20 text-sky-300 border-sky-500/30",
 };
 
 const FINDING_STATUS_CLASSES: Record<string, string> = {
@@ -305,7 +297,6 @@ export default function StaticAnalysis() {
     const [countingGitleaksFilteredCount, setCountingGitleaksFilteredCount] =
         useState(false);
 
-    const [severityFilter, setSeverityFilter] = useState<string>("");
     const [confidenceFilter, setConfidenceFilter] = useState<string>("");
     const [statusFilter, setStatusFilter] = useState<string>("open");
     const [gitleaksStatusFilter, setGitleaksStatusFilter] =
@@ -370,15 +361,6 @@ export default function StaticAnalysis() {
         [gitleaksTask?.status],
     );
 
-    const getSeverityLabel = (severity: string) => {
-        const normalized = String(severity || "").toUpperCase();
-        if (isEnglish) return normalized;
-        if (normalized === "ERROR") return "严重";
-        if (normalized === "WARNING") return "警告";
-        if (normalized === "INFO") return "提示";
-        return severity;
-    };
-
     const getStatusLabel = (status: string) => {
         const normalized = String(status || "").toLowerCase();
         if (isEnglish) return normalized;
@@ -426,7 +408,6 @@ export default function StaticAnalysis() {
                     const skip = (opengrepPage - 1) * opengrepPageSize;
                     const pageFindings = await getOpengrepScanFindings({
                         taskId: opengrepTaskId,
-                        severity: severityFilter || undefined,
                         confidence: confidenceFilter || undefined,
                         status: statusFilter || undefined,
                         skip,
@@ -519,7 +500,6 @@ export default function StaticAnalysis() {
             for (let page = 0; page < FINDINGS_COUNT_MAX_PAGES; page += 1) {
                 const findings = await getOpengrepScanFindings({
                     taskId: opengrepTaskId,
-                    severity: severityFilter || undefined,
                     confidence: confidenceFilter || undefined,
                     status: statusFilter || undefined,
                     skip: page * FINDINGS_COUNT_BATCH_SIZE,
@@ -628,14 +608,13 @@ export default function StaticAnalysis() {
 
     useEffect(() => {
         loadOpengrepFindings();
-    }, [opengrepTaskId, severityFilter, confidenceFilter, statusFilter, opengrepPage, opengrepPageSize]);
+    }, [opengrepTaskId, confidenceFilter, statusFilter, opengrepPage, opengrepPageSize]);
 
     useEffect(() => {
         setOpengrepFilteredCount(null);
         loadOpengrepFilteredCount();
     }, [
         opengrepTaskId,
-        severityFilter,
         confidenceFilter,
         statusFilter,
         opengrepTask?.total_findings,
@@ -1072,21 +1051,6 @@ export default function StaticAnalysis() {
                 onValueChange={(val) => setActiveTab(val as "opengrep" | "gitleaks")}
                 className="relative z-10"
             >
-                {(showOpengrepTab || showGitleaksTab) && (
-                    <TabsList className="mb-4">
-                        {showOpengrepTab && (
-                            <TabsTrigger value="opengrep">
-                                Opengrep
-                            </TabsTrigger>
-                        )}
-                        {showGitleaksTab && (
-                            <TabsTrigger value="gitleaks">
-                                Gitleaks
-                            </TabsTrigger>
-                        )}
-                    </TabsList>
-                )}
-
                 <TabsContent value="opengrep">
                     {opengrepTask && (
                         <div className="cyber-card p-4 space-y-3 mb-4">
@@ -1146,34 +1110,29 @@ export default function StaticAnalysis() {
                         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                             <div>
                                 <label className="block text-xs font-mono font-bold text-muted-foreground mb-1 uppercase">
-                                    严重程度
+                                    扫描引擎
                                 </label>
                                 <Select
-                                    value={severityFilter || "all"}
+                                    value={activeTab}
                                     onValueChange={(val) =>
-                                        {
-                                            setOpengrepPage(1);
-                                            setSeverityFilter(
-                                                val === "all" ? "" : val,
-                                            );
-                                        }
+                                        setActiveTab(val as "opengrep" | "gitleaks")
                                     }
-                                    disabled={!opengrepTaskId}
+                                    disabled={!showOpengrepTab || !showGitleaksTab}
                                 >
                                     <SelectTrigger className="cyber-input">
-                                        <SelectValue placeholder="全部" />
+                                        <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent className="cyber-dialog border-border">
-                                        <SelectItem value="all">全部</SelectItem>
-                                        <SelectItem value="ERROR">
-                                            {getSeverityLabel("ERROR")}
-                                        </SelectItem>
-                                        <SelectItem value="WARNING">
-                                            {getSeverityLabel("WARNING")}
-                                        </SelectItem>
-                                        <SelectItem value="INFO">
-                                            {getSeverityLabel("INFO")}
-                                        </SelectItem>
+                                        {showOpengrepTab && (
+                                            <SelectItem value="opengrep">
+                                                Opengrep
+                                            </SelectItem>
+                                        )}
+                                        {showGitleaksTab && (
+                                            <SelectItem value="gitleaks">
+                                                Gitleaks
+                                            </SelectItem>
+                                        )}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -1336,11 +1295,6 @@ export default function StaticAnalysis() {
                                                 <div className="flex items-center justify-between gap-4 flex-wrap">
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         <Badge
-                                                            className={`cyber-badge ${SEVERITY_CLASSES[finding.severity] || "bg-muted"}`}
-                                                        >
-                                                            {getSeverityLabel(finding.severity)}
-                                                        </Badge>
-                                                        <Badge
                                                             className={`cyber-badge ${FINDING_STATUS_CLASSES[finding.status] || "bg-muted"}`}
                                                         >
                                                             {getStatusLabel(finding.status)}
@@ -1498,6 +1452,34 @@ export default function StaticAnalysis() {
                     <TabsContent value="gitleaks">
                     <div className="cyber-card p-4 space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-mono font-bold text-muted-foreground mb-1 uppercase">
+                                    扫描引擎
+                                </label>
+                                <Select
+                                    value={activeTab}
+                                    onValueChange={(val) =>
+                                        setActiveTab(val as "opengrep" | "gitleaks")
+                                    }
+                                    disabled={!showOpengrepTab || !showGitleaksTab}
+                                >
+                                    <SelectTrigger className="cyber-input">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="cyber-dialog border-border">
+                                        {showOpengrepTab && (
+                                            <SelectItem value="opengrep">
+                                                Opengrep
+                                            </SelectItem>
+                                        )}
+                                        {showGitleaksTab && (
+                                            <SelectItem value="gitleaks">
+                                                Gitleaks
+                                            </SelectItem>
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <div>
                                 <label className="block text-xs font-mono font-bold text-muted-foreground mb-1 uppercase">
                                     状态
@@ -1854,11 +1836,6 @@ export default function StaticAnalysis() {
                                 <div className="flex-1 overflow-y-auto p-6">
                                     <div className="space-y-6">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <Badge
-                                                className={`cyber-badge ${SEVERITY_CLASSES[selectedFinding.severity] || "bg-muted"}`}
-                                            >
-                                                {getSeverityLabel(selectedFinding.severity)}
-                                            </Badge>
                                             <Badge
                                                 className={`cyber-badge ${FINDING_STATUS_CLASSES[selectedFinding.status] || "bg-muted"}`}
                                             >

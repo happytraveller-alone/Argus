@@ -71,55 +71,12 @@ export type RealtimeMergedFindingItem = {
   is_verified: boolean;
 };
 
-const SEVERITY_ORDER: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  invalid: 4,
-};
-
-const SEVERITY_BADGE_CLASS: Record<string, string> = {
-  critical: "bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/40",
-  high: "bg-orange-500/20 text-orange-600 dark:text-orange-300 border-orange-500/40",
-  medium: "bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40",
-  low: "bg-sky-500/20 text-sky-600 dark:text-sky-300 border-sky-500/40",
-  invalid:
-    "bg-zinc-500/20 text-zinc-700 dark:text-zinc-300 border-zinc-500/40",
-};
-
-const SEVERITY_LABEL_ZH: Record<string, string> = {
-  critical: "严重",
-  high: "高危",
-  medium: "中危",
-  low: "低危",
-  invalid: "无效",
-};
-
-function normalizeDisplaySeverity(value: string): RealtimeDisplaySeverity {
-  const key = String(value || "").trim().toLowerCase();
-  if (!key) return "medium";
-  if (key in SEVERITY_ORDER) return key;
-  if (key === "info") return "low";
-  return "medium";
-}
-
 function normalizeVerificationProgress(
   value: string,
 ): RealtimeVerificationProgress {
   return String(value || "").trim().toLowerCase() === "verified"
     ? "verified"
     : "pending";
-}
-
-function severityToZh(value: RealtimeDisplaySeverity): string {
-  return SEVERITY_LABEL_ZH[value] || SEVERITY_LABEL_ZH.medium;
-}
-
-function getItemDisplaySeverity(
-  item: RealtimeMergedFindingItem,
-): RealtimeDisplaySeverity {
-  return normalizeDisplaySeverity(item.display_severity || item.severity);
 }
 
 function getItemVerificationProgress(
@@ -183,9 +140,6 @@ export default function RealtimeFindingsPanel(props: {
   onClear: () => void;
 }) {
   const [keyword, setKeyword] = useState("");
-  const [severity, setSeverity] = useState<"all" | RealtimeDisplaySeverity>(
-    "all",
-  );
   const [verification, setVerification] = useState<
     "all" | RealtimeVerificationProgress
   >("all");
@@ -204,44 +158,17 @@ export default function RealtimeFindingsPanel(props: {
     return { total: props.items.length, pending, verified };
   }, [props.items]);
 
-  const severityCounts = useMemo(() => {
-    const next = {
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-      invalid: 0,
-    };
-    for (const item of props.items) {
-      const key = getItemDisplaySeverity(item);
-      if (key === "critical") next.critical += 1;
-      else if (key === "high") next.high += 1;
-      else if (key === "medium") next.medium += 1;
-      else if (key === "low") next.low += 1;
-      else next.invalid += 1;
-    }
-    return next;
-  }, [props.items]);
-
   const filtered = useMemo(() => {
     const key = keyword.trim().toLowerCase();
     const sorted = [...props.items].sort((a, b) => {
-      const aKey = getItemDisplaySeverity(a);
-      const bKey = getItemDisplaySeverity(b);
-      const aOrder = SEVERITY_ORDER[aKey] ?? 99;
-      const bOrder = SEVERITY_ORDER[bKey] ?? 99;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      // prefer latest seen first
       return String(b.timestamp || "").localeCompare(String(a.timestamp || ""));
     });
 
     return sorted.filter((item) => {
-      const sevKey = getItemDisplaySeverity(item);
       const verificationKey = getItemVerificationProgress(item);
-      const okSeverity = severity === "all" || sevKey === severity;
       const okVerification =
         verification === "all" || verificationKey === verification;
-      if (!okSeverity || !okVerification) return false;
+      if (!okVerification) return false;
       if (!key) return true;
       return (
         String(item.title || "").toLowerCase().includes(key) ||
@@ -249,7 +176,7 @@ export default function RealtimeFindingsPanel(props: {
         String(item.file_path || "").toLowerCase().includes(key)
       );
     });
-  }, [props.items, keyword, severity, verification]);
+  }, [props.items, keyword, verification]);
 
   return (
     <div className="h-full flex flex-col border border-border rounded-xl bg-card/70 overflow-hidden">
@@ -306,25 +233,6 @@ export default function RealtimeFindingsPanel(props: {
 
           <div className="flex items-center gap-2">
             <Select
-              value={severity}
-              onValueChange={(value) =>
-                setSeverity(value as "all" | RealtimeDisplaySeverity)
-              }
-            >
-              <SelectTrigger className="h-9 min-w-[112px] px-3 py-1.5 text-sm font-normal">
-                <SelectValue placeholder="严重度" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="critical">严重</SelectItem>
-                <SelectItem value="high">高危</SelectItem>
-                <SelectItem value="medium">中危</SelectItem>
-                <SelectItem value="low">低危</SelectItem>
-                <SelectItem value="invalid">无效</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
               value={verification}
               onValueChange={(value) =>
                 setVerification(value as "all" | RealtimeVerificationProgress)
@@ -340,39 +248,6 @@ export default function RealtimeFindingsPanel(props: {
               </SelectContent>
             </Select>
           </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Badge
-            variant="outline"
-            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.critical}`}
-          >
-            严重 {severityCounts.critical}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.high}`}
-          >
-            高危 {severityCounts.high}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.medium}`}
-          >
-            中危 {severityCounts.medium}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.low}`}
-          >
-            低危 {severityCounts.low}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={`text-[11px] border ${SEVERITY_BADGE_CLASS.invalid}`}
-          >
-            无效 {severityCounts.invalid}
-          </Badge>
         </div>
       </div>
 
@@ -390,7 +265,6 @@ export default function RealtimeFindingsPanel(props: {
           <ScrollArea className="h-full">
             <div className="p-3 space-y-2">
               {filtered.map((item) => {
-                const sevKey = getItemDisplaySeverity(item);
                 const verificationKey = getItemVerificationProgress(item);
                 return (
                   <div
@@ -400,11 +274,6 @@ export default function RealtimeFindingsPanel(props: {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <Badge
-                            className={`border text-[11px] ${SEVERITY_BADGE_CLASS[sevKey] || SEVERITY_BADGE_CLASS.medium}`}
-                          >
-                            {severityToZh(sevKey)}
-                          </Badge>
                           <span className="text-sm font-semibold break-words line-clamp-2">
                             {item.display_title || item.title || "未命名缺陷"}
                           </span>
@@ -474,12 +343,6 @@ export default function RealtimeFindingsPanel(props: {
           <div className="flex-1 overflow-y-auto custom-scrollbar py-4 space-y-4">
             {detailItem ? (
               <section className="rounded-lg border border-border bg-card/70 p-3.5 space-y-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline">
-                    {severityToZh(getItemDisplaySeverity(detailItem))}
-                  </Badge>
-                </div>
-
                 <h3 className="text-sm font-semibold break-words">
                   {detailItem.display_title || detailItem.title || "未命名缺陷"}
                 </h3>

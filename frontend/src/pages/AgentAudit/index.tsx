@@ -9,8 +9,11 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Terminal,
   Bot,
+  Layers,
+  Zap,
   Loader2,
   ArrowDown,
+  ArrowRight,
   Download,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -38,10 +41,10 @@ import {
   type OpengrepFinding,
 } from "@/shared/api/opengrep";
 import CreateAgentTaskDialog from "@/components/agent/CreateAgentTaskDialog";
+import CreateProjectAuditDialog from "@/components/audit/CreateProjectAuditDialog";
 
 // Local imports
 import {
-  SplashScreen,
   Header,
   LogEntry,
   StatsPanel,
@@ -117,6 +120,17 @@ const LOG_TYPE_LABELS: Record<string, string> = {
   error: "错误",
   user: "用户",
   progress: "进度",
+};
+
+type HomeScanCard = {
+  key: "static" | "agent" | "hybrid";
+  title: string;
+  intro: string;
+  strengths: string;
+  limitations: string;
+  quickStartHint: string;
+  icon: typeof Zap;
+  accentClassName: string;
 };
 
 type AutoScrollByProjectState = Record<string, boolean>;
@@ -619,6 +633,9 @@ function AgentAuditPageContent() {
   // Local state
   const [showSplash, setShowSplash] = useState(!taskId);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showHomeStaticDialog, setShowHomeStaticDialog] = useState(false);
+  const [showHomeAgentDialog, setShowHomeAgentDialog] = useState(false);
+  const [showHomeMixedDialog, setShowHomeMixedDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState<"logs" | "findings">(
@@ -735,6 +752,49 @@ function AgentAuditPageContent() {
   const failedStep = useMemo(
     () => (failedReason ? extractStepName(failedReason) : null),
     [failedReason],
+  );
+  const openHomeModeDialog = useCallback((mode: HomeScanCard["key"]) => {
+    setShowHomeStaticDialog(mode === "static");
+    setShowHomeAgentDialog(mode === "agent");
+    setShowHomeMixedDialog(mode === "hybrid");
+  }, []);
+  const homeScanCards: HomeScanCard[] = useMemo(
+    () => [
+      {
+        key: "static",
+        title: "静态扫描",
+        intro: "简介：严重规则快速定位缺陷",
+        strengths: "优势：速度快、结果稳定",
+        limitations: "劣势：复杂语义覆盖有限",
+        quickStartHint: "点击卡片，快速开始静态审计",
+        icon: Zap,
+        accentClassName:
+          "from-sky-500/25 via-cyan-500/10 to-transparent border-sky-400/40",
+      },
+      {
+        key: "agent",
+        title: "智能扫描",
+        intro: "简介：智能体上下文推理审计",
+        strengths: "优势：可发现规则外风险",
+        limitations: "劣势：耗时更长、资源更高",
+        quickStartHint: "点击卡片，快速开始智能审计",
+        icon: Bot,
+        accentClassName:
+          "from-violet-500/25 via-indigo-500/10 to-transparent border-violet-400/40",
+      },
+      {
+        key: "hybrid",
+        title: "混合扫描",
+        intro: "简介：规则预筛再智能深挖",
+        strengths: "优势：效率与覆盖更平衡",
+        limitations: "劣势：流程更长需阶段跟踪",
+        quickStartHint: "点击卡片，快速开始混合审计",
+        icon: Layers,
+        accentClassName:
+          "from-emerald-500/25 via-cyan-500/10 to-transparent border-emerald-400/40",
+      },
+    ],
+    [],
   );
   const currentProjectId = useMemo(() => {
     const value = typeof task?.project_id === "string" ? task.project_id.trim() : "";
@@ -2776,15 +2836,15 @@ function AgentAuditPageContent() {
 
   if (showSplash && !taskId) {
     return (
-      <div className="h-[100dvh] max-h-[100dvh] bg-background flex items-center justify-center relative overflow-hidden">
+      <div className="min-h-[100dvh] bg-background flex items-start justify-center relative overflow-y-auto overflow-x-hidden pt-6 md:pt-10">
         <div className="absolute inset-0 cyber-grid opacity-20" />
         <div className="absolute inset-0 vignette pointer-events-none" />
 
-        <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
+        <div className="relative z-10 w-full max-w-[1800px] mx-auto px-6 text-center">
           <button
             type="button"
             onClick={cycleLogoVariant}
-            className="mx-auto mb-10 w-48 h-48 rounded-[2.5rem] border border-primary/40 bg-primary/10 flex items-center justify-center shadow-[0_0_48px_rgba(59,130,246,0.4)] cursor-pointer transition-transform duration-200 hover:scale-[1.02]"
+            className="mx-auto mb-6 w-48 h-48 rounded-[2.5rem] border border-primary/40 bg-primary/10 flex items-center justify-center shadow-[0_0_48px_rgba(59,130,246,0.4)] cursor-pointer transition-transform duration-200 hover:scale-[1.02]"
             title="点击切换 Logo"
           >
             <img
@@ -2797,16 +2857,83 @@ function AgentAuditPageContent() {
           <h1 className="text-6xl md:text-7xl font-mono font-bold tracking-wider text-foreground">
             VulHunter
           </h1>
-          <p className="mt-6 text-2xl md:text-3xl text-muted-foreground leading-relaxed">
-            面向代码安全与合规审计的智能分析平台。聚焦仓库级项目，
-            提供任务编排、自动化审计与结果追踪，帮助团队更快定位风险与改进点。
+          <p className="mt-4 text-xl md:text-2xl text-muted-foreground leading-relaxed">
+            VulHunter 让你以静态、智能或混合方式快速发起代码安全审计。
           </p>
+
+          <div className="mt-8 mx-auto w-full md:w-[80%] grid grid-cols-1 md:grid-cols-[repeat(3,30%)] md:justify-between gap-5 text-left">
+            {homeScanCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => openHomeModeDialog(card.key)}
+                  aria-label={`${card.title}，点击快速开启审计`}
+                  className="group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/70 p-6 md:p-7 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_22px_48px_-28px_rgba(56,189,248,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                >
+                  <div
+                    className={`pointer-events-none absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100 ${card.accentClassName}`}
+                  />
+                  <div className="relative z-10 flex h-full flex-col">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-primary/35 bg-primary/10 text-primary">
+                          <Icon className="w-5 h-5" />
+                        </span>
+                        <h3 className="text-lg md:text-xl font-semibold text-foreground">
+                          {card.title}
+                        </h3>
+                      </div>
+                      <p className="text-sm md:text-base text-muted-foreground leading-relaxed whitespace-nowrap overflow-hidden text-ellipsis">
+                        {card.intro}
+                      </p>
+                      <p className="text-sm md:text-base text-foreground/90 leading-relaxed whitespace-nowrap overflow-hidden text-ellipsis">
+                        {card.strengths}
+                      </p>
+                      <p className="text-sm md:text-base text-muted-foreground leading-relaxed whitespace-nowrap overflow-hidden text-ellipsis">
+                        {card.limitations}
+                      </p>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-primary/20 pt-3 text-sm font-medium text-muted-foreground transition-colors duration-200 group-hover:text-primary group-focus-visible:text-primary">
+                      <span className="whitespace-nowrap overflow-hidden text-ellipsis">
+                        {card.quickStartHint}
+                      </span>
+                      <ArrowRight className="h-4 w-4 flex-shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5" />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/*
-        <SplashScreen onComplete={() => setShowCreateDialog(true)} />
-        <CreateAgentTaskDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
-        */}
+        <CreateProjectAuditDialog
+          open={showHomeStaticDialog}
+          onOpenChange={setShowHomeStaticDialog}
+          initialMode="static"
+          lockMode
+          allowUploadProject
+          navigateOnSuccess
+          primaryCreateLabel="开始静态扫描"
+        />
+        <CreateProjectAuditDialog
+          open={showHomeAgentDialog}
+          onOpenChange={setShowHomeAgentDialog}
+          initialMode="agent"
+          lockMode
+          allowUploadProject
+          navigateOnSuccess
+          primaryCreateLabel="开始智能扫描"
+        />
+        <CreateProjectAuditDialog
+          open={showHomeMixedDialog}
+          onOpenChange={setShowHomeMixedDialog}
+          initialMode="static"
+          allowUploadProject
+          navigateOnSuccess
+          primaryCreateLabel="开始扫描"
+        />
       </div>
     );
   }

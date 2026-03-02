@@ -126,6 +126,9 @@ const extractApiErrorMessage = (error: unknown): string => {
 	return "未知错误";
 };
 
+const isSevereRule = (rule: OpengrepRule) =>
+	String(rule.severity || "").toUpperCase() === "ERROR";
+
 export default function CreateTaskDialog({
 	open,
 	onOpenChange,
@@ -221,12 +224,12 @@ export default function CreateTaskDialog({
 	);
 
 	useEffect(() => {
-		const cached = getOpengrepActiveRules();
+		const cached = getOpengrepActiveRules().filter(isSevereRule);
 		if (cached.length > 0) {
 			setStaticRules(cached);
 		}
 		const unsubscribe = subscribeOpengrepActiveRules((rules) => {
-			setStaticRules(rules);
+			setStaticRules(rules.filter(isSevereRule));
 		});
 		return unsubscribe;
 	}, []);
@@ -236,7 +239,9 @@ export default function CreateTaskDialog({
 			if (!open || auditMode !== "static" || !staticTools.opengrep) return;
 			setLoadingStaticRules(true);
 			try {
-				const rules = await getOpengrepRules({ is_active: true });
+				const rules = (await getOpengrepRules({ is_active: true })).filter(
+					isSevereRule,
+				);
 				setStaticRules(rules);
 				setOpengrepActiveRules(rules);
 				setSelectedRuleIds((prev) => {
@@ -370,9 +375,12 @@ export default function CreateTaskDialog({
 
 		if (staticTools.opengrep) {
 			const pickActiveRuleIds = (rules: OpengrepRule[]) => {
-				const validRuleIds = new Set(rules.map((rule) => rule.id));
+				const severeRules = rules.filter(isSevereRule);
+				const validRuleIds = new Set(severeRules.map((rule) => rule.id));
 				const selected = selectedRuleIds.filter((id) => validRuleIds.has(id));
-				return selected.length > 0 ? selected : rules.map((rule) => rule.id);
+				return selected.length > 0
+					? selected
+					: severeRules.map((rule) => rule.id);
 			};
 
 			const activeRuleIds = pickActiveRuleIds(staticRules);
@@ -392,7 +400,9 @@ export default function CreateTaskDialog({
 					apiMsg.includes("部分规则不存在") || apiMsg.includes("规则不存在");
 				if (!shouldReloadRules) throw error;
 
-				const freshRules = await getOpengrepRules({ is_active: true });
+				const freshRules = (await getOpengrepRules({ is_active: true })).filter(
+					isSevereRule,
+				);
 				setStaticRules(freshRules);
 				setOpengrepActiveRules(freshRules);
 

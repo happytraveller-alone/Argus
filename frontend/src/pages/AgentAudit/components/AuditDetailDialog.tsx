@@ -25,7 +25,6 @@ import {
   localizeAuditText,
   toZhAgentName,
   toZhLogType,
-  toZhSeverityLabel,
   toZhStatus,
 } from "../localization";
 import FindingCodeWindow from "./FindingCodeWindow";
@@ -219,9 +218,6 @@ export function AuditDetailDialog({
               })()}
 
               <Section title="概览">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline">{toZhSeverityLabel(finding.severity)}</Badge>
-                </div>
                 <h3 className="text-sm font-semibold break-words">
                   {localizeAuditText(finding.title)}
                 </h3>

@@ -67,6 +67,9 @@ const extractApiErrorMessage = (error: unknown): string => {
 	return "未知错误";
 };
 
+const isSevereRule = (rule: OpengrepRule) =>
+	String(rule.severity || "").toUpperCase() === "ERROR";
+
 export default function CreateProjectAuditDialog({
 	open,
 	onOpenChange,
@@ -169,7 +172,7 @@ export default function CreateProjectAuditDialog({
 			try {
 				setLoadingRules(true);
 				const rules = await getOpengrepRules({ is_active: true });
-				setActiveRules(rules);
+				setActiveRules(rules.filter(isSevereRule));
 			} catch (error) {
 				console.error("加载启用规则失败:", error);
 				toast.error("加载启用规则失败");
@@ -228,9 +231,9 @@ export default function CreateProjectAuditDialog({
 		let gitleaksTask: { id: string } | null = null;
 
 		if (opengrepEnabled) {
-			const ruleIds = activeRules.map((rule) => rule.id);
+			const ruleIds = activeRules.filter(isSevereRule).map((rule) => rule.id);
 			if (ruleIds.length === 0) {
-				throw new Error("当前没有启用规则，请先启用规则");
+				throw new Error("当前没有启用严重规则，请先启用严重规则");
 			}
 			opengrepTask = await createOpengrepScanTask({
 				project_id: project.id,
