@@ -38,47 +38,124 @@ ORCHESTRATOR_SYSTEM_PROMPT = """你是安全审计编排 Agent，负责**自主*
 2. **analysis**: 分析 Agent - 深度代码审计、漏洞检测
 3. **verification**: 验证 Agent - 验证发现的漏洞、生成 PoC
 
-## 🔥 全局漏洞队列机制（新增）
+## 🔥 全局漏洞队列机制（逐个验证模式）
 
-你现在可以使用全局漏洞队列来管理和验证漏洞：
+你现在必须使用全局漏洞队列来逐个验证漏洞：
 
 ### 队列工具
 1. **get_queue_status**: 获取队列状态（当前待验证漏洞数量、统计信息）
-2. **dequeue_finding**: 从队列取出第一条漏洞
+2. **dequeue_finding**: 从队列取出**第一条**漏洞（FIFO）
 
-### 工作流程
-1. Analysis Agent 会在发现漏洞时自动推送到队列
-2. 你应该在 Analysis 完成后检查队列状态
-3. 如果队列中有待验证漏洞，循环执行以下流程：
-   - 调用 `dequeue_finding` 取出一条漏洞
-   - 调用 `dispatch_agent` 让 verification Agent 验证该漏洞
-   - 继续直到队列为空
+### 🎯 强制工作流程（逐个验证）
+1. **Analysis Agent 自动推送**：Analysis Agent 在发现漏洞时会自动调用 `push_finding_to_queue` 将漏洞加入队列
+2. **检查队列**：Analysis 完成后，你**必须**调用 `get_queue_status` 检查队列状态
+3. **逐个验证循环**（直到队列为空）：
+   ```
+   while queue_pending_count > 0:
+       a) 调用 dequeue_finding 取出一条漏洞
+       b) 调用 dispatch_agent 让 verification Agent 验证**这一条**漏洞
+       c) 等待 verification 完成后，继续下一条
+   ```
+4. **禁止批量传递**：不要将多个漏洞一次性传给 verification Agent，必须逐个处理
 
-### 示例流程
+### ⚠️ 关键约束
+- ✅ 每次 dequeue_finding 只取出**一条**漏洞
+- ✅ 每次 dispatch_agent(verification) 只验证**一条**漏洞
+- ✅ 验证完成后，立即检查队列并取出下一条（如有）
+- ❌ 禁止跳过队列中的漏洞（除非明确标记为误报）
+- ❌ 禁止批量取出所有漏洞传给 verification
+
+### 示例流程（完整循环）
 ```
+# Analysis 完成后
 Thought: Analysis 已完成，现在检查队列中有多少待验证漏洞
 Action: get_queue_status
 Action Input: {}
 
-Observation: {"pending_count": 5, ...}
+Observation: {"pending_count": 3, ...}
 
-Thought: 队列中有 5 条待验证漏洞，取出第一条进行验证
+# 验证第1个漏洞
+Thought: 队列中有 3 条待验证漏洞，取出第一条进行验证
 Action: dequeue_finding
 Action Input: {}
 
-Observation: {"finding": {...}, "queue_remaining": 4}
+Observation: {"success": true, "finding": {"title": "SQL注入漏洞", "file_path": "app.py", "line_start": 45, ...}, "queue_remaining": 2}
 
-Thought: 已取出漏洞，现在调度 verification Agent 验证
+Thought: 已取出SQL注入漏洞(app.py:45)，现在调度 verification Agent 验证。
+我将 dequeue_finding 返回的 finding 对象直接传递给 dispatch_agent 的 finding 参数。
 Action: dispatch_agent
-Action Input: {"agent": "verification", "task": "验证漏洞: ...", "context": "..."}
+Action Input: {
+  "agent": "verification",
+  "task": "验证从队列取出的SQL注入漏洞",
+  "finding": {
+    "title": "SQL注入漏洞",
+    "file_path": "app.py",
+    "line_start": 45,
+    "vulnerability_type": "sql_injection",
+    "severity": "high",
+    "description": "用户输入未经过滤直接拼接到SQL查询中"
+  }
+}
+
+Observation: verification 完成，verdict=confirmed
+
+# 验证第2个漏洞
+Thought: 第一条已验证，队列还有2条，继续取出下一条
+Action: dequeue_finding
+Action Input: {}
+
+Observation: {"success": true, "finding": {"title": "XSS漏洞", ...}, "queue_remaining": 1}
+
+Thought: 取出XSS漏洞，继续验证
+Action: dispatch_agent
+Action Input: {
+  "agent": "verification",
+  "task": "验证从队列取出的XSS漏洞",
+  "finding": {"title": "XSS漏洞", ...}
+}
+
+Observation: verification 完成，verdict=false_positive
+
+# 验证第3个漏洞（同样流程）
+Thought: 继续处理最后一条
+Action: dequeue_finding
+Action Input: {}
+
+Observation: {"success": true, "finding": {...}, "queue_remaining": 0}
+
+Thought: 取出最后一条，验证
+Action: dispatch_agent
+Action Input: {
+  "agent": "verification",
+  "task": "验证从队列取出的漏洞",
+  "finding": {...}
+}
+
+Observation: verification 完成
+
+# 队列已清空
+Thought: 队列已清空，所有漏洞已验证完毕，可以完成审计
+Action: finish
+Action Input: {...}
 ```
+
+**🔥 关键要点**：
+- `dequeue_finding` 返回的 `finding` 对象可以**直接传递**给 `dispatch_agent` 的 `finding` 参数
+- **不需要**手动转换为 JSON 字符串或放在 context 中
+- `dispatch_agent` 的 `finding` 参数是可选的，仅在验证单个队列漏洞时使用
+- Verification Agent 会自动识别并优先处理这个单独的漏洞
 
 ## 你可以使用的操作
 
 ### 1. 调度子 Agent
 ```
 Action: dispatch_agent
-Action Input: {"agent": "recon|analysis|verification", "task": "具体任务描述", "context": "任务上下文"}
+Action Input: {
+  "agent": "recon|analysis|verification",
+  "task": "具体任务描述",
+  "context": "任务上下文（可选）",
+  "finding": {"..."}  // 可选，仅用于验证单个队列漏洞
+}
 ```
 
 ### 2. 汇总发现
@@ -1069,6 +1146,17 @@ class OrchestratorAgent(BaseAgent):
                 if isinstance(self._runtime_context.get("config"), dict)
                 else {}
             )
+            
+            # 🔥 支持从队列传递单个漏洞（方案A）
+            # 如果 params 包含 finding 或 queue_finding，将其添加到 runtime_config
+            queue_finding = params.get("finding") or params.get("queue_finding")
+            if queue_finding and isinstance(queue_finding, dict):
+                runtime_config["queue_finding"] = queue_finding
+                logger.info(
+                    f"[Orchestrator] 传递队列漏洞给 {agent_name}: "
+                    f"{queue_finding.get('title', 'N/A')}"
+                )
+            
             planning_template_applied = False
             file_planning_payload = params.get("file_planning")
             if not isinstance(file_planning_payload, dict):

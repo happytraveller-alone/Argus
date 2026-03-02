@@ -1910,11 +1910,39 @@ class VerificationAgent(BaseAgent):
             self.receive_handoff(handoff)
 
         findings_to_verify = []
+        
+        # 🔥 优先支持：从队列取出的单个漏洞（方案A支持）
+        # Orchestrator 在调用 dequeue_finding 后，会将单个漏洞通过 context 传递
+        queue_finding_from_context = None
+        if task_context and isinstance(task_context, str):
+            # 尝试从 task_context 中解析 JSON 漏洞信息
+            import json
+            try:
+                # task_context 可能是纯文本描述，也可能包含 JSON
+                if task_context.strip().startswith("{"):
+                    queue_finding_from_context = json.loads(task_context)
+                elif "finding_from_queue" in task_context or "dequeued_finding" in task_context:
+                    # 尝试提取嵌入的 JSON
+                    import re
+                    json_match = re.search(r'\{.*\}', task_context, re.DOTALL)
+                    if json_match:
+                        queue_finding_from_context = json.loads(json_match.group(0))
+            except (json.JSONDecodeError, Exception) as e:
+                logger.debug(f"[Verification] 无法从 task_context 解析队列漏洞: {e}")
+        
+        # 如果通过 config 传递了单个漏洞（备用方案）
+        if not queue_finding_from_context and isinstance(config, dict):
+            queue_finding_from_context = config.get("queue_finding")
+        
+        if queue_finding_from_context and isinstance(queue_finding_from_context, dict):
+            findings_to_verify = [queue_finding_from_context]
+            logger.info(f"[Verification] 🎯 从队列获取单个漏洞进行验证: {queue_finding_from_context.get('title', 'N/A')}")
 
-        if self._incoming_handoff and self._incoming_handoff.key_findings:
+        if self._incoming_handoff and self._incoming_handoff.key_findings and not findings_to_verify:
             findings_to_verify = self._incoming_handoff.key_findings.copy()
             logger.info(f"[Verification] 从交接信息获取 {len(findings_to_verify)} 个发现")
-        else:
+        
+        if not findings_to_verify:
             if isinstance(previous_results, dict) and "findings" in previous_results:
                 direct_findings = previous_results.get("findings", [])
                 if isinstance(direct_findings, list):
@@ -2034,8 +2062,13 @@ class VerificationAgent(BaseAgent):
         self.record_work(f"开始验证 {len(findings_to_verify)} 个漏洞发现")
 
         handoff_context = self.get_handoff_context()
-        findings_summary = []
-        for index, finding in enumerate(findings_to_verify):
+        
+        # 🔥 支持单个漏洞验证（方案A：队列集成）
+        is_single_finding = len(findings_to_verify) == 1
+        
+        if is_single_finding:
+            # 单个漏洞验证模式：更简洁直接的提示词
+            finding = findings_to_verify[0]
             file_path = finding.get("file_path", "unknown")
             line_start = finding.get("line_start", 0)
 
@@ -2048,7 +2081,64 @@ class VerificationAgent(BaseAgent):
                     except ValueError:
                         pass
 
-            findings_summary.append(f"""
+            initial_message = f"""请验证以下安全发现：
+
+{handoff_context if handoff_context else ''}
+
+## 🎯 待验证发现
+
+**标题**: {finding.get('title', 'Unknown')}
+**漏洞类型**: {finding.get('vulnerability_type', 'unknown')}
+**严重度**: {finding.get('severity', 'medium')}
+**文件位置**: {file_path} (第 {line_start} 行)
+
+**代码片段**:
+```
+{finding.get('code_snippet', 'N/A')[:500]}
+```
+
+**发现描述**:
+{finding.get('description', 'N/A')[:400]}
+
+## ⚠️ 验证指南
+1. **直接使用上述文件路径** - 使用精确路径: `{file_path}`
+2. **先读取完整文件内容** - 使用 `read_file` 工具了解上下文
+3. **深入分析代码逻辑** - 确认漏洞是否真实存在
+4. **编写验证代码** - 如可能，使用 `run_code` 编写 Fuzzing Harness 验证
+
+## 验证要求
+- 验证级别: {config.get('verification_level', 'standard')}
+- 必须提供明确的验证结论: `confirmed` (确认) / `likely` (可能) / `false_positive` (误报)
+- 必须提供置信度 (0-1)
+- 必须提供可达性分析: `reachable` / `likely_reachable` / `unreachable`
+
+## 可用工具
+{self.get_tools_description()}
+
+请立即开始验证这个发现：
+1. 使用 read_file 读取 `{file_path}` (关注第 {line_start} 行附近)
+2. 分析代码上下文，确认漏洞是否存在
+3. 如需要，使用其他工具 (run_code, search_code, extract_function) 深入验证
+4. 给出最终验证结论
+
+{f'💡 参考 Analysis Agent 的分析要点。' if handoff_context else ''}"""
+        else:
+            # 批量验证模式：保持原有逻辑
+            findings_summary = []
+            for index, finding in enumerate(findings_to_verify):
+                file_path = finding.get("file_path", "unknown")
+                line_start = finding.get("line_start", 0)
+
+                if isinstance(file_path, str) and ":" in file_path:
+                    parts = file_path.split(":", 1)
+                    if len(parts) == 2 and parts[1].split()[0].isdigit():
+                        file_path = parts[0]
+                        try:
+                            line_start = int(parts[1].split()[0])
+                        except ValueError:
+                            pass
+
+                findings_summary.append(f"""
 ### 发现 {index + 1}: {finding.get('title', 'Unknown')}
 - 类型: {finding.get('vulnerability_type', 'unknown')}
 - 严重度: {finding.get('severity', 'medium')}
@@ -2060,7 +2150,7 @@ class VerificationAgent(BaseAgent):
 - 描述: {finding.get('description', 'N/A')[:300]}
 """)
 
-        initial_message = f"""请验证以下 {len(findings_to_verify)} 个安全发现。
+            initial_message = f"""请验证以下 {len(findings_to_verify)} 个安全发现。
 
 {handoff_context if handoff_context else ''}
 
