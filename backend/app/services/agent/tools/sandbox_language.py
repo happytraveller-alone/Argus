@@ -1139,7 +1139,8 @@ class ShellTestTool(BaseLanguageTestTool):
                 for i in range(1, max_idx + 1):
                     # 如果中间有缺失的数字，补空字符串
                     val = positional_args.get(i, "")
-                    args_list.append(f'"{val.replace(\'"\', \'\\\\"\')}"')
+                    safe_arg = val.replace('"', '\\"')
+                    args_list.append(f'"{safe_arg}"')
                 
                 # set -- "arg1" "arg2" 会重置当前 shell 的 $1, $2...
                 wrapper_parts.append(f"set -- {' '.join(args_list)}")

@@ -10,6 +10,8 @@ services:
     build:
       context: ./backend
       args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - UV_IMAGE=${UV_IMAGE:-ghcr.nju.edu.cn/astral-sh/uv:latest}
         - http_proxy=
         - https_proxy=
         - HTTP_PROXY=
@@ -25,6 +27,7 @@ services:
       context: ./frontend
       dockerfile: ${FRONTEND_DOCKERFILE:-Dockerfile}
       args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
         - FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}
         - PNPM_VERSION=${PNPM_VERSION:-9.15.4}
         - BUILD_WEAK_NETWORK=${BUILD_WEAK_NETWORK:-false}
@@ -41,3 +44,6 @@ services:
     build:
       context: ./docker/sandbox
       dockerfile: Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - SANDBOX_BASE_IMAGE=${SANDBOX_BASE_IMAGE:-docker.m.daocloud.io/python:3.11-bullseye}

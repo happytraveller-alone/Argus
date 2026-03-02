@@ -118,7 +118,7 @@ Do not commit real API keys into the repository.
 ### 3) Run (default: local source build)
 
 ```bash
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 If you want prebuilt-image deployment (production / quick bootstrap), use:
@@ -139,8 +139,9 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - The backend mounts `/var/run/docker.sock` for sandbox execution. Review security boundaries before using in production.
 - The default dev flow uses local image builds from `docker-compose.yml`; `docker-compose.prod.yml` / `docker-compose.prod.cn.yml` are for prebuilt-image deployment.
 - `docker-compose.prod.yml` and `docker-compose.prod.cn.yml` use the Nanjing University GHCR mirror (`ghcr.nju.edu.cn/lintsinghua/*`) for faster pulls in CN regions. Replace with your own images/registry for production deployments if needed.
-- The dev build path (`docker compose up -d --build`) defaults to CN mirrors: Docker Hub via `docker.m.daocloud.io/library`, GHCR via `ghcr.nju.edu.cn`.
+- The dev build flow defaults to `./scripts/compose-up-with-fallback.sh`: 3 retries with CN mirrors first, then 3 retries with official registries, then fail fast.
 - You can override mirror endpoints with `DOCKERHUB_LIBRARY_MIRROR` and `SANDBOX_IMAGE`.
+- Running `docker compose up -d --build` directly does not include automatic mirror fallback logic.
 - GitHub source sync and task repo download/clone now use a two-step proxy chain by default: `https://gh-proxy.com` -> `https://v6.gh-proxy.org`.
 - Fallback to origin GitHub is disabled by default (`GIT_MIRROR_FALLBACK_TO_ORIGIN=false`); enable it only for troubleshooting.
 
@@ -149,7 +150,7 @@ Example:
 ```bash
 DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library \
 SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest \
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 GitHub proxy chain example:
@@ -157,7 +158,7 @@ GitHub proxy chain example:
 ```bash
 GIT_MIRROR_PREFIXES=https://gh-proxy.com,https://v6.gh-proxy.org \
 GIT_MIRROR_FALLBACK_TO_ORIGIN=false \
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 ### Common startup error: `Can't locate revision identified by 'xxx'`
@@ -169,7 +170,7 @@ Recommended recovery order:
 1. Ensure startup uses local source build:
 
 ```bash
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 2. If it still fails and you can discard local test data, do a one-time PostgreSQL volume reset and rebuild:
@@ -177,7 +178,7 @@ docker compose up -d --build
 ```bash
 docker compose down
 docker volume rm audittool_postgres_data
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 ⚠️ This removes local DB data. Back up important data first.

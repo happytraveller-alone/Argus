@@ -6,7 +6,7 @@
 
 services:
   frontend-dev:
-    image: node:20-slim
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/node:20-slim
     working_dir: /app
     restart: unless-stopped
     volumes:

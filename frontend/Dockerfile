@@ -1,4 +1,3 @@
-# syntax=docker.m.daocloud.io/docker/dockerfile:1.7
 # =============================================
 # DeepAudit Frontend Docker 构建（BuildKit 缓存优化）
 # =============================================

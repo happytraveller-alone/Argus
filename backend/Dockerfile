@@ -2,6 +2,8 @@
 # 多阶段构建 - 构建阶段
 # ============================================
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+ARG UV_IMAGE=ghcr.nju.edu.cn/astral-sh/uv:latest
+FROM ${UV_IMAGE} AS uvbin
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.12-slim AS builder
 
 WORKDIR /app
@@ -54,7 +56,7 @@ RUN apt-get update && \
 #     rm gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
 
 # 安装 uv
-COPY --from=ghcr.nju.edu.cn/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=uvbin /uv /usr/local/bin/uv
 
 # 配置 uv/pip 使用阿里云 PyPI 镜像
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/

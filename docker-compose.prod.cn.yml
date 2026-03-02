@@ -9,7 +9,7 @@
 
 services:
   db:
-    image: postgres:15-alpine
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:15-alpine
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -26,7 +26,7 @@ services:
       - deepaudit-network
 
   redis:
-    image: redis:7-alpine
+    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:7-alpine
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -39,7 +39,7 @@ services:
       - deepaudit-network
 
   backend:
-    image: ghcr.nju.edu.cn/lintsinghua/deepaudit-backend:latest
+    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-backend:${DEEPAUDIT_IMAGE_TAG:-latest}
     restart: unless-stopped
     volumes:
       - backend_uploads:/app/uploads
@@ -53,7 +53,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - AGENT_ENABLED=true
       - SANDBOX_ENABLED=true
-      - SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-sandbox:${DEEPAUDIT_IMAGE_TAG:-latest}}
       - MCP_ENABLED=true
       - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
       - MCP_REQUIRED_RUNTIME_DOMAIN=all
@@ -149,7 +149,7 @@ services:
 
   # 数据库迁移服务 - 在后端启动前自动执行
   db-migrate:
-    image: ghcr.nju.edu.cn/lintsinghua/deepaudit-backend:latest
+    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-backend:${DEEPAUDIT_IMAGE_TAG:-latest}
     restart: "no"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/deepaudit
@@ -161,7 +161,7 @@ services:
       - deepaudit-network
 
   frontend:
-    image: ghcr.nju.edu.cn/lintsinghua/deepaudit-frontend:latest
+    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-frontend:${DEEPAUDIT_IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "3000:80"
@@ -181,7 +181,7 @@ services:
 
   # 预拉取沙箱镜像（后端会按需调用）
   sandbox-pull:
-    image: ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest
+    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-sandbox:${DEEPAUDIT_IMAGE_TAG:-latest}
     restart: "no"
     command: echo "Sandbox image ready"
 

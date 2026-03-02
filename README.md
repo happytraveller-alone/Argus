@@ -120,7 +120,7 @@ cp backend/env.example backend/.env
 ### 3) 一键启动（后台运行，默认本地源码构建）
 
 ```bash
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 如需使用预构建镜像部署（生产/快速拉起）：
@@ -141,8 +141,9 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - 后端需要访问 Docker，用于沙箱验证，因此默认会挂载 `/var/run/docker.sock`。生产环境请评估权限边界与隔离策略。
 - 默认开发流程使用 `docker-compose.yml` 本地构建业务镜像；`docker-compose.prod.yml` / `docker-compose.prod.cn.yml` 用于预构建镜像部署。
 - `docker-compose.prod.yml` 与 `docker-compose.prod.cn.yml` 默认使用南京大学 GHCR 镜像站（`ghcr.nju.edu.cn/lintsinghua/*`）加速拉取。如需生产镜像部署，可替换为你们自己的镜像地址/私有仓库。
-- 开发构建链路（`docker compose up -d --build`）默认使用国内镜像源：Docker Hub 走 `docker.m.daocloud.io/library`，GHCR 走 `ghcr.nju.edu.cn`。
+- 开发构建链路默认使用 `./scripts/compose-up-with-fallback.sh`：先走国内镜像重试 3 次，再自动切官方镜像重试 3 次，全部失败则退出。
 - 如需切换为自建代理/其他镜像站，可覆盖环境变量：`DOCKERHUB_LIBRARY_MIRROR`、`SANDBOX_IMAGE`。
+- 直接执行 `docker compose up -d --build` 不包含自动切换镜像源逻辑。
 - GitHub 源码同步与任务仓库下载/克隆默认走双代理：`https://gh-proxy.com` -> `https://v6.gh-proxy.org`。
 - 默认不回源 GitHub（`GIT_MIRROR_FALLBACK_TO_ORIGIN=false`）；仅在排障时建议临时开启回源。
 
@@ -151,7 +152,7 @@ docker compose -f docker-compose.prod.cn.yml up -d
 ```bash
 DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library \
 SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest \
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 GitHub 代理链路示例：
@@ -159,7 +160,7 @@ GitHub 代理链路示例：
 ```bash
 GIT_MIRROR_PREFIXES=https://gh-proxy.com,https://v6.gh-proxy.org \
 GIT_MIRROR_FALLBACK_TO_ORIGIN=false \
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 ### 常见启动报错：`Can't locate revision identified by 'xxx'`
@@ -171,7 +172,7 @@ docker compose up -d --build
 1. 先确保使用本地源码构建启动：
 
 ```bash
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 2. 若仍报错，且你确认可以丢弃本地测试数据，再执行一次性清理 PostgreSQL 卷后重建：
@@ -179,7 +180,7 @@ docker compose up -d --build
 ```bash
 docker compose down
 docker volume rm audittool_postgres_data
-docker compose up -d --build
+./scripts/compose-up-with-fallback.sh
 ```
 
 ⚠️ 以上会删除本地数据库数据；请先备份重要数据。

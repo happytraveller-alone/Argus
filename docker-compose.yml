@@ -34,6 +34,7 @@ services:
       context: ./backend
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - UV_IMAGE=${UV_IMAGE:-ghcr.nju.edu.cn/astral-sh/uv:latest}
         - http_proxy=
         - https_proxy=
         - HTTP_PROXY=
@@ -60,7 +61,7 @@ services:
       - RESET_STATIC_SCAN_TABLES_ON_DEPLOY=false
       - AGENT_ENABLED=true
       - SANDBOX_ENABLED=true
-      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest}
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-sandbox:latest}
       - MCP_ENABLED=true
       - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
       - MCP_REQUIRED_RUNTIME_DOMAIN=all
@@ -218,6 +219,9 @@ services:
     build:
       context: ./docker/sandbox
       dockerfile: Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - SANDBOX_BASE_IMAGE=${SANDBOX_BASE_IMAGE:-docker.m.daocloud.io/python:3.11-bullseye}
     image: deepaudit/sandbox:latest
     profiles: ["build"]
     restart: "no"
