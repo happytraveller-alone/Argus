@@ -10,6 +10,7 @@ Orchestrator Agent (编排层) - LLM 驱动 ReAct 模式
 """
 
 import asyncio
+import ast
 import json
 import logging
 import os
@@ -67,6 +68,20 @@ ORCHESTRATOR_SYSTEM_PROMPT = """你是安全审计编排 Agent，负责**自主*
 - ✅ 验证完成后，立即检查队列并取出下一条（如有）
 - ❌ 禁止跳过队列中的漏洞（除非明确标记为误报）
 - ❌ 禁止批量取出所有漏洞传给 verification
+
+## Recon 风险点队列（逐条分析）
+
+Recon Agent 会将提取的 `risk_points` 推送到专用队列。你必须使用以下工具保持 FIFO 顺序，逐条取出并调度 Analysis Agent 进行深度审计，**不得跳过或批量处理**。
+
+### 工具
+1. **get_recon_risk_queue_status**：查询 Recon 队列当前状态、待审计数量等。
+2. **dequeue_recon_risk_point**：从队列头取出下一条风险点（FIFO）。
+
+### 逐条分析流程
+1. 调用 `get_recon_risk_queue_status` 确认还有待处理的风险点。
+2. 使用 `dequeue_recon_risk_point` 取出一条风险点，并立即调用 `dispatch_agent`（agent=analysis）把该风险点通过 `context`/`risk_point`/`single_risk_point` 传给 Analysis。
+3. 等待 Analysis 完成后，再次检查 Recon 队列状态，并重复步骤 2。
+4. 仅当 Recon 队列清空后，才可进入漏洞队列验证流程（`get_queue_status` + `dequeue_finding`）。
 
 ### 示例流程（完整循环）
 ```
@@ -167,6 +182,17 @@ Action: finish
 Action Input: {"conclusion": "审计结论", "findings": [...], "recommendations": [...]}
 ```
 
+### 4. Recon 风险点队列
+```
+Action: get_recon_risk_queue_status
+Action Input: {}
+```
+```
+Action: dequeue_recon_risk_point
+Action Input: {}
+```
+每次 dequeue 后立即调用 dispatch_agent (analysis) 来分析该风险点，直到队列为空。
+
 ## 工作方式
 每一步，你需要：
 
@@ -186,7 +212,7 @@ Action Input: {"conclusion": "审计结论", "findings": [...], "recommendations
 
 ```
 Thought: [你的思考过程]
-Action: [dispatch_agent|get_queue_status|dequeue_finding|summarize|finish]
+Action: [dispatch_agent|get_queue_status|dequeue_finding|get_recon_risk_queue_status|dequeue_recon_risk_point|summarize|finish]
 Action Input: [JSON 参数]
 ```
 
@@ -290,6 +316,8 @@ class OrchestratorAgent(BaseAgent):
         self._agent_handoffs: Dict[str, TaskHandoff] = {}  # agent_name -> TaskHandoff
         self._phase_planning_applied: Dict[str, bool] = {}
         self._verified_queue_fingerprints: set[str] = set()
+        self._recon_queue_snapshot: Dict[str, Any] = {}
+        self._last_recon_risk_point: Optional[Dict[str, Any]] = None
     
     def register_sub_agent(self, name: str, agent: BaseAgent):
         """注册子 Agent"""
@@ -656,6 +684,23 @@ Action Input: {{"参数": "值"}}
                     agent_name = action_input.get("agent", "unknown")
                     task_desc = action_input.get("task", "")
 
+                    recon_point_injected = False
+                    if str(agent_name).lower() == "analysis":
+                        if not action_input.get("risk_point") and not action_input.get("single_risk_point"):
+                            if isinstance(self._last_recon_risk_point, dict):
+                                action_input["risk_point"] = self._last_recon_risk_point
+                                if not action_input.get("context"):
+                                    action_input["context"] = json.dumps(
+                                        self._last_recon_risk_point,
+                                        ensure_ascii=False,
+                                    )
+                                recon_point_injected = True
+                                logger.info(
+                                    "[Orchestrator] Injected Recon 风险点给 Analysis: %s:%s",
+                                    self._last_recon_risk_point.get("file_path", ""),
+                                    self._last_recon_risk_point.get("line_start", 1),
+                                )
+
                     if (
                         str(agent_name).lower() == "verification"
                         and isinstance(last_dequeued_finding, dict)
@@ -676,6 +721,7 @@ Action Input: {{"参数": "值"}}
                         and verification_fingerprint
                         and verification_fingerprint in self._verified_queue_fingerprints
                     ):
+
                         observation = (
                             "## Verification 跳过\n\n"
                             "该 finding 已在当前任务中完成验证，已按幂等策略跳过重复调度，"
@@ -698,6 +744,9 @@ Action Input: {{"参数": "值"}}
                     observation = await self._dispatch_agent(action_input)
                     step.observation = observation
 
+                    if str(agent_name).lower() == "analysis" and recon_point_injected:
+                        self._last_recon_risk_point = None
+
                     if self.is_cancelled:
                         logger.info("[%s] Cancelled after sub-agent dispatch", self.name)
                         break
@@ -715,11 +764,7 @@ Action Input: {{"参数": "值"}}
                     if str(agent_name).lower() == "verification":
                         try:
                             queue_status_result = await self.execute_tool("get_queue_status", {})
-                            queue_data = {}
-                            try:
-                                queue_data = json.loads(queue_status_result) if isinstance(queue_status_result, str) else queue_status_result
-                            except Exception:
-                                queue_data = {}
+                            queue_data = self._parse_tool_output(queue_status_result)
                             
                             pending_count = 0
                             if isinstance(queue_data, dict):
@@ -751,17 +796,45 @@ Action Input: {{"参数": "值"}}
                     step.observation = observation
 
                     parsed_finding = None
-                    try:
-                        payload = json.loads(dequeue_observation)
-                        if isinstance(payload, dict) and isinstance(payload.get("finding"), dict):
-                            parsed_finding = payload.get("finding")
-                    except Exception:
-                        parsed_finding = None
+                    payload = self._parse_tool_output(dequeue_observation)
+                    if isinstance(payload, dict) and isinstance(payload.get("finding"), dict):
+                        parsed_finding = payload.get("finding")
 
                     if isinstance(parsed_finding, dict):
                         last_dequeued_finding = parsed_finding
                         last_dequeued_fingerprint = self._build_queue_fingerprint(parsed_finding)
 
+                    await self.emit_llm_observation(observation)
+
+                elif step.action == "get_recon_risk_queue_status":
+                    await self.emit_llm_decision("查询 Recon 队列状态", "执行 get_recon_risk_queue_status")
+                    await self.emit_llm_action("get_recon_risk_queue_status", action_input)
+                    recon_status_observation = await self.execute_tool("get_recon_risk_queue_status", action_input)
+                    step.observation = f"## Recon 风险点队列状态\n\n{recon_status_observation}"
+                    parsed_status = self._parse_tool_output(recon_status_observation)
+                    if isinstance(parsed_status, dict):
+                        self._recon_queue_snapshot = parsed_status
+                    await self.emit_llm_observation(step.observation)
+
+                elif step.action == "dequeue_recon_risk_point":
+                    await self.emit_llm_decision("取出 Recon 风险点", "执行 dequeue_recon_risk_point")
+                    await self.emit_llm_action("dequeue_recon_risk_point", action_input)
+                    recon_dequeue_observation = await self.execute_tool("dequeue_recon_risk_point", action_input)
+                    payload = self._parse_tool_output(recon_dequeue_observation)
+                    risk_point = None
+                    queue_remaining = None
+                    if isinstance(payload, dict):
+                        risk_point = payload.get("risk_point")
+                        queue_remaining = payload.get("queue_remaining")
+                    if isinstance(risk_point, dict):
+                        self._last_recon_risk_point = risk_point
+                        risk_repr = json.dumps(risk_point, ensure_ascii=False, indent=2)
+                    else:
+                        self._last_recon_risk_point = None
+                        risk_repr = "队列为空或未返回有效风险点。"
+                    queue_info = f"\n队列剩余: {queue_remaining}" if queue_remaining is not None else ""
+                    observation = f"## Recon 风险点取出结果\n\n{risk_repr}{queue_info}"
+                    step.observation = observation
                     await self.emit_llm_observation(observation)
 
                 elif step.action == "summarize":
@@ -773,7 +846,7 @@ Action Input: {{"参数": "值"}}
                 else:
                     observation = (
                         f"未知操作: {step.action}，可用操作: "
-                        "dispatch_agent, get_queue_status, dequeue_finding, summarize, finish"
+                        "dispatch_agent, get_queue_status, dequeue_finding, get_recon_risk_queue_status, dequeue_recon_risk_point, summarize, finish"
                     )
                     step.observation = observation
                     await self.emit_llm_decision("未知操作", observation)
@@ -1734,6 +1807,22 @@ Action Input: {{"参数": "值"}}
                 "_run_error": str(e),
             }
             return f"## 调度失败\n\n错误: {str(e)}"
+
+    def _parse_tool_output(self, raw_output: Any) -> Any:
+        if isinstance(raw_output, dict) or isinstance(raw_output, list):
+            return raw_output
+        if not isinstance(raw_output, str):
+            return raw_output or {}
+        trimmed = raw_output.strip()
+        if not trimmed:
+            return {}
+        try:
+            return json.loads(trimmed)
+        except Exception:
+            try:
+                return ast.literal_eval(trimmed)
+            except Exception:
+                return {}
 
     def _validate_file_path(self, file_path: str) -> bool:
         """

@@ -87,6 +87,7 @@ _running_asyncio_tasks: Dict[str, asyncio.Task] = {}
 
 # 运行中的漏洞队列服务（供任务内工具与队列 API 共享）
 _running_queue_services: Dict[str, Any] = {}
+_running_recon_queue_services: Dict[str, Any] = {}
 
 _VALID_TASK_STATUS_VALUES: Set[str] = {
     AgentTaskStatus.PENDING,
@@ -2933,10 +2934,15 @@ async def _execute_agent_task(task_id: str):
 
             # 🔥 创建漏洞队列服务
             from app.services.agent.vulnerability_queue import InMemoryVulnerabilityQueue
+            from app.services.agent.recon_risk_queue import InMemoryReconRiskQueue
             queue_service = InMemoryVulnerabilityQueue()
+            recon_queue_service = InMemoryReconRiskQueue()
             _running_queue_services[task_id] = queue_service
+            _running_recon_queue_services[task_id] = recon_queue_service
             logger.info(f"[Queue] Created InMemoryVulnerabilityQueue for task {task_id}")
+            logger.info(f"[ReconQueue] Created InMemoryReconRiskQueue for task {task_id}")
             await event_emitter.emit_info("🔄 漏洞队列服务已初始化（内存模式）")
+            await event_emitter.emit_info("🔎 Recon 风险点队列已初始化（内存模式）")
 
             async def _initialize_tools_once():
                 return await _initialize_tools(
@@ -2952,6 +2958,7 @@ async def _execute_agent_task(task_id: str):
                     task_id=task_id,  # 🔥 新增：用于取消检查
                     qmd_task_kb=qmd_task_kb,
                     queue_service=queue_service,  # 🔥 新增：漏洞队列服务
+                    recon_queue_service=recon_queue_service,  # 🔥 新增：Recon 风险队列服务
                 )
 
             tools = await _run_with_retries(
@@ -4094,6 +4101,7 @@ async def _execute_agent_task(task_id: str):
             _running_event_managers.pop(task_id, None)
             _running_asyncio_tasks.pop(task_id, None)  # 🔥 清理 asyncio task
             _running_queue_services.pop(task_id, None)
+            _running_recon_queue_services.pop(task_id, None)
             _cancelled_tasks.discard(task_id)  # 🔥 清理取消标志
 
             # 🔥 清理整个 Agent 注册表（包括所有子 Agent）
@@ -4309,6 +4317,7 @@ async def _initialize_tools(
     task_id: Optional[str] = None,  # 🔥 新增：用于取消检查
     qmd_task_kb: Optional[Any] = None,
     queue_service: Optional[Any] = None,  # 🔥 新增：漏洞队列服务
+    recon_queue_service: Optional[Any] = None,  # 🔥 新增：Recon 风险队列服务
 ) -> Dict[str, Dict[str, Any]]:
     """初始化工具集
 
@@ -4343,6 +4352,14 @@ async def _initialize_tools(
     )
     from app.services.agent.tools.queue_tools import (
         GetQueueStatusTool, DequeueFindingTool, PushFindingToQueueTool, IsFindingInQueueTool
+    )
+    from app.services.agent.tools.recon_queue_tools import (
+        GetReconRiskQueueStatusTool,
+        PushRiskPointToQueueTool,
+        DequeueReconRiskPointTool,
+        PeekReconRiskQueueTool,
+        ClearReconRiskQueueTool,
+        IsReconRiskPointInQueueTool,
     )
     from app.services.agent.vulnerability_queue import (
         RedisVulnerabilityQueue, InMemoryVulnerabilityQueue
@@ -4655,6 +4672,10 @@ async def _initialize_tools(
         # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
     }
+    if recon_queue_service and task_id:
+        recon_tools["push_risk_point_to_queue"] = PushRiskPointToQueueTool(recon_queue_service, task_id)
+        recon_tools["get_recon_risk_queue_status"] = GetReconRiskQueueStatusTool(recon_queue_service, task_id)
+        logger.info(f"[Tools] Added Recon risk queue tools for task {task_id}")
 
     # Analysis 工具
     # 🔥 导入智能扫描工具
@@ -4813,6 +4834,24 @@ async def _initialize_tools(
         analysis_tools["push_finding_to_queue"] = PushFindingToQueueTool(queue_service, task_id)
         analysis_tools["is_finding_in_queue"] = IsFindingInQueueTool(queue_service, task_id)
         logger.info(f"[Tools] Added analysis queue tools for task {task_id}")
+
+    if recon_queue_service and task_id:
+        orchestrator_tools["get_recon_risk_queue_status"] = GetReconRiskQueueStatusTool(
+            recon_queue_service, task_id
+        )
+        orchestrator_tools["dequeue_recon_risk_point"] = DequeueReconRiskPointTool(
+            recon_queue_service, task_id
+        )
+        orchestrator_tools["peek_recon_risk_queue"] = PeekReconRiskQueueTool(
+            recon_queue_service, task_id
+        )
+        orchestrator_tools["clear_recon_risk_queue"] = ClearReconRiskQueueTool(
+            recon_queue_service, task_id
+        )
+        orchestrator_tools["is_recon_risk_point_in_queue"] = IsReconRiskPointInQueueTool(
+            recon_queue_service, task_id
+        )
+        logger.info(f"[Tools] Added Recon queue tools for task {task_id}")
     
     return {
         "recon": recon_tools,
@@ -8653,4 +8692,93 @@ async def clear_vulnerability_queue(
         "success": success,
         "task_id": task_id,
         "message": "队列已清空" if success else "清空队列失败",
+    }
+
+
+@router.get("/tasks/{task_id}/recon_risk_queue/status", response_model=Dict[str, Any])
+async def get_recon_risk_queue_status(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    from app.services.agent.recon_risk_queue import InMemoryReconRiskQueue
+
+    task = await db.get(AgentTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    project = await db.get(Project, task.project_id)
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    queue_service = _running_recon_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryReconRiskQueue()
+
+    stats = queue_service.stats(task_id)
+
+    return {
+        "success": True,
+        "task_id": task_id,
+        "queue_stats": stats,
+    }
+
+
+@router.get("/tasks/{task_id}/recon_risk_queue/peek", response_model=Dict[str, Any])
+async def peek_recon_risk_queue(
+    task_id: str,
+    limit: int = 3,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    from app.services.agent.recon_risk_queue import InMemoryReconRiskQueue
+
+    task = await db.get(AgentTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    project = await db.get(Project, task.project_id)
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    queue_service = _running_recon_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryReconRiskQueue()
+
+    findings = queue_service.peek(task_id, limit=min(limit, 10))
+
+    return {
+        "success": True,
+        "task_id": task_id,
+        "findings": findings,
+        "count": len(findings),
+    }
+
+
+@router.delete("/tasks/{task_id}/recon_risk_queue", response_model=Dict[str, Any])
+async def clear_recon_risk_queue(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    from app.services.agent.recon_risk_queue import InMemoryReconRiskQueue
+
+    task = await db.get(AgentTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    project = await db.get(Project, task.project_id)
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    queue_service = _running_recon_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryReconRiskQueue()
+
+    success = queue_service.clear(task_id)
+
+    return {
+        "success": success,
+        "task_id": task_id,
+        "message": "Recon 队列已清空" if success else "清空 Recon 队列失败",
     }

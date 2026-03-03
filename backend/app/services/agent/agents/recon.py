@@ -11,6 +11,7 @@ LLM 是真正的大脑！
 """
 
 import asyncio
+import ast
 import json
 import logging
 import re
@@ -148,6 +149,12 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 10. 整理所有发现的风险区域（必须包含文件路径和行号）
 11. 汇总入口点和技术栈信息
 12. 输出 Final Answer
+
+## Recon 风险点队列（新阶段）
+- 每当识别出高风险代码（文件 + 行号 + 描述），必须调用 `push_risk_point_to_queue` 将风险点入队。
+- 定期调用 `get_recon_risk_queue_status` 检查当前队列状态，记录 `pending_count` 与 `queue_status`。
+- 在 Final Answer 中返回 `risk_points`（包含 file_path/line_start/description/severity/vulnerability_type/confidence）和 `recon_queue_status`，以便后续 Analysis Agent 逐条弹出并验证。
+- 除了高风险区域字符串外，也可以将 `initial_findings` 或任意额外的 `risk_points` 结构体推送到队列。
 
 ### 每一步输出格式
 
@@ -417,6 +424,7 @@ class ReconAgent(BaseAgent):
         
         self._conversation_history: List[Dict[str, str]] = []
         self._steps: List[ReconStep] = []
+        self._recon_queue_snapshot: Dict[str, Any] = {}
     
     def _parse_llm_response(self, response: str) -> ReconStep:
         """解析 LLM 响应（共享 ReAct 解析器）"""
@@ -439,7 +447,174 @@ class ReconAgent(BaseAgent):
                 if isinstance(f, dict)
             ]
         return step
+
+    def _normalize_risk_point(self, candidate: Any) -> Optional[Dict[str, Any]]:
+        if not isinstance(candidate, dict):
+            return None
+        file_path = str(candidate.get("file_path") or "").strip()
+        if not file_path:
+            return None
+        try:
+            line_start = int(candidate.get("line_start") or candidate.get("line") or 1)
+        except Exception:
+            line_start = 1
+        if line_start <= 0:
+            line_start = 1
+        description = str(candidate.get("description") or candidate.get("title") or "").strip()
+        if not description:
+            description = f"潜在风险点，来自 {file_path}:{line_start}"
+        severity = str(candidate.get("severity") or "high").lower()
+        if severity not in {"critical", "high", "medium", "low", "info"}:
+            severity = "high"
+        vuln_type = str(candidate.get("vulnerability_type") or candidate.get("type") or "potential_issue").lower()
+        confidence = None
+        try:
+            confidence = float(candidate.get("confidence") or 0.6)
+        except Exception:
+            confidence = 0.6
+        return {
+            "file_path": file_path,
+            "line_start": line_start,
+            "description": description,
+            "severity": severity,
+            "vulnerability_type": vuln_type,
+            "confidence": max(0.0, min(1.0, confidence)),
+        }
+
+    def _parse_risk_area(self, area: str) -> Optional[Dict[str, Any]]:
+        text = str(area or "").strip()
+        if not text:
+            return None
+        description = text
+        file_path = ""
+        line_start = 1
+        if ":" in text:
+            candidate, rest = text.split(":", 1)
+            candidate = candidate.strip()
+            if "." in candidate or "/" in candidate:
+                file_path = candidate
+                rest = rest.strip()
+                parts = rest.split("-", 1)
+                line_part = parts[0].strip().split()[0] if parts else ""
+                if line_part.isdigit():
+                    line_start = int(line_part)
+                description = rest if rest else text
+        if not file_path:
+            return None
+        vuln_type = self._infer_vulnerability_type(description)
+        return {
+            "file_path": file_path,
+            "line_start": line_start,
+            "description": description,
+            "severity": "high",
+            "vulnerability_type": vuln_type,
+            "confidence": 0.6,
+        }
+
+    def _infer_vulnerability_type(self, text: str) -> str:
+        lowered = text.lower()
+        if any(keyword in lowered for keyword in ["sql", "query", "injection"]):
+            return "sql_injection"
+        if any(keyword in lowered for keyword in ["xss", "html", "innerhtml"]):
+            return "xss"
+        if any(keyword in lowered for keyword in ["command", "exec", "subprocess", "system"]):
+            return "command_injection"
+        if any(keyword in lowered for keyword in ["path", "traversal"]):
+            return "path_traversal"
+        if "ssrf" in lowered:
+            return "ssrf"
+        if any(keyword in lowered for keyword in ["secret", "key", "token", "env"]):
+            return "hardcoded_secret"
+        return "potential_issue"
+
+    def _extract_risk_points(self, result: Dict[str, Any]) -> List[Dict[str, Any]]:
+        points: List[Dict[str, Any]] = []
+        seen: set[tuple[str, int, str]] = set()
+        if isinstance(result.get("initial_findings"), list):
+            for item in result.get("initial_findings", []):
+                normalized = self._normalize_risk_point(item)
+                if not normalized:
+                    continue
+                key = (normalized["file_path"], normalized["line_start"], normalized["description"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                points.append(normalized)
+        high_risk = result.get("high_risk_areas", [])
+        if isinstance(high_risk, list):
+            for area in high_risk:
+                parsed = self._parse_risk_area(area)
+                if not parsed:
+                    continue
+                key = (parsed["file_path"], parsed["line_start"], parsed["description"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                points.append(parsed)
+        return points
+
+    def _ensure_risk_points(self, result: Dict[str, Any]) -> List[Dict[str, Any]]:
+        points = result.get("risk_points")
+        if isinstance(points, list) and points:
+            return points
+        extracted = self._extract_risk_points(result)
+        result["risk_points"] = extracted
+        return extracted
+
+    async def _push_risk_points_to_queue(self, risk_points: List[Dict[str, Any]]):
+        if not risk_points:
+            return
+        if "push_risk_point_to_queue" not in self.tools:
+            return
+        for point in risk_points:
+            tool_input = {
+                "file_path": point["file_path"],
+                "line_start": point["line_start"],
+                "description": point["description"],
+                "severity": point.get("severity", "high"),
+                "confidence": point.get("confidence", 0.6),
+                "vulnerability_type": point.get("vulnerability_type", "potential_issue"),
+            }
+            try:
+                await self.execute_tool("push_risk_point_to_queue", tool_input)
+            except Exception as exc:
+                logger.warning("[Recon] Risk queue push failed: %s", exc)
+
+    async def _refresh_recon_queue_status(self):
+        if "get_recon_risk_queue_status" not in self.tools:
+            self._recon_queue_snapshot = {}
+            return
+        observation = await self.execute_tool("get_recon_risk_queue_status", {})
+        parsed = self._parse_tool_output(observation)
+        if isinstance(parsed, dict):
+            self._recon_queue_snapshot = parsed
+        else:
+            self._recon_queue_snapshot = {"raw": observation}
+
+    async def _sync_recon_queue(self, result: Dict[str, Any]):
+        if not isinstance(result, dict):
+            return
+        risk_points = self._ensure_risk_points(result)
+        await self._push_risk_points_to_queue(risk_points)
+        await self._refresh_recon_queue_status()
+        result["recon_queue_status"] = self._recon_queue_snapshot
     
+    def _parse_tool_output(self, raw_output: Any) -> Any:
+        if isinstance(raw_output, dict) or isinstance(raw_output, list):
+            return raw_output
+        if not isinstance(raw_output, str):
+            return raw_output or {}
+        trimmed = raw_output.strip()
+        if not trimmed:
+            return {}
+        try:
+            return json.loads(trimmed)
+        except Exception:
+            try:
+                return ast.literal_eval(trimmed)
+            except Exception:
+                return {}
+
 
     
     async def run(self, input_data: Dict[str, Any]) -> AgentResult:
@@ -899,6 +1074,7 @@ Final Answer:""",
                 final_result = self._summarize_from_steps()
             if isinstance(final_result, dict):
                 final_result = self._ensure_project_profile(final_result)
+                await self._sync_recon_queue(final_result)
             
             # 🔥 记录工作和洞察
             self.record_work(f"完成项目信息收集，发现 {len(final_result.get('entry_points', []))} 个入口点")
@@ -1091,6 +1267,7 @@ Final Answer:""",
         result["tech_stack"]["frameworks"] = list(set(result["tech_stack"]["frameworks"]))
         result["tech_stack"]["databases"] = list(set(result["tech_stack"]["databases"]))
         result["high_risk_areas"] = list(set(result["high_risk_areas"]))[:20]  # 限制数量
+        result["risk_points"] = self._extract_risk_points(result)
         result = self._ensure_project_profile(result)
         
         # 🔥 汇总 LLM 的思考作为 summary
