@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist/release}"
+VERSION="${VERSION:-}"
+SKIP_BUILD="false"
+BUILD_SANDBOX="true"   # NEW: default build sandbox; can disable via --no-sandbox
+DOCKER_BIN="${DOCKER_BIN:-docker}"
+IMAGE_BACKEND="deepaudit/backend-local:latest"
+IMAGE_FRONTEND="deepaudit/frontend-local:latest"
+
+usage() {
+  cat <<USAGE
+Usage: $(basename "$0") [options]
+
+Package DeepAudit release artifacts for migration/deployment.
+
+Options:
+  --version <v>        Override version (default: frontend/package.json version)
+  --dist <path>        Output directory (default: ./dist/release)
+  --skip-build         Do not run build before packaging images/assets
+  --no-sandbox         Do not build sandbox image (avoid network-heavy steps)
+  -h, --help           Show this help message
+
+Environment:
+  DOCKER_BIN           Container runtime command (default: docker)
+
+Outputs:
+  checksums.txt
+  deepaudit-backend-v<version>.tar.gz
+  deepaudit-frontend-v<version>.tar.gz
+  deepaudit-source-v<version>.tar.gz
+  deepaudit-docker-v<version>.tar.gz
+USAGE
+}
+
+log() {
+  echo "[package-release] $*"
+}
+
+require_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Missing required command: $1" >&2
+    exit 1
+  fi
+}
+
+require_arg() {
+  local opt="$1"
+  local val="${2:-}"
+  if [[ -z "$val" || "$val" == --* ]]; then
+    echo "Option ${opt} requires a value" >&2
+    usage
+    exit 1
+  fi
+}
+
+require_container_cmd() {
+  if ! command -v "$DOCKER_BIN" >/dev/null 2>&1; then
+    echo "Missing required container runtime command: ${DOCKER_BIN}" >&2
+    echo "Hint: install Docker (or set DOCKER_BIN to an available runtime command), then rerun." >&2
+    echo "Example: DOCKER_BIN=nerdctl ./scripts/package-release-artifacts.sh --skip-build" >&2
+    exit 1
+  fi
+}
+
+require_image() {
+  local image="$1"
+  if ! "$DOCKER_BIN" image inspect "$image" >/dev/null 2>&1; then
+    echo "Missing Docker image: ${image}" >&2
+    echo "Hint: run without --skip-build, or build/pull the image before packaging." >&2
+    exit 1
+  fi
+}
+
+restore_artifact_owner() {
+  if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" ]]; then
+    log "restore artifact ownership to ${SUDO_UID}:${SUDO_GID}"
+    chown -R "${SUDO_UID}:${SUDO_GID}" "$DIST_DIR"
+  fi
+}
+
+pack_frontend_dist() {
+  local pkg_path="$1"
+  local tmp_root
+  tmp_root="$(mktemp -d)"
+  local cid
+  cid="$($DOCKER_BIN create "$IMAGE_FRONTEND")"
+  trap '$DOCKER_BIN rm -f "$cid" >/dev/null 2>&1 || true; rm -rf "$tmp_root"' RETURN
+  "$DOCKER_BIN" cp "${cid}:/usr/share/nginx/html/." "$tmp_root/"
+  tar -czf "$pkg_path" -C "$tmp_root" .
+  "$DOCKER_BIN" rm -f "$cid" >/dev/null
+  rm -rf "$tmp_root"
+  trap - RETURN
+}
+
+pack_docker_layout() {
+  local pkg_path="$1"
+  local tmp_root
+  tmp_root="$(mktemp -d)"
+  mkdir -p "$tmp_root/docker/sandbox" "$tmp_root/frontend" "$tmp_root/backend"
+
+  cp "$ROOT_DIR/docker-compose.yml" "$tmp_root/"
+  cp "$ROOT_DIR/docker-compose.build.yml" "$tmp_root/"
+  cp "$ROOT_DIR/backend/Dockerfile" "$tmp_root/backend/"
+  cp "$ROOT_DIR/frontend/Dockerfile" "$tmp_root/frontend/"
+  cp "$ROOT_DIR/docker/sandbox/Dockerfile" "$tmp_root/docker/sandbox/"
+  cp "$ROOT_DIR/docker/sandbox/seccomp.json" "$tmp_root/docker/sandbox/"
+
+  tar -czf "$pkg_path" -C "$tmp_root" .
+  rm -rf "$tmp_root"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --version)
+      require_arg "$1" "${2:-}"
+      VERSION="$2"
+      shift 2
+      ;;
+    --dist)
+      require_arg "$1" "${2:-}"
+      DIST_DIR="$2"
+      shift 2
+      ;;
+    --skip-build)
+      SKIP_BUILD="true"
+      shift
+      ;;
+    --no-sandbox)
+      BUILD_SANDBOX="false"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+require_cmd tar
+require_cmd gzip
+require_cmd sha256sum
+require_container_cmd
+require_cmd node
+
+if [[ -z "$VERSION" ]]; then
+  VERSION="$(node -p "require('${ROOT_DIR}/frontend/package.json').version")"
+fi
+VERSION="${VERSION#v}"
+
+TAG_PREFIX="v${VERSION}"
+mkdir -p "$DIST_DIR"
+
+BACKEND_PKG="deepaudit-backend-${TAG_PREFIX}.tar.gz"
+FRONTEND_PKG="deepaudit-frontend-${TAG_PREFIX}.tar.gz"
+SOURCE_PKG="deepaudit-source-${TAG_PREFIX}.tar.gz"
+DOCKER_PKG="deepaudit-docker-${TAG_PREFIX}.tar.gz"
+CHECKSUM_FILE="checksums.txt"
+
+log "version: ${VERSION}"
+log "output: ${DIST_DIR}"
+
+if [[ "$SKIP_BUILD" != "true" ]]; then
+  if [[ "$BUILD_SANDBOX" == "true" ]]; then
+    log "building runtime images with docker compose (backend, frontend, sandbox)"
+    "$DOCKER_BIN" compose -f "${ROOT_DIR}/docker-compose.build.yml" build backend frontend sandbox
+  else
+    log "building runtime images with docker compose (backend, frontend) [--no-sandbox]"
+    "$DOCKER_BIN" compose -f "${ROOT_DIR}/docker-compose.build.yml" build backend frontend
+  fi
+else
+  log "skip docker build"
+fi
+
+# Only backend/frontend images are required for packaging in this script
+require_image "$IMAGE_BACKEND"
+require_image "$IMAGE_FRONTEND"
+
+log "pack backend"
+tar -czf "${DIST_DIR}/${BACKEND_PKG}" -C "$ROOT_DIR" backend
+
+log "pack frontend dist from image"
+pack_frontend_dist "${DIST_DIR}/${FRONTEND_PKG}"
+
+log "pack source"
+tar \
+  --exclude='.git' \
+  --exclude='node_modules' \
+  --exclude='frontend/node_modules' \
+  --exclude='backend/.venv' \
+  --exclude='dist' \
+  -czf "${DIST_DIR}/${SOURCE_PKG}" -C "$ROOT_DIR" .
+
+log "pack docker deployment layout"
+pack_docker_layout "${DIST_DIR}/${DOCKER_PKG}"
+
+log "write checksums"
+(
+  cd "$DIST_DIR"
+  sha256sum \
+    "$BACKEND_PKG" \
+    "$DOCKER_PKG" \
+    "$FRONTEND_PKG" \
+    "$SOURCE_PKG" > "$CHECKSUM_FILE"
+)
+
+restore_artifact_owner
+
+log "done"
+log "artifacts:"
+ls -lh "$DIST_DIR"
