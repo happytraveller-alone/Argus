@@ -10,11 +10,20 @@ import {
 import type { Project } from "@/shared/types";
 
 export type TaskActivityKind = "rule_scan" | "intelligent_audit";
+export type TaskActivitySourceMode =
+	| "static"
+	| "intelligent"
+	| "hybrid"
+	| "unknown";
+
+export const HYBRID_TASK_NAME_MARKER = "[HYBRID]";
+export const INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]";
 
 export interface TaskActivityItem {
 	id: string;
 	projectName: string;
 	kind: TaskActivityKind;
+	sourceMode: TaskActivitySourceMode;
 	status: string;
 	gitleaksEnabled?: boolean;
 	staticFindingStats?: {
@@ -36,6 +45,34 @@ export const INTERRUPTED_STATUSES = new Set([
 ]);
 
 const PAIRING_WINDOW_MS = 60 * 1000;
+
+function normalizeTaskName(name: string | null | undefined): string {
+	return String(name || "").trim().toLowerCase();
+}
+
+function resolveSourceModeFromTaskMeta(
+	kind: TaskActivityKind,
+	name: string | null | undefined,
+	description?: string | null | undefined,
+): TaskActivitySourceMode {
+	const normalizedName = normalizeTaskName(name);
+	const normalizedDescription = normalizeTaskName(description);
+	const normalizedCombined = `${normalizedName} ${normalizedDescription}`;
+	if (
+		normalizedCombined.includes(HYBRID_TASK_NAME_MARKER.toLowerCase()) ||
+		normalizedCombined.includes("混合扫描")
+	) {
+		return "hybrid";
+	}
+	if (normalizedCombined.includes(INTELLIGENT_TASK_NAME_MARKER.toLowerCase())) {
+		return "intelligent";
+	}
+	if (kind === "rule_scan") {
+		return "static";
+	}
+	// Legacy intelligent tasks created before source markers were introduced.
+	return "intelligent";
+}
 
 function mapProjectNames(projects: Project[]) {
 	return new Map(projects.map((project) => [project.id, project.name]));
@@ -138,6 +175,7 @@ function toRuleScanActivities(
 			id: `opengrep-${task.id}`,
 			projectName: resolveProjectName(task.project_id),
 			kind: "rule_scan",
+			sourceMode: resolveSourceModeFromTaskMeta("rule_scan", task.name),
 			status: task.status,
 			gitleaksEnabled: Boolean(pairedGitleaksTask),
 			staticFindingStats: {
@@ -162,6 +200,11 @@ function toAgentActivities(
 		id: `agent-${task.id}`,
 		projectName: resolveProjectName(task.project_id),
 		kind: "intelligent_audit",
+		sourceMode: resolveSourceModeFromTaskMeta(
+			"intelligent_audit",
+			task.name,
+			task.description,
+		),
 		status: task.status,
 		createdAt: task.created_at,
 		startedAt: task.started_at,
@@ -219,6 +262,43 @@ export function filterActivitiesByKind(
 			getTaskStatusText(activity.status).includes(trimmed)
 		);
 	});
+}
+
+function matchesActivityKeyword(
+	activity: TaskActivityItem,
+	keyword: string,
+): boolean {
+	const trimmed = keyword.trim().toLowerCase();
+	if (!trimmed) return true;
+	const kindText = activity.kind === "rule_scan" ? "静态扫描" : "智能审计";
+	return (
+		activity.projectName.toLowerCase().includes(trimmed) ||
+		kindText.includes(trimmed) ||
+		getTaskStatusText(activity.status).includes(trimmed)
+	);
+}
+
+export function filterIntelligentActivities(
+	activities: TaskActivityItem[],
+	keyword: string,
+): TaskActivityItem[] {
+	return activities.filter(
+		(activity) =>
+			activity.kind === "intelligent_audit" &&
+			activity.sourceMode !== "hybrid" &&
+			matchesActivityKeyword(activity, keyword),
+	);
+}
+
+export function filterHybridActivities(
+	activities: TaskActivityItem[],
+	keyword: string,
+): TaskActivityItem[] {
+	return activities.filter(
+		(activity) =>
+			activity.sourceMode === "hybrid" &&
+			matchesActivityKeyword(activity, keyword),
+	);
 }
 
 export function filterMixedActivities(

@@ -146,6 +146,8 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - 直接执行 `docker compose up -d --build` 不包含自动切换镜像源逻辑。
 - GitHub 源码同步与任务仓库下载/克隆默认走双代理：`https://gh-proxy.com` -> `https://v6.gh-proxy.org`。
 - 默认不回源 GitHub（`GIT_MIRROR_FALLBACK_TO_ORIGIN=false`）；仅在排障时建议临时开启回源。
+- MCP 源码同步默认采用“首次下载后持久化缓存”策略：`MCP_SOURCE_UPDATE_ON_STARTUP=false`（已有缓存时跳过更新，提升启动稳定性）。
+- 如需临时强制刷新 MCP 源码，可设置：`MCP_SOURCE_UPDATE_ON_STARTUP=true`（或 `MCP_SOURCE_FORCE_REFRESH=true`）。
 
 示例：
 
@@ -160,6 +162,13 @@ GitHub 代理链路示例：
 ```bash
 GIT_MIRROR_PREFIXES=https://gh-proxy.com,https://v6.gh-proxy.org \
 GIT_MIRROR_FALLBACK_TO_ORIGIN=false \
+./scripts/compose-up-with-fallback.sh
+```
+
+强制刷新 MCP 源码示例：
+
+```bash
+MCP_SOURCE_UPDATE_ON_STARTUP=true \
 ./scripts/compose-up-with-fallback.sh
 ```
 

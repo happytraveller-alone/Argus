@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, BackgroundTasks,
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Any, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime, timezone
 import shutil
 import os
@@ -401,8 +401,7 @@ class InstantAnalysisResponse(BaseModel):
     analysis_result: str  # JSON字符串，包含完整的分析结果
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 async def get_user_config_dict(db: AsyncSession, user_id: str) -> dict:

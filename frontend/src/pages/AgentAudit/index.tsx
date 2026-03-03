@@ -777,7 +777,7 @@ function AgentAuditPageContent() {
         intro: "简介：智能体上下文推理审计",
         strengths: "优势：可发现规则外风险",
         limitations: "劣势：耗时更长、资源更高",
-        quickStartHint: "点击卡片，快速开始智能审计",
+        quickStartHint: "点击卡片，快速开始智能扫描",
         icon: Bot,
         accentClassName:
           "from-violet-500/25 via-indigo-500/10 to-transparent border-violet-400/40",
@@ -785,10 +785,10 @@ function AgentAuditPageContent() {
       {
         key: "hybrid",
         title: "混合扫描",
-        intro: "简介：规则预筛再智能深挖",
-        strengths: "优势：效率与覆盖更平衡",
-        limitations: "劣势：流程更长需阶段跟踪",
-        quickStartHint: "点击卡片，快速开始混合审计",
+        intro: "简介：静态 + 智能完整双阶段链路",
+        strengths: "优势：覆盖更全面",
+        limitations: "劣势：执行耗时更长",
+        quickStartHint: "点击卡片，快速开始混合扫描",
         icon: Layers,
         accentClassName:
           "from-emerald-500/25 via-cyan-500/10 to-transparent border-emerald-400/40",

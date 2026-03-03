@@ -1,5 +1,5 @@
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 class UserBase(BaseModel):
     email: Optional[EmailStr] = None
@@ -27,8 +27,7 @@ class UserInDBBase(UserBase):
     created_at: Optional[object] = None # Datetime
     updated_at: Optional[object] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class User(UserInDBBase):
     pass
@@ -38,7 +37,6 @@ class UserListResponse(BaseModel):
     total: int
     skip: int
     limit: int
-
 
 
 

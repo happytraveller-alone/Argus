@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Union, Optional
 from pydantic import AnyHttpUrl, validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -288,10 +288,11 @@ class Settings(BaseSettings):
     POC_TRIGGER_CHAIN_MAX_NODES: int = 80
     POC_TRIGGER_CHAIN_LLM_FALLBACK: bool = True
 
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
-        extra = "ignore"  # 忽略额外的环境变量（如 VITE_* 前端变量）
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        extra="ignore",  # 忽略额外的环境变量（如 VITE_* 前端变量）
+    )
 
 
 settings = Settings()

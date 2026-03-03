@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import json
 from datetime import datetime, timezone
 
@@ -29,8 +29,7 @@ class DatabaseExportResponse(BaseModel):
     user_id: str
     data: Dict[str, Any]
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/export", response_model=DatabaseExportResponse)
@@ -691,4 +690,3 @@ async def check_database_health(
     except Exception as e:
         print(f"健康检查失败: {e}")
         raise HTTPException(status_code=500, detail=f"健康检查失败: {str(e)}")
-

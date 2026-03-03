@@ -40,6 +40,7 @@ import {
 import { createGitleaksScanTask } from "@/shared/api/gitleaks";
 import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
+import { HYBRID_TASK_NAME_MARKER } from "@/features/tasks/services/taskActivities";
 
 export type AuditCreateMode = "static" | "agent" | "hybrid";
 
@@ -308,9 +309,14 @@ export default function CreateProjectAuditDialog({
 
 	const createStaticTasksForProject = async (
 		project: Project,
+		source: "static" | "hybrid" = "static",
 	): Promise<StaticTaskCreateResult> => {
 		let opengrepTask: { id: string } | null = null;
 		let gitleaksTask: { id: string } | null = null;
+		const taskNamePrefix =
+			source === "hybrid"
+				? `${HYBRID_TASK_NAME_MARKER}混合扫描`
+				: "静态分析";
 
 		if (opengrepEnabled) {
 			const ruleIds = activeRules.filter(isSevereRule).map((rule) => rule.id);
@@ -319,7 +325,7 @@ export default function CreateProjectAuditDialog({
 			}
 			opengrepTask = await createOpengrepScanTask({
 				project_id: project.id,
-				name: `静态分析-Opengrep-${project.name}`,
+				name: `${taskNamePrefix}-Opengrep-${project.name}`,
 				rule_ids: ruleIds,
 				target_path: ".",
 			});
@@ -328,7 +334,7 @@ export default function CreateProjectAuditDialog({
 		if (gitleaksEnabled) {
 			gitleaksTask = await createGitleaksScanTask({
 				project_id: project.id,
-				name: `静态分析-Gitleaks-${project.name}`,
+				name: `${taskNamePrefix}-Gitleaks-${project.name}`,
 				target_path: ".",
 				no_git: true,
 			});
@@ -349,9 +355,17 @@ export default function CreateProjectAuditDialog({
 		return { primaryTaskId, params };
 	};
 
-	const buildAgentTaskPayload = (project: Project) => ({
+	const buildAgentTaskPayload = (
+		project: Project,
+		source: "agent" | "hybrid" = "agent",
+	) => ({
 		project_id: project.id,
-		name: `智能审计-${project.name}`,
+		name:
+			source === "hybrid"
+				? `混合扫描-智能审计-${project.name}`
+				: `智能审计-${project.name}`,
+		description:
+			source === "hybrid" ? `${HYBRID_TASK_NAME_MARKER}混合扫描智能阶段任务` : undefined,
 		branch_name: isRepositoryProject(project)
 			? branchName.trim() || project.default_branch || "main"
 			: undefined,
@@ -394,9 +408,12 @@ export default function CreateProjectAuditDialog({
 		}
 	};
 
-	const runAgentTaskForProject = async (project: Project) => {
+	const createHybridLiteAgentTaskForProject = async (
+		project: Project,
+		source: "agent" | "hybrid" = "agent",
+	) => {
 		await ensureLlmPreflightPassed();
-		return createAgentTask(buildAgentTaskPayload(project));
+		return createAgentTask(buildAgentTaskPayload(project, source));
 	};
 
 	const handleQuickFixConfigChange = (key: keyof LlmQuickConfig, value: string) => {
@@ -505,16 +522,18 @@ export default function CreateProjectAuditDialog({
 		}
 	};
 
-	const handleCreateHybridForProject = async (
+	const handleCreateHybridFullForProject = async (
 		project: Project,
 		action: "primary" | "secondary",
 	) => {
-		const staticResult = await createStaticTasksForProject(project);
+		const staticResult = await createStaticTasksForProject(project, "hybrid");
 		const staticRoute = buildStaticTaskRoute(staticResult);
 
 		try {
-			await ensureLlmPreflightPassed();
-			const agentTask = await createAgentTask(buildAgentTaskPayload(project));
+			const agentTask = await createHybridLiteAgentTaskForProject(
+				project,
+				"hybrid",
+			);
 			onOpenChange(false);
 			onTaskCreated?.();
 			toast.success("混合扫描任务已创建（静态 + 智能）");
@@ -534,6 +553,21 @@ export default function CreateProjectAuditDialog({
 			} else if (navigateOnSuccess) {
 				navigate(staticRoute);
 			}
+		}
+	};
+
+	const handleCreateHybridLiteAgentForProject = async (
+		project: Project,
+		action: "primary" | "secondary",
+	) => {
+		const agentTask = await createHybridLiteAgentTaskForProject(project, "agent");
+		onOpenChange(false);
+		onTaskCreated?.();
+		toast.success("智能扫描任务已创建");
+		if (action === "secondary") {
+			onSecondaryCreateSuccess?.();
+		} else if (navigateOnSuccess) {
+			navigate(`/agent-audit/${agentTask.id}`);
 		}
 	};
 
@@ -608,7 +642,10 @@ export default function CreateProjectAuditDialog({
 					}
 
 					if (mode === "static") {
-						const result = await createStaticTasksForProject(createdProject);
+						const result = await createStaticTasksForProject(
+							createdProject,
+							"static",
+						);
 						onOpenChange(false);
 						onTaskCreated?.();
 						toast.success("静态审计任务已创建");
@@ -621,19 +658,11 @@ export default function CreateProjectAuditDialog({
 					}
 
 					if (mode === "hybrid") {
-						await handleCreateHybridForProject(createdProject, action);
+						await handleCreateHybridFullForProject(createdProject, action);
 						return;
 					}
 
-					const agentTask = await runAgentTaskForProject(createdProject);
-					onOpenChange(false);
-					onTaskCreated?.();
-					toast.success("智能审计任务已创建");
-					if (action === "secondary") {
-						onSecondaryCreateSuccess?.();
-					} else if (navigateOnSuccess) {
-						navigate(`/agent-audit/${agentTask.id}`);
-					}
+					await handleCreateHybridLiteAgentForProject(createdProject, action);
 					return;
 				} catch (error) {
 					if (createdProject) {
@@ -673,7 +702,10 @@ export default function CreateProjectAuditDialog({
 			}
 
 			if (mode === "static") {
-				const result = await createStaticTasksForProject(selectedProject);
+				const result = await createStaticTasksForProject(
+					selectedProject,
+					"static",
+				);
 				onOpenChange(false);
 				onTaskCreated?.();
 				toast.success("静态审计任务已创建");
@@ -686,7 +718,7 @@ export default function CreateProjectAuditDialog({
 			}
 
 			if (mode === "hybrid") {
-				await handleCreateHybridForProject(selectedProject, action);
+				await handleCreateHybridFullForProject(selectedProject, action);
 				return;
 			}
 
@@ -698,17 +730,12 @@ export default function CreateProjectAuditDialog({
 				}
 			}
 
-			const agentTask = await runAgentTaskForProject(selectedProject);
-			onOpenChange(false);
-			onTaskCreated?.();
-			toast.success("智能审计任务已创建");
-			if (action === "secondary") {
-				onSecondaryCreateSuccess?.();
-			} else if (navigateOnSuccess) {
-				navigate(`/agent-audit/${agentTask.id}`);
-			}
+			await handleCreateHybridLiteAgentForProject(selectedProject, action);
 		} catch (error) {
-			toast.error(`创建失败: ${extractApiErrorMessage(error)}`);
+			const message = extractApiErrorMessage(error);
+			const failureText =
+				mode === "agent" ? `智能扫描创建失败：${message}` : `创建失败: ${message}`;
+			toast.error(failureText);
 		} finally {
 			setCreating(false);
 		}

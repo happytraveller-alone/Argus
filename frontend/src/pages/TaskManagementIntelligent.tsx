@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
 	fetchTaskActivities,
-	filterActivitiesByKind,
+	filterIntelligentActivities,
 	formatCreatedAt,
 	getActivityDurationLabel,
 	getTaskProgressBarClassName,
@@ -58,11 +58,11 @@ export default function TaskManagementIntelligent() {
 	}, []);
 
 	const filteredActivities = useMemo(
-		() => filterActivitiesByKind(activities, "intelligent_audit", keyword),
+		() => filterIntelligentActivities(activities, keyword),
 		[activities, keyword],
 	);
 	const intelligentActivities = useMemo(
-		() => filterActivitiesByKind(activities, "intelligent_audit", ""),
+		() => filterIntelligentActivities(activities, ""),
 		[activities],
 	);
 	const stats = useMemo(
@@ -116,7 +116,7 @@ export default function TaskManagementIntelligent() {
 				<div className="flex items-center justify-between gap-3">
 					<div className="section-header">
 						<Bot className="w-5 h-5 text-primary" />
-						<h3 className="section-title">智能扫描任务</h3>
+						<h3 className="section-title">智能扫描</h3>
 					</div>
 					<div className="flex items-center gap-3">
 						<Button

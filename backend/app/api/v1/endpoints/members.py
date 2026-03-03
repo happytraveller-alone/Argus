@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 from app.api import deps
@@ -22,8 +22,7 @@ class UserSchema(BaseModel):
     avatar_url: Optional[str] = None
     role: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectMemberSchema(BaseModel):
@@ -36,8 +35,7 @@ class ProjectMemberSchema(BaseModel):
     created_at: datetime
     user: Optional[UserSchema] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AddMemberRequest(BaseModel):
@@ -195,7 +193,6 @@ async def remove_project_member(
     await db.commit()
     
     return {"message": "成员已移除"}
-
 
 
 

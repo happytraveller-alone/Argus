@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import case, func
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import yaml
 
 from app.api import deps
@@ -183,8 +183,7 @@ class AgentTaskResponse(BaseModel):
     # 错误信息
     error_message: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentEventResponse(BaseModel):
@@ -211,11 +210,11 @@ class AgentEventResponse(BaseModel):
     # 🔥 ORM 字段名是 event_metadata，序列化为 metadata
     event_metadata: Optional[Dict[str, Any]] = Field(default=None, serialization_alias="metadata")
 
-    model_config = {
-        "from_attributes": True,
-        "populate_by_name": True,
-        "by_alias": True,  # 🔥 关键：确保序列化时使用别名
-    }
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        by_alias=True,  # 🔥 关键：确保序列化时使用别名
+    )
 
 
 class AgentFindingResponse(BaseModel):
@@ -271,10 +270,10 @@ class AgentFindingResponse(BaseModel):
     
     created_at: datetime
     
-    model_config = {
-        "from_attributes": True,
-        "populate_by_name": True,  # Allow both 'confidence' and 'ai_confidence'
-    }
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,  # Allow both 'confidence' and 'ai_confidence'
+    )
 
 
 class TaskSummaryResponse(BaseModel):
@@ -7519,8 +7518,7 @@ class AgentTreeNodeResponse(BaseModel):
     duration_ms: Optional[int] = None
     children: List["AgentTreeNodeResponse"] = []
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentTreeResponse(BaseModel):
@@ -7718,8 +7716,7 @@ class CheckpointResponse(BaseModel):
     checkpoint_name: Optional[str] = None
     created_at: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/{task_id}/checkpoints", response_model=List[CheckpointResponse])
@@ -7851,7 +7848,7 @@ def _escape_markdown_table_cell(text: Optional[str]) -> str:
 @router.get("/{task_id}/report")
 async def generate_audit_report(
     task_id: str,
-    format: str = Query("markdown", regex="^(markdown|json)$"),
+    format: str = Query("markdown", pattern="^(markdown|json)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):

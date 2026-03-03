@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _generate_agent_id() -> str:
@@ -97,8 +97,7 @@ class AgentState(BaseModel):
     stop_requested: bool = False
     max_iterations_warning_sent: bool = False
     
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
     
     # ============ 状态管理方法 ============
     

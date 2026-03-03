@@ -32,6 +32,8 @@ fi
 SOURCE_ROOT="${MCP_SOURCE_ROOT:-/app/data/mcp/sources}"
 SYNC_DEPTH="${MCP_SOURCE_SYNC_DEPTH:-1}"
 SYNC_STRICT="${MCP_SOURCE_SYNC_STRICT:-false}"
+MCP_SOURCE_UPDATE_ON_STARTUP="${MCP_SOURCE_UPDATE_ON_STARTUP:-false}"
+MCP_SOURCE_FORCE_REFRESH="${MCP_SOURCE_FORCE_REFRESH:-false}"
 GIT_MIRROR_ENABLED="${GIT_MIRROR_ENABLED:-true}"
 GIT_MIRROR_PREFIX="${GIT_MIRROR_PREFIX:-https://gh-proxy.com}"
 GIT_MIRROR_PREFIXES="${GIT_MIRROR_PREFIXES:-https://gh-proxy.com,https://v6.gh-proxy.org}"
@@ -42,6 +44,7 @@ GIT_MIRROR_FALLBACK_TO_ORIGIN="${GIT_MIRROR_FALLBACK_TO_ORIGIN:-false}"
 mkdir -p "${SOURCE_ROOT}"
 
 echo "📚 开始同步 MCP 源码到: ${SOURCE_ROOT}"
+echo "🧭 同步策略: update_on_startup=${MCP_SOURCE_UPDATE_ON_STARTUP}, force_refresh=${MCP_SOURCE_FORCE_REFRESH}"
 echo "🔧 GitHub 代理配置: enabled=${GIT_MIRROR_ENABLED}, prefixes=${GIT_MIRROR_PREFIXES}, fallback_to_origin=${GIT_MIRROR_FALLBACK_TO_ORIGIN}"
 
 host_allowed_for_mirror() {
@@ -155,8 +158,26 @@ sync_repo() {
     echo "🚫 ${name} 已禁用回源（GIT_MIRROR_FALLBACK_TO_ORIGIN=${GIT_MIRROR_FALLBACK_TO_ORIGIN}）"
   fi
 
+  if [[ -e "${target}" && ! -d "${target}/.git" ]]; then
+    echo "⚠️  ${name} 缓存目录异常（缺失 .git），将清理后重新拉取: ${target}"
+    rm -rf "${target}"
+  fi
+
+  if [[ -d "${target}/.git" ]] \
+    && ! bool_true "${MCP_SOURCE_UPDATE_ON_STARTUP}" \
+    && ! bool_true "${MCP_SOURCE_FORCE_REFRESH}"; then
+    local cached_sha
+    cached_sha="$(git -C "${target}" rev-parse --short HEAD 2>/dev/null || true)"
+    echo "♻️  ${name} 使用缓存源码 @ ${cached_sha:-unknown}（已跳过更新，MCP_SOURCE_UPDATE_ON_STARTUP=${MCP_SOURCE_UPDATE_ON_STARTUP}）"
+    return 0
+  fi
+
   if [ -d "${target}/.git" ]; then
-    echo "🔄 更新 ${name} (${branch})"
+    if bool_true "${MCP_SOURCE_FORCE_REFRESH}"; then
+      echo "🔄 强制更新 ${name} (${branch})"
+    else
+      echo "🔄 更新 ${name} (${branch})"
+    fi
     local fetched=0
     local fetch_error=""
     for candidate in "${candidates[@]}"; do

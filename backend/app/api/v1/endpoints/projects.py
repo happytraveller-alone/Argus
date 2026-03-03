@@ -15,7 +15,7 @@ from sqlalchemy import func, case, or_, and_
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime, timezone
 import shutil
 import os
@@ -290,8 +290,7 @@ class OwnerSchema(BaseModel):
     avatar_url: Optional[str] = None
     role: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectResponse(BaseModel):
@@ -309,8 +308,7 @@ class ProjectResponse(BaseModel):
     updated_at: Optional[datetime] = None
     owner: Optional[OwnerSchema] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StatsResponse(BaseModel):

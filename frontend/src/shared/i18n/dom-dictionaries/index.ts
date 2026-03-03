@@ -15,6 +15,24 @@ export const agentAuditDictionary: DomDictionary = {
   "面向代码安全与合规审计的智能分析平台。": "An intelligent platform for code security and compliance audits.",
   "聚焦仓库级项目，": "Focused on repository-level projects,",
   "提供任务编排、自动化审计与结果追踪，帮助团队更快定位风险与改进点。": "it provides task orchestration, automated auditing, and result tracking to help teams identify risks and improvements faster.",
+  "VulHunter 让你以静态、智能或混合方式快速发起代码安全审计。":
+    "VulHunter helps you quickly launch code security audits in static, intelligent, or hybrid mode.",
+  "简介：智能体上下文推理审计":
+    "Overview: Intelligent-agent contextual reasoning audit",
+  "优势：可发现规则外风险":
+    "Strength: Can discover risks beyond predefined rules",
+  "劣势：耗时更长、资源更高":
+    "Limitation: Longer runtime and higher resource usage",
+  "点击卡片，快速开始智能扫描":
+    "Click to quickly start intelligent scan",
+  "简介：静态 + 智能完整双阶段链路":
+    "Overview: Full two-stage pipeline (static + intelligent)",
+  "优势：覆盖更全面":
+    "Strength: Broader coverage",
+  "劣势：执行耗时更长":
+    "Limitation: Longer execution time",
+  "点击卡片，快速开始混合扫描":
+    "Click to quickly start hybrid scan",
 };
 
 export const dashboardDictionary: DomDictionary = {
@@ -118,6 +136,18 @@ export const projectsDictionary: DomDictionary = {
   "新建项目": "New Project",
   "初始化项目": "Initialize Project",
   "初始化新项目": "Initialize New Project",
+  "混合视图任务": "Hybrid View Tasks",
+  "静态 / 智能": "Static / Intelligent",
+  "运行中 / 已完成": "Running / Completed",
+  "混合扫描任务（完整链路）": "Hybrid Scan Tasks (Full Pipeline)",
+  "混合扫描会创建静态与智能两条任务，此处统一展示完整链路。":
+    "Hybrid scan creates both static and intelligent tasks; this page shows the full pipeline in one view.",
+  "暂无混合扫描任务": "No hybrid scan tasks yet",
+  "静态阶段": "Static Stage",
+  "智能阶段": "Intelligent Stage",
+  "智能扫描任务": "Intelligent Scan Tasks",
+  "仅展示 intelligent_audit（Agent 审计）任务":
+    "Only intelligent_audit (Agent Audit) tasks are shown",
 };
 
 export const opengrepRulesDictionary: DomDictionary = {

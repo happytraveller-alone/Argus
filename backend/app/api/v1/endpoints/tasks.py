@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime, timezone
 
 from app.api import deps
@@ -36,8 +36,7 @@ class AuditIssueSchema(BaseModel):
     resolved_at: Optional[datetime] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IssueUpdateSchema(BaseModel):
@@ -58,8 +57,7 @@ class ProjectSchema(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuditTaskSchema(BaseModel):
@@ -81,8 +79,7 @@ class AuditTaskSchema(BaseModel):
     created_at: datetime
     project: Optional[ProjectSchema] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/", response_model=List[AuditTaskSchema])

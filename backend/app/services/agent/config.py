@@ -12,7 +12,7 @@ from enum import Enum
 from functools import lru_cache
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class LogLevel(str, Enum):
@@ -336,11 +336,12 @@ class AgentConfig(BaseSettings):
         description="Continue with partial results on timeout"
     )
 
-    class Config:
-        env_prefix = "AGENT_"
-        env_file = ".env"
-        case_sensitive = False
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_prefix="AGENT_",
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
 
 @dataclass

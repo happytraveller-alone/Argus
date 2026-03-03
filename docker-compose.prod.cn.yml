@@ -63,6 +63,8 @@ services:
       - MCP_SOURCE_ROOT=/app/data/mcp/sources
       - MCP_SOURCE_SYNC_DEPTH=1
       - MCP_SOURCE_SYNC_STRICT=false
+      - MCP_SOURCE_UPDATE_ON_STARTUP=false
+      - MCP_SOURCE_FORCE_REFRESH=false
       - MCP_FILESYSTEM_ENABLED=false
       - MCP_FILESYSTEM_SANDBOX_ENABLED=true
       - MCP_FILESYSTEM_RUNTIME_MODE=sandbox_only

@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,8 +76,7 @@ class OpengrepRuleSingleUploadResponse(BaseModel):
     created_at: datetime
     message: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OpengrepRuleBatchUpdateRequest(BaseModel):
@@ -140,8 +139,7 @@ class OpengrepScanTaskResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OpengrepFindingResponse(BaseModel):
@@ -160,8 +158,7 @@ class OpengrepFindingResponse(BaseModel):
     cwe: Optional[List[str]] = Field(None, description="CWE列表")
     rule_name: Optional[str] = Field(None, description="命中规则名称")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OpengrepFindingContextLine(BaseModel):
@@ -2229,7 +2226,7 @@ async def get_static_task_finding_context(
 @router.post("/findings/{finding_id}/status")
 async def update_static_task_finding(
     finding_id: str,
-    status: str = Query(..., regex="^(open|verified|false_positive)$", description="新状态"),
+    status: str = Query(..., pattern="^(open|verified|false_positive)$", description="新状态"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
@@ -3959,8 +3956,7 @@ class GitleaksScanTaskResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GitleaksFindingResponse(BaseModel):
@@ -3979,8 +3975,7 @@ class GitleaksFindingResponse(BaseModel):
     author: Optional[str]
     status: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 async def _execute_gitleaks_scan(
@@ -4415,7 +4410,7 @@ async def update_gitleaks_finding_status(
     finding_id: str,
     status: str = Query(
         ...,
-        regex="^(open|verified|false_positive|fixed)$",
+        pattern="^(open|verified|false_positive|fixed)$",
         description="新状态: open, verified, false_positive, fixed",
     ),
     db: AsyncSession = Depends(get_db),

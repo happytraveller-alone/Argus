@@ -7,7 +7,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import json
 import os
 import shlex
@@ -890,8 +890,7 @@ class UserConfigResponse(BaseModel):
     created_at: str
     updated_at: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MCPVerifyRequest(BaseModel):
