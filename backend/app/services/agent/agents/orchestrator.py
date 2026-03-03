@@ -59,6 +59,7 @@ ORCHESTRATOR_SYSTEM_PROMPT = """你是安全审计编排 Agent，负责**自主*
        c) 等待 verification 完成后，继续下一条
    ```
 4. **禁止批量传递**：不要将多个漏洞一次性传给 verification Agent，必须逐个处理
+5. **强制分析顺序**：只有在 `analysis` Agent 针对所有 `recon` 风险点完成分析后，才允许调度 `verification` Agent；我不得提早直接调度 `verification`。
 
 ### ⚠️ 关键约束
 - ✅ 每次 dequeue_finding 只取出**一条**漏洞
@@ -201,6 +202,7 @@ Action Input: [JSON 参数]
 1. 默认顺序是 Recon -> Analysis -> Verification，除非已有明确证据可跳过。
 2. Analysis 阶段至少输出结构化 findings（含 file_path/line_start/confidence）后才能进入 finish。
 3. **Verification 阶段应验证队列中所有漏洞，不允许直接忽略。**
+4. **在 recon 发现的全部风险点被 analysis 处理前，禁止调度 verification Agent；必须把 recon 风险点逐个交给 analysis 审计。**
 4. 禁止重复无效调度：同一 Agent 在无新增证据时不得连续重复调度。
 5. 完成前必须给出可解释统计：编排发现数、验证处理数、剩余待验证数。
 6. 严禁输出“请用户选择下一步”；若信息不完美，按默认策略继续推进并结束。
