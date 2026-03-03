@@ -3,7 +3,7 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Activity,
 	AlertTriangle,
@@ -191,18 +191,6 @@ export default function Dashboard() {
 	);
 	const [totalScanDurationMs, setTotalScanDurationMs] = useState(0);
 
-	useEffect(() => {
-		void loadDashboardData();
-
-		const timer = window.setInterval(() => {
-			void loadDashboardData({ silent: true });
-		}, 15000);
-
-		return () => {
-			window.clearInterval(timer);
-		};
-	}, []);
-
 	const chartMax = useMemo(() => {
 		if (rulesByLanguageData.length === 0) return 1;
 		const maxSide = Math.max(...rulesByLanguageData.map((item) => item.total));
@@ -247,7 +235,7 @@ export default function Dashboard() {
 		return Math.min(520, Math.max(280, rowCount * 36));
 	}, [projectVulnsData.length]);
 
-	const loadStatsData = async () => {
+	const loadStatsData = useCallback(async () => {
 		const [statsResult, rulesResult, scanStatsResult] = await Promise.allSettled([
 			api.getProjectStats(),
 			getOpengrepRules(),
@@ -307,7 +295,6 @@ export default function Dashboard() {
 				projects,
 				agentTasks,
 				opengrepTasks,
-				gitleaksTasks,
 			});
 			setProjectScanRunsData(toTopNByField(scanRuns, "totalRuns", 10));
 			setProjectVulnsData(toTopNByField(vulns, "totalVulns", 10));
@@ -316,18 +303,33 @@ export default function Dashboard() {
 			setProjectVulnsData([]);
 			setTotalScanDurationMs(0);
 		}
-	};
+	}, []);
 
-	const loadDashboardData = async (options?: { silent?: boolean }) => {
+	const loadDashboardData = useCallback(async (options?: { silent?: boolean }) => {
 		try {
 			await runWithRefreshMode(loadStatsData, { ...options, setLoading });
 		} catch (error) {
 			console.error("仪表盘数据加载失败:", error);
 			toast.error("数据加载失败");
 		}
-	};
+	}, [loadStatsData]);
 
-	const renderProjectVulnsTooltip = (payload: any) => {
+	useEffect(() => {
+		void loadDashboardData();
+
+		const timer = window.setInterval(() => {
+			void loadDashboardData({ silent: true });
+		}, 15000);
+
+		return () => {
+			window.clearInterval(timer);
+		};
+	}, [loadDashboardData]);
+
+	const renderProjectVulnsTooltip = (payload: {
+		active?: boolean;
+		payload?: Array<{ payload?: ProjectVulnsChartItem }>;
+	}) => {
 		if (!payload?.active || !Array.isArray(payload.payload) || payload.payload.length === 0) {
 			return null;
 		}

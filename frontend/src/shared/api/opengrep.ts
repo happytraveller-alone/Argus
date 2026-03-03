@@ -269,6 +269,7 @@ export interface OpengrepScanTask {
     total_findings: number;
     error_count: number;
     warning_count: number;
+    high_confidence_count?: number;
     scan_duration_ms: number;
     files_scanned: number;
     lines_scanned: number;

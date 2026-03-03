@@ -3,7 +3,7 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -732,7 +732,7 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 			setUploadingRules(true);
 			const result = await uploadPatchArchive(patchArchive);
 
-			const { message, total_files } = result;
+			const { message, rule_ids } = result;
 
 			toast.success(`${message}`);
 
@@ -741,11 +741,11 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 			setPatchArchive(null);
 			setEventRuleUploadTab("manual");
 
-			// 重新加载生成中的规则列表
-			await loadGeneratingRules();
-
-			// 设置定期轮询以更新生成队列
-			setTimeout(() => loadGeneratingRules(), 2000);
+			if (rule_ids.length > 0) {
+				void startPollingRules(rule_ids);
+			} else {
+				await loadGeneratingRules();
+			}
 		} catch (error: any) {
 			const message =
 				error?.response?.data?.detail ||
@@ -766,7 +766,7 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 			setUploadingRules(true);
 			const result = await uploadPatchDirectory(patchDirectoryFiles);
 
-			const { message, total_files } = result;
+			const { message, rule_ids } = result;
 
 			toast.success(`${message}`);
 
@@ -775,11 +775,11 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 			setPatchDirectoryFiles([]);
 			setEventRuleUploadTab("manual");
 
-			// 重新加载生成中的规则列表
-			await loadGeneratingRules();
-
-			// 设置定期轮询以更新生成队列
-			setTimeout(() => loadGeneratingRules(), 2000);
+			if (rule_ids.length > 0) {
+				void startPollingRules(rule_ids);
+			} else {
+				await loadGeneratingRules();
+			}
 		} catch (error: any) {
 			const message =
 				error?.response?.data?.detail ||
@@ -1174,7 +1174,7 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 						<div className="cyber-card p-4">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="stat-label">支持漏洞类型数量</p>
+									<p className="stat-label">智能/混合扫描支持漏洞类型数量</p>
 									<p className="stat-value">
 										{ruleStats.vulnerabilityTypeCount}
 									</p>
@@ -2736,11 +2736,14 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 												type="file"
 												id="patch-directory-input"
 												multiple
-												webkitdirectory=""
-												directory=""
 												onChange={(e) => {
 													const files = Array.from(e.target.files || []);
 													setPatchDirectoryFiles(files);
+												}}
+												ref={(node) => {
+													if (!node) return;
+													node.setAttribute("webkitdirectory", "");
+													node.setAttribute("directory", "");
 												}}
 												className="hidden"
 											/>

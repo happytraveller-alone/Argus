@@ -9,6 +9,7 @@ import {
 } from "@/shared/api/opengrep";
 import { api } from "@/shared/config/database";
 import type { Project } from "@/shared/types";
+import { getProjectFoundIssuesBreakdown } from "@/features/projects/services/projectCardPreview";
 import {
 	resolveSourceModeFromTaskMeta,
 } from "@/features/tasks/services/taskActivities";
@@ -179,61 +180,35 @@ export function buildProjectVulnsChartData(params: {
 	projects: Project[];
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
-	gitleaksTasks: GitleaksScanTask[];
 }): ProjectVulnsChartItem[] {
-	const { projects, agentTasks, opengrepTasks, gitleaksTasks } = params;
+	const { projects, agentTasks, opengrepTasks } = params;
 	const projectNameMap = new Map(
 		projects.map((project) => [project.id, project.name || "未知项目"]),
 	);
-	const aggregateMap = new Map<string, ProjectVulnsChartItem>();
-	const ensureItem = (projectId: string): ProjectVulnsChartItem => {
-		const existing = aggregateMap.get(projectId);
-		if (existing) return existing;
-		const created: ProjectVulnsChartItem = {
-			projectId,
-			projectName: projectNameMap.get(projectId) || "未知项目",
-			staticVulns: 0,
-			intelligentVulns: 0,
-			hybridVulns: 0,
-			totalVulns: 0,
-		};
-		aggregateMap.set(projectId, created);
-		return created;
-	};
-
+	const projectIdSet = new Set<string>();
 	for (const task of opengrepTasks) {
-		if (!isCompletedStatus(task.status)) continue;
-		const item = ensureItem(task.project_id);
-		item.staticVulns += Math.max(Number(task.total_findings || 0), 0);
+		projectIdSet.add(task.project_id);
 	}
-
-	for (const task of gitleaksTasks) {
-		if (!isCompletedStatus(task.status)) continue;
-		const item = ensureItem(task.project_id);
-		item.staticVulns += Math.max(Number(task.total_findings || 0), 0);
-	}
-
 	for (const task of agentTasks) {
-		if (!isCompletedStatus(task.status)) continue;
-		const item = ensureItem(task.project_id);
-		const findings = Math.max(Number(task.findings_count || 0), 0);
-		const sourceMode = resolveSourceModeFromTaskMeta(
-			"intelligent_audit",
-			task.name,
-			task.description,
-		);
-		if (sourceMode === "intelligent") {
-			item.intelligentVulns += findings;
-		} else {
-			item.hybridVulns += findings;
-		}
+		projectIdSet.add(task.project_id);
 	}
 
-	return Array.from(aggregateMap.values())
-		.map((item) => ({
-			...item,
-			totalVulns: item.staticVulns + item.intelligentVulns + item.hybridVulns,
-		}))
+	return Array.from(projectIdSet)
+		.map((projectId) => {
+			const issueBreakdown = getProjectFoundIssuesBreakdown({
+				projectId,
+				agentTasks,
+				opengrepTasks,
+			});
+			return {
+				projectId,
+				projectName: projectNameMap.get(projectId) || "未知项目",
+				staticVulns: issueBreakdown.staticIssues,
+				intelligentVulns: issueBreakdown.intelligentIssues,
+				hybridVulns: issueBreakdown.hybridIssues,
+				totalVulns: issueBreakdown.totalIssues,
+			};
+		})
 		.filter((item) => item.totalVulns > 0)
 		.sort((a, b) => {
 			if (b.totalVulns !== a.totalVulns) return b.totalVulns - a.totalVulns;

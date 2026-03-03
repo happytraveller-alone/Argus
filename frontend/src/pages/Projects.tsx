@@ -1602,7 +1602,6 @@ export default function Projects() {
                 <div className="flex items-center justify-between gap-3">
                     <div className="section-header">
                         <Code className="w-5 h-5 text-primary" />
-                        <h3 className="section-title">项目浏览</h3>
                     </div>
                     <Button
                         size="sm"
@@ -1624,7 +1623,6 @@ export default function Projects() {
                         />
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>项目管理同源数据</span>
                         <span>共 {filteredProjects.length} 个</span>
                     </div>
                 </div>

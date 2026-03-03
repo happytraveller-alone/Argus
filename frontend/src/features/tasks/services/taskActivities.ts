@@ -92,6 +92,18 @@ export function isHybridAgentActivity(
 	);
 }
 
+export function getTaskKindText(
+	activity: Pick<TaskActivityItem, "kind" | "sourceMode">,
+): string {
+	if (activity.kind === "rule_scan") {
+		return "静态扫描";
+	}
+	if (activity.sourceMode === "hybrid") {
+		return "混合扫描";
+	}
+	return "智能扫描";
+}
+
 function mapProjectNames(projects: Project[]) {
 	return new Map(projects.map((project) => [project.id, project.name]));
 }
@@ -272,7 +284,7 @@ export function filterActivitiesByKind(
 	);
 	if (!trimmed) return filteredByKind;
 
-	const kindText = kind === "rule_scan" ? "静态扫描" : "智能审计";
+	const kindText = kind === "rule_scan" ? "静态扫描" : "智能扫描";
 	return filteredByKind.filter((activity) => {
 		return (
 			activity.projectName.toLowerCase().includes(trimmed) ||
@@ -288,7 +300,7 @@ function matchesActivityKeyword(
 ): boolean {
 	const trimmed = keyword.trim().toLowerCase();
 	if (!trimmed) return true;
-	const kindText = activity.kind === "rule_scan" ? "静态扫描" : "智能审计";
+	const kindText = getTaskKindText(activity);
 	return (
 		activity.projectName.toLowerCase().includes(trimmed) ||
 		kindText.includes(trimmed) ||
@@ -326,7 +338,7 @@ export function filterMixedActivities(
 	if (!trimmed) return activities;
 
 	return activities.filter((activity) => {
-		const kindText = activity.kind === "rule_scan" ? "静态扫描" : "智能审计";
+		const kindText = getTaskKindText(activity);
 		return (
 			activity.projectName.toLowerCase().includes(trimmed) ||
 			kindText.includes(trimmed) ||

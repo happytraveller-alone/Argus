@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, Bot, Shield, Layers, ArrowRight, Clock } from "lucide-react";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import {
 	filterMixedActivities,
 	formatCreatedAt,
 	getActivityDurationLabel,
+	getTaskKindText,
 	getTaskProgressBarClassName,
 	getTaskProgressPercent,
 	getRelativeTime,
@@ -39,11 +40,7 @@ export default function TaskManagementOverview() {
 		return () => window.clearInterval(timer);
 	}, []);
 
-	useEffect(() => {
-		void loadData();
-	}, []);
-
-	const loadData = async () => {
+	const loadData = useCallback(async () => {
 		try {
 			setLoading(true);
 			const allProjects = await api.getProjects();
@@ -56,7 +53,11 @@ export default function TaskManagementOverview() {
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, []);
+
+	useEffect(() => {
+		void loadData();
+	}, [loadData]);
 
 	const filteredActivities = useMemo(
 		() => filterMixedActivities(activities, keyword),
@@ -98,11 +99,6 @@ export default function TaskManagementOverview() {
 	);
 
 	useEffect(() => {
-		setFinishedPage(1);
-		setRunningPage(1);
-	}, [keyword]);
-
-	useEffect(() => {
 		if (finishedPage > finishedTotalPages) {
 			setFinishedPage(finishedTotalPages);
 		}
@@ -124,10 +120,7 @@ export default function TaskManagementOverview() {
 
 	const renderActivityCard = (activity: TaskActivityItem) => {
 		void nowTick;
-		const activityName =
-			activity.kind === "rule_scan"
-				? `${activity.projectName}-静态扫描`
-				: `${activity.projectName}-智能审计`;
+		const activityName = `${activity.projectName}-${getTaskKindText(activity)}`;
 		return (
 			<Link
 				key={activity.id}
@@ -258,14 +251,18 @@ export default function TaskManagementOverview() {
 					</span>
 				</div>
 
-				<div className="space-y-3 mb-3 mt-3">
-					<Input
-						value={keyword}
-						onChange={(e) => setKeyword(e.target.value)}
-						placeholder="按项目名/任务类型/状态搜索"
-						className="h-9 font-mono"
-					/>
-				</div>
+					<div className="space-y-3 mb-3 mt-3">
+						<Input
+							value={keyword}
+							onChange={(e) => {
+								setKeyword(e.target.value);
+								setFinishedPage(1);
+								setRunningPage(1);
+							}}
+							placeholder="按项目名/任务类型/状态搜索"
+							className="h-9 font-mono"
+						/>
+					</div>
 
 				<div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 					<div className="rounded-lg border border-border/60 bg-muted/15 p-3 space-y-3">

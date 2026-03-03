@@ -133,6 +133,7 @@ class OpengrepScanTaskResponse(BaseModel):
     total_findings: int
     error_count: int
     warning_count: int
+    high_confidence_count: int = 0
     scan_duration_ms: int
     files_scanned: int
     lines_scanned: int
@@ -1605,6 +1606,80 @@ def _extract_finding_payload_confidence(rule_data: Any) -> Optional[str]:
     return None
 
 
+def _build_rule_confidence_maps(
+    rows: List[Any],
+) -> Dict[str, Optional[str]]:
+    rule_confidence_map: Dict[str, Optional[str]] = {}
+    for row in rows:
+        rule_name = row[0] if len(row) > 0 else None
+        rule_confidence = row[1] if len(row) > 1 else None
+        normalized_rule_name = str(rule_name or "").strip()
+        if not normalized_rule_name:
+            continue
+        normalized_confidence = _normalize_confidence(rule_confidence)
+        for lookup_key in _extract_rule_lookup_keys(normalized_rule_name):
+            existing = rule_confidence_map.get(lookup_key)
+            if existing is None and normalized_confidence is not None:
+                rule_confidence_map[lookup_key] = normalized_confidence
+                continue
+            if lookup_key not in rule_confidence_map:
+                rule_confidence_map[lookup_key] = normalized_confidence
+    return rule_confidence_map
+
+
+async def _count_high_confidence_findings_by_task_ids(
+    db: AsyncSession,
+    task_ids: List[str],
+) -> Dict[str, int]:
+    normalized_task_ids = [str(task_id).strip() for task_id in task_ids if str(task_id).strip()]
+    if not normalized_task_ids:
+        return {}
+
+    counts = {task_id: 0 for task_id in normalized_task_ids}
+    result = await db.execute(
+        select(OpengrepFinding.scan_task_id, OpengrepFinding.rule).where(
+            OpengrepFinding.scan_task_id.in_(normalized_task_ids),
+            or_(OpengrepFinding.status.is_(None), OpengrepFinding.status != "false_positive"),
+        )
+    )
+    finding_rows = result.all()
+    if not finding_rows:
+        return counts
+
+    rule_name_candidates: set[str] = set()
+    for _, rule_data in finding_rows:
+        if not isinstance(rule_data, dict):
+            continue
+        check_id = rule_data.get("check_id") or rule_data.get("id")
+        for key in _extract_rule_lookup_keys(check_id):
+            rule_name_candidates.add(key)
+
+    rule_confidence_map: Dict[str, Optional[str]] = {}
+    if rule_name_candidates:
+        rule_result = await db.execute(
+            select(OpengrepRule.name, OpengrepRule.confidence).where(
+                OpengrepRule.name.in_(rule_name_candidates)
+            )
+        )
+        rule_confidence_map = _build_rule_confidence_maps(rule_result.all())
+
+    for scan_task_id, rule_data in finding_rows:
+        resolved_confidence = _extract_finding_payload_confidence(rule_data)
+        if not resolved_confidence and isinstance(rule_data, dict):
+            check_id = rule_data.get("check_id") or rule_data.get("id")
+            for key in _extract_rule_lookup_keys(check_id):
+                mapped = rule_confidence_map.get(key)
+                if mapped:
+                    resolved_confidence = mapped
+                    break
+
+        if resolved_confidence == "HIGH":
+            task_key = str(scan_task_id)
+            counts[task_key] = counts.get(task_key, 0) + 1
+
+    return counts
+
+
 def _build_finding_path_candidates(file_path: Optional[str]) -> List[str]:
     raw = str(file_path or "").strip().replace("\\", "/")
     if not raw:
@@ -1811,6 +1886,12 @@ async def list_static_tasks(
     query = query.order_by(OpengrepScanTask.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     tasks = result.scalars().all()
+    high_confidence_counts = await _count_high_confidence_findings_by_task_ids(
+        db,
+        [task.id for task in tasks],
+    )
+    for task in tasks:
+        setattr(task, "high_confidence_count", int(high_confidence_counts.get(task.id, 0)))
     return tasks
 
 
@@ -1915,6 +1996,11 @@ async def get_static_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    high_confidence_counts = await _count_high_confidence_findings_by_task_ids(
+        db,
+        [task.id],
+    )
+    setattr(task, "high_confidence_count", int(high_confidence_counts.get(task.id, 0)))
     return task
 
 

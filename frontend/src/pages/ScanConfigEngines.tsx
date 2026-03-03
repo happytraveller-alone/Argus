@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { AlertTriangle, KeyRound, SearchCheck, ShieldAlert, Zap } from "lucide-react";
+import {
+	AlertTriangle,
+	KeyRound,
+	SearchCheck,
+	ShieldAlert,
+	Zap,
+} from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SystemConfig } from "@/components/system/SystemConfig";
@@ -12,114 +18,131 @@ type EngineTab = "opengrep" | "gitleaks" | "llm";
 const ENGINE_TABS: EngineTab[] = ["opengrep", "gitleaks", "llm"];
 
 export default function ScanConfigEngines() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const currentTab = useMemo<EngineTab>(() => {
-    const tab = (searchParams.get("tab") || "").toLowerCase();
-    return ENGINE_TABS.includes(tab as EngineTab) ? (tab as EngineTab) : "opengrep";
-  }, [searchParams]);
+	const [searchParams, setSearchParams] = useSearchParams();
+	const currentTab = useMemo<EngineTab>(() => {
+		const tab = (searchParams.get("tab") || "").toLowerCase();
+		return ENGINE_TABS.includes(tab as EngineTab)
+			? (tab as EngineTab)
+			: "opengrep";
+	}, [searchParams]);
 
-  const handleTabChange = (value: string) => {
-    const next = ENGINE_TABS.includes(value as EngineTab)
-      ? (value as EngineTab)
-      : "opengrep";
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("tab", next);
-    setSearchParams(nextParams, { replace: true });
-  };
+	const handleTabChange = (value: string) => {
+		const next = ENGINE_TABS.includes(value as EngineTab)
+			? (value as EngineTab)
+			: "opengrep";
+		const nextParams = new URLSearchParams(searchParams);
+		nextParams.set("tab", next);
+		setSearchParams(nextParams, { replace: true });
+	};
 
-  return (
-    <div className="space-y-6 p-6 bg-background min-h-screen relative">
-      <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
-      <div className="relative z-10">
-        <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-4">
-          <div className="cyber-card p-4">
-            <TabsList className="w-full h-auto bg-muted/30 border border-border/60 rounded-xl p-1 grid grid-cols-1 md:grid-cols-3 gap-1">
-              <TabsTrigger
-                value="opengrep"
-                className="justify-start md:justify-center gap-2 font-mono data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
-              >
-                <SearchCheck className="w-4 h-4" />
-                opengrep
-              </TabsTrigger>
-              <TabsTrigger
-                value="gitleaks"
-                className="justify-start md:justify-center gap-2 font-mono data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
-              >
-                <ShieldAlert className="w-4 h-4" />
-                gitleaks
-              </TabsTrigger>
-              <TabsTrigger
-                value="llm"
-                className="justify-start md:justify-center gap-2 font-mono data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
-              >
-                <KeyRound className="w-4 h-4" />
-                large language models
-              </TabsTrigger>
-            </TabsList>
-          </div>
+	return (
+		<div className="space-y-6 p-6 bg-background min-h-screen relative">
+			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
+			<div className="relative z-10">
+				<Tabs
+					value={currentTab}
+					onValueChange={handleTabChange}
+					className="space-y-4"
+				>
+					<div className="cyber-card p-4">
+						<TabsList className="w-full h-auto bg-muted/30 border border-border/60 rounded-xl p-1 grid grid-cols-1 md:grid-cols-3 gap-1">
+							<TabsTrigger
+								value="opengrep"
+								className="justify-start md:justify-center gap-2 font-mono data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+							>
+								<SearchCheck className="w-4 h-4" />
+								opengrep
+							</TabsTrigger>
+							<TabsTrigger
+								value="gitleaks"
+								className="justify-start md:justify-center gap-2 font-mono data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+							>
+								<ShieldAlert className="w-4 h-4" />
+								gitleaks
+							</TabsTrigger>
+							<TabsTrigger
+								value="llm"
+								className="justify-start md:justify-center gap-2 font-mono data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+							>
+								<KeyRound className="w-4 h-4" />
+								large language models
+							</TabsTrigger>
+						</TabsList>
+					</div>
 
-          <TabsContent value="opengrep" className="mt-0">
-            <div className="cyber-card p-0">
-              <OpengrepRules embedded />
-            </div>
-          </TabsContent>
+					<TabsContent value="opengrep" className="mt-0">
+						<div className="cyber-card p-0">
+							<OpengrepRules embedded />
+						</div>
+					</TabsContent>
 
-          <TabsContent value="gitleaks" className="mt-0">
-            <div className="cyber-card p-5 space-y-4">
-              <div className="section-header mb-1">
-                <ShieldAlert className="w-4 h-4 text-primary" />
-                <div className="font-mono font-bold uppercase text-sm text-foreground">
-                  Gitleaks 引擎配置
-                </div>
-              </div>
-              <div className="rounded-lg border border-border/70 bg-muted/20 p-4 space-y-2">
-                <div className="inline-flex items-center gap-2 text-amber-300 text-sm">
-                  <AlertTriangle className="w-4 h-4" />
-                  当前版本提供扫描联动能力，独立参数面板将在后续版本补充。
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  你可以先在静态扫描任务中启用 Gitleaks，
-                  并通过静态扫描详情查看与 Opengrep 的联合结果。
-                </p>
-                <Button
-                  asChild
-                  className="h-9 px-4 bg-blue-600 hover:bg-blue-500 text-white"
-                >
-                  <Link to="/tasks/static">前往静态扫描</Link>
-                </Button>
-              </div>
-            </div>
-          </TabsContent>
+					<TabsContent value="gitleaks" className="mt-0">
+						<div className="cyber-card p-5 space-y-4">
+							<div className="section-header mb-1">
+								<ShieldAlert className="w-4 h-4 text-primary" />
+								<div className="font-mono font-bold uppercase text-sm text-foreground">
+									Gitleaks 引擎配置
+								</div>
+							</div>
+							<div className="rounded-lg border border-border/70 bg-muted/20 p-4 space-y-2">
+								<div className="inline-flex items-center gap-2 text-amber-300 text-sm">
+									<AlertTriangle className="w-4 h-4" />
+									当前版本提供扫描联动能力，独立参数面板将在后续版本补充。
+								</div>
+								<p className="text-sm text-muted-foreground">
+									你可以先在静态扫描任务中启用 Gitleaks，
+									并通过静态扫描详情查看与 Opengrep 的联合结果。
+								</p>
+								<Button
+									asChild
+									className="h-9 px-4 bg-blue-600 hover:bg-blue-500 text-white"
+								>
+									<Link to="/tasks/static">前往静态扫描</Link>
+								</Button>
+							</div>
+						</div>
+					</TabsContent>
 
-          <TabsContent value="llm" className="mt-0 space-y-6">
-            <div className="cyber-card p-5 space-y-2">
-              <div>
-                <div className="font-mono font-bold uppercase text-sm text-foreground">
-                  智能引擎（LLM）
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  配置模型参数、请求预算和超时策略。
-                </div>
-              </div>
-              <SystemConfig
-                visibleSections={["llm"]}
-                defaultSection="llm"
-                mergedView={false}
-              />
-            </div>
+					<TabsContent value="llm" className="mt-0 space-y-6">
+						<SystemConfig
+							visibleSections={["llm"]}
+							defaultSection="llm"
+							mergedView={false}
+							llmSummaryOnly
+						/>
 
-            <div className="cyber-card p-5 space-y-2">
-              <div className="section-header mb-1">
-                <Zap className="w-4 h-4 text-primary" />
-                <div className="font-mono font-bold uppercase text-sm text-foreground">
-                  RAG（向量索引 / 代码向量化）
-                </div>
-              </div>
-              <EmbeddingConfig />
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  );
+						<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+							<div className="cyber-card p-5 space-y-2">
+								<div className="section-header mb-1">
+									<KeyRound className="w-4 h-4 text-primary" />
+									<div className="font-mono font-bold uppercase text-sm text-foreground">
+										推理模块
+									</div>
+								</div>
+								<div className="text-xs text-muted-foreground">
+									配置模型参数、请求预算和超时策略。
+								</div>
+								<SystemConfig
+									visibleSections={["llm"]}
+									defaultSection="llm"
+									mergedView={false}
+									showLlmSummaryCards={false}
+								/>
+							</div>
+
+							<div className="cyber-card p-5 space-y-2">
+								<div className="section-header mb-1">
+									<Zap className="w-4 h-4 text-primary" />
+									<div className="font-mono font-bold uppercase text-sm text-foreground">
+										搜索增强模块
+									</div>
+								</div>
+								<EmbeddingConfig />
+							</div>
+						</div>
+					</TabsContent>
+				</Tabs>
+			</div>
+		</div>
+	);
 }

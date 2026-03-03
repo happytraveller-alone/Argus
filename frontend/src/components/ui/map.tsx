@@ -33,6 +33,12 @@ type MapContextProps = {
 address?: string; /** 地图标记点地址 */
 };
 
+type BMapInstance = {
+clearOverlays: () => void;
+centerAndZoom: (center: unknown, zoom: number) => void;
+addOverlay: (marker: unknown) => void;
+};
+
 const MapContext = createContext<MapContextProps | null>(null);
 
 /** 默认地图配置 */
@@ -114,7 +120,7 @@ option?: {
 };
 }) => {
 const mapRef = useRef<HTMLDivElement>(null);
-const currentRef = useRef(null);
+const currentRef = useRef<BMapInstance | null>(null);
 
 const _options = useMemo(() => {
     return { ...defaultOption, ...option };
@@ -134,9 +140,11 @@ const initMap = useCallback(() => {
 
     if (!map) {
     // 创建地图实例
-    map = new (window as any).BMapGL.Map(mapRef.current);
+    map = new (window as any).BMapGL.Map(mapRef.current) as BMapInstance;
     currentRef.current = map;
     }
+
+    if (!map) return;
 
     // 清除覆盖物
     map.clearOverlays();

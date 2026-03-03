@@ -4,6 +4,7 @@ export const commonDictionary: DomDictionary = {
   "VulHunter": "VulHunter",
   "VULHUNTER": "VULHUNTER",
   "智能审计": "Intelligent Audit",
+  "智能扫描": "Intelligent Scan",
   "关闭": "Close",
   "规则「": "Rule \"",
   "」删除成功": "\" deleted successfully",
@@ -12,6 +13,7 @@ export const commonDictionary: DomDictionary = {
 export const agentAuditDictionary: DomDictionary = {
   "首页": "Home",
   "Agent审计任务": "Agent Audit Task",
+  "Agent扫描任务": "Agent Scan Task",
   "面向代码安全与合规审计的智能分析平台。": "An intelligent platform for code security and compliance audits.",
   "聚焦仓库级项目，": "Focused on repository-level projects,",
   "提供任务编排、自动化审计与结果追踪，帮助团队更快定位风险与改进点。": "it provides task orchestration, automated auditing, and result tracking to help teams identify risks and improvements faster.",
@@ -25,8 +27,6 @@ export const agentAuditDictionary: DomDictionary = {
     "Limitation: Longer runtime and higher resource usage",
   "点击卡片，快速开始智能扫描":
     "Click to quickly start intelligent scan",
-  "点击卡片，快速开始智能扫描（可先配置测试 LLM）":
-    "Click to quickly start intelligent scan (you can test LLM config first)",
   "简介：静态 + 智能完整双阶段链路":
     "Overview: Full two-stage pipeline (static + intelligent)",
   "优势：覆盖更全面":
@@ -35,8 +35,6 @@ export const agentAuditDictionary: DomDictionary = {
     "Limitation: Longer execution time",
   "点击卡片，快速开始混合扫描":
     "Click to quickly start hybrid scan",
-  "点击卡片，快速开始混合扫描（可先配置测试 LLM）":
-    "Click to quickly start hybrid scan (you can test LLM config first)",
 };
 
 export const dashboardDictionary: DomDictionary = {
@@ -84,8 +82,8 @@ export const dashboardDictionary: DomDictionary = {
   "按项目统计已完成扫描次数（静态/智能/混合）":
     "Completed scan runs by project (Static/Intelligent/Hybrid)",
   "项目漏洞数量横向统计图": "Project Vulnerability Counts Bar Chart",
-  "按项目统计已完成任务漏洞数（静态/智能/混合）":
-    "Completed-task vulnerability totals by project (Static/Intelligent/Hybrid)",
+  "按项目统计发现问题数（与项目卡片口径一致）":
+    "Issue counts by project (aligned with project-card metric)",
   "混合扫描已纳入统计": "Hybrid scan is included in statistics",
   "暂无项目扫描次数数据": "No project scan-run data",
   "暂无项目漏洞数量数据": "No project vulnerability-count data",
@@ -152,10 +150,10 @@ export const projectsDictionary: DomDictionary = {
     "Only hybrid-classified agent tasks are shown; static and standalone intelligent tasks are excluded.",
   "暂无混合扫描任务": "No hybrid scan tasks yet",
   "智能扫描任务": "Intelligent Scan Tasks",
-  "仅展示 intelligent_audit（Agent 审计）任务":
-    "Only intelligent_audit (Agent Audit) tasks are shown",
-  "仅展示显式标记为 [INTELLIGENT] 的 intelligent_audit 任务":
-    "Only intelligent_audit tasks explicitly marked as [INTELLIGENT] are shown",
+  "仅展示 intelligent_audit（Agent 扫描）任务":
+    "Only intelligent_audit (Agent Scan) tasks are shown",
+  "仅展示显式标记为 [INTELLIGENT] 的智能扫描任务":
+    "Only intelligent scan tasks explicitly marked as [INTELLIGENT] are shown",
   "创建前会自动校验 LLM 配置。":
     "LLM configuration is automatically validated before creation.",
   "配置测试": "Config Test",

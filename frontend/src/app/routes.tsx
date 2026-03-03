@@ -37,12 +37,12 @@ const routes: RouteConfig[] = [
         navGroup: "main",
         navOrder: 10,
     },
-    {
-        name: "Agent审计任务",
-        nameKey: "route.agentTask",
-        path: "/agent-audit/:taskId",
-        element: <AgentAudit />,
-        visible: false,
+	{
+		name: "Agent扫描任务",
+		nameKey: "route.agentTask",
+		path: "/agent-audit/:taskId",
+		element: <AgentAudit />,
+		visible: false,
         navVisible: false,
     },
     {

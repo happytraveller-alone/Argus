@@ -2,6 +2,7 @@ import type { AgentTask } from "@/shared/api/agentTasks";
 import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import type { AuditTask } from "@/shared/types";
+import { resolveSourceModeFromTaskMeta } from "@/features/tasks/services/taskActivities";
 
 const STATIC_GITLEAKS_PAIRING_WINDOW_MS = 60 * 1000;
 
@@ -37,6 +38,13 @@ export interface ProjectCardLanguageStats {
 export interface ProjectCardSummaryStats {
   totalTasks: number;
   completedTasks: number;
+  totalIssues: number;
+}
+
+export interface ProjectFoundIssuesBreakdown {
+  staticIssues: number;
+  intelligentIssues: number;
+  hybridIssues: number;
   totalIssues: number;
 }
 
@@ -81,7 +89,7 @@ function parseLanguageInfo(raw: unknown): {
 } | null {
   if (!raw) return null;
 
-  let parsed: any = raw;
+  let parsed: unknown = raw;
   if (typeof raw === "string") {
     try {
       parsed = JSON.parse(raw);
@@ -92,11 +100,18 @@ function parseLanguageInfo(raw: unknown): {
 
   if (!parsed || typeof parsed !== "object") return null;
 
-  const total = toFiniteNumber(parsed.total);
-  const totalFiles = toFiniteNumber(parsed.total_files);
-  const languages = parsed.languages && typeof parsed.languages === "object"
-    ? parsed.languages
-    : {};
+  const parsedObject = parsed as {
+    total?: unknown;
+    total_files?: unknown;
+    languages?: unknown;
+  };
+
+  const total = toFiniteNumber(parsedObject.total);
+  const totalFiles = toFiniteNumber(parsedObject.total_files);
+  const languages =
+    parsedObject.languages && typeof parsedObject.languages === "object"
+      ? (parsedObject.languages as Record<string, unknown>)
+      : {};
 
   const slices = Object.entries(languages)
     .map(([name, info]) => {
@@ -188,15 +203,57 @@ export function getProjectCardSummaryStats(params: {
     projectAgentTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectOpengrepTasks.filter((task) => isCompletedStatus(task.status)).length;
 
-  const totalIssues =
-    projectAuditTasks.reduce((sum, task) => sum + Number(task.issues_count || 0), 0) +
-    projectAgentTasks.reduce((sum, task) => sum + Number(task.findings_count || 0), 0) +
-    projectOpengrepTasks.reduce((sum, task) => sum + Number(task.total_findings || 0), 0);
+  const issueBreakdown = getProjectFoundIssuesBreakdown({
+    projectId,
+    agentTasks,
+    opengrepTasks,
+  });
 
   return {
     totalTasks,
     completedTasks,
-    totalIssues,
+    totalIssues: issueBreakdown.totalIssues,
+  };
+}
+
+export function getProjectFoundIssuesBreakdown(params: {
+  projectId: string;
+  agentTasks: AgentTask[];
+  opengrepTasks: OpengrepScanTask[];
+}): ProjectFoundIssuesBreakdown {
+  const { projectId, agentTasks, opengrepTasks } = params;
+
+  const staticIssues = opengrepTasks
+    .filter((task) => task.project_id === projectId)
+    .reduce(
+      (sum, task) =>
+        sum + Math.max(Number(task.high_confidence_count ?? 0), 0),
+      0,
+    );
+
+  const projectAgentTasks = agentTasks.filter((task) => task.project_id === projectId);
+
+  let intelligentIssues = 0;
+  let hybridIssues = 0;
+  for (const task of projectAgentTasks) {
+    const verified = Math.max(Number(task.verified_count ?? 0), 0);
+    const sourceMode = resolveSourceModeFromTaskMeta(
+      "intelligent_audit",
+      task.name,
+      task.description,
+    );
+    if (sourceMode === "intelligent") {
+      intelligentIssues += verified;
+    } else {
+      hybridIssues += verified;
+    }
+  }
+
+  return {
+    staticIssues,
+    intelligentIssues,
+    hybridIssues,
+    totalIssues: staticIssues + intelligentIssues + hybridIssues,
   };
 }
 
@@ -289,7 +346,7 @@ export function getProjectCardRecentTasks(params: {
       label: "静态扫描",
       scannedFiles: toNullableNonNegativeNumber(task.files_scanned),
       scannedLines: toNullableNonNegativeNumber(task.lines_scanned),
-      vulnerabilities: toNullableNonNegativeNumber(task.total_findings),
+      vulnerabilities: toNullableNonNegativeNumber(task.high_confidence_count ?? 0),
     }));
 
   const intelligentItems: ProjectCardRecentTask[] = agentTasks
@@ -319,7 +376,7 @@ export function getProjectCardRecentTasks(params: {
         scannedLines: toNullableNonNegativeNumber(
           dynamicTask.lines_scanned ?? dynamicTask.total_lines,
         ),
-        vulnerabilities: toNullableNonNegativeNumber(task.findings_count),
+        vulnerabilities: toNullableNonNegativeNumber(task.verified_count),
       };
     });
 
