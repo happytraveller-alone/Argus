@@ -5,7 +5,7 @@ import pytest
 
 from app.api.v1.endpoints.agent_tasks import (
     _filter_bootstrap_findings,
-    _prepare_bootstrap_opengrep_findings,
+    _prepare_embedded_bootstrap_findings,
 )
 import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
@@ -23,26 +23,29 @@ class _ScalarListResult:
 
 
 @pytest.mark.asyncio
-async def test_prepare_bootstrap_always_scan_even_when_history_exists(monkeypatch):
-    active_rules = [SimpleNamespace(id="rule-1", pattern_yaml="rules: []")]
+async def test_prepare_embedded_bootstrap_opengrep_only_no_static_task_record(
+    monkeypatch,
+):
+    active_rules = [SimpleNamespace(id="rule-1", pattern_yaml="rules: []", confidence="HIGH")]
     parsed_findings = [
         {
+            "check_id": "rule-1",
             "path": "src/a.py",
             "start": {"line": 6},
             "end": {"line": 6},
-            "extra": {"severity": "ERROR", "message": "danger", "lines": "danger()"},
+            "extra": {
+                "severity": "ERROR",
+                "message": "danger",
+                "lines": "danger()",
+                "metadata": {"confidence": "HIGH"},
+            },
         },
     ]
-    filtered_candidates = [{"id": "f-1", "severity": "ERROR", "confidence": "HIGH"}]
 
     db = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()
-
-    async def refresh_side_effect(task):
-        task.id = "forced-scan-task-1"
-
-    db.refresh = AsyncMock(side_effect=refresh_side_effect)
+    db.refresh = AsyncMock()
     db.execute = AsyncMock(return_value=_ScalarListResult(active_rules))
 
     event_emitter = SimpleNamespace(
@@ -55,72 +58,64 @@ async def test_prepare_bootstrap_always_scan_even_when_history_exists(monkeypatc
         "app.api.v1.endpoints.agent_tasks._run_bootstrap_opengrep_scan",
         AsyncMock(return_value=parsed_findings),
     )
-    collect_mock = AsyncMock(return_value=filtered_candidates)
-    monkeypatch.setattr(
-        "app.api.v1.endpoints.agent_tasks._collect_bootstrap_findings_for_task",
-        collect_mock,
-    )
 
-    candidates, bootstrap_task_id, source = await _prepare_bootstrap_opengrep_findings(
+    candidates, bootstrap_task_id, source = await _prepare_embedded_bootstrap_findings(
         db=db,
-        project_id="project-1",
         project_root="/tmp/project",
         event_emitter=event_emitter,
+        opengrep_enabled=True,
+        gitleaks_enabled=False,
     )
 
-    assert source == "scan_forced"
-    assert bootstrap_task_id == "forced-scan-task-1"
-    assert candidates == filtered_candidates
-    collect_mock.assert_awaited_once()
+    assert source == "embedded_opengrep"
+    assert bootstrap_task_id is None
+    assert len(candidates) == 1
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
+
     event_emitter.emit_info.assert_awaited()
     last_info_call = event_emitter.emit_info.await_args_list[-1]
-    last_metadata = last_info_call.kwargs.get("metadata")
-    assert isinstance(last_metadata, dict)
-    assert last_metadata.get("bootstrap") is True
-    assert last_metadata.get("bootstrap_task_id") == "forced-scan-task-1"
-    assert last_metadata.get("bootstrap_source") == "scan_forced"
-    assert last_metadata.get("bootstrap_total_findings") == len(parsed_findings)
-    assert (
-        last_metadata.get("bootstrap_candidate_count")
-        == len(filtered_candidates)
-    )
+    metadata = last_info_call.kwargs.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("bootstrap") is True
+    assert metadata.get("bootstrap_task_id") is None
+    assert metadata.get("bootstrap_source") == "embedded_opengrep"
+    assert metadata.get("bootstrap_total_findings") == 1
+    assert metadata.get("bootstrap_candidate_count") == 1
 
 
 @pytest.mark.asyncio
-async def test_prepare_bootstrap_fallback_scan_when_no_history(monkeypatch):
-    active_rules = [
-        SimpleNamespace(id="rule-1", pattern_yaml="rules: []"),
-        SimpleNamespace(id="rule-2", pattern_yaml="rules: []"),
-    ]
-    parsed_findings = [
+async def test_prepare_embedded_bootstrap_with_gitleaks(monkeypatch):
+    active_rules = [SimpleNamespace(id="rule-1", pattern_yaml="rules: []", confidence="MEDIUM")]
+    parsed_opengrep = [
         {
+            "check_id": "rule-1",
             "path": "src/a.py",
-            "start": {"line": 11},
-            "end": {"line": 11},
-            "extra": {"severity": "ERROR", "message": "danger", "lines": "danger()"},
-        },
-        {
-            "path": "src/b.py",
-            "start": {"line": 9},
+            "start": {"line": 10},
             "end": {"line": 10},
-            "extra": {"severity": "WARNING", "message": "warn", "lines": "warn()"},
+            "extra": {
+                "severity": "ERROR",
+                "message": "danger",
+                "metadata": {"confidence": "MEDIUM"},
+            },
         },
     ]
-    filtered_candidates = [
-        {"id": "candidate-1", "severity": "ERROR", "confidence": "HIGH"}
+    parsed_gitleaks = [
+        {
+            "RuleID": "generic-api-key",
+            "Description": "Potential API key",
+            "File": "src/secret.ts",
+            "StartLine": 3,
+            "EndLine": 3,
+            "Match": "apiKey = abc",
+        },
     ]
 
     db = AsyncMock()
     db.add = MagicMock()
     db.commit = AsyncMock()
-
-    async def refresh_side_effect(task):
-        task.id = "scan-task-1"
-
-    db.refresh = AsyncMock(side_effect=refresh_side_effect)
-    db.execute = AsyncMock(
-        return_value=_ScalarListResult(active_rules)
-    )
+    db.refresh = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarListResult(active_rules))
 
     event_emitter = SimpleNamespace(
         emit_info=AsyncMock(),
@@ -130,45 +125,39 @@ async def test_prepare_bootstrap_fallback_scan_when_no_history(monkeypatch):
 
     monkeypatch.setattr(
         "app.api.v1.endpoints.agent_tasks._run_bootstrap_opengrep_scan",
-        AsyncMock(return_value=parsed_findings),
+        AsyncMock(return_value=parsed_opengrep),
     )
     monkeypatch.setattr(
-        "app.api.v1.endpoints.agent_tasks._collect_bootstrap_findings_for_task",
-        AsyncMock(return_value=filtered_candidates),
+        "app.api.v1.endpoints.agent_tasks._run_bootstrap_gitleaks_scan",
+        AsyncMock(return_value=parsed_gitleaks),
     )
 
-    candidates, bootstrap_task_id, source = await _prepare_bootstrap_opengrep_findings(
+    candidates, bootstrap_task_id, source = await _prepare_embedded_bootstrap_findings(
         db=db,
-        project_id="project-1",
         project_root="/tmp/project",
         event_emitter=event_emitter,
+        opengrep_enabled=True,
+        gitleaks_enabled=True,
     )
 
-    assert source == "scan_forced"
-    assert bootstrap_task_id == "scan-task-1"
-    assert candidates == filtered_candidates
-    assert db.add.call_count >= 3  # 1 task + findings
-    assert db.commit.await_count >= 2
-    event_emitter.emit_info.assert_awaited()
+    assert source == "embedded_opengrep_gitleaks"
+    assert bootstrap_task_id is None
+    assert len(candidates) == 2
+    assert any(item.get("source") == "opengrep_bootstrap" for item in candidates)
+    assert any(item.get("source") == "gitleaks_bootstrap" for item in candidates)
+
     last_info_call = event_emitter.emit_info.await_args_list[-1]
-    last_metadata = last_info_call.kwargs.get("metadata")
-    assert isinstance(last_metadata, dict)
-    assert last_metadata.get("bootstrap") is True
-    assert last_metadata.get("bootstrap_task_id") == "scan-task-1"
-    assert last_metadata.get("bootstrap_source") == "scan_forced"
-    assert last_metadata.get("bootstrap_total_findings") == len(parsed_findings)
-    assert (
-        last_metadata.get("bootstrap_candidate_count")
-        == len(filtered_candidates)
-    )
+    metadata = last_info_call.kwargs.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("bootstrap_opengrep_total_findings") == 1
+    assert metadata.get("bootstrap_gitleaks_total_findings") == 1
+    assert metadata.get("bootstrap_candidate_count") == 2
 
 
 @pytest.mark.asyncio
-async def test_prepare_bootstrap_no_active_rules_abort():
+async def test_prepare_embedded_bootstrap_no_active_rules_abort():
     db = AsyncMock()
-    db.execute = AsyncMock(
-        return_value=_ScalarListResult([])
-    )
+    db.execute = AsyncMock(return_value=_ScalarListResult([]))
 
     event_emitter = SimpleNamespace(
         emit_info=AsyncMock(),
@@ -177,11 +166,12 @@ async def test_prepare_bootstrap_no_active_rules_abort():
     )
 
     with pytest.raises(RuntimeError) as exc_info:
-        await _prepare_bootstrap_opengrep_findings(
+        await _prepare_embedded_bootstrap_findings(
             db=db,
-            project_id="project-1",
             project_root="/tmp/project",
             event_emitter=event_emitter,
+            opengrep_enabled=True,
+            gitleaks_enabled=False,
         )
 
     assert "当前没有启用规则" in str(exc_info.value)
@@ -189,20 +179,9 @@ async def test_prepare_bootstrap_no_active_rules_abort():
 
 
 @pytest.mark.asyncio
-async def test_prepare_bootstrap_scan_failed_abort(monkeypatch):
-    active_rules = [SimpleNamespace(id="rule-1", pattern_yaml="rules: []")]
-
+async def test_prepare_embedded_bootstrap_gitleaks_failed_abort(monkeypatch):
     db = AsyncMock()
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-
-    async def refresh_side_effect(task):
-        task.id = "scan-task-2"
-
-    db.refresh = AsyncMock(side_effect=refresh_side_effect)
-    db.execute = AsyncMock(
-        return_value=_ScalarListResult(active_rules)
-    )
+    db.execute = AsyncMock(return_value=_ScalarListResult([]))
 
     event_emitter = SimpleNamespace(
         emit_info=AsyncMock(),
@@ -211,19 +190,20 @@ async def test_prepare_bootstrap_scan_failed_abort(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "app.api.v1.endpoints.agent_tasks._run_bootstrap_opengrep_scan",
-        AsyncMock(side_effect=RuntimeError("opengrep bootstrap failure")),
+        "app.api.v1.endpoints.agent_tasks._run_bootstrap_gitleaks_scan",
+        AsyncMock(side_effect=RuntimeError("gitleaks bootstrap failure")),
     )
 
     with pytest.raises(RuntimeError) as exc_info:
-        await _prepare_bootstrap_opengrep_findings(
+        await _prepare_embedded_bootstrap_findings(
             db=db,
-            project_id="project-1",
             project_root="/tmp/project",
             event_emitter=event_emitter,
+            opengrep_enabled=False,
+            gitleaks_enabled=True,
         )
 
-    assert "预处理失败" in str(exc_info.value)
+    assert "Gitleaks 预处理失败" in str(exc_info.value)
     event_emitter.emit_error.assert_awaited()
 
 

@@ -25,6 +25,8 @@ export const agentAuditDictionary: DomDictionary = {
     "Limitation: Longer runtime and higher resource usage",
   "点击卡片，快速开始智能扫描":
     "Click to quickly start intelligent scan",
+  "点击卡片，快速开始智能扫描（可先配置测试 LLM）":
+    "Click to quickly start intelligent scan (you can test LLM config first)",
   "简介：静态 + 智能完整双阶段链路":
     "Overview: Full two-stage pipeline (static + intelligent)",
   "优势：覆盖更全面":
@@ -33,6 +35,8 @@ export const agentAuditDictionary: DomDictionary = {
     "Limitation: Longer execution time",
   "点击卡片，快速开始混合扫描":
     "Click to quickly start hybrid scan",
+  "点击卡片，快速开始混合扫描（可先配置测试 LLM）":
+    "Click to quickly start hybrid scan (you can test LLM config first)",
 };
 
 export const dashboardDictionary: DomDictionary = {
@@ -76,17 +80,18 @@ export const dashboardDictionary: DomDictionary = {
   "下一页": "Next",
   "规则分布横向条形统计图": "Rule Distribution Horizontal Bar Chart",
   "仅统计严重(ERROR)且中/高置信度规则": "Only severe (ERROR) rules with medium/high confidence are counted",
-  "项目扫描次数横向统计图": "Project Scan Runs Horizontal Bar Chart",
+  "项目扫描次数横向统计图": "Project Scan Runs Bar Chart",
   "按项目统计已完成扫描次数（静态/智能/混合）":
     "Completed scan runs by project (Static/Intelligent/Hybrid)",
-  "项目漏洞数量横向统计图": "Project Vulnerability Counts Horizontal Bar Chart",
-  "按项目统计已完成任务漏洞数（静态+智能）":
-    "Completed-task vulnerability totals by project (Static + Intelligent)",
-  "混合扫描功能未上线，当前按 0 统计":
-    "Hybrid scan is not implemented yet, currently counted as 0",
+  "项目漏洞数量横向统计图": "Project Vulnerability Counts Bar Chart",
+  "按项目统计已完成任务漏洞数（静态/智能/混合）":
+    "Completed-task vulnerability totals by project (Static/Intelligent/Hybrid)",
+  "混合扫描已纳入统计": "Hybrid scan is included in statistics",
   "暂无项目扫描次数数据": "No project scan-run data",
   "暂无项目漏洞数量数据": "No project vulnerability-count data",
   "漏洞总数": "Total Vulnerabilities",
+  "累计扫描用时": "Total Scan Duration",
+  "所有扫描任务耗时加和": "Sum of all scan task durations",
   "语言数：": "Languages:",
   "全部规则": "All Rules",
   "仅启用规则": "Enabled Only",
@@ -139,15 +144,25 @@ export const projectsDictionary: DomDictionary = {
   "混合视图任务": "Hybrid View Tasks",
   "静态 / 智能": "Static / Intelligent",
   "运行中 / 已完成": "Running / Completed",
-  "混合扫描任务（完整链路）": "Hybrid Scan Tasks (Full Pipeline)",
-  "混合扫描会创建静态与智能两条任务，此处统一展示完整链路。":
-    "Hybrid scan creates both static and intelligent tasks; this page shows the full pipeline in one view.",
+  "混合扫描任务": "Hybrid Scan Tasks",
+  "混合扫描任务（完整链路）": "Hybrid Scan Tasks",
+  "展示混合扫描归类任务（含历史迁移任务与新建混合任务）。":
+    "Shows hybrid-classified tasks, including migrated historical tasks and newly created hybrid tasks.",
+  "仅展示混合扫描归类的 Agent 任务，不含静态扫描和智能扫描独立任务。":
+    "Only hybrid-classified agent tasks are shown; static and standalone intelligent tasks are excluded.",
   "暂无混合扫描任务": "No hybrid scan tasks yet",
-  "静态阶段": "Static Stage",
-  "智能阶段": "Intelligent Stage",
   "智能扫描任务": "Intelligent Scan Tasks",
   "仅展示 intelligent_audit（Agent 审计）任务":
     "Only intelligent_audit (Agent Audit) tasks are shown",
+  "仅展示显式标记为 [INTELLIGENT] 的 intelligent_audit 任务":
+    "Only intelligent_audit tasks explicitly marked as [INTELLIGENT] are shown",
+  "创建前会自动校验 LLM 配置。":
+    "LLM configuration is automatically validated before creation.",
+  "配置测试": "Config Test",
+  "收起配置": "Collapse Config",
+  "LLM 快速补配": "LLM Quick Fix",
+  "未通过时可在下方直接补配并测试连接。":
+    "If validation fails, you can complete config and test connection below.",
 };
 
 export const opengrepRulesDictionary: DomDictionary = {
@@ -172,6 +187,9 @@ export const opengrepRulesDictionary: DomDictionary = {
   "补丁生成": "Generated from Patch",
   "内置规则": "Built-in Rule",
   "有效规则总数": "Total Rules",
+  "支持编程语言个数": "Supported Languages",
+  "支持漏洞类型数量": "Supported Vulnerability Types",
+  "已禁用": "Disabled",
   "启用规则数量": "Active Rules",
   "筛选规则数量": "Filtered Rules",
   "当前规则库": "Current Rule Library",

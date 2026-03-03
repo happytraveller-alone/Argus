@@ -9,6 +9,9 @@ import {
 } from "@/shared/api/opengrep";
 import { api } from "@/shared/config/database";
 import type { Project } from "@/shared/types";
+import {
+	resolveSourceModeFromTaskMeta,
+} from "@/features/tasks/services/taskActivities";
 
 const AGENT_TASK_PAGE_LIMIT = 100;
 const STATIC_TASK_PAGE_LIMIT = 200;
@@ -148,14 +151,22 @@ export function buildProjectScanRunsChartData(params: {
 	for (const task of agentTasks) {
 		if (!isCompletedStatus(task.status)) continue;
 		const item = ensureItem(task.project_id);
-		item.intelligentRuns += 1;
+		const sourceMode = resolveSourceModeFromTaskMeta(
+			"intelligent_audit",
+			task.name,
+			task.description,
+		);
+		if (sourceMode === "intelligent") {
+			item.intelligentRuns += 1;
+		} else {
+			item.hybridRuns += 1;
+		}
 	}
 
 	return Array.from(aggregateMap.values())
 		.map((item) => ({
 			...item,
-			hybridRuns: 0,
-			totalRuns: item.staticRuns + item.intelligentRuns,
+			totalRuns: item.staticRuns + item.intelligentRuns + item.hybridRuns,
 		}))
 		.filter((item) => item.totalRuns > 0)
 		.sort((a, b) => {
@@ -205,14 +216,23 @@ export function buildProjectVulnsChartData(params: {
 	for (const task of agentTasks) {
 		if (!isCompletedStatus(task.status)) continue;
 		const item = ensureItem(task.project_id);
-		item.intelligentVulns += Math.max(Number(task.findings_count || 0), 0);
+		const findings = Math.max(Number(task.findings_count || 0), 0);
+		const sourceMode = resolveSourceModeFromTaskMeta(
+			"intelligent_audit",
+			task.name,
+			task.description,
+		);
+		if (sourceMode === "intelligent") {
+			item.intelligentVulns += findings;
+		} else {
+			item.hybridVulns += findings;
+		}
 	}
 
 	return Array.from(aggregateMap.values())
 		.map((item) => ({
 			...item,
-			hybridVulns: 0,
-			totalVulns: item.staticVulns + item.intelligentVulns,
+			totalVulns: item.staticVulns + item.intelligentVulns + item.hybridVulns,
 		}))
 		.filter((item) => item.totalVulns > 0)
 		.sort((a, b) => {

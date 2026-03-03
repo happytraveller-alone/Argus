@@ -51,7 +51,7 @@ export interface AgentTask {
   progress_percentage: number;
 
   // 配置
-  audit_scope: Record<string, unknown> | null;
+  audit_scope: AgentAuditScope | null;
   target_vulnerabilities: string[] | null;
   verification_level: string | null;
   exclude_patterns: string[] | null;
@@ -180,7 +180,7 @@ export interface CreateAgentTaskRequest {
   project_id: string;
   name?: string;
   description?: string;
-  audit_scope?: Record<string, unknown>;
+  audit_scope?: AgentAuditScope;
   target_vulnerabilities?: string[];
   // unified mode, backend still accepts legacy values and normalizes them
   verification_level?: "analysis_with_poc_plan";
@@ -190,6 +190,16 @@ export interface CreateAgentTaskRequest {
   max_iterations?: number;
   token_budget?: number;
   timeout_seconds?: number;
+}
+
+export interface AgentStaticBootstrapScope {
+  mode?: "embedded" | "disabled";
+  opengrep_enabled?: boolean;
+  gitleaks_enabled?: boolean;
+}
+
+export interface AgentAuditScope extends Record<string, unknown> {
+  static_bootstrap?: AgentStaticBootstrapScope;
 }
 
 export interface AgentTaskSummary {

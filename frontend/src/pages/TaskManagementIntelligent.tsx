@@ -21,7 +21,7 @@ import {
 import { api } from "@/shared/config/database";
 import type { Project } from "@/shared/types";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 3;
 
 export default function TaskManagementIntelligent() {
 	const [activities, setActivities] = useState<TaskActivityItem[]>([]);
@@ -144,7 +144,7 @@ export default function TaskManagementIntelligent() {
 						className="h-9 font-mono"
 					/>
 					<div className="text-xs text-muted-foreground">
-						仅展示 intelligent_audit（Agent 审计）任务
+						仅展示显式标记为 [INTELLIGENT] 的 intelligent_audit 任务
 					</div>
 				</div>
 

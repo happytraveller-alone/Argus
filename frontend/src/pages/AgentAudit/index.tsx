@@ -92,6 +92,9 @@ const TERMINAL_RECOVERY_MAX_ATTEMPTS = 2;
 const TERMINAL_RECOVERY_RETRY_INTERVAL_MS = 1500;
 const TERMINAL_RECOVERY_DEBOUNCE_MS = 30_000;
 const STREAM_SELF_HEAL_RETRY_MS = 4000;
+const LOG_DEFAULT_VISIBLE_COUNT = 3;
+const LOG_VIEWPORT_HEIGHT_PX = 200;
+const LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX = 24;
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -676,6 +679,7 @@ function AgentAuditPageContent() {
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
+  const hasInitializedLogViewportRef = useRef(false);
   const findingsContainerRef = useRef<HTMLDivElement | null>(null);
   const agentContainerRef = useRef<HTMLDivElement | null>(null);
   const logsRef = useRef(logs);
@@ -777,7 +781,7 @@ function AgentAuditPageContent() {
         intro: "简介：智能体上下文推理审计",
         strengths: "优势：可发现规则外风险",
         limitations: "劣势：耗时更长、资源更高",
-        quickStartHint: "点击卡片，快速开始智能扫描",
+        quickStartHint: "点击卡片，快速开始智能扫描（可先配置测试 LLM）",
         icon: Bot,
         accentClassName:
           "from-violet-500/25 via-indigo-500/10 to-transparent border-violet-400/40",
@@ -788,7 +792,7 @@ function AgentAuditPageContent() {
         intro: "简介：静态 + 智能完整双阶段链路",
         strengths: "优势：覆盖更全面",
         limitations: "劣势：执行耗时更长",
-        quickStartHint: "点击卡片，快速开始混合扫描",
+        quickStartHint: "点击卡片，快速开始混合扫描（可先配置测试 LLM）",
         icon: Layers,
         accentClassName:
           "from-emerald-500/25 via-cyan-500/10 to-transparent border-emerald-400/40",
@@ -988,6 +992,7 @@ function AgentAuditPageContent() {
       // 2. 重置所有状态
       reset();
       setShowSplash(!taskId);
+      hasInitializedLogViewportRef.current = false;
 
       // 2.1 重置 realtime 面板
       setRealtimeFindings([]);
@@ -2697,12 +2702,39 @@ function AgentAuditPageContent() {
     task?.status,
   ]);
 
-  // Auto scroll
-  useEffect(() => {
-    if (isAutoScroll && logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: "smooth" });
+  const scrollLogsToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const container = logsContainerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
+  }, []);
+
+  const handleLogsScroll = useCallback(() => {
+    const container = logsContainerRef.current;
+    if (!container || !isAutoScroll) return;
+    const distanceToBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceToBottom <= LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX) return;
+    setAutoScroll(false);
+    if (currentProjectId) {
+      persistAutoScroll(currentProjectId, false);
     }
-  }, [logs, isAutoScroll]);
+  }, [currentProjectId, isAutoScroll, setAutoScroll]);
+
+  // Default viewport: show latest logs (about 3 visible rows) when opening a task.
+  useEffect(() => {
+    if (!taskId || hasInitializedLogViewportRef.current) return;
+    if (filteredLogs.length === 0) return;
+    requestAnimationFrame(() => {
+      scrollLogsToBottom("auto");
+      hasInitializedLogViewportRef.current = true;
+    });
+  }, [filteredLogs.length, scrollLogsToBottom, taskId]);
+
+  // Auto scroll while stream keeps appending logs.
+  useEffect(() => {
+    if (!isAutoScroll) return;
+    scrollLogsToBottom("smooth");
+  }, [filteredLogs.length, isAutoScroll, scrollLogsToBottom]);
 
   // ============ Handlers ============
 
@@ -2830,7 +2862,12 @@ function AgentAuditPageContent() {
     if (currentProjectId) {
       persistAutoScroll(currentProjectId, nextEnabled);
     }
-  }, [currentProjectId, isAutoScroll, setAutoScroll]);
+    if (nextEnabled) {
+      requestAnimationFrame(() => {
+        scrollLogsToBottom("smooth");
+      });
+    }
+  }, [currentProjectId, isAutoScroll, scrollLogsToBottom, setAutoScroll]);
 
   // ============ Render ============
 
@@ -2972,71 +3009,10 @@ function AgentAuditPageContent() {
       />
 
       {/* Main content */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Column - Event Logs */}
-        <div className="w-[55%] min-w-0 flex flex-col border-r border-border bg-muted/20">
-          <div className="flex-shrink-0 px-4 py-3 border-b border-border bg-card">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-primary" />
-                <span className="text-sm font-semibold">事件日志</span>
-                <Badge variant="outline" className="text-[11px]">
-                  {filteredLogs.length}
-                </Badge>
-                {isConnected ? (
-                  <Badge
-                    variant="outline"
-                    className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                  >
-                    已连接
-                  </Badge>
-                ) : null}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>导出日志</span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleExportLogs("json")}>
-                      导出为 JSON
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExportLogs("markdown")}>
-                      导出为 Markdown
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => toast.info("导出范围：全部活动日志")}>
-                      当前为全部导出
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <button
-                  onClick={handleToggleAutoScroll}
-                  className={`
-                    flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider
-                    ${isAutoScroll
-                      ? "bg-primary/15 text-primary border border-primary/50"
-                      : "text-muted-foreground hover:text-foreground border border-border hover:bg-muted"
-                    }
-                  `}
-                >
-                  <ArrowDown className="w-3.5 h-3.5" />
-                  <span>自动滚动</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
+      <div className="flex-1 overflow-hidden relative p-3 bg-muted/10">
+        <div className="h-full flex flex-col gap-3">
           {failedReason && (
-            <div className="mx-3 mt-3 mb-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3">
+            <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3">
               <div className="text-sm font-semibold text-rose-600 dark:text-rose-300">
                 智能审计失败{failedStep ? `（${failedStep}）` : ""}
               </div>
@@ -3046,70 +3022,140 @@ function AgentAuditPageContent() {
             </div>
           )}
 
-          <div className="flex-1 min-h-0 p-3">
+          {/* Full-width stats row */}
+          <div className="flex-shrink-0">
             <div
-              ref={logsContainerRef}
-              className="h-full overflow-y-auto p-2 custom-scrollbar bg-muted/30 rounded-xl border border-border"
+              ref={agentContainerRef}
+              className="overflow-y-auto custom-scrollbar"
             >
-              {filteredLogs.length === 0 ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center text-muted-foreground">
-                    {isRunning ? (
-                      <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                        <span className="text-sm font-mono tracking-wide">
-                          等待活动日志...
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-sm font-mono tracking-wide">
-                        暂无活动日志
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3 p-2">
-                  {filteredLogs.map((item) => (
-                    <LogEntry
-                      key={item.id}
-                      item={item}
-                      anchorId={`log-item-${item.id}`}
-                      highlighted={highlightedLogId === item.id}
-                      onOpenDetail={() =>
-                        openDetailDialog({
-                          type: "log",
-                          id: item.id,
-                          anchorId: `log-item-${item.id}`,
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-              <div ref={logEndRef} />
+              <StatsPanel task={task} findings={findings} />
             </div>
           </div>
-        </div>
 
-        {/* Right Column - Findings (top) + Agent (bottom) */}
-        <div className="w-[45%] min-w-0 flex flex-col bg-muted/10">
-          <div className="flex-1 min-h-0 p-3 pb-2">
-            <RealtimeFindingsPanel
-              items={realtimeFindings}
-              isRunning={isRunning}
-              onClear={handleClearPotentialFindings}
-            />
+          {/* Full-width findings panel (expanded) */}
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <div ref={findingsContainerRef} className="h-full">
+              <RealtimeFindingsPanel
+                items={realtimeFindings}
+                isRunning={isRunning}
+                onClear={handleClearPotentialFindings}
+              />
+            </div>
           </div>
 
-          <div className="flex-shrink-0 border-t border-border bg-card/50 p-3">
-            <div className="max-h-[42vh] overflow-y-auto custom-scrollbar">
-              <div className="rounded-xl border border-border bg-card p-4">
-                <StatsPanel task={task} findings={findings} />
+          {/* Bottom: Full-width event logs */}
+          <div className="flex-shrink-0 rounded-xl border border-border bg-card/70 overflow-hidden">
+            <div className="px-4 py-3 border-b border-border bg-card">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Terminal className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold">事件日志</span>
+                  <Badge variant="outline" className="text-[11px]">
+                    {filteredLogs.length}
+                  </Badge>
+                  {isConnected ? (
+                    <Badge
+                      variant="outline"
+                      className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                    >
+                      已连接
+                    </Badge>
+                  ) : null}
+                  <span className="text-[11px] text-muted-foreground">
+                    默认最新 {LOG_DEFAULT_VISIBLE_COUNT} 条，可上拉查看历史
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>导出日志</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleExportLogs("json")}>
+                        导出为 JSON
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleExportLogs("markdown")}>
+                        导出为 Markdown
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => toast.info("导出范围：全部活动日志")}>
+                        当前为全部导出
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <button
+                    onClick={handleToggleAutoScroll}
+                    className={`
+                      flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider
+                      ${isAutoScroll
+                        ? "bg-primary/15 text-primary border border-primary/50"
+                        : "text-muted-foreground hover:text-foreground border border-border hover:bg-muted"
+                      }
+                    `}
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    <span>自动滚动</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3">
+              <div
+                ref={logsContainerRef}
+                onScroll={handleLogsScroll}
+                className="overflow-y-auto p-2 custom-scrollbar bg-muted/30 rounded-lg border border-border"
+                style={{ height: LOG_VIEWPORT_HEIGHT_PX, maxHeight: "30vh" }}
+              >
+                {filteredLogs.length === 0 ? (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="text-center text-muted-foreground">
+                      {isRunning ? (
+                        <div className="flex flex-col items-center gap-3">
+                          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                          <span className="text-sm font-mono tracking-wide">
+                            等待活动日志...
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm font-mono tracking-wide">
+                          暂无活动日志
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 p-1.5">
+                    {filteredLogs.map((item) => (
+                      <LogEntry
+                        key={item.id}
+                        item={item}
+                        anchorId={`log-item-${item.id}`}
+                        highlighted={highlightedLogId === item.id}
+                        onOpenDetail={() =>
+                          openDetailDialog({
+                            type: "log",
+                            id: item.id,
+                            anchorId: `log-item-${item.id}`,
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+                <div ref={logEndRef} />
               </div>
             </div>
           </div>
-        </div> 
+        </div>
       </div>
 
       {/* Create dialog */}

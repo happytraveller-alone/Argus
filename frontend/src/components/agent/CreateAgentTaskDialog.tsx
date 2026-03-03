@@ -43,6 +43,7 @@ import { getZipFileInfo, type ZipFileMeta } from "@/shared/utils/zipStorage";
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
 import type { Project } from "@/shared/types";
 import FileSelectionDialog from "@/components/audit/FileSelectionDialog";
+import { INTELLIGENT_TASK_NAME_MARKER } from "@/features/tasks/services/taskActivities";
 
 interface CreateAgentTaskDialogProps {
 	open: boolean;
@@ -221,6 +222,14 @@ export default function CreateAgentTaskDialog({
 			const agentTask = await createAgentTask({
 				project_id: selectedProject.id,
 				name: `智能审计-${selectedProject.name}`,
+				description: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
+				audit_scope: {
+					static_bootstrap: {
+						mode: "disabled",
+						opengrep_enabled: false,
+						gitleaks_enabled: false,
+					},
+				},
 				branch_name: isRepositoryProject(selectedProject) ? branch : undefined,
 				exclude_patterns: excludePatterns,
 				target_files: effectiveTargetFiles.length ? effectiveTargetFiles : undefined,

@@ -134,6 +134,45 @@ function getRawEvidenceFromRealtimeItem(item: RealtimeMergedFindingItem) {
   });
 }
 
+function getSeverityMeta(severity: RealtimeDisplaySeverity): {
+  label: string;
+  className: string;
+} {
+  if (severity === "critical") {
+    return {
+      label: "严重",
+      className:
+        "border-rose-500/40 text-rose-600 dark:text-rose-300 bg-rose-500/10",
+    };
+  }
+  if (severity === "high") {
+    return {
+      label: "高危",
+      className:
+        "border-orange-500/40 text-orange-600 dark:text-orange-300 bg-orange-500/10",
+    };
+  }
+  if (severity === "medium") {
+    return {
+      label: "中危",
+      className:
+        "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10",
+    };
+  }
+  if (severity === "low") {
+    return {
+      label: "低危",
+      className:
+        "border-cyan-500/40 text-cyan-600 dark:text-cyan-300 bg-cyan-500/10",
+    };
+  }
+  return {
+    label: "待确认",
+    className:
+      "border-zinc-500/40 text-zinc-600 dark:text-zinc-300 bg-zinc-500/10",
+  };
+}
+
 export default function RealtimeFindingsPanel(props: {
   items: RealtimeMergedFindingItem[];
   isRunning: boolean;
@@ -266,47 +305,51 @@ export default function RealtimeFindingsPanel(props: {
             <div className="p-3 space-y-2">
               {filtered.map((item) => {
                 const verificationKey = getItemVerificationProgress(item);
+                const severityMeta = getSeverityMeta(item.display_severity);
                 return (
                   <div
                     key={item.id}
-                    className="rounded-lg border border-border bg-background/40 hover:border-primary/30 transition-colors px-3 py-2.5"
+                    className="rounded-lg border border-border bg-background/50 hover:border-primary/30 transition-colors p-3 space-y-2.5"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold break-words line-clamp-2">
-                            {item.display_title || item.title || "未命名缺陷"}
-                          </span>
-                        </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-semibold break-words line-clamp-2 min-w-0">
+                        {item.display_title || item.title || "未命名缺陷"}
+                      </span>
+                      <Badge variant="outline" className={`text-[11px] ${severityMeta.className}`}>
+                        {severityMeta.label}
+                      </Badge>
+                    </div>
 
-                        <div className="mt-1 text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
-                          <span>类型: {item.vulnerability_type || "-"}</span>
-                          <span>定位: {formatLocation(item)}</span>
-                        </div>
+                    <div className="grid grid-cols-1 gap-2 text-xs">
+                      <div className="rounded-md border border-border/60 bg-card/60 px-2.5 py-1.5 text-muted-foreground">
+                        类型: <span className="text-foreground">{item.vulnerability_type || "-"}</span>
                       </div>
-
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <Badge
-                          variant="outline"
-                          className={`text-[11px] ${
-                            verificationKey === "verified"
-                              ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                              : "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10"
-                          }`}
-                        >
-                          {verificationKey === "verified" ? "已验证" : "待验证"}
-                        </Badge>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2.5 text-[11px]"
-                          onClick={() => setDetailItem(item)}
-                        >
-                          查看详情
-                          <ExternalLink className="w-3.5 h-3.5 ml-1.5" />
-                        </Button>
+                      <div className="rounded-md border border-border/60 bg-card/60 px-2.5 py-1.5 text-muted-foreground">
+                        定位: <span className="text-foreground break-all">{formatLocation(item)}</span>
                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`text-[11px] ${
+                          verificationKey === "verified"
+                            ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                            : "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10"
+                        }`}
+                      >
+                        {verificationKey === "verified" ? "已验证" : "待验证"}
+                      </Badge>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2.5 text-[11px]"
+                        onClick={() => setDetailItem(item)}
+                      >
+                        查看详情
+                        <ExternalLink className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
                     </div>
                   </div>
                 );

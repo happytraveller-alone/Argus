@@ -87,8 +87,8 @@ export const LogEntry = memo(function LogEntry({
           : ""
       }
     >
-      <div className="rounded-lg border border-border bg-card/80 px-3.5 py-3 hover:border-primary/30 transition-colors">
-        <div className="flex flex-col gap-2 md:grid md:grid-cols-[88px_72px_minmax(0,1fr)_130px_112px_auto] md:items-start md:gap-3">
+      <div className="rounded-lg border border-border bg-card/80 px-3 py-2.5 hover:border-primary/30 transition-colors">
+        <div className="flex flex-col gap-1.5 md:grid md:grid-cols-[80px_64px_minmax(0,1fr)_122px_104px_auto] md:items-start md:gap-2">
           <div className="text-xs font-mono text-muted-foreground tabular-nums">
             {item.time}
           </div>
@@ -101,11 +101,11 @@ export const LogEntry = memo(function LogEntry({
           </div>
 
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground leading-5 line-clamp-2 break-words">
+            <p className="text-sm font-semibold text-foreground leading-5 line-clamp-1 break-words">
               {formattedTitle}
             </p>
             {shouldRenderPreview && (
-              <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-2">
+              <p className="mt-0.5 text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-1">
                 {contentPreview}
               </p>
             )}

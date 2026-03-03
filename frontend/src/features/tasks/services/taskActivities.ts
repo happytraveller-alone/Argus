@@ -50,7 +50,7 @@ function normalizeTaskName(name: string | null | undefined): string {
 	return String(name || "").trim().toLowerCase();
 }
 
-function resolveSourceModeFromTaskMeta(
+export function resolveSourceModeFromTaskMeta(
 	kind: TaskActivityKind,
 	name: string | null | undefined,
 	description?: string | null | undefined,
@@ -70,8 +70,26 @@ function resolveSourceModeFromTaskMeta(
 	if (kind === "rule_scan") {
 		return "static";
 	}
-	// Legacy intelligent tasks created before source markers were introduced.
-	return "intelligent";
+	// Legacy intelligent_audit tasks created before markers are migrated to hybrid.
+	return "hybrid";
+}
+
+export function isIntelligentAgentActivity(
+	activity: Pick<TaskActivityItem, "kind" | "sourceMode">,
+): boolean {
+	return (
+		activity.kind === "intelligent_audit" &&
+		activity.sourceMode === "intelligent"
+	);
+}
+
+export function isHybridAgentActivity(
+	activity: Pick<TaskActivityItem, "kind" | "sourceMode">,
+): boolean {
+	return (
+		activity.kind === "intelligent_audit" &&
+		activity.sourceMode === "hybrid"
+	);
 }
 
 function mapProjectNames(projects: Project[]) {
@@ -284,8 +302,7 @@ export function filterIntelligentActivities(
 ): TaskActivityItem[] {
 	return activities.filter(
 		(activity) =>
-			activity.kind === "intelligent_audit" &&
-			activity.sourceMode !== "hybrid" &&
+			isIntelligentAgentActivity(activity) &&
 			matchesActivityKeyword(activity, keyword),
 	);
 }
@@ -296,7 +313,7 @@ export function filterHybridActivities(
 ): TaskActivityItem[] {
 	return activities.filter(
 		(activity) =>
-			activity.sourceMode === "hybrid" &&
+			isHybridAgentActivity(activity) &&
 			matchesActivityKeyword(activity, keyword),
 	);
 }
@@ -488,6 +505,7 @@ export function getActivityDurationLabel(activity: TaskActivityItem): string {
 export interface TaskActivitySummary {
 	staticTotal: number;
 	intelligentTotal: number;
+	hybridTotal: number;
 	running: number;
 	completed: number;
 	failed: number;
@@ -507,8 +525,10 @@ export function summarizeTaskActivities(
 		(acc, activity) => {
 			if (activity.kind === "rule_scan") {
 				acc.staticTotal += 1;
-			} else {
+			} else if (isIntelligentAgentActivity(activity)) {
 				acc.intelligentTotal += 1;
+			} else {
+				acc.hybridTotal += 1;
 			}
 
 			if (activity.status === "running") acc.running += 1;
@@ -521,6 +541,7 @@ export function summarizeTaskActivities(
 		{
 			staticTotal: 0,
 			intelligentTotal: 0,
+			hybridTotal: 0,
 			running: 0,
 			completed: 0,
 			failed: 0,

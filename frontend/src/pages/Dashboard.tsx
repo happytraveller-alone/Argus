@@ -4,7 +4,16 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, Code, Bug } from "lucide-react";
+import {
+	Activity,
+	AlertTriangle,
+	Code,
+	Bug,
+	Clock3,
+	Bot,
+	Wrench,
+	ShieldAlert,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -137,6 +146,35 @@ function getRulesByCweData(rules: OpengrepRule[]): RuleCweChartItem[] {
 }
 
 const formatTick = (value: number | string) => Number(value || 0).toLocaleString();
+const SUPPORTED_MODEL_PROVIDERS_COUNT = 13;
+const SUPPORTED_EXTERNAL_TOOL_CALLS_COUNT = 40;
+const SUPPORTED_VULNERABILITY_TYPES_COUNT = 8;
+
+const parseTimestampMs = (value?: string | null): number | null => {
+	if (!value) return null;
+	const timestamp = Date.parse(value);
+	return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const formatDurationMs = (durationMs: number): string => {
+	const sanitized = Math.max(0, Math.floor(Number(durationMs) || 0));
+	const totalSeconds = Math.floor(sanitized / 1000);
+	const days = Math.floor(totalSeconds / 86400);
+	const hours = Math.floor((totalSeconds % 86400) / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+
+	if (days > 0) {
+		return `${days}d ${hours}h ${minutes}m`;
+	}
+	if (hours > 0) {
+		return `${hours}h ${minutes}m ${seconds}s`;
+	}
+	if (minutes > 0) {
+		return `${minutes}m ${seconds}s`;
+	}
+	return `${seconds}s`;
+};
 
 export default function Dashboard() {
 	const { t } = useI18n();
@@ -151,6 +189,7 @@ export default function Dashboard() {
 	const [projectVulnsData, setProjectVulnsData] = useState<ProjectVulnsChartItem[]>(
 		[],
 	);
+	const [totalScanDurationMs, setTotalScanDurationMs] = useState(0);
 
 	useEffect(() => {
 		void loadDashboardData();
@@ -239,6 +278,26 @@ export default function Dashboard() {
 		if (scanStatsResult.status === "fulfilled") {
 			const { projects, agentTasks, opengrepTasks, gitleaksTasks } =
 				scanStatsResult.value;
+
+			const opengrepDurationMs = opengrepTasks.reduce(
+				(sum, task) => sum + Math.max(Number(task.scan_duration_ms || 0), 0),
+				0,
+			);
+			const gitleaksDurationMs = gitleaksTasks.reduce(
+				(sum, task) => sum + Math.max(Number(task.scan_duration_ms || 0), 0),
+				0,
+			);
+			const agentDurationMs = agentTasks.reduce((sum, task) => {
+				const startedAt = parseTimestampMs(task.started_at);
+				const completedAt = parseTimestampMs(task.completed_at);
+				if (startedAt === null || completedAt === null) return sum;
+				return sum + Math.max(completedAt - startedAt, 0);
+			}, 0);
+
+			setTotalScanDurationMs(
+				Math.max(opengrepDurationMs + gitleaksDurationMs + agentDurationMs, 0),
+			);
+
 			const scanRuns = buildProjectScanRunsChartData({
 				projects,
 				agentTasks,
@@ -255,6 +314,7 @@ export default function Dashboard() {
 		} else {
 			setProjectScanRunsData([]);
 			setProjectVulnsData([]);
+			setTotalScanDurationMs(0);
 		}
 	};
 
@@ -332,7 +392,7 @@ export default function Dashboard() {
 				</div>
 			)}
 
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
+			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
 				<div className="cyber-card p-4">
 					<div className="flex items-center justify-between">
 						<div>
@@ -379,6 +439,72 @@ export default function Dashboard() {
 						</div>
 						<div className="stat-icon text-sky-400">
 							<AlertTriangle className="w-6 h-6" />
+						</div>
+					</div>
+				</div>
+
+				<div className="cyber-card p-4">
+					<div className="flex items-center justify-between">
+						<div>
+							<p className="stat-label">{t("dashboard.totalScanDuration")}</p>
+							<p className="stat-value">{formatDurationMs(totalScanDurationMs)}</p>
+							<p className="text-sm text-amber-400 mt-1 flex items-center gap-1">
+								<span className="w-2 h-2 rounded-full bg-amber-400" />
+								{t("dashboard.totalScanDurationHint")}
+							</p>
+						</div>
+						<div className="stat-icon text-amber-400">
+							<Clock3 className="w-6 h-6" />
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+				<div className="cyber-card p-4">
+					<div className="flex items-center justify-between">
+						<div>
+							<p className="stat-label">{t("dashboard.supportedModelProviders")}</p>
+							<p className="stat-value">{SUPPORTED_MODEL_PROVIDERS_COUNT}</p>
+							<p className="text-sm text-sky-400 mt-1 flex items-center gap-1">
+								<span className="w-2 h-2 rounded-full bg-sky-400" />
+								{t("dashboard.fixedCountHint")}
+							</p>
+						</div>
+						<div className="stat-icon text-sky-400">
+							<Bot className="w-6 h-6" />
+						</div>
+					</div>
+				</div>
+
+				<div className="cyber-card p-4">
+					<div className="flex items-center justify-between">
+						<div>
+							<p className="stat-label">{t("dashboard.supportedExternalToolCalls")}</p>
+							<p className="stat-value">{SUPPORTED_EXTERNAL_TOOL_CALLS_COUNT}</p>
+							<p className="text-sm text-emerald-400 mt-1 flex items-center gap-1">
+								<span className="w-2 h-2 rounded-full bg-emerald-400" />
+								{t("dashboard.fixedCountHint")}
+							</p>
+						</div>
+						<div className="stat-icon text-emerald-400">
+							<Wrench className="w-6 h-6" />
+						</div>
+					</div>
+				</div>
+
+				<div className="cyber-card p-4">
+					<div className="flex items-center justify-between">
+						<div>
+							<p className="stat-label">{t("dashboard.supportedVulnerabilityTypes")}</p>
+							<p className="stat-value">{SUPPORTED_VULNERABILITY_TYPES_COUNT}</p>
+							<p className="text-sm text-violet-400 mt-1 flex items-center gap-1">
+								<span className="w-2 h-2 rounded-full bg-violet-400" />
+								{t("dashboard.vulnerabilityTypesHint")}
+							</p>
+						</div>
+						<div className="stat-icon text-violet-400">
+							<ShieldAlert className="w-6 h-6" />
 						</div>
 					</div>
 				</div>
@@ -546,9 +672,6 @@ export default function Dashboard() {
 							<p className="text-sm text-muted-foreground mt-1">
 								{t("dashboard.projectScanRunsChartSubtitle")}（Top 10）
 							</p>
-							<p className="text-xs text-muted-foreground mt-1">
-								{t("dashboard.hybridNotImplementedHint")}
-							</p>
 						</div>
 					</div>
 
@@ -635,9 +758,6 @@ export default function Dashboard() {
 							</div>
 							<p className="text-sm text-muted-foreground mt-1">
 								{t("dashboard.projectVulnsChartSubtitle")}（Top 10）
-							</p>
-							<p className="text-xs text-muted-foreground mt-1">
-								{t("dashboard.hybridNotImplementedHint")}
 							</p>
 						</div>
 					</div>

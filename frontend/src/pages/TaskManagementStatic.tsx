@@ -21,7 +21,7 @@ import {
 import { api } from "@/shared/config/database";
 import type { Project } from "@/shared/types";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 3;
 
 export default function TaskManagementStatic() {
 	const [activities, setActivities] = useState<TaskActivityItem[]>([]);

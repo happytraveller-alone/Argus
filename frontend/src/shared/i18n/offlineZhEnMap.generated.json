@@ -296,6 +296,8 @@
   "已复制到剪贴板": "Copied to clipboard",
   "已完成": "Completed",
   "已禁用": "Disabled",
+  "支持编程语言个数": "Supported languages",
+  "支持漏洞类型数量": "Supported vulnerability types",
   "已选择的排除模式": "Selected exclusion pattern",
   "已重置为默认配置": "Reset to default configuration",
   "已验证": "Verified",

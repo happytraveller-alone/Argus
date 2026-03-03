@@ -35,7 +35,7 @@ from app.models.agent_task import (
     VulnerabilitySeverity, FindingStatus,
 )
 from app.models.project import Project
-from app.models.opengrep import OpengrepScanTask, OpengrepFinding, OpengrepRule
+from app.models.opengrep import OpengrepRule
 from app.models.user import User
 from app.models.user_config import UserConfig
 from app.services.agent.event_manager import EventManager
@@ -593,12 +593,78 @@ _VERIFICATION_LEVEL_ALIASES = {
     "poc_plan": "analysis_with_poc_plan",
 }
 
+HYBRID_TASK_NAME_MARKER = "[HYBRID]"
+INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]"
+
 
 def _normalize_verification_level(value: Optional[str]) -> str:
     raw_value = str(value or "").strip().lower()
     if not raw_value:
         return "analysis_with_poc_plan"
     return _VERIFICATION_LEVEL_ALIASES.get(raw_value, "analysis_with_poc_plan")
+
+
+def _resolve_agent_task_source_mode(
+    name: Optional[str],
+    description: Optional[str],
+) -> str:
+    normalized_name = str(name or "").strip().lower()
+    normalized_description = str(description or "").strip().lower()
+    normalized_combined = f"{normalized_name} {normalized_description}"
+    if (
+        HYBRID_TASK_NAME_MARKER.lower() in normalized_combined
+        or "混合扫描" in normalized_combined
+    ):
+        return "hybrid"
+    if INTELLIGENT_TASK_NAME_MARKER.lower() in normalized_combined:
+        return "intelligent"
+    # 历史无 marker 任务，默认迁移为 hybrid。
+    return "hybrid"
+
+
+def _resolve_static_bootstrap_config(
+    task: AgentTask,
+    source_mode: str,
+) -> Dict[str, Any]:
+    defaults: Dict[str, Any] = {
+        "mode": "disabled",
+        "opengrep_enabled": False,
+        "gitleaks_enabled": False,
+    }
+    if source_mode == "hybrid":
+        defaults = {
+            "mode": "embedded",
+            "opengrep_enabled": True,
+            "gitleaks_enabled": False,
+        }
+
+    audit_scope = task.audit_scope if isinstance(task.audit_scope, dict) else {}
+    static_bootstrap = (
+        audit_scope.get("static_bootstrap")
+        if isinstance(audit_scope.get("static_bootstrap"), dict)
+        else {}
+    )
+
+    raw_mode = str(static_bootstrap.get("mode") or defaults["mode"]).strip().lower()
+    mode = "embedded" if raw_mode == "embedded" else "disabled"
+    if source_mode != "hybrid":
+        mode = "disabled"
+
+    opengrep_enabled = bool(
+        static_bootstrap.get("opengrep_enabled", defaults["opengrep_enabled"])
+    )
+    gitleaks_enabled = bool(
+        static_bootstrap.get("gitleaks_enabled", defaults["gitleaks_enabled"])
+    )
+    if mode == "disabled":
+        opengrep_enabled = False
+        gitleaks_enabled = False
+
+    return {
+        "mode": mode,
+        "opengrep_enabled": opengrep_enabled,
+        "gitleaks_enabled": gitleaks_enabled,
+    }
 
 
 def _parse_mcp_args(raw_args: Any) -> List[str]:
@@ -1695,45 +1761,13 @@ def _build_bootstrap_confidence_map_from_rules(
     return mapping
 
 
-async def _build_bootstrap_confidence_map_for_scan_task(
-    db: AsyncSession,
-    scan_task: OpengrepScanTask,
-) -> Dict[str, str]:
-    rule_ids: List[str] = []
-    raw_rulesets = scan_task.rulesets
-    parsed_rulesets: Any = raw_rulesets
-
-    if isinstance(raw_rulesets, str):
-        try:
-            parsed_rulesets = json.loads(raw_rulesets)
-        except Exception:
-            parsed_rulesets = []
-
-    if isinstance(parsed_rulesets, list):
-        for item in parsed_rulesets:
-            if isinstance(item, dict):
-                rule_id = item.get("rule_id")
-                if isinstance(rule_id, str) and rule_id:
-                    rule_ids.append(rule_id)
-
-    if not rule_ids:
-        return {}
-
-    result = await db.execute(
-        select(OpengrepRule).where(OpengrepRule.id.in_(list(set(rule_ids))))
-    )
-    rules = result.scalars().all()
-    return _build_bootstrap_confidence_map_from_rules(rules)
-
-
-def _normalize_bootstrap_finding_from_opengrep(
-    finding: OpengrepFinding,
+def _normalize_bootstrap_finding_from_opengrep_payload(
+    finding: Dict[str, Any],
     confidence_map: Dict[str, str],
+    index: int,
 ) -> Dict[str, Any]:
-    rule_data = finding.rule if isinstance(finding.rule, dict) else {}
-    check_id = None
-    if isinstance(rule_data, dict):
-        check_id = rule_data.get("check_id") or rule_data.get("id")
+    rule_data = finding if isinstance(finding, dict) else {}
+    check_id = rule_data.get("check_id") or rule_data.get("id")
 
     confidence = _extract_bootstrap_payload_confidence(rule_data)
     if confidence is None:
@@ -1743,28 +1777,60 @@ def _normalize_bootstrap_finding_from_opengrep(
                 confidence = mapped
                 break
 
-    severity_text = str(finding.severity or "").strip().upper()
-    start_line = finding.start_line
-    extra = rule_data.get("extra") if isinstance(rule_data, dict) else {}
-    title = None
-    description = finding.description
-    if isinstance(extra, dict):
-        title = extra.get("message")
-    if not title:
-        title = finding.description or str(check_id or "OpenGrep 发现")
+    extra = rule_data.get("extra") if isinstance(rule_data.get("extra"), dict) else {}
+    title = extra.get("message") or str(check_id or "OpenGrep 发现")
+    description = extra.get("message") or ""
+    file_path = str(rule_data.get("path") or "").strip()
+    start_obj = rule_data.get("start")
+    end_obj = rule_data.get("end")
+    start_line = int(start_obj.get("line") or 0) if isinstance(start_obj, dict) else 0
+    end_line = (
+        int(end_obj.get("line") or start_line)
+        if isinstance(end_obj, dict)
+        else start_line
+    )
+    severity_text = str(extra.get("severity") or "INFO").strip().upper()
+    code_snippet = extra.get("lines")
 
     return {
-        "id": finding.id,
+        "id": str(check_id or f"opengrep-{index}"),
         "title": str(title),
         "description": description,
-        "file_path": finding.file_path,
-        "line_start": start_line,
-        "line_end": start_line,
-        "code_snippet": finding.code_snippet,
+        "file_path": file_path,
+        "line_start": start_line or None,
+        "line_end": end_line or None,
+        "code_snippet": code_snippet,
         "severity": severity_text,
         "confidence": confidence,
         "vulnerability_type": str(check_id or "opengrep_rule"),
         "source": "opengrep_bootstrap",
+    }
+
+
+def _normalize_bootstrap_finding_from_gitleaks_payload(
+    finding: Dict[str, Any],
+    index: int,
+) -> Dict[str, Any]:
+    rule_id = str(finding.get("RuleID") or "gitleaks_secret").strip()
+    description = str(finding.get("Description") or "Gitleaks 密钥泄露候选").strip()
+    file_path = str(finding.get("File") or "").strip()
+    start_line = int(finding.get("StartLine") or 0)
+    end_line = int(finding.get("EndLine") or start_line)
+    code_snippet = finding.get("Match") or finding.get("Secret")
+    title = f"Gitleaks: {rule_id}" if rule_id else "Gitleaks 密钥泄露候选"
+
+    return {
+        "id": f"gitleaks-{index}",
+        "title": title,
+        "description": description,
+        "file_path": file_path,
+        "line_start": start_line or None,
+        "line_end": end_line or None,
+        "code_snippet": code_snippet,
+        "severity": "ERROR",
+        "confidence": "HIGH",
+        "vulnerability_type": rule_id or "gitleaks_secret",
+        "source": "gitleaks_bootstrap",
     }
 
 
@@ -1836,145 +1902,203 @@ async def _run_bootstrap_opengrep_scan(
             pass
 
 
-async def _collect_bootstrap_findings_for_task(
-    db: AsyncSession,
-    scan_task: OpengrepScanTask,
-    exclude_patterns: Optional[List[str]] = None,
+def _parse_bootstrap_gitleaks_output(stdout: str) -> List[Dict[str, Any]]:
+    if not stdout or not stdout.strip():
+        return []
+    output = json.loads(stdout)
+    if isinstance(output, list):
+        return [item for item in output if isinstance(item, dict)]
+    if isinstance(output, dict):
+        nested = output.get("findings")
+        if isinstance(nested, list):
+            return [item for item in nested if isinstance(item, dict)]
+    raise ValueError("Unexpected gitleaks output type")
+
+
+async def _run_bootstrap_gitleaks_scan(
+    project_root: str,
 ) -> List[Dict[str, Any]]:
-    confidence_map = await _build_bootstrap_confidence_map_for_scan_task(db, scan_task)
-    findings_result = await db.execute(
-        select(OpengrepFinding).where(OpengrepFinding.scan_task_id == scan_task.id)
-    )
-    findings = findings_result.scalars().all()
-    normalized = [
-        _normalize_bootstrap_finding_from_opengrep(item, confidence_map)
-        for item in findings
-    ]
-    return _filter_bootstrap_findings(normalized, exclude_patterns=exclude_patterns)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+        report_path = tf.name
+
+    try:
+        cmd = [
+            "gitleaks",
+            "detect",
+            "--source",
+            project_root,
+            "--report-format",
+            "json",
+            "--report-path",
+            report_path,
+            "--exit-code",
+            "0",
+            "--no-git",
+        ]
+        result = await asyncio.to_thread(
+            subprocess.run,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        if result.returncode != 0:
+            stderr_text = (result.stderr or result.stdout or "unknown error").strip()
+            raise RuntimeError(f"gitleaks failed: {stderr_text[:300]}")
+
+        if not os.path.exists(report_path):
+            return []
+        with open(report_path, "r", encoding="utf-8", errors="ignore") as f:
+            report_content = f.read()
+        return _parse_bootstrap_gitleaks_output(report_content)
+    finally:
+        try:
+            os.unlink(report_path)
+        except Exception:
+            pass
 
 
-async def _prepare_bootstrap_opengrep_findings(
+def _dedupe_bootstrap_findings(
+    findings: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    deduped: List[Dict[str, Any]] = []
+    seen: Set[Tuple[str, int, str, str]] = set()
+    for item in findings:
+        file_path = str(item.get("file_path") or "").strip()
+        line_start = int(item.get("line_start") or 0)
+        vuln_type = str(item.get("vulnerability_type") or "").strip()
+        source = str(item.get("source") or "").strip()
+        key = (file_path, line_start, vuln_type, source)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+async def _prepare_embedded_bootstrap_findings(
     db: AsyncSession,
-    project_id: str,
     project_root: str,
     event_emitter: Any,
     exclude_patterns: Optional[List[str]] = None,
+    opengrep_enabled: bool = True,
+    gitleaks_enabled: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str], str]:
-    active_rules_result = await db.execute(
-        select(OpengrepRule).where(OpengrepRule.is_active == True)
-    )
-    active_rules = active_rules_result.scalars().all()
-    if not active_rules:
-        await event_emitter.emit_error(
-            "❌ OpenGrep 预处理失败：当前没有启用规则，无法继续智能审计"
+    if not opengrep_enabled and not gitleaks_enabled:
+        return [], None, "disabled"
+
+    opengrep_total_findings = 0
+    gitleaks_total_findings = 0
+    opengrep_candidates: List[Dict[str, Any]] = []
+    gitleaks_candidates: List[Dict[str, Any]] = []
+
+    if opengrep_enabled:
+        active_rules_result = await db.execute(
+            select(OpengrepRule).where(OpengrepRule.is_active == True)
         )
-        raise RuntimeError("OpenGrep 预处理失败：当前没有启用规则")
-
-    scan_task = OpengrepScanTask(
-        project_id=project_id,
-        name=f"Agent Bootstrap OpenGrep {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        status="running",
-        target_path=".",
-        rulesets=json.dumps([{"rule_id": rule.id} for rule in active_rules]),
-    )
-    db.add(scan_task)
-    await db.commit()
-    await db.refresh(scan_task)
-
-    await event_emitter.emit_info(
-        f"🧪 OpenGrep 预处理开始：（task={scan_task.id}）",
-        metadata={
-            "bootstrap": True,
-            "bootstrap_task_id": scan_task.id,
-            "bootstrap_source": "scan_forced",
-            "bootstrap_total_findings": 0,
-            "bootstrap_candidate_count": 0,
-        },
-    )
-
-    try:
-        started_at = datetime.now(timezone.utc)
-        parsed_findings = await _run_bootstrap_opengrep_scan(project_root, active_rules)
-        finished_at = datetime.now(timezone.utc)
-        duration_ms = int((finished_at - started_at).total_seconds() * 1000)
-
-        error_count = 0
-        warning_count = 0
-        files_scanned: Set[str] = set()
-        lines_scanned = 0
-
-        for finding in parsed_findings:
-            severity = str(
-                finding.get("extra", {}).get("severity", "INFO")
-            ).upper()
-            if severity == "ERROR":
-                error_count += 1
-            elif severity == "WARNING":
-                warning_count += 1
-
-            file_path = finding.get("path", "")
-            if file_path:
-                files_scanned.add(file_path)
-
-            start_line = int(finding.get("start", {}).get("line") or 0)
-            end_line = int(finding.get("end", {}).get("line") or start_line)
-            if end_line >= start_line > 0:
-                lines_scanned += end_line - start_line + 1
-
-            db.add(
-                OpengrepFinding(
-                    scan_task_id=scan_task.id,
-                    rule=finding,
-                    description=finding.get("extra", {}).get("message"),
-                    file_path=file_path,
-                    start_line=start_line or None,
-                    code_snippet=finding.get("extra", {}).get("lines"),
-                    severity=severity,
-                    status="open",
-                )
+        active_rules = active_rules_result.scalars().all()
+        if not active_rules:
+            await event_emitter.emit_error(
+                "❌ OpenGrep 预处理失败：当前没有启用规则，无法继续智能审计"
             )
+            raise RuntimeError("OpenGrep 预处理失败：当前没有启用规则")
 
-        scan_task.status = "completed"
-        scan_task.total_findings = len(parsed_findings)
-        scan_task.error_count = error_count
-        scan_task.warning_count = warning_count
-        scan_task.scan_duration_ms = duration_ms
-        scan_task.files_scanned = len(files_scanned)
-        scan_task.lines_scanned = lines_scanned
-        await db.commit()
-
-        candidates = await _collect_bootstrap_findings_for_task(
-            db,
-            scan_task,
-            exclude_patterns=exclude_patterns,
-        )
         await event_emitter.emit_info(
-            f"✅ OpenGrep 预扫描完成: findings={len(parsed_findings)}, 候选={len(candidates)}",
+            "🧪 OpenGrep 内嵌预扫开始",
             metadata={
                 "bootstrap": True,
-                "bootstrap_task_id": scan_task.id,
-                "bootstrap_source": "scan_forced",
-                "bootstrap_total_findings": len(parsed_findings),
-                "bootstrap_candidate_count": len(candidates),
+                "bootstrap_task_id": None,
+                "bootstrap_source": "embedded_opengrep",
+                "bootstrap_total_findings": 0,
+                "bootstrap_candidate_count": 0,
             },
         )
-        return candidates, scan_task.id, "scan_forced"
-    except FileNotFoundError as exc:
-        scan_task.status = "failed"
-        scan_task.error_count = 1
-        await db.commit()
-        await event_emitter.emit_error(
-            "❌ OpenGrep 预处理失败：未安装 opengrep"
+        try:
+            parsed_opengrep_findings = await _run_bootstrap_opengrep_scan(
+                project_root,
+                active_rules,
+            )
+        except FileNotFoundError as exc:
+            await event_emitter.emit_error("❌ OpenGrep 预处理失败：未安装 opengrep")
+            raise RuntimeError("OpenGrep 预处理失败：未安装 opengrep") from exc
+        except Exception as exc:
+            await event_emitter.emit_error(f"❌ OpenGrep 预处理失败：{str(exc)[:160]}")
+            raise RuntimeError(f"OpenGrep 预处理失败：{str(exc)[:200]}") from exc
+
+        opengrep_total_findings = len(parsed_opengrep_findings)
+        confidence_map = _build_bootstrap_confidence_map_from_rules(active_rules)
+        normalized_opengrep_findings = [
+            _normalize_bootstrap_finding_from_opengrep_payload(
+                finding,
+                confidence_map,
+                index,
+            )
+            for index, finding in enumerate(parsed_opengrep_findings)
+            if isinstance(finding, dict)
+        ]
+        opengrep_candidates = _filter_bootstrap_findings(
+            normalized_opengrep_findings,
+            exclude_patterns=exclude_patterns,
         )
-        raise RuntimeError("OpenGrep 预处理失败：未安装 opengrep") from exc
-    except Exception as exc:
-        scan_task.status = "failed"
-        scan_task.error_count = (scan_task.error_count or 0) + 1
-        await db.commit()
-        await event_emitter.emit_error(
-            f"❌ OpenGrep 预处理失败：{str(exc)[:160]}"
+
+    if gitleaks_enabled:
+        await event_emitter.emit_info(
+            "🧪 Gitleaks 内嵌预扫开始",
+            metadata={
+                "bootstrap": True,
+                "bootstrap_task_id": None,
+                "bootstrap_source": "embedded_gitleaks",
+                "bootstrap_total_findings": 0,
+                "bootstrap_candidate_count": 0,
+            },
         )
-        raise RuntimeError(f"OpenGrep 预处理失败：{str(exc)[:200]}") from exc
+        try:
+            parsed_gitleaks_findings = await _run_bootstrap_gitleaks_scan(project_root)
+        except FileNotFoundError as exc:
+            await event_emitter.emit_error("❌ Gitleaks 预处理失败：未安装 gitleaks")
+            raise RuntimeError("Gitleaks 预处理失败：未安装 gitleaks") from exc
+        except Exception as exc:
+            await event_emitter.emit_error(f"❌ Gitleaks 预处理失败：{str(exc)[:160]}")
+            raise RuntimeError(f"Gitleaks 预处理失败：{str(exc)[:200]}") from exc
+
+        gitleaks_total_findings = len(parsed_gitleaks_findings)
+        normalized_gitleaks_findings = [
+            _normalize_bootstrap_finding_from_gitleaks_payload(finding, index)
+            for index, finding in enumerate(parsed_gitleaks_findings)
+            if isinstance(finding, dict)
+        ]
+        gitleaks_candidates = _filter_bootstrap_findings(
+            normalized_gitleaks_findings,
+            exclude_patterns=exclude_patterns,
+        )
+
+    merged_candidates = _dedupe_bootstrap_findings(
+        [*opengrep_candidates, *gitleaks_candidates]
+    )
+    total_findings = opengrep_total_findings + gitleaks_total_findings
+
+    if opengrep_enabled and gitleaks_enabled:
+        bootstrap_source = "embedded_opengrep_gitleaks"
+    elif opengrep_enabled:
+        bootstrap_source = "embedded_opengrep"
+    else:
+        bootstrap_source = "embedded_gitleaks"
+
+    await event_emitter.emit_info(
+        "✅ 内嵌静态预扫完成",
+        metadata={
+            "bootstrap": True,
+            "bootstrap_task_id": None,
+            "bootstrap_source": bootstrap_source,
+            "bootstrap_total_findings": total_findings,
+            "bootstrap_candidate_count": len(merged_candidates),
+            "bootstrap_opengrep_total_findings": opengrep_total_findings,
+            "bootstrap_opengrep_candidate_count": len(opengrep_candidates),
+            "bootstrap_gitleaks_total_findings": gitleaks_total_findings,
+            "bootstrap_gitleaks_candidate_count": len(gitleaks_candidates),
+        },
+    )
+    return merged_candidates, None, bootstrap_source
 
 
 MAX_SEED_FINDINGS = 25
@@ -3059,26 +3183,46 @@ async def _execute_agent_task(task_id: str):
 
             bootstrap_findings: List[Dict[str, Any]] = []
             bootstrap_task_id: Optional[str] = None
-            bootstrap_source = "none"
-            async def _prepare_bootstrap_once():
-                return await _prepare_bootstrap_opengrep_findings(
-                    db=db,
-                    project_id=str(project.id),
-                    project_root=project_root,
-                    event_emitter=event_emitter,
-                    exclude_patterns=task.exclude_patterns,
-                )
+            bootstrap_source = "disabled"
+            source_mode = _resolve_agent_task_source_mode(task.name, task.description)
+            static_bootstrap_config = _resolve_static_bootstrap_config(task, source_mode)
 
-            (
-                bootstrap_findings,
-                bootstrap_task_id,
-                bootstrap_source,
-            ) = await _run_with_retries(
-                "OPENGREP_BOOTSTRAP",
-                task_id,
-                event_emitter,
-                _prepare_bootstrap_once,
-            )
+            if static_bootstrap_config["mode"] == "embedded":
+                async def _prepare_bootstrap_once():
+                    return await _prepare_embedded_bootstrap_findings(
+                        db=db,
+                        project_root=project_root,
+                        event_emitter=event_emitter,
+                        exclude_patterns=task.exclude_patterns,
+                        opengrep_enabled=bool(
+                            static_bootstrap_config.get("opengrep_enabled")
+                        ),
+                        gitleaks_enabled=bool(
+                            static_bootstrap_config.get("gitleaks_enabled")
+                        ),
+                    )
+
+                (
+                    bootstrap_findings,
+                    bootstrap_task_id,
+                    bootstrap_source,
+                ) = await _run_with_retries(
+                    "STATIC_BOOTSTRAP",
+                    task_id,
+                    event_emitter,
+                    _prepare_bootstrap_once,
+                )
+            else:
+                await event_emitter.emit_info(
+                    "ℹ️ 当前任务未启用静态预扫，直接进入入口点回退流程",
+                    metadata={
+                        "bootstrap": True,
+                        "bootstrap_task_id": None,
+                        "bootstrap_source": "disabled",
+                        "bootstrap_total_findings": 0,
+                        "bootstrap_candidate_count": 0,
+                    },
+                )
 
             # ============ 🔥 Fixed-First: 生成种子候选（OpenGrep 优先，空则入口点回退） ============
             seed_findings: List[Dict[str, Any]] = []
@@ -3088,12 +3232,17 @@ async def _execute_agent_task(task_id: str):
             if bootstrap_findings:
                 seed_findings = _normalize_seed_from_opengrep(bootstrap_findings)
                 await event_emitter.emit_info(
-                    f"🌱 固定种子候选已生成（OpenGrep）：{len(seed_findings)} 条"
+                    f"🌱 固定种子候选已生成（静态预扫）：{len(seed_findings)} 条"
                 )
             else:
-                await event_emitter.emit_warning(
-                    "⚠️ OpenGrep 未筛选出 ERROR + HIGH/MEDIUM 候选，启动入口点回退流程"
-                )
+                if bootstrap_source == "disabled":
+                    await event_emitter.emit_info(
+                        "ℹ️ 静态预扫未启用，启动入口点回退流程"
+                    )
+                else:
+                    await event_emitter.emit_warning(
+                        "⚠️ 静态预扫未筛选出 ERROR + HIGH/MEDIUM 候选，启动入口点回退流程"
+                    )
                 entry = _discover_entry_points_deterministic(
                     project_root=project_root,
                     target_files=task.target_files,
@@ -5975,6 +6124,9 @@ async def create_agent_task(
         if isinstance(item, str) and item.strip()
     ]
     merged_exclude_patterns = _build_core_audit_exclude_patterns(request.exclude_patterns)
+    normalized_audit_scope = (
+        request.audit_scope if isinstance(request.audit_scope, dict) else None
+    )
     
     # 创建任务
     task = AgentTask(
@@ -5984,6 +6136,7 @@ async def create_agent_task(
         description=request.description,
         status=AgentTaskStatus.PENDING,
         current_phase=AgentTaskPhase.PLANNING,
+        audit_scope=normalized_audit_scope,
         target_vulnerabilities=request.target_vulnerabilities,
         verification_level=verification_level,
         branch_name=request.branch_name,  # 保存用户选择的分支

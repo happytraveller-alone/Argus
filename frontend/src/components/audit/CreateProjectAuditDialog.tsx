@@ -40,7 +40,11 @@ import {
 import { createGitleaksScanTask } from "@/shared/api/gitleaks";
 import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
-import { HYBRID_TASK_NAME_MARKER } from "@/features/tasks/services/taskActivities";
+import {
+	HYBRID_TASK_NAME_MARKER,
+	INTELLIGENT_TASK_NAME_MARKER,
+} from "@/features/tasks/services/taskActivities";
+import { useI18n } from "@/shared/i18n";
 
 export type AuditCreateMode = "static" | "agent" | "hybrid";
 
@@ -128,6 +132,30 @@ const buildStaticTaskRoute = (result: StaticTaskCreateResult) =>
 		result.params.toString() ? `?${result.params.toString()}` : ""
 	}`;
 
+const LLM_PREFLIGHT_UI_HANDLED_CODE = "llm_preflight_ui_handled" as const;
+
+type LlmPreflightUiHandledError = Error & {
+	code: typeof LLM_PREFLIGHT_UI_HANDLED_CODE;
+};
+
+const createLlmPreflightUiHandledError = (
+	message: string,
+): LlmPreflightUiHandledError => {
+	const error = new Error(message) as LlmPreflightUiHandledError;
+	error.code = LLM_PREFLIGHT_UI_HANDLED_CODE;
+	return error;
+};
+
+const isLlmPreflightUiHandledError = (
+	error: unknown,
+): error is LlmPreflightUiHandledError =>
+	Boolean(
+		error &&
+			typeof error === "object" &&
+			"code" in error &&
+			(error as { code?: string }).code === LLM_PREFLIGHT_UI_HANDLED_CODE,
+	);
+
 export default function CreateProjectAuditDialog({
 	open,
 	onOpenChange,
@@ -145,6 +173,7 @@ export default function CreateProjectAuditDialog({
 	onReturn,
 }: CreateProjectAuditDialogProps) {
 	const navigate = useNavigate();
+	const { t } = useI18n();
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [loadingProjects, setLoadingProjects] = useState(false);
 	const [creating, setCreating] = useState(false);
@@ -175,6 +204,7 @@ export default function CreateProjectAuditDialog({
 	>([]);
 	const [quickFixTesting, setQuickFixTesting] = useState(false);
 	const [quickFixSaving, setQuickFixSaving] = useState(false);
+	const [quickFixPanelOpening, setQuickFixPanelOpening] = useState(false);
 	const [quickFixTestResult, setQuickFixTestResult] = useState<{
 		success: boolean;
 		message: string;
@@ -309,14 +339,10 @@ export default function CreateProjectAuditDialog({
 
 	const createStaticTasksForProject = async (
 		project: Project,
-		source: "static" | "hybrid" = "static",
 	): Promise<StaticTaskCreateResult> => {
 		let opengrepTask: { id: string } | null = null;
 		let gitleaksTask: { id: string } | null = null;
-		const taskNamePrefix =
-			source === "hybrid"
-				? `${HYBRID_TASK_NAME_MARKER}混合扫描`
-				: "静态分析";
+		const taskNamePrefix = "静态分析";
 
 		if (opengrepEnabled) {
 			const ruleIds = activeRules.filter(isSevereRule).map((rule) => rule.id);
@@ -365,11 +391,27 @@ export default function CreateProjectAuditDialog({
 				? `混合扫描-智能审计-${project.name}`
 				: `智能审计-${project.name}`,
 		description:
-			source === "hybrid" ? `${HYBRID_TASK_NAME_MARKER}混合扫描智能阶段任务` : undefined,
+			source === "hybrid"
+				? `${HYBRID_TASK_NAME_MARKER}混合扫描智能阶段任务`
+				: `${INTELLIGENT_TASK_NAME_MARKER}智能扫描任务`,
 		branch_name: isRepositoryProject(project)
 			? branchName.trim() || project.default_branch || "main"
 			: undefined,
 		target_files: parsedTargetFiles.length > 0 ? parsedTargetFiles : undefined,
+		audit_scope: {
+			static_bootstrap:
+				source === "hybrid"
+					? {
+							mode: "embedded" as const,
+							opengrep_enabled: opengrepEnabled,
+							gitleaks_enabled: gitleaksEnabled,
+						}
+					: {
+							mode: "disabled" as const,
+							opengrep_enabled: false,
+							gitleaks_enabled: false,
+						},
+		},
 		verification_level: "analysis_with_poc_plan" as const,
 	});
 
@@ -386,10 +428,13 @@ export default function CreateProjectAuditDialog({
 	};
 
 	const openLlmQuickFixPanel = async (preflight: AgentPreflightResult) => {
-		setShowLlmQuickFixPanel(true);
-		setQuickFixTestResult(null);
 		setQuickFixMissingFields(preflight.missingFields || []);
 		setLastPreflightMessage(preflight.message || "");
+		if (showLlmQuickFixPanel) {
+			return;
+		}
+		setShowLlmQuickFixPanel(true);
+		setQuickFixTestResult(null);
 		try {
 			await loadQuickFixConfigFromUser();
 		} catch (error) {
@@ -397,14 +442,41 @@ export default function CreateProjectAuditDialog({
 		}
 	};
 
+	const openLlmQuickFixPanelManual = async () => {
+		if (showLlmQuickFixPanel) {
+			setShowLlmQuickFixPanel(false);
+			setQuickFixTestResult(null);
+			return;
+		}
+
+		setQuickFixPanelOpening(true);
+		setQuickFixTestResult(null);
+		setQuickFixMissingFields([]);
+		setLastPreflightMessage("");
+		try {
+			await loadQuickFixConfigFromUser();
+		} catch (error) {
+			console.error("加载 LLM 快速补配配置失败:", error);
+		} finally {
+			setShowLlmQuickFixPanel(true);
+			setQuickFixPanelOpening(false);
+		}
+	};
+
 	const ensureLlmPreflightPassed = async () => {
 		const checkToast = toast.loading("正在检查智能审计配置（LLM）...");
-		const preflight = await runAgentPreflightCheck();
-		toast.dismiss(checkToast);
+		let preflight: AgentPreflightResult;
+		try {
+			preflight = await runAgentPreflightCheck();
+		} finally {
+			toast.dismiss(checkToast);
+		}
 
 		if (!preflight.ok) {
+			const message = preflight.message || "智能审计配置检查未通过";
+			toast.error(message);
 			await openLlmQuickFixPanel(preflight);
-			throw new Error(preflight.message || "智能审计配置检查未通过");
+			throw createLlmPreflightUiHandledError(message);
 		}
 	};
 
@@ -526,33 +598,17 @@ export default function CreateProjectAuditDialog({
 		project: Project,
 		action: "primary" | "secondary",
 	) => {
-		const staticResult = await createStaticTasksForProject(project, "hybrid");
-		const staticRoute = buildStaticTaskRoute(staticResult);
-
-		try {
-			const agentTask = await createHybridLiteAgentTaskForProject(
-				project,
-				"hybrid",
-			);
-			onOpenChange(false);
-			onTaskCreated?.();
-			toast.success("混合扫描任务已创建（静态 + 智能）");
-			if (action === "secondary") {
-				onSecondaryCreateSuccess?.();
-			} else if (navigateOnSuccess) {
-				navigate(`/agent-audit/${agentTask.id}`);
-			}
-			return;
-		} catch (error) {
-			onOpenChange(false);
-			onTaskCreated?.();
-			const message = extractApiErrorMessage(error);
-			toast.error(`静态扫描已创建，智能扫描失败：${message}`);
-			if (action === "secondary") {
-				onSecondaryCreateSuccess?.();
-			} else if (navigateOnSuccess) {
-				navigate(staticRoute);
-			}
+		await ensureLlmPreflightPassed();
+		const agentTask = await createAgentTask(
+			buildAgentTaskPayload(project, "hybrid"),
+		);
+		onOpenChange(false);
+		onTaskCreated?.();
+		toast.success("混合扫描任务已创建（内嵌静态预扫 + 智能审计）");
+		if (action === "secondary") {
+			onSecondaryCreateSuccess?.();
+		} else if (navigateOnSuccess) {
+			navigate(`/agent-audit/${agentTask.id}`);
 		}
 	};
 
@@ -642,10 +698,7 @@ export default function CreateProjectAuditDialog({
 					}
 
 					if (mode === "static") {
-						const result = await createStaticTasksForProject(
-							createdProject,
-							"static",
-						);
+						const result = await createStaticTasksForProject(createdProject);
 						onOpenChange(false);
 						onTaskCreated?.();
 						toast.success("静态审计任务已创建");
@@ -702,10 +755,7 @@ export default function CreateProjectAuditDialog({
 			}
 
 			if (mode === "static") {
-				const result = await createStaticTasksForProject(
-					selectedProject,
-					"static",
-				);
+				const result = await createStaticTasksForProject(selectedProject);
 				onOpenChange(false);
 				onTaskCreated?.();
 				toast.success("静态审计任务已创建");
@@ -732,6 +782,9 @@ export default function CreateProjectAuditDialog({
 
 			await handleCreateHybridLiteAgentForProject(selectedProject, action);
 		} catch (error) {
+			if (isLlmPreflightUiHandledError(error)) {
+				return;
+			}
 			const message = extractApiErrorMessage(error);
 			const failureText =
 				mode === "agent" ? `智能扫描创建失败：${message}` : `创建失败: ${message}`;
@@ -1026,20 +1079,61 @@ export default function CreateProjectAuditDialog({
 					{shouldShowAgentPrecheckHint && (
 						<div className="space-y-3">
 							<div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
-								<p className="text-sm text-violet-200">执行前会自动校验 LLM 配置。</p>
-								<p className="text-xs text-violet-300/80 mt-1">
-									未通过时可在下方直接补配并测试连接。
-								</p>
+								<div className="flex items-start justify-between gap-3">
+									<div>
+										<p className="text-sm text-violet-200">
+											{t(
+												"task.llmPrecheckHint",
+												"创建前会自动校验 LLM 配置。",
+											)}
+										</p>
+										<p className="text-xs text-violet-300/80 mt-1">
+											{t(
+												"task.llmQuickFixDesc",
+												"未通过时可在下方直接补配并测试连接。",
+											)}
+										</p>
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										className="cyber-btn-outline h-8 shrink-0"
+										onClick={openLlmQuickFixPanelManual}
+										disabled={
+											creating ||
+											generatingDescription ||
+											quickFixSaving ||
+											quickFixTesting ||
+											quickFixPanelOpening
+										}
+									>
+										{quickFixPanelOpening ? (
+											<>
+												<Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+												加载中...
+											</>
+										) : showLlmQuickFixPanel ? (
+											t("task.llmConfigCollapse", "收起配置")
+										) : (
+											t("task.llmConfigTest", "配置测试")
+										)}
+									</Button>
+								</div>
 							</div>
 
 							{showLlmQuickFixPanel && (
 								<div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
 									<div className="flex items-start justify-between gap-2">
 										<div className="space-y-1">
-											<p className="text-sm font-semibold text-amber-100">LLM 快速补配</p>
+											<p className="text-sm font-semibold text-amber-100">
+												{t("task.llmQuickFixTitle", "LLM 快速补配")}
+											</p>
 											<p className="text-xs text-amber-200/85 leading-relaxed">
 												{lastPreflightMessage ||
-													"检测到 LLM 配置异常，请补全后重新创建。"}
+													t(
+														"task.llmQuickFixDesc",
+														"未通过时可在下方直接补配并测试连接。",
+													)}
 											</p>
 										</div>
 										<Badge className="cyber-badge-info uppercase">

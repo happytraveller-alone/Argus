@@ -49,8 +49,6 @@ import {
 	AlertTriangle,
 	ArrowLeft,
 	Database,
-	ShieldCheck,
-	ListFilter,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -84,7 +82,13 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 	const navigate = useNavigate();
 	const location = useLocation();
 	const [rules, setRules] = useState<OpengrepRule[]>([]);
-	const [ruleStats, setRuleStats] = useState({ total: 0, active: 0 });
+	const [ruleStats, setRuleStats] = useState({
+		total: 0,
+		active: 0,
+		inactive: 0,
+		languageCount: 0,
+		vulnerabilityTypeCount: 0,
+	});
 	const [loading, setLoading] = useState(true);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [selectedLanguage, setSelectedLanguage] = useState<string>("");
@@ -322,9 +326,35 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 			const allRules = (await getOpengrepRules()).filter(
 				(rule) => String(rule.severity || "").toUpperCase() === "ERROR",
 			);
+			const languageSet = new Set<string>();
+			const vulnerabilityTypeSet = new Set<string>();
+
+			for (const rule of allRules) {
+				const normalizedLanguage = String(rule.language || "")
+					.trim()
+					.toLowerCase();
+				if (normalizedLanguage) {
+					languageSet.add(normalizedLanguage);
+				}
+
+				if (Array.isArray(rule.cwe)) {
+					for (const cwe of rule.cwe) {
+						const normalizedCwe = normalizeCweCode(cwe);
+						if (normalizedCwe) {
+							vulnerabilityTypeSet.add(normalizedCwe);
+						}
+					}
+				}
+			}
+
+			const activeCount = allRules.filter((rule) => rule.is_active).length;
+
 			setRuleStats({
 				total: allRules.length,
-				active: allRules.filter((rule) => rule.is_active).length,
+				active: activeCount,
+				inactive: Math.max(allRules.length - activeCount, 0),
+				languageCount: languageSet.size,
+				vulnerabilityTypeCount: vulnerabilityTypeSet.size,
 			});
 		} catch (error) {
 			console.error("Failed to load rule stats:", error);
@@ -1112,8 +1142,15 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 								<div>
 									<p className="stat-label">有效规则总数</p>
 									<p className="stat-value">{ruleStats.total}</p>
-									<p className="text-sm text-muted-foreground mt-1">
-										当前规则库
+									<p className="text-sm mt-1 flex items-center gap-3">
+										<span className="inline-flex items-center gap-1 text-emerald-400">
+											<span className="w-2 h-2 rounded-full bg-emerald-400" />
+											已启用 {ruleStats.active}
+										</span>
+										<span className="inline-flex items-center gap-1 text-rose-400">
+											<span className="w-2 h-2 rounded-full bg-rose-400" />
+											已禁用 {ruleStats.inactive}
+										</span>
 									</p>
 								</div>
 								<div className="stat-icon text-primary">
@@ -1125,15 +1162,11 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 						<div className="cyber-card p-4">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="stat-label">启用规则数量</p>
-									<p className="stat-value">{ruleStats.active}</p>
-									<p className="text-sm text-emerald-400 mt-1 flex items-center gap-1">
-										<span className="w-2 h-2 rounded-full bg-emerald-400" />
-										未禁用
-									</p>
+									<p className="stat-label">支持编程语言个数</p>
+									<p className="stat-value">{ruleStats.languageCount}</p>
 								</div>
-								<div className="stat-icon text-emerald-400">
-									<ShieldCheck className="w-6 h-6" />
+								<div className="stat-icon text-indigo-400">
+									<Code className="w-6 h-6" />
 								</div>
 							</div>
 						</div>
@@ -1141,15 +1174,13 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 						<div className="cyber-card p-4">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="stat-label">筛选规则数量</p>
-									<p className="stat-value">{filteredRules.length}</p>
-									<p className="text-sm text-sky-400 mt-1 flex items-center gap-1">
-										<span className="w-2 h-2 rounded-full bg-sky-400" />
-										当前筛选结果
+									<p className="stat-label">支持漏洞类型数量</p>
+									<p className="stat-value">
+										{ruleStats.vulnerabilityTypeCount}
 									</p>
 								</div>
-								<div className="stat-icon text-sky-400">
-									<ListFilter className="w-6 h-6" />
+								<div className="stat-icon text-amber-400">
+									<AlertTriangle className="w-6 h-6" />
 								</div>
 							</div>
 						</div>

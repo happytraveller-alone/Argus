@@ -1,4 +1,4 @@
-import { Activity, Bot, Clock, Layers, Plus, Shield } from "lucide-react";
+import { Activity, Clock, Layers, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -15,13 +15,13 @@ import {
 	getRelativeTime,
 	getTaskStatusClassName,
 	getTaskStatusText,
-	summarizeTaskActivities,
+	summarizeTaskStatus,
 	type TaskActivityItem,
 } from "@/features/tasks/services/taskActivities";
 import { api } from "@/shared/config/database";
 import type { Project } from "@/shared/types";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 3;
 
 export default function TaskManagementHybrid() {
 	const [activities, setActivities] = useState<TaskActivityItem[]>([]);
@@ -60,8 +60,8 @@ export default function TaskManagementHybrid() {
 		() => filterHybridActivities(activities, keyword),
 		[activities, keyword],
 	);
-	const summary = useMemo(
-		() => summarizeTaskActivities(filteredActivities),
+	const stats = useMemo(
+		() => summarizeTaskStatus(filteredActivities),
 		[filteredActivities],
 	);
 
@@ -89,7 +89,7 @@ export default function TaskManagementHybrid() {
 				<div className="cyber-card p-4">
 					<div className="flex items-center justify-between">
 						<div>
-							<p className="stat-label">混合视图任务</p>
+							<p className="stat-label">混合扫描任务</p>
 							<p className="stat-value">{filteredActivities.length}</p>
 						</div>
 						<div className="stat-icon text-primary">
@@ -98,17 +98,12 @@ export default function TaskManagementHybrid() {
 					</div>
 				</div>
 				<div className="cyber-card p-4">
-					<p className="stat-label">静态 / 智能</p>
-					<p className="stat-value text-foreground">
-						{summary.staticTotal} / {summary.intelligentTotal}
-					</p>
+					<p className="stat-label">已完成</p>
+					<p className="stat-value text-emerald-400">{stats.completed}</p>
 				</div>
 				<div className="cyber-card p-4">
-					<p className="stat-label">运行中 / 已完成</p>
-					<p className="stat-value text-sky-400">
-						{summary.running} /{" "}
-						<span className="text-emerald-400">{summary.completed}</span>
-					</p>
+					<p className="stat-label">进行中</p>
+					<p className="stat-value text-sky-400">{stats.running}</p>
 				</div>
 			</div>
 
@@ -116,7 +111,7 @@ export default function TaskManagementHybrid() {
 				<div className="flex items-center justify-between gap-3">
 					<div className="section-header">
 						<Layers className="w-5 h-5 text-primary" />
-						<h3 className="section-title">混合扫描任务（完整链路）</h3>
+						<h3 className="section-title">混合扫描任务</h3>
 					</div>
 					<div className="flex items-center gap-3">
 						<Button
@@ -144,7 +139,7 @@ export default function TaskManagementHybrid() {
 						className="h-9 font-mono"
 					/>
 					<div className="text-xs text-muted-foreground">
-						混合扫描会创建静态与智能两条任务，此处统一展示完整链路。
+						仅展示混合扫描归类的 Agent 任务，不含静态扫描和智能扫描独立任务。
 					</div>
 				</div>
 
@@ -156,10 +151,7 @@ export default function TaskManagementHybrid() {
 					) : pagedActivities.length > 0 ? (
 						pagedActivities.map((activity) => {
 							void nowTick;
-							const activityName =
-								activity.kind === "rule_scan"
-									? `${activity.projectName}-静态扫描`
-									: `${activity.projectName}-智能审计`;
+							const activityName = `${activity.projectName}-混合扫描`;
 							return (
 								<Link
 									key={activity.id}
@@ -167,24 +159,9 @@ export default function TaskManagementHybrid() {
 									className={`block p-3 rounded-lg border transition-all ${getTaskStatusClassName(activity.status)}`}
 								>
 									<div className="space-y-3">
-										<div className="flex items-center justify-between gap-3">
-											<p className="text-base font-medium text-foreground">
-												{activityName}
-											</p>
-											<span className="text-sm font-semibold text-primary inline-flex items-center gap-1">
-												{activity.kind === "rule_scan" ? (
-													<>
-														<Shield className="w-4 h-4" />
-														静态阶段
-													</>
-												) : (
-													<>
-														<Bot className="w-4 h-4" />
-														智能阶段
-													</>
-												)}
-											</span>
-										</div>
+										<p className="text-base font-medium text-foreground">
+											{activityName}
+										</p>
 
 										<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
 											<div className="rounded-md bg-muted/30 px-2 py-1.5">

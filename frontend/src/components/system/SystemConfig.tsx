@@ -57,6 +57,11 @@ import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
 
 const DEFAULT_MODELS: Record<string, string> = {
   openai: "gpt-5",
+  anthropic: "claude-sonnet-4-20250514",
+  gemini: "gemini-2.5-pro",
+  deepseek: "deepseek-chat",
+  ollama: "llama3.1",
+  openrouter: "openai/gpt-5-mini",
 };
 
 type LLMFetchStyle =
@@ -76,6 +81,75 @@ interface LLMProviderItem {
   supportsModelFetch: boolean;
   fetchStyle: LLMFetchStyle;
 }
+
+const BUILTIN_LLM_PROVIDERS: LLMProviderItem[] = [
+  {
+    id: "openai",
+    name: "OpenAI",
+    description: "OpenAI 官方模型服务",
+    defaultModel: "gpt-5",
+    models: ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o"],
+    defaultBaseUrl: "https://api.openai.com/v1",
+    requiresApiKey: true,
+    supportsModelFetch: true,
+    fetchStyle: "openai_compatible",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    description: "Claude 系列模型服务",
+    defaultModel: "claude-sonnet-4-20250514",
+    models: ["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-3-5-haiku-latest"],
+    defaultBaseUrl: "https://api.anthropic.com",
+    requiresApiKey: true,
+    supportsModelFetch: true,
+    fetchStyle: "anthropic",
+  },
+  {
+    id: "gemini",
+    name: "Google Gemini",
+    description: "Google Gemini 模型服务",
+    defaultModel: "gemini-2.5-pro",
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
+    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    requiresApiKey: true,
+    supportsModelFetch: true,
+    fetchStyle: "openai_compatible",
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    description: "DeepSeek 推理与对话模型",
+    defaultModel: "deepseek-chat",
+    models: ["deepseek-chat", "deepseek-reasoner"],
+    defaultBaseUrl: "https://api.deepseek.com/v1",
+    requiresApiKey: true,
+    supportsModelFetch: true,
+    fetchStyle: "openai_compatible",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    description: "统一多模型路由聚合服务",
+    defaultModel: "openai/gpt-5-mini",
+    models: ["openai/gpt-5-mini", "anthropic/claude-3.7-sonnet", "google/gemini-2.5-pro"],
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
+    requiresApiKey: true,
+    supportsModelFetch: true,
+    fetchStyle: "openai_compatible",
+  },
+  {
+    id: "ollama",
+    name: "Ollama",
+    description: "本地部署 LLM（无 API Key）",
+    defaultModel: "llama3.1",
+    models: ["llama3.1", "qwen2.5", "deepseek-r1:latest"],
+    defaultBaseUrl: "http://localhost:11434/v1",
+    requiresApiKey: false,
+    supportsModelFetch: true,
+    fetchStyle: "openai_compatible",
+  },
+];
 
 interface LLMModelMetadata {
   contextWindow?: number | null;
@@ -587,6 +661,33 @@ export function SystemConfig({
     return "grid-cols-4";
   }, [sections.length]);
 
+  const llmProviderOptions = useMemo(() => {
+    const backendProviders = Array.isArray(llmProvidersFromBackend)
+      ? llmProvidersFromBackend
+      : [];
+    const baseProviders =
+      backendProviders.length > 0 ? backendProviders : BUILTIN_LLM_PROVIDERS;
+    const currentProviderId = normalizeLlmProviderId(config?.llmProvider || "");
+    if (!currentProviderId) return baseProviders;
+    if (baseProviders.some((provider) => provider.id === currentProviderId)) {
+      return baseProviders;
+    }
+    return [
+      ...baseProviders,
+      {
+        id: currentProviderId,
+        name: currentProviderId,
+        description: "自定义模型提供商",
+        defaultModel: "",
+        models: [],
+        defaultBaseUrl: "",
+        requiresApiKey: true,
+        supportsModelFetch: false,
+        fetchStyle: "openai_compatible",
+      },
+    ];
+  }, [llmProvidersFromBackend, config?.llmProvider]);
+
   const loadConfig = async () => {
     try {
       setLoading(true);
@@ -695,7 +796,7 @@ export function SystemConfig({
   };
 
   const getProviderInfo = (providerId: string): LLMProviderItem | undefined => {
-    return llmProvidersFromBackend.find((p) => p.id === providerId);
+    return llmProviderOptions.find((p) => p.id === providerId);
   };
 
   const getDefaultModelForProvider = (providerId: string): string => {
@@ -1149,7 +1250,16 @@ export function SystemConfig({
     );
   }
 
-  const selectedProviderInfo = getProviderInfo(config.llmProvider);
+  const normalizedProviderId = normalizeLlmProviderId(config.llmProvider);
+  const selectedProviderInfo = getProviderInfo(normalizedProviderId);
+  const currentModelName = resolveCurrentModelName(
+    normalizedProviderId,
+    config.llmModel,
+  );
+  const availableModelCount = getModelsForProvider(normalizedProviderId).length;
+  const availableModelMetadataCount = Object.keys(
+    getModelMetadataForProvider(normalizedProviderId),
+  ).length;
   const hasModelConfigured = String(config.llmModel || "").trim().length > 0;
   const hasBaseUrlConfigured = String(config.llmBaseUrl || "").trim().length > 0;
   const isConfigured =
@@ -1188,6 +1298,60 @@ export function SystemConfig({
         {sections.includes("llm") && (
           <TabsContent value="llm" className="space-y-6">
             <div className="cyber-card p-6 space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="cyber-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="stat-label">模型提供商</p>
+                      <p className="stat-value text-2xl break-all">
+                        {selectedProviderInfo?.name || normalizedProviderId}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {selectedProviderInfo?.supportsModelFetch
+                          ? "支持在线拉取"
+                          : "静态模型列表"}
+                      </p>
+                    </div>
+                    <div className="stat-icon text-primary">
+                      <Settings className="w-6 h-6" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cyber-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="stat-label">当前采用模型</p>
+                      <p className="stat-value text-2xl break-all">
+                        {currentModelName || "--"}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        推荐 max tokens：{currentModelRecommendation?.value ?? config.llmMaxTokens}
+                      </p>
+                    </div>
+                    <div className="stat-icon text-sky-400">
+                      <Brain className="w-6 h-6" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cyber-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="stat-label">模型统计</p>
+                      <p className="stat-value">{availableModelCount} 个模型</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        元数据 {availableModelMetadataCount} ·
+                        {selectedProviderInfo?.supportsModelFetch ? " 支持在线拉取" : " 使用静态列表"}
+                      </p>
+                    </div>
+                    <div className="stat-icon text-emerald-400">
+                      <Zap className="w-6 h-6" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-muted-foreground uppercase">提供商</Label>
                 <Select value={config.llmProvider} onValueChange={handleProviderChange}>
@@ -1195,7 +1359,7 @@ export function SystemConfig({
                     <SelectValue placeholder="选择提供商" />
                   </SelectTrigger>
                   <SelectContent className="cyber-dialog border-border">
-                    {llmProvidersFromBackend.map((provider) => (
+                    {llmProviderOptions.map((provider) => (
                       <SelectItem key={provider.id} value={provider.id} className="font-mono">
                         {provider.name}
                       </SelectItem>

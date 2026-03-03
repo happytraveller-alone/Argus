@@ -58,7 +58,6 @@ import {
     Terminal,
     Github,
     Folder,
-    ArrowUpRight,
     Key,
     Sparkles,
 } from "lucide-react";
@@ -88,14 +87,18 @@ import {
     type GitleaksScanTask,
 } from "@/shared/api/gitleaks";
 import {
+    getOpengrepScanFindings,
     getOpengrepScanTasks,
+    type OpengrepFinding,
     type OpengrepScanTask,
 } from "@/shared/api/opengrep";
 import {
+    getProjectCardPotentialVulnerabilities,
     getProjectCardSummaryStats,
     getProjectCardRecentTasks,
     normalizeProjectCardLanguageStats,
     type ProjectCardLanguageStats,
+    type ProjectCardPotentialVulnerability,
 } from "@/features/projects/services/projectCardPreview";
 const PROJECT_PAGE_SIZE = 6;
 const MODULE_SCROLL_DELAY_MS = 80;
@@ -105,6 +108,9 @@ const OPENGREP_TASK_PAGE_LIMIT = 200;
 const GITLEAKS_TASK_PAGE_LIMIT = 200;
 const LANGUAGE_STATS_RETRY_INTERVAL_MS = 2500;
 const LANGUAGE_STATS_MAX_RETRIES = 6;
+const PROJECT_CARD_POTENTIAL_SOURCE_TASK_LIMIT = 3;
+const PROJECT_CARD_POTENTIAL_FINDINGS_FETCH_LIMIT = 200;
+const PROJECT_CARD_POTENTIAL_TOP_LIMIT = 5;
 const PROJECT_CARD_PIE_COLORS = [
     "#0ea5e9",
     "#22c55e",
@@ -137,6 +143,11 @@ const PROJECT_ACTION_BTN =
 
 const PROJECT_ACTION_BTN_SUBTLE =
     "border border-sky-500/30 bg-sky-500/12 text-sky-100 hover:bg-sky-500/22 hover:border-sky-400/55";
+
+type ProjectCardPotentialVulnerabilityState = {
+    status: "loading" | "ready" | "empty" | "failed";
+    items: ProjectCardPotentialVulnerability[];
+};
 
 export default function Projects() {
     const location = useLocation();
@@ -199,8 +210,12 @@ export default function Projects() {
     const [projectLanguageStatsMap, setProjectLanguageStatsMap] = useState<
         Record<string, ProjectCardLanguageStats>
     >({});
+    const [projectPotentialVulnerabilityMap, setProjectPotentialVulnerabilityMap] = useState<
+        Record<string, ProjectCardPotentialVulnerabilityState>
+    >({});
     const languageStatsRetryCountRef = useRef<Record<string, number>>({});
     const languageStatsPollTimerRef = useRef<Record<string, number>>({});
+    const potentialVulnerabilityLoadingRef = useRef<Record<string, boolean>>({});
 
     // 将小写语言名转换为显示格式
     const formatLanguageName = (lang: string): string => {
@@ -329,6 +344,80 @@ export default function Projects() {
         [clearLanguageStatsPollTimer],
     );
 
+    const fetchProjectPotentialVulnerabilities = useCallback(
+        async (projectId: string) => {
+            if (potentialVulnerabilityLoadingRef.current[projectId]) {
+                return;
+            }
+
+            potentialVulnerabilityLoadingRef.current[projectId] = true;
+            try {
+                const sourceTasks = opengrepTaskPool
+                    .filter((task) => task.project_id === projectId)
+                    .sort(
+                        (a, b) =>
+                            new Date(b.created_at).getTime() -
+                            new Date(a.created_at).getTime(),
+                    )
+                    .slice(0, PROJECT_CARD_POTENTIAL_SOURCE_TASK_LIMIT);
+
+                if (sourceTasks.length === 0) {
+                    setProjectPotentialVulnerabilityMap((previous) => ({
+                        ...previous,
+                        [projectId]: { status: "empty", items: [] },
+                    }));
+                    return;
+                }
+
+                const findingsResult = await Promise.allSettled(
+                    sourceTasks.map((task) =>
+                        getOpengrepScanFindings({
+                            taskId: task.id,
+                            limit: PROJECT_CARD_POTENTIAL_FINDINGS_FETCH_LIMIT,
+                        }),
+                    ),
+                );
+
+                const findings: OpengrepFinding[] = findingsResult.flatMap(
+                    (result, index) => {
+                        if (
+                            result.status !== "fulfilled" ||
+                            !Array.isArray(result.value)
+                        ) {
+                            return [];
+                        }
+                        const fallbackTaskId = sourceTasks[index]!.id;
+                        return result.value.map((finding) => ({
+                            ...finding,
+                            scan_task_id: finding.scan_task_id || fallbackTaskId,
+                        }));
+                    },
+                );
+
+                const topVulnerabilities = getProjectCardPotentialVulnerabilities({
+                    findings,
+                    limit: PROJECT_CARD_POTENTIAL_TOP_LIMIT,
+                });
+
+                setProjectPotentialVulnerabilityMap((previous) => ({
+                    ...previous,
+                    [projectId]:
+                        topVulnerabilities.length > 0
+                            ? { status: "ready", items: topVulnerabilities }
+                            : { status: "empty", items: [] },
+                }));
+            } catch {
+                setProjectPotentialVulnerabilityMap((previous) => ({
+                    ...previous,
+                    [projectId]: { status: "failed", items: [] },
+                }));
+            } finally {
+                delete potentialVulnerabilityLoadingRef.current[projectId];
+            }
+        },
+        [opengrepTaskPool],
+    );
+
     const fetchAgentTaskPool = useCallback(async (): Promise<AgentTask[]> => {
         const taskPool: AgentTask[] = [];
         let skip = 0;
@@ -383,11 +472,13 @@ export default function Projects() {
             const projectData = await api.getProjects();
             setProjects(Array.isArray(projectData) ? projectData : []);
             setProjectLanguageStatsMap({});
+            setProjectPotentialVulnerabilityMap({});
             for (const timer of Object.values(languageStatsPollTimerRef.current)) {
                 window.clearTimeout(timer);
             }
             languageStatsPollTimerRef.current = {};
             languageStatsRetryCountRef.current = {};
+            potentialVulnerabilityLoadingRef.current = {};
 
             // 任务池属于增强信息，不应阻断项目浏览主列表渲染
             const [auditResult, agentResult, opengrepResult, gitleaksResult] =
@@ -430,6 +521,7 @@ export default function Projects() {
             setAgentTaskPool([]);
             setOpengrepTaskPool([]);
             setGitleaksTaskPool([]);
+            setProjectPotentialVulnerabilityMap({});
         } finally {
             setLoading(false);
         }
@@ -759,11 +851,44 @@ export default function Projects() {
     }, [pagedProjects, projectLanguageStatsMap, fetchProjectLanguageStats]);
 
     useEffect(() => {
+        const visibleProjectIds = pagedProjects.map((project) => project.id);
+        if (visibleProjectIds.length === 0) {
+            return;
+        }
+
+        const pendingFetchIds = visibleProjectIds.filter((projectId) => {
+            const current = projectPotentialVulnerabilityMap[projectId];
+            return !current;
+        });
+
+        if (pendingFetchIds.length > 0) {
+            setProjectPotentialVulnerabilityMap((previous) => {
+                const next = { ...previous };
+                for (const projectId of pendingFetchIds) {
+                    if (!next[projectId]) {
+                        next[projectId] = { status: "loading", items: [] };
+                    }
+                }
+                return next;
+            });
+
+            for (const projectId of pendingFetchIds) {
+                void fetchProjectPotentialVulnerabilities(projectId);
+            }
+        }
+    }, [
+        pagedProjects,
+        projectPotentialVulnerabilityMap,
+        fetchProjectPotentialVulnerabilities,
+    ]);
+
+    useEffect(() => {
         return () => {
             for (const timer of Object.values(languageStatsPollTimerRef.current)) {
                 window.clearTimeout(timer);
             }
             languageStatsPollTimerRef.current = {};
+            potentialVulnerabilityLoadingRef.current = {};
         };
     }, []);
 
@@ -880,6 +1005,40 @@ export default function Projects() {
             default:
                 return status || "未知";
         }
+    };
+
+    const formatRecentTaskMetricValue = (value: number | null) => {
+        if (value === null || !Number.isFinite(value)) return "--";
+        return value.toLocaleString();
+    };
+
+    const getVulnerabilitySeverityBadgeClassName = (
+        severity: ProjectCardPotentialVulnerability["severity"],
+    ) => {
+        if (severity === "CRITICAL") return "cyber-badge-danger";
+        if (severity === "HIGH") return "cyber-badge-warning";
+        if (severity === "MEDIUM") return "cyber-badge-info";
+        if (severity === "LOW") return "cyber-badge-muted";
+        return "cyber-badge-muted";
+    };
+
+    const getVulnerabilitySeverityText = (
+        severity: ProjectCardPotentialVulnerability["severity"],
+    ) => {
+        if (severity === "CRITICAL") return "严重";
+        if (severity === "HIGH") return "高危";
+        if (severity === "MEDIUM") return "中危";
+        if (severity === "LOW") return "低危";
+        return "未知";
+    };
+
+    const getVulnerabilityConfidenceText = (
+        confidence: ProjectCardPotentialVulnerability["confidence"],
+    ) => {
+        if (confidence === "HIGH") return "高";
+        if (confidence === "MEDIUM") return "中";
+        if (confidence === "LOW") return "低";
+        return "未知";
     };
 
     const handleCreateTask = (projectId: string) => {
@@ -1483,6 +1642,8 @@ export default function Projects() {
                                     const languageStats = projectLanguageStatsMap[project.id];
                                     const recentTasks = projectRecentTasksMap.get(project.id) || [];
                                     const programmingLanguages = projectLanguagesMap.get(project.id) || [];
+                                    const potentialVulnerabilityState =
+                                        projectPotentialVulnerabilityMap[project.id];
                                     const summaryStats = projectSummaryStatsMap.get(project.id) || {
                                         totalTasks: 0,
                                         completedTasks: 0,
@@ -1523,13 +1684,6 @@ export default function Projects() {
                                     <span className="text-xs text-muted-foreground">
                                         创建时间：{formatCreatedAt(project.created_at)}
                                     </span>
-                                    <Link
-                                        to={`/projects/${project.id}`}
-                                        state={{ from: projectDetailFrom }}
-                                        className="text-xs text-primary inline-flex items-center gap-1"
-                                    >
-                                        查看详情 <ArrowUpRight className="w-3 h-3" />
-                                    </Link>
                                     <div className="ml-auto flex items-center gap-2">
                                         <Button
                                             size="sm"
@@ -1594,8 +1748,8 @@ export default function Projects() {
                                         )}
                                     </div>
 
-                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                                        <div className="rounded-lg border border-border bg-muted/40 p-3">
+                                    <div className="grid grid-cols-1 xl:grid-cols-10 gap-3">
+                                        <div className="rounded-lg border border-border bg-muted/40 p-3 xl:col-span-3">
                                             <div className="flex items-center justify-between gap-2 mb-2">
                                                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
                                                     语言统计
@@ -1621,8 +1775,8 @@ export default function Projects() {
                                                     语言统计加载失败
                                                 </p>
                                             ) : languageStats?.status === "ready" ? (
-                                                <div className="grid grid-cols-[120px,1fr] gap-3 items-center">
-                                                    <div className="h-[120px]">
+                                                <div className="space-y-3">
+                                                    <div className="h-[170px]">
                                                         <ResponsiveContainer width="100%" height="100%">
                                                             <PieChart>
                                                                 <Pie
@@ -1631,8 +1785,8 @@ export default function Projects() {
                                                                     nameKey="name"
                                                                     cx="50%"
                                                                     cy="50%"
-                                                                    outerRadius={52}
-                                                                    innerRadius={22}
+                                                                    outerRadius={68}
+                                                                    innerRadius={26}
                                                                     stroke="none"
                                                                 >
                                                                     {languageStats.slices.map((slice, index) => (
@@ -1658,8 +1812,8 @@ export default function Projects() {
                                                             </PieChart>
                                                         </ResponsiveContainer>
                                                     </div>
-                                                    <div className="space-y-1">
-                                                        {languageStats.slices.slice(0, 3).map((slice, index) => (
+                                                    <div className="space-y-1.5 pt-2 border-t border-border/60">
+                                                        {languageStats.slices.slice(0, 5).map((slice, index) => (
                                                             <div
                                                                 key={`${project.id}-lang-item-${slice.name}`}
                                                                 className="flex items-center justify-between text-[11px] gap-2"
@@ -1697,7 +1851,7 @@ export default function Projects() {
                                             )}
                                         </div>
 
-                                        <div className="rounded-lg border border-border bg-muted/40 p-3">
+                                        <div className="rounded-lg border border-border bg-muted/40 p-3 xl:col-span-3">
                                             <div className="flex items-center justify-between gap-2 mb-2">
                                                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
                                                     最近任务
@@ -1725,12 +1879,98 @@ export default function Projects() {
                                                             <p className="mt-1 text-[11px] text-muted-foreground">
                                                                 {formatCreatedAt(task.createdAt)}
                                                             </p>
+                                                            <div className="mt-2 grid grid-cols-3 gap-1.5">
+                                                                <div className="rounded border border-border/70 bg-muted/35 px-2 py-1.5">
+                                                                    <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                                                        <FileText className="w-3 h-3" />
+                                                                        扫描文件
+                                                                    </p>
+                                                                    <p className="mt-1 text-xs font-semibold text-foreground">
+                                                                        {formatRecentTaskMetricValue(task.scannedFiles)}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="rounded border border-border/70 bg-muted/35 px-2 py-1.5">
+                                                                    <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                                                        <Code className="w-3 h-3" />
+                                                                        扫描代码行
+                                                                    </p>
+                                                                    <p className="mt-1 text-xs font-semibold text-foreground">
+                                                                        {formatRecentTaskMetricValue(task.scannedLines)}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="rounded border border-border/70 bg-muted/35 px-2 py-1.5">
+                                                                    <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                                                        <AlertCircle className="w-3 h-3" />
+                                                                        发现漏洞
+                                                                    </p>
+                                                                    <p className="mt-1 text-xs font-semibold text-amber-300">
+                                                                        {formatRecentTaskMetricValue(task.vulnerabilities)}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
                                                         </Link>
                                                     ))}
                                                 </div>
                                             ) : (
                                                 <p className="text-xs text-muted-foreground">
                                                     暂无任务记录
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="rounded-lg border border-border bg-muted/40 p-3 xl:col-span-4">
+                                            <div className="flex items-center justify-between gap-2 mb-2">
+                                                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                                                    潜在漏洞
+                                                </p>
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    Top 5
+                                                </span>
+                                            </div>
+                                            {potentialVulnerabilityState?.status === "loading" ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    潜在漏洞分析中...
+                                                </p>
+                                            ) : potentialVulnerabilityState?.status === "failed" ? (
+                                                <p className="text-xs text-rose-400">
+                                                    潜在漏洞加载失败
+                                                </p>
+                                            ) : potentialVulnerabilityState?.status === "ready" &&
+                                              potentialVulnerabilityState.items.length > 0 ? (
+                                                <div className="space-y-2">
+                                                    {potentialVulnerabilityState.items.map((item) => (
+                                                        <Link
+                                                            key={`${project.id}-vuln-${item.id}`}
+                                                            to={item.route}
+                                                            className="block rounded border border-border bg-background/80 px-2.5 py-2 hover:border-primary/40 transition-colors"
+                                                        >
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <p className="text-sm text-foreground font-semibold truncate">
+                                                                    {item.title}
+                                                                </p>
+                                                                <Badge
+                                                                    className={getVulnerabilitySeverityBadgeClassName(
+                                                                        item.severity,
+                                                                    )}
+                                                                >
+                                                                    {getVulnerabilitySeverityText(item.severity)}
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                                                                <p className="text-muted-foreground truncate">
+                                                                    {item.filePath}
+                                                                    {item.line ? `:${item.line}` : ""}
+                                                                </p>
+                                                                <span className="text-foreground/80 shrink-0">
+                                                                    置信度 {getVulnerabilityConfidenceText(item.confidence)}
+                                                                </span>
+                                                            </div>
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-muted-foreground">
+                                                    暂无潜在漏洞
                                                 </p>
                                             )}
                                         </div>
