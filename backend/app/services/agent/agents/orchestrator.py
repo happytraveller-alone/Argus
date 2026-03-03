@@ -1,18 +1,19 @@
 """
-Orchestrator Agent (编排层) - Deterministic TODO 模式
+Orchestrator Agent (编排层) - LLM 驱动 ReAct 模式
 
 策略：
-- 固定 TODO List（中粒度 8-12 项），默认 done=false
-- 按固定顺序调度 subagent（recon/analysis/verification），由 Orchestrator 用确定性规则验收并更新 done
-- 每项最多重试 max_attempts，超过后按降级完成继续推进（blocked_reason=degraded_after_retries）
+- LLM 每轮输出 Thought/Action/Action Input
+- Orchestrator 执行动作并回填 Observation
+- 根据中间结果动态推进，直到 finish
 
-注：此模式下 Orchestrator 不再依赖 LLM 进行每轮决策；LLM 只可能出现在子 Agent 内部。
+注：子 Agent 仍负责具体审计执行，Orchestrator 负责全局编排与收敛。
 """
 
 import asyncio
 import json
 import logging
 import os
+import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -34,9 +35,9 @@ ORCHESTRATOR_SYSTEM_PROMPT = """你是安全审计编排 Agent，负责**自主*
 4. 判断何时审计完成
 
 ## 你可以调度的子 Agent
-1. **recon**: 信息收集 Agent - 分析项目结构、技术栈、入口点
-2. **analysis**: 分析 Agent - 深度代码审计、漏洞检测
-3. **verification**: 验证 Agent - 验证发现的漏洞、生成 PoC
+1. **recon**: 信息收集 Agent - 分析项目结构、技术栈、入口点。**  
+2. **analysis**: 分析 Agent - 深度代码审计、漏洞检测。**  
+3. **verification**: 验证 Agent - 验证发现的漏洞、生成 PoC。
 
 ## 🔥 全局漏洞队列机制（逐个验证模式）
 
@@ -140,22 +141,16 @@ Action Input: {...}
 ```
 
 **🔥 关键要点**：
-- `dequeue_finding` 返回的 `finding` 对象可以**直接传递**给 `dispatch_agent` 的 `finding` 参数
-- **不需要**手动转换为 JSON 字符串或放在 context 中
-- `dispatch_agent` 的 `finding` 参数是可选的，仅在验证单个队列漏洞时使用
-- Verification Agent 会自动识别并优先处理这个单独的漏洞
+- `dequeue_finding` 返回的 `finding` 对象需要**转换为 JSON 字符串**后放入 `context` 字段，以便 verification Agent 解析。
+- `task` 字段只需提供简洁的人类可读描述，详细数据由 `context` 承载。
+- Verification Agent 应能解析 `context` 中的 JSON 字符串，获取漏洞信息进行验证。
 
 ## 你可以使用的操作
 
 ### 1. 调度子 Agent
 ```
 Action: dispatch_agent
-Action Input: {
-  "agent": "recon|analysis|verification",
-  "task": "具体任务描述",
-  "context": "任务上下文（可选）",
-  "finding": {"..."}  // 可选，仅用于验证单个队列漏洞
-}
+Action Input: {"agent": "recon|analysis|verification", "task": "具体任务描述", "context": "任务上下文"}
 ```
 
 ### 2. 汇总发现
@@ -176,9 +171,10 @@ Action Input: {"conclusion": "审计结论", "findings": [...], "recommendations
 1. **Thought**: 分析当前状态，思考下一步应该做什么
    - 目前收集到了什么信息？
    - 还需要了解什么？
+   - **【recon 返回的风险点列表中有多少条目？是否需要逐个分析？】**  
    - 应该深入分析哪些地方？
    - 有什么发现需要验证？
-   - **队列中有多少待验证漏洞？**
+   - 队列中有多少待验证漏洞？
 
 2. **Action**: 选择一个操作
 3. **Action Input**: 提供操作参数
@@ -193,11 +189,12 @@ Action Input: [JSON 参数]
 ```
 
 ## 审计策略建议
-- 先用 recon Agent 了解项目全貌（只需调度一次）
-- 根据 recon 结果，让 analysis Agent 重点审计高风险区域
-- **Analysis 完成后，检查队列状态（get_queue_status）**
-- **如队列非空，循环：dequeue_finding -> dispatch verification，直到队列为空**
-- 当你认为审计足够全面时，选择 finish
+- 先用 recon Agent 了解项目全貌（只需调度一次），**重点关注返回的 `high_risk_areas` 数组。**
+- **解析 recon 结果：** 提取风险点对象列表（每个对象包含 `file_path`、`line_start`、`description`）。  
+- **【逐个分析风险点：** 遍历列表中的每个风险点，依次调度 analysis Agent，每次将单个风险点对象（JSON 字符串）放入 `context`，任务描述为“分析指定风险点：[风险点信息]”。**】**  
+- analysis Agent 会按照提供的风险点进行深度审计，并将发现的漏洞自动推送到队列。  
+- 所有风险点分析完毕后，进入队列验证阶段：检查队列状态（`get_queue_status`），如果队列非空，循环执行 `dequeue_finding` -> `dispatch_agent`(verification) 将 finding 转为 JSON 放入 context，直到队列为空。  
+- 当你认为审计足够全面时，选择 finish.
 
 ## 编排门禁（强约束）
 1. 默认顺序是 Recon -> Analysis -> Verification，除非已有明确证据可跳过。
@@ -240,38 +237,13 @@ class AgentStep:
     sub_agent_result: Optional[AgentResult] = None
 
 
-@dataclass
-class TodoItem:
-    id: str
-    title: str
-    agent: str  # recon|analysis|verification|orchestrator|system
-    task: str
-    context: str = ""
-    done: bool = False
-    attempts: int = 0
-    max_attempts: int = 2
-    blocked_reason: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "title": self.title,
-            "agent": self.agent,
-            "task": self.task,
-            "context": self.context,
-            "done": bool(self.done),
-            "attempts": int(self.attempts),
-            "max_attempts": int(self.max_attempts),
-            "blocked_reason": self.blocked_reason,
-        }
-
-
 class OrchestratorAgent(BaseAgent):
     """
-    编排 Agent - Deterministic TODO 模式
+    编排 Agent - LLM 驱动 ReAct 模式
 
-    - 不做 per-iteration 的 LLM 决策循环
-    - 只负责：调度、验收、状态更新、汇总
+    - LLM 在每轮中输出 Thought/Action/Action Input
+    - Orchestrator 执行动作并反馈 Observation
+    - 持续迭代直到 LLM 输出 finish
     """
     
     def __init__(
@@ -314,6 +286,7 @@ class OrchestratorAgent(BaseAgent):
         # 🔥 保存各个 Agent 返回的 TaskHandoff，用于 Agent 间通信
         self._agent_handoffs: Dict[str, TaskHandoff] = {}  # agent_name -> TaskHandoff
         self._phase_planning_applied: Dict[str, bool] = {}
+        self._verified_queue_fingerprints: set[str] = set()
     
     def register_sub_agent(self, name: str, agent: BaseAgent):
         """注册子 Agent"""
@@ -343,6 +316,21 @@ class OrchestratorAgent(BaseAgent):
             seen.add(key)
             out.append(item)
         return out
+
+    @staticmethod
+    def _build_queue_fingerprint(finding: Optional[Dict[str, Any]]) -> Optional[str]:
+        if not isinstance(finding, dict):
+            return None
+        file_path = str(finding.get("file_path") or "").strip().lower()
+        vulnerability_type = str(finding.get("vulnerability_type") or "").strip().lower()
+        title = str(finding.get("title") or "").strip().lower()
+        try:
+            line_start = int(finding.get("line_start") or finding.get("line") or 0)
+        except Exception:
+            line_start = 0
+        if not file_path and line_start <= 0 and not title:
+            return None
+        return f"{file_path}|{line_start}|{vulnerability_type}|{title}"
 
     def _infer_verification_dispatch_reason(
         self,
@@ -484,7 +472,7 @@ class OrchestratorAgent(BaseAgent):
     
     async def run(self, input_data: Dict[str, Any]) -> AgentResult:
         """
-        执行编排任务 - Deterministic TODO 模式
+        执行编排任务 - LLM ReAct 编排
         
         Args:
             input_data: {
@@ -496,12 +484,10 @@ class OrchestratorAgent(BaseAgent):
         """
         import time
         start_time = time.time()
-
         project_info = input_data.get("project_info", {}) if isinstance(input_data, dict) else {}
         config = input_data.get("config", {}) if isinstance(input_data, dict) else {}
-        persist_findings = input_data.get("persist_findings") if isinstance(input_data, dict) else None
 
-        # 🔥 保存运行时上下文，用于传递给子 Agent
+        # 保存运行时上下文，用于传递给子 Agent
         self._runtime_context = {
             "project_info": project_info,
             "config": config,
@@ -509,376 +495,396 @@ class OrchestratorAgent(BaseAgent):
             "task_id": input_data.get("task_id"),
         }
 
-        # Reset runtime state
+        # 初始化状态
         self._steps = []
         self._all_findings = []
         self._agent_results = {}
         self._agent_handoffs = {}
         self._phase_planning_applied = {}
+        self._verified_queue_fingerprints = set()
         self._iteration = 0
         self._total_tokens = 0
         self._tool_calls = 0
 
-        analysis_agent = self.sub_agents.get("analysis")
-        analysis_tool_names: List[str] = []
-        if analysis_agent is not None and isinstance(getattr(analysis_agent, "tools", None), dict):
-            analysis_tool_names = sorted(str(name) for name in analysis_agent.tools.keys())
-        analysis_tool_hint = ", ".join(analysis_tool_names) if analysis_tool_names else "read_file, search_code"
-        analysis_task_text = (
-            "使用可用工具（"
-            f"{analysis_tool_hint}"
-            "）+ read_file 证据，产出结构化候选 findings（必须含 file_path/line_start/confidence）。"
-        )
-
-        todo_list: List[TodoItem] = [
-            TodoItem(
-                id="recon_1",
-                title="Recon-1：项目结构/语言/入口点/高风险区域",
-                agent="recon",
-                task="分析项目结构、技术栈、主要入口点与高风险区域（必须带 file_path:line）。",
-            ),
-            TodoItem(
-                id="recon_2",
-                title="Recon-2：输入面/信任边界/关键解析点",
-                agent="recon",
-                task="识别输入面、信任边界与关键解析点（文件解析、反序列化、命令行、环境变量等），输出可操作审计线索。",
-            ),
-            TodoItem(
-                id="analysis_1",
-                title="Analysis-1：快速扫描产出候选 findings",
-                agent="analysis",
-                task=analysis_task_text,
-            ),
-            TodoItem(
-                id="analysis_2",
-                title="Analysis-2：深挖 Top 风险区域并补齐证据",
-                agent="analysis",
-                task=(
-                    "围绕高风险区域/候选种子深挖，按“候选收敛 -> 流证据补齐 -> 真实性结论 -> 报告落地”输出结果。"
-                    "高危候选至少补齐一条 flow 证据（dataflow_analysis 或 controlflow_analysis_light）。"
-                ),
-            ),
-            TodoItem(
-                id="verification_1",
-                title="Verification-1：全量验证候选 findings 并回填结论",
-                agent="verification",
-                task=(
-                    "验证全部候选 findings，逐条回填真实性/可达性/修复建议/PoC 思路（不输出可直接利用 payload）。"
-                    "高危候选必须包含 flow 证据字段（verification_result.flow 或 function_trigger_flow）。"
-                ),
-                max_attempts=3,
-            ),
-            TodoItem(
-                id="orchestrator_merge",
-                title="Orchestrator-1：合并并去重 findings",
-                agent="orchestrator",
-                task="合并 recon/analysis/verification 结果并按 (file_path,line_start,vulnerability_type) 去重。",
-                max_attempts=1,
-            ),
-            TodoItem(
-                id="orchestrator_normalize",
-                title="Orchestrator-2：规范化字段并准备入库",
-                agent="orchestrator",
-                task="对 findings 做字段补齐与规范化（severity/type/confidence/location/snippets）。",
-                max_attempts=1,
-            ),
-            TodoItem(
-                id="persist_findings",
-                title="System：持久化入库",
-                agent="system",
-                task="调用持久化回调保存 findings（best-effort；失败则降级继续）。",
-                max_attempts=2,
-            ),
-            TodoItem(
-                id="finalize",
-                title="Orchestrator-3：生成最终汇总",
-                agent="orchestrator",
-                task="生成最终汇总（统计、过滤原因、TODO 完成表）。",
-                max_attempts=1,
-            ),
+        # 构建初始消息与对话历史
+        initial_message = self._build_initial_message(project_info, config)
+        self._conversation_history = [
+            {"role": "system", "content": self.config.system_prompt},
+            {"role": "user", "content": initial_message},
         ]
 
-        async def emit_todo_update(message: str) -> None:
-            lines = []
-            for item in todo_list:
-                check = "x" if item.done else " "
-                suffix = f" (degraded:{item.blocked_reason})" if item.blocked_reason else ""
-                lines.append(f"- [{check}] {item.title}{suffix}")
-            await self.emit_event(
-                "todo_update",
-                message,
-                metadata={"todo_list": [t.to_dict() for t in todo_list], "render": "\n".join(lines)},
-            )
+        final_result = None
+        error_message = None
+        last_dequeued_finding: Optional[Dict[str, Any]] = None
+        last_dequeued_fingerprint: Optional[str] = None
 
-        def validate_recon_done() -> bool:
-            data = self._agent_results.get("recon")
-            if not isinstance(data, dict):
-                return False
-            tech_stack = data.get("tech_stack")
-            high_risk = data.get("high_risk_areas")
-            if isinstance(tech_stack, dict):
-                langs = tech_stack.get("languages")
-                if isinstance(langs, list) and langs:
-                    return True
-            return isinstance(high_risk, list) and len(high_risk) > 0
-
-        def validate_analysis_done() -> bool:
-            data = self._agent_results.get("analysis")
-            if not isinstance(data, dict):
-                return False
-            findings = data.get("findings")
-            if not isinstance(findings, list) or not findings:
-                return False
-            for f in findings:
-                if not isinstance(f, dict):
-                    continue
-                fp = f.get("file_path")
-                ln = f.get("line_start")
-                conf = f.get("confidence")
-                if isinstance(fp, str) and fp.strip() and isinstance(ln, int) and ln > 0:
-                    try:
-                        float(conf)
-                    except Exception:
-                        continue
-                    return True
-            return False
-
-        def validate_verification_done() -> tuple[bool, Optional[str]]:
-            data = self._agent_results.get("verification")
-            if not isinstance(data, dict):
-                return False, None
-            findings = data.get("findings")
-            if not isinstance(findings, list):
-                return False, None
-
-            candidate_count = data.get("candidate_count")
-            try:
-                candidate_count_int = int(candidate_count) if candidate_count is not None else None
-            except Exception:
-                candidate_count_int = None
-
-            if candidate_count_int is None:
-                # Fallback for legacy payloads: use findings length as lower bound.
-                candidate_count_int = len(findings)
-
-            if candidate_count_int == 0:
-                return True, "no_candidates"
-
-            if len(findings) != candidate_count_int:
-                return False, f"verification_incomplete:{len(findings)}/{candidate_count_int}"
-
-            for item in findings:
-                if not isinstance(item, dict):
-                    return False, "verification_invalid_item"
-                verdict = item.get("verdict") or item.get("authenticity")
-                if str(verdict or "").strip().lower() not in {"confirmed", "likely", "false_positive"}:
-                    return False, "verification_missing_verdict"
-                verification_payload = item.get("verification_result")
-                if not isinstance(verification_payload, dict):
-                    return False, "verification_missing_contract:verification_result"
-                authenticity = verification_payload.get("authenticity") or verification_payload.get("verdict")
-                if str(authenticity or "").strip().lower() not in {"confirmed", "likely", "false_positive"}:
-                    return False, "verification_missing_contract:authenticity"
-                reachability = verification_payload.get("reachability")
-                if str(reachability or "").strip().lower() not in {"reachable", "likely_reachable", "unreachable"}:
-                    return False, "verification_missing_contract:reachability"
-                evidence = (
-                    verification_payload.get("evidence")
-                    or verification_payload.get("verification_details")
-                    or verification_payload.get("verification_evidence")
-                )
-                if not isinstance(evidence, str) or not evidence.strip():
-                    return False, "verification_missing_contract:evidence"
-                severity_text = str(item.get("severity") or "").strip().lower()
-                if severity_text in {"critical", "high"}:
-                    flow_payload = verification_payload.get("flow")
-                    function_flow = verification_payload.get("function_trigger_flow")
-                    has_flow_payload = isinstance(flow_payload, dict)
-                    has_path_flag = bool(has_flow_payload and flow_payload.get("path_found"))
-                    has_chain = bool(
-                        isinstance(flow_payload, dict)
-                        and isinstance(flow_payload.get("call_chain"), list)
-                        and flow_payload.get("call_chain")
-                    )
-                    has_score = False
-                    if has_flow_payload and flow_payload.get("path_score") is not None:
-                        try:
-                            has_score = float(flow_payload.get("path_score")) >= 0.2
-                        except Exception:
-                            has_score = False
-                    has_function_flow = bool(isinstance(function_flow, list) and function_flow)
-                    if not (has_path_flag or has_chain or has_score or has_function_flow):
-                        return False, "verification_missing_contract:flow_evidence"
-            return True, None
-
-        await self.emit_thinking("🧠 Orchestrator（TODO 模式）启动：按固定清单顺序调度子 Agent 并验收结果。")
-        await emit_todo_update("📋 初始化 TODO List")
+        await self.emit_thinking("🧠 Orchestrator Agent 启动，LLM 开始自主编排决策...")
 
         try:
-            for item in todo_list:
+            for iteration in range(self.config.max_iterations):
                 if self.is_cancelled:
                     break
 
-                while not item.done and item.attempts < item.max_attempts:
-                    if self.is_cancelled:
+                self._iteration = iteration + 1
+
+                if self.is_cancelled:
+                    await self.emit_thinking("🛑 任务已取消，停止执行")
+                    break
+
+                try:
+                    llm_output, tokens_this_round = await self.stream_llm_call(
+                        self._conversation_history,
+                    )
+                except asyncio.CancelledError:
+                    logger.info("[%s] LLM call cancelled", self.name)
+                    break
+
+                self._total_tokens += tokens_this_round
+
+                if not llm_output or not llm_output.strip():
+                    logger.warning("[%s] Empty LLM response", self.name)
+                    empty_retry_count = getattr(self, "_empty_retry_count", 0) + 1
+                    self._empty_retry_count = empty_retry_count
+                    if empty_retry_count >= 5:
+                        logger.error("[%s] Too many empty responses, stopping", self.name)
+                        error_message = "连续收到空响应，停止编排"
+                        await self.emit_event("error", error_message)
                         break
-                    item.attempts += 1
-                    await emit_todo_update(f"▶️ 开始执行：{item.title} (attempt {item.attempts}/{item.max_attempts})")
 
-                    if item.agent in {"recon", "analysis", "verification"}:
-                        dispatch_observation = await self._dispatch_agent(
-                            {"agent": item.agent, "task": item.task, "context": item.context}
+                    await asyncio.sleep(1.0)
+                    retry_prompt = f"""收到空响应（第 {empty_retry_count} 次）。请严格按照以下格式输出你的决策：
+
+Thought: [你对当前审计状态的思考]
+Action: [dispatch_agent|get_queue_status|dequeue_finding|summarize|finish]
+Action Input: {{"参数": "值"}}
+
+当前可调度的子 Agent: {list(self.sub_agents.keys())}
+当前已收集发现: {len(self._all_findings)} 个
+
+请立即输出你的下一步决策。"""
+
+                    self._conversation_history.append({
+                        "role": "user",
+                        "content": retry_prompt,
+                    })
+                    continue
+
+                self._empty_retry_count = 0
+
+                if llm_output.startswith("[API_ERROR:"):
+                    match = re.match(r"\[API_ERROR:(\w+)\]\s*(.*)", llm_output)
+                    if match:
+                        error_type = match.group(1)
+                        api_error_message = match.group(2)
+
+                        if error_type == "rate_limit":
+                            api_retry_count = getattr(self, "_api_retry_count", 0) + 1
+                            self._api_retry_count = api_retry_count
+                            if api_retry_count >= 3:
+                                logger.error("[%s] Too many rate limit errors, stopping", self.name)
+                                await self.emit_event("error", f"API 速率限制重试次数过多: {api_error_message}")
+                                break
+                            logger.warning("[%s] Rate limit hit, waiting before retry (%s/3)", self.name, api_retry_count)
+                            await self.emit_event("warning", f"API 速率限制，等待后重试 ({api_retry_count}/3)")
+                            await asyncio.sleep(30)
+                            continue
+
+                        if error_type == "quota_exceeded":
+                            logger.error("[%s] API quota exceeded: %s", self.name, api_error_message)
+                            await self.emit_event("error", f"API 配额已用尽: {api_error_message}")
+                            break
+
+                        if error_type == "authentication":
+                            logger.error("[%s] API authentication error: %s", self.name, api_error_message)
+                            await self.emit_event("error", f"API 认证失败: {api_error_message}")
+                            break
+
+                        if error_type == "connection":
+                            api_retry_count = getattr(self, "_api_retry_count", 0) + 1
+                            self._api_retry_count = api_retry_count
+                            if api_retry_count >= 3:
+                                logger.error("[%s] Too many connection errors, stopping", self.name)
+                                await self.emit_event("error", f"API 连接错误重试次数过多: {api_error_message}")
+                                break
+                            logger.warning("[%s] Connection error, retrying (%s/3)", self.name, api_retry_count)
+                            await self.emit_event("warning", f"API 连接错误，重试中 ({api_retry_count}/3)")
+                            await asyncio.sleep(5)
+                            continue
+
+                self._api_retry_count = 0
+
+                step = self._parse_llm_response(llm_output)
+                if not step:
+                    format_retry_count = getattr(self, "_format_retry_count", 0) + 1
+                    self._format_retry_count = format_retry_count
+                    if format_retry_count >= 3:
+                        logger.error("[%s] Too many format errors, stopping", self.name)
+                        error_message = "连续格式错误，停止编排"
+                        await self.emit_event("error", error_message)
+                        break
+                    await self.emit_llm_decision("格式错误", "需要重新输出")
+                    self._conversation_history.append({"role": "assistant", "content": llm_output})
+                    self._conversation_history.append({
+                        "role": "user",
+                        "content": "请按照规定格式输出：Thought + Action + Action Input",
+                    })
+                    continue
+
+                self._format_retry_count = 0
+                self._steps.append(step)
+
+                if step.thought:
+                    await self.emit_llm_thought(step.thought, iteration + 1)
+
+                self._conversation_history.append({"role": "assistant", "content": llm_output})
+
+                action_input = step.action_input if isinstance(step.action_input, dict) else {}
+
+                if step.action == "finish":
+                    await self.emit_llm_decision("完成审计", "LLM 判断审计已充分完成")
+                    await self.emit_llm_complete(
+                        f"编排完成，发现 {len(self._all_findings)} 个漏洞",
+                        self._total_tokens,
+                    )
+                    final_result = action_input
+                    break
+
+                if step.action == "dispatch_agent":
+                    agent_name = action_input.get("agent", "unknown")
+                    task_desc = action_input.get("task", "")
+
+                    if (
+                        str(agent_name).lower() == "verification"
+                        and isinstance(last_dequeued_finding, dict)
+                        and not isinstance(action_input.get("finding"), dict)
+                    ):
+                        action_input["finding"] = last_dequeued_finding
+                        if not action_input.get("context"):
+                            action_input["context"] = json.dumps(last_dequeued_finding, ensure_ascii=False)
+
+                    verification_finding = (
+                        action_input.get("finding")
+                        if isinstance(action_input.get("finding"), dict)
+                        else None
+                    )
+                    verification_fingerprint = self._build_queue_fingerprint(verification_finding)
+                    if (
+                        str(agent_name).lower() == "verification"
+                        and verification_fingerprint
+                        and verification_fingerprint in self._verified_queue_fingerprints
+                    ):
+                        observation = (
+                            "## Verification 跳过\n\n"
+                            "该 finding 已在当前任务中完成验证，已按幂等策略跳过重复调度，"
+                            "继续处理队列下一项。"
                         )
-                        if item.agent == "recon":
-                            if validate_recon_done():
-                                item.done = True
-                        elif item.agent == "analysis":
-                            analysis_payload = self._agent_results.get("analysis")
-                            if isinstance(analysis_payload, dict):
-                                degraded_reason = analysis_payload.get("degraded_reason")
-                                if isinstance(degraded_reason, str) and degraded_reason.strip():
-                                    item.blocked_reason = degraded_reason.strip()
-                            if validate_analysis_done():
-                                item.done = True
-                        elif item.agent == "verification":
-                            verification_payload = (
-                                self._agent_results.get("verification")
-                                if isinstance(self._agent_results.get("verification"), dict)
-                                else {}
-                            )
-                            dispatch_reason = self._infer_verification_dispatch_reason(
-                                dispatch_observation,
-                                verification_payload,
-                            )
-                            ok, reason = validate_verification_done()
-                            if ok:
-                                item.done = True
-                                item.blocked_reason = reason if reason else None
-                            elif reason:
-                                item.blocked_reason = reason
-                            elif dispatch_reason:
-                                item.blocked_reason = dispatch_reason
+                        step.observation = observation
+                        await self.emit_llm_decision("跳过重复验证", "队列项命中已验证指纹")
+                        await self.emit_llm_observation(observation)
+                        self._conversation_history.append({
+                            "role": "user",
+                            "content": f"Observation:\n{step.observation}",
+                        })
+                        continue
 
-                    elif item.agent == "orchestrator":
-                        if item.id == "orchestrator_merge":
-                            verification_payload = self._agent_results.get("verification")
-                            verification_findings = (
-                                verification_payload.get("findings")
-                                if isinstance(verification_payload, dict)
-                                else []
-                            )
-                            normalized_verified: List[Dict[str, Any]] = []
-                            if isinstance(verification_findings, list):
-                                for finding in verification_findings:
-                                    if not isinstance(finding, dict):
-                                        continue
-                                    verdict = finding.get("verdict") or finding.get("authenticity")
-                                    if str(verdict or "").strip().lower() not in {
-                                        "confirmed",
-                                        "likely",
-                                        "false_positive",
-                                    }:
-                                        continue
-                                    normalized = self._normalize_finding(finding)
-                                    if isinstance(normalized, dict):
-                                        normalized_verified.append(normalized)
-                            verification_item = next(
-                                (todo for todo in todo_list if todo.id == "verification_1"),
-                                None,
-                            )
-                            verification_blocked_reason = ""
-                            if isinstance(verification_item, TodoItem):
-                                verification_blocked_reason = str(
-                                    verification_item.blocked_reason or ""
-                                ).strip()
+                    await self.emit_llm_decision(
+                        f"调度 {agent_name} Agent",
+                        f"任务: {str(task_desc)[:100]}",
+                    )
+                    await self.emit_llm_action("dispatch_agent", action_input)
+                    observation = await self._dispatch_agent(action_input)
+                    step.observation = observation
 
-                            should_degrade = (
-                                not normalized_verified
-                                and verification_blocked_reason.startswith(
-                                    "verification_failed_after_retries:"
-                                )
-                            )
-                            if should_degrade:
-                                analysis_payload = self._agent_results.get("analysis")
-                                analysis_candidates = (
-                                    analysis_payload.get("findings")
-                                    if isinstance(analysis_payload, dict)
-                                    else []
-                                )
-                                degraded_verified = self._build_degraded_verified_findings(
-                                    analysis_candidates if isinstance(analysis_candidates, list) else [],
-                                    verification_blocked_reason,
-                                )
-                                if degraded_verified:
-                                    normalized_verified.extend(degraded_verified)
-                                    logger.warning(
-                                        "[Orchestrator] verification degraded fallback applied: %s findings",
-                                        len(degraded_verified),
-                                    )
-                            self._all_findings = self._dedup_findings(normalized_verified)
-                            item.done = True
-                        elif item.id == "orchestrator_normalize":
-                            self._all_findings = [
-                                self._normalize_finding(f) for f in self._all_findings if isinstance(f, dict)
-                            ]
-                            item.done = True
-                        elif item.id == "finalize":
-                            item.done = True
-                        else:
-                            item.done = True
-                            item.blocked_reason = "unknown_orchestrator_step"
+                    if self.is_cancelled:
+                        logger.info("[%s] Cancelled after sub-agent dispatch", self.name)
+                        break
 
-                    elif item.agent == "system":
-                        if callable(persist_findings):
+                    if str(agent_name).lower() == "verification":
+                        run_ok = bool(self._agent_results.get("verification", {}).get("_run_success"))
+                        if run_ok:
+                            candidate_fp = verification_fingerprint or last_dequeued_fingerprint
+                            if candidate_fp:
+                                self._verified_queue_fingerprints.add(candidate_fp)
+
+                    await self.emit_llm_observation(observation)
+
+                    # 🔥 v2.2: 验证 Agent 完成后自动检查队列 - 队列为空则立即终止
+                    if str(agent_name).lower() == "verification":
+                        try:
+                            queue_status_result = await self.execute_tool("get_queue_status", {})
+                            queue_data = {}
                             try:
-                                await persist_findings(self._all_findings)
-                                item.done = True
-                            except Exception as exc:
-                                if item.attempts >= item.max_attempts:
-                                    item.done = True
-                                    item.blocked_reason = f"degraded_after_retries:{type(exc).__name__}"
-                        else:
-                            item.done = True
-                            item.blocked_reason = "missing_persist_callback"
+                                queue_data = json.loads(queue_status_result) if isinstance(queue_status_result, str) else queue_status_result
+                            except Exception:
+                                queue_data = {}
+                            
+                            pending_count = 0
+                            if isinstance(queue_data, dict):
+                                pending_count = queue_data.get("pending_count") or queue_data.get("queue_status", {}).get("current_size") or 0
+                            
+                            if pending_count == 0:
+                                await self.emit_event(
+                                    "info",
+                                    "🎯 验证 Agent 完成，队列为空，自动终止审计"
+                                )
+                                logger.info("[Orchestrator] Verification completed and queue is empty, auto-terminating audit")
+                                break
+                        except Exception as e:
+                            logger.warning(f"[Orchestrator] Failed to check queue after verification: {e}")
 
-                    if not item.done and item.attempts >= item.max_attempts:
-                        item.done = True
-                        if item.agent == "verification":
-                            blocked_reason = item.blocked_reason or "verification_agent_error"
-                            if not str(blocked_reason).startswith("verification_failed_after_retries:"):
-                                item.blocked_reason = f"verification_failed_after_retries:{blocked_reason}"
-                        elif not item.blocked_reason:
-                            item.blocked_reason = "degraded_after_retries"
+                elif step.action == "get_queue_status":
+                    await self.emit_llm_decision("查询队列状态", "执行 get_queue_status")
+                    await self.emit_llm_action("get_queue_status", action_input)
+                    queue_observation = await self.execute_tool("get_queue_status", action_input)
+                    observation = f"## 队列状态\n\n{queue_observation}"
+                    step.observation = observation
+                    await self.emit_llm_observation(observation)
 
-                await emit_todo_update(f"✅ 完成：{item.title}")
+                elif step.action == "dequeue_finding":
+                    await self.emit_llm_decision("取出队列漏洞", "执行 dequeue_finding")
+                    await self.emit_llm_action("dequeue_finding", action_input)
+                    dequeue_observation = await self.execute_tool("dequeue_finding", action_input)
+                    observation = f"## 队列取出结果\n\n{dequeue_observation}"
+                    step.observation = observation
+
+                    parsed_finding = None
+                    try:
+                        payload = json.loads(dequeue_observation)
+                        if isinstance(payload, dict) and isinstance(payload.get("finding"), dict):
+                            parsed_finding = payload.get("finding")
+                    except Exception:
+                        parsed_finding = None
+
+                    if isinstance(parsed_finding, dict):
+                        last_dequeued_finding = parsed_finding
+                        last_dequeued_fingerprint = self._build_queue_fingerprint(parsed_finding)
+
+                    await self.emit_llm_observation(observation)
+
+                elif step.action == "summarize":
+                    await self.emit_llm_decision("汇总发现", "LLM 请求查看当前发现汇总")
+                    observation = self._summarize_findings()
+                    step.observation = observation
+                    await self.emit_llm_observation(observation)
+
+                else:
+                    observation = (
+                        f"未知操作: {step.action}，可用操作: "
+                        "dispatch_agent, get_queue_status, dequeue_finding, summarize, finish"
+                    )
+                    step.observation = observation
+                    await self.emit_llm_decision("未知操作", observation)
+
+                self._conversation_history.append({
+                    "role": "user",
+                    "content": f"Observation:\n{step.observation}",
+                })
 
             duration_ms = int((time.time() - start_time) * 1000)
 
             if self.is_cancelled:
-                await emit_todo_update("🛑 任务已取消，停止执行")
+                await self.emit_event(
+                    "info",
+                    f"🛑 Orchestrator 已取消: {len(self._all_findings)} 个发现, {self._iteration} 轮决策",
+                )
                 return AgentResult(
                     success=False,
                     error="任务已取消",
-                    data={"findings": self._all_findings, "todo_list": [t.to_dict() for t in todo_list]},
+                    data={
+                        "findings": self._all_findings,
+                        "steps": [
+                            {
+                                "thought": s.thought,
+                                "action": s.action,
+                                "action_input": s.action_input,
+                                "observation": s.observation[:500] if s.observation else None,
+                            }
+                            for s in self._steps
+                        ],
+                    },
                     iterations=self._iteration,
                     tool_calls=self._tool_calls,
                     tokens_used=self._total_tokens,
                     duration_ms=duration_ms,
                 )
 
-            summary = {
-                "todo_total": len(todo_list),
-                "todo_done": sum(1 for t in todo_list if t.done),
-                "findings_collected": len(self._all_findings),
-            }
-            await emit_todo_update("🎯 TODO List 全部执行完成")
+            if error_message:
+                await self.emit_event("error", f"❌ Orchestrator 失败: {error_message}")
+                return AgentResult(
+                    success=False,
+                    error=error_message,
+                    data={
+                        "findings": self._all_findings,
+                        "steps": [
+                            {
+                                "thought": s.thought,
+                                "action": s.action,
+                                "action_input": s.action_input,
+                                "observation": s.observation[:500] if s.observation else None,
+                            }
+                            for s in self._steps
+                        ],
+                    },
+                    iterations=self._iteration,
+                    tool_calls=self._tool_calls,
+                    tokens_used=self._total_tokens,
+                    duration_ms=duration_ms,
+                )
+
+            verification_payload = self._agent_results.get("verification")
+            has_verification_payload = isinstance(verification_payload, dict)
+            if has_verification_payload:
+                verification_findings = verification_payload.get("findings")
+                if not isinstance(verification_findings, list) or not verification_findings:
+                    analysis_payload = self._agent_results.get("analysis")
+                    analysis_candidates = (
+                        analysis_payload.get("findings")
+                        if isinstance(analysis_payload, dict)
+                        else []
+                    )
+                    degraded_verified = self._build_degraded_verified_findings(
+                        analysis_candidates if isinstance(analysis_candidates, list) else [],
+                        "verification_missing_or_empty_findings",
+                    )
+                    if degraded_verified:
+                        for finding in degraded_verified:
+                            if isinstance(finding, dict):
+                                self._all_findings.append(finding)
+                        self._all_findings = self._dedup_findings(
+                            [f for f in self._all_findings if isinstance(f, dict)]
+                        )
+                        logger.warning(
+                            "[Orchestrator] verification degraded fallback applied: %s findings",
+                            len(degraded_verified),
+                        )
+
+            await self.emit_event(
+                "info",
+                f"🎯 Orchestrator 完成: {len(self._all_findings)} 个发现, {self._iteration} 轮决策",
+            )
+
+            logger.info("[Orchestrator] Final result: %s findings collected", len(self._all_findings))
+            if len(self._all_findings) == 0:
+                logger.warning(
+                    "[Orchestrator] ⚠️ No findings collected! Dispatched agents: %s, Iterations: %s",
+                    list(self._dispatched_tasks.keys()),
+                    self._iteration,
+                )
 
             return AgentResult(
                 success=True,
                 data={
                     "findings": self._all_findings,
-                    "summary": summary,
-                    "todo_list": [t.to_dict() for t in todo_list],
+                    "summary": final_result or self._generate_default_summary(),
+                    "steps": [
+                        {
+                            "thought": s.thought,
+                            "action": s.action,
+                            "action_input": s.action_input,
+                            "observation": s.observation[:500] if s.observation else None,
+                        }
+                        for s in self._steps
+                    ],
                 },
                 iterations=self._iteration,
                 tool_calls=self._tool_calls,
@@ -887,16 +893,10 @@ class OrchestratorAgent(BaseAgent):
             )
 
         except Exception as e:
-            logger.error("Orchestrator TODO mode failed: %s", e, exc_info=True)
-            duration_ms = int((time.time() - start_time) * 1000)
+            logger.error("Orchestrator failed: %s", e, exc_info=True)
             return AgentResult(
                 success=False,
                 error=str(e),
-                data={"findings": self._all_findings, "todo_list": [t.to_dict() for t in todo_list]},
-                iterations=self._iteration,
-                tool_calls=self._tool_calls,
-                tokens_used=self._total_tokens,
-                duration_ms=duration_ms,
             )
     
     def _build_initial_message(
@@ -1064,6 +1064,88 @@ class OrchestratorAgent(BaseAgent):
                 "优先调用 MCP 工具链执行。",
             ],
         }
+
+    def _normalize_single_risk_point(self, candidate: Any) -> Optional[Dict[str, Any]]:
+        """标准化单风险点对象。"""
+        if not isinstance(candidate, dict):
+            return None
+        file_path = str(candidate.get("file_path") or "").strip()
+        if not file_path:
+            return None
+        line_raw = candidate.get("line_start")
+        if line_raw is None:
+            line_raw = candidate.get("line")
+        if line_raw is None:
+            line_raw = 1
+        try:
+            line_start = int(line_raw)
+        except Exception:
+            line_start = 1
+        if line_start <= 0:
+            line_start = 1
+        normalized = dict(candidate)
+        normalized["file_path"] = file_path
+        normalized["line_start"] = line_start
+        normalized.setdefault("description", "")
+        normalized.setdefault("title", "")
+        return normalized
+
+    def _extract_single_risk_point_for_analysis(
+        self,
+        *,
+        params: Dict[str, Any],
+        context: str,
+        runtime_config: Dict[str, Any],
+        handoff: Optional[TaskHandoff],
+    ) -> Optional[Dict[str, Any]]:
+        """为 analysis 调度提取唯一风险点。优先级：显式参数 > context JSON > handoff/context_data > bootstrap。"""
+        explicit = self._normalize_single_risk_point(
+            params.get("single_risk_point") or params.get("risk_point")
+        )
+        if explicit:
+            return explicit
+
+        context_text = str(context or "").strip()
+        if context_text:
+            try:
+                parsed_context = json.loads(context_text)
+                if isinstance(parsed_context, dict):
+                    parsed_point = self._normalize_single_risk_point(parsed_context)
+                    if parsed_point:
+                        return parsed_point
+            except Exception:
+                pass
+
+            path_match = re.search(r"([\\w./-]+\\.(?:py|js|ts|java|go|php|rb|rs|c|cpp|h|hpp|cs))(?:\\s*[:#]\\s*(\\d+))?", context_text)
+            if path_match:
+                line_token = path_match.group(2)
+                line_start = int(line_token) if line_token and line_token.isdigit() else 1
+                return {
+                    "file_path": path_match.group(1),
+                    "line_start": line_start,
+                    "description": context_text[:500],
+                }
+
+        if handoff and isinstance(handoff.context_data, dict):
+            handoff_point = self._normalize_single_risk_point(handoff.context_data.get("single_risk_point"))
+            if handoff_point:
+                return handoff_point
+
+            candidate_findings = handoff.context_data.get("candidate_findings")
+            if isinstance(candidate_findings, list):
+                for item in candidate_findings:
+                    normalized = self._normalize_single_risk_point(item)
+                    if normalized:
+                        return normalized
+
+        bootstrap_findings = runtime_config.get("bootstrap_findings")
+        if isinstance(bootstrap_findings, list):
+            for item in bootstrap_findings:
+                normalized = self._normalize_single_risk_point(item)
+                if normalized:
+                    return normalized
+
+        return None
     
     async def _dispatch_agent(self, params: Dict[str, Any]) -> str:
         """调度子 Agent"""
@@ -1146,6 +1228,31 @@ class OrchestratorAgent(BaseAgent):
                 if isinstance(self._runtime_context.get("config"), dict)
                 else {}
             )
+
+            if agent_name == "analysis":
+                single_risk_point = self._extract_single_risk_point_for_analysis(
+                    params=params,
+                    context=context,
+                    runtime_config=runtime_config,
+                    handoff=handoff,
+                )
+                runtime_config["single_risk_mode"] = True
+                if single_risk_point:
+                    runtime_config["single_risk_point"] = single_risk_point
+                    runtime_config["target_files"] = [single_risk_point.get("file_path", "")]
+                    if isinstance(previous_results, dict):
+                        previous_results["bootstrap_findings"] = [single_risk_point]
+                    if handoff:
+                        if not isinstance(handoff.context_data, dict):
+                            handoff.context_data = {}
+                        handoff.context_data["single_risk_point"] = single_risk_point
+                    logger.info(
+                        "[Orchestrator] Analysis 单风险点注入: %s:%s",
+                        single_risk_point.get("file_path", ""),
+                        single_risk_point.get("line_start", 1),
+                    )
+                else:
+                    logger.warning("[Orchestrator] Analysis 单风险点注入失败：未解析到有效风险点")
             
             # 🔥 支持从队列传递单个漏洞（方案A）
             # 如果 params 包含 finding 或 queue_finding，将其添加到 runtime_config

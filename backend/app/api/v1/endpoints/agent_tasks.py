@@ -85,6 +85,32 @@ _running_tasks: Dict[str, Any] = {}
 # 🔥 运行中的 asyncio Tasks（用于强制取消）
 _running_asyncio_tasks: Dict[str, asyncio.Task] = {}
 
+# 运行中的漏洞队列服务（供任务内工具与队列 API 共享）
+_running_queue_services: Dict[str, Any] = {}
+
+_VALID_TASK_STATUS_VALUES: Set[str] = {
+    AgentTaskStatus.PENDING,
+    AgentTaskStatus.INITIALIZING,
+    AgentTaskStatus.RUNNING,
+    AgentTaskStatus.PLANNING,
+    AgentTaskStatus.INDEXING,
+    AgentTaskStatus.ANALYZING,
+    AgentTaskStatus.VERIFYING,
+    AgentTaskStatus.REPORTING,
+    AgentTaskStatus.COMPLETED,
+    AgentTaskStatus.FAILED,
+    AgentTaskStatus.CANCELLED,
+    AgentTaskStatus.PAUSED,
+}
+
+_VALID_SEVERITY_VALUES: Set[str] = {
+    VulnerabilitySeverity.CRITICAL,
+    VulnerabilitySeverity.HIGH,
+    VulnerabilitySeverity.MEDIUM,
+    VulnerabilitySeverity.LOW,
+    VulnerabilitySeverity.INFO,
+}
+
 
 # ============ Schemas ============
 
@@ -1984,24 +2010,28 @@ async def _prepare_embedded_bootstrap_findings(
     opengrep_enabled: bool = True,
     gitleaks_enabled: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str], str]:
-    if not opengrep_enabled and not gitleaks_enabled:
-        return [], None, "disabled"
-
-    opengrep_total_findings = 0
-    gitleaks_total_findings = 0
-    opengrep_candidates: List[Dict[str, Any]] = []
-    gitleaks_candidates: List[Dict[str, Any]] = []
-
-    if opengrep_enabled:
-        active_rules_result = await db.execute(
-            select(OpengrepRule).where(OpengrepRule.is_active == True)
+    if event_emitter:
+        await event_emitter.emit_info(
+            "⏭️ OpenGrep 预扫描已禁用：返回空候选，继续后续流程",
+            metadata={
+                "bootstrap": True,
+                "bootstrap_task_id": None,
+                "bootstrap_source": "disabled_empty_seed",
+                "bootstrap_total_findings": 0,
+                "bootstrap_candidate_count": 0,
+            },
         )
-        active_rules = active_rules_result.scalars().all()
-        if not active_rules:
-            await event_emitter.emit_error(
-                "❌ OpenGrep 预处理失败：当前没有启用规则，无法继续智能审计"
-            )
-            raise RuntimeError("OpenGrep 预处理失败：当前没有启用规则")
+    return [], None, "disabled_empty_seed"
+
+    active_rules_result = await db.execute(
+        select(OpengrepRule).where(OpengrepRule.is_active == True)
+    )
+    active_rules = active_rules_result.scalars().all()
+    if not active_rules:
+        await event_emitter.emit_error(
+            "❌ OpenGrep 预处理失败：当前没有启用规则，无法继续智能审计"
+        )
+        raise RuntimeError("OpenGrep 预处理失败：当前没有启用规则")
 
         await event_emitter.emit_info(
             "🧪 OpenGrep 内嵌预扫开始",
@@ -2904,6 +2934,7 @@ async def _execute_agent_task(task_id: str):
             # 🔥 创建漏洞队列服务
             from app.services.agent.vulnerability_queue import InMemoryVulnerabilityQueue
             queue_service = InMemoryVulnerabilityQueue()
+            _running_queue_services[task_id] = queue_service
             logger.info(f"[Queue] Created InMemoryVulnerabilityQueue for task {task_id}")
             await event_emitter.emit_info("🔄 漏洞队列服务已初始化（内存模式）")
 
@@ -3339,6 +3370,7 @@ async def _execute_agent_task(task_id: str):
                     "verification_level": task.verification_level or "analysis_with_poc_plan",
                     "exclude_patterns": task.exclude_patterns or [],
                     "target_files": task.target_files or [],
+                    "single_risk_mode": True,
                     "max_iterations": task.max_iterations or 50,
                     # 🔥 seed_findings（继续使用 bootstrap_findings 字段承载：固定优先候选种子）
                     "bootstrap_findings": seed_findings,
@@ -3431,8 +3463,14 @@ async def _execute_agent_task(task_id: str):
                             len(findings),
                         )
 
-                # 🔥 Fixed-First 合并：确保 seed_findings 不会因 LLM 空输出而丢失
-                findings = _merge_seed_and_agent_findings(seed_findings, findings)
+                single_risk_mode = bool((input_data.get("config") or {}).get("single_risk_mode", False))
+                if single_risk_mode:
+                    logger.info(
+                        "[AgentTask] single_risk_mode=true，跳过 seed 与 agent findings 合并，使用实际分析结果"
+                    )
+                else:
+                    # 🔥 Fixed-First 合并：确保 seed_findings 不会因 LLM 空输出而丢失
+                    findings = _merge_seed_and_agent_findings(seed_findings, findings)
 
                 # Best-effort dedup to avoid double inserts when seeds overlap with agent findings.
                 # Key: (file_path, line_start, vulnerability_type)
@@ -4055,6 +4093,7 @@ async def _execute_agent_task(task_id: str):
             _running_tasks.pop(task_id, None)
             _running_event_managers.pop(task_id, None)
             _running_asyncio_tasks.pop(task_id, None)  # 🔥 清理 asyncio task
+            _running_queue_services.pop(task_id, None)
             _cancelled_tasks.discard(task_id)  # 🔥 清理取消标志
 
             # 🔥 清理整个 Agent 注册表（包括所有子 Agent）
@@ -4303,7 +4342,7 @@ async def _initialize_tools(
         NpmAuditTool, SafetyTool, TruffleHogTool, OSVScannerTool,
     )
     from app.services.agent.tools.queue_tools import (
-        GetQueueStatusTool, DequeueFindinGTool, PushFindingToQueueTool
+        GetQueueStatusTool, DequeueFindingTool, PushFindingToQueueTool, IsFindingInQueueTool
     )
     from app.services.agent.vulnerability_queue import (
         RedisVulnerabilityQueue, InMemoryVulnerabilityQueue
@@ -4766,13 +4805,14 @@ async def _initialize_tools(
     # 🔥 为 Orchestrator 添加队列管理工具
     if queue_service and task_id:
         orchestrator_tools["get_queue_status"] = GetQueueStatusTool(queue_service, task_id)
-        orchestrator_tools["dequeue_finding"] = DequeueFindinGTool(queue_service, task_id)
+        orchestrator_tools["dequeue_finding"] = DequeueFindingTool(queue_service, task_id)
         logger.info(f"[Tools] Added queue management tools for task {task_id}")
     
-    # 🔥 为 Analysis 添加队列推送工具
+    # 🔥 为 Analysis 添加队列工具
     if queue_service and task_id:
         analysis_tools["push_finding_to_queue"] = PushFindingToQueueTool(queue_service, task_id)
-        logger.info(f"[Tools] Added push_finding_to_queue tool for task {task_id}")
+        analysis_tools["is_finding_in_queue"] = IsFindingInQueueTool(queue_service, task_id)
+        logger.info(f"[Tools] Added analysis queue tools for task {task_id}")
     
     return {
         "recon": recon_tools,
@@ -4987,7 +5027,8 @@ def _resolve_finding_file_path(
     if not raw_file_path:
         return None, None
 
-    candidate = raw_file_path.strip().split(":", 1)[0].strip()
+    candidate = raw_file_path.strip()
+    candidate = re.sub(r":\d+(?:-\d+)?\s*$", "", candidate).strip()
     if not candidate:
         return None, None
 
@@ -5933,6 +5974,9 @@ async def _save_findings(
     except Exception as e:
         logger.error(f"Failed to commit findings: {e}")
         await db.rollback()
+        if isinstance(save_diagnostics, dict):
+            save_diagnostics["commit_failed"] = True
+        return 0
 
     return saved_count
 
@@ -6190,11 +6234,9 @@ async def list_agent_tasks(
         query = query.where(AgentTask.project_id == project_id)
     
     if status:
-        try:
-            status_enum = AgentTaskStatus(status)
-            query = query.where(AgentTask.status == status_enum)
-        except ValueError:
-            pass
+        normalized_status = str(status).strip().lower()
+        if normalized_status in _VALID_TASK_STATUS_VALUES:
+            query = query.where(AgentTask.status == normalized_status)
     
     query = query.order_by(AgentTask.created_at.desc())
     query = query.offset(skip).limit(limit)
@@ -6698,11 +6740,9 @@ async def list_agent_findings(
         query = query.where(AgentFinding.status != FindingStatus.FALSE_POSITIVE)
     
     if severity:
-        try:
-            sev_enum = VulnerabilitySeverity(severity)
-            query = query.where(AgentFinding.severity == sev_enum)
-        except ValueError:
-            pass
+        normalized_severity = str(severity).strip().lower()
+        if normalized_severity in _VALID_SEVERITY_VALUES:
+            query = query.where(AgentFinding.severity == normalized_severity)
     
     if verified_only:
         query = query.where(AgentFinding.is_verified == True)
@@ -6716,7 +6756,17 @@ async def list_agent_findings(
         VulnerabilitySeverity.INFO: 4,
     }
     
-    query = query.order_by(AgentFinding.severity, AgentFinding.created_at.desc())
+    query = query.order_by(
+        case(
+            (AgentFinding.severity == VulnerabilitySeverity.CRITICAL, 0),
+            (AgentFinding.severity == VulnerabilitySeverity.HIGH, 1),
+            (AgentFinding.severity == VulnerabilitySeverity.MEDIUM, 2),
+            (AgentFinding.severity == VulnerabilitySeverity.LOW, 3),
+            (AgentFinding.severity == VulnerabilitySeverity.INFO, 4),
+            else_=5,
+        ),
+        AgentFinding.created_at.desc(),
+    )
     query = query.offset(skip).limit(limit)
     
     result = await db.execute(query)
@@ -8513,8 +8563,10 @@ async def get_vulnerability_queue_status(
     if not project or project.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # 创建队列服务实例（使用内存队列）
-    queue_service = InMemoryVulnerabilityQueue()
+    # 复用运行中的队列服务，避免新实例导致状态丢失
+    queue_service = _running_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryVulnerabilityQueue()
     
     # 获取队列统计
     stats = queue_service.get_queue_stats(task_id)
@@ -8550,8 +8602,10 @@ async def peek_vulnerability_queue(
     if not project or project.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # 创建队列服务实例
-    queue_service = InMemoryVulnerabilityQueue()
+    # 复用运行中的队列服务，避免新实例导致状态丢失
+    queue_service = _running_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryVulnerabilityQueue()
     
     # 查看队列前几项
     findings = queue_service.peek_queue(task_id, limit=min(limit, 10))
@@ -8587,8 +8641,10 @@ async def clear_vulnerability_queue(
     if not project or project.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # 创建队列服务实例
-    queue_service = InMemoryVulnerabilityQueue()
+    # 复用运行中的队列服务，避免新实例导致状态丢失
+    queue_service = _running_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryVulnerabilityQueue()
     
     # 清空队列
     success = queue_service.clear_queue(task_id)

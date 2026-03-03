@@ -10,6 +10,7 @@ LLM 是真正的安全分析大脑！
 类型: ReAct (真正的!)
 """
 
+import ast
 import asyncio
 import json
 import logging
@@ -24,30 +25,23 @@ from ..prompts import CORE_SECURITY_PRINCIPLES, VULNERABILITY_PRIORITIES
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_SYSTEM_PROMPT = """你是漏洞分析 Agent，负责自主发现高价值安全问题并输出可验证发现。
+ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 漏洞分析 Agent，一个**自主**的安全专家，负责发现高价值安全问题并输出可验证发现。
 
-## 执行原则
-1. 禁止向用户追问“下一步怎么选/是否继续”，必须自主推进。
-2. 只能调用运行时提供的工具白名单，不得编造工具。
-3. 先覆盖高风险候选（bootstrap/high-risk），再扩展全局分析。
-4. 没有证据的推测不得作为最终漏洞输出。
-5. 优先分析 `target_files` 范围内文件；若提供 `bootstrap_findings`，必须优先处理。
-6. 不允许无效循环：同一工具同一参数连续失败后必须更换策略或结束。
-7. Final Answer 必须是结构化 JSON，且 findings 不得缺失关键定位字段。
-8. **语言要求**：Final Answer 中 title/description/suggestion/fix_description/verification_evidence/poc_plan 必须使用简体中文，禁止输出英文段落。
-9. **工具优先门禁（强约束）**：在输出任何结论或 Final Answer 前，必须至少执行一次“代码证据”工具调用（最低要求：至少一次 `read_file`；并建议再执行一次 `search_code/pattern_match/opengrep_scan` 之一）。结论必须引用 Observation 证据，禁止无证据宣称“已阅读/已验证”。
-10. **首轮强约束**：第一轮必须输出 Action（优先 `read_file` 或 `search_code`），不允许第一轮直接输出 Final Answer。
-11. **标题强约束**：每条 finding 的 `title` 必须是中文三段式：`路径+函数+具体漏洞名`。示例：`src/time64.c中asctime64_r栈溢出漏洞`。
-12. **证据强约束**：高危候选必须至少包含 2 类证据：代码证据（read_file/search_code）+ 流证据（dataflow_analysis/controlflow_analysis_light）。
-13. **禁止标题漂移**：不得输出英文标题、不得只写漏洞类型；函数名必须可解析，无法定位函数的候选不得进入最终可验证结果。
-14. **输出格式约束**：禁止使用 `## Action`/`## Action Input` 标题样式，必须使用 `Action:`/`Action Input:` 行格式。
+## 你的角色
+你是安全审计的**核心大脑**，不是工具执行器。你需要：
+1. 自主制定分析策略
+2. 选择最有效的工具和方法
+3. 深入分析可疑代码
+4. 判断是否是真实漏洞
+5. 动态调整分析方向
+**【6. 如果接收到传入的风险点对象，必须优先聚焦分析该风险点，并以此为基础展开深度审计。】**
 
-## 🔥 漏洞队列推送机制（重要）
+## 🔥 漏洞队列推送机制（强制要求）
 
-当你发现漏洞后，**建议使用 `push_finding_to_queue` 工具将漏洞推送到全局队列**：
+当你发现漏洞后，**必须立即使用 `push_finding_to_queue` 工具将漏洞推送到全局队列**：
 
-### push_finding_to_queue 工具（可选）
-在发现每个漏洞时，可以调用此工具将其推送到队列中：
+### push_finding_to_queue 工具（必须调用）
+在发现每个漏洞时，**必须立即**调用此工具将其推送到队列中：
 
 ```
 Action: push_finding_to_queue
@@ -67,11 +61,54 @@ Action Input: {
 }
 ```
 
-### 注意事项
+### ⚠️ 强制要求
+- **每发现一个漏洞必须立即推送到队列**，不得延迟或跳过
 - 推送到队列的漏洞会由 Orchestrator 统一调度 Verification Agent 验证
 - 每条漏洞必须包含完整的定位信息（file_path, line_start, title, vulnerability_type）
 - 你仍然需要在 Final Answer 中包含所有发现的汇总
-- 建议：分析过程中逐个推送，分析结束后统一汇总
+- **在输出 Final Answer 前，必须确保所有漏洞已推送到队列**
+
+## 📋 推荐分析流程（严格按此执行！）
+### 第一步：【如果收到风险点对象，优先聚焦分析该点】
+- 使用 `read_file` 读取该文件，重点关注风险点所在行及其上下文（前后至少20行）
+- 分析该点的代码逻辑，确认是否存在真实漏洞
+- ⚠️ **如果确认存在漏洞，立即调用 `push_finding_to_queue` 推送（强制要求）**
+- 围绕该风险点，使用内置工具进行扩展分析（例如，检查相关函数、数据流等）
+
+
+### 第二步: 业务逻辑风险识别
+在分析过程中，如果识别到 **疑似业务逻辑漏洞的接口**，应调用 `business_logic_scan` 进行专业分析。
+
+识别标准：
+1. **框架特定的入口**：基于框架特性识别的 HTTP 路由处理函数
+2. **敏感参数模式**：参数中包含用户ID、资源ID、权限标记等
+3. **敏感操作名称**：函数名或功能描述中包含 create/update/delete/transfer/payment/admin 等
+4. **权限检查缺失**：接口缺失权限验证逻辑（无 @login_required、无 permission_check）
+
+当发现 N≥1 个可疑接口时，调用 `business_logic_scan` 工具，通过 `entry_points_hint` 参数传递：
+
+```
+Action: business_logic_scan
+Action Input: {
+    "target": ".",
+    "entry_points_hint": ["app/api/user.py:update_profile", "app/api/order.py:transfer", ...],
+    "max_iterations": 5
+}
+```
+
+`business_logic_scan` 会自动分析这些接口，发现漏洞时会直接推送到队列（无需你手动 push），但你仍需在 Final Answer 中汇总。
+
+### 第三步: 补充扫描
+如果外部工具覆盖不足，使用内置工具补充：
+- `smart_scan` 综合扫描
+- `pattern_match` 模式匹配
+- ⚠️ **每发现一个漏洞必须立即调用 `push_finding_to_queue` 推送**
+
+### 第四步: 汇总汇报
+- **在输出 Final Answer 前，确认所有漏洞已推送到队列**
+- 检查队列状态，确保无遗漏
+- 整理所有发现，输出 Final Answer
+
 
 ## 条件调用 business_logic_scan 工具（新机制）
 **你不需要强制调用 business_logic_scan**。而是应该在以下情况下有条件地调用：
@@ -85,53 +122,144 @@ Action Input: {
 3. **敏感操作名称**：函数名或功能描述中包含 create/update/delete/transfer/payment/charge/refund/admin 等敏感操作关键词
 4. **权限检查缺失**：通过代码检查发现接口缺失权限验证逻辑（无 @login_required、无 permission_check 等）
 
-### 调用规范
-当发现 N≥1 个可疑接口时，调用 `business_logic_scan` 工具，通过 `entry_points_hint` 参数传递：
-
+## 工作方式
+每一步，你需要输出：
 ```
-Action: business_logic_scan
+Thought: [分析当前情况，思考下一步应该做什么]
+Action: [工具名称]
+Action Input: [JSON 格式的参数]
+```
+
+当发现漏洞时，**必须立即推送到队列**：
+```
+Thought: [发现了SQL注入漏洞，需要立即推送到队列]
+Action: push_finding_to_queue
 Action Input: {
-    "target": ".",
-    "entry_points_hint": ["app/api/user.py:update_profile", "app/api/order.py:transfer", ...],
-    "max_iterations": 5
+    "finding": {
+        "file_path": "app.py",
+        "line_start": 42,
+        "title": "app.py中handle_request函数SQL注入漏洞",
+        "vulnerability_type": "sql_injection",
+        "severity": "high",
+        "description": "...",
+        "code_snippet": "...",
+        "function_name": "handle_request",
+        "confidence": 0.85
+    }
 }
 ```
 
-### 聚焦模式
-当指定了 `entry_points_hint` 时，`business_logic_scan` 工具会进入聚焦模式，跳过全局入口发现，直接分析指定的接口，提高效率。
+当你完成分析后，**确认所有漏洞已推送**，然后输出：
+```
+Thought: [所有漏洞已推送到队列，现在总结所有发现]
+Final Answer: [JSON 格式的漏洞报告]
+```
 
-## 工作流
-1. 先读取关键文件/候选位置，确认上下文。
+## ⚠️ 输出格式要求（严格遵守）
 
-2. 使用可用扫描工具（smart_scan、pattern_match 等）与 dataflow_analysis/controlflow_analysis_light 形成可复核证据链，发现代码漏洞。
+**禁止使用 Markdown 格式标记！** 你的输出必须是纯文本格式：
 
-3. **🎯 业务逻辑风险识别**（可选）：
-   - 分析项目中的 HTTP 入口（路由定义）
-   - 识别可疑接口（参数中包含用户/资源 ID、缺失权限检查、敏感操作）
-   - 如果发现可疑接口，调用 `business_logic_scan` 进行分析
+## Final Answer 格式
+```json
+{
+    "findings": [
+        {
+            "vulnerability_type": "sql_injection",
+            "severity": "high",
+            "title": "app.py:45中handle_request函数SQL注入漏洞",  // 必须中文三段式：路径+函数+具体漏洞名
+            "description": "详细描述（简体中文）",
+            "file_path": "path/to/file.py",
+            "line_start": 42,
+            "function_name": "handle_request",
+            "code_snippet": "危险代码片段",
+            "source": "污点来源",
+            "sink": "危险函数",
+            "suggestion": "修复建议（简体中文）",
+            "confidence": 0.9,
+            "needs_verification": true
+        }
+    ],
+    "summary": "分析总结（简体中文）"
+}
+```
 
-4. 汇总所有发现（代码漏洞 + 业务逻辑漏洞），输出结构化 findings，并标记 `needs_verification=true` 供验证阶段处理。
+## 重点关注的漏洞类型
+* SQL 注入 (query, execute, raw SQL)
+* XSS (innerHTML, document.write, v-html)
+* 命令注入 (exec, system, subprocess)
+* 路径遍历 (open, readFile, path 拼接)
+* SSRF (requests, fetch, http client)
+* 硬编码密钥 (password, secret, api_key)
+* 不安全的反序列化 (pickle, yaml.load, eval)
+* 业务逻辑漏洞 (IDOR, 权限绕过, 金额篡改等)
 
-## 输出格式
-Thought: ...
-Action: ...
-Action Input: {...}
+## 重要原则
+1. 质量优先 - 宁可深入分析几个真实漏洞，不要浅尝辄止报告大量误报
+2. 上下文分析 - 看到可疑代码要读取上下文，理解完整逻辑
+3. 自主判断 - 要用你的专业知识判断
+4. 【风险点聚焦】 - 如果收到风险点，必须优先分析该点，并围绕它展开深入审计
+5. ⚠️ **队列推送（强制）** - 每发现一个漏洞立即推送，不得延迟或跳过，确保 Orchestrator 可以调度验证
+6. **推送优先于汇总** - 先推送所有漏洞到队列，再输出 Final Answer
 
-最终：
-Thought: ...
-Final Answer: {"findings":[...], "summary":"..."}
+## 关键约束
+1. 禁止直接输出 Final Answer - 你必须先调用工具来分析代码
+2. 没有工具调用的分析无效 - 不允许仅凭推测直接报告漏洞
+3. 先 Action 后 Final Answer - 必须先执行工具，获取 Observation，再输出最终结论
+4. 首轮强约束：第一轮必须输出 Action（优先 read_file 或 search_code），不允许第一轮直接输出 Final Answer
+5. 证据强约束：高危候选必须至少包含 2 类证据：代码证据（read_file/search_code）+ 流证据（dataflow_analysis/controlflow_analysis_light）
+6. 标题强约束：每条 finding 的 title 必须是中文三段式：路径+函数+具体漏洞名。示例：src/time64.c中asctime64_r栈溢出漏洞。函数名必须可解析，无法定位函数的候选不得进入最终可验证结果。
+7. 语言要求：Final Answer 中 title/description/suggestion 必须使用简体中文，禁止输出英文段落。
+8. 禁止输出英文标题、不得只写漏洞类型
+9. 禁止无效循环：同一工具同一参数连续失败后必须更换策略或结束。
+10. ⚠️ **队列推送强约束**：每发现一个漏洞必须立即调用 `push_finding_to_queue` 推送，在输出 Final Answer 前必须确保所有漏洞已推送完毕
 
-## finding 最低字段
-- vulnerability_type
-- severity
-- title
-- description
-- file_path
-- function_name
-- line_start
-- code_snippet
-- confidence
-- needs_verification
+错误示例（禁止）：
+```
+Thought: 根据项目信息，可能存在安全问题
+Final Answer: {...}  ❌ 没有调用任何工具！
+```
+
+```
+Thought: 发现了SQL注入漏洞
+Final Answer: {"findings": [{"vulnerability_type": "sql_injection", ...}]}  ❌ 发现漏洞但没有推送到队列！
+```
+
+正确示例（必须）：
+```
+Thought: 我需要先使用智能扫描工具对项目进行全面分析
+Action: smart_scan
+Action Input: {"scan_type": "security", "max_files": 50}
+```
+
+```
+Thought: 发现SQL注入漏洞，立即推送到队列
+Action: push_finding_to_queue
+Action Input: {
+    "finding": {
+        "file_path": "app.py",
+        "line_start": 45,
+        "title": "app.py中login函数SQL注入漏洞",
+        "vulnerability_type": "sql_injection",
+        "severity": "high",
+        "description": "用户输入未过滤直接拼接到SQL查询",
+        "function_name": "login",
+        "confidence": 0.9
+    }
+}
+```
+
+然后等待 Observation，推送成功后继续分析或输出 Final Answer。
+
+## ⚠️ 最终检查清单（输出 Final Answer 前必须确认）
+1. ✅ 已使用工具获取代码证据（read_file/search_code 等）
+2. ✅ 所有发现的漏洞已通过 `push_finding_to_queue` 推送到队列
+3. ✅ 每个漏洞的 title 符合中文三段式格式
+4. ✅ 所有 title/description/suggestion 字段使用简体中文
+5. ✅ 高危漏洞包含足够的证据（代码+流分析）
+
+**只有完成以上所有检查项，才能输出 Final Answer。**
+
+现在开始你的安全分析！首先检查是否收到风险点对象，如果有则优先读取该文件；否则按标准流程使用外部工具进行全面扫描。
 """
 
 @dataclass
@@ -206,6 +334,209 @@ class AnalysisAgent(BaseAgent):
                 if isinstance(f, dict)
             ]
         return step
+
+    def _normalize_risk_point(self, candidate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """标准化单个风险点对象。"""
+        if not isinstance(candidate, dict):
+            return None
+        file_path = str(candidate.get("file_path") or "").strip()
+        if not file_path:
+            return None
+
+        line_start_raw = candidate.get("line_start")
+        if line_start_raw is None:
+            line_start_raw = candidate.get("line")
+        if line_start_raw is None:
+            line_start_raw = 1
+
+        try:
+            line_start = int(line_start_raw)
+        except Exception:
+            line_start = 1
+        if line_start <= 0:
+            line_start = 1
+
+        normalized = dict(candidate)
+        normalized["file_path"] = file_path
+        normalized["line_start"] = line_start
+        normalized.setdefault("description", "")
+        normalized.setdefault("title", "")
+        normalized.setdefault("function_name", "")
+        return normalized
+
+    def _parse_risk_point_from_text(self, text: str) -> Optional[Dict[str, Any]]:
+        """从 task_context/context 文本中解析风险点。"""
+        raw = str(text or "").strip()
+        if not raw:
+            return None
+
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                normalized = self._normalize_risk_point(parsed)
+                if normalized:
+                    return normalized
+        except Exception:
+            pass
+
+        path_match = re.search(r"([\w./-]+\.(?:py|js|ts|java|go|php|rb|rs|c|cpp|h|hpp|cs))(?:\s*[:#]\s*(\d+))?", raw)
+        if path_match:
+            file_path = path_match.group(1)
+            line_token = path_match.group(2)
+            line_start = int(line_token) if line_token and line_token.isdigit() else 1
+            return {
+                "file_path": file_path,
+                "line_start": line_start,
+                "description": raw[:500],
+            }
+        return None
+
+    def _extract_single_risk_point(
+        self,
+        *,
+        config: Dict[str, Any],
+        previous_results: Dict[str, Any],
+        task_context: str,
+    ) -> Optional[Dict[str, Any]]:
+        """从多来源提取“唯一风险点”。优先级：config > handoff > task_context > recon/bootstrap。"""
+        if not isinstance(config, dict):
+            config = {}
+        if not isinstance(previous_results, dict):
+            previous_results = {}
+
+        direct = self._normalize_risk_point(config.get("single_risk_point") or {})
+        if direct:
+            return direct
+
+        queue_finding = self._normalize_risk_point(config.get("queue_finding") or {})
+        if queue_finding:
+            return queue_finding
+
+        incoming_handoff = getattr(self, "_incoming_handoff", None)
+        handoff_data = incoming_handoff.context_data if incoming_handoff else None
+        if isinstance(handoff_data, dict):
+            handoff_single = self._normalize_risk_point(handoff_data.get("single_risk_point") or {})
+            if handoff_single:
+                return handoff_single
+            handoff_candidates = handoff_data.get("candidate_findings")
+            if isinstance(handoff_candidates, list):
+                for item in handoff_candidates:
+                    normalized = self._normalize_risk_point(item if isinstance(item, dict) else {})
+                    if normalized:
+                        return normalized
+
+        parsed_from_context = self._parse_risk_point_from_text(task_context)
+        if parsed_from_context:
+            return parsed_from_context
+
+        recon_data = previous_results.get("recon", {})
+        if isinstance(recon_data, dict) and "data" in recon_data:
+            recon_data = recon_data["data"]
+        if isinstance(recon_data, dict):
+            high_risk_areas = recon_data.get("high_risk_areas", [])
+            if isinstance(high_risk_areas, list):
+                for area in high_risk_areas:
+                    if isinstance(area, dict):
+                        normalized = self._normalize_risk_point(area)
+                        if normalized:
+                            return normalized
+                    else:
+                        parsed = self._parse_risk_point_from_text(str(area))
+                        if parsed:
+                            return parsed
+
+        bootstrap_findings = previous_results.get("bootstrap_findings", [])
+        if isinstance(bootstrap_findings, list):
+            for item in bootstrap_findings:
+                normalized = self._normalize_risk_point(item if isinstance(item, dict) else {})
+                if normalized:
+                    return normalized
+
+        return None
+
+    def _is_action_out_of_single_scope(
+        self,
+        *,
+        action: str,
+        action_input: Dict[str, Any],
+        risk_file_path: str,
+    ) -> Optional[str]:
+        """判断 Action 是否越界到单风险点范围之外。返回原因字符串表示越界。"""
+        action_name = str(action or "").strip()
+        if not action_name:
+            return "Action 为空"
+
+        blocked_actions = {
+            "smart_scan",
+            "semgrep_scan",
+            "bandit_scan",
+            "gitleaks_scan",
+            "npm_audit",
+            "safety_scan",
+            "opengrep_scan",
+            "kunlun_scan",
+            "list_files",
+            "business_logic_scan",
+        }
+        if action_name in blocked_actions:
+            return f"单风险点模式禁止调用全局扫描工具: {action_name}"
+
+        target_keys = [
+            "file_path",
+            "scan_file",
+            "target_file",
+            "path",
+            "target_path",
+            "target",
+            "directory",
+        ]
+        allowed = str(risk_file_path or "").strip()
+        for key in target_keys:
+            value = action_input.get(key)
+            if isinstance(value, str) and value.strip():
+                candidate = value.strip()
+                if candidate in {".", "./", "*", "./*"}:
+                    return f"参数 {key}={candidate} 超出单风险点文件范围"
+                if candidate != allowed:
+                    return f"参数 {key}={candidate} 与目标文件 {allowed} 不一致"
+
+        return None
+
+    @staticmethod
+    def _parse_queue_membership_output(raw_output: Any) -> Optional[Dict[str, Any]]:
+        """解析 is_finding_in_queue 工具输出。"""
+        text = str(raw_output or "").strip()
+        if not text:
+            return None
+
+        candidates: List[Any] = [text]
+        for candidate in candidates:
+            if not isinstance(candidate, str):
+                continue
+            cleaned = candidate.strip()
+            if not cleaned:
+                continue
+            try:
+                payload = json.loads(cleaned)
+                if isinstance(payload, dict):
+                    return payload
+            except Exception:
+                pass
+            try:
+                payload = ast.literal_eval(cleaned)
+                if isinstance(payload, dict):
+                    return payload
+            except Exception:
+                pass
+
+        in_queue_match = re.search(r"['\"]?in_queue['\"]?\s*:\s*(true|false|True|False)", text)
+        queue_size_match = re.search(r"['\"]?queue_size['\"]?\s*:\s*(\d+)", text)
+        if in_queue_match:
+            return {
+                "in_queue": in_queue_match.group(1).lower() == "true",
+                "queue_size": int(queue_size_match.group(1)) if queue_size_match else 0,
+            }
+        return None
     
 
     
@@ -236,6 +567,13 @@ class AnalysisAgent(BaseAgent):
         if isinstance(recon_data, dict) and "data" in recon_data:
             recon_data = recon_data["data"]
         
+        single_risk_mode = bool(config.get("single_risk_mode", True))
+        single_risk_point = self._extract_single_risk_point(
+            config=config,
+            previous_results=previous_results,
+            task_context=task_context,
+        )
+
         tech_stack = recon_data.get("tech_stack", {})
         entry_points = recon_data.get("entry_points", [])
         high_risk_areas = recon_data.get("high_risk_areas", plan.get("high_risk_areas", []))
@@ -295,6 +633,57 @@ class AnalysisAgent(BaseAgent):
 
 """
         
+        single_risk_file = ""
+        single_risk_line = 1
+        if single_risk_point:
+            single_risk_file = str(single_risk_point.get("file_path") or "").strip()
+            try:
+                single_risk_line = int(single_risk_point.get("line_start") or 1)
+            except Exception:
+                single_risk_line = 1
+
+        queue_short_circuit = False
+        queue_short_circuit_payload: Optional[Dict[str, Any]] = None
+        if single_risk_point and "is_finding_in_queue" in self.tools:
+            queue_check_input = {
+                "file_path": single_risk_file,
+                "line_start": single_risk_line,
+                "vulnerability_type": str(single_risk_point.get("vulnerability_type") or ""),
+                "title": str(single_risk_point.get("title") or ""),
+            }
+            queue_check_observation = await self.execute_tool("is_finding_in_queue", queue_check_input)
+            queue_check_payload = self._parse_queue_membership_output(queue_check_observation)
+            if isinstance(queue_check_payload, dict) and bool(queue_check_payload.get("in_queue")):
+                queue_short_circuit = True
+                queue_short_circuit_payload = queue_check_payload
+
+        if queue_short_circuit:
+            await self.emit_event(
+                "info",
+                "单风险点已在待验证队列中，跳过分析阶段。",
+                metadata={
+                    "queue_short_circuit": True,
+                    "single_risk_point": single_risk_point,
+                    "queue_membership": queue_short_circuit_payload,
+                },
+            )
+            duration_ms = int((time.time() - start_time) * 1000)
+            return AgentResult(
+                success=True,
+                data={
+                    "findings": [],
+                    "queue_short_circuit": True,
+                    "degraded_reason": "finding_already_in_queue",
+                    "queue_membership": queue_short_circuit_payload or {},
+                    "skipped_risk_point": single_risk_point,
+                    "steps": [],
+                },
+                iterations=0,
+                tool_calls=self._tool_calls,
+                tokens_used=self._total_tokens,
+                duration_ms=duration_ms,
+            )
+
         initial_message += f"""{handoff_context if handoff_context else f'''## 上下文信息
 ### ⚠️ 高风险区域（来自 Recon Agent，必须优先分析）
 以下是 Recon Agent 识别的高风险区域，请**务必优先**读取和分析这些文件：
@@ -309,17 +698,21 @@ class AnalysisAgent(BaseAgent):
 {json.dumps(initial_findings[:5], ensure_ascii=False, indent=2) if initial_findings else "无"}'''}
 
 ## 任务
-{task_context or task or '进行全面的安全漏洞分析，发现代码中的安全问题。'}
+{task_context or task or '进行安全漏洞分析。'}
 
 ## 候选种子（bootstrap_findings，如有）
 {json.dumps(bootstrap_findings[:10], ensure_ascii=False, indent=2) if bootstrap_findings else "无"}
 
-## ⚠️ 分析策略要求
-1. **首先**：优先处理候选种子（bootstrap_findings）与高风险文件
-2. **然后**：分析这些文件中的安全问题
-3. **最后**：如果需要，使用 smart_scan 或其他工具扩展分析
+## 单风险点模式
+- 启用状态: {single_risk_mode}
+- 风险点: {json.dumps(single_risk_point, ensure_ascii=False) if single_risk_point else "未提供"}
 
-**禁止**：不要跳过高风险区域直接做全局扫描
+## ⚠️ 分析策略要求
+1. **首先**：只分析给定风险点所在文件与附近代码（前后至少20行）
+2. **然后**：仅在同一文件内做数据流/调用上下文扩展
+3. **最后**：给出该风险点是否成立的结论，禁止扩展到全局扫描
+
+**禁止**：不要跨文件、不要全局扫描、不要改为分析其他风险点
 
 ## 目标漏洞类型
 {config.get('target_vulnerabilities', ['all'])}
@@ -327,7 +720,27 @@ class AnalysisAgent(BaseAgent):
 ## 可用工具
 {self.get_tools_description()}
 
-请开始你的安全分析。**第一步必须输出 Action**（优先 `read_file` 或 `search_code`），不允许第一轮直接输出 Final Answer。首先读取高风险区域的文件，然后**立即**分析其中的安全问题（输出 Action）。"""
+请开始你的安全分析。**第一步必须输出 Action**（优先 `read_file` 或 `search_code`），不允许第一轮直接输出 Final Answer。请先读取风险点所在文件的上下文，然后仅围绕该风险点继续分析。"""
+
+        if single_risk_mode and not single_risk_point:
+            logger.warning("[%s] single_risk_mode enabled but no risk point provided", self.name)
+            await self.emit_event(
+                "warning",
+                "单风险点模式已启用但未收到风险点对象，本轮不执行全局扫描，返回空结果。",
+            )
+            duration_ms = int((time.time() - start_time) * 1000)
+            return AgentResult(
+                success=True,
+                data={
+                    "findings": [],
+                    "degraded_reason": "missing_single_risk_point",
+                    "steps": [],
+                },
+                iterations=0,
+                tool_calls=0,
+                tokens_used=0,
+                duration_ms=duration_ms,
+            )
         
         # 🔥 记录工作开始
         self.record_work("开始安全漏洞分析")
@@ -354,6 +767,10 @@ class AnalysisAgent(BaseAgent):
             """执行最小证据工具调用，避免无 Action 空转。"""
             file_path = ""
             line_start = 1
+
+            if single_risk_mode and single_risk_file:
+                file_path = single_risk_file
+                line_start = single_risk_line
 
             if target_files and isinstance(target_files[0], str):
                 file_path = target_files[0].strip()
@@ -399,17 +816,8 @@ class AnalysisAgent(BaseAgent):
                         "max_lines": 200,
                     },
                 )
-            if "list_files" in self.tools:
-                return await self.execute_tool(
-                    "list_files",
-                    {
-                        "directory": ".",
-                        "recursive": False,
-                        "max_files": 80,
-                    },
-                )
             return (
-                "⚠️ 系统无法自动执行最小工具调用（缺少 read_file/list_files 或目标文件未知）。"
+                "⚠️ 系统无法自动执行最小工具调用（缺少 read_file 或目标文件未知）。"
                 "请改用 read_file/search_code 获取证据后再总结。"
             )
 
@@ -659,6 +1067,26 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                     
                     # 🔥 特殊处理：business_logic_scan 工具调用的条件响应机制
                     action_input = dict(step.action_input or {})
+
+                    if single_risk_mode and single_risk_file:
+                        out_of_scope_reason = self._is_action_out_of_single_scope(
+                            action=step.action,
+                            action_input=action_input,
+                            risk_file_path=single_risk_file,
+                        )
+                        if out_of_scope_reason:
+                            scoped_observation = (
+                                f"⚠️ 单风险点范围约束：{out_of_scope_reason}。\n"
+                                f"请仅分析文件 {single_risk_file}，并优先使用 read_file/search_code/dataflow_analysis。"
+                            )
+                            step.observation = scoped_observation
+                            await self.emit_llm_observation(scoped_observation)
+                            self._conversation_history.append({
+                                "role": "user",
+                                "content": f"Observation:\n{self._prepare_observation_for_history(scoped_observation)}",
+                            })
+                            continue
+
                     if step.action == "business_logic_scan":
                         # 如果 LLM 没有提供 entry_points_hint，添加提示
                         if not action_input.get("entry_points_hint") and not suspicious_interfaces:
