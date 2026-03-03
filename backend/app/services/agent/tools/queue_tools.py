@@ -314,6 +314,46 @@ class PushFindingToQueueTool(AgentTool):
         **kwargs
     ) -> ToolResult:
         """执行工具"""
+        # 简单参数校验，确保必填字段有值，并给出正确参数示例
+        errors = []
+        if not file_path or not file_path.strip():
+            errors.append("file_path 不能为空")
+        if line_start <= 0:
+            errors.append("line_start 必须为正整数")
+        if not title or not title.strip():
+            errors.append("title 不能为空")
+        if not description or not description.strip():
+            errors.append("description 不能为空")
+        if not vulnerability_type or not vulnerability_type.strip():
+            errors.append("vulnerability_type 不能为空")
+        allowed_severities = {"critical", "high", "medium", "low", "info"}
+        if severity not in allowed_severities:
+            errors.append(f"severity 必须是 {sorted(allowed_severities)} 之一")
+        if not (0.0 <= confidence <= 1.0):
+            errors.append("confidence 必须在 0.0 到 1.0 之间")
+
+        if errors:
+            expected_args = {
+                "file_path": "path/to/file.py",
+                "line_start": 123,
+                "line_end": 130,
+                "title": "path/to/file.py中foo函数XX漏洞",
+                "description": "请用简体中文描述漏洞的影响、输入和代码位置",
+                "vulnerability_type": "sql_injection",
+                "severity": "high",
+                "confidence": 0.85,
+            }
+            error_msg = "; ".join(errors)
+            logger.warning(f"[Queue] 参数校验失败: {error_msg}")
+            return ToolResult(
+                success=False,
+                error="参数校验失败",
+                data={
+                    "message": error_msg,
+                    "expected_args": expected_args,
+                },
+            )
+
         try:
             # 构造漏洞信息
             finding = {
@@ -326,9 +366,9 @@ class PushFindingToQueueTool(AgentTool):
                 "severity": severity,
                 "confidence": confidence,
             }
-            
+
             success = self.queue_service.enqueue_finding(self.task_id, finding)
-            
+
             if success:
                 queue_size = self.queue_service.get_queue_size(self.task_id)
                 logger.info(
@@ -348,7 +388,7 @@ class PushFindingToQueueTool(AgentTool):
                     success=False,
                     error="Failed to enqueue finding"
                 )
-        
+
         except Exception as e:
             logger.error(f"[Queue] Failed to push finding: {e}")
             return ToolResult(

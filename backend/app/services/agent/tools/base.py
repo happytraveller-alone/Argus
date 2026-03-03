@@ -5,7 +5,7 @@ Agent 工具基类
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Type
 from dataclasses import dataclass, field
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import logging
 import time
 
@@ -89,6 +89,17 @@ class AgentTool(ABC):
             logger.debug(f"Tool '{self.name}' executing with args: {kwargs}")
             result = await self._execute(**kwargs)
             
+        except ValidationError as e:
+            logger.warning(f"Tool '{self.name}' validation error: {e}")
+            expected = self._build_expected_args()
+            result = ToolResult(
+                success=False,
+                error="参数校验失败",
+                data={
+                    "message": str(e),
+                    "expected_args": expected,
+                },
+            )
         except Exception as e:
             logger.error(f"Tool '{self.name}' error: {e}", exc_info=True)
             error_msg = str(e)
@@ -107,6 +118,24 @@ class AgentTool(ABC):
         logger.debug(f"Tool '{self.name}' completed in {duration_ms}ms, success={result.success}")
         
         return result
+
+    def _build_expected_args(self) -> Optional[Dict[str, Any]]:
+        schema = self.args_schema
+        if not schema:
+            return None
+        expected: Dict[str, Any] = {}
+        for name, field in schema.__fields__.items():
+            if field.required and field.default is None and field.default_factory is None:
+                type_name = getattr(field.outer_type_, "__name__", "value")
+                expected[name] = f"<{type_name}>"
+            elif field.default_factory is not None:
+                try:
+                    expected[name] = field.default_factory()
+                except Exception:
+                    expected[name] = None
+            else:
+                expected[name] = field.default
+        return expected
     
     def get_langchain_tool(self):
         """转换为 LangChain Tool"""
