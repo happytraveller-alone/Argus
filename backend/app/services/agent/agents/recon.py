@@ -128,7 +128,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 ```
 Thought: [分析当前情况，计划下一步行动]
 Action: [工具名称]
-Action Input: { "参数名": "参数值" }
+Action Input: {}
 ```
 
 ✅ 正确格式：
@@ -684,7 +684,7 @@ class ReconAgent(BaseAgent):
 
 Thought: [你对当前情况的分析]
 Action: [工具名称，如 list_files, read_file, search_code]
-Action Input: {{"参数名": "参数值"}}
+Action Input: {{}}
 
 可用工具: {', '.join(self.tools.keys())}
 

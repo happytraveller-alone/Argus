@@ -99,5 +99,6 @@ class LocalMCPProxyAdapter:
                 "local_proxy": True,
                 "local_proxy_tool_name": normalized or None,
                 "local_proxy_duration_ms": duration_ms,
+                "local_proxy_argument_keys": sorted(payload.keys()),
             },
         }

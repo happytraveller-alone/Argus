@@ -587,7 +587,7 @@ class OrchestratorAgent(BaseAgent):
 
 Thought: [你对当前审计状态的思考]
 Action: [dispatch_agent|get_queue_status|dequeue_finding|summarize|finish]
-Action Input: {{"参数": "值"}}
+Action Input: {{}}
 
 当前可调度的子 Agent: {list(self.sub_agents.keys())}
 当前已收集发现: {len(self._all_findings)} 个

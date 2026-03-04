@@ -67,6 +67,24 @@ Final Answer: {"findings": [], "summary": "ok"}"""
     "agent_factory",
     [_make_recon_agent, _make_analysis_agent, _make_verification_agent],
 )
+def test_react_parser_truncates_polluted_action_name(agent_factory):
+    agent = agent_factory()
+    response = """Thought: retry with queue status
+Action: get_recon_risk_queue_status和Action Input: {}
+Action Input: {}
+"""
+
+    step = agent._parse_llm_response(response)
+
+    assert step.action == "get_recon_risk_queue_status"
+    assert step.is_final is False
+    assert isinstance(step.action_input, dict)
+
+
+@pytest.mark.parametrize(
+    "agent_factory",
+    [_make_recon_agent, _make_analysis_agent, _make_verification_agent],
+)
 def test_react_parser_supports_markdown_action_sections(agent_factory):
     agent = agent_factory()
     response = """## Thought

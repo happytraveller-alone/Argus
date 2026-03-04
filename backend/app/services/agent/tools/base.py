@@ -5,6 +5,7 @@ Agent 工具基类
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Type
 from dataclasses import dataclass, field
+import inspect
 from pydantic import BaseModel, ValidationError
 import logging
 import time
@@ -80,14 +81,46 @@ class AgentTool(ABC):
     async def _execute(self, **kwargs) -> ToolResult:
         """执行工具（子类实现）"""
         pass
+
+    def _filter_execute_kwargs(self, payload: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        """Filter kwargs according to concrete _execute signature for defensive compatibility."""
+        try:
+            signature = inspect.signature(self._execute)
+        except Exception:
+            return dict(payload or {}), {}
+
+        parameters = list(signature.parameters.values())
+        accepts_var_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters)
+        if accepts_var_kwargs:
+            return dict(payload or {}), {}
+
+        allowed_keys = {
+            str(param.name)
+            for param in parameters
+            if param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            and str(param.name) != "self"
+        }
+        if not allowed_keys:
+            return {}, dict(payload or {})
+
+        filtered: Dict[str, Any] = {}
+        dropped: Dict[str, Any] = {}
+        for key, value in dict(payload or {}).items():
+            if str(key) in allowed_keys:
+                filtered[str(key)] = value
+            else:
+                dropped[str(key)] = value
+        return filtered, dropped
     
     async def execute(self, **kwargs) -> ToolResult:
         """执行工具（带计时和日志）"""
         start_time = time.time()
+        payload = dict(kwargs or {})
+        filtered_kwargs, dropped_kwargs = self._filter_execute_kwargs(payload)
         
         try:
-            logger.debug(f"Tool '{self.name}' executing with args: {kwargs}")
-            result = await self._execute(**kwargs)
+            logger.debug(f"Tool '{self.name}' executing with args: {filtered_kwargs}")
+            result = await self._execute(**filtered_kwargs)
             
         except ValidationError as e:
             logger.warning(f"Tool '{self.name}' validation error: {e}")
@@ -108,6 +141,11 @@ class AgentTool(ABC):
                 data=f"工具执行异常: {error_msg}",  # 🔥 修复：设置 data 字段避免 None
                 error=error_msg,
             )
+
+        if dropped_kwargs:
+            metadata = dict(result.metadata or {})
+            metadata["dropped_kwargs"] = sorted(dropped_kwargs.keys())
+            result.metadata = metadata
         
         duration_ms = int((time.time() - start_time) * 1000)
         result.duration_ms = duration_ms
@@ -184,4 +222,3 @@ class AgentTool(ABC):
             "total_duration_ms": self._total_duration_ms,
             "avg_duration_ms": self._total_duration_ms // max(1, self._call_count),
         }
-

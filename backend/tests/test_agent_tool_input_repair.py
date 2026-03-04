@@ -102,6 +102,23 @@ class _PushFindingTool:
         return SimpleNamespace(success=True, data=kwargs, error=None, metadata={})
 
 
+class _PushRiskPointSchema(BaseModel):
+    file_path: str
+    line_start: int
+    description: str
+    severity: Optional[str] = "high"
+    confidence: Optional[float] = 0.6
+    vulnerability_type: Optional[str] = "potential_issue"
+
+
+class _PushRiskPointTool:
+    args_schema = _PushRiskPointSchema
+    name = "push_risk_point_to_queue"
+
+    async def execute(self, **kwargs):
+        return SimpleNamespace(success=True, data=kwargs, error=None, metadata={})
+
+
 class _ControlFlowSchema(BaseModel):
     file_path: str
     line_start: int
@@ -188,7 +205,10 @@ async def test_execute_tool_repairs_search_code_from_raw_input_payload():
     assert len(tool_call_events) == 1
     metadata = tool_call_events[0].metadata or {}
     repaired = metadata.get("input_repaired") or {}
-    assert repaired.get("__raw_input.keyword") == "keyword"
+    assert (
+        repaired.get("__raw_input.keyword") == "keyword"
+        or repaired.get("pattern") == "keyword"
+    )
 
 
 @pytest.mark.asyncio
@@ -372,6 +392,75 @@ async def test_execute_tool_repairs_push_finding_nested_envelope():
     repaired = metadata.get("input_repaired") or {}
     assert repaired.get("__envelope.finding.file_path") == "file_path"
     assert repaired.get("__envelope.finding.line_start") == "line_start"
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_repairs_push_risk_point_from_risk_point_envelope():
+    agent, emitter = _make_agent(tools={"push_risk_point_to_queue": _PushRiskPointTool()})
+
+    output = await agent.execute_tool(
+        "push_risk_point_to_queue",
+        {
+            "risk_point": {
+                "file_path": "src/modules/demo.py",
+                "line_start": 23,
+                "description": "用户输入未经验证进入危险调用点",
+            }
+        },
+    )
+
+    assert "src/modules/demo.py" in output
+    assert "23" in output
+    tool_call_events = _events_by_type(emitter, "tool_call")
+    assert len(tool_call_events) == 1
+    metadata = tool_call_events[0].metadata or {}
+    repaired = metadata.get("input_repaired") or {}
+    assert repaired.get("__envelope.risk_point.file_path") == "file_path"
+    assert repaired.get("__envelope.risk_point.line_start") == "line_start"
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_repairs_push_risk_point_from_raw_input_json():
+    agent, emitter = _make_agent(tools={"push_risk_point_to_queue": _PushRiskPointTool()})
+
+    output = await agent.execute_tool(
+        "push_risk_point_to_queue",
+        {
+            "raw_input": (
+                '{"risk_point":{"file_path":"src/api/rce.py","line_start":51,'
+                '"description":"命令拼接执行"}}'
+            )
+        },
+    )
+
+    assert "src/api/rce.py" in output
+    assert "51" in output
+    tool_call_events = _events_by_type(emitter, "tool_call")
+    assert len(tool_call_events) == 1
+    metadata = tool_call_events[0].metadata or {}
+    repaired = metadata.get("input_repaired") or {}
+    assert repaired.get("__raw_input.risk_point.file_path") == "file_path"
+    assert repaired.get("__raw_input.risk_point.line_start") == "line_start"
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_repairs_placeholder_push_risk_point_with_context_hints():
+    agent, emitter = _make_agent(tools={"push_risk_point_to_queue": _PushRiskPointTool()})
+    agent._recent_thought_texts.append("请先推送 src/rce/handler.py:88 这一条风险点。")
+
+    output = await agent.execute_tool(
+        "push_risk_point_to_queue",
+        {"参数名": "参数值"},
+    )
+
+    assert "src/rce/handler.py" in output
+    assert "88" in output
+    assert "可疑风险点" in output or "风险点" in output
+    tool_call_events = _events_by_type(emitter, "tool_call")
+    assert len(tool_call_events) == 1
+    metadata = tool_call_events[0].metadata or {}
+    repaired = metadata.get("input_repaired") or {}
+    assert repaired.get("__placeholder_payload") == "removed"
 
 
 @pytest.mark.asyncio

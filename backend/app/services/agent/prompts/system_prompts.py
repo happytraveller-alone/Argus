@@ -284,7 +284,7 @@ Action Input: {"target_path": "."}
 
 ```
 Action: 工具名称
-Action Input: {"参数1": "值1", "参数2": "值2"}
+Action Input: {}
 ```
 
 ### 错误处理指南
@@ -460,7 +460,7 @@ Action Input: {"target_path": ".", "rules": "all"}
 
 ```
 Action: 工具名称
-Action Input: {"参数1": "值1", "参数2": "值2"}
+Action Input: {}
 ```
 
 ### 错误处理指南

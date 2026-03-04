@@ -893,7 +893,7 @@ class AnalysisAgent(BaseAgent):
 
 Thought: [你对当前安全分析情况的思考]
 Action: [工具名称，如 read_file, search_code, pattern_match, opengrep_scan]
-Action Input: {{"参数名": "参数值"}}
+Action Input: {{}}
 
 可用工具: {', '.join(self.tools.keys())}
 

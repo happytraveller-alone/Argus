@@ -75,6 +75,70 @@ class _StrictDeterministicRuntime:
         )
 
 
+class _StrictReadFileAutoRepairRuntime:
+    strict_mode = True
+
+    def __init__(self):
+        self.calls = []
+
+    def can_handle(self, tool_name: str) -> bool:
+        return tool_name in {"read_file", "search_code"}
+
+    async def execute_tool(self, *, tool_name, tool_input, agent_name=None, alias_used=None):
+        self.calls.append((tool_name, dict(tool_input or {})))
+        if tool_name == "search_code":
+            return SimpleNamespace(
+                handled=True,
+                success=True,
+                data="src/main/java/top/whgojp/modules/rce/command/CommandController.java:37",
+                error=None,
+                metadata={
+                    "mcp_used": True,
+                    "mcp_adapter": "filesystem",
+                    "mcp_runtime_mode": "strict",
+                },
+            )
+        if tool_name == "read_file":
+            file_path = str((tool_input or {}).get("file_path") or "")
+            if file_path.endswith("CeshiController.java"):
+                return SimpleNamespace(
+                    handled=True,
+                    success=False,
+                    data="",
+                    error=(
+                        "mcp_call_failed:ENOENT: no such file or directory, open "
+                        "'/tmp/deepaudit/task/JavaSecLab-1.4/src/main/java/top/whgojp/modules/rce/command/CeshiController.java'"
+                    ),
+                    metadata={
+                        "mcp_used": True,
+                        "mcp_adapter": "filesystem",
+                        "mcp_runtime_mode": "strict",
+                    },
+                )
+            if file_path.endswith("CommandController.java"):
+                return SimpleNamespace(
+                    handled=True,
+                    success=True,
+                    data="public class CommandController { ... }",
+                    error=None,
+                    metadata={
+                        "mcp_used": True,
+                        "mcp_adapter": "filesystem",
+                        "mcp_runtime_mode": "strict",
+                    },
+                )
+        return SimpleNamespace(
+            handled=True,
+            success=False,
+            data="",
+            error="mcp_unhandled_in_strict_mode",
+            metadata={
+                "mcp_used": True,
+                "mcp_runtime_mode": "strict",
+            },
+        )
+
+
 def _make_agent(tools):
     emitter = SimpleNamespace(emit=AsyncMock())
     config = AgentConfig(name="test-agent", agent_type=AgentType.ANALYSIS)
@@ -166,3 +230,22 @@ async def test_strict_mcp_deterministic_failure_suppresses_retry_and_short_circu
 
     third_metadata = tool_result_events[2].metadata or {}
     assert third_metadata.get("retry_suppressed") is True
+
+
+@pytest.mark.asyncio
+async def test_strict_mcp_read_file_path_auto_repair_retries_once_and_succeeds():
+    runtime = _StrictReadFileAutoRepairRuntime()
+    agent, _emitter = _make_agent(tools={"read_file": object(), "search_code": object()})
+    agent.set_mcp_runtime(runtime)
+
+    output = await agent.execute_tool(
+        "read_file",
+        {"file_path": "src/main/java/top/whgojp/modules/rce/command/CeshiController.java"},
+    )
+
+    assert "CommandController" in output
+    assert len(runtime.calls) >= 3
+    assert runtime.calls[0][0] == "read_file"
+    assert runtime.calls[1][0] == "search_code"
+    assert runtime.calls[2][0] == "read_file"
+    assert runtime.calls[2][1].get("file_path", "").endswith("CommandController.java")

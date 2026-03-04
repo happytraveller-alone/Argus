@@ -72,7 +72,7 @@ class GetReconRiskQueueStatusTool(AgentTool):
 
     常见用途：在持续审计过程中周期性轮询（无需输入参数），确认 Analysis Agent 是否处理完上轮的推送，同时作为数据收敛依据。"""
 
-    async def _execute(self) -> ToolResult:
+    async def _execute(self, **kwargs) -> ToolResult:
         try:
             stats = self.queue_service.stats(self.task_id)
             pending = stats.get("current_size", 0)

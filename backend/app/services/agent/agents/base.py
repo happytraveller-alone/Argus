@@ -3534,6 +3534,38 @@ class BaseAgent(ABC):
         return str(error_class or "") not in {"mcp_transient_error"}
 
     @staticmethod
+    def _is_read_file_path_not_found_error(error_text: str) -> bool:
+        lowered = str(error_text or "").lower()
+        if not lowered:
+            return False
+        path_not_found_hints = (
+            "enoent",
+            "no such file or directory",
+            "parent directory does not exist",
+            "文件不存在",
+            "not a file",
+            "不是文件",
+        )
+        return any(hint in lowered for hint in path_not_found_hints)
+
+    @staticmethod
+    def _extract_path_from_error_text(error_text: str) -> Optional[str]:
+        text = str(error_text or "").strip()
+        if not text:
+            return None
+        for pattern in (
+            re.compile(r"['\"](?P<path>[^'\"]+\.[A-Za-z0-9_+-]+)['\"]"),
+            re.compile(r"(?P<path>[A-Za-z0-9_./\\-]+\.[A-Za-z0-9_+-]+)"),
+        ):
+            match = pattern.search(text)
+            if not match:
+                continue
+            candidate = str(match.group("path") or "").strip().replace("\\", "/")
+            if candidate:
+                return candidate
+        return None
+
+    @staticmethod
     def _get_schema_fields(args_schema: Any) -> Tuple[Set[str], Set[str]]:
         fields: Set[str] = set()
         required_fields: Set[str] = set()
@@ -3578,6 +3610,71 @@ class BaseAgent(ABC):
                 if isinstance(candidate, str) and candidate.strip():
                     return candidate.strip()
         return ""
+
+    @staticmethod
+    def _looks_like_placeholder_key(raw_key: Any) -> bool:
+        key = str(raw_key or "").strip().lower()
+        if not key:
+            return False
+        if re.fullmatch(r"(参数|参数名|参数\d*|字段|字段名|key|name|param|params|parameter|value)\d*", key):
+            return True
+        return key in {"arg", "args", "input", "raw_input", "raw"}
+
+    @staticmethod
+    def _looks_like_placeholder_value(raw_value: Any) -> bool:
+        value = str(raw_value or "").strip().lower()
+        if not value:
+            return True
+        if re.fullmatch(r"(值|参数值|value|xxx|todo|待补充|待填写|example|示例)\d*", value):
+            return True
+        if value in {"...", "……", "n/a", "none", "null"}:
+            return True
+        return False
+
+    @classmethod
+    def _is_placeholder_payload(cls, payload: Any) -> bool:
+        if not isinstance(payload, dict) or not payload:
+            return False
+        meaningful_items = [
+            (str(key or "").strip(), value)
+            for key, value in payload.items()
+            if str(key or "").strip() and not str(key).startswith("__")
+        ]
+        if not meaningful_items:
+            return False
+        if len(meaningful_items) == 1:
+            only_key, only_value = meaningful_items[0]
+            return cls._looks_like_placeholder_key(only_key) and cls._looks_like_placeholder_value(only_value)
+        return all(
+            cls._looks_like_placeholder_key(item_key) and cls._looks_like_placeholder_value(item_value)
+            for item_key, item_value in meaningful_items
+        )
+
+    @staticmethod
+    def _parse_raw_input_payload(raw_input_text: str) -> Dict[str, Any]:
+        text = str(raw_input_text or "").strip()
+        if not text:
+            return {}
+
+        candidates = [text]
+        if "{" in text and "}" in text:
+            start = text.find("{")
+            end = text.rfind("}")
+            if end > start:
+                candidates.append(text[start : end + 1])
+
+        for candidate in candidates:
+            candidate = str(candidate or "").strip()
+            if not candidate:
+                continue
+            for loader in (json.loads, ast.literal_eval):
+                try:
+                    parsed = loader(candidate)  # type: ignore[arg-type]
+                except Exception:
+                    continue
+                if isinstance(parsed, dict):
+                    return dict(parsed)
+        return {}
 
     def _extract_keyword_from_raw_input(self, raw_input_text: str) -> Optional[str]:
         text = str(raw_input_text or "").strip()
@@ -3632,6 +3729,9 @@ class BaseAgent(ABC):
         finding_payload = tool_input.get("finding")
         if isinstance(finding_payload, dict):
             envelope_sources.append(("finding", finding_payload))
+        risk_point_payload = tool_input.get("risk_point")
+        if isinstance(risk_point_payload, dict):
+            envelope_sources.append(("risk_point", risk_point_payload))
         items_payload = tool_input.get("items")
         if isinstance(items_payload, list):
             first_item = next((item for item in items_payload if isinstance(item, dict)), None)
@@ -3645,12 +3745,46 @@ class BaseAgent(ABC):
                 repaired[source_key] = source_value
                 repaired_changes[f"__envelope.{source_name}.{source_key}"] = source_key
 
+        if self._is_placeholder_payload(repaired):
+            keys_to_remove = [key for key in list(repaired.keys()) if not str(key).startswith("__")]
+            for key in keys_to_remove:
+                repaired.pop(key, None)
+            repaired_changes["__placeholder_payload"] = "removed"
+
         for source_key, target_key in TOOL_INPUT_REPAIR_MAP.items():
             if source_key in repaired and target_key not in repaired and target_key in schema_fields:
                 repaired[target_key] = repaired[source_key]
                 repaired_changes[source_key] = target_key
 
         raw_input_text = self._extract_raw_input_text(tool_input, repaired)
+        raw_input_payload = self._parse_raw_input_payload(raw_input_text)
+        if self._is_placeholder_payload(raw_input_payload):
+            raw_input_payload = {}
+            repaired_changes["__raw_input.placeholder"] = "ignored"
+
+        raw_input_sources: List[Tuple[str, Dict[str, Any]]] = []
+        if raw_input_payload:
+            raw_input_sources.append(("raw_input", raw_input_payload))
+            for nested_key in ("arguments", "finding", "risk_point"):
+                nested_payload = raw_input_payload.get(nested_key)
+                if isinstance(nested_payload, dict):
+                    raw_input_sources.append((f"raw_input.{nested_key}", nested_payload))
+
+        for source_name, source_payload in raw_input_sources:
+            for source_key, source_value in source_payload.items():
+                if source_key in {"arguments", "finding", "risk_point"}:
+                    continue
+                if source_key in repaired:
+                    continue
+                if source_key in schema_fields or source_key in TOOL_INPUT_REPAIR_MAP:
+                    repaired[source_key] = source_value
+                    repaired_changes[f"__{source_name}.{source_key}"] = source_key
+
+        for source_key, target_key in TOOL_INPUT_REPAIR_MAP.items():
+            if source_key in repaired and target_key not in repaired and target_key in schema_fields:
+                repaired[target_key] = repaired[source_key]
+                repaired_changes[source_key] = target_key
+
         tool_name = str(getattr(tool, "name", "") or resolved_tool_name or "")
         if tool_name == "pattern_match":
             has_code = bool(str(repaired.get("code") or "").strip())
@@ -3837,6 +3971,69 @@ class BaseAgent(ABC):
                         repaired["is_regex"] = True
                         regex_label = "__context.regex_hint" if source_label == "__context.keyword" else "__raw_input.regex_hint"
                         repaired_changes[regex_label] = "is_regex"
+
+        if tool_name == "push_risk_point_to_queue":
+            def _safe_positive_int(value: Any) -> Optional[int]:
+                try:
+                    parsed = int(value)
+                except Exception:
+                    return None
+                return parsed if parsed > 0 else None
+
+            file_path = str(repaired.get("file_path") or "").strip()
+            file_hint: Dict[str, Any] = {}
+            if not file_path:
+                file_hint = self._extract_file_hint_from_context(context_texts)
+                hinted_path = str(file_hint.get("file_path") or "").strip()
+                if not hinted_path and raw_input_text:
+                    file_hint = self._extract_file_hint_from_raw_input(raw_input_text)
+                    hinted_path = str(file_hint.get("file_path") or "").strip()
+                if hinted_path:
+                    repaired["file_path"] = hinted_path
+                    repaired_changes["__context_or_raw.file_path"] = "file_path"
+            else:
+                sanitized_path = self._sanitize_file_path_text(file_path)
+                if sanitized_path and sanitized_path != file_path:
+                    repaired["file_path"] = sanitized_path
+                    repaired_changes["__sanitize.file_path"] = "file_path"
+
+            line_start = _safe_positive_int(repaired.get("line_start"))
+            if line_start is None:
+                for candidate in (
+                    repaired.get("line"),
+                    repaired.get("start_line"),
+                    raw_input_payload.get("line_start") if isinstance(raw_input_payload, dict) else None,
+                    raw_input_payload.get("line") if isinstance(raw_input_payload, dict) else None,
+                    file_hint.get("start_line") if isinstance(file_hint, dict) else None,
+                ):
+                    parsed = _safe_positive_int(candidate)
+                    if parsed is not None:
+                        line_start = parsed
+                        repaired_changes["__context_or_raw.line_start"] = "line_start"
+                        break
+            if line_start is not None:
+                repaired["line_start"] = int(line_start)
+
+            description = str(repaired.get("description") or "").strip()
+            if self._looks_like_placeholder_value(description):
+                description = ""
+            if not description:
+                description = str(repaired.get("context") or "").strip()
+            if self._looks_like_placeholder_value(description):
+                description = ""
+            if not description:
+                description = str(repaired.get("title") or "").strip()
+            if self._looks_like_placeholder_value(description):
+                description = ""
+            if not description and raw_input_text and "{" not in raw_input_text:
+                description = str(raw_input_text).strip()
+            if not description:
+                fallback_path = str(repaired.get("file_path") or "unknown_file").strip()
+                fallback_line = int(repaired.get("line_start") or 1)
+                description = f"可疑风险点，需进一步验证（{fallback_path}:{fallback_line}）"
+            repaired["description"] = description[:500]
+            if "description" not in repaired_changes:
+                repaired_changes["__auto_fill.description"] = "description"
 
         missing_required: List[str] = []
         for name in sorted(required_fields):
@@ -4231,6 +4428,13 @@ class BaseAgent(ABC):
             if strict_read_metadata:
                 runtime_policy_metadata.update(strict_read_metadata)
 
+        auto_retry_once = bool(repaired_input.pop("__auto_retry_once", False))
+        auto_repaired_file_path = str(repaired_input.pop("__auto_repaired_file_path", "") or "").strip()
+        if auto_retry_once:
+            runtime_policy_metadata["auto_retry_once"] = True
+        if auto_repaired_file_path:
+            runtime_policy_metadata["auto_repaired_file_path"] = auto_repaired_file_path
+
         if local_tool_available and missing_required:
             missing_required = [
                 name
@@ -4560,6 +4764,66 @@ class BaseAgent(ABC):
                     strict_error=strict_error,
                     base_metadata=merged_meta,
                 )
+                normalized_resolved_tool = str(resolved_tool_name or "").strip().lower()
+                auto_retry_used = False
+                if (
+                    normalized_resolved_tool == "read_file"
+                    and not bool(strict_metadata.get("auto_retry_once"))
+                    and self._is_read_file_path_not_found_error(strict_error)
+                ):
+                    failed_path = str(
+                        repaired_input.get("file_path")
+                        or self._extract_path_from_error_text(strict_error)
+                        or ""
+                    ).strip()
+                    if failed_path:
+                        failed_basename = os.path.basename(failed_path)
+                        failed_stem = os.path.splitext(failed_basename)[0]
+                        search_payload: Dict[str, Any] = {
+                            "keyword": failed_stem or failed_basename,
+                            "max_results": 8,
+                        }
+                        failed_dir = os.path.dirname(failed_path).strip()
+                        if failed_dir:
+                            search_payload["directory"] = failed_dir
+                        if failed_basename:
+                            search_payload["file_pattern"] = failed_basename
+                        search_output = await self.execute_tool(
+                            "search_code",
+                            search_payload,
+                            _fallback_depth=_fallback_depth + 1,
+                            _superpowers_retry=_superpowers_retry,
+                        )
+                        if not self._looks_like_tool_failure_output(search_output):
+                            repaired_path, repaired_line = self._extract_location_from_search_output(search_output)
+                            repaired_path = str(repaired_path or "").strip()
+                            if repaired_path and repaired_path != failed_path:
+                                retry_input = dict(repaired_input)
+                                retry_input["file_path"] = repaired_path
+                                retry_input["__auto_retry_once"] = True
+                                retry_input["__auto_repaired_file_path"] = repaired_path
+                                if (
+                                    repaired_line
+                                    and retry_input.get("start_line") in (None, "")
+                                    and retry_input.get("end_line") in (None, "")
+                                ):
+                                    start_line, end_line, max_lines = self._strict_read_window(int(repaired_line))
+                                    retry_input["start_line"] = int(start_line)
+                                    retry_input["end_line"] = int(end_line)
+                                    retry_input["max_lines"] = int(max_lines)
+                                retry_output = await self.execute_tool(
+                                    requested_tool_name,
+                                    retry_input,
+                                    _fallback_depth=_fallback_depth + 1,
+                                    _superpowers_retry=_superpowers_retry,
+                                )
+                                auto_retry_used = True
+                                if not self._looks_like_tool_failure_output(retry_output):
+                                    return retry_output
+                                strict_failure_metadata["auto_retry_once"] = True
+                                strict_failure_metadata["auto_repaired_file_path"] = repaired_path
+                                strict_failure_metadata["auto_retry_failed"] = True
+
                 await self.emit_tool_result(
                     resolved_tool_name,
                     mcp_output or strict_error,
@@ -4577,6 +4841,8 @@ class BaseAgent(ABC):
                     f"**错误**: {strict_error}\n"
                     "MCP 未成功处理，已按严格策略阻断。"
                 )
+                if auto_retry_used:
+                    failure_output += "\n\n已执行一次自动路径修复重试，但仍失败。"
                 if strict_failure_metadata.get("retry_suppressed") is True:
                     return (
                         f"{failure_output}\n\n"

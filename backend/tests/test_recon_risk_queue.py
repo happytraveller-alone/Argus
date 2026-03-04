@@ -79,3 +79,17 @@ async def test_recon_queue_status_tool_executes_with_valid_binding():
     assert result.success is True
     assert result.data["pending_count"] == 1
     assert result.data["queue_status"]["current_size"] == 1
+
+
+@pytest.mark.asyncio
+async def test_recon_queue_status_tool_ignores_redundant_kwargs():
+    queue = InMemoryReconRiskQueue()
+    task_id = "task-valid-binding-extra-kwargs"
+    assert queue.enqueue(task_id, _sample_risk_point()) is True
+
+    tool = GetReconRiskQueueStatusTool(queue_service=queue, task_id=task_id)
+    result = await tool.execute(raw_input="{}", file_path="src/demo.py")
+
+    assert result.success is True
+    assert result.data["pending_count"] == 1
+    assert result.data["queue_status"]["current_size"] == 1

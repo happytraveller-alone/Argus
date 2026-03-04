@@ -107,7 +107,7 @@ async def test_runtime_local_proxy_executes_recon_queue_status_tool():
     assert runtime.register_local_tool("get_recon_risk_queue_status", tool) is True
     result = await runtime.execute_tool(
         tool_name="get_recon_risk_queue_status",
-        tool_input={},
+        tool_input={"raw_input": "{}", "file_path": "src/ignored.py"},
         agent_name="recon",
     )
 

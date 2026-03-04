@@ -120,7 +120,20 @@ def _extract_action_name(cleaned_text: str) -> Optional[str]:
     if action_text.startswith("```"):
         return None
 
-    action_name_match = re.match(r"([A-Za-z_][\w-]*)", action_text)
+    # Truncate obvious trailing fragments from malformed model outputs.
+    for marker_pattern in (
+        r"(?i)\bAction\s*Input\b",
+        r"(?i)\bObservation\b",
+        r"(?i)\bFinal\s*Answer\b",
+    ):
+        action_text = re.split(marker_pattern, action_text, maxsplit=1)[0].strip()
+
+    # Remove trailing Chinese punctuation / connectors that can leak into action text.
+    action_text = re.split(r"[，。；：！？、（）【】《》“”‘’]", action_text, maxsplit=1)[0].strip()
+    action_text = re.split(r"\s+", action_text, maxsplit=1)[0].strip()
+
+    # ASCII-only tool token; do not allow Unicode word chars here.
+    action_name_match = re.match(r"([A-Za-z_][A-Za-z0-9_-]*)", action_text)
     if not action_name_match:
         return None
     return action_name_match.group(1)
