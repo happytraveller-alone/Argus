@@ -11,7 +11,24 @@ import type {
   InstantAnalysisForm,
   StaticScanOverviewResponse,
   ProjectDescriptionGenerateResponse,
+  DashboardSnapshotResponse,
 } from "../types/index";
+
+type ConfigObject = Record<string, unknown>;
+
+interface DefaultConfigPayload {
+  llmConfig: ConfigObject;
+  otherConfig: ConfigObject;
+}
+
+interface UserConfigPayload {
+  id: string;
+  user_id: string;
+  llmConfig: ConfigObject;
+  otherConfig: ConfigObject;
+  created_at: string;
+  updated_at?: string;
+}
 
 // Implement the same interface as the original localDatabase.ts but using backend API
 export const api = {
@@ -21,7 +38,7 @@ export const api = {
     try {
       const res = await apiClient.get('/users/me');
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return null;
     }
   },
@@ -30,7 +47,7 @@ export const api = {
     try {
       const res = await apiClient.get('/users/');
       return res.data.length;
-    } catch (e) {
+    } catch (_error) {
       return 0;
     }
   },
@@ -61,7 +78,7 @@ export const api = {
     try {
       const res = await apiClient.get(`/projects/${id}`);
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return null;
     }
   },
@@ -75,7 +92,7 @@ export const api = {
       }
       const res = await apiClient.get(`/projects/${id}/files`, { params });
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return [];
     }
   },
@@ -84,8 +101,8 @@ export const api = {
     try {
       const res = await apiClient.get(`/projects/${id}/branches`);
       return res.data;
-    } catch (e) {
-      return { branches: ["main"], default_branch: "main", error: String(e) };
+    } catch (error) {
+      return { branches: ["main"], default_branch: "main", error: String(error) };
     }
   },
 
@@ -158,7 +175,7 @@ export const api = {
     try {
       const res = await apiClient.get(`/projects/${projectId}/members`);
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return [];
     }
   },
@@ -187,7 +204,7 @@ export const api = {
     try {
       const res = await apiClient.get(`/tasks/${id}`);
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return null;
     }
   },
@@ -239,7 +256,7 @@ export const api = {
     try {
       const res = await apiClient.get('/scan/instant/history');
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return [];
     }
   },
@@ -297,7 +314,7 @@ export const api = {
     try {
       const res = await apiClient.get('/projects/stats');
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return {
         total_projects: 0,
         active_projects: 0,
@@ -311,6 +328,14 @@ export const api = {
         avg_quality_score: 0
       };
     }
+  },
+
+  async getDashboardSnapshot(topN = 10): Promise<DashboardSnapshotResponse> {
+    const safeTopN = Number.isFinite(topN) ? Math.min(Math.max(Math.floor(topN), 1), 50) : 10;
+    const res = await apiClient.get('/projects/dashboard-snapshot', {
+      params: { top_n: safeTopN },
+    });
+    return res.data;
   },
 
   async getStaticScanOverview(params?: {
@@ -327,7 +352,7 @@ export const api = {
         },
       });
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return {
         items: [],
         total: 0,
@@ -340,27 +365,17 @@ export const api = {
 
   // ==================== 用户配置相关方法 ====================
 
-  async getDefaultConfig(): Promise<{
-    llmConfig: any;
-    otherConfig: any;
-  } | null> {
+  async getDefaultConfig(): Promise<DefaultConfigPayload | null> {
     try {
       const res = await apiClient.get('/config/defaults');
       return res.data;
-    } catch (e) {
-      console.error('Failed to get default config:', e);
+    } catch (error) {
+      console.error('Failed to get default config:', error);
       return null;
     }
   },
 
-  async getUserConfig(): Promise<{
-    id: string;
-    user_id: string;
-    llmConfig: any;
-    otherConfig: any;
-    created_at: string;
-    updated_at?: string;
-  } | null> {
+  async getUserConfig(): Promise<UserConfigPayload | null> {
     try {
       const res = await apiClient.get('/config/me');
       console.log('[API] getUserConfig 成功:', {
@@ -369,23 +384,20 @@ export const api = {
         provider: res.data?.llmConfig?.llmProvider,
       });
       return res.data;
-    } catch (e: any) {
-      console.error('[API] getUserConfig 失败:', e?.response?.status, e?.message);
+    } catch (error: unknown) {
+      const apiError = error as {
+        response?: { status?: number };
+        message?: string;
+      };
+      console.error('[API] getUserConfig 失败:', apiError?.response?.status, apiError?.message);
       return null;
     }
   },
 
   async updateUserConfig(config: {
-    llmConfig?: any;
-    otherConfig?: any;
-  }): Promise<{
-    id: string;
-    user_id: string;
-    llmConfig: any;
-    otherConfig: any;
-    created_at: string;
-    updated_at?: string;
-  }> {
+    llmConfig?: ConfigObject;
+    otherConfig?: ConfigObject;
+  }): Promise<UserConfigPayload> {
     const res = await apiClient.put('/config/me', config);
     return res.data;
   },
@@ -546,7 +558,7 @@ export const api = {
   async exportDatabase(): Promise<{
     export_date: string;
     user_id: string;
-    data: any;
+    data: Record<string, unknown>;
   }> {
     const res = await apiClient.get('/database/export');
     return res.data;
@@ -611,7 +623,7 @@ export const api = {
     try {
       const res = await apiClient.get('/database/stats');
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return {
         total_projects: 0,
         active_projects: 0,
@@ -645,7 +657,7 @@ export const api = {
     try {
       const res = await apiClient.get('/database/health');
       return res.data;
-    } catch (e) {
+    } catch (_error) {
       return {
         status: 'error',
         database_connected: false,

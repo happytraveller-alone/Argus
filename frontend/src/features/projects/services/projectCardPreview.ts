@@ -13,6 +13,7 @@ export interface ProjectCardRecentTask {
   projectId: string;
   kind: ProjectCardTaskKind;
   status: string;
+  progressPercent: number;
   createdAt: string;
   route: string;
   label: string;
@@ -181,6 +182,48 @@ function toNullableNonNegativeNumber(value: unknown): number | null {
   return num;
 }
 
+function normalizeStatus(status: string | undefined | null): string {
+  return String(status || "").trim().toLowerCase();
+}
+
+function clampPercent(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  if (num <= 0) return 0;
+  if (num >= 100) return 100;
+  return num;
+}
+
+function getStatusProgressBaseline(status: string | undefined | null): number {
+  const normalized = normalizeStatus(status);
+  if (normalized === "completed") return 100;
+  if (normalized === "running") return 60;
+  if (normalized === "pending") return 0;
+  if (
+    normalized === "failed" ||
+    normalized === "cancelled" ||
+    normalized === "interrupted" ||
+    normalized === "aborted"
+  ) {
+    return 0;
+  }
+  return 0;
+}
+
+function computeAuditProgressPercent(task: AuditTask): number {
+  const totalFiles = Number(task.total_files);
+  const scannedFiles = Number(task.scanned_files);
+  if (
+    Number.isFinite(totalFiles) &&
+    totalFiles > 0 &&
+    Number.isFinite(scannedFiles) &&
+    scannedFiles >= 0
+  ) {
+    return clampPercent((scannedFiles / totalFiles) * 100);
+  }
+  return getStatusProgressBaseline(task.status);
+}
+
 export function getProjectCardSummaryStats(params: {
   projectId: string;
   auditTasks: AuditTask[];
@@ -340,6 +383,7 @@ export function getProjectCardRecentTasks(params: {
       projectId: task.project_id,
       kind: "static",
       status: task.status,
+      progressPercent: getStatusProgressBaseline(task.status),
       createdAt: task.created_at,
       route:
         staticRouteMap.get(task.id) || `/static-analysis/${task.id}`,
@@ -366,6 +410,9 @@ export function getProjectCardRecentTasks(params: {
         projectId: task.project_id,
         kind: "intelligent",
         status: task.status,
+        progressPercent: clampPercent(
+          task.progress_percentage ?? getStatusProgressBaseline(task.status),
+        ),
         createdAt: task.created_at,
         route: `/agent-audit/${task.id}`,
         label: "智能扫描",
@@ -387,6 +434,7 @@ export function getProjectCardRecentTasks(params: {
       projectId: task.project_id,
       kind: "audit",
       status: task.status,
+      progressPercent: computeAuditProgressPercent(task),
       createdAt: task.created_at,
       route: `/tasks/${task.id}`,
       label: task.task_type === "instant" ? "即时分析" : "审计任务",

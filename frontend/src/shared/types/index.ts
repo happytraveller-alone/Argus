@@ -197,6 +197,31 @@ export interface ProjectStats {
   avg_quality_score: number;
 }
 
+export interface DashboardScanRunsItem {
+  project_id: string;
+  project_name: string;
+  static_runs: number;
+  intelligent_runs: number;
+  hybrid_runs: number;
+  total_runs: number;
+}
+
+export interface DashboardVulnsItem {
+  project_id: string;
+  project_name: string;
+  static_vulns: number;
+  intelligent_vulns: number;
+  hybrid_vulns: number;
+  total_vulns: number;
+}
+
+export interface DashboardSnapshotResponse {
+  generated_at: string;
+  total_scan_duration_ms: number;
+  scan_runs: DashboardScanRunsItem[];
+  vulns: DashboardVulnsItem[];
+}
+
 export interface StaticScanOverviewItem {
   project_id: string;
   project_name: string;

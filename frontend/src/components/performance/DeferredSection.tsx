@@ -9,6 +9,7 @@ interface DeferredSectionProps {
 	rootMargin?: string;
 	minHeight?: number;
 	fallback?: ReactNode;
+	priority?: boolean;
 }
 
 export default function DeferredSection({
@@ -18,12 +19,17 @@ export default function DeferredSection({
 	rootMargin = "240px 0px",
 	minHeight = 320,
 	fallback,
+	priority = false,
 }: DeferredSectionProps) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
-	const [isNearViewport, setIsNearViewport] = useState(false);
-	const [isMounted, setIsMounted] = useState(false);
+	const [isNearViewport, setIsNearViewport] = useState(priority);
+	const [isMounted, setIsMounted] = useState(priority);
 
 	useEffect(() => {
+		if (priority) {
+			setIsNearViewport(true);
+			return;
+		}
 		if (isNearViewport) return;
 		const element = containerRef.current;
 		if (!element) return;
@@ -53,9 +59,13 @@ export default function DeferredSection({
 
 		observer.observe(element);
 		return () => observer.disconnect();
-	}, [isNearViewport, rootMargin]);
+	}, [isNearViewport, priority, rootMargin]);
 
 	useEffect(() => {
+		if (priority) {
+			setIsMounted(true);
+			return;
+		}
 		if (!isNearViewport || isMounted) return;
 		if (typeof window === "undefined") {
 			setIsMounted(true);
@@ -75,6 +85,11 @@ export default function DeferredSection({
 		const mountSection = () => {
 			setIsMounted(true);
 		};
+
+		if (delayMs <= 0) {
+			mountSection();
+			return;
+		}
 
 		timeoutId = window.setTimeout(() => {
 			if (typeof idleWindow.requestIdleCallback === "function") {
@@ -97,7 +112,7 @@ export default function DeferredSection({
 				idleWindow.cancelIdleCallback(idleId);
 			}
 		};
-	}, [delayMs, isMounted, isNearViewport]);
+	}, [delayMs, isMounted, isNearViewport, priority]);
 
 	return (
 		<div ref={containerRef} className={cn("relative", className)}>

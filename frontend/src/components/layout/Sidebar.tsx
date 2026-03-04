@@ -3,7 +3,7 @@
  * Premium Terminal Aesthetic with Enhanced Visual Design
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import LanguageToggle from "@/components/layout/LanguageToggle";
@@ -59,10 +59,12 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     const location = useLocation();
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [hoveredGroup, setHoveredGroup] = useState<"task" | "scanConfig" | null>(null);
     const [expandedGroup, setExpandedGroup] = useState<"task" | "scanConfig" | null>(null);
     const { t, isEnglish } = useI18n();
     const { logoSrc } = useLogoVariant();
+    const hasPrefetchedTaskGroupRef = useRef(false);
+    const hasPrefetchedDashboardRef = useRef(false);
+    const hasPrefetchedProjectsRef = useRef(false);
 
     const sidebarRoutes = routes.filter(
         (route) => (route.navVisible ?? route.visible) !== false,
@@ -95,16 +97,18 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         (route) => location.pathname === route.path,
     );
     const isTaskGroupExpanded =
-        !collapsed && (hoveredGroup === "task" || expandedGroup === "task");
+        !collapsed && (isTaskGroupActive || expandedGroup === "task");
     const isScanConfigGroupExpanded =
         !collapsed &&
-        (hoveredGroup === "scanConfig" || expandedGroup === "scanConfig");
+        (isScanConfigGroupActive || expandedGroup === "scanConfig");
 
     const toggleGroupExpanded = (group: "task" | "scanConfig") => {
         setExpandedGroup((prev) => (prev === group ? null : group));
     };
 
     const prefetchTaskGroupAssets = useCallback(() => {
+        if (hasPrefetchedTaskGroupRef.current) return;
+        hasPrefetchedTaskGroupRef.current = true;
         void import("@/features/tasks/services/taskActivitiesStore").then(
             ({ prefetchTaskActivitiesSnapshot }) => {
                 void prefetchTaskActivitiesSnapshot();
@@ -114,6 +118,26 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
         void import("@/pages/TaskManagementStatic");
         void import("@/pages/TaskManagementIntelligent");
         void import("@/pages/TaskManagementHybrid");
+    }, []);
+
+    const prefetchDashboardAssets = useCallback(() => {
+        if (hasPrefetchedDashboardRef.current) return;
+        hasPrefetchedDashboardRef.current = true;
+        void import("@/features/dashboard/services/dashboardSnapshotStore").then(
+            ({ prefetchDashboardSnapshot }) => {
+                void prefetchDashboardSnapshot(10);
+            },
+        );
+        void import("@/pages/Dashboard");
+    }, []);
+
+    const prefetchProjectsAssets = useCallback(() => {
+        if (hasPrefetchedProjectsRef.current) return;
+        hasPrefetchedProjectsRef.current = true;
+        void import("@/shared/config/database").then(({ api }) => {
+            void api.getProjects();
+        });
+        void import("@/pages/Projects");
     }, []);
 
     const renderRouteLink = (
@@ -149,10 +173,22 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                     if (!isActive) {
                         e.currentTarget.style.color = "var(--cyber-text)";
                     }
+                    if (route.path === "/dashboard") {
+                        prefetchDashboardAssets();
+                    } else if (route.path === "/projects") {
+                        prefetchProjectsAssets();
+                    }
                 }}
                 onMouseLeave={(e) => {
                     if (!isActive) {
                         e.currentTarget.style.color = "var(--cyber-text-muted)";
+                    }
+                }}
+                onFocus={() => {
+                    if (route.path === "/dashboard") {
+                        prefetchDashboardAssets();
+                    } else if (route.path === "/projects") {
+                        prefetchProjectsAssets();
                     }
                 }}
             >
@@ -213,7 +249,9 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 
             {/* Overlay for mobile */}
             {mobileOpen && (
-                <div
+                <button
+                    type="button"
+                    aria-label="Close sidebar overlay"
                     className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 md:hidden"
                     onClick={() => setMobileOpen(false)}
                 />
@@ -309,6 +347,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 
                         {/* Collapse button */}
                         <button
+                            type="button"
                             className="hidden md:flex absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md items-center justify-center hover:bg-primary hover:border-primary hover:text-white transition-all duration-300 shadow-sm"
                             style={{
                                 background: "var(--cyber-bg)",
@@ -332,14 +371,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                             {mainRoutes.map((route) => renderRouteLink(route))}
 
                             {taskRoutes.length > 0 && (
-                                <div
-                                    className="pt-1"
-                                    onMouseEnter={() => {
-                                        setHoveredGroup("task");
-                                        prefetchTaskGroupAssets();
-                                    }}
-                                    onMouseLeave={() => setHoveredGroup(null)}
-                                >
+                                <div className="pt-1">
                                     <Link
                                         to={taskOverviewRoute?.path || "/tasks/overview"}
                                         className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300 ${isTaskGroupActive ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted/20 border-border/40 text-muted-foreground"}`}
@@ -349,6 +381,12 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                                             setMobileOpen(false);
                                         }}
                                         title={collapsed ? t("route.taskManagement", "任务管理") : undefined}
+                                        onMouseEnter={() => {
+                                            prefetchTaskGroupAssets();
+                                        }}
+                                        onFocus={() => {
+                                            prefetchTaskGroupAssets();
+                                        }}
                                     >
                                         <span className={`p-1.5 rounded-md ${isTaskGroupActive ? "bg-primary/20" : "bg-muted/50"}`}>
                                             <ListChecks className="w-[18px] h-[18px]" />
@@ -373,11 +411,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                             )}
 
                             {scanConfigRoutes.length > 0 && (
-                                <div
-                                    className="pt-1"
-                                    onMouseEnter={() => setHoveredGroup("scanConfig")}
-                                    onMouseLeave={() => setHoveredGroup(null)}
-                                >
+                                <div className="pt-1">
                                     <Link
                                         to={scanConfigOverviewRoute?.path || "/scan-config"}
                                         className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300 ${isScanConfigGroupActive ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted/20 border-border/40 text-muted-foreground"}`}

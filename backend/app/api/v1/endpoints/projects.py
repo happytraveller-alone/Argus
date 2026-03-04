@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Literal
+from typing import Any, Dict, List, Optional, Literal
 from fastapi import (
     APIRouter,
     Depends,
@@ -199,6 +199,9 @@ from app.services.upload.project_stats import (
     get_cloc_stats_from_extracted_dir,
     generate_project_description_from_extracted_dir,
 )
+from app.services.opengrep_confidence import (
+    count_high_confidence_findings_by_task_ids,
+)
 
 
 def calculate_file_sha256(file_path: str) -> str:
@@ -323,6 +326,31 @@ class StatsResponse(BaseModel):
     resolved_issues: int
 
 
+class DashboardScanRunsItem(BaseModel):
+    project_id: str
+    project_name: str
+    static_runs: int
+    intelligent_runs: int
+    hybrid_runs: int
+    total_runs: int
+
+
+class DashboardVulnsItem(BaseModel):
+    project_id: str
+    project_name: str
+    static_vulns: int
+    intelligent_vulns: int
+    hybrid_vulns: int
+    total_vulns: int
+
+
+class DashboardSnapshotResponse(BaseModel):
+    generated_at: datetime
+    total_scan_duration_ms: int
+    scan_runs: List[DashboardScanRunsItem]
+    vulns: List[DashboardVulnsItem]
+
+
 class StaticScanOverviewItem(BaseModel):
     project_id: str
     project_name: str
@@ -416,6 +444,46 @@ def _build_static_scan_overview_item_from_row(
         hint_count=hint_count,
         info_count=info_count,
         total_findings=total_findings,
+    )
+
+
+HYBRID_TASK_NAME_MARKER = "[HYBRID]"
+INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]"
+
+
+def _to_non_negative_int(value: Any) -> int:
+    try:
+        parsed = int(float(value))
+    except (TypeError, ValueError):
+        return 0
+    return max(parsed, 0)
+
+
+def _resolve_agent_source_mode(name: Optional[str], description: Optional[str]) -> str:
+    normalized_name = str(name or "").strip().lower()
+    normalized_description = str(description or "").strip().lower()
+    normalized_combined = f"{normalized_name} {normalized_description}"
+    if (
+        HYBRID_TASK_NAME_MARKER.lower() in normalized_combined
+        or "混合扫描" in normalized_combined
+    ):
+        return "hybrid"
+    if INTELLIGENT_TASK_NAME_MARKER.lower() in normalized_combined:
+        return "intelligent"
+    # legacy intelligent_audit tasks created before markers are treated as hybrid.
+    return "hybrid"
+
+
+def _sort_dashboard_items_by_total_and_name(
+    items: List[Dict[str, Any]],
+    total_key: str,
+) -> List[Dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: (
+            -int(item.get(total_key, 0) or 0),
+            str(item.get("project_name") or ""),
+        ),
     )
     
 
@@ -593,6 +661,211 @@ async def get_stats(
         "total_issues": total_issues,
         "resolved_issues": resolved_issues,
     }
+
+
+@router.get("/dashboard-snapshot", response_model=DashboardSnapshotResponse)
+async def get_dashboard_snapshot(
+    top_n: int = Query(10, ge=1, le=50, description="Top N projects"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """Get aggregated dashboard data with project-card aligned vulnerability metric."""
+    projects_result = await db.execute(select(Project.id, Project.name))
+    project_rows = projects_result.all()
+    project_name_map: Dict[str, str] = {
+        str(project_id): str(project_name or "未知项目")
+        for project_id, project_name in project_rows
+        if project_id
+    }
+
+    opengrep_result = await db.execute(
+        select(
+            OpengrepScanTask.id,
+            OpengrepScanTask.project_id,
+            OpengrepScanTask.status,
+            OpengrepScanTask.scan_duration_ms,
+        )
+    )
+    opengrep_rows = opengrep_result.all()
+    opengrep_task_ids = [str(task_id) for task_id, *_ in opengrep_rows if task_id]
+    high_confidence_counts = await count_high_confidence_findings_by_task_ids(
+        db,
+        opengrep_task_ids,
+    )
+
+    gitleaks_result = await db.execute(
+        select(
+            GitleaksScanTask.project_id,
+            GitleaksScanTask.scan_duration_ms,
+        )
+    )
+    gitleaks_rows = gitleaks_result.all()
+
+    agent_result = await db.execute(
+        select(
+            AgentTask.project_id,
+            AgentTask.status,
+            AgentTask.name,
+            AgentTask.description,
+            AgentTask.verified_count,
+            AgentTask.started_at,
+            AgentTask.completed_at,
+        )
+    )
+    agent_rows = agent_result.all()
+
+    # project aggregates
+    scan_runs_map: Dict[str, Dict[str, int]] = {}
+    vulns_map: Dict[str, Dict[str, int]] = {}
+
+    def ensure_scan_runs(project_id: str) -> Dict[str, int]:
+        existing = scan_runs_map.get(project_id)
+        if existing is not None:
+            return existing
+        created = {
+            "static_runs": 0,
+            "intelligent_runs": 0,
+            "hybrid_runs": 0,
+        }
+        scan_runs_map[project_id] = created
+        return created
+
+    def ensure_vulns(project_id: str) -> Dict[str, int]:
+        existing = vulns_map.get(project_id)
+        if existing is not None:
+            return existing
+        created = {
+            "static_vulns": 0,
+            "intelligent_vulns": 0,
+            "hybrid_vulns": 0,
+        }
+        vulns_map[project_id] = created
+        return created
+
+    opengrep_duration_ms = 0
+    for task_id, project_id, status, scan_duration_ms in opengrep_rows:
+        if not project_id:
+            continue
+        normalized_project_id = str(project_id)
+        project_vulns = ensure_vulns(normalized_project_id)
+        project_vulns["static_vulns"] += _to_non_negative_int(
+            high_confidence_counts.get(str(task_id), 0)
+        )
+        if str(status or "").strip().lower() == "completed":
+            project_scan_runs = ensure_scan_runs(normalized_project_id)
+            project_scan_runs["static_runs"] += 1
+        opengrep_duration_ms += _to_non_negative_int(scan_duration_ms)
+
+    gitleaks_duration_ms = 0
+    for _, scan_duration_ms in gitleaks_rows:
+        gitleaks_duration_ms += _to_non_negative_int(scan_duration_ms)
+
+    agent_duration_ms = 0
+    for (
+        project_id,
+        status,
+        name,
+        description,
+        verified_count,
+        started_at,
+        completed_at,
+    ) in agent_rows:
+        if not project_id:
+            continue
+        normalized_project_id = str(project_id)
+        source_mode = _resolve_agent_source_mode(name, description)
+
+        # vulns: project-card aligned metric (not filtered by completed)
+        verified = _to_non_negative_int(verified_count)
+        project_vulns = ensure_vulns(normalized_project_id)
+        if source_mode == "intelligent":
+            project_vulns["intelligent_vulns"] += verified
+        else:
+            project_vulns["hybrid_vulns"] += verified
+
+        # scan runs: completed only
+        if str(status or "").strip().lower() == "completed":
+            project_scan_runs = ensure_scan_runs(normalized_project_id)
+            if source_mode == "intelligent":
+                project_scan_runs["intelligent_runs"] += 1
+            else:
+                project_scan_runs["hybrid_runs"] += 1
+
+        if started_at is not None and completed_at is not None:
+            agent_duration_ms += _to_non_negative_int(
+                (completed_at - started_at).total_seconds() * 1000
+            )
+
+    scan_runs_items: List[Dict[str, Any]] = []
+    for project_id, item in scan_runs_map.items():
+        total_runs = (
+            _to_non_negative_int(item.get("static_runs", 0))
+            + _to_non_negative_int(item.get("intelligent_runs", 0))
+            + _to_non_negative_int(item.get("hybrid_runs", 0))
+        )
+        if total_runs <= 0:
+            continue
+        scan_runs_items.append(
+            {
+                "project_id": project_id,
+                "project_name": project_name_map.get(project_id, "未知项目"),
+                "static_runs": _to_non_negative_int(item.get("static_runs", 0)),
+                "intelligent_runs": _to_non_negative_int(
+                    item.get("intelligent_runs", 0)
+                ),
+                "hybrid_runs": _to_non_negative_int(item.get("hybrid_runs", 0)),
+                "total_runs": total_runs,
+            }
+        )
+
+    vulns_items: List[Dict[str, Any]] = []
+    for project_id, item in vulns_map.items():
+        total_vulns = (
+            _to_non_negative_int(item.get("static_vulns", 0))
+            + _to_non_negative_int(item.get("intelligent_vulns", 0))
+            + _to_non_negative_int(item.get("hybrid_vulns", 0))
+        )
+        if total_vulns <= 0:
+            continue
+        vulns_items.append(
+            {
+                "project_id": project_id,
+                "project_name": project_name_map.get(project_id, "未知项目"),
+                "static_vulns": _to_non_negative_int(item.get("static_vulns", 0)),
+                "intelligent_vulns": _to_non_negative_int(
+                    item.get("intelligent_vulns", 0)
+                ),
+                "hybrid_vulns": _to_non_negative_int(item.get("hybrid_vulns", 0)),
+                "total_vulns": total_vulns,
+            }
+        )
+
+    sorted_scan_runs = _sort_dashboard_items_by_total_and_name(
+        scan_runs_items,
+        total_key="total_runs",
+    )[:top_n]
+    sorted_vulns = _sort_dashboard_items_by_total_and_name(
+        vulns_items,
+        total_key="total_vulns",
+    )[:top_n]
+
+    total_scan_duration_ms = max(
+        opengrep_duration_ms + gitleaks_duration_ms + agent_duration_ms,
+        0,
+    )
+
+    return DashboardSnapshotResponse(
+        generated_at=datetime.now(timezone.utc),
+        total_scan_duration_ms=total_scan_duration_ms,
+        scan_runs=[
+            DashboardScanRunsItem(**item)
+            for item in sorted_scan_runs
+        ],
+        vulns=[
+            DashboardVulnsItem(**item)
+            for item in sorted_vulns
+        ],
+    )
 
 
 @router.get("/static-scan-overview", response_model=StaticScanOverviewResponse)

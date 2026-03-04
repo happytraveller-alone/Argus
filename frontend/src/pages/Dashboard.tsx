@@ -22,6 +22,7 @@ import type { ProjectStats } from "@/shared/types";
 import { getOpengrepRules, type OpengrepRule } from "@/shared/api/opengrep";
 import { runWithRefreshMode } from "@/shared/utils/refreshMode";
 import { useI18n } from "@/shared/i18n";
+import type { I18nKey } from "@/shared/i18n/messages";
 import {
 	buildProjectScanRunsChartData,
 	buildProjectVulnsChartData,
@@ -30,6 +31,7 @@ import {
 	type ProjectScanRunsChartItem,
 	type ProjectVulnsChartItem,
 } from "@/features/dashboard/services/projectScanStats";
+import { loadDashboardSnapshot } from "@/features/dashboard/services/dashboardSnapshotStore";
 
 const DashboardChartsPanels = lazy(
 	() => import("@/features/dashboard/components/DashboardChartsPanels"),
@@ -171,10 +173,11 @@ const formatDurationMs = (durationMs: number): string => {
 };
 
 function DashboardChartsFallback() {
+	const fallbackPanels = ["rules", "cwe"] as const;
 	return (
 		<div className="grid grid-cols-1 xl:grid-cols-2 gap-4 relative z-10">
-			{Array.from({ length: 2 }).map((_, index) => (
-				<div key={index} className="cyber-card p-4 space-y-3">
+			{fallbackPanels.map((panelId) => (
+				<div key={panelId} className="cyber-card p-4 space-y-3">
 					<Skeleton className="h-5 w-48" />
 					<Skeleton className="h-72 w-full" />
 				</div>
@@ -197,15 +200,50 @@ export default function Dashboard() {
 		[],
 	);
 	const [totalScanDurationMs, setTotalScanDurationMs] = useState(0);
+	const [scanStatsLoading, setScanStatsLoading] = useState(true);
 	const scanStatsRequestSeqRef = useRef(0);
 	const translate = useCallback(
-		(key: string, fallback?: string) => t(key as any, fallback),
+		(key: string, fallback?: string) => t(key as I18nKey, fallback),
 		[t],
 	);
 
 	const loadScanStats = useCallback(async () => {
 		const requestSeq = scanStatsRequestSeqRef.current + 1;
 		scanStatsRequestSeqRef.current = requestSeq;
+		setScanStatsLoading(true);
+
+		try {
+			const snapshot = await loadDashboardSnapshot({ topN: 10 });
+			if (requestSeq !== scanStatsRequestSeqRef.current) {
+				return;
+			}
+
+			const snapshotScanRuns = (snapshot.data.scan_runs || []).map((item) => ({
+				projectId: item.project_id,
+				projectName: item.project_name || "未知项目",
+				staticRuns: Math.max(Number(item.static_runs || 0), 0),
+				intelligentRuns: Math.max(Number(item.intelligent_runs || 0), 0),
+				hybridRuns: Math.max(Number(item.hybrid_runs || 0), 0),
+				totalRuns: Math.max(Number(item.total_runs || 0), 0),
+			}));
+			const snapshotVulns = (snapshot.data.vulns || []).map((item) => ({
+				projectId: item.project_id,
+				projectName: item.project_name || "未知项目",
+				staticVulns: Math.max(Number(item.static_vulns || 0), 0),
+				intelligentVulns: Math.max(Number(item.intelligent_vulns || 0), 0),
+				hybridVulns: Math.max(Number(item.hybrid_vulns || 0), 0),
+				totalVulns: Math.max(Number(item.total_vulns || 0), 0),
+			}));
+			setTotalScanDurationMs(
+				Math.max(Number(snapshot.data.total_scan_duration_ms || 0), 0),
+			);
+			setProjectScanRunsData(toTopNByField(snapshotScanRuns, "totalRuns", 10));
+			setProjectVulnsData(toTopNByField(snapshotVulns, "totalVulns", 10));
+			setScanStatsLoading(false);
+			return;
+		} catch {
+			// fallback to legacy client-side aggregation
+		}
 
 		try {
 			const { projects, agentTasks, opengrepTasks, gitleaksTasks } =
@@ -245,6 +283,7 @@ export default function Dashboard() {
 			});
 			setProjectScanRunsData(toTopNByField(scanRuns, "totalRuns", 10));
 			setProjectVulnsData(toTopNByField(vulns, "totalVulns", 10));
+			setScanStatsLoading(false);
 		} catch {
 			if (requestSeq !== scanStatsRequestSeqRef.current) {
 				return;
@@ -252,6 +291,7 @@ export default function Dashboard() {
 			setProjectScanRunsData([]);
 			setProjectVulnsData([]);
 			setTotalScanDurationMs(0);
+			setScanStatsLoading(false);
 		}
 	}, []);
 
@@ -305,22 +345,14 @@ export default function Dashboard() {
 		};
 	}, [loadDashboardData]);
 
-	if (loading) {
-		return (
-			<div className="flex items-center justify-center min-h-[60vh]">
-				<div className="text-center space-y-4">
-					<div className="loading-spinner mx-auto" />
-					<p className="text-muted-foreground font-mono text-base uppercase tracking-wider">
-						加载数据中...
-					</p>
-				</div>
-			</div>
-		);
-	}
-
 	return (
 		<div className="space-y-6 p-6 bg-background min-h-screen font-mono relative">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
+			{loading && (
+				<div className="relative z-10 text-xs text-muted-foreground">
+					同步最新数据中...
+				</div>
+			)}
 
 			{isDemoMode && (
 				<div className="relative z-10 cyber-card p-4 border-amber-500/30 bg-amber-500/5">
@@ -458,16 +490,22 @@ export default function Dashboard() {
 				</div>
 			</div>
 
-			<DeferredSection minHeight={900}>
-				<Suspense fallback={<DashboardChartsFallback />}>
-					<DashboardChartsPanels
-						rulesByLanguageData={rulesByLanguageData}
-						rulesByCweData={rulesByCweData}
-						projectScanRunsData={projectScanRunsData}
-						projectVulnsData={projectVulnsData}
-						translate={translate}
-					/>
-				</Suspense>
+			<DeferredSection minHeight={900} priority>
+				{scanStatsLoading &&
+				projectScanRunsData.length === 0 &&
+				projectVulnsData.length === 0 ? (
+					<DashboardChartsFallback />
+				) : (
+					<Suspense fallback={<DashboardChartsFallback />}>
+						<DashboardChartsPanels
+							rulesByLanguageData={rulesByLanguageData}
+							rulesByCweData={rulesByCweData}
+							projectScanRunsData={projectScanRunsData}
+							projectVulnsData={projectVulnsData}
+							translate={translate}
+						/>
+					</Suspense>
+				)}
 			</DeferredSection>
 		</div>
 	);

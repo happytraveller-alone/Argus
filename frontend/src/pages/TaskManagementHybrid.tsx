@@ -248,7 +248,7 @@ export default function TaskManagementHybrid() {
 					</div>
 				</div>
 
-				<DeferredSection minHeight={480}>
+				<DeferredSection minHeight={480} priority>
 					<div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 						<div className="rounded-lg border border-border/60 bg-muted/15 p-3 space-y-3">
 							<div className="flex items-center justify-between gap-2">
