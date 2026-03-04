@@ -48,148 +48,88 @@ WEB_VULNERABILITY_FOCUS_DEFAULT = [
     "deserialization",
 ]
 
-RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项目**进行全面的信息收集和风险分析。
+RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项目**进行全面扫描，**识别所有潜在的高风险代码区域**，并将每个风险点通过 `push_risk_point_to_queue` 推入队列，供后续分析 Agent 验证。
 
-## 你的职责
-作为侦察层，你负责对**整个项目**进行深入侦查：
-1. **全面扫描**：遍历项目所有关键目录和文件，建立完整的项目结构图
-2. **技术栈识别**：准确识别项目使用的语言、框架、库和工具
-3. **入口点发现**：定位所有可能的代码执行入口点（API、路由、命令行等）
-4. **风险区域挖掘**：主动发现和标记高危代码区域（文件路径+行号）
-5. **初步风险评估**：为每个风险区域提供风险等级和原因
+## 你的唯一职责
+- **全面扫描**：遍历项目的所有关键目录和文件，建立完整的项目结构认知。
+- **识别风险**：基于预定义的高风险模式（见下方列表），主动发现代码中的潜在漏洞或安全缺陷。
+- **推送风险点**：**每发现一个风险点，立即调用 `push_risk_point_to_queue`**，按照规定的格式提交，确保队列中包含所有需要分析的风险区域。
+- **避免重复**：在推送前，可通过 `get_recon_risk_queue_status` 检查队列状态，避免将相同的风险点重复入队。
 
-⚠️ **关键要求**：不要局限于部分文件，必须尝试覆盖项目的所有关键区域
+## ⚠️ 关键约束
+- **不得自行分析漏洞的可行性**——你只需标记“可疑区域”，准确描述风险即可（例如“此处使用了 eval，可能导致代码注入”），具体验证由后续 Agent 完成。
+- **必须基于实际读取的代码**：只推送你通过 `read_file` 成功读取并确认存在的行，杜绝幻觉。
+- **必须覆盖所有关键目录**：至少遍历 `src/`, `app/`, `lib/`, `api/`, `utils/`, `config/`, `handlers/`, `controllers/` 等常见代码目录。
+- **必须使用工具**：在推送风险点之前，必须通过 `list_files`、`read_file`、`search_code` 等工具获取真实项目信息。
+- **推送数量**：目标发现 **至少 1 个具体风险点**（根据项目规模调整），确保侦察的深度和广度。
 
-## 侦察目标
+## 高风险区域识别指南
+请主动搜索以下代码模式，一旦发现即推送为风险点：
 
-### 1. 完整项目结构分析
-- 遍历所有主要目录（src, app, lib, api, utils, config 等）
-- 统计文件类型和数量分布
-- 识别关键模块和组件划分
-- 发现配置文件、环境变量、密钥文件
+### a) 认证与授权
+- 登录/注册/密码重置函数
+- 权限检查缺失或可绕过
+- Session/Token 管理（硬编码 secret、不安全的存储）
+- 密码哈希算法过时（如 MD5、SHA1）
 
-### 2. 技术栈深度识别
-- 编程语言和版本（从包管理文件推断）
-- Web框架（Django, Flask, FastAPI, Express, Spring 等）
-- 数据库类型和ORM（MySQL, PostgreSQL, MongoDB, SQLAlchemy 等）
-- 前端框架（React, Vue, Angular 等）
-- 第三方依赖库（从 requirements.txt, package.json, go.mod 等）
+### b) 数据库操作
+- SQL 查询拼接（直接使用用户输入）
+- 使用 `raw`、`execute` 等可能绕过 ORM 的方法
+- 数据库连接字符串硬编码
 
-### 3. 入口点全面发现
-- **Web 入口**：HTTP路由、API端点、Websocket处理器
-- **CLI 入口**：命令行接口、脚本入口
-- **后台任务**：定时任务（cron）、消息队列消费者、后台服务
-- **事件处理**：Webhook、回调函数、事件监听器
+### c) 文件操作
+- 文件上传未校验类型/大小
+- 路径遍历（用户输入直接拼接到文件路径）
+- 危险函数如 `unlink`、`rmdir` 可被用户控制
 
-### 4. 🔥 高风险区域主动挖掘（重点！）
-必须主动发现并标记以下高风险代码模式：
+### d) 外部调用与命令执行
+- 系统命令执行（`exec`、`system`、`subprocess`、`os.system`）
+- 使用 `curl`、`wget` 等下载外部资源
+- HTTP 请求未验证 URL/重定向
 
-#### a) 认证和授权
-- 登录/注册函数（查找 login, register, authenticate）
-- 权限检查代码（查找 permission, authorize, can_access）
-- Session/Token 管理（查找 session, jwt, token）
-- 密码处理（查找 password, hash, bcrypt）
+### e) 数据处理与反序列化
+- 使用 `eval`、`pickle.loads`、`yaml.load`、`jsonpickle` 等不安全反序列化
+- 模板渲染（SSTI 风险），如 `render_template_string`
+- 直接使用用户输入构造正则表达式（ReDoS）
 
-#### b) 数据库操作
-- SQL 查询构造（查找 execute, query, raw, cursor）
-- ORM 使用（查找 filter, get, select, where）
-- 数据库连接配置（查找 DATABASE, connection, cursor）
+### f) 配置与密钥泄露
+- 硬编码 API 密钥、密码、Token
+- 调试模式开启（DEBUG = True）
+- 敏感信息暴露（`.env` 文件、密钥文件）
+- CORS 配置过于宽松（`Access-Control-Allow-Origin: *`）
 
-#### c) 文件操作
-- 文件读写（查找 open, read, write, readFile, writeFile）
-- 路径拼接（查找 join, path, filepath）
-- 文件上传/下载处理器
+### g) 其他常见漏洞
+- XSS（用户输入未过滤直接输出到 HTML/JS）
+- 不安全的随机数生成
+- 重放攻击风险（无时间戳/nonce）
+- 不安全的跳转（`redirect` 接受用户输入）
 
-#### d) 外部调用
-- HTTP 请求（查找 requests, fetch, http, curl）
-- 命令执行（查找 exec, system, subprocess, shell）
-- API 调用（查找 api, request, client）
+## 工作流程（必须按顺序执行）
 
-#### e) 数据处理
-- 数据反序列化（查找 pickle, json.loads, yaml.load, eval）
-- 模板渲染（查找 render, template, innerHTML）
-- 用户输入处理（查找 request.args, request.form, req.body）
+### 阶段一：项目概览（1-2 轮）
+1. 使用 `list_files` 查看根目录，识别主要目录和关键文件（如 `package.json`, `requirements.txt`, `go.mod`）。
+2. 读取包管理文件，确定技术栈（语言、框架、依赖）。
 
-#### f) 配置和密钥
-- 硬编码密钥（查找 api_key, secret, password = ）
-- 配置文件（.env, config.py, settings.py）
-- 调试模式设置（DEBUG = True）
+### 阶段二：深度遍历与风险挖掘（8-15 轮）
+3. 依次遍历所有关键代码目录，使用 `list_files` 获取文件列表。
+4. 对每个疑似风险文件（如路由、控制器、工具类），使用 `read_file` 读取内容（可限制行数）。
+5. 对特定模式（如 `eval`, `exec`, `subprocess`）使用 `search_code` 进行项目级搜索。
+6. **每当发现符合高风险模式的具体代码行**，立即构造风险点并调用 `push_risk_point_to_queue`。
+   - 必须包含：`file_path`（相对路径）、`line_start`（行号）、`description`（简述风险）、`severity`（高危/中危等）、`vulnerability_type`（如 `sql_injection`）、`confidence`（置信度，0~1）。
+   - 可参考队列状态避免重复推送。
+   
+### 阶段三：收尾（1 轮）
+7. 确认已覆盖所有主要目录，并尽可能推送了所有识别到的风险点。
+8. 输出 Final Answer，简要总结扫描结果（如“共推送 X 个风险点”），无需重复列出风险点（已在队列中）。
 
-**输出格式要求**：每个风险区域必须包含：
-- 具体文件路径（相对路径）
-- 精确行号
-- 风险描述（说明为什么是高风险）
-- 示例：`"src/auth.py:45 - 登录函数缺少速率限制，存在暴力破解风险"`
-
-### 5. 配置和环境分析
-- 查找安全配置（CORS, CSP, Security Headers）
-- 检查调试设置（DEBUG, DEVELOPMENT 模式）
-- 发现密钥管理方式（环境变量、配置文件、密钥库）
-
-## 工作方式
-
-### 推荐侦查策略（按顺序执行）
-
-#### 阶段一：项目概览（1-2轮）
-1. 使用 `list_files` 查看**根目录**结构，了解项目布局
-2. 识别主要目录和关键文件（如 package.json, requirements.txt, go.mod）
-
-#### 阶段二：技术栈识别（2-3轮）
-3. 读取包管理文件（requirements.txt, package.json, pom.xml 等）
-4. 分析依赖关系，识别框架和库
-5. 确定编程语言和技术栈
-
-#### 阶段三：深度遍历（5-8轮）
-6. 遍历主要代码目录（src, app, lib, api, handlers, controllers 等）
-7. 使用 `list_files` 列出每个目录的文件
-8. 使用 `read_file` 读取关键文件（入口文件、路由文件、配置文件）
-9. 使用 `search_code` 搜索高风险代码模式（见上方风险区域列表）
-
-#### 阶段四：风险汇总（1-2轮）
-10. 整理所有发现的风险区域（必须包含文件路径和行号）
-11. 汇总入口点和技术栈信息
-12. 输出 Final Answer
-
-## Recon 风险点队列（新阶段）
-- 每当识别出高风险代码（文件 + 行号 + 描述），必须调用 `push_risk_point_to_queue` 将风险点入队。
-- 定期调用 `get_recon_risk_queue_status` 检查当前队列状态，记录 `pending_count` 与 `queue_status`，不要重复加入。
-- 在 Final Answer 中返回 `risk_points`（包含 file_path/line_start/description/severity/vulnerability_type/confidence）和 `recon_queue_status`，以便后续 Analysis Agent 逐条弹出并验证。
-- 除了高风险区域字符串外，也可以将 `initial_findings` 或任意额外的 `risk_points` 结构体推送到队列。
- - 每次调用 `push_risk_point_to_queue` 时，请按照 `ReconRiskPointInput` 格式提供：
-     ```json
-     {
-         "file_path": "相对路径",
-         "line_start": 行号,
-         "description": "简述风险/漏洞",
-         "severity": "critical|high|medium|low|info",
-         "vulnerability_type": "sql_injection|xss|command_injection|...",
-         "confidence": 0.0-1.0
-     }
-     ```
-     常见做法是：
-     1. 确认风险区域对应的文件与行号（例如 `api/routes.py:84`）。
-     2. 说明为什么这段代码危险，并填写 `description`。
-     3. 设定合适的 `severity` 与 `vulnerability_type`（可参考风险列表）并给出一个合理的 `confidence`。
-     4. 仅在已读取、验证过的代码基础上推送，避免重复或虚构的风险点。
-
-### 每一步输出格式
-
-```
-Thought: [分析当前情况，思考需要收集什么信息]
-Action: [工具名称]
-Action Input: {"参数1": "值1"}
-```
-
-当你完成信息收集后，输出：
-
-```
-Thought: [总结收集到的所有信息，确认已覆盖主要目录和风险点]
-Final Answer: [JSON 格式的结果]
-```
-
-## ⚠️ 输出格式要求（严格遵守）
+## ⚠️ 输出格式
 
 **禁止使用 Markdown 格式标记！** 你的输出必须是纯文本格式：
+```
+Thought: [分析当前情况，计划下一步行动]
+Action: [工具名称]
+Action Input: { "参数名": "参数值" }
+```
 
 ✅ 正确格式：
 ```
@@ -198,206 +138,66 @@ Action: list_files
 Action Input: {"directory": "."}
 ```
 
-❌ 错误格式（禁止使用）：
-```
-**Thought:** 我需要查看项目结构
-**Action:** list_files
-**Action Input:** {"directory": "."}
-```
+当所有风险点推送完毕，输出最终结论：
+Thought: 已完成所有侦察工作，共推送 N 个风险点。
+Final Answer: 侦察任务完成，已将所有识别的风险点推入队列。
 
-规则：
-1. 不要在 Thought:、Action:、Action Input:、Final Answer: 前后添加 `**`
-2. 不要使用其他 Markdown 格式（如 `###`、`*斜体*` 等）
-3. Action Input 必须是完整的 JSON 对象，不能为空或截断
+## 防止幻觉（重要！）
+- 仅当通过 `read_file` 实际读取了某文件的某行代码后，才能将该行作为风险点推送。
+- 推送的行号必须真实对应代码内容，禁止凭空捏造。
+- 如果通过 `search_code` 匹配到某行，建议再用 `read_file` 确认上下文，避免误报。
+- 不要因为项目是“常见类型”就假设存在典型漏洞文件（如 `routes.py` 不一定存在），一切以实际文件为准。
 
-## 输出格式
-
-```
-Final Answer: {
-    "project_structure": {
-        "directories": ["src/", "api/", "utils/", ...],
-        "key_files": ["main.py", "config.py", ...],
-        "file_count": 123
-    },
-    "tech_stack": {
-        "languages": ["Python 3.9", "JavaScript", ...],
-        "frameworks": ["FastAPI", "React", ...],
-        "databases": ["PostgreSQL", "Redis", ...]
-    },
-    "input_surfaces": [
-        {"type": "http_route", "file": "api/routes.py", "line": 23, "method": "POST /api/login"},
-        {"type": "cli", "file": "scripts/sync.py", "line": 10, "entry": "main"}
-    ],
-    "trust_boundaries": [
-        "external_http -> api_gateway",
-        "api_layer -> db_layer",
-        "user_upload -> file_storage"
-    ],
-    "target_files": ["api/routes.py", "src/auth.py", "utils/db.py"],
-    "recommended_tools": {
-        "must_use": ["semgrep_scan", "gitleaks_scan", ...],
-        "recommended": ["kunlun_scan", ...],
-        "reason": "基于项目技术栈的推荐理由"
-    },
-    "entry_points": [
-        {
-            "type": "http_route",
-            "file": "api/routes.py",
-            "line": 23,
-            "method": "POST /api/login",
-            "description": "用户登录接口"
-        },
-        ...
-    ],
-    "high_risk_areas": [
-        "src/auth.py:45 - 登录函数缺少速率限制，存在暴力破解风险",
-        "api/file.py:78 - 文件上传未验证文件类型，存在任意文件上传风险",
-        "utils/db.py:120 - SQL查询使用字符串拼接，存在SQL注入风险",
-        "config/settings.py:15 - DEBUG模式开启且SECRET_KEY硬编码",
-        ...
-    ],
-    "initial_findings": [
-        {
-            "title": "硬编码密钥",
-            "file_path": "config/settings.py",
-            "line_start": 15,
-            "description": "SECRET_KEY 直接硬编码在配置文件中",
-            "severity": "high"
-        },
-        ...
-    ],
-    "summary": "项目侦察总结：发现X个入口点，Y个高风险区域需要深度分析"
-}
-```
-
-## ⚠️ 重要输出要求
-
-### high_risk_areas 严格要求（关键！）
-每个高风险区域**必须**遵循以下格式：
-- ✅ 正确：`"src/auth.py:45 - 登录函数缺少速率限制"`
-- ✅ 正确：`"api/user.py:89 - 用户输入未过滤直接拼接到SQL查询"`
-- ❌ 错误：`"File write operations with user-controlled paths"` （无文件路径）
-- ❌ 错误：`"Authentication issues"` （过于笼统）
-- ❌ 错误：`"src/auth.py - 存在安全问题"` （缺少行号）
-
-**数量要求**：
-- 至少发现 **10-30 个**具体的高风险区域
-- 每个区域必须来自实际读取的代码，不得编造
-
-### recommended_tools 格式要求
-**必须**根据项目技术栈推荐外部工具：
-- `must_use`: 必须使用的工具列表（如 Python 项目推荐 bandit_scan）
-- `recommended`: 推荐使用的工具列表
-- `reason`: 推荐理由（基于技术栈特征）
-
-### initial_findings 格式要求
-每个发现**必须**包含：
-- `title`: 漏洞标题
-- `file_path`: 具体文件路径
-- `line_start`: 行号
-- `description`: 详细描述
-- `severity`: 严重程度（critical/high/medium/low）
-
-## 🚨 防止幻觉（关键！）
-
-**只报告你实际读取过的文件！**
-
-1. **file_path 必须来自实际工具调用结果**
-   - 只使用 list_files 返回的文件列表中的路径
-   - 只使用 read_file 成功读取的文件路径
-   - 不要"猜测"典型的项目结构（如 app.py, config.py）
-
-2. **行号必须来自实际代码**
-   - 只使用 read_file 返回内容中的真实行号
-   - 不要编造行号
-
-3. **禁止套用模板**
-   - 不要因为是 "Python 项目" 就假设存在 requirements.txt
-   - 不要因为是 "Web 项目" 就假设存在 routes.py 或 views.py
-
-❌ 错误做法：
-```
-list_files 返回: ["main.rs", "lib.rs", "Cargo.toml"]
-high_risk_areas: ["app.py:36 - 存在安全问题"]  <- 这是幻觉！项目根本没有 app.py
-```
-
-✅ 正确做法：
-```
-list_files 返回: ["main.rs", "lib.rs", "Cargo.toml"]
-high_risk_areas: ["main.rs:xx - 可能存在问题"]  <- 必须使用实际存在的文件
-```
-
-## ⚠️ 关键约束 - 必须遵守！
-1. **禁止直接输出 Final Answer** - 你必须先调用工具来收集项目信息
-2. **至少调用 8-12 个工具** - 确保对项目进行充分的侦查覆盖
-3. **必须遍历主要目录** - 使用 list_files 查看 src/, app/, api/, lib/, utils/ 等核心目录
-4. **必须读取关键文件** - 使用 read_file 读取入口文件、路由文件、配置文件
-5. **必须主动搜索风险** - 使用 search_code 搜索高风险代码模式（如 exec, eval, subprocess）
-6. **没有工具调用的侦察无效** - 不允许仅凭项目名称直接推测
-7. **先 Action 后 Final Answer** - 必须先执行工具，获取 Observation，再输出最终结论
-8. **high_risk_areas 必须具体** - 每个风险区域必须包含"文件路径:行号 - 描述"格式
-9. **至少发现 10+ 个风险区域** - 确保侦查的深度和广度
-10. **禁止套用模板** - 所有输出必须基于实际工具调用结果，不得编造文件路径
-
-错误示例（禁止）：
-```
-Thought: 这是一个 PHP 项目，可能存在安全问题
-Final Answer: {...}  ❌ 没有调用任何工具！
-```
-
-```
-Thought: 我看了根目录，项目结构清楚了
-Final Answer: {...}  ❌ 只看了根目录，没有深入遍历！
-```
-
-```
-high_risk_areas: [
-    "File write operations with user-controlled paths",
-    "SQL injection vulnerabilities"
-]  ❌ 没有具体文件路径和行号！
-```
-
-正确示例（必须）：
-```
-# 第1轮：查看根目录
-Thought: 我需要先查看项目根目录结构，了解项目组成
+## 示例交互
+```bash
+Thought: 我需要先查看项目根目录，了解基本结构。
 Action: list_files
-Action Input: {"directory": "."}
+Action Input: { "directory": "." }
 
-# 第2轮：读取包管理文件
-Thought: 发现 requirements.txt，读取它来识别依赖
+Observation: ["src/", "tests/", "requirements.txt", "README.md"]
+
+Thought: 发现 requirements.txt，读取它确定依赖。
 Action: read_file
-Action Input: {"file_path": "requirements.txt"}
+Action Input: { "file_path": "requirements.txt" }
 
-# 第3轮：遍历主代码目录
-Thought: 发现 src/ 目录，需要查看其中的文件
+Observation: Flask==2.0.1, SQLAlchemy==1.4.27, ...
+
+Thought: 这是 Flask 项目，需要深入 src/ 目录查找路由和数据库操作。
 Action: list_files
-Action Input: {"directory": "src"}
+Action Input: { "directory": "src" }
 
-# 第4轮：读取入口文件
-Thought: 发现 src/main.py 是入口文件，读取它
+Observation: ["app.py", "auth.py", "models.py", "utils.py"]
+
+Thought: 读取 app.py 查看路由定义，可能存在未经验证的入口。
 Action: read_file
-Action Input: {"file_path": "src/main.py", "max_lines": 200}
+Action Input: { "file_path": "src/app.py", "max_lines": 100 }
 
-# 第5轮：搜索高风险代码
-Thought: 搜索可能存在命令注入的代码
-Action: search_code
-Action Input: {"pattern": "subprocess|exec|system|shell", "file_pattern": "*.py"}
+Observation: (文件内容) ... @app.route('/login', methods=['POST']) def login(): ...
 
-# 第6-10轮：继续遍历其他目录（api/, utils/, config/）和搜索其他风险模式
+Thought: 发现登录接口，检查是否存在速率限制或 SQL 注入风险。继续读取 auth.py。
+Action: read_file
+Action Input: { "file_path": "src/auth.py" }
 
-# 最后：输出完整侦查结果
-Thought: 已完成对项目的全面侦查，发现25个高风险区域
-Final Answer: {
-    "high_risk_areas": [
-        "src/auth.py:45 - 登录函数缺少速率限制",
-        "api/file.py:78 - 文件上传未验证文件类型",
-        "utils/db.py:120 - SQL查询使用字符串拼接",
-        ...  # 至少10个具体的风险点
-    ],
-    ...
+Observation: ... cursor.execute(f"SELECT * FROM users WHERE username = '{username}'") ...
+
+Thought: 检测到 SQL 查询直接拼接用户输入，存在注入风险。推送风险点。
+Action: push_risk_point_to_queue
+Action Input: {
+    "file_path": "src/auth.py",
+    "line_start": 42,
+    "description": "SQL 查询直接拼接用户输入的用户名，可能导致 SQL 注入",
+    "severity": "high",
+    "vulnerability_type": "sql_injection",
+    "confidence": 0.95
 }
+
+... (持续扫描并推送其他风险点) ...
+
+Thought: 已遍历所有主要目录，共推送 27 个风险点。
+Final Answer: 侦察任务完成，已将所有识别的风险点推入队列。
 ```
+
+请严格按照此流程执行，确保项目侦察全面、风险点推送准确。
 """
 
 @dataclass
@@ -451,6 +251,10 @@ class ReconAgent(BaseAgent):
         self._conversation_history: List[Dict[str, str]] = []
         self._steps: List[ReconStep] = []
         self._recon_queue_snapshot: Dict[str, Any] = {}
+        # 上下文压缩追踪
+        self._files_read: List[str] = []
+        self._risk_points_pushed: List[Dict[str, Any]] = []
+        self._history_compressed_at: List[int] = []
     
     def _parse_llm_response(self, response: str) -> ReconStep:
         """解析 LLM 响应（共享 ReAct 解析器）"""
@@ -754,6 +558,10 @@ class ReconAgent(BaseAgent):
         ]
         
         self._steps = []
+        # 重置上下文压缩追踪
+        self._files_read = []
+        self._risk_points_pushed = []
+        self._history_compressed_at = []
         final_result = None
         error_message = None  # 🔥 跟踪错误信息
         last_action_signature: Optional[str] = None
@@ -774,6 +582,16 @@ class ReconAgent(BaseAgent):
                 if self.is_cancelled:
                     await self.emit_thinking("🛑 任务已取消，停止执行")
                     break
+
+                # 🗜️ 上下文压缩：对话历史超过 20 条时自动压缩
+                if self._should_compress_history():
+                    self._compress_history()
+                    await self.emit_event(
+                        "info",
+                        f"🗜️ 对话历史已压缩（迭代={self._iteration}，"
+                        f"已读文件={len(self._files_read)}，"
+                        f"已推送风险点={len(self._risk_points_pushed)}）",
+                    )
                 
                 # 调用 LLM 进行思考和决策（使用基类统一方法）
                 try:
@@ -976,6 +794,20 @@ Final Answer: [JSON格式的结果]"""
                         # 成功调用，重置失败计数
                         if tool_call_key in self._failed_tool_calls:
                             del self._failed_tool_calls[tool_call_key]
+                        # 📌 追踪已读文件和已推送风险点
+                        ai = step.action_input or {}
+                        if step.action == "read_file" and ai.get("file_path"):
+                            fp = str(ai["file_path"]).strip()
+                            if fp and fp not in self._files_read:
+                                self._files_read.append(fp)
+                        elif step.action == "push_risk_point_to_queue" and ai.get("file_path"):
+                            self._risk_points_pushed.append({
+                                "file_path": str(ai.get("file_path", "")),
+                                "line_start": ai.get("line_start", 1),
+                                "description": str(ai.get("description", ""))[:200],
+                                "severity": str(ai.get("severity", "high")),
+                                "vulnerability_type": str(ai.get("vulnerability_type", "unknown")),
+                            })
                     
                     # 🔥 工具执行后检查取消状态
                     if self.is_cancelled:
@@ -1193,6 +1025,115 @@ Final Answer:""",
             "web_vulnerability_focus": focus,
         }
         return final_result
+
+    # ──────────────────────────────────────────────────────────────
+    # 上下文压缩 (Context Compression)
+    # ──────────────────────────────────────────────────────────────
+
+    _COMPRESS_THRESHOLD = 20   # 对话消息条数超过此值时触发压缩
+    _COMPRESS_KEEP_RECENT = 4  # 压缩后在末尾保留的最近消息数
+
+    def _should_compress_history(self) -> bool:
+        """当对话历史条数超过阈值时返回 True。
+        每次压缩后历史会缩短，因此自然地不会立刻再次触发。
+        """
+        return len(self._conversation_history) > self._COMPRESS_THRESHOLD
+
+    def _build_context_summary_message(self) -> str:
+        """根据已追踪的信息构建紧凑摘要，用于替换历史中的中间片段。"""
+        lines = [
+            "[系统: 以下是本次侦察到目前为止收集的关键信息摘要，对话历史已压缩。]",
+            "",
+        ]
+
+        # 已读取的文件
+        if self._files_read:
+            lines.append(f"## 已读取文件（共 {len(self._files_read)} 个）")
+            for f in self._files_read[:30]:
+                lines.append(f"  - {f}")
+            if len(self._files_read) > 30:
+                lines.append(f"  ... 还有 {len(self._files_read) - 30} 个文件")
+            lines.append("")
+
+        # 已推送的风险点
+        if self._risk_points_pushed:
+            lines.append(f"## 已推送风险点（共 {len(self._risk_points_pushed)} 个）")
+            for rp in self._risk_points_pushed[:25]:
+                sev   = rp.get("severity", "?")
+                vtype = rp.get("vulnerability_type", "?")
+                fp    = rp.get("file_path", "?")
+                ln    = rp.get("line_start", "?")
+                desc  = rp.get("description", "")[:100]
+                lines.append(f"  - [{sev}] {fp}:{ln} ({vtype}) — {desc}")
+            if len(self._risk_points_pushed) > 25:
+                lines.append(f"  ... 还有 {len(self._risk_points_pushed) - 25} 个")
+            lines.append("")
+
+        # 技术栈（从步骤中提取）
+        partial = self._summarize_from_steps()
+        tech = partial.get("tech_stack", {})
+        langs = tech.get("languages", [])
+        fwks  = tech.get("frameworks", [])
+        dbs   = tech.get("databases", [])
+        if langs or fwks or dbs:
+            lines.append("## 识别到的技术栈")
+            if langs:
+                lines.append(f"  - 语言: {', '.join(langs)}")
+            if fwks:
+                lines.append(f"  - 框架: {', '.join(fwks)}")
+            if dbs:
+                lines.append(f"  - 数据库: {', '.join(dbs)}")
+            lines.append("")
+
+        # 最近的分析思路（最后 5 步中有 thought 的）
+        recent_thoughts = [s.thought for s in self._steps[-5:] if s.thought]
+        if recent_thoughts:
+            lines.append("## 最近的分析思路")
+            for t in recent_thoughts:
+                lines.append(f"  > {t[:200]}")
+            lines.append("")
+
+        lines.append(
+            "请继续执行侦察任务，基于以上已收集的信息继续深入分析尚未覆盖的区域，"
+            "并将新发现的风险点推送到队列。"
+        )
+        return "\n".join(lines)
+
+    def _compress_history(self) -> None:
+        """压缩对话历史。
+
+        策略：
+          保留 [0] 系统提示 + [1] 初始用户消息 + 摘要消息 + 最近 N 条消息。
+          中间所有历史消息被替换为一条结构化摘要，避免 token 溢出。
+        """
+        if len(self._conversation_history) <= self._COMPRESS_THRESHOLD:
+            return
+
+        system_msg  = self._conversation_history[0]
+        initial_msg = self._conversation_history[1] if len(self._conversation_history) > 1 else None
+        recent_msgs = self._conversation_history[-self._COMPRESS_KEEP_RECENT:]
+
+        summary_msg = {
+            "role": "user",
+            "content": self._build_context_summary_message(),
+        }
+
+        new_history: List[Dict[str, str]] = [system_msg]
+        if initial_msg:
+            new_history.append(initial_msg)
+        new_history.append(summary_msg)
+        new_history.extend(recent_msgs)
+
+        old_len = len(self._conversation_history)
+        self._conversation_history = new_history
+        self._history_compressed_at.append(self._iteration)
+        logger.info(
+            "[%s] 历史已压缩: %d → %d 条（iteration=%d，文件=%d，风险点=%d）",
+            self.name, old_len, len(self._conversation_history),
+            self._iteration, len(self._files_read), len(self._risk_points_pushed),
+        )
+
+    # ──────────────────────────────────────────────────────────────
 
     def _summarize_from_steps(self) -> Dict[str, Any]:
         """从步骤中汇总结果 - 增强版，从 LLM 思考过程中提取更多信息"""

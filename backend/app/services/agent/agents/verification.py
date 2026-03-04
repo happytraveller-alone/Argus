@@ -47,19 +47,26 @@ CONFIDENCE_THRESHOLD_FALSE_POSITIVE = 0.3  # <= 0.3 判定为 false_positive
 CONFIDENCE_DEFAULT_ON_MISSING = None  # 缺失置信度时：None表示保留LLM原始verdict，不强制降级
 CONFIDENCE_DEFAULT_FALLBACK = 0.5  # 最后兜底：信息不足时使用0.5作为中立值
 
-VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个**自主**的安全验证专家。
+VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个**自主**的安全验证专家。你的核心目标是**以最高标准确认漏洞的真实性，坚决排除误报**。
 
 ## 你的角色
 你是漏洞验证的**大脑**，不是机械验证器。你需要：
-1. 理解每个漏洞的上下文
-2. 设计合适的验证策略
-3. **编写测试代码进行动态验证**
-4. 判断漏洞是否真实存在
-5. 评估实际影响并生成 PoC
+1. 深入理解每个漏洞的上下文和触发条件。
+2. 设计严谨的验证策略，**优先通过动态执行（Fuzzing Harness）触发漏洞**。
+3. 编写测试代码进行动态验证，**只有能稳定触发的漏洞才能被评为 confirmed**。
+4. 对于无法动态验证的情况，必须提供充足的静态证据，并相应降低置信度。
+5. 如果发现漏洞实际不可触发（如输入被过滤、路径不可达），必须明确判定为 false_positive 并给出理由。
 
 ## 输入方式
-你将收到 Orchestrator 传递的**单个漏洞对象**，通过 `context` 字段传入。context 是一个 JSON 字符串，解析后包含漏洞的详细信息（如 file_path, line_start, vulnerability_type, title 等）。你**只需要验证这一个漏洞**，不要尝试批量处理多个漏洞。
+你将收到传递的**单个漏洞对象**，通过 `context` 字段传入。context 是一个 JSON 字符串，解析后包含漏洞的详细信息（如 file_path, line_start, vulnerability_type, title 等）。你**只需要验证这一个漏洞**，不要尝试批量处理多个漏洞。
 
+## 🔥 降低误报率的黄金准则
+1. **必须证明输入可控且无有效过滤**：仅凭代码中存在危险函数不足以构成漏洞，必须确认用户输入能影响该函数，且没有足够的防御（如参数化查询、转义、白名单校验）。
+2. **必须证明代码路径可达**：检查函数是否被外部调用（如路由、API 入口、公开方法）。如果无法证明可达性，置信度不得高于 0.5。
+3. **必须构造成功触发漏洞的 PoC**：对于 confirmed 判定，必须提供能稳定触发漏洞的 payload，并展示执行结果（如命令执行输出、SQL 报错、XSS 弹窗模拟等）。
+4. **必须考虑上下文防御**：检查是否存在上游过滤、类型转换、安全配置（如 HttpOnly、CSP）等可能阻止漏洞利用的机制。
+5. **多 payload 测试**：不要只用一个 payload 就下结论，应测试多种变形，以绕过简单的过滤。
+6. **误报分析**：如果初步怀疑存在漏洞但实际测试未触发，应分析原因（例如：过滤函数、参数类型限制、框架自动转义），并记录在证据中。
 
 ## 核心理念：Fuzzing Harness（强制优先）
 即使项目无法整体运行，也要尽量完成验证：
@@ -67,6 +74,12 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 2. Mock 依赖（数据库/HTTP/文件系统/危险函数）。
 3. 编写测试脚本并构造多组 payload。
 4. 用 `run_code` 执行 Harness，基于输出判定。
+### 结果持久化
+- **save_verification_results**: 将已确定 verdict 的 findings 持久化保存到数据库
+  - 必须在所有验证工作完成、输出 Final Answer 之前调用
+  - 参数: findings (List[Dict])，可选 summary (str)
+  - 返回保存结果（saved_count / filtered_count / message）
+
 ## 你可以使用的工具
 
 ### 🔥 核心验证工具（优先使用）
@@ -90,6 +103,12 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 ### 沙箱工具
 - **sandbox_exec**: 在沙箱中执行命令（用于验证命令执行类漏洞）
 - **sandbox_http**: 发送 HTTP 请求（如果有运行的服务）
+
+### 💾 结果持久化（必须调用）
+- **save_verification_results**: 将已确定 verdict 的 findings 持久化保存到数据库
+  - **必须在所有验证工作完成、输出 Final Answer 之前调用**
+  - 参数: findings (List[Dict])，可选 summary (str)
+  - 返回保存结果（saved_count / filtered_count / message）
 
 ## 🔥 Fuzzing Harness 编写指南
 
@@ -244,7 +263,7 @@ Action: [工具名称]
 Action Input: [参数]
 ```
 
-验证完所有发现后，输出：
+验证完所有发现后，必须先调用 save_verification_results 工具保存所有 findings（无论 verdict 如何），然后输出 Final Answer：
 
 ```
 Thought: [总结验证结果]
@@ -294,6 +313,7 @@ Action Input: {"file_path": "search.php"}
 7. 输出语言必须为简体中文（title/description/suggestion/fix_description/verification_evidence/poc_plan）。
 8. 禁止 Markdown 样式的 `**Thought:**`，必须使用纯文本 `Thought:` / `Action:` / `Action Input:` / `Final Answer:`。
 9. 不允许“请选择/请确认后继续”等交互漂移语句。
+10. **输出 Final Answer 后，必须立即调用 `save_verification_results` 工具，将 confirmed/likely 的 findings 持久化入库；跳过此步骤将导致验证结果丢失。**
 
 ## 真实性与置信度判定
 
@@ -333,6 +353,7 @@ Action Input: {"file_path": "search.php"}
 2. 提取目标函数，构建 Harness，优先动态验证（`run_code`）。
 3. 按单候选状态机推进：pending -> running -> verified/false_positive。
 4. 汇总证据，输出 Final Answer JSON。
+5. **输出 Final Answer 前，调用 `save_verification_results` 工具保存结果（必须执行）。**
 
 ## Final Answer 要求（JSON格式）
 
@@ -2780,6 +2801,39 @@ class VerificationAgent(BaseAgent):
             )
 
             logger.info(f"[{self.name}] Returning {len(verified_findings)} verified findings")
+
+            # 🔥 验证结果持久化：通过工具将 findings 保存到数据库
+            # LLM 处理层已在 Final Answer 后将 findings 传递给此工具；
+            # 这里做兼容兴德：如果 LLM 未主动调用，仍由濒递逻辑处理。
+            if "save_verification_results" in self.tools and verified_findings:
+                confirmed_or_likely = [
+                    f for f in verified_findings
+                    if str(f.get("verdict") or "").lower() in {"confirmed", "likely"}
+                ]
+                if confirmed_or_likely:
+                    try:
+                        save_result = await self.execute_tool(
+                            "save_verification_results",
+                            {
+                                "findings": confirmed_or_likely,
+                                "summary": (
+                                    f"共验证 {len(findings_to_verify)} 个候选，"
+                                    f"{confirmed_count} 确认 / {likely_count} 可能 / "
+                                    f"{false_positive_count} 误报"
+                                ),
+                            },
+                        )
+                        logger.info(
+                            "[%s] save_verification_results: %s",
+                            self.name,
+                            (save_result.data or {}).get("message", ""),
+                        )
+                    except Exception as _save_err:
+                        logger.warning(
+                            "[%s] save_verification_results 工具调用失败 (已降级继续): %s",
+                            self.name,
+                            _save_err,
+                        )
 
             handoff = self._create_verification_handoff(
                 verified_findings,

@@ -2654,6 +2654,7 @@ async def _execute_agent_task(task_id: str):
     架构：OrchestratorAgent 作为大脑，动态调度子 Agent
     """
     from app.services.agent.agents import OrchestratorAgent, ReconAgent, AnalysisAgent, VerificationAgent
+    from app.services.agent.workflow import WorkflowOrchestratorAgent
     from app.services.agent.event_manager import EventManager, AgentEventEmitter
     from app.services.llm.service import LLMService, LLMConfigError
     from app.services.agent.core import agent_registry
@@ -3184,8 +3185,8 @@ async def _execute_agent_task(task_id: str):
                 if hasattr(agent, "set_mcp_runtime"):
                     agent.set_mcp_runtime(mcp_runtime)
 
-            # 创建 Orchestrator Agent
-            orchestrator = OrchestratorAgent(
+            # 创建 Orchestrator Agent（使用确定性 Workflow 版本，注入两个队列服务）
+            orchestrator = WorkflowOrchestratorAgent(
                 llm_service=llm_service,
                 tools=tools.get("orchestrator", {}),
                 event_emitter=event_emitter,
@@ -3194,6 +3195,8 @@ async def _execute_agent_task(task_id: str):
                     "analysis": analysis_agent,
                     "verification": verification_agent,
                 },
+                recon_queue_service=recon_queue_service,
+                vuln_queue_service=queue_service,
             )
             if isinstance(getattr(orchestrator.config, "metadata", None), dict):
                 orchestrator.config.metadata.update(audit_runtime_metadata)
@@ -3441,7 +3444,18 @@ async def _execute_agent_task(task_id: str):
                 return int(saved)
 
             input_data["persist_findings"] = _persist_findings_callback
-            
+
+            # 🔥 将持久化回调注入到已初始化的 Verification 保存工具
+            # （工具在 _initialize_tools 时以 save_callback=None 创建，此处补注入）
+            _save_tool_instance = (
+                tools.get("verification", {}).get("save_verification_results")
+                if isinstance(tools, dict)
+                else None
+            )
+            if _save_tool_instance is not None and hasattr(_save_tool_instance, "_save_callback"):
+                _save_tool_instance._save_callback = _persist_findings_callback
+                logger.info("[Task] Injected persist_findings_callback into save_verification_results tool")
+
             # 执行 Orchestrator
             await event_emitter.emit_phase_start("orchestration", "🎯 Orchestrator 开始编排审计流程")
             task.current_phase = AgentTaskPhase.ANALYSIS
@@ -3541,7 +3555,39 @@ async def _execute_agent_task(task_id: str):
                 task.current_phase = AgentTaskPhase.VERIFICATION
                 task.current_step = "验证与结果归档中"
                 await db.commit()
-                if persist_state.get("saved_count") is not None:
+
+                # 检查 save_verification_results 工具是否已由 Agent 主动持久化
+                _tool_saved_count: Optional[int] = None
+                if (
+                    _save_tool_instance is not None
+                    and hasattr(_save_tool_instance, "is_saved")
+                    and _save_tool_instance.is_saved
+                ):
+                    _tool_saved_count = _save_tool_instance.saved_count
+                    logger.info(
+                        "[AgentTask] save_verification_results 工具已由 Verification Agent 主动保存: saved_count=%s",
+                        _tool_saved_count,
+                    )
+                elif (
+                    _save_tool_instance is not None
+                    and hasattr(_save_tool_instance, "buffered_findings")
+                    and _save_tool_instance.buffered_findings
+                    and not findings
+                ):
+                    # 工具缓冲了结果但未持久化（无回调），用缓冲的 findings 作为来源
+                    findings = _save_tool_instance.buffered_findings
+                    logger.info(
+                        "[AgentTask] 从 save_verification_results 工具缓冲读取 %d 条 findings",
+                        len(findings),
+                    )
+
+                if _tool_saved_count is not None:
+                    saved_count = _tool_saved_count
+                    logger.info(
+                        "[AgentTask] 跳过重复持久化（工具已保存 %s 条）",
+                        saved_count,
+                    )
+                elif persist_state.get("saved_count") is not None:
                     saved_count = int(persist_state["saved_count"])
                     logger.info(
                         "[AgentTask] Findings were already persisted by Orchestrator TODO step: saved_count=%s",
@@ -4338,6 +4384,7 @@ async def _initialize_tools(
     qmd_task_kb: Optional[Any] = None,
     queue_service: Optional[Any] = None,  # 🔥 新增：漏洞队列服务
     recon_queue_service: Optional[Any] = None,  # 🔥 新增：Recon 风险队列服务
+    save_callback: Optional[Any] = None,  # 🔥 新增：验证结果持久化回调 async (findings) -> int
 ) -> Dict[str, Dict[str, Any]]:
     """初始化工具集
 
@@ -4843,6 +4890,16 @@ async def _initialize_tools(
         "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
     }
     verification_tools.update(deprecated_skill_tools)
+
+    # 🔥 验证结果保存工具（与 Analysis 队列工具相同的注入模式）
+    if task_id:
+        from app.services.agent.tools.verification_result_tools import SaveVerificationResultsTool
+        _save_tool = SaveVerificationResultsTool(
+            task_id=task_id,
+            save_callback=save_callback,  # 可为 None，工具仍会缓存结果
+        )
+        verification_tools["save_verification_results"] = _save_tool
+        logger.info("[Tools] Added save_verification_results tool for task %s", task_id)
 
     # Orchestrator 工具（主要是思考工具）
     orchestrator_tools = {
@@ -5969,7 +6026,7 @@ async def _save_findings(
                 poc_description = None
                 poc_steps = None
 
-            # 11) optional CVSS/CWE
+    # 11) optional CVSS/CWE
             cwe_id = _resolve_cwe_id(
                 finding.get("cwe_id") or finding.get("cwe"),
                 raw_type,
@@ -5984,38 +6041,87 @@ async def _save_findings(
                 except ValueError:
                     cvss_score = None
 
-            db_finding = AgentFinding(
-                id=str(uuid4()),
-                task_id=task_id,
+            # 12) Deduplication and Persistence
+            # Logic: If a finding with same fingerprint exists for this task, update it.
+            # fingerprint components: type, file_path, line_start, function_name, code_snippet(prefix)
+            temp_finding = AgentFinding(
                 vulnerability_type=type_enum,
-                severity=severity_enum,
-                title=title_text,
-                description=description_text,
                 file_path=stored_file_path,
                 line_start=line_start,
-                line_end=line_end,
-                code_snippet=snippet_text,
-                code_context=context_text,
                 function_name=reachability_target_function,
-                source=source_text,
-                sink=sink_text,
-                dataflow_path=dataflow_path,
-                suggestion=suggestion_text,
-                fix_code=fix_code_text,
-                fix_description=fix_description_text,
-                is_verified=is_verified,
-                ai_confidence=confidence,
-                status=FindingStatus.FALSE_POSITIVE if authenticity == "false_positive" else FindingStatus.VERIFIED,
-                has_poc=has_poc,
-                poc_code=poc_code,
-                poc_description=poc_description,
-                poc_steps=poc_steps,
-                verification_method=verification_method_text,
-                verification_result=verification_result_payload,
-                cvss_score=cvss_score,
-                references=[{"cwe": cwe_id}] if cwe_id else None,
+                code_snippet=snippet_text,
             )
-            db.add(db_finding)
+            fingerprint = temp_finding.generate_fingerprint()
+
+            # Find existing finding in current task
+            existing_finding_stmt = select(AgentFinding).where(
+                AgentFinding.task_id == task_id,
+                AgentFinding.fingerprint == fingerprint
+            )
+            existing_finding_result = await db.execute(existing_finding_stmt)
+            db_finding = existing_finding_result.scalar_one_or_none()
+
+            if db_finding:
+                logger.info(f"[SaveFindings] Updating existing finding {db_finding.id} (fingerprint: {fingerprint})")
+                # Update fields
+                db_finding.severity = severity_enum
+                db_finding.title = title_text
+                db_finding.description = description_text
+                db_finding.line_end = line_end
+                db_finding.code_context = context_text
+                db_finding.source = source_text
+                db_finding.sink = sink_text
+                db_finding.dataflow_path = dataflow_path
+                db_finding.suggestion = suggestion_text
+                db_finding.fix_code = fix_code_text
+                db_finding.fix_description = fix_description_text
+                db_finding.is_verified = is_verified
+                db_finding.ai_confidence = confidence
+                db_finding.status = FindingStatus.FALSE_POSITIVE if authenticity == "false_positive" else FindingStatus.VERIFIED
+                db_finding.has_poc = has_poc
+                db_finding.poc_code = poc_code
+                db_finding.poc_description = poc_description
+                db_finding.poc_steps = poc_steps
+                db_finding.verification_method = verification_method_text
+                db_finding.verification_result = verification_result_payload
+                db_finding.cvss_score = cvss_score
+                db_finding.references = [{"cwe": cwe_id}] if cwe_id else None
+                db_finding.updated_at = func.now()
+            else:
+                db_finding = AgentFinding(
+                    id=str(uuid4()),
+                    task_id=task_id,
+                    vulnerability_type=type_enum,
+                    severity=severity_enum,
+                    title=title_text,
+                    description=description_text,
+                    file_path=stored_file_path,
+                    line_start=line_start,
+                    line_end=line_end,
+                    code_snippet=snippet_text,
+                    code_context=context_text,
+                    function_name=reachability_target_function,
+                    source=source_text,
+                    sink=sink_text,
+                    dataflow_path=dataflow_path,
+                    suggestion=suggestion_text,
+                    fix_code=fix_code_text,
+                    fix_description=fix_description_text,
+                    is_verified=is_verified,
+                    ai_confidence=confidence,
+                    status=FindingStatus.FALSE_POSITIVE if authenticity == "false_positive" else FindingStatus.VERIFIED,
+                    has_poc=has_poc,
+                    poc_code=poc_code,
+                    poc_description=poc_description,
+                    poc_steps=poc_steps,
+                    verification_method=verification_method_text,
+                    verification_result=verification_result_payload,
+                    cvss_score=cvss_score,
+                    references=[{"cwe": cwe_id}] if cwe_id else None,
+                    fingerprint=fingerprint,
+                )
+                db.add(db_finding)
+            
             saved_count += 1
             logger.debug(f"[SaveFindings] Prepared finding: {title_text[:50]}... ({severity_enum})")
 

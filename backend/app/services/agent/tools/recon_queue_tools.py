@@ -61,23 +61,35 @@ class GetReconRiskQueueStatusTool(AgentTool):
 
     @property
     def description(self) -> str:
-        return """获取 Recon 风险点队列的状态，包括待处理数量和统计信息。
+        return """
+    获取 Recon 风险点队列的状态，包括待处理数量和统计信息。 
 
-                返回值格式:
-                {
-                    "queue_status": {...},  # 详细统计（如 current_size/total_processed/last_push 等）
-                    "pending_count": int    # 当前待处理数量
-                }
+    返回值格式:
+    {
+        "queue_status": {...},  # 详细统计（如 current_size/total_processed/last_push 等）
+        "pending_count": int    # 当前待处理数量
+    }
 
-                常见用途：在持续审计过程中周期性轮询，确认 Analysis Agent 是否处理完上轮的推送，同时作为数据收敛依据。"""
+    常见用途：在持续审计过程中周期性轮询（无需输入参数），确认 Analysis Agent 是否处理完上轮的推送，同时作为数据收敛依据。"""
 
-    async def _execute(self, **kwargs) -> ToolResult:
+    async def _execute(self) -> ToolResult:
         try:
             stats = self.queue_service.stats(self.task_id)
             pending = stats.get("current_size", 0)
+            peek_findings = self.queue_service.peek(self.task_id, limit=3)
+            peek_list = []
+            for finding in peek_findings:
+                if isinstance(finding, dict):
+                    peek_list.append({
+                        "file_path": finding.get("file_path", "N/A"),
+                        "line": finding.get("line_start", "N/A"),
+                        "description": finding.get("description", "N/A"),
+                        "severity": finding.get("severity", "N/A"),
+                    })
             response = {
                 "queue_status": stats,
                 "pending_count": pending,
+                "peek": peek_list,
             }
             return ToolResult(success=True, data=response)
         except Exception as exc:

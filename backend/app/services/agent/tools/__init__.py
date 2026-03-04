@@ -93,6 +93,9 @@ from .control_flow_tool import ControlFlowAnalysisLightTool
 from .joern_verify_tool import JoernReachabilityVerifyTool
 from .logic_authz_tool import LogicAuthzAnalysisTool
 
+# 🔥 新增：验证结果保存工具
+from .verification_result_tools import SaveVerificationResultsTool
+
 __all__ = [
     # 基础
     "AgentTool",
@@ -189,4 +192,7 @@ __all__ = [
     "ControlFlowAnalysisLightTool",
     "JoernReachabilityVerifyTool",
     "LogicAuthzAnalysisTool",
+
+    # 🔥 验证结果保存工具
+    "SaveVerificationResultsTool",
 ]
