@@ -58,7 +58,11 @@ interface TestResult {
   latency_ms?: number;
 }
 
-export default function EmbeddingConfigPanel() {
+interface EmbeddingConfigPanelProps {
+  compact?: boolean;
+}
+
+export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfigPanelProps) {
   const [providers, setProviders] = useState<EmbeddingProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -294,9 +298,9 @@ export default function EmbeddingConfigPanel() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={compact ? "space-y-4" : "space-y-6"}>
       {/* 配置表单 */}
-      <div className="cyber-card p-6 space-y-6">
+      <div className={`cyber-card ${compact ? "p-4 space-y-4" : "p-6 space-y-6"}`}>
         {/* 提供商选择 */}
         <div className="space-y-2">
           <Label className="text-xs font-bold text-muted-foreground uppercase">提供商</Label>
@@ -368,7 +372,7 @@ export default function EmbeddingConfigPanel() {
           ) : null}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${compact ? "gap-3" : "gap-4"}`}>
           {/* 模型选择/输入 */}
           <div className="space-y-2">
             <Label className="text-xs font-bold text-muted-foreground uppercase">模型选择</Label>
@@ -518,7 +522,7 @@ export default function EmbeddingConfigPanel() {
         </div>
 
         {advancedOpen ? (
-          <div className="pt-2 border-t border-border border-dashed space-y-6">
+          <div className={`pt-2 border-t border-border border-dashed ${compact ? "space-y-4" : "space-y-6"}`}>
             {/* 自定义向量维度 */}
             <div className="space-y-2">
               <Label className="text-xs font-bold text-muted-foreground uppercase">
@@ -601,7 +605,7 @@ export default function EmbeddingConfigPanel() {
         )}
 
         {/* 操作按钮（对齐 LLM） */}
-        <div className="pt-4 border-t border-border border-dashed flex items-center justify-between flex-wrap gap-4">
+        <div className={`${compact ? "pt-3" : "pt-4"} border-t border-border border-dashed flex items-center justify-between flex-wrap ${compact ? "gap-3" : "gap-4"}`}>
           <div className="text-sm">
             <span className="font-bold text-foreground">测试连接</span>
             <span className="text-muted-foreground ml-2">验证配置是否正确</span>

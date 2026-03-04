@@ -1,4 +1,5 @@
 import type { AgentTask } from "@/shared/api/agentTasks";
+import type { AgentFinding } from "@/shared/api/agentTasks";
 import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import type { AuditTask } from "@/shared/types";
@@ -15,8 +16,12 @@ export interface ProjectCardRecentTask {
   status: string;
   progressPercent: number;
   createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  durationMs?: number | null;
   route: string;
   label: string;
+  scanTypeLabel: string;
   scannedFiles: number | null;
   scannedLines: number | null;
   vulnerabilities: number | null;
@@ -192,6 +197,19 @@ function clampPercent(value: unknown): number {
   if (num <= 0) return 0;
   if (num >= 100) return 100;
   return num;
+}
+
+function computeDurationMs(
+  startedAt: string | null | undefined,
+  completedAt: string | null | undefined,
+): number | null {
+  if (!startedAt || !completedAt) return null;
+  const startedMs = new Date(startedAt).getTime();
+  const completedMs = new Date(completedAt).getTime();
+  if (!Number.isFinite(startedMs) || !Number.isFinite(completedMs)) return null;
+  const diff = completedMs - startedMs;
+  if (!Number.isFinite(diff) || diff < 0) return null;
+  return diff;
 }
 
 function getStatusProgressBaseline(status: string | undefined | null): number {
@@ -375,23 +393,43 @@ export function getProjectCardRecentTasks(params: {
     params;
   const limit = params.limit ?? 3;
   const staticRouteMap = buildStaticRouteMap(opengrepTasks, gitleaksTasks);
+  const gitleaksById = new Map(gitleaksTasks.map((task) => [task.id, task]));
 
   const staticItems: ProjectCardRecentTask[] = opengrepTasks
     .filter((task) => task.project_id === projectId)
-    .map((task) => ({
-      id: task.id,
-      projectId: task.project_id,
-      kind: "static",
-      status: task.status,
-      progressPercent: getStatusProgressBaseline(task.status),
-      createdAt: task.created_at,
-      route:
-        staticRouteMap.get(task.id) || `/static-analysis/${task.id}`,
-      label: "静态扫描",
-      scannedFiles: toNullableNonNegativeNumber(task.files_scanned),
-      scannedLines: toNullableNonNegativeNumber(task.lines_scanned),
-      vulnerabilities: toNullableNonNegativeNumber(task.high_confidence_count ?? 0),
-    }));
+    .map((task) => {
+      const staticRoute = staticRouteMap.get(task.id) || `/static-analysis/${task.id}`;
+      const query = staticRoute.split("?")[1] || "";
+      const pairedGitleaksTaskId = new URLSearchParams(query).get("gitleaksTaskId");
+      const pairedGitleaksTask = pairedGitleaksTaskId
+        ? gitleaksById.get(pairedGitleaksTaskId)
+        : null;
+      const durationCandidates = [task.scan_duration_ms, pairedGitleaksTask?.scan_duration_ms];
+      const durationMs = durationCandidates.reduce<number | null>((total, value) => {
+        if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+          return total;
+        }
+        return (total ?? 0) + value;
+      }, null);
+
+      return {
+        id: task.id,
+        projectId: task.project_id,
+        kind: "static",
+        status: task.status,
+        progressPercent: getStatusProgressBaseline(task.status),
+        createdAt: task.created_at,
+        startedAt: task.created_at,
+        completedAt: task.updated_at ?? null,
+        durationMs,
+        route: staticRoute,
+        label: "静态扫描",
+        scanTypeLabel: "静态扫描",
+        scannedFiles: toNullableNonNegativeNumber(task.files_scanned),
+        scannedLines: toNullableNonNegativeNumber(task.lines_scanned),
+        vulnerabilities: toNullableNonNegativeNumber(task.high_confidence_count ?? 0),
+      };
+    });
 
   const intelligentItems: ProjectCardRecentTask[] = agentTasks
     .filter((task) => task.project_id === projectId)
@@ -404,6 +442,12 @@ export function getProjectCardRecentTasks(params: {
 
       const analyzedFiles = toNullableNonNegativeNumber(task.analyzed_files);
       const totalFiles = toNullableNonNegativeNumber(task.total_files);
+      const sourceMode = resolveSourceModeFromTaskMeta(
+        "intelligent_audit",
+        task.name,
+        task.description,
+      );
+      const scanLabel = sourceMode === "hybrid" ? "混合扫描" : "智能扫描";
 
       return {
         id: task.id,
@@ -414,8 +458,12 @@ export function getProjectCardRecentTasks(params: {
           task.progress_percentage ?? getStatusProgressBaseline(task.status),
         ),
         createdAt: task.created_at,
+        startedAt: task.started_at,
+        completedAt: task.completed_at,
+        durationMs: computeDurationMs(task.started_at, task.completed_at),
         route: `/agent-audit/${task.id}`,
-        label: "智能扫描",
+        label: scanLabel,
+        scanTypeLabel: scanLabel,
         scannedFiles:
           analyzedFiles !== null && analyzedFiles > 0
             ? analyzedFiles
@@ -436,8 +484,12 @@ export function getProjectCardRecentTasks(params: {
       status: task.status,
       progressPercent: computeAuditProgressPercent(task),
       createdAt: task.created_at,
+      startedAt: task.started_at ?? null,
+      completedAt: task.completed_at ?? null,
+      durationMs: computeDurationMs(task.started_at, task.completed_at),
       route: `/tasks/${task.id}`,
       label: task.task_type === "instant" ? "即时分析" : "审计任务",
+      scanTypeLabel: "审计任务",
       scannedFiles: toNullableNonNegativeNumber(task.scanned_files ?? task.total_files),
       scannedLines: toNullableNonNegativeNumber(task.total_lines),
       vulnerabilities: toNullableNonNegativeNumber(task.issues_count),
@@ -487,34 +539,84 @@ function confidenceRank(confidence: ProjectCardVulnerabilityConfidence): number 
 }
 
 export function getProjectCardPotentialVulnerabilities(params: {
-  findings: OpengrepFinding[];
+  opengrepFindings?: OpengrepFinding[];
+  verifiedAgentFindings?: AgentFinding[];
   limit?: number;
 }): ProjectCardPotentialVulnerability[] {
   const limit = params.limit ?? 5;
-  const deduped = new Map<string, ProjectCardPotentialVulnerability>();
+  const toNormalizedTimestamp = (value: string | null | undefined): number => {
+    const ts = new Date(String(value || "")).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+  };
 
-  for (const finding of params.findings) {
-    const severity = normalizeVulnerabilitySeverity(finding.severity);
-    const confidence = normalizeVulnerabilityConfidence(finding.confidence);
-    const line =
-      typeof finding.start_line === "number" && Number.isFinite(finding.start_line)
-        ? finding.start_line
-        : null;
-    const title =
-      String(finding.rule_name || "").trim() ||
-      String(finding.description || "").trim() ||
-      "潜在漏洞";
-    const dedupeKey = [
-      finding.scan_task_id,
-      finding.file_path,
-      line ?? "",
-      title,
-      severity,
-      confidence,
-    ].join("|");
+  const toAgentConfidence = (
+    value: number | null | undefined,
+  ): ProjectCardVulnerabilityConfidence => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "UNKNOWN";
+    if (value >= 0.8) return "HIGH";
+    if (value >= 0.5) return "MEDIUM";
+    if (value > 0) return "LOW";
+    return "UNKNOWN";
+  };
 
-    if (!deduped.has(dedupeKey)) {
-      deduped.set(dedupeKey, {
+  type RankedCandidate = ProjectCardPotentialVulnerability & {
+    groupPriority: 1 | 2;
+    sortTime: number;
+  };
+
+  const rankedCandidates: RankedCandidate[] = [];
+  const deduped = new Set<string>();
+
+  const agentCandidates = (params.verifiedAgentFindings || [])
+    .map((finding) => {
+      const severity = normalizeVulnerabilitySeverity(finding.severity);
+      const confidence = toAgentConfidence(finding.ai_confidence);
+      const line =
+        typeof finding.line_start === "number" && Number.isFinite(finding.line_start)
+          ? finding.line_start
+          : null;
+      const title =
+        String(finding.display_title || "").trim() ||
+        String(finding.title || "").trim() ||
+        String(finding.vulnerability_type || "").trim() ||
+        String(finding.description || "").trim() ||
+        "潜在漏洞";
+      const filePath = String(finding.file_path || "").trim() || "-";
+      return {
+        id: finding.id,
+        taskId: finding.task_id,
+        title,
+        severity,
+        confidence,
+        filePath,
+        line,
+        route: `/agent-audit/${finding.task_id}?detailType=finding&detailId=${finding.id}`,
+        groupPriority: 1 as const,
+        sortTime: toNormalizedTimestamp(finding.created_at),
+      };
+    })
+    .filter((item) => item.severity === "CRITICAL" || item.severity === "HIGH")
+    .sort((a, b) => {
+      const bySeverity = severityRank(b.severity) - severityRank(a.severity);
+      if (bySeverity !== 0) return bySeverity;
+      const byConfidence = confidenceRank(b.confidence) - confidenceRank(a.confidence);
+      if (byConfidence !== 0) return byConfidence;
+      return b.sortTime - a.sortTime;
+    });
+
+  const staticCandidates = (params.opengrepFindings || [])
+    .map((finding) => {
+      const severity = normalizeVulnerabilitySeverity(finding.severity);
+      const confidence = normalizeVulnerabilityConfidence(finding.confidence);
+      const line =
+        typeof finding.start_line === "number" && Number.isFinite(finding.start_line)
+          ? finding.start_line
+          : null;
+      const title =
+        String(finding.rule_name || "").trim() ||
+        String(finding.description || "").trim() ||
+        "潜在漏洞";
+      return {
         id: finding.id,
         taskId: finding.scan_task_id,
         title,
@@ -523,17 +625,41 @@ export function getProjectCardPotentialVulnerabilities(params: {
         filePath: finding.file_path,
         line,
         route: `/static-analysis/${finding.scan_task_id}?opengrepTaskId=${finding.scan_task_id}`,
-      });
-    }
-  }
-
-  return Array.from(deduped.values())
+        groupPriority: 2 as const,
+        sortTime: 0,
+      };
+    })
+    .filter((item) => item.confidence === "HIGH")
     .sort((a, b) => {
       const bySeverity = severityRank(b.severity) - severityRank(a.severity);
       if (bySeverity !== 0) return bySeverity;
-      const byConfidence = confidenceRank(b.confidence) - confidenceRank(a.confidence);
-      if (byConfidence !== 0) return byConfidence;
       return a.filePath.localeCompare(b.filePath, "zh-CN");
-    })
-    .slice(0, limit);
+    });
+
+  for (const item of [...agentCandidates, ...staticCandidates]) {
+    const dedupeKey = [
+      item.groupPriority,
+      item.taskId,
+      item.filePath,
+      item.line ?? "",
+      item.title,
+      item.severity,
+      item.confidence,
+    ].join("|");
+    if (deduped.has(dedupeKey)) continue;
+    deduped.add(dedupeKey);
+    rankedCandidates.push(item);
+    if (rankedCandidates.length >= limit) break;
+  }
+
+  return rankedCandidates.map((item) => ({
+    id: item.id,
+    taskId: item.taskId,
+    title: item.title,
+    severity: item.severity,
+    confidence: item.confidence,
+    filePath: item.filePath,
+    line: item.line,
+    route: item.route,
+  }));
 }

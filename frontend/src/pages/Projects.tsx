@@ -54,6 +54,7 @@ import {
     Folder,
     Key,
     Sparkles,
+    ChevronRight,
 } from "lucide-react";
 import { api } from "@/shared/config/database";
 import { validateZipFile } from "@/features/projects/services";
@@ -72,7 +73,12 @@ import type { AuditCreateMode } from "@/components/audit/CreateProjectAuditDialo
 import { SUPPORTED_LANGUAGES, REPOSITORY_PLATFORMS } from "@/shared/constants";
 import { useI18n } from "@/shared/i18n";
 import { apiClient } from "@/shared/api/serverClient";
-import { getAgentTasks, type AgentTask } from "@/shared/api/agentTasks";
+import {
+    getAgentFindings,
+    getAgentTasks,
+    type AgentFinding,
+    type AgentTask,
+} from "@/shared/api/agentTasks";
 import {
     getGitleaksScanTasks,
     type GitleaksScanTask,
@@ -91,6 +97,10 @@ import {
     type ProjectCardLanguageStats,
     type ProjectCardPotentialVulnerability,
 } from "@/features/projects/services/projectCardPreview";
+import {
+    formatDurationMs,
+    resolveSourceModeFromTaskMeta,
+} from "@/features/tasks/services/taskActivities";
 const PROJECT_PAGE_SIZE = 1;
 const MODULE_SCROLL_DELAY_MS = 80;
 const TASK_POOL_MAX_TOTAL = 800;
@@ -359,7 +369,7 @@ export default function Projects() {
 
             potentialVulnerabilityLoadingRef.current[projectId] = true;
             try {
-                const sourceTasks = (projectTaskPoolsMap[projectId]?.opengrepTasks || [])
+                const sourceOpengrepTasks = (projectTaskPoolsMap[projectId]?.opengrepTasks || [])
                     .filter((task) => task.project_id === projectId)
                     .sort(
                         (a, b) =>
@@ -368,7 +378,28 @@ export default function Projects() {
                     )
                     .slice(0, PROJECT_CARD_POTENTIAL_SOURCE_TASK_LIMIT);
 
-                if (sourceTasks.length === 0) {
+                const sourceAgentTasks = (projectTaskPoolsMap[projectId]?.agentTasks || [])
+                    .filter(
+                        (task) => {
+                            if (task.project_id !== projectId) return false;
+                            const verifiedCount = Math.max(Number(task.verified_count ?? 0), 0);
+                            if (verifiedCount <= 0) return false;
+                            const sourceMode = resolveSourceModeFromTaskMeta(
+                                "intelligent_audit",
+                                task.name,
+                                task.description,
+                            );
+                            return sourceMode === "intelligent" || sourceMode === "hybrid";
+                        },
+                    )
+                    .sort(
+                        (a, b) =>
+                            new Date(b.created_at).getTime() -
+                            new Date(a.created_at).getTime(),
+                    )
+                    .slice(0, PROJECT_CARD_POTENTIAL_SOURCE_TASK_LIMIT);
+
+                if (sourceOpengrepTasks.length === 0 && sourceAgentTasks.length === 0) {
                     setProjectPotentialVulnerabilityMap((previous) => ({
                         ...previous,
                         [projectId]: { status: "empty", items: [] },
@@ -376,16 +407,17 @@ export default function Projects() {
                     return;
                 }
 
-                const findingsResult = await Promise.allSettled(
-                    sourceTasks.map((task) =>
+                const staticFindingsResult = await Promise.allSettled(
+                    sourceOpengrepTasks.map((task) =>
                         getOpengrepScanFindings({
                             taskId: task.id,
                             limit: PROJECT_CARD_POTENTIAL_FINDINGS_FETCH_LIMIT,
+                            confidence: "HIGH",
                         }),
                     ),
                 );
 
-                const findings: OpengrepFinding[] = findingsResult.flatMap(
+                const staticFindings: OpengrepFinding[] = staticFindingsResult.flatMap(
                     (result, index) => {
                         if (
                             result.status !== "fulfilled" ||
@@ -393,7 +425,7 @@ export default function Projects() {
                         ) {
                             return [];
                         }
-                        const fallbackTaskId = sourceTasks[index]?.id || "";
+                        const fallbackTaskId = sourceOpengrepTasks[index]?.id || "";
                         return result.value.map((finding) => ({
                             ...finding,
                             scan_task_id: finding.scan_task_id || fallbackTaskId,
@@ -401,8 +433,30 @@ export default function Projects() {
                     },
                 );
 
+                const agentFindingsResult = await Promise.allSettled(
+                    sourceAgentTasks.map((task) =>
+                        getAgentFindings(task.id, {
+                            is_verified: true,
+                            include_false_positive: false,
+                        }),
+                    ),
+                );
+
+                const verifiedAgentFindings: AgentFinding[] = agentFindingsResult.flatMap(
+                    (result) => {
+                        if (
+                            result.status !== "fulfilled" ||
+                            !Array.isArray(result.value)
+                        ) {
+                            return [];
+                        }
+                        return result.value;
+                    },
+                );
+
                 const topVulnerabilities = getProjectCardPotentialVulnerabilities({
-                    findings,
+                    opengrepFindings: staticFindings,
+                    verifiedAgentFindings,
                     limit: PROJECT_CARD_POTENTIAL_TOP_LIMIT,
                 });
 
@@ -1012,26 +1066,6 @@ export default function Projects() {
         );
     }, [pagedProjects, projectTaskPoolsMap]);
 
-    const projectLanguagesMap = useMemo(() => {
-        return new Map(
-            pagedProjects.map((project) => {
-                try {
-                    const parsed = JSON.parse(project.programming_languages || "[]");
-                    return [
-                        project.id,
-                        Array.isArray(parsed)
-                            ? parsed.filter(
-                                (item): item is string => typeof item === "string",
-                            )
-                            : [],
-                    ];
-                } catch {
-                    return [project.id, [] as string[]];
-                }
-            }),
-        );
-    }, [pagedProjects]);
-
     const projectDetailFrom = `${location.pathname}${location.search}${location.hash}`;
 
     const formatCreatedAt = (time: string) => {
@@ -1045,6 +1079,17 @@ export default function Projects() {
             minute: "2-digit",
             hour12: false,
         });
+    };
+
+    const formatTaskDuration = (durationMs: number | null | undefined) => {
+        if (
+            typeof durationMs !== "number" ||
+            !Number.isFinite(durationMs) ||
+            durationMs <= 0
+        ) {
+            return "-";
+        }
+        return formatDurationMs(durationMs);
     };
 
     const getRepositoryIcon = (type?: string) => {
@@ -1089,6 +1134,24 @@ export default function Projects() {
             default:
                 return status || "未知";
         }
+    };
+
+    const normalizeTaskStatus = (status: string) => String(status || "").trim().toLowerCase();
+
+    const getTaskProgressBarClassName = (status: string) => {
+        const normalized = normalizeTaskStatus(status);
+        if (normalized === "running") return "[&>div]:bg-sky-500";
+        if (normalized === "completed") return "[&>div]:bg-emerald-500";
+        if (
+            normalized === "failed" ||
+            normalized === "pending" ||
+            normalized === "cancelled" ||
+            normalized === "interrupted" ||
+            normalized === "aborted"
+        ) {
+            return "[&>div]:bg-slate-400";
+        }
+        return "[&>div]:bg-slate-400";
     };
 
     const formatRecentTaskMetricValue = (value: number | null) => {
@@ -1723,7 +1786,6 @@ export default function Projects() {
                                 {(() => {
                                     const languageStats = projectLanguageStatsMap[project.id];
                                     const recentTasks = projectRecentTasksMap.get(project.id) || [];
-                                    const programmingLanguages = projectLanguagesMap.get(project.id) || [];
                                     const potentialVulnerabilityState =
                                         projectPotentialVulnerabilityMap[project.id] ||
                                         (projectTaskPoolsMap[project.id]?.status === "loading"
@@ -1822,20 +1884,8 @@ export default function Projects() {
                                         {project.description?.trim() || "暂无项目描述"}
                                     </p>
 
-                                    <div className="flex flex-wrap gap-2">
-                                        {programmingLanguages.length > 0 ? (
-                                            programmingLanguages.slice(0, 5).map((language) => (
-                                                <Badge key={`${project.id}-${language}`} className="cyber-badge-primary">
-                                                    {language}
-                                                </Badge>
-                                            ))
-                                        ) : (
-                                            <Badge className="cyber-badge-muted">语言未识别</Badge>
-                                        )}
-                                    </div>
-
                                     <div className="grid grid-cols-1 xl:grid-cols-10 gap-3">
-                                        <div className="rounded-lg border border-border bg-muted/40 p-3 xl:col-span-3">
+                                        <div className="rounded-lg border border-border bg-muted/40 p-3 xl:col-span-2">
                                             <div className="flex items-center justify-between gap-2 mb-2">
                                                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
                                                     语言统计
@@ -1916,12 +1966,12 @@ export default function Projects() {
                                             )}
                                         </div>
 
-                                        <div className="rounded-lg border border-border bg-muted/40 p-3 xl:col-span-3">
+                                        <div className="rounded-lg border border-border bg-muted/40 p-3 xl:col-span-4">
                                             <div className="flex items-center justify-between gap-2 mb-2">
-                                                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                                                <p className="text-sm uppercase tracking-wider text-muted-foreground">
                                                     最近任务
                                                 </p>
-                                                <span className="text-[11px] text-muted-foreground">
+                                                <span className="text-sm text-muted-foreground">
                                                     最近 3 条
                                                 </span>
                                             </div>
@@ -1931,57 +1981,44 @@ export default function Projects() {
                                                         <Link
                                                             key={`${project.id}-${task.kind}-${task.id}`}
                                                             to={task.route}
-                                                            className="block rounded border border-border bg-background/80 px-2.5 py-2 hover:border-primary/40 transition-colors"
+                                                            className="block rounded border border-border bg-background/80 px-2.5 py-2 hover:border-primary/40 transition-colors text-left"
                                                         >
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <p className="text-sm text-foreground font-semibold truncate">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="min-w-0 flex-1 text-base text-foreground font-semibold truncate">
                                                                     {task.label}
                                                                 </p>
-                                                                <Badge className={getTaskStatusBadgeClassName(task.status)}>
-                                                                    {getTaskStatusText(task.status)}
-                                                                </Badge>
+                                                                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                                    {formatCreatedAt(task.createdAt)}
+                                                                </span>
+                                                                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                                    {formatTaskDuration(task.durationMs)}
+                                                                </span>
+                                                                <span className="inline-flex items-center gap-1 text-sm text-primary/85 shrink-0">
+                                                                    查看详情
+                                                                    <ChevronRight className="w-4 h-4" />
+                                                                </span>
                                                             </div>
-                                                            <p className="mt-1 text-[11px] text-muted-foreground">
-                                                                {formatCreatedAt(task.createdAt)}
-                                                            </p>
+                                                            <div className="mt-2 space-y-1.5">
+                                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                                    <Badge
+                                                                        className={`${getTaskStatusBadgeClassName(task.status)} text-xs`}
+                                                                    >
+                                                                        {getTaskStatusText(task.status)}
+                                                                    </Badge>
+                                                                    <Badge className="cyber-badge-success text-xs">
+                                                                        发现漏洞 {formatRecentTaskMetricValue(task.vulnerabilities)}
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
                                                             <div className="mt-2 space-y-1">
-                                                                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                                                <div className="flex items-center justify-between text-xs text-muted-foreground">
                                                                     <span>进度</span>
                                                                     <span>{Math.round(task.progressPercent)}%</span>
                                                                 </div>
                                                                 <Progress
                                                                     value={task.progressPercent}
-                                                                    className="h-1.5 bg-muted/45 [&>div]:bg-primary"
+                                                                    className={`h-1.5 bg-muted/45 ${getTaskProgressBarClassName(task.status)}`}
                                                                 />
-                                                            </div>
-                                                            <div className="mt-2 grid grid-cols-3 gap-1.5">
-                                                                <div className="rounded border border-border/70 bg-muted/35 px-2 py-1.5">
-                                                                    <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                                                                        <FileText className="w-3 h-3" />
-                                                                        扫描文件
-                                                                    </p>
-                                                                    <p className="mt-1 text-xs font-semibold text-foreground">
-                                                                        {formatRecentTaskMetricValue(task.scannedFiles)}
-                                                                    </p>
-                                                                </div>
-                                                                <div className="rounded border border-border/70 bg-muted/35 px-2 py-1.5">
-                                                                    <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                                                                        <Code className="w-3 h-3" />
-                                                                        扫描代码行
-                                                                    </p>
-                                                                    <p className="mt-1 text-xs font-semibold text-foreground">
-                                                                        {formatRecentTaskMetricValue(task.scannedLines)}
-                                                                    </p>
-                                                                </div>
-                                                                <div className="rounded border border-border/70 bg-muted/35 px-2 py-1.5">
-                                                                    <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                                                                        <AlertCircle className="w-3 h-3" />
-                                                                        发现漏洞
-                                                                    </p>
-                                                                    <p className="mt-1 text-xs font-semibold text-amber-300">
-                                                                        {formatRecentTaskMetricValue(task.vulnerabilities)}
-                                                                    </p>
-                                                                </div>
                                                             </div>
                                                         </Link>
                                                     ))}
@@ -1995,10 +2032,10 @@ export default function Projects() {
 
                                         <div className="rounded-lg border border-border bg-muted/40 p-3 xl:col-span-4">
                                             <div className="flex items-center justify-between gap-2 mb-2">
-                                                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                                                <p className="text-sm uppercase tracking-wider text-muted-foreground">
                                                     潜在漏洞
                                                 </p>
-                                                <span className="text-[11px] text-muted-foreground">
+                                                <span className="text-sm text-muted-foreground">
                                                     Top 5
                                                 </span>
                                             </div>
@@ -2017,21 +2054,27 @@ export default function Projects() {
                                                         <Link
                                                             key={`${project.id}-vuln-${item.id}`}
                                                             to={item.route}
-                                                            className="block rounded border border-border bg-background/80 px-2.5 py-2 hover:border-primary/40 transition-colors"
+                                                            className="block rounded border border-border bg-background/80 px-2.5 py-2 hover:border-primary/40 transition-colors text-left"
                                                         >
                                                             <div className="flex items-center justify-between gap-2">
-                                                                <p className="text-sm text-foreground font-semibold truncate">
+                                                                <p className="text-base text-foreground font-semibold truncate">
                                                                     {item.title}
                                                                 </p>
-                                                                <Badge
-                                                                    className={getVulnerabilitySeverityBadgeClassName(
-                                                                        item.severity,
-                                                                    )}
-                                                                >
-                                                                    {getVulnerabilitySeverityText(item.severity)}
-                                                                </Badge>
+                                                                <div className="inline-flex items-center gap-2 shrink-0">
+                                                                    <Badge
+                                                                        className={`${getVulnerabilitySeverityBadgeClassName(
+                                                                            item.severity,
+                                                                        )} text-xs`}
+                                                                    >
+                                                                        {getVulnerabilitySeverityText(item.severity)}
+                                                                    </Badge>
+                                                                    <span className="inline-flex items-center gap-1 text-sm text-primary/85">
+                                                                        查看详情
+                                                                        <ChevronRight className="w-4 h-4" />
+                                                                    </span>
+                                                                </div>
                                                             </div>
-                                                            <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                                                            <div className="mt-1 flex items-center justify-between gap-2 text-sm">
                                                                 <p className="text-muted-foreground truncate">
                                                                     {item.filePath}
                                                                     {item.line ? `:${item.line}` : ""}

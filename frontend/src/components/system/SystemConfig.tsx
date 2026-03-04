@@ -180,12 +180,6 @@ const normalizeLlmProviderId = (
 	return normalized;
 };
 
-const TOKEN_SOURCE_LABELS: Record<string, string> = {
-	online_metadata: "在线元数据",
-	static_mapping: "静态映射",
-	default: "默认值",
-};
-
 const recommendTokensFromStaticRules = (modelName: string): number | null => {
 	const normalized = String(modelName || "")
 		.trim()
@@ -263,6 +257,8 @@ interface SystemConfigProps {
 	mergedView?: boolean;
 	showLlmSummaryCards?: boolean;
 	llmSummaryOnly?: boolean;
+	showFloatingSaveButton?: boolean;
+	compactLayout?: boolean;
 }
 
 type AdvancedConfigItemId =
@@ -284,17 +280,17 @@ const DEFAULT_CONFIG: SystemConfigData = {
 	llmApiKey: "",
 	llmModel: "",
 	llmBaseUrl: "",
-	llmTimeout: 150000,
-	llmTemperature: 0.1,
-	llmMaxTokens: 4096,
-	llmFirstTokenTimeout: 90,
-	llmStreamTimeout: 60,
-	agentTimeout: 1800,
-	subAgentTimeout: 600,
-	toolTimeout: 60,
+	llmTimeout: 300000,
+	llmTemperature: 0.05,
+	llmMaxTokens: 16384,
+	llmFirstTokenTimeout: 180,
+	llmStreamTimeout: 180,
+	agentTimeout: 3600,
+	subAgentTimeout: 1200,
+	toolTimeout: 120,
 	maxAnalyzeFiles: 0,
-	llmConcurrency: 3,
-	llmGapMs: 2000,
+	llmConcurrency: 1,
+	llmGapMs: 3000,
 	outputLanguage: "zh-CN",
 	mcpConfig: {
 		enabled: true,
@@ -658,6 +654,8 @@ export function SystemConfig({
 	mergedView = false,
 	showLlmSummaryCards = true,
 	llmSummaryOnly = false,
+	showFloatingSaveButton = true,
+	compactLayout = false,
 }: SystemConfigProps = {}) {
 	const sections = visibleSections.length > 0 ? visibleSections : ["llm"];
 	const [config, setConfig] = useState<SystemConfigData | null>(null);
@@ -666,6 +664,8 @@ export function SystemConfig({
 	const [llmModelSelectValue, setLlmModelSelectValue] =
 		useState<string>("__default__");
 	const [llmModelPopoverOpen, setLlmModelPopoverOpen] = useState(false);
+	const [customModelQuery, setCustomModelQuery] = useState("");
+	const [customSuggestionOpen, setCustomSuggestionOpen] = useState(false);
 	const [hasChanges, setHasChanges] = useState(false);
 	const [testingLLM, setTestingLLM] = useState(false);
 	const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -689,6 +689,7 @@ export function SystemConfig({
 	const llmModelSelectTouchedRef = useRef(false);
 	const llmBaseUrlTouchedRef = useRef(false);
 	const llmMaxTokensTouchedRef = useRef(false);
+	const autoFetchSignatureRef = useRef<string>("");
 
 	useEffect(() => {
 		loadConfig();
@@ -1012,28 +1013,6 @@ export function SystemConfig({
 		return { ok: true, providerId, apiKey, model, baseUrl };
 	};
 
-	const applyLongReasoningPreset = () => {
-		setConfig((prev) => {
-			if (!prev) return prev;
-			return {
-				...prev,
-				llmTemperature: 0.05,
-				llmTimeout: 300000,
-				llmMaxTokens: 16384,
-				llmFirstTokenTimeout: 180,
-				llmStreamTimeout: 180,
-				agentTimeout: 3600,
-				subAgentTimeout: 1200,
-				toolTimeout: 120,
-				llmConcurrency: 1,
-				llmGapMs: 3000,
-			};
-		});
-		llmMaxTokensTouchedRef.current = true;
-		setHasChanges(true);
-		toast.success("已应用漏洞挖掘-长推理预设，可继续微调。");
-	};
-
 	const handleProviderChange = (newProvider: string) => {
 		const defaultModel = getDefaultModelForProvider(newProvider);
 		setConfig((prev) => {
@@ -1058,21 +1037,37 @@ export function SystemConfig({
 		setLlmTestResult(null);
 	};
 
-	const handleFetchModels = async () => {
+	const fetchModels = async (options?: {
+		trigger?: "manual" | "auto";
+		silent?: boolean;
+	}) => {
 		if (!config) return;
+		const trigger = options?.trigger || "manual";
+		const silent = Boolean(options?.silent);
 		const providerId = normalizeLlmProviderId(config.llmProvider);
+		const baseUrl = String(config.llmBaseUrl || "").trim();
+		const apiKey = String(config.llmApiKey || "").trim();
 		const requiresApiKey = shouldRequireApiKey(providerId);
-		if (requiresApiKey && !config.llmApiKey.trim()) {
-			toast.error("当前提供商需要 API Key，无法拉取模型");
+		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}`;
+
+		if (!providerId || !baseUrl) return;
+		if (requiresApiKey && !apiKey) {
+			if (!silent) {
+				toast.error("当前提供商需要 API Key，无法拉取模型");
+			}
 			return;
+		}
+
+		if (trigger === "manual") {
+			autoFetchSignatureRef.current = signature;
 		}
 
 		setFetchingModels(true);
 		try {
 			const result = await api.fetchLLMModels({
 				provider: providerId,
-				apiKey: config.llmApiKey,
-				baseUrl: config.llmBaseUrl || undefined,
+				apiKey,
+				baseUrl,
 			});
 			const normalizedModels = Array.isArray(result.models)
 				? [
@@ -1119,33 +1114,48 @@ export function SystemConfig({
 				resolveCurrentModelName(providerId, config.llmModel) ||
 				result.defaultModel ||
 				getDefaultModelForProvider(providerId);
-			const recommendation = applyRecommendedMaxTokens(
-				providerId,
-				effectiveModel,
-				{
-					force: false,
-					markChanges: true,
-				},
-			);
-			if (result.success) {
-				const sourceLabel =
-					TOKEN_SOURCE_LABELS[
-						result.tokenRecommendationSource || recommendation.source
-					] || "默认值";
-				toast.success(
-					`${result.message || "模型列表已更新"}（max tokens: ${recommendation.value}，${sourceLabel}）`,
-				);
-			} else {
-				toast.error(result.message || "模型拉取失败");
+			applyRecommendedMaxTokens(providerId, effectiveModel, {
+				force: false,
+				markChanges: true,
+			});
+			if (!silent) {
+				if (result.success) {
+					toast.success(result.message || "模型列表已更新");
+				} else {
+					toast.error(result.message || "模型拉取失败");
+				}
 			}
 		} catch (error) {
-			toast.error(
-				`模型拉取失败: ${error instanceof Error ? error.message : "未知错误"}`,
-			);
+			if (!silent) {
+				toast.error(
+					`模型拉取失败: ${error instanceof Error ? error.message : "未知错误"}`,
+				);
+			}
 		} finally {
 			setFetchingModels(false);
 		}
 	};
+
+	const handleFetchModels = async () => {
+		await fetchModels({ trigger: "manual", silent: false });
+	};
+
+	useEffect(() => {
+		if (!config) return;
+		const providerId = normalizeLlmProviderId(config.llmProvider);
+		const baseUrl = String(config.llmBaseUrl || "").trim();
+		const apiKey = String(config.llmApiKey || "").trim();
+		const requiresApiKey = shouldRequireApiKey(providerId);
+		if (!providerId || !baseUrl) return;
+		if (requiresApiKey && !apiKey) return;
+		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}`;
+		const timer = setTimeout(() => {
+			if (autoFetchSignatureRef.current === signature) return;
+			autoFetchSignatureRef.current = signature;
+			void fetchModels({ trigger: "auto", silent: true });
+		}, 700);
+		return () => clearTimeout(timer);
+	}, [config?.llmProvider, config?.llmBaseUrl, config?.llmApiKey]);
 
 	useEffect(() => {
 		if (!config) return;
@@ -1154,6 +1164,13 @@ export function SystemConfig({
 		if (llmModelSelectTouchedRef.current) return;
 		setLlmModelSelectValue(computeLlmModelSelectValue(config.llmModel, models));
 	}, [config, llmProvidersFromBackend, fetchedModelsByProvider]);
+
+	useEffect(() => {
+		if (!config) return;
+		if (llmModelSelectValue === "__custom__") {
+			setCustomModelQuery(String(config.llmModel || ""));
+		}
+	}, [llmModelSelectValue, config?.llmModel]);
 
 	const handleLlmModelSelect = (value: string) => {
 		if (!config) return;
@@ -1171,6 +1188,8 @@ export function SystemConfig({
 			return;
 		}
 		if (value === "__custom__") {
+			setCustomModelQuery(String(config.llmModel || ""));
+			setCustomSuggestionOpen(true);
 			return;
 		}
 
@@ -1180,38 +1199,6 @@ export function SystemConfig({
 			markChanges: true,
 		});
 	};
-
-	const applyCurrentModelRecommendation = () => {
-		if (!config) return;
-		const providerId = normalizeLlmProviderId(config.llmProvider);
-		const effectiveModel = resolveCurrentModelName(providerId, config.llmModel);
-		llmMaxTokensTouchedRef.current = false;
-		const recommendation = applyRecommendedMaxTokens(
-			providerId,
-			effectiveModel,
-			{
-				force: true,
-				markChanges: true,
-			},
-		);
-		const sourceLabel = TOKEN_SOURCE_LABELS[recommendation.source] || "默认值";
-		toast.success(
-			`已应用模型推荐 max tokens: ${recommendation.value}（${sourceLabel}）`,
-		);
-	};
-
-	const currentModelRecommendation = useMemo(() => {
-		if (!config) return null;
-		const providerId = normalizeLlmProviderId(config.llmProvider);
-		const effectiveModel = resolveCurrentModelName(providerId, config.llmModel);
-		if (!effectiveModel) return null;
-		return getRecommendedMaxTokens(providerId, effectiveModel);
-	}, [
-		config,
-		llmProvidersFromBackend,
-		fetchedModelsByProvider,
-		fetchedModelMetadataByProvider,
-	]);
 
 	const saveConfig = async () => {
 		if (!config) return;
@@ -1297,6 +1284,7 @@ export function SystemConfig({
 						getModelsForProvider(nextConfig.llmProvider),
 					),
 				);
+				setCustomModelQuery(nextConfig.llmModel || "");
 				llmBaseUrlTouchedRef.current = false;
 			}
 
@@ -1431,9 +1419,17 @@ export function SystemConfig({
 					</TabsList>
 				)}
 
-				{sections.includes("llm") && (
-					<TabsContent value="llm" className="space-y-6">
-						<div className="cyber-card p-6 space-y-6">
+					{sections.includes("llm") && (
+						<TabsContent
+							value="llm"
+							className={compactLayout ? "space-y-4" : "space-y-6"}
+						>
+							<div
+								className={cn(
+									"cyber-card",
+									compactLayout ? "p-4 space-y-4" : "p-6 space-y-6",
+								)}
+							>
 							{showLlmSummaryCards ? (
 								<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 									<div className="cyber-card p-4">
@@ -1455,19 +1451,14 @@ export function SystemConfig({
 										</div>
 									</div>
 
-									<div className="cyber-card p-4">
-										<div className="flex items-center justify-between">
-											<div>
-												<p className="stat-label">当前采用模型</p>
-												<p className="stat-value text-2xl break-all">
-													{currentModelName || "--"}
-												</p>
-												<p className="text-sm text-muted-foreground mt-1">
-													推荐 max tokens：
-													{currentModelRecommendation?.value ??
-														config.llmMaxTokens}
-												</p>
-											</div>
+										<div className="cyber-card p-4">
+											<div className="flex items-center justify-between">
+												<div>
+													<p className="stat-label">当前采用模型</p>
+													<p className="stat-value text-2xl break-all">
+														{currentModelName || "--"}
+													</p>
+												</div>
 											<div className="stat-icon text-sky-400">
 												<Brain className="w-6 h-6" />
 											</div>
@@ -1498,342 +1489,358 @@ export function SystemConfig({
 
 							{!llmSummaryOnly ? (
 								<>
-									<div className="space-y-2">
-										<Label className="text-xs font-bold text-muted-foreground uppercase">
-											提供商
-										</Label>
-										<Select
-											value={config.llmProvider}
-											onValueChange={handleProviderChange}
-										>
-											<SelectTrigger className="h-12 cyber-input">
-												<SelectValue placeholder="选择提供商" />
-											</SelectTrigger>
-											<SelectContent className="cyber-dialog border-border">
-												{llmProviderOptions.map((provider) => (
-													<SelectItem
-														key={provider.id}
-														value={provider.id}
-														className="font-mono"
+									<div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+										<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
+											<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
+												提供商
+											</Label>
+											<div className="flex-1 min-w-0 space-y-1">
+													<Select
+														value={config.llmProvider}
+														onValueChange={handleProviderChange}
 													>
-														{provider.name}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-										{selectedProviderInfo?.description ? (
-											<p className="text-xs text-muted-foreground">
-												{selectedProviderInfo.description}
-											</p>
-										) : null}
+														<SelectTrigger
+															className={cn(
+																"cyber-input",
+																compactLayout ? "h-10" : "h-12",
+															)}
+														>
+															<SelectValue placeholder="选择提供商" />
+														</SelectTrigger>
+													<SelectContent className="cyber-dialog border-border">
+														{llmProviderOptions.map((provider) => (
+															<SelectItem
+																key={provider.id}
+																value={provider.id}
+																className="font-mono"
+															>
+																{provider.name}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												</div>
+											</div>
+
+										<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
+											<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
+												API 站口
+												<span className="text-rose-400 ml-1">*</span>
+											</Label>
+											<div className="flex-1 min-w-0">
+													<Input
+														value={config.llmBaseUrl}
+													onChange={(event) => {
+														llmBaseUrlTouchedRef.current = true;
+														updateConfig("llmBaseUrl", event.target.value);
+													}}
+													placeholder={(() => {
+														const baseUrl = getDefaultBaseUrlForProvider(
+															config.llmProvider,
+														);
+														if (baseUrl) return `必填，例如：${baseUrl}`;
+														return "必填：请输入完整 Base URL";
+													})()}
+														className={cn(
+															"cyber-input",
+															compactLayout ? "h-10" : "h-12",
+														)}
+													/>
+											</div>
+										</div>
 									</div>
 
-									<div className="space-y-2">
-										<Label className="text-xs font-bold text-muted-foreground uppercase">
+									<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
+										<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
 											API Key
 											{shouldRequireApiKey(config.llmProvider) ? (
 												<span className="text-rose-400 ml-1">*</span>
 											) : null}
 										</Label>
-										<div className="flex gap-2">
-											<Input
-												type={showApiKey ? "text" : "password"}
-												value={config.llmApiKey}
-												onChange={(event) =>
-													updateConfig("llmApiKey", event.target.value)
-												}
-												placeholder={
-													shouldRequireApiKey(config.llmProvider)
-														? "输入你的 API Key"
-														: "该提供商无需 API Key"
-												}
-												className="h-12 cyber-input"
-												disabled={!shouldRequireApiKey(config.llmProvider)}
-											/>
-											<Button
-												variant="outline"
-												size="icon"
-												onClick={() => setShowApiKey((prev) => !prev)}
-												className="h-12 w-12 cyber-btn-ghost"
-												disabled={!shouldRequireApiKey(config.llmProvider)}
-											>
-												{showApiKey ? (
-													<EyeOff className="h-4 w-4" />
-												) : (
-													<Eye className="h-4 w-4" />
-												)}
-											</Button>
+										<div className="flex-1 min-w-0">
+											<div className="flex gap-2">
+													<Input
+														type={showApiKey ? "text" : "password"}
+													value={config.llmApiKey}
+													onChange={(event) =>
+														updateConfig("llmApiKey", event.target.value)
+													}
+													placeholder={
+														shouldRequireApiKey(config.llmProvider)
+															? "输入你的 API Key"
+															: "该提供商无需 API Key"
+													}
+														className={cn(
+															"cyber-input",
+															compactLayout ? "h-10" : "h-12",
+														)}
+														disabled={!shouldRequireApiKey(config.llmProvider)}
+													/>
+												<Button
+													variant="outline"
+													size="icon"
+													onClick={() => setShowApiKey((prev) => !prev)}
+														className={cn(
+															"w-12 cyber-btn-ghost",
+															compactLayout ? "h-10" : "h-12",
+														)}
+													disabled={!shouldRequireApiKey(config.llmProvider)}
+												>
+													{showApiKey ? (
+														<EyeOff className="h-4 w-4" />
+													) : (
+														<Eye className="h-4 w-4" />
+													)}
+												</Button>
+											</div>
 										</div>
 									</div>
 
-									<div className="space-y-2">
-										<Label className="text-xs font-bold text-muted-foreground uppercase">
-											API 站口
-											<span className="text-rose-400 ml-1">*</span>
-										</Label>
-										<Input
-											value={config.llmBaseUrl}
-											onChange={(event) => {
-												llmBaseUrlTouchedRef.current = true;
-												updateConfig("llmBaseUrl", event.target.value);
-											}}
-											placeholder={(() => {
-												const baseUrl = getDefaultBaseUrlForProvider(
-													config.llmProvider,
-												);
-												if (baseUrl) return `必填，例如：${baseUrl}`;
-												return "必填：请输入完整 Base URL";
-											})()}
-											className="h-10 cyber-input"
-										/>
-									</div>
-
-									<div className="space-y-2">
-										<div className="flex items-center justify-between gap-2">
-											<Label className="text-xs font-bold text-muted-foreground uppercase">
+										<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
+											<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
 												模型选择
 												<span className="text-rose-400 ml-1">*</span>
 											</Label>
-											<Button
-												type="button"
-												variant="outline"
-												className="h-8 cyber-btn-ghost text-xs"
-												onClick={handleFetchModels}
-												disabled={
-													fetchingModels ||
-													!config.llmProvider ||
-													(shouldRequireApiKey(config.llmProvider) &&
-														!config.llmApiKey.trim())
-												}
-											>
-												{fetchingModels ? (
-													<>
-														<Loader2 className="w-3 h-3 mr-1 animate-spin" />
-														拉取中...
-													</>
-												) : (
-													"一键获取模型"
-												)}
-											</Button>
-										</div>
-										{(() => {
-											const providerId = config.llmProvider;
-											const models = getModelsForProvider(providerId);
-											const defaultModel =
-												getDefaultModelForProvider(providerId) || "auto";
+											<div className="flex-1 min-w-0 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-2">
+												{(() => {
+													const providerId = config.llmProvider;
+													const models = getModelsForProvider(providerId);
+													const defaultModel =
+														getDefaultModelForProvider(providerId) || "auto";
+													const fallbackSelectValue = computeLlmModelSelectValue(
+														config.llmModel,
+														models,
+													);
+													const selectValue =
+														llmModelSelectValue === "__default__" ||
+														llmModelSelectValue === "__custom__" ||
+														models.includes(llmModelSelectValue)
+															? llmModelSelectValue
+															: fallbackSelectValue;
+													const displayLabel =
+														selectValue === "__default__"
+															? `默认（${defaultModel}）`
+															: selectValue === "__custom__"
+																? config.llmModel?.trim()
+																	? `自定义：${config.llmModel.trim()}`
+																	: "自定义模型..."
+																: selectValue;
+													const isCustomModelMode =
+														selectValue === "__custom__" || !models.length;
+													const normalizedQuery = customModelQuery
+														.trim()
+														.toLowerCase();
+													const fuzzyMatches = models
+														.filter((model) => {
+															if (!normalizedQuery) return true;
+															return model.toLowerCase().includes(normalizedQuery);
+														})
+														.sort((a, b) => {
+															const aStarts = normalizedQuery
+																? a.toLowerCase().startsWith(normalizedQuery)
+																: false;
+															const bStarts = normalizedQuery
+																? b.toLowerCase().startsWith(normalizedQuery)
+																: false;
+															if (aStarts !== bStarts) return aStarts ? -1 : 1;
+															return a.localeCompare(b);
+														})
+														.slice(0, 20);
 
-											if (!models.length) {
-												return (
-													<div className="space-y-2">
-														<Input
-															value={config.llmModel}
-															onChange={(event) =>
-																updateConfig("llmModel", event.target.value)
-															}
-															placeholder={`请输入模型名称，例如：${defaultModel}`}
-															className="h-10 cyber-input"
-														/>
-														{currentModelRecommendation ? (
-															<div className="flex items-center justify-between text-xs text-muted-foreground">
-																<span>
-																	推荐 max tokens:{" "}
-																	{currentModelRecommendation.value}（
-																	{TOKEN_SOURCE_LABELS[
-																		currentModelRecommendation.source
-																	] || "默认值"}
-																	）
-																</span>
-																{llmMaxTokensTouchedRef.current ? (
-																	<Button
-																		type="button"
-																		variant="outline"
-																		className="h-7 px-2 text-xs cyber-btn-ghost"
-																		onClick={applyCurrentModelRecommendation}
-																	>
-																		跟随模型建议
-																	</Button>
-																) : null}
-															</div>
-														) : null}
-													</div>
-												);
-											}
-
-											const fallbackSelectValue = computeLlmModelSelectValue(
-												config.llmModel,
-												models,
-											);
-											const selectValue =
-												llmModelSelectValue === "__default__" ||
-												llmModelSelectValue === "__custom__" ||
-												models.includes(llmModelSelectValue)
-													? llmModelSelectValue
-													: fallbackSelectValue;
-											const displayLabel =
-												selectValue === "__default__"
-													? `默认（${defaultModel}）`
-													: selectValue === "__custom__"
-														? config.llmModel?.trim()
-															? `自定义：${config.llmModel.trim()}`
-															: "自定义模型..."
-														: selectValue;
-
-											return (
-												<div className="space-y-2">
-													<Popover
-														open={llmModelPopoverOpen}
-														onOpenChange={setLlmModelPopoverOpen}
-													>
-														<PopoverTrigger asChild>
-															<Button
-																variant="outline"
-																role="combobox"
-																aria-expanded={llmModelPopoverOpen}
-																className="h-10 w-full justify-between cyber-input font-mono text-sm"
-															>
-																<span className="truncate text-left">
-																	{displayLabel}
-																</span>
-																<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-															</Button>
-														</PopoverTrigger>
-														<PopoverContent
-															className="w-[--radix-popover-trigger-width] p-0 cyber-dialog border-border"
-															align="start"
-														>
-															<Command className="bg-background">
-																<CommandInput placeholder="搜索模型..." />
-																<CommandList className="max-h-[280px]">
-																	<CommandEmpty>未找到匹配模型</CommandEmpty>
-																	<CommandGroup>
-																		<CommandItem
-																			value={`自定义模型 ${config.llmModel || ""}`}
-																			onSelect={() => {
-																				handleLlmModelSelect("__custom__");
-																				setLlmModelPopoverOpen(false);
+													return (
+														<>
+															<div className="space-y-2">
+																{isCustomModelMode ? (
+																	<div className="space-y-2">
+																		<Input
+																			value={customModelQuery}
+																			onChange={(event) => {
+																				const nextValue = event.target.value;
+																				llmModelSelectTouchedRef.current = true;
+																				setLlmModelSelectValue("__custom__");
+																				setCustomModelQuery(nextValue);
+																				updateConfig("llmModel", nextValue);
+																				setCustomSuggestionOpen(true);
 																			}}
-																			className="font-mono"
-																		>
-																			<Check
-																				className={cn(
-																					"mr-2 h-4 w-4",
-																					selectValue === "__custom__"
-																						? "opacity-100"
-																						: "opacity-0",
-																				)}
-																			/>
-																			自定义模型...
-																		</CommandItem>
-																		{defaultModel ? (
-																			<CommandItem
-																				value={`默认模型 ${defaultModel}`}
-																				onSelect={() => {
-																					handleLlmModelSelect("__default__");
-																					setLlmModelPopoverOpen(false);
-																				}}
-																				className="font-mono"
-																			>
-																				<Check
-																					className={cn(
-																						"mr-2 h-4 w-4",
-																						selectValue === "__default__"
-																							? "opacity-100"
-																							: "opacity-0",
-																					)}
-																				/>
-																				默认（{defaultModel}）
-																			</CommandItem>
+																			onFocus={() => setCustomSuggestionOpen(true)}
+																			onBlur={() => {
+																				setTimeout(() => setCustomSuggestionOpen(false), 120);
+																			}}
+																			onKeyDown={(event) => {
+																				if (event.key === "Escape") {
+																					setCustomSuggestionOpen(false);
+																				}
+																				if (event.key === "Enter") {
+																					setCustomSuggestionOpen(false);
+																				}
+																			}}
+																			placeholder={`请输入模型名称，例如：${defaultModel}`}
+																			className="h-10 cyber-input"
+																		/>
+																		{customSuggestionOpen ? (
+																			<div className="border border-border rounded-md cyber-dialog">
+																				<Command className="bg-background">
+																					<CommandList className="max-h-[220px]">
+																						{fuzzyMatches.length > 0 ? (
+																							<CommandGroup>
+																								{fuzzyMatches.map((model) => (
+																									<CommandItem
+																										key={model}
+																										value={model}
+																										onSelect={() => {
+																											handleLlmModelSelect(model);
+																											setCustomModelQuery(model);
+																											setCustomSuggestionOpen(false);
+																										}}
+																										className="font-mono"
+																									>
+																										{model}
+																									</CommandItem>
+																								))}
+																							</CommandGroup>
+																						) : (
+																							<CommandEmpty>未找到匹配模型</CommandEmpty>
+																						)}
+																					</CommandList>
+																				</Command>
+																			</div>
 																		) : null}
-																		{models.map((model) => (
-																			<CommandItem
-																				key={model}
-																				value={model}
-																				onSelect={() => {
-																					handleLlmModelSelect(model);
-																					setLlmModelPopoverOpen(false);
-																				}}
-																				className="font-mono"
+																	</div>
+																) : (
+																	<Popover
+																		open={llmModelPopoverOpen}
+																		onOpenChange={setLlmModelPopoverOpen}
+																	>
+																		<PopoverTrigger asChild>
+																			<Button
+																				variant="outline"
+																				role="combobox"
+																				aria-expanded={llmModelPopoverOpen}
+																				className="h-10 w-full justify-between cyber-input font-mono text-sm"
 																			>
-																				<Check
-																					className={cn(
-																						"mr-2 h-4 w-4",
-																						selectValue === model
-																							? "opacity-100"
-																							: "opacity-0",
-																					)}
-																				/>
-																				<span className="truncate">
-																					{model}
+																				<span className="truncate text-left">
+																					{displayLabel}
 																				</span>
-																			</CommandItem>
-																		))}
-																	</CommandGroup>
-																</CommandList>
-															</Command>
-														</PopoverContent>
-													</Popover>
-
-													{selectValue === "__custom__" ? (
-														<Input
-															value={config.llmModel}
-															onChange={(event) => {
-																llmModelSelectTouchedRef.current = true;
-																setLlmModelSelectValue("__custom__");
-																updateConfig("llmModel", event.target.value);
-															}}
-															placeholder="输入模型名称"
-															className="h-10 cyber-input"
-														/>
-													) : null}
-
-													{currentModelRecommendation ? (
-														<div className="flex items-center justify-between text-xs text-muted-foreground">
-															<span>
-																推荐 max tokens:{" "}
-																{currentModelRecommendation.value}（
-																{TOKEN_SOURCE_LABELS[
-																	currentModelRecommendation.source
-																] || "默认值"}
-																）
-															</span>
-															{llmMaxTokensTouchedRef.current ? (
-																<Button
-																	type="button"
-																	variant="outline"
-																	className="h-7 px-2 text-xs cyber-btn-ghost"
-																	onClick={applyCurrentModelRecommendation}
-																>
-																	跟随模型建议
-																</Button>
-															) : null}
-														</div>
-													) : null}
-												</div>
-											);
-										})()}
-									</div>
-
-									<div className="flex items-center justify-between">
-										<div className="flex items-center gap-2">
-											<Button
-												variant="outline"
-												className="cyber-btn-ghost h-9"
-												onClick={applyLongReasoningPreset}
-												type="button"
-											>
-												<Zap className="w-4 h-4 mr-2" />
-												漏洞挖掘-长推理预设
-											</Button>
-											<Button
-												variant="outline"
-												className="cyber-btn-ghost h-9"
-												onClick={() => setAdvancedOpen(true)}
-												type="button"
-											>
-												<Settings className="w-4 h-4 mr-2" />
-												高级配置
-											</Button>
+																				<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+																			</Button>
+																		</PopoverTrigger>
+																		<PopoverContent
+																			className="w-[--radix-popover-trigger-width] p-0 cyber-dialog border-border"
+																			align="start"
+																		>
+																			<Command className="bg-background">
+																				<CommandInput placeholder="搜索模型..." />
+																				<CommandList className="max-h-[280px]">
+																					<CommandEmpty>未找到匹配模型</CommandEmpty>
+																					<CommandGroup>
+																						<CommandItem
+																							value={`自定义模型 ${config.llmModel || ""}`}
+																							onSelect={() => {
+																								handleLlmModelSelect("__custom__");
+																								setCustomModelQuery(config.llmModel || "");
+																								setCustomSuggestionOpen(true);
+																								setLlmModelPopoverOpen(false);
+																							}}
+																							className="font-mono"
+																						>
+																							<Check
+																								className={cn(
+																									"mr-2 h-4 w-4",
+																									selectValue === "__custom__"
+																										? "opacity-100"
+																										: "opacity-0",
+																								)}
+																							/>
+																							自定义模型...
+																						</CommandItem>
+																						{defaultModel ? (
+																							<CommandItem
+																								value={`默认模型 ${defaultModel}`}
+																								onSelect={() => {
+																									handleLlmModelSelect("__default__");
+																									setLlmModelPopoverOpen(false);
+																								}}
+																								className="font-mono"
+																							>
+																								<Check
+																									className={cn(
+																										"mr-2 h-4 w-4",
+																										selectValue === "__default__"
+																											? "opacity-100"
+																											: "opacity-0",
+																									)}
+																								/>
+																								默认（{defaultModel}）
+																							</CommandItem>
+																						) : null}
+																						{models.map((model) => (
+																							<CommandItem
+																								key={model}
+																								value={model}
+																								onSelect={() => {
+																									handleLlmModelSelect(model);
+																									setLlmModelPopoverOpen(false);
+																								}}
+																								className="font-mono"
+																							>
+																								<Check
+																									className={cn(
+																										"mr-2 h-4 w-4",
+																										selectValue === model
+																											? "opacity-100"
+																											: "opacity-0",
+																									)}
+																								/>
+																								<span className="truncate">
+																									{model}
+																								</span>
+																							</CommandItem>
+																						))}
+																					</CommandGroup>
+																				</CommandList>
+																			</Command>
+																		</PopoverContent>
+																	</Popover>
+																)}
+															</div>
+															<Button
+																type="button"
+																variant="outline"
+																className="h-10 cyber-btn-ghost text-xs w-full md:w-auto"
+																onClick={handleFetchModels}
+																disabled={
+																	fetchingModels ||
+																	!config.llmProvider ||
+																	!config.llmBaseUrl.trim() ||
+																	(shouldRequireApiKey(config.llmProvider) &&
+																		!config.llmApiKey.trim())
+																}
+															>
+																{fetchingModels ? (
+																	<>
+																		<Loader2 className="w-3 h-3 mr-1 animate-spin" />
+																		拉取中...
+																	</>
+																) : (
+																	"一键获取模型"
+																)}
+															</Button>
+														</>
+													);
+												})()}
+											</div>
 										</div>
+
+									<div className="flex items-center justify-end">
+										<Button
+											variant="outline"
+											className="cyber-btn-ghost h-9"
+											onClick={() => setAdvancedOpen(true)}
+											type="button"
+										>
+											<Settings className="w-4 h-4 mr-2" />
+											高级配置
+										</Button>
 									</div>
 
 									<div className="pt-4 border-t border-border border-dashed flex items-center justify-between flex-wrap gap-4">
@@ -1945,11 +1952,14 @@ export function SystemConfig({
 					</TabsContent>
 				)}
 
-				{!mergedView && sections.includes("embedding") && (
-					<TabsContent value="embedding" className="space-y-6">
-						<EmbeddingConfig />
-					</TabsContent>
-				)}
+					{!mergedView && sections.includes("embedding") && (
+						<TabsContent
+							value="embedding"
+							className={compactLayout ? "space-y-4" : "space-y-6"}
+						>
+							<EmbeddingConfig compact={compactLayout} />
+						</TabsContent>
+					)}
 
 				{!mergedView && sections.includes("analysis") && (
 					<TabsContent value="analysis" className="space-y-6">
@@ -2167,7 +2177,7 @@ export function SystemConfig({
 				)}
 			</Tabs>
 
-			{hasChanges && !advancedOpen && (
+			{hasChanges && !advancedOpen && showFloatingSaveButton && (
 				<div className="fixed bottom-6 right-6 cyber-card p-4 z-50">
 					<Button onClick={saveConfig} className="cyber-btn-primary h-12">
 						<Save className="w-4 h-4 mr-2" /> 保存所有更改

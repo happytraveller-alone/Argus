@@ -103,17 +103,19 @@ export default function ScanConfigEngines() {
 						</div>
 					</TabsContent>
 
-					<TabsContent value="llm" className="mt-0 space-y-6">
+					<TabsContent value="llm" className="mt-0 space-y-4">
 						<SystemConfig
 							visibleSections={["llm"]}
 							defaultSection="llm"
 							mergedView={false}
 							llmSummaryOnly
+							showFloatingSaveButton={false}
+							compactLayout
 						/>
 
-						<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-							<div className="cyber-card p-5 space-y-2">
-								<div className="section-header mb-1">
+						<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+							<div className="cyber-card p-4 space-y-2">
+								<div className="section-header mb-0">
 									<KeyRound className="w-4 h-4 text-primary" />
 									<div className="font-mono font-bold uppercase text-sm text-foreground">
 										推理模块
@@ -127,17 +129,19 @@ export default function ScanConfigEngines() {
 									defaultSection="llm"
 									mergedView={false}
 									showLlmSummaryCards={false}
+									showFloatingSaveButton={false}
+									compactLayout
 								/>
 							</div>
 
-							<div className="cyber-card p-5 space-y-2">
-								<div className="section-header mb-1">
+							<div className="cyber-card p-4 space-y-2">
+								<div className="section-header mb-0">
 									<Zap className="w-4 h-4 text-primary" />
 									<div className="font-mono font-bold uppercase text-sm text-foreground">
 										搜索增强模块
 									</div>
 								</div>
-								<EmbeddingConfig />
+								<EmbeddingConfig compact />
 							</div>
 						</div>
 					</TabsContent>
