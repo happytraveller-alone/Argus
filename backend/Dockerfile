@@ -255,10 +255,19 @@ RUN --mount=type=cache,id=deepaudit-backend-pnpm-store,target=/pnpm/store \
     pnpm bin -g; \
     command -v qmd; \
     PNPM_GLOBAL_ROOT="$(pnpm root -g)"; \
+    PNPM_GLOBAL_DIR="$(dirname "${PNPM_GLOBAL_ROOT}")"; \
+    export PNPM_GLOBAL_ROOT; \
+    # 定向补齐 better-sqlite3 原生模块，避免 --ignore-scripts 导致运行期缺失 binding。
+    pnpm --dir "${PNPM_GLOBAL_DIR}" --config.virtual-store-dir=.pnpm rebuild better-sqlite3; \
+    # 构建期硬性校验：确保 better-sqlite3 可实际创建连接。
+    PNPM_BETTER_SQLITE_DIR="$(find "${PNPM_GLOBAL_DIR}/.pnpm" -maxdepth 1 -type d -name 'better-sqlite3@*' | head -n 1)"; \
+    [ -n "${PNPM_BETTER_SQLITE_DIR}" ]; \
+    export PNPM_BETTER_SQLITE_DIR; \
+    node -e 'const path=require("node:path");const pkg=process.env.PNPM_BETTER_SQLITE_DIR;if(!pkg){throw new Error("PNPM_BETTER_SQLITE_DIR is not set");}const Database=require(path.join(pkg,"node_modules","better-sqlite3"));const db=new Database(":memory:");db.prepare("SELECT 1 AS ok").get();db.close();console.log("better-sqlite3 smoke check passed");'; \
     mkdir -p /app/mcp-src; \
-    cp -R "${PNPM_GLOBAL_ROOT}/@modelcontextprotocol/server-filesystem" /app/mcp-src/filesystem; \
-    cp -R "${PNPM_GLOBAL_ROOT}/@modelcontextprotocol/server-sequential-thinking" /app/mcp-src/sequential-thinking; \
-    cp -R "${PNPM_GLOBAL_ROOT}/@tobilu/qmd" /app/mcp-src/qmd
+    cp -R -L "${PNPM_GLOBAL_ROOT}/@modelcontextprotocol/server-filesystem" /app/mcp-src/filesystem; \
+    cp -R -L "${PNPM_GLOBAL_ROOT}/@modelcontextprotocol/server-sequential-thinking" /app/mcp-src/sequential-thinking; \
+    cp -R -L "${PNPM_GLOBAL_ROOT}/@tobilu/qmd" /app/mcp-src/qmd
 
 # MCP / QMD 持久化目录
 ENV XDG_DATA_HOME=/app/data/mcp/xdg-data
