@@ -116,6 +116,7 @@ RUN apt-get update && \
         libpq5 \
         curl \
         git \
+        unzip \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
         libpangocairo-1.0-0 \
@@ -179,6 +180,13 @@ RUN set -eux; \
       > /usr/local/bin/opengrep; \
     chmod +x /usr/local/bin/opengrep; \
     opengrep --version
+    
+# 安装 PMD
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+    curl -L https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.0.0/pmd-dist-7.0.0-bin.zip -o /tmp/pmd.zip && \
+    unzip -q /tmp/pmd.zip -d /opt && \
+    ln -s /opt/pmd-bin-7.0.0/bin/pmd /usr/local/bin/pmd && \
+    rm /tmp/pmd.zip
 
 # 安装 MCP 相关运行时（pnpm + qmd CLI）
 RUN mkdir -p /pnpm /pnpm/global && \

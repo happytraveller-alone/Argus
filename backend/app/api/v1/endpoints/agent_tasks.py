@@ -4671,6 +4671,7 @@ async def _initialize_tools(
         # "safety_scan": SafetyTool(project_root, sandbox_manager),
         # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
+        # "pmd_scan": PMDTool(project_root, sandbox_manager),
     }
     if recon_queue_service and task_id:
         recon_tools["push_risk_point_to_queue"] = PushRiskPointToQueueTool(recon_queue_service, task_id)
@@ -4731,6 +4732,7 @@ async def _initialize_tools(
         # "safety_scan": SafetyTool(project_root, sandbox_manager),
         # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
+        # "pmd_scan": PMDTool(project_root, sandbox_manager),
     }
     
     # 🔥 完成工具集构建后，补充完整工具集给 business_logic_scan

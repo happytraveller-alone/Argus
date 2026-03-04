@@ -1134,6 +1134,233 @@ Google 开源的漏洞扫描工具。
             error_msg = f"OSV-Scanner 执行错误: {str(e)}"
             return ToolResult(success=False, data=error_msg, error=error_msg)
 
+# ============ PMD 工具 (Java 源码分析) ============
+
+class PMDInput(BaseModel):
+    """PMD 扫描输入"""
+    target_path: str = Field(
+        default=".",
+        description="要扫描的路径。使用 '.' 扫描整个项目（推荐）"
+    )
+    ruleset: str = Field(
+        default="security",
+        description="规则集: security, quickstart, all。security 专注安全问题"
+    )
+    max_results: int = Field(
+        default=50,
+        description="最大返回结果数"
+    )
+
+
+class PMDTool(AgentTool):
+    """
+    PMD Java 源代码安全扫描工具
+    
+    PMD 直接分析 Java 源代码（无需编译），可以检测：
+    - SQL 注入风险
+    - 硬编码密码/密钥
+    - 空 catch 块（可能隐藏错误）
+    - 不安全的随机数生成
+    - 资源未关闭
+    - 潜在的 XSS 问题
+    - 代码质量问题
+    """
+    
+    def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
+        super().__init__()
+        self.project_root = os.path.abspath(project_root)
+        self.sandbox_manager = sandbox_manager or SandboxManager()
+
+    @property
+    def name(self) -> str:
+        return "pmd_scan"
+    
+    @property
+    def description(self) -> str:
+        return """使用 PMD 扫描 Java 源代码的安全和质量问题。
+PMD 直接分析源代码，无需编译！
+
+⚠️ 重要提示: target_path 使用 '.' 扫描整个项目
+
+检测能力:
+- 硬编码密码/凭证
+- 空 catch 块（隐藏异常）
+- 不安全的随机数
+- 资源泄漏（未关闭连接）
+- SQL 拼接风险
+- 潜在的注入点
+- 代码复杂度问题
+
+适用于 Java/JSP 项目，无需预先编译。"""
+    
+    @property
+    def args_schema(self):
+        return PMDInput
+    
+    async def _execute(
+        self,
+        target_path: str = ".",
+        ruleset: str = "security",
+        max_results: int = 50,
+        **kwargs
+    ) -> ToolResult:
+        """执行 PMD 扫描"""
+        # 确保 Docker 可用
+        await self.sandbox_manager.initialize()
+        if not self.sandbox_manager.is_available:
+            error_msg = f"PMD unavailable: {self.sandbox_manager.get_diagnosis()}"
+            return ToolResult(success=False, data=error_msg, error=error_msg)
+
+        # 智能路径解析
+        safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
+            target_path, self.project_root, "PMD"
+        )
+        if error_msg:
+            return ToolResult(success=False, data=error_msg, error=error_msg)
+
+        # 检查是否有 Java 源文件
+        has_java_files = False
+        for root, dirs, files in os.walk(host_check_path):
+            dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules', 'target', 'build', '.idea', '.gradle'}]
+            for f in files:
+                if f.endswith('.java') or f.endswith('.jsp'):
+                    has_java_files = True
+                    break
+            if has_java_files:
+                break
+        
+        if not has_java_files:
+            return ToolResult(
+                success=False,
+                data="未找到 Java 源文件 (.java 或 .jsp)。请确认这是一个 Java 项目。",
+                error="no_java_source"
+            )
+
+        # 选择规则集
+        ruleset_map = {
+            "security": "category/java/security.xml,category/java/errorprone.xml",
+            "quickstart": "rulesets/java/quickstart.xml",
+            "all": "category/java/security.xml,category/java/errorprone.xml,category/java/bestpractices.xml,category/java/codestyle.xml"
+        }
+        selected_ruleset = ruleset_map.get(ruleset, ruleset_map["security"])
+
+        # 构建 PMD 命令
+        cmd = [
+            "pmd", "check",
+            "-d", safe_target_path,
+            "-R", selected_ruleset,
+            "-f", "json",
+            "--no-cache"
+        ]
+        
+        cmd_str = " ".join(cmd)
+        
+        try:
+            result = await self.sandbox_manager.execute_tool_command(
+                command=cmd_str,
+                host_workdir=self.project_root,
+                timeout=180
+            )
+            
+            stdout = result.get('stdout', '')
+            stderr = result.get('stderr', '')
+            
+            # PMD 返回非零退出码表示发现问题，这是正常的
+            if not stdout.strip():
+                if "No such file" in stderr or "Error" in stderr:
+                    return ToolResult(
+                        success=False,
+                        data=f"PMD 执行错误: {stderr[:500]}",
+                        error="pmd_error"
+                    )
+                return ToolResult(
+                    success=True,
+                    data="🔍 PMD 扫描完成，未发现问题",
+                    metadata={"findings_count": 0}
+                )
+            
+            # 解析 JSON 结果
+            try:
+                pmd_result = json.loads(stdout)
+            except json.JSONDecodeError:
+                return ToolResult(
+                    success=True,
+                    data=f"🔍 PMD 扫描结果:\n{stdout[:3000]}",
+                    metadata={"raw_output": True}
+                )
+            
+            # 提取 violations
+            violations = []
+            files = pmd_result.get('files', [])
+            for file_info in files:
+                filename = file_info.get('filename', '')
+                for v in file_info.get('violations', []):
+                    violations.append({
+                        'file': filename,
+                        'beginLine': v.get('beginline', 0),
+                        'endLine': v.get('endline', 0),
+                        'rule': v.get('rule', ''),
+                        'ruleset': v.get('ruleset', ''),
+                        'priority': v.get('priority', 3),
+                        'message': v.get('message', ''),
+                    })
+            
+            if not violations:
+                return ToolResult(
+                    success=True,
+                    data="🔍 PMD 扫描完成，未发现安全问题",
+                    metadata={"findings_count": 0}
+                )
+            
+            # 按优先级排序
+            violations.sort(key=lambda x: x.get('priority', 5))
+            
+            # 格式化输出
+            output_parts = ["🔍 PMD Java 源码安全扫描结果\n"]
+            output_parts.append(f"⚠️ 发现 {len(violations)} 个问题!\n")
+            
+            # 统计
+            high_count = sum(1 for v in violations if v.get('priority', 5) <= 2)
+            medium_count = sum(1 for v in violations if v.get('priority', 5) == 3)
+            low_count = sum(1 for v in violations if v.get('priority', 5) >= 4)
+            
+            output_parts.append(f"📊 优先级分布: 🔴 高 {high_count} | 🟡 中 {medium_count} | 🟢 低 {low_count}\n")
+            
+            for i, v in enumerate(violations[:max_results]):
+                priority = v.get('priority', 5)
+                icon = "🔴" if priority <= 2 else ("🟡" if priority == 3 else "🟢")
+                
+                # 简化文件路径
+                filepath = v.get('file', '')
+                if '/workspace/' in filepath:
+                    filepath = filepath.split('/workspace/')[-1]
+                
+                output_parts.append(f"\n{icon} [{i+1}] {v.get('rule', 'Unknown')}")
+                output_parts.append(f"   文件: {filepath}")
+                output_parts.append(f"   行号: {v.get('beginLine', '?')}-{v.get('endLine', '?')}")
+                output_parts.append(f"   规则集: {v.get('ruleset', 'Unknown')}")
+                if v.get('message'):
+                    msg = v.get('message', '')[:200]
+                    output_parts.append(f"   描述: {msg}")
+            
+            if len(violations) > max_results:
+                output_parts.append(f"\n... 还有 {len(violations) - max_results} 个问题未显示")
+            
+            return ToolResult(
+                success=True,
+                data="\n".join(output_parts),
+                metadata={
+                    "findings_count": len(violations),
+                    "high_count": high_count,
+                    "medium_count": medium_count,
+                    "low_count": low_count
+                }
+            )
+            
+        except Exception as e:
+            error_msg = f"PMD 执行错误: {str(e)}"
+            logger.error(f"[PMD] {error_msg}", exc_info=True)
+            return ToolResult(success=False, data=error_msg, error=error_msg)
 
 # ============ 导出所有工具 ============
 
@@ -1145,5 +1372,6 @@ __all__ = [
     "SafetyTool",
     "TruffleHogTool",
     "OSVScannerTool",
+    "PMDTool",
 ]
 
