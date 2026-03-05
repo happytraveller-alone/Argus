@@ -4417,6 +4417,7 @@ async def _initialize_tools(
         ExtractFunctionTool,
         OpengrepTool, BanditTool, GitleaksTool,
         NpmAuditTool, SafetyTool, TruffleHogTool, OSVScannerTool,
+        PMDTool,PHPStanTool,
     )
     from app.services.agent.tools.queue_tools import (
         GetQueueStatusTool, DequeueFindingTool, PushFindingToQueueTool, IsFindingInQueueTool
@@ -4741,6 +4742,7 @@ async def _initialize_tools(
         # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
         # "pmd_scan": PMDTool(project_root, sandbox_manager),
+        # "phpstan_scan": PHPStanTool(project_root, sandbox_manager),
     }
     if recon_queue_service and task_id:
         recon_tools["push_risk_point_to_queue"] = PushRiskPointToQueueTool(
@@ -4808,6 +4810,7 @@ async def _initialize_tools(
         # "trufflehog_scan": TruffleHogTool(project_root, sandbox_manager),
         # "osv_scan": OSVScannerTool(project_root, sandbox_manager),
         # "pmd_scan": PMDTool(project_root, sandbox_manager),
+        # "phpstan_scan": PHPStanTool(project_root, sandbox_manager),
     }
     
     # 🔥 完成工具集构建后，补充完整工具集给 business_logic_scan

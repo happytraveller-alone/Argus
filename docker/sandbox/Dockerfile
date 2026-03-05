@@ -161,6 +161,18 @@ RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
     curl -L https://github.com/google/osv-scanner/releases/download/v1.6.2/osv-scanner_1.6.2_linux_amd64 -o /usr/local/bin/osv-scanner && \
     chmod +x /usr/local/bin/osv-scanner
 
+# 安装 PMD
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+    curl -L https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.0.0/pmd-dist-7.0.0-bin.zip -o /tmp/pmd.zip && \
+    unzip -q /tmp/pmd.zip -d /opt && \
+    ln -s /opt/pmd-bin-7.0.0/bin/pmd /usr/local/bin/pmd && \
+    rm /tmp/pmd.zip
+
+# 安装 PHPStan (PHP 静态分析工具) - 使用官方 PHAR 直装版（最稳定）
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
+    curl -L https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar -o /usr/local/bin/phpstan && \
+    chmod +x /usr/local/bin/phpstan
+
 # 创建非 root 用户
 RUN groupadd -g 1000 sandbox && \
     useradd -u 1000 -g sandbox -m -s /bin/bash sandbox

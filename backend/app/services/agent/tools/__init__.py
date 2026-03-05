@@ -56,6 +56,7 @@ from .external_tools import (
     TruffleHogTool,
     OSVScannerTool,
     PMDTool,
+    PHPStanTool,
 )
 
 # 🔥 新增：思考和推理工具
@@ -152,6 +153,7 @@ __all__ = [
     "TruffleHogTool",
     "OSVScannerTool",
     "PMDTool",
+    "PHPStanTool",
     
     # 🔥 思考和推理工具
     "ThinkTool",
