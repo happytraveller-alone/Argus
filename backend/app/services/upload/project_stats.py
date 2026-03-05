@@ -233,7 +233,8 @@ def _build_cloc_payload(output: str, extracted_files: Optional[List[str]] = None
     return json.dumps(result_payload, ensure_ascii=False)
 
 
-def _run_cloc_on_directory(project_dir: str, extracted_files: Optional[List[str]] = None) -> str:
+def _run_cloc_sync(project_dir: str) -> str:
+    """同步执行 CLOC（用于在线程池中运行）"""
     try:
         cloc = CLOC(
             json=True,
@@ -242,30 +243,53 @@ def _run_cloc_on_directory(project_dir: str, extracted_files: Optional[List[str]
         )
         output = cloc(project_dir)
         if not output or not str(output).strip():
-            logger.error("pycloc 返回空输出")
+            logger.warning("pycloc 返回空输出，将使用后缀统计")
             return "{}"
-        return _build_cloc_payload(str(output), extracted_files=extracted_files)
-    except json.JSONDecodeError:
-        logger.error("pycloc JSON解析失败")
-        return "{}"
+        return str(output).strip()
     except CLOCDependencyError as e:
-        logger.error(f"pycloc 依赖错误（Perl不可用）: {e}")
+        logger.warning(f"pycloc 依赖错误（Perl不可用），将使用后缀统计: {e}")
         return "{}"
     except CLOCCommandError as e:
-        logger.error(f"pycloc 命令执行失败: {e}")
+        logger.warning(f"pycloc 命令执行失败（可能超时），将使用后缀统计: {e}")
         return "{}"
     except Exception as e:
-        logger.error(f"pycloc 执行异常: {e}", exc_info=True)
+        logger.warning(f"pycloc 执行异常（{type(e).__name__}），将使用后缀统计: {e}")
+        return "{}"
+
+
+async def _run_cloc_on_directory(project_dir: str, extracted_files: Optional[List[str]] = None) -> str:
+    """异步执行 CLOC，在线程池中运行避免阻塞事件循环"""
+    loop = asyncio.get_event_loop()
+    try:
+        # 在线程池中执行 CLOC 命令
+        output_str = await loop.run_in_executor(None, _run_cloc_sync, project_dir)
+        
+        if not output_str or output_str == "{}":
+            return "{}"
+        
+        # 验证输出是否是有效的 JSON
+        try:
+            json.loads(output_str)  # 预验证 JSON 格式
+        except json.JSONDecodeError as je:
+            logger.warning(f"pycloc 输出无效 JSON（可能超时或出错）: {str(output_str)[:200]}... 错误: {je}")
+            return "{}"
+        
+        return _build_cloc_payload(output_str, extracted_files=extracted_files)
+    except json.JSONDecodeError as je:
+        logger.warning(f"pycloc JSON解析失败: {je}")
+        return "{}"
+    except Exception as e:
+        logger.warning(f"pycloc 异步执行异常（{type(e).__name__}），将使用后缀统计: {e}")
         return "{}"
 
 
 async def get_cloc_stats_from_extracted_dir(
     extracted_dir: str, extracted_files: Optional[List[str]] = None
 ) -> str:
-    cloc_payload = _run_cloc_on_directory(extracted_dir, extracted_files=extracted_files)
+    cloc_payload = await _run_cloc_on_directory(extracted_dir, extracted_files=extracted_files)
     if _is_non_empty_language_payload(cloc_payload):
         return cloc_payload
-    logger.warning("cloc 统计结果为空，回退到后缀统计: %s", extracted_dir)
+    logger.info("cloc 统计结果为空，使用后缀统计进行代码行数统计")
     return _build_suffix_fallback_payload(extracted_dir)
 
 
@@ -280,10 +304,10 @@ async def get_cloc_stats_from_archive(archive_path: str) -> str:
         if not extracted_files:
             logger.error("解压失败：无文件被解压")
             return "{}"
-        cloc_payload = _run_cloc_on_directory(temp_dir, extracted_files=extracted_files)
+        cloc_payload = await _run_cloc_on_directory(temp_dir, extracted_files=extracted_files)
         if _is_non_empty_language_payload(cloc_payload):
             return cloc_payload
-        logger.warning("cloc 统计结果为空，回退到后缀统计: %s", archive_path)
+        logger.info("cloc 统计结果为空，使用后缀统计进行代码行数统计")
         return _build_suffix_fallback_payload(temp_dir)
 
 
