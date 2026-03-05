@@ -1035,8 +1035,12 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                     # 🔥 记录工作完成
                     self.record_work(f"完成安全分析，发现 {len(all_findings)} 个潜在漏洞")
                     
+                    # await self.emit_llm_complete(
+                    #     f"分析完成，发现 {len(all_findings)} 个潜在漏洞",
+                    #     self._total_tokens
+                    # )
                     await self.emit_llm_complete(
-                        f"分析完成，发现 {len(all_findings)} 个潜在漏洞",
+                        f"分析完成",
                         self._total_tokens
                     )
                     break
