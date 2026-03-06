@@ -4,35 +4,75 @@
 
 ARG SANDBOX_BASE_IMAGE=docker.m.daocloud.io/python:3.11-bullseye
 FROM ${SANDBOX_BASE_IMAGE}
+ARG SANDBOX_APT_MIRROR_PRIMARY=mirrors.aliyun.com
+ARG SANDBOX_APT_SECURITY_PRIMARY=mirrors.aliyun.com
+ARG SANDBOX_APT_MIRROR_FALLBACK=deb.debian.org
+ARG SANDBOX_APT_SECURITY_FALLBACK=security.debian.org
 
 LABEL maintainer="XCodeReviewer Team"
 LABEL description="Secure sandbox environment for vulnerability verification and security scanning"
 
-# 安装基本工具
-# 安装基本工具
-# 使用阿里云镜像加速 apt
-RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
-    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
-    apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    wget \
-    netcat-openbsd \
-    dnsutils \
-    iputils-ping \
-    ca-certificates \
-    git \
-    unzip \
-    jq \
-    php-cli \
-    openjdk-11-jdk-headless \
-    ruby-full \
-    build-essential \
-    cmake \
-    clang \
-    llvm \
-    xz-utils \
-    && rm -rf /var/lib/apt/lists/*
+# 安装基本工具（主镜像源失败后自动回退到官方源）
+RUN set -eux; \
+    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; \
+    rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \
+    { \
+      echo 'Acquire::http::Proxy "false";'; \
+      echo 'Acquire::https::Proxy "false";'; \
+      echo 'Acquire::Retries "5";'; \
+      echo 'Acquire::http::Timeout "30";'; \
+      echo 'Acquire::https::Timeout "30";'; \
+      echo 'Acquire::ForceIPv4 "true";'; \
+    } > /etc/apt/apt.conf.d/99-deepaudit-network; \
+    . /etc/os-release; \
+    CODENAME="${VERSION_CODENAME:-bullseye}"; \
+    APT_INSTALL_RETRIES=3; \
+    write_sources() { \
+      main_host="$1"; \
+      security_host="$2"; \
+      rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      printf 'deb https://%s/debian %s main\n' "${main_host}" "${CODENAME}" > /etc/apt/sources.list; \
+      printf 'deb https://%s/debian %s-updates main\n' "${main_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+      printf 'deb https://%s/debian-security %s-security main\n' "${security_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+    }; \
+    install_core_packages_with_retry() { \
+      max_attempts="$1"; \
+      attempt=1; \
+      while [ "${attempt}" -le "${max_attempts}" ]; do \
+        if apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+          curl \
+          wget \
+          netcat-openbsd \
+          dnsutils \
+          iputils-ping \
+          ca-certificates \
+          git \
+          unzip \
+          jq \
+          php-cli \
+          openjdk-11-jdk-headless \
+          ruby-full \
+          build-essential \
+          cmake \
+          clang \
+          llvm \
+          xz-utils; then \
+          return 0; \
+        fi; \
+        echo "APT install failed (attempt ${attempt}/${max_attempts}), retrying..." >&2; \
+        rm -rf /var/lib/apt/lists/*; \
+        sleep $((attempt * attempt)); \
+        attempt=$((attempt + 1)); \
+      done; \
+      return 1; \
+    }; \
+    write_sources "${SANDBOX_APT_MIRROR_PRIMARY}" "${SANDBOX_APT_SECURITY_PRIMARY}"; \
+    if ! install_core_packages_with_retry "${APT_INSTALL_RETRIES}"; then \
+      echo "Primary apt mirrors failed, switching to fallback mirrors..." >&2; \
+      write_sources "${SANDBOX_APT_MIRROR_FALLBACK}" "${SANDBOX_APT_SECURITY_FALLBACK}"; \
+      install_core_packages_with_retry "${APT_INSTALL_RETRIES}"; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
 
 # 统一 Python 包镜像源（uv/pip）
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/

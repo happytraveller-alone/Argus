@@ -10,6 +10,8 @@ BUILD_SANDBOX="true"   # NEW: default build sandbox; can disable via --no-sandbo
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 IMAGE_BACKEND="deepaudit/backend-local:latest"
 IMAGE_FRONTEND="deepaudit/frontend-local:latest"
+BUILD_RETRIES="${BUILD_RETRIES:-2}"
+BUILD_RETRY_INTERVAL_SECONDS="${BUILD_RETRY_INTERVAL_SECONDS:-5}"
 
 usage() {
   cat <<USAGE
@@ -26,6 +28,9 @@ Options:
 
 Environment:
   DOCKER_BIN           Container runtime command (default: docker)
+  BUILD_RETRIES        Build retry attempts for docker compose build (default: 2)
+  BUILD_RETRY_INTERVAL_SECONDS
+                       Interval between build retries in seconds (default: 5)
 
 Outputs:
   checksums.txt
@@ -53,6 +58,15 @@ require_arg() {
   if [[ -z "$val" || "$val" == --* ]]; then
     echo "Option ${opt} requires a value" >&2
     usage
+    exit 1
+  fi
+}
+
+require_positive_int() {
+  local name="$1"
+  local value="${2:-}"
+  if ! [[ "$value" =~ ^[0-9]+$ ]] || (( value < 1 )); then
+    echo "${name} must be a positive integer, got: ${value}" >&2
     exit 1
   fi
 }
@@ -113,6 +127,26 @@ pack_docker_layout() {
   rm -rf "$tmp_root"
 }
 
+run_compose_build_with_retries() {
+  local -a services=("$@")
+  local attempt=1
+
+  while true; do
+    log "docker compose build attempt ${attempt}/${BUILD_RETRIES} for services: ${services[*]}"
+    if "$DOCKER_BIN" compose -f "${ROOT_DIR}/docker-compose.build.yml" build "${services[@]}"; then
+      return 0
+    fi
+
+    if (( attempt >= BUILD_RETRIES )); then
+      return 1
+    fi
+
+    log "build failed, retrying in ${BUILD_RETRY_INTERVAL_SECONDS}s..."
+    sleep "${BUILD_RETRY_INTERVAL_SECONDS}"
+    attempt=$((attempt + 1))
+  done
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)
@@ -150,6 +184,8 @@ require_cmd gzip
 require_cmd sha256sum
 require_container_cmd
 require_cmd node
+require_positive_int "BUILD_RETRIES" "$BUILD_RETRIES"
+require_positive_int "BUILD_RETRY_INTERVAL_SECONDS" "$BUILD_RETRY_INTERVAL_SECONDS"
 
 if [[ -z "$VERSION" ]]; then
   VERSION="$(node -p "require('${ROOT_DIR}/frontend/package.json').version")"
@@ -171,10 +207,19 @@ log "output: ${DIST_DIR}"
 if [[ "$SKIP_BUILD" != "true" ]]; then
   if [[ "$BUILD_SANDBOX" == "true" ]]; then
     log "building runtime images with docker compose (backend, frontend, sandbox)"
-    "$DOCKER_BIN" compose -f "${ROOT_DIR}/docker-compose.build.yml" build backend frontend sandbox
+    if ! run_compose_build_with_retries backend frontend sandbox; then
+      echo "Docker build failed after ${BUILD_RETRIES} attempts (sandbox included)." >&2
+      echo "Hint: check network/mirror availability, then rerun the packaging command." >&2
+      echo "Temporary bypass (not recommended for complete release): bash scripts/package-release-artifacts.sh --no-sandbox" >&2
+      exit 1
+    fi
   else
     log "building runtime images with docker compose (backend, frontend) [--no-sandbox]"
-    "$DOCKER_BIN" compose -f "${ROOT_DIR}/docker-compose.build.yml" build backend frontend
+    if ! run_compose_build_with_retries backend frontend; then
+      echo "Docker build failed after ${BUILD_RETRIES} attempts." >&2
+      echo "Hint: check network/mirror availability, then rerun the packaging command." >&2
+      exit 1
+    fi
   fi
 else
   log "skip docker build"
