@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Activity, Plus, Search, Shield } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,7 +19,20 @@ export default function TaskManagementStatic() {
 	const { activities, loading, error, refresh } = useTaskActivitiesSnapshot();
 	const [keyword, setKeyword] = useState("");
 	const [showCreateStaticDialog, setShowCreateStaticDialog] = useState(false);
+	const [searchParams, setSearchParams] = useSearchParams();
 	const errorRef = useRef<string | null>(null);
+	const autoOpenHandledRef = useRef(false);
+
+	useEffect(() => {
+		if (autoOpenHandledRef.current) return;
+		if (searchParams.get("openCreate") !== "1") return;
+
+		autoOpenHandledRef.current = true;
+		setShowCreateStaticDialog(true);
+		const nextParams = new URLSearchParams(searchParams);
+		nextParams.delete("openCreate");
+		setSearchParams(nextParams, { replace: true });
+	}, [searchParams, setSearchParams]);
 
 	useEffect(() => {
 		if (!error || activities.length > 0 || errorRef.current === error) {

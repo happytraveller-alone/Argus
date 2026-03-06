@@ -1134,8 +1134,10 @@ export default function Projects() {
                     {
                         completed: statuses.filter((status) => status === "completed")
                             .length,
-                        running: statuses.filter((status) => status === "running")
-                            .length,
+                        running: statuses.filter(
+                            (status) =>
+                                status === "running" || status === "pending",
+                        ).length,
                     },
                 ];
             }),
@@ -1459,7 +1461,7 @@ export default function Projects() {
     };
 
     return (
-        <div className="space-y-6 p-6 bg-background min-h-screen font-mono relative">
+        <div className="p-6 bg-background min-h-screen font-mono relative flex flex-col gap-6">
             {/* Grid background */}
             <div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
             {loading && (
@@ -1913,7 +1915,10 @@ export default function Projects() {
             </Dialog>
 
             {/* Project Browser */}
-            <div id="project-browser" className="cyber-card p-4 relative z-10">
+            <div
+                id="project-browser"
+                className="cyber-card p-4 relative z-10 flex flex-col flex-1 min-h-[65vh]"
+            >
                 <div className="flex items-center justify-between gap-3 mb-3">
                     <div className="relative w-full max-w-xl">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1943,7 +1948,7 @@ export default function Projects() {
                         <Skeleton className="h-48 w-full" />
                     </div>
                 ) : pagedProjects.length > 0 ? (
-                    <>
+                    <div className="flex-1 flex flex-col">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -1979,6 +1984,7 @@ export default function Projects() {
                                         projectSummaryStatsMap.get(project.id) || {
                                             totalTasks: 0,
                                             completedTasks: 0,
+                                            runningTasks: 0,
                                             totalIssues: 0,
                                         };
                                     const executionStats =
@@ -2033,8 +2039,25 @@ export default function Projects() {
                                                     {project.is_active ? "启用" : "禁用"}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-emerald-300 font-semibold">
-                                                {executionStats.completed}/{executionStats.running}
+                                            <TableCell>
+                                                <div className="grid grid-cols-2 gap-2 min-w-[180px]">
+                                                    <div className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-1">
+                                                        <p className="text-[10px] leading-4 text-muted-foreground">
+                                                            已完成
+                                                        </p>
+                                                        <p className="text-sm leading-5 font-semibold text-emerald-300">
+                                                            {executionStats.completed}
+                                                        </p>
+                                                    </div>
+                                                    <div className="rounded border border-sky-500/25 bg-sky-500/10 px-2 py-1">
+                                                        <p className="text-[10px] leading-4 text-muted-foreground">
+                                                            进行中
+                                                        </p>
+                                                        <p className="text-sm leading-5 font-semibold text-sky-300">
+                                                            {executionStats.running}
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-amber-300 font-semibold">
                                                 {summaryStats.totalIssues ?? 0}
@@ -2088,7 +2111,7 @@ export default function Projects() {
                             </TableBody>
                         </Table>
 
-                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="mt-auto pt-4 flex flex-wrap items-center justify-between gap-3">
                             <div className="text-xs text-muted-foreground">
                                 共 {filteredProjects.length} 条
                             </div>
@@ -2149,7 +2172,7 @@ export default function Projects() {
                                 </Button>
                             </div>
                         </div>
-                    </>
+                    </div>
                 ) : (
                     <div className="empty-state py-10">
                         <Code className="w-12 h-12 text-muted-foreground mb-3" />

@@ -45,6 +45,7 @@ export interface ProjectCardLanguageStats {
 export interface ProjectCardSummaryStats {
   totalTasks: number;
   completedTasks: number;
+  runningTasks: number;
   totalIssues: number;
 }
 
@@ -185,6 +186,11 @@ function isCompletedStatus(status: string | undefined | null): boolean {
   return String(status || "").trim().toLowerCase() === "completed";
 }
 
+function isRunningStatus(status: string | undefined | null): boolean {
+  const normalized = String(status || "").trim().toLowerCase();
+  return normalized === "running" || normalized === "pending";
+}
+
 function toNullableNonNegativeNumber(value: unknown): number | null {
   const num = Number(value);
   if (!Number.isFinite(num) || num < 0) return null;
@@ -267,6 +273,10 @@ export function getProjectCardSummaryStats(params: {
     projectAuditTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectAgentTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectOpengrepTasks.filter((task) => isCompletedStatus(task.status)).length;
+  const runningTasks =
+    projectAuditTasks.filter((task) => isRunningStatus(task.status)).length +
+    projectAgentTasks.filter((task) => isRunningStatus(task.status)).length +
+    projectOpengrepTasks.filter((task) => isRunningStatus(task.status)).length;
 
   const issueBreakdown = getProjectFoundIssuesBreakdown({
     projectId,
@@ -277,6 +287,7 @@ export function getProjectCardSummaryStats(params: {
   return {
     totalTasks,
     completedTasks,
+    runningTasks,
     totalIssues: issueBreakdown.totalIssues,
   };
 }

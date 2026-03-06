@@ -41,7 +41,6 @@ import {
   type OpengrepFinding,
 } from "@/shared/api/opengrep";
 import CreateAgentTaskDialog from "@/components/agent/CreateAgentTaskDialog";
-import CreateProjectAuditDialog from "@/components/audit/CreateProjectAuditDialog";
 
 // Local imports
 import {
@@ -131,7 +130,7 @@ type HomeScanCard = {
   intro: string;
   icon: typeof Zap;
   accentClassName: string;
-  route: "static" | "intelligent" | "hybrid";
+  targetRoute: string;
 };
 
 type AutoScrollByProjectState = Record<string, boolean>;
@@ -638,9 +637,6 @@ function AgentAuditPageContent() {
   // Local state
   const [showSplash, setShowSplash] = useState(!taskId);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showHomeStaticDialog, setShowHomeStaticDialog] = useState(false);
-  const [showHomeAgentDialog, setShowHomeAgentDialog] = useState(false);
-  const [showHomeMixedDialog, setShowHomeMixedDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState<"logs" | "findings">(
@@ -750,11 +746,6 @@ function AgentAuditPageContent() {
     () => (failedReason ? extractStepName(failedReason) : null),
     [failedReason],
   );
-  const openHomeModeDialog = useCallback((mode: HomeScanCard["key"]) => {
-    setShowHomeStaticDialog(mode === "static");
-    setShowHomeAgentDialog(mode === "agent");
-    setShowHomeMixedDialog(mode === "hybrid");
-  }, []);
   const homeScanCards: HomeScanCard[] = useMemo(
   () => [
     {
@@ -764,7 +755,7 @@ function AgentAuditPageContent() {
       icon: Zap,
       accentClassName:
         "from-sky-500/25 via-cyan-500/10 to-transparent border-sky-400/40",
-      route: "static",
+      targetRoute: "/tasks/static?openCreate=1&source=home-card",
     },
     {
       key: "agent",
@@ -773,7 +764,7 @@ function AgentAuditPageContent() {
       icon: Bot,
       accentClassName:
         "from-violet-500/25 via-indigo-500/10 to-transparent border-violet-400/40",
-      route: "intelligent",
+      targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",
     },
     {
       key: "hybrid",
@@ -782,7 +773,7 @@ function AgentAuditPageContent() {
       icon: Layers,
       accentClassName:
         "from-emerald-500/25 via-cyan-500/10 to-transparent border-emerald-400/40",
-      route: "hybrid",
+      targetRoute: "/tasks/hybrid?openCreate=1&source=home-card",
     },
   ],
   [],
@@ -2895,7 +2886,9 @@ function AgentAuditPageContent() {
           {/* 快速审计按钮 - 在卡片上方 */}
           <div className="mb-[6vh]">
             <button
-              onClick={() => openHomeModeDialog('static')}
+              onClick={() =>
+                navigate("/tasks/hybrid?openCreate=1&source=home-primary")
+              }
               className="group relative px-10 md:px-14 py-4 md:py-5 text-lg md:text-xl font-bold text-white bg-gradient-to-r from-primary via-primary to-primary/90 rounded-2xl transition-all duration-300 hover:shadow-2xl hover:shadow-primary/60 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 overflow-hidden"
             >
               {/* 背景动画效果 */}
@@ -2917,7 +2910,7 @@ function AgentAuditPageContent() {
                 <button
                   key={card.key}
                   type="button"
-                  onClick={() => window.location.href = `/tasks/${card.route}`}
+                  onClick={() => navigate(card.targetRoute)}
                   aria-label={`${card.title}，点击快速开启审计`}
                   className="group relative flex h-full min-h-[280px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/70 p-6 md:p-7 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_22px_48px_-28px_rgba(56,189,248,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                 >
@@ -2967,33 +2960,6 @@ function AgentAuditPageContent() {
           </div>
         </div>
 
-        <CreateProjectAuditDialog
-          open={showHomeStaticDialog}
-          onOpenChange={setShowHomeStaticDialog}
-          initialMode="static"
-          lockMode
-          allowUploadProject
-          navigateOnSuccess
-          primaryCreateLabel="开始静态扫描"
-        />
-        <CreateProjectAuditDialog
-          open={showHomeAgentDialog}
-          onOpenChange={setShowHomeAgentDialog}
-          initialMode="agent"
-          lockMode
-          allowUploadProject
-          navigateOnSuccess
-          primaryCreateLabel="开始智能扫描"
-        />
-        <CreateProjectAuditDialog
-          open={showHomeMixedDialog}
-          onOpenChange={setShowHomeMixedDialog}
-          initialMode="hybrid"
-          lockMode
-          allowUploadProject
-          navigateOnSuccess
-          primaryCreateLabel="开始混合扫描"
-        />
       </div>
     );
   }
