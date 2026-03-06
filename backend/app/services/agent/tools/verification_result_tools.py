@@ -12,6 +12,7 @@ Verification Agent 结果保存工具
 - 提供内存暂存缓冲，即使回调未注入也可缓存结果供 Orchestrator 读取
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -397,6 +398,7 @@ class SaveVerificationResultsTool(AgentTool):
         # 内存缓冲：即使没有注入回调也能暂存结果
         self._buffered_findings: List[Dict[str, Any]] = []
         self._saved_count: Optional[int] = None  # None 表示尚未调用过
+        self._seen_payload_digests: set[str] = set()
 
     # ------------------------------------------------------------------ #
     # AgentTool 必须实现的属性
@@ -458,6 +460,14 @@ reachability / verification_evidence 之后，必须调用此工具，
     def saved_count(self) -> Optional[int]:
         return self._saved_count
 
+    @staticmethod
+    def _build_payload_digest(findings: List[Dict[str, Any]]) -> str:
+        try:
+            normalized = json.dumps(findings, ensure_ascii=False, sort_keys=True, default=str)
+        except Exception:
+            normalized = str(findings)
+        return hashlib.sha1(normalized.encode("utf-8", errors="ignore")).hexdigest()
+
     # ------------------------------------------------------------------ #
     # 核心执行逻辑
     # ------------------------------------------------------------------ #
@@ -495,26 +505,27 @@ reachability / verification_evidence 之后，必须调用此工具，
                 },
             )
 
-        # 幂等检查：已保存过则直接返回
-        if self._saved_count is not None:
-            logger.info(
-                "[SaveVerificationResults][%s] 幂等保护：结果已保存过（saved_count=%d），跳过重复调用",
-                task_id,
-                self._saved_count,
-            )
-            return ToolResult(
-                success=True,
-                data={
-                    "saved_count": self._saved_count,
-                    "filtered_count": len(findings) - self._saved_count,
-                    "already_saved": True,
-                    "message": f"结果已保存（幂等保护），saved_count={self._saved_count}",
-                },
-            )
-
         # 所有 findings 都已通过 Pydantic 验证（在 coerce_findings_to_models 中）
         # 这里直接将它们转换回 Dict 格式以供持久化
         valid_findings = [f.model_dump(exclude_none=True) for f in findings]
+
+        payload_digest = self._build_payload_digest(valid_findings)
+        if payload_digest in self._seen_payload_digests:
+            logger.info(
+                "[SaveVerificationResults][%s] 幂等保护：重复 payload（digest=%s），跳过重复持久化",
+                task_id,
+                payload_digest[:12],
+            )
+            current_saved = int(self._saved_count or 0)
+            return ToolResult(
+                success=True,
+                data={
+                    "saved_count": current_saved,
+                    "filtered_count": 0,
+                    "already_saved": True,
+                    "message": f"重复 payload 已跳过，累计 saved_count={current_saved}",
+                },
+            )
         
         # 更新内存缓冲（供外部兜底读取）
         self._buffered_findings = list(valid_findings)
@@ -566,22 +577,27 @@ reachability / verification_evidence 之后，必须调用此工具，
         # 调用注入的持久化回调
         try:
             saved = await self._save_callback(valid_findings)
-            self._saved_count = int(saved)
-            filtered = len(valid_findings) - self._saved_count
+            self._seen_payload_digests.add(payload_digest)
+            previous_saved = int(self._saved_count or 0)
+            current_saved = int(saved)
+            self._saved_count = previous_saved + current_saved
+            filtered = max(0, len(valid_findings) - current_saved)
             logger.info(
-                "[SaveVerificationResults][%s] 持久化完成：saved=%d, filtered=%d",
+                "[SaveVerificationResults][%s] 持久化完成：batch_saved=%d, filtered=%d, total_saved=%d",
                 task_id,
-                self._saved_count,
+                current_saved,
                 filtered,
+                self._saved_count,
             )
             return ToolResult(
                 success=True,
                 data={
                     "saved_count": self._saved_count,
+                    "batch_saved_count": current_saved,
                     "filtered_count": filtered,
                     "already_saved": False,
                     "message": (
-                        f"✅ 验证结果已保存：{self._saved_count} 条成功入库"
+                        f"✅ 验证结果已保存：本批 {current_saved} 条，累计 {self._saved_count} 条"
                         + (f"，{filtered} 条被过滤（false_positive/uncertain 等）" if filtered else "")
                         + f"\n前置参数验证：所有 {len(valid_findings)} 条 findings 已通过严格的 Pydantic 模型验证"
                     ),
