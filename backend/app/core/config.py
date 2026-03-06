@@ -253,8 +253,8 @@ class Settings(BaseSettings):
     MCP_DAEMON_AUTOSTART: bool = True
     MCP_DAEMON_LOG_DIR: str = "/tmp/deepaudit/mcp-daemons"
     GIT_MIRROR_ENABLED: bool = True
-    GIT_MIRROR_PREFIX: str = "https://gh-proxy.com"
-    GIT_MIRROR_PREFIXES: str = "https://gh-proxy.com,https://v6.gh-proxy.org"
+    GIT_MIRROR_PREFIX: str = "https://gh-proxy.org"
+    GIT_MIRROR_PREFIXES: str = "https://gh-proxy.org,https://v6.gh-proxy.org"
     GIT_MIRROR_HOSTS: str = "github.com"
     GIT_MIRROR_ALLOW_AUTH_URL: bool = False
     GIT_MIRROR_FALLBACK_TO_ORIGIN: bool = False

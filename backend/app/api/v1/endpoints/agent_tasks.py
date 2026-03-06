@@ -7526,7 +7526,7 @@ async def _get_project_root(
                 # 构建 ZIP 下载 URL
                 if repo_type == "github" or "github.com" in repo_url:
                     # GitHub ZIP 下载 URL
-                    zip_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
+                    zip_url = f"https://gh-proxy.org/https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
                     headers = {}
                     if github_token:
                         headers["Authorization"] = f"token {github_token}"
@@ -7546,9 +7546,9 @@ async def _get_project_root(
                 zip_url_candidates = get_mirror_candidates(
                     zip_url,
                     enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
-                    mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.com"),
+                    mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.org"),
                     mirror_prefixes=getattr(
-                        settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.com,https://v6.gh-proxy.org"
+                        settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.org,https://v6.gh-proxy.org"
                     ),
                     allow_hosts=getattr(settings, "GIT_MIRROR_HOSTS", "github.com"),
                     allow_auth_url=getattr(settings, "GIT_MIRROR_ALLOW_AUTH_URL", False),
@@ -7723,9 +7723,9 @@ async def _get_project_root(
             clone_url_candidates = [auth_url] if is_ssh_url else get_mirror_candidates(
                 auth_url,
                 enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
-                mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.com"),
+                mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.org"),
                 mirror_prefixes=getattr(
-                    settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.com,https://v6.gh-proxy.org"
+                    settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.org,https://v6.gh-proxy.org"
                 ),
                 allow_hosts=getattr(settings, "GIT_MIRROR_HOSTS", "github.com"),
                 allow_auth_url=getattr(settings, "GIT_MIRROR_ALLOW_AUTH_URL", False),

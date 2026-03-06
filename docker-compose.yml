@@ -129,8 +129,8 @@ services:
       - MCP_QMD_DAEMON_SOURCE_DIR=${MCP_QMD_DAEMON_SOURCE_DIR:-/app/mcp-src/qmd}
       - MCP_QMD_DAEMON_STARTUP_TIMEOUT_SECONDS=60
       - GIT_MIRROR_ENABLED=${GIT_MIRROR_ENABLED:-true}
-      - GIT_MIRROR_PREFIX=${GIT_MIRROR_PREFIX:-https://gh-proxy.com}
-      - GIT_MIRROR_PREFIXES=${GIT_MIRROR_PREFIXES:-https://gh-proxy.com,https://v6.gh-proxy.org}
+      - GIT_MIRROR_PREFIX=${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
+      - GIT_MIRROR_PREFIXES=${GIT_MIRROR_PREFIXES:-https://gh-proxy.org,https://v6.gh-proxy.org}
       - GIT_MIRROR_HOSTS=${GIT_MIRROR_HOSTS:-github.com}
       - GIT_MIRROR_ALLOW_AUTH_URL=${GIT_MIRROR_ALLOW_AUTH_URL:-false}
       - GIT_MIRROR_FALLBACK_TO_ORIGIN=${GIT_MIRROR_FALLBACK_TO_ORIGIN:-false}

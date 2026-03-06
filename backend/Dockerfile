@@ -194,7 +194,7 @@ RUN set -eux; \
       aarch64|arm64) OG_DIST="opengrep_manylinux_aarch64" ;; \
       *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
     esac; \
-    curl -fL "https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
+    curl -fL "https://gh-proxy.org/https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
       -o /usr/local/bin/opengrep.real; \
     chmod +x /usr/local/bin/opengrep.real; \
     printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY="*"\nexport no_proxy="*"\nexec /usr/local/bin/opengrep.real "$@"\n' \
@@ -204,7 +204,7 @@ RUN set -eux; \
     
 # 安装 PMD
 RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY && \
-    curl -L https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.0.0/pmd-dist-7.0.0-bin.zip -o /tmp/pmd.zip && \
+    curl -L https://gh-proxy.org/https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.0.0/pmd-dist-7.0.0-bin.zip -o /tmp/pmd.zip && \
     unzip -q /tmp/pmd.zip -d /opt && \
     ln -s /opt/pmd-bin-7.0.0/bin/pmd /usr/local/bin/pmd && \
     rm /tmp/pmd.zip

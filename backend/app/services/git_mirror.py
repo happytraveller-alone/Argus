@@ -146,7 +146,7 @@ def get_mirror_candidates(
         prefix_value = str(
             mirror_prefix
             if mirror_prefix is not None
-            else os.getenv("GIT_MIRROR_PREFIX", "https://gh-proxy.com")
+            else os.getenv("GIT_MIRROR_PREFIX", "https://gh-proxy.org")
         ).strip()
         if prefix_value:
             prefixes_value = [prefix_value]
