@@ -31,7 +31,14 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
@@ -39,7 +46,6 @@ import {
 	Trash2,
 	Search,
 	Copy,
-	Eye,
 	PencilLine,
 	Save,
 	Code,
@@ -1187,12 +1193,9 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 					</div>
 
 					{/* Filters */}
-					<div className="cyber-card p-4 relative z-10 space-y-4">
-						<div>
-							<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-								搜索
-							</Label>
-							<div className="relative mt-1.5">
+					<div className="cyber-card p-4 relative z-10">
+						<div className="flex flex-wrap items-end gap-3">
+							<div className="relative w-full max-w-sm shrink-0">
 								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
 								<Input
 									placeholder={t(
@@ -1201,137 +1204,137 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 									)}
 									value={searchTerm}
 									onChange={(e) => setSearchTerm(e.target.value)}
-									className="cyber-input !pl-10"
+									className="cyber-input !pl-10 h-10"
 								/>
 							</div>
-						</div>
 
-						<div className="flex flex-wrap items-end gap-4">
-							<div className="min-w-[180px] flex-1">
-								<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-									编程语言
-								</Label>
-								<Select
-									value={selectedLanguage || "all"}
-									onValueChange={(val) =>
-										setSelectedLanguage(val === "all" ? "" : val)
-									}
-								>
-									<SelectTrigger className="cyber-input mt-1.5">
-										<SelectValue placeholder="所有语言" />
-									</SelectTrigger>
-									<SelectContent className="cyber-dialog border-border">
-										<SelectItem value="all">所有语言</SelectItem>
-										{availableLanguages.map((lang) => (
-											<SelectItem key={lang} value={lang}>
-												{lang}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-
-							<div className="min-w-[180px] flex-1">
-								<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-									规则来源
-								</Label>
-								<Select
-									value={selectedSource || "all"}
-									onValueChange={(val) =>
-										setSelectedSource(val === "all" ? "" : val)
-									}
-								>
-									<SelectTrigger className="cyber-input mt-1.5">
-										<SelectValue placeholder="所有来源" />
-									</SelectTrigger>
-									<SelectContent className="cyber-dialog border-border">
-										<SelectItem value="all">所有来源</SelectItem>
-										{RULE_SOURCES.map((source) => (
-											<SelectItem key={source.value} value={source.value}>
-												{source.label}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-
-							<div className="min-w-[180px] flex-1">
-								<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-									置信度
-								</Label>
-								<Select
-									value={selectedConfidence || "all"}
-									onValueChange={(val) =>
-										setSelectedConfidence(val === "all" ? "" : val)
-									}
-								>
-									<SelectTrigger className="cyber-input mt-1.5">
-										<SelectValue placeholder="所有等级" />
-									</SelectTrigger>
-									<SelectContent className="cyber-dialog border-border">
-										<SelectItem value="all">所有等级</SelectItem>
-										<SelectItem value="HIGH">
-											{getConfidenceLabel("HIGH")}
-										</SelectItem>
-										<SelectItem value="MEDIUM">
-											{getConfidenceLabel("MEDIUM")}
-										</SelectItem>
-										<SelectItem value="LOW">
-											{getConfidenceLabel("LOW")}
-										</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
-
-							<div className="min-w-[180px] flex-1">
-								<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-									启用状态
-								</Label>
-								<Select
-									value={selectedActiveStatus || "all"}
-									onValueChange={(val) =>
-										setSelectedActiveStatus(val === "all" ? "" : val)
-									}
-								>
-									<SelectTrigger className="cyber-input mt-1.5">
-										<SelectValue placeholder="所有状态" />
-									</SelectTrigger>
-									<SelectContent className="cyber-dialog border-border">
-										<SelectItem value="all">所有状态</SelectItem>
-										{ACTIVE_STATUS.map((status) => (
-											<SelectItem key={status.value} value={status.value}>
-												{status.label}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-
-							<div className="flex items-end gap-2">
-								<Button
-									variant="outline"
-									onClick={handleResetFilters}
-									className="cyber-btn-outline h-10 min-w-[110px] whitespace-normal text-center leading-tight"
-								>
-									重置
-								</Button>
-								{generatingRules.size > 0 && (
-									<Button
-										onClick={() => setShowGeneratingQueue(!showGeneratingQueue)}
-										className="cyber-btn-primary h-10 min-w-[150px] whitespace-normal text-center leading-tight bg-cyan-950 border-cyan-500 hover:bg-cyan-900"
+							<div className="flex flex-1 flex-wrap items-end gap-3">
+								<div className="min-w-[150px] flex-1">
+									<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+										编程语言
+									</Label>
+									<Select
+										value={selectedLanguage || "all"}
+										onValueChange={(val) =>
+											setSelectedLanguage(val === "all" ? "" : val)
+										}
 									>
-										<div className="relative w-3 h-3 mr-2">
-											<div className="absolute inset-0 bg-cyan-400 rounded-full animate-pulse opacity-50" />
-										</div>
-										生成队列 ({generatingRules.size})
+										<SelectTrigger className="cyber-input mt-1.5 h-10">
+											<SelectValue placeholder="所有语言" />
+										</SelectTrigger>
+										<SelectContent className="cyber-dialog border-border">
+											<SelectItem value="all">所有语言</SelectItem>
+											{availableLanguages.map((lang) => (
+												<SelectItem key={lang} value={lang}>
+													{lang}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div className="min-w-[150px] flex-1">
+									<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+										规则来源
+									</Label>
+									<Select
+										value={selectedSource || "all"}
+										onValueChange={(val) =>
+											setSelectedSource(val === "all" ? "" : val)
+										}
+									>
+										<SelectTrigger className="cyber-input mt-1.5 h-10">
+											<SelectValue placeholder="所有来源" />
+										</SelectTrigger>
+										<SelectContent className="cyber-dialog border-border">
+											<SelectItem value="all">所有来源</SelectItem>
+											{RULE_SOURCES.map((source) => (
+												<SelectItem key={source.value} value={source.value}>
+													{source.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div className="min-w-[150px] flex-1">
+									<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+										置信度
+									</Label>
+									<Select
+										value={selectedConfidence || "all"}
+										onValueChange={(val) =>
+											setSelectedConfidence(val === "all" ? "" : val)
+										}
+									>
+										<SelectTrigger className="cyber-input mt-1.5 h-10">
+											<SelectValue placeholder="所有等级" />
+										</SelectTrigger>
+										<SelectContent className="cyber-dialog border-border">
+											<SelectItem value="all">所有等级</SelectItem>
+											<SelectItem value="HIGH">
+												{getConfidenceLabel("HIGH")}
+											</SelectItem>
+											<SelectItem value="MEDIUM">
+												{getConfidenceLabel("MEDIUM")}
+											</SelectItem>
+											<SelectItem value="LOW">
+												{getConfidenceLabel("LOW")}
+											</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div className="min-w-[150px] flex-1">
+									<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
+										启用状态
+									</Label>
+									<Select
+										value={selectedActiveStatus || "all"}
+										onValueChange={(val) =>
+											setSelectedActiveStatus(val === "all" ? "" : val)
+										}
+									>
+										<SelectTrigger className="cyber-input mt-1.5 h-10">
+											<SelectValue placeholder="所有状态" />
+										</SelectTrigger>
+										<SelectContent className="cyber-dialog border-border">
+											<SelectItem value="all">所有状态</SelectItem>
+											{ACTIVE_STATUS.map((status) => (
+												<SelectItem key={status.value} value={status.value}>
+													{status.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div className="ml-auto flex items-end gap-2">
+									<Button
+										variant="outline"
+										onClick={handleResetFilters}
+										className="cyber-btn-outline h-10 min-w-[96px]"
+									>
+										重置
 									</Button>
-								)}
-								<Button
-									onClick={() => setShowRuleTypeDialog(true)}
-									className="cyber-btn-primary h-10 min-w-[150px] whitespace-normal text-center leading-tight"
-								>
-									新建规则
-								</Button>
+									{generatingRules.size > 0 && (
+										<Button
+											onClick={() => setShowGeneratingQueue(!showGeneratingQueue)}
+											className="cyber-btn-primary h-10 min-w-[132px] bg-cyan-950 border-cyan-500 hover:bg-cyan-900"
+										>
+											<div className="relative w-3 h-3 mr-2">
+												<div className="absolute inset-0 bg-cyan-400 rounded-full animate-pulse opacity-50" />
+											</div>
+											生成队列 ({generatingRules.size})
+										</Button>
+									)}
+									<Button
+										onClick={() => setShowRuleTypeDialog(true)}
+										className="cyber-btn-primary h-10 min-w-[116px]"
+									>
+										新建规则
+									</Button>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -1494,130 +1497,128 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 							</div>
 						) : (
 							<>
-								<div>
-									{/* Table Header with Select All */}
-									<div className="flex items-center gap-3 p-4 border-b border-border bg-muted/30">
-										<Checkbox
-											checked={
-												selectedRuleIds.size === paginatedRules.length &&
-												paginatedRules.length > 0
-											}
-											onCheckedChange={handleToggleAllSelection}
-											className="w-4 h-4"
-										/>
-										<span className="text-sm font-mono text-muted-foreground">
-											{selectedRuleIds.size > 0
-												? `已选择 ${selectedRuleIds.size} 条`
-												: "全选当前页"}
-										</span>
-									</div>
-
-									{/* Rules List */}
-									<ScrollArea className="h-[calc(100vh-600px)] min-h-[400px]">
-										<div className="divide-y divide-border">
-											{paginatedRules.map((rule) => (
-												<div
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead className="w-[52px]">
+												<Checkbox
+													checked={
+														selectedRuleIds.size === paginatedRules.length &&
+														paginatedRules.length > 0
+													}
+													onCheckedChange={handleToggleAllSelection}
+													className="w-4 h-4"
+												/>
+											</TableHead>
+											<TableHead className="w-[80px] text-center">序号</TableHead>
+											<TableHead className="min-w-[220px]">规则名称</TableHead>
+											<TableHead className="w-[120px]">编程语言</TableHead>
+											<TableHead className="w-[120px]">规则来源</TableHead>
+											<TableHead className="w-[120px]">置信度</TableHead>
+											<TableHead className="w-[120px]">启用状态</TableHead>
+											<TableHead className="w-[120px]">验证状态</TableHead>
+											<TableHead className="w-[140px]">创建时间</TableHead>
+											<TableHead className="min-w-[320px]">操作</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{paginatedRules.map((rule, rowIndex) => {
+											const rowNumber =
+												(currentPage - 1) * pageSize + rowIndex + 1;
+											return (
+												<TableRow
 													key={rule.id}
-													className={`p-4 hover:bg-muted/50 transition-colors border-b border-border last:border-0 ${
-														isHighlightedRule(rule)
-															? "bg-primary/10 border-l-2 border-l-primary"
-															: ""
-													}`}
+													className={
+														isHighlightedRule(rule) ? "bg-primary/10" : undefined
+													}
 												>
-													<div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-														<div className="flex gap-3 flex-1 min-w-0">
-															<Checkbox
-																checked={selectedRuleIds.has(rule.id)}
-																onCheckedChange={() =>
-																	handleToggleRuleSelection(rule.id)
-																}
-																className="w-4 h-4 mt-1"
-															/>
-																<div className="flex-1 min-w-0">
-																	<h3 className="text-base font-semibold text-foreground truncate">
-																		{rule.name}
-																	</h3>
-																	<div className="mt-2 flex items-center gap-2 flex-wrap">
-																		<Badge
-																			className={`cyber-badge ${
-																				rule.source === "patch"
-																				? "cyber-badge-warning"
-																				: "cyber-badge-info"
-																		}`}
-																	>
-																		{getSourceBadge(rule.source)}
-																	</Badge>
-																	{rule.confidence && (
-																		<Badge
-																			className={`cyber-badge ${getConfidenceColor(rule.confidence)}`}
-																		>
-																			{getConfidenceLabel(rule.confidence)}
-																		</Badge>
-																	)}
-																	{rule.is_active ? (
-																		<Badge className="cyber-badge cyber-badge-success">
-																			已启用
-																		</Badge>
-																	) : (
-																		<Badge className="cyber-badge cyber-badge-muted">
-																			已禁用
-																		</Badge>
-																	)}
-																</div>
-
-																<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-mono">
-																	<div>
-																		<span className="text-muted-foreground">
-																			规则ID:
-																		</span>
-																		<span className="text-foreground font-bold">
-																			{rule.id}
-																		</span>
-																	</div>
-																	<div>
-																		<span className="text-muted-foreground">
-																			语言:
-																		</span>
-																		<span className="text-foreground font-bold">
-																			{rule.language}
-																		</span>
-																	</div>
-																	<div>
-																		<span className="text-muted-foreground">
-																			状态:
-																		</span>
-																		<span
-																			className={
-																				rule.correct
-																					? "text-emerald-400"
-																					: "text-amber-400"
-																			}
-																		>
-																			{rule.correct ? "✓ 正确" : "⚠ 未验证"}
-																		</span>
-																	</div>
-																	<div>
-																		<span className="text-muted-foreground">
-																			创建:
-																		</span>
-																		<span className="text-foreground font-bold">
-																			{new Date(
-																				rule.created_at,
-																			).toLocaleDateString("zh-CN")}
-																		</span>
-																	</div>
-																</div>
+													<TableCell>
+														<Checkbox
+															checked={selectedRuleIds.has(rule.id)}
+															onCheckedChange={() =>
+																handleToggleRuleSelection(rule.id)
+															}
+															className="w-4 h-4"
+														/>
+													</TableCell>
+													<TableCell className="text-center text-muted-foreground">
+														{rowNumber}
+													</TableCell>
+													<TableCell>
+														<div className="max-w-[260px]">
+															<div
+																className="font-semibold text-foreground truncate"
+																title={rule.name}
+															>
+																{rule.name}
+															</div>
+															<div
+																className="text-xs text-muted-foreground font-mono truncate mt-1"
+																title={rule.id}
+															>
+																{rule.id}
 															</div>
 														</div>
-
-														<div className="flex flex-wrap items-center gap-2 xl:justify-end">
+													</TableCell>
+													<TableCell className="font-mono text-sm">
+														{rule.language}
+													</TableCell>
+													<TableCell>
+														<Badge
+															className={`cyber-badge ${
+																rule.source === "patch"
+																	? "cyber-badge-warning"
+																	: "cyber-badge-info"
+															}`}
+														>
+															{getSourceBadge(rule.source)}
+														</Badge>
+													</TableCell>
+													<TableCell>
+														{rule.confidence ? (
+															<Badge
+																className={`cyber-badge ${getConfidenceColor(rule.confidence)}`}
+															>
+																{getConfidenceLabel(rule.confidence)}
+															</Badge>
+														) : (
+															<span className="text-muted-foreground text-sm">-</span>
+														)}
+													</TableCell>
+													<TableCell>
+														<Badge
+															className={
+																rule.is_active
+																	? "cyber-badge cyber-badge-success"
+																	: "cyber-badge cyber-badge-muted"
+															}
+														>
+															{rule.is_active ? "已启用" : "已禁用"}
+														</Badge>
+													</TableCell>
+													<TableCell>
+														<span
+															className={
+																rule.correct
+																	? "text-emerald-400 text-sm"
+																	: "text-amber-400 text-sm"
+															}
+														>
+															{rule.correct ? "✓ 正确" : "⚠ 未验证"}
+														</span>
+													</TableCell>
+													<TableCell className="text-sm text-muted-foreground">
+														{new Date(rule.created_at).toLocaleDateString("zh-CN")}
+													</TableCell>
+													<TableCell>
+														<div className="flex items-center gap-2 whitespace-nowrap">
 															<Button
 																size="sm"
 																variant="outline"
 																onClick={() => handleViewRule(rule)}
-																className="cyber-btn-ghost h-8 px-3 min-w-[64px]"
+																className="cyber-btn-ghost h-8 px-3"
 															>
-																<Eye className="w-4 h-4" />
+																详情
 															</Button>
 															<Button
 																size="sm"
@@ -1627,15 +1628,15 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 																		edit: true,
 																	})
 																}
-																className="cyber-btn-ghost h-8 px-3 min-w-[64px]"
+																className="cyber-btn-ghost h-8 px-3"
 															>
-																<PencilLine className="w-4 h-4" />
+																编辑
 															</Button>
 															<Button
 																size="sm"
 																variant="outline"
 																onClick={() => handleToggleRule(rule)}
-																className={`cyber-btn-ghost h-8 px-3 min-w-[72px] ${
+																className={`cyber-btn-ghost h-8 px-3 ${
 																	rule.is_active
 																		? "hover:bg-rose-500/10"
 																		: "hover:bg-emerald-500/10"
@@ -1652,17 +1653,17 @@ export default function OpengrepRules({ embedded = false }: OpengrepRulesProps) 
 																		name: rule.name,
 																	})
 																}
-																className="cyber-btn-ghost h-8 px-3 min-w-[64px] hover:bg-rose-500/10 hover:text-rose-400"
+																className="cyber-btn-ghost h-8 px-3 hover:bg-rose-500/10 hover:text-rose-400"
 															>
-																<Trash2 className="w-4 h-4" />
+																删除
 															</Button>
 														</div>
-													</div>
-												</div>
-											))}
-										</div>
-									</ScrollArea>
-								</div>
+													</TableCell>
+												</TableRow>
+											);
+										})}
+									</TableBody>
+								</Table>
 
 								{/* Pagination */}
 								<div className="flex items-center justify-between p-4 border-t border-border bg-muted/20">

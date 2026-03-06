@@ -1,5 +1,6 @@
 import { lazy } from "react";
 import type { ReactNode } from "react";
+import { Navigate } from "react-router-dom";
 import type { I18nKey } from "@/shared/i18n";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -11,12 +12,13 @@ const OpengrepRules = lazy(() => import("@/pages/OpengrepRules"));
 const StaticAnalysis = lazy(() => import("@/pages/StaticAnalysis"));
 const StaticFindingDetail = lazy(() => import("@/pages/StaticFindingDetail"));
 const FindingDetail = lazy(() => import("@/pages/FindingDetail"));
-const ScanConfigOverview = lazy(() => import("@/pages/ScanConfigOverview"));
 const ScanConfigEngines = lazy(() => import("@/pages/ScanConfigEngines"));
+const ScanConfigIntelligentEngine = lazy(
+	() => import("@/pages/ScanConfigIntelligentEngine"),
+);
 const ScanConfigExternalTools = lazy(
 	() => import("@/pages/ScanConfigExternalTools"),
 );
-const TaskManagementOverview = lazy(() => import("@/pages/TaskManagementOverview"));
 const TaskManagementStatic = lazy(() => import("@/pages/TaskManagementStatic"));
 const TaskManagementIntelligent = lazy(() => import("@/pages/TaskManagementIntelligent"));
 const TaskManagementHybrid = lazy(() => import("@/pages/TaskManagementHybrid"));
@@ -90,14 +92,11 @@ const routes: RouteConfig[] = [
         navOrder: 40,
     },
     {
-        name: "任务概览",
-        nameKey: "route.taskOverview",
+        name: "任务管理重定向",
         path: "/tasks/overview",
-        element: <TaskManagementOverview />,
-        visible: true,
-        navVisible: true,
-        navGroup: "task",
-        navOrder: 10,
+        element: <Navigate to="/tasks/static" replace />,
+        visible: false,
+        navVisible: false,
     },
     {
         name: "静态扫描",
@@ -130,14 +129,11 @@ const routes: RouteConfig[] = [
         navOrder: 40,
     },
     {
-        name: "扫描配置总览",
-        nameKey: "route.scanConfigOverview",
+        name: "扫描配置重定向",
         path: "/scan-config",
-        element: <ScanConfigOverview />,
-        visible: true,
-        navVisible: true,
-        navGroup: "scanConfig",
-        navOrder: 10,
+        element: <Navigate to="/scan-config/engines" replace />,
+        visible: false,
+        navVisible: false,
     },
     {
         name: "扫描引擎",
@@ -148,6 +144,16 @@ const routes: RouteConfig[] = [
         navVisible: true,
         navGroup: "scanConfig",
         navOrder: 20,
+    },
+    {
+        name: "智能引擎",
+        nameKey: "route.smartEngine",
+        path: "/scan-config/intelligent-engine",
+        element: <ScanConfigIntelligentEngine />,
+        visible: true,
+        navVisible: true,
+        navGroup: "scanConfig",
+        navOrder: 25,
     },
     {
         name: "外部工具",

@@ -40,12 +40,11 @@ const routeIcons: Record<string, React.ReactNode> = {
     // "/audit-tasks": <ListTodo className="w-[18px] h-[18px]" />,
     "/audit-rules": <Shield className="w-[18px] h-[18px]" />,
     "/opengrep-rules": <Code className="w-[18px] h-[18px]" />,
-    "/tasks/overview": <ListChecks className="w-[18px] h-[18px]" />,
     "/tasks/static": <Shield className="w-[18px] h-[18px]" />,
     "/tasks/intelligent": <Bot className="w-[18px] h-[18px]" />,
     "/tasks/hybrid": <ListChecks className="w-[18px] h-[18px]" />,
-    "/scan-config": <Wrench className="w-[18px] h-[18px]" />,
     "/scan-config/engines": <Zap className="w-[18px] h-[18px]" />,
+    "/scan-config/intelligent-engine": <Bot className="w-[18px] h-[18px]" />,
     "/scan-config/external-tools": <Wrench className="w-[18px] h-[18px]" />,
     // "/prompts": <MessageSquare className="w-[18px] h-[18px]" />,
     // "/recycle-bin": <Trash2 className="w-[18px] h-[18px]" />,
@@ -78,18 +77,10 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
     const scanConfigRoutes = sidebarRoutes
         .filter((route) => route.navGroup === "scanConfig")
         .sort((a, b) => (a.navOrder ?? 999) - (b.navOrder ?? 999));
-    const taskOverviewRoute =
-        taskRoutes.find((route) => route.path === "/tasks/overview") ||
-        taskRoutes[0];
-    const taskChildRoutes = taskRoutes.filter(
-        (route) => route.path !== taskOverviewRoute?.path,
-    );
-    const scanConfigOverviewRoute =
-        scanConfigRoutes.find((route) => route.path === "/scan-config") ||
-        scanConfigRoutes[0];
-    const scanConfigChildRoutes = scanConfigRoutes.filter(
-        (route) => route.path !== scanConfigOverviewRoute?.path,
-    );
+    const taskEntryRoute = taskRoutes[0];
+    const taskChildRoutes = taskRoutes;
+    const scanConfigEntryRoute = scanConfigRoutes[0];
+    const scanConfigChildRoutes = scanConfigRoutes;
     const isTaskGroupActive = taskRoutes.some(
         (route) => location.pathname === route.path,
     );
@@ -114,7 +105,6 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                 void prefetchTaskActivitiesSnapshot();
             },
         );
-        void import("@/pages/TaskManagementOverview");
         void import("@/pages/TaskManagementStatic");
         void import("@/pages/TaskManagementIntelligent");
         void import("@/pages/TaskManagementHybrid");
@@ -373,12 +363,16 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                             {taskRoutes.length > 0 && (
                                 <div className="pt-1">
                                     <Link
-                                        to={taskOverviewRoute?.path || "/tasks/overview"}
+                                        to={taskEntryRoute?.path || "/tasks/static"}
                                         className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300 ${isTaskGroupActive ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted/20 border-border/40 text-muted-foreground"}`}
-                                        onClick={() => {
+                                        onClick={(event) => {
                                             prefetchTaskGroupAssets();
+                                            if (collapsed) {
+                                                setMobileOpen(false);
+                                                return;
+                                            }
+                                            event.preventDefault();
                                             toggleGroupExpanded("task");
-                                            setMobileOpen(false);
                                         }}
                                         title={collapsed ? t("route.taskManagement", "任务管理") : undefined}
                                         onMouseEnter={() => {
@@ -413,11 +407,15 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                             {scanConfigRoutes.length > 0 && (
                                 <div className="pt-1">
                                     <Link
-                                        to={scanConfigOverviewRoute?.path || "/scan-config"}
+                                        to={scanConfigEntryRoute?.path || "/scan-config/engines"}
                                         className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300 ${isScanConfigGroupActive ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted/20 border-border/40 text-muted-foreground"}`}
-                                        onClick={() => {
+                                        onClick={(event) => {
+                                            if (collapsed) {
+                                                setMobileOpen(false);
+                                                return;
+                                            }
+                                            event.preventDefault();
                                             toggleGroupExpanded("scanConfig");
-                                            setMobileOpen(false);
                                         }}
                                         title={collapsed ? t("route.scanConfig", "扫描配置") : undefined}
                                     >

@@ -62,8 +62,8 @@ export default function TaskActivitiesListTable({
 	}, [activities, page, pageSize]);
 
 	return (
-		<div className="space-y-3">
-			<div className="overflow-x-auto">
+		<div className="flex h-full min-h-0 flex-col gap-3">
+			<div className="min-h-0 flex-1 [&_[data-slot=table-container]]:h-full">
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -155,7 +155,7 @@ export default function TaskActivitiesListTable({
 				</Table>
 			</div>
 
-			<div className="flex flex-wrap items-center justify-between gap-3">
+			<div className="mt-auto flex flex-wrap items-center justify-between gap-3">
 				<div className="text-xs text-muted-foreground">共 {activities.length} 条</div>
 				<div className="flex items-center gap-2">
 					<Button

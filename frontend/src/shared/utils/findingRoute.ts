@@ -1,4 +1,5 @@
 export type FindingSource = "static" | "agent";
+export type StaticFindingEngine = "opengrep" | "gitleaks";
 
 function normalizeSegment(value: string): string {
 	return encodeURIComponent(String(value || "").trim());
@@ -8,11 +9,16 @@ export function buildFindingDetailPath(params: {
 	source: FindingSource;
 	taskId: string;
 	findingId: string;
+	engine?: StaticFindingEngine;
 }): string {
 	const source = String(params.source || "").trim();
 	const taskId = String(params.taskId || "").trim();
 	const findingId = String(params.findingId || "").trim();
-	return `/finding-detail/${normalizeSegment(source)}/${normalizeSegment(taskId)}/${normalizeSegment(findingId)}`;
+	const basePath = `/finding-detail/${normalizeSegment(source)}/${normalizeSegment(taskId)}/${normalizeSegment(findingId)}`;
+	if (source !== "static") return basePath;
+	const engine = String(params.engine || "").trim();
+	if (engine !== "opengrep" && engine !== "gitleaks") return basePath;
+	return `${basePath}?engine=${normalizeSegment(engine)}`;
 }
 
 export function normalizeReturnToPath(rawValue: string | null | undefined): string {
@@ -38,4 +44,3 @@ export function appendReturnTo(
 	const query = queryParams.toString();
 	return query ? `${pathPart}?${query}` : pathPart;
 }
-

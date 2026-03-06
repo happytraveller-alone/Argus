@@ -98,6 +98,16 @@ export async function getGitleaksFindings(params: {
     return response.data;
 }
 
+export async function getGitleaksFinding(params: {
+    taskId: string;
+    findingId: string;
+}): Promise<GitleaksFinding> {
+    const response = await apiClient.get(
+        `/static-tasks/gitleaks/tasks/${params.taskId}/findings/${params.findingId}`,
+    );
+    return response.data;
+}
+
 export async function updateGitleaksFindingStatus(params: {
     findingId: string;
     status: "open" | "verified" | "false_positive" | "fixed";

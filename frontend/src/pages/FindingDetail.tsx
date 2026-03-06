@@ -16,9 +16,16 @@ import {
 	type OpengrepFindingContext,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
+import {
+	getGitleaksFinding,
+	getGitleaksScanTask,
+	type GitleaksFinding,
+	type GitleaksScanTask,
+} from "@/shared/api/gitleaks";
 import { normalizeReturnToPath } from "@/shared/utils/findingRoute";
 
 type FindingSource = "static" | "agent";
+type StaticEngine = "opengrep" | "gitleaks";
 
 type CodeViewItem = {
 	id: string;
@@ -44,6 +51,12 @@ function resolveFindingSource(raw: string | undefined): FindingSource | null {
 	const value = decodePathParam(raw);
 	if (value === "static" || value === "agent") return value;
 	return null;
+}
+
+function resolveStaticEngine(raw: string | null): StaticEngine {
+	const value = decodePathParam(raw ?? undefined).toLowerCase();
+	if (value === "gitleaks") return "gitleaks";
+	return "opengrep";
 }
 
 function parseStaticEndLine(finding: OpengrepFinding): number | null {
@@ -213,6 +226,10 @@ export default function FindingDetail() {
 	const source = useMemo(() => resolveFindingSource(sourceParam), [sourceParam]);
 	const taskId = useMemo(() => decodePathParam(rawTaskId), [rawTaskId]);
 	const findingId = useMemo(() => decodePathParam(rawFindingId), [rawFindingId]);
+	const staticEngine = useMemo(() => {
+		const searchParams = new URLSearchParams(location.search);
+		return resolveStaticEngine(searchParams.get("engine"));
+	}, [location.search]);
 	const returnTo = useMemo(() => {
 		const searchParams = new URLSearchParams(location.search);
 		return normalizeReturnToPath(searchParams.get("returnTo"));
@@ -225,6 +242,8 @@ export default function FindingDetail() {
 	const [staticContext, setStaticContext] = useState<OpengrepFindingContext | null>(
 		null,
 	);
+	const [gitleaksTask, setGitleaksTask] = useState<GitleaksScanTask | null>(null);
+	const [gitleaksFinding, setGitleaksFinding] = useState<GitleaksFinding | null>(null);
 	const [agentFinding, setAgentFinding] = useState<AgentFinding | null>(null);
 	const [selectedCodeId, setSelectedCodeId] = useState<string | null>(null);
 
@@ -242,24 +261,36 @@ export default function FindingDetail() {
 			setStaticTask(null);
 			setStaticFinding(null);
 			setStaticContext(null);
+			setGitleaksTask(null);
+			setGitleaksFinding(null);
 			setAgentFinding(null);
 
 			try {
 				if (source === "static") {
-					const [task, finding, context] = await Promise.all([
-						getOpengrepScanTask(taskId),
-						getOpengrepScanFinding({ taskId, findingId }),
-						getOpengrepFindingContext({
-							taskId,
-							findingId,
-							before: 5,
-							after: 5,
-						}),
-					]);
-					if (cancelled) return;
-					setStaticTask(task);
-					setStaticFinding(finding);
-					setStaticContext(context);
+					if (staticEngine === "gitleaks") {
+						const [task, finding] = await Promise.all([
+							getGitleaksScanTask(taskId),
+							getGitleaksFinding({ taskId, findingId }),
+						]);
+						if (cancelled) return;
+						setGitleaksTask(task);
+						setGitleaksFinding(finding);
+					} else {
+						const [task, finding, context] = await Promise.all([
+							getOpengrepScanTask(taskId),
+							getOpengrepScanFinding({ taskId, findingId }),
+							getOpengrepFindingContext({
+								taskId,
+								findingId,
+								before: 5,
+								after: 5,
+							}),
+						]);
+						if (cancelled) return;
+						setStaticTask(task);
+						setStaticFinding(finding);
+						setStaticContext(context);
+					}
 				} else {
 					const finding = await getAgentFinding(taskId, findingId, {
 						include_false_positive: true,
@@ -282,17 +313,42 @@ export default function FindingDetail() {
 		return () => {
 			cancelled = true;
 		};
-	}, [findingId, source, taskId]);
+	}, [findingId, source, staticEngine, taskId]);
 
 	const codeViews = useMemo(() => {
-		if (source === "static" && staticFinding) {
+		if (source === "static" && staticEngine === "opengrep" && staticFinding) {
 			return toStaticCodeView(staticFinding, staticContext);
+		}
+		if (source === "static" && staticEngine === "gitleaks" && gitleaksFinding) {
+			const content = String(gitleaksFinding.match || gitleaksFinding.secret || "").trim();
+			if (!content) return [];
+			return [
+				{
+					id: `gitleaks:${gitleaksFinding.id}`,
+					title: "命中内容",
+					filePath: gitleaksFinding.file_path || null,
+					code: content,
+					lineStart: gitleaksFinding.start_line ?? null,
+					lineEnd: gitleaksFinding.end_line ?? gitleaksFinding.start_line ?? null,
+					highlightStartLine: gitleaksFinding.start_line ?? null,
+					highlightEndLine:
+						gitleaksFinding.end_line ?? gitleaksFinding.start_line ?? null,
+					focusLine: gitleaksFinding.start_line ?? null,
+				},
+			];
 		}
 		if (source === "agent" && agentFinding) {
 			return toAgentCodeView(agentFinding);
 		}
 		return [];
-	}, [agentFinding, source, staticContext, staticFinding]);
+	}, [
+		agentFinding,
+		gitleaksFinding,
+		source,
+		staticContext,
+		staticEngine,
+		staticFinding,
+	]);
 
 	useEffect(() => {
 		setSelectedCodeId(codeViews[0]?.id ?? null);
@@ -311,7 +367,13 @@ export default function FindingDetail() {
 		navigate(-1);
 	};
 
-	const sourceLabel = source === "static" ? "静态扫描" : source === "agent" ? "智能扫描" : "-";
+	const sourceLabel = useMemo(() => {
+		if (source === "static") {
+			return staticEngine === "gitleaks" ? "静态扫描 · Gitleaks" : "静态扫描 · Opengrep";
+		}
+		if (source === "agent") return "智能扫描";
+		return "-";
+	}, [source, staticEngine]);
 
 	return (
 		<div className="min-h-screen bg-background p-6 space-y-5">
@@ -398,7 +460,7 @@ export default function FindingDetail() {
 							缺陷信息
 						</h2>
 
-						{source === "static" && staticFinding ? (
+						{source === "static" && staticEngine === "opengrep" && staticFinding ? (
 							<>
 								<div className="flex flex-wrap items-center gap-2">
 									<Badge className={getSeverityBadgeClass(staticFinding.severity)}>
@@ -434,6 +496,68 @@ export default function FindingDetail() {
 									<p className="text-muted-foreground uppercase">描述</p>
 									<p className="text-foreground whitespace-pre-wrap break-words">
 										{staticFinding.description || "-"}
+									</p>
+								</div>
+							</>
+						) : source === "static" &&
+						  staticEngine === "gitleaks" &&
+						  gitleaksFinding ? (
+							<>
+								<div className="flex flex-wrap items-center gap-2">
+									<Badge className="cyber-badge-muted">
+										规则：{gitleaksFinding.rule_id || "-"}
+									</Badge>
+									<Badge className="cyber-badge-muted">
+										状态：{gitleaksFinding.status}
+									</Badge>
+									<Badge className="cyber-badge-muted">漏洞危害：-</Badge>
+									<Badge className="cyber-badge-muted">置信度：-</Badge>
+								</div>
+								<div className="space-y-1 text-xs">
+									<p className="text-muted-foreground uppercase">文件位置</p>
+									<p className="text-foreground break-all">
+										{gitleaksFinding.file_path || "-"}
+										{gitleaksFinding.start_line
+											? `:${gitleaksFinding.start_line}`
+											: ""}
+									</p>
+								</div>
+								<div className="space-y-1 text-xs">
+									<p className="text-muted-foreground uppercase">任务</p>
+									<p className="text-foreground break-all">
+										{gitleaksTask?.name || "-"} ({gitleaksTask?.id || "-"})
+									</p>
+								</div>
+								<div className="space-y-1 text-xs">
+									<p className="text-muted-foreground uppercase">描述</p>
+									<p className="text-foreground whitespace-pre-wrap break-words">
+										{gitleaksFinding.description || "-"}
+									</p>
+								</div>
+								<div className="space-y-1 text-xs">
+									<p className="text-muted-foreground uppercase">命中内容</p>
+									<p className="text-foreground whitespace-pre-wrap break-words">
+										{gitleaksFinding.match || "-"}
+									</p>
+								</div>
+								<div className="space-y-1 text-xs">
+									<p className="text-muted-foreground uppercase">密钥（脱敏）</p>
+									<p className="text-foreground whitespace-pre-wrap break-words">
+										{gitleaksFinding.secret || "-"}
+									</p>
+								</div>
+								<div className="space-y-1 text-xs">
+									<p className="text-muted-foreground uppercase">提交信息</p>
+									<p className="text-foreground whitespace-pre-wrap break-words">
+										commit: {gitleaksFinding.commit || "-"}
+										{"\n"}
+										author: {gitleaksFinding.author || "-"}
+										{"\n"}
+										email: {gitleaksFinding.email || "-"}
+										{"\n"}
+										date: {gitleaksFinding.date || "-"}
+										{"\n"}
+										fingerprint: {gitleaksFinding.fingerprint || "-"}
 									</p>
 								</div>
 							</>

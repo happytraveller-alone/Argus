@@ -1,30 +1,29 @@
 import { useMemo } from "react";
 import {
 	AlertTriangle,
-	KeyRound,
 	SearchCheck,
 	ShieldAlert,
-	Zap,
 } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SystemConfig } from "@/components/system/SystemConfig";
-import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
 import OpengrepRules from "@/pages/OpengrepRules";
 import { Button } from "@/components/ui/button";
 
-type EngineTab = "opengrep" | "gitleaks" | "llm";
+type EngineTab = "opengrep" | "gitleaks";
 
-const ENGINE_TABS: EngineTab[] = ["opengrep", "gitleaks", "llm"];
+const ENGINE_TABS: EngineTab[] = ["opengrep", "gitleaks"];
 
 export default function ScanConfigEngines() {
 	const [searchParams, setSearchParams] = useSearchParams();
+	const rawTab = (searchParams.get("tab") || "").toLowerCase();
+	if (rawTab === "llm") {
+		return <Navigate to="/scan-config/intelligent-engine" replace />;
+	}
 	const currentTab = useMemo<EngineTab>(() => {
-		const tab = (searchParams.get("tab") || "").toLowerCase();
-		return ENGINE_TABS.includes(tab as EngineTab)
-			? (tab as EngineTab)
+		return ENGINE_TABS.includes(rawTab as EngineTab)
+			? (rawTab as EngineTab)
 			: "opengrep";
-	}, [searchParams]);
+	}, [rawTab]);
 
 	const handleTabChange = (value: string) => {
 		const next = ENGINE_TABS.includes(value as EngineTab)
@@ -45,7 +44,7 @@ export default function ScanConfigEngines() {
 					className="space-y-4"
 				>
 					<div className="cyber-card p-4">
-						<TabsList className="w-full h-auto bg-muted/30 border border-border/60 rounded-xl p-1 grid grid-cols-1 md:grid-cols-3 gap-1">
+						<TabsList className="w-full h-auto bg-muted/30 border border-border/60 rounded-xl p-1 grid grid-cols-1 md:grid-cols-2 gap-1">
 							<TabsTrigger
 								value="opengrep"
 								className="justify-start md:justify-center gap-2 font-mono data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
@@ -59,13 +58,6 @@ export default function ScanConfigEngines() {
 							>
 								<ShieldAlert className="w-4 h-4" />
 								gitleaks
-							</TabsTrigger>
-							<TabsTrigger
-								value="llm"
-								className="justify-start md:justify-center gap-2 font-mono data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
-							>
-								<KeyRound className="w-4 h-4" />
-								large language models
 							</TabsTrigger>
 						</TabsList>
 					</div>
@@ -99,49 +91,6 @@ export default function ScanConfigEngines() {
 								>
 									<Link to="/tasks/static">前往静态扫描</Link>
 								</Button>
-							</div>
-						</div>
-					</TabsContent>
-
-					<TabsContent value="llm" className="mt-0 space-y-4">
-						<SystemConfig
-							visibleSections={["llm"]}
-							defaultSection="llm"
-							mergedView={false}
-							llmSummaryOnly
-							showFloatingSaveButton={false}
-							compactLayout
-						/>
-
-						<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-							<div className="cyber-card p-4 space-y-2">
-								<div className="section-header mb-0">
-									<KeyRound className="w-4 h-4 text-primary" />
-									<div className="font-mono font-bold uppercase text-sm text-foreground">
-										推理模块
-									</div>
-								</div>
-								<div className="text-xs text-muted-foreground">
-									配置模型参数、请求预算和超时策略。
-								</div>
-								<SystemConfig
-									visibleSections={["llm"]}
-									defaultSection="llm"
-									mergedView={false}
-									showLlmSummaryCards={false}
-									showFloatingSaveButton={false}
-									compactLayout
-								/>
-							</div>
-
-							<div className="cyber-card p-4 space-y-2">
-								<div className="section-header mb-0">
-									<Zap className="w-4 h-4 text-primary" />
-									<div className="font-mono font-bold uppercase text-sm text-foreground">
-										搜索增强模块
-									</div>
-								</div>
-								<EmbeddingConfig compact />
 							</div>
 						</div>
 					</TabsContent>

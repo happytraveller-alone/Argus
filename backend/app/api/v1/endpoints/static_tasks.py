@@ -4034,6 +4034,9 @@ class GitleaksFindingResponse(BaseModel):
     match: Optional[str]
     commit: Optional[str]
     author: Optional[str]
+    email: Optional[str]
+    date: Optional[str]
+    fingerprint: Optional[str]
     status: str
 
     model_config = ConfigDict(from_attributes=True)
@@ -4464,6 +4467,35 @@ async def get_gitleaks_findings(
     result = await db.execute(query)
     findings = result.scalars().all()
     return findings
+
+
+@router.get(
+    "/gitleaks/tasks/{task_id}/findings/{finding_id}",
+    response_model=GitleaksFindingResponse,
+)
+async def get_gitleaks_finding(
+    task_id: str,
+    finding_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """获取单条 Gitleaks 密钥泄露详情"""
+    task_result = await db.execute(
+        select(GitleaksScanTask).where(GitleaksScanTask.id == task_id)
+    )
+    if not task_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    finding_result = await db.execute(
+        select(GitleaksFinding).where(
+            GitleaksFinding.id == finding_id,
+            GitleaksFinding.scan_task_id == task_id,
+        )
+    )
+    finding = finding_result.scalar_one_or_none()
+    if not finding:
+        raise HTTPException(status_code=404, detail="密钥泄露记录不存在")
+    return finding
 
 
 @router.post("/gitleaks/findings/{finding_id}/status")

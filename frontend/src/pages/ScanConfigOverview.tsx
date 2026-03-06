@@ -27,11 +27,11 @@ const ENGINE_CARDS: EngineCard[] = [
     to: "/scan-config/engines?tab=gitleaks",
   },
   {
-    id: "llm",
-    name: "large language models",
+    id: "smart-engine",
+    name: "智能引擎",
     description: "智能分析引擎，支撑智能审计、总结归纳与上下文推理。",
     icon: <Bot className="w-5 h-5 text-sky-100" />,
-    to: "/scan-config/engines?tab=llm",
+    to: "/scan-config/intelligent-engine",
   },
 ];
 

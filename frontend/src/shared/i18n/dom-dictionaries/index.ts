@@ -121,6 +121,7 @@ export const projectsDictionary: DomDictionary = {
   "智能扫描": "Intelligent Scan",
   "混合扫描": "Hybrid Scan",
   "扫描引擎": "Scan Engines",
+  "智能引擎": "Smart Engine",
   "外部工具": "External Tools",
   "扫描配置总览": "Scan Config Overview",
   "统一管理扫描引擎入口，点击右侧按钮进入对应配置或使用页面。":

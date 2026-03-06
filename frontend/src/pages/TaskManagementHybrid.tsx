@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Layers, Plus } from "lucide-react";
+import { Activity, Layers, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import DeferredSection from "@/components/performance/DeferredSection";
@@ -39,14 +39,17 @@ export default function TaskManagementHybrid() {
 	);
 	const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 5000 });
 
-	const filteredActivities = useMemo(
-		() => filterHybridActivities(activities, keyword),
-		[activities, keyword],
-	);
 	const hybridActivities = useMemo(
 		() => filterHybridActivities(activities, ""),
 		[activities],
 	);
+	const normalizedKeyword = keyword.trim().toLowerCase();
+	const filteredActivities = useMemo(() => {
+		if (!normalizedKeyword) return hybridActivities;
+		return hybridActivities.filter((activity) =>
+			activity.projectName.toLowerCase().includes(normalizedKeyword),
+		);
+	}, [hybridActivities, normalizedKeyword]);
 
 	const stats = useMemo(() => {
 		return hybridActivities.reduce(
@@ -65,10 +68,10 @@ export default function TaskManagementHybrid() {
 	}, [hybridActivities]);
 
 	return (
-		<div className="space-y-6 p-6 bg-background min-h-screen font-mono relative">
+		<div className="relative flex h-screen flex-col gap-6 overflow-hidden bg-background p-6 font-mono">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
 
-			<div className="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-10">
+			<div className="relative z-10 grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-3">
 				<div className="cyber-card p-4">
 					<div className="flex items-center justify-between">
 						<div>
@@ -90,13 +93,24 @@ export default function TaskManagementHybrid() {
 				</div>
 			</div>
 
-			<div className="cyber-card p-4 relative z-10">
-				<div className="flex items-center justify-between gap-3">
-					<div className="section-header">
-						<Layers className="w-5 h-5 text-primary" />
-						<h3 className="section-title">混合扫描任务</h3>
+			<div className="cyber-card relative z-10 flex min-h-0 flex-1 flex-col p-4">
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<div className="flex min-w-0 flex-1 items-center gap-3">
+						<div className="section-header shrink-0">
+							<Layers className="w-5 h-5 text-primary" />
+							<h3 className="section-title">混合扫描任务</h3>
+						</div>
+						<div className="relative w-full max-w-sm">
+							<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+							<Input
+								value={keyword}
+								onChange={(e) => setKeyword(e.target.value)}
+								placeholder="搜索项目名"
+								className="h-9 pl-9 font-mono"
+							/>
+						</div>
 					</div>
-					<div className="flex items-center gap-3">
+					<div className="flex shrink-0 items-center gap-3">
 						<Button
 							size="sm"
 							className="cyber-btn-primary h-8 px-3"
@@ -111,19 +125,7 @@ export default function TaskManagementHybrid() {
 					</div>
 				</div>
 
-				<div className="space-y-3 mb-3 mt-3">
-					<Input
-						value={keyword}
-						onChange={(e) => setKeyword(e.target.value)}
-						placeholder="按项目名/任务类型/状态搜索"
-						className="h-9 font-mono"
-					/>
-					<div className="text-xs text-muted-foreground">
-						仅展示混合扫描归类的 Agent 任务，不含静态扫描和智能扫描独立任务。
-					</div>
-				</div>
-
-				<DeferredSection minHeight={480} priority>
+				<DeferredSection className="mt-3 min-h-0 flex-1" minHeight={0} priority>
 					<TaskActivitiesListTable
 						activities={filteredActivities}
 						loading={loading}
