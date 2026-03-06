@@ -96,6 +96,10 @@ class AuditWorkflowEngine:
             await orc.emit_event("info", "🔎 [Workflow] 开始 Recon 阶段")
             await self._run_recon_phase(state)
             
+            # 🔥 Recon 结束后调用 LLM 对风险点进行去重
+            if state.recon_done and not orc.is_cancelled:
+                await self._dedup_recon_risk_queue(self.task_id)
+            
             # 🔥 记录 Recon 完成后的内存
             if self.enable_memory_monitoring:
                 self.memory_monitor.take_snapshot(phase="recon_done", agent_name="recon")
@@ -113,6 +117,10 @@ class AuditWorkflowEngine:
                 f"🔍 [Workflow] 开始 Analysis 阶段，Recon 队列共 {recon_queue_size} 条风险点",
             )
             await self._run_analysis_phase(state, task_id)
+            
+            # 🔥 Analysis 阶段结束后调用 LLM 对漏洞进行去重
+            if not orc.is_cancelled:
+                await self._dedup_vuln_queue(self.task_id)
             
             # 🔥 记录 Analysis 完成后的内存
             if self.enable_memory_monitoring:
@@ -166,6 +174,321 @@ class AuditWorkflowEngine:
             state.all_findings = list(orc._all_findings)
 
         return state
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 去重方法
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def _dedup_recon_risk_queue(self, task_id: str) -> None:
+        """
+        在 Recon 结束后，调用大模型对队列中可能重复的风险项进行语义级去重。
+        
+        过程：
+        1. 从队列中预览所有风险点
+        2. 构建 prompt 让 LLM 识别重复项
+        3. 根据 LLM 分析结果从队列中删除重复的项
+        """
+        orc = self.orchestrator
+        
+        try:
+            # 获取队列中的所有风险点
+            all_risk_points = self.recon_queue.peek(task_id, limit=1000)
+            
+            if not all_risk_points or len(all_risk_points) <= 1:
+                logger.info("[WorkflowEngine] Recon queue has ≤1 items, skipping LLM dedup")
+                return
+            
+            queue_size = self.recon_queue.size(task_id)
+            await orc.emit_event(
+                "info",
+                f"🤖 [Workflow] 开始 Recon 风险点 LLM 去重：队列共 {queue_size} 条",
+            )
+            
+            # 构建 prompt 让 LLM 分析可能重复的风险点
+            risk_points_json = json.dumps(
+                [
+                    {
+                        "id": i,
+                        "file_path": rp.get("file_path", ""),
+                        "line_start": rp.get("line_start", 0),
+                        "description": rp.get("description", ""),
+                        "severity": rp.get("severity", ""),
+                        "vulnerability_type": rp.get("vulnerability_type", ""),
+                    }
+                    for i, rp in enumerate(all_risk_points[:50])  # 限制数量避免 token 过多
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+            
+            dedup_prompt = f"""请分析以下风险点列表，识别其中**明确重复或基本相同**的项目。
+
+风险点列表：
+{risk_points_json}
+
+分析标准：
+1. 相同文件、相同或相邻行号、相同漏洞类型 → 重复
+2. 相同文件、类似描述、相同漏洞类型 → 可能重复
+3. 不同文件 → 即使描述相似也不算重复
+
+请输出：
+{{
+  "duplicates": [
+    {{"keep_id": 0, "remove_ids": [1, 2]}},
+    ...
+  ],
+  "explanation": "简要说明去重原因"
+}}
+
+仅输出 JSON，不要其他内容。"""
+
+            messages = [
+                {
+                    "role": "user",
+                    "content": dedup_prompt,
+                }
+            ]
+            
+            # 调用 LLM
+            logger.info("[WorkflowEngine] Calling LLM for Recon risk queue dedup...")
+            llm_response, _ = await orc.stream_llm_call(messages)
+            
+            # 解析 LLM 响应
+            dedup_result = self._parse_llm_dedup_response(llm_response)
+            
+            if not dedup_result or not dedup_result.get("duplicates"):
+                logger.info("[WorkflowEngine] No duplicates identified by LLM")
+                await orc.emit_event("info", "✅ [Workflow] Recon 风险点 LLM 去重：无重复项")
+                return
+            
+            # 根据 LLM 分析结果删除重复的风险点
+            removed_count = await self._remove_duplicate_recon_risk_points(
+                task_id, dedup_result["duplicates"], all_risk_points
+            )
+            
+            if removed_count > 0:
+                await orc.emit_event(
+                    "info",
+                    f"✅ [Workflow] Recon 风险点 LLM 去重完成：移除 {removed_count} 条重复项",
+                )
+                logger.info("[WorkflowEngine] Removed %s duplicate recon risk points", removed_count)
+            
+        except Exception as exc:
+            logger.warning("[WorkflowEngine] Recon queue LLM dedup failed: %s", exc)
+            await orc.emit_event(
+                "warning",
+                f"⚠️ [Workflow] Recon 风险点 LLM 去重失败（非关键）：{str(exc)[:100]}",
+            )
+
+    async def _dedup_vuln_queue(self, task_id: str) -> None:
+        """
+        在 Analysis 阶段总体结束后，调用大模型对队列中可能重复的漏洞项进行语义级去重。
+        
+        过程：
+        1. 从队列中预览所有漏洞
+        2. 构建 prompt 让 LLM 识别重复漏洞
+        3. 根据 LLM 分析结果从队列中删除重复的漏洞
+        """
+        orc = self.orchestrator
+        
+        try:
+            # 获取队列中的所有漏洞
+            all_findings = self.vuln_queue.peek_queue(task_id, limit=1000)
+            
+            if not all_findings or len(all_findings) <= 1:
+                logger.info("[WorkflowEngine] Vuln queue has ≤1 items, skipping LLM dedup")
+                return
+            
+            queue_size = self.vuln_queue.get_queue_size(task_id)
+            await orc.emit_event(
+                "info",
+                f"🤖 [Workflow] 开始漏洞队列 LLM 去重：队列共 {queue_size} 条",
+            )
+            
+            # 构建 prompt 让 LLM 分析可能重复的漏洞
+            findings_json = json.dumps(
+                [
+                    {
+                        "id": i,
+                        "title": f.get("title", ""),
+                        "file_path": f.get("file_path", ""),
+                        "line_start": f.get("line_start", 0),
+                        "vulnerability_type": f.get("vulnerability_type", ""),
+                        "severity": f.get("severity", ""),
+                        "description": (f.get("description", "")[:100]),  # 截断长描述
+                    }
+                    for i, f in enumerate(all_findings[:50])  # 限制数量避免 token 过多
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+            
+            dedup_prompt = f"""请分析以下漏洞列表，识别其中**明确重复或基本相同**的项目。
+
+漏洞列表：
+{findings_json}
+
+分析标准：
+1. 相同文件、相同或相邻行号、相同漏洞类型、相同标题 → 重复
+2. 相同文件、相同漏洞类型、相似标题和描述 → 可能重复
+3. 不同文件但相同漏洞类型和标题 → 需要判断是否为同一根本原因
+4. 即使描述稍有不同，如果是同一漏洞就认为重复
+
+请输出：
+{{
+  "duplicates": [
+    {{"keep_id": 0, "remove_ids": [1, 2]}},
+    ...
+  ],
+  "explanation": "简要说明去重原因"
+}}
+
+仅输出 JSON，不要其他内容。"""
+
+            messages = [
+                {
+                    "role": "user",
+                    "content": dedup_prompt,
+                }
+            ]
+            
+            # 调用 LLM
+            logger.info("[WorkflowEngine] Calling LLM for vulnerability queue dedup...")
+            llm_response, _ = await orc.stream_llm_call(messages)
+            
+            # 解析 LLM 响应
+            dedup_result = self._parse_llm_dedup_response(llm_response)
+            
+            if not dedup_result or not dedup_result.get("duplicates"):
+                logger.info("[WorkflowEngine] No duplicates identified by LLM")
+                await orc.emit_event("info", "✅ [Workflow] 漏洞队列 LLM 去重：无重复项")
+                return
+            
+            # 根据 LLM 分析结果删除重复的漏洞
+            removed_count = await self._remove_duplicate_findings(
+                task_id, dedup_result["duplicates"], all_findings
+            )
+            
+            if removed_count > 0:
+                await orc.emit_event(
+                    "info",
+                    f"✅ [Workflow] 漏洞队列 LLM 去重完成：移除 {removed_count} 条重复项",
+                )
+                logger.info("[WorkflowEngine] Removed %s duplicate findings", removed_count)
+            
+        except Exception as exc:
+            logger.warning("[WorkflowEngine] Vuln queue LLM dedup failed: %s", exc)
+            await orc.emit_event(
+                "warning",
+                f"⚠️ [Workflow] 漏洞队列 LLM 去重失败（非关键）：{str(exc)[:100]}",
+            )
+
+    @staticmethod
+    def _parse_llm_dedup_response(response: str) -> Optional[Dict[str, Any]]:
+        """从 LLM 响应中解析去重结果"""
+        try:
+            # 尝试直接解析 JSON
+            text = response.strip()
+            # 如果响应有 markdown 代码块，提取 JSON 部分
+            if "```" in text:
+                import re
+                json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+                if json_match:
+                    text = json_match.group(1)
+            
+            result = json.loads(text)
+            return result if isinstance(result, dict) else None
+        except Exception as exc:
+            logger.warning("[WorkflowEngine] Failed to parse LLM dedup response: %s", exc)
+            return None
+
+    async def _remove_duplicate_recon_risk_points(
+        self,
+        task_id: str,
+        duplicates: List[Dict[str, Any]],
+        all_risk_points: List[Dict[str, Any]],
+    ) -> int:
+        """根据 LLM 分析结果，从 Recon 风险队列中删除重复的风险点"""
+        removed_count = 0
+        ids_to_remove = set()
+        
+        for dup_group in duplicates:
+            if isinstance(dup_group, dict) and "remove_ids" in dup_group:
+                for remove_id in dup_group.get("remove_ids", []):
+                    ids_to_remove.add(remove_id)
+        
+        # 由于队列的 peek 返回的是副本，我们需要重建队列
+        # 这里的策略是：重新清空队列，然后只添加非重复的项
+        if ids_to_remove:
+            try:
+                # 获取当前队列的所有项
+                current_items = []
+                while True:
+                    item = self.recon_queue.dequeue(task_id)
+                    if item is None:
+                        break
+                    current_items.append(item)
+                
+                # 根据原始 peek 结果中的 ID 确定哪些要保留
+                # 这里假设 current_items 的顺序与 all_risk_points 相同
+                kept_items = []
+                for i, item in enumerate(current_items[:len(all_risk_points)]):
+                    if i not in ids_to_remove:
+                        kept_items.append(item)
+                    else:
+                        removed_count += 1
+                
+                # 重新加入保留的项
+                for item in kept_items:
+                    self.recon_queue.enqueue(task_id, item)
+                
+            except Exception as exc:
+                logger.error("[WorkflowEngine] Failed to remove duplicate recon risk points: %s", exc)
+        
+        return removed_count
+
+    async def _remove_duplicate_findings(
+        self,
+        task_id: str,
+        duplicates: List[Dict[str, Any]],
+        all_findings: List[Dict[str, Any]],
+    ) -> int:
+        """根据 LLM 分析结果，从漏洞队列中删除重复的漏洞"""
+        removed_count = 0
+        ids_to_remove = set()
+        
+        for dup_group in duplicates:
+            if isinstance(dup_group, dict) and "remove_ids" in dup_group:
+                for remove_id in dup_group.get("remove_ids", []):
+                    ids_to_remove.add(remove_id)
+        
+        # 从漏洞队列中删除重复的项
+        if ids_to_remove:
+            try:
+                # 获取当前队列的所有项
+                current_items = []
+                while True:
+                    item = self.vuln_queue.dequeue_finding(task_id)
+                    if item is None:
+                        break
+                    current_items.append(item)
+                
+                # 根据原始 peek 结果中的 ID 确定哪些要保留
+                kept_items = []
+                for i, item in enumerate(current_items[:len(all_findings)]):
+                    if i not in ids_to_remove:
+                        kept_items.append(item)
+                    else:
+                        removed_count += 1
+                
+                # 重新加入保留的项
+                for item in kept_items:
+                    self.vuln_queue.enqueue_finding(task_id, item)
+                
+            except Exception as exc:
+                logger.error("[WorkflowEngine] Failed to remove duplicate findings: %s", exc)
+        
+        return removed_count
 
     # ─────────────────────────────────────────────────────────────────────────
     # 阶段实现
