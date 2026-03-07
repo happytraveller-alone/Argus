@@ -634,23 +634,6 @@ class ReconAgent(BaseAgent):
 3. 重点分析指定的目标文件
 4. 发现并标记所有高风险区域（不限于目标文件）
 """
-        else:
-            initial_message += """🎯 **完整项目审计模式**（推荐）
-
-你需要对整个项目进行全面深入的侦查：
-
-### 必须完成的侦查任务：
-1. **遍历主要目录**：使用 list_files 查看 src/, app/, api/, lib/, utils/, config/ 等目录
-2. **读取关键文件**：包管理文件（requirements.txt, package.json 等）、配置文件、入口文件
-3. **识别技术栈**：准确识别语言、框架、数据库、第三方库
-4. **发现入口点**：HTTP路由、API端点、CLI命令、后台任务等
-5. **挖掘风险区域**：主动搜索认证、数据库操作、文件处理、命令执行等高风险代码
-
-### 侦查深度要求：
-- 至少调用 **8-12 个工具**进行充分覆盖
-- 必须使用 search_code 搜索高风险模式（exec, eval, subprocess, sql, password 等）
-- 输出至少 **10-30 个具体的高风险区域**（格式：文件路径:行号 - 描述）
-"""
         
         if exclude_patterns:
             initial_message += f"\n⚠️ 排除模式: {', '.join(exclude_patterns[:5])}\n"
@@ -664,16 +647,7 @@ class ReconAgent(BaseAgent):
 
 ## 🎯 开始侦查！
 
-请按照以下策略开始你的侦查工作：
-
-**第1步**：使用 list_files 查看根目录，了解项目整体结构
-**第2步**：读取包管理文件（requirements.txt, package.json 等），识别技术栈
-**第3步**：遍历主要代码目录（src/, app/, api/ 等）
-**第4步**：读取入口文件和路由文件
-**第5步**：使用 search_code 搜索高风险代码模式
-**第6-10步**：继续深入分析和风险挖掘
-
-记住：不要只输出 Thought，必须立即执行 Action！"""
+请开始你的信息收集工作。首先思考应该收集什么信息，然后**立即**选择合适的工具执行（输出 Action）。不要只输出 Thought，必须紧接着输出 Action。"""
 
         # 初始化对话历史
         self._conversation_history = [

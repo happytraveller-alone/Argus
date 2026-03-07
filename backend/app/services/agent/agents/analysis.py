@@ -885,7 +885,7 @@ class AnalysisAgent(BaseAgent):
 ## 可用工具
 {self.get_tools_description()}
 
-请开始你的安全分析。**第一步必须输出 Action**（优先 `read_file` 或 `search_code`），不允许第一轮直接输出 Final Answer。请先读取风险点所在文件的上下文，然后仅围绕该风险点继续分析。"""
+请开始你的安全分析。首先读取高风险区域的文件，然后**立即**分析其中的安全问题（输出 Action）。"""
 
         if single_risk_mode and not single_risk_point:
             logger.warning("[%s] single_risk_mode enabled but no risk point provided", self.name)

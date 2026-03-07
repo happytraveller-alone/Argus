@@ -750,7 +750,7 @@ class FileSearchTool(AgentTool):
 输入:
 - keyword: 搜索关键字或正则表达式
 - file_pattern: 可选，文件名模式（如 *.py）
-- directory: 可选，搜索目录
+- directory: 可选，搜索目录 (使用相对路径)
 - case_sensitive: 是否区分大小写
 - is_regex: 是否使用正则表达式
 
