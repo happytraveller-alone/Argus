@@ -284,8 +284,10 @@ class MCPToolRouter:
         normalized = self._normalize_tool_name(tool_name)
         if not normalized:
             return False
-        if normalized in self._blocked_virtual_names:
-            return False
+        # 允许 blocked 工具如果被明确注册为本地实现则可以使用
+        # 这样 rag_query 等工具可以正常工作
+        # if normalized in self._blocked_virtual_names:
+        #     return False
         if normalized in self._route_map:
             return False
         before = len(self._local_proxy_tools)
@@ -304,8 +306,12 @@ class MCPToolRouter:
 
     def route(self, tool_name: str, tool_input: Dict[str, Any]) -> Optional[MCPToolRoute]:
         normalized_tool_name = self._normalize_tool_name(tool_name)
+        
+        # 如果工具在 blocked list 中但已注册为 local_proxy，允许使用
         if normalized_tool_name in self._blocked_virtual_names:
-            return None
+            if normalized_tool_name not in self._local_proxy_tools:
+                return None
+        
         route = self._route_map.get(normalized_tool_name)
         if not route:
             if normalized_tool_name not in self._local_proxy_tools:

@@ -135,13 +135,6 @@ class FileReadInput(BaseModel):
     start_line: Optional[int] = Field(default=None, description="起始行号（从1开始）")
     end_line: Optional[int] = Field(default=None, description="结束行号")
     max_lines: int = Field(default=500, description="最大返回行数")
-    reason_paths: Optional[List[str]] = Field(default=None, description="可选，基于上文推断的优先路径")
-    project_scope: bool = Field(default=True, description="可选，启用全项目路径补全")
-    strict_anchor: bool = Field(default=False, description="严格锚点模式：仅允许窗口化读取")
-    allow_file_header_fallback: bool = Field(
-        default=False,
-        description="严格锚点模式下允许回退读取文件头部窗口（防御性兜底）。",
-    )
 
 
 class FileReadTool(AgentTool):
@@ -155,7 +148,6 @@ class FileReadTool(AgentTool):
         project_root: str,
         exclude_patterns: Optional[List[str]] = None,
         target_files: Optional[List[str]] = None,
-        strict_anchor_mode: bool = False,
     ):
         """
         初始化文件读取工具
@@ -168,82 +160,12 @@ class FileReadTool(AgentTool):
         super().__init__()
         self.project_root = project_root
         self.exclude_patterns = exclude_patterns or []
-        self.target_files = (
-            {_normalize_rel_path(path) for path in target_files if isinstance(path, str)}
-            if target_files
-            else None
-        )
-        self.strict_anchor_mode = bool(strict_anchor_mode)
+        self.target_files = set(target_files) if target_files else None
 
     @staticmethod
     def _read_all_lines_sync(file_path: str) -> List[str]:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             return f.readlines()
-
-    @staticmethod
-    def _count_lines_fast_sync(file_path: str) -> int:
-        try:
-            proc = subprocess.run(
-                ["wc", "-l", file_path],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            if proc.returncode == 0:
-                prefix = str(proc.stdout or "").strip().split(" ", 1)[0]
-                if prefix.isdigit():
-                    return int(prefix)
-        except Exception:
-            pass
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return sum(1 for _ in f)
-
-    @staticmethod
-    def _read_lines_by_range_sync(file_path: str, start_line: int, end_line: int) -> List[str]:
-        try:
-            proc = subprocess.run(
-                ["sed", "-n", f"{start_line},{end_line}p", file_path],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            if proc.returncode == 0:
-                return str(proc.stdout or "").splitlines()
-        except Exception:
-            pass
-
-        lines: List[str] = []
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            for idx, line in enumerate(f, start=1):
-                if idx < start_line:
-                    continue
-                if idx > end_line:
-                    break
-                lines.append(line.rstrip("\n"))
-        return lines
-
-    @staticmethod
-    def _read_lines_head_sync(file_path: str, max_lines: int) -> List[str]:
-        safe_lines = max(1, int(max_lines))
-        try:
-            proc = subprocess.run(
-                ["head", "-n", str(safe_lines), file_path],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            if proc.returncode == 0:
-                return str(proc.stdout or "").splitlines()
-        except Exception:
-            pass
-
-        lines: List[str] = []
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            for idx, line in enumerate(f, start=1):
-                if idx > safe_lines:
-                    break
-                lines.append(line.rstrip("\n"))
-        return lines
 
     @property
     def name(self) -> str:
@@ -272,180 +194,19 @@ class FileReadTool(AgentTool):
     
     def _should_exclude(self, file_path: str) -> bool:
         """检查文件是否应该被排除"""
-        normalized_path = _normalize_rel_path(file_path)
-        if _has_hidden_or_test_segment(normalized_path):
-            return True
         # 如果指定了目标文件，只允许读取这些文件
-        if self.target_files and normalized_path not in self.target_files:
+        if self.target_files and file_path not in self.target_files:
             return True
         
         # 检查排除模式
         for pattern in self.exclude_patterns:
-            if fnmatch.fnmatch(normalized_path, pattern):
+            if fnmatch.fnmatch(file_path, pattern):
                 return True
             # 也检查文件名
-            if fnmatch.fnmatch(os.path.basename(normalized_path), pattern):
+            if fnmatch.fnmatch(os.path.basename(file_path), pattern):
                 return True
         
         return False
-    
-    def _collect_reason_dirs(self, reason_paths: Optional[List[str]]) -> List[str]:
-        if not isinstance(reason_paths, list):
-            return []
-        normalized: List[str] = []
-        seen: set[str] = set()
-        for item in reason_paths:
-            norm = _normalize_reason_path(item, self.project_root)
-            if not norm or norm in seen:
-                continue
-            seen.add(norm)
-            normalized.append(norm)
-            if len(normalized) >= 12:
-                break
-        return normalized
-
-    def _resolve_existing_file(self, file_path: str) -> tuple[Optional[str], Optional[str]]:
-        candidate = str(file_path or "").strip().replace("\\", "/")
-        if not candidate:
-            return None, None
-
-        root_norm = os.path.normpath(self.project_root)
-        if os.path.isabs(candidate):
-            abs_norm = os.path.normpath(candidate)
-            if not abs_norm.startswith(root_norm):
-                return None, None
-            if os.path.isfile(abs_norm):
-                rel = _normalize_display_path(abs_norm, self.project_root)
-                return rel, abs_norm
-            return None, None
-
-        full_path = os.path.normpath(os.path.join(self.project_root, candidate))
-        if not full_path.startswith(root_norm):
-            return None, None
-        if os.path.isfile(full_path):
-            rel = _normalize_display_path(full_path, self.project_root)
-            return rel, full_path
-        return None, None
-
-    def _scan_project_for_path_candidates(
-        self,
-        target_path: str,
-        reason_dirs: List[str],
-        project_scope: bool,
-    ) -> List[Dict[str, Any]]:
-        normalized_target = _normalize_rel_path(target_path)
-        basename = os.path.basename(normalized_target)
-        if not normalized_target or (not project_scope and not reason_dirs):
-            return []
-
-        matches: List[Dict[str, Any]] = []
-        files_scanned = 0
-        for root, dirs, files in os.walk(self.project_root):
-            rel_dir = os.path.relpath(root, self.project_root).replace("\\", "/")
-            if rel_dir == ".":
-                rel_dir = ""
-            dirs[:] = [
-                d for d in dirs
-                if d not in {"node_modules", "vendor", "dist", "build", ".git", "__pycache__", ".pytest_cache"}
-                and not d.startswith(".")
-                and not _has_hidden_or_test_segment(f"{rel_dir}/{d}" if rel_dir else d)
-            ]
-
-            for filename in files:
-                files_scanned += 1
-                if files_scanned > 10000:
-                    return matches
-
-                rel_path = _normalize_rel_path(os.path.join(rel_dir, filename) if rel_dir else filename)
-                if not rel_path or _has_hidden_or_test_segment(rel_path):
-                    continue
-                if self._should_exclude(rel_path):
-                    continue
-                if not _is_source_like_file(rel_path):
-                    continue
-
-                suffix_hit = bool(normalized_target and rel_path.endswith(normalized_target))
-                basename_hit = bool(basename and filename == basename)
-                if not suffix_hit and not basename_hit:
-                    continue
-
-                score = 0
-                if suffix_hit:
-                    score += 300
-                elif basename_hit:
-                    score += 200
-
-                if reason_dirs:
-                    for idx, reason in enumerate(reason_dirs):
-                        prefix = reason.rstrip("/")
-                        if rel_path == prefix or rel_path.startswith(f"{prefix}/"):
-                            score += max(1, 30 - idx)
-                            break
-
-                score += max(0, 8 - rel_path.count("/"))
-                matches.append(
-                    {
-                        "relative_path": rel_path,
-                        "full_path": os.path.join(self.project_root, rel_path),
-                        "score": score,
-                        "suffix_hit": suffix_hit,
-                        "basename_hit": basename_hit,
-                    }
-                )
-        return matches
-
-    def _resolve_file_with_context(
-        self,
-        file_path: str,
-        reason_paths: Optional[List[str]],
-        project_scope: bool,
-    ) -> tuple[Optional[str], Optional[str], Optional[str], List[str]]:
-        raw_input_path = str(file_path or "").strip().replace("\\", "/")
-        direct_rel, direct_abs = self._resolve_existing_file(file_path)
-        reason_dirs = self._collect_reason_dirs(reason_paths)
-        if not raw_input_path:
-            return None, None, "必须提供 file_path", reason_dirs
-        root_norm = os.path.normpath(self.project_root)
-        if not os.path.isabs(raw_input_path):
-            try:
-                resolved_candidate = os.path.normpath(
-                    os.path.join(self.project_root, raw_input_path)
-                )
-                if os.path.commonpath([root_norm, resolved_candidate]) != root_norm:
-                    return None, None, "安全错误：不允许读取项目目录外的文件", reason_dirs
-            except Exception:
-                return None, None, "安全错误：不允许读取项目目录外的文件", reason_dirs
-        if os.path.isabs(raw_input_path):
-            try:
-                input_norm = os.path.normpath(raw_input_path)
-                if os.path.commonpath([root_norm, input_norm]) != root_norm:
-                    return None, None, "安全错误：不允许读取项目目录外的文件", reason_dirs
-            except Exception:
-                return None, None, "安全错误：不允许读取项目目录外的文件", reason_dirs
-
-        if direct_rel and direct_abs:
-            return direct_rel, direct_abs, None, reason_dirs
-
-        matches = self._scan_project_for_path_candidates(file_path, reason_dirs, project_scope)
-        if not matches:
-            if project_scope:
-                return None, None, f"文件不存在: {file_path}（已在项目范围内尝试路径补全）", reason_dirs
-            return None, None, f"文件不存在: {file_path}", reason_dirs
-
-        suffix_matches = [item for item in matches if item.get("suffix_hit")]
-        if suffix_matches:
-            suffix_matches.sort(key=lambda item: (item["score"], -len(item["relative_path"])), reverse=True)
-            winner = suffix_matches[0]
-            return winner["relative_path"], winner["full_path"], None, reason_dirs
-
-        basename_matches = [item for item in matches if item.get("basename_hit")]
-        if len(basename_matches) == 1:
-            winner = basename_matches[0]
-            return winner["relative_path"], winner["full_path"], None, reason_dirs
-
-        basename_matches.sort(key=lambda item: (item["score"], -len(item["relative_path"])), reverse=True)
-        winner = basename_matches[0]
-        return winner["relative_path"], winner["full_path"], None, reason_dirs
 
     async def _execute(
         self,
@@ -453,135 +214,105 @@ class FileReadTool(AgentTool):
         start_line: Optional[int] = None,
         end_line: Optional[int] = None,
         max_lines: int = 500,
-        reason_paths: Optional[List[str]] = None,
-        project_scope: bool = True,
-        strict_anchor: bool = False,
-        allow_file_header_fallback: bool = False,
         **kwargs
     ) -> ToolResult:
+        """执行文件读取"""
         try:
-            parsed_path, parsed_start_line, parsed_end_line = _parse_file_path_with_line_range(file_path)
-            file_path = parsed_path
-            if start_line is None and end_line is None and parsed_start_line is not None:
-                start_line = parsed_start_line
-                end_line = parsed_end_line
-
-            strict_anchor_enabled = bool(strict_anchor) or bool(self.strict_anchor_mode)
-            if strict_anchor_enabled and start_line is None and end_line is None:
-                if bool(allow_file_header_fallback) and str(file_path or "").strip():
-                    start_line = 1
-                    end_line = 120
-                else:
-                    return ToolResult(
-                        success=False,
-                        error="read_file 严格锚点模式要求提供 start_line/end_line，禁止无定位全文读取。",
-                        metadata={
-                            "strict_anchor": True,
-                            "read_scope_policy": "strict_anchor",
-                        },
-                    )
-
-            resolved_rel_path, full_path, resolve_error, normalized_reason_dirs = await asyncio.to_thread(
-                self._resolve_file_with_context,
-                file_path,
-                reason_paths,
-                bool(project_scope),
-            )
-            if resolve_error or not resolved_rel_path or not full_path:
-                return ToolResult(success=False, error=resolve_error or f"文件不存在: {file_path}")
-
-            if self._should_exclude(resolved_rel_path):
+            # 检查是否被排除
+            if self._should_exclude(file_path):
                 return ToolResult(
                     success=False,
-                    error=f"文件被排除或不在目标文件列表中: {resolved_rel_path}",
+                    error=f"文件被排除或不在目标文件列表中: {file_path}",
                 )
-
-            if not os.path.exists(full_path):
-                return ToolResult(success=False, error=f"文件不存在: {resolved_rel_path}")
-            if not os.path.isfile(full_path):
-                return ToolResult(success=False, error=f"不是文件: {resolved_rel_path}")
-
-            total_lines = await asyncio.to_thread(self._count_lines_fast_sync, full_path)
-            safe_max_lines = max(1, min(int(max_lines or 500), 2000))
-
-            if total_lines <= 0:
+            
+            # 安全检查：防止路径遍历
+            full_path = os.path.realpath(os.path.join(self.project_root, file_path))
+            if not full_path.startswith(os.path.realpath(self.project_root)):
                 return ToolResult(
-                    success=True,
-                    data=f"文件: {resolved_rel_path}\n行数: 0-0 / 0\n\n```text\n\n```",
-                    metadata={
-                        "file_path": resolved_rel_path,
-                        "total_lines": 0,
-                        "start_line": 0,
-                        "end_line": 0,
-                        "language": "text",
-                        "reason_paths_used": normalized_reason_dirs,
-                        "strict_anchor": strict_anchor_enabled,
-                    },
+                    success=False,
+                    error="安全错误：不允许访问项目目录外的文件",
                 )
-
-            if start_line is not None or end_line is not None:
-                start_val = max(1, int(start_line or 1))
-                if end_line is None:
-                    end_val = min(total_lines, start_val + safe_max_lines - 1)
-                else:
-                    end_val = min(total_lines, max(start_val, int(end_line)))
-                selected_lines = await asyncio.to_thread(
-                    self._read_lines_by_range_sync,
-                    full_path,
-                    start_val,
-                    end_val,
+            
+            if not os.path.exists(full_path):
+                return ToolResult(
+                    success=False,
+                    error=f"文件不存在: {file_path}",
                 )
-                display_start = start_val
-                display_end = start_val + max(len(selected_lines) - 1, 0)
+            
+            if not os.path.isfile(full_path):
+                return ToolResult(
+                    success=False,
+                    error=f"不是文件: {file_path}",
+                )
+            
+            # 检查文件大小
+            file_size = os.path.getsize(full_path)
+            is_large_file = file_size > 1024 * 1024  # 1MB
+            
+            if is_large_file and start_line is None and end_line is None:
+                return ToolResult(
+                    success=False,
+                    error=f"文件过大 ({file_size / 1024:.1f}KB)，请指定 start_line 和 end_line 读取部分内容",
+                )
+            
+            # 读取文件
+            all_lines = await asyncio.to_thread(self._read_all_lines_sync, full_path)
+            total_lines = len(all_lines)
+            
+            # 处理行范围
+            if start_line is not None:
+                start_idx = max(0, start_line - 1)
             else:
-                selected_lines = await asyncio.to_thread(
-                    self._read_lines_head_sync,
-                    full_path,
-                    safe_max_lines,
-                )
-                display_start = 1
-                display_end = len(selected_lines)
+                start_idx = 0
 
+            if end_line is not None:
+                end_idx = min(total_lines, end_line)
+            else:
+                end_idx = min(total_lines, start_idx + max_lines)
+
+            # 截取指定行
+            selected_lines = all_lines[start_idx:end_idx]
+            
+            # 添加行号
             numbered_lines = []
-            for idx, line in enumerate(selected_lines, start=display_start):
-                numbered_lines.append(f"{idx:4d}| {line.rstrip()}")
-            content = "\n".join(numbered_lines)
-
-            ext = os.path.splitext(resolved_rel_path)[1].lower()
+            for i, line in enumerate(selected_lines, start=start_idx + 1):
+                numbered_lines.append(f"{i:4d}| {line.rstrip()}")
+            
+            content = '\n'.join(numbered_lines)
+            
+            # 检测语言
+            ext = os.path.splitext(file_path)[1].lower()
             language = {
                 ".py": "python", ".js": "javascript", ".ts": "typescript",
                 ".java": "java", ".go": "go", ".rs": "rust",
                 ".cpp": "cpp", ".c": "c", ".cs": "csharp",
                 ".php": "php", ".rb": "ruby", ".swift": "swift",
             }.get(ext, "text")
-
-            output = f"文件: {resolved_rel_path}\n"
-            output += f"行数: {display_start}-{display_end} / {total_lines}\n\n"
+            
+            output = f"文件: {file_path}\n"
+            output += f"行数: {start_idx + 1}-{end_idx} / {total_lines}\n\n"
             output += f"```{language}\n{content}\n```"
-            if display_end < total_lines:
-                output += f"\n\n... 还有 {total_lines - display_end} 行未显示"
-
+            
+            if end_idx < total_lines:
+                output += f"\n\n... 还有 {total_lines - end_idx} 行未显示"
+            
             return ToolResult(
                 success=True,
                 data=output,
                 metadata={
-                    "file_path": resolved_rel_path,
+                    "file_path": file_path,
                     "total_lines": total_lines,
-                    "start_line": display_start,
-                    "end_line": display_end,
+                    "start_line": start_idx + 1,
+                    "end_line": end_idx,
                     "language": language,
-                    "reason_paths_used": normalized_reason_dirs,
-                    "project_scope": bool(project_scope),
-                    "strict_anchor": strict_anchor_enabled,
-                    "read_anchor_source": (
-                        "file_header_fallback"
-                        if bool(allow_file_header_fallback) and int(display_start) == 1 and int(display_end) <= 120
-                        else "input"
-                    ),
-                },
+                }
             )
+            
         except Exception as e:
-            return ToolResult(success=False, error=f"读取文件失败: {str(e)}")
+            return ToolResult(
+                success=False,
+                error=f"读取文件失败: {str(e)}",
+            )
 
 
 class FileSearchInput(BaseModel):

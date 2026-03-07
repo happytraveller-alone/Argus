@@ -426,6 +426,11 @@ class BaseAgent(ABC):
         self._mcp_runtime: Optional["MCPRuntime"] = None
         self._write_scope_guard: Optional["TaskWriteScopeGuard"] = None
         self._max_history_observation_chars: int = 12000
+        
+        # 🔥 兜底机制：追踪关键工具调用（push/save）
+        self._critical_tool_called: bool = False  # 是否调用了关键工具
+        self._critical_tool_name: Optional[str] = None  # 调用的关键工具名称
+        self._critical_tool_calls: List[Dict[str, Any]] = []  # 所有关键工具调用记录
         try:
             from app.services.agent.config import get_agent_config
 
@@ -2629,7 +2634,7 @@ class BaseAgent(ABC):
         )
         if any(hint in lowered for hint in mcp_unavailable_hints):
             return "mcp_unavailable"
-        if "mcp 严格模式阻断" in text or "mcp_runtime_unavailable_strict_mode" in lowered:
+        if "mcp runtime 未就绪" in text or "mcp router 未匹配" in text:
             return "mcp_unavailable"
         if "mcp 未成功处理" in text or "mcp route" in lowered:
             return "mcp_unavailable"
@@ -4467,7 +4472,7 @@ class BaseAgent(ABC):
                     return merged_failure_meta
 
                 if not mcp_runtime:
-                    strict_error = "mcp_runtime_unavailable_strict_mode"
+                    strict_error = "MCP Runtime 未就绪，无法执行工具。"
                     strict_failure_metadata = _build_strict_failure_metadata(
                         strict_error=strict_error,
                         base_metadata=strict_metadata,
@@ -4482,15 +4487,10 @@ class BaseAgent(ABC):
                         input_repaired=repaired_changes or None,
                         extra_metadata=strict_failure_metadata or None,
                     )
-                    return (
-                        "⚠️ MCP 严格模式阻断\n\n"
-                        f"**请求工具**: {requested_tool_name}\n"
-                        f"**实际工具**: {resolved_tool_name}\n"
-                        "原因: MCP Runtime 未就绪，禁止本地回退。"
-                    )
+                    return strict_error
 
                 if not mcp_can_handle:
-                    strict_error = f"mcp_route_missing:{resolved_tool_name}"
+                    strict_error = f"MCP Router 未匹配工具 {resolved_tool_name}，无法执行。"
                     strict_failure_metadata = _build_strict_failure_metadata(
                         strict_error=strict_error,
                         base_metadata=strict_metadata,
@@ -4505,12 +4505,7 @@ class BaseAgent(ABC):
                         input_repaired=repaired_changes or None,
                         extra_metadata=strict_failure_metadata or None,
                     )
-                    return (
-                        "⚠️ MCP 严格模式阻断\n\n"
-                        f"**请求工具**: {requested_tool_name}\n"
-                        f"**实际工具**: {resolved_tool_name}\n"
-                        "原因: MCP Router 未匹配该工具，禁止本地执行。"
-                    )
+                    return strict_error
 
                 mcp_result = await mcp_runtime.execute_tool(
                     tool_name=resolved_tool_name,
@@ -4625,15 +4620,10 @@ class BaseAgent(ABC):
                     input_repaired=repaired_changes or None,
                     extra_metadata=strict_failure_metadata or None,
                 )
-                failure_output = (
-                    "⚠️ MCP 严格模式执行失败\n\n"
-                    f"**请求工具**: {requested_tool_name}\n"
-                    f"**实际工具**: {resolved_tool_name}\n"
-                    f"**错误**: {strict_error}\n"
-                    "MCP 未成功处理，已按严格策略阻断。"
-                )
+                # 直接返回错误信息给模型，而不是封装成"阻断"消息
+                failure_output = mcp_output or strict_error
                 if auto_retry_used:
-                    failure_output += "\n\n已执行一次自动路径修复重试，但仍失败。"
+                    failure_output += "\n\n(注：已执行一次自动路径修复重试，但仍失败。)"
                 return failure_output
 
             is_mcp_proxy_tool = bool(local_tool_available and getattr(tool, "mcp_proxy_only", False))
@@ -4735,6 +4725,21 @@ class BaseAgent(ABC):
                             tool_input=repaired_input,
                             tool_metadata=mcp_result_meta,
                         )
+                        
+                        # 🔥 MCP 工具成功执行后追踪关键工具调用
+                        critical_tools = {"push_finding_to_queue", "save_verification_results"}
+                        if resolved_tool_name in critical_tools:
+                            self._critical_tool_called = True
+                            self._critical_tool_name = resolved_tool_name
+                            self._critical_tool_calls.append({
+                                "tool_name": resolved_tool_name,
+                                "tool_input": repaired_input,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "success": True,
+                                "via": "mcp",
+                            })
+                            logger.info(f"[{self.name}] ✅ 关键工具成功执行 (MCP): {resolved_tool_name}")
+                        
                         if not is_write_tool and not cache_bypass:
                             self._tool_success_cache[tool_call_key] = mcp_output
                             if len(self._tool_success_cache) > 500:
@@ -4769,6 +4774,21 @@ class BaseAgent(ABC):
                             input_repaired=repaired_changes or None,
                             extra_metadata=merged_fallback_metadata or None,
                         )
+                        
+                        # 🔥 MCP fallback 成功执行后追踪关键工具调用
+                        critical_tools = {"push_finding_to_queue", "save_verification_results"}
+                        if resolved_tool_name in critical_tools:
+                            self._critical_tool_called = True
+                            self._critical_tool_name = resolved_tool_name
+                            self._critical_tool_calls.append({
+                                "tool_name": resolved_tool_name,
+                                "tool_input": repaired_input,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "success": True,
+                                "via": "mcp_fallback",
+                            })
+                            logger.info(f"[{self.name}] ✅ 关键工具成功执行 (MCP fallback): {resolved_tool_name}")
+                        
                         if not is_write_tool and not cache_bypass:
                             self._tool_success_cache[tool_call_key] = fallback_output
                             if len(self._tool_success_cache) > 500:
@@ -4969,6 +4989,20 @@ class BaseAgent(ABC):
                     tool_input=repaired_input,
                     tool_metadata=metadata_dict,
                 )
+                
+                # 🔥 仅在工具成功执行后才追踪关键工具调用（push/save）
+                critical_tools = {"push_finding_to_queue", "save_verification_results"}
+                if resolved_tool_name in critical_tools:
+                    self._critical_tool_called = True
+                    self._critical_tool_name = resolved_tool_name
+                    self._critical_tool_calls.append({
+                        "tool_name": resolved_tool_name,
+                        "tool_input": repaired_input,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "success": True,
+                    })
+                    logger.info(f"[{self.name}] ✅ 关键工具成功执行: {resolved_tool_name}")
+                
                 output = str(result.data)
 
                 # 包含 metadata 中的额外信息
@@ -5058,3 +5092,318 @@ class BaseAgent(ABC):
             desc = f"- {name}: {getattr(tool, 'description', 'No description')}"
             tools_info.append(desc)
         return "\n".join(tools_info)
+    
+    async def _fallback_check_and_save(
+        self,
+        conversation_history: List[Dict[str, str]],
+        expected_tool: str,
+        agent_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        兜底机制：使用 LLM 分析对话记录，判断是否需要补救性保存
+        
+        Args:
+            conversation_history: 对话记录
+            expected_tool: 预期的工具名称 (push_finding_to_queue | save_verification_results)
+            agent_type: Agent 类型 (analysis | verification)
+        
+        Returns:
+            如果补救成功返回结果，否则返回 None
+        """
+        if self._critical_tool_called:
+            logger.info(f"[{self.name}] ✅ 已调用关键工具 {self._critical_tool_name}，无需兜底")
+            return None
+        
+        logger.warning(f"[{self.name}] ⚠️ 未检测到 {expected_tool} 成功调用，启动兜底分析...")
+        
+        # 根据 agent_type 构建不同的输出格式示例
+        if agent_type == "analysis":
+            output_example = """{{
+    "needs_fallback": true,
+    "reason": "发现2个XSS漏洞但未成功调用push_finding_to_queue",
+    "findings": [
+        {{
+            "file_path": "vulnerability/xss/xss.go",
+            "line_start": 31,
+            "line_end": 35,
+            "vulnerability_type": "xss",
+            "title": "漏洞标题",
+            "description": "详细描述...",
+            "severity": "high",
+            "confidence": 0.85,
+            "code_snippet": "相关代码",
+            "suggestion": "修复建议"
+        }}
+    ]
+}}"""
+            negative_example = """{{
+    "needs_fallback": false,
+    "reason": "对话中未发现任何结构化的漏洞数据",
+    "findings": []
+}}"""
+        else:  # verification
+            output_example = """{{
+    "needs_fallback": true,
+    "reason": "完成1个漏洞验证但未成功调用save_verification_results",
+    "verification_results": {{
+        "findings": [
+            {{
+                "file_path": "src/auth.py",
+                "line_start": 42,
+                "line_end": 45,
+                "title": "漏洞标题",
+                "cwe_id": "CWE-89",
+                "suggestion": "修复建议",
+                "verification_result": {{
+                    "verdict": "confirmed",
+                    "confidence": 0.9,
+                    "reachability": "reachable",
+                    "verification_evidence": "验证证据"
+                }}
+            }}
+        ],
+        "summary": "验证摘要"
+    }}
+}}"""
+            negative_example = """{{
+    "needs_fallback": false,
+    "reason": "对话中未发现任何验证结果数据",
+    "verification_results": {{
+        "findings": []
+    }}
+}}"""
+        
+        # 构建分析提示词
+        analysis_prompt = f"""你是一个严格的对话分析助手。请分析以下对话记录，判断 {agent_type} Agent 是否发现了需要保存的结果但未成功调用 `{expected_tool}` 工具。
+
+## 对话记录（最后 20 轮）
+{self._format_conversation_for_analysis(conversation_history[-20:])}
+
+## 分析方法
+
+### 第一步：检查对话中是否存在有效的结果数据
+
+**对于 Analysis Agent**：
+查找对话中是否包含**结构化的漏洞发现数据**，关键特征：
+- 包含 `file_path` 或 `"file_path":` 字样
+- 包含 `vulnerability_type` 或 `漏洞类型` 关键词（如 sql_injection, xss, command_injection 等）
+- 包含 `line_start` 或行号信息
+- 包含漏洞描述（`description`）
+- 通常出现在 assistant 的最后几条消息中，或者以 JSON/对象形式呈现
+
+**重要**：即使对话中有"占位分析"、"进行中"等字样，只要存在上述结构化数据（file_path + vulnerability_type + description），就应该认为发现了漏洞。
+
+**对于 Verification Agent**：
+查找对话中是否包含**验证结果数据**，关键特征：
+- 包含 `verdict` 字段（confirmed/likely/false_positive/uncertain）
+- 包含 `verification_result` 或 `verification_evidence` 或 `verification_details`
+- 包含 `confidence` 评分（通常是 0.0-1.0 的浮点数）
+- 包含 `reachability` 字段（reachable/unreachable/unknown）
+- 包含最终的判定结论或验证证据描述
+- 通常出现在 assistant 的最后几条消息中，或以包含 findings 数组的 JSON 形式呈现
+
+**重要**：只要对话中出现了包含上述字段的结构化验证数据，就应该认为完成了验证。
+
+### 第二步：检查是否成功调用了保存工具
+
+查找对话中是否有以下模式之一：
+- `Action: {expected_tool}` 后面紧跟 `Observation: ✅` 或 `成功` 或 `已入队` 或 `已保存`
+- `Action: {expected_tool}` 后面的 Observation 没有包含错误信息（如"失败"、"错误"、"Error"）
+
+**如果只看到 `Action: {expected_tool}` 但 Observation 显示失败，则视为未成功调用。**
+
+### 第三步：综合判断
+
+- 如果**存在有效结果数据** 且 **未成功调用保存工具**，则 `needs_fallback = true`
+- 否则 `needs_fallback = false`
+
+## 输出格式
+
+请严格按照以下 JSON 格式输出，**不要有任何额外文本，不要使用 markdown 代码块标记**：
+
+**正例（需要兜底）：**
+{output_example}
+
+**反例（不需要兜底）：**
+{negative_example}
+
+## 示例场景
+
+### ✅ 需要兜底的情况（{agent_type}）
+```
+assistant: {"分析发现以下漏洞：" if agent_type == "analysis" else "验证完成，结果："}
+{{"findings": [{{"file_path": "src/auth.py", "vulnerability_type": "sql_injection"}}]}}
+```
+→ `needs_fallback = true`（有数据但未调用工具）
+
+### ❌ 不需要兜底的情况
+```
+assistant: 正在分析代码...
+assistant: 继续深入查看...
+```
+→ `needs_fallback = false`（无结构化数据）
+
+### ❌ 不需要兜底的情况（已成功调用）
+```
+assistant: Action: {expected_tool}
+user: Observation: ✅ {"漏洞已成功入队" if agent_type == "analysis" else "验证结果已保存"}
+```
+→ `needs_fallback = false`（已成功调用工具）
+
+### ✅ 需要兜底的情况（调用失败）
+```
+assistant: Action: {expected_tool}
+user: Observation: ❌ 数据库连接失败
+```
+→ `needs_fallback = true`（调用失败，需要补救）
+
+**请现在开始分析，严格输出 JSON 格式，不要有任何额外文本。**
+"""
+        
+        try:
+            # 调用 LLM 分析
+            analysis_history = [
+                {"role": "system", "content": "你是一个严格的对话分析助手，专门判断是否需要补救性工具调用。"},
+                {"role": "user", "content": analysis_prompt}
+            ]
+            
+            logger.info(f"[{self.name}] 正在调用 LLM 进行兜底分析...")
+            llm_response, tokens = await self.stream_llm_call(
+                analysis_history,
+                # 使用较低的 temperature 确保一致性
+            )
+            
+            if not llm_response or not llm_response.strip():
+                logger.warning(f"[{self.name}] LLM 兜底分析返回空响应")
+                return None
+            
+            # 解析 LLM 响应
+            analysis_result = self._parse_fallback_analysis(llm_response)
+            
+            if not analysis_result or not analysis_result.get("needs_fallback"):
+                logger.info(f"[{self.name}] LLM 判断不需要兜底: {analysis_result.get('reason', '未提供理由')}")
+                return None
+            
+            logger.warning(f"[{self.name}] 🔧 LLM 判断需要兜底保存: {analysis_result.get('reason')}")
+            
+            # 执行补救操作
+            fallback_result = await self._execute_fallback_save(
+                analysis_result,
+                expected_tool,
+                agent_type,
+            )
+            
+            return fallback_result
+            
+        except Exception as e:
+            logger.error(f"[{self.name}] 兜底分析失败: {e}", exc_info=True)
+            return None
+    
+    def _format_conversation_for_analysis(self, conversation: List[Dict[str, str]]) -> str:
+        """格式化对话记录用于分析"""
+        formatted = []
+        for i, msg in enumerate(conversation):
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            
+            # 截断过长的内容
+            if len(content) > 2000:
+                content = content[:2000] + "\n... [内容已截断]"
+            
+            formatted.append(f"### 轮次 {i + 1} - {role.upper()}\n{content}\n")
+        
+        return "\n".join(formatted)
+    
+    def _parse_fallback_analysis(self, llm_response: str) -> Optional[Dict[str, Any]]:
+        """解析 LLM 的兜底分析结果"""
+        try:
+            # 移除可能的 markdown 代码块标记
+            cleaned = llm_response.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+            
+            # 解析 JSON
+            result = json.loads(cleaned)
+            
+            if not isinstance(result, dict):
+                logger.warning(f"[{self.name}] 兜底分析结果不是字典: {type(result)}")
+                return None
+            
+            return result
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"[{self.name}] 无法解析兜底分析 JSON: {e}")
+            logger.debug(f"原始响应: {llm_response[:500]}")
+            return None
+        except Exception as e:
+            logger.error(f"[{self.name}] 解析兜底分析失败: {e}")
+            return None
+    
+    async def _execute_fallback_save(
+        self,
+        analysis_result: Dict[str, Any],
+        expected_tool: str,
+        agent_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        """执行补救性保存操作"""
+        try:
+            if agent_type == "analysis" and expected_tool == "push_finding_to_queue":
+                # Analysis Agent: 逐个推送 findings
+                findings = analysis_result.get("findings", [])
+                if not findings:
+                    logger.warning(f"[{self.name}] 兜底分析未提取到 findings")
+                    return None
+                
+                logger.info(f"[{self.name}] 开始补救推送 {len(findings)} 个 findings")
+                pushed_count = 0
+                
+                for finding in findings:
+                    try:
+                        result = await self.execute_tool("push_finding_to_queue", finding)
+                        if "成功" in result or "已入队" in result:
+                            pushed_count += 1
+                            logger.info(f"[{self.name}] 补救推送成功: {finding.get('title', 'N/A')}")
+                    except Exception as e:
+                        logger.error(f"[{self.name}] 补救推送失败: {e}")
+                
+                return {
+                    "fallback_executed": True,
+                    "tool": expected_tool,
+                    "pushed_count": pushed_count,
+                    "total_findings": len(findings),
+                }
+            
+            elif agent_type == "verification" and expected_tool == "save_verification_results":
+                # Verification Agent: 保存验证结果
+                verification_results = analysis_result.get("verification_results", {})
+                if not verification_results or not verification_results.get("findings"):
+                    logger.warning(f"[{self.name}] 兜底分析未提取到 verification_results")
+                    return None
+                
+                logger.info(f"[{self.name}] 开始补救保存验证结果")
+                
+                try:
+                    result = await self.execute_tool("save_verification_results", verification_results)
+                    if "成功" in result or "已保存" in result:
+                        logger.info(f"[{self.name}] 补救保存验证结果成功")
+                        return {
+                            "fallback_executed": True,
+                            "tool": expected_tool,
+                            "saved_count": len(verification_results.get("findings", [])),
+                        }
+                except Exception as e:
+                    logger.error(f"[{self.name}] 补救保存验证结果失败: {e}")
+                    return None
+            
+            else:
+                logger.warning(f"[{self.name}] 不支持的兜底类型: {agent_type}/{expected_tool}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[{self.name}] 执行补救保存失败: {e}", exc_info=True)
+            return None

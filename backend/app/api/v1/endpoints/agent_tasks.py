@@ -4,6 +4,7 @@ DeepAudit Agent 审计任务 API
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -3427,12 +3428,37 @@ async def _execute_agent_task(task_id: str):
             # Provide deterministic persistence callback for Orchestrator TODO mode.
             # The callback is idempotent per task run to avoid double inserts on retries.
             finding_save_diagnostics: Dict[str, Any] = {}
-            persist_state: Dict[str, Any] = {"saved_count": None}
+            persist_state: Dict[str, Any] = {
+                "saved_count": 0,
+                "seen_payload_digests": set(),
+            }
 
             async def _persist_findings_callback(findings_payload: Any) -> int:
-                if persist_state.get("saved_count") is not None:
-                    return int(persist_state["saved_count"])
                 findings_list = findings_payload if isinstance(findings_payload, list) else []
+                if not findings_list:
+                    return 0
+
+                try:
+                    payload_digest_raw = json.dumps(
+                        findings_list,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        default=str,
+                    )
+                except Exception:
+                    payload_digest_raw = str(findings_list)
+                payload_digest = hashlib.sha1(
+                    payload_digest_raw.encode("utf-8", errors="ignore")
+                ).hexdigest()
+
+                seen_payload_digests = persist_state.get("seen_payload_digests")
+                if isinstance(seen_payload_digests, set) and payload_digest in seen_payload_digests:
+                    logger.info(
+                        "[AgentTask] Skip duplicate persist_findings payload: digest=%s",
+                        payload_digest[:12],
+                    )
+                    return 0
+
                 saved = await _save_findings(
                     db,
                     task_id,
@@ -3440,7 +3466,9 @@ async def _execute_agent_task(task_id: str):
                     project_root=project_root,
                     save_diagnostics=finding_save_diagnostics,
                 )
-                persist_state["saved_count"] = int(saved)
+                if isinstance(seen_payload_digests, set):
+                    seen_payload_digests.add(payload_digest)
+                persist_state["saved_count"] = int(persist_state.get("saved_count") or 0) + int(saved)
                 return int(saved)
 
             input_data["persist_findings"] = _persist_findings_callback
@@ -3587,7 +3615,7 @@ async def _execute_agent_task(task_id: str):
                         "[AgentTask] 跳过重复持久化（工具已保存 %s 条）",
                         saved_count,
                     )
-                elif persist_state.get("saved_count") is not None:
+                elif int(persist_state.get("saved_count") or 0) > 0:
                     saved_count = int(persist_state["saved_count"])
                     logger.info(
                         "[AgentTask] Findings were already persisted by Orchestrator TODO step: saved_count=%s",
@@ -4452,6 +4480,10 @@ async def _initialize_tools(
         QmdQueryTool,
         QmdStatusTool,
     )
+    from app.services.agent.knowledge import (
+        SecurityKnowledgeQueryTool,
+        GetVulnerabilityKnowledgeTool,
+    )
     # 🔥 RAG 相关导入
     from app.services.rag import CodeIndexer, CodeRetriever, EmbeddingService, IndexUpdateMode
     from app.core.config import settings
@@ -4471,161 +4503,156 @@ async def _initialize_tools(
 
     # ============ 🔥 初始化 RAG 系统 ============
     retriever = None
-    effective_rag_enabled = bool(rag_enabled) or bool(getattr(settings, "RAG_ENABLED", False))
-    if not effective_rag_enabled:
-        # 智能审计默认不依赖 embedding/RAG；保留接口，后续按开关启用。
-        pass
-    else:
-        try:
-            await emit("🔍 正在初始化 RAG 系统...")
+    try:
+        await emit("🔍 正在初始化 RAG 系统...")
 
-            # 从用户配置中获取 embedding 配置
-            user_llm_config = (user_config or {}).get("llmConfig", {})
-            user_other_config = (user_config or {}).get("otherConfig", {})
-            user_embedding_config = user_other_config.get("embedding_config", {})
+        # 从用户配置中获取 embedding 配置
+        user_llm_config = (user_config or {}).get("llmConfig", {})
+        user_other_config = (user_config or {}).get("otherConfig", {})
+        user_embedding_config = user_other_config.get("embedding_config", {})
 
-            # Embedding Provider/Model 优先级：用户嵌入配置 > 环境变量
-            embedding_provider = user_embedding_config.get("provider") or getattr(
-                settings, "EMBEDDING_PROVIDER", "openai"
-            )
-            embedding_model = user_embedding_config.get("model") or getattr(
-                settings, "EMBEDDING_MODEL", "text-embedding-3-small"
-            )
+        # Embedding Provider/Model 优先级：用户嵌入配置 > 环境变量
+        embedding_provider = user_embedding_config.get("provider") or getattr(
+            settings, "EMBEDDING_PROVIDER", "openai"
+        )
+        embedding_model = user_embedding_config.get("model") or getattr(
+            settings, "EMBEDDING_MODEL", "text-embedding-3-small"
+        )
 
-            # API Key 优先级：用户嵌入配置 > 环境变量 EMBEDDING_API_KEY > 用户 LLM 配置 > 环境变量 LLM_API_KEY
-            embedding_api_key = (
-                user_embedding_config.get("api_key")
-                or getattr(settings, "EMBEDDING_API_KEY", None)
-                or user_llm_config.get("llmApiKey")
-                or getattr(settings, "LLM_API_KEY", "")
-                or ""
-            )
+        # API Key 优先级：用户嵌入配置 > 环境变量 EMBEDDING_API_KEY > 用户 LLM 配置 > 环境变量 LLM_API_KEY
+        embedding_api_key = (
+            user_embedding_config.get("api_key")
+            or getattr(settings, "EMBEDDING_API_KEY", None)
+            or user_llm_config.get("llmApiKey")
+            or getattr(settings, "LLM_API_KEY", "")
+            or ""
+        )
 
-            # Base URL 优先级：用户嵌入配置 > 环境变量 EMBEDDING_BASE_URL > None（使用提供商默认地址）
-            embedding_base_url = (
-                user_embedding_config.get("base_url")
-                or getattr(settings, "EMBEDDING_BASE_URL", None)
-                or None
-            )
+        # Base URL 优先级：用户嵌入配置 > 环境变量 EMBEDDING_BASE_URL > None（使用提供商默认地址）
+        embedding_base_url = (
+            user_embedding_config.get("base_url")
+            or getattr(settings, "EMBEDDING_BASE_URL", None)
+            or None
+        )
 
-            logger.info(
-                "RAG 配置: provider=%s, model=%s, base_url=%s",
-                embedding_provider,
-                embedding_model,
-                embedding_base_url or "(使用默认)",
-            )
-            await emit(f"📊 Embedding 配置: {embedding_provider}/{embedding_model}")
+        logger.info(
+            "RAG 配置: provider=%s, model=%s, base_url=%s",
+            embedding_provider,
+            embedding_model,
+            embedding_base_url or "(使用默认)",
+        )
+        await emit(f"📊 Embedding 配置: {embedding_provider}/{embedding_model}")
 
-            # 创建 Embedding 服务
-            embedding_service = EmbeddingService(
-                provider=embedding_provider,
-                model=embedding_model,
-                api_key=embedding_api_key,
-                base_url=embedding_base_url,
-            )
+        # 创建 Embedding 服务
+        embedding_service = EmbeddingService(
+            provider=embedding_provider,
+            model=embedding_model,
+            api_key=embedding_api_key,
+            base_url=embedding_base_url,
+        )
 
-            # 创建 collection_name（基于 project_id）
-            collection_name = f"project_{project_id}" if project_id else "default_project"
+        # 创建 collection_name（基于 project_id）
+        collection_name = f"project_{project_id}" if project_id else "default_project"
 
-            # 创建 CodeIndexer 并进行智能索引（增量更新）
-            indexer = CodeIndexer(
-                collection_name=collection_name,
-                embedding_service=embedding_service,
-                persist_directory=settings.VECTOR_DB_PATH,
-            )
+        # 创建 CodeIndexer 并进行智能索引（增量更新）
+        indexer = CodeIndexer(
+            collection_name=collection_name,
+            embedding_service=embedding_service,
+            persist_directory=settings.VECTOR_DB_PATH,
+        )
 
-            logger.info("📝 开始智能索引项目: %s", project_root)
-            await emit("📝 正在构建代码向量索引...")
+        logger.info("📝 开始智能索引项目: %s", project_root)
+        await emit("📝 正在构建代码向量索引...")
 
-            index_progress = None
-            last_progress_update = 0
-            last_embedding_progress = [0]  # 使用列表以便在闭包中修改
-            embedding_total = [0]  # 记录总数
+        index_progress = None
+        last_progress_update = 0
+        last_embedding_progress = [0]  # 使用列表以便在闭包中修改
+        embedding_total = [0]  # 记录总数
 
-            # 🔥 嵌入进度回调函数（同步，但会调度异步任务）
-            def on_embedding_progress(processed: int, total: int):
-                embedding_total[0] = total
-                # 每处理 50 个或完成时更新
-                if processed - last_embedding_progress[0] >= 50 or processed == total:
-                    last_embedding_progress[0] = processed
-                    percentage = (processed / total * 100) if total > 0 else 0
-                    msg = f"🔢 嵌入进度: {processed}/{total} ({percentage:.0f}%)"
-                    logger.info(msg)
-                    # 使用 asyncio.create_task 调度异步 emit
-                    try:
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(emit(msg))
-                    except Exception as exc:
-                        logger.warning("Failed to emit embedding progress: %s", exc)
+        # 🔥 嵌入进度回调函数（同步，但会调度异步任务）
+        def on_embedding_progress(processed: int, total: int):
+            embedding_total[0] = total
+            # 每处理 50 个或完成时更新
+            if processed - last_embedding_progress[0] >= 50 or processed == total:
+                last_embedding_progress[0] = processed
+                percentage = (processed / total * 100) if total > 0 else 0
+                msg = f"🔢 嵌入进度: {processed}/{total} ({percentage:.0f}%)"
+                logger.info(msg)
+                # 使用 asyncio.create_task 调度异步 emit
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(emit(msg))
+                except Exception as exc:
+                    logger.warning("Failed to emit embedding progress: %s", exc)
 
-            # 🔥 创建取消检查函数，用于在嵌入批处理中检查取消状态
-            def check_cancelled() -> bool:
-                return task_id is not None and is_task_cancelled(task_id)
+        # 🔥 创建取消检查函数，用于在嵌入批处理中检查取消状态
+        def check_cancelled() -> bool:
+            return task_id is not None and is_task_cancelled(task_id)
 
-            async for progress in indexer.smart_index_directory(
-                directory=project_root,
-                exclude_patterns=exclude_patterns or [],
-                include_patterns=target_files,  # 🔥 传递 target_files 限制索引范围
-                update_mode=IndexUpdateMode.SMART,
-                embedding_progress_callback=on_embedding_progress,
-                cancel_check=check_cancelled,  # 🔥 传递取消检查函数
+        async for progress in indexer.smart_index_directory(
+            directory=project_root,
+            exclude_patterns=exclude_patterns or [],
+            include_patterns=target_files,  # 🔥 传递 target_files 限制索引范围
+            update_mode=IndexUpdateMode.SMART,
+            embedding_progress_callback=on_embedding_progress,
+            cancel_check=check_cancelled,  # 🔥 传递取消检查函数
+        ):
+            # 🔥 在索引过程中检查取消状态
+            if check_cancelled():
+                logger.info("[Cancel] RAG indexing cancelled for task %s", task_id)
+                raise asyncio.CancelledError("任务已取消")
+
+            index_progress = progress
+            # 每处理 10 个文件或完成时发送进度更新
+            if (
+                progress.processed_files - last_progress_update >= 10
+                or progress.processed_files == progress.total_files
             ):
-                # 🔥 在索引过程中检查取消状态
-                if check_cancelled():
-                    logger.info("[Cancel] RAG indexing cancelled for task %s", task_id)
-                    raise asyncio.CancelledError("任务已取消")
+                if progress.total_files > 0:
+                    await emit(
+                        f"📝 索引进度: {progress.processed_files}/{progress.total_files} 文件 "
+                        f"({progress.progress_percentage:.0f}%)"
+                    )
+                last_progress_update = progress.processed_files
 
-                index_progress = progress
-                # 每处理 10 个文件或完成时发送进度更新
-                if (
-                    progress.processed_files - last_progress_update >= 10
-                    or progress.processed_files == progress.total_files
-                ):
-                    if progress.total_files > 0:
-                        await emit(
-                            f"📝 索引进度: {progress.processed_files}/{progress.total_files} 文件 "
-                            f"({progress.progress_percentage:.0f}%)"
-                        )
-                    last_progress_update = progress.processed_files
+            # 发送状态消息（如嵌入向量生成进度）
+            if progress.status_message:
+                await emit(progress.status_message)
+                progress.status_message = ""  # 清空已发送的消息
 
-                # 发送状态消息（如嵌入向量生成进度）
-                if progress.status_message:
-                    await emit(progress.status_message)
-                    progress.status_message = ""  # 清空已发送的消息
-
-            if index_progress:
-                summary = (
-                    f"✅ 索引完成: 模式={index_progress.update_mode}, "
-                    f"新增={index_progress.added_files}, "
-                    f"更新={index_progress.updated_files}, "
-                    f"删除={index_progress.deleted_files}, "
-                    f"代码块={index_progress.indexed_chunks}"
-                )
-                logger.info(summary)
-                await emit(summary)
-                await emit("✅ 索引已完成，进入分析阶段")
-
-            # 创建 CodeRetriever（用于搜索）
-            retriever = CodeRetriever(
-                collection_name=collection_name,
-                embedding_service=embedding_service,
-                persist_directory=settings.VECTOR_DB_PATH,
-                api_key=embedding_api_key,  # 🔥 传递 api_key 以支持自动切换 embedding
+        if index_progress:
+            summary = (
+                f"✅ 索引完成: 模式={index_progress.update_mode}, "
+                f"新增={index_progress.added_files}, "
+                f"更新={index_progress.updated_files}, "
+                f"删除={index_progress.deleted_files}, "
+                f"代码块={index_progress.indexed_chunks}"
             )
+            logger.info(summary)
+            await emit(summary)
+            await emit("✅ 索引已完成，进入分析阶段")
 
-            logger.info("✅ RAG 系统初始化成功: collection=%s", collection_name)
-            await emit("✅ RAG 系统初始化成功")
+        # 创建 CodeRetriever（用于搜索）
+        retriever = CodeRetriever(
+            collection_name=collection_name,
+            embedding_service=embedding_service,
+            persist_directory=settings.VECTOR_DB_PATH,
+            api_key=embedding_api_key,  # 🔥 传递 api_key 以支持自动切换 embedding
+        )
 
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            # 🔥 降级继续：RAG 初始化失败不再阻塞智能审计任务
-            logger.error("❌ RAG 系统初始化失败（已降级继续）: %s", e)
-            await emit(f"⚠️ RAG 系统初始化失败（已降级继续）：{e}", "warning")
-            import traceback
+        logger.info("✅ RAG 系统初始化成功: collection=%s", collection_name)
+        await emit("✅ RAG 系统初始化成功")
 
-            logger.debug("RAG 初始化异常详情:\n%s", traceback.format_exc())
-            retriever = None
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        # 🔥 降级继续：RAG 初始化失败不再阻塞智能审计任务
+        logger.error("❌ RAG 系统初始化失败（已降级继续）: %s", e)
+        await emit(f"⚠️ RAG 系统初始化失败（已降级继续）：{e}", "warning")
+        import traceback
+
+        logger.debug("RAG 初始化异常详情:\n%s", traceback.format_exc())
+        retriever = None
 
     # 基础工具 - 传递排除模式和目标文件
     base_tools = {
@@ -4633,7 +4660,6 @@ async def _initialize_tools(
             project_root,
             exclude_patterns,
             target_files,
-            strict_anchor_mode=True,
         ),
         "list_files": ListFilesTool(project_root, exclude_patterns, target_files),
         "search_code": FileSearchTool(project_root, exclude_patterns, target_files),
@@ -4768,6 +4794,12 @@ async def _initialize_tools(
         )
         logger.info(f"[Tools] Added Recon risk queue tools for task {task_id}")
 
+    # 🔥 注册 RAG 工具到 Recon Agent
+    if retriever:
+        from app.services.agent.tools import RAGQueryTool
+        recon_tools["rag_query"] = RAGQueryTool(retriever)
+        logger.info("✅ RAG 工具 (rag_query) 已注册到 Recon Agent")
+
     # Analysis 工具
     # 🔥 导入智能扫描工具
     from app.services.agent.tools import SmartScanTool, QuickAuditTool, BusinessLogicScanTool, ExtractFunctionTool, PatternMatchTool
@@ -4813,6 +4845,9 @@ async def _initialize_tools(
             project_root=project_root,
             target_files=target_files,
         ),
+        # 安全知识查询
+        "query_security_knowledge": SecurityKnowledgeQueryTool(),
+        "get_vulnerability_knowledge": GetVulnerabilityKnowledgeTool(),
         # 外部安全工具 (传入共享的 sandbox_manager)
         # "opengrep_scan": OpengrepTool(project_root, sandbox_manager),
         # "bandit_scan": BanditTool(project_root, sandbox_manager),
@@ -4826,14 +4861,23 @@ async def _initialize_tools(
         # "phpstan_scan": PHPStanTool(project_root, sandbox_manager),
     }
     
+    # 🔥 注册 RAG 工具到 Analysis Agent
+    if retriever:
+        from app.services.agent.tools import RAGQueryTool, SecurityCodeSearchTool, FunctionContextTool
+        analysis_tools["rag_query"] = RAGQueryTool(retriever)
+        analysis_tools["security_search"] = SecurityCodeSearchTool(retriever)
+        analysis_tools["function_context"] = FunctionContextTool(retriever)
+        logger.info("✅ RAG 工具 (rag_query, security_search, function_context) 已注册到 Analysis Agent")
+    else:
+        logger.warning("⚠️ RAG 未初始化，rag_query/security_search/function_context 工具不可用")
+    
     # 🔥 完成工具集构建后，补充完整工具集给 business_logic_scan
     # 这确保 Sub Agent 有足够的工具在各个分析阶段使用
     business_logic_scan_core_tools.update({
         "extract_function": analysis_tools["extract_function"],
+        "rag_query": analysis_tools["rag_query"],  # 可能未注册，需使用 get 安全访问
         "pattern_match": analysis_tools["pattern_match"],
         "dataflow_analysis": analysis_tools["dataflow_analysis"],
-        "controlflow_analysis_light": analysis_tools["controlflow_analysis_light"],
-        "logic_authz_analysis": analysis_tools["logic_authz_analysis"],
     })
     analysis_tools["business_logic_scan"].tools_registry = business_logic_scan_core_tools
     logger.info(
