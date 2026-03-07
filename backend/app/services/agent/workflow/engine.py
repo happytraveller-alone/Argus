@@ -133,6 +133,39 @@ class AuditWorkflowEngine:
             # ── 阶段 3: VERIFICATION（逐条消耗漏洞验证队列）────────────────
             state.phase = WorkflowPhase.VERIFICATION
             vuln_queue_size = self.vuln_queue.get_queue_size(task_id)
+
+            # 安全护栏：Analysis 已产出发现，但验证队列意外为空时，回填队列避免跳过 Verification
+            if vuln_queue_size <= 0 and orc._all_findings:
+                repopulated = 0
+                for finding in orc._all_findings:
+                    if not isinstance(finding, dict):
+                        continue
+                    try:
+                        normalized = orc._normalize_finding(finding)
+                    except Exception:
+                        normalized = finding
+                    if not isinstance(normalized, dict):
+                        continue
+                    try:
+                        if self.vuln_queue.enqueue_finding(task_id, normalized):
+                            repopulated += 1
+                    except Exception:
+                        continue
+
+                vuln_queue_size = int(self.vuln_queue.get_queue_size(task_id))
+                if repopulated > 0:
+                    await orc.emit_event(
+                        "warning",
+                        (
+                            "⚠️ [Workflow] Verification 队列为空但已存在 Analysis 发现，"
+                            f"已自动回填 {vuln_queue_size} 条并继续验证"
+                        ),
+                    )
+                    logger.warning(
+                        "[WorkflowEngine] Verification queue unexpectedly empty; repopulated_from_all_findings=%s",
+                        vuln_queue_size,
+                    )
+
             state.vuln_queue_findings_total = vuln_queue_size
             await orc.emit_event(
                 "info",
@@ -370,11 +403,16 @@ class AuditWorkflowEngine:
             )
             
             if removed_count > 0:
+                current_size = int(self.vuln_queue.get_queue_size(task_id))
                 await orc.emit_event(
                     "info",
-                    f"✅ [Workflow] 漏洞队列 LLM 去重完成：移除 {removed_count} 条重复项",
+                    f"✅ [Workflow] 漏洞队列 LLM 去重完成：移除 {removed_count} 条重复项，剩余 {current_size} 条",
                 )
-                logger.info("[WorkflowEngine] Removed %s duplicate findings", removed_count)
+                logger.info(
+                    "[WorkflowEngine] Removed %s duplicate findings, queue_size_after_dedup=%s",
+                    removed_count,
+                    current_size,
+                )
             
         except Exception as exc:
             logger.warning("[WorkflowEngine] Vuln queue LLM dedup failed: %s", exc)
@@ -411,37 +449,40 @@ class AuditWorkflowEngine:
         """根据 LLM 分析结果，从 Recon 风险队列中删除重复的风险点"""
         removed_count = 0
         ids_to_remove = set()
+        total_items = len(all_risk_points)
         
         for dup_group in duplicates:
             if isinstance(dup_group, dict) and "remove_ids" in dup_group:
                 for remove_id in dup_group.get("remove_ids", []):
-                    ids_to_remove.add(remove_id)
-        
-        # 由于队列的 peek 返回的是副本，我们需要重建队列
-        # 这里的策略是：重新清空队列，然后只添加非重复的项
-        if ids_to_remove:
+                    try:
+                        idx = int(remove_id)
+                    except Exception:
+                        continue
+                    if 0 <= idx < total_items:
+                        ids_to_remove.add(idx)
+
+        if ids_to_remove and total_items > 0:
+            kept_items = [item for i, item in enumerate(all_risk_points) if i not in ids_to_remove]
+
+            # 安全护栏：不允许去重后将队列清空（除非原本确实只有重复且全删，但这里强制至少保留 1 条）
+            if not kept_items and all_risk_points:
+                logger.warning(
+                    "[WorkflowEngine] Recon dedup would remove all items, keep first item as safety guard"
+                )
+                kept_items = [all_risk_points[0]]
+
             try:
-                # 获取当前队列的所有项
-                current_items = []
-                while True:
-                    item = self.recon_queue.dequeue(task_id)
-                    if item is None:
-                        break
-                    current_items.append(item)
-                
-                # 根据原始 peek 结果中的 ID 确定哪些要保留
-                # 这里假设 current_items 的顺序与 all_risk_points 相同
-                kept_items = []
-                for i, item in enumerate(current_items[:len(all_risk_points)]):
-                    if i not in ids_to_remove:
-                        kept_items.append(item)
-                    else:
-                        removed_count += 1
-                
-                # 重新加入保留的项
+                clear_func = getattr(self.recon_queue, "clear", None)
+                if callable(clear_func):
+                    clear_func(task_id)
+                else:
+                    logger.warning("[WorkflowEngine] Recon queue has no clear() method, skip dedup rewrite")
+                    return 0
+
                 for item in kept_items:
                     self.recon_queue.enqueue(task_id, item)
-                
+
+                removed_count = max(0, total_items - len(kept_items))
             except Exception as exc:
                 logger.error("[WorkflowEngine] Failed to remove duplicate recon risk points: %s", exc)
         
@@ -456,35 +497,50 @@ class AuditWorkflowEngine:
         """根据 LLM 分析结果，从漏洞队列中删除重复的漏洞"""
         removed_count = 0
         ids_to_remove = set()
+        total_items = len(all_findings)
         
         for dup_group in duplicates:
             if isinstance(dup_group, dict) and "remove_ids" in dup_group:
                 for remove_id in dup_group.get("remove_ids", []):
-                    ids_to_remove.add(remove_id)
-        
-        # 从漏洞队列中删除重复的项
-        if ids_to_remove:
+                    try:
+                        idx = int(remove_id)
+                    except Exception:
+                        continue
+                    if 0 <= idx < total_items:
+                        ids_to_remove.add(idx)
+
+        if ids_to_remove and total_items > 0:
+            kept_items = [item for i, item in enumerate(all_findings) if i not in ids_to_remove]
+
+            # 安全护栏：不允许去重后队列被清空，避免 Verification 阶段被跳过
+            if not kept_items and all_findings:
+                logger.warning(
+                    "[WorkflowEngine] Vulnerability dedup would remove all items, keep first item as safety guard"
+                )
+                kept_items = [all_findings[0]]
+
             try:
-                # 获取当前队列的所有项
-                current_items = []
-                while True:
-                    item = self.vuln_queue.dequeue_finding(task_id)
-                    if item is None:
-                        break
-                    current_items.append(item)
-                
-                # 根据原始 peek 结果中的 ID 确定哪些要保留
-                kept_items = []
-                for i, item in enumerate(current_items[:len(all_findings)]):
-                    if i not in ids_to_remove:
-                        kept_items.append(item)
-                    else:
-                        removed_count += 1
-                
-                # 重新加入保留的项
+                clear_func = getattr(self.vuln_queue, "clear_queue", None)
+                if callable(clear_func):
+                    clear_func(task_id)
+                else:
+                    logger.warning("[WorkflowEngine] Vulnerability queue has no clear_queue() method, skip dedup rewrite")
+                    return 0
+
                 for item in kept_items:
                     self.vuln_queue.enqueue_finding(task_id, item)
-                
+
+                removed_count = max(0, total_items - len(kept_items))
+
+                post_size = int(self.vuln_queue.get_queue_size(task_id))
+                if post_size <= 0 and kept_items:
+                    logger.warning(
+                        "[WorkflowEngine] Vulnerability dedup rewrite produced empty queue unexpectedly; restoring snapshot"
+                    )
+                    clear_func(task_id)
+                    for item in all_findings:
+                        self.vuln_queue.enqueue_finding(task_id, item)
+                    removed_count = 0
             except Exception as exc:
                 logger.error("[WorkflowEngine] Failed to remove duplicate findings: %s", exc)
         
