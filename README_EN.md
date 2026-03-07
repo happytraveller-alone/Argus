@@ -140,8 +140,12 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - The default dev flow uses local image builds from `docker-compose.yml`; `docker-compose.prod.yml` / `docker-compose.prod.cn.yml` are for prebuilt-image deployment.
 - `docker-compose.prod.yml` and `docker-compose.prod.cn.yml` use the Nanjing University GHCR mirror (`ghcr.nju.edu.cn/lintsinghua/*`) for faster pulls in CN regions. Replace with your own images/registry for production deployments if needed.
 - The dev build flow defaults to `./scripts/compose-up-with-fallback.sh`: it probes candidate mirrors first, ranks by latency, then retries build phases in ranked order (instead of fixed CN->official phases).
+- Docker image source probing (DockerHub/GHCR) now runs in parallel; failed candidates are downgraded to the tail instead of blocking other sources.
+- Default DockerHub candidates: `docker.m.daocloud.io/library,docker.1ms.run/library,docker.io/library`; default GHCR candidates: `ghcr.nju.edu.cn,ghcr.m.daocloud.io,ghcr.io`.
+- DockerHub official probing uses `registry-1.docker.io` to avoid inaccurate checks against `docker.io`.
 - The script enables BuildKit by default (`DOCKER_BUILDKIT=1`, `COMPOSE_DOCKER_CLI_BUILD=1`), and you can override both.
 - You can override mirror endpoints with `DOCKERHUB_LIBRARY_MIRROR` and `SANDBOX_IMAGE`.
+- DockerHub/GHCR candidate priority is: `*_CANDIDATES` > plural `CN_*` vars (`CN_DOCKERHUB_LIBRARY_MIRRORS` / `CN_GHCR_REGISTRIES`) > legacy singular vars (`CN_DOCKERHUB_LIBRARY_MIRROR` / `CN_GHCR_REGISTRY`) > built-in defaults.
 - You can extend probe pools via comma-separated `*_CANDIDATES`, or explicitly set `*_PRIMARY` / `*_FALLBACK` to skip probing for that category.
 - Backend Node/pnpm build now supports mirror-first + official fallback; override with `BACKEND_NPM_REGISTRY_PRIMARY`, `BACKEND_NPM_REGISTRY_FALLBACK`, and `BACKEND_PNPM_VERSION`.
 - Local Compose now disables pnpm optional dependencies by default (`BACKEND_PNPM_INSTALL_OPTIONAL=0`) to avoid long `node-llama-cpp` retry loops; set it to `1` if you require full optional dependencies.
@@ -155,6 +159,14 @@ Example:
 ```bash
 DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library \
 SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest \
+./scripts/compose-up-with-fallback.sh
+```
+
+Custom DockerHub/GHCR CN candidate pools:
+
+```bash
+CN_DOCKERHUB_LIBRARY_MIRRORS=docker.m.daocloud.io/library,docker.1ms.run/library \
+CN_GHCR_REGISTRIES=ghcr.nju.edu.cn,ghcr.m.daocloud.io \
 ./scripts/compose-up-with-fallback.sh
 ```
 

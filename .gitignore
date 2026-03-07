@@ -200,3 +200,5 @@ commit_message.txt
 skills/
 !backend/app/services/agent/skills/
 !backend/app/services/agent/skills/**
+
+CLAUDE.md

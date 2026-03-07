@@ -142,9 +142,13 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - 默认开发流程使用 `docker-compose.yml` 本地构建业务镜像；`docker-compose.prod.yml` / `docker-compose.prod.cn.yml` 用于预构建镜像部署。
 - `docker-compose.prod.yml` 与 `docker-compose.prod.cn.yml` 默认使用南京大学 GHCR 镜像站（`ghcr.nju.edu.cn/lintsinghua/*`）加速拉取。如需生产镜像部署，可替换为你们自己的镜像地址/私有仓库。
 - 开发构建链路默认使用 `./scripts/compose-up-with-fallback.sh`：先对候选镜像源测速并按延迟排序，再按排序分阶段重试构建（不再固定“国内→官方”两段式）。
+- Docker 镜像拉取（DockerHub/GHCR）测速采用并行探测，失败候选会自动降到排序末位，不阻塞其他可用源。
+- DockerHub 默认候选池：`docker.m.daocloud.io/library,docker.1ms.run/library,docker.io/library`；GHCR 默认候选池：`ghcr.nju.edu.cn,ghcr.m.daocloud.io,ghcr.io`。
+- DockerHub 官方源测速会使用 `registry-1.docker.io`，避免直接探测 `docker.io` 带来的误差。
 - 脚本默认启用 BuildKit（`DOCKER_BUILDKIT=1`、`COMPOSE_DOCKER_CLI_BUILD=1`），可按需覆盖。
 - 如需切换为自建代理/其他镜像站，可覆盖环境变量：`DOCKERHUB_LIBRARY_MIRROR`、`SANDBOX_IMAGE`。
-- 可通过 `*_CANDIDATES`（逗号分隔）扩展测速候选源；也可直接显式指定 `*_PRIMARY` / `*_FALLBACK` 跳过该类源测速。
+- DockerHub/GHCR 候选池优先级：`*_CANDIDATES` > `CN_*` 复数变量（`CN_DOCKERHUB_LIBRARY_MIRRORS` / `CN_GHCR_REGISTRIES`）> 旧单数变量（`CN_DOCKERHUB_LIBRARY_MIRROR` / `CN_GHCR_REGISTRY`）> 内置默认池。
+- 可通过 `*_CANDIDATES`（逗号分隔）扩展测速候选源；也可直接显式指定 `*_PRIMARY` / `*_FALLBACK` 跳过对应类别测速。
 - 后端 Node/pnpm 构建支持镜像优先+官方回退，可覆盖：`BACKEND_NPM_REGISTRY_PRIMARY`、`BACKEND_NPM_REGISTRY_FALLBACK`、`BACKEND_PNPM_VERSION`。
 - 本地 Compose 默认关闭 pnpm optional 依赖安装（`BACKEND_PNPM_INSTALL_OPTIONAL=0`），可显著减少 `node-llama-cpp` 相关下载重试；如需完整 optional 依赖可设为 `1`。
 - 本地 Compose 默认跳过 CJK 字体安装（`BACKEND_INSTALL_CJK_FONTS=0`）以加快构建；如需中文字体渲染可设置为 `1`。
@@ -159,6 +163,14 @@ docker compose -f docker-compose.prod.cn.yml up -d
 ```bash
 DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library \
 SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest \
+./scripts/compose-up-with-fallback.sh
+```
+
+自定义 DockerHub/GHCR 国内候选池示例：
+
+```bash
+CN_DOCKERHUB_LIBRARY_MIRRORS=docker.m.daocloud.io/library,docker.1ms.run/library \
+CN_GHCR_REGISTRIES=ghcr.nju.edu.cn,ghcr.m.daocloud.io \
 ./scripts/compose-up-with-fallback.sh
 ```
 

@@ -5,6 +5,10 @@ log_info() {
   echo "[INFO] $*"
 }
 
+log_info_err() {
+  echo "[INFO] $*" >&2
+}
+
 log_warn() {
   echo "[WARN] $*" >&2
 }
@@ -63,10 +67,12 @@ csv_item_or_last() {
   local raw
   IFS=',' read -r -a raw <<<"$csv"
   local it
-  for it in "${raw[@]}"; do
-    it="$(trim "$it")"
-    [ -n "$it" ] && items+=("$it")
-  done
+  if [ "${#raw[@]}" -gt 0 ]; then
+    for it in "${raw[@]}"; do
+      it="$(trim "$it")"
+      [ -n "$it" ] && items+=("$it")
+    done
+  fi
   if [ "${#items[@]}" -eq 0 ]; then
     return 1
   fi
@@ -83,10 +89,12 @@ count_csv_items() {
   IFS=',' read -r -a raw <<<"$csv"
   local count=0
   local it
-  for it in "${raw[@]}"; do
-    it="$(trim "$it")"
-    [ -n "$it" ] && count=$((count + 1))
-  done
+  if [ "${#raw[@]}" -gt 0 ]; then
+    for it in "${raw[@]}"; do
+      it="$(trim "$it")"
+      [ -n "$it" ] && count=$((count + 1))
+    done
+  fi
   printf '%s' "$count"
 }
 
@@ -96,19 +104,23 @@ dedupe_csv() {
   local -a dedup=()
   IFS=',' read -r -a raw <<<"$csv"
   local item
-  for item in "${raw[@]}"; do
-    item="$(trim "$item")"
-    [ -z "$item" ] && continue
-    local seen=0
-    local existing
-    for existing in "${dedup[@]}"; do
-      if [ "$existing" = "$item" ]; then
-        seen=1
-        break
+  if [ "${#raw[@]}" -gt 0 ]; then
+    for item in "${raw[@]}"; do
+      item="$(trim "$item")"
+      [ -z "$item" ] && continue
+      local seen=0
+      local existing
+      if [ "${#dedup[@]}" -gt 0 ]; then
+        for existing in "${dedup[@]}"; do
+          if [ "$existing" = "$item" ]; then
+            seen=1
+            break
+          fi
+        done
       fi
+      [ "$seen" -eq 0 ] && dedup+=("$item")
     done
-    [ "$seen" -eq 0 ] && dedup+=("$item")
-  done
+  fi
   local out=""
   local i
   for i in "${!dedup[@]}"; do
@@ -127,7 +139,12 @@ build_probe_url() {
   case "$kind" in
     dockerhub)
       # docker.m.daocloud.io/library -> docker.m.daocloud.io
-      printf 'https://%s/v2/' "${candidate%%/*}"
+      # docker.io/library -> registry-1.docker.io (canonical Docker Hub registry host)
+      local host="${candidate%%/*}"
+      if [ "$host" = "docker.io" ] || [ "$host" = "index.docker.io" ]; then
+        host="registry-1.docker.io"
+      fi
+      printf 'https://%s/v2/' "$host"
       ;;
     ghcr)
       printf 'https://%s/v2/' "$candidate"
@@ -206,22 +223,24 @@ rank_candidates() {
   IFS=',' read -r -a raw <<<"$candidates_csv"
 
   local candidate url median
-  for candidate in "${raw[@]}"; do
-    candidate="$(trim "$candidate")"
-    [ -z "$candidate" ] && continue
+  if [ "${#raw[@]}" -gt 0 ]; then
+    for candidate in "${raw[@]}"; do
+      candidate="$(trim "$candidate")"
+      [ -z "$candidate" ] && continue
 
-    if ! url="$(build_probe_url "$kind" "$candidate" "$apt_codename")"; then
-      continue
-    fi
+      if ! url="$(build_probe_url "$kind" "$candidate" "$apt_codename")"; then
+        continue
+      fi
 
-    if median="$(probe_median_seconds "$url")"; then
-      log_info "probe ${label}: ${candidate} median=${median}s url=${url}"
+      if median="$(probe_median_seconds "$url")"; then
+      log_info_err "probe ${label}: ${candidate} median=${median}s url=${url}"
       printf '%s|%s\n' "$median" "$candidate" >>"$tmp"
-    else
-      log_warn "probe ${label}: ${candidate} failed url=${url}"
-      printf '9999|%s\n' "$candidate" >>"$tmp"
-    fi
-  done
+      else
+        log_warn "probe ${label}: ${candidate} failed url=${url}"
+        printf '9999|%s\n' "$candidate" >>"$tmp"
+      fi
+    done
+  fi
 
   if [ ! -s "$tmp" ]; then
     rm -f "$tmp"
@@ -231,6 +250,104 @@ rank_candidates() {
   local ranked
   ranked="$(sort -t'|' -g -k1,1 "$tmp" | cut -d'|' -f2 | paste -sd, -)"
   rm -f "$tmp"
+
+  [ -n "$ranked" ] || return 1
+  printf '%s' "$ranked"
+}
+
+rank_candidates_parallel() {
+  local kind="$1"
+  local label="$2"
+  local candidates_csv="$3"
+  local apt_codename="$4"
+
+  candidates_csv="$(dedupe_csv "$candidates_csv")"
+  if [ -z "$candidates_csv" ]; then
+    return 1
+  fi
+
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  local ranking_file
+  ranking_file="$(mktemp)"
+  local raw
+  IFS=',' read -r -a raw <<<"$candidates_csv"
+
+  local -a pids=()
+  local -a result_files=()
+  local candidate
+  local index=0
+  if [ "${#raw[@]}" -gt 0 ]; then
+    for candidate in "${raw[@]}"; do
+      candidate="$(trim "$candidate")"
+      [ -z "$candidate" ] && continue
+
+      local result_file="${tmp_dir}/probe-${index}.result"
+      result_files+=("$result_file")
+      (
+        local url median
+        if ! url="$(build_probe_url "$kind" "$candidate" "$apt_codename")"; then
+          printf 'skip|||%s\n' "$candidate"
+          exit 0
+        fi
+
+        if median="$(probe_median_seconds "$url")"; then
+          printf 'ok|%s|%s|%s\n' "$median" "$candidate" "$url"
+        else
+          printf 'fail|9999|%s|%s\n' "$candidate" "$url"
+        fi
+      ) >"$result_file" &
+      pids+=("$!")
+      index=$((index + 1))
+    done
+  fi
+
+  if [ "${#pids[@]}" -eq 0 ]; then
+    rm -f "$ranking_file"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  local pid
+  if [ "${#pids[@]}" -gt 0 ]; then
+    for pid in "${pids[@]}"; do
+      if ! wait "$pid"; then
+        log_warn "probe ${label}: worker exited unexpectedly pid=${pid}"
+      fi
+    done
+  fi
+
+  local result_line status median url
+  if [ "${#result_files[@]}" -gt 0 ]; then
+    for result_file in "${result_files[@]}"; do
+      [ -f "$result_file" ] || continue
+      result_line="$(cat "$result_file")"
+      IFS='|' read -r status median candidate url <<<"$result_line"
+      case "$status" in
+        ok)
+          log_info_err "probe ${label}: ${candidate} median=${median}s url=${url}"
+          printf '%s|%s\n' "$median" "$candidate" >>"$ranking_file"
+          ;;
+        fail)
+          log_warn "probe ${label}: ${candidate} failed url=${url}"
+          printf '9999|%s\n' "$candidate" >>"$ranking_file"
+          ;;
+        *)
+          ;;
+      esac
+    done
+  fi
+
+  rm -rf "$tmp_dir"
+
+  if [ ! -s "$ranking_file" ]; then
+    rm -f "$ranking_file"
+    return 1
+  fi
+
+  local ranked
+  ranked="$(sort -t'|' -g -k1,1 "$ranking_file" | cut -d'|' -f2 | paste -sd, -)"
+  rm -f "$ranking_file"
 
   [ -n "$ranked" ] || return 1
   printf '%s' "$ranked"
@@ -351,8 +468,10 @@ require_positive_int "PROBE_ATTEMPTS" "${PROBE_ATTEMPTS}"
 require_positive_int "PROBE_TIMEOUT_SECONDS" "${PROBE_TIMEOUT_SECONDS}"
 require_positive_int "PROBE_CONNECT_TIMEOUT_SECONDS" "${PROBE_CONNECT_TIMEOUT_SECONDS}"
 
-DOCKERHUB_CANDIDATES_DEFAULT="${DOCKERHUB_LIBRARY_MIRROR_CANDIDATES:-${CN_DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library},${OFFICIAL_DOCKERHUB_LIBRARY_MIRROR:-docker.io/library}}"
-GHCR_CANDIDATES_DEFAULT="${GHCR_REGISTRY_CANDIDATES:-${CN_GHCR_REGISTRY:-ghcr.nju.edu.cn},${OFFICIAL_GHCR_REGISTRY:-ghcr.io}}"
+DOCKERHUB_CN_CANDIDATES_DEFAULT="${CN_DOCKERHUB_LIBRARY_MIRRORS:-${CN_DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library,docker.1ms.run/library}}"
+GHCR_CN_CANDIDATES_DEFAULT="${CN_GHCR_REGISTRIES:-${CN_GHCR_REGISTRY:-ghcr.nju.edu.cn,ghcr.m.daocloud.io}}"
+DOCKERHUB_CANDIDATES_DEFAULT="${DOCKERHUB_LIBRARY_MIRROR_CANDIDATES:-${DOCKERHUB_CN_CANDIDATES_DEFAULT},${OFFICIAL_DOCKERHUB_LIBRARY_MIRROR:-docker.io/library}}"
+GHCR_CANDIDATES_DEFAULT="${GHCR_REGISTRY_CANDIDATES:-${GHCR_CN_CANDIDATES_DEFAULT},${OFFICIAL_GHCR_REGISTRY:-ghcr.io}}"
 BACKEND_NPM_CANDIDATES_DEFAULT="${BACKEND_NPM_REGISTRY_CANDIDATES:-https://registry.npmmirror.com,https://registry.npmjs.org}"
 FRONTEND_NPM_CANDIDATES_DEFAULT="${FRONTEND_NPM_REGISTRY_CANDIDATES:-${BACKEND_NPM_CANDIDATES_DEFAULT}}"
 SANDBOX_NPM_CANDIDATES_DEFAULT="${SANDBOX_NPM_REGISTRY_CANDIDATES:-${BACKEND_NPM_CANDIDATES_DEFAULT}}"
@@ -367,7 +486,7 @@ if [ -n "${DOCKERHUB_LIBRARY_MIRROR:-}" ]; then
   DOCKERHUB_RANKED="$(dedupe_csv "${DOCKERHUB_LIBRARY_MIRROR},${DOCKERHUB_CANDIDATES_DEFAULT}")"
   log_info "skip probe dockerhub: explicit DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR}"
 else
-  DOCKERHUB_RANKED="$(rank_candidates dockerhub dockerhub "${DOCKERHUB_CANDIDATES_DEFAULT}" "${APT_PROBE_CODENAME}" || true)"
+  DOCKERHUB_RANKED="$(rank_candidates_parallel dockerhub dockerhub "${DOCKERHUB_CANDIDATES_DEFAULT}" "${APT_PROBE_CODENAME}" || true)"
   [ -n "$DOCKERHUB_RANKED" ] || DOCKERHUB_RANKED="$(dedupe_csv "${DOCKERHUB_CANDIDATES_DEFAULT}")"
 fi
 
@@ -375,7 +494,7 @@ if [ -n "${GHCR_REGISTRY:-}" ]; then
   GHCR_RANKED="$(dedupe_csv "${GHCR_REGISTRY},${GHCR_CANDIDATES_DEFAULT}")"
   log_info "skip probe ghcr: explicit GHCR_REGISTRY=${GHCR_REGISTRY}"
 else
-  GHCR_RANKED="$(rank_candidates ghcr ghcr "${GHCR_CANDIDATES_DEFAULT}" "${APT_PROBE_CODENAME}" || true)"
+  GHCR_RANKED="$(rank_candidates_parallel ghcr ghcr "${GHCR_CANDIDATES_DEFAULT}" "${APT_PROBE_CODENAME}" || true)"
   [ -n "$GHCR_RANKED" ] || GHCR_RANKED="$(dedupe_csv "${GHCR_CANDIDATES_DEFAULT}")"
 fi
 
@@ -460,6 +579,10 @@ IFS='|' read -r SANDBOX_APT_MIRROR_PRIMARY_SELECTED SANDBOX_APT_MIRROR_FALLBACK_
   <<<"$(choose_primary_fallback "${SANDBOX_APT_MIRROR_RANKED}" "${SANDBOX_APT_MIRROR_PRIMARY:-}" "${SANDBOX_APT_MIRROR_FALLBACK:-}")"
 IFS='|' read -r SANDBOX_APT_SECURITY_PRIMARY_SELECTED SANDBOX_APT_SECURITY_FALLBACK_SELECTED \
   <<<"$(choose_primary_fallback "${SANDBOX_APT_SECURITY_RANKED}" "${SANDBOX_APT_SECURITY_PRIMARY:-}" "${SANDBOX_APT_SECURITY_FALLBACK:-}")"
+IFS='|' read -r DOCKERHUB_LIBRARY_MIRROR_PRIMARY_SELECTED DOCKERHUB_LIBRARY_MIRROR_FALLBACK_SELECTED \
+  <<<"$(choose_primary_fallback "${DOCKERHUB_RANKED}" "${DOCKERHUB_LIBRARY_MIRROR:-}" "")"
+IFS='|' read -r GHCR_REGISTRY_PRIMARY_SELECTED GHCR_REGISTRY_FALLBACK_SELECTED \
+  <<<"$(choose_primary_fallback "${GHCR_RANKED}" "${GHCR_REGISTRY:-}" "")"
 
 DOCKERHUB_PHASES_COUNT="$(count_csv_items "${DOCKERHUB_RANKED}")"
 GHCR_PHASES_COUNT="$(count_csv_items "${GHCR_RANKED}")"
@@ -475,7 +598,9 @@ log_info "Compose command: ${COMPOSE_BIN[*]}"
 log_info "Compose args: ${COMPOSE_ARGS[*]}"
 log_info "DOCKER_BUILDKIT=${DOCKER_BUILDKIT} COMPOSE_DOCKER_CLI_BUILD=${COMPOSE_DOCKER_CLI_BUILD}"
 log_info "rank dockerhub=${DOCKERHUB_RANKED}"
+log_info "selected dockerhub primary=${DOCKERHUB_LIBRARY_MIRROR_PRIMARY_SELECTED} fallback=${DOCKERHUB_LIBRARY_MIRROR_FALLBACK_SELECTED}"
 log_info "rank ghcr=${GHCR_RANKED}"
+log_info "selected ghcr primary=${GHCR_REGISTRY_PRIMARY_SELECTED} fallback=${GHCR_REGISTRY_FALLBACK_SELECTED}"
 log_info "rank backend npm=${BACKEND_NPM_RANKED}"
 log_info "rank frontend npm=${FRONTEND_NPM_RANKED}"
 log_info "rank sandbox npm=${SANDBOX_NPM_RANKED}"
@@ -509,6 +634,7 @@ for ((phase_index = 0; phase_index < PHASE_COUNT; phase_index++)); do
   fi
 
   phase_name="rank-$((phase_index + 1))"
+  log_info "Phase=${phase_name} mirror selection dockerhub=${dockerhub_mirror} ghcr=${ghcr_registry}"
   if run_with_retries \
     "${phase_name}" \
     "${PHASE_RETRY_COUNT}" \
