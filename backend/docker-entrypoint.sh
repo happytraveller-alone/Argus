@@ -14,6 +14,37 @@ is_true() {
     esac
 }
 
+ensure_code2flow() {
+    export CODE2FLOW_AUTO_INSTALL_FAILED=0
+    if command -v code2flow >/dev/null 2>&1; then
+        echo "✅ code2flow 已可用"
+        return 0
+    fi
+
+    echo "🔧 code2flow 缺失，尝试自动安装..."
+    index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-${PIP_INDEX_URL:-https://pypi.org/simple}}"
+    install_ok=0
+    old_ifs="$IFS"
+    IFS=','
+    for index_url in $index_candidates; do
+        [ -n "$index_url" ] || continue
+        if PIP_INDEX_URL="$index_url" python3 -m pip install --retries 3 --timeout 60 --disable-pip-version-check code2flow; then
+            install_ok=1
+            break
+        fi
+    done
+    IFS="$old_ifs"
+
+    if [ "$install_ok" -eq 1 ] && command -v code2flow >/dev/null 2>&1; then
+        echo "✅ code2flow 安装完成"
+        return 0
+    fi
+
+    echo "⚠️ code2flow 自动安装失败，控制流分析将退化为无 code2flow 模式"
+    export CODE2FLOW_AUTO_INSTALL_FAILED=1
+    return 0
+}
+
 # 启动前安装 Codex Skills（持久化到 mcp_data 卷）
 if [ -x "/app/scripts/install_codex_skills.sh" ]; then
     /app/scripts/install_codex_skills.sh
@@ -25,6 +56,8 @@ if [ -f "/app/scripts/build_skill_registry.py" ] && \
     .venv/bin/python /app/scripts/build_skill_registry.py --print-json || \
         echo "[SkillRegistry] build failed, continue startup"
 fi
+
+ensure_code2flow
 
 # 等待 PostgreSQL 就绪
 echo "⏳ 等待数据库连接..."

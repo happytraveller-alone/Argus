@@ -172,7 +172,8 @@ RUN --mount=type=cache,id=deepaudit-sandbox-pip,target=/root/.cache/pip \
         sqlparse \
         bandit \
         safety \
-        code-index-mcp; \
+        code-index-mcp \
+        code2flow; \
     }; \
     pip_install_with_index "${SANDBOX_PYPI_INDEX_PRIMARY}" || pip_install_with_index "${SANDBOX_PYPI_INDEX_FALLBACK}"
 

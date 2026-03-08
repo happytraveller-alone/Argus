@@ -170,10 +170,15 @@ class ControlFlowAnalysisLightTool(AgentTool):
         except Exception:
             score_text = "N/A"
         blocked_text = ", ".join(str(item) for item in blocked if str(item).strip()) or "无"
-        return (
+        summary = (
             f"path_found={path_found}; path_score={score_text}; "
             f"entry_inferred={entry_inferred}; blocked_reasons={blocked_text}"
         )
+        if "code2flow_not_installed" in blocked:
+            summary += "; code2flow=missing"
+        if "auto_install_failed" in blocked:
+            summary += "; install_hint=auto_install_failed"
+        return summary
 
 
 __all__ = ["ControlFlowAnalysisLightTool"]

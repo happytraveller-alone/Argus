@@ -173,6 +173,10 @@ for payload in payloads:
         if description:
             output_parts.append(f"目的: {description}")
         output_parts.append(f"语言: {language}")
+        if result.get("image"):
+            output_parts.append(f"镜像: {result['image']}")
+        if result.get("image_candidates"):
+            output_parts.append(f"镜像候选: {', '.join(result['image_candidates'])}")
         output_parts.append(f"退出码: {result['exit_code']}")
 
         if result.get("stdout"):
@@ -203,6 +207,8 @@ for payload in payloads:
                 "exit_code": result.get("exit_code", -1),
                 "stdout_length": len(result.get("stdout", "")),
                 "stderr_length": len(result.get("stderr", "")),
+                "image": result.get("image"),
+                "image_candidates": result.get("image_candidates") or [],
             }
         )
 

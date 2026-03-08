@@ -76,7 +76,7 @@ services:
       - RESET_STATIC_SCAN_TABLES_ON_DEPLOY=false
       - AGENT_ENABLED=true
       - SANDBOX_ENABLED=true
-      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/vulhunter-sandbox:latest}
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-vulhunter/sandbox:latest}
       - MCP_ENABLED=true
       - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
       - MCP_REQUIRED_RUNTIME_DOMAIN=stdio

@@ -87,6 +87,10 @@ class MCPToolRouter:
             payload["pattern"] = pattern
 
         elif tool_name == "search_code":
+            explicit_regex = payload.get("is_regex")
+            if explicit_regex is None:
+                explicit_regex = payload.get("regex")
+            is_regex = bool(explicit_regex)
             query = (
                 _non_empty_string(payload.get("query"))
                 or _non_empty_string(payload.get("keyword"))
@@ -94,7 +98,11 @@ class MCPToolRouter:
             )
             if query:
                 payload["query"] = query
-                payload["pattern"] = query
+                if is_regex:
+                    payload["pattern"] = query
+                else:
+                    payload.pop("pattern", None)
+            payload["regex"] = is_regex
             path_value = _sanitize_path(payload.get("path") or payload.get("file_path"))
             if path_value:
                 payload["path"] = path_value

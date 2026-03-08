@@ -381,6 +381,12 @@ class _StubFlowLLM:
         }
 
 
+class _TimeoutFlowLLM:
+    async def analyze_code_with_custom_prompt(self, **kwargs):
+        _ = kwargs
+        raise asyncio.TimeoutError()
+
+
 class TestFlowTools:
     @pytest.mark.asyncio
     async def test_dataflow_analysis_source_code_mode_returns_structured_metadata(self):
@@ -443,6 +449,27 @@ class TestFlowTools:
         assert isinstance(result.metadata.get("analysis"), dict)
 
     @pytest.mark.asyncio
+    async def test_dataflow_analysis_marks_fallback_when_llm_times_out(self):
+        tool = DataFlowAnalysisTool(llm_service=_TimeoutFlowLLM())
+        source_code = (
+            "char *copy_user(char *input, char *dst) {\n"
+            "    sprintf(dst, \"%s\", input);\n"
+            "    return dst;\n"
+            "}\n"
+        )
+
+        result = await tool.execute(
+            source_code=source_code,
+            file_path="src/time64.c",
+            variable_name="input",
+            sink_hints=["sprintf"],
+        )
+
+        assert result.success is True
+        assert result.metadata.get("fallback_used") is True
+        assert isinstance(result.metadata.get("analysis"), dict)
+
+    @pytest.mark.asyncio
     async def test_controlflow_analysis_light_supports_file_path_line_shorthand(self, temp_project_dir):
         tool = ControlFlowAnalysisLightTool(project_root=temp_project_dir)
         tool.pipeline.analyze_finding = AsyncMock(
@@ -486,6 +513,27 @@ class TestFlowTools:
         assert result.success is False
         assert "line_start" in result.error
         assert "function_name" in result.error
+
+    @pytest.mark.asyncio
+    async def test_controlflow_analysis_light_summary_mentions_code2flow_diagnosis(self, temp_project_dir):
+        tool = ControlFlowAnalysisLightTool(project_root=temp_project_dir)
+        tool.pipeline.analyze_finding = AsyncMock(
+            return_value={
+                "flow": {
+                    "path_found": False,
+                    "path_score": 0.12,
+                    "blocked_reasons": ["code2flow_not_installed", "auto_install_failed"],
+                    "entry_inferred": True,
+                }
+            }
+        )
+
+        result = await tool.execute(file_path="src/sql_vuln.py:8")
+
+        assert result.success is True
+        summary = result.metadata.get("summary", "")
+        assert "code2flow" in summary
+        assert "auto_install_failed" in summary
 
 
 class TestToolResult:

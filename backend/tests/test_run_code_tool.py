@@ -4,9 +4,12 @@ RunCodeTool 测试脚本
 测试通用代码执行工具的各项功能
 """
 
-import pytest
 import asyncio
+import os
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from app.services.agent.tools.run_code import RunCodeTool, RunCodeInput, ExtractFunctionTool
 from app.services.agent.tools.base import ToolResult
@@ -74,6 +77,31 @@ class TestRunCodeToolBasic:
         assert isinstance(tool.sandbox_manager, SandboxManager)
 
 
+class TestSandboxManagerImageResolution:
+    def test_image_candidates_prefer_explicit_then_local_then_remote(self, monkeypatch):
+        monkeypatch.setenv("GHCR_REGISTRY", "ghcr.nju.edu.cn")
+        monkeypatch.setenv("VULHUNTER_IMAGE_TAG", "latest")
+        manager = SandboxManager(SandboxConfig(image="custom/sandbox:latest"))
+
+        candidates = manager._image_candidates()
+
+        assert candidates == [
+            "custom/sandbox:latest",
+            "vulhunter/sandbox:latest",
+            "deepaudit/sandbox:latest",
+            "deepaudit-sandbox:latest",
+            "ghcr.nju.edu.cn/lintsinghua/vulhunter-sandbox:latest",
+        ]
+
+    def test_select_runtime_image_uses_local_legacy_fallback_when_present(self):
+        manager = SandboxManager(SandboxConfig(image="ghcr.nju.edu.cn/lintsinghua/vulhunter-sandbox:latest"))
+        manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"deepaudit/sandbox:latest": object()}[image]))
+
+        selected = manager._select_runtime_image(manager._image_candidates())
+
+        assert selected == "deepaudit/sandbox:latest"
+
+
 class TestBuildCommand:
     """测试命令构建功能"""
 
@@ -85,14 +113,14 @@ class TestBuildCommand:
         """测试 Python 命令构建"""
         code = "print('hello world')"
         command = self.tool._build_command(code, "python")
-        assert command.startswith("python3 -c '")
+        assert command.startswith("cd /tmp && python3 -c '")
         assert "hello world" in command
 
     def test_build_php_command(self):
         """测试 PHP 命令构建"""
         code = "echo 'hello';"
         command = self.tool._build_command(code, "php")
-        assert command.startswith("php -r '")
+        assert command.startswith("cd /tmp && php -r '")
         assert "echo" in command
 
     def test_build_php_command_strip_tags(self):
@@ -108,21 +136,21 @@ class TestBuildCommand:
         """测试 JavaScript 命令构建"""
         code = "console.log('hello')"
         command = self.tool._build_command(code, "javascript")
-        assert command.startswith("node -e '")
+        assert command.startswith("cd /tmp && node -e '")
         assert "console.log" in command
 
     def test_build_ruby_command(self):
         """测试 Ruby 命令构建"""
         code = "puts 'hello'"
         command = self.tool._build_command(code, "ruby")
-        assert command.startswith("ruby -e '")
+        assert command.startswith("cd /tmp && ruby -e '")
         assert "puts" in command
 
     def test_build_bash_command(self):
         """测试 Bash 命令构建"""
         code = "echo hello"
         command = self.tool._build_command(code, "bash")
-        assert command.startswith("bash -c '")
+        assert command.startswith("cd /tmp && bash -c '")
         assert "echo hello" in command
 
     def test_build_go_command(self):
@@ -130,7 +158,8 @@ class TestBuildCommand:
         code = "package main\nfunc main() {}"
         command = self.tool._build_command(code, "go")
         assert "go run" in command
-        assert "/tmp/main.go" in command
+        assert "cd /tmp &&" in command
+        assert "> main.go && go run main.go" in command
 
     def test_build_java_command(self):
         """测试 Java 命令构建"""
@@ -138,7 +167,7 @@ class TestBuildCommand:
         command = self.tool._build_command(code, "java")
         assert "javac" in command
         assert "Test.java" in command
-        assert "java -cp" in command
+        assert "&& java Test" in command
 
     def test_build_unsupported_language(self):
         """测试不支持的语言"""

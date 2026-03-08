@@ -166,6 +166,24 @@ class Code2FlowCallGraph:
             "error": last_error or "code2flow_failed",
         }
 
+    def _has_code2flow_runtime(self) -> bool:
+        if shutil.which("code2flow"):
+            return True
+        python_bin = shutil.which("python3") or shutil.which("python")
+        if not python_bin:
+            return False
+        try:
+            probe = subprocess.run(
+                [python_bin, "-c", "import code2flow"],
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            return False
+        return probe.returncode == 0
+
     def generate(self) -> Code2FlowGraphResult:
         result = Code2FlowGraphResult()
 
@@ -174,8 +192,10 @@ class Code2FlowCallGraph:
             result.blocked_reasons.append("code2flow_no_candidate_files")
             return result
 
-        if not shutil.which("code2flow"):
+        if not self._has_code2flow_runtime():
             result.blocked_reasons.append("code2flow_not_installed")
+            if str(os.environ.get("CODE2FLOW_AUTO_INSTALL_FAILED") or "0").strip() == "1":
+                result.blocked_reasons.append("auto_install_failed")
             return result
 
         with tempfile.NamedTemporaryFile(suffix=".dot", delete=False) as temp_file:

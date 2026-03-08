@@ -504,7 +504,7 @@ ENV CODE_INDEX_INDEXER_PATH=/app/data/mcp/code-index
 
 
 
-# code-index-mcp 是 Python 包（非 npm 包），安装到系统 PATH（镜像失败时回退官方源）
+# code-index-mcp / code2flow 是 Python 包（非 npm 包），安装到系统 PATH（镜像失败时回退官方源）
 RUN --mount=type=cache,id=vulhunter-backend-pip-cache,target=/root/.cache/pip \
     set -eux; \
     pypi_index_candidates="${PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \
@@ -512,9 +512,9 @@ RUN --mount=type=cache,id=vulhunter-backend-pip-cache,target=/root/.cache/pip \
       raw_candidates="$1"; \
       python3 /usr/local/bin/package_source_selector.py --candidates "${raw_candidates}" --kind pypi --timeout-seconds 2 || printf '%s\n' "${raw_candidates}" | tr ',' '\n'; \
     }; \
-    install_code_index() { \
+    install_python_helpers() { \
       idx="$1"; \
-      PIP_INDEX_URL="${idx}" pip install --retries 5 --timeout 60 --disable-pip-version-check code-index-mcp; \
+      PIP_INDEX_URL="${idx}" pip install --retries 5 --timeout 60 --disable-pip-version-check code-index-mcp code2flow; \
     }; \
     installed=0; \
     ordered_indexes="$(order_indexes "${pypi_index_candidates}")"; \
@@ -522,7 +522,7 @@ RUN --mount=type=cache,id=vulhunter-backend-pip-cache,target=/root/.cache/pip \
     printf '%s\n' "${ordered_indexes}" > "${order_file}"; \
     while IFS= read -r idx; do \
       [ -n "${idx}" ] || continue; \
-      if install_code_index "${idx}"; then \
+      if install_python_helpers "${idx}"; then \
         installed=1; \
         break; \
       fi; \

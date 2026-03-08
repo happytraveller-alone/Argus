@@ -141,6 +141,18 @@ def test_mcp_router_exposes_only_core_stdio_routes():
     assert search_route is not None
     assert search_route.adapter_name == "code_index"
     assert search_route.mcp_tool_name == "search_code_advanced"
+    assert search_route.arguments["query"] == "dangerous_call"
+    assert search_route.arguments["regex"] is False
+    assert "pattern" not in search_route.arguments
+
+    regex_search_route = router.route(
+        "search_code",
+        {"keyword": r"foo\\s*\\(", "is_regex": True},
+    )
+    assert regex_search_route is not None
+    assert regex_search_route.arguments["query"] == r"foo\\s*\\("
+    assert regex_search_route.arguments["pattern"] == r"foo\\s*\\("
+    assert regex_search_route.arguments["regex"] is True
 
     extract_route = router.route(
         "extract_function",

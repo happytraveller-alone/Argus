@@ -2293,7 +2293,48 @@ class BaseAgent(ABC):
     @staticmethod
     def _keyword_prefers_regex(keyword: str) -> bool:
         text = str(keyword or "")
-        return any(token in text for token in ("|", "(", r"\s"))
+        if not text:
+            return False
+        if "|" in text:
+            return True
+        if re.search(r"\\[AbBdDsSwWZfnrtv]", text):
+            return True
+        if any(token in text for token in ("(?:", "(?=", "(?!", "(?<=", "(?<!")):
+            return True
+        if "[" in text and "]" in text:
+            return True
+        if text.startswith("^") or text.endswith("$"):
+            return True
+        if any(token in text for token in (".*", ".+")):
+            return True
+        return bool(re.search(r"\{\d+(?:,\d*)?\}", text))
+
+    def _resolve_tool_timeout(self, resolved_tool_name: str) -> int:
+        from app.core.config import settings
+
+        default_tool_timeout = int(self._timeout_config.get('tool_timeout', 60) or 60)
+        normalized_tool_name = str(resolved_tool_name or "").strip().lower()
+        if normalized_tool_name == "dataflow_analysis":
+            return max(default_tool_timeout, 150)
+        if normalized_tool_name == "joern_reachability_verify":
+            joern_timeout = int(getattr(settings, 'FLOW_JOERN_TIMEOUT_SEC', 45) or 45)
+            return max(default_tool_timeout, joern_timeout + 15)
+        tool_timeouts = {
+            "opengrep_scan": 120,
+            "bandit_scan": 90,
+            "gitleaks_scan": 60,
+            "npm_audit": 90,
+            "safety_scan": 60,
+            "kunlun_scan": 180,
+            "osv_scanner": 60,
+            "trufflehog_scan": 90,
+            "sandbox_exec": 60,
+            "php_test": 30,
+            "command_injection_test": 30,
+            "sql_injection_test": 30,
+            "xss_test": 30,
+        }
+        return tool_timeouts.get(normalized_tool_name, default_tool_timeout)
 
     @staticmethod
     def _coerce_positive_int(value: Any) -> Optional[int]:
@@ -5063,24 +5104,7 @@ class BaseAgent(ABC):
             start = time.time()
 
             # 🔥 根据工具类型设置不同的超时时间
-            tool_timeouts = {
-                "opengrep_scan": 120,      # 外部扫描工具需要更长时间
-                "bandit_scan": 90,
-                "gitleaks_scan": 60,
-                "npm_audit": 90,
-                "safety_scan": 60,
-                "kunlun_scan": 180,
-                "osv_scanner": 60,
-                "trufflehog_scan": 90,
-                "sandbox_exec": 60,
-                "php_test": 30,
-                "command_injection_test": 30,
-                "sql_injection_test": 30,
-                "xss_test": 30,
-            }
-            # 🔥 使用用户配置的默认工具超时时间
-            default_tool_timeout = self._timeout_config.get('tool_timeout', 60)
-            timeout = tool_timeouts.get(resolved_tool_name, default_tool_timeout)
+            timeout = self._resolve_tool_timeout(resolved_tool_name)
 
             # 🔥 使用 asyncio.wait_for 添加超时控制，同时支持取消
             async def execute_with_cancel_check():

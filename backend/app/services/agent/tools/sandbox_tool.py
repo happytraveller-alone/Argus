@@ -46,6 +46,8 @@ class SandboxManager:
         self._docker_client = None
         self._initialized = False
         self._init_error = None
+        self._resolved_image = str(self.config.image or "").strip()
+        self._last_image_candidates: List[str] = []
     
     async def initialize(self):
         """初始化 Docker 客户端"""
@@ -83,6 +85,91 @@ class SandboxManager:
         if self.is_available:
             return "Docker Service Available"
         return f"Docker Service Unavailable. Error: {self._init_error or 'Not initialized'}"
+
+    def _image_candidates(self) -> List[str]:
+        explicit_image = str(self.config.image or settings.SANDBOX_IMAGE or "").strip()
+        ghcr_registry = str(os.environ.get("GHCR_REGISTRY") or "ghcr.nju.edu.cn").strip() or "ghcr.nju.edu.cn"
+        image_tag = str(os.environ.get("VULHUNTER_IMAGE_TAG") or "latest").strip() or "latest"
+        remote_image = f"{ghcr_registry}/lintsinghua/vulhunter-sandbox:{image_tag}"
+        ordered_candidates = [
+            explicit_image,
+            "vulhunter/sandbox:latest",
+            "deepaudit/sandbox:latest",
+            "deepaudit-sandbox:latest",
+            remote_image,
+        ]
+        deduped: List[str] = []
+        for candidate in ordered_candidates:
+            normalized = str(candidate or "").strip()
+            if not normalized or normalized in deduped:
+                continue
+            deduped.append(normalized)
+        self._last_image_candidates = deduped
+        return deduped
+
+    def _image_exists_locally(self, image: str) -> bool:
+        if not self._docker_client:
+            return False
+        try:
+            self._docker_client.images.get(image)
+            return True
+        except Exception:
+            return False
+
+    def _select_runtime_image(self, candidates: Optional[List[str]] = None) -> str:
+        resolved_candidates = list(candidates or self._image_candidates())
+        for image in resolved_candidates:
+            if self._image_exists_locally(image):
+                self._resolved_image = image
+                return image
+        self._resolved_image = resolved_candidates[0] if resolved_candidates else str(self.config.image or "")
+        return self._resolved_image
+
+    @staticmethod
+    def _looks_like_image_not_found_error(error: Exception) -> bool:
+        error_text = f"{type(error).__name__}: {error}".lower()
+        return any(
+            token in error_text
+            for token in (
+                "not found",
+                "no such image",
+                "pull access denied",
+                "failed to resolve reference",
+            )
+        )
+
+    def _format_image_resolution_error(self, candidates: List[str], attempt_errors: List[str]) -> str:
+        attempted = ", ".join(candidates) or str(self.config.image or "<unset>")
+        detail_text = " | ".join(attempt_errors[-3:]) if attempt_errors else "镜像不存在或拉取失败"
+        build_hint = "cd docker/sandbox && docker build -t vulhunter/sandbox:latest ."
+        return (
+            f"未找到可用沙箱镜像。已尝试: {attempted}。"
+            f"详情: {detail_text}。"
+            f"建议先构建本地镜像：{build_hint}"
+        )
+
+    async def _run_container_with_image_fallback(self, container_config: Dict[str, Any]) -> tuple[Any, str, List[str]]:
+        candidates = self._image_candidates()
+        preferred = self._select_runtime_image(candidates)
+        ordered_candidates = [preferred, *[image for image in candidates if image != preferred]]
+        attempt_errors: List[str] = []
+        for image in ordered_candidates:
+            candidate_config = dict(container_config)
+            candidate_config["image"] = image
+            try:
+                container = await asyncio.to_thread(
+                    self._docker_client.containers.run,
+                    **candidate_config,
+                )
+                self._resolved_image = image
+                self._last_image_candidates = ordered_candidates
+                return container, image, ordered_candidates
+            except Exception as exc:
+                if self._looks_like_image_not_found_error(exc):
+                    attempt_errors.append(f"{image}: {exc}")
+                    continue
+                raise
+        raise RuntimeError(self._format_image_resolution_error(ordered_candidates, attempt_errors))
     
     async def execute_command(
         self,
@@ -131,7 +218,6 @@ class SandboxManager:
             with tempfile.TemporaryDirectory() as temp_dir:
                 # 准备容器配置
                 container_config = {
-                    "image": self.config.image,
                     "command": ["sh", "-c", command],
                     "detach": True,
                     "mem_limit": self.config.memory_limit,
@@ -155,9 +241,8 @@ class SandboxManager:
                 }
                 
                 # 创建并启动容器
-                container = await asyncio.to_thread(
-                    self._docker_client.containers.run,
-                    **container_config
+                container, selected_image, image_candidates = await self._run_container_with_image_fallback(
+                    container_config
                 )
                 
                 try:
@@ -181,6 +266,8 @@ class SandboxManager:
                         "stderr": stderr.decode('utf-8', errors='ignore')[:2000],
                         "exit_code": result["StatusCode"],
                         "error": None,
+                        "image": selected_image,
+                        "image_candidates": image_candidates,
                     }
                     
                 except asyncio.TimeoutError:
@@ -191,6 +278,8 @@ class SandboxManager:
                         "stdout": "",
                         "stderr": "",
                         "exit_code": -1,
+                        "image": selected_image,
+                        "image_candidates": image_candidates,
                     }
                     
                 finally:
@@ -205,6 +294,8 @@ class SandboxManager:
                 "stdout": "",
                 "stderr": "",
                 "exit_code": -1,
+                "image": self._resolved_image,
+                "image_candidates": list(self._last_image_candidates),
             }
     
     async def execute_tool_command(
@@ -258,7 +349,6 @@ class SandboxManager:
 
             # 准备容器配置
             container_config = {
-                "image": self.config.image,
                 "command": ["sh", "-c", wrapped_command],
                 "detach": True,
                 "mem_limit": self.config.memory_limit,
@@ -281,9 +371,8 @@ class SandboxManager:
             }
             
             # 创建并启动容器
-            container = await asyncio.to_thread(
-                self._docker_client.containers.run,
-                **container_config
+            container, selected_image, image_candidates = await self._run_container_with_image_fallback(
+                container_config
             )
             
             try:
@@ -307,6 +396,8 @@ class SandboxManager:
                     "stderr": stderr.decode('utf-8', errors='ignore')[:5000],
                     "exit_code": result["StatusCode"],
                     "error": None,
+                    "image": selected_image,
+                    "image_candidates": image_candidates,
                 }
                 
             except asyncio.TimeoutError:
@@ -317,6 +408,8 @@ class SandboxManager:
                     "stdout": "",
                     "stderr": "",
                     "exit_code": -1,
+                    "image": selected_image,
+                    "image_candidates": image_candidates,
                 }
                 
             finally:
@@ -331,6 +424,8 @@ class SandboxManager:
                 "stdout": "",
                 "stderr": "",
                 "exit_code": -1,
+                "image": self._resolved_image,
+                "image_candidates": list(self._last_image_candidates),
             }
     async def execute_python(
         self,
@@ -601,6 +696,10 @@ class SandboxTool(AgentTool):
         # 格式化输出
         output_parts = ["🐳 沙箱执行结果\n"]
         output_parts.append(f"命令: {command}")
+        if result.get("image"):
+            output_parts.append(f"镜像: {result['image']}")
+        if result.get("image_candidates"):
+            output_parts.append(f"镜像候选: {', '.join(result['image_candidates'])}")
         output_parts.append(f"退出码: {result['exit_code']}")
         
         if result["stdout"]:
@@ -619,6 +718,8 @@ class SandboxTool(AgentTool):
             metadata={
                 "command": command,
                 "exit_code": result["exit_code"],
+                "image": result.get("image"),
+                "image_candidates": result.get("image_candidates") or [],
             }
         )
 

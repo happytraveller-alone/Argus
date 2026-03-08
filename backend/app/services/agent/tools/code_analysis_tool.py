@@ -294,6 +294,8 @@ class DataFlowAnalysisTool(AgentTool):
             variable_name=normalized_variable,
             file_path=file_path,
         )
+        fallback_used = llm_analysis is None
+        analysis_mode = "rules_only_fallback" if fallback_used else "hybrid"
 
         return ToolResult(
             success=True,
@@ -304,7 +306,8 @@ class DataFlowAnalysisTool(AgentTool):
                 "start_line": resolved_start_line,
                 "end_line": resolved_end_line,
                 "analysis": merged_analysis,
-                "fallback_used": llm_analysis is None,
+                "fallback_used": fallback_used,
+                "analysis_mode": analysis_mode,
             },
         )
     
