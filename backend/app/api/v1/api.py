@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     prompts,
     rules,
     scan,
+    search,
     skills,
     ssh_keys,
     static_tasks,
@@ -17,6 +18,7 @@ from app.api.v1.endpoints import (
 )
 
 api_router = APIRouter()
+api_router.include_router(search.router, tags=["search"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 api_router.include_router(members.router, prefix="/projects", tags=["members"])

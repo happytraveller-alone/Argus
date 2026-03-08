@@ -1,0 +1,121 @@
+"""
+搜索功能测试配置和 Fixtures
+"""
+
+import pytest
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.db.base import Base
+from app.models.user import User
+from app.models.project import Project
+from app.models.agent_task import AgentTask, AgentTaskStatus
+from app.models.opengrep import OpengrepRule, OpengrepScanTask, OpengrepFinding
+from app.models.gitleaks import GitleaksScanTask, GitleaksFinding
+from app.core.security import get_password_hash
+
+
+# 配置异步事件循环
+@pytest.fixture(scope="session")
+def event_loop():
+    """创建事件循环"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
+
+
+@pytest.fixture
+async def db():
+    """
+    创建内存 SQLite 数据库用于测试
+    """
+    # 创建异步引擎（使用内存数据库）
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
+    
+    # 创建所有表
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    # 创建会话工厂
+    async_session = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+    
+    # 创建并返回会话
+    async with async_session() as session:
+        yield session
+        await session.rollback()
+    
+    # 清理
+    await engine.dispose()
+
+
+@pytest.fixture
+async def test_user(db: AsyncSession):
+    """
+    创建测试用户
+    """
+    user = User(
+        email="test@example.com",
+        full_name="Test User",
+        hashed_password=get_password_hash("password123"),
+        is_active=True,
+        role="admin",
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@pytest.fixture
+async def test_project(db: AsyncSession, test_user: User):
+    """
+    创建测试项目
+    """
+    project = Project(
+        name="Test Project",
+        description="This is a test project",
+        source_type="repository",
+        repository_url="https://github.com/test/test-project",
+        repository_type="github",
+        owner_id=test_user.id,
+        is_active=True,
+    )
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+@pytest.fixture
+async def test_agent_task(db: AsyncSession, test_project: Project, test_user: User):
+    """
+    创建测试 Agent 任务
+    """
+    task = AgentTask(
+        project_id=test_project.id,
+        created_by=test_user.id,
+        name="Test Agent Audit",
+        description="This is a test audit task",
+        task_type="agent_audit",
+        status=AgentTaskStatus.COMPLETED,
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+# 配置 pytest-asyncio
+pytest_plugins = ("pytest_asyncio",)
