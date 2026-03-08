@@ -2280,7 +2280,8 @@ def _discover_entry_points_deterministic(
     """在 OpenGrep 候选为空时，确定性发现入口点（grep-like + AST 兜底）。"""
     import re
 
-    root = Path(project_root)
+    normalized_project_root = os.path.abspath(project_root)
+    root = Path(normalized_project_root)
     effective_exclude_patterns = _build_core_audit_exclude_patterns(exclude_patterns)
 
     include_set = (
@@ -2681,8 +2682,7 @@ async def _execute_agent_task(task_id: str):
                 event_emitter,
                 _prepare_project_root_once,
             )
-            project_root = os.path.abspath(project_root)
-            normalized_project_root = project_root
+            normalized_project_root = os.path.abspath(project_root)
 
             # 🔥 自动修正 target_files 路径
             # 如果发生了目录调整（例如 ZIP 解压后只有一层目录，root 被下移），
