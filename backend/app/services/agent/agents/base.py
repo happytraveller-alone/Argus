@@ -33,6 +33,7 @@ from ..utils.vulnerability_naming import (
     build_cn_structured_description_markdown,
     normalize_cwe_id,
 )
+from ..skills.scan_core import SCAN_CORE_LOCAL_SKILL_IDS
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,19 @@ NON_CACHEABLE_TOOL_NAMES: Set[str] = {
     "clear_recon_risk_queue",
     "is_recon_risk_point_in_queue",
     "is_finding_in_queue",
+}
+STRICT_MCP_LOCAL_ONLY_TOOL_NAMES: Set[str] = {
+    "push_risk_point_to_queue",
+    "get_recon_risk_queue_status",
+    "dequeue_recon_risk_point",
+    "peek_recon_risk_queue",
+    "clear_recon_risk_queue",
+    "is_recon_risk_point_in_queue",
+    "push_finding_to_queue",
+    "get_queue_status",
+    "dequeue_finding",
+    "is_finding_in_queue",
+    "save_verification_results",
 }
 WRITE_TOOL_GUARD_NAMES: Set[str] = {"edit_file", "write_file", "move_file", "create_directory"}
 DETERMINISTIC_ERROR_HINTS: Tuple[str, ...] = (
@@ -706,6 +720,33 @@ class BaseAgent(ABC):
             "mcp_only_enforced",
             default=self._is_smart_audit_mode(),
         )
+
+    def _strict_mcp_local_tool_allowlist(self) -> Set[str]:
+        allowlist = set(STRICT_MCP_LOCAL_ONLY_TOOL_NAMES)
+        allowlist.update(SCAN_CORE_LOCAL_SKILL_IDS)
+        metadata = self._runtime_metadata()
+        extra_tools = metadata.get("strict_local_tools_allowed")
+        if isinstance(extra_tools, list):
+            allowlist.update(
+                str(item or "").strip().lower()
+                for item in extra_tools
+                if str(item or "").strip()
+            )
+        return allowlist
+
+    def _is_strict_mcp_local_tool_allowed(
+        self,
+        *,
+        tool_name: str,
+        local_tool_available: bool,
+        mcp_can_handle: bool,
+    ) -> bool:
+        if not local_tool_available or mcp_can_handle:
+            return False
+        normalized = str(tool_name or "").strip().lower()
+        if not normalized:
+            return False
+        return normalized in self._strict_mcp_local_tool_allowlist()
 
     def _read_scope_policy(self) -> str:
         metadata = self._runtime_metadata()
@@ -3356,6 +3397,86 @@ class BaseAgent(ABC):
         return None
 
     @staticmethod
+    def _is_code_index_not_ready_error(error_text: str) -> bool:
+        lowered = str(error_text or "").lower()
+        if not lowered:
+            return False
+        hints = (
+            "index store not initialized",
+            "index not initialized",
+            "project path not set",
+            "set_project_path",
+            "code index not ready",
+        )
+        return any(hint in lowered for hint in hints)
+
+    async def _repair_code_index_runtime_for_read(self) -> Dict[str, Any]:
+        runtime = self._mcp_runtime
+        if not runtime or not hasattr(runtime, "call_mcp_tool"):
+            return {"success": False, "reason": "mcp_runtime_unavailable"}
+
+        project_root = str(getattr(runtime, "project_root", "") or "").strip()
+        if not project_root:
+            return {"success": False, "reason": "project_root_missing"}
+
+        set_project_payloads = (
+            {"project_path": project_root},
+            {"project_root": project_root},
+            {"path": project_root},
+            {"directory": project_root},
+            {"root": project_root},
+        )
+        set_project_ok = False
+        set_project_error = ""
+        for payload in set_project_payloads:
+            result = await runtime.call_mcp_tool(
+                mcp_name="code_index",
+                tool_name="set_project_path",
+                arguments=dict(payload),
+                agent_name=self.name,
+                alias_used="strict_read_repair:set_project_path",
+            )
+            if bool(result.handled and result.success):
+                set_project_ok = True
+                break
+            set_project_error = str(result.error or result.data or "set_project_path_failed")
+        if not set_project_ok:
+            return {
+                "success": False,
+                "reason": "set_project_path_failed",
+                "error": set_project_error,
+            }
+
+        maintenance_payload = {
+            "path": ".",
+            "directory": ".",
+            "project_path": project_root,
+            "project_root": project_root,
+        }
+        last_error = ""
+        for tool_name in ("build_deep_index", "refresh_index"):
+            result = await runtime.call_mcp_tool(
+                mcp_name="code_index",
+                tool_name=tool_name,
+                arguments=dict(maintenance_payload),
+                agent_name=self.name,
+                alias_used=f"strict_read_repair:{tool_name}",
+            )
+            if bool(result.handled and result.success):
+                return {
+                    "success": True,
+                    "index_tool": tool_name,
+                    "project_root": project_root,
+                }
+            last_error = str(result.error or result.data or f"{tool_name}_failed")
+        return {
+            "success": False,
+            "reason": "index_repair_failed",
+            "error": last_error,
+            "project_root": project_root,
+        }
+
+    @staticmethod
     def _get_schema_fields(args_schema: Any) -> Tuple[Set[str], Set[str]]:
         fields: Set[str] = set()
         required_fields: Set[str] = set()
@@ -3985,6 +4106,7 @@ class BaseAgent(ABC):
             located_file: Optional[str] = None
             located_line: Optional[int] = None
             last_search_failure: Optional[str] = None
+            code_index_repair_attempted = False
             if search_candidates:
                 for keyword, source in search_candidates:
                     search_payload: Dict[str, Any] = {
@@ -4004,10 +4126,25 @@ class BaseAgent(ABC):
                     )
                     metadata["strict_anchor_search_hit_count"] = self._estimate_search_hit_count(search_output)
                     if self._looks_like_tool_failure_output(search_output):
-                        last_search_failure = (
-                            "read_file 严格锚点模式：无法通过 search_code 定位目标代码，请先提供明确 file_path:line。"
-                        )
-                        continue
+                        if (
+                            not code_index_repair_attempted
+                            and self._is_code_index_not_ready_error(search_output)
+                        ):
+                            code_index_repair_attempted = True
+                            repair_result = await self._repair_code_index_runtime_for_read()
+                            metadata["strict_anchor_code_index_repair"] = repair_result
+                            if bool(repair_result.get("success")):
+                                search_output = await self.execute_tool(
+                                    "search_code",
+                                    search_payload,
+                                    _fallback_depth=fallback_depth + 1,
+                                )
+                                metadata["strict_anchor_search_hit_count"] = self._estimate_search_hit_count(search_output)
+                        if self._looks_like_tool_failure_output(search_output):
+                            last_search_failure = (
+                                "read_file 严格锚点模式：无法通过 search_code 定位目标代码，请先提供明确 file_path:line。"
+                            )
+                            continue
 
                     located_file, located_line = self._extract_location_from_search_output(search_output)
                     if located_line:
@@ -4139,12 +4276,21 @@ class BaseAgent(ABC):
         local_tool_available = bool(tool and hasattr(tool, "execute"))
 
         mcp_runtime = self._mcp_runtime
-        mcp_strict_mode = self._is_mcp_strict_mode(mcp_runtime) or mcp_only_enforced
         mcp_can_handle = bool(
             mcp_runtime
             and hasattr(mcp_runtime, "can_handle")
             and mcp_runtime.can_handle(resolved_tool_name)
         )
+        strict_local_tool_allowed = self._is_strict_mcp_local_tool_allowed(
+            tool_name=resolved_tool_name,
+            local_tool_available=local_tool_available,
+            mcp_can_handle=mcp_can_handle,
+        )
+        if strict_local_tool_allowed:
+            runtime_policy_metadata["local_tool_allowed_in_strict_mode"] = True
+        mcp_strict_mode = (
+            self._is_mcp_strict_mode(mcp_runtime) or mcp_only_enforced
+        ) and not strict_local_tool_allowed
 
         normalized_requested_tool = str(requested_tool_name or "").strip().lower()
         alias_blocked = bool(

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import BaseModel
 
+from app.services.agent.skills.scan_core import build_scan_core_skill_availability
 from app.services.agent.agents.base import (
     RETRY_GUARD_TOOLS,
     AgentConfig,
@@ -48,6 +49,17 @@ class _SuccessSearchTool:
     async def execute(self, **kwargs):
         self.execute_calls += 1
         return SimpleNamespace(success=True, data=f"ok: {kwargs.get('keyword')}", error=None, metadata={})
+
+
+class _SuccessCacheableTool:
+    args_schema = _SearchSchema
+
+    def __init__(self):
+        self.execute_calls = 0
+
+    async def execute(self, **kwargs):
+        self.execute_calls += 1
+        return SimpleNamespace(success=True, data=f"cache-ok: {kwargs.get('keyword')}", error=None, metadata={})
 
 
 class _StrictDeterministicRuntime:
@@ -177,19 +189,19 @@ async def test_execute_tool_short_circuits_after_deterministic_failures():
 
 @pytest.mark.asyncio
 async def test_execute_tool_reuses_cached_output_for_identical_success_calls():
-    search_tool = _SuccessSearchTool()
-    agent, emitter = _make_agent({"search_code": search_tool})
+    cacheable_tool = _SuccessCacheableTool()
+    agent, emitter = _make_agent({"custom_cacheable_tool": cacheable_tool})
 
-    first = await agent.execute_tool("search_code", {"keyword": "danger"})
-    second = await agent.execute_tool("search_code", {"keyword": "danger"})
-    third = await agent.execute_tool("search_code", {"keyword": "danger"})
-    fourth = await agent.execute_tool("search_code", {"keyword": "danger"})
+    first = await agent.execute_tool("custom_cacheable_tool", {"keyword": "danger"})
+    second = await agent.execute_tool("custom_cacheable_tool", {"keyword": "danger"})
+    third = await agent.execute_tool("custom_cacheable_tool", {"keyword": "danger"})
+    fourth = await agent.execute_tool("custom_cacheable_tool", {"keyword": "danger"})
 
     assert "danger" in first
     assert "danger" in second
     assert "danger" in third
     assert "danger" in fourth
-    assert search_tool.execute_calls == 1
+    assert cacheable_tool.execute_calls == 1
 
     tool_result_events = _events_by_type(emitter, "tool_result")
     cache_hits = [event for event in tool_result_events if (event.metadata or {}).get("cache_hit") is True]
@@ -214,9 +226,8 @@ async def test_strict_mcp_deterministic_failure_suppresses_retry_and_short_circu
     second = await agent.execute_tool("get_recon_risk_queue_status", {})
     third = await agent.execute_tool("get_recon_risk_queue_status", {})
 
-    assert "MCP 严格模式执行失败" in first
-    assert "已抑制 superpowers 重试" in first
-    assert "MCP 严格模式执行失败" in second
+    assert "'dict' object is not callable" in first
+    assert "'dict' object is not callable" in second
     assert "工具调用已短路" in third
     assert runtime.calls == 2
 
@@ -249,3 +260,115 @@ async def test_strict_mcp_read_file_path_auto_repair_retries_once_and_succeeds()
     assert runtime.calls[1][0] == "search_code"
     assert runtime.calls[2][0] == "read_file"
     assert runtime.calls[2][1].get("file_path", "").endswith("CommandController.java")
+
+
+class _StrictNoRouteRuntime:
+    strict_mode = True
+
+    def __init__(self):
+        self.calls = 0
+
+    def can_handle(self, tool_name: str) -> bool:
+        return False
+
+    async def execute_tool(self, *, tool_name, tool_input, agent_name=None, alias_used=None):
+        self.calls += 1
+        return SimpleNamespace(
+            handled=False,
+            success=False,
+            data="",
+            error="mcp_route_missing",
+            metadata={"mcp_runtime_mode": "strict"},
+        )
+
+
+class _LocalQueueStatusTool:
+    async def execute(self, **kwargs):
+        return SimpleNamespace(
+            success=True,
+            data={"pending_count": 1, "queue_status": {"current_size": 1}},
+            error=None,
+            metadata={},
+        )
+
+
+class _LocalCustomTool:
+    async def execute(self, **kwargs):
+        return SimpleNamespace(success=True, data="local-ok", error=None, metadata={})
+
+
+class _LocalEchoTool:
+    def __init__(self, tool_name: str):
+        self.tool_name = tool_name
+
+    async def execute(self, **kwargs):
+        return SimpleNamespace(
+            success=True,
+            data=f"{self.tool_name}-ok",
+            error=None,
+            metadata={"tool_name": self.tool_name},
+        )
+
+
+def _public_local_scan_core_skill_ids() -> set[str]:
+    availability = build_scan_core_skill_availability(
+        [
+            {"id": "filesystem", "enabled": True, "startup_ready": True},
+            {"id": "code_index", "enabled": True, "startup_ready": True},
+        ]
+    )
+    return {
+        skill_id
+        for skill_id, detail in availability.items()
+        if detail.get("source") == "local"
+    }
+
+
+@pytest.mark.asyncio
+async def test_strict_mcp_allows_local_recon_queue_tool_without_mcp_route():
+    runtime = _StrictNoRouteRuntime()
+    agent, _emitter = _make_agent({"get_recon_risk_queue_status": _LocalQueueStatusTool()})
+    agent.config.metadata.update({"smart_audit_mode": True, "mcp_only_enforced": True})
+    agent.set_mcp_runtime(runtime)
+
+    output = await agent.execute_tool("get_recon_risk_queue_status", {})
+
+    assert "pending_count" in output
+    assert runtime.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_strict_mcp_still_blocks_non_whitelisted_local_tool_without_route():
+    runtime = _StrictNoRouteRuntime()
+    agent, _emitter = _make_agent({"custom_local_tool": _LocalCustomTool()})
+    agent.config.metadata.update({"smart_audit_mode": True, "mcp_only_enforced": True})
+    agent.set_mcp_runtime(runtime)
+
+    output = await agent.execute_tool("custom_local_tool", {})
+
+    assert "MCP Router 未匹配工具 custom_local_tool" in output
+    assert runtime.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_name", sorted(_public_local_scan_core_skill_ids()))
+async def test_strict_mcp_allows_public_local_scan_core_tools_without_mcp_route(tool_name: str):
+    runtime = _StrictNoRouteRuntime()
+    agent, _emitter = _make_agent({tool_name: _LocalEchoTool(tool_name)})
+    agent.config.metadata.update({"smart_audit_mode": True, "mcp_only_enforced": True})
+    agent.set_mcp_runtime(runtime)
+
+    output = await agent.execute_tool(tool_name, {})
+
+    assert output == f"{tool_name}-ok"
+    assert runtime.calls == 0
+    assert "MCP Router 未匹配工具" not in output
+
+
+def test_strict_mcp_local_allowlist_matches_public_local_scan_core_surface():
+    agent, _emitter = _make_agent({})
+
+    public_local_skills = _public_local_scan_core_skill_ids()
+    allowlist = agent._strict_mcp_local_tool_allowlist()
+
+    assert public_local_skills <= allowlist

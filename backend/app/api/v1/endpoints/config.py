@@ -826,6 +826,48 @@ class MCPToolsCallResponse(BaseModel):
     runtime_domain: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+def _resolve_target_mcp_ids(
+    requested_ids: Optional[list[str]],
+    *,
+    mcp_catalog: Any,
+) -> list[str]:
+    if isinstance(requested_ids, list) and requested_ids:
+        return [
+            mcp_id
+            for mcp_id in dict.fromkeys(
+                str(item or "").strip().lower() for item in requested_ids
+            )
+            if mcp_id
+        ]
+
+    target_ids: list[str] = []
+    for item in mcp_catalog if isinstance(mcp_catalog, list) else []:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("type") or "").strip().lower() != "mcp-server":
+            continue
+        mcp_id = str(item.get("id") or "").strip().lower()
+        if mcp_id:
+            target_ids.append(mcp_id)
+    return list(dict.fromkeys(target_ids))
+
+
+def _filter_internal_tools(
+    tools: list[dict[str, Any]],
+    *,
+    include_internal: bool,
+) -> list[dict[str, Any]]:
+    if include_internal:
+        return list(tools)
+    visible: list[dict[str, Any]] = []
+    for tool in tools:
+        name = str(tool.get("name") or "").strip()
+        if not name or name in _MCP_INTERNAL_TOOLS:
+            continue
+        visible.append(tool)
+    return visible
+
+
 def get_default_config() -> dict:
     """获取系统默认配置"""
     return {

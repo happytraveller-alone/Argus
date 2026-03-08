@@ -25,11 +25,7 @@ import { api } from "@/shared/config/database";
 import type { Project } from "@/shared/types";
 import { isRepositoryProject, isZipProject } from "@/shared/utils/projectUtils";
 import { createAgentTask } from "@/shared/api/agentTasks";
-import {
-	runAgentPreflightCheck,
-	type AgentPreflightResult,
-	type PreflightMissingField,
-} from "@/shared/api/agentPreflight";
+import { type PreflightMissingField } from "@/shared/api/agentPreflight";
 import {
 	createOpengrepScanTask,
 	getOpengrepRules,
@@ -131,29 +127,7 @@ const buildStaticTaskRoute = (result: StaticTaskCreateResult) =>
 		result.params.toString() ? `?${result.params.toString()}` : ""
 	}`;
 
-const LLM_PREFLIGHT_UI_HANDLED_CODE = "llm_preflight_ui_handled" as const;
 
-type LlmPreflightUiHandledError = Error & {
-	code: typeof LLM_PREFLIGHT_UI_HANDLED_CODE;
-};
-
-const createLlmPreflightUiHandledError = (
-	message: string,
-): LlmPreflightUiHandledError => {
-	const error = new Error(message) as LlmPreflightUiHandledError;
-	error.code = LLM_PREFLIGHT_UI_HANDLED_CODE;
-	return error;
-};
-
-const isLlmPreflightUiHandledError = (
-	error: unknown,
-): error is LlmPreflightUiHandledError =>
-	Boolean(
-		error &&
-			typeof error === "object" &&
-			"code" in error &&
-			(error as { code?: string }).code === LLM_PREFLIGHT_UI_HANDLED_CODE,
-	);
 
 export default function CreateProjectScanDialog({
 	open,
@@ -424,20 +398,6 @@ export default function CreateProjectScanDialog({
 		});
 	};
 
-	const openLlmQuickFixPanel = async (preflight: AgentPreflightResult) => {
-		setQuickFixMissingFields(preflight.missingFields || []);
-		setLastPreflightMessage(preflight.message || "");
-		if (showLlmQuickFixPanel) {
-			return;
-		}
-		setShowLlmQuickFixPanel(true);
-		setQuickFixTestResult(null);
-		try {
-			await loadQuickFixConfigFromUser();
-		} catch (error) {
-			console.error("加载 LLM 快速补配配置失败:", error);
-		}
-	};
 
 	const openLlmQuickFixPanelManual = async () => {
 		if (showLlmQuickFixPanel) {
@@ -460,30 +420,11 @@ export default function CreateProjectScanDialog({
 		}
 	};
 
-	const ensureLlmPreflightPassed = async () => {
-		const checkToast = toast.loading("正在检查智能扫描配置（LLM）...");
-		let preflight: AgentPreflightResult;
-		try {
-			preflight = await runAgentPreflightCheck();
-		} finally {
-			toast.dismiss(checkToast);
-		}
-
-		if (!preflight.ok) {
-			const message = preflight.message || "智能扫描配置检查未通过";
-			toast.error(message);
-			await openLlmQuickFixPanel(preflight);
-			throw createLlmPreflightUiHandledError(message);
-		}
-	};
 
 	const createHybridLiteAgentTaskForProject = async (
 		project: Project,
 		source: "agent" | "hybrid" = "agent",
-	) => {
-		await ensureLlmPreflightPassed();
-		return createAgentTask(buildAgentTaskPayload(project, source));
-	};
+	) => createAgentTask(buildAgentTaskPayload(project, source));
 
 	const handleQuickFixConfigChange = (key: keyof LlmQuickConfig, value: string) => {
 		setLlmQuickConfig((prev) => ({ ...prev, [key]: value }));
@@ -595,7 +536,6 @@ export default function CreateProjectScanDialog({
 		project: Project,
 		action: "primary" | "secondary",
 	) => {
-		await ensureLlmPreflightPassed();
 		const agentTask = await createAgentTask(
 			buildAgentTaskPayload(project, "hybrid"),
 		);
@@ -752,9 +692,6 @@ export default function CreateProjectScanDialog({
 
 			await handleCreateHybridLiteAgentForProject(selectedProject, action);
 		} catch (error) {
-			if (isLlmPreflightUiHandledError(error)) {
-				return;
-			}
 			const message = extractApiErrorMessage(error);
 			const failureText =
 				mode === "agent" ? `智能扫描创建失败：${message}` : `创建失败: ${message}`;

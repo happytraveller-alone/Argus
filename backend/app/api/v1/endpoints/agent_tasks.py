@@ -695,6 +695,229 @@ def _parse_mcp_args(raw_args: Any) -> List[str]:
         return [item for item in text.split(" ") if item]
 
 
+def _extract_allowed_directories_from_payload(payload: Any) -> list[str]:
+    candidate = payload
+    if isinstance(candidate, str):
+        stripped = candidate.strip()
+        if stripped:
+            try:
+                candidate = json.loads(stripped)
+            except Exception:
+                normalized_text = stripped.replace("\\r\\n", "\n").replace("\\n", "\n")
+                match = re.search(
+                    r"allowed directories:\s*(.+)",
+                    normalized_text,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+                if match:
+                    raw_block = str(match.group(1) or "")
+                    parsed_paths: list[str] = []
+                    for raw_line in raw_block.splitlines():
+                        cleaned = str(raw_line or "").strip().strip(",")
+                        if not cleaned:
+                            continue
+                        if cleaned.startswith("/") or re.match(r"^[A-Za-z]:[\/]", cleaned):
+                            cleaned = re.split(r"[\"'\}\)]", cleaned, maxsplit=1)[0].rstrip(",").strip()
+                        if not cleaned:
+                            continue
+                        if os.path.isabs(cleaned) or re.match(r"^[A-Za-z]:[\/]", cleaned):
+                            parsed_paths.append(cleaned)
+                    if parsed_paths:
+                        return list(dict.fromkeys(parsed_paths))
+                candidate = stripped
+    if isinstance(candidate, dict):
+        for key in ("allowedDirectories", "allowed_directories", "directories", "paths"):
+            value = candidate.get(key)
+            if isinstance(value, list):
+                return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(candidate, list):
+        return [str(item).strip() for item in candidate if str(item).strip()]
+    return []
+
+
+def _project_root_is_allowed(project_root: str, allowed_directories: List[str]) -> bool:
+    project_root_text = str(project_root or "").strip()
+    if not project_root_text:
+        return False
+    for item in allowed_directories:
+        candidate = str(item or "").strip()
+        if not candidate:
+            continue
+        normalized_candidate = candidate.rstrip(os.sep)
+        if project_root_text == candidate or project_root_text.startswith(f"{normalized_candidate}{os.sep}"):
+            return True
+    return False
+
+
+async def _run_task_llm_connection_test(
+    *,
+    llm_service: Any,
+    event_emitter: Optional[Any] = None,
+) -> Dict[str, Any]:
+    if event_emitter:
+        await event_emitter.emit_info(
+            "🧪 正在测试 LLM 连接...",
+            metadata={"step_name": "LLM_CONNECTION_TEST", "status": "running"},
+        )
+    started_at = time.perf_counter()
+    response = await llm_service.chat_completion_raw(
+        [{"role": "user", "content": "Say Hello in one word."}],
+    )
+    content = str(response.get("content") or "").strip()
+    if not content:
+        raise RuntimeError("LLM 测试返回空响应")
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    usage = dict(response.get("usage") or {}) if isinstance(response, dict) else {}
+    if event_emitter:
+        await event_emitter.emit_info(
+            f"✅ LLM 连接测试通过 ({elapsed_ms}ms)",
+            metadata={
+                "step_name": "LLM_CONNECTION_TEST",
+                "status": "completed",
+                "elapsed_ms": elapsed_ms,
+                "response_preview": content[:32],
+                "usage": usage,
+            },
+        )
+    return {"elapsed_ms": elapsed_ms, "response_preview": content[:32], "usage": usage}
+
+
+async def _bootstrap_task_mcp_runtime(
+    runtime: MCPRuntime,
+    *,
+    project_root: str,
+    event_emitter: Optional[Any] = None,
+) -> Dict[str, Any]:
+    normalized_project_root = os.path.abspath(project_root)
+    details: Dict[str, Any] = {}
+
+    if event_emitter:
+        await event_emitter.emit_info(
+            "🔗 正在验证 filesystem MCP 项目根路径绑定...",
+            metadata={"step_name": "MCP_BIND_FILESYSTEM_ROOT", "status": "running"},
+        )
+    filesystem_result = await runtime.call_mcp_tool(
+        mcp_name="filesystem",
+        tool_name="list_allowed_directories",
+        arguments={},
+        agent_name="TASK_STARTUP",
+        alias_used="startup:filesystem_root_binding",
+    )
+    filesystem_allowed = _extract_allowed_directories_from_payload(filesystem_result.data)
+    project_root_allowed = _project_root_is_allowed(normalized_project_root, filesystem_allowed)
+    if not bool(filesystem_result.handled and filesystem_result.success) or not project_root_allowed:
+        error_text = str(filesystem_result.error or filesystem_result.data or "filesystem_project_root_not_allowed")
+        if event_emitter:
+            await event_emitter.emit_error(
+                f"❌ filesystem MCP 根路径绑定失败：{error_text}",
+                metadata={
+                    "step_name": "MCP_BIND_FILESYSTEM_ROOT",
+                    "status": "failed",
+                    "allowed_directories": filesystem_allowed,
+                    "project_root": normalized_project_root,
+                },
+            )
+        raise RuntimeError(f"filesystem MCP 根路径绑定失败：{error_text}")
+    details["filesystem"] = {
+        "allowed_directories": filesystem_allowed,
+        "project_root_allowed": project_root_allowed,
+    }
+    if event_emitter:
+        await event_emitter.emit_info(
+            "✅ filesystem MCP 已绑定项目根路径",
+            metadata={
+                "step_name": "MCP_BIND_FILESYSTEM_ROOT",
+                "status": "completed",
+                "allowed_directories": filesystem_allowed,
+            },
+        )
+
+    if event_emitter:
+        await event_emitter.emit_info(
+            "🔗 正在绑定 code_index MCP 到项目根路径...",
+            metadata={"step_name": "MCP_BIND_CODE_INDEX_ROOT", "status": "running"},
+        )
+    set_project_payloads = (
+        {"project_path": normalized_project_root},
+        {"project_root": normalized_project_root},
+        {"path": normalized_project_root},
+        {"directory": normalized_project_root},
+        {"root": normalized_project_root},
+    )
+    set_project_ok = False
+    set_project_error = ""
+    for payload in set_project_payloads:
+        set_project_result = await runtime.call_mcp_tool(
+            mcp_name="code_index",
+            tool_name="set_project_path",
+            arguments=dict(payload),
+            agent_name="TASK_STARTUP",
+            alias_used="startup:set_project_path",
+        )
+        if bool(set_project_result.handled and set_project_result.success):
+            set_project_ok = True
+            break
+        set_project_error = str(set_project_result.error or set_project_result.data or "set_project_path_failed")
+    if not set_project_ok:
+        if event_emitter:
+            await event_emitter.emit_error(
+                f"❌ code_index MCP 根路径绑定失败：{set_project_error}",
+                metadata={"step_name": "MCP_BIND_CODE_INDEX_ROOT", "status": "failed", "project_root": normalized_project_root},
+            )
+        raise RuntimeError(f"code_index MCP 根路径绑定失败：{set_project_error}")
+    details["code_index"] = {"project_root": normalized_project_root}
+    if event_emitter:
+        await event_emitter.emit_info(
+            "✅ code_index MCP 已绑定项目根路径",
+            metadata={"step_name": "MCP_BIND_CODE_INDEX_ROOT", "status": "completed", "project_root": normalized_project_root},
+        )
+
+    if event_emitter:
+        await event_emitter.emit_info(
+            "🧱 正在构建 code_index deep index...",
+            metadata={"step_name": "MCP_BUILD_DEEP_INDEX", "status": "running"},
+        )
+    maintenance_payload = {
+        "path": ".",
+        "directory": ".",
+        "project_path": normalized_project_root,
+        "project_root": normalized_project_root,
+    }
+    last_error = ""
+    selected_tool = ""
+    for tool_name in ("build_deep_index", "refresh_index"):
+        maintenance_result = await runtime.call_mcp_tool(
+            mcp_name="code_index",
+            tool_name=tool_name,
+            arguments=dict(maintenance_payload),
+            agent_name="TASK_STARTUP",
+            alias_used=f"startup:{tool_name}",
+        )
+        if bool(maintenance_result.handled and maintenance_result.success):
+            selected_tool = tool_name
+            break
+        last_error = str(maintenance_result.error or maintenance_result.data or f"{tool_name}_failed")
+        if event_emitter and tool_name == "build_deep_index" and hasattr(event_emitter, "emit_warning"):
+            await event_emitter.emit_warning(
+                f"⚠️ build_deep_index 失败，回退 refresh_index：{last_error}",
+                metadata={"step_name": "MCP_BUILD_DEEP_INDEX", "status": "fallback", "failed_tool": tool_name},
+            )
+    if not selected_tool:
+        if event_emitter:
+            await event_emitter.emit_error(
+                f"❌ code_index 索引预热失败：{last_error}",
+                metadata={"step_name": "MCP_BUILD_DEEP_INDEX", "status": "failed", "project_root": normalized_project_root},
+            )
+        raise RuntimeError(f"code_index 索引预热失败：{last_error}")
+    details.setdefault("code_index", {})["index_tool"] = selected_tool
+    if event_emitter:
+        await event_emitter.emit_info(
+            f"✅ code_index 索引预热完成（{selected_tool}）",
+            metadata={"step_name": "MCP_BUILD_DEEP_INDEX", "status": "completed", "index_tool": selected_tool},
+        )
+    return details
+
+
 def _build_task_mcp_runtime(
     *,
     project_root: str,
@@ -947,22 +1170,7 @@ async def _probe_required_mcp_runtime(
         return score
 
     def _extract_allowed_directories(payload: Any) -> list[str]:
-        candidate = payload
-        if isinstance(candidate, str):
-            stripped = candidate.strip()
-            if stripped:
-                try:
-                    candidate = json.loads(stripped)
-                except Exception:
-                    candidate = stripped
-        if isinstance(candidate, dict):
-            for key in ("allowedDirectories", "allowed_directories", "directories", "paths"):
-                value = candidate.get(key)
-                if isinstance(value, list):
-                    return [str(item).strip() for item in value if str(item).strip()]
-        if isinstance(candidate, list):
-            return [str(item).strip() for item in candidate if str(item).strip()]
-        return []
+        return _extract_allowed_directories_from_payload(payload)
 
     def _probe_failure_reason(
         *,
@@ -2408,6 +2616,10 @@ async def _execute_agent_task(task_id: str):
             del force
             return False
 
+        async def _set_current_step(step: str) -> None:
+            task.current_step = step
+            await db.commit()
+
         try:
             # 获取任务
             task = await db.get(AgentTask, task_id, options=[selectinload(AgentTask.project)])
@@ -2469,6 +2681,8 @@ async def _execute_agent_task(task_id: str):
                 event_emitter,
                 _prepare_project_root_once,
             )
+            project_root = os.path.abspath(project_root)
+            normalized_project_root = project_root
 
             # 🔥 自动修正 target_files 路径
             # 如果发生了目录调整（例如 ZIP 解压后只有一层目录，root 被下移），
@@ -2546,9 +2760,14 @@ async def _execute_agent_task(task_id: str):
             await event_emitter.emit_info("🧠 QMD 任务知识库已移除，跳过任务内知识库初始化")
 
             # 创建 LLM 服务
+            await _set_current_step("正在校验 LLM 配置")
             llm_service = LLMService(user_config=user_config)
             try:
                 _ = llm_service.config
+                await event_emitter.emit_info(
+                    "✅ LLM 配置校验通过",
+                    metadata={"step_name": "LLM_CONFIG_VALIDATION", "status": "completed"},
+                )
             except LLMConfigError as cfg_exc:
                 cfg_message = f"LLM配置校验失败：{cfg_exc}"
                 await event_emitter.emit_error(
@@ -2559,6 +2778,21 @@ async def _execute_agent_task(task_id: str):
                     },
                 )
                 raise RuntimeError(cfg_message) from cfg_exc
+
+            await _set_current_step("正在测试 LLM 连接")
+
+            async def _test_llm_connection_once():
+                return await _run_task_llm_connection_test(
+                    llm_service=llm_service,
+                    event_emitter=event_emitter,
+                )
+
+            await _run_with_retries(
+                "LLM_CONNECTION_TEST",
+                task_id,
+                event_emitter,
+                _test_llm_connection_once,
+            )
 
             # 初始化工具集 - 传递排除模式和目标文件以及预初始化的 sandbox_manager
             # 🔥 传递 event_emitter 以发送索引进度，传递 task_id 以支持取消
@@ -2602,6 +2836,7 @@ async def _execute_agent_task(task_id: str):
             task.current_step = "索引已完成，进入分析阶段"
             await db.commit()
 
+            await _set_current_step("正在初始化 MCP 运行时")
             mcp_runtime = _build_task_mcp_runtime(
                 project_root=normalized_project_root,
                 user_config=user_config,
@@ -2671,6 +2906,22 @@ async def _execute_agent_task(task_id: str):
                         },
                     )
                     raise RuntimeError(message)
+
+                await _set_current_step("正在绑定 MCP 根路径并构建索引")
+
+                async def _bootstrap_mcp_runtime_once():
+                    return await _bootstrap_task_mcp_runtime(
+                        mcp_runtime,
+                        project_root=normalized_project_root,
+                        event_emitter=event_emitter,
+                    )
+
+                await _run_with_retries(
+                    "MCP_RUNTIME_BOOTSTRAP",
+                    task_id,
+                    event_emitter,
+                    _bootstrap_mcp_runtime_once,
+                )
 
                 probe_result = await _probe_required_mcp_runtime(
                     mcp_runtime,

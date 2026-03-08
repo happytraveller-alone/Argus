@@ -40,7 +40,6 @@ import {
 import { toast } from "sonner";
 import { api } from "@/shared/config/database";
 import { createAgentTask } from "@/shared/api/agentTasks";
-import { runAgentPreflightCheck } from "@/shared/api/agentPreflight";
 import {
 	createOpengrepScanTask,
 	getOpengrepRules,
@@ -454,16 +453,6 @@ export default function CreateScanTaskDialog({
 					}
 
 					if (scanMode === "agent") {
-						const preflightToast = toast.loading(
-							"正在检查智能扫描配置（LLM）...",
-						);
-						const preflight = await runAgentPreflightCheck();
-						toast.dismiss(preflightToast);
-						if (!preflight.ok) {
-							toast.error(preflight.message);
-							return;
-						}
-
 						const agentTask = await createAgentTask({
 							project_id: createdProject.id,
 							name: `智能扫描-${createdProject.name}`,
@@ -528,16 +517,6 @@ export default function CreateScanTaskDialog({
 			}
 
 			if (scanMode === "agent") {
-				const preflightToast = toast.loading(
-					"正在检查智能扫描配置（LLM）...",
-				);
-				const preflight = await runAgentPreflightCheck();
-				toast.dismiss(preflightToast);
-				if (!preflight.ok) {
-					toast.error(preflight.message);
-					return;
-				}
-
 				const agentTask = await createAgentTask({
 					project_id: selectedProject.id,
 					name: `智能扫描-${selectedProject.name}`,

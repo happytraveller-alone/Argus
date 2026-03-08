@@ -37,7 +37,6 @@ import {
 import { toast } from "sonner";
 import { api } from "@/shared/config/database";
 import { createAgentTask } from "@/shared/api/agentTasks";
-import { runAgentPreflightCheck } from "@/shared/api/agentPreflight";
 import { isRepositoryProject, isZipProject } from "@/shared/utils/projectUtils";
 import { getZipFileInfo, type ZipFileMeta } from "@/shared/utils/zipStorage";
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
@@ -209,16 +208,6 @@ export default function CreateAgentTaskDialog({
 
 		setCreating(true);
 		try {
-			const preflightToast = toast.loading(
-				"正在检查智能扫描配置（LLM）...",
-			);
-			const preflight = await runAgentPreflightCheck();
-			toast.dismiss(preflightToast);
-			if (!preflight.ok) {
-				toast.error(preflight.message);
-				return;
-			}
-
 			const agentTask = await createAgentTask({
 				project_id: selectedProject.id,
 				name: `智能扫描-${selectedProject.name}`,

@@ -223,6 +223,47 @@ async def test_probe_runtime_prefers_list_allowed_directories_for_filesystem(tmp
 
 
 @pytest.mark.asyncio
+async def test_probe_runtime_accepts_stringified_allowed_directories_payload(tmp_path):
+    stringified_payload = (
+        "CallToolResult(content=[TextContent(type='text', text='Allowed directories:\n"
+        + str(tmp_path)
+        + "', annotations=None, meta=None)], structured_content={'content': 'Allowed directories:\n"
+        + str(tmp_path)
+        + "'}, meta=None, data=Root(content='Allowed directories:\n"
+        + str(tmp_path)
+        + "'), is_error=False)"
+    )
+    filesystem_adapter = _ProbeAdapter(
+        tools=[
+            {"name": "list_allowed_directories", "inputSchema": {"type": "object", "properties": {}}},
+        ],
+        call_result={"success": True, "data": stringified_payload, "metadata": {}},
+    )
+    code_index_adapter = _ProbeAdapter(
+        tools=[
+            {"name": "get_file_summary", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "number"}}}},
+        ],
+        call_result={"success": True, "data": "ok", "metadata": {}},
+    )
+    runtime = MCPRuntime(
+        enabled=True,
+        prefer_mcp=True,
+        adapters={"filesystem": filesystem_adapter, "code_index": code_index_adapter},
+        runtime_modes={"filesystem": "stdio_only", "code_index": "stdio_only"},
+        required_mcps=["filesystem", "code_index"],
+        default_runtime_mode="stdio_only",
+        strict_mode=True,
+        project_root=str(tmp_path),
+    )
+
+    probe = await _probe_required_mcp_runtime(runtime, runtime_domain="stdio")
+
+    assert probe["ready"] is True
+    assert probe["details"]["filesystem"]["selected_tool"] == "list_allowed_directories"
+    assert probe["details"]["filesystem"]["allowed_directories"] == [str(tmp_path)]
+
+
+@pytest.mark.asyncio
 async def test_probe_runtime_classifies_filesystem_allowed_dir_failure(tmp_path):
     raw_error = f"Access denied - path outside allowed directories: {tmp_path}/tmp/.mcp_required_media_probe.png not in"
     filesystem_adapter = _ProbeAdapter(
