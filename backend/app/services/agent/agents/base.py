@@ -5319,19 +5319,32 @@ class BaseAgent(ABC):
                         self._tool_success_cache.pop(oldest_key, None)
                 return output
             else:
-                # 🔥 输出详细的错误信息，包括原始错误
+                # 🔥 输出详细的错误信息，包括原始错误和完整输出
                 guard_hint = ""
                 if retry_guard_key and self._deterministic_failure_counts.get(retry_guard_key, 0) >= 2:
                     guard_hint = (
                         "\n\n同一输入已连续出现确定性失败。"
                         "后续相同输入将被系统短路，请修改参数或改用其他工具。"
                     )
+                
+                # 构建错误消息，优先显示完整的 data（包含格式化的输出）
+                error_details = []
+                if result.data:
+                    # data 字段通常包含格式化的完整输出（stdout + stderr）
+                    error_details.append(str(result.data))
+                
+                # 如果 error 字段有额外信息且不在 data 中，也添加
+                if result.error and (not result.data or str(result.error) not in str(result.data)):
+                    error_details.append(f"\n**错误详情**: {result.error}")
+                
+                error_output = "\n".join(error_details) if error_details else "未知错误"
+                
                 error_msg = f"""⚠️ 工具执行失败
 
 **请求工具**: {requested_tool_name}
 **实际工具**: {resolved_tool_name}
-**参数**: {json.dumps(repaired_input, ensure_ascii=False, indent=2) if repaired_input else '无'}
-**错误**: {result.error}
+
+{error_output}
 
 请根据错误信息调整参数或尝试其他方法。{guard_hint}"""
                 return error_msg

@@ -198,10 +198,22 @@ for payload in payloads:
         output_parts.append("\n---")
         output_parts.append("请根据上述输出分析漏洞是否存在。")
 
+        # 🔥 修复：当工具执行失败时，确保 error 字段包含有意义的错误信息
+        # 如果 result['error'] 为空但执行失败，从 stderr 中提取错误
+        error_message = result.get("error")
+        if not error_message and not result.get("success", False):
+            # 执行失败但没有 error 字段，尝试从 stderr 提取
+            stderr = result.get("stderr", "")
+            if stderr:
+                # 取 stderr 的前 500 字符作为 error 摘要
+                error_message = stderr[:500] if len(stderr) > 500 else stderr
+            elif result.get("exit_code", 0) != 0:
+                error_message = f"代码执行失败，退出码: {result.get('exit_code')}"
+
         return ToolResult(
             success=result.get("success", False),
             data="\n".join(output_parts),
-            error=result.get("error"),
+            error=error_message,  # 确保 error 字段有值
             metadata={
                 "language": language,
                 "exit_code": result.get("exit_code", -1),
