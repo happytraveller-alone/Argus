@@ -41,8 +41,8 @@ ENV ALL_PROXY=""
 ENV no_proxy="*"
 ENV NO_PROXY="*"
 
-RUN --mount=type=cache,id=deepaudit-backend-builder-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=deepaudit-backend-builder-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=vulhunter-backend-builder-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=vulhunter-backend-builder-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \
     { \
@@ -96,7 +96,7 @@ ENV PIP_INDEX_URL=${BACKEND_PYPI_INDEX_PRIMARY}
 COPY pyproject.toml uv.lock README.md ./
 
 # 安装 Python 依赖到虚拟环境
-RUN --mount=type=cache,id=deepaudit-backend-uv-cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
     set -eux; \
     cmd_timeout="${BACKEND_PNPM_CMD_TIMEOUT_SECONDS:-420}"; \
     case "${cmd_timeout}" in ''|*[!0-9]*) cmd_timeout=420 ;; esac; \
@@ -158,8 +158,8 @@ ENV PATH=/pnpm:${PATH}
 
 # 只安装运行时依赖（不需要 gcc）；CJK 字体可通过 BACKEND_INSTALL_CJK_FONTS 控制
 ARG BACKEND_INSTALL_CJK_FONTS
-RUN --mount=type=cache,id=deepaudit-backend-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=deepaudit-backend-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=vulhunter-backend-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \
     { \
@@ -215,7 +215,7 @@ ARG BACKEND_NPM_REGISTRY_FALLBACK
 ARG BACKEND_PNPM_VERSION
 COPY --from=nodebase /usr/local/bin/node /usr/local/bin/node
 COPY --from=nodebase /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN --mount=type=cache,id=deepaudit-backend-npm,target=/root/.npm \
+RUN --mount=type=cache,id=vulhunter-backend-npm,target=/root/.npm \
     set -eux; \
     ln -sf /usr/local/bin/node /usr/local/bin/nodejs; \
     ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm; \
@@ -262,7 +262,7 @@ COPY --from=builder /tmp/builder-network-ready /tmp/builder-network-ready
 
 # 安装 MCP 相关运行时（pnpm + qmd CLI），镜像优先并支持官方回退
 # 使用 --ignore-scripts 避免 node-llama-cpp 等可选构建脚本拖慢构建
-RUN --mount=type=cache,id=deepaudit-backend-pnpm-store,target=/pnpm/store \
+RUN --mount=type=cache,id=vulhunter-backend-pnpm-store,target=/pnpm/store \
     set -eux; \
     cmd_timeout="${BACKEND_PNPM_CMD_TIMEOUT_SECONDS:-420}"; \
     case "${cmd_timeout}" in ''|*[!0-9]*) cmd_timeout=420 ;; esac; \
@@ -330,7 +330,7 @@ RUN --mount=type=cache,id=deepaudit-backend-pnpm-store,target=/pnpm/store \
 
 # 定向补齐 better-sqlite3 原生模块，避免 --ignore-scripts 导致运行期缺失 binding。
 # 构建期硬性校验：确保 better-sqlite3 可实际创建连接。
-RUN --mount=type=cache,id=deepaudit-backend-pnpm-store,target=/pnpm/store \
+RUN --mount=type=cache,id=vulhunter-backend-pnpm-store,target=/pnpm/store \
     set -eux; \
     cmd_timeout="${BACKEND_PNPM_CMD_TIMEOUT_SECONDS:-420}"; \
     case "${cmd_timeout}" in ''|*[!0-9]*) cmd_timeout=420 ;; esac; \
@@ -391,14 +391,14 @@ ARG BACKEND_PNPM_CMD_TIMEOUT_SECONDS
 ARG BACKEND_PYPI_INDEX_PRIMARY
 ARG BACKEND_PYPI_INDEX_FALLBACK
 
-RUN --mount=type=cache,id=deepaudit-backend-tool-archive,target=/var/cache/deepaudit-tools \
+RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhunter-tools \
     set -eux; \
     unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; \
     cmd_timeout="${BACKEND_PNPM_CMD_TIMEOUT_SECONDS:-420}"; \
     case "${cmd_timeout}" in ''|*[!0-9]*) cmd_timeout=420 ;; esac; \
     download_step_timeout=90; \
     if [ "${cmd_timeout}" -lt "${download_step_timeout}" ]; then download_step_timeout="${cmd_timeout}"; fi; \
-    mkdir -p /var/cache/deepaudit-tools; \
+    mkdir -p /var/cache/vulhunter-tools; \
     ARCH="$(uname -m)"; \
     case "$ARCH" in \
       x86_64|amd64) OG_DIST="opengrep_manylinux_x86" ;; \
@@ -440,7 +440,7 @@ RUN --mount=type=cache,id=deepaudit-backend-tool-archive,target=/var/cache/deepa
       done; \
       return 1; \
     }; \
-    OG_CACHE="/var/cache/deepaudit-tools/opengrep-${OPENGREP_VERSION}-${OG_DIST}"; \
+    OG_CACHE="/var/cache/vulhunter-tools/opengrep-${OPENGREP_VERSION}-${OG_DIST}"; \
     if [ ! -s "${OG_CACHE}" ]; then \
       download_with_fallback \
         "${OG_CACHE}" \
@@ -455,7 +455,7 @@ RUN --mount=type=cache,id=deepaudit-backend-tool-archive,target=/var/cache/deepa
       > /usr/local/bin/opengrep; \
     chmod +x /usr/local/bin/opengrep; \
     opengrep --version; \
-    PMD_CACHE="/var/cache/deepaudit-tools/pmd-dist-7.0.0-bin.zip"; \
+    PMD_CACHE="/var/cache/vulhunter-tools/pmd-dist-7.0.0-bin.zip"; \
     if [ ! -s "${PMD_CACHE}" ]; then \
       download_with_fallback \
         "${PMD_CACHE}" \
@@ -479,7 +479,7 @@ ENV CODE_INDEX_INDEXER_PATH=/app/data/mcp/code-index
 
 
 # code-index-mcp 是 Python 包（非 npm 包），安装到系统 PATH（镜像失败时回退官方源）
-RUN --mount=type=cache,id=deepaudit-backend-pip-cache,target=/root/.cache/pip \
+RUN --mount=type=cache,id=vulhunter-backend-pip-cache,target=/root/.cache/pip \
     set -eux; \
     install_code_index() { \
       idx="$1"; \

@@ -1,34 +1,29 @@
-# Seed Assets
+# Seed Archives
 
-These archives are used by the backend during database initialization and are imported as default demo projects.
-
-## Built-in offline seed sources
-
-1. `backend/app/db/seed_assets`
-   - `libplist-2.7.0.zip`
-   - Imported by `ensure_default_libplist_project(...)`.
-2. `backend/tests/resources`
-   - All `*.zip` files in this directory are imported by `ensure_default_test_resource_projects(...)`.
-   - Current archives:
-     - `DSVW-master.zip`
-     - `DVWA-master.zip`
-     - `JavaSecLab-1.4.zip`
-     - `WebGoat-main.zip`
-     - `fastjson.zip`
-     - `govwa-master.zip`
+Default demo projects are no longer stored as repo-tracked ZIP files.
 
 ## Runtime behavior
 
-- On backend startup, `app/db/init_db.py` ensures default projects exist for the demo user.
-- If a project ZIP is not stored yet, it imports from local archive files.
+- On backend startup, `app/db/init_db.py` ensures the default GitHub-backed seed projects exist for the demo user.
+- If a project ZIP is not stored yet, backend builds the pinned GitHub archive URL, probes configured mirror candidates plus the official GitHub source, then downloads the fastest reachable archive.
 - With Docker Compose defaults:
   - Postgres data is persisted in `postgres_data`.
   - ZIP files are persisted in `backend_uploads` (`/app/uploads/zip_files`).
-- Result: after `docker compose up --build` first import, the projects can be reused across restarts/rebuilds.
+- Result: after the first successful install, the projects are reused across restarts/rebuilds without re-downloading.
+
+## Managed seed projects
+
+- `libplist` → `libimobiledevice/libplist@tag:2.7.0`
+- `DVWA` → `digininja/DVWA@commit:eba982f486aef10fd4278948cd1bb078504b74e7`
+- `DSVW` → `stamparm/DSVW@commit:7d40f4b7939c901610ed9b85724552d60e7d63fa`
+- `WebGoat` → `WebGoat/WebGoat@commit:7d3343d08c360d4751e5298e1fe910463b7731a1`
+- `JavaSecLab` → `whgojp/JavaSecLab@tag:V1.4`
+- `govwa` → `0c34/govwa@commit:4058f79f31eeb4a36d8f1e64bba1f0c899646e6f`
+- `fastjson` → `alibaba/fastjson@commit:c942c83443117b73af5ad278cc780270998ba3e1`
 
 ## Update procedure
 
-1. Add or update local ZIP archives in `backend/app/db/seed_assets` or `backend/tests/resources`.
-2. For known test resources, update `DEFAULT_TEST_RESOURCE_PROJECT_METADATA` in `app/db/init_db.py` to customize project name/description.
+1. Update the pinned seed manifest in `backend/app/db/init_db.py`.
+2. Adjust probe/download settings in `backend/env.example` if mirror behavior needs tuning.
 3. Run backend seed tests:
-   - `pytest backend/tests/test_init_db_libplist_seed.py`
+   - `cd backend && ./.venv/bin/pytest tests/test_seed_archive.py tests/test_init_db_libplist_seed.py -q`

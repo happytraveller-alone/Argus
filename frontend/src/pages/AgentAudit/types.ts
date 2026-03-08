@@ -4,6 +4,7 @@
  */
 
 import type { AgentTask, AgentFinding, AgentTreeNode } from "@/shared/api/agentTasks";
+import type { AgentAuditStatsSummary } from "./detailViewModel";
 
 // ============ Log Types ============
 
@@ -161,14 +162,7 @@ export interface AgentDetailPanelProps {
 }
 
 export interface StatsPanelProps {
-  task: AgentTask | null;
-  findings: AgentFinding[];
-  resultConsistency?: {
-    orchestrator: number;
-    persisted: number;
-    filtered: number;
-    filteredReasons?: Record<string, number> | null;
-  } | null;
+  summary: AgentAuditStatsSummary | null;
 }
 
 export interface HeaderProps {
@@ -211,7 +205,7 @@ export interface FindingsViewFilters {
   keyword: string;
   severity: string;
   verification: string;
-  showFiltered: boolean;
+  showFiltered?: boolean;
 }
 
 export interface BootstrapInputsSummary {

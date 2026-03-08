@@ -1,5 +1,5 @@
 # =============================================
-# DeepAudit Frontend Docker 构建（BuildKit 缓存优化）
+# VulHunter Frontend Docker 构建（BuildKit 缓存优化）
 # =============================================
 
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
@@ -27,8 +27,8 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=/pnpm:${PATH}
 
 # 使用 corepack 管理 pnpm，镜像优先且支持官方回退
-RUN --mount=type=cache,id=deepaudit-frontend-npm,target=/root/.npm \
-    --mount=type=cache,id=deepaudit-frontend-corepack,target=/root/.cache/node/corepack \
+RUN --mount=type=cache,id=vulhunter-frontend-npm,target=/root/.npm \
+    --mount=type=cache,id=vulhunter-frontend-corepack,target=/root/.cache/node/corepack \
     set -eux; \
     corepack enable; \
     prepare_pnpm() { \
@@ -54,8 +54,8 @@ RUN --mount=type=cache,id=deepaudit-frontend-npm,target=/root/.npm \
 COPY package.json pnpm-lock.yaml ./
 
 # 利用 BuildKit 缓存 mount 复用 pnpm store，减少重复下载
-RUN --mount=type=cache,id=deepaudit-frontend-pnpm,target=/pnpm/store \
-    --mount=type=cache,id=deepaudit-frontend-npm,target=/root/.npm \
+RUN --mount=type=cache,id=vulhunter-frontend-pnpm,target=/pnpm/store \
+    --mount=type=cache,id=vulhunter-frontend-npm,target=/root/.npm \
     set -eux; \
     FALLBACK_REGISTRY="${FRONTEND_NPM_REGISTRY_FALLBACK}"; \
     step_timeout=90; \

@@ -1,5 +1,5 @@
 # =============================================
-# DeepAudit Frontend Docker 构建（无 BuildKit 降级版）
+# VulHunter Frontend Docker 构建（无 BuildKit 降级版）
 # =============================================
 
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library

@@ -1,21 +1,21 @@
+import os
 import tempfile
 import zipfile
 from pathlib import Path
-import os
 
 import pytest
 from dotenv import load_dotenv
 
-from app.services.agent.tools.business_logic_scan_tool import BusinessLogicScanTool
-from app.services.agent.tools.base import ToolResult
-from app.services.llm.service import LLMService
-from app.services.llm.types import DEFAULT_BASE_URLS, LLMProvider
 from app.services.agent.tools import (
+    ExtractFunctionTool,
     FileReadTool,
     FileSearchTool,
     ListFilesTool,
-    ExtractFunctionTool,
 )
+from app.services.agent.tools.base import ToolResult
+from app.services.agent.tools.business_logic_scan_tool import BusinessLogicScanTool
+from app.services.llm.service import LLMService
+from app.services.llm.types import DEFAULT_BASE_URLS, LLMProvider
 
 
 class _DummyReadFileTool:
@@ -25,13 +25,26 @@ class _DummyReadFileTool:
         return ToolResult(success=True, data=f"read:{kwargs.get('file_path', 'unknown')}")
 
 
-def _prepare_javaseclab_target_and_llm() -> tuple[Path, Path, LLMService]:
+def _build_javaseclab_like_zip(tmp_path: Path) -> Path:
+    zip_path = tmp_path / "JavaSecLab-1.4.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_ref:
+        zip_ref.writestr(
+            "JavaSecLab-1.4/src/main/java/com/example/DemoController.java",
+            "package com.example; public class DemoController { public String ping() { return \"pong\"; } }\n",
+        )
+        zip_ref.writestr(
+            "JavaSecLab-1.4/README.md",
+            "# JavaSecLab sample\n",
+        )
+    return zip_path
+
+
+def _prepare_javaseclab_target_and_llm(tmp_path: Path) -> tuple[Path, Path, LLMService]:
     backend_root = Path(__file__).resolve().parents[1]
     env_path = backend_root / ".env"
-    zip_path = backend_root / "tests" / "resources" / "JavaSecLab-1.4.zip"
+    zip_path = _build_javaseclab_like_zip(tmp_path)
 
     assert env_path.exists(), f".env 文件不存在: {env_path}"
-    assert zip_path.exists(), f"ZIP 文件不存在: {zip_path}"
 
     load_dotenv(dotenv_path=env_path, override=False)
     provider = (os.getenv("LLM_PROVIDER", "openai") or "openai").strip().lower()
@@ -79,8 +92,8 @@ def _prepare_javaseclab_target_and_llm() -> tuple[Path, Path, LLMService]:
 
 
 @pytest.mark.asyncio
-async def test_business_logic_scan_with_javaseclab_zip_and_env_llm(monkeypatch):
-    _, zip_path, llm_service = _prepare_javaseclab_target_and_llm()
+async def test_business_logic_scan_with_javaseclab_zip_and_env_llm(monkeypatch, tmp_path: Path):
+    _, zip_path, llm_service = _prepare_javaseclab_target_and_llm(tmp_path)
     assert llm_service.config is not None
     assert llm_service.config.provider is not None
     assert llm_service.config.model
@@ -122,7 +135,7 @@ async def test_business_logic_scan_with_javaseclab_zip_and_env_llm(monkeypatch):
             zip_ref.extractall(temp_dir)
 
         extracted_root = Path(temp_dir)
-        children = [item for item in extracted_root.iterdir()]
+        children = list(extracted_root.iterdir())
         if len(children) == 1 and children[0].is_dir():
             target_dir = str(children[0])
         else:
@@ -148,7 +161,7 @@ async def test_business_logic_scan_with_javaseclab_zip_and_env_llm(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_business_logic_scan_real_llm_end_to_end():
+async def test_business_logic_scan_real_llm_end_to_end(tmp_path: Path):
     """真 LLM 端到端测试（可选执行）。
 
     启用方式：
@@ -157,7 +170,7 @@ async def test_business_logic_scan_real_llm_end_to_end():
     if os.getenv("RUN_LIVE_LLM_E2E") != "1":
         pytest.skip("未启用真 LLM 端到端测试。设置 RUN_LIVE_LLM_E2E=1 后执行。")
 
-    _, zip_path, llm_service = _prepare_javaseclab_target_and_llm()
+    _, zip_path, llm_service = _prepare_javaseclab_target_and_llm(tmp_path)
     config = llm_service.config
     if config.provider.value != "ollama" and not str(config.api_key or "").strip():
         pytest.skip("当前 .env 未提供可用 API Key，跳过真 LLM 端到端测试。")
@@ -167,7 +180,7 @@ async def test_business_logic_scan_real_llm_end_to_end():
             zip_ref.extractall(temp_dir)
 
         extracted_root = Path(temp_dir)
-        children = [item for item in extracted_root.iterdir()]
+        children = list(extracted_root.iterdir())
         target_dir = str(children[0]) if len(children) == 1 and children[0].is_dir() else str(extracted_root)
 
         analysis_tools = {

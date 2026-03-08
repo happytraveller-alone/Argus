@@ -1,7 +1,0 @@
-services:
-  backend:
-    ports:
-      - "${DEEPAUDIT_BACKEND_PORT:-8000}:8000"
-  frontend:
-    ports:
-      - "${DEEPAUDIT_FRONTEND_PORT:-3000}:80"

@@ -188,6 +188,12 @@ type McpSummaryItem = {
   executionFunctions: string[];
 };
 
+function toObjectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 export default function SkillToolsPanel({
   mode = "all",
 }: {
@@ -271,8 +277,9 @@ export default function SkillToolsPanel({
         const config = await api.getUserConfig();
         if (!mounted) return;
 
-        const runtimeSkillAvailability =
-          config?.otherConfig?.mcpConfig?.skillAvailability;
+        const otherConfig = toObjectRecord(config?.otherConfig);
+        const mcpConfig = toObjectRecord(otherConfig.mcpConfig);
+        const runtimeSkillAvailability = mcpConfig.skillAvailability;
         if (
           runtimeSkillAvailability &&
           typeof runtimeSkillAvailability === "object"
@@ -283,7 +290,7 @@ export default function SkillToolsPanel({
         }
 
         if (showMcpCatalog) {
-          const serverCatalog = config?.otherConfig?.mcpConfig?.catalog;
+          const serverCatalog = mcpConfig.catalog;
           if (Array.isArray(serverCatalog) && serverCatalog.length > 0) {
             setMcpCatalog(normalizeMcpCatalog(serverCatalog));
             setMcpCatalogFallbackNotice(null);

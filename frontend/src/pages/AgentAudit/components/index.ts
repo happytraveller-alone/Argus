@@ -13,7 +13,6 @@ export { Header } from "./Header";
 export { AgentErrorBoundary } from "./AgentErrorBoundary";
 export { ConnectionStatus } from "./ConnectionStatus";
 export { ReportExportDialog } from "./ReportExportDialog";
-export { FindingsPanel } from "./FindingsPanel";
 export { AuditDetailDialog } from "./AuditDetailDialog";
 export { BootstrapInputsPanel } from "./BootstrapInputsPanel";
 export { default as RealtimeFindingsPanel } from "./RealtimeFindingsPanel";

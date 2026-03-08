@@ -592,7 +592,7 @@ if [ "$GHCR_PHASES_COUNT" -gt "$PHASE_COUNT" ]; then
 fi
 [ "$PHASE_COUNT" -ge 1 ] || PHASE_COUNT=1
 
-DEEPAUDIT_IMAGE_TAG="${DEEPAUDIT_IMAGE_TAG:-latest}"
+VULHUNTER_IMAGE_TAG="${VULHUNTER_IMAGE_TAG:-latest}"
 
 log_info "Compose command: ${COMPOSE_BIN[*]}"
 log_info "Compose args: ${COMPOSE_ARGS[*]}"
@@ -630,7 +630,7 @@ for ((phase_index = 0; phase_index < PHASE_COUNT; phase_index++)); do
   if [ -n "${SANDBOX_IMAGE:-}" ]; then
     sandbox_image="${SANDBOX_IMAGE}"
   else
-    sandbox_image="${ghcr_registry}/lintsinghua/deepaudit-sandbox:${DEEPAUDIT_IMAGE_TAG}"
+    sandbox_image="${ghcr_registry}/lintsinghua/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG}"
   fi
 
   phase_name="rank-$((phase_index + 1))"

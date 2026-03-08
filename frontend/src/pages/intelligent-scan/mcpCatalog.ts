@@ -177,7 +177,7 @@ export function normalizeMcpCatalog(rawCatalog: unknown): McpCatalogItem[] {
         sandbox: toDomainStatus(item.sandbox),
       } satisfies McpCatalogItem;
     })
-    .filter((item): item is McpCatalogItem => Boolean(item));
+    
 
   if (!normalized.length) {
     return DEFAULT_MCP_CATALOG;

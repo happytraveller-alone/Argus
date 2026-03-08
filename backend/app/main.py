@@ -185,7 +185,7 @@ async def lifespan(app: FastAPI):
         logger.info("  - Agent 核心服务检查通过")
 
     logger.info("=" * 50)
-    logger.info("DeepAudit 后端服务已启动")
+    logger.info("VulHunter 后端服务已启动")
     logger.info(f"API 文档: http://localhost:8000/docs")
     logger.info("=" * 50)
     # logger.info("演示账户: demo@example.com / demo123")

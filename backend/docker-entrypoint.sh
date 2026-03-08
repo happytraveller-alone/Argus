@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 DeepAudit 后端启动中..."
+echo "🚀 VulHunter 后端启动中..."
 
 is_true() {
     case "${1:-}" in

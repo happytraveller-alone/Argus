@@ -216,10 +216,16 @@ export function buildProjectVulnsChartData(params: {
 		});
 }
 
-export function toTopNByField<
-	T extends Record<string, string | number | null | undefined>,
->(items: T[], field: keyof T, limit = 10): T[] {
+export function toTopNByField<T extends object, K extends keyof T>(
+	items: T[],
+	field: K,
+	limit = 10,
+): T[] {
 	return [...items]
-		.sort((a, b) => Number(b[field] || 0) - Number(a[field] || 0))
+		.sort(
+			(a, b) =>
+				Number((b[field] as string | number | null | undefined) || 0) -
+				Number((a[field] as string | number | null | undefined) || 0),
+		)
 		.slice(0, limit);
 }

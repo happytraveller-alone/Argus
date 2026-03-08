@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENV_FILE="/etc/deepaudit/deepaudit.env"
-RUNTIME_STATE_FILE="/var/lib/deepaudit/runtime.json"
+ENV_FILE="/etc/vulhunter/vulhunter.env"
+RUNTIME_STATE_FILE="/var/lib/vulhunter/runtime.json"
 
 ensure_compose() {
   if ! command -v docker >/dev/null 2>&1; then
@@ -63,12 +63,12 @@ read_env_value() {
 
 case "${1:-configure}" in
   configure|triggered)
-    mkdir -p /etc/deepaudit /var/log/deepaudit /var/lib/deepaudit
+    mkdir -p /etc/vulhunter /var/log/vulhunter /var/lib/vulhunter
 
     ensure_compose
 
-    frontend_port="$(read_env_value DEEPAUDIT_FRONTEND_PORT || true)"
-    backend_port="$(read_env_value DEEPAUDIT_BACKEND_PORT || true)"
+    frontend_port="$(read_env_value VULHUNTER_FRONTEND_PORT || true)"
+    backend_port="$(read_env_value VULHUNTER_BACKEND_PORT || true)"
 
     if [[ -z "$frontend_port" ]]; then
       frontend_port="$(pick_port 3000 13000 23000 33000)"
@@ -77,21 +77,21 @@ case "${1:-configure}" in
       backend_port="$(pick_port 8000 18000 28000 38000)"
     fi
 
-    update_env_kv "DEEPAUDIT_FRONTEND_PORT" "$frontend_port"
-    update_env_kv "DEEPAUDIT_BACKEND_PORT" "$backend_port"
+    update_env_kv "VULHUNTER_FRONTEND_PORT" "$frontend_port"
+    update_env_kv "VULHUNTER_BACKEND_PORT" "$backend_port"
 
     cat > "$RUNTIME_STATE_FILE" <<JSON
 {"frontend_port":${frontend_port},"backend_port":${backend_port}}
 JSON
 
     if grep -q "^LLM_API_KEY=your-api-key-here" "$ENV_FILE"; then
-      echo "[WARN] LLM_API_KEY is not configured. Edit /etc/deepaudit/deepaudit.env after install."
+      echo "[WARN] LLM_API_KEY is not configured. Edit /etc/vulhunter/vulhunter.env after install."
     fi
 
     systemctl daemon-reload
-    systemctl enable --now deepaudit.service
+    systemctl enable --now vulhunter.service
 
-    echo "[INFO] DeepAudit installed"
+    echo "[INFO] VulHunter installed"
     echo "[INFO] Frontend: http://localhost:${frontend_port}"
     echo "[INFO] Backend: http://localhost:${backend_port}/docs"
     ;;

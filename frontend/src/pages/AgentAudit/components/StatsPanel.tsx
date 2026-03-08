@@ -1,126 +1,98 @@
-/**
- * Stats Panel Component
- * Dashboard-style statistics with premium visual design
- * Features: Animated progress, metric gauges, severity indicators
- * Enhanced visual effects with depth and polish
- */
-
 import { memo } from "react";
+import type { ReactNode } from "react";
 import {
-	Activity,
-	Repeat,
-	Zap,
-	TrendingUp,
+  Activity,
+  Bug,
+  Clock3,
+  Repeat,
+  Wrench,
+  TrendingUp,
 } from "lucide-react";
-import type { StatsPanelProps } from "../types";
+import { Progress } from "@/components/ui/progress";
+import type { AgentAuditStatsSummary } from "../detailViewModel";
+import { formatDurationMs, formatTokenValue } from "../detailViewModel";
 
-function InlineMetric({
-	icon,
-	label,
-	value,
-	suffix = "",
-	colorClass = "text-muted-foreground",
-}: {
-	icon: React.ReactNode;
-	label: string;
-	value: string | number;
-	suffix?: string;
-	colorClass?: string;
-}) {
-	return (
-		<div
-			className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border/60 bg-card/70"
-		>
-			<div className={`p-1.5 rounded-md bg-muted/50 border border-border/50 ${colorClass}`}>
-				{icon}
-			</div>
-			<div className="flex-1 min-w-0">
-				<div className="text-[11px] text-muted-foreground uppercase tracking-wider truncate font-medium">
-					{label}
-				</div>
-				<div className="text-sm text-foreground font-mono font-bold leading-tight">
-					{value}
-					<span className="text-muted-foreground text-xs ml-0.5">{suffix}</span>
-				</div>
-			</div>
-		</div>
-	);
+interface StatsPanelProps {
+  summary: AgentAuditStatsSummary | null;
 }
 
-export const StatsPanel = memo(function StatsPanel({
-	task,
-	findings: _findings,
-}: StatsPanelProps) {
-	if (!task) return null;
+function MetricCard({
+  icon,
+  label,
+  value,
+  subtext,
+  progress,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  subtext: string;
+  progress?: number;
+}) {
+  return (
+    <div className="cyber-card flex min-w-[180px] flex-col gap-2 p-4">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-primary">{icon}</span>
+        <span>{label}</span>
+      </div>
+      <div className="text-xl font-bold text-foreground">{value}</div>
+      {typeof progress === "number" ? (
+        <Progress
+          value={Math.max(Math.min(progress, 100), 0)}
+          className="h-1.5 bg-muted [&>div]:bg-emerald-500"
+        />
+      ) : null}
+      <div className="text-xs text-muted-foreground">{subtext}</div>
+    </div>
+  );
+}
 
-	const progressPercent = task.progress_percentage || 0;
+export const StatsPanel = memo(function StatsPanel({ summary }: StatsPanelProps) {
+  if (!summary) return null;
 
-	return (
-		<div className="rounded-lg border border-border/50 bg-card/80 backdrop-blur-sm p-3">
-			<div className="flex flex-col xl:flex-row xl:items-center gap-3">
-				<div className="flex-1 min-w-0">
-					<div className="flex items-center justify-between mb-2.5">
-						<div className="flex items-center gap-2.5">
-							<div className="p-1.5 rounded-md bg-primary/15 border border-primary/30">
-								<Activity className="w-4 h-4 text-primary" />
-							</div>
-							<span className="text-sm text-foreground uppercase tracking-wider font-semibold">
-								进度
-							</span>
-						</div>
-						<div className="flex items-center gap-1.5">
-							<span className="text-base text-primary font-mono font-bold">
-								{progressPercent.toFixed(0)}
-							</span>
-							<span className="text-xs text-muted-foreground">%</span>
-						</div>
-					</div>
-					<div className="relative h-2.5 bg-muted/50 rounded-full overflow-hidden border border-border/30">
-						<div
-							className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary via-primary to-primary/80 rounded-full transition-all duration-700 ease-out"
-							style={{ width: `${progressPercent}%` }}
-						/>
-						<div
-							className="absolute inset-y-0 left-0 bg-gradient-to-r from-transparent via-white/30 to-transparent rounded-full"
-							style={{
-								width: `${progressPercent}%`,
-								animation: "shine 2s ease-in-out infinite",
-							}}
-						/>
-					</div>
-				</div>
-
-				<div className="grid grid-cols-1 sm:grid-cols-3 gap-2 xl:min-w-[480px]">
-					<InlineMetric
-						icon={<Repeat className="w-4 h-4" />}
-						label="迭代次数"
-						value={task.total_iterations || 0}
-						colorClass="text-teal-500"
-					/>
-					<InlineMetric
-						icon={<Zap className="w-4 h-4" />}
-						label="工具调用"
-						value={task.tool_calls_count || 0}
-						colorClass="text-amber-500"
-					/>
-					<InlineMetric
-						icon={<TrendingUp className="w-4 h-4" />}
-						label="Token"
-						value={((task.tokens_used || 0) / 1000).toFixed(1)}
-						suffix="k"
-						colorClass="text-violet-500"
-					/>
-				</div>
-			</div>
-			<style>{`
-        @keyframes shine {
-          0% { transform: translateX(-100%); }
-          50% { transform: translateX(100%); }
-          100% { transform: translateX(100%); }
-        }
-      `}</style>
-		</div>
-	);
+  return (
+    <div className="overflow-x-auto custom-scrollbar">
+      <div className="grid min-w-[1120px] grid-cols-6 gap-3">
+        <MetricCard
+          icon={<Activity className="h-4 w-4" />}
+          label="进度比例"
+          value={`${summary.progressPercent.toFixed(0)}%`}
+          progress={summary.progressPercent}
+          subtext="当前扫描进度"
+        />
+        <MetricCard
+          icon={<Clock3 className="h-4 w-4" />}
+          label="扫描时间"
+          value={formatDurationMs(summary.durationMs)}
+          subtext="任务开始至当前/结束"
+        />
+        <MetricCard
+          icon={<Bug className="h-4 w-4" />}
+          label="漏洞数量"
+          value={summary.findingsTotal.toLocaleString()}
+          subtext={`已验证 ${summary.findingsVerified.toLocaleString()} · 待验证 ${summary.findingsPending.toLocaleString()}`}
+        />
+        <MetricCard
+          icon={<Repeat className="h-4 w-4" />}
+          label="迭代次数"
+          value={summary.iterations.toLocaleString()}
+          subtext="Agent 迭代轮次"
+        />
+        <MetricCard
+          icon={<Wrench className="h-4 w-4" />}
+          label="工具扫描"
+          value={summary.toolCalls.toLocaleString()}
+          subtext="累计工具调用次数"
+        />
+        <MetricCard
+          icon={<TrendingUp className="h-4 w-4" />}
+          label="Token 消耗"
+          value={formatTokenValue(summary.tokensTotal)}
+          subtext={`输入 ${formatTokenValue(summary.tokensInput)} · 输出 ${formatTokenValue(summary.tokensOutput)}`}
+        />
+      </div>
+    </div>
+  );
 });
 
 export default StatsPanel;

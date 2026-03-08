@@ -2,33 +2,34 @@
 数据库初始化模块
 在应用启动时创建默认演示账户和演示数据
 """
+import hashlib
 import json
 import logging
 import os
-import sys
-import hashlib
-import yaml
 import subprocess
+import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass
-from typing import Optional, List, Any
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+
+import yaml
 from sqlalchemy import insert, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from tqdm import tqdm
 
 from app.core.security import get_password_hash
-from app.models.user import User
-from app.models.project import Project, ProjectMember
-from app.models.audit import AuditTask, AuditIssue
 from app.models.analysis import InstantAnalysis
+from app.models.audit import AuditIssue, AuditTask
 from app.models.opengrep import OpengrepRule
-from app.services.zip_storage import save_project_zip, has_project_zip, delete_project_zip
+from app.models.project import Project
+from app.models.user import User
+from app.services.seed_archive import download_seed_archive
 from app.services.upload.language_detection import detect_languages_from_paths
+from app.services.zip_storage import delete_project_zip, has_project_zip, save_project_zip
 
 logger = logging.getLogger(__name__)
 
@@ -67,66 +68,8 @@ DEFAULT_LIBPLIST_LEGACY_ZIP_URL = "https://github.com/libimobiledevice/libplist/
 DEFAULT_LIBPLIST_LEGACY_DESCRIPTION = "默认示例项目：libplist 2.7.0"
 DEFAULT_LIBPLIST_DESCRIPTION = (
     "libplist 是一个小型、可移植的 C 语言库，用于读写 Apple 的 Property List（.plist）数据。"
-    "它提供统一的 API 来解析与生成多种 plist 表达形式，包括 Binary、XML、JSON、OpenStep 等格式，"
-    "并附带命令行工具 plistutil 便于在不同格式之间转换与处理。"
-    "项目同时提供基于 Cython 的 Python 绑定，并通过模糊测试与数据一致性测试提升健壮性，"
-    "适用于 iOS/macOS 工具链、设备通信与配置数据处理等场景。"
 )
 DEFAULT_LIBPLIST_ARCHIVE_NAME = "libplist-2.7.0.zip"
-DEFAULT_LIBPLIST_LOCAL_ZIP_PATH = str(
-    Path(__file__).resolve().parent / "seed_assets" / DEFAULT_LIBPLIST_ARCHIVE_NAME
-)
-DEFAULT_TEST_RESOURCE_ARCHIVE_DIR = Path(__file__).resolve().parents[2] / "tests" / "resources"
-DEFAULT_TEST_RESOURCE_PROJECT_METADATA: dict[str, dict[str, Any]] = {
-    "DVWA-master.zip": {
-        "name": "DVWA",
-        "description": (
-            "DVWA（Damn Vulnerable Web Application）是经典的 Web 安全靶场项目，"
-            "覆盖 SQL 注入、XSS、文件包含、CSRF 等常见漏洞场景，适合用于漏洞验证与规则调试。"
-        ),
-        "fallback_languages": ["PHP", "JavaScript"],
-    },
-    "DSVW-master.zip": {
-        "name": "DSVW",
-        "description": (
-            "DSVW（Damn Small Vulnerable Web）是轻量级 Web 漏洞练习项目，"
-            "聚焦常见输入验证与访问控制缺陷，便于快速复现与教学演示。"
-        ),
-        "fallback_languages": ["PHP", "JavaScript"],
-    },
-    "WebGoat-main.zip": {
-        "name": "WebGoat",
-        "description": (
-            "WebGoat 是 OWASP 提供的交互式安全训练平台，"
-            "包含身份认证、注入、逻辑缺陷等多类教学关卡，适合后端与应用安全演练。"
-        ),
-        "fallback_languages": ["Java", "JavaScript"],
-    },
-    "JavaSecLab-1.4.zip": {
-        "name": "JavaSecLab",
-        "description": (
-            "JavaSecLab 是面向 Java 生态的漏洞练习项目，"
-            "覆盖反序列化、表达式注入、模板注入等典型风险，适合 Java 安全测试场景。"
-        ),
-        "fallback_languages": ["Java"],
-    },
-    "govwa-master.zip": {
-        "name": "govwa",
-        "description": (
-            "govwa 是 Go 语言 Web 漏洞练习项目，"
-            "用于演示输入校验、权限控制和请求处理中的安全缺陷，适合 Go 应用审计训练。"
-        ),
-        "fallback_languages": ["Go", "HTML"],
-    },
-    "fastjson.zip": {
-        "name": "fastjson",
-        "description": (
-            "fastjson 安全样本项目用于演示 Java 反序列化链与历史漏洞利用面，"
-            "可用于规则回归测试与序列化安全能力验证。"
-        ),
-        "fallback_languages": ["Java"],
-    },
-}
 
 
 @dataclass(frozen=True)
@@ -134,7 +77,10 @@ class DefaultZipSeedProject:
     name: str
     description: str
     archive_name: str
-    local_zip_path: str
+    owner: str
+    repo: str
+    ref_type: str
+    ref: str
     fallback_languages: list[str]
     legacy_description: str | None = None
     legacy_repository_url: str | None = None
@@ -190,34 +136,99 @@ async def cleanup_legacy_default_projects(db: AsyncSession, user_id: str) -> Non
     logger.info("✓ 已清理旧默认项目: %s 个", len(legacy_projects))
 
 
-def _build_default_test_resource_seed_projects() -> list[DefaultZipSeedProject]:
-    seeds: list[DefaultZipSeedProject] = []
-    for zip_path in sorted(DEFAULT_TEST_RESOURCE_ARCHIVE_DIR.glob("*.zip")):
-        metadata = DEFAULT_TEST_RESOURCE_PROJECT_METADATA.get(zip_path.name, {})
-        default_name = zip_path.stem
-        for suffix in ("-master", "-main"):
-            if default_name.endswith(suffix):
-                default_name = default_name[: -len(suffix)]
-                break
-        project_name = metadata.get("name", default_name)
-        description = metadata.get(
-            "description",
-            (
-                f"{project_name} 是系统内置的离线安全样本项目，来源于本地归档 {zip_path.name}，"
-                "用于首次启动时自动初始化项目数据并支持后续重复使用。"
+def _build_default_seed_projects() -> list[DefaultZipSeedProject]:
+    return [
+        DefaultZipSeedProject(
+            name=DEFAULT_LIBPLIST_NAME,
+            description=DEFAULT_LIBPLIST_DESCRIPTION,
+            archive_name=DEFAULT_LIBPLIST_ARCHIVE_NAME,
+            owner="libimobiledevice",
+            repo="libplist",
+            ref_type="tag",
+            ref="2.7.0",
+            fallback_languages=["C"],
+            legacy_description=DEFAULT_LIBPLIST_LEGACY_DESCRIPTION,
+            legacy_repository_url=DEFAULT_LIBPLIST_LEGACY_ZIP_URL,
+        ),
+        DefaultZipSeedProject(
+            name="DVWA",
+            description=(
+                "DVWA（Damn Vulnerable Web Application）是经典的 Web 安全靶场项目，"
+                "覆盖 SQL 注入、XSS、文件包含、CSRF 等常见漏洞场景，适合用于漏洞验证与规则调试。"
             ),
-        )
-        fallback_languages = metadata.get("fallback_languages", ["Unknown"])
-        seeds.append(
-            DefaultZipSeedProject(
-                name=project_name,
-                description=description,
-                archive_name=zip_path.name,
-                local_zip_path=str(zip_path),
-                fallback_languages=fallback_languages,
-            )
-        )
-    return seeds
+            archive_name="DVWA-master.zip",
+            owner="digininja",
+            repo="DVWA",
+            ref_type="commit",
+            ref="eba982f486aef10fd4278948cd1bb078504b74e7",
+            fallback_languages=["PHP", "JavaScript"],
+        ),
+        DefaultZipSeedProject(
+            name="DSVW",
+            description=(
+                "DSVW（Damn Small Vulnerable Web）是轻量级 Web 漏洞练习项目，"
+                "聚焦常见输入验证与访问控制缺陷，便于快速复现与教学演示。"
+            ),
+            archive_name="DSVW-master.zip",
+            owner="stamparm",
+            repo="DSVW",
+            ref_type="commit",
+            ref="7d40f4b7939c901610ed9b85724552d60e7d63fa",
+            fallback_languages=["PHP", "JavaScript"],
+        ),
+        DefaultZipSeedProject(
+            name="WebGoat",
+            description=(
+                "WebGoat 是 OWASP 提供的交互式安全训练平台，"
+                "包含身份认证、注入、逻辑缺陷等多类教学关卡，适合后端与应用安全演练。"
+            ),
+            archive_name="WebGoat-main.zip",
+            owner="WebGoat",
+            repo="WebGoat",
+            ref_type="commit",
+            ref="7d3343d08c360d4751e5298e1fe910463b7731a1",
+            fallback_languages=["Java", "JavaScript"],
+        ),
+        DefaultZipSeedProject(
+            name="JavaSecLab",
+            description=(
+                "JavaSecLab 是面向 Java 生态的漏洞练习项目，"
+                "覆盖反序列化、表达式注入、模板注入等典型风险，适合 Java 安全测试场景。"
+            ),
+            archive_name="JavaSecLab-1.4.zip",
+            owner="whgojp",
+            repo="JavaSecLab",
+            ref_type="tag",
+            ref="V1.4",
+            fallback_languages=["Java"],
+        ),
+        DefaultZipSeedProject(
+            name="govwa",
+            description=(
+                "govwa 是 Go 语言 Web 漏洞练习项目，"
+                "用于演示输入校验、权限控制和请求处理中的安全缺陷，适合 Go 应用审计训练。"
+            ),
+            archive_name="govwa-master.zip",
+            owner="0c34",
+            repo="govwa",
+            ref_type="commit",
+            ref="4058f79f31eeb4a36d8f1e64bba1f0c899646e6f",
+            fallback_languages=["Go", "HTML"],
+        ),
+        DefaultZipSeedProject(
+            name="fastjson",
+            description=(
+                "fastjson 安全样本项目用于演示 Java 反序列化链与历史漏洞利用面，"
+                "可用于规则回归测试与序列化安全能力验证。"
+            ),
+            archive_name="fastjson.zip",
+            owner="alibaba",
+            repo="fastjson",
+            ref_type="commit",
+            ref="c942c83443117b73af5ad278cc780270998ba3e1",
+            fallback_languages=["Java"],
+        ),
+    ]
 
 
 async def _ensure_default_zip_seed_project(
@@ -226,7 +237,7 @@ async def _ensure_default_zip_seed_project(
     seed: DefaultZipSeedProject,
 ) -> None:
     """
-    确保默认 ZIP 种子项目存在，并从本地 seed 资源导入 zip 到项目存储。
+    确保默认 ZIP 种子项目存在，并从 GitHub 归档导入到项目存储。
     """
     result = await db.execute(
         select(Project).where(
@@ -282,23 +293,23 @@ async def _ensure_default_zip_seed_project(
     if await has_project_zip(project.id):
         return
 
-    if not os.path.exists(seed.local_zip_path):
-        logger.warning(
-            "默认项目 ZIP 本地资源缺失（%s），仅保留项目记录: %s",
-            seed.name,
-            seed.local_zip_path,
-        )
-        return
-
+    archive_path: str | None = None
     try:
-        zip_hash = _sha256_file(seed.local_zip_path)
+        archive_path = await download_seed_archive(
+            owner=seed.owner,
+            repo=seed.repo,
+            ref_type=seed.ref_type,
+            ref=seed.ref,
+            archive_name=seed.archive_name,
+        )
+        zip_hash = _sha256_file(archive_path)
         await save_project_zip(
             project.id,
-            seed.local_zip_path,
+            archive_path,
             seed.archive_name,
         )
 
-        zip_paths = _collect_zip_paths(seed.local_zip_path)
+        zip_paths = _collect_zip_paths(archive_path)
         detected_languages = detect_languages_from_paths(zip_paths)
         project.programming_languages = json.dumps(
             detected_languages or seed.fallback_languages,
@@ -313,41 +324,45 @@ async def _ensure_default_zip_seed_project(
             project.zip_file_hash = None
             await db.commit()
             logger.warning("默认项目 %s ZIP 哈希重复，已跳过去重哈希写入", seed.name)
-        logger.info("✓ 默认项目 %s ZIP 本地导入完成", seed.name)
+        logger.info("✓ 默认项目 %s ZIP 远程导入完成", seed.name)
     except Exception as e:
-        logger.warning("默认项目 %s ZIP 本地导入失败，仅保留项目记录: %s", seed.name, e)
+        logger.warning("默认项目 %s ZIP 下载失败，仅保留项目记录: %s", seed.name, e)
+    finally:
+        if archive_path and os.path.exists(archive_path):
+            try:
+                os.remove(archive_path)
+            except OSError:
+                pass
 
 
 async def ensure_default_libplist_project(db: AsyncSession, user: User) -> None:
     """
-    首次初始化仅引入 libplist 默认项目，并从本地 seed 资源导入 zip 到项目存储。
+    兼容入口：仅确保 libplist 默认项目存在。
     """
     await cleanup_legacy_default_projects(db, user.id)
+    libplist_seed = next(seed for seed in _build_default_seed_projects() if seed.name == DEFAULT_LIBPLIST_NAME)
     await _ensure_default_zip_seed_project(
         db=db,
         user=user,
-        seed=DefaultZipSeedProject(
-            name=DEFAULT_LIBPLIST_NAME,
-            description=DEFAULT_LIBPLIST_DESCRIPTION,
-            archive_name=DEFAULT_LIBPLIST_ARCHIVE_NAME,
-            local_zip_path=DEFAULT_LIBPLIST_LOCAL_ZIP_PATH,
-            fallback_languages=["C"],
-            legacy_description=DEFAULT_LIBPLIST_LEGACY_DESCRIPTION,
-            legacy_repository_url=DEFAULT_LIBPLIST_LEGACY_ZIP_URL,
-        ),
+        seed=libplist_seed,
     )
 
 
 async def ensure_default_test_resource_projects(db: AsyncSession, user: User) -> None:
     """
-    导入 backend/tests/resources 下的离线 ZIP，作为默认演练项目。
+    兼容入口：确保非 libplist 的默认演练项目存在。
     """
-    seeds = _build_default_test_resource_seed_projects()
-    if not seeds:
-        logger.info("默认测试资源目录下未发现 ZIP：%s", DEFAULT_TEST_RESOURCE_ARCHIVE_DIR)
-        return
-
+    seeds = [seed for seed in _build_default_seed_projects() if seed.name != DEFAULT_LIBPLIST_NAME]
     for seed in seeds:
+        await _ensure_default_zip_seed_project(db=db, user=user, seed=seed)
+
+
+async def ensure_default_seed_projects(db: AsyncSession, user: User) -> None:
+    """
+    统一确保所有 GitHub 预置项目存在。
+    """
+    await cleanup_legacy_default_projects(db, user.id)
+    for seed in _build_default_seed_projects():
         await _ensure_default_zip_seed_project(db=db, user=user, seed=seed)
 
 
@@ -358,7 +373,7 @@ async def create_demo_user(db: AsyncSession) -> User | None:
     """
     result = await db.execute(select(User).where(User.email == DEFAULT_DEMO_EMAIL))
     demo_user = result.scalars().first()
-    
+
     if not demo_user:
         demo_user = User(
             email=DEFAULT_DEMO_EMAIL,
@@ -387,10 +402,10 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
     if existing_projects:
         logger.info("演示数据已存在，跳过创建")
         return
-    
+
     logger.info("开始创建演示数据...")
-    now = datetime.now(timezone.utc)
-    
+    now = datetime.now(UTC)
+
     # ==================== 创建演示项目 ====================
     projects_data = [
         {
@@ -448,7 +463,7 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
             "programming_languages": json.dumps(["Rust", "TypeScript"]),
         },
     ]
-    
+
     projects = []
     for i, pdata in enumerate(projects_data):
         project = Project(
@@ -459,10 +474,10 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
         )
         db.add(project)
         projects.append(project)
-    
+
     await db.flush()
     logger.info(f"✓ 创建了 {len(projects)} 个演示项目")
-    
+
     # ==================== 创建审计任务和问题 ====================
     tasks_data = [
         # 项目1: 电商平台后端
@@ -487,7 +502,7 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
         {"project_idx": 5, "status": "completed", "days_ago": 16, "files": 67, "lines": 8400, "issues": 16, "score": 65.3},
         {"project_idx": 5, "status": "completed", "days_ago": 6, "files": 72, "lines": 9100, "issues": 9, "score": 77.5},
     ]
-    
+
     tasks = []
     for tdata in tasks_data:
         task_time = now - timedelta(days=tdata["days_ago"])
@@ -508,10 +523,10 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
         )
         db.add(task)
         tasks.append(task)
-    
+
     await db.flush()
     logger.info(f"✓ 创建了 {len(tasks)} 个审计任务")
-    
+
     # ==================== 创建审计问题 ====================
     issue_templates = [
         {"type": "security", "severity": "critical", "title": "SQL 注入漏洞", "file": "UserService.java", "line": 45},
@@ -527,12 +542,12 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
         {"type": "maintainability", "severity": "medium", "title": "重复代码块", "file": "handlers/auth.go", "line": 78},
         {"type": "maintainability", "severity": "low", "title": "缺少错误处理", "file": "utils/http.py", "line": 56},
     ]
-    
+
     issue_count = 0
     for task in tasks:
         if task.status != "completed" or task.issues_count == 0:
             continue
-        
+
         # 为每个完成的任务创建问题
         num_issues = min(task.issues_count, len(issue_templates))
         for i in range(num_issues):
@@ -554,10 +569,10 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
             )
             db.add(issue)
             issue_count += 1
-    
+
     await db.flush()
     logger.info(f"✓ 创建了 {issue_count} 个审计问题")
-    
+
     # ==================== 创建即时分析记录 ====================
     analyses_data = [
         {"lang": "Python", "issues": 3, "score": 75.5, "days_ago": 10},
@@ -567,7 +582,7 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
         {"lang": "TypeScript", "issues": 4, "score": 72.8, "days_ago": 2},
         {"lang": "Python", "issues": 0, "score": 95.0, "days_ago": 1},
     ]
-    
+
     for adata in analyses_data:
         analysis = InstantAnalysis(
             user_id=user.id,
@@ -580,10 +595,10 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
             created_at=now - timedelta(days=adata["days_ago"]),
         )
         db.add(analysis)
-    
+
     await db.flush()
     logger.info(f"✓ 创建了 {len(analyses_data)} 条即时分析记录")
-    
+
     await db.commit()
     logger.info("✓ 演示数据创建完成")
 
@@ -597,7 +612,7 @@ def validate_opengrep_rule(yaml_content: str) -> bool:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as tmp_file:
             tmp_file.write(yaml_content)
             tmp_file_path = tmp_file.name
-        
+
         try:
             # 使用 opengrep --config 验证规则
             result = subprocess.run(
@@ -634,22 +649,22 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
     if existing_rule_ids:
         logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则，跳过内置规则初始化")
         return
-    
+
     # 获取规则文件目录
     rules_dir = Path(__file__).parent / "rules"
     if not rules_dir.exists():
         logger.warning(f"规则目录不存在: {rules_dir}")
         return
-    
+
     # 读取所有 .yaml 文件
     yaml_files = list(rules_dir.glob("*.yaml")) + list(rules_dir.glob("*.yml"))
     if not yaml_files:
         logger.warning(f"规则目录中没有找到 .yaml 文件: {rules_dir}")
         return
-    
+
     logger.info(f"开始加载内置规则，找到 {len(yaml_files)} 个文件...")
     logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则")
-    
+
     created_count = 0
     skipped_count = 0
     invalid_count = 0
@@ -663,55 +678,55 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
     )
     for yaml_file in iterator:
         try:
-            with open(yaml_file, 'r', encoding='utf-8') as f:
+            with open(yaml_file, encoding='utf-8') as f:
                 content = f.read()
                 rule_data = _load_yaml_fast(content)
-            
+
             # 解析 YAML 中的规则
             if not rule_data or 'rules' not in rule_data:
                 logger.warning(f"跳过无效的规则文件: {yaml_file.name}")
                 invalid_count += 1
                 continue
-            
+
             # 验证规则是否有效
             # if not validate_opengrep_rule(content):
             #     logger.warning(f"规则验证失败,跳过: {yaml_file.name}")
             #     invalid_count += 1
             #     continue
-            
-            for rule_idx, rule in enumerate(rule_data['rules']):
+
+            for _rule_idx, rule in enumerate(rule_data['rules']):
                 rule_id = rule.get('id', yaml_file.stem)
                 metadata = rule.get('metadata', {}) if isinstance(rule, dict) else {}
-                
+
                 # 判断规则是否已在表中
                 if rule_id in existing_rule_ids:
                     logger.debug(f"  ⊘ 规则已存在，跳过: {rule_id}")
                     skipped_count += 1
                     continue
-                
+
                 # 提取语言（优先从顶层查找，再从 metadata 中查找）
                 languages = rule.get('languages', [])
                 if not languages or not isinstance(languages, list):
                     languages = metadata.get('languages', [])
-                
+
                 if isinstance(languages, list) and languages:
                     language = languages[0]
                 else:
                     language = 'unknown'
-                
+
                 # 提取严重程度
                 severity = rule.get('severity', 'INFO')
                 if severity not in ['ERROR', 'WARNING', 'INFO']:
                     severity = 'INFO'
-                
+
                 # 提取置信度（从顶层或 metadata 中）
                 confidence = _normalize_confidence(
                     rule.get('confidence') or metadata.get('confidence')
                 )
-                
+
                 # 提取描述 - 如果没有则置空
                 description = rule.get('message') or None
-                
+
                 # 提取 CWE - 优先规则字段，其次 metadata
                 # 检查顶层的 cwe 字段（可能是 None 或具体值）
                 cwe = None
@@ -719,7 +734,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
                     cwe = rule['cwe']
                 elif 'cwe' in metadata and metadata['cwe'] is not None:
                     cwe = metadata['cwe']
-                
+
                 # 标准化 CWE 格式为列表
                 if cwe:
                     if isinstance(cwe, str):
@@ -731,7 +746,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
                         cwe = None
                 else:
                     cwe = None
-                
+
                 # 每条规则独立存储，避免重复写入整文件 YAML
                 rows_to_add.append(
                     {
@@ -749,12 +764,12 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
                 )
                 existing_rule_ids.add(rule_id)  # 更新本地集合，防止同一批次重复
                 logger.debug(f"  ✓ 规则已准备入库: {rule_id} (CWE: {len(cwe) if cwe else 0})")
-        
+
         except Exception as e:
             logger.error(f"加载规则文件失败 {yaml_file.name}: {e}")
             invalid_count += 1
             continue
-    
+
     # 一次性批量添加所有规则
     if rows_to_add:
         try:
@@ -767,7 +782,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
             await db.rollback()
             logger.error(f"  ✗ 规则批量入库失败: {e}")
             invalid_count += len(rows_to_add)
-    
+
     logger.info(f"✓ 内置规则加载完成: 成功创建 {created_count} 条新规则，跳过 {skipped_count} 条已存在的规则，{invalid_count} 条失败")
 
 
@@ -781,28 +796,28 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
     # 检查数据库中是否已有规则
     result = await db.execute(select(OpengrepRule.name))
     existing_rule_ids = {row[0] for row in result.fetchall()}
-    
+
     # 注意：Patch 规则通常是增量添加的，且数量较少，所以即使数据库不为空也不应该跳过初始化
     # 我们只会跳过那些 ID 已经存在的规则
     # if existing_rule_ids:
     #     logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则，跳过 Patch 规则初始化")
     #     return
-    
+
     # 获取规则文件目录
     rules_dir = Path(__file__).parent / "rules_from_patches"
     if not rules_dir.exists():
         logger.warning(f"Patch 规则目录不存在: {rules_dir}")
         return
-    
+
     # 递归读取所有 .yml 文件
     yaml_files = list(rules_dir.glob("**/*.yml")) + list(rules_dir.glob("**/*.yaml"))
     if not yaml_files:
         logger.warning(f"Patch 规则目录中没有找到 .yml 文件: {rules_dir}")
         return
-    
+
     logger.info(f"开始加载 Patch 来源规则，找到 {len(yaml_files)} 个文件...")
     logger.info(f"数据库中已存在 {len(existing_rule_ids)} 条规则")
-    
+
     created_count = 0
     skipped_count = 0
     error_count = 0
@@ -816,64 +831,64 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
     )
     for yaml_file in iterator:
         try:
-            with open(yaml_file, 'r', encoding='utf-8') as f:
+            with open(yaml_file, encoding='utf-8') as f:
                 content = f.read()
                 rule_data = _load_yaml_fast(content)
-            
+
             # 解析 YAML 中的规则
             if not rule_data or 'rules' not in rule_data:
                 logger.debug(f"  ⊘ 跳过无效的规则文件: {yaml_file.relative_to(rules_dir)}")
                 error_count += 1
                 continue
-            
+
             # 验证规则是否有效
             # if not validate_opengrep_rule(content):
             #     logger.debug(f"  ⊘ 规则验证失败,跳过: {yaml_file.relative_to(rules_dir)}")
             #     error_count += 1
             #     continue
-            
+
             # 通常 Patch 规则文件只包含一条规则
-            for rule_idx, rule in enumerate(rule_data['rules']):
+            for _rule_idx, rule in enumerate(rule_data['rules']):
                 rule_id = rule.get('id', yaml_file.stem)
                 metadata = rule.get('metadata', {}) if isinstance(rule, dict) else {}
-                
+
                 # 判断规则是否已在表中
                 if rule_id in existing_rule_ids:
                     logger.debug(f"  ⊘ 规则已存在，跳过: {rule_id}")
                     skipped_count += 1
                     continue
-                
+
                 # 提取语言（优先从顶层查找，再从 metadata 中查找）
                 languages = rule.get('languages', [])
                 if not languages or not isinstance(languages, list):
                     languages = metadata.get('languages', [])
-                
+
                 if isinstance(languages, list) and languages:
                     language = languages[0]
                 else:
                     # 如果规则中没有指定语言，尝试从目录名称中推断
                     relative_path = yaml_file.relative_to(rules_dir)
                     language = relative_path.parts[0] if relative_path.parts else 'unknown'
-                
+
                 # 提取严重程度
                 severity = rule.get('severity', 'INFO')
                 if severity not in ['ERROR', 'WARNING', 'INFO']:
                     severity = 'INFO'
-                
+
                 # 提取置信度（从顶层或 metadata 中）
                 confidence = _normalize_confidence(
                     rule.get('confidence') or metadata.get('confidence')
                 )
-                
+
                 # 提取描述 - 如果没有则置空
                 description = rule.get('message') or None
-                
+
                 # 读取对应的 patch 文件内容
                 patch_content = None
                 patch_file = Path(__file__).parent / "patches" / f"{yaml_file.stem}.patch"
                 if patch_file.exists():
                     try:
-                        with open(patch_file, 'r', encoding='utf-8') as pf:
+                        with open(patch_file, encoding='utf-8') as pf:
                             patch_content = pf.read()
                     except Exception as e:
                         logger.debug(f"  ⊘ 无法读取 patch 文件 {patch_file.name}: {e}")
@@ -882,7 +897,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                 else:
                     # 如果没有对应的 patch 文件，从 metadata 获取 URL
                     patch_content = metadata.get('source-url') or None
-                
+
                 # 提取 CWE - 优先规则字段，其次 metadata
                 # 检查顶层的 cwe 字段（可能是 None 或具体值）
                 cwe = None
@@ -890,7 +905,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                     cwe = rule['cwe']
                 elif 'cwe' in metadata and metadata['cwe'] is not None:
                     cwe = metadata['cwe']
-                
+
                 # 标准化 CWE 格式为列表
                 if cwe:
                     if isinstance(cwe, str):
@@ -902,7 +917,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                         cwe = None
                 else:
                     cwe = None
-                
+
                 # 每条规则独立存储，避免重复写入整文件 YAML
                 rows_to_add.append(
                     {
@@ -921,12 +936,12 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                 )
                 existing_rule_ids.add(rule_id)  # 更新本地集合，防止同一批次重复
                 logger.debug(f"  ✓ 规则已准备入库: {rule_id} (CWE: {len(cwe) if cwe else 0})")
-        
+
         except Exception as e:
             logger.error(f"加载规则文件失败 {yaml_file.relative_to(rules_dir)}: {e}")
             error_count += 1
             continue
-    
+
     # 一次性批量添加所有规则
     if rows_to_add:
         try:
@@ -939,7 +954,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
             await db.rollback()
             logger.error(f"  ✗ 规则批量入库失败: {e}")
             error_count += len(rows_to_add)
-    
+
     logger.info(f"✓ Patch 规则导入完成: 成功创建 {created_count} 条新规则，"
                f"跳过 {skipped_count} 条已存在的规则，{error_count} 条错误并已删除")
 
@@ -977,28 +992,27 @@ async def init_db(db: AsyncSession) -> None:
 
     # 沙箱模式下直接补齐去重字段（不依赖额外 alembic 文件）
     await ensure_project_zip_hash_schema(db)
-    
+
     # 创建演示用户
     demo_user = await create_demo_user(db)
-    
-    # 不再创建历史演示项目，统一切换为默认 libplist 项目
+
+    # 不再创建历史演示项目，统一切换为 GitHub 预置样本项目
     if demo_user:
-        await ensure_default_libplist_project(db, demo_user)
-        await ensure_default_test_resource_projects(db, demo_user)
-    
+        await ensure_default_seed_projects(db, demo_user)
+
     await db.commit()
-    
+
     # 初始化内置 opengrep 规则
     await create_internal_opengrep_rules(db)
-    
+
     # 初始化 Patch 来源的 opengrep 规则
     await create_patch_opengrep_rules(db)
-    
+
     # 初始化系统模板和规则
     try:
         from app.services.init_templates import init_templates_and_rules
         await init_templates_and_rules(db)
     except Exception as e:
         logger.warning(f"初始化模板和规则跳过: {e}")
-    
+
     logger.info("数据库初始化完成")

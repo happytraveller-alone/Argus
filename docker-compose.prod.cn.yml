@@ -1,8 +1,8 @@
 # =============================================
-# DeepAudit v3.0.4 生产环境一键部署配置（国内加速版）
+# VulHunter v3.0.4 生产环境一键部署配置（国内加速版）
 # =============================================
 # 使用南京大学镜像站加速拉取 GHCR 镜像
-# 部署命令: curl -fsSL https://raw.githubusercontent.com/lintsinghua/DeepAudit/main/docker-compose.prod.cn.yml | docker compose -f - up -d
+# 部署命令: curl -fsSL https://raw.githubusercontent.com/unbengable12/AuditTool/main/docker-compose.prod.cn.yml | docker compose -f - up -d
 # 镜像加速说明：
 # - 原始地址：ghcr.io
 # - 加速地址：ghcr.nju.edu.cn（南京大学开源镜像站）
@@ -16,14 +16,14 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=deepaudit
+      - POSTGRES_DB=${POSTGRES_DB:-vulhunter}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   redis:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:7-alpine
@@ -36,10 +36,10 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   backend:
-    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-backend:${DEEPAUDIT_IMAGE_TAG:-latest}
+    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}
     restart: unless-stopped
     volumes:
       - backend_uploads:/app/uploads
@@ -49,16 +49,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/deepaudit
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       - REDIS_URL=redis://redis:6379/0
       - AGENT_ENABLED=true
       - SANDBOX_ENABLED=true
-      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-sandbox:${DEEPAUDIT_IMAGE_TAG:-latest}}
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
       - MCP_ENABLED=true
       - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
       - MCP_REQUIRED_RUNTIME_DOMAIN=all
       - MCP_DAEMON_AUTOSTART=true
-      - MCP_DAEMON_LOG_DIR=/tmp/deepaudit/mcp-daemons
+      - MCP_DAEMON_LOG_DIR=/tmp/vulhunter/mcp-daemons
       - MCP_SOURCE_SYNC_ENABLED=true
       - MCP_SOURCE_ROOT=/app/data/mcp/sources
       - MCP_SOURCE_SYNC_DEPTH=1
@@ -123,7 +123,7 @@ services:
       - QMD_CLI_COMMAND=qmd
       - QMD_CLI_TIMEOUT_SECONDS=120
       - QMD_TASK_KB_ENABLED=true
-      - QMD_TASK_ROOT_REL=.deepaudit/qmd
+      - QMD_TASK_ROOT_REL=.vulhunter/qmd
       - QMD_TASK_COLLECTION_PREFIX=task
       - QMD_TASK_DOC_GLOB=**/*.{md,txt,json,yml,yaml}
       - QMD_TASK_AUTO_EMBED=false
@@ -147,23 +147,23 @@ services:
       db-migrate:
         condition: service_completed_successfully
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   # 数据库迁移服务 - 在后端启动前自动执行
   db-migrate:
-    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-backend:${DEEPAUDIT_IMAGE_TAG:-latest}
+    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}
     restart: "no"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/deepaudit
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
     command: [".venv/bin/alembic", "upgrade", "head"]
     depends_on:
       db:
         condition: service_healthy
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   frontend:
-    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-frontend:${DEEPAUDIT_IMAGE_TAG:-latest}
+    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "3000:80"
@@ -179,16 +179,16 @@ services:
     logging:
       driver: "none"
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   # 预拉取沙箱镜像（后端会按需调用）
   sandbox-pull:
-    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-sandbox:${DEEPAUDIT_IMAGE_TAG:-latest}
+    image: ${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}
     restart: "no"
     command: echo "Sandbox image ready"
 
 networks:
-  deepaudit-network:
+  vulhunter-network:
     driver: bridge
 
 volumes:

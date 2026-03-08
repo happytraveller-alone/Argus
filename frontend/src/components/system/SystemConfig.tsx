@@ -883,27 +883,25 @@ export function SystemConfig({
 		const backendProviders = Array.isArray(llmProvidersFromBackend)
 			? llmProvidersFromBackend
 			: [];
-		const baseProviders =
+		const baseProviders: LLMProviderItem[] =
 			backendProviders.length > 0 ? backendProviders : BUILTIN_LLM_PROVIDERS;
 		const currentProviderId = normalizeLlmProviderId(config?.llmProvider || "");
 		if (!currentProviderId) return baseProviders;
 		if (baseProviders.some((provider) => provider.id === currentProviderId)) {
 			return baseProviders;
 		}
-		return [
-			...baseProviders,
-			{
-				id: currentProviderId,
-				name: currentProviderId,
-				description: "自定义模型提供商",
-				defaultModel: "",
-				models: [],
-				defaultBaseUrl: "",
-				requiresApiKey: true,
-				supportsModelFetch: false,
-				fetchStyle: "openai_compatible",
-			},
-		];
+		const customProvider: LLMProviderItem = {
+			id: currentProviderId,
+			name: currentProviderId,
+			description: "自定义模型提供商",
+			defaultModel: "",
+			models: [],
+			defaultBaseUrl: "",
+			requiresApiKey: true,
+			supportsModelFetch: false,
+			fetchStyle: "openai_compatible",
+		};
+		return [...baseProviders, customProvider];
 	}, [llmProvidersFromBackend, config?.llmProvider]);
 
 	const loadConfig = reloadConfig;

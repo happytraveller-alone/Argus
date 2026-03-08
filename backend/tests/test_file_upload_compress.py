@@ -1,24 +1,33 @@
-from app.services.upload.upload_manager import UploadManager
-from app.services.upload.compression_factory import CompressionStrategyFactory
-import tempfile
+import zipfile
 from pathlib import Path
-import asyncio
+
+import pytest
+
+from app.services.upload.compression_factory import CompressionStrategyFactory
+from app.services.upload.upload_manager import UploadManager
 
 
-async def test_upload_manager():
-    tests_dir = Path(__file__).parent
-    test_file = tests_dir / "resources" / "fastjson.zip"
-    print(f"Testing with file: {test_file}")
+@pytest.mark.asyncio
+async def test_upload_manager_with_generated_zip(tmp_path: Path):
+    test_file = tmp_path / "fastjson.zip"
+    with zipfile.ZipFile(test_file, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("fastjson/src/main/java/com/example/App.java", "class App {}\n")
+
     is_valid, error = UploadManager.validate_file(test_file)
-    print(f"Validation: {is_valid}, Error: {error}")
+    assert is_valid is True
+    assert error is None
+
     success, files, error = UploadManager.get_file_list_preview(test_file)
-    print(f"File list preview success: {success}, Files: {files}, Error: {error}")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        success, file_list, error = await UploadManager.extract_file(test_file, tmpdir)
-        print(f"Extracted files to {tmpdir}: {file_list}")
+    assert success is True
+    assert error is None
+    assert any(item["path"].endswith("App.java") for item in files)
 
-    # 4. 查询支持的格式
+    extract_dir = tmp_path / "extracted"
+    success, file_list, error = await UploadManager.extract_file(test_file, str(extract_dir))
+    assert success is True
+    assert error is None
+    assert any(path.endswith("App.java") for path in file_list)
+    assert (extract_dir / "fastjson/src/main/java/com/example/App.java").exists()
+
     formats = CompressionStrategyFactory.get_supported_formats()
-    print(formats)
-
-asyncio.run(test_upload_manager())
+    assert ".zip" in formats

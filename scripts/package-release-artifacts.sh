@@ -8,8 +8,8 @@ VERSION="${VERSION:-}"
 SKIP_BUILD="false"
 BUILD_SANDBOX="true"   # NEW: default build sandbox; can disable via --no-sandbox
 DOCKER_BIN="${DOCKER_BIN:-docker}"
-IMAGE_BACKEND="deepaudit/backend-local:latest"
-IMAGE_FRONTEND="deepaudit/frontend-local:latest"
+IMAGE_BACKEND="vulhunter/backend-local:latest"
+IMAGE_FRONTEND="vulhunter/frontend-local:latest"
 BUILD_RETRIES="${BUILD_RETRIES:-2}"
 BUILD_RETRY_INTERVAL_SECONDS="${BUILD_RETRY_INTERVAL_SECONDS:-5}"
 
@@ -17,7 +17,7 @@ usage() {
   cat <<USAGE
 Usage: $(basename "$0") [options]
 
-Package DeepAudit release artifacts for migration/deployment.
+Package VulHunter release artifacts for migration/deployment.
 
 Options:
   --version <v>        Override version (default: frontend/package.json version)
@@ -34,10 +34,10 @@ Environment:
 
 Outputs:
   checksums.txt
-  deepaudit-backend-v<version>.tar.gz
-  deepaudit-frontend-v<version>.tar.gz
-  deepaudit-source-v<version>.tar.gz
-  deepaudit-docker-v<version>.tar.gz
+  vulhunter-backend-v<version>.tar.gz
+  vulhunter-frontend-v<version>.tar.gz
+  vulhunter-source-v<version>.tar.gz
+  vulhunter-docker-v<version>.tar.gz
 USAGE
 }
 
@@ -195,10 +195,10 @@ VERSION="${VERSION#v}"
 TAG_PREFIX="v${VERSION}"
 mkdir -p "$DIST_DIR"
 
-BACKEND_PKG="deepaudit-backend-${TAG_PREFIX}.tar.gz"
-FRONTEND_PKG="deepaudit-frontend-${TAG_PREFIX}.tar.gz"
-SOURCE_PKG="deepaudit-source-${TAG_PREFIX}.tar.gz"
-DOCKER_PKG="deepaudit-docker-${TAG_PREFIX}.tar.gz"
+BACKEND_PKG="vulhunter-backend-${TAG_PREFIX}.tar.gz"
+FRONTEND_PKG="vulhunter-frontend-${TAG_PREFIX}.tar.gz"
+SOURCE_PKG="vulhunter-source-${TAG_PREFIX}.tar.gz"
+DOCKER_PKG="vulhunter-docker-${TAG_PREFIX}.tar.gz"
 CHECKSUM_FILE="checksums.txt"
 
 log "version: ${VERSION}"

@@ -1,5 +1,5 @@
 # =============================================
-# DeepAudit v3.0.4 Docker Compose 配置
+# VulHunter v3.0.4 Docker Compose 配置
 # =============================================
 # 部署: docker compose up -d --build
 # 查看日志: docker compose logs -f
@@ -18,7 +18,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=deepaudit
+      - POSTGRES_DB=${POSTGRES_DB:-vulhunter}
     ports:
       - "5432:5432"
     healthcheck:
@@ -27,7 +27,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   backend:
     build:
@@ -53,32 +53,33 @@ services:
         - HTTPS_PROXY=
         - all_proxy=
         - ALL_PROXY=
-    image: deepaudit/backend-local:latest
+    image: vulhunter/backend-local:latest
     restart: unless-stopped
     volumes:
       # - ./backend/app:/app/app:ro  # 挂载代码目录，修改后自动生效
       - backend_uploads:/app/uploads
       - mcp_data:/app/data/mcp
       - qmd_data:/app/data/qmd
-      - /tmp/deepaudit:/tmp/deepaudit # ZIP/Repo 工作目录必须对宿主机可见（供沙箱/Joern MCP 挂载）
+      - /tmp/vulhunter:/tmp/vulhunter # VulHunter runtime cache/log dir visible to host
+      - /tmp/vulhunter:/tmp/deepaudit # ZIP/Repo 工作目录兼容挂载（供沙箱/Joern MCP 挂载）
       - /var/run/docker.sock:/var/run/docker.sock # 沙箱执行必须
     ports:
       - "8000:8000"
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/deepaudit
-      - ASYNCPG_DSN=postgresql://postgres:postgres@db:5432/deepaudit
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
+      - ASYNCPG_DSN=postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       - REDIS_URL=redis://redis:6379/0
       - RESET_STATIC_SCAN_TABLES_ON_DEPLOY=false
       - AGENT_ENABLED=true
       - SANDBOX_ENABLED=true
-      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/deepaudit-sandbox:latest}
+      - SANDBOX_IMAGE=${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/lintsinghua/vulhunter-sandbox:latest}
       - MCP_ENABLED=true
       - MCP_REQUIRE_ALL_READY_ON_STARTUP=true
       - MCP_REQUIRED_RUNTIME_DOMAIN=all
       - MCP_DAEMON_AUTOSTART=true
-      - MCP_DAEMON_LOG_DIR=/tmp/deepaudit/mcp-daemons
+      - MCP_DAEMON_LOG_DIR=/tmp/vulhunter/mcp-daemons
       - MCP_SOURCE_SYNC_ENABLED=true
       - MCP_SOURCE_ROOT=/app/data/mcp/sources
       - MCP_SOURCE_SYNC_DEPTH=1
@@ -145,7 +146,7 @@ services:
       - QMD_CLI_COMMAND=qmd
       - QMD_CLI_TIMEOUT_SECONDS=120
       - QMD_TASK_KB_ENABLED=true
-      - QMD_TASK_ROOT_REL=.deepaudit/qmd
+      - QMD_TASK_ROOT_REL=.vulhunter/qmd
       - QMD_TASK_COLLECTION_PREFIX=task
       - QMD_TASK_DOC_GLOB=**/*.{md,txt,json,yml,yaml}
       - QMD_TASK_AUTO_EMBED=false
@@ -174,7 +175,7 @@ services:
     # 开发模式：启用 --reload 热重载
     command: sh -c "if [ -x /app/scripts/sync_mcp_sources.sh ]; then /app/scripts/sync_mcp_sources.sh || true; fi && if [ -x /app/scripts/install_codex_skills.sh ]; then /app/scripts/install_codex_skills.sh; fi && if [ \"$$SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP\" = \"true\" ] || [ \"$$SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP\" = \"1\" ]; then .venv/bin/python scripts/build_skill_registry.py --print-json || true; fi && .venv/bin/alembic upgrade head && if [ \"$$RESET_STATIC_SCAN_TABLES_ON_DEPLOY\" = \"true\" ] || [ \"$$RESET_STATIC_SCAN_TABLES_ON_DEPLOY\" = \"1\" ]; then .venv/bin/python scripts/reset_static_scan_tables.py; fi && .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   frontend:
     build:
@@ -193,7 +194,7 @@ services:
         - HTTPS_PROXY=
         - all_proxy=
         - ALL_PROXY=
-    image: deepaudit/frontend-local:latest
+    image: vulhunter/frontend-local:latest
     restart: unless-stopped
     volumes:
       # - ./frontend/dist:/usr/share/nginx/html:ro  # 挂载构建产物，本地 pnpm build 后自动生效
@@ -213,7 +214,7 @@ services:
     logging:
       driver: "none"
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   # =============================================
   # Agent 服务必须组件
@@ -233,7 +234,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
   # 沙箱镜像构建服务 (漏洞验证必须)
   # 注意: 此服务仅用于构建镜像，构建完成后自动退出
@@ -253,13 +254,13 @@ services:
         - SANDBOX_NPM_REGISTRY_PRIMARY=${SANDBOX_NPM_REGISTRY_PRIMARY:-https://registry.npmmirror.com}
         - SANDBOX_NPM_REGISTRY_FALLBACK=${SANDBOX_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}
         - SANDBOX_PNPM_CMD_TIMEOUT_SECONDS=${SANDBOX_PNPM_CMD_TIMEOUT_SECONDS:-420}
-    image: deepaudit/sandbox:latest
+    image: vulhunter/sandbox:latest
     profiles: ["build"]
     restart: "no"
     command: echo "Sandbox image built successfully"
 
 networks:
-  deepaudit-network:
+  vulhunter-network:
     driver: bridge
 
 volumes:

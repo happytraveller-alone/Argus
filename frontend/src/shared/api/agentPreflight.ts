@@ -44,12 +44,15 @@ const resolveEffectiveApiKey = (
 
 export async function runAgentPreflightCheck(): Promise<AgentPreflightResult> {
 	const userConfig = await api.getUserConfig();
-	const llmConfig = userConfig?.llmConfig || {};
+	const llmConfig = (userConfig?.llmConfig || {}) as Record<string, unknown>;
 
-	const llmProvider = normalizeProvider(llmConfig.llmProvider) || "openai";
+	const llmProvider =
+		normalizeProvider(
+			typeof llmConfig.llmProvider === "string" ? llmConfig.llmProvider : undefined,
+		) || "openai";
 	const llmApiKey = resolveEffectiveApiKey(llmProvider, llmConfig);
-	const llmModel = (llmConfig.llmModel || "").trim();
-	const llmBaseUrl = (llmConfig.llmBaseUrl || "").trim();
+	const llmModel = String(llmConfig.llmModel || "").trim();
+	const llmBaseUrl = String(llmConfig.llmBaseUrl || "").trim();
 	const missingFields: PreflightMissingField[] = [];
 	if (!llmModel) missingFields.push("llmModel");
 	if (!llmBaseUrl) missingFields.push("llmBaseUrl");

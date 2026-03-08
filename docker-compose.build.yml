@@ -1,12 +1,12 @@
 # =============================================
-# DeepAudit 本地源码构建覆盖配置（可选）
+# VulHunter 本地源码构建覆盖配置（可选）
 # =============================================
 # 使用方式:
 # docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 services:
   backend:
-    image: deepaudit/backend-local:latest
+    image: vulhunter/backend-local:latest
     build:
       context: ./backend
       args:
@@ -31,10 +31,10 @@ services:
         - all_proxy=
         - ALL_PROXY=
     environment:
-      SANDBOX_IMAGE: deepaudit/sandbox:latest
+      SANDBOX_IMAGE: vulhunter/sandbox:latest
 
   frontend:
-    image: deepaudit/frontend-local:latest
+    image: vulhunter/frontend-local:latest
     build:
       context: ./frontend
       dockerfile: ${FRONTEND_DOCKERFILE:-Dockerfile}
@@ -53,7 +53,7 @@ services:
         - ALL_PROXY=
 
   sandbox:
-    image: deepaudit/sandbox:latest
+    image: vulhunter/sandbox:latest
     build:
       context: ./docker/sandbox
       dockerfile: Dockerfile

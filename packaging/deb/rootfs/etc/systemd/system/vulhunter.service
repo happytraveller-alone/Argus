@@ -1,0 +1,19 @@
+[Unit]
+Description=VulHunter Compose Service
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/etc/vulhunter
+ExecStart=/usr/bin/vulhunterctl start
+ExecStop=/usr/bin/vulhunterctl stop
+ExecReload=/usr/bin/vulhunterctl restart
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

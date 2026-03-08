@@ -13,6 +13,11 @@ log() {
   echo "[deploy-release] $*"
 }
 
+die() {
+  echo "[deploy-release] $*" >&2
+  exit 1
+}
+
 ensure_backend_env() {
   local env_dir="${TARGET_DIR}/backend"
   local env_file="${env_dir}/.env"
@@ -34,6 +39,29 @@ ensure_backend_env() {
 
   : > "$env_file"
   log "created empty .env (no template found)"
+}
+
+find_latest_artifact() {
+  local pattern="$1"
+  local latest
+
+  latest="$(find "$ARTIFACT_DIR" -maxdepth 1 -type f -iname "$pattern" | LC_ALL=C sort | tail -n 1)"
+  [[ -n "$latest" ]] || die "artifact not found for pattern: ${pattern}"
+
+  printf '%s\n' "$latest"
+}
+
+resolve_artifact() {
+  local kind="$1"
+  local tag="$2"
+  local preferred="${ARTIFACT_DIR}/vulhunter-${kind}-${tag}.tar.gz"
+
+  if [[ -f "$preferred" ]]; then
+    printf '%s\n' "$preferred"
+    return
+  fi
+
+  find_latest_artifact "*-${kind}-${tag}.tar.gz"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -65,19 +93,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+[[ -n "$ARTIFACT_DIR" ]] || die "--artifacts is required"
+[[ -n "$TARGET_DIR" ]] || die "--target is required"
+
 ARTIFACT_DIR="$(cd "$ARTIFACT_DIR" && pwd)"
 mkdir -p "$TARGET_DIR"
 TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
 
 if [[ -z "$VERSION" ]]; then
-  SOURCE_FILE="$(ls "$ARTIFACT_DIR"/deepaudit-source-v*.tar.gz | sort | tail -n1)"
-  VERSION="$(basename "$SOURCE_FILE" | sed -E 's/deepaudit-source-v(.*)\.tar\.gz/\1/')"
+  SOURCE_FILE="$(find_latest_artifact '*-source-v*.tar.gz')"
+  VERSION="$(basename "$SOURCE_FILE" | sed -E 's/.*-source-v(.*)\.tar\.gz/\1/')"
 fi
 
 TAG_PREFIX="v${VERSION}"
-
-SOURCE_PKG="${ARTIFACT_DIR}/deepaudit-source-${TAG_PREFIX}.tar.gz"
-DOCKER_PKG="${ARTIFACT_DIR}/deepaudit-docker-${TAG_PREFIX}.tar.gz"
+SOURCE_PKG="$(resolve_artifact source "$TAG_PREFIX")"
+DOCKER_PKG="$(resolve_artifact docker "$TAG_PREFIX")"
 
 log "version: ${VERSION}"
 
@@ -94,7 +124,7 @@ tar -xzf "$DOCKER_PKG" -C "$TARGET_DIR"
 ensure_backend_env
 
 if [[ "$START_STACK" == "true" ]]; then
-  docker compose \
+  "$DOCKER_BIN" compose \
     -f "${TARGET_DIR}/docker-compose.yml" \
     -f "${TARGET_DIR}/docker-compose.build.yml" \
     up -d --build

@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --strictPort --port 5173",
-    "lint": "tsgo -p tsconfig.check.json; biome lint --only=correctness/noUndeclaredDependencies; ast-grep scan",
+    "lint": "rm -rf dist && tsgo -p tsconfig.check.json; biome lint --only=correctness/noUndeclaredDependencies src tests scripts; ast-grep scan src tests scripts",
     "lint:fix": "biome check --apply .",
     "type-check": "tsc --noEmit",
     "format": "biome format --write .",

@@ -5,7 +5,9 @@
 
 import { Wifi, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { cn } from '@/shared/utils/utils';
-import type { ConnectionState } from '../hooks';
+import type { ConnectionStatus as BaseConnectionStatus } from '../types';
+
+type ConnectionState = BaseConnectionStatus | 'reconnecting' | 'failed';
 
 interface ConnectionStatusProps {
   state: ConnectionState;
@@ -50,6 +52,12 @@ const STATUS_CONFIG: Record<ConnectionState, {
   failed: {
     icon: AlertCircle,
     label: 'Connection Failed',
+    color: 'text-red-400',
+    bgColor: 'bg-red-400/10',
+  },
+  error: {
+    icon: AlertCircle,
+    label: 'Error',
     color: 'text-red-400',
     bgColor: 'bg-red-400/10',
   },

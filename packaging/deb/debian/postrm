@@ -3,7 +3,7 @@ set -euo pipefail
 
 case "${1:-}" in
   purge)
-    rm -rf /etc/deepaudit /var/log/deepaudit /var/lib/deepaudit
+    rm -rf /etc/vulhunter /var/log/vulhunter /var/lib/vulhunter
     ;;
 esac
 

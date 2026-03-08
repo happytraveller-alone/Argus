@@ -89,6 +89,9 @@ LLM_GAP_MS=2000                    # 请求间隔（毫秒），避免限流
 
 # ========== 存储配置 ==========
 ZIP_STORAGE_PATH=./uploads/zip_files  # ZIP 文件存储目录
+SEED_ARCHIVE_PROBE_ATTEMPTS=2         # GitHub 预置项目测速次数（取中位数）
+SEED_ARCHIVE_PROBE_TIMEOUT_SECONDS=5  # 单次测速超时（秒）
+SEED_ARCHIVE_DOWNLOAD_TIMEOUT_SECONDS=180  # 预置项目归档下载超时（秒）
 
 # ========== 输出配置 ==========
 OUTPUT_LANGUAGE=zh-CN              # 输出语言：zh-CN（中文）| en-US（英文）

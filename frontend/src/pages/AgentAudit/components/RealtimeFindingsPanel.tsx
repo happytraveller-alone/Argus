@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -11,11 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Table,
   TableBody,
@@ -25,12 +18,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   AlertTriangle,
   ArrowLeft,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Search,
-  Trash2,
 } from "lucide-react";
 import {
   Dialog,
@@ -38,6 +37,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { FindingsViewFilters } from "../types";
+import {
+  buildFindingTableState,
+  shouldResetFindingPage,
+} from "../detailViewModel";
 import FindingCodeWindow from "./FindingCodeWindow";
 import FindingNarrativeMarkdown from "./FindingNarrativeMarkdown";
 import { collectRawEvidenceEntries } from "./findingNarrative";
@@ -81,54 +85,6 @@ export type RealtimeMergedFindingItem = {
   is_verified: boolean;
 };
 
-function normalizeVerificationProgress(
-  value: string,
-): RealtimeVerificationProgress {
-  return String(value || "").trim().toLowerCase() === "verified"
-    ? "verified"
-    : "pending";
-}
-
-function getItemVerificationProgress(
-  item: RealtimeMergedFindingItem,
-): RealtimeVerificationProgress {
-  if (item.verification_progress) {
-    return normalizeVerificationProgress(item.verification_progress);
-  }
-  return item.is_verified ? "verified" : "pending";
-}
-
-function formatLocation(item: RealtimeMergedFindingItem): string {
-  const path = String(item.file_path || "").trim();
-  const line = item.line_start;
-  if (path && typeof line === "number" && Number.isFinite(line)) {
-    return `${path}:${line}`;
-  }
-  if (path) return path;
-  return "-";
-}
-
-function normalizeCweLabel(raw: string | null | undefined): string {
-  const value = String(raw || "").trim();
-  if (!value) return "-";
-
-  const cweMatch = value.match(/CWE[\s:_-]*(\d{1,6})/i);
-  if (cweMatch?.[1]) {
-    return `CWE-${cweMatch[1]}`;
-  }
-
-  const definitionMatch = value.match(/definitions\/(\d{1,6})(?:\.html)?/i);
-  if (definitionMatch?.[1]) {
-    return `CWE-${definitionMatch[1]}`;
-  }
-
-  if (/^\d{1,6}$/.test(value)) {
-    return `CWE-${value}`;
-  }
-
-  return value.toUpperCase();
-}
-
 function pickRealtimeCode(item: RealtimeMergedFindingItem): {
   code: string;
   lineStart: number | null;
@@ -165,386 +121,288 @@ function getRawEvidenceFromRealtimeItem(item: RealtimeMergedFindingItem) {
   });
 }
 
-function getSeverityMeta(severity: RealtimeDisplaySeverity): {
-  label: string;
-  className: string;
-} {
+function getSeverityBadgeClass(severity: string): string {
   if (severity === "critical") {
-    return {
-      label: "严重",
-      className:
-        "border-rose-500/40 text-rose-600 dark:text-rose-300 bg-rose-500/10",
-    };
+    return "border-rose-500/30 bg-rose-500/15 text-rose-300";
   }
   if (severity === "high") {
-    return {
-      label: "高危",
-      className:
-        "border-orange-500/40 text-orange-600 dark:text-orange-300 bg-orange-500/10",
-    };
+    return "border-amber-500/30 bg-amber-500/15 text-amber-300";
   }
   if (severity === "medium") {
-    return {
-      label: "中危",
-      className:
-        "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10",
-    };
+    return "border-sky-500/30 bg-sky-500/15 text-sky-300";
   }
   if (severity === "low") {
-    return {
-      label: "低危",
-      className:
-        "border-cyan-500/40 text-cyan-600 dark:text-cyan-300 bg-cyan-500/10",
-    };
+    return "border-emerald-500/30 bg-emerald-500/15 text-emerald-300";
   }
-  return {
-    label: "待确认",
-    className:
-      "border-zinc-500/40 text-zinc-600 dark:text-zinc-300 bg-zinc-500/10",
-  };
+  return "border-border bg-muted text-muted-foreground";
 }
 
-function getConfidenceMeta(confidence: number | null | undefined): {
-  label: string;
-  className: string;
-} | null {
-  if (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence <= 0) {
-    return null;
+function getConfidenceBadgeClass(confidenceLabel: string): string {
+  if (confidenceLabel === "高") {
+    return "border-emerald-500/30 bg-emerald-500/15 text-emerald-300";
   }
-  if (confidence >= 0.8) {
-    return {
-      label: "高",
-      className:
-        "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10",
-    };
+  if (confidenceLabel === "中") {
+    return "border-amber-500/30 bg-amber-500/15 text-amber-300";
   }
-  if (confidence >= 0.5) {
-    return {
-      label: "中",
-      className:
-        "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10",
-    };
+  if (confidenceLabel === "低") {
+    return "border-sky-500/30 bg-sky-500/15 text-sky-300";
   }
-  return {
-    label: "低",
-    className:
-      "border-zinc-500/40 text-zinc-600 dark:text-zinc-300 bg-zinc-500/10",
-  };
+  return "border-border bg-muted text-muted-foreground";
 }
 
-function getVerificationMeta(progress: RealtimeVerificationProgress): {
-  label: string;
-  className: string;
-} {
-  if (progress === "verified") {
-    return {
-      label: "已验证",
-      className:
-        "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10",
-    };
+function getVerificationBadgeClass(verification: string): string {
+  if (verification === "verified") {
+    return "border-emerald-500/30 bg-emerald-500/15 text-emerald-300";
   }
-  return {
-    label: "待验证",
-    className:
-      "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10",
-  };
+  return "border-amber-500/30 bg-amber-500/15 text-amber-300";
 }
 
 export default function RealtimeFindingsPanel(props: {
   items: RealtimeMergedFindingItem[];
   isRunning: boolean;
-  onClear: () => void;
+  filters: FindingsViewFilters;
+  onFiltersChange: (next: FindingsViewFilters) => void;
 }) {
-  const [keyword, setKeyword] = useState("");
-  const [verification, setVerification] = useState<
-    "all" | RealtimeVerificationProgress
-  >("all");
+  const [page, setPage] = useState(1);
   const [detailItem, setDetailItem] = useState<RealtimeMergedFindingItem | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  const counts = useMemo(() => {
-    let pending = 0;
-    let verified = 0;
-    for (const item of props.items) {
-      if (getItemVerificationProgress(item) === "verified") {
-        verified += 1;
-      } else {
-        pending += 1;
-      }
-    }
-    return { total: props.items.length, pending, verified };
-  }, [props.items]);
-
-  const filtered = useMemo(() => {
-    const key = keyword.trim().toLowerCase();
-    const sorted = [...props.items].sort((a, b) => {
-      return String(b.timestamp || "").localeCompare(String(a.timestamp || ""));
-    });
-
-    return sorted.filter((item) => {
-      const verificationKey = getItemVerificationProgress(item);
-      const okVerification =
-        verification === "all" || verificationKey === verification;
-      if (!okVerification) return false;
-      if (!key) return true;
-      return (
-        String(item.title || "").toLowerCase().includes(key) ||
-        String(item.vulnerability_type || "").toLowerCase().includes(key) ||
-        String(item.file_path || "").toLowerCase().includes(key)
-      );
-    });
-  }, [props.items, keyword, verification]);
+  const previousFiltersRef = useRef<FindingsViewFilters>(props.filters);
 
   useEffect(() => {
-    const validIds = new Set(props.items.map((item) => item.id));
-    setSelectedIds((prev) => {
-      if (!prev.size) return prev;
-      const next = new Set<string>();
-      for (const id of prev) {
-        if (validIds.has(id)) {
-          next.add(id);
-        }
-      }
-      if (next.size === prev.size) return prev;
-      return next;
-    });
-  }, [props.items]);
-
-  const visibleIds = useMemo(() => filtered.map((item) => item.id), [filtered]);
-
-  const selectedVisibleCount = useMemo(() => {
-    let count = 0;
-    for (const id of visibleIds) {
-      if (selectedIds.has(id)) {
-        count += 1;
-      }
+    if (shouldResetFindingPage(previousFiltersRef.current, props.filters)) {
+      setPage(1);
     }
-    return count;
-  }, [selectedIds, visibleIds]);
+    previousFiltersRef.current = props.filters;
+  }, [props.filters]);
 
-  const allVisibleSelected =
-    visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
-  const headerChecked: boolean | "indeterminate" = allVisibleSelected
-    ? true
-    : selectedVisibleCount > 0
-      ? "indeterminate"
-      : false;
+  const tableState = useMemo(
+    () =>
+      buildFindingTableState({
+        items: props.items,
+        filters: props.filters,
+        page,
+        pageSize: 10,
+      }),
+    [page, props.filters, props.items],
+  );
 
-  const toggleSelectAll = (checked: boolean | "indeterminate") => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked === true) {
-        for (const id of visibleIds) {
-          next.add(id);
-        }
-      } else {
-        for (const id of visibleIds) {
-          next.delete(id);
-        }
-      }
-      return next;
-    });
-  };
-
-  const toggleSelectOne = (id: string, checked: boolean | "indeterminate") => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked === true) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      return next;
-    });
-  };
+  useEffect(() => {
+    if (page !== tableState.page) {
+      setPage(tableState.page);
+    }
+  }, [page, tableState.page]);
 
   return (
-    <div className="h-full flex flex-col border border-border rounded-xl bg-card/70 overflow-hidden">
-      <div className="flex-shrink-0 px-4 py-3 border-b border-border bg-card">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card/70">
+      <div className="border-b border-border bg-card px-4 py-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold">潜在缺陷</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">漏洞列表</span>
             <Badge variant="outline" className="text-[11px]">
-              {counts.total}
-            </Badge>
-            <Badge
-              variant="outline"
-              className="text-[11px] border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10"
-            >
-              待验证 {counts.pending}
-            </Badge>
-            <Badge
-              variant="outline"
-              className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-            >
-              已验证 {counts.verified}
+              {props.items.length}
             </Badge>
             {props.isRunning ? (
               <Badge
                 variant="outline"
-                className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
+                className="border-emerald-500/40 bg-emerald-500/10 text-[11px] text-emerald-300"
               >
-                实时
+                实时更新
               </Badge>
             ) : null}
           </div>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={props.onClear}
-            disabled={props.items.length === 0}
-          >
-            <Trash2 className="w-3.5 h-3.5 mr-2" />
-            清空
-          </Button>
+          <div className="text-[11px] text-muted-foreground">
+            数据按严重度、置信度与位置排序
+          </div>
         </div>
 
-        <div className="mt-3 flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_160px_160px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="搜索标题/类型/文件..."
-              className="pl-9"
+              value={props.filters.keyword}
+              onChange={(event) =>
+                props.onFiltersChange({
+                  ...props.filters,
+                  keyword: event.target.value,
+                })
+              }
+              placeholder="搜索类型 / 标题 / 文件路径"
+              className="cyber-input pl-9"
             />
           </div>
-
-          <div className="flex items-center gap-2">
-            <Select
-              value={verification}
-              onValueChange={(value) =>
-                setVerification(value as "all" | RealtimeVerificationProgress)
-              }
-            >
-              <SelectTrigger className="h-9 min-w-[112px] px-3 py-1.5 text-sm font-normal">
-                <SelectValue placeholder="验证进度" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="pending">待验证</SelectItem>
-                <SelectItem value="verified">已验证</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={props.filters.severity}
+            onValueChange={(value) =>
+              props.onFiltersChange({
+                ...props.filters,
+                severity: value,
+              })
+            }
+          >
+            <SelectTrigger className="cyber-input">
+              <SelectValue placeholder="严重度" />
+            </SelectTrigger>
+            <SelectContent className="cyber-dialog border-border">
+              <SelectItem value="all">全部严重度</SelectItem>
+              <SelectItem value="critical">严重</SelectItem>
+              <SelectItem value="high">高危</SelectItem>
+              <SelectItem value="medium">中危</SelectItem>
+              <SelectItem value="low">低危</SelectItem>
+              <SelectItem value="invalid">无效</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={props.filters.verification}
+            onValueChange={(value) =>
+              props.onFiltersChange({
+                ...props.filters,
+                verification: value,
+              })
+            }
+          >
+            <SelectTrigger className="cyber-input">
+              <SelectValue placeholder="验证状态" />
+            </SelectTrigger>
+            <SelectContent className="cyber-dialog border-border">
+              <SelectItem value="all">全部验证状态</SelectItem>
+              <SelectItem value="pending">待验证</SelectItem>
+              <SelectItem value="verified">已验证</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0">
-        {filtered.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-muted-foreground">
-            <div className="flex flex-col items-center gap-2 text-center px-6">
-              <AlertTriangle className="w-5 h-5 opacity-60" />
+      <div className="min-h-0 flex-1 overflow-auto custom-scrollbar">
+        {tableState.rows.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            <div className="flex flex-col items-center gap-2 px-6 text-center">
+              <AlertTriangle className="h-5 w-5 opacity-60" />
               <span className="text-sm">
-                {props.isRunning ? "等待新缺陷..." : "暂无缺陷"}
+                {props.isRunning ? "等待新的漏洞结果..." : "暂无符合条件的漏洞"}
               </span>
             </div>
           </div>
         ) : (
-          <ScrollArea className="h-full">
-            <div className="p-3">
-              <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[44px]">
-                      <Checkbox
-                        checked={headerChecked}
-                        onCheckedChange={toggleSelectAll}
-                        aria-label="全选当前可见缺陷"
-                      />
-                    </TableHead>
-                    <TableHead className="w-[64px]">序号</TableHead>
-                    <TableHead className="w-[18%]">类型（CWE编号）</TableHead>
-                    <TableHead className="w-[34%]">路径</TableHead>
-                    <TableHead className="w-[12%]">危害</TableHead>
-                    <TableHead className="w-[10%]">置信度</TableHead>
-                    <TableHead className="w-[10%]">状态</TableHead>
-                    <TableHead className="w-[12%]">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((item, index) => {
-                    const verificationKey = getItemVerificationProgress(item);
-                    const severityMeta = getSeverityMeta(item.display_severity);
-                    const confidenceMeta = getConfidenceMeta(item.confidence);
-                    const verificationMeta = getVerificationMeta(verificationKey);
-                    const cweLabel = normalizeCweLabel(item.cwe_id);
-                    const rowSelected = selectedIds.has(item.id);
-                    return (
-                      <TableRow
-                        key={item.id}
-                        data-state={rowSelected ? "selected" : undefined}
-                        className={rowSelected ? "bg-primary/5" : undefined}
+          <div className="p-3">
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[64px] whitespace-nowrap">序号</TableHead>
+                  <TableHead className="w-[22%] whitespace-nowrap">类型</TableHead>
+                  <TableHead className="w-[34%] whitespace-nowrap">路径</TableHead>
+                  <TableHead className="w-[10%] whitespace-nowrap">危害</TableHead>
+                  <TableHead className="w-[10%] whitespace-nowrap">置信度</TableHead>
+                  <TableHead className="w-[10%] whitespace-nowrap">状态</TableHead>
+                  <TableHead className="w-[14%] whitespace-nowrap text-center">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableState.rows.map((row, index) => {
+                  const active = detailItem?.id === row.id;
+                  return (
+                    <TableRow key={row.id} className={active ? "bg-primary/5" : undefined}>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {(tableState.pageStart + index + 1).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <div className="min-w-0">
+                          <div
+                            className="truncate text-sm font-medium text-foreground"
+                            title={row.typeLabel}
+                          >
+                            {row.typeLabel}
+                          </div>
+                          <div
+                            className="mt-1 truncate text-xs text-muted-foreground"
+                            title={row.title}
+                          >
+                            {row.title}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell
+                        className="font-mono text-xs text-muted-foreground whitespace-normal break-all"
+                        title={row.location}
                       >
-                        <TableCell>
-                          <Checkbox
-                            checked={rowSelected}
-                            onCheckedChange={(checked) =>
-                              toggleSelectOne(item.id, checked)
-                            }
-                            aria-label={`选择缺陷 ${index + 1}`}
-                          />
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {index + 1}
-                        </TableCell>
-                        <TableCell
-                          className="text-sm text-foreground break-words"
-                          title={cweLabel}
+                        {row.location}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`text-[11px] ${getSeverityBadgeClass(row.severity)}`}
                         >
-                          {cweLabel}
-                        </TableCell>
-                        <TableCell
-                          className="text-xs text-muted-foreground whitespace-normal break-all"
-                          title={formatLocation(item)}
+                          {row.severityLabel}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`text-[11px] ${getConfidenceBadgeClass(row.confidenceLabel)}`}
                         >
-                          {formatLocation(item)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={`text-[11px] ${severityMeta.className}`}>
-                            {severityMeta.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {confidenceMeta ? (
-                            <Badge
-                              variant="outline"
-                              className={`text-[11px] ${confidenceMeta.className}`}
-                            >
-                              {confidenceMeta.label}
-                            </Badge>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={`text-[11px] ${verificationMeta.className}`}
-                          >
-                            {verificationMeta.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2.5 text-[11px]"
-                            onClick={() => setDetailItem(item)}
-                          >
-                            详情
-                            <ExternalLink className="w-3.5 h-3.5 ml-1.5" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </ScrollArea>
+                          {row.confidenceLabel}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`text-[11px] ${getVerificationBadgeClass(row.verification)}`}
+                        >
+                          {row.verificationLabel}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="cyber-btn-outline h-7 px-2.5"
+                          onClick={() => setDetailItem(row.raw as RealtimeMergedFindingItem)}
+                        >
+                          详情
+                          <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
+      </div>
+
+      <div className="flex items-center justify-between gap-2 border-t border-border bg-card px-4 py-3">
+        <div className="text-xs text-muted-foreground">
+          共 {tableState.totalRows.toLocaleString()} 条，当前显示 {tableState.rows.length.toLocaleString()} 条
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="cyber-btn-outline h-8 px-2.5"
+            disabled={tableState.page <= 1}
+            onClick={() => setPage((value) => Math.max(value - 1, 1))}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            上一页
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            第 {tableState.page} / {tableState.totalPages} 页
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="cyber-btn-outline h-8 px-2.5"
+            disabled={tableState.page >= tableState.totalPages}
+            onClick={() =>
+              setPage((value) => Math.min(value + 1, tableState.totalPages))
+            }
+          >
+            下一页
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
 
       <Dialog
@@ -553,27 +411,27 @@ export default function RealtimeFindingsPanel(props: {
           if (!open) setDetailItem(null);
         }}
       >
-        <DialogContent className="max-w-3xl h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="flex h-[80vh] max-w-3xl flex-col overflow-hidden">
           <DialogHeader className="border-b border-border pb-3">
             <div className="flex items-center justify-between gap-3">
               <DialogTitle className="flex items-center gap-2">
-                <ExternalLink className="w-4 h-4" />
+                <ExternalLink className="h-4 w-4" />
                 缺陷详情
               </DialogTitle>
               <button
                 type="button"
                 onClick={() => setDetailItem(null)}
-                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border hover:border-primary/40 hover:text-primary"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs hover:border-primary/40 hover:text-primary"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
+                <ArrowLeft className="h-3.5 w-3.5" />
                 返回
               </button>
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar py-4 space-y-4">
+          <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto py-4">
             {detailItem ? (
-              <section className="rounded-lg border border-border bg-card/70 p-3.5 space-y-2">
+              <section className="space-y-2 rounded-lg border border-border bg-card/70 p-3.5">
                 <h3 className="text-sm font-semibold break-words">
                   {detailItem.display_title || detailItem.title || "未命名缺陷"}
                 </h3>
@@ -623,18 +481,18 @@ export default function RealtimeFindingsPanel(props: {
                   />
 
                   <Collapsible className="rounded-md border border-border bg-card/60">
-                    <CollapsibleTrigger className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                    <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
                       <span>原始证据</span>
-                      <ChevronDown className="w-4 h-4" />
+                      <ChevronDown className="h-4 w-4" />
                     </CollapsibleTrigger>
-                    <CollapsibleContent className="px-3 pb-3 space-y-2">
+                    <CollapsibleContent className="space-y-2 px-3 pb-3">
                       {getRawEvidenceFromRealtimeItem(detailItem).map((item) => (
                         <div key={item.key} className="space-y-1">
-                          <div className="text-[11px] text-muted-foreground font-mono">
+                          <div className="font-mono text-[11px] text-muted-foreground">
                             {item.label}
                             {item.truncated ? " (已截断至 2000 字)" : ""}
                           </div>
-                          <pre className="text-xs font-mono bg-background border border-border rounded-md p-2 whitespace-pre-wrap break-words">
+                          <pre className="whitespace-pre-wrap break-words rounded-md border border-border bg-background p-2 text-xs font-mono">
                             {item.value}
                           </pre>
                         </div>

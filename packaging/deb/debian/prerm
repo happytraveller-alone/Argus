@@ -3,7 +3,7 @@ set -euo pipefail
 
 case "${1:-}" in
   remove|deconfigure|upgrade|failed-upgrade)
-    systemctl disable --now deepaudit.service || true
+    systemctl disable --now vulhunter.service || true
     ;;
 esac
 

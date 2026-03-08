@@ -101,10 +101,10 @@ jobs:
           mkdir -p release
           
           # 打包前端构建产物
-          tar -czf release/deepaudit-frontend-${{ steps.version.outputs.VERSION }}.tar.gz -C frontend/dist .
+          tar -czf release/vulhunter-frontend-${{ steps.version.outputs.VERSION }}.tar.gz -C frontend/dist .
           
           # 打包后端源码
-          tar -czf release/deepaudit-backend-${{ steps.version.outputs.VERSION }}.tar.gz \
+          tar -czf release/vulhunter-backend-${{ steps.version.outputs.VERSION }}.tar.gz \
             --exclude=backend/.venv \
             --exclude=backend/.env \
             --exclude=backend/__pycache__ \
@@ -112,7 +112,7 @@ jobs:
             backend/
           
           # 打包 Docker 配置文件（包含 Agent 模式配置）
-          tar -czf release/deepaudit-docker-${{ steps.version.outputs.VERSION }}.tar.gz \
+          tar -czf release/vulhunter-docker-${{ steps.version.outputs.VERSION }}.tar.gz \
             docker-compose.yml \
             backend/Dockerfile \
             backend/.dockerignore \
@@ -124,7 +124,7 @@ jobs:
             docker/sandbox/
           
           # 打包完整源码（包括配置文件）
-          tar -czf release/deepaudit-source-${{ steps.version.outputs.VERSION }}.tar.gz \
+          tar -czf release/vulhunter-source-${{ steps.version.outputs.VERSION }}.tar.gz \
             --exclude=frontend/node_modules \
             --exclude=frontend/dist \
             --exclude=backend/.venv \
@@ -168,15 +168,15 @@ jobs:
           echo "## 📦 下载说明" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "### 构建产物" >> CHANGELOG.md
-          echo "- \`deepaudit-frontend-*.tar.gz\`: 前端构建产物（用于生产部署）" >> CHANGELOG.md
-          echo "- \`deepaudit-backend-*.tar.gz\`: 后端源码包" >> CHANGELOG.md
-          echo "- \`deepaudit-docker-*.tar.gz\`: Docker 配置文件（包含沙箱配置）" >> CHANGELOG.md
-          echo "- \`deepaudit-source-*.tar.gz\`: 完整源码包" >> CHANGELOG.md
+          echo "- \`vulhunter-frontend-*.tar.gz\`: 前端构建产物（用于生产部署）" >> CHANGELOG.md
+          echo "- \`vulhunter-backend-*.tar.gz\`: 后端源码包" >> CHANGELOG.md
+          echo "- \`vulhunter-docker-*.tar.gz\`: Docker 配置文件（包含沙箱配置）" >> CHANGELOG.md
+          echo "- \`vulhunter-source-*.tar.gz\`: 完整源码包" >> CHANGELOG.md
           echo "- \`checksums.txt\`: 文件校验和" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "### Docker 镜像" >> CHANGELOG.md
-          echo "- Frontend: \`ghcr.io/${{ github.repository_owner }}/deepaudit-frontend:${{ steps.version.outputs.VERSION }}\`" >> CHANGELOG.md
-          echo "- Backend: \`ghcr.io/${{ github.repository_owner }}/deepaudit-backend:${{ steps.version.outputs.VERSION }}\`" >> CHANGELOG.md
+          echo "- Frontend: \`ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ steps.version.outputs.VERSION }}\`" >> CHANGELOG.md
+          echo "- Backend: \`ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ steps.version.outputs.VERSION }}\`" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "### 快速部署" >> CHANGELOG.md
           echo "\`\`\`bash" >> CHANGELOG.md
@@ -224,8 +224,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/deepaudit-frontend:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/deepaudit-frontend:latest
+            ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:latest
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
       
@@ -238,8 +238,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/deepaudit-backend:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/deepaudit-backend:latest
+            ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-backend:latest
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
       
@@ -252,8 +252,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/deepaudit-sandbox:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/deepaudit-sandbox:latest
+            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:latest
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox
       

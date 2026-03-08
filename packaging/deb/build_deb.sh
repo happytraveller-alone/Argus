@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEB_DIR="$ROOT_DIR/packaging/deb"
-PACKAGE_NAME="deepaudit"
+PACKAGE_NAME="vulhunter"
 VERSION=""
 ARCH="amd64"
 OUTPUT_DIR="$ROOT_DIR/dist"
@@ -60,16 +60,16 @@ mkdir -p "$STAGING_DIR" "$STAGING_DIR/DEBIAN"
 cp -R "$DEB_DIR/rootfs/." "$STAGING_DIR/"
 
 # Always bundle current compose templates from repository.
-cp "$ROOT_DIR/docker-compose.prod.yml" "$STAGING_DIR/etc/deepaudit/docker-compose.prod.yml"
-cp "$ROOT_DIR/docker-compose.prod.cn.yml" "$STAGING_DIR/etc/deepaudit/docker-compose.prod.cn.yml"
+cp "$ROOT_DIR/docker-compose.prod.yml" "$STAGING_DIR/etc/vulhunter/docker-compose.prod.yml"
+cp "$ROOT_DIR/docker-compose.prod.cn.yml" "$STAGING_DIR/etc/vulhunter/docker-compose.prod.cn.yml"
 
 # Remove hard-coded ports from bundled compose; runtime ports come from override file.
 for compose_file in \
-  "$STAGING_DIR/etc/deepaudit/docker-compose.prod.yml" \
-  "$STAGING_DIR/etc/deepaudit/docker-compose.prod.cn.yml"; do
+  "$STAGING_DIR/etc/vulhunter/docker-compose.prod.yml" \
+  "$STAGING_DIR/etc/vulhunter/docker-compose.prod.cn.yml"; do
   perl -0pi -e 's/\n    ports:\n      - "8000:8000"\n/\n/g' "$compose_file"
   perl -0pi -e 's/\n    ports:\n      - "3000:80"\n/\n/g' "$compose_file"
-  perl -0pi -e 's#(ghcr(?:\.nju\.edu\.cn)?/lintsinghua/deepaudit-[^:]+):latest#$1:\${DEEPAUDIT_IMAGE_TAG:-latest}#g' "$compose_file"
+  perl -0pi -e 's#(ghcr(?:\.nju\.edu\.cn)?/lintsinghua/vulhunter-[^:]+):latest#$1:\${VULHUNTER_IMAGE_TAG:-latest}#g' "$compose_file"
 done
 
 sed \
@@ -83,7 +83,7 @@ cp "$DEB_DIR/debian/prerm" "$STAGING_DIR/DEBIAN/prerm"
 cp "$DEB_DIR/debian/postrm" "$STAGING_DIR/DEBIAN/postrm"
 
 chmod 0755 "$STAGING_DIR/DEBIAN/postinst" "$STAGING_DIR/DEBIAN/prerm" "$STAGING_DIR/DEBIAN/postrm"
-chmod 0755 "$STAGING_DIR/usr/bin/deepauditctl"
+chmod 0755 "$STAGING_DIR/usr/bin/vulhunterctl"
 
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_FILE="$OUTPUT_DIR/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"

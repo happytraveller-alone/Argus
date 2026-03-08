@@ -1,0 +1,7 @@
+services:
+  backend:
+    ports:
+      - "${VULHUNTER_BACKEND_PORT:-8000}:8000"
+  frontend:
+    ports:
+      - "${VULHUNTER_FRONTEND_PORT:-3000}:80"

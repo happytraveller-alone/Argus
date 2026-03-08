@@ -78,6 +78,11 @@ import type {
   TerminalFailureClass,
   TerminalRecoveryState,
 } from "./types";
+import {
+  accumulateTokenUsage,
+  buildStatsSummary,
+  createTokenUsageAccumulator,
+} from "./detailViewModel";
 
 import type { RealtimeMergedFindingItem } from "./components/RealtimeFindingsPanel";
 
@@ -648,7 +653,6 @@ function AgentAuditPageContent() {
     keyword: "",
     severity: "all",
     verification: "all",
-    showFiltered: false,
   });
   // NOTE: bootstrap (opengrep) input UI is currently not shown in the new realtime layout,
   // but we keep the plumbing in place for future toggles.
@@ -673,6 +677,8 @@ function AgentAuditPageContent() {
 
   // Realtime panels state
   const [realtimeFindings, setRealtimeFindings] = useState<RealtimeMergedFindingItem[]>([]);
+  const [tokenUsage, setTokenUsage] = useState(() => createTokenUsageAccumulator());
+  const [statsNow, setStatsNow] = useState(() => new Date());
   const verifiedFindingsManuallyClearedRef = useRef(false);
 
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -745,6 +751,18 @@ function AgentAuditPageContent() {
   const failedStep = useMemo(
     () => (failedReason ? extractStepName(failedReason) : null),
     [failedReason],
+  );
+  const statsSummary = useMemo(
+    () =>
+      task
+        ? buildStatsSummary({
+            task,
+            realtimeFindings,
+            tokenUsage,
+            now: statsNow,
+          })
+        : null,
+    [realtimeFindings, statsNow, task, tokenUsage],
   );
   const homeScanCards: HomeScanCard[] = useMemo(
   () => [
@@ -930,6 +948,18 @@ function AgentAuditPageContent() {
   }, [task?.started_at]);
 
   useEffect(() => {
+    setStatsNow(new Date());
+    const status = String(task?.status || "").trim().toLowerCase();
+    if ((status !== "running" && status !== "pending") || !taskStartedAtRef.current) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setStatsNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [task?.completed_at, task?.started_at, task?.status]);
+
+  useEffect(() => {
     const startedAt = taskStartedAtRef.current;
     if (!startedAt || !logsRef.current.length) return;
 
@@ -990,8 +1020,9 @@ function AgentAuditPageContent() {
         keyword: "",
         severity: "all",
         verification: "all",
-        showFiltered: false,
       });
+      setTokenUsage(createTokenUsageAccumulator());
+      setStatsNow(new Date());
       setBootstrapInputsSummary(null);
       setBootstrapInputFindings([]);
       setBootstrapInputsLoading(false);
@@ -2099,6 +2130,16 @@ function AgentAuditPageContent() {
     };
   }, []);
 
+  const ingestTokenEvents = useCallback((events: UnifiedAgentEvent[]) => {
+    setTokenUsage((previous) => {
+      let next = previous;
+      for (const event of events) {
+        next = accumulateTokenUsage(next, event);
+      }
+      return next;
+    });
+  }, []);
+
   const backfillEventsSince = useCallback(
     async (startAfter: number, reason: string) => {
       if (!taskId || isBackfillingRef.current) return;
@@ -2109,6 +2150,7 @@ function AgentAuditPageContent() {
           return;
         }
 
+        ingestTokenEvents(events as UnifiedAgentEvent[]);
         if (!verifiedFindingsManuallyClearedRef.current) {
           const findingItems = events
             .map(agentEventToRealtimeItem)
@@ -2136,7 +2178,13 @@ function AgentAuditPageContent() {
         isBackfillingRef.current = false;
       }
     },
-    [appendLogFromEvent, compactToolLogsAfterReplay, fetchAllHistoricalEvents, taskId],
+    [
+      appendLogFromEvent,
+      compactToolLogsAfterReplay,
+      fetchAllHistoricalEvents,
+      ingestTokenEvents,
+      taskId,
+    ],
   );
 
   const runTerminalRecovery = useCallback(
@@ -2293,6 +2341,7 @@ function AgentAuditPageContent() {
         return 0;
       }
 
+      ingestTokenEvents(events as UnifiedAgentEvent[]);
       if (!verifiedFindingsManuallyClearedRef.current) {
         const findingItems = events
           .map(agentEventToRealtimeItem)
@@ -2318,7 +2367,13 @@ function AgentAuditPageContent() {
       console.error("[AgentAudit] Failed to load historical events:", err);
       return 0;
     }
-  }, [appendLogFromEvent, compactToolLogsAfterReplay, fetchAllHistoricalEvents, taskId]);
+  }, [
+    appendLogFromEvent,
+    compactToolLogsAfterReplay,
+    fetchAllHistoricalEvents,
+    ingestTokenEvents,
+    taskId,
+  ]);
 
   useEffect(() => {
     const bootstrapTaskId = bootstrapInputsSummary?.taskId;
@@ -2357,6 +2412,7 @@ function AgentAuditPageContent() {
         if (event.metadata?.agent_name) {
           setCurrentAgentName(String(event.metadata.agent_name));
         }
+        ingestTokenEvents([event]);
         appendLogFromEvent(event);
         if (String(event.type ?? "").toLowerCase() === "task_end") {
           void backfillEventsSince(
@@ -2490,6 +2546,7 @@ function AgentAuditPageContent() {
       setCurrentAgentName,
       setCurrentThinkingId,
       buildNowRelativeLogTime,
+      ingestTokenEvents,
     ],
   );
 
@@ -2718,11 +2775,6 @@ function AgentAuditPageContent() {
   }, [filteredLogs.length, isAutoScroll, scrollLogsToBottom]);
 
   // ============ Handlers ============
-
-  const handleClearPotentialFindings = useCallback(() => {
-    verifiedFindingsManuallyClearedRef.current = true;
-    setRealtimeFindings([]);
-  }, []);
 
   const handleCancel = async () => {
     if (!taskId || isCancelling) return;
@@ -3014,9 +3066,9 @@ function AgentAuditPageContent() {
           <div className="flex-shrink-0">
             <div
               ref={agentContainerRef}
-              className="overflow-y-auto custom-scrollbar"
+              className="overflow-x-auto custom-scrollbar"
             >
-              <StatsPanel task={task} findings={findings} />
+              <StatsPanel summary={statsSummary} />
             </div>
           </div>
 
@@ -3026,7 +3078,8 @@ function AgentAuditPageContent() {
               <RealtimeFindingsPanel
                 items={realtimeFindings}
                 isRunning={isRunning}
-                onClear={handleClearPotentialFindings}
+                filters={findingsFilters}
+                onFiltersChange={setFindingsFilters}
               />
             </div>
           </div>

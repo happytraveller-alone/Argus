@@ -1,5 +1,5 @@
 # =============================================
-# DeepAudit 前端增量开发配置
+# VulHunter 前端增量开发配置
 # =============================================
 # 用法:
 # docker compose -f docker-compose.yml -f docker-compose.frontend-dev.yml up -d frontend-dev
@@ -25,7 +25,7 @@ services:
     depends_on:
       - backend
     networks:
-      - deepaudit-network
+      - vulhunter-network
 
 volumes:
   frontend_node_modules:

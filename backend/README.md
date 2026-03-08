@@ -19,7 +19,7 @@ Frontend is exposed at `http://localhost:3000`, backend at `http://localhost:800
 
 ### Default seed projects (persistent)
 
-On first startup (`docker compose up --build`), backend initializes built-in ZIP projects for the demo user:
+On first startup (`docker compose up --build`), backend downloads the pinned GitHub archive snapshots for the demo user and stores them as persistent ZIP projects:
 
 - `libplist`
 - `DVWA`
@@ -29,7 +29,11 @@ On first startup (`docker compose up --build`), backend initializes built-in ZIP
 - `govwa`
 - `fastjson`
 
-Project ZIPs are imported once and persisted in Docker volumes (`postgres_data` + `backend_uploads`), so subsequent restarts/rebuilds reuse them directly.
+The installer probes configured GitHub mirror candidates plus the official GitHub source, sorts them by latency, and downloads from the fastest reachable source first.
+
+Project ZIPs are installed once and persisted in Docker volumes (`postgres_data` + `backend_uploads`), so subsequent restarts/rebuilds reuse them directly.
+
+If all candidates fail during first startup, backend still starts successfully and retries the missing project archives on the next startup.
 
 ## Local Development
 
