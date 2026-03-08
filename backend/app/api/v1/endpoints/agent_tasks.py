@@ -4327,13 +4327,13 @@ async def _initialize_tools(
     }
 
     if task_id:
-        from app.services.agent.tools.verification_result_tools import SaveVerificationResultsTool
+        from app.services.agent.tools.verification_result_tools import SaveVerificationResultTool
 
-        verification_tools["save_verification_results"] = SaveVerificationResultsTool(
+        verification_tools["save_verification_result"] = SaveVerificationResultTool(
             task_id=task_id,
             save_callback=save_callback,
         )
-        logger.info("[Tools] Added save_verification_results tool for task %s", task_id)
+        logger.info("[Tools] Added save_verification_result tool for task %s", task_id)
 
     orchestrator_tools = {**base_tools}
 

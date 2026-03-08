@@ -47,9 +47,9 @@ class MCPToolRouter:
                 "create_vulnerability_report",
                 False,
             ),
-            "save_verification_results": (
+            "save_verification_result": (
                 self._LOCAL_ROUTE_ADAPTER,
-                "save_verification_results",
+                "save_verification_result",
                 False,
             ),
             "push_finding_to_queue": (self._LOCAL_ROUTE_ADAPTER, "push_finding_to_queue", True),

@@ -64,7 +64,7 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 | **动态优先** | **优先通过 Fuzzing Harness 动态触发漏洞**，这是 confirmed 的必要条件 |
 | **严谨验证** | 编写测试代码，只有**稳定触发**才能评为 confirmed |
 | **误报排除** | 若无法触发（输入被过滤、路径不可达），明确判定 false_positive |
-| **结果持久化** | 验证完成后**必须调用 `save_verification_results`** 保存结果 |
+| **结果持久化** | 每验证完一个漏洞后**必须调用 `save_verification_result`** 保存结果 |
 
 ═══════════════════════════════════════════════════════════════
 
@@ -108,7 +108,7 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 | 2 | `run_code` | 执行 Fuzzing Harness/PoC | **核心验证手段**，执行测试脚本 |
 | 3 | `read_file` | 读取代码上下文 | 需要 surrounding code 时 |
 | 4 | `search_code` | 查找调用链、依赖关系 | 验证可达性时 |
-| 5 | `save_verification_results` | **持久化验证结果** | **Final Answer 前必须调用** |
+| 5 | `save_verification_result` | **持久化单个验证结果** | **每验证完一个漏洞就调用** |
 
 **辅助工具**：
 - `sandbox_exec`：沙箱命令执行（验证命令注入）
@@ -129,6 +129,7 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 1. **分析错误信息** - 理解失败原因（文件不存在、语法错误、超时、权限等）
 2. **自主调整策略** - 根据错误类型选择替代方案
 3. **继续验证流程** - **禁止直接输出 Final Answer 或放弃验证**
+4. 如果多次调用`save_verification_result`失败，必须在Final Answer中明确说明验证结果未保存，并提供失败原因。
 
 ═══════════════════════════════════════════════════════════════
 
@@ -312,42 +313,36 @@ if ({}.polluted === true) {
 5. **语言要求**：title/description/suggestion/verification_evidence 必须用**简体中文**
 6. **格式严格**：使用纯文本 `Thought: / Action: / Action Input: / Final Answer:`，**禁止 Markdown 标记（**、###、* 等）**
 7. **禁止交互**：不允许"请选择/请确认后继续"等语句
-8. **结果保存**：**Final Answer 前必须调用 save_verification_results**
+8. **结果保存**：**每验证完一个漏洞就调用 save_verification_result**
 
 ═══════════════════════════════════════════════════════════════
 
 ## 💾 结果持久化（强制）
 
-**`save_verification_results` 调用时机**：
-- **所有验证工作完成后**
-- **输出 Final Answer 之前**
+**`save_verification_result` 调用时机**：
+- **每验证完一个漏洞后立即调用**
 - **必须执行，不可跳过**
 
 **参数格式**：
 ```json
 {
-    "findings": [
-        {
-            "file_path": "src/auth.py",
-            "line_start": 45,
-            "line_end": 47,
-            "function_name": "login",
-            "title": "src/auth.py中login函数SQL注入漏洞",
-            "cwe_id": "CWE-89",
-            "suggestion": "使用参数化查询替代字符串拼接",
-            "verification_result": {
-                "verdict": "confirmed",
-                "confidence": 0.9,
-                "reachability": "reachable",
-                "verification_evidence": "通过fuzzing验证：payload '1 OR 1=1' 成功注入，返回所有用户数据"
-            }
-        }
-    ],
-    "summary": "验证完成：confirmed 2个，likely 1个，false_positive 1个"
+    "file_path": "src/auth.py",
+    "line_start": 45,
+    "line_end": 47,
+    "function_name": "login",
+    "title": "src/auth.py中login函数SQL注入漏洞",
+    "vulnerability_type": "sql_injection",
+    "severity": "high",
+    "cwe_id": "CWE-89",
+    "verdict": "confirmed",
+    "confidence": 0.9,
+    "reachability": "reachable",
+    "verification_evidence": "通过fuzzing验证：payload '1 OR 1=1' 成功注入，返回所有用户数据",
+    "suggestion": "使用参数化查询替代字符串拼接"
 }
 ```
 
-`findings[*].function_name` 为必填：
+`function_name` 为必填：
 - 优先使用定位结果（TreeSitter/regex/extract_function）
 - 若定位失败，尝试从标题中提取函数名
 - 若仍失败，使用语义化占位符（如 `<function_at_line_45>`），禁止留空
@@ -414,29 +409,24 @@ Action Input: {"keyword": "def search|@app.route.*search", "file_pattern": "*.py
 Observation: 发现 @app.route('/api/search') 装饰器，函数可通过 HTTP POST 访问。
 
 Thought: 动态验证通过 + 路径可达。判定为 confirmed，confidence 计算：fuzzing(0.35) + 可达(0.2) + 静态确认(0.15) + 证据明确(0.15) = 0.85。构造 finding 并保存。
-Action: save_verification_results
+Action: save_verification_result
 Action Input: {
-    "findings": [
-        {
-            "file_path": "app/api/search.py",
-            "line_start": 28,
-            "line_end": 28,
-            "function_name": "search",
-            "title": "app/api/search.py中search函数SQL注入漏洞",
-            "cwe_id": "CWE-89",
-            "suggestion": "使用参数化查询：cursor.execute(\"SELECT * FROM products WHERE name LIKE ?\", (f\"%{keyword}%\",))",
-            "verification_result": {
-                "verdict": "confirmed",
-                "confidence": 0.85,
-                "reachability": "reachable",
-                "verification_evidence": "通过fuzzing动态验证：payload \"apple' OR '1'='1\" 成功注入，单引号破坏SQL结构，查询逻辑被改变。函数通过@app.route对外暴露，路径可达。"
-            }
-        }
-    ],
-    "summary": "验证完成：confirmed 1个（SQL注入），confidence 0.85"
+    "file_path": "app/api/search.py",
+    "line_start": 28,
+    "line_end": 28,
+    "function_name": "search",
+    "title": "app/api/search.py中search函数SQL注入漏洞",
+    "vulnerability_type": "sql_injection",
+    "severity": "high",
+    "cwe_id": "CWE-89",
+    "verdict": "confirmed",
+    "confidence": 0.85,
+    "reachability": "reachable",
+    "verification_evidence": "通过fuzzing动态验证：payload \"apple' OR '1'='1\" 成功注入，单引号破坏SQL结构，查询逻辑被改变。函数通过@app.route对外暴露，路径可达。",
+    "suggestion": "使用参数化查询：cursor.execute(\"SELECT * FROM products WHERE name LIKE ?\", (f\"%{keyword}%\",))"
 }
 
-Observation: 保存成功，1个 finding 已持久化。
+Observation: 保存成功，已持久化，累计 1 条。
 
 Thought: 验证完成，结果已保存。输出 Final Answer。
 Final Answer: 验证任务完成。已确认 1 个漏洞：app/api/search.py SQL 注入漏洞，判定为 confirmed，confidence 0.85，路径可达。结果已持久化至数据库。
@@ -2872,38 +2862,23 @@ class VerificationAgent(BaseAgent):
             logger.info(f"[{self.name}] Returning {len(verified_findings)} verified findings")
 
             # 🔥 验证结果持久化：通过工具将 findings 保存到数据库
-            # LLM 处理层已在 Final Answer 后将 findings 传递给此工具；
-            # 这里做兼容兴德：如果 LLM 未主动调用，仍由濒递逻辑处理。
-            if "save_verification_results" in self.tools and verified_findings:
-                try:
-                    save_result = await self.execute_tool(
-                        "save_verification_results",
-                        {
-                            "findings": verified_findings,
-                            "summary": (
-                                f"共验证 {len(findings_to_verify)} 个候选，"
-                                f"{confirmed_count} 确认 / {likely_count} 可能 / "
-                                f"{false_positive_count} 误报"
-                            ),
-                            "strict_mode": False,
-                        },
-                    )
-                    logger.info(
-                        "[%s] save_verification_results: %s",
-                        self.name,
-                        (save_result.data or {}).get("message", ""),
-                    )
-                except Exception as _save_err:
-                    logger.warning(
-                        "[%s] save_verification_results 工具调用失败 (已降级继续): %s",
-                        self.name,
-                        _save_err,
-                    )
+            # LLM 处理层已在验证过程中逐个调用 save_verification_result；
+            # 这里作为监控点，记录验证结果统计。
+            if "save_verification_result" in self.tools and verified_findings:
+                logger.info(
+                    "[%s] save_verification_result 工具可用，验证过程中应已逐个保存 %d 条结果 "
+                    "(confirmed=%d, likely=%d, false_positive=%d)",
+                    self.name,
+                    len(verified_findings),
+                    confirmed_count,
+                    likely_count,
+                    false_positive_count,
+                )
             
-            # 🔥 兜底机制：检查是否遗漏了 save_verification_results 调用
+            # 🔥 兜底机制：检查是否遗漏了 save_verification_result 调用
             fallback_result = await self._fallback_check_and_save(
                 conversation_history=self._conversation_history,
-                expected_tool="save_verification_results",
+                expected_tool="save_verification_result",
                 agent_type="verification",
             )
             

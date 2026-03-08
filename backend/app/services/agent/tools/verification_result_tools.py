@@ -386,25 +386,23 @@ class SaveVerificationResultsInput(BaseModel):
         return result
 
 
-class SaveVerificationResultsTool(AgentTool):
+class SaveVerificationResultTool(AgentTool):
     """
-    Verification Agent 专用：将验证结果持久化保存到数据库。
+    Verification Agent 专用：将单个验证结果持久化保存到数据库。
 
     核心责任：
-    1. **强制验证参数** - 通过 Pydantic 模型确保所有 findings 的数据质量
-    2. **前置校验** - 在工具执行前检查每条 finding 的必填字段和类型
+    1. **强制验证参数** - 通过 Pydantic 模型确保 finding 的数据质量
+    2. **前置校验** - 在工具执行前检查必填字段和类型
     3. **详细错误报告** - 告知 Agent 哪些字段缺失或错误，便于纠正
     4. **支持多状态** - 持久化 confirmed、likely、uncertain、false_positive 等多种 verdict
 
-    调用时机：在所有 findings 的 verdict / confidence / reachability /
-    verification_evidence 都已确定后，调用此工具完成持久化，
+    调用时机：每验证完一个漏洞，确定其 verdict / confidence / reachability /
+    verification_evidence 后，立即调用此工具完成持久化，
     避免结果仅停留在内存中而丢失。
 
     返回：
-    - saved_count: 实际入库的 findings 数量（经过滤后）
-    - filtered_count: 被过滤掉的数量（false_positive、uncertain 等）
-    - already_saved: 是否为重复调用（幂等保护）
-    - validation_errors: 验证失败的详情列表（如果有）
+    - saved: 是否成功保存（布尔值）
+    - total_saved: 任务累计已保存的 findings 数量
     - message: 人类可读的结果描述
     """
 
@@ -433,41 +431,52 @@ class SaveVerificationResultsTool(AgentTool):
 
     @property
     def name(self) -> str:
-        return "save_verification_results"
+        return "save_verification_result"
 
     @property
     def description(self) -> str:
-        return """将本轮验证结果持久化保存到数据库。
+        return """将单个验证结果持久化保存到数据库。
 
-在完成所有漏洞验证、确定每条 finding 的 verdict / confidence /
-reachability / verification_evidence 之后，必须调用此工具，
-否则结果只存在内存中，任务结束后会丢失。
+在验证完一个漏洞、确定其 verdict / confidence / reachability / verification_evidence 之后，
+立即调用此工具保存结果，否则结果只存在内存中，任务结束后会丢失。
 
 必需参数:
-- findings: 已验证的 findings 列表（至少 1 条）。每条 finding 必须是有效的结构，
-    包含：file_path、line_start、function_name、title、vulnerability_type、severity、verification_result。
-  每个 verification_result 必须包含 verdict、confidence、reachability、verification_evidence。
+- file_path: 文件路径
+- line_start: 起始行号（>= 1）
+- function_name: 函数名称（必填，无法精确定位时使用语义化占位符如 <function_at_line_120>）
+- title: 发现标题（5-200 字符）
+- vulnerability_type: 漏洞类型（如 sql_injection、xss 等）
+- severity: 严重程度（critical|high|medium|low|info）
+- verdict: 真实性判定（confirmed|likely|uncertain|false_positive）
+- confidence: 置信度 [0.0-1.0 浮点数]
+- reachability: 可达性（reachable|likely_reachable|unknown|unreachable）
+- verification_evidence: 验证证据（至少 10 字符）
 
 可选参数:
-- summary: 本轮验证的整体评述（纯日志，不影响保存逻辑）
-- strict_mode: 是否使用严格模式（默认 True，验证失败则整体失败；False 则过滤失败项）
+- line_end: 代码结束行号（默认等于 line_start）
+- cwe_id: CWE 编号（如 CWE-89）
+- description: 详细描述
+- poc_plan: PoC 思路
+- code_snippet: 相关代码片段
+- suggestion: 修复建议
+- function_trigger_flow: 函数触发链
+- code_context: 代码上下文
+- localization_status: 代码定位状态
 
 返回值:
-- saved_count: 成功入库条数（confirmed、likely 等状态）
-- filtered_count: 因质量门校验或 false_positive/uncertain 而被过滤的条数
-- validation_errors: 详细的验证失败列表（如果 strict_mode=False）
-- already_saved: 是否为重复调用（本工具支持幂等）
+- saved: 是否成功保存（true/false）
+- total_saved: 任务累计已保存的 findings 数量
 - message: 结果描述
 
 注意：
-- false_positive 和 uncertain verdict 的 findings 会被接受但分别标记为不同的状态
-- 所有 confidence 值必须是浮点数 [0.0-1.0]，不能为字符串
-- 所有 cwe_id 必须符合 CWE-XXX 格式或为 null
-- 调用一次即可，无需重复调用（幂等保护）"""
+- 每验证完一个漏洞就调用一次此工具
+- false_positive 和 uncertain 的 findings 也会被保存，但标记不同状态
+- confidence 必须是浮点数，不能为字符串
+- cwe_id 必须符合 CWE-XXX 格式或为 null"""
 
     @property
     def args_schema(self):
-        return SaveVerificationResultsInput
+        return SaveVerificationResultInput
 
     # ------------------------------------------------------------------ #
     # 公开属性：供 Orchestrator / 持久化兜底逻辑读取
@@ -501,138 +510,147 @@ reachability / verification_evidence 之后，必须调用此工具，
 
     async def _execute(
         self,
-        findings: List[AgentFindingModel],
-        summary: Optional[str] = None,
-        strict_mode: bool = True,
+        file_path: str,
+        line_start: int,
+        function_name: str,
+        title: str,
+        vulnerability_type: str,
+        severity: str,
+        verdict: str,
+        confidence: float,
+        reachability: str,
+        verification_evidence: str,
+        line_end: Optional[int] = None,
+        cwe_id: Optional[str] = None,
+        description: Optional[str] = None,
+        poc_plan: Optional[str] = None,
+        code_snippet: Optional[str] = None,
+        suggestion: Optional[str] = None,
+        function_trigger_flow: Optional[List[str]] = None,
+        code_context: Optional[str] = None,
+        localization_status: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         """
-        参数验证和持久化执行。
+        保存单个验证结果。
 
         Args:
-            findings: 已验证发现列表（Pydantic 模型已验证）
-            summary: 可选摘要
-            strict_mode: 严格模式（默认 True）
+            file_path: 文件路径
+            line_start: 起始行号
+            function_name: 函数名称
+            title: 漏洞标题
+            vulnerability_type: 漏洞类型
+            severity: 严重程度
+            verdict: 真实性判定
+            confidence: 置信度
+            reachability: 可达性
+            verification_evidence: 验证证据
+            其他可选参数...
 
         Returns:
-            ToolResult，包含 saved_count、filtered_count、validation_errors 等
+            ToolResult，包含 saved、total_saved、message
         """
         task_id = self.task_id
 
-        # 基础校验
-        if not findings:
-            logger.warning("[SaveVerificationResults][%s] 收到空 findings 列表", task_id)
-            return ToolResult(
-                success=True,
-                data={
-                    "saved_count": 0,
-                    "filtered_count": 0,
-                    "already_saved": False,
-                    "message": "findings 列表为空，无需保存",
-                },
-            )
+        # 构造 finding 字典
+        finding = {
+            "file_path": file_path,
+            "line_start": line_start,
+            "line_end": line_end if line_end is not None else line_start,
+            "function_name": function_name,
+            "title": title,
+            "vulnerability_type": vulnerability_type,
+            "severity": severity,
+            "cwe_id": cwe_id,
+            "description": description,
+            "verification_result": {
+                "verdict": verdict,
+                "confidence": confidence,
+                "reachability": reachability,
+                "verification_evidence": verification_evidence,
+                "poc_plan": poc_plan,
+                "code_snippet": code_snippet,
+                "suggestion": suggestion,
+                "function_trigger_flow": function_trigger_flow,
+                "code_context": code_context,
+                "localization_status": localization_status,
+            },
+        }
 
-        # 所有 findings 都已通过 Pydantic 验证（在 coerce_findings_to_models 中）
-        # 这里直接将它们转换回 Dict 格式以供持久化
-        valid_findings = [f.model_dump(exclude_none=True) for f in findings]
+        # 生成指纹用于去重
+        fingerprint_data = f"{file_path}:{line_start}:{function_name}:{vulnerability_type}:{verdict}"
+        fingerprint = hashlib.sha1(fingerprint_data.encode("utf-8")).hexdigest()[:12]
 
-        payload_digest = self._build_payload_digest(valid_findings)
-        if payload_digest in self._seen_payload_digests:
+        if fingerprint in self._seen_payload_digests:
             logger.info(
-                "[SaveVerificationResults][%s] 幂等保护：重复 payload（digest=%s），跳过重复持久化",
+                "[SaveVerificationResult][%s] 幂等保护：重复 finding（fingerprint=%s），跳过",
                 task_id,
-                payload_digest[:12],
+                fingerprint,
             )
             current_saved = int(self._saved_count or 0)
             return ToolResult(
                 success=True,
                 data={
-                    "saved_count": current_saved,
-                    "filtered_count": 0,
+                    "saved": False,
+                    "total_saved": current_saved,
                     "already_saved": True,
-                    "message": f"重复 payload 已跳过，累计 saved_count={current_saved}",
+                    "message": f"重复 finding 已跳过（{title}），累计 total_saved={current_saved}",
                 },
             )
-        
+
         # 更新内存缓冲（供外部兜底读取）
-        self._buffered_findings = list(valid_findings)
-
-        if summary:
-            logger.info("[SaveVerificationResults][%s] 验证摘要: %s", task_id, summary[:200])
+        self._buffered_findings.append(finding)
 
         logger.info(
-            "[SaveVerificationResults][%s] 开始保存 %d 条已验证的 findings …",
+            "[SaveVerificationResult][%s] 保存验证结果：%s (%s) - verdict=%s, confidence=%.2f",
             task_id,
-            len(valid_findings),
-        )
-
-        # ---- 统计各 verdict 分布（方便调试）----
-        verdict_counts: Dict[str, int] = {}
-        for f in valid_findings:
-            vr = f.get("verification_result") or {}
-            v = str((vr.get("verdict") if isinstance(vr, dict) else None) or "unknown").lower()
-            verdict_counts[v] = verdict_counts.get(v, 0) + 1
-        
-        logger.info(
-            "[SaveVerificationResults][%s] verdict 分布: %s",
-            task_id,
-            json.dumps(verdict_counts, ensure_ascii=False),
+            title,
+            file_path,
+            verdict,
+            confidence,
         )
 
         if self._save_callback is None:
             # 无回调时仅写入缓冲，Orchestrator 侧兜底持久化会读取 buffered_findings
             logger.warning(
-                "[SaveVerificationResults][%s] 未注入 save_callback，结果仅写入内存缓冲 (%d 条)",
+                "[SaveVerificationResult][%s] 未注入 save_callback，结果仅写入内存缓冲",
                 task_id,
-                len(valid_findings),
             )
-            # 标记"已缓存但未持久化"——saved_count 保持 None 以便兜底逻辑仍然运行
             return ToolResult(
                 success=True,
                 data={
-                    "saved_count": 0,
-                    "filtered_count": 0,
-                    "already_saved": False,
+                    "saved": False,
+                    "total_saved": 0,
                     "buffered": True,
-                    "message": (
-                        f"结果已写入内存缓冲（{len(valid_findings)} 条），"
-                        "将在任务完成时由 Orchestrator 统一持久化"
-                    ),
+                    "message": f"结果已写入内存缓冲（{title}），将在任务完成时由 Orchestrator 统一持久化",
                 },
             )
 
         # 调用注入的持久化回调
         try:
-            saved = await self._save_callback(valid_findings)
-            self._seen_payload_digests.add(payload_digest)
+            saved = await self._save_callback([finding])
+            self._seen_payload_digests.add(fingerprint)
             previous_saved = int(self._saved_count or 0)
-            current_saved = int(saved)
-            self._saved_count = previous_saved + current_saved
-            filtered = max(0, len(valid_findings) - current_saved)
+            self._saved_count = previous_saved + int(saved)
+            
             logger.info(
-                "[SaveVerificationResults][%s] 持久化完成：batch_saved=%d, filtered=%d, total_saved=%d",
+                "[SaveVerificationResult][%s] 持久化完成：finding=%s, total_saved=%d",
                 task_id,
-                current_saved,
-                filtered,
+                title,
                 self._saved_count,
             )
+            
             return ToolResult(
                 success=True,
                 data={
-                    "saved_count": self._saved_count,
-                    "batch_saved_count": current_saved,
-                    "filtered_count": filtered,
-                    "already_saved": False,
-                    "message": (
-                        f"✅ 验证结果已保存：本批 {current_saved} 条，累计 {self._saved_count} 条"
-                        + (f"，{filtered} 条被过滤（false_positive/uncertain 等）" if filtered else "")
-                        + f"\n前置参数验证：所有 {len(valid_findings)} 条 findings 已通过严格的 Pydantic 模型验证"
-                    ),
+                    "saved": saved > 0,
+                    "total_saved": self._saved_count,
+                    "message": f"✅ 验证结果已保存：{title}（verdict={verdict}, confidence={confidence:.2f}），累计 {self._saved_count} 条",
                 },
             )
         except Exception as exc:
             logger.error(
-                "[SaveVerificationResults][%s] 持久化失败: %s",
+                "[SaveVerificationResult][%s] 持久化失败: %s",
                 task_id,
                 exc,
                 exc_info=True,
@@ -641,9 +659,8 @@ reachability / verification_evidence 之后，必须调用此工具，
                 success=False,
                 error=str(exc),
                 data={
-                    "saved_count": 0,
-                    "filtered_count": len(valid_findings),
-                    "already_saved": False,
+                    "saved": False,
+                    "total_saved": self._saved_count or 0,
                     "message": f"❌ 持久化失败: {exc}",
                 },
             )

@@ -123,7 +123,7 @@ STRICT_MCP_LOCAL_ALLOWLIST: Set[str] = {
     "verify_vulnerability",
     "run_code",
     "create_vulnerability_report",
-    "save_verification_results",
+    "save_verification_result",
     "push_finding_to_queue",
     "is_finding_in_queue",
     "get_queue_status",
@@ -4641,28 +4641,22 @@ class BaseAgent(ABC):
                 # 🔥 为缺失字段生成更详细的示例
                 example_dict: Dict[str, Any] = {}
                 
-                # 特殊处理 save_verification_results 工具
-                if str(resolved_tool_name or "").strip().lower() == "save_verification_results" and "findings" in missing_required:
+                # 特殊处理 save_verification_result 工具
+                if str(resolved_tool_name or "").strip().lower() == "save_verification_result":
                     example_dict = {
-                        "findings": [
-                            {
-                                "file_path": "<相对路径，如 src/main.py>",
-                                "line_start": "<起始行号，如 10>",
-                                "line_end": "<结束行号，如 20>",
-                                "title": "<漏洞标题，5-200字符>",
-                                "vulnerability_type": "<漏洞类型，如 sql_injection>",
-                                "severity": "<critical|high|medium|low|info>",
-                                "cwe_id": "<CWE编号，如 CWE-89>",
-                                "function_name": "<函数名，必填>",
-                                "verification_result": {
-                                    "verdict": "<confirmed|likely|uncertain|false_positive>",
-                                    "confidence": "<0.0-1.0 浮点数>",
-                                    "reachability": "<reachable|likely_reachable|unknown|unreachable>",
-                                    "verification_evidence": "<验证证据，至少10字符>"
-                                }
-                            }
-                        ],
-                        "summary": "<可选：验证结果摘要>"
+                        "file_path": "<相对路径，如 src/main.py>",
+                        "line_start": "<起始行号，如 10>",
+                        "line_end": "<结束行号，如 20>",
+                        "function_name": "<函数名，必填>",
+                        "title": "<漏洞标题，5-200字符>",
+                        "vulnerability_type": "<漏洞类型，如 sql_injection>",
+                        "severity": "<critical|high|medium|low|info>",
+                        "verdict": "<confirmed|likely|uncertain|false_positive>",
+                        "confidence": "<0.0-1.0 浮点数>",
+                        "reachability": "<reachable|likely_reachable|unknown|unreachable>",
+                        "verification_evidence": "<验证证据，至少10字符>",
+                        "cwe_id": "<CWE编号，如 CWE-89，可选>",
+                        "suggestion": "<修复建议，可选>",
                     }
                 elif local_tool_available and tool:
                     # 尝试从工具的 args_schema 获取字段类型和描述
@@ -5044,7 +5038,7 @@ class BaseAgent(ABC):
                         )
                         
                         # 🔥 MCP 工具成功执行后追踪关键工具调用
-                        critical_tools = {"push_finding_to_queue", "save_verification_results"}
+                        critical_tools = {"push_finding_to_queue", "save_verification_result"}
                         if resolved_tool_name in critical_tools:
                             self._critical_tool_called = True
                             self._critical_tool_name = resolved_tool_name
@@ -5093,7 +5087,7 @@ class BaseAgent(ABC):
                         )
                         
                         # 🔥 MCP fallback 成功执行后追踪关键工具调用
-                        critical_tools = {"push_finding_to_queue", "save_verification_results"}
+                        critical_tools = {"push_finding_to_queue", "save_verification_result"}
                         if resolved_tool_name in critical_tools:
                             self._critical_tool_called = True
                             self._critical_tool_name = resolved_tool_name
@@ -5291,7 +5285,7 @@ class BaseAgent(ABC):
                 )
                 
                 # 🔥 仅在工具成功执行后才追踪关键工具调用（push/save）
-                critical_tools = {"push_finding_to_queue", "save_verification_results"}
+                critical_tools = {"push_finding_to_queue", "save_verification_result"}
                 if resolved_tool_name in critical_tools:
                     self._critical_tool_called = True
                     self._critical_tool_name = resolved_tool_name
@@ -5444,7 +5438,7 @@ class BaseAgent(ABC):
         else:  # verification
             output_example = """{{
     "needs_fallback": true,
-    "reason": "完成1个漏洞验证但未成功调用save_verification_results",
+    "reason": "完成1个漏洞验证但未成功调用save_verification_result",
     "verification_results": {{
         "findings": [
             {{
@@ -5678,26 +5672,53 @@ user: Observation: ❌ 数据库连接失败
                     "total_findings": len(findings),
                 }
             
-            elif agent_type == "verification" and expected_tool == "save_verification_results":
-                # Verification Agent: 保存验证结果
+            elif agent_type == "verification" and expected_tool == "save_verification_result":
+                # Verification Agent: 保存验证结果（逐个保存）
                 verification_results = analysis_result.get("verification_results", {})
-                if not verification_results or not verification_results.get("findings"):
-                    logger.warning(f"[{self.name}] 兜底分析未提取到 verification_results")
+                findings = verification_results.get("findings", [])
+                if not findings:
+                    logger.warning(f"[{self.name}] 兜底分析未提取到 verification findings")
                     return None
                 
-                logger.info(f"[{self.name}] 开始补救保存验证结果")
+                logger.info(f"[{self.name}] 开始补救保存验证结果（共 {len(findings)} 条）")
                 
-                try:
-                    result = await self.execute_tool("save_verification_results", verification_results)
-                    if "成功" in result or "已保存" in result:
-                        logger.info(f"[{self.name}] 补救保存验证结果成功")
-                        return {
-                            "fallback_executed": True,
-                            "tool": expected_tool,
-                            "saved_count": len(verification_results.get("findings", [])),
+                saved_count = 0
+                for idx, finding in enumerate(findings):
+                    try:
+                        # 构造单个 finding 的参数
+                        vr = finding.get("verification_result", {})
+                        params = {
+                            "file_path": finding.get("file_path"),
+                            "line_start": finding.get("line_start"),
+                            "line_end": finding.get("line_end"),
+                            "function_name": finding.get("function_name"),
+                            "title": finding.get("title"),
+                            "vulnerability_type": finding.get("vulnerability_type"),
+                            "severity": finding.get("severity"),
+                            "verdict": vr.get("verdict"),
+                            "confidence": vr.get("confidence"),
+                            "reachability": vr.get("reachability"),
+                            "verification_evidence": vr.get("verification_evidence"),
+                            "cwe_id": finding.get("cwe_id"),
+                            "description": finding.get("description"),
+                            "suggestion": finding.get("suggestion"),
                         }
-                except Exception as e:
-                    logger.error(f"[{self.name}] 补救保存验证结果失败: {e}")
+                        result = await self.execute_tool("save_verification_result", params)
+                        if result and ("成功" in str(result) or "已保存" in str(result)):
+                            saved_count += 1
+                            logger.info(f"[{self.name}] 补救保存第 {idx+1}/{len(findings)} 条验证结果成功")
+                    except Exception as e:
+                        logger.error(f"[{self.name}] 补救保存第 {idx+1} 条验证结果失败: {e}")
+                
+                if saved_count > 0:
+                    logger.info(f"[{self.name}] 补救保存完成：{saved_count}/{len(findings)} 条成功")
+                    return {
+                        "fallback_executed": True,
+                        "tool": expected_tool,
+                        "saved_count": saved_count,
+                        "total_findings": len(findings),
+                    }
+                else:
                     return None
             
             else:
