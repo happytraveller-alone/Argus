@@ -153,7 +153,7 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - 本地 Compose 默认关闭 pnpm optional 依赖安装（`BACKEND_PNPM_INSTALL_OPTIONAL=0`），可显著减少 `node-llama-cpp` 相关下载重试；如需完整 optional 依赖可设为 `1`。
 - 本地 Compose 默认跳过 CJK 字体安装（`BACKEND_INSTALL_CJK_FONTS=0`）以加快构建；如需中文字体渲染可设置为 `1`。
 - 直接执行 `docker compose up -d --build` 不包含自动切换镜像源逻辑。
-- GitHub 源码同步与任务仓库下载/克隆默认走双代理：`https://gh-proxy.com` -> `https://v6.gh-proxy.org`。
+- GitHub 源码同步与任务仓库下载/克隆默认走双代理：`https://gh-proxy.org` -> `https://v6.gh-proxy.org`。
 - 默认不回源 GitHub（`GIT_MIRROR_FALLBACK_TO_ORIGIN=false`）；仅在排障时建议临时开启回源。
 - MCP 源码同步默认采用“首次下载后持久化缓存”策略：`MCP_SOURCE_UPDATE_ON_STARTUP=false`（已有缓存时跳过更新，提升启动稳定性）。
 - 如需临时强制刷新 MCP 源码，可设置：`MCP_SOURCE_UPDATE_ON_STARTUP=true`（或 `MCP_SOURCE_FORCE_REFRESH=true`）。
@@ -162,7 +162,7 @@ docker compose -f docker-compose.prod.cn.yml up -d
 
 ```bash
 DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library \
-SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest \
+SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/vulhunter-sandbox:latest \
 ./scripts/compose-up-with-fallback.sh
 ```
 
@@ -188,7 +188,7 @@ BACKEND_INSTALL_CJK_FONTS=0 \
 GitHub 代理链路示例：
 
 ```bash
-GIT_MIRROR_PREFIXES=https://gh-proxy.com,https://v6.gh-proxy.org \
+GIT_MIRROR_PREFIXES=https://gh-proxy.org,https://v6.gh-proxy.org \
 GIT_MIRROR_FALLBACK_TO_ORIGIN=false \
 ./scripts/compose-up-with-fallback.sh
 ```

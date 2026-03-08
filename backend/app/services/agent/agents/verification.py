@@ -1457,7 +1457,6 @@ class VerificationAgent(BaseAgent):
                 read_error_reason = "file_not_exists"
             else:
                 read_error_reason = "read_failed_unknown_reason"
-        
         return {
             "file_path": resolved_file_path or file_path,
             "function": None,

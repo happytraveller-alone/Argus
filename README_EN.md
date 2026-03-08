@@ -151,14 +151,14 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - Local Compose now disables pnpm optional dependencies by default (`BACKEND_PNPM_INSTALL_OPTIONAL=0`) to avoid long `node-llama-cpp` retry loops; set it to `1` if you require full optional dependencies.
 - Local Compose now skips CJK font installation by default (`BACKEND_INSTALL_CJK_FONTS=0`) to speed up builds; set it to `1` if you need Chinese font rendering.
 - Running `docker compose up -d --build` directly does not include automatic mirror fallback logic.
-- GitHub source sync and task repo download/clone now use a two-step proxy chain by default: `https://gh-proxy.com` -> `https://v6.gh-proxy.org`.
+- GitHub source sync and task repo download/clone now use a two-step proxy chain by default: `https://gh-proxy.org` -> `https://v6.gh-proxy.org`.
 - Fallback to origin GitHub is disabled by default (`GIT_MIRROR_FALLBACK_TO_ORIGIN=false`); enable it only for troubleshooting.
 
 Example:
 
 ```bash
 DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library \
-SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/deepaudit-sandbox:latest \
+SANDBOX_IMAGE=ghcr.nju.edu.cn/lintsinghua/vulhunter-sandbox:latest \
 ./scripts/compose-up-with-fallback.sh
 ```
 
@@ -184,7 +184,7 @@ BACKEND_INSTALL_CJK_FONTS=0 \
 GitHub proxy chain example:
 
 ```bash
-GIT_MIRROR_PREFIXES=https://gh-proxy.com,https://v6.gh-proxy.org \
+GIT_MIRROR_PREFIXES=https://gh-proxy.org,https://v6.gh-proxy.org \
 GIT_MIRROR_FALLBACK_TO_ORIGIN=false \
 ./scripts/compose-up-with-fallback.sh
 ```
