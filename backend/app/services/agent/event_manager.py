@@ -524,7 +524,8 @@ class EventManager:
                     if sequence % 10 == 0:
                         logger.debug(f"[EventQueue] Added thinking_token #{sequence} to queue, size: {self._event_queues[task_id].qsize()}")
             except asyncio.QueueFull:
-                logger.warning(f"Event queue full for task {task_id}, dropping event: {event_type}")
+                # logger.warning(f"Event queue full for task {task_id}, dropping event: {event_type}")
+                pass
         
         # 调用回调
         if task_id in self._event_callbacks:
