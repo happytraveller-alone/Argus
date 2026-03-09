@@ -243,6 +243,23 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"停止定时清理任务失败: {e}")
 
+    # 清理未关闭的 aiohttp ClientSession（修复资源泄漏警告）
+    try:
+        import gc
+        
+        # 等待一小段时间让所有 pending 的异步任务完成
+        await asyncio.sleep(0.1)
+        
+        # 强制垃圾回收，触发并清理未关闭的资源
+        gc.collect()
+        
+        # 再等待一点时间让清理完成
+        await asyncio.sleep(0.05)
+        
+        logger.info("  - 异步资源清理完成")
+    except Exception as e:
+        logger.warning(f"清理异步资源失败: {e}")
+
     try:
         # 可选：清理过期的 git 缓存（超过30天未使用的缓存）
         cleaned = GlobalRepoCacheManager.cleanup_unused_caches(
