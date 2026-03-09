@@ -4,6 +4,7 @@
  */
 
 import type { AgentTreeNode, LogItem } from "./types";
+import { isAgentAuditTerminalStatus } from "./taskStatus";
 
 const AUDIT_EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F\u200D]/gu;
 const AUDIT_DECORATION_REGEX = /[◆◇■□●○★☆▶▷◀◁►◄•▪▫◉◎◌⏭⏮⏯⏹⏺⏸⏵⏴⏩⏪]/g;
@@ -284,9 +285,7 @@ export function isTaskRunning(status: string | undefined): boolean {
  * Check if task is complete
  */
 export function isTaskComplete(status: string | undefined): boolean {
-  return (
-    status === "completed" || status === "failed" || status === "cancelled"
-  );
+  return isAgentAuditTerminalStatus(status);
 }
 
 /**

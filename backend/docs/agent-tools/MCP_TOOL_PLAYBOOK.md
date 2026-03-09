@@ -6,7 +6,7 @@
 
 | 标准工具名 | MCP Server | MCP Tool | 必填参数 | 典型输出 |
 | --- | --- | --- | --- | --- |
-| `search_code` | `code_index` (fallback `filesystem`) | `search_code_advanced` (`search_files`) | 公开输入 `keyword`；MCP 稳定形态推荐 `keyword + is_regex=true` | 命中位置（含 file_path 与 line） |
+| `search_code` | `local` | `FileSearchTool` | 公开输入 `keyword`；优先补充 `directory/file_pattern` 缩小范围 | 命中位置（含 file_path 与 line） |
 | `read_file` | `filesystem` | `read_file` | `file_path + start_line/end_line` | 窗口化代码片段 |
 | `list_files` | `code_index` | `find_files` | `directory/path` | 文件列表 |
 | `locate_enclosing_function` | `code_index` | `get_file_summary` | `file_path`, `line_start` | 所属函数与范围 |

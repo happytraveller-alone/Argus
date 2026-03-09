@@ -18,6 +18,10 @@ class _ReadSchema(BaseModel):
     file_path: str
 
 
+class _SearchSchema(BaseModel):
+    keyword: str
+
+
 class _LocalReadTool:
     args_schema = _ReadSchema
     name = "read_file"
@@ -32,6 +36,23 @@ class _LocalReadTool:
             data=f"local-read:{kwargs.get('file_path')}",
             error=None,
             metadata={"file_path": kwargs.get("file_path")},
+        )
+
+
+class _LocalSearchTool:
+    args_schema = _SearchSchema
+    name = "search_code"
+
+    def __init__(self):
+        self.execute_calls = 0
+
+    async def execute(self, **kwargs):
+        self.execute_calls += 1
+        return SimpleNamespace(
+            success=True,
+            data=f"local-search:{kwargs.get('keyword')}",
+            error=None,
+            metadata={"keyword": kwargs.get("keyword")},
         )
 
 
@@ -105,6 +126,7 @@ async def test_task_mcp_runtime_uses_only_stdio_adapters(monkeypatch, tmp_path):
         "filesystem": "stdio_only",
         "code_index": "stdio_only",
     }
+    assert runtime.required_mcps == ["filesystem"]
 
 
 @pytest.mark.asyncio
@@ -139,8 +161,8 @@ def test_mcp_router_exposes_only_core_stdio_routes():
 
     search_route = router.route("search_code", {"keyword": "dangerous_call"})
     assert search_route is not None
-    assert search_route.adapter_name == "code_index"
-    assert search_route.mcp_tool_name == "search_code_advanced"
+    assert search_route.adapter_name == "__local__"
+    assert search_route.mcp_tool_name == "search_code"
     assert search_route.arguments["pattern"] == "dangerous_call"
     assert search_route.arguments["regex"] is False
     assert "query" not in search_route.arguments
@@ -182,8 +204,16 @@ def test_mcp_router_exposes_only_core_stdio_routes():
         {"file_path": "src/time64.c", "function_name": "asctime64_r"},
     )
     assert extract_route is not None
-    assert extract_route.adapter_name == "code_index"
-    assert extract_route.mcp_tool_name == "get_symbol_body"
+    assert extract_route.adapter_name == "__local__"
+    assert extract_route.mcp_tool_name == "extract_function"
+
+    locate_route = router.route(
+        "locate_enclosing_function",
+        {"file_path": "src/time64.c", "line_start": 22},
+    )
+    assert locate_route is not None
+    assert locate_route.adapter_name == "__local__"
+    assert locate_route.mcp_tool_name == "locate_enclosing_function"
 
     assert router.route("edit_file", {"file_path": "src/main.py"}) is None
     assert router.route("qmd_query", {"query": "auth"}) is None
@@ -217,6 +247,27 @@ async def test_agent_does_not_fallback_to_local_read_tool_when_mcp_is_unavailabl
 
     assert "mcp_adapter_unavailable:filesystem" in output
     assert local_tool.execute_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_agent_runs_local_search_code_when_strict_mode_route_is_local_only(tmp_path):
+    runtime = MCPRuntime(
+        enabled=True,
+        prefer_mcp=True,
+        adapters={},
+        runtime_modes={},
+        default_runtime_mode="stdio_only",
+        project_root=str(tmp_path),
+        strict_mode=True,
+    )
+    local_tool = _LocalSearchTool()
+    agent = _make_agent(tools={"search_code": local_tool}, runtime=runtime)
+    agent.config.metadata.update({"smart_audit_mode": True, "mcp_only_enforced": True})
+
+    output = await agent.execute_tool("search_code", {"keyword": "dangerous_call"})
+
+    assert output == "local-search:dangerous_call"
+    assert local_tool.execute_calls == 1
 
 
 @pytest.mark.asyncio

@@ -59,8 +59,7 @@ export function ProjectTasksTab(props: {
                 ? `/tasks/${task.id}`
                 : `/agent-audit/${task.id}`;
             const detailRoute = getTaskRoute ? getTaskRoute(wrappedTask) : defaultRoute;
-            const resolvedDetailRoute =
-              isStaticTask ? appendReturnTo(detailRoute, currentRoute) : detailRoute;
+            const resolvedDetailRoute = appendReturnTo(detailRoute, currentRoute);
 
             return (
               <div key={`${wrappedTask.kind}:${task.id}`} className="cyber-card p-6">

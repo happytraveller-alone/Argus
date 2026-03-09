@@ -89,7 +89,7 @@ STRICT_MCP_LOCAL_ONLY_TOOL_NAMES: Set[str] = {
     "get_queue_status",
     "dequeue_finding",
     "is_finding_in_queue",
-    "save_verification_results",
+    "save_verification_result",
 }
 WRITE_TOOL_GUARD_NAMES: Set[str] = {"edit_file", "write_file", "move_file", "create_directory"}
 DETERMINISTIC_ERROR_HINTS: Tuple[str, ...] = (
@@ -110,32 +110,6 @@ STRICT_MCP_TRANSIENT_ERROR_HINTS: Tuple[str, ...] = (
     "connection refused",
     "network",
 )
-STRICT_MCP_LOCAL_ALLOWLIST: Set[str] = {
-    "think",
-    "reflect",
-    "smart_scan",
-    "quick_audit",
-    "pattern_match",
-    "dataflow_analysis",
-    "controlflow_analysis_light",
-    "logic_authz_analysis",
-    "sandbox_exec",
-    "verify_vulnerability",
-    "run_code",
-    "create_vulnerability_report",
-    "save_verification_result",
-    "push_finding_to_queue",
-    "is_finding_in_queue",
-    "get_queue_status",
-    "dequeue_finding",
-    "push_risk_point_to_queue",
-    "get_recon_risk_queue_status",
-    "dequeue_recon_risk_point",
-    "peek_recon_risk_queue",
-    "clear_recon_risk_queue",
-    "is_recon_risk_point_in_queue",
-}
-
 if TYPE_CHECKING:
     from ..mcp.runtime import MCPRuntime
     from ..mcp.write_scope import TaskWriteScopeGuard, WriteScopeDecision
@@ -717,21 +691,13 @@ class BaseAgent(ABC):
         tool_name: str,
         local_tool_available: bool,
     ) -> bool:
-        if not runtime or not local_tool_available:
+        if not runtime:
             return False
-        normalized_tool_name = str(tool_name or "").strip().lower()
-        if not normalized_tool_name:
-            return False
-        router = getattr(runtime, "router", None)
-        if not router or not hasattr(router, "can_route"):
-            return False
-        try:
-            route_registered = bool(router.can_route(normalized_tool_name))
-        except Exception:
-            route_registered = False
-        if not route_registered:
-            return False
-        return normalized_tool_name in STRICT_MCP_LOCAL_ALLOWLIST
+        return self._is_strict_mcp_local_tool_allowed(
+            tool_name=tool_name,
+            local_tool_available=local_tool_available,
+            mcp_can_handle=False,
+        )
 
     def _runtime_metadata(self) -> Dict[str, Any]:
         metadata = getattr(self.config, "metadata", None)
@@ -3322,12 +3288,6 @@ class BaseAgent(ABC):
         route_tool = str(route.mcp_tool_name or "").strip()
         if route_adapter and route_tool:
             metadata["mcp_route_primary"] = f"{route_adapter}.{route_tool}"
-        if (
-            str(tool_name or "").strip().lower() == "search_code"
-            and route_adapter == "code_index"
-            and route_tool == "search_code_advanced"
-        ):
-            metadata["mcp_route_fallback"] = "filesystem.search_files"
         get_runtime_mode = getattr(runtime, "_get_runtime_mode", None)
         runtime_mode = ""
         if callable(get_runtime_mode):
@@ -4195,7 +4155,6 @@ class BaseAgent(ABC):
             located_file: Optional[str] = None
             located_line: Optional[int] = None
             last_search_failure: Optional[str] = None
-            code_index_repair_attempted = False
             if search_candidates:
                 for keyword, source in search_candidates:
                     search_payload: Dict[str, Any] = {
@@ -4215,25 +4174,10 @@ class BaseAgent(ABC):
                     )
                     metadata["strict_anchor_search_hit_count"] = self._estimate_search_hit_count(search_output)
                     if self._looks_like_tool_failure_output(search_output):
-                        if (
-                            not code_index_repair_attempted
-                            and self._is_code_index_not_ready_error(search_output)
-                        ):
-                            code_index_repair_attempted = True
-                            repair_result = await self._repair_code_index_runtime_for_read()
-                            metadata["strict_anchor_code_index_repair"] = repair_result
-                            if bool(repair_result.get("success")):
-                                search_output = await self.execute_tool(
-                                    "search_code",
-                                    search_payload,
-                                    _fallback_depth=fallback_depth + 1,
-                                )
-                                metadata["strict_anchor_search_hit_count"] = self._estimate_search_hit_count(search_output)
-                        if self._looks_like_tool_failure_output(search_output):
-                            last_search_failure = (
-                                "read_file 严格锚点模式：无法通过 search_code 定位目标代码，请先提供明确 file_path:line。"
-                            )
-                            continue
+                        last_search_failure = (
+                            "read_file 严格锚点模式：无法通过 search_code 定位目标代码，请先提供明确 file_path:line。"
+                        )
+                        continue
 
                     located_file, located_line = self._extract_location_from_search_output(search_output)
                     if located_line:

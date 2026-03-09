@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
+from app.services.agent.flow.lightweight.function_locator import EnclosingFunctionLocator
+
 from .base import AgentTool, ToolResult
 
 
@@ -1124,3 +1126,102 @@ class ListFilesTool(AgentTool):
                 success=False,
                 error=f"列出文件失败: {str(e)}",
             )
+
+
+class LocateEnclosingFunctionInput(BaseModel):
+    file_path: str = Field(description="文件路径（相对于项目根目录）")
+    line_start: Optional[int] = Field(default=None, description="目标行号（从1开始）")
+    line: Optional[int] = Field(default=None, description="兼容字段：目标行号（从1开始）")
+
+
+class LocateEnclosingFunctionTool(AgentTool):
+    def __init__(
+        self,
+        project_root: str,
+        exclude_patterns: Optional[List[str]] = None,
+        target_files: Optional[List[str]] = None,
+    ):
+        super().__init__()
+        self.project_root = project_root
+        self.exclude_patterns = exclude_patterns or []
+        self.target_files = set(target_files) if target_files else None
+        self.locator = EnclosingFunctionLocator(project_root=project_root)
+
+    @property
+    def name(self) -> str:
+        return "locate_enclosing_function"
+
+    @property
+    def description(self) -> str:
+        return "根据 file_path + line_start 定位包含该行的函数/方法，用于提取函数级上下文。"
+
+    @property
+    def args_schema(self):
+        return LocateEnclosingFunctionInput
+
+    def _resolve_full_path(self, file_path: str) -> tuple[Optional[str], Optional[str]]:
+        normalized = _normalize_rel_path(file_path)
+        if not normalized:
+            return None, "必须提供 file_path"
+        full_path = os.path.normpath(os.path.join(self.project_root, normalized))
+        root_path = os.path.normpath(self.project_root)
+        if not FileSearchTool._is_path_within_root(full_path, root_path):
+            return None, "安全错误：不允许读取项目目录外的内容"
+        if self.target_files and normalized not in self.target_files:
+            return None, f"文件不在审计范围内: {normalized}"
+        if not os.path.exists(full_path):
+            return None, f"文件不存在: {normalized}"
+        if not os.path.isfile(full_path):
+            return None, f"不是文件: {normalized}"
+        return full_path, None
+
+    async def _execute(
+        self,
+        file_path: str,
+        line_start: Optional[int] = None,
+        line: Optional[int] = None,
+    ) -> ToolResult:
+        target_line = line_start if line_start is not None else line
+        try:
+            normalized_line = max(1, int(target_line or 1))
+        except Exception:
+            normalized_line = 1
+
+        full_path, error = self._resolve_full_path(file_path)
+        if full_path is None:
+            return ToolResult(success=False, error=error or "文件定位失败")
+
+        relative_path = _normalize_rel_path(file_path)
+        located = self.locator.locate(
+            full_file_path=full_path,
+            line_start=normalized_line,
+            relative_file_path=relative_path,
+        )
+
+        payload = {
+            "file_path": relative_path,
+            "line_start": normalized_line,
+            "enclosing_function": {
+                "name": located.get("function"),
+                "start_line": located.get("start_line"),
+                "end_line": located.get("end_line"),
+                "language": located.get("language"),
+            },
+            "symbols": [],
+            "resolution_method": located.get("resolution_method"),
+            "resolution_engine": located.get("resolution_engine"),
+            "diagnostics": located.get("diagnostics") or [],
+        }
+        function_name = str(located.get("function") or "").strip()
+        if function_name:
+            payload["symbols"].append(
+                {
+                    "name": function_name,
+                    "kind": "function",
+                    "start_line": located.get("start_line"),
+                    "end_line": located.get("end_line"),
+                    "language": located.get("language"),
+                }
+            )
+
+        return ToolResult(success=True, data=payload, metadata=payload)

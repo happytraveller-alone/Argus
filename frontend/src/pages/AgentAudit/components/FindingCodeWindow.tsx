@@ -9,6 +9,7 @@ interface FindingCodeWindowProps {
   highlightEndLine?: number | null;
   focusLine?: number | null;
   title?: string;
+  variant?: "default" | "detail";
 }
 
 function formatHeader(
@@ -41,6 +42,7 @@ export default function FindingCodeWindow({
   highlightEndLine,
   focusLine,
   title = "命中代码",
+  variant = "default",
 }: FindingCodeWindowProps) {
   const lines = useMemo(() => String(code || "").replace(/\r\n/g, "\n").split("\n"), [code]);
   const firstLine = typeof lineStart === "number" && Number.isFinite(lineStart) ? lineStart : 1;
@@ -59,6 +61,7 @@ export default function FindingCodeWindow({
     typeof focusLine === "number" && Number.isFinite(focusLine)
       ? focusLine
       : lineStart ?? null;
+  const isDetail = variant === "detail";
 
   useEffect(() => {
     if (!containerRef.current || !normalizedFocusLine) return;
@@ -70,13 +73,17 @@ export default function FindingCodeWindow({
 
   return (
     <section className="rounded-lg border border-border bg-card/70 overflow-hidden">
-      <div className="px-3 py-2 border-b border-border bg-muted/40">
-        <div className="text-xs font-mono uppercase text-muted-foreground">{title}</div>
-        <div className="text-xs text-foreground break-all">{header}</div>
+      <div className={`border-b border-border bg-muted/40 ${isDetail ? "px-4 py-3" : "px-3 py-2"}`}>
+        <div className={`${isDetail ? "text-sm" : "text-xs"} font-mono uppercase text-muted-foreground`}>
+          {title}
+        </div>
+        <div className={`${isDetail ? "text-sm" : "text-xs"} text-foreground break-all`}>
+          {header}
+        </div>
       </div>
 
-      <div ref={containerRef} className="max-h-[46vh] overflow-auto">
-        <div className="min-w-max font-mono text-[12px] leading-6">
+      <div ref={containerRef} className={isDetail ? "max-h-[52vh] overflow-auto" : "max-h-[46vh] overflow-auto"}>
+        <div className={`min-w-max font-mono ${isDetail ? "text-[13px] leading-7" : "text-[12px] leading-6"}`}>
           {lines.map((line, index) => {
             const lineNumber = firstLine + index;
             const inHighlightRange =
@@ -89,12 +96,12 @@ export default function FindingCodeWindow({
               <div
                 key={`${lineNumber}-${index}`}
                 data-line-number={lineNumber}
-                className={`grid grid-cols-[64px_1fr] border-b border-border/30 last:border-b-0 ${
+                className={`grid ${isDetail ? "grid-cols-[72px_1fr]" : "grid-cols-[64px_1fr]"} border-b border-border/30 last:border-b-0 ${
                   inHighlightRange ? "bg-orange-500/10" : ""
                 } ${isFocusLine ? "ring-1 ring-red-500/60 ring-inset" : ""}`}
               >
                 <div
-                  className={`px-2 py-0.5 text-right text-muted-foreground select-none ${
+                  className={`${isDetail ? "px-3 py-1" : "px-2 py-0.5"} text-right text-muted-foreground select-none ${
                     isFocusLine
                       ? "bg-red-500/15 text-red-700 dark:text-red-200"
                       : inHighlightRange
@@ -105,7 +112,7 @@ export default function FindingCodeWindow({
                   {lineNumber}
                 </div>
                 <pre
-                  className={`px-3 py-0.5 whitespace-pre-wrap break-words text-foreground ${
+                  className={`${isDetail ? "px-4 py-1" : "px-3 py-0.5"} whitespace-pre-wrap break-words text-foreground ${
                     isFocusLine
                       ? "bg-red-500/10"
                       : inHighlightRange

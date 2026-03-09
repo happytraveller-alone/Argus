@@ -42,7 +42,7 @@ test("high-impact frontend copy uses 扫描 terminology", () => {
 		},
 		{
 			file: "src/pages/intelligent-scan/SkillToolsPanel.tsx",
-			mustInclude: ["智能扫描 MCP 目录", "智能扫描 SKILL 目录"],
+			mustInclude: ["外部工具列表", "是否加载", "可执行功能"],
 			mustExclude: ["智能审计 MCP 目录", "智能审计 SKILL 目录"],
 		},
 		{

@@ -16,7 +16,7 @@ STAMP_FILE="/pnpm/store/.deepaudit_frontend_lock.sha256"
 INSTALL_MODE="${FRONTEND_DEV_INSTALL_MODE:-auto}"
 NEED_INSTALL="0"
 
-if [ ! -d /app/node_modules ]; then
+if [ ! -f /app/node_modules/.modules.yaml ] || [ ! -x /app/node_modules/.bin/vite ] || [ ! -x /app/node_modules/.bin/tsc ]; then
   NEED_INSTALL="1"
 fi
 
@@ -44,6 +44,8 @@ if [ "$NEED_INSTALL" = "1" ]; then
 else
   echo "[frontend-dev] lockfile unchanged, skip install"
 fi
+
+export BROWSER="${BROWSER:-none}"
 
 if [ -z "${CHOKIDAR_USEPOLLING:-}" ]; then
   case "$(uname -s)" in

@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import FindingCodeWindow from "@/pages/AgentAudit/components/FindingCodeWindow";
+import { buildFindingDetailCodeSections } from "@/pages/finding-detail/viewModel";
 import {
 	getAgentFinding,
 	type AgentFinding,
@@ -239,13 +240,10 @@ export default function FindingDetail() {
 	const [error, setError] = useState("");
 	const [staticTask, setStaticTask] = useState<OpengrepScanTask | null>(null);
 	const [staticFinding, setStaticFinding] = useState<OpengrepFinding | null>(null);
-	const [staticContext, setStaticContext] = useState<OpengrepFindingContext | null>(
-		null,
-	);
+	const [staticContext, setStaticContext] = useState<OpengrepFindingContext | null>(null);
 	const [gitleaksTask, setGitleaksTask] = useState<GitleaksScanTask | null>(null);
 	const [gitleaksFinding, setGitleaksFinding] = useState<GitleaksFinding | null>(null);
 	const [agentFinding, setAgentFinding] = useState<AgentFinding | null>(null);
-	const [selectedCodeId, setSelectedCodeId] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -331,8 +329,7 @@ export default function FindingDetail() {
 					lineStart: gitleaksFinding.start_line ?? null,
 					lineEnd: gitleaksFinding.end_line ?? gitleaksFinding.start_line ?? null,
 					highlightStartLine: gitleaksFinding.start_line ?? null,
-					highlightEndLine:
-						gitleaksFinding.end_line ?? gitleaksFinding.start_line ?? null,
+					highlightEndLine: gitleaksFinding.end_line ?? gitleaksFinding.start_line ?? null,
 					focusLine: gitleaksFinding.start_line ?? null,
 				},
 			];
@@ -341,23 +338,9 @@ export default function FindingDetail() {
 			return toAgentCodeView(agentFinding);
 		}
 		return [];
-	}, [
-		agentFinding,
-		gitleaksFinding,
-		source,
-		staticContext,
-		staticEngine,
-		staticFinding,
-	]);
+	}, [agentFinding, gitleaksFinding, source, staticContext, staticEngine, staticFinding]);
 
-	useEffect(() => {
-		setSelectedCodeId(codeViews[0]?.id ?? null);
-	}, [codeViews]);
-
-	const selectedCodeView = useMemo(
-		() => codeViews.find((item) => item.id === selectedCodeId) ?? codeViews[0] ?? null,
-		[codeViews, selectedCodeId],
-	);
+	const codeSections = useMemo(() => buildFindingDetailCodeSections(codeViews), [codeViews]);
 
 	const handleBack = () => {
 		if (returnTo) {
@@ -376,87 +359,62 @@ export default function FindingDetail() {
 	}, [source, staticEngine]);
 
 	return (
-		<div className="min-h-screen bg-background p-6 space-y-5">
+		<div className="min-h-screen bg-background p-6 flex flex-col gap-5">
 			<div className="flex items-center justify-between gap-3">
 				<div className="space-y-1">
 					<h1 className="text-2xl font-bold tracking-wider uppercase text-foreground">
 						统一缺陷详情
 					</h1>
-					<p className="text-xs text-muted-foreground">
+					<p className="text-sm text-muted-foreground">
 						来源：{sourceLabel} · 任务ID：{taskId || "-"} · 缺陷ID：{findingId || "-"}
 					</p>
 				</div>
-				<Button
-					variant="outline"
-					className="cyber-btn-outline"
-					onClick={handleBack}
-				>
+				<Button variant="outline" className="cyber-btn-outline" onClick={handleBack}>
 					<ArrowLeft className="w-4 h-4 mr-2" />
 					返回
 				</Button>
 			</div>
 
 			{loading ? (
-				<div className="cyber-card p-8 text-sm text-muted-foreground">
-					缺陷详情加载中...
-				</div>
+				<div className="cyber-card p-8 text-base text-muted-foreground">缺陷详情加载中...</div>
 			) : error ? (
-				<div className="cyber-card p-8 text-sm text-rose-400">{error}</div>
+				<div className="cyber-card p-8 text-base text-rose-400">{error}</div>
 			) : (
-				<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-					<div className="cyber-card p-4 space-y-3">
+				<div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-2 gap-4">
+					<div className="cyber-card p-5 min-h-0 flex flex-col gap-4">
 						<div className="flex items-center justify-between gap-2">
-							<h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-								命中文件
+							<h2 className="text-base font-semibold uppercase tracking-wider text-foreground">
+								命中代码
 							</h2>
-							<span className="text-xs text-muted-foreground">
-								{codeViews.length} 个
-							</span>
+							<span className="text-sm text-muted-foreground">{codeSections.length} 个代码块</span>
 						</div>
 
-						<div className="space-y-2">
-							{codeViews.length > 0 ? (
-								codeViews.map((item) => (
-									<button
+						<div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+							{codeSections.length > 0 ? (
+								codeSections.map((item) => (
+									<FindingCodeWindow
 										key={item.id}
-										type="button"
-										onClick={() => setSelectedCodeId(item.id)}
-										className={`w-full text-left px-3 py-2 rounded border text-xs transition-colors ${
-											selectedCodeView?.id === item.id
-												? "border-sky-500/50 bg-sky-500/10 text-sky-200"
-												: "border-border bg-card/40 text-muted-foreground hover:text-foreground"
-										}`}
-									>
-										<div className="font-semibold truncate">{item.title}</div>
-										<div className="truncate">
-											{item.filePath || "未定位文件"}
-											{item.focusLine ? `:${item.focusLine}` : ""}
-										</div>
-									</button>
+										code={item.code}
+										filePath={item.filePath}
+										lineStart={item.lineStart}
+										lineEnd={item.lineEnd}
+										highlightStartLine={item.highlightStartLine}
+										highlightEndLine={item.highlightEndLine}
+										focusLine={item.focusLine}
+										title={item.title || "命中代码上下文"}
+										variant="detail"
+									/>
 								))
 							) : (
-								<div className="rounded border border-border p-3 text-xs text-muted-foreground">
+								<div className="rounded border border-border p-4 text-sm text-muted-foreground">
 									暂无可展示的命中代码
 								</div>
 							)}
 						</div>
-
-						{selectedCodeView && (
-							<FindingCodeWindow
-								code={selectedCodeView.code}
-								filePath={selectedCodeView.filePath}
-								lineStart={selectedCodeView.lineStart}
-								lineEnd={selectedCodeView.lineEnd}
-								highlightStartLine={selectedCodeView.highlightStartLine}
-								highlightEndLine={selectedCodeView.highlightEndLine}
-								focusLine={selectedCodeView.focusLine}
-								title="命中代码上下文"
-							/>
-						)}
 					</div>
 
-					<div className="cyber-card p-4 space-y-4">
-						<h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+					<div className="cyber-card p-5 min-h-0 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
+						<h2 className="text-base font-semibold uppercase tracking-wider text-foreground">
 							缺陷信息
 						</h2>
 
@@ -466,89 +424,79 @@ export default function FindingDetail() {
 									<Badge className={getSeverityBadgeClass(staticFinding.severity)}>
 										严重级别：{staticFinding.severity}
 									</Badge>
-									<Badge className="cyber-badge-muted">
-										状态：{staticFinding.status}
-									</Badge>
+									<Badge className="cyber-badge-muted">状态：{staticFinding.status}</Badge>
 									<Badge className="cyber-badge-muted">
 										置信度：{staticFinding.confidence || "-"}
 									</Badge>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">规则/类型</p>
-									<p className="text-foreground break-all">
+									<p className="text-base text-foreground break-all">
 										{staticFinding.rule_name || "unknown-rule"}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">文件位置</p>
-									<p className="text-foreground break-all">
+									<p className="text-base text-foreground break-all">
 										{staticFinding.file_path || "-"}
 										{staticFinding.start_line ? `:${staticFinding.start_line}` : ""}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">任务</p>
-									<p className="text-foreground break-all">
+									<p className="text-base text-foreground break-all">
 										{staticTask?.name || "-"} ({staticTask?.id || "-"})
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">描述</p>
-									<p className="text-foreground whitespace-pre-wrap break-words">
+									<p className="text-base text-foreground whitespace-pre-wrap break-words">
 										{staticFinding.description || "-"}
 									</p>
 								</div>
 							</>
-						) : source === "static" &&
-						  staticEngine === "gitleaks" &&
-						  gitleaksFinding ? (
+						) : source === "static" && staticEngine === "gitleaks" && gitleaksFinding ? (
 							<>
 								<div className="flex flex-wrap items-center gap-2">
-									<Badge className="cyber-badge-muted">
-										规则：{gitleaksFinding.rule_id || "-"}
-									</Badge>
-									<Badge className="cyber-badge-muted">
-										状态：{gitleaksFinding.status}
-									</Badge>
+									<Badge className="cyber-badge-muted">规则：{gitleaksFinding.rule_id || "-"}</Badge>
+									<Badge className="cyber-badge-muted">状态：{gitleaksFinding.status}</Badge>
 									<Badge className="cyber-badge-muted">漏洞危害：-</Badge>
 									<Badge className="cyber-badge-muted">置信度：-</Badge>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">文件位置</p>
-									<p className="text-foreground break-all">
+									<p className="text-base text-foreground break-all">
 										{gitleaksFinding.file_path || "-"}
-										{gitleaksFinding.start_line
-											? `:${gitleaksFinding.start_line}`
-											: ""}
+										{gitleaksFinding.start_line ? `:${gitleaksFinding.start_line}` : ""}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">任务</p>
-									<p className="text-foreground break-all">
+									<p className="text-base text-foreground break-all">
 										{gitleaksTask?.name || "-"} ({gitleaksTask?.id || "-"})
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">描述</p>
-									<p className="text-foreground whitespace-pre-wrap break-words">
+									<p className="text-base text-foreground whitespace-pre-wrap break-words">
 										{gitleaksFinding.description || "-"}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">命中内容</p>
-									<p className="text-foreground whitespace-pre-wrap break-words">
+									<p className="text-base text-foreground whitespace-pre-wrap break-words">
 										{gitleaksFinding.match || "-"}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">密钥（脱敏）</p>
-									<p className="text-foreground whitespace-pre-wrap break-words">
+									<p className="text-base text-foreground whitespace-pre-wrap break-words">
 										{gitleaksFinding.secret || "-"}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">提交信息</p>
-									<p className="text-foreground whitespace-pre-wrap break-words">
+									<p className="text-base text-foreground whitespace-pre-wrap break-words">
 										commit: {gitleaksFinding.commit || "-"}
 										{"\n"}
 										author: {gitleaksFinding.author || "-"}
@@ -567,48 +515,44 @@ export default function FindingDetail() {
 									<Badge className={getSeverityBadgeClass(agentFinding.severity)}>
 										严重级别：{agentFinding.severity}
 									</Badge>
-									<Badge className="cyber-badge-muted">
-										状态：{agentFinding.status}
-									</Badge>
+									<Badge className="cyber-badge-muted">状态：{agentFinding.status}</Badge>
 									<Badge className="cyber-badge-muted">
 										置信度：{normalizeAgentConfidence(resolveAgentConfidenceValue(agentFinding))}
 									</Badge>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">规则/类型</p>
-									<p className="text-foreground break-all">
+									<p className="text-base text-foreground break-all">
 										{agentFinding.vulnerability_type || "-"}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">文件位置</p>
-									<p className="text-foreground break-all">
+									<p className="text-base text-foreground break-all">
 										{agentFinding.file_path || "-"}
 										{agentFinding.line_start ? `:${agentFinding.line_start}` : ""}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">标题</p>
-									<p className="text-foreground break-words">
+									<p className="text-base text-foreground break-words">
 										{agentFinding.display_title || agentFinding.title || "-"}
 									</p>
 								</div>
-								<div className="space-y-1 text-xs">
+								<div className="space-y-1.5 text-sm">
 									<p className="text-muted-foreground uppercase">描述</p>
-									<p className="text-foreground whitespace-pre-wrap break-words">
+									<p className="text-base text-foreground whitespace-pre-wrap break-words">
 										{agentFinding.description || "-"}
 									</p>
 								</div>
 							</>
 						) : (
-							<div className="text-sm text-muted-foreground">暂无缺陷信息</div>
+							<div className="text-base text-muted-foreground">暂无缺陷信息</div>
 						)}
 
-						<div className="rounded border border-dashed border-border p-3">
-							<p className="text-xs text-muted-foreground uppercase mb-1">
-								其他信息（待优化）
-							</p>
-							<p className="text-xs text-muted-foreground">
+						<div className="rounded border border-dashed border-border p-4">
+							<p className="text-sm text-muted-foreground uppercase mb-1.5">其他信息（待优化）</p>
+							<p className="text-base text-muted-foreground">
 								此区域预留给后续扩展（修复建议、证据链、关联规则等）。
 							</p>
 						</div>

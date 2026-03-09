@@ -8,6 +8,7 @@ _SCAN_CORE_SKILLS: List[Dict[str, Any]] = [
     {"skill_id": "search_code", "name": "search_code", "summary": "在项目中检索代码片段、关键字与命中位置。"},
     {"skill_id": "list_files", "name": "list_files", "summary": "按目录或模式列出候选文件，快速缩小分析范围。"},
     {"skill_id": "extract_function", "name": "extract_function", "summary": "提取目标函数/符号主体，辅助漏洞分析与验证。"},
+    {"skill_id": "locate_enclosing_function", "name": "locate_enclosing_function", "summary": "根据文件与行号定位所属函数及其范围，辅助补全函数级证据。"},
     {"skill_id": "smart_scan", "name": "smart_scan", "summary": "执行智能扫描，快速定位高风险区域。"},
     {"skill_id": "quick_audit", "name": "quick_audit", "summary": "执行轻量快速审计，输出优先检查点。"},
     {"skill_id": "pattern_match", "name": "pattern_match", "summary": "用规则/模式快速筛查危险调用与脆弱代码模式。"},
@@ -25,7 +26,7 @@ _SCAN_CORE_SKILLS: List[Dict[str, Any]] = [
 SCAN_CORE_SKILL_IDS = tuple(item["skill_id"] for item in _SCAN_CORE_SKILLS)
 _SCAN_CORE_BY_ID = {item["skill_id"]: item for item in _SCAN_CORE_SKILLS}
 SCAN_CORE_FILESYSTEM_BOUND_SKILL_IDS = frozenset({"read_file"})
-SCAN_CORE_CODE_INDEX_BOUND_SKILL_IDS = frozenset({"search_code", "list_files", "extract_function"})
+SCAN_CORE_CODE_INDEX_BOUND_SKILL_IDS = frozenset()
 SCAN_CORE_MCP_BOUND_SKILL_IDS = (
     SCAN_CORE_FILESYSTEM_BOUND_SKILL_IDS | SCAN_CORE_CODE_INDEX_BOUND_SKILL_IDS
 )

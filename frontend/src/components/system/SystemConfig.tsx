@@ -62,6 +62,13 @@ import {
 import { toast } from "sonner";
 import { api } from "@/shared/api/database";
 import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
+import {
+	resolvePreferredModelStats,
+	type LlmModelStatsCounts,
+	type LlmModelStatsFetchState,
+	type LlmModelStatsSource,
+	type LlmModelStatsStatus,
+} from "@/components/system/llmModelStatsSummary";
 
 const DEFAULT_MODELS: Record<string, string> = {
 	openai: "gpt-5",
@@ -293,6 +300,9 @@ interface SystemConfigProps {
 		availableModelCount: number;
 		availableModelMetadataCount: number;
 		supportsModelFetch: boolean;
+		modelStatsStatus: LlmModelStatsStatus;
+		modelStatsSource: LlmModelStatsSource;
+		shouldPreferOnlineStats: boolean;
 	}) => void;
 }
 
@@ -856,6 +866,11 @@ export function SystemConfig({
 	const [selectedAdvancedItemId, setSelectedAdvancedItemId] =
 		useState<AdvancedConfigItemId>("llmTimeout");
 	const [fetchingModels, setFetchingModels] = useState(false);
+	const [onlineModelStatsBySignature, setOnlineModelStatsBySignature] = useState<
+		Record<string, LlmModelStatsCounts>
+	>({});
+	const [modelStatsFetchStateBySignature, setModelStatsFetchStateBySignature] =
+		useState<Record<string, LlmModelStatsFetchState>>({});
 	const [llmTestResult, setLlmTestResult] = useState<{
 		success: boolean;
 		message: string;
@@ -1201,6 +1216,10 @@ export function SystemConfig({
 			autoFetchSignatureRef.current = signature;
 		}
 
+		setModelStatsFetchStateBySignature((prev) => ({
+			...prev,
+			[signature]: "loading",
+		}));
 		setFetchingModels(true);
 		try {
 			const result = await api.fetchLLMModels({
@@ -1253,6 +1272,24 @@ export function SystemConfig({
 				...prev,
 				[providerId]: normalizedMetadata,
 			}));
+			if (result.source === "online") {
+				setOnlineModelStatsBySignature((prev) => ({
+					...prev,
+					[signature]: {
+						availableModelCount: normalizedModels.length,
+						availableModelMetadataCount: Object.keys(normalizedMetadata).length,
+					},
+				}));
+				setModelStatsFetchStateBySignature((prev) => ({
+					...prev,
+					[signature]: "online",
+				}));
+			} else {
+				setModelStatsFetchStateBySignature((prev) => ({
+					...prev,
+					[signature]: "failed",
+				}));
+			}
 			const latestModel = String(latestConfig.llmModel || "").trim();
 			const wasCustomInput =
 				llmModelSelectValue === "__custom__" && currentModelBeforeFetch.length > 0;
@@ -1278,6 +1315,10 @@ export function SystemConfig({
 				}
 			}
 		} catch (error) {
+			setModelStatsFetchStateBySignature((prev) => ({
+				...prev,
+				[signature]: "failed",
+			}));
 			if (!silent) {
 				toast.error(
 					`模型拉取失败: ${error instanceof Error ? error.message : "未知错误"}`,
@@ -1298,16 +1339,22 @@ export function SystemConfig({
 		const baseUrl = String(config.llmBaseUrl || "").trim();
 		const apiKey = String(config.llmApiKey || "").trim();
 		const requiresApiKey = shouldRequireApiKey(providerId);
+		const providerInfo = getProviderInfo(providerId);
 		if (!providerId || !baseUrl) return;
+		if (!providerInfo?.supportsModelFetch) return;
 		if (requiresApiKey && !apiKey) return;
 		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}`;
+		if (autoFetchSignatureRef.current === signature) return;
+		setModelStatsFetchStateBySignature((prev) => ({
+			...prev,
+			[signature]: "loading",
+		}));
 		const timer = setTimeout(() => {
-			if (autoFetchSignatureRef.current === signature) return;
 			autoFetchSignatureRef.current = signature;
 			void fetchModels({ trigger: "auto", silent: true });
 		}, 700);
 		return () => clearTimeout(timer);
-	}, [config?.llmProvider, config?.llmBaseUrl, config?.llmApiKey]);
+	}, [config?.llmProvider, config?.llmBaseUrl, config?.llmApiKey, llmProvidersFromBackend]);
 
 	useEffect(() => {
 		if (!config) return;
@@ -1488,6 +1535,33 @@ export function SystemConfig({
 	const availableModelMetadataCount = config
 		? Object.keys(getModelMetadataForProvider(normalizedProviderId)).length
 		: 0;
+	const statsBaseUrl = String(config?.llmBaseUrl || "").trim();
+	const statsApiKey = String(config?.llmApiKey || "").trim();
+	const statsRequiresApiKey = shouldRequireApiKey(normalizedProviderId);
+	const supportsModelFetch = Boolean(selectedProviderInfo?.supportsModelFetch);
+	const shouldPreferOnlineStats = Boolean(
+		config &&
+			supportsModelFetch &&
+			normalizedProviderId !== "custom" &&
+			statsBaseUrl &&
+			(!statsRequiresApiKey || statsApiKey),
+	);
+	const currentStatsSignature = shouldPreferOnlineStats
+		? `${normalizedProviderId}|${statsBaseUrl}|${statsRequiresApiKey ? statsApiKey : ""}`
+		: null;
+	const preferredModelStats = resolvePreferredModelStats({
+		shouldPreferOnlineStats,
+		staticStats: {
+			availableModelCount,
+			availableModelMetadataCount,
+		},
+		cachedOnlineStats: currentStatsSignature
+			? onlineModelStatsBySignature[currentStatsSignature] || null
+			: null,
+		fetchState: currentStatsSignature
+			? modelStatsFetchStateBySignature[currentStatsSignature] || "idle"
+			: "idle",
+	});
 
 	useEffect(() => {
 		if (!onLlmSummaryChange) return;
@@ -1495,18 +1569,25 @@ export function SystemConfig({
 			providerId: normalizedProviderId,
 			providerLabel: selectedProviderInfo?.name || normalizedProviderId || "--",
 			currentModelName: currentModelName || "--",
-			availableModelCount,
-			availableModelMetadataCount,
-			supportsModelFetch: Boolean(selectedProviderInfo?.supportsModelFetch),
+			availableModelCount: preferredModelStats.availableModelCount,
+			availableModelMetadataCount:
+				preferredModelStats.availableModelMetadataCount,
+			supportsModelFetch,
+			modelStatsStatus: preferredModelStats.modelStatsStatus,
+			modelStatsSource: preferredModelStats.modelStatsSource,
+			shouldPreferOnlineStats,
 		});
 	}, [
 		onLlmSummaryChange,
 		normalizedProviderId,
 		selectedProviderInfo?.name,
-		selectedProviderInfo?.supportsModelFetch,
 		currentModelName,
-		availableModelCount,
-		availableModelMetadataCount,
+		preferredModelStats.availableModelCount,
+		preferredModelStats.availableModelMetadataCount,
+		preferredModelStats.modelStatsSource,
+		preferredModelStats.modelStatsStatus,
+		supportsModelFetch,
+		shouldPreferOnlineStats,
 	]);
 
 	if (loading || !config) {

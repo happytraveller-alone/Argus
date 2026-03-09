@@ -26,7 +26,7 @@ function MetricCard({
   icon: ReactNode;
   label: string;
   value: string;
-  subtext: string;
+  subtext: ReactNode;
   progress?: number;
 }) {
   return (
@@ -88,7 +88,12 @@ export const StatsPanel = memo(function StatsPanel({ summary }: StatsPanelProps)
           icon={<TrendingUp className="h-4 w-4" />}
           label="Token 消耗"
           value={formatTokenValue(summary.tokensTotal)}
-          subtext={`输入 ${formatTokenValue(summary.tokensInput)} · 输出 ${formatTokenValue(summary.tokensOutput)}`}
+          subtext={
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span>输入 {summary.tokensInput === null ? "--" : formatTokenValue(summary.tokensInput)}</span>
+              <span>输出 {summary.tokensOutput === null ? "--" : formatTokenValue(summary.tokensOutput)}</span>
+            </div>
+          }
         />
       </div>
     </div>

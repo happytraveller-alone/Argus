@@ -32,6 +32,7 @@ class AgentTaskStatus:
     COMPLETED = "completed"       # 已完成
     FAILED = "failed"             # 失败
     CANCELLED = "cancelled"       # 已取消
+    INTERRUPTED = "interrupted"   # 服务中断
     PAUSED = "paused"             # 已暂停
 
 

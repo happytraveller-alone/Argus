@@ -68,7 +68,6 @@ export default function TaskActivitiesListTable({
 	}, [activities, page, pageSize]);
 
 	const getDetailRoute = (activity: TaskActivityItem): string => {
-		if (activity.kind !== "rule_scan") return activity.route;
 		return appendReturnTo(activity.route, currentRoute);
 	};
 

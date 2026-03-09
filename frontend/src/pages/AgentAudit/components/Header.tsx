@@ -9,128 +9,75 @@ import {
 	Square,
 	Download,
 	Loader2,
-	Radio,
-	Cpu,
-	Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "./StatusBadge";
 import type { HeaderProps } from "../types";
 
 export function Header({
+	title,
 	task,
 	isRunning,
 	isCancelling,
-	phaseLabel,
-	phaseHint,
 	onBack,
 	onCancel,
 	onExport,
-	onNewAudit,
 }: HeaderProps) {
 	return (
-		<header className="flex-shrink-0 h-16 border-b border-border/50 flex items-center justify-between px-6 bg-card/80 backdrop-blur-md relative overflow-hidden">
-			{/* Animated gradient line at top */}
-			<div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-			{/* Subtle glow effect */}
+		<header className="relative flex-shrink-0 overflow-hidden border-b border-border/50 bg-card/80 px-6 py-4 backdrop-blur-md">
+			<div className="absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 			<div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
 
-			{/* Left side - Brand and task info */}
-			<div className="flex items-center gap-5 relative z-10">
-				
-				{/* Task info with enhanced styling */}
-				{task && (
-					<div className="flex flex-col gap-1">
-						<div className="flex items-center gap-4">
-							<div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-muted/50 border border-border/50">
-								<Radio className="w-3 h-3 text-muted-foreground" />
-								<span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
-									任务
-							</span>
-						</div>
-						<div className="flex items-center gap-3">
-							<span className="text-foreground text-sm font-mono truncate max-w-[200px] font-medium">
-								{task.name || task.id.slice(0, 8)}
-							</span>
-							<StatusBadge status={task.status} />
-							{phaseLabel && (
-								<span className="text-[11px] font-mono uppercase tracking-wide text-muted-foreground">
-									阶段: {phaseLabel}
-								</span>
+			<div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
+				<div>
+					<h1 className="text-2xl font-bold tracking-wider text-foreground">
+						{title}
+					</h1>
+				</div>
+
+				<div className="flex items-center gap-2 flex-wrap">
+					{isRunning && (
+						<Button
+							variant="outline"
+							className="cyber-btn-outline h-8 border-rose-500/40 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+							onClick={onCancel}
+							disabled={isCancelling}
+						>
+							{isCancelling ? (
+								<>
+									<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+									中止中
+								</>
+							) : (
+								<>
+									<Square className="mr-1.5 h-3.5 w-3.5" />
+									中止
+								</>
 							)}
-						</div>
-						</div>
-						{phaseHint && (
-							<div className="text-[11px] text-muted-foreground font-mono max-w-[360px] truncate">
-								{phaseHint}
-							</div>
-						)}
-					</div>
-				)}
-			</div>
+						</Button>
+					)}
 
-			{/* Right side - Controls */}
-			<div className="flex items-center gap-3 relative z-10">
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={onBack}
-					className="h-9 px-4 text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted border border-border hover:border-border/80 transition-all duration-300 rounded-md"
-				>
-					<ArrowLeft className="w-3.5 h-3.5 mr-2" />
-					<span>返回</span>
-				</Button>
-
-				{isRunning && (
 					<Button
-						variant="ghost"
-						size="sm"
-						onClick={onCancel}
-						disabled={isCancelling}
-						className="h-9 px-4 text-xs font-mono uppercase tracking-wider text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-500/50 transition-all duration-300 disabled:opacity-50 rounded-md shadow-[0_0_15px_rgba(244,63,94,0.1)] hover:shadow-[0_0_20px_rgba(244,63,94,0.2)]"
+						variant="outline"
+						className="cyber-btn-outline h-8"
+						onClick={onExport}
+						disabled={!task}
 					>
-						{isCancelling ? (
-							<>
-								<Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
-								<span>中止中</span>
-							</>
-						) : (
-							<>
-								<Square className="w-3.5 h-3.5 mr-2" />
-								<span>中止</span>
-							</>
-						)}
+						<Download className="mr-1.5 h-3.5 w-3.5" />
+						导出报告
 					</Button>
-				)}
 
-				<div className="h-8 w-px bg-border/50 mx-1" />
-
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={onExport}
-					disabled={!task}
-					className="h-9 px-4 text-xs font-mono uppercase tracking-wider text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 hover:border-cyan-500/50 transition-all duration-300 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:border-transparent rounded-md shadow-[0_0_15px_rgba(6,182,212,0.1)] hover:shadow-[0_0_20px_rgba(6,182,212,0.2)]"
-				>
-					<Download className="w-3.5 h-3.5 mr-2" />
-					<span>导出报告</span>
-				</Button>
-
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={onNewAudit}
-					className="h-9 px-4 text-xs font-mono uppercase tracking-wider text-primary hover:text-primary/90 bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 transition-all duration-300 rounded-md shadow-[0_0_15px_rgba(255,107,44,0.15)] hover:shadow-[0_0_25px_rgba(255,107,44,0.25)]"
-				>
-					<Sparkles className="w-3.5 h-3.5 mr-2" />
-					<span>新建扫描</span>
-				</Button>
+					<Button
+						variant="outline"
+						className="cyber-btn-outline h-8"
+						onClick={onBack}
+					>
+						<ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+						返回
+					</Button>
+				</div>
 			</div>
 
-			{/* Bottom accent line */}
 			<div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
-
-			{/* Enhanced bottom glow when running */}
 			{isRunning && (
 				<>
 					<div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/2 h-px bg-gradient-to-r from-transparent via-emerald-500/60 to-transparent" />

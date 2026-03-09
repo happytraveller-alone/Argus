@@ -50,7 +50,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    open: true,
+    open: process.env.VITE_OPEN_BROWSER === "1",
     cors: {
       origin: true,
       credentials: true,

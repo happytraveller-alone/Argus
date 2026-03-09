@@ -21,10 +21,14 @@ class MCPToolRouter:
     def __init__(self) -> None:
         self._route_map = {
             "read_file": ("filesystem", "read_file", False),
-            "list_files": ("code_index", "find_files", False),
-            "search_code": ("code_index", "search_code_advanced", False),
-            "extract_function": ("code_index", "get_symbol_body", False),
-            "locate_enclosing_function": ("code_index", "get_file_summary", False),
+            "list_files": (self._LOCAL_ROUTE_ADAPTER, "list_files", False),
+            "search_code": (self._LOCAL_ROUTE_ADAPTER, "search_code", False),
+            "extract_function": (self._LOCAL_ROUTE_ADAPTER, "extract_function", False),
+            "locate_enclosing_function": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "locate_enclosing_function",
+                False,
+            ),
             # Local-registered routes: these tools are valid Agent tools but are currently
             # executed via local tool implementations (strict-mode fallback allowlist).
             "think": (self._LOCAL_ROUTE_ADAPTER, "think", False),
@@ -207,6 +211,8 @@ class MCPToolRouter:
                 normalized_payload["pattern"] = pattern
             if path_value:
                 normalized_payload["path"] = path_value
+            elif payload.get("directory") is not None:
+                normalized_payload["path"] = _sanitize_path(payload.get("directory")) or "."
             if normalized_file_pattern:
                 normalized_payload["file_pattern"] = normalized_file_pattern
             for key in ("case_sensitive", "context_lines", "fuzzy", "start_index", "max_results"):

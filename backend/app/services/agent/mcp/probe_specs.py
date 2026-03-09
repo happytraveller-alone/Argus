@@ -21,7 +21,7 @@ class MCPProbeCheck:
 
 
 MCP_VERIFICATION_TOOLS: Dict[str, List[str]] = {
-    "filesystem": ["read_file", "search_code"],
+    "filesystem": ["read_file"],
     "code_index": ["extract_function", "list_files", "locate_enclosing_function"],
     "sequentialthinking": ["sequential_thinking", "reasoning_trace"],
     "qmd": ["qmd_status", "qmd_query", "qmd_get", "qmd_multi_get"],
@@ -51,16 +51,6 @@ def build_probe_checks(
                 step="read_probe_file",
                 tool_name="read_file",
                 arguments={"file_path": probe_rel_path},
-            ),
-            MCPProbeCheck(
-                step="search_probe_file",
-                tool_name="search_code",
-                arguments={
-                    "keyword": probe_keyword,
-                    "directory": "tmp",
-                    "file_pattern": "*",
-                    "max_results": 5,
-                },
             ),
         ]
     if normalized_id == "code_index":

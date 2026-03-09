@@ -90,6 +90,7 @@ _VALID_TASK_STATUS_VALUES: Set[str] = {
     AgentTaskStatus.COMPLETED,
     AgentTaskStatus.FAILED,
     AgentTaskStatus.CANCELLED,
+    AgentTaskStatus.INTERRUPTED,
     AgentTaskStatus.PAUSED,
 }
 
@@ -832,89 +833,6 @@ async def _bootstrap_task_mcp_runtime(
             },
         )
 
-    if event_emitter:
-        await event_emitter.emit_info(
-            "🔗 正在绑定 code_index MCP 到项目根路径...",
-            metadata={"step_name": "MCP_BIND_CODE_INDEX_ROOT", "status": "running"},
-        )
-    set_project_payloads = (
-        {"project_path": normalized_project_root},
-        {"project_root": normalized_project_root},
-        {"path": normalized_project_root},
-        {"directory": normalized_project_root},
-        {"root": normalized_project_root},
-    )
-    set_project_ok = False
-    set_project_error = ""
-    for payload in set_project_payloads:
-        set_project_result = await runtime.call_mcp_tool(
-            mcp_name="code_index",
-            tool_name="set_project_path",
-            arguments=dict(payload),
-            agent_name="TASK_STARTUP",
-            alias_used="startup:set_project_path",
-        )
-        if bool(set_project_result.handled and set_project_result.success):
-            set_project_ok = True
-            break
-        set_project_error = str(set_project_result.error or set_project_result.data or "set_project_path_failed")
-    if not set_project_ok:
-        if event_emitter:
-            await event_emitter.emit_error(
-                f"❌ code_index MCP 根路径绑定失败：{set_project_error}",
-                metadata={"step_name": "MCP_BIND_CODE_INDEX_ROOT", "status": "failed", "project_root": normalized_project_root},
-            )
-        raise RuntimeError(f"code_index MCP 根路径绑定失败：{set_project_error}")
-    details["code_index"] = {"project_root": normalized_project_root}
-    if event_emitter:
-        await event_emitter.emit_info(
-            "✅ code_index MCP 已绑定项目根路径",
-            metadata={"step_name": "MCP_BIND_CODE_INDEX_ROOT", "status": "completed", "project_root": normalized_project_root},
-        )
-
-    if event_emitter:
-        await event_emitter.emit_info(
-            "🧱 正在构建 code_index deep index...",
-            metadata={"step_name": "MCP_BUILD_DEEP_INDEX", "status": "running"},
-        )
-    maintenance_payload = {
-        "path": ".",
-        "directory": ".",
-        "project_path": normalized_project_root,
-        "project_root": normalized_project_root,
-    }
-    last_error = ""
-    selected_tool = ""
-    for tool_name in ("build_deep_index", "refresh_index"):
-        maintenance_result = await runtime.call_mcp_tool(
-            mcp_name="code_index",
-            tool_name=tool_name,
-            arguments=dict(maintenance_payload),
-            agent_name="TASK_STARTUP",
-            alias_used=f"startup:{tool_name}",
-        )
-        if bool(maintenance_result.handled and maintenance_result.success):
-            selected_tool = tool_name
-            break
-        last_error = str(maintenance_result.error or maintenance_result.data or f"{tool_name}_failed")
-        if event_emitter and tool_name == "build_deep_index" and hasattr(event_emitter, "emit_warning"):
-            await event_emitter.emit_warning(
-                f"⚠️ build_deep_index 失败，回退 refresh_index：{last_error}",
-                metadata={"step_name": "MCP_BUILD_DEEP_INDEX", "status": "fallback", "failed_tool": tool_name},
-            )
-    if not selected_tool:
-        if event_emitter:
-            await event_emitter.emit_error(
-                f"❌ code_index 索引预热失败：{last_error}",
-                metadata={"step_name": "MCP_BUILD_DEEP_INDEX", "status": "failed", "project_root": normalized_project_root},
-            )
-        raise RuntimeError(f"code_index 索引预热失败：{last_error}")
-    details.setdefault("code_index", {})["index_tool"] = selected_tool
-    if event_emitter:
-        await event_emitter.emit_info(
-            f"✅ code_index 索引预热完成（{selected_tool}）",
-            metadata={"step_name": "MCP_BUILD_DEEP_INDEX", "status": "completed", "index_tool": selected_tool},
-        )
     return details
 
 
@@ -1038,7 +956,7 @@ def _build_task_mcp_runtime(
         )
         runtime_modes["code_index"] = "stdio_only"
 
-    required_mcps = [name for name in ("filesystem", "code_index") if name in adapters]
+    required_mcps = [name for name in ("filesystem",) if name in adapters]
 
     return MCPRuntime(
         enabled=bool(mcp_config.get("enabled", getattr(settings, "MCP_ENABLED", True))),
@@ -4234,6 +4152,7 @@ async def _initialize_tools(
         FileReadTool,
         FileSearchTool,
         ListFilesTool,
+        LocateEnclosingFunctionTool,
         PatternMatchTool,
         DataFlowAnalysisTool,
         ThinkTool,
@@ -4284,6 +4203,11 @@ async def _initialize_tools(
         "read_file": FileReadTool(project_root, exclude_patterns, target_files),
         "list_files": ListFilesTool(project_root, exclude_patterns, target_files),
         "search_code": FileSearchTool(project_root, exclude_patterns, target_files),
+        "locate_enclosing_function": LocateEnclosingFunctionTool(
+            project_root,
+            exclude_patterns,
+            target_files,
+        ),
         "think": ThinkTool(),
         "reflect": ReflectTool(),
     }
@@ -6021,7 +5945,7 @@ async def cancel_agent_task(
     if not project:
         raise HTTPException(status_code=403, detail="无权操作此任务")
 
-    if task.status in [AgentTaskStatus.COMPLETED, AgentTaskStatus.FAILED, AgentTaskStatus.CANCELLED]:
+    if task.status in [AgentTaskStatus.COMPLETED, AgentTaskStatus.FAILED, AgentTaskStatus.CANCELLED, AgentTaskStatus.INTERRUPTED]:
         raise HTTPException(status_code=400, detail="任务已结束，无法取消")
 
     # 🔥 0. 立即标记任务为已取消（用于前置操作的取消检查）
@@ -6130,7 +6054,7 @@ async def stream_agent_events(
             if task_status:
                 # task_status 可能是字符串或枚举，统一转换为字符串
                 status_str = str(task_status)
-                if status_str in ["completed", "failed", "cancelled"]:
+                if status_str in ["completed", "failed", "cancelled", "interrupted"]:
                     yield f"data: {json.dumps({'type': 'task_end', 'status': status_str})}\n\n"
                     break
             
@@ -6306,7 +6230,7 @@ async def stream_agent_with_thinking(
                         if task_status:
                             status_str = str(task_status)
                             # 如果任务已完成且没有新事件，结束流
-                            if status_str in ["completed", "failed", "cancelled"]:
+                            if status_str in ["completed", "failed", "cancelled", "interrupted"]:
                                 end_data = {
                                     "type": "task_end",
                                     "status": status_str,

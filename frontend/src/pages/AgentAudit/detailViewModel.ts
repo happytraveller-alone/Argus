@@ -1,3 +1,4 @@
+import { normalizeReturnToPath } from "../../shared/utils/findingRoute";
 export type FindingVerificationFilter = "all" | "verified" | "pending";
 
 export interface AgentAuditFindingFilters {
@@ -53,6 +54,55 @@ export interface AgentAuditStatsSummary {
   tokensTotal: number;
   tokensInput: number | null;
   tokensOutput: number | null;
+}
+
+export const AGENT_AUDIT_FINDINGS_PAGE_SIZE = 3;
+
+function normalizeReturnToMode(returnTo: string | null | undefined): "intelligent" | "hybrid" | null {
+  const normalized = String(returnTo || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.startsWith("/tasks/hybrid")) return "hybrid";
+  if (normalized.startsWith("/tasks/intelligent")) return "intelligent";
+  return null;
+}
+
+function normalizeTaskMetaMode(
+  name: string | null | undefined,
+  description: string | null | undefined,
+): "intelligent" | "hybrid" {
+  const normalized = `${String(name || "").trim().toLowerCase()} ${String(description || "")
+    .trim()
+    .toLowerCase()}`;
+  if (normalized.includes("[hybrid]") || normalized.includes("混合扫描")) {
+    return "hybrid";
+  }
+  if (normalized.includes("[intelligent]")) {
+    return "intelligent";
+  }
+  return "intelligent";
+}
+
+export function resolveAgentAuditDetailTitle(input: {
+  returnTo?: string | null;
+  name?: string | null;
+  description?: string | null;
+}): string {
+  const mode =
+    normalizeReturnToMode(input.returnTo) ||
+    normalizeTaskMetaMode(input.name, input.description);
+  return mode === "hybrid" ? "混合扫描详情" : "智能扫描详情";
+}
+
+export function resolveAgentAuditBackTarget(
+  returnTo: string | null | undefined,
+  hasHistory: boolean,
+): string | -1 {
+  const normalized = normalizeReturnToPath(returnTo);
+  if (normalized) {
+    return normalized;
+  }
+  if (hasHistory) return -1;
+  return "/dashboard";
 }
 
 export interface FindingTableRow {
@@ -203,10 +253,13 @@ export function buildStatsSummary(input: {
     durationMs = Number.isFinite(delta) && delta >= 0 ? delta : null;
   }
 
-  const tokensTotal = Math.max(
-    toFiniteNumber(tokenUsage.totalTokens) || toFiniteNumber(task?.tokens_used),
-    0,
-  );
+  const tokensInput = Math.max(toFiniteNumber(tokenUsage.inputTokens), 0);
+  const tokensOutput = Math.max(toFiniteNumber(tokenUsage.outputTokens), 0);
+  const hasTokenBreakdown =
+    tokenUsage.seenSequences.size > 0 || tokensInput > 0 || tokensOutput > 0;
+  const tokensTotal = hasTokenBreakdown
+    ? tokensInput + tokensOutput
+    : Math.max(toFiniteNumber(task?.tokens_used), 0);
 
   return {
     progressPercent: Math.max(toFiniteNumber(task?.progress_percentage), 0),
@@ -217,14 +270,8 @@ export function buildStatsSummary(input: {
     iterations: Math.max(toFiniteNumber(task?.total_iterations), 0),
     toolCalls: Math.max(toFiniteNumber(task?.tool_calls_count), 0),
     tokensTotal,
-    tokensInput:
-      tokenUsage.seenSequences.size > 0 || toFiniteNumber(tokenUsage.inputTokens) > 0
-        ? Math.max(toFiniteNumber(tokenUsage.inputTokens), 0)
-        : null,
-    tokensOutput:
-      tokenUsage.seenSequences.size > 0 || toFiniteNumber(tokenUsage.outputTokens) > 0
-        ? Math.max(toFiniteNumber(tokenUsage.outputTokens), 0)
-        : null,
+    tokensInput: hasTokenBreakdown ? tokensInput : null,
+    tokensOutput: hasTokenBreakdown ? tokensOutput : null,
   };
 }
 

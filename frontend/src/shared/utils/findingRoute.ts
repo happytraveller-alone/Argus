@@ -28,10 +28,7 @@ export function normalizeReturnToPath(rawValue: string | null | undefined): stri
 	return value;
 }
 
-export function appendReturnTo(
-	route: string,
-	returnTo: string,
-): string {
+export function appendReturnTo(route: string, returnTo: string): string {
 	const normalizedRoute = String(route || "").trim();
 	if (!normalizedRoute) return normalizedRoute;
 
@@ -43,4 +40,29 @@ export function appendReturnTo(
 	queryParams.set("returnTo", normalizedReturnTo);
 	const query = queryParams.toString();
 	return query ? `${pathPart}?${query}` : pathPart;
+}
+
+export function sanitizeAgentAuditReturnTo(route: string): string {
+	const normalizedRoute = String(route || "").trim();
+	if (!normalizedRoute) return "";
+
+	const [pathPart, queryPart = ""] = normalizedRoute.split("?");
+	const queryParams = new URLSearchParams(queryPart);
+	queryParams.delete("detailType");
+	queryParams.delete("detailId");
+	const query = queryParams.toString();
+	return query ? `${pathPart}?${query}` : pathPart;
+}
+
+export function buildAgentFindingDetailRoute(params: {
+	taskId: string;
+	findingId: string;
+	currentRoute: string;
+}): string {
+	const targetPath = buildFindingDetailPath({
+		source: "agent",
+		taskId: params.taskId,
+		findingId: params.findingId,
+	});
+	return appendReturnTo(targetPath, sanitizeAgentAuditReturnTo(params.currentRoute));
 }

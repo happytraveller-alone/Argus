@@ -11,6 +11,7 @@ interface FindingNarrativeMarkdownProps {
   finding: FindingNarrativeInput;
   searchQuery?: string;
   className?: string;
+  variant?: "default" | "detail";
 }
 
 function renderHighlightedText(text: string, query: string): ReactNode {
@@ -30,7 +31,13 @@ function renderHighlightedText(text: string, query: string): ReactNode {
   );
 }
 
-function renderInlineToken(token: NarrativeInlineToken, query: string, key: string): ReactNode {
+function renderInlineToken(
+  token: NarrativeInlineToken,
+  query: string,
+  key: string,
+  variant: "default" | "detail",
+): ReactNode {
+  const isDetail = variant === "detail";
   if (token.kind === "bold") {
     return (
       <strong key={key} className="font-semibold text-foreground">
@@ -40,7 +47,10 @@ function renderInlineToken(token: NarrativeInlineToken, query: string, key: stri
   }
   if (token.kind === "code") {
     return (
-      <code key={key} className="font-mono text-[12px] px-1.5 py-0.5 rounded bg-muted border border-border">
+      <code
+        key={key}
+        className={`font-mono ${isDetail ? "text-[13px]" : "text-[12px]"} px-1.5 py-0.5 rounded bg-muted border border-border`}
+      >
         {token.text}
       </code>
     );
@@ -49,7 +59,7 @@ function renderInlineToken(token: NarrativeInlineToken, query: string, key: stri
     return (
       <span
         key={key}
-        className="font-mono text-[12px] px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary"
+        className={`font-mono ${isDetail ? "text-[13px]" : "text-[12px]"} px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary`}
       >
         {`$${token.text}$`}
       </span>
@@ -62,9 +72,11 @@ export default function FindingNarrativeMarkdown({
   finding,
   searchQuery = "",
   className = "",
+  variant = "default",
 }: FindingNarrativeMarkdownProps) {
   const markdown = useMemo(() => buildFindingNarrativeMarkdown(finding), [finding]);
   const blocks = useMemo(() => parseFindingNarrativeMarkdown(markdown), [markdown]);
+  const isDetail = variant === "detail";
 
   return (
     <div className={`space-y-3 ${className}`.trim()}>
@@ -73,10 +85,16 @@ export default function FindingNarrativeMarkdown({
         if (block.kind === "heading") {
           const headingClass =
             block.level <= 2
-              ? "text-base"
+              ? isDetail
+                ? "text-lg"
+                : "text-base"
               : block.level === 3
-                ? "text-sm"
-                : "text-xs";
+                ? isDetail
+                  ? "text-base"
+                  : "text-sm"
+                : isDetail
+                  ? "text-sm"
+                  : "text-xs";
           return (
             <h4
               key={key}
@@ -90,10 +108,14 @@ export default function FindingNarrativeMarkdown({
         if (block.kind === "code_block") {
           return (
             <div key={key} className="rounded-md border border-border overflow-hidden bg-card/60">
-              <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b border-border uppercase tracking-wide">
+              <div
+                className={`px-3 py-1.5 ${isDetail ? "text-xs" : "text-[11px]"} text-muted-foreground border-b border-border uppercase tracking-wide`}
+              >
                 {block.language || "text"}
               </div>
-              <pre className="text-xs font-mono p-3 whitespace-pre-wrap break-words overflow-auto max-h-[38vh]">
+              <pre
+                className={`${isDetail ? "text-sm" : "text-xs"} font-mono p-3 whitespace-pre-wrap break-words overflow-auto max-h-[38vh]`}
+              >
                 {block.code}
               </pre>
             </div>
@@ -104,7 +126,7 @@ export default function FindingNarrativeMarkdown({
           return (
             <div
               key={key}
-              className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-mono text-primary whitespace-pre-wrap break-words"
+              className={`rounded-md border border-primary/30 bg-primary/10 px-3 py-2 ${isDetail ? "text-sm" : "text-xs"} font-mono text-primary whitespace-pre-wrap break-words`}
             >
               {`$$${block.formula}$$`}
             </div>
@@ -112,9 +134,12 @@ export default function FindingNarrativeMarkdown({
         }
 
         return (
-          <p key={key} className="text-sm leading-6 whitespace-pre-wrap break-words text-foreground/95">
+          <p
+            key={key}
+            className={`${isDetail ? "text-base leading-7" : "text-sm leading-6"} whitespace-pre-wrap break-words text-foreground/95`}
+          >
             {block.inlines.map((token, tokenIndex) =>
-              renderInlineToken(token, searchQuery, `${key}-token-${tokenIndex}`),
+              renderInlineToken(token, searchQuery, `${key}-token-${tokenIndex}`, variant),
             )}
           </p>
         );

@@ -166,6 +166,7 @@ export interface StatsPanelProps {
 }
 
 export interface HeaderProps {
+  title: string;
   task: AgentTask | null;
   isRunning: boolean;
   isCancelling: boolean;
@@ -174,7 +175,6 @@ export interface HeaderProps {
   onBack: () => void;
   onCancel: () => void;
   onExport: () => void;
-  onNewAudit: () => void;
 }
 
 export interface ActivityLogProps {

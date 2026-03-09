@@ -41,28 +41,6 @@ class _Runtime:
                 data=f"Allowed directories:\\n{self.project_root}",
                 metadata={"mcp_runtime_domain": "stdio"},
             )
-        if mcp_name == "code_index" and tool_name == "set_project_path":
-            return MCPExecutionResult(
-                handled=True,
-                success=True,
-                data="ok",
-                metadata={"mcp_runtime_domain": "stdio"},
-            )
-        if mcp_name == "code_index" and tool_name == "build_deep_index":
-            return MCPExecutionResult(
-                handled=True,
-                success=self.build_success,
-                data="built" if self.build_success else "",
-                error=None if self.build_success else "build_failed",
-                metadata={"mcp_runtime_domain": "stdio"},
-            )
-        if mcp_name == "code_index" and tool_name == "refresh_index":
-            return MCPExecutionResult(
-                handled=True,
-                success=True,
-                data="refreshed",
-                metadata={"mcp_runtime_domain": "stdio"},
-            )
         return MCPExecutionResult(
             handled=False,
             success=False,
@@ -72,7 +50,7 @@ class _Runtime:
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_task_mcp_runtime_binds_and_builds_deep_index(tmp_path):
+async def test_bootstrap_task_mcp_runtime_only_binds_filesystem_root(tmp_path):
     emitter = _Emitter()
     runtime = _Runtime(project_root=str(tmp_path), build_success=True)
 
@@ -83,17 +61,14 @@ async def test_bootstrap_task_mcp_runtime_binds_and_builds_deep_index(tmp_path):
     )
 
     assert result["filesystem"]["project_root_allowed"] is True
-    assert result["code_index"]["index_tool"] == "build_deep_index"
     assert [call["tool_name"] for call in runtime.calls] == [
         "list_allowed_directories",
-        "set_project_path",
-        "build_deep_index",
     ]
-    assert any("deep index" in message for message, _ in emitter.infos)
+    assert not any("code_index" in message for message, _ in emitter.infos)
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_task_mcp_runtime_falls_back_to_refresh_index(tmp_path):
+async def test_bootstrap_task_mcp_runtime_does_not_touch_code_index_on_bootstrap(tmp_path):
     emitter = _Emitter()
     runtime = _Runtime(project_root=str(tmp_path), build_success=False)
 
@@ -102,11 +77,7 @@ async def test_bootstrap_task_mcp_runtime_falls_back_to_refresh_index(tmp_path):
         project_root=str(tmp_path),
         event_emitter=emitter,
     )
-
-    assert result["code_index"]["index_tool"] == "refresh_index"
+    assert result["filesystem"]["project_root_allowed"] is True
     assert [call["tool_name"] for call in runtime.calls] == [
         "list_allowed_directories",
-        "set_project_path",
-        "build_deep_index",
-        "refresh_index",
     ]

@@ -1,82 +1,30 @@
 # Tool: `search_code`
 
 ## Tool Purpose
-在项目代码中搜索关键字或模式。
+在项目代码中搜索关键字或模式，并返回可继续阅读的命中位置。
 
 使用场景:
-- 查找特定函数的所有调用位置
-- 搜索特定的 API 使用
-- 查找包含特定模式的代码
+- 查找特定函数的调用位置
+- 搜索特定 API 的使用点
+- 建立 `file_path:line` 级证据锚点
 
 输入:
 - keyword: 搜索关键字或正则表达式
 - file_pattern: 可选，文件名模式（如 *.py）
-- directory: 可选，搜索目录 (相对于项目根目录)
+- directory: 可选，搜索目录（相对于项目根目录）
 - case_sensitive: 是否区分大小写
 - is_regex: 是否使用正则表达式
 
-这是一个快速搜索工具，结果包含匹配行和上下文。
-
-## MCP Precision Mode
-- 当 `search_code` 路由到 `code_index/search_code_advanced` 时，推荐显式设置 `is_regex=true`。
-- 原因：2026-03-08 的任务日志显示，keyword-only 调用会触发 `pattern Field required`；regex 模式则会由 router 补齐 `pattern`。
-- `keyword` 应尽量写成简单、可执行的 regex，并总是配合 `directory` + `file_pattern` 缩小范围。
-- 若命中 `Potentially unsafe regex pattern`，改用更简单的 alternation/literal token，或退回 `list_files` + `read_file`。
-
-## Goal
-定位目标代码、函数上下文与证据位置。
-
-## Task List
-- 读取代码文件并定位行号上下文。
-- 快速检索关键词并筛选有效命中。
-- 提取函数级上下文供后续验证链路使用。
-
-
-## Inputs
-- `keyword` (string, required): 搜索关键字或正则表达式
-- `file_pattern` (any, optional): 文件名模式，如 *.py, *.js
-- `directory` (any, optional): 搜索目录（相对路径）
-- `case_sensitive` (boolean, optional): 是否区分大小写
-- `max_results` (integer, optional): 最大结果数
-- `is_regex` (boolean, optional): 是否使用正则表达式
-
-### MCP-Stable Input Shape
-```json
-{
-  "keyword": "pickle|fromstring\\(|subprocess",
-  "file_pattern": "dsvw.py",
-  "directory": ".",
-  "is_regex": true,
-  "max_results": 12
-}
-```
-
-
-### Example Input
-```json
-{
-  "keyword": "<text>",
-  "file_pattern": null,
-  "directory": null
-}
-```
-
-## Outputs
-- `success` (bool): 执行是否成功。
-- `data` (any): 工具主结果载荷。
-- `error` (string|null): 失败时错误信息。
-- `duration_ms` (int): 执行耗时（毫秒）。
-- `metadata` (object): 补充上下文信息。
+## Execution Notes
+- `search_code` 优先通过本地内容检索执行；不要绑定 `filesystem.search_files`，因为后者只支持路径 glob，不搜索文件内容。
+- 它只负责定位，不负责自动展开文件窗口；命中后应立即调用 `read_file`。
+- 想减少 token 消耗时，优先收窄 `directory` 与 `file_pattern`。
 
 ## Typical Triggers
-- 当 Agent 需要完成“定位目标代码、函数上下文与证据位置。”时触发。
-- 常见阶段: `analysis, recon, verification`。
-- 分类: `代码读取与定位`。
-- 可选工具: `否`。
+- 当 Agent 需要快速建立 `file_path:line` 锚点时触发。
+- 常见阶段: `analysis`, `recon`, `verification`。
 
 ## Pitfalls And Forbidden Use
 - 不要在输入缺失关键参数时盲目调用。
-- 不要将该工具输出直接当作最终结论，必须结合上下文复核。
-- 不要在权限不足或路径不合法时重复重试同一输入。
-- 不要在 MCP 路由下默认省略 `is_regex`。
-- 不要重复提交已被拒绝的 unsafe regex。
+- 不要将该工具输出直接当作最终结论，必须结合 `read_file` 复核。
+- 不要把它当作自动函数提取工具。

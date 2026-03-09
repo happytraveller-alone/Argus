@@ -208,4 +208,6 @@ CLAUDE.md
 .codex/session.log
 
 .playwright-cli/
+frontend/.playwright-cli/
 frontend/.playwright-cli/*.pyc
+frontend/.pnpm-store

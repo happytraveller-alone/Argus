@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import warnings
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from app.core.config import settings
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
 from app.services.llm_rule.repo_cache_manager import GlobalRepoCacheManager
+from app.models.agent_task import AgentTask, AgentTaskStatus
+from app.models.audit import AuditTask
 from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
 from sqlalchemy.future import select
@@ -88,40 +91,75 @@ async def _run_daily_cache_cleanup(stop_event: asyncio.Event) -> None:
             continue
 
 
-async def recover_interrupted_static_scan_tasks() -> None:
+INTERRUPTED_ERROR_MESSAGE = "服务中断，任务被自动标记为中断"
+RECOVERABLE_AGENT_TASK_STATUSES = {
+    AgentTaskStatus.PENDING,
+    AgentTaskStatus.INITIALIZING,
+    AgentTaskStatus.RUNNING,
+    AgentTaskStatus.PLANNING,
+    AgentTaskStatus.INDEXING,
+    AgentTaskStatus.ANALYZING,
+    AgentTaskStatus.VERIFYING,
+    AgentTaskStatus.REPORTING,
+}
+RECOVERABLE_AUDIT_TASK_STATUSES = {"pending", "running"}
+RECOVERABLE_OPENGREP_TASK_STATUSES = {"pending", "running"}
+RECOVERABLE_GITLEAKS_TASK_STATUSES = {"pending", "running"}
+
+
+def _mark_task_interrupted(task) -> bool:
+    changed = False
+    if str(getattr(task, "status", "")).lower() != "interrupted":
+        task.status = "interrupted"
+        changed = True
+
+    if hasattr(task, "completed_at") and getattr(task, "completed_at", None) is None:
+        task.completed_at = datetime.now(timezone.utc)
+
+    if hasattr(task, "error_message") and not getattr(task, "error_message", None):
+        task.error_message = INTERRUPTED_ERROR_MESSAGE
+
+    if hasattr(task, "error_count"):
+        task.error_count = int(getattr(task, "error_count", 0) or 0) + 1
+
+    return changed
+
+
+async def recover_interrupted_tasks() -> dict[str, int]:
     """
-    将上次异常退出时仍处于 running 状态的静态扫描任务标记为 interrupted。
+    将上次异常退出时仍处于进行中的任务统一标记为 interrupted。
     """
     async with AsyncSessionLocal() as db:
-        interrupted_opengrep = 0
-        interrupted_gitleaks = 0
+        counts = {"agent": 0, "audit": 0, "opengrep": 0, "gitleaks": 0}
 
-        opengrep_result = await db.execute(
-            select(OpengrepScanTask).where(OpengrepScanTask.status == "running")
-        )
-        for task in opengrep_result.scalars().all():
-            task.status = "interrupted"
-            task.error_count = (task.error_count or 0) + 1
-            interrupted_opengrep += 1
+        recovery_specs = [
+            (AgentTask, RECOVERABLE_AGENT_TASK_STATUSES, "agent"),
+            (AuditTask, RECOVERABLE_AUDIT_TASK_STATUSES, "audit"),
+            (OpengrepScanTask, RECOVERABLE_OPENGREP_TASK_STATUSES, "opengrep"),
+            (GitleaksScanTask, RECOVERABLE_GITLEAKS_TASK_STATUSES, "gitleaks"),
+        ]
 
-        gitleaks_result = await db.execute(
-            select(GitleaksScanTask).where(GitleaksScanTask.status == "running")
-        )
-        for task in gitleaks_result.scalars().all():
-            task.status = "interrupted"
-            if not task.error_message:
-                task.error_message = "服务中断，任务被自动标记为中断"
-            interrupted_gitleaks += 1
+        for model, recoverable_statuses, counter_key in recovery_specs:
+            result = await db.execute(
+                select(model).where(model.status.in_(sorted(recoverable_statuses)))
+            )
+            for task in result.scalars().all():
+                if _mark_task_interrupted(task):
+                    counts[counter_key] += 1
 
-        if interrupted_opengrep or interrupted_gitleaks:
+        if any(counts.values()):
             await db.commit()
             logger.warning(
-                "检测到上次中断遗留任务，已自动标记 interrupted：opengrep=%s, gitleaks=%s",
-                interrupted_opengrep,
-                interrupted_gitleaks,
+                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, audit=%s, opengrep=%s, gitleaks=%s",
+                counts["agent"],
+                counts["audit"],
+                counts["opengrep"],
+                counts["gitleaks"],
             )
         else:
             await db.rollback()
+
+        return counts
 
 
 
@@ -156,9 +194,9 @@ async def lifespan(app: FastAPI):
             logger.warning(f"数据库初始化跳过: {e}")
 
     try:
-        await recover_interrupted_static_scan_tasks()
+        await recover_interrupted_tasks()
     except Exception as e:
-        logger.warning(f"恢复静态扫描中断任务失败: {e}")
+        logger.warning(f"恢复中断任务失败: {e}")
 
     # 检查 Agent 服务
     logger.info("检查 Agent 核心服务...")

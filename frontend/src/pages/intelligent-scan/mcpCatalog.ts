@@ -95,48 +95,45 @@ export function normalizeMcpCatalog(rawCatalog: unknown): McpCatalogItem[] {
     return DEFAULT_MCP_CATALOG;
   }
 
-  const normalized = rawCatalog
-    .map((raw) => {
-      if (!raw || typeof raw !== "object") return null;
-      const item = raw as Record<string, unknown>;
-      const id = String(item.id ?? "").trim();
-      const name = String(item.name ?? "").trim();
-      if (!id || !name) return null;
-      return {
-        id,
-        name,
-        type: toCatalogType(item.type),
-        enabled: Boolean(item.enabled),
-        description: String(item.description ?? "").trim(),
-        executionFunctions: toStringArray(
-          item.executionFunctions ?? item.execution_functions,
-        ),
-        inputInterface: toStringArray(item.inputInterface ?? item.input_interface),
-        outputInterface: toStringArray(item.outputInterface ?? item.output_interface),
-        includedSkills: toStringArray(item.includedSkills ?? item.included_skills),
-        verificationTools: toStringArray(
-          item.verificationTools ?? item.verification_tools,
-        ),
-        source: String(item.source ?? "").trim(),
-        runtime_mode:
-          typeof item.runtime_mode === "string"
-            ? item.runtime_mode
-            : typeof item.runtimeMode === "string"
-              ? item.runtimeMode
-              : "stdio_only",
-        required:
-          typeof item.required === "boolean" ? item.required : true,
-        startup_ready:
-          typeof item.startup_ready === "boolean"
-            ? item.startup_ready
-            : true,
-        startup_error:
-          typeof item.startup_error === "string" ? item.startup_error : null,
-        backend: toDomainStatus(item.backend),
-        sandbox: toDomainStatus(item.sandbox),
-      } satisfies McpCatalogItem;
-    })
-    .filter((item): item is McpCatalogItem => item !== null);
+  const normalized = rawCatalog.reduce<McpCatalogItem[]>((acc, raw) => {
+    if (!raw || typeof raw !== "object") return acc;
+    const item = raw as Record<string, unknown>;
+    const id = String(item.id ?? "").trim();
+    const name = String(item.name ?? "").trim();
+    if (!id || !name) return acc;
+
+    acc.push({
+      id,
+      name,
+      type: toCatalogType(item.type),
+      enabled: Boolean(item.enabled),
+      description: String(item.description ?? "").trim(),
+      executionFunctions: toStringArray(
+        item.executionFunctions ?? item.execution_functions,
+      ),
+      inputInterface: toStringArray(item.inputInterface ?? item.input_interface),
+      outputInterface: toStringArray(item.outputInterface ?? item.output_interface),
+      includedSkills: toStringArray(item.includedSkills ?? item.included_skills),
+      verificationTools: toStringArray(
+        item.verificationTools ?? item.verification_tools,
+      ),
+      source: String(item.source ?? "").trim(),
+      runtime_mode:
+        typeof item.runtime_mode === "string"
+          ? item.runtime_mode
+          : typeof item.runtimeMode === "string"
+            ? item.runtimeMode
+            : "stdio_only",
+      required: typeof item.required === "boolean" ? item.required : true,
+      startup_ready:
+        typeof item.startup_ready === "boolean" ? item.startup_ready : true,
+      startup_error:
+        typeof item.startup_error === "string" ? item.startup_error : null,
+      backend: toDomainStatus(item.backend),
+      sandbox: toDomainStatus(item.sandbox),
+    });
+    return acc;
+  }, []);
 
   if (normalized.length === 0) {
     return DEFAULT_MCP_CATALOG;

@@ -3,7 +3,7 @@
 from .base import AgentTool, ToolResult
 from .pattern_tool import PatternMatchTool
 from .code_analysis_tool import CodeAnalysisTool, DataFlowAnalysisTool, VulnerabilityValidationTool
-from .file_tool import FileReadTool, FileSearchTool, ListFilesTool
+from .file_tool import FileReadTool, FileSearchTool, ListFilesTool, LocateEnclosingFunctionTool
 from .sandbox_tool import SandboxTool, VulnerabilityVerifyTool, SandboxManager
 from .thinking_tool import ThinkTool, ReflectTool
 from .reporting_tool import CreateVulnerabilityReportTool
@@ -34,6 +34,7 @@ __all__ = [
     "FileReadTool",
     "FileSearchTool",
     "ListFilesTool",
+    "LocateEnclosingFunctionTool",
     "SandboxTool",
     "VulnerabilityVerifyTool",
     "SandboxManager",

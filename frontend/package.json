@@ -2,16 +2,26 @@
   "name": "deep-audit",
   "version": "3.0.4",
   "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.6.0",
+    "pnpm": ">=9.15.4"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --strictPort --port 5173",
-    "lint": "rm -rf dist && tsgo -p tsconfig.check.json; biome lint --only=correctness/noUndeclaredDependencies src tests scripts; ast-grep scan src tests scripts",
+    "lint": "rm -rf dist && tsgo -p tsconfig.check.json; biome lint --only=correctness/noUndeclaredDependencies src tests scripts; ast-grep scan --config sgconfig.yml src tests scripts",
     "lint:fix": "biome check --apply .",
-    "type-check": "tsc --noEmit",
     "format": "biome format --write .",
+    "type-check": "tsc --noEmit",
+    "type-check:docker": "bash scripts/run-in-dev-container.sh pnpm type-check",
+    "test:node": "tsx --test tests/*.test.ts",
+    "test:docker": "bash scripts/run-in-dev-container.sh pnpm test:node",
+    "lint:docker": "bash scripts/run-in-dev-container.sh pnpm lint",
     "clean": "rm -rf dist node_modules/.vite",
-    "setup": "node scripts/setup.js || ./scripts/setup.sh",
+    "setup": "node scripts/setup.cjs || bash scripts/setup.sh",
+    "setup:docker": "bash scripts/run-in-dev-container.sh pnpm install --no-frozen-lockfile",
     "analyze": "vite build --mode analyze"
   },
   "dependencies": {
@@ -94,6 +104,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "terser": "^5.44.1",
+    "tsx": "^4.21.0",
     "typescript": "~5.7.3",
     "vite": "^5.4.21",
     "vite-plugin-svgr": "^4.5.0"

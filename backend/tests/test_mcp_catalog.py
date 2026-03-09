@@ -16,16 +16,8 @@ def test_mcp_catalog_only_exposes_stdio_core_mcps(monkeypatch):
     assert all(item.get("runtime_mode") == "stdio_only" for item in catalog)
     assert catalog_by_id["filesystem"].get("includedSkills") == ["read_file"]
     assert catalog_by_id["filesystem"].get("verificationTools") == ["read_file"]
-    assert catalog_by_id["code_index"].get("includedSkills") == [
-        "list_files",
-        "search_code",
-        "extract_function",
-    ]
-    assert catalog_by_id["code_index"].get("verificationTools") == [
-        "list_files",
-        "search_code",
-        "extract_function",
-    ]
+    assert catalog_by_id["code_index"].get("includedSkills") == []
+    assert catalog_by_id["code_index"].get("verificationTools") == []
     assert "sequentialthinking" not in catalog_by_id
     assert all(item.get("backend") is None for item in catalog)
     assert all(item.get("sandbox") is None for item in catalog)
@@ -82,6 +74,7 @@ def test_sanitize_mcp_config_skill_availability_only_contains_scan_core(monkeypa
         "search_code",
         "list_files",
         "extract_function",
+        "locate_enclosing_function",
         "smart_scan",
         "quick_audit",
         "pattern_match",
@@ -99,3 +92,7 @@ def test_sanitize_mcp_config_skill_availability_only_contains_scan_core(monkeypa
     assert "qmd_query" not in skill_availability
     assert "sequential_thinking" not in skill_availability
     assert "skill_lookup" not in skill_availability
+    assert skill_availability["search_code"]["source"] == "local"
+    assert skill_availability["search_code"]["reason"] == "ready"
+    assert skill_availability["list_files"]["source"] == "local"
+    assert skill_availability["extract_function"]["source"] == "local"

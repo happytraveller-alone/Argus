@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "已完成",
   failed: "失败",
   cancelled: "已取消",
+  interrupted: "中止",
   canceled: "已取消",
   pending: "待处理",
   waiting: "等待中",

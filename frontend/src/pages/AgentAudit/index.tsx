@@ -40,7 +40,6 @@ import {
   getOpengrepScanFindings,
   type OpengrepFinding,
 } from "@/shared/api/opengrep";
-import CreateAgentTaskDialog from "@/components/agent/CreateAgentTaskDialog";
 
 // Local imports
 import {
@@ -80,23 +79,33 @@ import type {
 } from "./types";
 import {
   accumulateTokenUsage,
+  resolveAgentAuditBackTarget,
+  resolveAgentAuditDetailTitle,
   buildStatsSummary,
   createTokenUsageAccumulator,
 } from "./detailViewModel";
+import {
+  getTaskAutoScroll,
+  persistTaskAutoScroll,
+  PROGRAMMATIC_SCROLL_GUARD_MS,
+  shouldDisableAutoScrollOnScroll,
+} from "./autoScrollState";
 
 import type { RealtimeMergedFindingItem } from "./components/RealtimeFindingsPanel";
+import {
+  buildAgentAuditStreamDisconnectTitle,
+  toAgentAuditStatusLabel,
+} from "./taskStatus";
 
 const EVENT_PAGE_SIZE = 500;
 const EVENT_BATCH_SAFETY_LIMIT = 200;
 const FINDINGS_REFRESH_INTERVAL = 10000;
 const BOOTSTRAP_FINDING_PAGE_SIZE = 200;
-const AUTO_SCROLL_BY_PROJECT_STORAGE_KEY = "agentAudit.autoScrollByProject.v1";
 const EVENT_DEDUP_WINDOW_SIZE = 5000;
 const TERMINAL_RECOVERY_MAX_ATTEMPTS = 2;
 const TERMINAL_RECOVERY_RETRY_INTERVAL_MS = 1500;
 const TERMINAL_RECOVERY_DEBOUNCE_MS = 30_000;
 const STREAM_SELF_HEAL_RETRY_MS = 4000;
-const LOG_DEFAULT_VISIBLE_COUNT = 3;
 const LOG_VIEWPORT_HEIGHT_PX = 200;
 const LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX = 24;
 
@@ -137,51 +146,6 @@ type HomeScanCard = {
   accentClassName: string;
   targetRoute: string;
 };
-
-type AutoScrollByProjectState = Record<string, boolean>;
-
-function loadAutoScrollByProjectState(): AutoScrollByProjectState {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(AUTO_SCROLL_BY_PROJECT_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-    const normalized: AutoScrollByProjectState = {};
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value === "boolean" && key.trim()) {
-        normalized[key] = value;
-      }
-    }
-    return normalized;
-  } catch {
-    return {};
-  }
-}
-
-function getPersistedAutoScroll(projectId: string): boolean {
-  const state = loadAutoScrollByProjectState();
-  if (Object.prototype.hasOwnProperty.call(state, projectId)) {
-    return state[projectId];
-  }
-  return true;
-}
-
-function persistAutoScroll(projectId: string, enabled: boolean): void {
-  if (typeof window === "undefined") return;
-  try {
-    const state = loadAutoScrollByProjectState();
-    state[projectId] = enabled;
-    window.localStorage.setItem(
-      AUTO_SCROLL_BY_PROJECT_STORAGE_KEY,
-      JSON.stringify(state),
-    );
-  } catch {
-    // ignore storage errors to avoid blocking runtime behavior
-  }
-}
 
 type UnifiedAgentEvent = {
   type?: string;
@@ -641,7 +605,6 @@ function AgentAuditPageContent() {
 
   // Local state
   const [showSplash, setShowSplash] = useState(!taskId);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState<"logs" | "findings">(
@@ -706,6 +669,7 @@ function AgentAuditPageContent() {
   const terminalBoundarySequenceRef = useRef<number | null>(null);
   const taskStartedAtRef = useRef<string | null>(null);
   const userCancelSeenRef = useRef(false);
+  const ignoreScrollUntilRef = useRef(0);
   const lastStreamSelfHealAttemptRef = useRef(0);
   const terminalRecoveryStateRef = useRef<TerminalRecoveryState>({
     active: false,
@@ -752,6 +716,14 @@ function AgentAuditPageContent() {
     () => (failedReason ? extractStepName(failedReason) : null),
     [failedReason],
   );
+  const detailTitle = useMemo(() => {
+    const searchParams = new URLSearchParams(location.search);
+    return resolveAgentAuditDetailTitle({
+      returnTo: searchParams.get("returnTo"),
+      name: task?.name,
+      description: task?.description,
+    });
+  }, [location.search, task?.description, task?.name]);
   const statsSummary = useMemo(
     () =>
       task
@@ -796,10 +768,6 @@ function AgentAuditPageContent() {
   ],
   [],
 );
-  const currentProjectId = useMemo(() => {
-    const value = typeof task?.project_id === "string" ? task.project_id.trim() : "";
-    return value || null;
-  }, [task?.project_id]);
   const currentPhaseLabel = useMemo(() => {
     const phaseKey = String(task?.current_phase || "")
       .trim()
@@ -810,6 +778,7 @@ function AgentAuditPageContent() {
     if (task?.status === "completed") return "完成";
     if (task?.status === "failed") return "失败";
     if (task?.status === "cancelled") return "已取消";
+    if (task?.status === "interrupted") return toAgentAuditStatusLabel("interrupted");
     return null;
   }, [task?.current_phase, task?.status]);
   const phaseHint = useMemo(() => {
@@ -913,12 +882,17 @@ function AgentAuditPageContent() {
   }, [detailDialog, detailViewState, restoreAndScrollToAnchor, setDetailQuery]);
 
   const handleBack = useCallback(() => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
+    const searchParams = new URLSearchParams(location.search);
+    const target = resolveAgentAuditBackTarget(
+      searchParams.get("returnTo"),
+      typeof window !== "undefined" && window.history.length > 1,
+    );
+    if (target === -1) {
       navigate(-1);
       return;
     }
-    navigate("/dashboard");
-  }, [navigate]);
+    navigate(target);
+  }, [location.search, navigate]);
 
   useEffect(() => {
     logsRef.current = logs;
@@ -983,11 +957,6 @@ function AgentAuditPageContent() {
     }
   }, [dispatch, task?.started_at]);
 
-  useEffect(() => {
-    if (!currentProjectId) return;
-    setAutoScroll(getPersistedAutoScroll(currentProjectId));
-  }, [currentProjectId, setAutoScroll]);
-
   // 🔥 当 taskId 变化时立即重置状态（新建任务时清理旧日志）
   useEffect(() => {
     // 如果 taskId 发生变化，立即重置
@@ -1047,8 +1016,9 @@ function AgentAuditPageContent() {
       };
       terminalBoundarySequenceRef.current = null;
     }
+    setAutoScroll(getTaskAutoScroll(taskId || null));
     previousTaskIdRef.current = taskId;
-  }, [taskId, reset]);
+  }, [taskId, reset, setAutoScroll]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -2516,10 +2486,7 @@ function AgentAuditPageContent() {
             payload: {
               ...nowTime,
               type: "error",
-              title:
-                source === "transport"
-                  ? `事件流连接失败：${err}`
-                  : `事件流连接中断：${err}`,
+              title: buildAgentAuditStreamDisconnectTitle(source, err),
             },
           });
         }
@@ -2740,23 +2707,49 @@ function AgentAuditPageContent() {
     task?.status,
   ]);
 
+  const markProgrammaticScroll = useCallback(() => {
+    ignoreScrollUntilRef.current = Math.max(
+      ignoreScrollUntilRef.current,
+      Date.now() + PROGRAMMATIC_SCROLL_GUARD_MS,
+    );
+  }, []);
+
   const scrollLogsToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const container = logsContainerRef.current;
     if (!container) return;
+    markProgrammaticScroll();
     container.scrollTo({ top: container.scrollHeight, behavior });
-  }, []);
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        markProgrammaticScroll();
+      });
+      window.setTimeout(() => {
+        markProgrammaticScroll();
+      }, 120);
+    }
+  }, [markProgrammaticScroll]);
 
   const handleLogsScroll = useCallback(() => {
     const container = logsContainerRef.current;
     if (!container || !isAutoScroll) return;
     const distanceToBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (distanceToBottom <= LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX) return;
-    setAutoScroll(false);
-    if (currentProjectId) {
-      persistAutoScroll(currentProjectId, false);
+    const isProgrammaticScroll = Date.now() < ignoreScrollUntilRef.current;
+    if (
+      !shouldDisableAutoScrollOnScroll({
+        isAutoScrollEnabled: isAutoScroll,
+        isProgrammaticScroll,
+        distanceToBottom,
+        thresholdPx: LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX,
+      })
+    ) {
+      return;
     }
-  }, [currentProjectId, isAutoScroll, setAutoScroll]);
+    setAutoScroll(false);
+    if (taskId) {
+      persistTaskAutoScroll(taskId, false);
+    }
+  }, [isAutoScroll, setAutoScroll, taskId]);
 
   // Default viewport: show latest logs (about 3 visible rows) when opening a task.
   useEffect(() => {
@@ -2892,15 +2885,15 @@ function AgentAuditPageContent() {
   const handleToggleAutoScroll = useCallback(() => {
     const nextEnabled = !isAutoScroll;
     setAutoScroll(nextEnabled);
-    if (currentProjectId) {
-      persistAutoScroll(currentProjectId, nextEnabled);
+    if (taskId) {
+      persistTaskAutoScroll(taskId, nextEnabled);
     }
     if (nextEnabled) {
       requestAnimationFrame(() => {
         scrollLogsToBottom("smooth");
       });
     }
-  }, [currentProjectId, isAutoScroll, scrollLogsToBottom, setAutoScroll]);
+  }, [isAutoScroll, scrollLogsToBottom, setAutoScroll, taskId]);
 
   // ============ Render ============
 
@@ -3037,6 +3030,7 @@ function AgentAuditPageContent() {
     <div className="h-[100dvh] max-h-[100dvh] bg-background flex flex-col overflow-hidden relative">
       {/* Header */}
       <Header
+        title={detailTitle}
         task={task}
         isRunning={isRunning}
         isCancelling={isCancelling}
@@ -3045,7 +3039,6 @@ function AgentAuditPageContent() {
         onBack={handleBack}
         onCancel={handleCancel}
         onExport={handleExportReport}
-        onNewAudit={() => setShowCreateDialog(true)}
       />
 
       {/* Main content */}
@@ -3076,6 +3069,7 @@ function AgentAuditPageContent() {
           <div className="min-h-0 flex-1 overflow-hidden">
             <div ref={findingsContainerRef} className="h-full">
               <RealtimeFindingsPanel
+                taskId={task?.id || ""}
                 items={realtimeFindings}
                 isRunning={isRunning}
                 filters={findingsFilters}
@@ -3085,79 +3079,69 @@ function AgentAuditPageContent() {
           </div>
 
           {/* Bottom: Full-width event logs */}
-          <div className="flex-shrink-0 rounded-xl border border-border bg-card/70 overflow-hidden">
-            <div className="px-4 py-3 border-b border-border bg-card">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Terminal className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold">事件日志</span>
-                  <Badge variant="outline" className="text-[11px]">
-                    {filteredLogs.length}
-                  </Badge>
-                  {isConnected ? (
-                    <Badge
-                      variant="outline"
-                      className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                    >
-                      已连接
-                    </Badge>
-                  ) : null}
-                  <span className="text-[11px] text-muted-foreground">
-                    默认最新 {LOG_DEFAULT_VISIBLE_COUNT} 条，可上拉查看历史
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>导出日志</span>
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleExportLogs("json")}>
-                        导出为 JSON
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleExportLogs("markdown")}>
-                        导出为 Markdown
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => toast.info("导出范围：全部活动日志")}>
-                        当前为全部导出
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  <button
-                    onClick={handleToggleAutoScroll}
-                    className={`
-                      flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-mono uppercase tracking-wider
-                      ${isAutoScroll
-                        ? "bg-primary/15 text-primary border border-primary/50"
-                        : "text-muted-foreground hover:text-foreground border border-border hover:bg-muted"
-                      }
-                    `}
+          <div className="flex-shrink-0 overflow-hidden rounded-xl bg-card/50">
+            <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Terminal className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold">事件日志</span>
+                {isConnected ? (
+                  <Badge
+                    variant="outline"
+                    className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
                   >
-                    <ArrowDown className="w-3.5 h-3.5" />
-                    <span>自动滚动</span>
-                  </button>
-                </div>
+                    已连接
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>导出日志</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleExportLogs("json")}>
+                      导出为 JSON
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExportLogs("markdown")}>
+                      导出为 Markdown
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => toast.info("导出范围：全部活动日志")}>
+                      当前为全部导出
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <button
+                  onClick={handleToggleAutoScroll}
+                  className={
+                    isAutoScroll
+                      ? "flex items-center gap-2 rounded-md border border-primary/50 bg-primary/15 px-3 py-1.5 text-xs text-primary"
+                      : "flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                  <span>自动滚动</span>
+                </button>
               </div>
             </div>
 
-            <div className="p-3">
+            <div className="pt-2">
               <div
                 ref={logsContainerRef}
                 onScroll={handleLogsScroll}
-                className="overflow-y-auto p-2 custom-scrollbar bg-muted/30 rounded-lg border border-border"
+                className="overflow-y-auto custom-scrollbar"
                 style={{ height: LOG_VIEWPORT_HEIGHT_PX, maxHeight: "30vh" }}
               >
                 {filteredLogs.length === 0 ? (
-                  <div className="h-full flex items-center justify-center">
+                  <div className="flex h-full items-center justify-center px-3">
                     <div className="text-center text-muted-foreground">
                       {isRunning ? (
                         <div className="flex flex-col items-center gap-3">
@@ -3174,7 +3158,7 @@ function AgentAuditPageContent() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2 p-1.5">
+                  <div className="divide-y divide-border/60 px-3">
                     {filteredLogs.map((item) => (
                       <LogEntry
                         key={item.id}
@@ -3198,12 +3182,6 @@ function AgentAuditPageContent() {
           </div>
         </div>
       </div>
-
-      {/* Create dialog */}
-      <CreateAgentTaskDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
-      />
 
       {/* Export dialog */}
       <ReportExportDialog

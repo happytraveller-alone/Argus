@@ -83,29 +83,29 @@ export const LogEntry = memo(function LogEntry({
       id={anchorId}
       className={
         highlighted
-          ? "rounded-lg ring-2 ring-primary/60 transition-shadow"
-          : ""
+          ? "bg-primary/5 ring-1 ring-primary/50 transition-colors"
+          : "transition-colors"
       }
     >
-      <div className="rounded-lg border border-border bg-card/80 px-3 py-2.5 hover:border-primary/30 transition-colors">
-        <div className="flex flex-col gap-1.5 md:grid md:grid-cols-[80px_64px_minmax(0,1fr)_122px_104px_auto] md:items-start md:gap-2">
+      <div className="px-2 py-2.5 hover:bg-muted/35">
+        <div className="flex flex-col gap-2 md:grid md:grid-cols-[72px_64px_minmax(0,1fr)_110px_96px_auto] md:items-start md:gap-3">
           <div className="text-xs font-mono text-muted-foreground tabular-nums">
             {item.time}
           </div>
 
           <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground/80">{typeIcon}</span>
-            <span className="text-xs font-mono uppercase text-muted-foreground tracking-wide">
+            <span className="text-xs font-mono uppercase tracking-wide text-muted-foreground">
               {typeLabel}
             </span>
           </div>
 
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground leading-5 line-clamp-1 break-words">
+            <p className="line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground">
               {formattedTitle}
             </p>
             {shouldRenderPreview && (
-              <p className="mt-0.5 text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-1">
+              <p className="mt-0.5 line-clamp-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">
                 {contentPreview}
               </p>
             )}
@@ -113,12 +113,9 @@ export const LogEntry = memo(function LogEntry({
 
           <div className="min-w-0">
             {item.agentName ? (
-              <Badge
-                variant="outline"
-                className="h-6 px-2 text-[11px] uppercase tracking-wide border-primary/40 text-primary bg-primary/10 max-w-full truncate"
-              >
+              <span className="block truncate text-xs text-primary" title={item.agentName}>
                 {item.agentName}
-              </Badge>
+              </span>
             ) : (
               <span className="text-xs text-muted-foreground">-</span>
             )}
@@ -131,7 +128,7 @@ export const LogEntry = memo(function LogEntry({
                 className={`h-6 px-2 text-[11px] font-medium ${TOOL_STATUS_CLASS[toolStatus]}`}
               >
                 {toolStatus === "running" && (
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  <Loader2 className="mr-1 w-3 h-3 animate-spin" />
                 )}
                 {TOOL_STATUS_LABELS[toolStatus]}
               </Badge>
@@ -161,7 +158,7 @@ export const LogEntry = memo(function LogEntry({
             <button
               type="button"
               onClick={onOpenDetail}
-              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border hover:border-primary/40 hover:text-primary"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-primary"
             >
               查看详情
               <ExternalLink className="w-3.5 h-3.5" />

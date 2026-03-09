@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Brain, KeyRound, Settings, Zap } from "lucide-react";
 import { SystemConfig, useSystemConfigDraftState } from "@/components/system/SystemConfig";
+import type { LlmModelStatsSource, LlmModelStatsStatus } from "@/components/system/llmModelStatsSummary";
 import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
 
 type LlmSummaryState = {
@@ -9,6 +10,9 @@ type LlmSummaryState = {
 	availableModelCount: number;
 	availableModelMetadataCount: number;
 	supportsModelFetch: boolean;
+	modelStatsStatus: LlmModelStatsStatus;
+	modelStatsSource: LlmModelStatsSource;
+	shouldPreferOnlineStats: boolean;
 };
 
 export default function ScanConfigIntelligentEngine() {
@@ -19,11 +23,21 @@ export default function ScanConfigIntelligentEngine() {
 		providerLabel: summaryState?.providerLabel || summaryConfig?.llmProvider || "--",
 		currentModelName:
 			summaryState?.currentModelName || summaryConfig?.llmModel || "--",
-		availableModelCount: summaryState?.availableModelCount || 0,
+		availableModelCount: summaryState?.availableModelCount ?? 0,
 		availableModelMetadataCount:
-			summaryState?.availableModelMetadataCount || 0,
+			summaryState?.availableModelMetadataCount ?? 0,
 		supportsModelFetch: summaryState?.supportsModelFetch || false,
+		modelStatsStatus: summaryState?.modelStatsStatus || "static",
+		modelStatsSource: summaryState?.modelStatsSource || "static",
+		shouldPreferOnlineStats: summaryState?.shouldPreferOnlineStats || false,
 	};
+
+	const modelStatsValue =
+		summary.modelStatsStatus === "loading"
+			? "加载中..."
+			: summary.modelStatsStatus === "empty"
+				? "--"
+				: `${summary.availableModelCount} 个模型`;
 
 	return (
 		<div className="space-y-6 p-6 bg-background min-h-screen relative">
@@ -66,12 +80,7 @@ export default function ScanConfigIntelligentEngine() {
 						<div className="flex items-center justify-between">
 							<div>
 								<p className="stat-label">模型统计</p>
-								<p className="stat-value">
-									{summary.availableModelCount} 个模型
-								</p>
-								<p className="text-sm text-muted-foreground mt-1">
-									元数据 {summary.availableModelMetadataCount} ·{summary.supportsModelFetch ? " 支持在线拉取" : " 使用静态列表"}
-								</p>
+								<p className="stat-value">{modelStatsValue}</p>
 							</div>
 							<div className="stat-icon text-emerald-400">
 								<Zap className="w-6 h-6" />

@@ -14,6 +14,7 @@ import type {
   ConnectionStatus,
 } from "../types";
 import { createLogItem, filterLogsByAgent, buildAgentTree } from "../utils";
+import { isAgentAuditTerminalStatus } from "../taskStatus";
 import type { AgentTreeNode } from "@/shared/api/agentTasks";
 
 // ============ Initial State ============
@@ -362,8 +363,7 @@ export function useAgentAuditState() {
   }, [state.task]);
 
   const isComplete = useMemo(() => {
-    const status = state.task?.status;
-    return status === 'completed' || status === 'failed' || status === 'cancelled';
+    return isAgentAuditTerminalStatus(state.task?.status);
   }, [state.task?.status]);
 
   return {
