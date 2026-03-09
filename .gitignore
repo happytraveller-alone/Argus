@@ -211,3 +211,4 @@ CLAUDE.md
 frontend/.playwright-cli/
 frontend/.playwright-cli/*.pyc
 frontend/.pnpm-store
+*.pyc
