@@ -74,14 +74,20 @@ class ParallelPhaseExecutor:
         """
         base_agent = self.orchestrator.sub_agents[self.agent_type]
 
+        # 创建 worker agent（使用相同的构造参数）
         worker_agent = base_agent.__class__(
             llm_service=base_agent.llm_service,
             tools=base_agent.tools,
             event_emitter=base_agent.event_emitter,
         )
 
+        # 深拷贝并修改 config（config 在 deepcopy 后变成字典）
         worker_agent.config = copy.deepcopy(base_agent.config)
-        worker_agent.name = f"{base_agent.name}_worker_{worker_id}"
+        if isinstance(worker_agent.config, dict):
+            worker_agent.config["name"] = f"{base_agent.name}_worker_{worker_id}"
+        else:
+            # 如果 config 是对象，尝试设置属性
+            worker_agent.config.name = f"{base_agent.name}_worker_{worker_id}"
         worker_agent.tracer = getattr(base_agent, "tracer", None)
 
         if hasattr(worker_agent, "set_mcp_runtime"):
