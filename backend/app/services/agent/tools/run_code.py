@@ -429,29 +429,43 @@ class ExtractFunctionTool(AgentTool):
         return {"success": False, "error": f"未找到函数 '{function_name}'"}
 
     def _extract_php(self, code: str, function_name: str) -> Dict:
-        """提取 PHP 函数"""
+        """提取 PHP 函数（支持类方法、独立函数）"""
         import re
 
-        pattern = rf'function\s+{re.escape(function_name)}\s*\([^)]*\)\s*\{{'
-        match = re.search(pattern, code)
+        # 支持类方法（访问修饰符 + static/abstract/final）和独立函数
+        # 匹配: public static function name(...): returnType { 或 function name(...) {
+        # 使用更宽松的模式来处理类型提示和返回类型
+        pattern = rf'(?:(?:public|protected|private|abstract|final)\s+)*(?:static\s+)?function\s+{re.escape(function_name)}\s*\([^{{;]*?\)(?:[^{{;]*?)(?:\{{|;)'
+        match = re.search(pattern, code, re.DOTALL)
 
         if not match:
             return {"success": False, "error": f"未找到函数 '{function_name}'"}
 
+        # 检查是否为接口/抽象方法（以分号结尾）
+        matched_text = match.group(0)
+        is_abstract = matched_text.rstrip().endswith(';')
+        
         start_pos = match.start()
-        brace_count = 0
-        end_pos = match.end() - 1
+        
+        if is_abstract:
+            # 接口/抽象方法，到分号结束
+            end_pos = match.end()
+            func_code = code[start_pos:end_pos]
+        else:
+            # 有函数体的方法，需要找到匹配的右花括号
+            brace_count = 0
+            end_pos = match.end() - 1
 
-        for i, char in enumerate(code[match.end() - 1:], start=match.end() - 1):
-            if char == '{':
-                brace_count += 1
-            elif char == '}':
-                brace_count -= 1
-                if brace_count == 0:
-                    end_pos = i + 1
-                    break
+            for i, char in enumerate(code[match.end() - 1:], start=match.end() - 1):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_pos = i + 1
+                        break
 
-        func_code = code[start_pos:end_pos]
+            func_code = code[start_pos:end_pos]
 
         # 提取参数
         param_match = re.search(r'function\s+\w+\s*\(([^)]*)\)', func_code)
@@ -712,7 +726,9 @@ class ExtractFunctionTool(AgentTool):
         # 尝试多种模式
         patterns = [
             rf'def\s+{re.escape(function_name)}\s*\([^)]*\)\s*:',  # Python
-            rf'function\s+{re.escape(function_name)}\s*\([^)]*\)',  # PHP/JS
+            # PHP: 支持类方法（访问修饰符 + static）和独立函数，包含返回类型声明
+            rf'(?:(?:public|protected|private|abstract|final)\s+)*(?:static\s+)?function\s+{re.escape(function_name)}\s*\([^{{;]*?\)(?:[^{{;]*?)(?:\{{|;)',
+            rf'function\s+{re.escape(function_name)}\s*\([^)]*\)',  # PHP/JS 独立函数（简化版）
             rf'func\s+{re.escape(function_name)}\s*\([^)]*\)',  # Go
         ]
 
