@@ -6,10 +6,7 @@ WorkflowOrchestratorAgent - 基于确定性 Workflow 的编排 Agent
 子 Agent（Recon / Analysis / Verification）内部仍使用 LLM+ReAct 进行深度分析。
 
 兼容性说明：
-- 与 OrchestratorAgent 接口完全一致（同样继承 BaseAgent，同等返回 AgentResult）。
-- 只在 `run()` 的编排控制流部分不同，所有辅助方法（_dispatch_agent、_normalize_finding 等）
   均完整继承。
-- 构造函数新增 `recon_queue_service` / `vuln_queue_service` 参数，用于直接操作队列。
 """
 
 import json
@@ -127,6 +124,9 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
 
         await self.emit_thinking("🧠 WorkflowOrchestrator 启动，执行确定性 Workflow 模式...")
 
+        # ── 打印初始队列状态（调试用）───────────────────────────────────
+        await self._log_queue_status("启动前")
+
         # ── 创建并执行 Workflow 引擎 ────────────────────────────────────
         engine = AuditWorkflowEngine(
             recon_queue_service=self._recon_queue_service,
@@ -144,6 +144,9 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
 
         # 同步统计
         self._iteration = workflow_state.total_iterations
+
+        # ── 打印最终队列状态（调试用）───────────────────────────────────
+        await self._log_queue_status("完成后")
 
         duration_ms = int((_time.time() - start_time) * 1000)
 
@@ -235,3 +238,70 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
             tokens_used=self._total_tokens,
             duration_ms=duration_ms,
         )
+
+    # ------------------------------------------------------------------
+    # 辅助方法:打印队列状态
+    # ------------------------------------------------------------------
+
+    async def _log_queue_status(self, stage: str) -> None:
+        """
+        记录当前队列状态到日志（调试用）。
+
+        Args:
+            stage: 阶段标识（如 "启动前"、"完成后"）
+        """
+        try:
+            task_id = self._runtime_context.get("task_id", "") if self._runtime_context else ""
+            if not task_id:
+                logger.debug("[QueueStatus] No task_id, skip queue status logging")
+                return
+
+            # Recon 队列状态
+            recon_stats = {}
+            if self._recon_queue_service:
+                try:
+                    recon_size = self._recon_queue_service.size(task_id)
+                    recon_stats = self._recon_queue_service.stats(task_id)
+                    logger.info(
+                        "[QueueStatus|%s] Recon队列: size=%d, enqueued=%d, dequeued=%d, deduplicated=%d",
+                        stage,
+                        recon_size,
+                        recon_stats.get("total_enqueued", 0),
+                        recon_stats.get("total_dequeued", 0),
+                        recon_stats.get("total_deduplicated", 0),
+                    )
+                except Exception as e:
+                    logger.warning("[QueueStatus|%s] Failed to get recon queue stats: %s", stage, e)
+
+            # Vulnerability 队列状态
+            vuln_stats = {}
+            if self._vuln_queue_service:
+                try:
+                    vuln_size = self._vuln_queue_service.size(task_id)
+                    vuln_stats = self._vuln_queue_service.stats(task_id)
+                    logger.info(
+                        "[QueueStatus|%s] Vuln队列: size=%d, enqueued=%d, dequeued=%d, deduplicated=%d",
+                        stage,
+                        vuln_size,
+                        vuln_stats.get("total_enqueued", 0),
+                        vuln_stats.get("total_dequeued", 0),
+                        vuln_stats.get("total_deduplicated", 0),
+                    )
+                except Exception as e:
+                    logger.warning("[QueueStatus|%s] Failed to get vuln queue stats: %s", stage, e)
+
+            # 如果在完成阶段，记录剩余项（可能表示未处理完）
+            if stage == "完成后":
+                if recon_stats.get("total_enqueued", 0) > 0 or vuln_stats.get("total_enqueued", 0) > 0:
+                    recon_remaining = recon_stats.get("total_enqueued", 0) - recon_stats.get("total_dequeued", 0)
+                    vuln_remaining = vuln_stats.get("total_enqueued", 0) - vuln_stats.get("total_dequeued", 0)
+                    if recon_remaining > 0 or vuln_remaining > 0:
+                        logger.warning(
+                            "[QueueStatus|%s] ⚠️ 队列中有未处理项: Recon剩余=%d, Vuln剩余=%d",
+                            stage,
+                            recon_remaining,
+                            vuln_remaining,
+                        )
+
+        except Exception as e:
+            logger.error("[QueueStatus|%s] Failed to log queue status: %s", stage, e)
