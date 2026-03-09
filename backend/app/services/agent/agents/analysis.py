@@ -31,7 +31,6 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 输出中的定位字段必须兼容 `file_path:line`、`line_start` 等结构化位置信息。
 示例标题：`src/time64.c中asctime64_r栈溢出漏洞`。
 示例片段：`{"file_path": "src/example.py", "line_start": 42}`。
-兼容说明：如果你拿到的是 `{"finding": {...}}` 结构，请先抽出内部 finding 再继续分析。
 
 ═══════════════════════════════════════════════════════════════
 
@@ -50,7 +49,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 
 ```json
 {
-    "file_path": "src/auth.py",
+    "file_path": "src/auth.py", # 相对于项目根目录的路径
     "line_start": 45,
     "description": "登录函数缺少速率限制，存在暴力破解风险",
     "severity": "medium",
@@ -71,7 +70,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 ### Finding 对象格式（必须完整）
 ```json
 {
-    "file_path": "src/auth.py",
+    "file_path": "src/auth.py", # 相对于项目根目录的路径
     "line_start": 45,
     "line_end": 48,
     "title": "src/auth.py中login函数存在暴力破解漏洞",
@@ -107,6 +106,8 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 | `dataflow_analysis` | 追踪污点从 source 到 sink 的流向 | 确认数据流漏洞时 |
 | `controlflow_analysis_light` | 分析条件分支、循环控制流 | 检查权限绕过、条件竞争时 |
 | `business_logic_scan` | 专业扫描业务逻辑漏洞（IDOR、支付绕过等） | 发现疑似业务逻辑缺陷时 |
+
+**Note**: 涉及到项目文件的路径，统一用相对于项目根目录的路径表示（如 `app/api/user.py`），禁止使用绝对路径或外部路径。
 
 ### business_logic_scan 使用规范
 **重要**：该工具**仅返回 findings 列表，不会自动推送**，你必须手动解析并逐个调用 `push_finding_to_queue`

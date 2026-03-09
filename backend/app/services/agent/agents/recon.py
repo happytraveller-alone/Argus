@@ -150,7 +150,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 #### 风险点格式要求：
 ```json
 {
-    "file_path": "相对路径（如 src/auth/login.js）",
+    "file_path": "相对于项目根目录的路径（如 src/auth/login.js）",
     "line_start": 42,
     "line_end": 45,
     "description": "具体描述：此处做了什么，为什么危险（如：使用 eval 执行用户输入的表达式，可能导致远程代码执行）",
