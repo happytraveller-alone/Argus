@@ -90,8 +90,9 @@ export const StatsPanel = memo(function StatsPanel({ summary }: StatsPanelProps)
           value={formatTokenValue(summary.tokensTotal)}
           subtext={
             <div className="flex items-center justify-between gap-3 text-xs">
-              <span>输入 {summary.tokensInput === null ? "--" : formatTokenValue(summary.tokensInput)}</span>
-              <span>输出 {summary.tokensOutput === null ? "--" : formatTokenValue(summary.tokensOutput)}</span>
+              Token 消耗
+              {/* <span>输入 {summary.tokensInput === null ? "--" : formatTokenValue(summary.tokensInput)}</span>
+              <span>输出 {summary.tokensOutput === null ? "--" : formatTokenValue(summary.tokensOutput)}</span> */}
             </div>
           }
         />
