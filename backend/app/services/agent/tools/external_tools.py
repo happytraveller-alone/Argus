@@ -9,6 +9,7 @@ import logging
 import os
 import tempfile
 import shutil
+import shlex
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from dataclasses import dataclass
@@ -385,36 +386,65 @@ Bandit 是 Python 专用的安全分析工具。
             return ToolResult(success=False, data=error_msg, error=error_msg)
 
         # 构建命令
-        severity_map = {"low": "l", "medium": "m", "high": "h"}
-        confidence_map = {"low": "l", "medium": "m", "high": "h"}
+        # 使用 Bandit 接受的完整单词形式 (low, medium, high, all)
+        severity_map = {"low": "low", "medium": "medium", "high": "high", "all": "all"}
+        confidence_map = {"low": "low", "medium": "medium", "high": "high", "all": "all"}
         
         cmd = [
-            "bandit", "-r", "-f", "json",
-            "-ll" if severity == "low" else f"-l{severity_map.get(severity, 'm')}",
-            f"-i{confidence_map.get(confidence, 'm')}",
-            safe_target_path
+            "bandit",
+            "-r",
+            "-f",
+            "json",
         ]
-        
-        cmd_str = " ".join(cmd)
-        
+
+        # 显式构造等级与置信度参数，避免拼接产生不可预测的 flag
+        level = severity_map.get(severity, "m")
+        conf = confidence_map.get(confidence, "m")
+        # 使用长选项避免短选项解析歧义
+        cmd.extend(["--severity-level", level, "--confidence-level", conf, safe_target_path])
+
+        # 使用 shell-safe 的转义构造最终命令字符串
+        cmd_str = " ".join(shlex.quote(p) for p in cmd)
+
+        # 调试日志：记录将要执行的命令与工作目录
+        logger.info(f"[Bandit] command: {cmd_str}, host_workdir={self.project_root}")
+
         try:
             result = await self.sandbox_manager.execute_tool_command(
                 command=cmd_str,
                 host_workdir=self.project_root,
                 timeout=120
             )
-            
-            try:
-                # find json in output
-                json_start = result['stdout'].find('{')
-                if json_start >= 0:
-                    results = json.loads(result['stdout'][json_start:])
-                else:
-                    results = {}
-            except json.JSONDecodeError:
-                error_msg = f"无法解析 Bandit 输出: {result['stdout'][:200]}"
+
+            stdout = result.get('stdout', '') or ''
+            stderr = result.get('stderr', '') or ''
+            exit_code = int(result.get('exit_code', 0) or 0)
+
+            # 如果 exit_code > 1，视为执行错误（Bandit 通常用 0/1 表示结果），返回 stderr
+            if exit_code > 1:
+                err_snip = (stderr or stdout)[:1024]
+                error_msg = f"Bandit 执行失败 (exit_code={exit_code}): {err_snip}"
                 return ToolResult(success=False, data=error_msg, error=error_msg)
-            
+
+            # 从 stdout 或 stderr 中查找 JSON 起始位置
+            json_start = -1
+            for buf in (stdout, stderr):
+                if buf:
+                    idx = buf.find('{')
+                    if idx >= 0:
+                        json_start = idx
+                        json_buf = buf
+                        break
+
+            if json_start >= 0:
+                try:
+                    results = json.loads(json_buf[json_start:])
+                except json.JSONDecodeError:
+                    error_msg = f"无法解析 Bandit 输出 JSON: {json_buf[json_start:json_start+200]}"
+                    return ToolResult(success=False, data=error_msg, error=error_msg,)
+            else:
+                results = {}
+
             findings = results.get("results", [])[:max_results]
             
             if not findings:
