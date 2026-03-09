@@ -2552,17 +2552,24 @@ class VerificationAgent(BaseAgent):
                         self._tool_call_counts = {}
                     self._tool_call_counts[tool_call_key] = self._tool_call_counts.get(tool_call_key, 0) + 1
 
+                    if not hasattr(self, "_tool_last_error"):
+                        self._tool_last_error = {}
+
                     if self._tool_call_counts[tool_call_key] > 3:
                         logger.warning(f"[{self.name}] Detected repetitive tool call loop: {tool_call_key}")
+                        last_error_excerpt = str(self._tool_last_error.get(tool_call_key) or "").strip()
+                        if last_error_excerpt:
+                            last_error_excerpt = last_error_excerpt[:600]
                         observation = (
                             f"⚠️ **系统干预**: 你已经使用完全相同的参数调用了工具 '{step.action}' 超过3次。\n"
-                            "请**不要**重复尝试相同的操作。这是无效的。\n"
-                            "请尝试：\n"
-                            "1. 修改参数 (例如改变 input payload)\n"
-                            "2. 使用不同的工具 (例如从 sandbox_exec 换到 php_test)\n"
-                            "3. 如果之前的尝试都失败了，请尝试 analyze_file 重新分析代码\n"
-                            "4. 如果无法验证，请输出 Final Answer 并标记为 uncertain"
+                            "请不要重复相同调用。你必须根据错误信息调整参数或更换验证路径，然后继续验证。\n"
+                            "请优先执行：\n"
+                            "1. 基于最近一次错误信息，修改 Action Input 后重试同一工具\n"
+                            "2. 若路径/行号相关错误，先用 search_code/read_file 定位后再调用\n"
+                            "3. 若工具不可用或超时，切换到替代工具并说明原因"
                         )
+                        if last_error_excerpt:
+                            observation += f"\n\n最近一次失败摘要:\n{last_error_excerpt}"
                         step.observation = observation
                         await self.emit_llm_observation(observation)
                         self._conversation_history.append({"role": "user", "content": f"Observation:\n{observation}"})
@@ -2578,22 +2585,39 @@ class VerificationAgent(BaseAgent):
                         or "不存在" in observation
                         or "文件过大" in observation
                         or "Error" in observation
+                        or "failed" in observation.lower()
+                        or "timeout" in observation.lower()
+                        or "超时" in observation
                     )
 
                     if is_tool_error:
+                        self._tool_last_error[tool_call_key] = observation
                         self._failed_tool_calls[tool_call_key] = self._failed_tool_calls.get(tool_call_key, 0) + 1
                         fail_count = self._failed_tool_calls[tool_call_key]
+                        failure_excerpt = str(observation or "").strip()[:1000]
+                        observation += (
+                            "\n\n🧭 **重试指导(必须遵循)**:\n"
+                            f"- 当前失败工具: {step.action}\n"
+                            f"- 当前失败次数: {fail_count}\n"
+                            "- 下一步请直接基于上面的错误信息修改 Action Input，再次调用工具\n"
+                            "- 若报错为路径/定位问题，先执行 search_code 或 read_file 缩小范围\n"
+                            "- 若报错为权限/环境/工具不可用，改用替代工具并继续验证\n"
+                            "- 禁止在未尝试参数修复前直接结束验证\n"
+                            f"\n失败片段:\n{failure_excerpt}"
+                        )
                         if fail_count >= 3:
                             logger.warning(f"[{self.name}] Tool call failed {fail_count} times: {tool_call_key}")
                             observation += f"\n\n⚠️ **系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
                             observation += "1. 尝试使用不同的参数（如指定较小的行范围）\n"
                             observation += "2. 使用 search_code 工具定位关键代码片段\n"
-                            observation += "3. 跳过此发现的验证，继续验证其他发现\n"
-                            observation += "4. 如果已有足够验证结果，直接输出 Final Answer"
+                            observation += "3. 切换其他可用工具进行等价验证（例如 extract_function/run_code/read_file）\n"
+                            observation += "4. 继续当前漏洞验证，不要直接结束整个验证流程"
                             self._failed_tool_calls[tool_call_key] = 0
                     else:
                         if tool_call_key in self._failed_tool_calls:
                             del self._failed_tool_calls[tool_call_key]
+                        if tool_call_key in self._tool_last_error:
+                            del self._tool_last_error[tool_call_key]
 
                     if self.is_cancelled:
                         logger.info(f"[{self.name}] Cancelled after tool execution")
