@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "codex": {
+      "source": "oil-oil/codex",
+      "sourceType": "github",
+      "computedHash": "130b41d2c76447cbccebc922cd0d566c085597a21a19f2c4ac2614e68594e142"
+    },
+    "gemini-designer": {
+      "source": "oil-oil/gemini-designer",
+      "sourceType": "github",
+      "computedHash": "6ae1bcb7d6fc5b678a62b48d7c935a9b2258b38ab36203d560a38b113832c991"
+    }
+  }
+}

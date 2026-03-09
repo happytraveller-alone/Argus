@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from ..agents.orchestrator import OrchestratorAgent
 from ..agents.base import AgentResult
 from .engine import AuditWorkflowEngine
-from .models import WorkflowPhase, WorkflowState
+from .models import WorkflowPhase, WorkflowState, WorkflowConfig
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
         tracer=None,
         recon_queue_service: Optional[Any] = None,
         vuln_queue_service: Optional[Any] = None,
+        workflow_config: Optional[WorkflowConfig] = None,
     ) -> None:
         """
         Args:
@@ -65,6 +66,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
                                    若为 None，则回退到 LLM-driven 模式（兼容旧行为）。
             vuln_queue_service:    InMemoryVulnerabilityQueue / RedisVulnerabilityQueue 实例。
                                    若为 None，则回退到 LLM-driven 模式。
+            workflow_config:       Workflow 配置（控制并行化行为）。
         """
         super().__init__(
             llm_service=llm_service,
@@ -75,6 +77,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
         )
         self._recon_queue_service = recon_queue_service
         self._vuln_queue_service = vuln_queue_service
+        self._workflow_config = workflow_config or WorkflowConfig()
 
     # ------------------------------------------------------------------
     # 核心入口：覆盖父类 run()
@@ -134,6 +137,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
             vuln_queue_service=self._vuln_queue_service,
             task_id=task_id,
             orchestrator=self,
+            workflow_config=self._workflow_config,
         )
 
         workflow_state: WorkflowState = await engine.run(

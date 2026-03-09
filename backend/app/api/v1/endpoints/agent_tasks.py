@@ -2463,6 +2463,7 @@ async def _execute_agent_task(task_id: str):
     """
     from app.services.agent.agents import OrchestratorAgent, ReconAgent, AnalysisAgent, VerificationAgent
     from app.services.agent.workflow import WorkflowOrchestratorAgent
+    from app.services.agent.workflow.models import WorkflowConfig
     from app.services.agent.event_manager import EventManager, AgentEventEmitter
     from app.services.llm.service import LLMService, LLMConfigError
     from app.services.agent.core import agent_registry
@@ -2875,6 +2876,15 @@ async def _execute_agent_task(task_id: str):
                 if hasattr(agent, "set_mcp_runtime"):
                     agent.set_mcp_runtime(mcp_runtime)
 
+            # 创建 Workflow 配置（从 settings 读取）
+            from app.core.config import settings
+            workflow_config = WorkflowConfig(
+                enable_parallel_analysis=settings.ENABLE_PARALLEL_ANALYSIS,
+                enable_parallel_verification=settings.ENABLE_PARALLEL_VERIFICATION,
+                analysis_max_workers=settings.ANALYSIS_MAX_WORKERS,
+                verification_max_workers=settings.VERIFICATION_MAX_WORKERS,
+            )
+
             # 创建 Orchestrator Agent（使用确定性 Workflow 版本，注入两个队列服务）
             orchestrator = WorkflowOrchestratorAgent(
                 llm_service=llm_service,
@@ -2887,6 +2897,7 @@ async def _execute_agent_task(task_id: str):
                 },
                 recon_queue_service=recon_queue_service,
                 vuln_queue_service=queue_service,
+                workflow_config=workflow_config,
             )
             if isinstance(getattr(orchestrator.config, "metadata", None), dict):
                 orchestrator.config.metadata.update(audit_runtime_metadata)

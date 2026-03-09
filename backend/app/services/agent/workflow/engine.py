@@ -17,8 +17,9 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from .models import WorkflowPhase, WorkflowState, WorkflowStepRecord
+from .models import WorkflowPhase, WorkflowState, WorkflowStepRecord, WorkflowConfig
 from .memory_monitor import MemoryMonitor
+from .parallel_executor import ParallelPhaseExecutor
 
 if TYPE_CHECKING:
     from ..agents.orchestrator import OrchestratorAgent
@@ -49,6 +50,7 @@ class AuditWorkflowEngine:
         vuln_queue_service: Any,
         task_id: str,
         orchestrator: "OrchestratorAgent",
+        workflow_config: Optional[WorkflowConfig] = None,
     ) -> None:
         """
         Args:
@@ -56,15 +58,40 @@ class AuditWorkflowEngine:
             vuln_queue_service:  InMemoryVulnerabilityQueue 或 RedisVulnerabilityQueue 实例。
             task_id:             当前审计任务 ID（队列 key 隔离）。
             orchestrator:        父 OrchestratorAgent 实例，用于调用 _dispatch_agent 等方法。
+            workflow_config:     Workflow 配置（控制并行化行为）。
         """
         self.recon_queue = recon_queue_service
         self.vuln_queue = vuln_queue_service
         self.task_id = task_id
         self.orchestrator = orchestrator
-        
+        self.workflow_config = workflow_config or WorkflowConfig()
+
         # 🔥 内存监控
         self.memory_monitor = MemoryMonitor()
         self.enable_memory_monitoring = True  # 可配置的监控开关
+
+        # 🔥 初始化并行执行器
+        self.analysis_executor = ParallelPhaseExecutor(
+            orchestrator=orchestrator,
+            agent_type="analysis",
+            max_workers=self.workflow_config.analysis_max_workers,
+            enable_parallel=self.workflow_config.should_parallelize_analysis,
+        )
+
+        self.verification_executor = ParallelPhaseExecutor(
+            orchestrator=orchestrator,
+            agent_type="verification",
+            max_workers=self.workflow_config.verification_max_workers,
+            enable_parallel=self.workflow_config.should_parallelize_verification,
+        )
+
+        logger.info(
+            f"[WorkflowEngine] Initialized with parallel config: "
+            f"analysis_workers={self.workflow_config.analysis_max_workers} "
+            f"(enabled={self.workflow_config.should_parallelize_analysis}), "
+            f"verification_workers={self.workflow_config.verification_max_workers} "
+            f"(enabled={self.workflow_config.should_parallelize_verification})"
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # 公开入口
@@ -596,209 +623,40 @@ class AuditWorkflowEngine:
 
     async def _run_analysis_phase(self, state: WorkflowState, task_id: str) -> None:
         """
-        从 Recon 风险点队列逐条取出风险点，每取一条就调度一次 Analysis Agent。
-        队列取空后退出。
+        从 Recon 风险点队列逐条取出风险点，调度 Analysis Agent。
+
+        根据配置选择并行或串行模式：
+        - 并行模式：使用 ParallelPhaseExecutor 创建 worker 池
+        - 串行模式：保留原有 while 循环逻辑（fallback）
         """
-        orc = self.orchestrator
-        iteration = 0
-
-        while True:
-            if orc.is_cancelled:
-                break
-
-            risk_point = self.recon_queue.dequeue(task_id)
-            if risk_point is None:
-                logger.info(
-                    "[WorkflowEngine] Recon risk queue drained at iteration %s", iteration
-                )
-                break
-
-            iteration += 1
-            state.analysis_risk_points_processed += 1
-            state.total_iterations += 1
-
-            fp_repr = (
-                f"{risk_point.get('file_path', '')}:{risk_point.get('line_start', '')}"
-            )
-            await orc.emit_event(
-                "info",
-                f"🔍 [Workflow] Analysis 第 {iteration} 轮：风险点 {fp_repr}",
-            )
-            
-            # 🔥 记录 Analysis 迭代前的内存
-            if self.enable_memory_monitoring:
-                self.memory_monitor.take_snapshot(phase="analysis", iteration=iteration, agent_name="analysis")
-
-            step_start = time.time()
-            params = {
-                "agent": "analysis",
-                "task": f"针对风险点 {fp_repr} 进行深度代码审计",
-                "risk_point": risk_point,
-                "context": json.dumps(risk_point, ensure_ascii=False),
-            }
-
-            # 通知 orchestrator 当前注入的风险点（用于其内部 injection 逻辑）
-            orc._last_recon_risk_point = risk_point
-
-            try:
-                await orc._dispatch_agent(params)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.error(
-                    "[WorkflowEngine] Analysis dispatch failed for %s: %s", fp_repr, exc
-                )
-            finally:
-                orc._last_recon_risk_point = None
-
-            duration_ms = int((time.time() - step_start) * 1000)
-            analysis_result = orc._agent_results.get("analysis", {})
-            analysis_success = bool(analysis_result.get("_run_success"))
-
-            state.step_records.append(
-                WorkflowStepRecord(
-                    phase=WorkflowPhase.ANALYSIS,
-                    agent="analysis",
-                    injected_context=risk_point,
-                    success=analysis_success,
-                    error=None if analysis_success else analysis_result.get("_run_error"),
-                    findings_count=len(orc._all_findings),
-                    duration_ms=duration_ms,
-                )
-            )
-            logger.info(
-                "[WorkflowEngine] Analysis iteration %s done: risk_point=%s, success=%s, cumulative_findings=%s",
-                iteration,
-                fp_repr,
-                analysis_success,
-                len(orc._all_findings),
-            )
-            
-            # 🔥 清理 Analysis Agent 的会话内存，实现任务级隔离
-            analysis_agent = orc.sub_agents.get("analysis")
-            if analysis_agent:
-                analysis_agent.reset_session_memory()
-                logger.debug(
-                    "[WorkflowEngine] Analysis Agent session memory reset after iteration %s",
-                    iteration,
-                )
+        # 委托给并行执行器（内部会根据配置选择并行或串行）
+        await self.analysis_executor.run_parallel_analysis(
+            state=state,
+            task_id=task_id,
+            recon_queue=self.recon_queue,
+        )
 
         logger.info(
             "[WorkflowEngine] Analysis phase done: %s risk point(s) processed, cumulative findings=%s",
             state.analysis_risk_points_processed,
-            len(orc._all_findings),
+            len(self.orchestrator._all_findings),
         )
 
     async def _run_verification_phase(self, state: WorkflowState, task_id: str) -> None:
         """
-        从漏洞验证队列（VulnerabilityQueue）逐条取出漏洞，每取一条调度 Verification Agent。
-        遵循「队列权威」规则：队列中所有漏洞必须被验证，不得跳过。
+        从漏洞验证队列逐条取出漏洞，调度 Verification Agent。
+
+        根据配置选择并行或串行模式。
         """
-        orc = self.orchestrator
-        iteration = 0
-
-        while True:
-            if orc.is_cancelled:
-                break
-
-            finding = self.vuln_queue.dequeue_finding(task_id)
-            if finding is None:
-                logger.info(
-                    "[WorkflowEngine] Vulnerability queue drained at iteration %s", iteration
-                )
-                break
-
-            iteration += 1
-            state.vuln_queue_findings_processed += 1
-            state.total_iterations += 1
-
-            # 指纹去重：已验证过的跳过
-            fingerprint = orc._build_queue_fingerprint(finding)
-            if fingerprint and fingerprint in orc._verified_queue_fingerprints:
-                await orc.emit_event(
-                    "info",
-                    f"⏭️ [Workflow] Verification 跳过重复指纹: {fingerprint[:60]}",
-                )
-                state.step_records.append(
-                    WorkflowStepRecord(
-                        phase=WorkflowPhase.VERIFICATION,
-                        agent="verification",
-                        injected_context=finding,
-                        success=True,
-                        error=None,
-                        findings_count=len(orc._all_findings),
-                        duration_ms=0,
-                    )
-                )
-                continue
-
-            title_repr = finding.get("title") or finding.get("file_path", "unknown")
-            await orc.emit_event(
-                "info",
-                f"🛡️ [Workflow] Verification 第 {iteration} 轮：{title_repr}",
-            )
-            
-            # 🔥 记录 Verification 迭代前的内存
-            if self.enable_memory_monitoring:
-                self.memory_monitor.take_snapshot(phase="verification", iteration=iteration, agent_name="verification")
-
-            step_start = time.time()
-            params = {
-                "agent": "verification",
-                "task": f"验证漏洞：{title_repr}",
-                "finding": finding,
-                "context": json.dumps(finding, ensure_ascii=False),
-            }
-
-            try:
-                await orc._dispatch_agent(params)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.error(
-                    "[WorkflowEngine] Verification dispatch failed for %s: %s",
-                    title_repr,
-                    exc,
-                )
-
-            duration_ms = int((time.time() - step_start) * 1000)
-            verification_result = orc._agent_results.get("verification", {})
-            verification_success = bool(verification_result.get("_run_success"))
-
-            # 验证成功后记录指纹，避免重复验证
-            if verification_success and fingerprint:
-                orc._verified_queue_fingerprints.add(fingerprint)
-
-            state.step_records.append(
-                WorkflowStepRecord(
-                    phase=WorkflowPhase.VERIFICATION,
-                    agent="verification",
-                    injected_context=finding,
-                    success=verification_success,
-                    error=None if verification_success else verification_result.get("_run_error"),
-                    findings_count=len(orc._all_findings),
-                    duration_ms=duration_ms,
-                )
-            )
-            logger.info(
-                "[WorkflowEngine] Verification iteration %s done: finding=%s, success=%s, cumulative_findings=%s",
-                iteration,
-                title_repr,
-                verification_success,
-                len(orc._all_findings),
-            )
-            
-            # 🔥 清理 Verification Agent 的会话内存，实现任务级隔离
-            verification_agent = orc.sub_agents.get("verification")
-            if verification_agent:
-                verification_agent.reset_session_memory()
-                logger.debug(
-                    "[WorkflowEngine] Verification Agent session memory reset after iteration %s",
-                    iteration,
-                )
+        # 委托给并行执行器（内部会根据配置选择并行或串行）
+        await self.verification_executor.run_parallel_verification(
+            state=state,
+            task_id=task_id,
+            vuln_queue=self.vuln_queue,
+        )
 
         logger.info(
             "[WorkflowEngine] Verification phase done: %s finding(s) processed, final findings=%s",
             state.vuln_queue_findings_processed,
-            len(orc._all_findings),
+            len(self.orchestrator._all_findings),
         )

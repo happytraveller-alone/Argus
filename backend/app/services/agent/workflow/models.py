@@ -9,6 +9,29 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
 
+@dataclass
+class WorkflowConfig:
+    """
+    Workflow 执行配置
+
+    控制并行化行为和 worker 数量
+    """
+    enable_parallel_analysis: bool = True
+    enable_parallel_verification: bool = True
+    analysis_max_workers: int = 5
+    verification_max_workers: int = 3
+
+    @property
+    def should_parallelize_analysis(self) -> bool:
+        """是否应该并行化 Analysis（workers > 1 且启用）"""
+        return self.enable_parallel_analysis and self.analysis_max_workers > 1
+
+    @property
+    def should_parallelize_verification(self) -> bool:
+        """是否应该并行化 Verification（workers > 1 且启用）"""
+        return self.enable_parallel_verification and self.verification_max_workers > 1
+
+
 class WorkflowPhase(Enum):
     """审计 Workflow 阶段"""
     INIT = "init"

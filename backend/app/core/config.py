@@ -133,6 +133,12 @@ class Settings(BaseSettings):
     AGENT_MAX_ITERATIONS: int = 50  # Agent 最大迭代次数
     AGENT_TOKEN_BUDGET: int = 100000  # Agent Token 预算
     AGENT_TIMEOUT_SECONDS: int = 1800  # Agent 超时时间（30分钟）
+
+    # Agent 并发配置
+    ENABLE_PARALLEL_ANALYSIS: bool = True  # 是否启用 Analysis 阶段并行处理
+    ENABLE_PARALLEL_VERIFICATION: bool = True  # 是否启用 Verification 阶段并行处理
+    ANALYSIS_MAX_WORKERS: int = 5  # Analysis 阶段最大 worker 数量
+    VERIFICATION_MAX_WORKERS: int = 3  # Verification 阶段最大 worker 数量
     
     # 沙箱配置（必须）
     SANDBOX_IMAGE: str = "vulhunter/sandbox:latest"  # 沙箱 Docker 镜像
