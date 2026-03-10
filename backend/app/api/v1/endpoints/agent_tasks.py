@@ -2644,7 +2644,7 @@ async def _execute_agent_task(task_id: str):
                 logger.info(f"[Cancel] Task {task_id} cancelled after project preparation")
                 raise asyncio.CancelledError("任务已取消")
 
-            await event_emitter.emit_info("🧠 QMD 任务知识库已移除，跳过任务内知识库初始化")
+            # await event_emitter.emit_info("🧠 QMD 任务知识库已移除，跳过任务内知识库初始化")
 
             # 创建 LLM 服务
             await _set_current_step("正在校验 LLM 配置")
