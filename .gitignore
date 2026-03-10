@@ -196,6 +196,7 @@ backend/data/vector_db/
 
 # custom
 commit_message.txt
+.worktrees/
 
 skills/
 !backend/app/services/agent/skills/
