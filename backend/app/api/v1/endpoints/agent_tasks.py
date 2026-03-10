@@ -2461,7 +2461,7 @@ async def _execute_agent_task(task_id: str):
     
     架构：OrchestratorAgent 作为大脑，动态调度子 Agent
     """
-    from app.services.agent.agents import OrchestratorAgent, ReconAgent, AnalysisAgent, VerificationAgent
+    from app.services.agent.agents import OrchestratorAgent, ReconAgent, AnalysisAgent, VerificationAgent, ReportAgent
     from app.services.agent.workflow import WorkflowOrchestratorAgent
     from app.services.agent.workflow.models import WorkflowConfig
     from app.services.agent.event_manager import EventManager, AgentEventEmitter
@@ -2862,6 +2862,12 @@ async def _execute_agent_task(task_id: str):
                 event_emitter=event_emitter,
             )
 
+            report_agent = ReportAgent(
+                llm_service=llm_service,
+                tools=tools.get("report", {}),
+                event_emitter=event_emitter,
+            )
+
             audit_runtime_metadata = {
                 "smart_audit_mode": True,
                 "audit_mode": "smart_audit",
@@ -2870,7 +2876,7 @@ async def _execute_agent_task(task_id: str):
                 "read_scope_policy": "strict_anchor",
             }
 
-            for agent in (recon_agent, analysis_agent, verification_agent):
+            for agent in (recon_agent, analysis_agent, verification_agent, report_agent):
                 if isinstance(getattr(agent.config, "metadata", None), dict):
                     agent.config.metadata.update(audit_runtime_metadata)
                 if hasattr(agent, "set_mcp_runtime"):
@@ -2894,6 +2900,7 @@ async def _execute_agent_task(task_id: str):
                     "recon": recon_agent,
                     "analysis": analysis_agent,
                     "verification": verification_agent,
+                    "report": report_agent,
                 },
                 recon_queue_service=recon_queue_service,
                 vuln_queue_service=queue_service,
@@ -2914,6 +2921,7 @@ async def _execute_agent_task(task_id: str):
             recon_agent.set_cancel_callback(check_global_cancel)
             analysis_agent.set_cancel_callback(check_global_cancel)
             verification_agent.set_cancel_callback(check_global_cancel)
+            report_agent.set_cancel_callback(check_global_cancel)
 
             # 注册到全局
             _running_orchestrators[task_id] = orchestrator
@@ -3436,7 +3444,7 @@ async def _execute_agent_task(task_id: str):
                         )
 
                         # Sub agents
-                        for agent_key in ("recon", "analysis", "verification"):
+                        for agent_key in ("recon", "analysis", "verification", "report"):
                             data = agent_payloads.get(agent_key)
                             if not isinstance(data, dict):
                                 continue
@@ -3479,7 +3487,7 @@ async def _execute_agent_task(task_id: str):
                         "findings_count": len(findings or []),
                     },
                 )
-                for agent_key in ("recon", "analysis", "verification"):
+                for agent_key in ("recon", "analysis", "verification", "report"):
                     payload = agent_payloads.get(agent_key)
                     if not isinstance(payload, dict):
                         continue
@@ -4289,6 +4297,13 @@ async def _initialize_tools(
         "analysis": analysis_tools,
         "verification": verification_tools,
         "orchestrator": orchestrator_tools,
+        "report": {
+            "read_file": FileReadTool(project_root, exclude_patterns, target_files),
+            "list_files": ListFilesTool(project_root, exclude_patterns, target_files),
+            "search_code": FileSearchTool(project_root, exclude_patterns, target_files),
+            "extract_function": ExtractFunctionTool(project_root=project_root),
+            "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
+        },
     }
 
 

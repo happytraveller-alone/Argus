@@ -108,7 +108,7 @@ class AuditWorkflowEngine:
         执行完整审计 Workflow，返回最终 WorkflowState。
 
         Workflow 阶段顺序：
-            INIT → RECON → ANALYSIS（per risk point）→ VERIFICATION（per finding）→ COMPLETE
+            INIT → RECON → ANALYSIS（per risk point）→ VERIFICATION（per finding）→ REPORT（per confirmed/likely）→ COMPLETE
         """
         state = WorkflowState()
         orc = self.orchestrator
@@ -203,6 +203,19 @@ class AuditWorkflowEngine:
             # 🔥 记录 Verification 完成后的内存
             if self.enable_memory_monitoring:
                 self.memory_monitor.take_snapshot(phase="verification_done", agent_name="verification")
+
+            if orc.is_cancelled:
+                state.phase = WorkflowPhase.CANCELLED
+                return state
+
+            # ── 阶段 4: REPORT（为每条 confirmed/likely 漏洞生成详情报告）──
+            state.phase = WorkflowPhase.REPORT
+            await orc.emit_event("info", "📝 [Workflow] 开始 Report 阶段，生成漏洞详情报告")
+            await self._run_report_phase(state, project_info, config)
+
+            # 🔥 记录 Report 完成后的内存
+            if self.enable_memory_monitoring:
+                self.memory_monitor.take_snapshot(phase="report_done", agent_name="report")
 
             if orc.is_cancelled:
                 state.phase = WorkflowPhase.CANCELLED
@@ -659,4 +672,112 @@ class AuditWorkflowEngine:
             "[WorkflowEngine] Verification phase done: %s finding(s) processed, final findings=%s",
             state.vuln_queue_findings_processed,
             len(self.orchestrator._all_findings),
+        )
+
+    async def _run_report_phase(
+        self,
+        state: WorkflowState,
+        project_info: Dict[str, Any],
+        config: Dict[str, Any],
+    ) -> None:
+        """
+        为每条 confirmed/likely 漏洞调度 Report Agent，生成结构化 Markdown 详情报告。
+
+        报告写入：
+        - finding["vulnerability_report"]（同步修改 orc._all_findings 中的对应项）
+        - state.finding_reports[finding_title]（汇总）
+        """
+        orc = self.orchestrator
+        report_agent = orc.sub_agents.get("report")
+
+        if report_agent is None:
+            logger.info("[WorkflowEngine] No report agent registered, skipping Report phase")
+            await orc.emit_event("info", "⏭️ [Workflow] 未配置 Report Agent，跳过报告生成阶段")
+            return
+
+        # 只为 confirmed 或 likely 的 findings 生成报告
+        valid_verdicts = {"confirmed", "likely"}
+        reportable = [
+            f for f in orc._all_findings
+            if isinstance(f, dict) and str(f.get("verdict") or "").lower() in valid_verdicts
+        ]
+
+        if not reportable:
+            await orc.emit_event(
+                "info",
+                "⏭️ [Workflow] 无 confirmed/likely 漏洞，跳过报告生成阶段",
+            )
+            logger.info("[WorkflowEngine] Report phase skipped: no reportable findings")
+            return
+
+        state.report_findings_total = len(reportable)
+        await orc.emit_event(
+            "info",
+            f"📝 [Workflow] Report 阶段：共 {len(reportable)} 条漏洞需要生成报告",
+        )
+
+        for idx, finding in enumerate(reportable, start=1):
+            if orc.is_cancelled:
+                break
+
+            title = finding.get("title") or f"漏洞 #{idx}"
+            await orc.emit_event(
+                "info",
+                f"📝 [Workflow] Report [{idx}/{len(reportable)}]：{title}",
+            )
+
+            step_start = time.time()
+            report_text = ""
+            success = False
+            error_msg = None
+
+            try:
+                result = await report_agent.run(
+                    {
+                        "finding": finding,
+                        "project_info": project_info,
+                        "config": config,
+                    }
+                )
+                if result.success and result.data:
+                    report_text = result.data.get("vulnerability_report") or ""
+                    success = bool(report_text)
+                else:
+                    error_msg = result.error or "Report Agent 返回空结果"
+                    logger.warning("[WorkflowEngine] Report failed for '%s': %s", title, error_msg)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                error_msg = str(exc)
+                logger.exception("[WorkflowEngine] Report phase error for '%s': %s", title, exc)
+
+            duration_ms = int((time.time() - step_start) * 1000)
+
+            if report_text:
+                # 写回 orc._all_findings 中对应 finding
+                finding["vulnerability_report"] = report_text
+                # 汇总到 state
+                state.finding_reports[title] = report_text
+                state.report_findings_processed += 1
+
+            state.step_records.append(
+                WorkflowStepRecord(
+                    phase=WorkflowPhase.REPORT,
+                    agent="report",
+                    injected_context={"title": title, "verdict": finding.get("verdict")},
+                    success=success,
+                    error=error_msg,
+                    findings_count=len(orc._all_findings),
+                    duration_ms=duration_ms,
+                )
+            )
+
+        await orc.emit_event(
+            "info",
+            f"✅ [Workflow] Report 阶段完成：{state.report_findings_processed}/{state.report_findings_total} 条报告已生成",
+        )
+        logger.info(
+            "[WorkflowEngine] Report phase done: %s/%s reports generated",
+            state.report_findings_processed,
+            state.report_findings_total,
         )

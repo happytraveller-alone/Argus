@@ -127,6 +127,7 @@ class AgentType(Enum):
     RECON = "recon"
     ANALYSIS = "analysis"
     VERIFICATION = "verification"
+    REPORT = "report"
 
 
 class AgentPattern(Enum):

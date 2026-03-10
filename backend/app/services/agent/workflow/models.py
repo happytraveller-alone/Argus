@@ -38,6 +38,7 @@ class WorkflowPhase(Enum):
     RECON = "recon"
     ANALYSIS = "analysis"
     VERIFICATION = "verification"
+    REPORT = "report"
     COMPLETE = "complete"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -92,6 +93,13 @@ class WorkflowState:
     # 所有收集到的发现
     all_findings: List[Dict[str, Any]] = field(default_factory=list)
 
+    # Report 阶段：每条已验证漏洞的详情报告（finding title -> Markdown 报告内容）
+    finding_reports: Dict[str, str] = field(default_factory=dict)
+
+    # Report 阶段统计
+    report_findings_total: int = 0
+    report_findings_processed: int = 0
+
     # 每步调度记录
     step_records: List[WorkflowStepRecord] = field(default_factory=list)
 
@@ -113,6 +121,8 @@ class WorkflowState:
             "vuln_queue_findings_total": self.vuln_queue_findings_total,
             "vuln_queue_findings_processed": self.vuln_queue_findings_processed,
             "all_findings_count": len(self.all_findings),
+            "report_findings_total": self.report_findings_total,
+            "report_findings_processed": self.report_findings_processed,
             "step_records": [r.to_dict() for r in self.step_records],
             "error": self.error,
             "total_iterations": self.total_iterations,

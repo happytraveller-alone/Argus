@@ -13,6 +13,7 @@ from .recon import ReconAgent
 from .analysis import AnalysisAgent
 from .verification import VerificationAgent
 from .business_logic_scan import BusinessLogicScanAgent
+from .report import ReportAgent
 
 __all__ = [
     "BaseAgent",
@@ -24,5 +25,6 @@ __all__ = [
     "AnalysisAgent",
     "VerificationAgent",
     "BusinessLogicScanAgent",
+    "ReportAgent",
 ]
 
