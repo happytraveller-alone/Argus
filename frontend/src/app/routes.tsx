@@ -1,14 +1,14 @@
 import { lazy } from "react";
 import type { ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import type { I18nKey } from "@/shared/i18n";
+import { buildOpengrepRulesRedirectPath } from "@/shared/utils/legacyRouteRedirect";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const AgentAudit = lazy(() => import("@/pages/AgentAudit"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
-const OpengrepRules = lazy(() => import("@/pages/OpengrepRules"));
 const StaticAnalysis = lazy(() => import("@/pages/StaticAnalysis"));
 const StaticFindingDetail = lazy(() => import("@/pages/StaticFindingDetail"));
 const FindingDetail = lazy(() => import("@/pages/FindingDetail"));
@@ -22,6 +22,16 @@ const ScanConfigExternalTools = lazy(
 const TaskManagementStatic = lazy(() => import("@/pages/TaskManagementStatic"));
 const TaskManagementIntelligent = lazy(() => import("@/pages/TaskManagementIntelligent"));
 const TaskManagementHybrid = lazy(() => import("@/pages/TaskManagementHybrid"));
+
+function LegacyOpengrepRulesRedirect() {
+	const location = useLocation();
+	return (
+		<Navigate
+			to={buildOpengrepRulesRedirectPath(location.search)}
+			replace
+		/>
+	);
+}
 
 export interface RouteConfig {
     name: string;
@@ -84,14 +94,12 @@ const routes: RouteConfig[] = [
         navParentPath: "/projects",
     },
     {
-        name: "扫描规则",
+        name: "扫描规则重定向",
         nameKey: "route.scanRules",
         path: "/opengrep-rules",
-        element: <OpengrepRules />,
-        visible: true,
+        element: <LegacyOpengrepRulesRedirect />,
+        visible: false,
         navVisible: false,
-        navGroup: "main",
-        navOrder: 40,
     },
     {
         name: "任务管理重定向",

@@ -37,9 +37,9 @@ test("high-impact frontend copy uses 扫描 terminology", () => {
 			mustExclude: ["创建审计", "静态审计", "智能审计"],
 		},
 		{
-			file: "src/pages/project-detail/components/ProjectTasksTab.tsx",
-			mustInclude: ["扫描任务", "暂无扫描任务"],
-			mustExclude: ["审计任务", "暂无审计任务"],
+			file: "src/pages/ProjectDetail.tsx",
+			mustInclude: ["扫描任务已创建", "静态扫描", "智能扫描", "启动扫描"],
+			mustExclude: ["审计任务已创建", "静态审计", "智能审计", "启动审计"],
 		},
 		{
 			file: "src/pages/intelligent-scan/SkillToolsPanel.tsx",

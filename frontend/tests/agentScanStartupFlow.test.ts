@@ -14,7 +14,6 @@ test("scan creation dialogs no longer block on frontend LLM preflight", () => {
 	const cases = [
 		"src/components/scan/CreateProjectScanDialog.tsx",
 		"src/components/scan/CreateScanTaskDialog.tsx",
-		"src/components/agent/CreateAgentTaskDialog.tsx",
 	] as const;
 
 	for (const file of cases) {
@@ -28,7 +27,6 @@ test("scan creation dialogs still navigate to task detail after task creation", 
 	const cases = [
 		"src/components/scan/CreateProjectScanDialog.tsx",
 		"src/components/scan/CreateScanTaskDialog.tsx",
-		"src/components/agent/CreateAgentTaskDialog.tsx",
 	] as const;
 
 	for (const file of cases) {

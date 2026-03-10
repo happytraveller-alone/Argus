@@ -136,7 +136,7 @@ ProjectMember, User, UserConfig, ProjectInfo, PromptTemplate, AuditRuleSet/Audit
 | 静态扫描任务 | `/static-tasks/tasks` + `/static-tasks/gitleaks/*` | `shared/api/opengrep.ts`、`shared/api/gitleaks.ts` | StaticAnalysis、Dashboard、ProjectDetail、CreateTaskDialog |
 | 静态规则库 | `/static-tasks/rules` | `shared/api/opengrep.ts` | OpengrepRules、CreateTaskDialog |
 | 审计规则集 | `/rules` | `shared/api/rules.ts` | Dashboard（统计）、配置页 |
-| 提示词模板 | `/prompts` | `shared/api/prompts.ts` | AgentSettingsPanel、Dashboard（统计） |
+| 提示词模板 | `/prompts` | `shared/api/prompts.ts` | 暂无活跃前端入口、Dashboard（统计） |
 | 系统配置 | `/config`、`/embedding` | `shared/api/database.ts` + 局部 `apiClient` | SystemConfig、EmbeddingConfig |
 | 数据库管理 | `/database` | `shared/api/database.ts` | DatabaseManager（AdminDashboard） |
 | SSH 能力 | `/ssh-keys` | `shared/api/sshKeys.ts` | 项目接入/配置流程 |
