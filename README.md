@@ -131,6 +131,39 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.cn.yml up -d
 ```
 
+### Windows 用户特别说明
+
+Windows 用户可以使用以下方式启动：
+
+#### 方式 1：PowerShell（推荐，支持自动镜像选择）
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
+```
+
+#### 方式 2：批处理文件（简单快速）
+```cmd
+scripts\compose-up-with-fallback.bat
+```
+
+#### 方式 3：直接使用 docker compose
+```cmd
+docker compose up -d --build
+```
+
+**注意**：
+- 确保 Docker Desktop for Windows 已安装并正在运行
+- PowerShell 脚本支持自动镜像源选择和延迟测试
+- 批处理文件使用默认镜像源（中国镜像），不进行测速
+- 详细说明请参考：`scripts/README-COMPOSE.md`
+
+**环境变量配置示例（PowerShell）**：
+```powershell
+$env:DOCKERHUB_LIBRARY_MIRROR="docker.m.daocloud.io/library"
+$env:GHCR_REGISTRY="ghcr.nju.edu.cn"
+powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
+```
+
+
 ### 4) 访问服务
 
 - 前端：http://localhost:3000
