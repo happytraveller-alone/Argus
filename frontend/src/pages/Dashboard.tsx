@@ -444,13 +444,9 @@ export default function Dashboard() {
 				<div className="cyber-card p-4">
 					<div className="flex items-center justify-between">
 						<div>
-							<p className="stat-label">{t("dashboard.supportedModelProviders")}</p>
-							<p className="stat-value">{SUPPORTED_MODEL_PROVIDERS_COUNT}</p>
-							<p className="text-sm text-sky-400 mt-1 flex items-center gap-1">
-								<span className="w-2 h-2 rounded-full bg-sky-400" />
-								{t("dashboard.fixedCountHint")}
-							</p>
-						</div>
+								<p className="stat-label">{t("dashboard.supportedModelProviders")}</p>
+								<p className="stat-value">{SUPPORTED_MODEL_PROVIDERS_COUNT}</p>
+							</div>
 						<div className="stat-icon text-sky-400">
 							<Bot className="w-6 h-6" />
 						</div>
@@ -460,13 +456,9 @@ export default function Dashboard() {
 				<div className="cyber-card p-4">
 					<div className="flex items-center justify-between">
 						<div>
-							<p className="stat-label">{t("dashboard.supportedExternalToolCalls")}</p>
-							<p className="stat-value">{SUPPORTED_EXTERNAL_TOOL_CALLS_COUNT}</p>
-							<p className="text-sm text-emerald-400 mt-1 flex items-center gap-1">
-								<span className="w-2 h-2 rounded-full bg-emerald-400" />
-								{t("dashboard.fixedCountHint")}
-							</p>
-						</div>
+								<p className="stat-label">{t("dashboard.supportedExternalToolCalls")}</p>
+								<p className="stat-value">{SUPPORTED_EXTERNAL_TOOL_CALLS_COUNT}</p>
+							</div>
 						<div className="stat-icon text-emerald-400">
 							<Wrench className="w-6 h-6" />
 						</div>
@@ -476,13 +468,9 @@ export default function Dashboard() {
 				<div className="cyber-card p-4">
 					<div className="flex items-center justify-between">
 						<div>
-							<p className="stat-label">{t("dashboard.supportedVulnerabilityTypes")}</p>
-							<p className="stat-value">{SUPPORTED_VULNERABILITY_TYPES_COUNT}</p>
-							<p className="text-sm text-violet-400 mt-1 flex items-center gap-1">
-								<span className="w-2 h-2 rounded-full bg-violet-400" />
-								{t("dashboard.vulnerabilityTypesHint")}
-							</p>
-						</div>
+								<p className="stat-label">{t("dashboard.supportedVulnerabilityTypes")}</p>
+								<p className="stat-value">{SUPPORTED_VULNERABILITY_TYPES_COUNT}</p>
+							</div>
 						<div className="stat-icon text-violet-400">
 							<ShieldAlert className="w-6 h-6" />
 						</div>

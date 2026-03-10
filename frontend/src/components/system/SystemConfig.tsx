@@ -10,8 +10,10 @@ import {
 	useRef,
 	useState,
 	type Dispatch,
+	type CSSProperties,
 	type SetStateAction,
 } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/utils/utils";
 import { Input } from "@/components/ui/input";
@@ -37,11 +39,6 @@ import {
 	CommandItem,
 	CommandList,
 } from "@/components/ui/command";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 	AlertCircle,
@@ -723,7 +720,10 @@ function AdvancedConfigDialog(props: {
 
 	return (
 		<Dialog open={props.open} onOpenChange={props.onOpenChange}>
-			<DialogContent className="!w-[min(92vw,980px)] !max-w-none h-[80vh] p-0 gap-0 flex flex-col cyber-dialog border border-border rounded-lg">
+			<DialogContent
+				showCloseButton={false}
+				className="!w-[min(92vw,980px)] !max-w-none h-[80vh] p-0 gap-0 flex flex-col cyber-dialog border border-border rounded-lg"
+			>
 				<DialogHeader className="px-5 py-4 border-b border-border flex-shrink-0 bg-muted">
 					<div className="flex items-center justify-between gap-3">
 						<DialogTitle className="font-mono text-base font-bold uppercase tracking-wider text-foreground">
@@ -856,16 +856,14 @@ export function SystemConfig({
 		reloadConfig,
 	} = sharedDraftState ?? internalDraftState;
 	const [showApiKey, setShowApiKey] = useState(false);
-	const [llmModelSelectValue, setLlmModelSelectValue] =
-		useState<string>("__default__");
 	const [llmModelPopoverOpen, setLlmModelPopoverOpen] = useState(false);
-	const [customModelQuery, setCustomModelQuery] = useState("");
-	const [customSuggestionOpen, setCustomSuggestionOpen] = useState(false);
 	const [testingLLM, setTestingLLM] = useState(false);
 	const [advancedOpen, setAdvancedOpen] = useState(false);
 	const [selectedAdvancedItemId, setSelectedAdvancedItemId] =
 		useState<AdvancedConfigItemId>("llmTimeout");
 	const [fetchingModels, setFetchingModels] = useState(false);
+	const [llmDropdownPanelStyle, setLlmDropdownPanelStyle] =
+		useState<CSSProperties | null>(null);
 	const [onlineModelStatsBySignature, setOnlineModelStatsBySignature] = useState<
 		Record<string, LlmModelStatsCounts>
 	>({});
@@ -877,15 +875,61 @@ export function SystemConfig({
 		debug?: Record<string, unknown>;
 	} | null>(null);
 	const [showDebugInfo, setShowDebugInfo] = useState(true);
-	const llmModelSelectTouchedRef = useRef(false);
 	const llmBaseUrlTouchedRef = useRef(false);
 	const llmMaxTokensTouchedRef = useRef(false);
 	const autoFetchSignatureRef = useRef<string>("");
 	const latestConfigRef = useRef<SystemConfigData | null>(config);
+	const llmModelDropdownAreaRef = useRef<HTMLDivElement | null>(null);
+	const llmModelDropdownPanelRef = useRef<HTMLDivElement | null>(null);
 
 	useEffect(() => {
 		latestConfigRef.current = config;
 	}, [config]);
+
+	useEffect(() => {
+		if (!llmModelPopoverOpen) return;
+		const updateDropdownPosition = () => {
+			const anchor = llmModelDropdownAreaRef.current;
+			if (!anchor) return;
+			const rect = anchor.getBoundingClientRect();
+			const viewportHeight = window.innerHeight;
+			const top = rect.bottom + 6;
+			const panelHeight = Math.max(220, Math.min(340, viewportHeight - top - 12));
+			setLlmDropdownPanelStyle({
+				position: "fixed",
+				left: rect.left,
+				top,
+				width: rect.width,
+				height: panelHeight,
+				maxHeight: panelHeight,
+				zIndex: 80,
+			});
+		};
+
+		const handleMouseDown = (event: MouseEvent) => {
+			const target = event.target as Node | null;
+			if (!target) return;
+			if (llmModelDropdownAreaRef.current?.contains(target)) return;
+			if (llmModelDropdownPanelRef.current?.contains(target)) return;
+			setLlmModelPopoverOpen(false);
+		};
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				setLlmModelPopoverOpen(false);
+			}
+		};
+		updateDropdownPosition();
+		document.addEventListener("mousedown", handleMouseDown);
+		document.addEventListener("keydown", handleKeyDown);
+		window.addEventListener("resize", updateDropdownPosition);
+		window.addEventListener("scroll", updateDropdownPosition, true);
+		return () => {
+			document.removeEventListener("mousedown", handleMouseDown);
+			document.removeEventListener("keydown", handleKeyDown);
+			window.removeEventListener("resize", updateDropdownPosition);
+			window.removeEventListener("scroll", updateDropdownPosition, true);
+		};
+	}, [llmModelPopoverOpen]);
 
 	const tabsGridClass = useMemo(() => {
 		if (sections.length <= 1) return "grid-cols-1";
@@ -969,28 +1013,6 @@ export function SystemConfig({
 			};
 		});
 		setHasChanges(true);
-	};
-
-	const computeLlmModelSelectValue = (
-		model: string,
-		models: string[],
-	): string => {
-		const current = (model || "").trim();
-		if (!current) return "__default__";
-		return models.includes(current) ? current : "__custom__";
-	};
-
-	const resolveDisplayedLlmModelSelectValue = (
-		model: string,
-		models: string[],
-		uiValue: string,
-	): string => {
-		const current = String(model || "").trim();
-		if (!current) return "__default__";
-		if (!models.includes(current)) return "__custom__";
-		if (uiValue === "__custom__") return "__custom__";
-		if (uiValue === "__default__") return current;
-		return models.includes(uiValue) ? uiValue : current;
 	};
 
 	const getProviderInfo = (providerId: string): LLMProviderItem | undefined => {
@@ -1157,11 +1179,7 @@ export function SystemConfig({
 	};
 
 	const handleProviderChange = (newProvider: string) => {
-		const previousConfig = latestConfigRef.current;
 		const defaultModel = getDefaultModelForProvider(newProvider);
-		const currentModel = String(previousConfig?.llmModel || "").trim();
-		const preserveCustomModel =
-			llmModelSelectValue === "__custom__" && currentModel.length > 0;
 		setConfig((prev) => {
 			if (!prev) return prev;
 			const defaultBaseUrl = getDefaultBaseUrlForProvider(newProvider);
@@ -1170,21 +1188,15 @@ export function SystemConfig({
 			return {
 				...prev,
 				llmProvider: newProvider,
-				llmModel:
-					preserveCustomModel ? currentModel : defaultModel || prev.llmModel,
+				llmModel: defaultModel || prev.llmModel,
 				llmBaseUrl: shouldUpdateBaseUrl ? defaultBaseUrl : prev.llmBaseUrl,
 			};
 		});
-		llmModelSelectTouchedRef.current = true;
-		setLlmModelSelectValue(preserveCustomModel ? "__custom__" : "__default__");
-		if (preserveCustomModel) {
-			setCustomModelQuery(currentModel);
-		} else {
-			applyRecommendedMaxTokens(newProvider, defaultModel, {
-				force: false,
-				markChanges: true,
-			});
-		}
+		setLlmModelPopoverOpen(false);
+		applyRecommendedMaxTokens(newProvider, defaultModel, {
+			force: false,
+			markChanges: true,
+		});
 		setHasChanges(true);
 		setLlmTestResult(null);
 	};
@@ -1291,25 +1303,28 @@ export function SystemConfig({
 				}));
 			}
 			const latestModel = String(latestConfig.llmModel || "").trim();
-			const wasCustomInput =
-				llmModelSelectValue === "__custom__" && currentModelBeforeFetch.length > 0;
-			llmModelSelectTouchedRef.current = false;
-			setLlmModelSelectValue(
-				computeLlmModelSelectValue(latestModel, normalizedModels),
-			);
-			if (!wasCustomInput) {
-				const effectiveModel =
-					resolveCurrentModelName(providerId, latestModel) ||
-					result.defaultModel ||
-					getDefaultModelForProvider(providerId);
-				applyRecommendedMaxTokens(providerId, effectiveModel, {
-					force: false,
-					markChanges: true,
-				});
-			}
+			const effectiveModel =
+				resolveCurrentModelName(providerId, latestModel) ||
+				result.defaultModel ||
+				getDefaultModelForProvider(providerId);
+			applyRecommendedMaxTokens(providerId, effectiveModel, {
+				force: false,
+				markChanges: true,
+			});
 			if (!silent) {
 				if (result.success) {
-					toast.success(result.message || "模型列表已更新");
+					const currentModel = String(latestConfig.llmModel || "").trim();
+					const hasCurrentModel = Boolean(currentModel);
+					const matched = hasCurrentModel
+						? normalizedModels.includes(currentModel)
+						: false;
+					if (hasCurrentModel && matched) {
+						toast.success("模型列表已更新，当前输入已匹配可选项");
+					} else if (hasCurrentModel) {
+						toast.success("模型列表已更新，当前输入可继续作为自定义模型");
+					} else {
+						toast.success(result.message || "模型列表已更新");
+					}
 				} else {
 					toast.error(result.message || "模型拉取失败");
 				}
@@ -1356,59 +1371,17 @@ export function SystemConfig({
 		return () => clearTimeout(timer);
 	}, [config?.llmProvider, config?.llmBaseUrl, config?.llmApiKey, llmProvidersFromBackend]);
 
-	useEffect(() => {
-		if (!config) return;
-		const models = getModelsForProvider(config.llmProvider);
-		const currentModel = String(config.llmModel || "").trim();
-		if (!llmModelSelectTouchedRef.current) {
-			setLlmModelSelectValue(
-				resolveDisplayedLlmModelSelectValue(
-					currentModel,
-					models,
-					llmModelSelectValue,
-				),
-			);
-		}
-		if (
-			llmModelSelectValue === "__custom__" ||
-			(currentModel.length > 0 && !models.includes(currentModel))
-		) {
-			setCustomModelQuery(currentModel);
-		}
-	}, [
-		config?.llmModel,
-		config?.llmProvider,
-		llmProvidersFromBackend,
-		fetchedModelsByProvider,
-		llmModelSelectValue,
-	]);
-
 	const handleLlmModelSelect = (value: string) => {
 		if (!config) return;
-		llmModelSelectTouchedRef.current = true;
-		setLlmModelSelectValue(value);
 		const providerId = normalizeLlmProviderId(config.llmProvider);
-		const defaultModel = getDefaultModelForProvider(providerId);
-
-		if (value === "__default__") {
-			updateConfig("llmModel", defaultModel);
-			applyRecommendedMaxTokens(providerId, defaultModel, {
-				force: false,
-				markChanges: true,
-			});
-			return;
-		}
-		if (value === "__custom__") {
-			setCustomModelQuery(String(config.llmModel || ""));
-			setCustomSuggestionOpen(true);
-			return;
-		}
-
-		updateConfig("llmModel", value);
-		applyRecommendedMaxTokens(providerId, value, {
+		const nextModel = String(value || "").trim();
+		if (!nextModel) return;
+		updateConfig("llmModel", nextModel);
+		applyRecommendedMaxTokens(providerId, nextModel, {
 			force: false,
 			markChanges: true,
 		});
+		setLlmModelPopoverOpen(false);
 	};
 
 	const saveConfig = async () => {
@@ -1457,16 +1430,8 @@ export function SystemConfig({
 			if (savedConfig) {
 				const nextConfig = buildSystemConfigDataFromBackendConfig(savedConfig);
 				setConfig(nextConfig);
-				llmModelSelectTouchedRef.current = false;
 				llmBaseUrlTouchedRef.current = false;
 				llmMaxTokensTouchedRef.current = false;
-				setLlmModelSelectValue(
-					computeLlmModelSelectValue(
-						nextConfig.llmModel,
-						getModelsForProvider(nextConfig.llmProvider),
-					),
-				);
-				setCustomModelQuery(nextConfig.llmModel || "");
 			}
 
 			setHasChanges(false);
@@ -1483,7 +1448,6 @@ export function SystemConfig({
 		try {
 			await api.deleteUserConfig();
 			await loadConfig();
-			llmModelSelectTouchedRef.current = false;
 			llmBaseUrlTouchedRef.current = false;
 			llmMaxTokensTouchedRef.current = false;
 			setHasChanges(false);
@@ -1667,7 +1631,7 @@ export function SystemConfig({
 						>
 							<div
 								className={cn(
-									"cyber-card",
+									"cyber-card !overflow-visible",
 									compactLayout ? "p-4 space-y-4" : "p-6 space-y-6",
 								)}
 							>
@@ -1837,243 +1801,176 @@ export function SystemConfig({
 										</div>
 									</div>
 
-										<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
-											<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
-												模型选择
-												<span className="text-rose-400 ml-1">*</span>
-											</Label>
-											<div className="flex-1 min-w-0 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-2">
-												{(() => {
-													const providerId = config.llmProvider;
-													const models = getModelsForProvider(providerId);
-													const defaultModel =
-														getDefaultModelForProvider(providerId) || "auto";
-													const fallbackSelectValue = computeLlmModelSelectValue(
-												config.llmModel,
-												models,
-											);
-											const selectValue = resolveDisplayedLlmModelSelectValue(
-												config.llmModel,
-												models,
-												llmModelSelectValue === "__default__" ||
-												llmModelSelectValue === "__custom__" ||
-												models.includes(llmModelSelectValue)
-													? llmModelSelectValue
-													: fallbackSelectValue,
-											);
-											const displayLabel =
-														selectValue === "__default__"
-															? `默认（${defaultModel}）`
-															: selectValue === "__custom__"
-																? config.llmModel?.trim()
-																	? `自定义：${config.llmModel.trim()}`
-																	: "自定义模型..."
-																: selectValue;
-													const isCustomModelMode =
-														selectValue === "__custom__" || !models.length;
-													const normalizedQuery = customModelQuery
-														.trim()
-														.toLowerCase();
-													const fuzzyMatches = models
-														.filter((model) => {
-															if (!normalizedQuery) return true;
-															return model.toLowerCase().includes(normalizedQuery);
-														})
-														.sort((a, b) => {
-															const aStarts = normalizedQuery
-																? a.toLowerCase().startsWith(normalizedQuery)
-																: false;
-															const bStarts = normalizedQuery
-																? b.toLowerCase().startsWith(normalizedQuery)
-																: false;
-															if (aStarts !== bStarts) return aStarts ? -1 : 1;
-															return a.localeCompare(b);
-														})
-														.slice(0, 20);
+									<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
+										<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
+											模型选择
+											<span className="text-rose-400 ml-1">*</span>
+										</Label>
+										<div className="flex-1 min-w-0 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-2">
+											{(() => {
+												const providerId = config.llmProvider;
+												const models = getModelsForProvider(providerId);
+												const defaultModel =
+													getDefaultModelForProvider(providerId) || "auto";
+												const currentModel = String(config.llmModel || "");
+												const normalizedCurrentModel = currentModel.trim();
+												const normalizedQuery = normalizedCurrentModel
+													.trim()
+													.toLowerCase();
+												const selectableModels = models
+													.filter((model) => {
+														if (!normalizedQuery) return true;
+														return model.toLowerCase().includes(normalizedQuery);
+													})
+													.sort((a, b) => {
+														const aStarts = normalizedQuery
+															? a.toLowerCase().startsWith(normalizedQuery)
+															: false;
+														const bStarts = normalizedQuery
+															? b.toLowerCase().startsWith(normalizedQuery)
+															: false;
+														if (aStarts !== bStarts) return aStarts ? -1 : 1;
+														return a.localeCompare(b);
+													})
+													.slice(0, 80);
 
-													return (
-														<>
+												return (
+													<>
 															<div className="space-y-2">
-																{isCustomModelMode ? (
-																	<div className="space-y-2">
-																		<Input
-																			value={customModelQuery}
-																			onChange={(event) => {
-																				const nextValue = event.target.value;
-																				llmModelSelectTouchedRef.current = true;
-																				setLlmModelSelectValue("__custom__");
-																				setCustomModelQuery(nextValue);
-																				updateConfig("llmModel", nextValue);
-																				setCustomSuggestionOpen(true);
-																			}}
-																			onFocus={() => setCustomSuggestionOpen(true)}
-																			onBlur={() => {
-																				setTimeout(() => setCustomSuggestionOpen(false), 120);
-																			}}
-																			onKeyDown={(event) => {
-																				if (event.key === "Escape") {
-																					setCustomSuggestionOpen(false);
+																<div
+																	className="relative"
+																	ref={llmModelDropdownAreaRef}
+																>
+																	<div className="flex gap-2">
+																		<div className="relative flex-1 min-w-0">
+																			<Input
+																				value={currentModel}
+																				onChange={(event) =>
+																					updateConfig("llmModel", event.target.value)
 																				}
-																				if (event.key === "Enter") {
-																					setCustomSuggestionOpen(false);
-																				}
-																			}}
-																			placeholder={`请输入模型名称，例如：${defaultModel}`}
-																			className="h-10 cyber-input"
-																		/>
-																		{customSuggestionOpen ? (
-																			<div className="border border-border rounded-md cyber-dialog">
-																				<Command className="bg-background">
-																					<CommandList className="max-h-[220px]">
-																						{fuzzyMatches.length > 0 ? (
-																							<CommandGroup>
-																								{fuzzyMatches.map((model) => (
-																									<CommandItem
-																										key={model}
-																										value={model}
-																										onSelect={() => {
-																											handleLlmModelSelect(model);
-																											setCustomModelQuery(model);
-																											setCustomSuggestionOpen(false);
-																										}}
-																										className="font-mono"
-																									>
-																										{model}
-																									</CommandItem>
-																								))}
-																							</CommandGroup>
-																						) : (
-																							<CommandEmpty>未找到匹配模型</CommandEmpty>
-																						)}
-																					</CommandList>
-																				</Command>
-																			</div>
-																		) : null}
-																	</div>
-																) : (
-																	<Popover
-																		open={llmModelPopoverOpen}
-																		onOpenChange={setLlmModelPopoverOpen}
-																	>
-																		<PopoverTrigger asChild>
-																			<Button
-																				variant="outline"
-																				role="combobox"
-																				aria-expanded={llmModelPopoverOpen}
-																				className="h-10 w-full justify-between cyber-input font-mono text-sm"
-																			>
-																				<span className="truncate text-left">
-																					{displayLabel}
-																				</span>
-																				<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-																			</Button>
-																		</PopoverTrigger>
-																		<PopoverContent
-																			className="w-[--radix-popover-trigger-width] p-0 cyber-dialog border-border"
-																			align="start"
+																				onFocus={() => setLlmModelPopoverOpen(true)}
+																				placeholder={`请输入模型名称，例如：${defaultModel}`}
+																				className="h-10 cyber-input font-mono"
+																			/>
+																			{llmModelPopoverOpen ? (
+																				llmDropdownPanelStyle
+																					? createPortal(
+																							<div
+																								ref={llmModelDropdownPanelRef}
+																								style={llmDropdownPanelStyle}
+																								className="border border-border rounded-md p-0 cyber-dialog shadow-lg overflow-hidden"
+																							>
+																								<Command className="bg-background h-full flex flex-col">
+																									<CommandInput
+																										placeholder="搜索模型..."
+																										className="h-10 border-0 border-b border-border/60 rounded-none"
+																									/>
+																									<CommandList className="flex-1 overflow-y-auto custom-scrollbar">
+																										<CommandEmpty>未找到匹配模型</CommandEmpty>
+																										<CommandGroup>
+																											{defaultModel ? (
+																												<CommandItem
+																													value={`默认模型 ${defaultModel}`}
+																													onSelect={() =>
+																														handleLlmModelSelect(
+																															defaultModel,
+																														)
+																													}
+																													className="font-mono"
+																												>
+																													<Check
+																														className={cn(
+																															"mr-2 h-4 w-4",
+																															normalizedCurrentModel ===
+																																defaultModel
+																																? "opacity-100"
+																																: "opacity-0",
+																														)}
+																													/>
+																													默认（{defaultModel}）
+																												</CommandItem>
+																											) : null}
+																											{selectableModels.map((model) => (
+																												<CommandItem
+																													key={model}
+																													value={model}
+																													onSelect={() =>
+																														handleLlmModelSelect(model)
+																													}
+																													className="font-mono"
+																												>
+																													<Check
+																														className={cn(
+																															"mr-2 h-4 w-4",
+																															normalizedCurrentModel === model
+																																? "opacity-100"
+																																: "opacity-0",
+																														)}
+																													/>
+																													<span className="truncate">{model}</span>
+																												</CommandItem>
+																											))}
+																										</CommandGroup>
+																									</CommandList>
+																								</Command>
+																							</div>,
+																							document.body,
+																						)
+																					: null
+																			) : null}
+																		</div>
+																		<Button
+																			variant="outline"
+																			role="combobox"
+																			aria-expanded={llmModelPopoverOpen}
+																			title="打开模型候选列表"
+																			className="h-10 w-10 px-0 cyber-btn-ghost shrink-0"
+																			onClick={() =>
+																				setLlmModelPopoverOpen((prev) => !prev)
+																			}
 																		>
-																			<Command className="bg-background">
-																				<CommandInput placeholder="搜索模型..." />
-																				<CommandList className="max-h-[280px]">
-																					<CommandEmpty>未找到匹配模型</CommandEmpty>
-																					<CommandGroup>
-																						<CommandItem
-																							value={`自定义模型 ${config.llmModel || ""}`}
-																							onSelect={() => {
-																								handleLlmModelSelect("__custom__");
-																								setCustomModelQuery(config.llmModel || "");
-																								setCustomSuggestionOpen(true);
-																								setLlmModelPopoverOpen(false);
-																							}}
-																							className="font-mono"
-																						>
-																							<Check
-																								className={cn(
-																									"mr-2 h-4 w-4",
-																									selectValue === "__custom__"
-																										? "opacity-100"
-																										: "opacity-0",
-																								)}
-																							/>
-																							自定义模型...
-																						</CommandItem>
-																						{defaultModel ? (
-																							<CommandItem
-																								value={`默认模型 ${defaultModel}`}
-																								onSelect={() => {
-																									handleLlmModelSelect("__default__");
-																									setLlmModelPopoverOpen(false);
-																								}}
-																								className="font-mono"
-																							>
-																								<Check
-																									className={cn(
-																										"mr-2 h-4 w-4",
-																										selectValue === "__default__"
-																											? "opacity-100"
-																											: "opacity-0",
-																									)}
-																								/>
-																								默认（{defaultModel}）
-																							</CommandItem>
-																						) : null}
-																						{models.map((model) => (
-																							<CommandItem
-																								key={model}
-																								value={model}
-																								onSelect={() => {
-																									handleLlmModelSelect(model);
-																									setLlmModelPopoverOpen(false);
-																								}}
-																								className="font-mono"
-																							>
-																								<Check
-																									className={cn(
-																										"mr-2 h-4 w-4",
-																										selectValue === model
-																											? "opacity-100"
-																											: "opacity-0",
-																									)}
-																								/>
-																								<span className="truncate">
-																									{model}
-																								</span>
-																							</CommandItem>
-																						))}
-																					</CommandGroup>
-																				</CommandList>
-																			</Command>
-																		</PopoverContent>
-																	</Popover>
-																)}
-															</div>
-															<Button
-																type="button"
-																variant="outline"
-																className="h-10 cyber-btn-ghost text-xs w-full md:w-auto"
-																onClick={handleFetchModels}
-																disabled={
-																	fetchingModels ||
-																	!config.llmProvider ||
-																	!config.llmBaseUrl.trim() ||
-																	(shouldRequireApiKey(config.llmProvider) &&
-																		!config.llmApiKey.trim())
-																}
-															>
-																{fetchingModels ? (
-																	<>
-																		<Loader2 className="w-3 h-3 mr-1 animate-spin" />
-																		拉取中...
-																	</>
-																) : (
-																	"一键获取模型"
-																)}
-															</Button>
-														</>
-													);
-												})()}
-											</div>
+																			<ChevronsUpDown className="h-4 w-4 opacity-70" />
+																		</Button>
+																	</div>
+																</div>
+															<p className="text-[11px] text-muted-foreground/80">
+																{normalizedCurrentModel
+																	? models.includes(normalizedCurrentModel)
+																		? "已匹配可选模型"
+																		: "当前为自定义模型，可直接保存或测试"
+																	: "支持手动输入或从候选列表选择"}
+															</p>
+														</div>
+														<Button
+															type="button"
+															variant="outline"
+															className="h-10 cyber-btn-ghost text-xs w-full md:w-auto"
+															onClick={handleFetchModels}
+															disabled={
+																fetchingModels ||
+																!config.llmProvider ||
+																!config.llmBaseUrl.trim() ||
+																(shouldRequireApiKey(config.llmProvider) &&
+																	!config.llmApiKey.trim())
+															}
+														>
+															{fetchingModels ? (
+																<>
+																	<Loader2 className="w-3 h-3 mr-1 animate-spin" />
+																	拉取中...
+																</>
+															) : (
+																<>
+																	<Zap className="w-3 h-3 mr-1" />
+																	一键获取模型
+																</>
+															)}
+														</Button>
+													</>
+												);
+											})()}
 										</div>
+									</div>
 
 									<div className="flex items-center justify-end">
 										<Button
