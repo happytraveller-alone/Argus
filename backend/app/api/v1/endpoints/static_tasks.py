@@ -4176,18 +4176,19 @@ async def _build_effective_gitleaks_config_toml(
     db: AsyncSession, runtime_config: Dict[str, Any]
 ) -> Optional[str]:
     try:
-        result = await db.execute(
-            select(GitleaksRule)
-            .where(GitleaksRule.is_active == True)
-            .order_by(GitleaksRule.created_at.asc())
-        )
-        active_rules = result.scalars().all()
+        # Use a savepoint so that a ProgrammingError (e.g. table not yet migrated)
+        # only rolls back to the savepoint, leaving the outer transaction intact and
+        # already-loaded ORM objects (like `task`) un-expired.
+        async with db.begin_nested():
+            result = await db.execute(
+                select(GitleaksRule)
+                .where(GitleaksRule.is_active == True)
+                .order_by(GitleaksRule.created_at.asc())
+            )
+            active_rules = result.scalars().all()
     except ProgrammingError as exc:
         if "gitleaks_rules" in str(exc):
             logger.warning("gitleaks_rules table not found, fallback to custom/default config only")
-            # Must rollback to clear PostgreSQL's aborted transaction state before
-            # any further DB operations can succeed on this session.
-            await db.rollback()
             active_rules = []
         else:
             raise
