@@ -88,6 +88,12 @@ async def test_list_agent_findings_hides_false_positive_by_default():
             "evidence": "cannot reproduce",
             "context_start_line": 18,
             "context_end_line": 22,
+            "verification_todo_id": "todo-fp-1",
+            "verification_fingerprint": "fp-fp-1",
+        },
+        finding_metadata={
+            "verification_todo_id": "todo-fp-1",
+            "verification_fingerprint": "fp-fp-1",
         },
         created_at=now,
     )
@@ -133,3 +139,8 @@ async def test_list_agent_findings_hides_false_positive_by_default():
         current_user=SimpleNamespace(id="user-1"),
     )
     assert len(all_findings) == 2
+    false_positive = next(item for item in all_findings if item.id == "finding-2")
+    assert false_positive.authenticity == "false_positive"
+    assert false_positive.verification_evidence == "cannot reproduce"
+    assert false_positive.verification_todo_id == "todo-fp-1"
+    assert false_positive.verification_fingerprint == "fp-fp-1"

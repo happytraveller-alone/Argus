@@ -53,6 +53,7 @@ from app.services.agent.utils.vulnerability_naming import (
 from app.services.agent.bootstrap import OpenGrepBootstrapScanner
 from app.services.agent.mcp import (
     HARD_MAX_WRITABLE_FILES_PER_TASK,
+    FastMCPHttpAdapter,
     FastMCPStdioAdapter,
     MCPRuntime,
     TaskWriteScopeGuard,
@@ -62,6 +63,7 @@ from app.services.agent.mcp.protocol_verify import (
     build_tool_args as build_mcp_probe_tool_args,
     normalize_listed_tools as normalize_mcp_listed_tools,
 )
+from app.services.agent.mcp.health_probe import probe_mcp_endpoint_readiness
 from app.services.git_mirror import get_mirror_candidates
 from app.services.git_ssh_service import GitSSHOperations
 from app.core.encryption import decrypt_sensitive_data
@@ -753,6 +755,16 @@ def _project_root_is_allowed(project_root: str, allowed_directories: List[str]) 
     return False
 
 
+def _resolve_codebadger_backend_url() -> str:
+    from app.core.config import settings
+
+    return str(
+        getattr(settings, "MCP_CODEBADGER_BACKEND_URL", "")
+        or getattr(settings, "JOERN_MCP_URL", "")
+        or ""
+    ).strip()
+
+
 async def _run_task_llm_connection_test(
     *,
     llm_service: Any,
@@ -836,6 +848,60 @@ async def _bootstrap_task_mcp_runtime(
             },
         )
 
+    codebadger_domains = getattr(runtime, "domain_adapters", {}) or {}
+    codebadger_enabled = isinstance(codebadger_domains.get("codebadger"), dict) and bool(
+        codebadger_domains.get("codebadger")
+    )
+    if codebadger_enabled:
+        if event_emitter:
+            await event_emitter.emit_info(
+                "🩺 正在验证 CodeBadger MCP 健康状态...",
+                metadata={"step_name": "MCP_CODEBADGER_HEALTH", "status": "running"},
+            )
+        codebadger_result = await runtime.call_mcp_tool(
+            mcp_name="codebadger",
+            tool_name="health_status",
+            arguments={},
+            agent_name="TASK_STARTUP",
+            alias_used="startup:codebadger_health",
+        )
+        health_payload = codebadger_result.data
+        health_status = ""
+        if isinstance(health_payload, dict):
+            health_status = str(health_payload.get("status") or "").strip().lower()
+        codebadger_ready = bool(codebadger_result.handled and codebadger_result.success)
+        if codebadger_ready and health_status and health_status not in {"healthy", "ready", "ok"}:
+            codebadger_ready = False
+        if not codebadger_ready:
+            error_text = str(
+                codebadger_result.error
+                or health_payload
+                or "codebadger_healthcheck_failed"
+            )
+            if event_emitter:
+                await event_emitter.emit_error(
+                    f"❌ CodeBadger MCP 健康检查失败：{error_text}",
+                    metadata={
+                        "step_name": "MCP_CODEBADGER_HEALTH",
+                        "status": "failed",
+                        "health_payload": health_payload,
+                    },
+                )
+            raise RuntimeError(f"CodeBadger MCP 健康检查失败：{error_text}")
+        details["codebadger"] = {
+            "status": health_status or "healthy",
+            "payload": health_payload,
+        }
+        if event_emitter:
+            await event_emitter.emit_info(
+                "✅ CodeBadger MCP 健康检查通过",
+                metadata={
+                    "step_name": "MCP_CODEBADGER_HEALTH",
+                    "status": "completed",
+                    "health_payload": health_payload,
+                },
+            )
+
     return details
 
 
@@ -913,6 +979,7 @@ def _build_task_mcp_runtime(
         return args
 
     adapters: Dict[str, Any] = {}
+    domain_adapters: Dict[str, Dict[str, Any]] = {}
     runtime_modes: Dict[str, str] = {}
 
     if _is_active_mcp("filesystem") and _policy_enabled("filesystem", "MCP_FILESYSTEM_ENABLED", True):
@@ -927,6 +994,38 @@ def _build_task_mcp_runtime(
         )
         runtime_modes["filesystem"] = "stdio_only"
 
+    codebadger_url = _resolve_codebadger_backend_url()
+    codebadger_enabled = (
+        _is_active_mcp("codebadger")
+        and _policy_enabled("codebadger", "MCP_CODEBADGER_ENABLED", False)
+        and bool(codebadger_url)
+    )
+    if codebadger_enabled:
+        codebadger_adapter = FastMCPHttpAdapter(
+            url=codebadger_url,
+            timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
+            runtime_domain="backend",
+            synthetic_tools=[
+                {
+                    "name": "health_status",
+                    "description": "Check CodeBadger health via the /health HTTP endpoint.",
+                    "inputSchema": {"type": "object", "properties": {}},
+                }
+            ],
+        )
+        ready, _reason = probe_mcp_endpoint_readiness(
+            codebadger_url,
+            timeout=max(1.0, min(float(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)), 3.0)),
+        )
+        if ready:
+            domain_adapters["codebadger"] = {
+                "backend": codebadger_adapter,
+            }
+            runtime_modes["codebadger"] = str(
+                getattr(settings, "MCP_CODEBADGER_RUNTIME_MODE", "backend_only")
+                or "backend_only"
+            ).strip().lower()
+
     required_mcps = [name for name in ("filesystem",) if name in adapters]
 
     return MCPRuntime(
@@ -937,7 +1036,7 @@ def _build_task_mcp_runtime(
             else bool(mcp_config.get("preferMcp", getattr(settings, "MCP_PREFER", True)))
         ),
         adapters=adapters,
-        domain_adapters={},
+        domain_adapters=domain_adapters,
         runtime_modes=runtime_modes,
         required_mcps=required_mcps,
         write_scope_guard=write_guard,

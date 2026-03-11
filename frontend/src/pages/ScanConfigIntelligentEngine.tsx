@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Brain, Database, KeyRound, Settings, Zap } from "lucide-react";
-import { DatabaseManager } from "@/components/database/DatabaseManager";
+import { Brain, KeyRound, Settings, Zap } from "lucide-react";
 import { SystemConfig, useSystemConfigDraftState } from "@/components/system/SystemConfig";
 import type { LlmModelStatsSource, LlmModelStatsStatus } from "@/components/system/llmModelStatsSummary";
 import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
@@ -122,19 +121,6 @@ export default function ScanConfigIntelligentEngine() {
 						</div>
 						<EmbeddingConfig compact />
 					</div>
-				</div>
-
-				<div className="cyber-card p-4 space-y-4">
-					<div className="section-header mb-0">
-						<Database className="w-4 h-4 text-primary" />
-						<div className="font-mono font-bold uppercase text-sm text-foreground">
-							数据库管理
-						</div>
-					</div>
-					<div className="text-xs text-muted-foreground">
-						统一执行数据库健康检查、备份导出、恢复导入与全量清理。
-					</div>
-					<DatabaseManager />
 				</div>
 			</div>
 		</div>

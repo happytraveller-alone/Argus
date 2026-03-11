@@ -2,6 +2,7 @@
 # VulHunter v3.0.4 生产环境一键部署配置
 # =============================================
 # 使用预构建的 GHCR 镜像（南京大学镜像站加速），无需本地构建
+# CodeBadger 不在此 compose 内构建；如需 Joern 深度分析，请通过外部地址接入
 # 部署命令: curl -fsSL https://raw.githubusercontent.com/unbengable12/AuditTool/main/docker-compose.prod.yml | docker compose -f - up -d
 
 services:
@@ -57,6 +58,9 @@ services:
       - MCP_FILESYSTEM_ENABLED=false
       - MCP_FILESYSTEM_RUNTIME_MODE=stdio_only
       - MCP_FILESYSTEM_FORCE_STDIO=${MCP_FILESYSTEM_FORCE_STDIO:-true}
+      - MCP_CODEBADGER_ENABLED=${MCP_CODEBADGER_ENABLED:-false}
+      - MCP_CODEBADGER_RUNTIME_MODE=${MCP_CODEBADGER_RUNTIME_MODE:-backend_only}
+      - MCP_CODEBADGER_BACKEND_URL=${MCP_CODEBADGER_BACKEND_URL:-}
       - MCP_CODE_INDEX_ENABLED=true
       - MCP_CODE_INDEX_RUNTIME_MODE=stdio_only
       - GIT_MIRROR_ENABLED=${GIT_MIRROR_ENABLED:-true}
@@ -73,7 +77,12 @@ services:
       - QMD_TASK_AUTO_EMBED=false
       - QMD_TASK_QUERY_CACHE=true
       - XDG_CONFIG_HOME=/app/data/mcp/xdg-config
-      # CodeBadger/Joern MCP（服务可通过单独 profile 或外部地址启用）
+      - JOERN_MCP_ENABLED=${JOERN_MCP_ENABLED:-false}
+      - JOERN_MCP_PREFER=${JOERN_MCP_PREFER:-true}
+      - JOERN_MCP_URL=${JOERN_MCP_URL:-}
+      - JOERN_MCP_CPG_TIMEOUT_SEC=${JOERN_MCP_CPG_TIMEOUT_SEC:-240}
+      - JOERN_MCP_QUERY_TIMEOUT_SEC=${JOERN_MCP_QUERY_TIMEOUT_SEC:-90}
+      # CodeBadger/Joern MCP：仅支持外部服务地址
       # LLM 配置 - 请根据需要修改
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o}

@@ -14,6 +14,7 @@ from .codebadger_poc_query import (
     infer_codebadger_language,
     parse_codebadger_query_data,
 )
+from .codebadger_mcp_client import CodeBadgerMCPClient
 from .codebadger_reachability_query import build_reachability_cpgql_query
 
 logger = logging.getLogger(__name__)
@@ -42,14 +43,19 @@ class JoernClient:
         self._joern_bin = shutil.which("joern")
         self._version_checked = False
         self._version_ok = False
-        self._mcp_enabled = False
-        self._mcp_prefer = False
+        normalized_url = str(mcp_url or "").strip()
+        self._mcp_enabled = bool(mcp_enabled) and bool(normalized_url)
+        self._mcp_prefer = bool(mcp_prefer) and bool(normalized_url)
         self._mcp_url = str(mcp_url or "")
-        self._mcp_cpg_timeout_sec = int(mcp_cpg_timeout_sec or 0)
-        self._mcp_query_timeout_sec = int(mcp_query_timeout_sec or 0)
+        self._mcp_cpg_timeout_sec = max(self.timeout_sec, int(mcp_cpg_timeout_sec or self.timeout_sec))
+        self._mcp_query_timeout_sec = max(10, int(mcp_query_timeout_sec or self.timeout_sec))
         self._mcp_checked = False
         self._mcp_ok = False
-        self._mcp = None
+        self._mcp = (
+            CodeBadgerMCPClient(url=normalized_url)
+            if normalized_url and (self._mcp_enabled or self._mcp_prefer)
+            else None
+        )
         # In-process cache to avoid regenerating CPG for repeated verifications
         # within the same task execution (project_root, language) -> codebase_hash.
         self._mcp_codebase_hash_cache: dict[tuple[str, str], str] = {}

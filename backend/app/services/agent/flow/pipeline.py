@@ -55,6 +55,15 @@ class FlowEvidencePipeline:
         self.joern_client = JoernClient(
             enabled=self.joern_enabled,
             timeout_sec=int(getattr(settings, "FLOW_JOERN_TIMEOUT_SEC", 45)),
+            mcp_enabled=bool(getattr(settings, "JOERN_MCP_ENABLED", False)),
+            mcp_url=str(
+                getattr(settings, "JOERN_MCP_URL", "")
+                or getattr(settings, "MCP_CODEBADGER_BACKEND_URL", "")
+                or ""
+            ),
+            mcp_prefer=bool(getattr(settings, "JOERN_MCP_PREFER", False)),
+            mcp_cpg_timeout_sec=int(getattr(settings, "JOERN_MCP_CPG_TIMEOUT_SEC", 240)),
+            mcp_query_timeout_sec=int(getattr(settings, "JOERN_MCP_QUERY_TIMEOUT_SEC", 90)),
         )
         self.logic_engine = (
             AuthzRuleEngine(project_root=project_root, target_files=target_files)

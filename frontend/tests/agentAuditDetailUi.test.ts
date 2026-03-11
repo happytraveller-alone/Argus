@@ -145,7 +145,7 @@ test("accumulateTokenUsage 聚合 llm_call_complete 并按 sequence 去重", () 
 	);
 });
 
-test("buildStatsSummary 在无实时漏洞时回退到任务统计，并把误报算入已验证", () => {
+test("buildStatsSummary 在无实时漏洞时回退到任务统计，并动态拆分总数、有效数和误报数", () => {
 	const summary = buildStatsSummary({
 		task: {
 			progress_percentage: 62,
@@ -170,15 +170,81 @@ test("buildStatsSummary 在无实时漏洞时回退到任务统计，并把误�
 	assert.deepEqual(summary, {
 		progressPercent: 62,
 		durationMs: 180000,
-		findingsTotal: 6,
-		findingsVerified: 3,
-		findingsPending: 3,
+		totalFindings: 7,
+		effectiveFindings: 6,
+		falsePositiveFindings: 1,
 		iterations: 4,
 		toolCalls: 9,
 		tokensTotal: 420,
 		tokensInput: 300,
 		tokensOutput: 120,
 	});
+});
+
+test("buildStatsSummary 在有实时漏洞时优先使用实时结果统计总数、有效数和误报数", () => {
+	const summary = buildStatsSummary({
+		task: {
+			progress_percentage: 88,
+			findings_count: 99,
+			verified_count: 88,
+			false_positive_count: 11,
+			total_iterations: 7,
+			tool_calls_count: 15,
+		},
+		realtimeFindings: [
+			{
+				id: "finding-1",
+				title: "sql injection",
+				vulnerability_type: "sql_injection",
+				severity: "high",
+				display_severity: "high",
+				verification_progress: "pending",
+				file_path: "src/a.ts",
+				line_start: 8,
+				confidence: 0.91,
+				is_verified: false,
+				authenticity: "confirmed",
+			},
+			{
+				id: "finding-2",
+				title: "auth bypass",
+				vulnerability_type: "auth_bypass",
+				severity: "medium",
+				display_severity: "medium",
+				verification_progress: "verified",
+				file_path: "src/b.ts",
+				line_start: 19,
+				confidence: 0.76,
+				is_verified: true,
+				authenticity: "likely",
+			},
+			{
+				id: "finding-fp",
+				title: "template secret",
+				vulnerability_type: "hardcoded_secret",
+				severity: "low",
+				display_severity: "invalid",
+				verification_progress: "verified",
+				file_path: "fixtures/demo.ts",
+				line_start: 7,
+				confidence: 0.12,
+				is_verified: true,
+				authenticity: "false_positive",
+				detailMode: "false_positive_reason",
+			},
+		],
+		tokenUsage: {
+			inputTokens: 0,
+			outputTokens: 0,
+			totalTokens: 0,
+			seenSequences: new Set<number>(),
+		},
+		now: new Date("2026-03-08T10:04:00.000Z"),
+	});
+
+	assert.equal(summary.totalFindings, 3);
+	assert.equal(summary.effectiveFindings, 2);
+	assert.equal(summary.falsePositiveFindings, 1);
 });
 
 test("buildStatsSummary 在有输入输出拆分时以两者求和作为总 Token", () => {

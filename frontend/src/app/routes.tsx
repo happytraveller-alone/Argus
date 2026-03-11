@@ -18,6 +18,9 @@ const ScanConfigIntelligentEngine = lazy(
 const ScanConfigExternalTools = lazy(
 	() => import("@/pages/ScanConfigExternalTools"),
 );
+const ScanConfigExternalToolDetail = lazy(
+	() => import("@/pages/ScanConfigExternalToolDetail"),
+);
 const TaskManagementStatic = lazy(() => import("@/pages/TaskManagementStatic"));
 const TaskManagementIntelligent = lazy(() => import("@/pages/TaskManagementIntelligent"));
 const TaskManagementHybrid = lazy(() => import("@/pages/TaskManagementHybrid"));
@@ -174,6 +177,14 @@ const routes: RouteConfig[] = [
         navVisible: true,
         navGroup: "scanConfig",
         navOrder: 30,
+    },
+    {
+        name: "外部工具详情",
+        path: "/scan-config/external-tools/:toolType/:toolId",
+        element: <ScanConfigExternalToolDetail />,
+        visible: false,
+        navVisible: false,
+        navParentPath: "/scan-config/external-tools",
     },
     {
         name: "静态分析结果",

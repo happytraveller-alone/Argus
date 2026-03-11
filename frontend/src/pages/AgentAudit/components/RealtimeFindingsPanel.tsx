@@ -16,7 +16,6 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import {
-	Table,
 	TableBody,
 	TableCell,
 	TableHead,
@@ -98,6 +97,9 @@ function getSeverityBadgeClass(severity: string): string {
 }
 
 function getConfidenceBadgeClass(confidenceLabel: string): string {
+	if (confidenceLabel === "误报") {
+		return "border-zinc-500/30 bg-zinc-500/15 text-zinc-300";
+	}
 	if (confidenceLabel === "高") {
 		return "border-emerald-500/30 bg-emerald-500/15 text-emerald-300";
 	}
@@ -289,9 +291,9 @@ export default function RealtimeFindingsPanel(props: {
 								</div>
 							</div>
 						) : (
-							<Table className="min-w-[1180px]">
-								<TableHeader>
-									<TableRow>
+							<table className="min-w-[1180px] w-full caption-bottom text-base font-mono">
+								<TableHeader className="bg-transparent">
+									<TableRow className="border-b border-border/60 hover:bg-transparent">
 										<TableHead className="w-[72px]">序号</TableHead>
 										<TableHead className="min-w-[260px]">类型 / 标题</TableHead>
 										<TableHead className="min-w-[260px]" data-no-i18n="true">
@@ -315,7 +317,11 @@ export default function RealtimeFindingsPanel(props: {
 										});
 
 										return (
-											<TableRow key={row.id} id={`finding-item-${row.id}`}>
+											<TableRow
+												key={row.id}
+												id={`finding-item-${row.id}`}
+												className="border-b border-border/40 last:border-b-0"
+											>
 												<TableCell className="font-mono text-xs text-muted-foreground">
 													{(tableState.pageStart + index + 1).toLocaleString()}
 												</TableCell>
@@ -381,12 +387,12 @@ export default function RealtimeFindingsPanel(props: {
 										);
 									})}
 								</TableBody>
-							</Table>
+							</table>
 						)}
 					</div>
 				</div>
 
-				<div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+				<div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
 					<div className="text-xs text-muted-foreground">
 						共 {tableState.totalRows.toLocaleString()} 条，当前显示 {" "}
 						{tableState.rows.length.toLocaleString()} 条

@@ -7,6 +7,7 @@ DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist/release}"
 VERSION="${VERSION:-}"
 SKIP_BUILD="false"
 BUILD_SANDBOX="true"   # NEW: default build sandbox; can disable via --no-sandbox
+WITH_JOERN="false"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 IMAGE_BACKEND="vulhunter/backend-local:latest"
 IMAGE_FRONTEND="vulhunter/frontend-local:latest"
@@ -24,6 +25,7 @@ Options:
   --dist <path>        Output directory (default: ./dist/release)
   --skip-build         Do not run build before packaging images/assets
   --no-sandbox         Do not build sandbox image (avoid network-heavy steps)
+  --with-joern         Build optional CodeBadger/Joern images for the joern profile
   -h, --help           Show this help message
 
 Environment:
@@ -114,14 +116,20 @@ pack_docker_layout() {
   local pkg_path="$1"
   local tmp_root
   tmp_root="$(mktemp -d)"
-  mkdir -p "$tmp_root/docker/sandbox" "$tmp_root/frontend" "$tmp_root/backend"
+  mkdir -p \
+    "$tmp_root/docker/sandbox" \
+    "$tmp_root/docker/codebadger-mcp" \
+    "$tmp_root/docker/codebadger-joern-server" \
+    "$tmp_root/frontend" \
+    "$tmp_root/backend"
 
   cp "$ROOT_DIR/docker-compose.yml" "$tmp_root/"
-  cp "$ROOT_DIR/docker-compose.build.yml" "$tmp_root/"
   cp "$ROOT_DIR/backend/Dockerfile" "$tmp_root/backend/"
   cp "$ROOT_DIR/frontend/Dockerfile" "$tmp_root/frontend/"
   cp "$ROOT_DIR/docker/sandbox/Dockerfile" "$tmp_root/docker/sandbox/"
   cp "$ROOT_DIR/docker/sandbox/seccomp.json" "$tmp_root/docker/sandbox/"
+  cp "$ROOT_DIR/docker/codebadger-mcp/Dockerfile" "$tmp_root/docker/codebadger-mcp/"
+  cp "$ROOT_DIR/docker/codebadger-joern-server/Dockerfile" "$tmp_root/docker/codebadger-joern-server/"
 
   tar -czf "$pkg_path" -C "$tmp_root" .
   rm -rf "$tmp_root"
@@ -130,10 +138,15 @@ pack_docker_layout() {
 run_compose_build_with_retries() {
   local -a services=("$@")
   local attempt=1
+  local -a compose_cmd=("$DOCKER_BIN" compose -f "${ROOT_DIR}/docker-compose.yml")
+
+  if [[ "$WITH_JOERN" == "true" ]]; then
+    compose_cmd=("$DOCKER_BIN" compose --profile joern -f "${ROOT_DIR}/docker-compose.yml")
+  fi
 
   while true; do
     log "docker compose build attempt ${attempt}/${BUILD_RETRIES} for services: ${services[*]}"
-    if "$DOCKER_BIN" compose -f "${ROOT_DIR}/docker-compose.build.yml" build "${services[@]}"; then
+    if "${compose_cmd[@]}" build "${services[@]}"; then
       return 0
     fi
 
@@ -165,6 +178,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-sandbox)
       BUILD_SANDBOX="false"
+      shift
+      ;;
+    --with-joern)
+      WITH_JOERN="true"
       shift
       ;;
     -h|--help)
@@ -206,16 +223,36 @@ log "output: ${DIST_DIR}"
 
 if [[ "$SKIP_BUILD" != "true" ]]; then
   if [[ "$BUILD_SANDBOX" == "true" ]]; then
-    log "building runtime images with docker compose (backend, frontend, sandbox)"
-    if ! run_compose_build_with_retries backend frontend sandbox; then
+    if [[ "$WITH_JOERN" == "true" ]]; then
+      log "building runtime images with docker compose (backend, frontend, sandbox, joern profile)"
+    else
+      log "building runtime images with docker compose (backend, frontend, sandbox)"
+    fi
+    if [[ "$WITH_JOERN" == "true" ]]; then
+      if ! run_compose_build_with_retries backend frontend sandbox codebadger-mcp codebadger-joern-server; then
+        echo "Docker build failed after ${BUILD_RETRIES} attempts (sandbox + joern)." >&2
+        echo "Hint: check network/mirror availability, then rerun the packaging command." >&2
+        exit 1
+      fi
+    elif ! run_compose_build_with_retries backend frontend sandbox; then
       echo "Docker build failed after ${BUILD_RETRIES} attempts (sandbox included)." >&2
       echo "Hint: check network/mirror availability, then rerun the packaging command." >&2
       echo "Temporary bypass (not recommended for complete release): bash scripts/package-release-artifacts.sh --no-sandbox" >&2
       exit 1
     fi
   else
-    log "building runtime images with docker compose (backend, frontend) [--no-sandbox]"
-    if ! run_compose_build_with_retries backend frontend; then
+    if [[ "$WITH_JOERN" == "true" ]]; then
+      log "building runtime images with docker compose (backend, frontend, joern profile) [--no-sandbox]"
+    else
+      log "building runtime images with docker compose (backend, frontend) [--no-sandbox]"
+    fi
+    if [[ "$WITH_JOERN" == "true" ]]; then
+      if ! run_compose_build_with_retries backend frontend codebadger-mcp codebadger-joern-server; then
+        echo "Docker build failed after ${BUILD_RETRIES} attempts (joern profile enabled)." >&2
+        echo "Hint: check network/mirror availability, then rerun the packaging command." >&2
+        exit 1
+      fi
+    elif ! run_compose_build_with_retries backend frontend; then
       echo "Docker build failed after ${BUILD_RETRIES} attempts." >&2
       echo "Hint: check network/mirror availability, then rerun the packaging command." >&2
       exit 1

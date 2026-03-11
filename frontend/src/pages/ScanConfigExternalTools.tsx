@@ -13,9 +13,6 @@ export default function ScanConfigExternalTools() {
               外部工具列表
             </div>
           </div>
-          <div className="text-xs text-muted-foreground px-1">
-            MCP 与 SKILL 统一按列表形式展示；可在详情弹窗中查看能力说明、运行时诊断与验证结果。
-          </div>
           <SkillToolsPanel />
         </div>
       </div>

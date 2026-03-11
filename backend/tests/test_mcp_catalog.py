@@ -5,6 +5,7 @@ from app.services.agent.mcp.catalog import build_mcp_catalog
 def test_mcp_catalog_only_exposes_stdio_core_mcps(monkeypatch):
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_ENABLED", True)
     monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_COMMAND", "python3")
+    monkeypatch.setattr("app.core.config.settings.MCP_CODEBADGER_ENABLED", False)
 
     catalog = build_mcp_catalog(mcp_enabled=True)
     catalog_by_id = {item["id"]: item for item in catalog}
@@ -18,6 +19,32 @@ def test_mcp_catalog_only_exposes_stdio_core_mcps(monkeypatch):
     assert "sequentialthinking" not in catalog_by_id
     assert all(item.get("backend") is None for item in catalog)
     assert all(item.get("sandbox") is None for item in catalog)
+
+
+def test_mcp_catalog_exposes_codebadger_as_not_ready_when_endpoint_unreachable(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_ENABLED", True)
+    monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_COMMAND", "python3")
+    monkeypatch.setattr("app.core.config.settings.MCP_CODEBADGER_ENABLED", True)
+    monkeypatch.setattr(
+        "app.core.config.settings.MCP_CODEBADGER_BACKEND_URL",
+        "http://codebadger-mcp:4242/mcp",
+    )
+    monkeypatch.setattr(
+        "app.services.agent.mcp.catalog.probe_mcp_endpoint_readiness",
+        lambda *args, **kwargs: (False, "healthcheck_failed"),
+    )
+
+    catalog = build_mcp_catalog(mcp_enabled=True)
+    catalog_by_id = {item["id"]: item for item in catalog}
+
+    assert set(catalog_by_id.keys()) == {"filesystem", "codebadger"}
+    assert catalog_by_id["codebadger"]["runtime_mode"] == "backend_only"
+    assert catalog_by_id["codebadger"]["backend"] == {
+        "enabled": True,
+        "startup_ready": False,
+        "startup_error": "healthcheck_failed",
+    }
+    assert catalog_by_id["codebadger"]["source"] == "https://github.com/Lekssays/codebadger"
 
 
 def test_sanitize_mcp_config_ignores_client_runtime_overrides(monkeypatch):

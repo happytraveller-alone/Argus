@@ -24,8 +24,8 @@ if docker buildx version >/dev/null 2>&1; then
   echo "[INFO] BuildKit detected, using ${FRONTEND_DOCKERFILE}"
 else
   export DOCKER_BUILDKIT=0
-  export FRONTEND_DOCKERFILE="${FRONTEND_DOCKERFILE:-Dockerfile.legacy}"
-  echo "[WARN] BuildKit unavailable, fallback to ${FRONTEND_DOCKERFILE}"
+  export FRONTEND_DOCKERFILE="${FRONTEND_DOCKERFILE:-Dockerfile}"
+  echo "[WARN] BuildKit unavailable, continuing with ${FRONTEND_DOCKERFILE}"
 fi
 
 echo "[INFO] building frontend image (arch=${BUILD_ARCH})..."

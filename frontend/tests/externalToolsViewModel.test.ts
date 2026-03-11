@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
 	buildExternalToolRows,
 	buildExternalToolDetailSections,
+	buildExternalToolListState,
+	EXTERNAL_TOOLS_PAGE_SIZE,
 } from "../src/pages/intelligent-scan/externalToolsViewModel.ts";
 
 test("buildExternalToolRows merges MCP before SKILL and keeps unloaded items visible", () => {
@@ -129,5 +131,83 @@ test("buildExternalToolDetailSections returns MCP and SKILL specific sections", 
 	assert.deepEqual(
 		skillSections.map((item) => item.title),
 		["基础信息", "任务清单", "Prompt 模板", "示例输入", "参数清单", "误用提示"],
+	);
+});
+
+test("buildExternalToolListState filters by name and capabilities, keeps MCP before SKILL, and paginates 6 rows", () => {
+	const rows = buildExternalToolRows({
+		mcpCatalog: [
+			{
+				id: "filesystem",
+				name: "Filesystem MCP",
+				type: "mcp-server",
+				enabled: true,
+				description: "Read files",
+				executionFunctions: ["read_file", "search_files"],
+				inputInterface: [],
+				outputInterface: [],
+				includedSkills: [],
+				verificationTools: [],
+				source: "builtin",
+				runtime_mode: "stdio_only",
+				required: true,
+				startup_ready: true,
+				startup_error: null,
+			},
+		],
+		skillCatalog: Array.from({ length: 7 }, (_, index) => ({
+			id: `tool_${index + 1}`,
+			category: "模型基础增强类" as const,
+			summary: `工具 ${index + 1}`,
+			goal: "执行分析",
+			taskList:
+				index === 6 ? ["定位 sink", "回溯调用链"] : [`任务 ${index + 1}`],
+			inputChecklist: ["target_path"],
+			exampleInput: "{}",
+			pitfalls: ["不要跳过证据"],
+		})),
+		skillAvailability: {},
+	});
+
+	const capabilityState = buildExternalToolListState({
+		rows,
+		searchQuery: "sink",
+		page: 3,
+	});
+
+	assert.equal(EXTERNAL_TOOLS_PAGE_SIZE, 6);
+	assert.equal(capabilityState.totalRows, 1);
+	assert.equal(capabilityState.page, 1);
+	assert.equal(capabilityState.totalPages, 1);
+	assert.equal(capabilityState.startIndex, 0);
+	assert.deepEqual(
+		capabilityState.pageRows.map((item) => item.id),
+		["tool_7"],
+	);
+
+	const pagedState = buildExternalToolListState({
+		rows,
+		searchQuery: "",
+		page: 2,
+	});
+
+	assert.equal(pagedState.totalRows, 8);
+	assert.equal(pagedState.page, 2);
+	assert.equal(pagedState.totalPages, 2);
+	assert.equal(pagedState.startIndex, 6);
+	assert.deepEqual(
+		pagedState.pageRows.map((item) => item.id),
+		["tool_6", "tool_7"],
+	);
+
+	const nameState = buildExternalToolListState({
+		rows,
+		searchQuery: "filesystem",
+		page: 1,
+	});
+
+	assert.deepEqual(
+		nameState.pageRows.map((item) => item.id),
+		["filesystem"],
 	);
 });

@@ -442,11 +442,13 @@ class FastMCPHttpAdapter:
         timeout: int = 30,
         runtime_domain: str = "backend",
         headers: Optional[Dict[str, str]] = None,
+        synthetic_tools: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.url = str(url or "").strip()
         self.timeout = max(5, int(timeout))
         self.runtime_domain = str(runtime_domain or "backend").strip().lower() or "backend"
         self.headers = dict(headers or {})
+        self.synthetic_tools = _normalize_tools_payload(list(synthetic_tools or []))
         self._availability_checked = False
         self._available = False
         self._availability_reason: Optional[str] = None
@@ -468,6 +470,22 @@ class FastMCPHttpAdapter:
             if alt and alt not in candidates:
                 candidates.append(alt)
         return candidates
+
+    def _candidate_health_urls(self) -> List[str]:
+        health_urls: List[str] = []
+        for candidate_url in self._candidate_urls():
+            parsed = urlparse(candidate_url)
+            path = str(parsed.path or "").strip()
+            if path.endswith("/mcp"):
+                health_path = f"{path[: -len('/mcp')].rstrip('/') or ''}/health"
+            elif path in {"", "/"}:
+                health_path = "/health"
+            else:
+                health_path = f"{path.rstrip('/')}/health"
+            health_url = urlunparse(parsed._replace(path=health_path, params="", query="", fragment=""))
+            if health_url not in health_urls:
+                health_urls.append(health_url)
+        return health_urls
 
     @staticmethod
     def _normalize_tool_payload(data: Any) -> Dict[str, Any]:
@@ -604,6 +622,8 @@ class FastMCPHttpAdapter:
                         raise RuntimeError("mcp_list_tools_not_supported")
                     raw_tools = await list_tools()
                 normalized = _normalize_tools_payload(raw_tools)
+                if self.synthetic_tools:
+                    normalized = _normalize_tools_payload(normalized + self.synthetic_tools)
                 if normalized:
                     return normalized
             except Exception as mcp_exc:
@@ -623,6 +643,8 @@ class FastMCPHttpAdapter:
                     response.raise_for_status()
                     data = response.json()
                 normalized = _normalize_tools_payload(data)
+                if self.synthetic_tools:
+                    normalized = _normalize_tools_payload(normalized + self.synthetic_tools)
                 if normalized:
                     return normalized
                 last_exc = RuntimeError("mcp_tools_list_empty")
@@ -634,7 +656,31 @@ class FastMCPHttpAdapter:
             raise last_exc
         raise RuntimeError("mcp_http_list_tools_failed")
 
+    async def _call_health_status(self) -> Dict[str, Any]:
+        last_error = "healthcheck_failed"
+        for candidate_url in self._candidate_health_urls():
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.get(candidate_url, headers=self.headers or None)
+                    response.raise_for_status()
+                    payload = response.json()
+                status_value = str((payload or {}).get("status") or "").strip().lower()
+                success = status_value in {"healthy", "ready", "ok"}
+                return {
+                    "success": success,
+                    "data": payload,
+                    "error": None if success else f"health_status:{status_value or 'unknown'}",
+                }
+            except Exception as exc:
+                last_error = f"healthcheck_failed:{exc}"
+                continue
+        return {"success": False, "error": last_error}
+
     async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        normalized_tool_name = str(tool_name or "").strip().lower()
+        if normalized_tool_name == "health_status":
+            return await self._call_health_status()
+
         payload_args = dict(arguments or {})
         candidate_urls = self._candidate_urls()
         if not candidate_urls:

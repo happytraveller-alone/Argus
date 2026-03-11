@@ -21,7 +21,7 @@ async def test_reachability_engine_selection_no_local_joern_mcp_enabled_but_unre
     )
 
     assert evidence.path_found is False
-    assert "joern_not_available" in (evidence.blocked_reasons or [])
+    assert "joern_mcp_unavailable" in (evidence.blocked_reasons or [])
 
 
 def test_codebadger_reachability_query_builder_payload_safe():

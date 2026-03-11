@@ -372,7 +372,7 @@ Ollama 本地模型没有网络延迟，适合大量文件分析。
 
 ### Q: 如何备份数据？
 
-在 `/admin` 页面的"数据库管理"标签页中，点击"导出数据"按钮，可以将所有数据导出为 JSON 文件。
+当前版本不再提供浏览器内的数据库导出入口。
 
 也可以直接备份 PostgreSQL 数据库：
 
@@ -386,11 +386,15 @@ docker-compose exec -T db psql -U postgres deepaudit < backup.sql
 
 ### Q: 如何恢复数据？
 
-在 `/admin` 页面的"数据库管理"标签页中，点击"导入数据"按钮，选择之前导出的 JSON 文件即可恢复。
+当前版本不再提供浏览器内的数据库导入入口，请直接恢复 PostgreSQL 备份：
+
+```bash
+docker-compose exec -T db psql -U postgres deepaudit < backup.sql
+```
 
 ### Q: 如何清空所有数据？
 
-在 `/admin` 页面的"数据库管理"标签页中，点击"清空数据"按钮。
+当前版本不再提供浏览器内的一键清库入口。请在维护窗口内通过数据库管理命令执行，并先备份重要数据。
 
 ⚠️ **警告**：此操作不可恢复，请先备份重要数据！
 

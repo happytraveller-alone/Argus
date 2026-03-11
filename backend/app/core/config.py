@@ -161,6 +161,11 @@ class Settings(BaseSettings):
     FLOW_JOERN_TIMEOUT_SEC: int = 45
     FLOW_JOERN_TRIGGER_SEVERITY: str = "high,critical"
     FLOW_JOERN_TRIGGER_CONFIDENCE: float = 0.7
+    JOERN_MCP_ENABLED: bool = False
+    JOERN_MCP_URL: str = ""
+    JOERN_MCP_PREFER: bool = False
+    JOERN_MCP_CPG_TIMEOUT_SEC: int = 240
+    JOERN_MCP_QUERY_TIMEOUT_SEC: int = 90
     LOGIC_AUTHZ_ENABLED: bool = True
     FLOW_UNREACHABLE_POLICY: str = "degrade_likely"
 
@@ -200,6 +205,9 @@ class Settings(BaseSettings):
     MCP_FILESYSTEM_RUNTIME_MODE: str = "stdio_only"
     MCP_FILESYSTEM_COMMAND: str = "pnpm"
     MCP_FILESYSTEM_ARGS: str = "dlx @modelcontextprotocol/server-filesystem"
+    MCP_CODEBADGER_ENABLED: bool = False
+    MCP_CODEBADGER_RUNTIME_MODE: str = "backend_only"
+    MCP_CODEBADGER_BACKEND_URL: str = ""
     GIT_MIRROR_ENABLED: bool = True
     GIT_MIRROR_PREFIX: str = "https://gh-proxy.org"
     GIT_MIRROR_PREFIXES: str = "https://gh-proxy.org,https://v6.gh-proxy.org"

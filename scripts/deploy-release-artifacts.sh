@@ -126,7 +126,6 @@ ensure_backend_env
 if [[ "$START_STACK" == "true" ]]; then
   "$DOCKER_BIN" compose \
     -f "${TARGET_DIR}/docker-compose.yml" \
-    -f "${TARGET_DIR}/docker-compose.build.yml" \
     up -d --build
 fi
 

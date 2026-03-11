@@ -3,7 +3,6 @@ from app.api.v1.endpoints import (
     agent_tasks,
     agent_test,
     config,
-    database,
     embedding_config,
     members,
     projects,
@@ -26,7 +25,6 @@ api_router.include_router(members.router, prefix="/projects", tags=["members"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(scan.router, prefix="/scan", tags=["scan"])
 api_router.include_router(config.router, prefix="/config", tags=["config"])
-api_router.include_router(database.router, prefix="/database", tags=["database"])
 api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(rules.router, prefix="/rules", tags=["rules"])
 api_router.include_router(agent_tasks.router, prefix="/agent-tasks", tags=["agent-tasks"])

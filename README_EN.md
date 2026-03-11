@@ -121,6 +121,18 @@ Do not commit real API keys into the repository.
 ./scripts/compose-up-with-fallback.sh
 ```
 
+To use the repository's default local Docker build path directly:
+
+```bash
+docker compose up -d --build
+```
+
+To explicitly enable local Joern / CodeBadger:
+
+```bash
+docker compose --profile joern up -d --build
+```
+
 If you want prebuilt-image deployment (production / quick bootstrap), use:
 
 ```bash
@@ -133,11 +145,14 @@ docker compose -f docker-compose.prod.cn.yml up -d
 
 - Frontend: http://localhost:3000
 - Backend: http://localhost:8000 (OpenAPI: http://localhost:8000/docs)
+- If `3000` or `8000` is already in use, override them with `VULHUNTER_FRONTEND_PORT` / `VULHUNTER_BACKEND_PORT`, for example `VULHUNTER_BACKEND_PORT=18000 docker compose up -d --build`
 
 ### Notes
 
 - The backend mounts `/var/run/docker.sock` for sandbox execution. Review security boundaries before using in production.
-- The default dev flow uses local image builds from `docker-compose.yml`; `docker-compose.prod.yml` / `docker-compose.prod.cn.yml` are for prebuilt-image deployment.
+- The only repository-local image build path is the root default Compose flow: `docker compose up -d --build` (or `./scripts/compose-up-with-fallback.sh`). By default it does not start Joern / CodeBadger containers.
+- To enable local Joern / CodeBadger, use `docker compose --profile joern up -d --build`, or `./scripts/compose-up-with-fallback.sh --profile joern up -d --build`.
+- `docker-compose.prod.yml` / `docker-compose.prod.cn.yml` remain prebuilt-image deployment flows; they do not build CodeBadger inside this repository.
 - `docker-compose.prod.yml` and `docker-compose.prod.cn.yml` use the Nanjing University GHCR mirror (`ghcr.nju.edu.cn/lintsinghua/*`) for faster pulls in CN regions. Replace with your own images/registry for production deployments if needed.
 - The dev build flow defaults to `./scripts/compose-up-with-fallback.sh`: it probes candidate mirrors first, ranks by latency, then retries build phases in ranked order (instead of fixed CN->official phases).
 - Docker image source probing (DockerHub/GHCR) now runs in parallel; failed candidates are downgraded to the tail instead of blocking other sources.
@@ -153,6 +168,12 @@ docker compose -f docker-compose.prod.cn.yml up -d
 - Running `docker compose up -d --build` directly does not include automatic mirror fallback logic.
 - GitHub source sync and task repo download/clone now use a two-step proxy chain by default: `https://gh-proxy.org` -> `https://v6.gh-proxy.org`.
 - Fallback to origin GitHub is disabled by default (`GIT_MIRROR_FALLBACK_TO_ORIGIN=false`); enable it only for troubleshooting.
+- Default local Compose does not start the bundled CodeBadger services; when absent, Joern deep analysis degrades automatically to the lightweight flow path.
+- `docker-compose.prod.yml` / `docker-compose.prod.cn.yml` require an explicitly configured external CodeBadger service if you want Joern deep analysis:
+  - `MCP_CODEBADGER_ENABLED=true`
+  - `MCP_CODEBADGER_BACKEND_URL=http://your-codebadger-host:4242/mcp`
+  - `JOERN_MCP_ENABLED=true`
+  - `JOERN_MCP_URL=http://your-codebadger-host:4242/mcp`
 
 Example:
 
@@ -179,6 +200,16 @@ BACKEND_PNPM_VERSION=9.15.4 \
 BACKEND_PNPM_INSTALL_OPTIONAL=0 \
 BACKEND_INSTALL_CJK_FONTS=0 \
 ./scripts/compose-up-with-fallback.sh
+```
+
+Example: external CodeBadger on the production flow
+
+```bash
+MCP_CODEBADGER_ENABLED=true \
+MCP_CODEBADGER_BACKEND_URL=http://codebadger.example.internal:4242/mcp \
+JOERN_MCP_ENABLED=true \
+JOERN_MCP_URL=http://codebadger.example.internal:4242/mcp \
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 GitHub proxy chain example:

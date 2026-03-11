@@ -114,6 +114,19 @@ export type ExternalToolRow =
 			};
 	  };
 
+export const EXTERNAL_TOOLS_PAGE_SIZE = 6;
+
+export interface ExternalToolListState {
+	filteredRows: ExternalToolRow[];
+	pageRows: ExternalToolRow[];
+	page: number;
+	pageSize: number;
+	totalRows: number;
+	totalPages: number;
+	startIndex: number;
+	searchQuery: string;
+}
+
 export function buildExternalToolRows({
 	mcpCatalog,
 	skillCatalog,
@@ -174,6 +187,43 @@ export function buildExternalToolRows({
 	}));
 
 	return [...mcpRows, ...skillRows];
+}
+
+export function buildExternalToolListState({
+	rows,
+	searchQuery,
+	page,
+	pageSize = EXTERNAL_TOOLS_PAGE_SIZE,
+}: {
+	rows: ExternalToolRow[];
+	searchQuery: string;
+	page: number;
+	pageSize?: number;
+}): ExternalToolListState {
+	const normalizedQuery = String(searchQuery || "").trim().toLowerCase();
+	const safePageSize = Math.max(1, Math.floor(pageSize) || EXTERNAL_TOOLS_PAGE_SIZE);
+	const filteredRows = normalizedQuery
+		? rows.filter((row) => {
+				const searchable = [row.name, ...row.capabilities].join(" ").toLowerCase();
+				return searchable.includes(normalizedQuery);
+		  })
+		: rows;
+	const totalRows = filteredRows.length;
+	const totalPages = Math.max(1, Math.ceil(totalRows / safePageSize));
+	const normalizedPage =
+		totalRows === 0 ? 1 : Math.min(Math.max(1, Math.floor(page) || 1), totalPages);
+	const startIndex = totalRows === 0 ? 0 : (normalizedPage - 1) * safePageSize;
+
+	return {
+		filteredRows,
+		pageRows: filteredRows.slice(startIndex, startIndex + safePageSize),
+		page: normalizedPage,
+		pageSize: safePageSize,
+		totalRows,
+		totalPages,
+		startIndex,
+		searchQuery: String(searchQuery || ""),
+	};
 }
 
 export function buildExternalToolDetailSections(

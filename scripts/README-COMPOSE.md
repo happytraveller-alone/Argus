@@ -184,8 +184,11 @@ $env:BACKEND_PYPI_INDEX_PRIMARY="https://pypi.org/simple"
 # 克隆仓库后直接运行
 ./scripts/compose-up-with-fallback.sh
 
-# 或使用 docker compose 直接构建（不使用镜像选择）
+# 或直接使用默认 Compose 构建链路（仓库内唯一支持的本地 Dockerfile 构建入口）
 docker compose up -d --build
+
+# 显式启用 Joern / CodeBadger
+docker compose --profile joern up -d --build
 ```
 
 ### Windows
@@ -198,4 +201,13 @@ scripts\compose-up-with-fallback.bat
 
 # 或直接使用 docker compose
 docker compose up -d --build
+
+# 显式启用 Joern / CodeBadger
+docker compose --profile joern up -d --build
 ```
+
+## 当前构建边界
+
+- 仓库内仅保留默认 `docker compose up --build` 会实际使用到的 Dockerfile。
+- 默认 Compose 不会启动 `codebadger-mcp`、`codebadger-joern-server`；启用时需显式加 `--profile joern`。
+- `docker-compose.prod.yml` 与 `docker-compose.prod.cn.yml` 不在仓库内构建 CodeBadger；如需 Joern 深度分析，请通过环境变量接入外部 CodeBadger 服务。

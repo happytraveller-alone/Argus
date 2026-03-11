@@ -74,16 +74,17 @@ test("route inventory keeps the current visible, hidden, and redirect page group
 	assert.deepEqual(hiddenButRouted, [
 		"/agent-audit/:taskId",
 		"/projects/:id",
+		"/scan-config/external-tools/:toolType/:toolId",
 		"/static-analysis/:taskId",
 		"/finding-detail/:source/:taskId/:findingId",
 		"/static-analysis/:taskId/findings/:findingId",
-		"/admin",
 	]);
 
 	assert.deepEqual(redirectOnly, [
 		"/opengrep-rules",
 		"/tasks/overview",
 		"/scan-config",
+		"/admin",
 	]);
 });
 
@@ -148,9 +149,22 @@ test("admin becomes a redirect-only route to the intelligent-engine config page"
 	);
 });
 
-test("intelligent-engine config page embeds the database manager", () => {
+test("intelligent-engine config page no longer embeds database management", () => {
 	const content = fs.readFileSync(intelligentEngineFile, "utf8");
 
-	assert.match(content, /import\s+\{\s*DatabaseManager\s*\}\s+from\s+"@\/components\/database\/DatabaseManager"/);
-	assert.match(content, /<DatabaseManager\s*\/>/);
+	assert.doesNotMatch(
+		content,
+		/import\s+\{\s*DatabaseManager\s*\}\s+from\s+"@\/components\/database\/DatabaseManager"/,
+	);
+	assert.doesNotMatch(content, /<DatabaseManager\s*\/>/);
+});
+
+test("database manager component is absent after capability retirement", () => {
+	assert.equal(
+		fs.existsSync(
+			path.join(frontendDir, "src/components/database/DatabaseManager.tsx"),
+		),
+		false,
+		"DatabaseManager should be removed with the retired database management capability",
+	);
 });

@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Literal, Optional
 
 from app.core.config import settings
+from .health_probe import probe_mcp_endpoint_readiness
 
 
 MCPCatalogType = Literal["mcp-server", "skill-pack"]
@@ -70,6 +71,20 @@ _CORE_MCP_DEFINITIONS = {
 }
 
 
+_CODEBADGER_MCP_DEFINITION = {
+    "name": "CodeBadger MCP",
+    "description": "通过外部 CodeBadger HTTP MCP 服务提供源码级 CPG / CFG / DFG 能力。",
+    "executionFunctions": ["generate_cpg", "run_cpgql_query", "get_cfg"],
+    "inputInterface": ["source_path", "language", "query"],
+    "outputInterface": ["response", "codebase_hash", "status"],
+    "includedSkills": ["joern_reachability_verify"],
+    "verificationTools": ["health_status"],
+    "source": "https://github.com/Lekssays/codebadger",
+    "enabled_setting": "MCP_CODEBADGER_ENABLED",
+    "backend_url_setting": "MCP_CODEBADGER_BACKEND_URL",
+}
+
+
 def _command_ready(command: str) -> tuple[bool, Optional[str]]:
     executable = str(command or "").strip()
     if not executable:
@@ -124,6 +139,49 @@ def build_mcp_catalog(
             required=True,
             startup_ready=startup_ready,
             startup_error=startup_error,
+        )
+        catalog.append(item.to_dict())
+
+    codebadger_enabled = bool(getattr(settings, _CODEBADGER_MCP_DEFINITION["enabled_setting"], False))
+    if codebadger_enabled:
+        policy = _runtime_entry(runtime_policy, "codebadger")
+        enabled = bool(policy.get("enabled", codebadger_enabled))
+        backend_url = str(
+            getattr(settings, _CODEBADGER_MCP_DEFINITION["backend_url_setting"], "") or ""
+        ).strip()
+        backend_ready = False
+        backend_error: Optional[str] = None
+        if runtime_enabled and enabled and backend_url:
+            backend_ready, backend_error = probe_mcp_endpoint_readiness(
+                backend_url,
+                timeout=1.5,
+            )
+        elif enabled:
+            backend_error = "missing_backend_url"
+        else:
+            backend_error = "disabled"
+        item = McpCatalogItem(
+            id="codebadger",
+            name=_CODEBADGER_MCP_DEFINITION["name"],
+            type="mcp-server",
+            enabled=bool(runtime_enabled and enabled),
+            description=_CODEBADGER_MCP_DEFINITION["description"],
+            executionFunctions=list(_CODEBADGER_MCP_DEFINITION["executionFunctions"]),
+            inputInterface=list(_CODEBADGER_MCP_DEFINITION["inputInterface"]),
+            outputInterface=list(_CODEBADGER_MCP_DEFINITION["outputInterface"]),
+            includedSkills=list(_CODEBADGER_MCP_DEFINITION["includedSkills"]),
+            verificationTools=list(_CODEBADGER_MCP_DEFINITION["verificationTools"]),
+            source=_CODEBADGER_MCP_DEFINITION["source"],
+            runtime_mode="backend_only",
+            backend=McpDomainStatus(
+                enabled=bool(runtime_enabled and enabled),
+                startup_ready=backend_ready,
+                startup_error=backend_error,
+            ),
+            sandbox=None,
+            required=False,
+            startup_ready=backend_ready,
+            startup_error=backend_error,
         )
         catalog.append(item.to_dict())
 

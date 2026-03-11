@@ -53,7 +53,6 @@ PostgreSQL
 - `/tasks`（传统审计任务）
 - `/scan`（即时分析/ZIP 扫描）
 - `/config`
-- `/database`
 - `/prompts`
 - `/rules`
 - `/agent-tasks`
@@ -104,7 +103,6 @@ ProjectMember, User, UserConfig, ProjectInfo, PromptTemplate, AuditRuleSet/Audit
   - `frontend/src/pages/AgentAudit/index.tsx`
   - `frontend/src/pages/OpengrepRules.tsx`
   - `frontend/src/pages/StaticAnalysis.tsx`
-  - `frontend/src/pages/AdminDashboard.tsx`
 
 ## 4.2 API 层（前端）
 
@@ -138,7 +136,6 @@ ProjectMember, User, UserConfig, ProjectInfo, PromptTemplate, AuditRuleSet/Audit
 | 审计规则集 | `/rules` | `shared/api/rules.ts` | Dashboard（统计）、配置页 |
 | 提示词模板 | `/prompts` | `shared/api/prompts.ts` | 暂无活跃前端入口、Dashboard（统计） |
 | 系统配置 | `/config`、`/embedding` | `shared/api/database.ts` + 局部 `apiClient` | SystemConfig、EmbeddingConfig |
-| 数据库管理 | `/database` | `shared/api/database.ts` | DatabaseManager（AdminDashboard） |
 | SSH 能力 | `/ssh-keys` | `shared/api/sshKeys.ts` | 项目接入/配置流程 |
 
 ---

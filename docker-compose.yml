@@ -3,7 +3,9 @@
 # =============================================
 # 部署: docker compose up -d --build
 # 查看日志: docker compose logs -f
-# 说明: 开发默认本地源码构建；预构建镜像部署请使用 docker-compose.prod.yml / docker-compose.prod.cn.yml
+# 说明: 默认 docker compose 路径不会启动 Joern/CodeBadger
+# 如需启用，请使用 --profile joern
+# 预构建镜像部署请使用 docker-compose.prod.yml / docker-compose.prod.cn.yml
 
 services:
   # =============================================
@@ -66,7 +68,7 @@ services:
       - /tmp/vulhunter:/tmp/deepaudit # ZIP/Repo 工作目录兼容挂载（供沙箱/Joern MCP 挂载）
       - /var/run/docker.sock:/var/run/docker.sock # 沙箱执行必须
     ports:
-      - "8000:8000"
+      - "${VULHUNTER_BACKEND_PORT:-8000}:8000"
     env_file:
       - ./backend/.env
     environment:
@@ -83,6 +85,9 @@ services:
       - MCP_FILESYSTEM_ENABLED=true
       - MCP_FILESYSTEM_RUNTIME_MODE=stdio_only
       - MCP_FILESYSTEM_FORCE_STDIO=${MCP_FILESYSTEM_FORCE_STDIO:-true}
+      - MCP_CODEBADGER_ENABLED=true
+      - MCP_CODEBADGER_RUNTIME_MODE=backend_only
+      - MCP_CODEBADGER_BACKEND_URL=http://codebadger-mcp:4242/mcp
       - MCP_CODE_INDEX_ENABLED=true
       - GIT_MIRROR_ENABLED=${GIT_MIRROR_ENABLED:-true}
       - GIT_MIRROR_PREFIX=${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
@@ -91,8 +96,11 @@ services:
       - GIT_MIRROR_ALLOW_AUTH_URL=${GIT_MIRROR_ALLOW_AUTH_URL:-false}
       - GIT_MIRROR_FALLBACK_TO_ORIGIN=${GIT_MIRROR_FALLBACK_TO_ORIGIN:-false}
       - XDG_CONFIG_HOME=/app/data/mcp/xdg-config
-      # Enable Joern MCP fallback (CodeBadger). Best-effort when the profile isn't enabled.
       - JOERN_MCP_ENABLED=true
+      - JOERN_MCP_PREFER=true
+      - JOERN_MCP_URL=http://codebadger-mcp:4242/mcp
+      - JOERN_MCP_CPG_TIMEOUT_SEC=${JOERN_MCP_CPG_TIMEOUT_SEC:-240}
+      - JOERN_MCP_QUERY_TIMEOUT_SEC=${JOERN_MCP_QUERY_TIMEOUT_SEC:-90}
       # 禁用代理设置，防止容器内无法连接外部 API
       - HTTP_PROXY=
       - HTTPS_PROXY=
@@ -105,6 +113,66 @@ services:
       redis:
         condition: service_healthy
     # 开发模式：启用 --reload 热重载
+    networks:
+      - vulhunter-network
+
+  codebadger-joern-server:
+    build:
+      context: ./docker/codebadger-joern-server
+      dockerfile: Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - CODEBADGER_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        - CODEBADGER_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        - CODEBADGER_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
+        - CODEBADGER_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+        - GIT_MIRROR_PREFIX=${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
+    image: vulhunter/codebadger-joern-server:latest
+    container_name: codebadger-joern-server
+    restart: unless-stopped
+    volumes:
+      - codebadger_playground:/playground
+      - /tmp/vulhunter:/tmp/vulhunter
+      - /tmp/vulhunter:/tmp/deepaudit
+    healthcheck:
+      test: ["CMD-SHELL", "test -x /opt/joern/joern-cli/joern"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles: ["joern"]
+    networks:
+      - vulhunter-network
+
+  codebadger-mcp:
+    build:
+      context: ./docker/codebadger-mcp
+      dockerfile: Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - CODEBADGER_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        - CODEBADGER_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        - CODEBADGER_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
+        - CODEBADGER_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+        - CODEBADGER_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
+        - CODEBADGER_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
+        - CODEBADGER_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
+        - GIT_MIRROR_PREFIX=${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
+    image: vulhunter/codebadger-mcp:latest
+    restart: unless-stopped
+    volumes:
+      - codebadger_playground:/app/playground
+      - /tmp/vulhunter:/tmp/vulhunter
+      - /tmp/vulhunter:/tmp/deepaudit
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4242/health | tr -d '\\n\\r ' | grep -q '\"status\":\"healthy\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    depends_on:
+      codebadger-joern-server:
+        condition: service_healthy
+    profiles: ["joern"]
     networks:
       - vulhunter-network
 
@@ -131,7 +199,7 @@ services:
       # - ./frontend/dist:/usr/share/nginx/html:ro  # 挂载构建产物，本地 pnpm build 后自动生效
       - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro  # 挂载 nginx 配置
     ports:
-      - "3000:80" # Nginx 监听 80 端口
+      - "${VULHUNTER_FRONTEND_PORT:-3000}:80" # Nginx 监听 80 端口
     environment:
       # 禁用代理 - nginx 需要直连后端
       - HTTP_PROXY=
@@ -200,3 +268,4 @@ volumes:
   mcp_data:
   qmd_data:
   redis_data:
+  codebadger_playground:
