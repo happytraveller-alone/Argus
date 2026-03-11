@@ -340,6 +340,10 @@ class EventManager:
         self._inflight_tool_calls: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self._tool_drain_waiters: Dict[str, asyncio.Event] = {}
         self._inflight_lock = asyncio.Lock()
+        self._pending_realtime_events: Dict[str, Dict[int, Dict[str, Any]]] = {}
+        self._next_realtime_sequence: Dict[str, int] = {}
+        self._realtime_publish_state_lock = asyncio.Lock()
+        self._realtime_publish_flush_lock = asyncio.Lock()
 
     @staticmethod
     def _normalize_tool_call_key(
@@ -458,6 +462,70 @@ class EventManager:
             "elapsed_ms": elapsed_ms,
             "pending_tool_calls": pending_after,
         }
+
+    async def _publish_realtime_event(self, task_id: str, event_data: Dict[str, Any]) -> None:
+        sequence = int(event_data.get("sequence") or 0)
+        ready_batch: List[Dict[str, Any]] = []
+
+        async with self._realtime_publish_flush_lock:
+            async with self._realtime_publish_state_lock:
+                if sequence <= 0:
+                    ready_batch.append(event_data)
+                else:
+                    pending = self._pending_realtime_events.setdefault(task_id, {})
+                    pending[sequence] = event_data
+                    next_sequence = self._next_realtime_sequence.setdefault(task_id, 1)
+                    while next_sequence in pending:
+                        ready_batch.append(pending.pop(next_sequence))
+                        next_sequence += 1
+                    self._next_realtime_sequence[task_id] = next_sequence
+                    if not pending:
+                        self._pending_realtime_events.pop(task_id, None)
+
+            for ready_event in ready_batch:
+                await self._deliver_realtime_event(task_id, ready_event)
+
+    async def _deliver_realtime_event(self, task_id: str, event_data: Dict[str, Any]) -> None:
+        event_type = str(event_data.get("event_type") or "")
+        sequence = int(event_data.get("sequence") or 0)
+
+        if task_id in self._event_queues:
+            try:
+                self._event_queues[task_id].put_nowait(event_data)
+                if event_type in [
+                    "thinking_start",
+                    "thinking_end",
+                    "dispatch",
+                    "task_complete",
+                    "task_error",
+                    "tool_call",
+                    "tool_result",
+                    "llm_action",
+                ]:
+                    logger.info(
+                        "[EventQueue] Added %s to queue for task %s, queue size: %s",
+                        event_type,
+                        task_id,
+                        self._event_queues[task_id].qsize(),
+                    )
+                elif event_type == "thinking_token" and sequence % 10 == 0:
+                    logger.debug(
+                        "[EventQueue] Added thinking_token #%s to queue, size: %s",
+                        sequence,
+                        self._event_queues[task_id].qsize(),
+                    )
+            except asyncio.QueueFull:
+                pass
+
+        if task_id in self._event_callbacks:
+            for callback in self._event_callbacks[task_id]:
+                try:
+                    if asyncio.iscoroutinefunction(callback):
+                        await callback(event_data)
+                    else:
+                        callback(event_data)
+                except Exception as e:
+                    logger.error(f"Event callback error: {e}")
     
     async def add_event(
         self,
@@ -511,32 +579,8 @@ class EventManager:
                 await self._save_event_to_db(event_data)
             except Exception as e:
                 logger.error(f"Failed to save event to database: {e}")
-        
-        # 推送到队列（非阻塞）
-        if task_id in self._event_queues:
-            try:
-                self._event_queues[task_id].put_nowait(event_data)
-                # 🔥 DEBUG: 记录重要事件被添加到队列
-                if event_type in ["thinking_start", "thinking_end", "dispatch", "task_complete", "task_error", "tool_call", "tool_result", "llm_action"]:
-                    logger.info(f"[EventQueue] Added {event_type} to queue for task {task_id}, queue size: {self._event_queues[task_id].qsize()}")
-                elif event_type == "thinking_token":
-                    # 每10个token记录一次
-                    if sequence % 10 == 0:
-                        logger.debug(f"[EventQueue] Added thinking_token #{sequence} to queue, size: {self._event_queues[task_id].qsize()}")
-            except asyncio.QueueFull:
-                # logger.warning(f"Event queue full for task {task_id}, dropping event: {event_type}")
-                pass
-        
-        # 调用回调
-        if task_id in self._event_callbacks:
-            for callback in self._event_callbacks[task_id]:
-                try:
-                    if asyncio.iscoroutinefunction(callback):
-                        await callback(event_data)
-                    else:
-                        callback(event_data)
-                except Exception as e:
-                    logger.error(f"Event callback error: {e}")
+
+        await self._publish_realtime_event(task_id, event_data)
         
         return event_id
     
@@ -600,6 +644,8 @@ class EventManager:
         if task_id in self._event_queues:
             del self._event_queues[task_id]
         self._inflight_tool_calls.pop(task_id, None)
+        self._pending_realtime_events.pop(task_id, None)
+        self._next_realtime_sequence.pop(task_id, None)
         waiter = self._tool_drain_waiters.pop(task_id, None)
         if waiter is not None:
             waiter.set()
@@ -752,6 +798,8 @@ class EventManager:
         # 清理所有回调
         self._event_callbacks.clear()
         self._inflight_tool_calls.clear()
+        self._pending_realtime_events.clear()
+        self._next_realtime_sequence.clear()
         for waiter in self._tool_drain_waiters.values():
             waiter.set()
         self._tool_drain_waiters.clear()

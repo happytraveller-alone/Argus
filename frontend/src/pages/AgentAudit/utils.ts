@@ -214,6 +214,120 @@ export function createLogItem(
   };
 }
 
+function toFiniteSequence(value: unknown): number | null {
+  const sequence = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(sequence)) {
+    return null;
+  }
+  return Math.floor(sequence);
+}
+
+function extractExistingToolCallId(log: LogItem): string | null {
+  const directCallId =
+    typeof log.tool?.callId === "string" ? log.tool.callId.trim() : "";
+  if (directCallId) {
+    return directCallId;
+  }
+
+  const metadata =
+    log.detail && typeof log.detail === "object"
+      ? (log.detail.metadata as Record<string, unknown> | undefined)
+      : undefined;
+  const metadataCallId =
+    typeof metadata?.tool_call_id === "string" ? metadata.tool_call_id.trim() : "";
+  return metadataCallId || null;
+}
+
+export function shouldIgnoreStaleToolEvent(input: {
+  existingLog: LogItem | null | undefined;
+  incomingEventType: string;
+  incomingSequence?: number | null;
+  incomingToolCallId?: string | null;
+}): boolean {
+  const { existingLog, incomingEventType, incomingSequence, incomingToolCallId } = input;
+  if (!existingLog || existingLog.type !== "tool") {
+    return false;
+  }
+
+  const existingCallId = extractExistingToolCallId(existingLog);
+  const normalizedIncomingCallId =
+    typeof incomingToolCallId === "string" ? incomingToolCallId.trim() : "";
+  if (existingCallId && normalizedIncomingCallId && existingCallId !== normalizedIncomingCallId) {
+    return false;
+  }
+
+  const existingSequence = toFiniteSequence(
+    existingLog.detail && typeof existingLog.detail === "object"
+      ? existingLog.detail.sequence
+      : null,
+  );
+  const nextSequence = toFiniteSequence(incomingSequence);
+  if (
+    existingSequence !== null &&
+    nextSequence !== null &&
+    nextSequence < existingSequence
+  ) {
+    return true;
+  }
+
+  const normalizedEventType = String(incomingEventType || "").trim().toLowerCase();
+  const normalizedStatus = String(existingLog.tool?.status || "").trim().toLowerCase();
+  const isTerminalToolStatus =
+    normalizedStatus === "completed" ||
+    normalizedStatus === "failed" ||
+    normalizedStatus === "cancelled";
+
+  return Boolean(
+    isTerminalToolStatus &&
+    (normalizedEventType === "tool_call" || normalizedEventType === "tool_call_start") &&
+    existingCallId &&
+    normalizedIncomingCallId &&
+    existingCallId === normalizedIncomingCallId &&
+    (nextSequence === null || existingSequence === null || nextSequence <= existingSequence),
+  );
+}
+
+export function computeContainerAnchorScrollTop(input: {
+  containerScrollTop: number;
+  containerClientHeight: number;
+  containerTop: number;
+  anchorTop: number;
+  anchorHeight: number;
+}): number {
+  const {
+    containerScrollTop,
+    containerClientHeight,
+    containerTop,
+    anchorTop,
+    anchorHeight,
+  } = input;
+
+  if (
+    !Number.isFinite(containerClientHeight) ||
+    containerClientHeight <= 0 ||
+    !Number.isFinite(containerScrollTop) ||
+    !Number.isFinite(containerTop) ||
+    !Number.isFinite(anchorTop)
+  ) {
+    return Number.isFinite(containerScrollTop) ? containerScrollTop : 0;
+  }
+
+  const safeAnchorHeight =
+    Number.isFinite(anchorHeight) && anchorHeight > 0 ? anchorHeight : 0;
+  const relativeAnchorTop = anchorTop - containerTop + containerScrollTop;
+  const visibleTop = containerScrollTop;
+  const visibleBottom = containerScrollTop + containerClientHeight;
+  const anchorBottom = relativeAnchorTop + safeAnchorHeight;
+
+  if (relativeAnchorTop >= visibleTop && anchorBottom <= visibleBottom) {
+    return containerScrollTop;
+  }
+
+  const centeredTarget =
+    relativeAnchorTop - containerClientHeight / 2 + safeAnchorHeight / 2;
+  return Math.max(0, Math.round(centeredTarget));
+}
+
 /**
  * Clean thinking content (extract only the Thought part, remove Action/Action Input)
  */

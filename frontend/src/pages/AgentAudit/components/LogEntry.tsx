@@ -53,71 +53,42 @@ function formatCodeWindowLocation(entry: {
   return `${entry.filePath}:${entry.startLine}-${entry.endLine}`;
 }
 
-function buildToolListSummary(item: LogItem): {
-  primaryTitle: string;
-  secondarySummary: string;
-  resultBadgeText?: string;
-} {
-  const primaryTitle =
-    String(item.tool?.name || "").trim() || formatTitle(item.title);
+function buildToolListSummary(item: LogItem): string {
+  const primaryTitle = String(item.tool?.name || "").trim() || formatTitle(item.title);
 
   if (item.tool?.status === "running") {
-    return {
-      primaryTitle,
-      secondarySummary: "正在执行",
-    };
+    return `${primaryTitle} · 正在执行`;
   }
 
   const evidence = item.toolEvidence;
   if (evidence?.renderType === "search_hits") {
     const count = evidence.entries.length;
-    return {
-      primaryTitle,
-      secondarySummary: `${count} 条命中`,
-      resultBadgeText: `${count} 条命中`,
-    };
+    return `${primaryTitle} · ${count} 条命中`;
   }
 
   if (evidence?.renderType === "code_window") {
     const first = evidence.entries[0];
     const location = first ? formatCodeWindowLocation(first) : "详情可查看代码窗口";
-    return {
-      primaryTitle,
-      secondarySummary: `代码窗口 · ${location}`,
-      resultBadgeText: "代码窗口",
-    };
+    return `${primaryTitle} · 代码窗口 · ${location}`;
   }
 
   if (evidence?.renderType === "execution_result") {
     const first = evidence.entries[0];
     const exitCode = first?.exitCode;
-    return {
-      primaryTitle,
-      secondarySummary:
-        typeof exitCode === "number" ? `执行结果 · 退出码 ${exitCode}` : "执行结果已生成",
-      resultBadgeText:
-        typeof exitCode === "number" ? `退出码 ${exitCode}` : "执行结果",
-    };
+    return typeof exitCode === "number"
+      ? `${primaryTitle} · 执行结果 · 退出码 ${exitCode}`
+      : `${primaryTitle} · 执行结果已生成`;
   }
 
   if (item.tool?.status === "failed") {
-    return {
-      primaryTitle,
-      secondarySummary: "执行失败，详情可查看原始结果",
-    };
+    return `${primaryTitle} · 执行失败，详情可查看原始结果`;
   }
 
   if (item.tool?.status === "cancelled") {
-    return {
-      primaryTitle,
-      secondarySummary: "已取消，详情可查看原始结果",
-    };
+    return `${primaryTitle} · 已取消，详情可查看原始结果`;
   }
 
-  return {
-    primaryTitle,
-    secondarySummary: "已完成，详情可查看原始结果",
-  };
+  return `${primaryTitle} · 已完成，详情可查看原始结果`;
 }
 
 export const LogEntry = memo(function LogEntry({
@@ -154,14 +125,29 @@ export const LogEntry = memo(function LogEntry({
   const normalizedPreview = contentPreview.replace(/\.\.\.$/, "").trim();
   const isToolRow = item.type === "tool" && Boolean(item.tool?.name);
   const toolListSummary = isToolRow ? buildToolListSummary(item) : null;
+  const isEvidenceTool = isToolEvidenceCapableTool(item.tool?.name);
   const shouldRenderPreview =
     Boolean(contentPreview) &&
     !isToolRow &&
     normalizedPreview !== formattedTitle &&
     normalizedPreview !== normalizedTitle &&
     !(normalizedTitle && normalizedPreview.startsWith(normalizedTitle));
-  const isEvidenceTool = isToolEvidenceCapableTool(item.tool?.name);
-
+  const summaryText = isToolRow
+    ? toolListSummary || formattedTitle
+    : formattedTitle;
+  const summaryTitle = isToolRow
+    ? toolListSummary || formattedTitle
+    : shouldRenderPreview
+      ? `${formattedTitle} · ${contentPreview}`
+      : formattedTitle;
+  const typeBadgeClass =
+    item.type === "error"
+      ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+      : item.type === "tool"
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+        : item.type === "progress"
+          ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
+          : "border-border/70 bg-background/60 text-muted-foreground";
   return (
     <div
       id={anchorId}
@@ -172,58 +158,34 @@ export const LogEntry = memo(function LogEntry({
       }
     >
       <div className="px-2 py-2.5 hover:bg-muted/35">
-        <div className="flex flex-col gap-2 md:grid md:grid-cols-[72px_64px_minmax(0,1fr)_110px_96px_auto] md:items-start md:gap-3">
+        <div className="flex flex-col gap-2 md:grid md:grid-cols-[72px_84px_minmax(0,1fr)_120px_110px_auto] md:items-center md:gap-3">
           <div className="text-xs font-mono text-muted-foreground tabular-nums">
             {item.time}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <span className="text-muted-foreground/80">{typeIcon}</span>
-            <span className="text-xs font-mono uppercase tracking-wide text-muted-foreground">
+            <Badge
+              variant="outline"
+              className={`h-6 rounded-full px-2 text-[10px] font-medium ${typeBadgeClass}`}
+            >
               {typeLabel}
-            </span>
+            </Badge>
           </div>
 
           <div className="min-w-0">
-            {isToolRow && toolListSummary ? (
-              <>
-                <p className="line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground">
-                  {toolListSummary.primaryTitle}
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <p className="line-clamp-1 break-words text-xs text-muted-foreground">
-                    {toolListSummary.secondarySummary}
-                  </p>
-                  {toolListSummary.resultBadgeText ? (
-                    <Badge
-                      variant="outline"
-                      className="h-5 rounded-full border-border/70 px-2 text-[10px] font-medium text-muted-foreground"
-                    >
-                      {toolListSummary.resultBadgeText}
-                    </Badge>
-                  ) : null}
-                  {isEvidenceTool && !item.toolEvidence && item.tool?.status !== "running" ? (
-                    <Badge
-                      variant="outline"
-                      className="h-5 rounded-full border-amber-500/30 bg-amber-500/10 px-2 text-[10px] font-medium text-amber-700 dark:text-amber-200"
-                    >
-                      原始结果
-                    </Badge>
-                  ) : null}
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground">
-                  {formattedTitle}
-                </p>
-                {shouldRenderPreview && (
-                  <p className="mt-0.5 line-clamp-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">
-                    {contentPreview}
-                  </p>
-                )}
-              </>
-            )}
+            <p
+              className="line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground"
+              title={summaryTitle}
+            >
+              {summaryText}
+            </p>
+            {!isToolRow && shouldRenderPreview ? (
+              <p className="sr-only">{contentPreview}</p>
+            ) : null}
+            {isEvidenceTool && !item.toolEvidence && item.tool?.status !== "running" ? (
+              <span className="sr-only">原始结果</span>
+            ) : null}
           </div>
 
           <div className="min-w-0">
@@ -269,11 +231,11 @@ export const LogEntry = memo(function LogEntry({
             )}
           </div>
 
-          <div className="flex justify-start md:justify-end">
+          <div className="flex justify-start md:justify-start">
             <button
               type="button"
               onClick={onOpenDetail}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-primary"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/70 px-2.5 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
             >
               查看详情
               <ExternalLink className="w-3.5 h-3.5" />

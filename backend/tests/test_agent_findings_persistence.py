@@ -7,6 +7,14 @@ import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 
 
+class _ScalarOneOrNoneResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+
 @pytest.mark.asyncio
 async def test_save_findings_keeps_long_text_fields_without_truncation(tmp_path):
     long_title = "T" * 1200
@@ -24,6 +32,7 @@ async def test_save_findings_keeps_long_text_fields_without_truncation(tmp_path)
 
     db = AsyncMock()
     db.add = MagicMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
 
@@ -69,3 +78,101 @@ async def test_save_findings_keeps_long_text_fields_without_truncation(tmp_path)
     assert "参数化查询" in (saved_finding.fix_description or "")
     assert saved_finding.verification_result["authenticity"] == "confirmed"
     assert saved_finding.verification_result["reachability"] == "reachable"
+
+
+@pytest.mark.asyncio
+async def test_save_findings_persists_false_positive_without_resolved_source_file(tmp_path):
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+
+    findings = [
+        {
+            "title": "示例配置命中并非真实漏洞",
+            "severity": "low",
+            "vulnerability_type": "hardcoded_secret",
+            "description": "示例模板，不参与真实运行",
+            "file_path": "examples/demo.env.example",
+            "line_start": None,
+            "line_end": None,
+            "code_snippet": None,
+            "verdict": "false_positive",
+            "authenticity": "false_positive",
+            "reachability": "unreachable",
+            "verification_evidence": "示例配置模板，不参与实际部署，验证阶段判定为误报。",
+            "verification_todo_id": "todo-fp-1",
+            "verification_fingerprint": "fingerprint-fp-1",
+            "verification_result": {},
+        }
+    ]
+
+    saved_count = await _save_findings(
+        db,
+        task_id="task-fp-1",
+        findings=findings,
+        project_root=str(tmp_path),
+    )
+
+    assert saved_count == 1
+    db.add.assert_called_once()
+    db.commit.assert_awaited_once()
+
+    saved_finding = db.add.call_args.args[0]
+    assert saved_finding.status == "false_positive"
+    assert saved_finding.verdict == "false_positive"
+    assert saved_finding.file_path == "examples/demo.env.example"
+    assert saved_finding.line_start is None
+    assert saved_finding.code_snippet is None
+    assert saved_finding.code_context is None
+    assert saved_finding.verification_evidence == "示例配置模板，不参与实际部署，验证阶段判定为误报。"
+    assert saved_finding.verification_result["verification_todo_id"] == "todo-fp-1"
+    assert saved_finding.verification_result["verification_fingerprint"] == "fingerprint-fp-1"
+    assert saved_finding.finding_metadata["verification_todo_id"] == "todo-fp-1"
+
+
+@pytest.mark.asyncio
+async def test_save_findings_synthesizes_false_positive_fingerprint_without_location_or_ids(tmp_path):
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+
+    findings = [
+        {
+            "title": "模板文件命中但属于误报",
+            "severity": "low",
+            "vulnerability_type": "hardcoded_secret",
+            "description": "示例配置，不参与真实部署",
+            "file_path": None,
+            "line_start": None,
+            "line_end": None,
+            "code_snippet": None,
+            "verdict": "false_positive",
+            "authenticity": "false_positive",
+            "reachability": "unreachable",
+            "verification_evidence": "验证阶段确认为误报。",
+            "verification_result": {},
+        }
+    ]
+
+    saved_count = await _save_findings(
+        db,
+        task_id="task-fp-synth",
+        findings=findings,
+        project_root=str(tmp_path),
+    )
+
+    assert saved_count == 1
+    saved_finding = db.add.call_args.args[0]
+    assert saved_finding.status == "false_positive"
+    assert saved_finding.verification_result["verification_fingerprint"].startswith(
+        "fp:task-fp-synth:"
+    )
+    assert (
+        saved_finding.finding_metadata["verification_fingerprint"]
+        == saved_finding.verification_result["verification_fingerprint"]
+    )
+    assert saved_finding.fingerprint == saved_finding.verification_result["verification_fingerprint"]

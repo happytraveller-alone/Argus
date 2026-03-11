@@ -2824,8 +2824,40 @@ class VerificationAgent(BaseAgent):
                 meta_vuln = str(verified_findings[idx].get("vulnerability_type") or "unknown")
                 meta_sev = str(verified_findings[idx].get("severity") or "medium")
                 meta_file = str(verified_findings[idx].get("file_path") or todo_item.file_path)
-                meta_line_start = int(verified_findings[idx].get("line_start") or todo_item.line_start)
-                meta_line_end = int(verified_findings[idx].get("line_end") or meta_line_start)
+                raw_meta_line_start = verified_findings[idx].get("line_start") or todo_item.line_start
+                raw_meta_line_end = verified_findings[idx].get("line_end")
+                meta_line_start = int(raw_meta_line_start) if raw_meta_line_start is not None else None
+                meta_line_end = (
+                    int(raw_meta_line_end)
+                    if raw_meta_line_end is not None
+                    else meta_line_start
+                )
+                verification_payload = verified_findings[idx].get("verification_result")
+                if not isinstance(verification_payload, dict):
+                    verification_payload = {}
+                meta_verdict = str(
+                    verification_payload.get("verdict")
+                    or verified_findings[idx].get("verdict")
+                    or ("false_positive" if todo_item.status != "verified" else "confirmed")
+                ).strip().lower()
+                meta_authenticity = str(
+                    verification_payload.get("authenticity")
+                    or verified_findings[idx].get("authenticity")
+                    or meta_verdict
+                ).strip().lower()
+                meta_evidence = str(
+                    verification_payload.get("verification_evidence")
+                    or verified_findings[idx].get("verification_evidence")
+                    or verified_findings[idx].get("description")
+                    or ""
+                ).strip()
+                meta_description = str(verified_findings[idx].get("description") or "").strip() or None
+                meta_description_markdown = str(
+                    verified_findings[idx].get("description_markdown") or ""
+                ).strip() or None
+                meta_code_snippet = (
+                    str(verified_findings[idx].get("code_snippet") or "").strip() or None
+                )
                 if todo_item.status == "verified":
                     await self.emit_event(
                         "finding_verified",
@@ -2844,6 +2876,12 @@ class VerificationAgent(BaseAgent):
                             "verification_fingerprint": todo_item.fingerprint,
                             "verification_status": "verified",
                             "status": "verified",
+                            "authenticity": meta_authenticity,
+                            "verdict": meta_verdict,
+                            "verification_evidence": meta_evidence,
+                            "description": meta_description,
+                            "description_markdown": meta_description_markdown,
+                            "code_snippet": meta_code_snippet,
                         },
                     )
                 else:
@@ -2864,6 +2902,12 @@ class VerificationAgent(BaseAgent):
                             "verification_fingerprint": todo_item.fingerprint,
                             "verification_status": "false_positive",
                             "status": "false_positive",
+                            "authenticity": meta_authenticity,
+                            "verdict": meta_verdict,
+                            "verification_evidence": meta_evidence,
+                            "description": meta_description,
+                            "description_markdown": meta_description_markdown,
+                            "code_snippet": meta_code_snippet,
                         },
                     )
 

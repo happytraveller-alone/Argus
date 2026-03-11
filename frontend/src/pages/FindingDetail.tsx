@@ -24,6 +24,7 @@ import {
 	type GitleaksScanTask,
 } from "@/shared/api/gitleaks";
 import {
+	isFindingDetailLocationState,
 	normalizeReturnToPath,
 	resolveFindingDetailBackTarget,
 } from "@/shared/utils/findingRoute";
@@ -89,6 +90,13 @@ function getErrorMessage(error: unknown): string {
 			apiError?.message ||
 			"缺陷详情加载失败，请稍后重试",
 	);
+}
+
+function getErrorStatus(error: unknown): number {
+	const apiError = error as {
+		response?: { status?: number };
+	};
+	return Number(apiError?.response?.status || 0);
 }
 
 function normalizeAgentConfidence(value: number | null | undefined): string {
@@ -218,6 +226,27 @@ function getSeverityBadgeClass(severity: string): string {
 	return "bg-muted text-muted-foreground border-border";
 }
 
+function normalizeFindingToken(value: unknown): string {
+	return String(value || "").trim().toLowerCase();
+}
+
+function isAgentFalsePositiveFinding(finding: AgentFinding | null): boolean {
+	if (!finding) return false;
+	return (
+		normalizeFindingToken(finding.authenticity) === "false_positive" ||
+		normalizeFindingToken(finding.status) === "false_positive"
+	);
+}
+
+function getAgentFalsePositiveEvidence(finding: AgentFinding | null): string {
+	if (!finding) return "未生成详细判定说明";
+	const evidence = String(finding.verification_evidence || "").trim();
+	if (evidence) return evidence;
+	const description = String(finding.description || "").trim();
+	if (description) return description;
+	return "未生成详细判定说明";
+}
+
 export default function FindingDetail() {
 	const { source: sourceParam, taskId: rawTaskId, findingId: rawFindingId } = useParams<{
 		source: string;
@@ -238,6 +267,14 @@ export default function FindingDetail() {
 		const searchParams = new URLSearchParams(location.search);
 		return normalizeReturnToPath(searchParams.get("returnTo"));
 	}, [location.search]);
+	const routeState = useMemo(
+		() => (isFindingDetailLocationState(location.state) ? location.state : null),
+		[location.state],
+	);
+	const agentFindingSnapshot = useMemo(() => {
+		if (source !== "agent") return null;
+		return routeState?.agentFindingSnapshot ?? null;
+	}, [routeState, source]);
 
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
@@ -293,11 +330,42 @@ export default function FindingDetail() {
 						setStaticContext(context);
 					}
 				} else {
-					const finding = await getAgentFinding(taskId, findingId, {
-						include_false_positive: true,
-					});
-					if (cancelled) return;
-					setAgentFinding(finding);
+					const canUseSnapshot =
+						agentFindingSnapshot &&
+						isAgentFalsePositiveFinding(agentFindingSnapshot);
+					const retryDelaysMs = canUseSnapshot ? [0, 1200, 2400] : [0];
+					let resolved = false;
+					for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+						if (attempt > 0) {
+							await new Promise((resolve) =>
+								window.setTimeout(resolve, retryDelaysMs[attempt]),
+							);
+							if (cancelled) return;
+						}
+						try {
+							const finding = await getAgentFinding(taskId, findingId, {
+								include_false_positive: true,
+							});
+							if (cancelled) return;
+							setAgentFinding(finding);
+							setError("");
+							resolved = true;
+							break;
+						} catch (agentLoadError) {
+							const status = getErrorStatus(agentLoadError);
+							if (status === 404 && canUseSnapshot) {
+								setAgentFinding(agentFindingSnapshot);
+								setError("");
+								setLoading(false);
+								continue;
+							}
+							throw agentLoadError;
+						}
+					}
+					if (!resolved && canUseSnapshot) {
+						if (cancelled) return;
+						setAgentFinding(agentFindingSnapshot);
+					}
 				}
 			} catch (loadError) {
 				if (!cancelled) {
@@ -314,7 +382,7 @@ export default function FindingDetail() {
 		return () => {
 			cancelled = true;
 		};
-	}, [findingId, source, staticEngine, taskId]);
+	}, [agentFindingSnapshot, findingId, source, staticEngine, taskId]);
 
 	const codeViews = useMemo(() => {
 		if (source === "static" && staticEngine === "opengrep" && staticFinding) {
@@ -344,6 +412,17 @@ export default function FindingDetail() {
 	}, [agentFinding, gitleaksFinding, source, staticContext, staticEngine, staticFinding]);
 
 	const codeSections = useMemo(() => buildFindingDetailCodeSections(codeViews), [codeViews]);
+	const isAgentFalsePositive = useMemo(
+		() => source === "agent" && isAgentFalsePositiveFinding(agentFinding),
+		[source, agentFinding],
+	);
+	const detailPageTitle = isAgentFalsePositive ? "误报判定依据" : "统一缺陷详情";
+	const codePanelTitle = isAgentFalsePositive ? "关联代码 / 命中位置" : "命中代码";
+	const infoPanelTitle = isAgentFalsePositive ? "判定结果" : "缺陷信息";
+	const falsePositiveEvidence = useMemo(
+		() => getAgentFalsePositiveEvidence(agentFinding),
+		[agentFinding],
+	);
 
 	const handleBack = () => {
 		const target = resolveFindingDetailBackTarget({
@@ -371,7 +450,7 @@ export default function FindingDetail() {
 			<div className="flex items-center justify-between gap-3">
 				<div className="space-y-1">
 					<h1 className="text-2xl font-bold tracking-wider uppercase text-foreground">
-						统一缺陷详情
+						{detailPageTitle}
 					</h1>
 					<p className="text-sm text-muted-foreground">
 						来源：{sourceLabel} · 任务ID：{taskId || "-"} · 缺陷ID：{findingId || "-"}
@@ -392,7 +471,7 @@ export default function FindingDetail() {
 					<div className="cyber-card p-5 min-h-0 flex flex-col gap-4">
 						<div className="flex items-center justify-between gap-2">
 							<h2 className="text-base font-semibold uppercase tracking-wider text-foreground">
-								命中代码
+								{codePanelTitle}
 							</h2>
 							<span className="text-sm text-muted-foreground">{codeSections.length} 个代码块</span>
 						</div>
@@ -415,7 +494,9 @@ export default function FindingDetail() {
 								))
 							) : (
 								<div className="rounded border border-border p-4 text-sm text-muted-foreground">
-									暂无可展示的命中代码
+									{isAgentFalsePositive
+										? "该误报未保留可展示代码，仅提供判定结论"
+										: "暂无可展示的命中代码"}
 								</div>
 							)}
 						</div>
@@ -423,7 +504,7 @@ export default function FindingDetail() {
 
 					<div className="cyber-card p-5 min-h-0 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
 						<h2 className="text-base font-semibold uppercase tracking-wider text-foreground">
-							缺陷信息
+							{infoPanelTitle}
 						</h2>
 
 						{source === "static" && staticEngine === "opengrep" && staticFinding ? (
@@ -519,51 +600,107 @@ export default function FindingDetail() {
 							</>
 						) : source === "agent" && agentFinding ? (
 							<>
-								<div className="flex flex-wrap items-center gap-2">
-									<Badge className={getSeverityBadgeClass(agentFinding.severity)}>
-										严重级别：{agentFinding.severity}
-									</Badge>
-									<Badge className="cyber-badge-muted">状态：{agentFinding.status}</Badge>
-									<Badge className="cyber-badge-muted">
-										置信度：{normalizeAgentConfidence(resolveAgentConfidenceValue(agentFinding))}
-									</Badge>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">规则/类型</p>
-									<p className="text-base text-foreground break-all">
-										{agentFinding.vulnerability_type || "-"}
-									</p>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">文件位置</p>
-									<p className="text-base text-foreground break-all">
-										{agentFinding.file_path || "-"}
-										{agentFinding.line_start ? `:${agentFinding.line_start}` : ""}
-									</p>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">标题</p>
-									<p className="text-base text-foreground break-words">
-										{agentFinding.display_title || agentFinding.title || "-"}
-									</p>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">描述</p>
-									<p className="text-base text-foreground whitespace-pre-wrap break-words">
-										{agentFinding.description || "-"}
-									</p>
-								</div>
+								{isAgentFalsePositive ? (
+									<>
+										<div className="rounded-xl border border-zinc-500/30 bg-zinc-500/10 p-4">
+											<p className="text-xs font-mono uppercase tracking-[0.24em] text-zinc-300">
+												验证结论
+											</p>
+											<p className="mt-2 text-base font-medium text-foreground">
+												该问题已在验证阶段判定为误报，不计入有效漏洞
+											</p>
+										</div>
+										<div className="flex flex-wrap items-center gap-2">
+											<Badge className="cyber-badge-muted">
+												状态：{agentFinding.status || "false_positive"}
+											</Badge>
+											<Badge className="cyber-badge-muted">
+												置信度：{normalizeAgentConfidence(resolveAgentConfidenceValue(agentFinding))}
+											</Badge>
+										</div>
+										<div className="space-y-1.5 text-sm">
+											<p className="text-muted-foreground uppercase">误报类型 / 漏洞类型</p>
+											<p className="text-base text-foreground break-all">
+												{agentFinding.vulnerability_type || "-"}
+											</p>
+										</div>
+										<div className="space-y-1.5 text-sm">
+											<p className="text-muted-foreground uppercase">文件位置</p>
+											<p className="text-base text-foreground break-all">
+												{agentFinding.file_path || "-"}
+												{agentFinding.line_start ? `:${agentFinding.line_start}` : ""}
+											</p>
+										</div>
+										<div className="space-y-1.5 text-sm">
+											<p className="text-muted-foreground uppercase">原标题</p>
+											<p className="text-base text-foreground break-words">
+												{agentFinding.display_title || agentFinding.title || "-"}
+											</p>
+										</div>
+										<div className="space-y-1.5 text-sm">
+											<p className="text-muted-foreground uppercase">判定依据</p>
+											<p className="text-base text-foreground whitespace-pre-wrap break-words">
+												{falsePositiveEvidence}
+											</p>
+										</div>
+										<div className="rounded border border-dashed border-border p-4">
+											<p className="mb-1.5 text-sm text-muted-foreground uppercase">说明</p>
+											<p className="text-base text-muted-foreground">
+												误报仅表示本次验证未确认漏洞成立，不代表该类规则永久失效。
+											</p>
+										</div>
+									</>
+								) : (
+									<>
+										<div className="flex flex-wrap items-center gap-2">
+											<Badge className={getSeverityBadgeClass(agentFinding.severity)}>
+												严重级别：{agentFinding.severity}
+											</Badge>
+											<Badge className="cyber-badge-muted">状态：{agentFinding.status}</Badge>
+											<Badge className="cyber-badge-muted">
+												置信度：{normalizeAgentConfidence(resolveAgentConfidenceValue(agentFinding))}
+											</Badge>
+										</div>
+										<div className="space-y-1.5 text-sm">
+											<p className="text-muted-foreground uppercase">规则/类型</p>
+											<p className="text-base text-foreground break-all">
+												{agentFinding.vulnerability_type || "-"}
+											</p>
+										</div>
+										<div className="space-y-1.5 text-sm">
+											<p className="text-muted-foreground uppercase">文件位置</p>
+											<p className="text-base text-foreground break-all">
+												{agentFinding.file_path || "-"}
+												{agentFinding.line_start ? `:${agentFinding.line_start}` : ""}
+											</p>
+										</div>
+										<div className="space-y-1.5 text-sm">
+											<p className="text-muted-foreground uppercase">标题</p>
+											<p className="text-base text-foreground break-words">
+												{agentFinding.display_title || agentFinding.title || "-"}
+											</p>
+										</div>
+										<div className="space-y-1.5 text-sm">
+											<p className="text-muted-foreground uppercase">描述</p>
+											<p className="text-base text-foreground whitespace-pre-wrap break-words">
+												{agentFinding.description || "-"}
+											</p>
+										</div>
+									</>
+								)}
 							</>
 						) : (
 							<div className="text-base text-muted-foreground">暂无缺陷信息</div>
 						)}
 
-						<div className="rounded border border-dashed border-border p-4">
-							<p className="text-sm text-muted-foreground uppercase mb-1.5">其他信息（待优化）</p>
-							<p className="text-base text-muted-foreground">
-								此区域预留给后续扩展（修复建议、证据链、关联规则等）。
-							</p>
-						</div>
+						{!isAgentFalsePositive ? (
+							<div className="rounded border border-dashed border-border p-4">
+								<p className="text-sm text-muted-foreground uppercase mb-1.5">其他信息（待优化）</p>
+								<p className="text-base text-muted-foreground">
+									此区域预留给后续扩展（修复建议、证据链、关联规则等）。
+								</p>
+							</div>
+						) : null}
 					</div>
 				</div>
 			)}

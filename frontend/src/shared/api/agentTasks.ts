@@ -137,6 +137,8 @@ export interface AgentFinding {
   reachability: string | null;
   authenticity: string | null;
   verification_evidence: string | null;
+  verification_todo_id?: string | null;
+  verification_fingerprint?: string | null;
   reachability_file?: string | null;
   reachability_function?: string | null;
   reachability_function_start_line?: number | null;

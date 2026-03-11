@@ -7,6 +7,14 @@ import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 
 
+class _ScalarOneOrNoneResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+
 @pytest.mark.asyncio
 async def test_save_findings_strict_validation_filters_invalid_and_keeps_enriched(tmp_path):
     source_file = tmp_path / "app.py"
@@ -28,6 +36,7 @@ async def test_save_findings_strict_validation_filters_invalid_and_keeps_enriche
 
     db = AsyncMock()
     db.add = MagicMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
 
@@ -97,52 +106,31 @@ async def test_save_findings_strict_validation_filters_invalid_and_keeps_enriche
 
 
 @pytest.mark.asyncio
-async def test_save_findings_discards_false_positive_payload(tmp_path):
-    source_file = tmp_path / "app.py"
-    source_file.write_text(
-        "\n".join(
-            [
-                "def run(user_input):",
-                "    dangerous_call(user_input)",
-                "    return user_input",
-                "",
-                "def dangerous_call(value):",
-                "    return value",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
+async def test_save_findings_keeps_false_positive_payload_with_minimal_fields(tmp_path):
     db = AsyncMock()
     db.add = MagicMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
 
     diagnostics = {}
     findings = [
         {
-            "title": "valid likely finding",
-            "file_path": "app.py",
-            "line_start": 2,
-            "line_end": 2,
-            "description": "dangerous call is reachable",
-            "code_snippet": "dangerous_call(user_input)",
-            "verdict": "likely",
-            "reachability": "likely_reachable",
-            "verification_details": "matched dangerous call in source",
-            "verification_result": {},
-        },
-        {
-            "title": "false positive should be discarded",
-            "file_path": "app.py",
-            "line_start": 2,
-            "line_end": 2,
+            "title": "false positive should persist",
+            "file_path": "missing/demo.ts",
+            "line_start": None,
+            "line_end": None,
             "description": "cannot reproduce",
-            "code_snippet": "dangerous_call(user_input)",
+            "code_snippet": None,
             "verdict": "false_positive",
             "reachability": "unreachable",
-            "verification_details": "flow shows unreachable",
-            "verification_result": {},
+            "verification_details": "flow shows unreachable because this is only a sample config",
+            "verification_todo_id": "todo-1",
+            "verification_fingerprint": "fp-1",
+            "verification_result": {
+                "verification_todo_id": "todo-1",
+                "verification_fingerprint": "fp-1",
+            },
         },
     ]
 
@@ -157,4 +145,12 @@ async def test_save_findings_discards_false_positive_payload(tmp_path):
     assert saved_count == 1
     db.add.assert_called_once()
     assert diagnostics["saved_count"] == 1
-    assert diagnostics["filtered_reasons"]["false_positive_discarded"] == 1
+    saved_finding = db.add.call_args.args[0]
+    assert saved_finding.status == "false_positive"
+    assert saved_finding.verdict == "false_positive"
+    assert saved_finding.verification_evidence.startswith("flow shows unreachable")
+    assert saved_finding.file_path == "missing/demo.ts"
+    assert saved_finding.line_start is None
+    assert saved_finding.code_context is None
+    assert saved_finding.finding_metadata["verification_todo_id"] == "todo-1"
+    assert saved_finding.finding_metadata["verification_fingerprint"] == "fp-1"

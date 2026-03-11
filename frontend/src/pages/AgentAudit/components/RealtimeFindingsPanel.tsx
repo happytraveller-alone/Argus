@@ -4,7 +4,7 @@ import {
 	ChevronRight,
 	Search,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,11 +63,23 @@ export type RealtimeMergedFindingItem = {
 	reachability_function_end_line?: number | null;
 	context_start_line?: number | null;
 	context_end_line?: number | null;
+	authenticity?: string | null;
 	verification_evidence?: string | null;
+	verification_todo_id?: string | null;
+	verification_fingerprint?: string | null;
+	detailMode?: "detail" | "false_positive_reason";
 	confidence?: number | null;
 	timestamp?: string | null;
 	is_verified: boolean;
 };
+
+function isFalsePositiveFinding(item: RealtimeMergedFindingItem): boolean {
+	return (
+		item.detailMode === "false_positive_reason" ||
+		String(item.authenticity || "").trim().toLowerCase() === "false_positive" ||
+		item.display_severity === "invalid"
+	);
+}
 
 function getSeverityBadgeClass(severity: string): string {
 	if (severity === "critical") {
@@ -104,7 +116,7 @@ function getProcessingStatus(input: {
 	isRunning: boolean;
 }): { label: string; className: string } {
 	const phase = String(input.currentPhase || "").trim().toLowerCase();
-	if (input.item.display_severity === "invalid") {
+	if (isFalsePositiveFinding(input.item)) {
 		return {
 			label: "误报",
 			className: "border-zinc-500/30 bg-zinc-500/15 text-zinc-300",
@@ -153,6 +165,7 @@ export default function RealtimeFindingsPanel(props: {
 	filters: FindingsViewFilters;
 	onFiltersChange: (next: FindingsViewFilters) => void;
 	onOpenDetail: (item: RealtimeMergedFindingItem) => void;
+	scrollContainerRef?: RefObject<HTMLDivElement | null>;
 }) {
 	const [page, setPage] = useState(1);
 	const previousFiltersRef = useRef<FindingsViewFilters>(props.filters);
@@ -180,6 +193,13 @@ export default function RealtimeFindingsPanel(props: {
 			setPage(tableState.page);
 		}
 	}, [page, tableState.page]);
+
+	function getActionLabel(item: RealtimeMergedFindingItem): string {
+		if (!props.isRunning && isFalsePositiveFinding(item)) {
+			return "查看判定依据";
+		}
+		return "详情";
+	}
 
 	return (
 		<div
@@ -256,7 +276,7 @@ export default function RealtimeFindingsPanel(props: {
 				</div>
 
 				<div className="min-h-0 flex-1 overflow-hidden px-4 py-3">
-					<div className="h-full overflow-auto custom-scrollbar">
+					<div ref={props.scrollContainerRef} className="h-full overflow-auto custom-scrollbar">
 						{tableState.rows.length === 0 ? (
 							<div className="flex h-full items-center justify-center text-muted-foreground">
 								<div className="flex flex-col items-center gap-2 px-6 text-center">
@@ -287,8 +307,9 @@ export default function RealtimeFindingsPanel(props: {
 								</TableHeader>
 								<TableBody>
 									{tableState.rows.map((row, index) => {
+										const findingItem = row.raw as RealtimeMergedFindingItem;
 										const processingStatus = getProcessingStatus({
-											item: row.raw as RealtimeMergedFindingItem,
+											item: findingItem,
 											currentPhase: props.currentPhase,
 											isRunning: props.isRunning,
 										});
@@ -351,9 +372,9 @@ export default function RealtimeFindingsPanel(props: {
 														variant="outline"
 														className="cyber-btn-ghost h-8 px-3"
 														disabled={props.isRunning}
-														onClick={() => props.onOpenDetail(row.raw as RealtimeMergedFindingItem)}
+														onClick={() => props.onOpenDetail(findingItem)}
 													>
-														详情
+														{getActionLabel(findingItem)}
 													</Button>
 												</TableCell>
 											</TableRow>

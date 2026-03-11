@@ -2,11 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import LogEntry from "../src/pages/AgentAudit/components/LogEntry.tsx";
 import type { LogItem } from "../src/pages/AgentAudit/types.ts";
 
 globalThis.React = React;
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function renderLogEntry(item: LogItem): string {
   return renderToStaticMarkup(
@@ -165,4 +170,33 @@ test("LogEntry 工具行在缺少结构化证据时显示兜底摘要", () => {
   assert.match(markup, /search_code/);
   assert.match(markup, /执行失败，详情可查看原始结果/);
   assert.doesNotMatch(markup, /MCP/);
+});
+
+test("LogEntry 以六列表格化布局展示并保留查看详情操作", () => {
+  const markup = renderLogEntry(
+    createToolLog({
+      agentName: "验证智能体",
+    }),
+  );
+
+  assert.match(markup, /grid-cols-\[72px_84px_minmax\(0,1fr\)_120px_110px_auto\]/);
+  assert.match(markup, /验证智能体/);
+  assert.match(markup, /已完成/);
+  assert.match(markup, /查看详情/);
+});
+
+test("事件日志表头与行内容共用同一列模板且操作列左对齐", () => {
+  const pageSource = fs.readFileSync(
+    path.join(repoRoot, "src/pages/AgentAudit/index.tsx"),
+    "utf8",
+  );
+  const rowMarkup = renderLogEntry(createToolLog());
+
+  assert.match(
+    pageSource,
+    /grid-cols-\[72px_84px_minmax\(0,1fr\)_120px_110px_auto\]/,
+  );
+  assert.doesNotMatch(pageSource, /<span className="text-right">操作<\/span>/);
+  assert.doesNotMatch(rowMarkup, /md:justify-end/);
+  assert.match(rowMarkup, /md:justify-start/);
 });

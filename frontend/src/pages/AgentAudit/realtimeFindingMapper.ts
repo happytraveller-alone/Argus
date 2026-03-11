@@ -234,9 +234,15 @@ export function fromAgentFinding(
     reachability_function_end_line: finding.reachability_function_end_line ?? null,
     context_start_line: finding.context_start_line ?? null,
     context_end_line: finding.context_end_line ?? null,
+    authenticity: toOptionalString(finding.authenticity),
     confidence: toOptionalConfidence(finding.ai_confidence ?? finding.confidence),
     timestamp: finding.created_at ?? null,
     is_verified: verificationProgress === "verified",
+    verification_todo_id: toOptionalString(findingRecord.verification_todo_id),
+    verification_fingerprint: toOptionalString(
+      findingRecord.verification_fingerprint,
+    ),
+    detailMode: falsePositive ? "false_positive_reason" : "detail",
   };
 }
 
@@ -334,8 +340,12 @@ export function fromAgentEvent(event: AgentEvent): RealtimeMergedFindingItem | n
     ),
     context_start_line: toOptionalNumber(metadata.context_start_line),
     context_end_line: toOptionalNumber(metadata.context_end_line),
+    authenticity: toOptionalString(metadata.authenticity),
     confidence,
     timestamp,
     is_verified: verificationProgress === "verified",
+    verification_todo_id: toOptionalString(metadata.verification_todo_id),
+    verification_fingerprint: toOptionalString(metadata.verification_fingerprint),
+    detailMode: falsePositive ? "false_positive_reason" : "detail",
   };
 }

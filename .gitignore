@@ -213,3 +213,4 @@ frontend/.pnpm-store
 *.pyc
 
 skills-lock.json
+CLAUDE.md

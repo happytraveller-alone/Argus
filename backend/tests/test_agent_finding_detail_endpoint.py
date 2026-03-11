@@ -37,6 +37,8 @@ def _build_agent_finding(
             "start_line": 7,
             "end_line": 18,
         },
+        "verification_todo_id": "todo-1",
+        "verification_fingerprint": "fp-1",
     }
     return SimpleNamespace(
         id=finding_id,
@@ -60,6 +62,11 @@ def _build_agent_finding(
         poc_steps=None,
         verification_result=verification_result,
         references=["https://cwe.mitre.org/data/definitions/79.html"],
+        verification_evidence="verified by harness",
+        finding_metadata={
+            "verification_todo_id": "todo-1",
+            "verification_fingerprint": "fp-1",
+        },
         created_at=now,
     )
 
@@ -173,3 +180,6 @@ async def test_get_agent_finding_can_include_false_positive():
 
     assert result.id == "finding-fp"
     assert result.authenticity == "false_positive"
+    assert result.verification_todo_id == "todo-1"
+    assert result.verification_fingerprint == "fp-1"
+    assert result.verification_evidence == "verified by harness"

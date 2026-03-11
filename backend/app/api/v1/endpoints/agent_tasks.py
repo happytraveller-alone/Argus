@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Dict, Set, Tuple
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
@@ -264,6 +264,8 @@ class AgentFindingResponse(BaseModel):
     reachability: Optional[str] = None
     authenticity: Optional[str] = None
     verification_evidence: Optional[str] = None
+    verification_todo_id: Optional[str] = None
+    verification_fingerprint: Optional[str] = None
     flow_path_score: Optional[float] = None
     flow_call_chain: Optional[List[str]] = None
     function_trigger_flow: Optional[List[str]] = None
@@ -5193,41 +5195,45 @@ async def _save_findings(
 
             verification_result_payload_input = {
                 **verification_result_payload_input,
+                "authenticity": authenticity,
                 "verdict": authenticity,
                 "confidence": confidence,
                 "reachability": reachability,
                 "verification_evidence": verification_details_text,
             }
+            verification_todo_id = _normalize_optional_text(
+                finding.get("verification_todo_id")
+                or verification_result_payload_input.get("verification_todo_id")
+            )
+            verification_fingerprint = _normalize_optional_text(
+                finding.get("verification_fingerprint")
+                or verification_result_payload_input.get("verification_fingerprint")
+            )
+            if authenticity == "false_positive" and not verification_fingerprint:
+                fingerprint_basis = "|".join(
+                    [
+                        str(task_id or "").strip(),
+                        _normalize_optional_text(finding.get("title")) or "",
+                        _normalize_optional_text(finding.get("vulnerability_type")) or "",
+                        _normalize_optional_text(finding.get("description")) or "",
+                        _normalize_optional_text(finding.get("file_path")) or "",
+                        str(_to_int(finding.get("line_start")) or ""),
+                        str(_to_int(finding.get("line_end")) or ""),
+                        _normalize_optional_text(finding.get("code_snippet")) or "",
+                        verification_details_text,
+                    ]
+                )
+                verification_fingerprint = (
+                    f"fp:{str(task_id or '').strip()}:{uuid5(NAMESPACE_URL, fingerprint_basis)}"
+                )
+            if verification_todo_id:
+                verification_result_payload_input["verification_todo_id"] = verification_todo_id
+            if verification_fingerprint:
+                verification_result_payload_input["verification_fingerprint"] = verification_fingerprint
 
             # 5) normalize file location
             location_file, location_line = _extract_location_parts(finding)
             raw_file_path = finding.get("file_path") or finding.get("file") or location_file
-            stored_file_path, full_file_path = _resolve_finding_file_path(
-                str(raw_file_path) if raw_file_path else None,
-                project_root,
-            )
-            if not stored_file_path or not full_file_path:
-                mark_filtered("missing_or_invalid_file_path", finding)
-                continue
-            if _is_core_ignored_path(stored_file_path):
-                mark_filtered("ignored_scope_path", finding)
-                continue
-
-            try:
-                file_content = Path(full_file_path).read_text(encoding="utf-8", errors="replace")
-            except Exception:
-                mark_filtered("file_read_failed", finding)
-                continue
-
-            file_lines = file_content.splitlines()
-            if not file_lines:
-                mark_filtered("empty_file_content", finding)
-                continue
-
-            # 6) normalize line range
-            line_start = _to_int(finding.get("line_start")) or _to_int(finding.get("line")) or location_line
-            line_end = _to_int(finding.get("line_end"))
-
             # 7) normalize snippets
             code_snippet = (
                 finding.get("code_snippet") or
@@ -5235,36 +5241,82 @@ async def _save_findings(
                 finding.get("vulnerable_code")
             )
             code_snippet_text = _normalize_optional_text(code_snippet)
+            line_start = _to_int(finding.get("line_start")) or _to_int(finding.get("line")) or location_line
+            line_end = _to_int(finding.get("line_end"))
+            stored_file_path = None
+            full_file_path = None
+            file_lines: List[str] = []
+            snippet_text = code_snippet_text
+            context_text = None
+            context_start_line = None
+            context_end_line = None
 
-            if line_start is None:
-                inferred_start, inferred_end = _infer_line_range_from_snippet(file_lines, code_snippet_text)
-                line_start = inferred_start
-                if inferred_end is not None:
-                    line_end = inferred_end
+            if authenticity == "false_positive":
+                if raw_file_path:
+                    stored_file_path = _normalize_relative_file_path(
+                        str(raw_file_path),
+                        project_root,
+                    )
+                if line_end is None and line_start is not None:
+                    line_end = line_start
+            else:
+                stored_file_path, full_file_path = _resolve_finding_file_path(
+                    str(raw_file_path) if raw_file_path else None,
+                    project_root,
+                )
+                if not stored_file_path or not full_file_path:
+                    mark_filtered("missing_or_invalid_file_path", finding)
+                    continue
+                if _is_core_ignored_path(stored_file_path):
+                    mark_filtered("ignored_scope_path", finding)
+                    continue
 
-            if line_start is None:
-                mark_filtered("missing_line_start", finding)
-                continue
-            if line_end is None:
-                line_end = line_start
+                try:
+                    file_content = Path(full_file_path).read_text(
+                        encoding="utf-8",
+                        errors="replace",
+                    )
+                except Exception:
+                    mark_filtered("file_read_failed", finding)
+                    continue
 
-            total_lines = len(file_lines)
-            line_start = max(1, min(line_start, total_lines))
-            line_end = max(line_start, min(line_end, total_lines))
+                file_lines = file_content.splitlines()
+                if not file_lines:
+                    mark_filtered("empty_file_content", finding)
+                    continue
 
-            snippet_text, context_text, context_start_line, context_end_line = _build_code_windows(
-                file_lines=file_lines,
-                line_start=line_start,
-                line_end=line_end,
-                radius=12,
-            )
-            if not context_text or context_start_line is None or context_end_line is None:
-                mark_filtered("missing_code_context", finding)
-                continue
-            if not snippet_text:
-                snippet_text = code_snippet_text
-            if not snippet_text:
-                snippet_text = "\n".join(file_lines[line_start - 1 : line_end]).strip()
+                if line_start is None:
+                    inferred_start, inferred_end = _infer_line_range_from_snippet(
+                        file_lines,
+                        code_snippet_text,
+                    )
+                    line_start = inferred_start
+                    if inferred_end is not None:
+                        line_end = inferred_end
+
+                if line_start is None:
+                    mark_filtered("missing_line_start", finding)
+                    continue
+                if line_end is None:
+                    line_end = line_start
+
+                total_lines = len(file_lines)
+                line_start = max(1, min(line_start, total_lines))
+                line_end = max(line_start, min(line_end, total_lines))
+
+                snippet_text, context_text, context_start_line, context_end_line = _build_code_windows(
+                    file_lines=file_lines,
+                    line_start=line_start,
+                    line_end=line_end,
+                    radius=12,
+                )
+                if not context_text or context_start_line is None or context_end_line is None:
+                    mark_filtered("missing_code_context", finding)
+                    continue
+                if not snippet_text:
+                    snippet_text = code_snippet_text
+                if not snippet_text:
+                    snippet_text = "\n".join(file_lines[line_start - 1 : line_end]).strip()
 
             # 7.5) 获取函数定位信息，但允许定位失败时仍然保存（降级模式）
             reachability_target_function = _infer_function_name_for_save(finding, line_start)
@@ -5276,7 +5328,7 @@ async def _save_findings(
             locator_resolution_method = None
             localization_status = "unknown"  # success|failed|partial
 
-            if function_locator:
+            if function_locator and full_file_path and line_start is not None and file_lines:
                 try:
                     located = function_locator.locate(
                         full_file_path=full_file_path,
@@ -5299,6 +5351,17 @@ async def _save_findings(
                 except Exception as loc_exc:
                     logger.debug(f"[SaveFindings] Function locator error: {loc_exc}")
                     localization_status = "failed"
+
+            if (
+                authenticity != "false_positive"
+                and function_locator
+                and full_file_path
+                and line_start is not None
+                and file_lines
+                and localization_status == "failed"
+            ):
+                mark_filtered("missing_enclosing_function", finding)
+                continue
             
             # 降级策略：函数定位失败时仍允许保存，且确保 function_name 始终非空
             if not reachability_target_function:
@@ -5418,6 +5481,20 @@ async def _save_findings(
             dataflow_path = function_trigger_flow if function_trigger_flow else dataflow_path
             source_text = _normalize_optional_text(finding.get("source"))
             sink_text = _normalize_optional_text(finding.get("sink"))
+            finding_metadata_payload: Dict[str, Any] = {}
+            if verification_todo_id:
+                finding_metadata_payload["verification_todo_id"] = verification_todo_id
+            if verification_fingerprint:
+                finding_metadata_payload["verification_fingerprint"] = verification_fingerprint
+            if raw_file_path:
+                finding_metadata_payload["raw_file_path"] = _normalize_relative_file_path(
+                    str(raw_file_path),
+                    project_root,
+                )
+            if line_start is not None:
+                finding_metadata_payload["raw_line_start"] = line_start
+            if line_end is not None:
+                finding_metadata_payload["raw_line_end"] = line_end
 
             # 10) PoC info
             poc_data = finding.get("poc", {})
@@ -5465,7 +5542,11 @@ async def _save_findings(
                 function_name=reachability_target_function,
                 code_snippet=snippet_text,
             )
-            fingerprint = temp_finding.generate_fingerprint()
+            fingerprint = (
+                verification_fingerprint
+                if authenticity == "false_positive" and verification_fingerprint
+                else temp_finding.generate_fingerprint()
+            )
 
             # Find existing finding in current task
             existing_finding_stmt = select(AgentFinding).where(
@@ -5481,8 +5562,12 @@ async def _save_findings(
                 db_finding.severity = severity_enum
                 db_finding.title = title_text
                 db_finding.description = description_text
+                db_finding.file_path = stored_file_path
+                db_finding.line_start = line_start
                 db_finding.line_end = line_end
+                db_finding.code_snippet = snippet_text
                 db_finding.code_context = context_text
+                db_finding.function_name = reachability_target_function
                 db_finding.source = source_text
                 db_finding.sink = sink_text
                 db_finding.dataflow_path = dataflow_path
@@ -5502,8 +5587,10 @@ async def _save_findings(
                 db_finding.poc_steps = poc_steps
                 db_finding.verification_method = verification_method_text
                 db_finding.verification_result = verification_result_payload
+                db_finding.finding_metadata = finding_metadata_payload or None
                 db_finding.cvss_score = cvss_score
                 db_finding.references = [{"cwe": cwe_id}] if cwe_id else None
+                db_finding.fingerprint = fingerprint
                 db_finding.updated_at = func.now()
             else:
                 db_finding = AgentFinding(
@@ -5538,6 +5625,7 @@ async def _save_findings(
                     poc_steps=poc_steps,
                     verification_method=verification_method_text,
                     verification_result=verification_result_payload,
+                    finding_metadata=finding_metadata_payload or None,
                     cvss_score=cvss_score,
                     references=[{"cwe": cwe_id}] if cwe_id else None,
                     fingerprint=fingerprint,
@@ -6327,16 +6415,24 @@ def _serialize_agent_findings(
             if isinstance(item.verification_result, dict)
             else {}
         )
+        finding_metadata = (
+            item.finding_metadata
+            if isinstance(getattr(item, "finding_metadata", None), dict)
+            else {}
+        )
         normalized_item_file_path = _normalize_relative_file_path(
             str(item.file_path or ""),
             None,
         )
-        authenticity = verification_payload.get("authenticity")
+        authenticity = verification_payload.get("authenticity") or verification_payload.get("verdict")
         if not authenticity:
             authenticity = (
                 "false_positive"
                 if str(item.status) == FindingStatus.FALSE_POSITIVE
-                else ("confirmed" if item.is_verified else "likely")
+                else (
+                    str(getattr(item, "verdict", "") or "").strip().lower()
+                    or ("confirmed" if item.is_verified else "likely")
+                )
             )
         authenticity = str(authenticity).lower()
 
@@ -6345,7 +6441,18 @@ def _serialize_agent_findings(
 
         reachability = verification_payload.get("reachability")
         verification_evidence = (
-            verification_payload.get("evidence") or verification_payload.get("details")
+            verification_payload.get("verification_evidence")
+            or verification_payload.get("evidence")
+            or verification_payload.get("details")
+            or getattr(item, "verification_evidence", None)
+        )
+        verification_todo_id = (
+            finding_metadata.get("verification_todo_id")
+            or verification_payload.get("verification_todo_id")
+        )
+        verification_fingerprint = (
+            finding_metadata.get("verification_fingerprint")
+            or verification_payload.get("verification_fingerprint")
         )
         context_start_line = _to_int(verification_payload.get("context_start_line"))
         context_end_line = _to_int(verification_payload.get("context_end_line"))
@@ -6552,6 +6659,8 @@ def _serialize_agent_findings(
                     "reachability": reachability,
                     "authenticity": authenticity,
                     "verification_evidence": verification_evidence,
+                    "verification_todo_id": verification_todo_id,
+                    "verification_fingerprint": verification_fingerprint,
                     "flow_path_score": flow_path_score,
                     "flow_call_chain": flow_call_chain,
                     "function_trigger_flow": function_trigger_flow,

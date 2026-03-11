@@ -1,9 +1,12 @@
+import type { AgentFinding } from "@/shared/api/agentTasks";
+
 export type FindingSource = "static" | "agent";
 export type StaticFindingEngine = "opengrep" | "gitleaks";
 
 export type FindingDetailLocationState = {
 	fromTaskDetail: true;
 	preferHistoryBack: true;
+	agentFindingSnapshot?: AgentFinding | null;
 };
 
 function normalizeSegment(value: string): string {
@@ -59,11 +62,17 @@ export function sanitizeAgentAuditReturnTo(route: string): string {
 	return query ? `${pathPart}?${query}` : pathPart;
 }
 
-export function buildFindingDetailLocationState(): FindingDetailLocationState {
-	return {
+export function buildFindingDetailLocationState(
+	snapshot?: AgentFinding | null,
+): FindingDetailLocationState {
+	const baseState: FindingDetailLocationState = {
 		fromTaskDetail: true,
 		preferHistoryBack: true,
 	};
+	if (snapshot) {
+		baseState.agentFindingSnapshot = snapshot;
+	}
+	return baseState;
 }
 
 export function buildAgentFindingDetailRoute(params: {
@@ -83,10 +92,11 @@ export function buildAgentFindingDetailNavigation(params: {
 	taskId: string;
 	findingId: string;
 	currentRoute: string;
+	snapshot?: AgentFinding | null;
 }): { route: string; state: FindingDetailLocationState } {
 	return {
 		route: buildAgentFindingDetailRoute(params),
-		state: buildFindingDetailLocationState(),
+		state: buildFindingDetailLocationState(params.snapshot),
 	};
 }
 

@@ -56,14 +56,17 @@ import { useAgentAuditState } from "./hooks";
 import { POLLING_INTERVALS, TASK_PHASE_LABELS } from "./constants";
 import {
   cleanThinkingContent,
+  computeContainerAnchorScrollTop,
   getTimeString,
   resolveLogDisplayTime,
   sanitizeAuditText,
+  shouldIgnoreStaleToolEvent,
 } from "./utils";
 import {
   fromAgentEvent as agentEventToRealtimeItem,
   fromAgentFinding as agentFindingToRealtimeItem,
 } from "./realtimeFindingMapper";
+import { mergeRealtimeFindingsBatch } from "./realtimeFindingMerge";
 import {
   localizeAuditText,
   normalizeSeverityKey,
@@ -436,8 +439,16 @@ function toSafeTrimmedString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function isRealtimeFalsePositive(item: RealtimeMergedFindingItem): boolean {
+  return (
+    item.detailMode === "false_positive_reason" ||
+    toSafeTrimmedString(item.authenticity).toLowerCase() === "false_positive" ||
+    item.display_severity === "invalid"
+  );
+}
+
 function toDialogFinding(item: RealtimeMergedFindingItem): AgentFinding {
-  const falsePositive = item.display_severity === "invalid";
+  const falsePositive = isRealtimeFalsePositive(item);
   const isVerified = item.verification_progress === "verified" || item.is_verified;
   return {
     id: item.id,
@@ -459,8 +470,12 @@ function toDialogFinding(item: RealtimeMergedFindingItem): AgentFinding {
     status: falsePositive ? "false_positive" : isVerified ? "verified" : "pending",
     is_verified: isVerified,
     reachability: null,
-    authenticity: falsePositive ? "false_positive" : null,
+    authenticity: falsePositive
+      ? "false_positive"
+      : (item.authenticity ?? null),
     verification_evidence: item.verification_evidence ?? null,
+    verification_todo_id: item.verification_todo_id ?? null,
+    verification_fingerprint: item.verification_fingerprint ?? null,
     reachability_file: item.reachability_file ?? null,
     reachability_function: item.reachability_function ?? null,
     reachability_function_start_line: item.reachability_function_start_line ?? null,
@@ -475,153 +490,6 @@ function toDialogFinding(item: RealtimeMergedFindingItem): AgentFinding {
     function_trigger_flow: item.function_trigger_flow ?? null,
     created_at: item.timestamp ?? new Date().toISOString(),
   };
-}
-
-function resolveRealtimeFindingMergeKey(
-  item: RealtimeMergedFindingItem | null | undefined,
-): string {
-  if (!item) return "";
-  const mergeKey = toSafeTrimmedString(item.merge_key);
-  if (mergeKey) return mergeKey;
-  return toSafeTrimmedString(item.fingerprint);
-}
-
-function pickNewerIsoTimestamp(
-  a: string | null | undefined,
-  b: string | null | undefined,
-): string | null {
-  const left = typeof a === "string" ? a : "";
-  const right = typeof b === "string" ? b : "";
-  if (!left && !right) return null;
-  if (!left) return right || null;
-  if (!right) return left || null;
-  return right.localeCompare(left) > 0 ? right : left;
-}
-
-function mergeRealtimeFindingsBatch(
-  prev: RealtimeMergedFindingItem[],
-  incoming: RealtimeMergedFindingItem[],
-  options: { source: "db" | "event" },
-): RealtimeMergedFindingItem[] {
-  if (!incoming.length) return prev;
-
-  const byMergeKey = new Map<string, RealtimeMergedFindingItem>();
-  for (const item of prev) {
-    const key = resolveRealtimeFindingMergeKey(item);
-    if (!key) continue;
-    if (!byMergeKey.has(key)) {
-      byMergeKey.set(key, item);
-    }
-  }
-
-  for (const item of incoming) {
-    const mergeKey = resolveRealtimeFindingMergeKey(item);
-    if (!mergeKey) continue;
-    const existing = byMergeKey.get(mergeKey);
-    if (!existing) {
-      byMergeKey.set(mergeKey, item);
-      continue;
-    }
-
-    const preferIncoming = options.source === "db";
-    const verificationProgress =
-      existing.verification_progress === "verified" ||
-      item.verification_progress === "verified"
-        ? "verified"
-        : "pending";
-    const displaySeverity =
-      existing.display_severity === "invalid" || item.display_severity === "invalid"
-        ? "invalid"
-        : preferIncoming
-          ? (item.display_severity || existing.display_severity)
-          : (existing.display_severity || item.display_severity);
-    const merged: RealtimeMergedFindingItem = {
-      ...existing,
-      merge_key: preferIncoming
-        ? (item.merge_key || existing.merge_key || mergeKey)
-        : (existing.merge_key || item.merge_key || mergeKey),
-      // Prefer DB fields; event backfill only fills blanks.
-      id: preferIncoming ? (item.id || existing.id) : (existing.id || item.id),
-      fingerprint: preferIncoming
-        ? (item.fingerprint || existing.fingerprint)
-        : (existing.fingerprint || item.fingerprint),
-      title: preferIncoming
-        ? (item.title || existing.title)
-        : (existing.title || item.title),
-      severity: preferIncoming
-        ? (item.severity || existing.severity)
-        : (existing.severity || item.severity),
-      display_severity: displaySeverity,
-      verification_progress: verificationProgress,
-      vulnerability_type: preferIncoming
-        ? (item.vulnerability_type || existing.vulnerability_type)
-        : (existing.vulnerability_type || item.vulnerability_type),
-      display_title: preferIncoming
-        ? (item.display_title ?? existing.display_title)
-        : (existing.display_title ?? item.display_title),
-      description: preferIncoming
-        ? (item.description ?? existing.description)
-        : (existing.description ?? item.description),
-      description_markdown: preferIncoming
-        ? (item.description_markdown ?? existing.description_markdown)
-        : (existing.description_markdown ?? item.description_markdown),
-      file_path: preferIncoming
-        ? (item.file_path ?? existing.file_path)
-        : (existing.file_path ?? item.file_path),
-      line_start: preferIncoming
-        ? (item.line_start ?? existing.line_start)
-        : (existing.line_start ?? item.line_start),
-      line_end: preferIncoming
-        ? (item.line_end ?? existing.line_end)
-        : (existing.line_end ?? item.line_end),
-      cwe_id: preferIncoming
-        ? (item.cwe_id ?? existing.cwe_id)
-        : (existing.cwe_id ?? item.cwe_id),
-      code_snippet: preferIncoming
-        ? (item.code_snippet ?? existing.code_snippet)
-        : (existing.code_snippet ?? item.code_snippet),
-      code_context: preferIncoming
-        ? (item.code_context ?? existing.code_context)
-        : (existing.code_context ?? item.code_context),
-      function_trigger_flow: preferIncoming
-        ? (item.function_trigger_flow ?? existing.function_trigger_flow)
-        : (existing.function_trigger_flow ?? item.function_trigger_flow),
-      verification_evidence: preferIncoming
-        ? (item.verification_evidence ?? existing.verification_evidence)
-        : (existing.verification_evidence ?? item.verification_evidence),
-      reachability_file: preferIncoming
-        ? (item.reachability_file ?? existing.reachability_file)
-        : (existing.reachability_file ?? item.reachability_file),
-      reachability_function: preferIncoming
-        ? (item.reachability_function ?? existing.reachability_function)
-        : (existing.reachability_function ?? item.reachability_function),
-      reachability_function_start_line: preferIncoming
-        ? (item.reachability_function_start_line ?? existing.reachability_function_start_line)
-        : (existing.reachability_function_start_line ?? item.reachability_function_start_line),
-      reachability_function_end_line: preferIncoming
-        ? (item.reachability_function_end_line ?? existing.reachability_function_end_line)
-        : (existing.reachability_function_end_line ?? item.reachability_function_end_line),
-      context_start_line: preferIncoming
-        ? (item.context_start_line ?? existing.context_start_line)
-        : (existing.context_start_line ?? item.context_start_line),
-      context_end_line: preferIncoming
-        ? (item.context_end_line ?? existing.context_end_line)
-        : (existing.context_end_line ?? item.context_end_line),
-      confidence: preferIncoming
-        ? (item.confidence ?? existing.confidence ?? null)
-        : (existing.confidence ?? item.confidence ?? null),
-      timestamp: pickNewerIsoTimestamp(existing.timestamp, item.timestamp),
-      is_verified: verificationProgress === "verified",
-    };
-
-    byMergeKey.set(mergeKey, merged);
-  }
-
-  const merged = Array.from(byMergeKey.values());
-  merged.sort((a, b) =>
-    String(b.timestamp || "").localeCompare(String(a.timestamp || "")),
-  );
-  return merged.slice(0, 500);
 }
 
 function AgentAuditPageContent() {
@@ -899,7 +767,23 @@ function AgentAuditPageContent() {
         }
 
         const anchor = document.getElementById(state.anchorId);
-        anchor?.scrollIntoView({ behavior: "smooth", block: "center" });
+        const container =
+          state.detailType === "log"
+            ? logsContainerRef.current
+            : state.detailType === "finding"
+              ? findingsContainerRef.current
+              : agentContainerRef.current;
+        if (anchor && container) {
+          const containerRect = container.getBoundingClientRect();
+          const anchorRect = anchor.getBoundingClientRect();
+          container.scrollTop = computeContainerAnchorScrollTop({
+            containerScrollTop: container.scrollTop,
+            containerClientHeight: container.clientHeight,
+            containerTop: containerRect.top,
+            anchorTop: anchorRect.top,
+            anchorHeight: anchorRect.height,
+          });
+        }
         setTimeout(() => clearHighlights(), 1800);
       });
     },
@@ -928,12 +812,13 @@ function AgentAuditPageContent() {
   );
 
   const openFindingDetailPage = useCallback(
-    (findingId: string) => {
+    (findingId: string, snapshot?: AgentFinding | null) => {
       if (!taskId) return;
       const target = buildAgentFindingDetailNavigation({
         taskId,
         findingId,
         currentRoute,
+        snapshot,
       });
       navigate(target.route, { state: target.state });
     },
@@ -1636,6 +1521,16 @@ function AgentAuditPageContent() {
           : null;
         if (existingLogId) {
           const existing = logsRef.current.find((item) => item.id === existingLogId);
+          if (
+            shouldIgnoreStaleToolEvent({
+              existingLog: existing,
+              incomingEventType: eventType,
+              incomingSequence: event.sequence ?? null,
+              incomingToolCallId: toolCallId,
+            })
+          ) {
+            return;
+          }
           updateLog(existingLogId, {
             time: displayTime,
             eventTimestamp,
@@ -1790,6 +1685,16 @@ function AgentAuditPageContent() {
 
         if (targetLogId) {
           const existing = logsRef.current.find((item) => item.id === targetLogId);
+          if (
+            shouldIgnoreStaleToolEvent({
+              existingLog: existing,
+              incomingEventType: eventType,
+              incomingSequence: event.sequence ?? null,
+              incomingToolCallId: toolCallId,
+            })
+          ) {
+            return;
+          }
           if (existing && existing.tool?.status === toolStatus && toolCallId) {
             return;
           }
@@ -3190,7 +3095,7 @@ function AgentAuditPageContent() {
 
           {/* Full-width findings panel (expanded) */}
           <div className="min-h-0 flex-1 overflow-hidden">
-            <div ref={findingsContainerRef} className="h-full">
+            <div className="h-full">
               <RealtimeFindingsPanel
                 taskId={task?.id || ""}
                 items={realtimeFindings}
@@ -3198,7 +3103,13 @@ function AgentAuditPageContent() {
                 currentPhase={task?.current_phase ?? null}
                 filters={findingsFilters}
                 onFiltersChange={setFindingsFilters}
-                onOpenDetail={(item) => openFindingDetailPage(item.id)}
+                scrollContainerRef={findingsContainerRef}
+                onOpenDetail={(item) =>
+                  openFindingDetailPage(
+                    item.id,
+                    isRealtimeFalsePositive(item) ? toDialogFinding(item) : null,
+                  )
+                }
               />
             </div>
           </div>
@@ -3259,6 +3170,16 @@ function AgentAuditPageContent() {
             </div>
 
             <div className="pt-2">
+              <div className="hidden border-b border-border/60 px-5 py-2 md:block">
+                <div className="grid grid-cols-[72px_84px_minmax(0,1fr)_120px_110px_auto] items-center gap-3 text-[11px] font-mono uppercase tracking-[0.24em] text-muted-foreground/80">
+                  <span>距开始时间</span>
+                  <span>类型标签</span>
+                  <span>事件概况</span>
+                  <span>归属智能体</span>
+                  <span>完成状态</span>
+                  <span>操作</span>
+                </div>
+              </div>
               <div
                 ref={logsContainerRef}
                 onScroll={handleLogsScroll}
