@@ -4185,6 +4185,9 @@ async def _build_effective_gitleaks_config_toml(
     except ProgrammingError as exc:
         if "gitleaks_rules" in str(exc):
             logger.warning("gitleaks_rules table not found, fallback to custom/default config only")
+            # Must rollback to clear PostgreSQL's aborted transaction state before
+            # any further DB operations can succeed on this session.
+            await db.rollback()
             active_rules = []
         else:
             raise
@@ -4752,6 +4755,7 @@ async def _execute_gitleaks_scan(
         except asyncio.CancelledError:
             logger.warning(f"Gitleaks scan task {task_id} interrupted by service shutdown")
             try:
+                await db.rollback()
                 result = await db.execute(
                     select(GitleaksScanTask).where(GitleaksScanTask.id == task_id)
                 )
@@ -4769,6 +4773,7 @@ async def _execute_gitleaks_scan(
         except Exception as e:
             logger.error(f"Error executing gitleaks scan for task {task_id}: {e}")
             try:
+                await db.rollback()
                 result = await db.execute(
                     select(GitleaksScanTask).where(GitleaksScanTask.id == task_id)
                 )
