@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
     agent_tasks,
+    agent_test,
     config,
     database,
     embedding_config,
@@ -29,6 +30,7 @@ api_router.include_router(database.router, prefix="/database", tags=["database"]
 api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(rules.router, prefix="/rules", tags=["rules"])
 api_router.include_router(agent_tasks.router, prefix="/agent-tasks", tags=["agent-tasks"])
+api_router.include_router(agent_test.router, prefix="/agent-test", tags=["agent-test"])
 api_router.include_router(skills.router, prefix="/skills", tags=["skills"])
 api_router.include_router(embedding_config.router, prefix="/embedding", tags=["embedding"])
 api_router.include_router(ssh_keys.router, prefix="/ssh-keys", tags=["ssh-keys"])

@@ -21,6 +21,7 @@ const ScanConfigExternalTools = lazy(
 const TaskManagementStatic = lazy(() => import("@/pages/TaskManagementStatic"));
 const TaskManagementIntelligent = lazy(() => import("@/pages/TaskManagementIntelligent"));
 const TaskManagementHybrid = lazy(() => import("@/pages/TaskManagementHybrid"));
+const AgentTestPage = lazy(() => import("@/pages/AgentTest"));
 
 function LegacyOpengrepRulesRedirect() {
 	const location = useLocation();
@@ -203,6 +204,15 @@ const routes: RouteConfig[] = [
         element: <Navigate to="/scan-config/intelligent-engine" replace />,
         visible: false,
         navVisible: false,
+    },
+    {
+        name: "Agent 测试",
+        path: "/agent-test",
+        element: <AgentTestPage />,
+        visible: true,
+        navVisible: true,
+        navGroup: "main",
+        navOrder: 35,
     },
 ];
 
