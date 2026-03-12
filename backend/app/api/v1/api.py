@@ -13,7 +13,6 @@ from app.api.v1.endpoints import (
     skills,
     ssh_keys,
     static_tasks,
-    bandit_tasks,
     tasks,
     users,
 )
@@ -34,4 +33,3 @@ api_router.include_router(skills.router, prefix="/skills", tags=["skills"])
 api_router.include_router(embedding_config.router, prefix="/embedding", tags=["embedding"])
 api_router.include_router(ssh_keys.router, prefix="/ssh-keys", tags=["ssh-keys"])
 api_router.include_router(static_tasks.router, prefix="/static-tasks", tags=["static-tasks"])
-api_router.include_router(bandit_tasks.router, prefix="/static-tasks/bandit", tags=["bandit-tasks"])

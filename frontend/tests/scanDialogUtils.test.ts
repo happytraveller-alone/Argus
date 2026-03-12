@@ -54,14 +54,13 @@ test("buildCreateProjectStaticTaskRoute preserves query params", () => {
   const params = new URLSearchParams();
   params.set("opengrepTaskId", "og-1");
   params.set("gitleaksTaskId", "gl-1");
-  params.set("banditTaskId", "bd-1");
 
   assert.equal(
     buildCreateProjectStaticTaskRoute({
       primaryTaskId: "task-1",
       params,
     }),
-    "/static-analysis/task-1?opengrepTaskId=og-1&gitleaksTaskId=gl-1&banditTaskId=bd-1",
+    "/static-analysis/task-1?opengrepTaskId=og-1&gitleaksTaskId=gl-1",
   );
 });
 

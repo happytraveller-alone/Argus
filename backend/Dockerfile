@@ -489,7 +489,6 @@ COPY --from=mcp-builder /pnpm /pnpm
 
 # 安装 Opengrep CLI 和 PMD
 ARG OPENGREP_VERSION=v1.15.1
-ARG HORUSEC_VERSION=latest
 ARG BACKEND_PNPM_CMD_TIMEOUT_SECONDS
 ARG BACKEND_PYPI_INDEX_PRIMARY
 ARG BACKEND_PYPI_INDEX_FALLBACK
@@ -572,38 +571,6 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
     ln -s /opt/pmd-bin-7.0.0/bin/pmd /usr/local/bin/pmd; \
     rm /tmp/pmd.zip
 
-# 安装 Horusec CLI（按架构选择二进制，避免固定 amd64）
-RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhunter-tools \
-    set -eux; \
-    unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; \
-    mkdir -p /var/cache/vulhunter-tools; \
-    ARCH="$(uname -m)"; \
-    case "$ARCH" in \
-      x86_64|amd64) HORUSEC_DIST="horusec_linux_amd64" ;; \
-      aarch64|arm64) HORUSEC_DIST="horusec_linux_arm64" ;; \
-      *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
-    esac; \
-    HORUSEC_CACHE="/var/cache/vulhunter-tools/horusec-${HORUSEC_VERSION}-${HORUSEC_DIST}"; \
-    if [ ! -s "${HORUSEC_CACHE}" ]; then \
-      downloaded=0; \
-      for url in \
-        "https://gh-proxy.com/https://github.com/ZupIT/horusec/releases/${HORUSEC_VERSION}/download/${HORUSEC_DIST}" \
-        "https://v6.gh-proxy.org/https://github.com/ZupIT/horusec/releases/${HORUSEC_VERSION}/download/${HORUSEC_DIST}" \
-        "https://gh-proxy.org/https://github.com/ZupIT/horusec/releases/${HORUSEC_VERSION}/download/${HORUSEC_DIST}" \
-        "https://github.com/ZupIT/horusec/releases/${HORUSEC_VERSION}/download/${HORUSEC_DIST}"; do \
-        if curl -fL --connect-timeout 8 --max-time 60 "${url}" -o "${HORUSEC_CACHE}.tmp"; then \
-          mv "${HORUSEC_CACHE}.tmp" "${HORUSEC_CACHE}"; \
-          downloaded=1; \
-          break; \
-        fi; \
-        rm -f "${HORUSEC_CACHE}.tmp"; \
-      done; \
-      [ "${downloaded}" -eq 1 ]; \
-    fi; \
-    cp "${HORUSEC_CACHE}" /usr/local/bin/horusec; \
-    chmod +x /usr/local/bin/horusec; \
-    horusec version
-
 # MCP / QMD 持久化目录
 ENV XDG_DATA_HOME=/app/data/mcp/xdg-data
 ENV XDG_CACHE_HOME=/app/data/mcp/xdg-cache
@@ -622,7 +589,7 @@ RUN --mount=type=cache,id=vulhunter-backend-pip-cache,target=/root/.cache/pip \
     }; \
     install_python_helpers() { \
       idx="$1"; \
-      PIP_INDEX_URL="${idx}" pip install --retries 5 --timeout 60 --disable-pip-version-check code2flow bandit; \
+      PIP_INDEX_URL="${idx}" pip install --retries 5 --timeout 60 --disable-pip-version-check code2flow; \
     }; \
     installed=0; \
     ordered_indexes="$(order_indexes "${pypi_index_candidates}")"; \

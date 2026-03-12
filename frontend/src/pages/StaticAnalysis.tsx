@@ -66,7 +66,7 @@ export default function StaticAnalysis() {
   const opengrepTaskId = useMemo(() => {
     const explicit = searchParams.get("opengrepTaskId");
     if (explicit) return explicit;
-    if (toolParam === "gitleaks" || toolParam === "bandit") return "";
+    if (toolParam === "gitleaks") return "";
     return taskId;
   }, [searchParams, taskId, toolParam]);
 
@@ -77,14 +77,7 @@ export default function StaticAnalysis() {
     return "";
   }, [searchParams, taskId, toolParam]);
 
-  const banditTaskId = useMemo(() => {
-    const explicit = searchParams.get("banditTaskId");
-    if (explicit) return explicit;
-    if (toolParam === "bandit") return taskId;
-    return "";
-  }, [searchParams, taskId, toolParam]);
-
-  const hasEnabledEngine = Boolean(opengrepTaskId || gitleaksTaskId || banditTaskId);
+  const hasEnabledEngine = Boolean(opengrepTaskId || gitleaksTaskId);
   const [engineFilter, setEngineFilter] = useState<EngineFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [confidenceFilter, setConfidenceFilter] =
@@ -94,10 +87,8 @@ export default function StaticAnalysis() {
   const {
     opengrepTask,
     gitleaksTask,
-    banditTask,
     opengrepFindings,
     gitleaksFindings,
-    banditFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -110,12 +101,10 @@ export default function StaticAnalysis() {
     handleToggleStatus,
     canInterruptOpengrep,
     canInterruptGitleaks,
-    canInterruptBandit,
   } = useStaticAnalysisData({
     hasEnabledEngine,
     opengrepTaskId,
     gitleaksTaskId,
-    banditTaskId,
   });
 
   const unifiedRows = useMemo(
@@ -123,19 +112,10 @@ export default function StaticAnalysis() {
       buildUnifiedFindingRows({
         opengrepFindings,
         gitleaksFindings,
-        banditFindings,
         opengrepTaskId,
         gitleaksTaskId,
-        banditTaskId,
       }),
-    [
-      banditFindings,
-      banditTaskId,
-      gitleaksFindings,
-      gitleaksTaskId,
-      opengrepFindings,
-      opengrepTaskId,
-    ],
+    [gitleaksFindings, gitleaksTaskId, opengrepFindings, opengrepTaskId],
   );
 
   const listState = useMemo(
@@ -154,9 +134,8 @@ export default function StaticAnalysis() {
     const engines: Engine[] = [];
     if (opengrepTaskId) engines.push("opengrep");
     if (gitleaksTaskId) engines.push("gitleaks");
-    if (banditTaskId) engines.push("bandit");
     return engines;
-  }, [banditTaskId, gitleaksTaskId, opengrepTaskId]);
+  }, [gitleaksTaskId, opengrepTaskId]);
 
   const completedEngineCount = useMemo(() => {
     let count = 0;
@@ -166,18 +145,8 @@ export default function StaticAnalysis() {
     if (gitleaksTaskId && isStaticAnalysisCompletedStatus(gitleaksTask?.status)) {
       count += 1;
     }
-    if (banditTaskId && isStaticAnalysisCompletedStatus(banditTask?.status)) {
-      count += 1;
-    }
     return count;
-  }, [
-    banditTask?.status,
-    banditTaskId,
-    gitleaksTask?.status,
-    gitleaksTaskId,
-    opengrepTask?.status,
-    opengrepTaskId,
-  ]);
+  }, [gitleaksTask?.status, gitleaksTaskId, opengrepTask?.status, opengrepTaskId]);
 
   const progressPercent = Math.max(
     0,
@@ -191,16 +160,13 @@ export default function StaticAnalysis() {
 
   const totalScanDurationMs =
     toStaticAnalysisSafeMetric(opengrepTask?.scan_duration_ms) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.scan_duration_ms) +
-    toStaticAnalysisSafeMetric(banditTask?.scan_duration_ms);
+    toStaticAnalysisSafeMetric(gitleaksTask?.scan_duration_ms);
   const totalFindings =
     toStaticAnalysisSafeMetric(opengrepTask?.total_findings) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.total_findings) +
-    toStaticAnalysisSafeMetric(banditTask?.total_findings);
+    toStaticAnalysisSafeMetric(gitleaksTask?.total_findings);
   const totalFilesScanned =
     toStaticAnalysisSafeMetric(opengrepTask?.files_scanned) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.files_scanned) +
-    toStaticAnalysisSafeMetric(banditTask?.files_scanned);
+    toStaticAnalysisSafeMetric(gitleaksTask?.files_scanned);
 
   useEffect(() => {
     setPage(1);
@@ -266,16 +232,6 @@ export default function StaticAnalysis() {
               中止 Gitleaks
             </Button>
           ) : null}
-          {canInterruptBandit ? (
-            <Button
-              variant="outline"
-              className="cyber-btn-outline h-8"
-              onClick={() => setInterruptTarget("bandit")}
-            >
-              <Ban className="w-3.5 h-3.5 mr-1.5" />
-              中止 Bandit
-            </Button>
-          ) : null}
           <Button
             variant="outline"
             className="cyber-btn-outline h-8"
@@ -337,11 +293,7 @@ export default function StaticAnalysis() {
           </p>
           <p className="text-xs text-muted-foreground">
             {enabledEngines
-              .map((engine) => {
-                if (engine === "opengrep") return "Opengrep";
-                if (engine === "gitleaks") return "Gitleaks";
-                return "Bandit";
-              })
+              .map((engine) => (engine === "opengrep" ? "Opengrep" : "Gitleaks"))
               .join(" / ") || "-"}
           </p>
         </div>
@@ -373,7 +325,6 @@ export default function StaticAnalysis() {
                 <SelectItem value="all">全部</SelectItem>
                 <SelectItem value="opengrep">Opengrep</SelectItem>
                 <SelectItem value="gitleaks">Gitleaks</SelectItem>
-                <SelectItem value="bandit">Bandit</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -451,11 +402,7 @@ export default function StaticAnalysis() {
             <AlertDialogTitle>确认中止任务？</AlertDialogTitle>
             <AlertDialogDescription>
               即将中止
-              {interruptTarget === "opengrep"
-                ? " Opengrep "
-                : interruptTarget === "gitleaks"
-                  ? " Gitleaks "
-                  : " Bandit "}
+              {interruptTarget === "opengrep" ? " Opengrep " : " Gitleaks "}
               扫描任务。中止后任务状态将更新为已中断。
             </AlertDialogDescription>
           </AlertDialogHeader>

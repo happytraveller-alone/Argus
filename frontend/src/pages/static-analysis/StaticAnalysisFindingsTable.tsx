@@ -115,16 +115,10 @@ export default function StaticAnalysisFindingsTable({
                         className={
                           row.engine === "opengrep"
                             ? "bg-sky-500/20 text-sky-300 border-sky-500/30"
-                            : row.engine === "gitleaks"
-                              ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                              : "bg-violet-500/20 text-violet-300 border-violet-500/30"
+                            : "bg-amber-500/20 text-amber-300 border-amber-500/30"
                         }
                       >
-                        {row.engine === "opengrep"
-                          ? "Opengrep"
-                          : row.engine === "gitleaks"
-                            ? "Gitleaks"
-                            : "Bandit"}
+                        {row.engine === "opengrep" ? "Opengrep" : "Gitleaks"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm break-all">

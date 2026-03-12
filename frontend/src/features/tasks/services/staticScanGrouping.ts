@@ -10,13 +10,11 @@ export interface StaticScanTaskLike {
 export interface StaticScanGroup<
 	TOpengrepTask extends StaticScanTaskLike = StaticScanTaskLike,
 	TGitleaksTask extends StaticScanTaskLike = StaticScanTaskLike,
-	TBanditTask extends StaticScanTaskLike = StaticScanTaskLike,
 > {
 	projectId: string;
 	createdAt: string;
 	opengrepTask?: TOpengrepTask;
 	gitleaksTask?: TGitleaksTask;
-	banditTask?: TBanditTask;
 }
 
 export type StaticScanGroupStatus = "completed" | "running" | "other";
@@ -33,17 +31,14 @@ function normalizeStatus(value: string | null | undefined): string {
 export function buildStaticScanGroups<
 	TOpengrepTask extends StaticScanTaskLike,
 	TGitleaksTask extends StaticScanTaskLike,
-	TBanditTask extends StaticScanTaskLike,
 >(params: {
 	opengrepTasks: TOpengrepTask[];
 	gitleaksTasks: TGitleaksTask[];
-	banditTasks: TBanditTask[];
 	pairingWindowMs?: number;
-}): Array<StaticScanGroup<TOpengrepTask, TGitleaksTask, TBanditTask>> {
+}): Array<StaticScanGroup<TOpengrepTask, TGitleaksTask>> {
 	const {
 		opengrepTasks,
 		gitleaksTasks,
-		banditTasks,
 		pairingWindowMs = STATIC_SCAN_PAIRING_WINDOW_MS,
 	} = params;
 
@@ -61,25 +56,8 @@ export function buildStaticScanGroups<
 		gitleaksByProject.set(projectId, list);
 	}
 
-	const banditByProject = new Map<string, TBanditTask[]>();
-	for (const task of banditTasks) {
-		const list = banditByProject.get(task.project_id) || [];
-		list.push(task);
-		banditByProject.set(task.project_id, list);
-	}
-
-	for (const [projectId, list] of banditByProject.entries()) {
-		list.sort(
-			(a, b) => normalizeTimestamp(a.created_at) - normalizeTimestamp(b.created_at),
-		);
-		banditByProject.set(projectId, list);
-	}
-
 	const usedGitleaksTaskIds = new Set<string>();
-	const usedBanditTaskIds = new Set<string>();
-	const groups: Array<
-		StaticScanGroup<TOpengrepTask, TGitleaksTask, TBanditTask>
-	> = [];
+	const groups: Array<StaticScanGroup<TOpengrepTask, TGitleaksTask>> = [];
 
 	for (const opengrepTask of opengrepTasks) {
 		const candidates = gitleaksByProject.get(opengrepTask.project_id) || [];
@@ -102,29 +80,11 @@ export function buildStaticScanGroups<
 			usedGitleaksTaskIds.add(pairedGitleaksTask.id);
 		}
 
-		const banditCandidates = banditByProject.get(opengrepTask.project_id) || [];
-		let pairedBanditTask: TBanditTask | undefined;
-		let bestBanditDiff = Number.POSITIVE_INFINITY;
-		for (const candidate of banditCandidates) {
-			if (usedBanditTaskIds.has(candidate.id)) continue;
-			const diff = Math.abs(
-				normalizeTimestamp(candidate.created_at) - opengrepTimestamp,
-			);
-			if (diff <= pairingWindowMs && diff < bestBanditDiff) {
-				pairedBanditTask = candidate;
-				bestBanditDiff = diff;
-			}
-		}
-		if (pairedBanditTask) {
-			usedBanditTaskIds.add(pairedBanditTask.id);
-		}
-
 		groups.push({
 			projectId: opengrepTask.project_id,
 			createdAt: opengrepTask.created_at,
 			opengrepTask,
 			gitleaksTask: pairedGitleaksTask,
-			banditTask: pairedBanditTask,
 		});
 	}
 
@@ -137,22 +97,13 @@ export function buildStaticScanGroups<
 		});
 	}
 
-	for (const banditTask of banditTasks) {
-		if (usedBanditTaskIds.has(banditTask.id)) continue;
-		groups.push({
-			projectId: banditTask.project_id,
-			createdAt: banditTask.created_at,
-			banditTask,
-		});
-	}
-
 	return groups;
 }
 
 export function resolveStaticScanGroupStatus(
-	group: Pick<StaticScanGroup, "opengrepTask" | "gitleaksTask" | "banditTask">,
+	group: Pick<StaticScanGroup, "opengrepTask" | "gitleaksTask">,
 ): StaticScanGroupStatus {
-	const statuses = [group.opengrepTask?.status, group.gitleaksTask?.status, group.banditTask?.status]
+	const statuses = [group.opengrepTask?.status, group.gitleaksTask?.status]
 		.map((status) => normalizeStatus(status))
 		.filter(Boolean);
 

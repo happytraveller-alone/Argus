@@ -24,19 +24,13 @@ import {
 	type GitleaksScanTask,
 } from "@/shared/api/gitleaks";
 import {
-  getBanditFinding,
-  getBanditScanTask,
-  type BanditFinding,
-  type BanditScanTask,
-} from "@/shared/api/bandit";
-import {
 	isFindingDetailLocationState,
 	normalizeReturnToPath,
 	resolveFindingDetailBackTarget,
 } from "@/shared/utils/findingRoute";
 
 type FindingSource = "static" | "agent";
-type StaticEngine = "opengrep" | "gitleaks" | "bandit";
+type StaticEngine = "opengrep" | "gitleaks";
 
 type CodeViewItem = {
 	id: string;
@@ -67,7 +61,6 @@ function resolveFindingSource(raw: string | undefined): FindingSource | null {
 function resolveStaticEngine(raw: string | null): StaticEngine {
 	const value = decodePathParam(raw ?? undefined).toLowerCase();
 	if (value === "gitleaks") return "gitleaks";
-	if (value === "bandit") return "bandit";
 	return "opengrep";
 }
 
@@ -291,8 +284,6 @@ export default function FindingDetail() {
 	const [staticContext, setStaticContext] = useState<OpengrepFindingContext | null>(null);
 	const [gitleaksTask, setGitleaksTask] = useState<GitleaksScanTask | null>(null);
 	const [gitleaksFinding, setGitleaksFinding] = useState<GitleaksFinding | null>(null);
-  const [banditTask, setBanditTask] = useState<BanditScanTask | null>(null);
-  const [banditFinding, setBanditFinding] = useState<BanditFinding | null>(null);
 	const [agentFinding, setAgentFinding] = useState<AgentFinding | null>(null);
 
 	useEffect(() => {
@@ -311,8 +302,6 @@ export default function FindingDetail() {
 			setStaticContext(null);
 			setGitleaksTask(null);
 			setGitleaksFinding(null);
-      setBanditTask(null);
-      setBanditFinding(null);
 			setAgentFinding(null);
 
 			try {
@@ -325,14 +314,6 @@ export default function FindingDetail() {
 						if (cancelled) return;
 						setGitleaksTask(task);
 						setGitleaksFinding(finding);
-					} else if (staticEngine === "bandit") {
-						const [task, finding] = await Promise.all([
-							getBanditScanTask(taskId),
-							getBanditFinding({ taskId, findingId }),
-						]);
-						if (cancelled) return;
-						setBanditTask(task);
-						setBanditFinding(finding);
 					} else {
 						const [task, finding, context] = await Promise.all([
 							getOpengrepScanTask(taskId),
@@ -425,36 +406,11 @@ export default function FindingDetail() {
 				},
 			];
 		}
-    if (source === "static" && staticEngine === "bandit" && banditFinding) {
-      const content = String(banditFinding.code || banditFinding.issue_text || "").trim();
-      if (!content) return [];
-      return [
-        {
-          id: `bandit:${banditFinding.id}`,
-          title: "命中内容",
-          filePath: banditFinding.file_path || null,
-          code: content,
-          lineStart: banditFinding.line_number ?? null,
-          lineEnd: banditFinding.line_number ?? null,
-          highlightStartLine: banditFinding.line_number ?? null,
-          highlightEndLine: banditFinding.line_number ?? null,
-          focusLine: banditFinding.line_number ?? null,
-        },
-      ];
-    }
 		if (source === "agent" && agentFinding) {
 			return toAgentCodeView(agentFinding);
 		}
 		return [];
-	}, [
-    agentFinding,
-    banditFinding,
-    gitleaksFinding,
-    source,
-    staticContext,
-    staticEngine,
-    staticFinding,
-  ]);
+	}, [agentFinding, gitleaksFinding, source, staticContext, staticEngine, staticFinding]);
 
 	const codeSections = useMemo(() => buildFindingDetailCodeSections(codeViews), [codeViews]);
 	const isAgentFalsePositive = useMemo(
@@ -488,9 +444,7 @@ export default function FindingDetail() {
 
 	const sourceLabel = useMemo(() => {
 		if (source === "static") {
-			if (staticEngine === "gitleaks") return "静态扫描 · Gitleaks";
-			if (staticEngine === "bandit") return "静态扫描 · Bandit";
-			return "静态扫描 · Opengrep";
+			return staticEngine === "gitleaks" ? "静态扫描 · Gitleaks" : "静态扫描 · Opengrep";
 		}
 		if (source === "agent") return "智能扫描";
 		return "-";
@@ -646,50 +600,6 @@ export default function FindingDetail() {
 										date: {gitleaksFinding.date || "-"}
 										{"\n"}
 										fingerprint: {gitleaksFinding.fingerprint || "-"}
-									</p>
-								</div>
-							</>
-						) : source === "static" && staticEngine === "bandit" && banditFinding ? (
-							<>
-								<div className="flex flex-wrap items-center gap-2">
-									<Badge className={getSeverityBadgeClass(banditFinding.issue_severity)}>
-										严重级别：{banditFinding.issue_severity || "-"}
-									</Badge>
-									<Badge className="cyber-badge-muted">状态：{banditFinding.status || "-"}</Badge>
-									<Badge className="cyber-badge-muted">
-										置信度：{banditFinding.issue_confidence || "-"}
-									</Badge>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">规则/类型</p>
-									<p className="text-base text-foreground break-all">
-										{banditFinding.test_id || "-"}
-										{banditFinding.test_name ? ` (${banditFinding.test_name})` : ""}
-									</p>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">文件位置</p>
-									<p className="text-base text-foreground break-all">
-										{banditFinding.file_path || "-"}
-										{banditFinding.line_number ? `:${banditFinding.line_number}` : ""}
-									</p>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">任务</p>
-									<p className="text-base text-foreground break-all">
-										{banditTask?.name || "-"} ({banditTask?.id || "-"})
-									</p>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">描述</p>
-									<p className="text-base text-foreground whitespace-pre-wrap break-words">
-										{banditFinding.issue_text || "-"}
-									</p>
-								</div>
-								<div className="space-y-1.5 text-sm">
-									<p className="text-muted-foreground uppercase">更多信息</p>
-									<p className="text-base text-foreground whitespace-pre-wrap break-words">
-										{banditFinding.more_info || "-"}
 									</p>
 								</div>
 							</>

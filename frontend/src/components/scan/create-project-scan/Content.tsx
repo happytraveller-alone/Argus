@@ -78,8 +78,6 @@ export default function CreateProjectScanDialogContent({
   setOpengrepEnabled,
   gitleaksEnabled,
   setGitleaksEnabled,
-  banditEnabled,
-  setBanditEnabled,
   showLlmQuickFixPanel,
   openLlmQuickFixPanelManual,
   quickFixSaving,
@@ -138,8 +136,6 @@ export default function CreateProjectScanDialogContent({
   setOpengrepEnabled: (enabled: boolean) => void;
   gitleaksEnabled: boolean;
   setGitleaksEnabled: (enabled: boolean) => void;
-  banditEnabled: boolean;
-  setBanditEnabled: (enabled: boolean) => void;
   showLlmQuickFixPanel: boolean;
   openLlmQuickFixPanelManual: () => void | Promise<void>;
   quickFixSaving: boolean;
@@ -462,7 +458,7 @@ export default function CreateProjectScanDialogContent({
                   {loadingRules ? "规则加载中..." : `已启用规则 ${activeRules.length}`}
                 </p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
                   <Checkbox
                     checked={opengrepEnabled}
@@ -487,24 +483,7 @@ export default function CreateProjectScanDialogContent({
                     <p className="text-xs text-muted-foreground">密钥泄露扫描</p>
                   </div>
                 </label>
-                <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
-                  <Checkbox
-                    checked={banditEnabled}
-                    onCheckedChange={(checked) => setBanditEnabled(Boolean(checked))}
-                    disabled={creating || mode === "hybrid"}
-                    className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                  />
-                  <div>
-                    <p className="text-sm text-foreground font-semibold">Bandit</p>
-                    <p className="text-xs text-muted-foreground">Python 安全扫描</p>
-                  </div>
-                </label>
               </div>
-              {mode === "hybrid" && banditEnabled && (
-                <p className="text-xs text-amber-300">
-                  Bandit 暂未接入混合扫描内嵌预扫，将仅用于静态扫描模式。
-                </p>
-              )}
               {mode === "hybrid" && selectedProject && !isZipProject(selectedProject) && (
                 <p className="text-xs text-rose-300">
                   混合扫描当前仅支持源码压缩包项目（静态 + 智能）。

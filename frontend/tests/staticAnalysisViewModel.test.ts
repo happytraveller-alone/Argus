@@ -31,22 +31,8 @@ test("buildUnifiedFindingRows normalizes opengrep and gitleaks rows", () => {
         status: "open",
       },
     ],
-    banditFindings: [
-      {
-        id: "bd-1",
-        scan_task_id: "task-bd",
-        test_id: "B101",
-        test_name: "assert_used",
-        file_path: "app/main.py",
-        line_number: 23,
-        issue_severity: "MEDIUM",
-        issue_confidence: "HIGH",
-        status: "open",
-      },
-    ],
     opengrepTaskId: "task-og",
     gitleaksTaskId: "task-gl",
-    banditTaskId: "task-bd",
   });
 
   assert.equal(rows[0]?.engine, "opengrep");
@@ -57,9 +43,6 @@ test("buildUnifiedFindingRows normalizes opengrep and gitleaks rows", () => {
   assert.equal(rows[1]?.engine, "gitleaks");
   assert.equal(rows[1]?.severity, "LOW");
   assert.equal(rows[1]?.confidence, "MEDIUM");
-  assert.equal(rows[2]?.engine, "bandit");
-  assert.equal(rows[2]?.severity, "MEDIUM");
-  assert.equal(rows[2]?.confidence, "HIGH");
 });
 
 test("buildStaticAnalysisListState filters, sorts and paginates rows", () => {

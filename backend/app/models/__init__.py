@@ -12,4 +12,4 @@ from .agent_task import (
     VulnerabilitySeverity, VulnerabilityType, FindingStatus
 )
 from .gitleaks import GitleaksScanTask, GitleaksFinding, GitleaksRule
-from .bandit import BanditScanTask, BanditFinding
+
