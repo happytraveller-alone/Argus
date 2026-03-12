@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/utils/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	Dialog,
 	DialogContent,
@@ -65,6 +66,7 @@ import {
 	getDefaultModelForProvider as resolveDefaultModelForProvider,
 	getLlmProviderInfo,
 	normalizeLlmProviderId,
+	parseLlmCustomHeadersInput,
 	shouldRequireApiKey as resolveShouldRequireApiKey,
 	type LLMProviderItem,
 } from "@/shared/llm/providerCatalog";
@@ -133,6 +135,7 @@ interface SystemConfigData {
 	llmApiKey: string;
 	llmModel: string;
 	llmBaseUrl: string;
+	llmCustomHeaders: string;
 	llmTimeout: number;
 	llmTemperature: number;
 	llmMaxTokens: number;
@@ -200,6 +203,7 @@ interface SystemConfigProps {
 }
 
 type AdvancedConfigItemId =
+	| "llmCustomHeaders"
 	| "llmTimeout"
 	| "llmTemperature"
 	| "llmMaxTokens"
@@ -218,6 +222,7 @@ const DEFAULT_CONFIG: SystemConfigData = {
 	llmApiKey: "",
 	llmModel: "",
 	llmBaseUrl: "",
+	llmCustomHeaders: "",
 	llmTimeout: 300000,
 	llmTemperature: 0.05,
 	llmMaxTokens: 16384,
@@ -300,6 +305,10 @@ function buildSystemConfigDataFromBackendConfig(
 		llmModel: typeof llmConfig.llmModel === "string" ? llmConfig.llmModel : "",
 		llmBaseUrl:
 			typeof llmConfig.llmBaseUrl === "string" ? llmConfig.llmBaseUrl : "",
+		llmCustomHeaders:
+			typeof llmConfig.llmCustomHeaders === "string"
+				? llmConfig.llmCustomHeaders
+				: "",
 		llmTimeout:
 			typeof llmConfig.llmTimeout === "number"
 				? llmConfig.llmTimeout
@@ -432,6 +441,18 @@ function AdvancedConfigDialog(props: {
 			AdvancedConfigItemId,
 			{ label: string; desc: string; input?: React.ReactNode }
 		> = {
+			llmCustomHeaders: {
+				label: "自定义请求头 (JSON)",
+				desc: "用于 OpenAI 兼容网关的额外请求头，例如 HTTP-Referer 或 X-Title。",
+				input: (
+					<Textarea
+						value={cfg.llmCustomHeaders}
+						onChange={(e) => update("llmCustomHeaders", e.target.value)}
+						placeholder='{"HTTP-Referer":"https://app.example.com","X-Title":"DeepAudit"}'
+						className="min-h-32 cyber-input font-mono"
+					/>
+				),
+			},
 			llmTimeout: {
 				label: "请求超时 (毫秒)",
 				desc: "单次 LLM 请求最大允许耗时。",
@@ -656,6 +677,7 @@ function AdvancedConfigDialog(props: {
 								</div>
 								<div className="space-y-1">
 									{[
+										["llmCustomHeaders", "自定义请求头"],
 										["llmTimeout", "请求超时"],
 										["llmTemperature", "温度"],
 										["llmMaxTokens", "最大 Tokens"],
@@ -772,6 +794,7 @@ export function SystemConfig({
 	} | null>(null);
 	const [showDebugInfo, setShowDebugInfo] = useState(true);
 	const llmBaseUrlTouchedRef = useRef(false);
+	const llmModelTouchedRef = useRef(false);
 	const llmMaxTokensTouchedRef = useRef(false);
 	const autoFetchSignatureRef = useRef<string>("");
 	const latestConfigRef = useRef<SystemConfigData | null>(config);
@@ -847,6 +870,9 @@ export function SystemConfig({
 		key: keyof SystemConfigData,
 		value: string | number,
 	) => {
+		if (key === "llmModel") {
+			llmModelTouchedRef.current = true;
+		}
 		if (key === "llmMaxTokens") {
 			llmMaxTokensTouchedRef.current = true;
 		}
@@ -1016,6 +1042,7 @@ export function SystemConfig({
 		apiKey: string;
 		model: string;
 		baseUrl: string;
+		customHeaders: string;
 	} => {
 		if (!config) {
 			return {
@@ -1024,32 +1051,77 @@ export function SystemConfig({
 				apiKey: "",
 				model: "",
 				baseUrl: "",
+				customHeaders: "",
 			};
 		}
 		const providerId = normalizeLlmProviderId(config.llmProvider);
 		const apiKey = String(config.llmApiKey || "").trim();
 		const model = String(config.llmModel || "").trim();
 		const baseUrl = String(config.llmBaseUrl || "").trim();
+		const parsedCustomHeaders = parseLlmCustomHeadersInput(
+			config.llmCustomHeaders,
+		);
+		if (!parsedCustomHeaders.ok) {
+			toast.error(
+				`无法${source === "save" ? "保存" : "测试"}：${parsedCustomHeaders.message}`,
+			);
+			return {
+				ok: false,
+				providerId,
+				apiKey,
+				model,
+				baseUrl,
+				customHeaders: "",
+			};
+		}
 
 		if (!model) {
 			toast.error(
 				`无法${source === "save" ? "保存" : "测试"}：请先填写模型（llmModel）`,
 			);
-			return { ok: false, providerId, apiKey, model, baseUrl };
+			return {
+				ok: false,
+				providerId,
+				apiKey,
+				model,
+				baseUrl,
+				customHeaders: parsedCustomHeaders.normalizedText,
+			};
 		}
 		if (!baseUrl) {
 			toast.error(
 				`无法${source === "save" ? "保存" : "测试"}：请先填写 Base URL（llmBaseUrl）`,
 			);
-			return { ok: false, providerId, apiKey, model, baseUrl };
+			return {
+				ok: false,
+				providerId,
+				apiKey,
+				model,
+				baseUrl,
+				customHeaders: parsedCustomHeaders.normalizedText,
+			};
 		}
 		if (shouldRequireApiKey(providerId) && !apiKey) {
 			toast.error(
 				`无法${source === "save" ? "保存" : "测试"}：当前提供商必须配置 API Key`,
 			);
-			return { ok: false, providerId, apiKey, model, baseUrl };
+			return {
+				ok: false,
+				providerId,
+				apiKey,
+				model,
+				baseUrl,
+				customHeaders: parsedCustomHeaders.normalizedText,
+			};
 		}
-		return { ok: true, providerId, apiKey, model, baseUrl };
+		return {
+			ok: true,
+			providerId,
+			apiKey,
+			model,
+			baseUrl,
+			customHeaders: parsedCustomHeaders.normalizedText,
+		};
 	};
 
 	const handleProviderChange = (newProvider: string) => {
@@ -1059,15 +1131,22 @@ export function SystemConfig({
 			const defaultBaseUrl = getDefaultBaseUrlForProvider(newProvider);
 			const shouldUpdateBaseUrl =
 				!llmBaseUrlTouchedRef.current || !(prev.llmBaseUrl || "").trim();
+			const shouldUpdateModel =
+				!llmModelTouchedRef.current || !(prev.llmModel || "").trim();
 			return {
 				...prev,
 				llmProvider: newProvider,
-				llmModel: defaultModel || prev.llmModel,
+				llmModel: shouldUpdateModel ? defaultModel || prev.llmModel : prev.llmModel,
 				llmBaseUrl: shouldUpdateBaseUrl ? defaultBaseUrl : prev.llmBaseUrl,
 			};
 		});
 		setLlmModelPopoverOpen(false);
-		applyRecommendedMaxTokens(newProvider, defaultModel, {
+		const nextModel =
+			!llmModelTouchedRef.current ||
+			!(String(latestConfigRef.current?.llmModel || "").trim())
+				? defaultModel
+				: String(latestConfigRef.current?.llmModel || "").trim();
+		applyRecommendedMaxTokens(newProvider, nextModel, {
 			force: false,
 			markChanges: true,
 		});
@@ -1086,11 +1165,26 @@ export function SystemConfig({
 		const providerId = normalizeLlmProviderId(configSnapshot.llmProvider);
 		const baseUrl = String(configSnapshot.llmBaseUrl || "").trim();
 		const apiKey = String(configSnapshot.llmApiKey || "").trim();
+		const parsedCustomHeaders = parseLlmCustomHeadersInput(
+			configSnapshot.llmCustomHeaders,
+		);
 		const currentModelBeforeFetch = String(configSnapshot.llmModel || "").trim();
 		const requiresApiKey = shouldRequireApiKey(providerId);
-		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}`;
+		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}|${
+			parsedCustomHeaders.ok ? parsedCustomHeaders.normalizedText : "invalid"
+		}`;
 
 		if (!providerId || !baseUrl) return;
+		if (!parsedCustomHeaders.ok) {
+			setModelStatsFetchStateBySignature((prev) => ({
+				...prev,
+				[signature]: "failed",
+			}));
+			if (!silent) {
+				toast.error(parsedCustomHeaders.message);
+			}
+			return;
+		}
 		if (requiresApiKey && !apiKey) {
 			if (!silent) {
 				toast.error("当前提供商需要 API Key，无法拉取模型");
@@ -1112,13 +1206,19 @@ export function SystemConfig({
 				provider: providerId,
 				apiKey,
 				baseUrl,
+				customHeaders: parsedCustomHeaders.normalizedText,
 			});
 			const latestConfig = latestConfigRef.current;
 			if (!latestConfig) return;
 			const latestProviderId = normalizeLlmProviderId(latestConfig.llmProvider);
 			const latestBaseUrl = String(latestConfig.llmBaseUrl || "").trim();
 			const latestApiKey = String(latestConfig.llmApiKey || "").trim();
-			const latestSignature = `${latestProviderId}|${latestBaseUrl}|${shouldRequireApiKey(latestProviderId) ? latestApiKey : ""}`;
+			const latestParsedCustomHeaders = parseLlmCustomHeadersInput(
+				latestConfig.llmCustomHeaders,
+			);
+			const latestSignature = `${latestProviderId}|${latestBaseUrl}|${
+				shouldRequireApiKey(latestProviderId) ? latestApiKey : ""
+			}|${latestParsedCustomHeaders.ok ? latestParsedCustomHeaders.normalizedText : "invalid"}`;
 			if (latestSignature !== signature) return;
 
 			const normalizedModels = Array.isArray(result.models)
@@ -1227,12 +1327,14 @@ export function SystemConfig({
 		const providerId = normalizeLlmProviderId(config.llmProvider);
 		const baseUrl = String(config.llmBaseUrl || "").trim();
 		const apiKey = String(config.llmApiKey || "").trim();
+		const parsedCustomHeaders = parseLlmCustomHeadersInput(config.llmCustomHeaders);
 		const requiresApiKey = shouldRequireApiKey(providerId);
 		const providerInfo = getProviderInfo(providerId);
 		if (!providerId || !baseUrl) return;
+		if (!parsedCustomHeaders.ok) return;
 		if (!providerInfo?.supportsModelFetch) return;
 		if (requiresApiKey && !apiKey) return;
-		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}`;
+		const signature = `${providerId}|${baseUrl}|${requiresApiKey ? apiKey : ""}|${parsedCustomHeaders.normalizedText}`;
 		if (autoFetchSignatureRef.current === signature) return;
 		setModelStatsFetchStateBySignature((prev) => ({
 			...prev,
@@ -1243,7 +1345,13 @@ export function SystemConfig({
 			void fetchModels({ trigger: "auto", silent: true });
 		}, 700);
 		return () => clearTimeout(timer);
-	}, [config?.llmProvider, config?.llmBaseUrl, config?.llmApiKey, llmProvidersFromBackend]);
+	}, [
+		config?.llmProvider,
+		config?.llmBaseUrl,
+		config?.llmApiKey,
+		config?.llmCustomHeaders,
+		llmProvidersFromBackend,
+	]);
 
 	const handleLlmModelSelect = (value: string) => {
 		if (!config) return;
@@ -1270,6 +1378,7 @@ export function SystemConfig({
 					llmApiKey: validated.apiKey,
 					llmModel: validated.model,
 					llmBaseUrl: validated.baseUrl,
+					llmCustomHeaders: validated.customHeaders,
 					llmTimeout: config.llmTimeout,
 					llmTemperature: config.llmTemperature,
 					llmMaxTokens: config.llmMaxTokens,
@@ -1305,6 +1414,7 @@ export function SystemConfig({
 				const nextConfig = buildSystemConfigDataFromBackendConfig(savedConfig);
 				setConfig(nextConfig);
 				llmBaseUrlTouchedRef.current = false;
+				llmModelTouchedRef.current = false;
 				llmMaxTokensTouchedRef.current = false;
 			}
 
@@ -1323,6 +1433,7 @@ export function SystemConfig({
 			await api.deleteUserConfig();
 			await loadConfig();
 			llmBaseUrlTouchedRef.current = false;
+			llmModelTouchedRef.current = false;
 			llmMaxTokensTouchedRef.current = false;
 			setHasChanges(false);
 			toast.success("已重置为默认配置");
@@ -1346,6 +1457,7 @@ export function SystemConfig({
 				apiKey: validated.apiKey,
 				model: validated.model,
 				baseUrl: validated.baseUrl,
+				customHeaders: validated.customHeaders,
 			});
 			setLlmTestResult(result);
 			if (result.success) {

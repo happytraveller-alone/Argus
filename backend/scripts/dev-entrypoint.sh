@@ -7,6 +7,7 @@ APP_ROOT="/app"
 VENV_DIR="${APP_ROOT}/.venv"
 SEED_VENV_DIR="/opt/backend-venv"
 STAMP_FILE="${VENV_DIR}/.vulhunter-dev-lock.sha256"
+DEFAULT_PYPI_INDEX_CANDIDATES="https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple"
 
 ensure_seed_venv() {
     if [ -x "${VENV_DIR}/bin/python" ] && "${VENV_DIR}/bin/python" -V >/dev/null 2>&1; then
@@ -25,6 +26,34 @@ compute_lock_hash() {
     fi
 
     sha256sum "${APP_ROOT}/pyproject.toml" "${APP_ROOT}/uv.lock" | sha256sum | awk '{print $1}'
+}
+
+select_pypi_index() {
+    if [ -n "${UV_INDEX_URL:-}" ]; then
+        printf '%s\n' "${UV_INDEX_URL}"
+        return 0
+    fi
+
+    if [ -n "${PIP_INDEX_URL:-}" ]; then
+        printf '%s\n' "${PIP_INDEX_URL}"
+        return 0
+    fi
+
+    pypi_index_candidates="${PYPI_INDEX_CANDIDATES:-${DEFAULT_PYPI_INDEX_CANDIDATES}}"
+    selected_pypi_index="$(
+        python3 /usr/local/bin/package_source_selector.py \
+            --candidates "${pypi_index_candidates}" \
+            --kind pypi \
+            --timeout-seconds 2 2>/dev/null | sed -n '1p'
+    )"
+
+    if [ -z "${selected_pypi_index}" ]; then
+        selected_pypi_index="$(
+            printf '%s' "${pypi_index_candidates}" | tr ',' '\n' | sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}'
+        )"
+    fi
+
+    printf '%s\n' "${selected_pypi_index}"
 }
 
 sync_python_env_if_needed() {
@@ -46,6 +75,12 @@ sync_python_env_if_needed() {
 
     echo "Syncing backend dependencies with uv..."
     mkdir -p /root/.cache/uv
+    selected_pypi_index="$(select_pypi_index)"
+    if [ -n "${selected_pypi_index}" ]; then
+        export UV_INDEX_URL="${selected_pypi_index}"
+        export PIP_INDEX_URL="${selected_pypi_index}"
+        echo "Selected PyPI index: ${selected_pypi_index}"
+    fi
     uv sync --frozen --no-dev
 
     if [ -n "${current_hash}" ]; then

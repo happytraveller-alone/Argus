@@ -95,8 +95,9 @@ COPY --from=uvbin /uv /usr/local/bin/uv
 ENV UV_INDEX_URL=${BACKEND_PYPI_INDEX_PRIMARY}
 ENV PIP_INDEX_URL=${BACKEND_PYPI_INDEX_PRIMARY}
 
-# 复制依赖文件
+# 复制依赖文件与镜像源测速脚本
 COPY pyproject.toml uv.lock README.md ./
+COPY scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
 
 # 安装 Python 依赖到虚拟环境
 RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
@@ -106,6 +107,31 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
     uv_step_timeout=90; \
     if [ "${cmd_timeout}" -lt "${uv_step_timeout}" ]; then uv_step_timeout="${cmd_timeout}"; fi; \
     uv_http_timeout=45; \
+    pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \
+    append_unique_index() { \
+      index_url="$(printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; \
+      target_file="$2"; \
+      [ -n "${index_url}" ] || return 0; \
+      touch "${target_file}"; \
+      if ! grep -Fxq "${index_url}" "${target_file}"; then \
+        printf '%s\n' "${index_url}" >> "${target_file}"; \
+      fi; \
+    }; \
+    append_csv_indexes() { \
+      csv="$1"; \
+      target_file="$2"; \
+      old_ifs="$IFS"; \
+      IFS=','; \
+      set -- ${csv}; \
+      IFS="$old_ifs"; \
+      for item do \
+        append_unique_index "${item}" "${target_file}"; \
+      done; \
+    }; \
+    order_indexes() { \
+      raw_candidates="$1"; \
+      python3 /usr/local/bin/package_source_selector.py --candidates "${raw_candidates}" --kind pypi --timeout-seconds 2 || printf '%s\n' "${raw_candidates}" | tr ',' '\n'; \
+    }; \
     sync_with_index() { \
       index_url="$1"; \
       attempt=1; \
@@ -126,7 +152,43 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
       done; \
       return 1; \
     }; \
-    sync_with_index "${BACKEND_PYPI_INDEX_PRIMARY}" || sync_with_index "${BACKEND_PYPI_INDEX_FALLBACK}"; \
+    ranked_candidates_file="$(mktemp)"; \
+    ordered_indexes_file="$(mktemp)"; \
+    attempt_indexes_file="$(mktemp)"; \
+    if [ -n "${BACKEND_PYPI_INDEX_PRIMARY:-}" ]; then \
+      append_unique_index "${BACKEND_PYPI_INDEX_PRIMARY}" "${attempt_indexes_file}"; \
+    fi; \
+    if [ -n "${BACKEND_PYPI_INDEX_FALLBACK:-}" ]; then \
+      append_unique_index "${BACKEND_PYPI_INDEX_FALLBACK}" "${attempt_indexes_file}"; \
+    fi; \
+    append_csv_indexes "${pypi_index_candidates}" "${ranked_candidates_file}"; \
+    ordered_indexes=""; \
+    if [ -s "${ranked_candidates_file}" ]; then \
+      pypi_index_candidates="$(paste -sd, "${ranked_candidates_file}")"; \
+      ordered_indexes="$(order_indexes "${pypi_index_candidates}")"; \
+    fi; \
+    if [ -n "${ordered_indexes}" ]; then \
+      printf '%s\n' "${ordered_indexes}" > "${ordered_indexes_file}"; \
+    elif [ -s "${ranked_candidates_file}" ]; then \
+      cp "${ranked_candidates_file}" "${ordered_indexes_file}"; \
+    fi; \
+    if [ -s "${ordered_indexes_file}" ]; then \
+      while IFS= read -r index_url; do \
+        append_unique_index "${index_url}" "${attempt_indexes_file}"; \
+      done < "${ordered_indexes_file}"; \
+    fi; \
+    echo "uv sync candidate order:"; \
+    cat "${attempt_indexes_file}"; \
+    install_result=1; \
+    while IFS= read -r index_url; do \
+      [ -n "${index_url}" ] || continue; \
+      if sync_with_index "${index_url}"; then \
+        install_result=0; \
+        break; \
+      fi; \
+    done < "${attempt_indexes_file}"; \
+    rm -f "${ranked_candidates_file}" "${ordered_indexes_file}" "${attempt_indexes_file}"; \
+    [ "${install_result}" -eq 0 ]; \
     printf 'ready\n' > /tmp/builder-network-ready
 
 # ============================================

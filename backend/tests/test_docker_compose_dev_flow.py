@@ -29,6 +29,12 @@ def test_default_compose_is_dev_first_layout() -> None:
     assert "/app/node_modules" in compose_text
     assert "/pnpm/store" in compose_text
     assert "${VULHUNTER_FRONTEND_PORT:-3000}:5173" in compose_text
+    assert "- BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
+    assert "- BACKEND_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
+    assert (
+        "${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,"
+        "https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"
+    ) in compose_text
     assert 'MCP_REQUIRE_ALL_READY_ON_STARTUP: "false"' in compose_text
     assert 'SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP: "false"' in compose_text
     assert 'CODEX_SKILLS_AUTO_INSTALL: "false"' in compose_text
@@ -39,6 +45,10 @@ def test_default_compose_is_dev_first_layout() -> None:
     backend_text = backend_dockerfile.read_text(encoding="utf-8")
     assert "FROM runtime-base AS dev-runtime" in backend_text
     assert "dev-entrypoint.sh" in backend_text
+    assert 'COPY scripts/package_source_selector.py /usr/local/bin/package_source_selector.py' in backend_text
+    assert 'ordered_indexes="$(order_indexes "${pypi_index_candidates}")"' in backend_text
+    assert 'while IFS= read -r index_url; do' in backend_text
+    assert 'sync_with_index "${BACKEND_PYPI_INDEX_PRIMARY}" || sync_with_index "${BACKEND_PYPI_INDEX_FALLBACK}"' not in backend_text
 
     frontend_text = frontend_dockerfile.read_text(encoding="utf-8")
     assert " AS dev" in frontend_text
@@ -48,6 +58,9 @@ def test_default_compose_is_dev_first_layout() -> None:
     assert "app.main:app --reload" in entrypoint_text
     assert 'rm -rf "${VENV_DIR}"' not in entrypoint_text
     assert 'find "${VENV_DIR}" -mindepth 1 -maxdepth 1' in entrypoint_text
+    assert "select_pypi_index()" in entrypoint_text
+    assert 'export UV_INDEX_URL="${selected_pypi_index}"' in entrypoint_text
+    assert 'export PIP_INDEX_URL="${selected_pypi_index}"' in entrypoint_text
 
 
 def test_full_overlay_restores_full_local_build_defaults() -> None:
@@ -78,6 +91,12 @@ def test_scripts_and_packaging_use_new_compose_layout() -> None:
     deb_build_script = (REPO_ROOT / "packaging" / "deb" / "build_deb.sh").read_text(
         encoding="utf-8"
     )
+    compose_wrapper_script = (
+        REPO_ROOT / "scripts" / "compose-up-with-fallback.sh"
+    ).read_text(encoding="utf-8")
+    compose_wrapper_ps1 = (
+        REPO_ROOT / "scripts" / "compose-up-with-fallback.ps1"
+    ).read_text(encoding="utf-8")
 
     assert "docker compose up -d db redis backend frontend" in dev_frontend_script
     assert "frontend-dev" not in dev_frontend_script
@@ -93,3 +112,5 @@ def test_scripts_and_packaging_use_new_compose_layout() -> None:
     assert (REPO_ROOT / "deploy" / "compose" / "docker-compose.prod.cn.yml").exists()
     assert 'cp "$ROOT_DIR/deploy/compose/docker-compose.prod.yml"' in deb_build_script
     assert 'cp "$ROOT_DIR/deploy/compose/docker-compose.prod.cn.yml"' in deb_build_script
+    assert "https://pypi.tuna.tsinghua.edu.cn/simple" in compose_wrapper_script
+    assert "https://pypi.tuna.tsinghua.edu.cn/simple" in compose_wrapper_ps1

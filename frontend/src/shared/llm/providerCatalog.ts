@@ -14,22 +14,29 @@ export interface LLMProviderItem {
 	requiresApiKey: boolean;
 	supportsModelFetch: boolean;
 	fetchStyle: LLMFetchStyle;
+	exampleBaseUrls?: string[];
+	supportsCustomHeaders?: boolean;
 }
 
 const DEFAULT_MODELS: Record<string, string> = {
+	custom: "gpt-5",
 	openai: "gpt-5",
-	anthropic: "claude-sonnet-4-20250514",
-	gemini: "gemini-2.5-pro",
-	deepseek: "deepseek-chat",
-	ollama: "llama3.1",
 	openrouter: "openai/gpt-5-mini",
+	azure_openai: "gpt-5",
+	anthropic: "claude-sonnet-4.5",
+	gemini: "gemini-3-pro",
+	deepseek: "deepseek-v3.1-terminus",
+	qwen: "qwen3-max-instruct",
+	zhipu: "glm-4.6",
+	moonshot: "kimi-k2",
+	ollama: "llama3.3-70b",
 };
 
 export const LLM_PROVIDER_API_KEY_FIELD_MAP: Record<string, string> = {
+	custom: "openaiApiKey",
 	openai: "openaiApiKey",
 	openrouter: "openaiApiKey",
 	azure_openai: "openaiApiKey",
-	custom: "openaiApiKey",
 	anthropic: "claudeApiKey",
 	claude: "claudeApiKey",
 	gemini: "geminiApiKey",
@@ -44,57 +51,39 @@ export const LLM_PROVIDER_API_KEY_FIELD_MAP: Record<string, string> = {
 
 export const BUILTIN_LLM_PROVIDERS: LLMProviderItem[] = [
 	{
+		id: "custom",
+		name: "OpenAI Compatible / 自定义站点",
+		description: "适用于 OpenAI 兼容站点、中转服务和自建网关。",
+		defaultModel: "gpt-5",
+		models: ["gpt-5", "kimi-k2", "deepseek-chat", "qwen-max"],
+		defaultBaseUrl: "",
+		requiresApiKey: true,
+		supportsModelFetch: true,
+		fetchStyle: "openai_compatible",
+		exampleBaseUrls: [
+			"https://api.openai.com/v1",
+			"https://api.moonshot.cn/v1",
+			"http://localhost:11434/v1",
+		],
+		supportsCustomHeaders: true,
+	},
+	{
 		id: "openai",
 		name: "OpenAI",
-		description: "OpenAI 官方模型服务",
+		description: "OpenAI 官方接口。",
 		defaultModel: "gpt-5",
-		models: ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o"],
+		models: ["gpt-5", "gpt-5.1", "gpt-4o", "gpt-4o-mini"],
 		defaultBaseUrl: "https://api.openai.com/v1",
 		requiresApiKey: true,
 		supportsModelFetch: true,
 		fetchStyle: "openai_compatible",
-	},
-	{
-		id: "anthropic",
-		name: "Anthropic",
-		description: "Claude 系列模型服务",
-		defaultModel: "claude-sonnet-4-20250514",
-		models: [
-			"claude-sonnet-4-20250514",
-			"claude-opus-4-20250514",
-			"claude-3-5-haiku-latest",
-		],
-		defaultBaseUrl: "https://api.anthropic.com",
-		requiresApiKey: true,
-		supportsModelFetch: true,
-		fetchStyle: "anthropic",
-	},
-	{
-		id: "gemini",
-		name: "Google Gemini",
-		description: "Google Gemini 模型服务",
-		defaultModel: "gemini-2.5-pro",
-		models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
-		defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-		requiresApiKey: true,
-		supportsModelFetch: true,
-		fetchStyle: "openai_compatible",
-	},
-	{
-		id: "deepseek",
-		name: "DeepSeek",
-		description: "DeepSeek 推理与对话模型",
-		defaultModel: "deepseek-chat",
-		models: ["deepseek-chat", "deepseek-reasoner"],
-		defaultBaseUrl: "https://api.deepseek.com/v1",
-		requiresApiKey: true,
-		supportsModelFetch: true,
-		fetchStyle: "openai_compatible",
+		exampleBaseUrls: ["https://api.openai.com/v1"],
+		supportsCustomHeaders: true,
 	},
 	{
 		id: "openrouter",
 		name: "OpenRouter",
-		description: "统一多模型路由聚合服务",
+		description: "统一多模型路由聚合服务（OpenAI 兼容）。",
 		defaultModel: "openai/gpt-5-mini",
 		models: [
 			"openai/gpt-5-mini",
@@ -105,17 +94,88 @@ export const BUILTIN_LLM_PROVIDERS: LLMProviderItem[] = [
 		requiresApiKey: true,
 		supportsModelFetch: true,
 		fetchStyle: "openai_compatible",
+		exampleBaseUrls: ["https://openrouter.ai/api/v1"],
+		supportsCustomHeaders: true,
+	},
+	{
+		id: "anthropic",
+		name: "Anthropic",
+		description: "Claude 系列模型服务。",
+		defaultModel: "claude-sonnet-4.5",
+		models: [
+			"claude-sonnet-4.5",
+			"claude-opus-4.5",
+			"claude-haiku-4.5",
+		],
+		defaultBaseUrl: "https://api.anthropic.com/v1",
+		requiresApiKey: true,
+		supportsModelFetch: true,
+		fetchStyle: "anthropic",
+		exampleBaseUrls: ["https://api.anthropic.com/v1"],
+		supportsCustomHeaders: true,
+	},
+	{
+		id: "azure_openai",
+		name: "Azure OpenAI",
+		description: "Azure 托管 OpenAI 接口。",
+		defaultModel: "gpt-5",
+		models: ["gpt-5", "gpt-4o", "o4-mini"],
+		defaultBaseUrl: "https://{resource}.openai.azure.com/openai/v1",
+		requiresApiKey: true,
+		supportsModelFetch: true,
+		fetchStyle: "azure_openai",
+		exampleBaseUrls: ["https://{resource}.openai.azure.com/openai/v1"],
+		supportsCustomHeaders: true,
+	},
+	{
+		id: "moonshot",
+		name: "Moonshot / Kimi",
+		description: "Moonshot Kimi 官方接口（OpenAI 兼容）。",
+		defaultModel: "kimi-k2",
+		models: ["kimi-k2", "kimi-k2-thinking", "moonshot-v1-128k"],
+		defaultBaseUrl: "https://api.moonshot.cn/v1",
+		requiresApiKey: true,
+		supportsModelFetch: true,
+		fetchStyle: "openai_compatible",
+		exampleBaseUrls: ["https://api.moonshot.cn/v1"],
+		supportsCustomHeaders: true,
 	},
 	{
 		id: "ollama",
 		name: "Ollama",
-		description: "本地部署 LLM（无 API Key）",
-		defaultModel: "llama3.1",
-		models: ["llama3.1", "qwen2.5", "deepseek-r1:latest"],
+		description: "本地部署 LLM（OpenAI 兼容，无需 API Key）。",
+		defaultModel: "llama3.3-70b",
+		models: ["llama3.3-70b", "qwen3-8b", "deepseek-r1"],
 		defaultBaseUrl: "http://localhost:11434/v1",
 		requiresApiKey: false,
 		supportsModelFetch: true,
 		fetchStyle: "openai_compatible",
+		exampleBaseUrls: ["http://localhost:11434/v1"],
+		supportsCustomHeaders: true,
+	},
+	{
+		id: "gemini",
+		name: "Google Gemini",
+		description: "Google Gemini 模型服务。",
+		defaultModel: "gemini-3-pro",
+		models: ["gemini-3-pro", "gemini-2.5-pro", "gemini-2.5-flash"],
+		defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
+		requiresApiKey: true,
+		supportsModelFetch: true,
+		fetchStyle: "openai_compatible",
+		supportsCustomHeaders: true,
+	},
+	{
+		id: "deepseek",
+		name: "DeepSeek",
+		description: "DeepSeek 推理与对话模型。",
+		defaultModel: "deepseek-v3.1-terminus",
+		models: ["deepseek-v3.1-terminus", "deepseek-chat", "deepseek-reasoner"],
+		defaultBaseUrl: "https://api.deepseek.com",
+		requiresApiKey: true,
+		supportsModelFetch: true,
+		fetchStyle: "openai_compatible",
+		supportsCustomHeaders: true,
 	},
 ];
 
@@ -125,6 +185,7 @@ export function normalizeLlmProviderId(
 	const normalized = (provider || "").trim().toLowerCase();
 	if (!normalized) return "openai";
 	if (normalized === "claude") return "anthropic";
+	if (normalized === "openai_compatible") return "custom";
 	return normalized;
 }
 
@@ -145,9 +206,11 @@ function buildUnknownProvider(providerId: string): LLMProviderItem {
 		defaultModel: "",
 		models: [],
 		defaultBaseUrl: "",
-		requiresApiKey: true,
+		requiresApiKey: providerId !== "ollama",
 		supportsModelFetch: false,
 		fetchStyle: "openai_compatible",
+		exampleBaseUrls: [],
+		supportsCustomHeaders: true,
 	};
 }
 
@@ -158,8 +221,11 @@ export function buildLlmProviderOptions(options?: {
 	const backendProviders = Array.isArray(options?.backendProviders)
 		? options?.backendProviders
 		: [];
-	const currentProviderId = normalizeLlmProviderId(options?.currentProviderId || "");
-	const baseProviders = backendProviders.length > 0 ? backendProviders : BUILTIN_LLM_PROVIDERS;
+	const currentProviderId = normalizeLlmProviderId(
+		options?.currentProviderId || "",
+	);
+	const baseProviders =
+		backendProviders.length > 0 ? backendProviders : BUILTIN_LLM_PROVIDERS;
 	if (!currentProviderId) return baseProviders;
 	if (baseProviders.some((provider) => provider.id === currentProviderId)) {
 		return baseProviders;
@@ -182,7 +248,9 @@ export function getDefaultModelForProvider(
 	providerId: string,
 ): string {
 	const provider = getLlmProviderInfo(providerOptions, providerId);
-	return provider?.defaultModel || DEFAULT_MODELS[normalizeLlmProviderId(providerId)] || "";
+	return (
+		provider?.defaultModel || DEFAULT_MODELS[normalizeLlmProviderId(providerId)] || ""
+	);
 }
 
 export function getDefaultBaseUrlForProvider(
@@ -214,11 +282,73 @@ export function resolveEffectiveLlmApiKey(
 	return String(llmConfig[providerKeyField] || "").trim();
 }
 
+export type LlmCustomHeadersParseResult =
+	| {
+			ok: true;
+			headers: Record<string, string>;
+			normalizedText: string;
+	  }
+	| {
+			ok: false;
+			message: string;
+	  };
+
+export function parseLlmCustomHeadersInput(
+	rawValue: string | null | undefined,
+): LlmCustomHeadersParseResult {
+	const text = String(rawValue || "").trim();
+	if (!text) {
+		return {
+			ok: true,
+			headers: {},
+			normalizedText: "",
+		};
+	}
+
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		return {
+			ok: false,
+			message: "自定义请求头必须是 JSON 对象",
+		};
+	}
+
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		return {
+			ok: false,
+			message: "自定义请求头必须是 JSON 对象",
+		};
+	}
+
+	const headers: Record<string, string> = {};
+	for (const [key, value] of Object.entries(parsed)) {
+		const headerName = String(key || "").trim();
+		if (!headerName) continue;
+		if (value && typeof value === "object") {
+			return {
+				ok: false,
+				message: "自定义请求头必须是扁平的 JSON 对象",
+			};
+		}
+		headers[headerName] = value == null ? "" : String(value);
+	}
+
+	return {
+		ok: true,
+		headers,
+		normalizedText: Object.keys(headers).length
+			? JSON.stringify(headers)
+			: "",
+	};
+}
+
 export function getCreateProjectScanProviderLabel(
 	provider: Pick<LLMProviderItem, "id" | "name"> | undefined,
 ): string {
 	if (!provider) return "";
-	return normalizeLlmProviderId(provider.id) === "openai"
+	return normalizeLlmProviderId(provider.id) === "custom"
 		? "OpenAI 兼容"
 		: provider.name || provider.id;
 }

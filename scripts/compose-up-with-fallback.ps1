@@ -188,6 +188,7 @@ $npmCandidates = @(
 
 $pypiCandidates = @(
     "https://mirrors.aliyun.com/pypi/simple/",
+    "https://pypi.tuna.tsinghua.edu.cn/simple",
     "https://pypi.org/simple"
 )
 

@@ -512,6 +512,7 @@ export const api = {
     apiKey: string;
     model?: string;
     baseUrl?: string;
+    customHeaders?: string;
   }): Promise<{
     success: boolean;
     message: string;
@@ -533,6 +534,8 @@ export const api = {
       requiresApiKey: boolean;
       supportsModelFetch: boolean;
       fetchStyle: "openai_compatible" | "anthropic" | "azure_openai" | "native_static";
+      exampleBaseUrls?: string[];
+      supportsCustomHeaders?: boolean;
     }>;
   }> {
     const res = await apiClient.get('/config/llm-providers');
@@ -543,6 +546,7 @@ export const api = {
     provider: string;
     apiKey: string;
     baseUrl?: string;
+    customHeaders?: string;
   }): Promise<{
     success: boolean;
     message: string;
