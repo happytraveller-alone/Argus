@@ -281,6 +281,7 @@ ENV PYTHONUNBUFFERED=1
 ENV XDG_DATA_HOME=/workspace/.deepaudit/mcp/xdg-data
 ENV XDG_CACHE_HOME=/workspace/.deepaudit/mcp/xdg-cache
 ENV XDG_CONFIG_HOME=/workspace/.deepaudit/mcp/xdg-config
+RUN mkdir -p /workspace/.deepaudit/mcp/xdg-data /workspace/.deepaudit/mcp/xdg-cache /workspace/.deepaudit/mcp/xdg-config
 ENV QMD_DATA_DIR=/workspace/.deepaudit/qmd
 
 # 限制 Python 导入路径

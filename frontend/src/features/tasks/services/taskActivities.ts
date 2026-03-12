@@ -113,7 +113,13 @@ function mapProjectNames(projects: Project[]) {
 	return new Map(projects.map((project) => [project.id, project.name]));
 }
 
-function pairGitleaksTasks(gitleaksTasks: GitleaksScanTask[]) {
+interface GitleaksPairingResult {
+	pickPairedGitleaksTask: (opengrepTask: OpengrepScanTask) => GitleaksScanTask | null;
+	/** 返回所有被配对的独立 gitleaks 任务 */
+	getUnpairedGitleaksTasks: () => GitleaksScanTask[];
+}
+
+function pairGitleaksTasks(gitleaksTasks: GitleaksScanTask[]): GitleaksPairingResult {
 	const gitleaksByProject = new Map<string, GitleaksScanTask[]>();
 	for (const task of gitleaksTasks) {
 		const list = gitleaksByProject.get(task.project_id) || [];
@@ -157,7 +163,10 @@ function pairGitleaksTasks(gitleaksTasks: GitleaksScanTask[]) {
 		return bestTask;
 	};
 
-	return pickPairedGitleaksTask;
+	const getUnpairedGitleaksTasks = () =>
+		gitleaksTasks.filter((task) => !usedGitleaksTaskIds.has(task.id));
+
+	return { pickPairedGitleaksTask, getUnpairedGitleaksTasks };
 }
 
 function toRuleScanActivities(
@@ -227,6 +236,55 @@ function toRuleScanActivities(
 	});
 }
 
+/**
+ * 将未被配对的独立 gitleaks 任务转换为 TaskActivityItem。
+ * 当用户仅启用 gitleaks 扫描时，这些任务不会与任何 opengrep 任务配对，
+ * 需要独立展示在任务列表中。
+ */
+function toStandaloneGitleaksActivities(
+	gitleaksTasks: GitleaksScanTask[],
+	resolveProjectName: (projectId: string) => string,
+): TaskActivityItem[] {
+	return gitleaksTasks.map((task) => {
+		const totalFindings = Math.max(task.total_findings || 0, 0);
+		const params = new URLSearchParams();
+		params.set("gitleaksTaskId", task.id);
+		params.set("tool", "gitleaks");
+		params.set("muteToast", "1");
+
+		const durationMs =
+			typeof task.scan_duration_ms === "number" &&
+			Number.isFinite(task.scan_duration_ms) &&
+			task.scan_duration_ms > 0
+				? task.scan_duration_ms
+				: null;
+
+		const isTerminal =
+			task.status === "completed" ||
+			task.status === "failed" ||
+			INTERRUPTED_STATUSES.has(task.status);
+
+		return {
+			id: `gitleaks-${task.id}`,
+			projectName: resolveProjectName(task.project_id),
+			kind: "rule_scan" as const,
+			sourceMode: resolveSourceModeFromTaskMeta("rule_scan", task.name),
+			status: task.status,
+			gitleaksEnabled: true,
+			staticFindingStats: {
+				severe: 0,
+				hint: totalFindings,
+				total: totalFindings,
+			},
+			createdAt: task.created_at,
+			startedAt: task.created_at,
+			completedAt: isTerminal ? (task.updated_at ?? null) : null,
+			durationMs,
+			route: `/static-analysis/${task.id}?${params.toString()}`,
+		};
+	});
+}
+
 function toAgentActivities(
 	agentTasks: AgentTask[],
 	resolveProjectName: (projectId: string) => string,
@@ -262,12 +320,17 @@ export async function fetchTaskActivities(
 	const resolveProjectName = (projectId: string) =>
 		projectNameMap.get(projectId) || "未知项目";
 
-	const pickPairedGitleaksTask = pairGitleaksTasks(gitleaksTasks);
+	const { pickPairedGitleaksTask, getUnpairedGitleaksTasks } =
+		pairGitleaksTasks(gitleaksTasks);
 
 	const activities = [
 		...toRuleScanActivities(
 			opengrepTasks,
 			pickPairedGitleaksTask,
+			resolveProjectName,
+		),
+		...toStandaloneGitleaksActivities(
+			getUnpairedGitleaksTasks(),
 			resolveProjectName,
 		),
 		...toAgentActivities(agentTasks, resolveProjectName),

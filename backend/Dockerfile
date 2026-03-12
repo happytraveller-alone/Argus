@@ -225,6 +225,10 @@ ENV PATH=/pnpm:${PATH}
 ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}
 ENV NPM_REGISTRY_CANDIDATES=${BACKEND_NPM_REGISTRY_CANDIDATES}
 
+ENV OPENGREP_HOME=/opt/opengrep
+ENV OPENGREP_REAL_BIN=/opt/opengrep/opengrep.real
+ENV OPENGREP_WRAPPER_BIN=/opt/opengrep/opengrep
+
 # 只安装运行时依赖（不需要 gcc）；CJK 字体可通过 BACKEND_INSTALL_CJK_FONTS 控制
 ARG BACKEND_INSTALL_CJK_FONTS
 RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
@@ -467,32 +471,11 @@ FROM runtime-base AS dev-runtime
 
 COPY --from=builder /app/.venv /opt/backend-venv
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=builder /usr/bin/gitleaks /usr/local/bin/gitleaks
 COPY --chmod=755 scripts/dev-entrypoint.sh /usr/local/bin/backend-dev-entrypoint.sh
 
-ENV PATH=/app/.venv/bin:/pnpm:${PATH}
-
-RUN mkdir -p /app /app/.venv /root/.cache/uv /app/uploads/zip_files /app/data/mcp /app/data/qmd
-
-EXPOSE 8000
-
-CMD ["/usr/local/bin/backend-dev-entrypoint.sh"]
-
-FROM runtime-base AS runtime
-
-# 提前复制 builder 产物，避免 runtime 与 builder 并行下载导致网络争抢
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
-COPY --from=builder /usr/bin/gitleaks /usr/local/bin/gitleaks
-
-# 从 mcp-builder 复制 MCP 运行时（前置以减少网络并发抢占）
-COPY --from=mcp-builder /pnpm /pnpm
-
-# 安装 Opengrep CLI 和 PMD
 ARG OPENGREP_VERSION=v1.15.1
 ARG BACKEND_PNPM_CMD_TIMEOUT_SECONDS
-ARG BACKEND_PYPI_INDEX_PRIMARY
-ARG BACKEND_PYPI_INDEX_FALLBACK
-
 RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhunter-tools \
     set -eux; \
     unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; \
@@ -500,7 +483,7 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
     case "${cmd_timeout}" in ''|*[!0-9]*) cmd_timeout=420 ;; esac; \
     download_step_timeout=90; \
     if [ "${cmd_timeout}" -lt "${download_step_timeout}" ]; then download_step_timeout="${cmd_timeout}"; fi; \
-    mkdir -p /var/cache/vulhunter-tools; \
+    mkdir -p /var/cache/vulhunter-tools "${OPENGREP_HOME}"; \
     ARCH="$(uname -m)"; \
     case "$ARCH" in \
       x86_64|amd64) OG_DIST="opengrep_manylinux_x86" ;; \
@@ -551,11 +534,105 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
         "https://gh-proxy.org/https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
         "https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}"; \
     fi; \
-    cp "${OG_CACHE}" /usr/local/bin/opengrep.real; \
-    chmod +x /usr/local/bin/opengrep.real; \
+    cp "${OG_CACHE}" "${OPENGREP_REAL_BIN}"; \
+    chmod +x "${OPENGREP_REAL_BIN}"; \
     printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY="*"\nexport no_proxy="*"\nexec /usr/local/bin/opengrep.real "$@"\n' \
-      > /usr/local/bin/opengrep; \
-    chmod +x /usr/local/bin/opengrep; \
+      > "${OPENGREP_WRAPPER_BIN}"; \
+    chmod +x "${OPENGREP_WRAPPER_BIN}"; \
+    ln -sf "${OPENGREP_REAL_BIN}" /usr/local/bin/opengrep.real; \
+    ln -sf "${OPENGREP_WRAPPER_BIN}" /usr/local/bin/opengrep; \
+    opengrep --version
+
+
+ENV PATH=/app/.venv/bin:/pnpm:${PATH}
+
+RUN mkdir -p /app /app/.venv /root/.cache/uv /app/uploads/zip_files /app/data/mcp
+
+EXPOSE 8000
+
+CMD ["/usr/local/bin/backend-dev-entrypoint.sh"]
+
+FROM runtime-base AS runtime
+
+# 提前复制 builder 产物，避免 runtime 与 builder 并行下载导致网络争抢
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=builder /usr/bin/gitleaks /usr/local/bin/gitleaks
+
+# 从 mcp-builder 复制 MCP 运行时（前置以减少网络并发抢占）
+COPY --from=mcp-builder /pnpm /pnpm
+
+# 安装 Opengrep CLI 和 PMD
+ARG OPENGREP_VERSION=v1.15.1
+ARG BACKEND_PNPM_CMD_TIMEOUT_SECONDS
+ARG BACKEND_PYPI_INDEX_PRIMARY
+ARG BACKEND_PYPI_INDEX_FALLBACK
+
+RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhunter-tools \
+    set -eux; \
+    unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; \
+    cmd_timeout="${BACKEND_PNPM_CMD_TIMEOUT_SECONDS:-420}"; \
+    case "${cmd_timeout}" in ''|*[!0-9]*) cmd_timeout=420 ;; esac; \
+    download_step_timeout=90; \
+    if [ "${cmd_timeout}" -lt "${download_step_timeout}" ]; then download_step_timeout="${cmd_timeout}"; fi; \
+    mkdir -p /var/cache/vulhunter-tools "${OPENGREP_HOME}"; \
+    ARCH="$(uname -m)"; \
+    case "$ARCH" in \
+      x86_64|amd64) OG_DIST="opengrep_manylinux_x86" ;; \
+      aarch64|arm64) OG_DIST="opengrep_manylinux_aarch64" ;; \
+      *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    download_with_fallback() { \
+      output="$1"; \
+      shift; \
+      for url in "$@"; do \
+        if ! curl -fsSI --connect-timeout 5 --max-time 12 "${url}" >/dev/null 2>&1 && \
+           ! curl -fsS --connect-timeout 5 --max-time 12 --range 0-0 "${url}" -o /dev/null >/dev/null 2>&1; then \
+          echo "download source probe failed for ${url}, continue with direct download attempts." >&2; \
+        fi; \
+        attempt=1; \
+        while [ "${attempt}" -le 2 ]; do \
+          echo "download ${output} via ${url} (attempt ${attempt}/2, timeout ${download_step_timeout}s)"; \
+          if timeout "${download_step_timeout}" curl -fL \
+            --connect-timeout 8 \
+            --max-time 60 \
+            --speed-time 15 \
+            --speed-limit 2048 \
+            "${url}" \
+            -o "${output}.tmp"; then \
+            mv "${output}.tmp" "${output}"; \
+            return 0; \
+          else \
+            status="$?"; \
+          fi; \
+          if [ "${status}" -eq 124 ]; then \
+            echo "download timed out: ${url} (attempt ${attempt}/2)." >&2; \
+          else \
+            echo "download failed: ${url} (attempt ${attempt}/2, exit ${status})." >&2; \
+          fi; \
+          rm -f "${output}.tmp"; \
+          sleep $((attempt + 1)); \
+          attempt=$((attempt + 1)); \
+        done; \
+      done; \
+      return 1; \
+    }; \
+    OG_CACHE="/var/cache/vulhunter-tools/opengrep-${OPENGREP_VERSION}-${OG_DIST}"; \
+    if [ ! -s "${OG_CACHE}" ]; then \
+      download_with_fallback \
+        "${OG_CACHE}" \
+        "https://gh-proxy.com/https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
+        "https://v6.gh-proxy.org/https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
+        "https://gh-proxy.org/https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
+        "https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}"; \
+    fi; \
+    cp "${OG_CACHE}" "${OPENGREP_REAL_BIN}"; \
+    chmod +x "${OPENGREP_REAL_BIN}"; \
+    printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY="*"\nexport no_proxy="*"\nexec /usr/local/bin/opengrep.real "$@"\n' \
+      > "${OPENGREP_WRAPPER_BIN}"; \
+    chmod +x "${OPENGREP_WRAPPER_BIN}"; \
+    ln -sf "${OPENGREP_REAL_BIN}" /usr/local/bin/opengrep.real; \
+    ln -sf "${OPENGREP_WRAPPER_BIN}" /usr/local/bin/opengrep; \
     opengrep --version; \
     PMD_CACHE="/var/cache/vulhunter-tools/pmd-dist-7.0.0-bin.zip"; \
     if [ ! -s "${PMD_CACHE}" ]; then \
@@ -575,7 +652,7 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
 ENV XDG_DATA_HOME=/app/data/mcp/xdg-data
 ENV XDG_CACHE_HOME=/app/data/mcp/xdg-cache
 ENV XDG_CONFIG_HOME=/app/data/mcp/xdg-config
-ENV QMD_DATA_DIR=/app/data/qmd
+RUN mkdir -p /app/data/mcp/xdg-data /app/data/mcp/xdg-cache /app/data/mcp/xdg-config
 
 
 
@@ -631,7 +708,7 @@ RUN set -eux; \
     ensure_npx_wrapper "qmd" "@tobilu/qmd"
 
 # 创建运行时持久化目录
-RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/code-index /app/data/mcp/xdg-config /app/data/qmd
+RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/code-index /app/data/mcp/xdg-config
 
 # 暴露端口
 EXPOSE 8000

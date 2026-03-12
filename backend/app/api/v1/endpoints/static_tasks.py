@@ -395,6 +395,7 @@ async def _validate_opengrep_rule(yaml_content: str) -> tuple[bool, Optional[str
         (is_valid, error_message): 验证是否通过，失败时返回错误信息
     """
     try:
+        _ensure_opengrep_xdg_dirs()
         # 创建临时文件保存规则
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False, encoding="utf-8") as tmp_file:
             tmp_file.write(yaml_content)
@@ -552,6 +553,17 @@ def _summarize_fatal_rule_errors(
 _static_scan_process_lock = threading.Lock()
 _static_running_scan_processes: Dict[str, subprocess.Popen] = {}
 _static_cancelled_scan_tasks: set[str] = set()
+
+
+def _ensure_opengrep_xdg_dirs() -> None:
+    """确保 XDG 目录存在，防止 opengrep (Semgrep) 因缺少 XDG_CONFIG_HOME 等目录而启动失败。"""
+    for env_key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"):
+        path = os.environ.get(env_key, "")
+        if path and not os.path.isdir(path):
+            try:
+                os.makedirs(path, exist_ok=True)
+            except OSError:
+                pass
 
 
 def _scan_task_key(scan_type: str, task_id: str) -> str:
@@ -823,6 +835,7 @@ async def _execute_opengrep_scan(
                 return True, "valid"
 
             # 准备扫描环境变量
+            _ensure_opengrep_xdg_dirs()
             scan_env = os.environ.copy()
             for proxy_key in (
                 "HTTP_PROXY",

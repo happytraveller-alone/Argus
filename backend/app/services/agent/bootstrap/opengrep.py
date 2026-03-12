@@ -18,6 +18,17 @@ from .base import (
 )
 
 
+def _ensure_opengrep_xdg_dirs() -> None:
+    """确保 XDG 目录存在，防止 opengrep (Semgrep) 因缺少 XDG_CONFIG_HOME 等目录而启动失败。"""
+    for env_key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"):
+        path = os.environ.get(env_key, "")
+        if path and not os.path.isdir(path):
+            try:
+                os.makedirs(path, exist_ok=True)
+            except OSError:
+                pass
+
+
 def _normalize_confidence(value: Any) -> Optional[str]:
     normalized = str(value or "").strip().upper()
     if normalized in {"HIGH", "MEDIUM", "LOW"}:
@@ -188,6 +199,8 @@ class OpenGrepBootstrapScanner(StaticBootstrapScanner):
         merged_rules = self._build_merged_rules()
         if not merged_rules:
             raise ValueError("No executable opengrep rules found")
+
+        _ensure_opengrep_xdg_dirs()
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as temp_file:
             yaml.dump({"rules": merged_rules}, temp_file, sort_keys=False, default_flow_style=False)

@@ -61,7 +61,6 @@ services:
       - backend_uv_cache:/root/.cache/uv
       - backend_uploads:/app/uploads
       - mcp_data:/app/data/mcp
-      - qmd_data:/app/data/qmd
       - /tmp/vulhunter:/tmp/vulhunter
       - /tmp/vulhunter:/tmp/deepaudit
       - /var/run/docker.sock:/var/run/docker.sock
@@ -210,7 +209,6 @@ volumes:
   backend_uv_cache:
   backend_uploads:
   mcp_data:
-  qmd_data:
   redis_data:
   frontend_node_modules:
   frontend_pnpm_store:
