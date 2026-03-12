@@ -184,6 +184,7 @@ class SandboxManager:
         working_dir: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
         timeout: Optional[int] = None,
+        host_project_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         在沙箱中执行命令
@@ -193,6 +194,8 @@ class SandboxManager:
             working_dir: 工作目录
             env: 环境变量
             timeout: 超时时间（秒）
+            host_project_dir: 宿主机上的项目根目录，将以只读方式挂载到容器 /project，
+                              并自动设置 PYTHONPATH=/project，便于导入项目模块。
             
         Returns:
             执行结果
@@ -217,12 +220,23 @@ class SandboxManager:
             "NO_PROXY": "*",
             "no_proxy": "*",
         }
+        # 挂载项目目录时，将 PYTHONPATH 指向 /project，便于代码在沙箱内导入项目模块
+        project_env: Dict[str, str] = {}
+        if host_project_dir and os.path.isdir(host_project_dir):
+            project_env["PYTHONPATH"] = "/project"
         # 合并用户传入的环境变量（用户变量优先）
-        container_env = {**no_proxy_env, **(env or {})}
+        container_env = {**no_proxy_env, **project_env, **(env or {})}
 
         try:
             # 创建临时目录
             with tempfile.TemporaryDirectory() as temp_dir:
+                # 挂载卷：workspace（可读写）+ 可选的项目目录（只读）
+                volumes: Dict[str, Any] = {
+                    temp_dir: {"bind": "/workspace", "mode": "rw"},
+                }
+                if host_project_dir and os.path.isdir(host_project_dir):
+                    volumes[os.path.realpath(host_project_dir)] = {"bind": "/project", "mode": "ro"}
+
                 # 准备容器配置
                 container_config = {
                     "command": ["sh", "-c", command],
@@ -233,9 +247,7 @@ class SandboxManager:
                     "network_mode": self.config.network_mode,
                     "user": self.config.user,
                     "read_only": self.config.read_only,
-                    "volumes": {
-                        temp_dir: {"bind": "/workspace", "mode": "rw"},
-                    },
+                    "volumes": volumes,
                     "tmpfs": {
                             "/home/sandbox": "rw,size=100m,mode=1777",
                             "/tmp": "rw,size=100m,mode=1777"

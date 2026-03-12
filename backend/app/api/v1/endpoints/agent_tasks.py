@@ -3092,6 +3092,8 @@ async def _execute_agent_task(task_id: str):
 
                 memory_store = MarkdownMemoryStore(project_id=str(project.id))
                 memory_store.ensure()
+                # 每次新任务启动时清除 Agent 专属记忆，防止跨任务上下文污染
+                memory_store.clear_agent_memory(task_id=task_id)
                 if bool(getattr(settings, "TOOL_DOC_SYNC_ENABLED", True)):
                     _sync_tool_catalog_to_memory(
                         memory_store=memory_store,

@@ -215,6 +215,40 @@ class MarkdownMemoryStore:
             except Exception as exc:
                 logger.warning("[MarkdownMemory] write skills snapshot failed (%s): %s", file_path, exc)
 
+    def clear_agent_memory(
+        self,
+        *,
+        task_id: Optional[str] = None,
+        keys: Optional[list] = None,
+    ) -> None:
+        """清除每个任务开始前的 Agent 专属记忆文件，防止跨任务上下文污染。
+
+        默认清除 orchestrator / recon / analysis / verification 四个文件；
+        skills.md（工具文档）和 shared.md（跨 Agent 共享知识）不在清除范围内。
+
+        Args:
+            task_id: 当前任务 ID，用于在文件头写入溯源标记。
+            keys: 要清除的记忆键列表，默认为 ["orchestrator", "recon", "analysis", "verification"]。
+        """
+        if keys is None:
+            keys = ["orchestrator", "recon", "analysis", "verification"]
+        self.ensure()
+        ts = datetime.now(timezone.utc).isoformat()
+        header = (
+            f"# Task Reset\n"
+            f"- cleared_at: {ts}\n"
+            f"- task_id: {str(task_id or '').strip() or 'unknown'}\n"
+            f"- reason: new task started, previous context cleared to prevent cross-task pollution\n\n"
+        )
+        with self._lock():
+            for key in keys:
+                try:
+                    file_path = self._path(key)
+                    file_path.write_text(header, encoding="utf-8")
+                    logger.debug("[MarkdownMemory] cleared %s for task %s", file_path.name, task_id)
+                except Exception as exc:
+                    logger.warning("[MarkdownMemory] clear_agent_memory failed for %s: %s", key, exc)
+
     def append_entry(
         self,
         key: str,
