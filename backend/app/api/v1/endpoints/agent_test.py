@@ -64,12 +64,29 @@ class BusinessLogicTestRequest(BaseModel):
     quick_mode: bool = Field(False)
 
 
+class BusinessLogicReconTestRequest(BaseModel):
+    project_path: str = Field(..., description="项目绝对路径")
+    project_name: str = Field("test-project", description="项目名称")
+    framework_hint: Optional[str] = Field(None, description="框架提示（如 django/fastapi/express）")
+    max_iterations: int = Field(10, ge=1, le=200)
+
+
+class BusinessLogicAnalysisTestRequest(BaseModel):
+    project_path: str = Field(..., description="项目绝对路径")
+    risk_point: Dict[str, Any] = Field(
+        ...,
+        description="单个业务逻辑风险点（来自 BL Recon 阶段），需包含 file_path、line_start、description、vulnerability_type",
+    )
+    max_iterations: int = Field(10, ge=1, le=200)
+
+
 # ─────────────────────────── Simple Event Emitter ────────────────────────
 
 # 队列相关工具名称，调用后需要推送队列快照
 _QUEUE_PUSH_TOOL_NAMES = frozenset([
     "push_risk_point_to_queue",
     "push_finding_to_queue",
+    "push_bl_risk_point_to_queue",
 ])
 
 
@@ -91,12 +108,16 @@ class QueueEventEmitter:
         vuln_task_id: str = "",
         recon_queue: Any = None,
         recon_task_id: str = "",
+        bl_queue: Any = None,
+        bl_task_id: str = "",
     ):
         self._queue = queue
         self._vuln_queue = vuln_queue
         self._vuln_task_id = vuln_task_id
         self._recon_queue = recon_queue
         self._recon_task_id = recon_task_id
+        self._bl_queue = bl_queue
+        self._bl_task_id = bl_task_id
 
     # ── 核心入口：BaseAgent 调用的唯一方法 ──────────────────────
     async def emit(self, event_data: Any) -> None:
@@ -182,6 +203,29 @@ class QueueEventEmitter:
             except Exception as e:
                 logger.debug("Failed to snapshot recon queue: %s", e)
 
+        if self._bl_queue and self._bl_task_id:
+            try:
+                size = self._bl_queue.size(self._bl_task_id)
+                peek = self._bl_queue.peek(self._bl_task_id, limit=500)
+                queues["bl_recon"] = {
+                    "label": "业务逻辑风险点队列",
+                    "size": size,
+                    "peek": [
+                        {
+                            "title": str(item.get("description", item.get("vulnerability_type", "unknown")))[:60],
+                            "severity": str(item.get("severity", "high")),
+                            "vulnerability_type": str(item.get("vulnerability_type", "")),
+                            "file_path": str(item.get("file_path", "")),
+                            "line_start": item.get("line_start"),
+                            "confidence": item.get("confidence"),
+                            "description": str(item.get("description", ""))[:120],
+                        }
+                        for item in (peek or [])
+                    ],
+                }
+            except Exception as e:
+                logger.debug("Failed to snapshot BL queue: %s", e)
+
         if queues:
             await self._queue.put({"type": "queue_snapshot", "queues": queues, "ts": time.time()})
 
@@ -246,9 +290,16 @@ def _build_recon_tools(
     task_id: str,
     recon_queue: Any,
 ) -> Dict[str, Any]:
-    from app.services.agent.tools.recon_queue_tools import PushRiskPointToQueueTool
+    from app.services.agent.tools.recon_queue_tools import (
+        PushRiskPointToQueueTool,
+        PushRiskPointsBatchToQueueTool,
+    )
     tools = _build_base_tools(project_root)
     tools["push_risk_point_to_queue"] = PushRiskPointToQueueTool(
+        queue_service=recon_queue,
+        task_id=task_id,
+    )
+    tools["push_risk_points_to_queue"] = PushRiskPointsBatchToQueueTool(
         queue_service=recon_queue,
         task_id=task_id,
     )
@@ -293,6 +344,61 @@ def _build_verification_tools(project_root: str) -> Dict[str, Any]:
         "extract_function": ExtractFunctionTool(project_root),
         "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
     }
+
+
+def _build_bl_recon_tools(
+    project_root: str,
+    task_id: str,
+    bl_queue: Any,
+) -> Dict[str, Any]:
+    from app.services.agent.tools.business_logic_recon_queue_tools import (
+        PushBLRiskPointToQueueTool,
+        PushBLRiskPointsBatchToQueueTool,
+        GetBLRiskQueueStatusTool,
+        IsBLRiskPointInQueueTool,
+    )
+    tools = _build_base_tools(project_root)
+    tools["push_bl_risk_point_to_queue"] = PushBLRiskPointToQueueTool(
+        queue_service=bl_queue,
+        task_id=task_id,
+    )
+    tools["push_bl_risk_points_to_queue"] = PushBLRiskPointsBatchToQueueTool(
+        queue_service=bl_queue,
+        task_id=task_id,
+    )
+    tools["get_bl_risk_queue_status"] = GetBLRiskQueueStatusTool(
+        queue_service=bl_queue,
+        task_id=task_id,
+    )
+    tools["is_bl_risk_point_in_queue"] = IsBLRiskPointInQueueTool(
+        queue_service=bl_queue,
+        task_id=task_id,
+    )
+    return tools
+
+
+def _build_bl_analysis_tools(
+    project_root: str,
+    llm_service: Any,
+    task_id: str = "",
+    vuln_queue: Any = None,
+) -> Dict[str, Any]:
+    from app.services.agent.tools import (
+        PatternMatchTool, ExtractFunctionTool, DataFlowAnalysisTool,
+        ControlFlowAnalysisLightTool,
+    )
+    tools = {
+        **_build_base_tools(project_root),
+        "pattern_match": PatternMatchTool(project_root),
+        "extract_function": ExtractFunctionTool(project_root=project_root),
+        "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
+        "controlflow_analysis_light": ControlFlowAnalysisLightTool(project_root=project_root),
+    }
+    if vuln_queue and task_id:
+        from app.services.agent.tools.queue_tools import PushFindingToQueueTool, IsFindingInQueueTool
+        tools["push_finding_to_queue"] = PushFindingToQueueTool(vuln_queue, task_id)
+        tools["is_finding_in_queue"] = IsFindingInQueueTool(vuln_queue, task_id)
+    return tools
 
 
 # ─────────────────────────── SSE Generator ──────────────────────────────
@@ -557,6 +663,92 @@ async def test_business_logic_agent(
         "framework_hint": request.framework_hint,
         "entry_points_hint": request.entry_points_hint,
         "quick_mode": request.quick_mode,
+        "max_iterations": request.max_iterations,
+    }
+
+    return StreamingResponse(
+        _run_agent_streaming(agent.run(input_data), queue),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/business-logic-recon/run")
+async def test_business_logic_recon_agent(
+    request: BusinessLogicReconTestRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """
+    单独测试 BusinessLogicReconAgent（业务逻辑风险点侦察 Agent）。
+    扫描项目中的潜在业务逻辑风险点并推入 BL 风险队列。
+    """
+    project_root = _validate_project_path(request.project_path)
+    user_config = await _get_user_config(db, str(current_user.id))
+    llm_service = await _init_llm_service(user_config)
+
+    from app.services.agent.business_logic_risk_queue import InMemoryBusinessLogicRiskQueue
+    test_task_id = str(uuid4())
+    bl_queue = InMemoryBusinessLogicRiskQueue()
+
+    queue: asyncio.Queue = asyncio.Queue()
+    emitter = QueueEventEmitter(
+        queue,
+        bl_queue=bl_queue,
+        bl_task_id=test_task_id,
+    )
+
+    from app.services.agent.agents import BusinessLogicReconAgent
+    tools = _build_bl_recon_tools(project_root, task_id=test_task_id, bl_queue=bl_queue)
+    agent = BusinessLogicReconAgent(llm_service=llm_service, tools=tools, event_emitter=emitter)
+
+    input_data = {
+        "project_info": {"name": request.project_name, "root": project_root},
+        "config": {},
+        "project_root": project_root,
+        "framework_hint": request.framework_hint,
+        "max_iterations": request.max_iterations,
+    }
+
+    return StreamingResponse(
+        _run_agent_streaming(agent.run(input_data), queue),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/business-logic-analysis/run")
+async def test_business_logic_analysis_agent(
+    request: BusinessLogicAnalysisTestRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """
+    单独测试 BusinessLogicAnalysisAgent（业务逻辑漏洞深度分析 Agent）。
+    对单个 BL 风险点进行深度分析并将确认漏洞推入漏洞队列。
+    """
+    project_root = _validate_project_path(request.project_path)
+    user_config = await _get_user_config(db, str(current_user.id))
+    llm_service = await _init_llm_service(user_config)
+
+    from app.services.agent.vulnerability_queue import InMemoryVulnerabilityQueue
+    test_task_id = str(uuid4())
+    vuln_queue = InMemoryVulnerabilityQueue()
+
+    queue: asyncio.Queue = asyncio.Queue()
+    emitter = QueueEventEmitter(
+        queue,
+        vuln_queue=vuln_queue,
+        vuln_task_id=test_task_id,
+    )
+
+    from app.services.agent.agents import BusinessLogicAnalysisAgent
+    tools = _build_bl_analysis_tools(project_root, llm_service, task_id=test_task_id, vuln_queue=vuln_queue)
+    agent = BusinessLogicAnalysisAgent(llm_service=llm_service, tools=tools, event_emitter=emitter)
+
+    input_data = {
+        "risk_point": request.risk_point,
+        "project_root": project_root,
         "max_iterations": request.max_iterations,
     }
 

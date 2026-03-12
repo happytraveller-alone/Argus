@@ -51,6 +51,7 @@ class AuditWorkflowEngine:
         task_id: str,
         orchestrator: "OrchestratorAgent",
         workflow_config: Optional[WorkflowConfig] = None,
+        business_logic_queue_service: Optional[Any] = None,
     ) -> None:
         """
         Args:
@@ -59,9 +60,12 @@ class AuditWorkflowEngine:
             task_id:             当前审计任务 ID（队列 key 隔离）。
             orchestrator:        父 OrchestratorAgent 实例，用于调用 _dispatch_agent 等方法。
             workflow_config:     Workflow 配置（控制并行化行为）。
+            business_logic_queue_service: InMemoryBusinessLogicRiskQueue 实例（可选）。
+                                          若为 None，则跳过业务逻辑双轨道流程。
         """
         self.recon_queue = recon_queue_service
         self.vuln_queue = vuln_queue_service
+        self.bl_queue = business_logic_queue_service
         self.task_id = task_id
         self.orchestrator = orchestrator
         self.workflow_config = workflow_config or WorkflowConfig()
@@ -85,12 +89,23 @@ class AuditWorkflowEngine:
             enable_parallel=self.workflow_config.should_parallelize_verification,
         )
 
+        # 🔥 业务逻辑分析并行执行器（仅在 bl_queue 存在时使用）
+        self.bl_analysis_executor = ParallelPhaseExecutor(
+            orchestrator=orchestrator,
+            agent_type="business_logic_analysis",
+            max_workers=self.workflow_config.bl_analysis_max_workers,
+            enable_parallel=self.workflow_config.should_parallelize_bl_analysis,
+        )
+
         logger.info(
             f"[WorkflowEngine] Initialized with parallel config: "
             f"analysis_workers={self.workflow_config.analysis_max_workers} "
             f"(enabled={self.workflow_config.should_parallelize_analysis}), "
+            f"bl_analysis_workers={self.workflow_config.bl_analysis_max_workers} "
+            f"(enabled={self.workflow_config.should_parallelize_bl_analysis}), "
             f"verification_workers={self.workflow_config.verification_max_workers} "
-            f"(enabled={self.workflow_config.should_parallelize_verification})"
+            f"(enabled={self.workflow_config.should_parallelize_verification}), "
+            f"bl_queue={'enabled' if business_logic_queue_service else 'disabled'}"
         )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -108,7 +123,12 @@ class AuditWorkflowEngine:
         执行完整审计 Workflow，返回最终 WorkflowState。
 
         Workflow 阶段顺序：
-            INIT → RECON → ANALYSIS（per risk point）→ VERIFICATION（per finding）→ REPORT（per confirmed/likely）→ COMPLETE
+            INIT
+            → RECON（完成后）→ BUSINESS_LOGIC_RECON（顺序执行）
+            → ANALYSIS + BUSINESS_LOGIC_ANALYSIS（asyncio.gather 并行，per risk point）
+            → VERIFICATION（per finding）
+            → REPORT（per confirmed/likely）
+            → COMPLETE
         """
         state = WorkflowState()
         orc = self.orchestrator
@@ -174,9 +194,24 @@ class AuditWorkflowEngine:
                 await orc.emit_event("info", "🔎 [Workflow] 开始 Recon 阶段")
                 await self._run_recon_phase(state)
             
+            # 🔥 业务逻辑侦察阶段（与 Recon 相互独立，可并行；这里在 Recon 完成后启动）
+            # 注意：由于 bootstrap 模式下 Recon 可能被跳过，BL Recon 不受影响，始终运行
+            if self.bl_queue is not None and not orc.is_cancelled:
+                has_bl_recon_agent = orc.sub_agents.get("business_logic_recon") is not None
+                if has_bl_recon_agent:
+                    await orc.emit_event("info", "🕵️ [Workflow] 开始 BusinessLogicRecon 阶段")
+                    await self._run_business_logic_recon_phase(state, task_id)
+                else:
+                    logger.info("[WorkflowEngine] No business_logic_recon agent registered, skipping BL Recon phase")
+                    await orc.emit_event("info", "⏭️ [Workflow] 未配置 BusinessLogicReconAgent，跳过 BL Recon 阶段")
+            
             # 🔥 Recon 结束后调用 LLM 对风险点进行去重
             if state.recon_done and not orc.is_cancelled:
                 await self._dedup_recon_risk_queue(self.task_id)
+
+            # 🔥 BL Recon 结束后对业务逻辑风险点去重
+            if state.bl_recon_done and not orc.is_cancelled and self.bl_queue is not None:
+                await self._dedup_bl_risk_queue(self.task_id)
             
             # 🔥 记录 Recon 完成后的内存
             if self.enable_memory_monitoring:
@@ -186,15 +221,42 @@ class AuditWorkflowEngine:
                 state.phase = WorkflowPhase.CANCELLED
                 return state
 
-            # ── 阶段 2: ANALYSIS（逐条消耗 Recon 风险点队列）───────────────
+            # ── 阶段 2: ANALYSIS（逐条消耗 Recon 风险点队列）+ BUSINESS_LOGIC_ANALYSIS（并行）───
             state.phase = WorkflowPhase.ANALYSIS
             recon_queue_size = self.recon_queue.size(task_id)
             state.analysis_risk_points_total = recon_queue_size
-            await orc.emit_event(
-                "info",
-                f"🔍 [Workflow] 开始 Analysis 阶段，Recon 队列共 {recon_queue_size} 条风险点",
+
+            bl_queue_size = self.bl_queue.size(task_id) if self.bl_queue is not None else 0
+            state.bl_risk_points_total = bl_queue_size
+
+            has_bl_analysis = (
+                self.bl_queue is not None
+                and bl_queue_size > 0
+                and orc.sub_agents.get("business_logic_analysis") is not None
             )
-            await self._run_analysis_phase(state, task_id)
+
+            if has_bl_analysis:
+                await orc.emit_event(
+                    "info",
+                    f"🔍 [Workflow] 开始 Analysis + BusinessLogicAnalysis 并行阶段，"
+                    f"Recon 队列 {recon_queue_size} 条，BL 队列 {bl_queue_size} 条",
+                )
+                gather_results = await asyncio.gather(
+                    self._run_analysis_phase(state, task_id),
+                    self._run_business_logic_analysis_phase(state, task_id),
+                    return_exceptions=True,
+                )
+                for i, result in enumerate(gather_results):
+                    if isinstance(result, Exception):
+                        phase_name = ["Analysis", "BusinessLogicAnalysis"][i]
+                        logger.error("[WorkflowEngine] %s phase raised exception: %s", phase_name, result, exc_info=result)
+                        await orc.emit_event("warning", f"⚠️ [Workflow] {phase_name} 阶段异常（非关键）：{str(result)[:100]}")
+            else:
+                await orc.emit_event(
+                    "info",
+                    f"🔍 [Workflow] 开始 Analysis 阶段，Recon 队列共 {recon_queue_size} 条风险点",
+                )
+                await self._run_analysis_phase(state, task_id)
             
             # 🔥 Analysis 阶段结束后调用 LLM 对漏洞进行去重
             if not orc.is_cancelled:
@@ -404,6 +466,84 @@ class AuditWorkflowEngine:
                 f"⚠️ [Workflow] Recon 风险点 LLM 去重失败（非关键）：{str(exc)[:100]}",
             )
 
+    async def _dedup_bl_risk_queue(self, task_id: str) -> None:
+        """
+        在 BL Recon 结束后，调用大模型对业务逻辑风险点队列进行语义级去重。
+        逻辑与 _dedup_recon_risk_queue 完全相同，但操作 bl_queue。
+        """
+        if self.bl_queue is None:
+            return
+        orc = self.orchestrator
+
+        try:
+            all_risk_points = self.bl_queue.peek(task_id, limit=1000)
+            if not all_risk_points or len(all_risk_points) <= 1:
+                return
+
+            queue_size = self.bl_queue.size(task_id)
+            await orc.emit_event(
+                "info",
+                f"🤖 [Workflow] 开始 BL 风险点 LLM 去重：队列共 {queue_size} 条",
+            )
+
+            risk_points_json = json.dumps(
+                [
+                    {
+                        "id": i,
+                        "file_path": rp.get("file_path", ""),
+                        "line_start": rp.get("line_start", 0),
+                        "description": rp.get("description", ""),
+                        "vulnerability_type": rp.get("vulnerability_type", ""),
+                        "entry_function": rp.get("entry_function", ""),
+                    }
+                    for i, rp in enumerate(all_risk_points[:50])
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+
+            dedup_prompt = f"""请分析以下业务逻辑风险点列表，识别其中明确重复或基本相同的项目。
+
+风险点列表：
+{risk_points_json}
+
+分析标准：
+1. 相同文件、相同或相邻行号、相同漏洞类型 → 重复
+2. 相同文件、相同入口函数、类似描述 → 可能重复
+3. 不同文件 → 即使描述相似也不算重复
+
+请输出：
+{{
+  "duplicates": [
+    {{"keep_id": 0, "remove_ids": [1, 2]}},
+    ...
+  ],
+  "explanation": "简要说明去重原因"
+}}
+
+仅输出 JSON，不要其他内容。"""
+
+            messages = [{"role": "user", "content": dedup_prompt}]
+            llm_response, _ = await orc.stream_llm_call(messages)
+            dedup_result = self._parse_llm_dedup_response(llm_response)
+
+            if not dedup_result or not dedup_result.get("duplicates"):
+                await orc.emit_event("info", "✅ [Workflow] BL 风险点 LLM 去重：无重复项")
+                return
+
+            removed_count = await self._remove_duplicate_recon_risk_points(
+                task_id, dedup_result["duplicates"], all_risk_points, queue=self.bl_queue
+            )
+
+            if removed_count > 0:
+                await orc.emit_event(
+                    "info",
+                    f"✅ [Workflow] BL 风险点 LLM 去重完成：移除 {removed_count} 条重复项",
+                )
+
+        except Exception as exc:
+            logger.warning("[WorkflowEngine] BL queue LLM dedup failed: %s", exc)
+
     async def _dedup_vuln_queue(self, task_id: str) -> None:
         """
         在 Analysis 阶段总体结束后，调用大模型对队列中可能重复的漏洞项进行语义级去重。
@@ -536,8 +676,14 @@ class AuditWorkflowEngine:
         task_id: str,
         duplicates: List[Dict[str, Any]],
         all_risk_points: List[Dict[str, Any]],
+        queue: Optional[Any] = None,
     ) -> int:
-        """根据 LLM 分析结果，从 Recon 风险队列中删除重复的风险点"""
+        """根据 LLM 分析结果，从风险队列中删除重复的风险点。
+
+        Args:
+            queue: 要操作的队列服务；若为 None，则使用 self.recon_queue。
+        """
+        target_queue = queue if queue is not None else self.recon_queue
         removed_count = 0
         ids_to_remove = set()
         total_items = len(all_risk_points)
@@ -563,15 +709,15 @@ class AuditWorkflowEngine:
                 kept_items = [all_risk_points[0]]
 
             try:
-                clear_func = getattr(self.recon_queue, "clear", None)
+                clear_func = getattr(target_queue, "clear", None)
                 if callable(clear_func):
                     clear_func(task_id)
                 else:
-                    logger.warning("[WorkflowEngine] Recon queue has no clear() method, skip dedup rewrite")
+                    logger.warning("[WorkflowEngine] Queue has no clear() method, skip dedup rewrite")
                     return 0
 
                 for item in kept_items:
-                    self.recon_queue.enqueue(task_id, item)
+                    target_queue.enqueue(task_id, item)
 
                 removed_count = max(0, total_items - len(kept_items))
             except Exception as exc:
@@ -685,15 +831,58 @@ class AuditWorkflowEngine:
             recon_agent.reset_session_memory()
             logger.debug("[WorkflowEngine] Recon Agent session memory reset after phase completed")
 
+    async def _run_business_logic_recon_phase(self, state: WorkflowState, task_id: str) -> None:
+        """
+        调度 BusinessLogicReconAgent 一次，将业务逻辑风险点推入 bl_risk_queue。
+        """
+        orc = self.orchestrator
+        step_start = time.time()
+
+        params = {
+            "agent": "business_logic_recon",
+            "task": "侦查项目中的业务逻辑漏洞风险点（IDOR、权限绕过、支付逻辑、竞态条件等），将风险点推送到业务逻辑队列",
+        }
+        try:
+            observation = await orc._dispatch_agent(params)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("[WorkflowEngine] BL Recon phase failed: %s", exc)
+            observation = f"BL Recon 执行异常: {exc}"
+
+        duration_ms = int((time.time() - step_start) * 1000)
+        bl_recon_success = bool(
+            orc._agent_results.get("business_logic_recon", {}).get("_run_success")
+        )
+        state.bl_recon_done = bl_recon_success
+        state.step_records.append(
+            WorkflowStepRecord(
+                phase=WorkflowPhase.BUSINESS_LOGIC_RECON,
+                agent="business_logic_recon",
+                success=bl_recon_success,
+                error=None if bl_recon_success else orc._agent_results.get("business_logic_recon", {}).get("_run_error"),
+                findings_count=len(orc._all_findings),
+                duration_ms=duration_ms,
+            )
+        )
+        logger.info(
+            "[WorkflowEngine] BL Recon phase done: success=%s, bl_queue_size=%s",
+            bl_recon_success,
+            self.bl_queue.size(task_id) if self.bl_queue else 0,
+        )
+
+        bl_recon_agent = orc.sub_agents.get("business_logic_recon")
+        if bl_recon_agent and hasattr(bl_recon_agent, "reset_session_memory"):
+            bl_recon_agent.reset_session_memory()
+
     async def _run_analysis_phase(self, state: WorkflowState, task_id: str) -> None:
         """
-        从 Recon 风险点队列逐条取出风险点，调度 Analysis Agent。
+        从 Recon 风险点队列逐条取出风险点，调度 AnalysisAgent。
 
         根据配置选择并行或串行模式：
-        - 并行模式：使用 ParallelPhaseExecutor 创建 worker 池
-        - 串行模式：保留原有 while 循环逻辑（fallback）
+        - 并行模式：使用 ParallelPhaseExecutor 创建 worker 池（最多 analysis_max_workers 个）
+        - 串行模式：降级到串行处理（fallback）
         """
-        # 委托给并行执行器（内部会根据配置选择并行或串行）
         await self.analysis_executor.run_parallel_analysis(
             state=state,
             task_id=task_id,
@@ -704,6 +893,30 @@ class AuditWorkflowEngine:
             "[WorkflowEngine] Analysis phase done: %s risk point(s) processed, cumulative findings=%s",
             state.analysis_risk_points_processed,
             len(self.orchestrator._all_findings),
+        )
+
+    async def _run_business_logic_analysis_phase(self, state: WorkflowState, task_id: str) -> None:
+        """
+        从 BL 风险点队列逐条取出风险点，调度 BusinessLogicAnalysisAgent。
+
+        根据配置选择并行或串行模式：
+        - 并行模式：使用 ParallelPhaseExecutor 创建 worker 池（最多 bl_analysis_max_workers 个）
+        - 串行模式：降级到串行处理（fallback）
+        """
+        bl_analysis_agent = self.orchestrator.sub_agents.get("business_logic_analysis")
+        if bl_analysis_agent is None:
+            logger.info("[WorkflowEngine] No business_logic_analysis agent, skipping BL Analysis phase")
+            return
+
+        await self.bl_analysis_executor.run_parallel_bl_analysis(
+            state=state,
+            task_id=task_id,
+            bl_queue=self.bl_queue,
+        )
+
+        logger.info(
+            "[WorkflowEngine] BL Analysis phase done: %s risk point(s) processed",
+            state.bl_risk_points_processed,
         )
 
     async def _run_verification_phase(self, state: WorkflowState, task_id: str) -> None:

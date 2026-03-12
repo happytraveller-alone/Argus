@@ -913,3 +913,221 @@ class ParallelPhaseExecutor:
                 verification_agent.reset_session_memory()
 
         logger.info(f"[ParallelExecutor] Sequential verification done: {iteration} findings processed")
+
+    async def run_parallel_bl_analysis(
+        self,
+        state: WorkflowState,
+        task_id: str,
+        bl_queue: Any,
+    ) -> None:
+        """
+        并行处理业务逻辑风险队列
+
+        流程与 run_parallel_analysis 类似，区别在于处理 bl_queue 和 BL 相关状态字段。
+
+        Args:
+            state: Workflow 状态
+            task_id: 任务 ID
+            bl_queue: 业务逻辑风险队列服务
+        """
+        if not self.enable_parallel or self.max_workers <= 1:
+            logger.info("[ParallelExecutor] Parallel disabled or max_workers=1, using sequential BL analysis")
+            return await self._run_sequential_bl_analysis(state, task_id, bl_queue)
+
+        logger.info(f"[ParallelExecutor] Starting parallel BL analysis with {self.max_workers} workers")
+
+        # 初始化 worker agents
+        for worker_id in range(self.max_workers):
+            self.worker_agents[worker_id] = self._create_worker_agent(worker_id)
+
+        # 启动 worker 任务
+        worker_tasks = [
+            asyncio.create_task(
+                self._bl_analysis_worker(worker_id, state, task_id, bl_queue),
+                name=f"bl_analysis_worker_{worker_id}"
+            )
+            for worker_id in range(self.max_workers)
+        ]
+
+        # 等待所有 worker 完成
+        results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"[ParallelExecutor] BL Worker {i} failed: {result}", exc_info=result)
+
+        self.worker_agents.clear()
+        logger.info("[ParallelExecutor] Parallel BL analysis completed")
+
+    async def _bl_analysis_worker(
+        self,
+        worker_id: int,
+        state: WorkflowState,
+        task_id: str,
+        bl_queue: Any,
+    ) -> None:
+        """
+        BusinessLogicAnalysis worker 协程：从 BL 风险队列取风险点并处理
+
+        Args:
+            worker_id: Worker ID
+            state: Workflow 状态
+            task_id: 任务 ID
+            bl_queue: 业务逻辑风险队列服务
+        """
+        worker_agent = self.worker_agents[worker_id]
+        iteration = 0
+
+        logger.info(f"[BLWorker-{worker_id}] BL analysis worker started")
+
+        while True:
+            if self.orchestrator.is_cancelled:
+                logger.info(f"[BLWorker-{worker_id}] Cancelled, exiting")
+                break
+
+            async with self.semaphore:
+                risk_point = bl_queue.dequeue(task_id)
+                if risk_point is None:
+                    logger.info(f"[BLWorker-{worker_id}] BL queue drained, exiting")
+                    break
+
+                iteration += 1
+
+                async with self.lock:
+                    self.active_workers.add(worker_id)
+                    state.bl_risk_points_processed += 1
+                    state.total_iterations += 1
+
+                fp_repr = f"{risk_point.get('file_path', '')}:{risk_point.get('line_start', '')}"
+                await self.orchestrator.emit_event(
+                    "info",
+                    f"🔍 [BLWorker-{worker_id}] BLAnalysis 第 {iteration} 轮：{fp_repr}",
+                )
+
+                step_start = time.time()
+
+                params = {
+                    "agent": self.agent_type,
+                    "task": f"深度分析业务逻辑风险点 {fp_repr}",
+                    "risk_point": risk_point,
+                    "context": json.dumps(risk_point, ensure_ascii=False),
+                }
+
+                try:
+                    await self._dispatch_to_worker_agent(worker_agent, params)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.error(f"[BLWorker-{worker_id}] Dispatch failed: {exc}", exc_info=True)
+
+                duration_ms = int((time.time() - step_start) * 1000)
+
+                async with self.lock:
+                    worker_result = getattr(worker_agent, '_agent_results', {}).get(self.agent_type, {})
+                    bl_success = bool(worker_result.get("_run_success"))
+                    self.orchestrator._tool_calls += int(worker_result.get("_worker_tool_calls", 0) or 0)
+                    self.orchestrator._total_tokens += int(
+                        worker_result.get("_worker_tokens_used", 0) or 0
+                    )
+                    self.orchestrator._iteration += int(worker_result.get("_worker_iterations", 0) or 0)
+
+                    if worker_result:
+                        self._merge_phase_result(
+                            worker_result,
+                            handoff=getattr(worker_agent, "_latest_handoff", None),
+                        )
+
+                    worker_findings = worker_result.get("findings", [])
+                    self._merge_findings_into_all_findings(worker_findings)
+
+                    state.step_records.append(
+                        WorkflowStepRecord(
+                            phase=WorkflowPhase.BUSINESS_LOGIC_ANALYSIS,
+                            agent=f"{self.agent_type}_worker_{worker_id}",
+                            injected_context=risk_point,
+                            success=bl_success,
+                            error=None if bl_success else worker_result.get("_run_error"),
+                            findings_count=len(self.orchestrator._all_findings),
+                            duration_ms=duration_ms,
+                        )
+                    )
+
+                    logger.info(
+                        f"[BLWorker-{worker_id}] BL analysis iteration {iteration} done: "
+                        f"risk_point={fp_repr}, success={bl_success}, "
+                        f"cumulative_findings={len(self.orchestrator._all_findings)}"
+                    )
+
+                worker_agent.reset_session_memory()
+
+                async with self.lock:
+                    self.active_workers.discard(worker_id)
+
+        logger.info(f"[BLWorker-{worker_id}] BL analysis worker completed {iteration} iterations")
+
+    async def _run_sequential_bl_analysis(
+        self,
+        state: WorkflowState,
+        task_id: str,
+        bl_queue: Any,
+    ) -> None:
+        """
+        降级到串行模式处理业务逻辑风险点（fallback）
+        """
+        orc = self.orchestrator
+        iteration = 0
+
+        logger.info("[ParallelExecutor] Running sequential BL analysis (fallback mode)")
+
+        while True:
+            if orc.is_cancelled:
+                break
+
+            risk_point = bl_queue.dequeue(task_id)
+            if risk_point is None:
+                logger.info(f"[ParallelExecutor] BL risk queue drained at iteration {iteration}")
+                break
+
+            iteration += 1
+            state.bl_risk_points_processed += 1
+            state.total_iterations += 1
+
+            fp_repr = f"{risk_point.get('file_path', '')}:{risk_point.get('line_start', '')}"
+            await orc.emit_event("info", f"🔍 [Workflow] BLAnalysis 第 {iteration} 轮：{fp_repr}")
+
+            step_start = time.time()
+            params = {
+                "agent": "business_logic_analysis",
+                "task": f"深度分析业务逻辑风险点 {fp_repr}",
+                "risk_point": risk_point,
+                "context": json.dumps(risk_point, ensure_ascii=False),
+            }
+
+            try:
+                await orc._dispatch_agent(params)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error(f"[ParallelExecutor] BL analysis dispatch failed for {fp_repr}: {exc}")
+
+            duration_ms = int((time.time() - step_start) * 1000)
+            bl_result = orc._agent_results.get("business_logic_analysis", {})
+            bl_success = bool(bl_result.get("_run_success"))
+
+            state.step_records.append(
+                WorkflowStepRecord(
+                    phase=WorkflowPhase.BUSINESS_LOGIC_ANALYSIS,
+                    agent="business_logic_analysis",
+                    injected_context=risk_point,
+                    success=bl_success,
+                    error=None if bl_success else bl_result.get("_run_error"),
+                    findings_count=len(orc._all_findings),
+                    duration_ms=duration_ms,
+                )
+            )
+
+            bl_agent = orc.sub_agents.get("business_logic_analysis")
+            if bl_agent and hasattr(bl_agent, "reset_session_memory"):
+                bl_agent.reset_session_memory()
+
+        logger.info(f"[ParallelExecutor] Sequential BL analysis done: {iteration} risk points processed")

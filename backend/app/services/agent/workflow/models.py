@@ -18,8 +18,9 @@ class WorkflowConfig:
     """
     enable_parallel_analysis: bool = True
     enable_parallel_verification: bool = True
-    analysis_max_workers: int = 5
+    analysis_max_workers: int = 3
     verification_max_workers: int = 3
+    bl_analysis_max_workers: int = 3
 
     @property
     def should_parallelize_analysis(self) -> bool:
@@ -31,12 +32,19 @@ class WorkflowConfig:
         """是否应该并行化 Verification（workers > 1 且启用）"""
         return self.enable_parallel_verification and self.verification_max_workers > 1
 
+    @property
+    def should_parallelize_bl_analysis(self) -> bool:
+        """是否应该并行化 BusinessLogicAnalysis（workers > 1 且启用）"""
+        return self.enable_parallel_analysis and self.bl_analysis_max_workers > 1
+
 
 class WorkflowPhase(Enum):
     """审计 Workflow 阶段"""
     INIT = "init"
     RECON = "recon"
+    BUSINESS_LOGIC_RECON = "business_logic_recon"
     ANALYSIS = "analysis"
+    BUSINESS_LOGIC_ANALYSIS = "business_logic_analysis"
     VERIFICATION = "verification"
     REPORT = "report"
     COMPLETE = "complete"
@@ -79,9 +87,16 @@ class WorkflowState:
     # Recon
     recon_done: bool = False
 
+    # BusinessLogicRecon
+    bl_recon_done: bool = False
+
     # Analysis（对应 Recon 风险点队列）
     analysis_risk_points_total: int = 0
     analysis_risk_points_processed: int = 0
+
+    # BusinessLogicAnalysis（对应 BL 风险点队列）
+    bl_risk_points_total: int = 0
+    bl_risk_points_processed: int = 0
 
     # Verification（对应漏洞验证队列）
     vuln_queue_findings_total: int = 0
@@ -116,8 +131,11 @@ class WorkflowState:
         return {
             "phase": self.phase.value,
             "recon_done": self.recon_done,
+            "bl_recon_done": self.bl_recon_done,
             "analysis_risk_points_total": self.analysis_risk_points_total,
             "analysis_risk_points_processed": self.analysis_risk_points_processed,
+            "bl_risk_points_total": self.bl_risk_points_total,
+            "bl_risk_points_processed": self.bl_risk_points_processed,
             "vuln_queue_findings_total": self.vuln_queue_findings_total,
             "vuln_queue_findings_processed": self.vuln_queue_findings_processed,
             "all_findings_count": len(self.all_findings),

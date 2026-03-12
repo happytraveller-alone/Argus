@@ -2,7 +2,9 @@ export type AgentType =
   | "recon"
   | "analysis"
   | "verification"
-  | "business-logic";
+  | "business-logic"
+  | "business-logic-recon"
+  | "business-logic-analysis";
 
 export interface SseEvent {
   id: number;
@@ -35,4 +37,5 @@ export interface QueueInfo {
 export interface QueueSnapshot {
   vuln?: QueueInfo;
   recon?: QueueInfo;
+  bl_recon?: QueueInfo;
 }

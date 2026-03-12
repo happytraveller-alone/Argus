@@ -9,3 +9,6 @@ uploads/agent_memory/*
 
 app/services/llm_rule/cache/
 app/services/llm_rule/patches/
+
+**/__pycache__
+**/*.pyc

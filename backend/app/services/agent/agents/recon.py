@@ -60,7 +60,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 |------|------|
 | **全面扫描** | 遍历项目的所有关键目录和文件，建立完整的项目结构认知 |
 | **识别风险** | 基于预定义的高风险模式，主动发现代码中的潜在漏洞或安全缺陷 |
-| **推送风险点** | **每发现一个风险点，立即调用 `push_risk_point_to_queue`**，确保队列中包含所有需要分析的风险区域 |
+| **推送风险点** | **每发现一个风险点，立即调用 `push_risk_point_to_queue`**；若在同一文件/扫描中发现多个风险点，可一次调用 `push_risk_points_to_queue` 批量入队 |
 | **避免重复** | 请勿将同一风险点重复入队 |
 
 ═══════════════════════════════════════════════════════════════
@@ -145,9 +145,9 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 5. 依次遍历所有关键代码目录，使用 `list_files` 获取文件列表
 6. 对重点文件（路由、控制器、工具类、中间件），使用 `read_file` 读取内容（可限制行数，必要时分段读取）
 7. **全局模式搜索**：使用 `search_code` 对特定危险函数进行项目级搜索（`eval`, `exec`, `subprocess`, `execute`, `raw`, `pickle.loads` 等）
-8. **即时推送**：每当发现符合高风险模式的具体代码行，立即构造风险点并调用 `push_risk_point_to_queue`
+8. **即时推送**：每当发现符合高风险模式的具体代码行，立即构造风险点并调用 `push_risk_point_to_queue`；若读取同一文件后发现多个风险点，可改用 `push_risk_points_to_queue` 批量入队，减少调用轮次
 
-#### 风险点格式要求：
+#### 风险点格式要求（单条）：
 ```json
 {
     "file_path": "相对于项目根目录的路径（如 src/auth/login.js）",
@@ -160,6 +160,36 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
     "code_snippet": "可选：提取的代码片段"
 }
 ```
+
+#### 批量推送（同一文件发现多个风险点时优先使用）：
+
+使用 `push_risk_points_to_queue` 将多个风险点一次性入队，可减少调用轮次：
+```json
+{
+    "risk_points": [
+        {
+            "file_path": "src/auth.py",
+            "line_start": 40,
+            "description": "SQL 查询使用 f-string 拼接用户输入，存在 SQL 注入风险",
+            "severity": "critical",
+            "vulnerability_type": "sql_injection",
+            "confidence": 0.98
+        },
+        {
+            "file_path": "src/auth.py",
+            "line_start": 85,
+            "description": "密码比较使用非恒定时间比较函数，存在时序攻击风险",
+            "severity": "medium",
+            "vulnerability_type": "timing_attack",
+            "confidence": 0.75
+        }
+    ]
+}
+```
+
+**使用建议**：
+- 读取同一文件并发现 **≥2 个**风险点时，使用 `push_risk_points_to_queue` 批量推送
+- 仅发现单个风险点时，使用 `push_risk_point_to_queue` 单条推送
 
 ### 阶段三：收尾与确认（质量检查）
 9. 确认已覆盖所有主要目录，检查是否遗漏：
@@ -901,6 +931,16 @@ Final Answer: [JSON格式的结果]"""
                                 "severity": str(ai.get("severity", "high")),
                                 "vulnerability_type": str(ai.get("vulnerability_type", "unknown")),
                             })
+                        elif step.action == "push_risk_points_to_queue" and isinstance(ai.get("risk_points"), list):
+                            for rp in ai["risk_points"]:
+                                if isinstance(rp, dict) and rp.get("file_path"):
+                                    self._risk_points_pushed.append({
+                                        "file_path": str(rp.get("file_path", "")),
+                                        "line_start": rp.get("line_start", 1),
+                                        "description": str(rp.get("description", ""))[:200],
+                                        "severity": str(rp.get("severity", "high")),
+                                        "vulnerability_type": str(rp.get("vulnerability_type", "unknown")),
+                                    })
                     
                     # 🔥 工具执行后检查取消状态
                     if self.is_cancelled:

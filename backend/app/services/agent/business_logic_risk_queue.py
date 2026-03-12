@@ -1,5 +1,5 @@
 """
-Recon risk queue service for managing Recon Agent risk points.
+Business Logic risk queue service for managing BusinessLogicReconAgent risk points.
 """
 import json
 import logging
@@ -9,14 +9,14 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
-class RedisReconRiskQueue:
-    """Redis-based Recon risk queue."""
+class RedisBusinessLogicRiskQueue:
+    """Redis-based Business Logic risk queue."""
 
     def __init__(self, redis_client):
         self.redis = redis_client
-        self.queue_key_prefix = "recon_risk_queue"
-        self.stats_key_prefix = "recon_risk_queue_stats"
-        self.seen_key_prefix = "recon_risk_queue_seen"
+        self.queue_key_prefix = "bl_risk_queue"
+        self.stats_key_prefix = "bl_risk_queue_stats"
+        self.seen_key_prefix = "bl_risk_queue_seen"
 
     def _queue_key(self, task_id: str) -> str:
         return f"{self.queue_key_prefix}:{task_id}"
@@ -31,8 +31,8 @@ class RedisReconRiskQueue:
     def _fingerprint(risk_point: Dict[str, Any]) -> str:
         file_path = str(risk_point.get("file_path") or "").strip().lower()
         line_start = int(risk_point.get("line_start") or 0)
-        description = str(risk_point.get("description") or "").strip().lower()
-        return f"{file_path}|{line_start}|{description}"
+        vuln_type = str(risk_point.get("vulnerability_type") or risk_point.get("description") or "").strip().lower()
+        return f"{file_path}|{line_start}|{vuln_type}"
 
     def enqueue(self, task_id: str, risk_point: Dict[str, Any]) -> bool:
         try:
@@ -48,14 +48,14 @@ class RedisReconRiskQueue:
             self.redis.rpush(queue_key, json.dumps(risk_point, ensure_ascii=False))
             self.redis.hincrby(stats_key, "total_enqueued", 1)
             self.redis.hset(stats_key, "last_enqueue_time", datetime.now(timezone.utc).isoformat())
-            logger.info("[ReconRiskQueue] Enqueued risk point %s for task %s", risk_point.get("file_path"), task_id)
+            logger.info("[BLRiskQueue] Enqueued risk point %s for task %s", risk_point.get("file_path"), task_id)
             return True
         except Exception as exc:
-            logger.error("[ReconRiskQueue] Enqueue failed: %s", exc)
+            logger.error("[BLRiskQueue] Enqueue failed: %s", exc)
             return False
 
     def enqueue_batch(self, task_id: str, risk_points: List[Dict[str, Any]]) -> int:
-        """批量入队多个风险点，使用 pipeline 提升效率。返回成功入队的数量。"""
+        """批量入队多个业务逻辑风险点，使用 pipeline 提升效率。返回成功入队的数量。"""
         if not risk_points:
             return 0
         try:
@@ -82,10 +82,10 @@ class RedisReconRiskQueue:
                     pipe.hincrby(stats_key, "total_deduplicated", dedup_count)
                 pipe.hset(stats_key, "last_enqueue_time", datetime.now(timezone.utc).isoformat())
                 pipe.execute()
-            logger.info("[ReconRiskQueue] Batch enqueued %d risk points for task %s", count, task_id)
+            logger.info("[BLRiskQueue] Batch enqueued %d risk points for task %s", count, task_id)
             return count
         except Exception as exc:
-            logger.error("[ReconRiskQueue] Batch enqueue failed: %s", exc)
+            logger.error("[BLRiskQueue] Batch enqueue failed: %s", exc)
             return 0
 
     def dequeue(self, task_id: str) -> Optional[Dict[str, Any]]:
@@ -99,7 +99,7 @@ class RedisReconRiskQueue:
             self.redis.hset(stats_key, "last_dequeue_time", datetime.now(timezone.utc).isoformat())
             return json.loads(raw)
         except Exception as exc:
-            logger.error("[ReconRiskQueue] Dequeue failed: %s", exc)
+            logger.error("[BLRiskQueue] Dequeue failed: %s", exc)
             return None
 
     def peek(self, task_id: str, limit: int = 3) -> List[Dict[str, Any]]:
@@ -108,14 +108,14 @@ class RedisReconRiskQueue:
             items = self.redis.lrange(queue_key, 0, limit - 1)
             return [json.loads(item) for item in items]
         except Exception as exc:
-            logger.error("[ReconRiskQueue] Peek failed: %s", exc)
+            logger.error("[BLRiskQueue] Peek failed: %s", exc)
             return []
 
     def size(self, task_id: str) -> int:
         try:
             return int(self.redis.llen(self._queue_key(task_id)))
         except Exception as exc:
-            logger.error("[ReconRiskQueue] Size failed: %s", exc)
+            logger.error("[BLRiskQueue] Size failed: %s", exc)
             return 0
 
     def stats(self, task_id: str) -> Dict[str, Any]:
@@ -130,7 +130,7 @@ class RedisReconRiskQueue:
                 "last_dequeue_time": stats_raw.get(b"last_dequeue_time"),
             }
         except Exception as exc:
-            logger.error("[ReconRiskQueue] Stats failed: %s", exc)
+            logger.error("[BLRiskQueue] Stats failed: %s", exc)
             return {"current_size": 0}
 
     def contains(self, task_id: str, risk_point: Dict[str, Any]) -> bool:
@@ -139,7 +139,7 @@ class RedisReconRiskQueue:
             fp = self._fingerprint(risk_point)
             return bool(fp and self.redis.sismember(seen_key, fp))
         except Exception as exc:
-            logger.error("[ReconRiskQueue] Contains check failed: %s", exc)
+            logger.error("[BLRiskQueue] Contains check failed: %s", exc)
             return False
 
     def clear(self, task_id: str) -> bool:
@@ -147,20 +147,20 @@ class RedisReconRiskQueue:
             self.redis.delete(self._queue_key(task_id))
             self.redis.delete(self._stats_key(task_id))
             self.redis.delete(self._seen_key(task_id))
-            logger.info("[ReconRiskQueue] Cleared queue for %s", task_id)
+            logger.info("[BLRiskQueue] Cleared queue for %s", task_id)
             return True
         except Exception as exc:
-            logger.error("[ReconRiskQueue] Clear failed: %s", exc)
+            logger.error("[BLRiskQueue] Clear failed: %s", exc)
             return False
 
 
-class InMemoryReconRiskQueue:
-    """In-memory fallback for Recon risk queue."""
+class InMemoryBusinessLogicRiskQueue:
+    """In-memory Business Logic risk queue."""
 
     def __init__(self):
         self.queues: Dict[str, List[Dict[str, Any]]] = {}
         self._stats: Dict[str, Dict[str, Any]] = {}
-        self.seen: Dict[str, set[str]] = {}
+        self.seen: Dict[str, set] = {}
 
     def _ensure_task(self, task_id: str):
         if task_id not in self.queues:
@@ -178,8 +178,8 @@ class InMemoryReconRiskQueue:
     def _fingerprint(risk_point: Dict[str, Any]) -> str:
         file_path = str(risk_point.get("file_path") or "").strip().lower()
         line_start = int(risk_point.get("line_start") or 0)
-        description = str(risk_point.get("description") or "").strip().lower()
-        return f"{file_path}|{line_start}|{description}"
+        vuln_type = str(risk_point.get("vulnerability_type") or risk_point.get("description") or "").strip().lower()
+        return f"{file_path}|{line_start}|{vuln_type}"
 
     def enqueue(self, task_id: str, risk_point: Dict[str, Any]) -> bool:
         try:
@@ -196,11 +196,11 @@ class InMemoryReconRiskQueue:
             self._stats[task_id]["last_enqueue_time"] = datetime.now(timezone.utc).isoformat()
             return True
         except Exception as exc:
-            logger.error("[ReconRiskQueue] InMemory enqueue failed: %s", exc)
+            logger.error("[BLRiskQueue] InMemory enqueue failed: %s", exc)
             return False
 
     def enqueue_batch(self, task_id: str, risk_points: List[Dict[str, Any]]) -> int:
-        """批量入队多个风险点。返回成功入队的数量。"""
+        """批量入队多个业务逻辑风险点。返回成功入队的数量。"""
         count = 0
         for risk_point in risk_points:
             if self.enqueue(task_id, risk_point):
@@ -217,7 +217,7 @@ class InMemoryReconRiskQueue:
             self._stats[task_id]["last_dequeue_time"] = datetime.now(timezone.utc).isoformat()
             return item
         except Exception as exc:
-            logger.error("[ReconRiskQueue] InMemory dequeue failed: %s", exc)
+            logger.error("[BLRiskQueue] InMemory dequeue failed: %s", exc)
             return None
 
     def peek(self, task_id: str, limit: int = 3) -> List[Dict[str, Any]]:
@@ -225,7 +225,7 @@ class InMemoryReconRiskQueue:
             self._ensure_task(task_id)
             return self.queues[task_id][:limit]
         except Exception as exc:
-            logger.error("[ReconRiskQueue] InMemory peek failed: %s", exc)
+            logger.error("[BLRiskQueue] InMemory peek failed: %s", exc)
             return []
 
     def size(self, task_id: str) -> int:
@@ -233,7 +233,7 @@ class InMemoryReconRiskQueue:
             self._ensure_task(task_id)
             return len(self.queues[task_id])
         except Exception as exc:
-            logger.error("[ReconRiskQueue] InMemory size failed: %s", exc)
+            logger.error("[BLRiskQueue] InMemory size failed: %s", exc)
             return 0
 
     def stats(self, task_id: str) -> Dict[str, Any]:
@@ -243,7 +243,7 @@ class InMemoryReconRiskQueue:
             data["current_size"] = len(self.queues[task_id])
             return data
         except Exception as exc:
-            logger.error("[ReconRiskQueue] InMemory stats failed: %s", exc)
+            logger.error("[BLRiskQueue] InMemory stats failed: %s", exc)
             return {"current_size": 0}
 
     def contains(self, task_id: str, risk_point: Dict[str, Any]) -> bool:
@@ -252,7 +252,7 @@ class InMemoryReconRiskQueue:
             fp = self._fingerprint(risk_point)
             return fp in self.seen[task_id]
         except Exception as exc:
-            logger.error("[ReconRiskQueue] InMemory contains failed: %s", exc)
+            logger.error("[BLRiskQueue] InMemory contains failed: %s", exc)
             return False
 
     def clear(self, task_id: str) -> bool:
@@ -269,5 +269,5 @@ class InMemoryReconRiskQueue:
             self.seen[task_id].clear()
             return True
         except Exception as exc:
-            logger.error("[ReconRiskQueue] InMemory clear failed: %s", exc)
+            logger.error("[BLRiskQueue] InMemory clear failed: %s", exc)
             return False

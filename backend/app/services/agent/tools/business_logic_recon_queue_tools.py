@@ -1,4 +1,4 @@
-"""Tools for managing the Recon risk point queue."""
+"""Tools for managing the Business Logic risk point queue."""
 
 import logging
 from typing import Any, List, Optional, Tuple
@@ -10,7 +10,7 @@ from .base import AgentTool, ToolResult
 logger = logging.getLogger(__name__)
 
 
-def _validate_recon_queue_service_binding(
+def _validate_bl_queue_service_binding(
     *,
     queue_service: Any,
     task_id: str,
@@ -26,37 +26,38 @@ def _validate_recon_queue_service_binding(
         return
     missing_text = ",".join(missing)
     error_token = (
-        "invalid_recon_queue_service_binding:"
+        "invalid_bl_queue_service_binding:"
         f"{tool_name}:missing_callable={missing_text}:task_id={task_id}"
     )
-    logger.error("[ReconQueue] %s", error_token)
+    logger.error("[BLRiskQueue] %s", error_token)
     raise TypeError(error_token)
 
 
-class ReconRiskPointInput(BaseModel):
-    file_path: str = Field(..., description="风险点文件路径")
+class BLRiskPointInput(BaseModel):
+    file_path: str = Field(..., description="风险点文件路径（相对于项目根目录）")
     line_start: int = Field(..., description="风险点起始行号")
-    description: str = Field(..., description="风险描述")
-    severity: Optional[str] = Field("high", description="严重程度")
+    description: str = Field(..., description="业务逻辑风险描述")
+    severity: Optional[str] = Field("high", description="严重程度：critical/high/medium/low")
     confidence: Optional[float] = Field(0.6, description="置信度 0.0-1.0")
-    vulnerability_type: Optional[str] = Field("potential_issue", description="漏洞类型")
-    context: Optional[str] = Field(None, description="附加上下文")
+    vulnerability_type: Optional[str] = Field("business_logic", description="业务逻辑漏洞类型：idor/privilege_escalation/amount_tampering/race_condition/auth_bypass/state_machine_bypass/etc.")
+    entry_function: Optional[str] = Field(None, description="涉及的入口函数名（如 update_order, create_payment）")
+    context: Optional[str] = Field(None, description="附加上下文（如 HTTP 方法、路由、相关表名）")
 
 
-class ReconRiskPointsBatchInput(BaseModel):
-    risk_points: List[ReconRiskPointInput] = Field(
+class BLRiskPointsBatchInput(BaseModel):
+    risk_points: List[BLRiskPointInput] = Field(
         ...,
-        description="批量风险点列表，每项结构与 push_risk_point_to_queue 相同",
+        description="批量业务逻辑风险点列表，每项结构与 push_bl_risk_point_to_queue 相同",
     )
 
 
-class GetReconRiskQueueStatusTool(AgentTool):
+class GetBLRiskQueueStatusTool(AgentTool):
     def __init__(self, *, queue_service: Any, task_id: str):
         super().__init__()
-        _validate_recon_queue_service_binding(
+        _validate_bl_queue_service_binding(
             queue_service=queue_service,
             task_id=task_id,
-            tool_name="get_recon_risk_queue_status",
+            tool_name="get_bl_risk_queue_status",
             required_callables=("stats",),
         )
         self.queue_service = queue_service
@@ -64,20 +65,21 @@ class GetReconRiskQueueStatusTool(AgentTool):
 
     @property
     def name(self) -> str:
-        return "get_recon_risk_queue_status"
+        return "get_bl_risk_queue_status"
 
     @property
     def description(self) -> str:
         return """
-    获取 Recon 风险点队列的状态，包括待处理数量和统计信息。 
+    获取业务逻辑风险点队列的状态，包括待处理数量和统计信息。
 
     返回值格式:
     {
-        "queue_status": {...},  # 详细统计（如 current_size/total_processed/last_push 等）
-        "pending_count": int    # 当前待处理数量
+        "queue_status": {...},
+        "pending_count": int,
+        "peek": [...]
     }
 
-    常见用途：在持续审计过程中周期性轮询（无需输入参数），确认 Analysis Agent 是否处理完上轮的推送，同时作为数据收敛依据。"""
+    用于在侦查过程中周期性查看当前队列状态，确认是否有重复推送等问题。"""
 
     async def _execute(self, **kwargs) -> ToolResult:
         try:
@@ -91,26 +93,25 @@ class GetReconRiskQueueStatusTool(AgentTool):
                         "file_path": finding.get("file_path", "N/A"),
                         "line": finding.get("line_start", "N/A"),
                         "description": finding.get("description", "N/A"),
-                        "severity": finding.get("severity", "N/A"),
+                        "vulnerability_type": finding.get("vulnerability_type", "N/A"),
                     })
-            response = {
+            return ToolResult(success=True, data={
                 "queue_status": stats,
                 "pending_count": pending,
                 "peek": peek_list,
-            }
-            return ToolResult(success=True, data=response)
+            })
         except Exception as exc:
-            logger.error(f"[ReconQueue] Status failed: {exc}")
+            logger.error(f"[BLRiskQueue] Status failed: {exc}")
             return ToolResult(success=False, error=str(exc), data={})
 
 
-class PushRiskPointToQueueTool(AgentTool):
+class PushBLRiskPointToQueueTool(AgentTool):
     def __init__(self, *, queue_service: Any, task_id: str):
         super().__init__()
-        _validate_recon_queue_service_binding(
+        _validate_bl_queue_service_binding(
             queue_service=queue_service,
             task_id=task_id,
-            tool_name="push_risk_point_to_queue",
+            tool_name="push_bl_risk_point_to_queue",
             required_callables=("enqueue", "size"),
         )
         self.queue_service = queue_service
@@ -118,43 +119,45 @@ class PushRiskPointToQueueTool(AgentTool):
 
     @property
     def name(self) -> str:
-        return "push_risk_point_to_queue"
+        return "push_bl_risk_point_to_queue"
 
     @property
     def description(self) -> str:
-        return """将 Recon 发现的风险点推送到 Recon 风险队列中，供后续 Analysis 逐条处理。
+        return """将业务逻辑侦查发现的风险点推送到业务逻辑风险队列，供 BusinessLogicAnalysisAgent 逐条深度分析。
 
-        输入字段说明（参考 ReconRiskPointInput）：
+        输入字段说明：
         - file_path / line_start / description：必须提供风险位置与描述
-        - severity：critical/high/medium/low/info，缺省为 high
-        - vulnerability_type：比如 sql_injection、xss、command_injection 等
-        - confidence：0.0-1.0，用来记录推断的置信度
+        - vulnerability_type：idor / privilege_escalation / amount_tampering / race_condition / auth_bypass / state_machine_bypass / mass_assignment / replay_attack / business_flow_bypass
+        - entry_function：该风险点所在的入口函数名（如 update_order、create_payment）
+        - severity：critical/high/medium/low
+        - confidence：0.0-1.0
+        - context：附加上下文（如 HTTP 路由、相关参数）
 
-        调用后会返回当前队列大小，可据此判断是否需要等待消费。"""
+        调用后返回当前队列大小。"""
 
     @property
     def args_schema(self):
-        return ReconRiskPointInput
+        return BLRiskPointInput
 
     async def _execute(self, **kwargs) -> ToolResult:
         data = kwargs
         try:
             success = self.queue_service.enqueue(self.task_id, data)
             queue_size = self.queue_service.size(self.task_id)
-            message = f"风险点已入队，当前队列大小 {queue_size}" if success else "风险点入队失败"
+            message = f"业务逻辑风险点已入队，当前队列大小 {queue_size}" if success else "入队失败"
             return ToolResult(success=success, data={"message": message, "queue_size": queue_size})
         except Exception as exc:
-            logger.error(f"[ReconQueue] Push failed: {exc}")
+            logger.error(f"[BLRiskQueue] Push failed: {exc}")
             return ToolResult(success=False, error=str(exc), data={})
 
 
-class DequeueReconRiskPointTool(AgentTool):
+class DequeueBLRiskPointTool(AgentTool):
     def __init__(self, *, queue_service: Any, task_id: str):
         super().__init__()
-        _validate_recon_queue_service_binding(
+        _validate_bl_queue_service_binding(
             queue_service=queue_service,
             task_id=task_id,
-            tool_name="dequeue_recon_risk_point",
+            tool_name="dequeue_bl_risk_point",
             required_callables=("dequeue", "size"),
         )
         self.queue_service = queue_service
@@ -162,41 +165,37 @@ class DequeueReconRiskPointTool(AgentTool):
 
     @property
     def name(self) -> str:
-        return "dequeue_recon_risk_point"
+        return "dequeue_bl_risk_point"
 
     @property
     def description(self) -> str:
-        return """从 Recon 风险点队列中取出第一条风险点（FIFO）。
+        return """从业务逻辑风险队列取出第一条风险点（FIFO）。
 
-        返回字段: risk_point（已出队的风险点结构），queue_remaining（剩余数量）。
-        可用于手动或自动消费队列中的下一条记录，结合 is_recon_risk_point_in_queue 可用于保障消费一致性。"""
+        返回字段: risk_point（已出队的风险点），queue_remaining（剩余数量）。"""
 
     async def _execute(self, **kwargs) -> ToolResult:
         try:
             risk_point = self.queue_service.dequeue(self.task_id)
             remaining = self.queue_service.size(self.task_id)
-            return ToolResult(
-                success=True,
-                data={
-                    "risk_point": risk_point,
-                    "queue_remaining": remaining,
-                },
-            )
+            return ToolResult(success=True, data={
+                "risk_point": risk_point,
+                "queue_remaining": remaining,
+            })
         except Exception as exc:
-            logger.error(f"[ReconQueue] Dequeue failed: {exc}")
+            logger.error(f"[BLRiskQueue] Dequeue failed: {exc}")
             return ToolResult(success=False, error=str(exc), data={})
 
 
-class PeekReconRiskQueueTool(AgentTool):
+class PeekBLRiskQueueTool(AgentTool):
     class PeekInput(BaseModel):
         limit: int = Field(3, ge=1, description="预览条数")
 
     def __init__(self, *, queue_service: Any, task_id: str):
         super().__init__()
-        _validate_recon_queue_service_binding(
+        _validate_bl_queue_service_binding(
             queue_service=queue_service,
             task_id=task_id,
-            tool_name="peek_recon_risk_queue",
+            tool_name="peek_bl_risk_queue",
             required_callables=("peek",),
         )
         self.queue_service = queue_service
@@ -204,15 +203,13 @@ class PeekReconRiskQueueTool(AgentTool):
 
     @property
     def name(self) -> str:
-        return "peek_recon_risk_queue"
+        return "peek_bl_risk_queue"
 
     @property
     def description(self) -> str:
-        return """预览 Recon 风险点队列中的前 N 条记录。
+        return """预览业务逻辑风险队列中的前 N 条记录（不出队）。
 
-        输入: limit（最多预览的条数，最大自动限制为 20）。
-        返回: {"findings": [...], "count": 实际条数}。
-        使用场景：理解当前队列内容，避免重复推送，或排查未消费的风险点。"""
+        返回: {"findings": [...], "count": 条数}。"""
 
     @property
     def args_schema(self):
@@ -223,17 +220,17 @@ class PeekReconRiskQueueTool(AgentTool):
             items = self.queue_service.peek(self.task_id, limit=min(limit, 20))
             return ToolResult(success=True, data={"findings": items, "count": len(items)})
         except Exception as exc:
-            logger.error(f"[ReconQueue] Peek failed: {exc}")
+            logger.error(f"[BLRiskQueue] Peek failed: {exc}")
             return ToolResult(success=False, error=str(exc), data={})
 
 
-class ClearReconRiskQueueTool(AgentTool):
+class ClearBLRiskQueueTool(AgentTool):
     def __init__(self, *, queue_service: Any, task_id: str):
         super().__init__()
-        _validate_recon_queue_service_binding(
+        _validate_bl_queue_service_binding(
             queue_service=queue_service,
             task_id=task_id,
-            tool_name="clear_recon_risk_queue",
+            tool_name="clear_bl_risk_queue",
             required_callables=("clear",),
         )
         self.queue_service = queue_service
@@ -241,33 +238,32 @@ class ClearReconRiskQueueTool(AgentTool):
 
     @property
     def name(self) -> str:
-        return "clear_recon_risk_queue"
+        return "clear_bl_risk_queue"
 
     @property
     def description(self) -> str:
-        return """清空 Recon 风险点队列。
+        return """清空业务逻辑风险点队列。
 
-        作用: 重置队列状态，通常在重新规划侦查任务或出现数据异常时使用。
-        返回: {"success": true/false} 指示是否成功清空。"""
+        返回: {"success": true/false}。"""
 
     async def _execute(self, **kwargs) -> ToolResult:
         try:
             success = self.queue_service.clear(self.task_id)
             return ToolResult(success=success, data={"success": success})
         except Exception as exc:
-            logger.error(f"[ReconQueue] Clear failed: {exc}")
+            logger.error(f"[BLRiskQueue] Clear failed: {exc}")
             return ToolResult(success=False, error=str(exc), data={})
 
 
-class PushRiskPointsBatchToQueueTool(AgentTool):
-    """一次调用将多个 Recon 风险点批量推入队列。"""
+class PushBLRiskPointsBatchToQueueTool(AgentTool):
+    """一次调用将多个业务逻辑风险点批量推入队列。"""
 
     def __init__(self, *, queue_service: Any, task_id: str):
         super().__init__()
-        _validate_recon_queue_service_binding(
+        _validate_bl_queue_service_binding(
             queue_service=queue_service,
             task_id=task_id,
-            tool_name="push_risk_points_to_queue",
+            tool_name="push_bl_risk_points_to_queue",
             required_callables=("enqueue_batch", "size"),
         )
         self.queue_service = queue_service
@@ -275,33 +271,35 @@ class PushRiskPointsBatchToQueueTool(AgentTool):
 
     @property
     def name(self) -> str:
-        return "push_risk_points_to_queue"
+        return "push_bl_risk_points_to_queue"
 
     @property
     def description(self) -> str:
-        return """批量将多个 Recon 风险点一次性推入队列。适合在同一文件/模块中发现多个风险点时一次提交，减少工具调用轮次。
+        return """批量将多个业务逻辑风险点一次性推入队列。适合在同一接口/模块中发现多个业务逻辑风险时一次提交，减少工具调用轮次。
 
         输入格式：
         {
             "risk_points": [
                 {
-                    "file_path": "src/auth.py",
-                    "line_start": 40,
-                    "description": "SQL 注入：用户输入直接拼接到查询字符串",
-                    "severity": "critical",
-                    "vulnerability_type": "sql_injection",
-                    "confidence": 0.95
+                    "file_path": "app/api/orders.py",
+                    "line_start": 42,
+                    "description": "update_order 未验证订单归属，存在 IDOR 风险",
+                    "severity": "high",
+                    "vulnerability_type": "idor",
+                    "confidence": 0.85,
+                    "entry_function": "update_order",
+                    "context": "PUT /api/orders/<order_id>"
                 },
                 { ... }
             ]
         }
 
-        每条风险点的字段与 push_risk_point_to_queue 相同。
+        每条风险点的字段与 push_bl_risk_point_to_queue 相同。
         返回成功入队的数量和当前队列大小。"""
 
     @property
     def args_schema(self):
-        return ReconRiskPointsBatchInput
+        return BLRiskPointsBatchInput
 
     async def _execute(self, risk_points: list, **kwargs) -> ToolResult:
         if not isinstance(risk_points, list):
@@ -315,25 +313,25 @@ class PushRiskPointsBatchToQueueTool(AgentTool):
         try:
             count = self.queue_service.enqueue_batch(self.task_id, data_list)
             queue_size = self.queue_service.size(self.task_id)
-            message = f"批量入队 {count}/{len(data_list)} 个风险点，当前队列大小 {queue_size}"
+            message = f"批量入队 {count}/{len(data_list)} 个业务逻辑风险点，当前队列大小 {queue_size}"
             return ToolResult(success=True, data={"message": message, "enqueued": count, "queue_size": queue_size})
         except Exception as exc:
-            logger.error(f"[ReconQueue] Batch push failed: {exc}")
+            logger.error(f"[BLRiskQueue] Batch push failed: {exc}")
             return ToolResult(success=False, error=str(exc), data={})
 
 
-class IsReconRiskPointInQueueTool(AgentTool):
+class IsBLRiskPointInQueueTool(AgentTool):
     class Input(BaseModel):
         file_path: str = Field(...)
         line_start: int = Field(...)
-        description: Optional[str] = Field("")
+        vulnerability_type: Optional[str] = Field("")
 
     def __init__(self, *, queue_service: Any, task_id: str):
         super().__init__()
-        _validate_recon_queue_service_binding(
+        _validate_bl_queue_service_binding(
             queue_service=queue_service,
             task_id=task_id,
-            tool_name="is_recon_risk_point_in_queue",
+            tool_name="is_bl_risk_point_in_queue",
             required_callables=("contains",),
         )
         self.queue_service = queue_service
@@ -341,31 +339,30 @@ class IsReconRiskPointInQueueTool(AgentTool):
 
     @property
     def name(self) -> str:
-        return "is_recon_risk_point_in_queue"
+        return "is_bl_risk_point_in_queue"
 
     @property
     def description(self) -> str:
-        return """检查指定风险点是否仍在 Recon 风险队列中。
+        return """检查指定业务逻辑风险点是否已在队列中（避免重复推送）。
 
-        输入字段: 文件路径、行号、可选描述（用于精确匹配）。
-        返回: {"in_queue": bool}。
-        场景: 结合 push/check/consume 流程，确认未消费的风险点避免重复推送。"""
+        输入: file_path、line_start、vulnerability_type。
+        返回: {"in_queue": bool}。"""
 
     @property
     def args_schema(self):
         return self.Input
 
     async def _execute(
-        self, file_path: str, line_start: int, description: str = "", **kwargs
+        self, file_path: str, line_start: int, vulnerability_type: str = "", **kwargs
     ) -> ToolResult:
         try:
             point = {
                 "file_path": file_path,
                 "line_start": line_start,
-                "description": description,
+                "vulnerability_type": vulnerability_type,
             }
             exists = self.queue_service.contains(self.task_id, point)
             return ToolResult(success=True, data={"in_queue": exists})
         except Exception as exc:
-            logger.error(f"[ReconQueue] Contains failed: {exc}")
+            logger.error(f"[BLRiskQueue] Contains failed: {exc}")
             return ToolResult(success=False, error=str(exc), data={})

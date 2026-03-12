@@ -1062,6 +1062,16 @@ class FileSearchTool(AgentTool):
             if dir_error or not search_dir_abs or not search_dir_rel:
                 return ToolResult(success=False, error=dir_error or "搜索目录解析失败")
 
+            # Auto-detect regex: if keyword contains regex metacharacters (|, (, ), [, ]), treat as regex
+            _REGEX_META_RE = re.compile(r'[|()\[\]{}+?^$\\]')
+            if not is_regex and _REGEX_META_RE.search(keyword):
+                try:
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    re.compile(keyword, flags)
+                    is_regex = True
+                except re.error:
+                    pass  # Not valid regex, keep is_regex=False and search literally
+
             if is_regex:
                 flags = 0 if case_sensitive else re.IGNORECASE
                 try:

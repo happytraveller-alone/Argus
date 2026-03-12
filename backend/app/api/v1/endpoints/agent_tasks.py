@@ -80,6 +80,7 @@ _running_asyncio_tasks: Dict[str, asyncio.Task] = {}
 # 运行中的漏洞队列服务（供任务内工具与队列 API 共享）
 _running_queue_services: Dict[str, Any] = {}
 _running_recon_queue_services: Dict[str, Any] = {}
+_running_bl_queue_services: Dict[str, Any] = {}
 
 _VALID_TASK_STATUS_VALUES: Set[str] = {
     AgentTaskStatus.PENDING,
@@ -2464,7 +2465,7 @@ async def _execute_agent_task(task_id: str):
     
     架构：OrchestratorAgent 作为大脑，动态调度子 Agent
     """
-    from app.services.agent.agents import OrchestratorAgent, ReconAgent, AnalysisAgent, VerificationAgent, ReportAgent
+    from app.services.agent.agents import OrchestratorAgent, ReconAgent, AnalysisAgent, VerificationAgent, ReportAgent, BusinessLogicReconAgent, BusinessLogicAnalysisAgent
     from app.services.agent.workflow import WorkflowOrchestratorAgent
     from app.services.agent.workflow.models import WorkflowConfig
     from app.services.agent.event_manager import EventManager, AgentEventEmitter
@@ -2692,12 +2693,16 @@ async def _execute_agent_task(task_id: str):
             # 🔥 创建漏洞队列服务
             from app.services.agent.vulnerability_queue import InMemoryVulnerabilityQueue
             from app.services.agent.recon_risk_queue import InMemoryReconRiskQueue
+            from app.services.agent.business_logic_risk_queue import InMemoryBusinessLogicRiskQueue
             queue_service = InMemoryVulnerabilityQueue()
             recon_queue_service = InMemoryReconRiskQueue()
+            bl_queue_service = InMemoryBusinessLogicRiskQueue()
             _running_queue_services[task_id] = queue_service
             _running_recon_queue_services[task_id] = recon_queue_service
+            _running_bl_queue_services[task_id] = bl_queue_service
             logger.info(f"[Queue] Created InMemoryVulnerabilityQueue for task {task_id}")
             logger.info(f"[ReconQueue] Created InMemoryReconRiskQueue for task {task_id}")
+            logger.info(f"[BLQueue] Created InMemoryBusinessLogicRiskQueue for task {task_id}")
             await event_emitter.emit_info("🔄 漏洞队列服务已初始化（内存模式）")
             await event_emitter.emit_info("🔎 Recon 风险点队列已初始化（内存模式）")
 
@@ -2715,6 +2720,7 @@ async def _execute_agent_task(task_id: str):
                     task_id=task_id,  # 🔥 新增：用于取消检查
                     queue_service=queue_service,  # 🔥 新增：漏洞队列服务
                     recon_queue_service=recon_queue_service,  # 🔥 新增：Recon 风险队列服务
+                    bl_queue_service=bl_queue_service,  # 🔥 新增：业务逻辑风险队列服务
                 )
 
             tools = await _run_with_retries(
@@ -2871,6 +2877,18 @@ async def _execute_agent_task(task_id: str):
                 event_emitter=event_emitter,
             )
 
+            bl_recon_agent = BusinessLogicReconAgent(
+                llm_service=llm_service,
+                tools=tools.get("business_logic_recon", {}),
+                event_emitter=event_emitter,
+            )
+
+            bl_analysis_agent = BusinessLogicAnalysisAgent(
+                llm_service=llm_service,
+                tools=tools.get("business_logic_analysis", {}),
+                event_emitter=event_emitter,
+            )
+
             audit_runtime_metadata = {
                 "smart_audit_mode": True,
                 "audit_mode": "smart_audit",
@@ -2879,7 +2897,7 @@ async def _execute_agent_task(task_id: str):
                 "read_scope_policy": "strict_anchor",
             }
 
-            for agent in (recon_agent, analysis_agent, verification_agent, report_agent):
+            for agent in (recon_agent, analysis_agent, verification_agent, report_agent, bl_recon_agent, bl_analysis_agent):
                 if isinstance(getattr(agent.config, "metadata", None), dict):
                     agent.config.metadata.update(audit_runtime_metadata)
                 if hasattr(agent, "set_mcp_runtime"):
@@ -2904,9 +2922,12 @@ async def _execute_agent_task(task_id: str):
                     "analysis": analysis_agent,
                     "verification": verification_agent,
                     "report": report_agent,
+                    "business_logic_recon": bl_recon_agent,
+                    "business_logic_analysis": bl_analysis_agent,
                 },
                 recon_queue_service=recon_queue_service,
                 vuln_queue_service=queue_service,
+                business_logic_queue_service=bl_queue_service,
                 workflow_config=workflow_config,
             )
             if isinstance(getattr(orchestrator.config, "metadata", None), dict):
@@ -3934,6 +3955,7 @@ async def _execute_agent_task(task_id: str):
             _running_asyncio_tasks.pop(task_id, None)  # 🔥 清理 asyncio task
             _running_queue_services.pop(task_id, None)
             _running_recon_queue_services.pop(task_id, None)
+            _running_bl_queue_services.pop(task_id, None)
             _cancelled_tasks.discard(task_id)  # 🔥 清理取消标志
 
             # 🔥 清理整个 Agent 注册表（包括所有子 Agent）
@@ -4152,6 +4174,7 @@ async def _initialize_tools(
     task_id: Optional[str] = None,  # 🔥 新增：用于取消检查
     queue_service: Optional[Any] = None,  # 🔥 新增：漏洞队列服务
     recon_queue_service: Optional[Any] = None,  # 🔥 新增：Recon 风险队列服务
+    bl_queue_service: Optional[Any] = None,  # 🔥 新增：业务逻辑风险队列服务
     save_callback: Optional[Any] = None,  # 🔥 新增：验证结果持久化回调 async (findings) -> int
 ) -> Dict[str, Dict[str, Any]]:
     """初始化工具集。"""
@@ -4180,10 +4203,20 @@ async def _initialize_tools(
     from app.services.agent.tools.recon_queue_tools import (
         GetReconRiskQueueStatusTool,
         PushRiskPointToQueueTool,
+        PushRiskPointsBatchToQueueTool,
         DequeueReconRiskPointTool,
         PeekReconRiskQueueTool,
         ClearReconRiskQueueTool,
         IsReconRiskPointInQueueTool,
+    )
+    from app.services.agent.tools.business_logic_recon_queue_tools import (
+        PushBLRiskPointToQueueTool,
+        PushBLRiskPointsBatchToQueueTool,
+        GetBLRiskQueueStatusTool,
+        DequeueBLRiskPointTool,
+        PeekBLRiskQueueTool,
+        ClearBLRiskQueueTool,
+        IsBLRiskPointInQueueTool,
     )
 
     _ = rag_enabled
@@ -4222,6 +4255,10 @@ async def _initialize_tools(
     recon_tools = {**base_tools}
     if recon_queue_service and task_id:
         recon_tools["push_risk_point_to_queue"] = PushRiskPointToQueueTool(
+            queue_service=recon_queue_service,
+            task_id=task_id,
+        )
+        recon_tools["push_risk_points_to_queue"] = PushRiskPointsBatchToQueueTool(
             queue_service=recon_queue_service,
             task_id=task_id,
         )
@@ -4298,11 +4335,59 @@ async def _initialize_tools(
         )
         logger.info(f"[Tools] Added Recon queue tools for task {task_id}")
 
+    bl_recon_tools = {**base_tools}
+    bl_analysis_tools = {**base_tools}
+
+    if bl_queue_service and task_id:
+        bl_recon_tools["push_bl_risk_point_to_queue"] = PushBLRiskPointToQueueTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        bl_recon_tools["push_bl_risk_points_to_queue"] = PushBLRiskPointsBatchToQueueTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        bl_recon_tools["get_bl_risk_queue_status"] = GetBLRiskQueueStatusTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        bl_recon_tools["is_bl_risk_point_in_queue"] = IsBLRiskPointInQueueTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        orchestrator_tools["get_bl_risk_queue_status"] = GetBLRiskQueueStatusTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        orchestrator_tools["dequeue_bl_risk_point"] = DequeueBLRiskPointTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        orchestrator_tools["peek_bl_risk_queue"] = PeekBLRiskQueueTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        orchestrator_tools["clear_bl_risk_queue"] = ClearBLRiskQueueTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        orchestrator_tools["is_bl_risk_point_in_queue"] = IsBLRiskPointInQueueTool(
+            queue_service=bl_queue_service,
+            task_id=task_id,
+        )
+        logger.info(f"[Tools] Added BL risk queue tools for task {task_id}")
+
+    if queue_service and task_id:
+        bl_analysis_tools["push_finding_to_queue"] = PushFindingToQueueTool(queue_service, task_id)
+        bl_analysis_tools["is_finding_in_queue"] = IsFindingInQueueTool(queue_service, task_id)
+
     return {
         "recon": recon_tools,
         "analysis": analysis_tools,
         "verification": verification_tools,
         "orchestrator": orchestrator_tools,
+        "business_logic_recon": bl_recon_tools,
+        "business_logic_analysis": bl_analysis_tools,
         "report": {
             "read_file": FileReadTool(project_root, exclude_patterns, target_files),
             "list_files": ListFilesTool(project_root, exclude_patterns, target_files),
@@ -8550,6 +8635,97 @@ async def clear_recon_risk_queue(
         "success": success,
         "task_id": task_id,
         "message": "Recon 队列已清空" if success else "清空 Recon 队列失败",
+    }
+
+
+# ==================== 🔥 业务逻辑风险队列接口 ====================
+
+@router.get("/tasks/{task_id}/business_logic_risk_queue/status", response_model=Dict[str, Any])
+async def get_bl_risk_queue_status(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    from app.services.agent.business_logic_risk_queue import InMemoryBusinessLogicRiskQueue
+
+    task = await db.get(AgentTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    project = await db.get(Project, task.project_id)
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    queue_service = _running_bl_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryBusinessLogicRiskQueue()
+
+    stats = queue_service.stats(task_id)
+
+    return {
+        "success": True,
+        "task_id": task_id,
+        "queue_stats": stats,
+    }
+
+
+@router.get("/tasks/{task_id}/business_logic_risk_queue/peek", response_model=Dict[str, Any])
+async def peek_bl_risk_queue(
+    task_id: str,
+    limit: int = 3,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    from app.services.agent.business_logic_risk_queue import InMemoryBusinessLogicRiskQueue
+
+    task = await db.get(AgentTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    project = await db.get(Project, task.project_id)
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    queue_service = _running_bl_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryBusinessLogicRiskQueue()
+
+    findings = queue_service.peek(task_id, limit=min(limit, 10))
+
+    return {
+        "success": True,
+        "task_id": task_id,
+        "findings": findings,
+        "count": len(findings),
+    }
+
+
+@router.delete("/tasks/{task_id}/business_logic_risk_queue", response_model=Dict[str, Any])
+async def clear_bl_risk_queue_endpoint(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    from app.services.agent.business_logic_risk_queue import InMemoryBusinessLogicRiskQueue
+
+    task = await db.get(AgentTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    project = await db.get(Project, task.project_id)
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    queue_service = _running_bl_queue_services.get(task_id)
+    if queue_service is None:
+        queue_service = InMemoryBusinessLogicRiskQueue()
+
+    success = queue_service.clear(task_id)
+
+    return {
+        "success": success,
+        "task_id": task_id,
+        "message": "业务逻辑风险队列已清空" if success else "清空业务逻辑风险队列失败",
     }
 
 

@@ -1,6 +1,7 @@
 /**
  * Agent 单体测试页面
  * 用于独立测试 ReconAgent / AnalysisAgent / VerificationAgent / BusinessLogicScanAgent
+ * / BusinessLogicReconAgent / BusinessLogicAnalysisAgent
  */
 
 import {
@@ -10,11 +11,15 @@ import {
   Cpu,
   Search,
   Shield,
+  Telescope,
+  Zap,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AnalysisPanel,
   BusinessLogicPanel,
+  BusinessLogicReconPanel,
+  BusinessLogicAnalysisPanel,
   ReconPanel,
   VerificationPanel,
 } from "./agent-test/panels";
@@ -41,7 +46,7 @@ export default function AgentTestPage() {
 
         <div className="cyber-card flex-1 min-h-0 p-4 overflow-hidden flex flex-col">
           <Tabs defaultValue="recon" className="flex flex-col flex-1 min-h-0">
-            <TabsList className="shrink-0 grid grid-cols-4 w-full max-w-xl mb-4">
+            <TabsList className="shrink-0 grid grid-cols-6 w-full mb-4">
               <TabsTrigger value="recon" className="gap-1.5 text-xs">
                 <Search className="w-3.5 h-3.5" /> Recon
               </TabsTrigger>
@@ -52,7 +57,13 @@ export default function AgentTestPage() {
                 <Shield className="w-3.5 h-3.5" /> Verification
               </TabsTrigger>
               <TabsTrigger value="business-logic" className="gap-1.5 text-xs">
-                <Code2 className="w-3.5 h-3.5" /> Business Logic
+                <Code2 className="w-3.5 h-3.5" /> BL Scan
+              </TabsTrigger>
+              <TabsTrigger value="bl-recon" className="gap-1.5 text-xs">
+                <Telescope className="w-3.5 h-3.5" /> BL Recon
+              </TabsTrigger>
+              <TabsTrigger value="bl-analysis" className="gap-1.5 text-xs">
+                <Zap className="w-3.5 h-3.5" /> BL Analysis
               </TabsTrigger>
             </TabsList>
 
@@ -96,11 +107,35 @@ export default function AgentTestPage() {
                       BusinessLogicScanAgent
                     </strong>{" "}
                     —
-                    业务逻辑漏洞扫描：检测 IDOR、权限绕过、金额篡改、批量赋值、竞态条件等业务逻辑缺陷。
+                    业务逻辑漏洞扫描（旧版单体 Agent）：检测 IDOR、权限绕过、金额篡改、批量赋值、竞态条件等业务逻辑缺陷。
                     指定入口点列表可启用聚焦模式，留空则全局扫描。
                   </p>
                 </div>
                 <BusinessLogicPanel />
+              </TabsContent>
+
+              <TabsContent value="bl-recon" className="mt-0">
+                <div className="mb-3 p-2.5 rounded bg-muted/30 border border-border/30">
+                  <p className="text-xs text-muted-foreground">
+                    <strong className="text-cyan-400">BusinessLogicReconAgent</strong>{" "}
+                    —
+                    业务逻辑风险侦察：扫描整个项目，识别 IDOR、权限绕过、支付逻辑、竞态条件、批量赋值等业务逻辑风险点，
+                    推入 BL 风险队列供 <strong className="text-cyan-400">BusinessLogicAnalysisAgent</strong> 深度分析。
+                  </p>
+                </div>
+                <BusinessLogicReconPanel />
+              </TabsContent>
+
+              <TabsContent value="bl-analysis" className="mt-0">
+                <div className="mb-3 p-2.5 rounded bg-muted/30 border border-border/30">
+                  <p className="text-xs text-muted-foreground">
+                    <strong className="text-cyan-400">BusinessLogicAnalysisAgent</strong>{" "}
+                    —
+                    业务逻辑漏洞深度分析：对单个 BL 风险点进行深度代码审查，确认漏洞真实性、评估影响范围，
+                    将确认的漏洞推入漏洞队列。输入来自 BL Recon 阶段的风险点 JSON 对象。
+                  </p>
+                </div>
+                <BusinessLogicAnalysisPanel />
               </TabsContent>
             </div>
           </Tabs>

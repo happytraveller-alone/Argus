@@ -398,3 +398,183 @@ export function BusinessLogicPanel() {
     </div>
   );
 }
+
+const BL_RISK_POINT_PLACEHOLDER = JSON.stringify(
+  {
+    file_path: "app/api/order.py",
+    line_start: 85,
+    vulnerability_type: "idor",
+    severity: "high",
+    description: "订单更新接口仅验证登录状态，未校验当前用户是否为订单所有者",
+    confidence: 0.85,
+  },
+  null,
+  2,
+);
+
+export function BusinessLogicReconPanel() {
+  const { events, running, result, queueSnapshot, run, stop, clear } =
+    useAgentTestStream();
+  const [projectPath, setProjectPath] = useState("");
+  const [projectName, setProjectName] = useState("test-project");
+  const [frameworkHint, setFrameworkHint] = useState("");
+  const [maxIter, setMaxIter] = useState("10");
+
+  const handleRun = () => {
+    if (!projectPath.trim()) {
+      toast.error("请填写项目路径");
+      return;
+    }
+    run("business-logic-recon", {
+      project_path: projectPath.trim(),
+      project_name: projectName.trim() || "test-project",
+      framework_hint: frameworkHint.trim() || null,
+      max_iterations: parseInt(maxIter, 10) || 10,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">项目绝对路径 *</label>
+          <Input
+            placeholder="/path/to/your/project"
+            value={projectPath}
+            onChange={(e) => setProjectPath(e.target.value)}
+            disabled={running}
+            className="font-mono text-sm"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">项目名称</label>
+          <Input
+            placeholder="my-webapp"
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            disabled={running}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">框架提示（可选）</label>
+          <Input
+            placeholder="django / fastapi / express / spring"
+            value={frameworkHint}
+            onChange={(e) => setFrameworkHint(e.target.value)}
+            disabled={running}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">最大迭代次数</label>
+          <Input
+            type="number"
+            min={1}
+            max={30}
+            value={maxIter}
+            onChange={(e) => setMaxIter(e.target.value)}
+            disabled={running}
+            className="w-24"
+          />
+        </div>
+      </div>
+      <RunBar
+        running={running}
+        eventCount={events.length}
+        onRun={handleRun}
+        onStop={stop}
+        onClear={clear}
+      />
+      <QueueStatusPanel snapshot={queueSnapshot} />
+      <EventLog events={events} running={running} />
+      <ResultPanel result={result} />
+    </div>
+  );
+}
+
+export function BusinessLogicAnalysisPanel() {
+  const { events, running, result, queueSnapshot, run, stop, clear } =
+    useAgentTestStream();
+  const [projectPath, setProjectPath] = useState("");
+  const [riskPointJson, setRiskPointJson] = useState(BL_RISK_POINT_PLACEHOLDER);
+  const [maxIter, setMaxIter] = useState("10");
+
+  const handleRun = () => {
+    if (!projectPath.trim()) {
+      toast.error("请填写项目路径");
+      return;
+    }
+    let riskPoint: unknown;
+    try {
+      riskPoint = JSON.parse(riskPointJson);
+      if (typeof riskPoint !== "object" || Array.isArray(riskPoint) || !riskPoint) {
+        toast.error("风险点必须是 JSON 对象");
+        return;
+      }
+    } catch {
+      toast.error("风险点 JSON 格式错误");
+      return;
+    }
+    run("business-logic-analysis", {
+      project_path: projectPath.trim(),
+      risk_point: riskPoint,
+      max_iterations: parseInt(maxIter, 10) || 10,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">项目绝对路径 *</label>
+          <Input
+            placeholder="/path/to/your/project"
+            value={projectPath}
+            onChange={(e) => setProjectPath(e.target.value)}
+            disabled={running}
+            className="font-mono text-sm"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">最大迭代次数</label>
+          <Input
+            type="number"
+            min={1}
+            max={30}
+            value={maxIter}
+            onChange={(e) => setMaxIter(e.target.value)}
+            disabled={running}
+            className="w-24"
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <label className="text-xs text-muted-foreground">
+            业务逻辑风险点（JSON 对象，来自 BL Recon 阶段输出）
+          </label>
+          <Textarea
+            value={riskPointJson}
+            onChange={(e) => setRiskPointJson(e.target.value)}
+            disabled={running}
+            rows={10}
+            className="font-mono text-xs resize-none"
+          />
+          <p className="text-xs text-muted-foreground/60">
+            必填字段：<code className="text-cyan-400">file_path</code>、
+            <code className="text-cyan-400">line_start</code>、
+            <code className="text-cyan-400">description</code>、
+            <code className="text-cyan-400">vulnerability_type</code>
+          </p>
+        </div>
+      </div>
+      <RunBar
+        running={running}
+        eventCount={events.length}
+        onRun={handleRun}
+        onStop={stop}
+        onClear={clear}
+      />
+      <QueueStatusPanel snapshot={queueSnapshot} />
+      <EventLog events={events} running={running} />
+      <ResultPanel result={result} />
+    </div>
+  );
+}

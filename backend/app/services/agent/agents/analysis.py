@@ -105,28 +105,10 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 | `extract_function` | 提取目标函数代码 | 需要分析特定函数时 |
 | `dataflow_analysis` | 追踪污点从 source 到 sink 的流向 | 确认数据流漏洞时 |
 | `controlflow_analysis_light` | 分析条件分支、循环控制流 | 检查权限绕过、条件竞争时 |
-| `business_logic_scan` | 专业扫描业务逻辑漏洞（IDOR、支付绕过等） | 发现疑似业务逻辑缺陷时 |
 
 **Note**: 涉及到项目文件的路径，统一用相对于项目根目录的路径表示（如 `app/api/user.py`），禁止使用绝对路径或外部路径。
 
-### business_logic_scan 使用规范
-**重要**：该工具**仅返回 findings 列表，不会自动推送**，你必须手动解析并逐个调用 `push_finding_to_queue`
-
-**调用方式：**
-```
-Action: business_logic_scan
-Action Input: {
-    "target": ".",
-    "entry_points_hint": ["app/api/user.py:update_profile", "app/api/order.py:create_order"],
-    "max_iterations": 5
-}
-```
-
-**结果处理流程：**
-1. 接收返回的 findings 数组
-2. **逐个构造 finding 对象**（确保格式符合规范）
-3. **逐个调用 `push_finding_to_queue`** 推送
-4. 不得遗漏工具发现的任何漏洞
+**业务逻辑漏洞（IDOR、权限绕过、支付逻辑等）由独立的 BusinessLogicReconAgent + BusinessLogicAnalysisAgent 双轨道负责，本 Agent 专注于常规代码安全漏洞分析。**
 
 ═══════════════════════════════════════════════════════════════
 
@@ -151,20 +133,17 @@ Action Input: {
 4. **追踪调用链**：
    - 使用 `search_code` 查找风险函数被调用位置
    - 使用 `dataflow_analysis` 追踪污点流向（source → sink）
-5. **业务逻辑检查**：
-   - 若发现权限检查缺失、ID 参数可控 → 标记为业务逻辑入口点
-   - 收集 2-3 个相关入口点后，调用 `business_logic_scan` 深度扫描
-6. **处理扫描结果**：解析 `business_logic_scan` 返回的 findings，**逐个推送**
+5. **扩展分析**：在同文件内检查其他相关的安全问题（如同模块中其他危险函数调用）
 
 ### 阶段三：证据强化（高危漏洞）
-7. **构建证据链**：对 `critical`/`high` 级别漏洞，确保至少 2 类证据：
+6. **构建证据链**：对 `critical`/`high` 级别漏洞，确保至少 2 类证据：
    - 代码证据（漏洞代码片段）
    - 数据流证据（污点追踪结果）
    - 上下文证据（配置、调用环境）
 
 ### 阶段四：收尾确认
-8. **检查队列状态**：确认所有漏洞已推送，无遗漏
-9. **输出 Final Answer**：汇总本次分析的漏洞数量及关键信息
+7. **检查队列状态**：确认所有漏洞已推送，无遗漏
+8. **输出 Final Answer**：汇总本次分析的漏洞数量及关键信息
 
 ═══════════════════════════════════════════════════════════════
 
@@ -178,7 +157,6 @@ Action Input: {
 | **语言要求** | `title`、`description`、`suggestion` 必须使用**简体中文** |
 | **证据要求** | `critical`/`high` 漏洞需 ≥2 类证据，`evidence_chain` 字段必填 |
 | **首轮行动** | **第一轮必须输出 Action**（read_file 或 search_code），禁止直接 Final Answer |
-| **工具结果处理** | `business_logic_scan` 返回的 findings **必须手动解析并逐个推送** |
 
 ### 置信度评估标准
 - `0.9-1.0`: 代码直接证明，可稳定复现（如明显的 SQL 拼接）
@@ -339,23 +317,7 @@ def update_order(order_id):
     return 'Updated'
 ```
 
-Thought: 发现严重IDOR漏洞：update_order仅检查登录状态，未验证当前用户是否拥有该订单，可越权修改他人订单信息。这是典型的业务逻辑漏洞，应调用business_logic_scan深入分析。
-Action: business_logic_scan
-Action Input: {
-    "target": ".",
-    "entry_points_hint": [
-        "app/api/user.py:update_avatar",
-        "app/api/order.py:update_order"
-    ],
-    "max_iterations": 5
-}
-
-Observation: business_logic_scan 执行完成，发现以下漏洞：
-1. IDOR漏洞：app/api/order.py:update_order 未验证订单归属，可越权修改他人订单
-2. 批量分配漏洞：app/api/order.py:update_order 接受批量更新参数，可修改订单金额、状态等敏感字段
-3. 信息泄露：app/api/user.py:update_avatar 返回的路径可预测，导致头像遍历下载
-
-Thought: 扫描发现3个业务逻辑漏洞，需要手动解析并逐个推送。首先推送IDOR漏洞。
+Thought: 发现严重IDOR漏洞：update_order仅检查登录状态，未验证当前用户是否拥有该订单，可越权修改他人订单信息。立即推送此漏洞，再追踪批量赋值问题。
 Action: push_finding_to_queue
 Action Input: {
     "file_path": "app/api/order.py",
@@ -648,7 +610,6 @@ class AnalysisAgent(BaseAgent):
             "opengrep_scan",
             "kunlun_scan",
             "list_files",
-            "business_logic_scan",
         }
         if action_name in blocked_actions:
             return f"单风险点模式禁止调用全局扫描工具: {action_name}"
@@ -916,9 +877,6 @@ class AnalysisAgent(BaseAgent):
         
         # 🔥 记录工作开始
         self.record_work("开始安全漏洞分析")
-        
-        # 🔥 初始化可疑接口列表（用于 business_logic_scan entry_points_hint）
-        suspicious_interfaces: List[str] = []
 
         # 初始化对话历史
         self._conversation_history = [
@@ -1241,7 +1199,6 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                     # 🔥 发射 LLM 动作决策事件
                     await self.emit_llm_action(step.action, step.action_input or {})
                     
-                    # 🔥 特殊处理：business_logic_scan 工具调用的条件响应机制
                     action_input = dict(step.action_input or {})
 
                     if single_risk_mode and single_risk_file:
@@ -1263,27 +1220,6 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                             })
                             continue
 
-                    if step.action == "business_logic_scan":
-                        # 如果 LLM 没有提供 entry_points_hint，添加提示
-                        if not action_input.get("entry_points_hint") and not suspicious_interfaces:
-                            # 提示 LLM 应该指定具体的接口
-                            await self.emit_event(
-                                "info",
-                                "ℹ️ business_logic_scan 工具需要通过 entry_points_hint 参数指定要分析的接口。"
-                                "您可以在 entry_points_hint 中列出具体的函数或入口点，例如 ['app/api/user.py:update_profile', ...]"
-                            )
-                            # 添加提示到对话历史
-                            self._conversation_history.append({
-                                "role": "user",
-                                "content": "请使用 entry_points_hint 参数指定要分析的具体接口或函数。"
-                                           "例如：entry_points_hint=['app/api/user.py:get_user', 'app/api/order.py:create_order']"
-                            })
-                            continue  # 跳过本次工具执行，等待 LLM 提供 entry_points_hint
-                        
-                        # 如果有收集到可疑接口但 LLM 没有完全指定，考虑自动填充
-                        if suspicious_interfaces and not action_input.get("entry_points_hint"):
-                            action_input["entry_points_hint"] = suspicious_interfaces[:20]
-                    
                     # 🔥 循环检测：追踪工具调用失败历史
                     tool_call_key = f"{step.action}:{json.dumps(action_input or {}, sort_keys=True)}"
                     if not hasattr(self, '_failed_tool_calls'):

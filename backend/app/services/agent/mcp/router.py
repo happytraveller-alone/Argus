@@ -65,6 +65,11 @@ class MCPToolRouter:
                 "push_risk_point_to_queue",
                 True,
             ),
+            "push_risk_points_to_queue": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "push_risk_points_to_queue",
+                True,
+            ),
             "get_recon_risk_queue_status": (
                 self._LOCAL_ROUTE_ADAPTER,
                 "get_recon_risk_queue_status",
@@ -88,6 +93,41 @@ class MCPToolRouter:
             "is_recon_risk_point_in_queue": (
                 self._LOCAL_ROUTE_ADAPTER,
                 "is_recon_risk_point_in_queue",
+                False,
+            ),
+            "push_bl_risk_point_to_queue": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "push_bl_risk_point_to_queue",
+                True,
+            ),
+            "push_bl_risk_points_to_queue": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "push_bl_risk_points_to_queue",
+                True,
+            ),
+            "get_bl_risk_queue_status": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "get_bl_risk_queue_status",
+                False,
+            ),
+            "dequeue_bl_risk_point": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "dequeue_bl_risk_point",
+                True,
+            ),
+            "peek_bl_risk_queue": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "peek_bl_risk_queue",
+                False,
+            ),
+            "clear_bl_risk_queue": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "clear_bl_risk_queue",
+                True,
+            ),
+            "is_bl_risk_point_in_queue": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "is_bl_risk_point_in_queue",
                 False,
             ),
         }
@@ -246,13 +286,14 @@ class MCPToolRouter:
 
         elif tool_name == "extract_function":
             path_value = _sanitize_path(
-                payload.get("path") or payload.get("file_name")
+                payload.get("file_path") or payload.get("path") or payload.get("file_name")
             )
             if path_value:
                 payload["path"] = path_value
             symbol = (
                 _non_empty_string(payload.get("symbol_name"))
                 or _non_empty_string(payload.get("symbol"))
+                or _non_empty_string(payload.get("function_name"))
                 or MCPToolRouter._infer_function_name_from_code(payload.get("code"))
             )
             if symbol:

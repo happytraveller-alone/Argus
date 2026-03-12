@@ -76,15 +76,19 @@ NON_CACHEABLE_TOOL_NAMES: Set[str] = {
     "get_queue_status",
     "dequeue_finding",
     "push_risk_point_to_queue",
+    "push_risk_points_to_queue",
     "get_recon_risk_queue_status",
     "dequeue_recon_risk_point",
     "peek_recon_risk_queue",
     "clear_recon_risk_queue",
     "is_recon_risk_point_in_queue",
     "is_finding_in_queue",
+    "push_bl_risk_point_to_queue",
+    "push_bl_risk_points_to_queue",
 }
 STRICT_MCP_LOCAL_ONLY_TOOL_NAMES: Set[str] = {
     "push_risk_point_to_queue",
+    "push_risk_points_to_queue",
     "get_recon_risk_queue_status",
     "dequeue_recon_risk_point",
     "peek_recon_risk_queue",
@@ -95,6 +99,8 @@ STRICT_MCP_LOCAL_ONLY_TOOL_NAMES: Set[str] = {
     "dequeue_finding",
     "is_finding_in_queue",
     "save_verification_result",
+    "push_bl_risk_point_to_queue",
+    "push_bl_risk_points_to_queue",
 }
 WRITE_TOOL_GUARD_NAMES: Set[str] = {"edit_file", "write_file", "move_file", "create_directory"}
 DETERMINISTIC_ERROR_HINTS: Tuple[str, ...] = (

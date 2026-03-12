@@ -54,19 +54,23 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
         recon_queue_service: Optional[Any] = None,
         vuln_queue_service: Optional[Any] = None,
         workflow_config: Optional[WorkflowConfig] = None,
+        business_logic_queue_service: Optional[Any] = None,
     ) -> None:
         """
         Args:
-            llm_service:           LLM 服务实例（与 OrchestratorAgent 相同）。
-            tools:                 Orchestrator 工具集（think/reflect/queue tools 等）。
-            event_emitter:         事件发射器（用于前端实时推送）。
-            sub_agents:            子 Agent 字典 {"recon": ..., "analysis": ..., "verification": ...}。
-            tracer:                遥测 Tracer（可选）。
-            recon_queue_service:   InMemoryReconRiskQueue / RedisReconRiskQueue 实例。
-                                   若为 None，则回退到 LLM-driven 模式（兼容旧行为）。
-            vuln_queue_service:    InMemoryVulnerabilityQueue / RedisVulnerabilityQueue 实例。
-                                   若为 None，则回退到 LLM-driven 模式。
-            workflow_config:       Workflow 配置（控制并行化行为）。
+            llm_service:                  LLM 服务实例（与 OrchestratorAgent 相同）。
+            tools:                        Orchestrator 工具集（think/reflect/queue tools 等）。
+            event_emitter:                事件发射器（用于前端实时推送）。
+            sub_agents:                   子 Agent 字典 {"recon": ..., "analysis": ..., "verification": ...,
+                                          "business_logic_recon": ..., "business_logic_analysis": ...}。
+            tracer:                       遥测 Tracer（可选）。
+            recon_queue_service:          InMemoryReconRiskQueue / RedisReconRiskQueue 实例。
+                                          若为 None，则回退到 LLM-driven 模式（兼容旧行为）。
+            vuln_queue_service:           InMemoryVulnerabilityQueue / RedisVulnerabilityQueue 实例。
+                                          若为 None，则回退到 LLM-driven 模式。
+            workflow_config:              Workflow 配置（控制并行化行为）。
+            business_logic_queue_service: InMemoryBusinessLogicRiskQueue 实例（可选）。
+                                          若为 None，则跳过业务逻辑双轨道，仅执行常规 Recon→Analysis。
         """
         super().__init__(
             llm_service=llm_service,
@@ -78,6 +82,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
         self._recon_queue_service = recon_queue_service
         self._vuln_queue_service = vuln_queue_service
         self._workflow_config = workflow_config or WorkflowConfig()
+        self._business_logic_queue_service = business_logic_queue_service
 
     # ------------------------------------------------------------------
     # 核心入口：覆盖父类 run()
@@ -138,6 +143,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
             task_id=task_id,
             orchestrator=self,
             workflow_config=self._workflow_config,
+            business_logic_queue_service=self._business_logic_queue_service,
         )
 
         workflow_state: WorkflowState = await engine.run(
@@ -223,6 +229,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
             "info",
             f"🎯 WorkflowOrchestrator 完成: {len(self._all_findings)} 个发现, "
             f"Recon 风险点 {workflow_state.analysis_risk_points_processed} 条已分析, "
+            f"BL 风险点 {workflow_state.bl_risk_points_processed} 条已分析, "
             f"漏洞验证 {workflow_state.vuln_queue_findings_processed} 条已处理",
         )
         logger.info(
@@ -294,6 +301,23 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
                     )
                 except Exception as e:
                     logger.warning("[QueueStatus|%s] Failed to get vuln queue stats: %s", stage, e)
+
+            # BusinessLogic 队列状态
+            bl_stats = {}
+            if self._business_logic_queue_service:
+                try:
+                    bl_size = self._business_logic_queue_service.size(task_id)
+                    bl_stats = self._business_logic_queue_service.stats(task_id)
+                    logger.info(
+                        "[QueueStatus|%s] BL队列: size=%d, enqueued=%d, dequeued=%d, deduplicated=%d",
+                        stage,
+                        bl_size,
+                        bl_stats.get("total_enqueued", 0),
+                        bl_stats.get("total_dequeued", 0),
+                        bl_stats.get("total_deduplicated", 0),
+                    )
+                except Exception as e:
+                    logger.warning("[QueueStatus|%s] Failed to get BL queue stats: %s", stage, e)
 
             # 如果在完成阶段，记录剩余项（可能表示未处理完）
             if stage == "完成后":
