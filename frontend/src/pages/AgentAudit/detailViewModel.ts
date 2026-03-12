@@ -1,4 +1,5 @@
 import { normalizeReturnToPath } from "../../shared/utils/findingRoute";
+import { getEstimatedTaskProgressPercent } from "../../features/tasks/services/taskProgress";
 export type FindingVerificationFilter = "all" | "verified" | "pending";
 
 export interface AgentAuditFindingFilters {
@@ -35,6 +36,8 @@ export interface RealtimeFindingLike {
 }
 
 export interface TaskStatsLike {
+  status?: string | null;
+  created_at?: string | null;
   progress_percentage?: number | null;
   started_at?: string | null;
   completed_at?: string | null;
@@ -277,7 +280,14 @@ export function buildStatsSummary(input: {
     : Math.max(toFiniteNumber(task?.tokens_used), 0);
 
   return {
-    progressPercent: Math.max(toFiniteNumber(task?.progress_percentage), 0),
+    progressPercent: getEstimatedTaskProgressPercent(
+      {
+        status: task?.status,
+        createdAt: task?.created_at || task?.started_at || null,
+        startedAt: task?.started_at,
+      },
+      now.getTime(),
+    ),
     durationMs,
     totalFindings: counts.total,
     effectiveFindings: counts.effective,

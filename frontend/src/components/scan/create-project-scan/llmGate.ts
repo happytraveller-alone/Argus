@@ -114,13 +114,8 @@ export function getLlmQuickGateStatus({
 }: LlmQuickGateStatusInput) {
 	const missingFields = getLlmQuickConfigMissingFields(currentConfig, providerOptions);
 	const hasUnsavedChanges = !areSameLlmQuickConfig(currentConfig, savedConfig);
-	const canTest = missingFields.length === 0 && !hasUnsavedChanges;
-	const testBlockMessage =
-		missingFields.length > 0
-			? ""
-			: hasUnsavedChanges
-				? "请先保存当前配置，再测试连接。"
-				: "";
+	const canTest = missingFields.length === 0;
+	const testBlockMessage = "";
 
 	return {
 		missingFields,

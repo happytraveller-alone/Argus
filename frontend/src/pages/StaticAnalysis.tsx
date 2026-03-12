@@ -29,11 +29,11 @@ import {
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
 import {
+  buildStaticAnalysisProgressSummary,
   buildStaticAnalysisListState,
   buildUnifiedFindingRows,
   decodeStaticAnalysisPathParam,
   formatStaticAnalysisDuration,
-  isStaticAnalysisCompletedStatus,
   type ConfidenceFilter,
   type Engine,
   type EngineFilter,
@@ -137,26 +137,15 @@ export default function StaticAnalysis() {
     return engines;
   }, [gitleaksTaskId, opengrepTaskId]);
 
-  const completedEngineCount = useMemo(() => {
-    let count = 0;
-    if (opengrepTaskId && isStaticAnalysisCompletedStatus(opengrepTask?.status)) {
-      count += 1;
-    }
-    if (gitleaksTaskId && isStaticAnalysisCompletedStatus(gitleaksTask?.status)) {
-      count += 1;
-    }
-    return count;
-  }, [gitleaksTask?.status, gitleaksTaskId, opengrepTask?.status, opengrepTaskId]);
-
-  const progressPercent = Math.max(
-    0,
-    Math.min(
-      100,
-      enabledEngines.length > 0
-        ? Math.round((completedEngineCount / enabledEngines.length) * 100)
-        : 0,
-    ),
+  const progressSummary = useMemo(
+    () =>
+      buildStaticAnalysisProgressSummary({
+        opengrepTask,
+        gitleaksTask,
+      }),
+    [gitleaksTask, opengrepTask],
   );
+  const progressPercent = progressSummary.progressPercent;
 
   const totalScanDurationMs =
     toStaticAnalysisSafeMetric(opengrepTask?.scan_duration_ms) +
@@ -260,9 +249,6 @@ export default function StaticAnalysis() {
             value={progressPercent}
             className="h-1.5 bg-muted [&>div]:bg-emerald-500"
           />
-          <p className="text-xs text-muted-foreground">
-            已完成 {completedEngineCount} / {enabledEngines.length}
-          </p>
         </div>
         <div className="cyber-card p-4 space-y-1">
           <p className="text-xs font-semibold uppercase text-muted-foreground">

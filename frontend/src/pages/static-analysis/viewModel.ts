@@ -1,3 +1,5 @@
+import { getEstimatedTaskProgressPercent } from "@/features/tasks/services/taskProgress";
+
 export type Engine = "opengrep" | "gitleaks";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive" | "fixed";
@@ -5,6 +7,18 @@ export type StatusFilter = "all" | FindingStatus;
 export type ConfidenceFilter = "all" | "HIGH" | "MEDIUM" | "LOW";
 export type NormalizedSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 export type NormalizedConfidence = "HIGH" | "MEDIUM" | "LOW";
+
+export interface StaticAnalysisProgressTaskLike {
+  id: string;
+  project_id: string;
+  status: string;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface StaticAnalysisProgressSummary {
+  progressPercent: number;
+}
 
 export type UnifiedFindingRow = {
   key: string;
@@ -182,6 +196,28 @@ export function isStaticAnalysisCompletedStatus(
 export function toStaticAnalysisSafeMetric(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+export function buildStaticAnalysisProgressSummary(input: {
+  opengrepTask: StaticAnalysisProgressTaskLike | null;
+  gitleaksTask: StaticAnalysisProgressTaskLike | null;
+  nowMs?: number;
+}): StaticAnalysisProgressSummary {
+  const primaryTask = input.opengrepTask || input.gitleaksTask || null;
+  if (!primaryTask) {
+    return { progressPercent: 0 };
+  }
+
+  return {
+    progressPercent: getEstimatedTaskProgressPercent(
+      {
+        status: primaryTask.status,
+        createdAt: primaryTask.created_at,
+        startedAt: primaryTask.created_at,
+      },
+      input.nowMs,
+    ),
+  };
 }
 
 export function getStaticAnalysisOpengrepRuleName(

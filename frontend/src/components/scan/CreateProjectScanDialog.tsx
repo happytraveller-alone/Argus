@@ -408,7 +408,12 @@ export default function CreateProjectScanDialog({
 		mode,
 		opengrepEnabled,
 		gitleaksEnabled,
+		banditEnabled,
 		branchName,
+		isLlmMode,
+		llmQuickInitialized,
+		quickFixPanelOpening,
+		llmGateStatus.canCreate,
 	]);
 
 	useEffect(() => {
@@ -569,13 +574,13 @@ export default function CreateProjectScanDialog({
 		const validation = validateQuickFixFields();
 		if (!validation.ok) {
 			const message = validation.message || "请先补全 LLM 必填配置";
-			setLastPreflightMessage(`${message}，保存后再测试连接。`);
+			setLastPreflightMessage(`${message}。`);
 			if (validation.message) toast.error(validation.message);
 			return;
 		}
 
 		if (!llmGateStatus.canTest) {
-			const message = llmGateStatus.testBlockMessage || "请先保存当前配置，再测试连接。";
+			const message = llmGateStatus.testBlockMessage || "请先补全 LLM 必填配置。";
 			setLastPreflightMessage(message);
 			toast.error(message);
 			return;
@@ -602,6 +607,35 @@ export default function CreateProjectScanDialog({
 			);
 			if (result.success) {
 				toast.success(`测试成功：${result.model || payload.model}`);
+				// 测试通过后自动保存配置到后端，确保创建任务时使用已验证的配置
+				try {
+					const currentUserConfig = await api.getUserConfig();
+					const currentLlmConfig =
+						(currentUserConfig?.llmConfig as Record<string, unknown>) || {};
+					const normalizedQuickConfig: LlmQuickConfig = {
+						provider,
+						model: payload.model,
+						baseUrl: payload.baseUrl,
+						apiKey: payload.apiKey,
+					};
+					const providerKeyField =
+						CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP[provider];
+					const nextLlmConfig: Record<string, unknown> = {
+						...currentLlmConfig,
+						llmProvider: provider,
+						llmModel: normalizedQuickConfig.model,
+						llmBaseUrl: normalizedQuickConfig.baseUrl,
+						llmApiKey: normalizedQuickConfig.apiKey,
+					};
+					if (providerKeyField) {
+						nextLlmConfig[providerKeyField] = normalizedQuickConfig.apiKey;
+					}
+					await api.updateUserConfig({ llmConfig: nextLlmConfig });
+					setLlmQuickConfig(normalizedQuickConfig);
+					setSavedLlmQuickConfig(normalizedQuickConfig);
+				} catch (saveError) {
+					console.error("测试通过后自动保存配置失败:", saveError);
+				}
 			} else {
 				toast.error(`测试失败：${result.message || "未知错误"}`);
 			}
@@ -653,7 +687,7 @@ export default function CreateProjectScanDialog({
 			await api.updateUserConfig({ llmConfig: nextLlmConfig });
 			setLlmQuickConfig(normalizedQuickConfig);
 			setSavedLlmQuickConfig(normalizedQuickConfig);
-			setQuickFixManualTestPassed(false);
+			setQuickFixManualTestPassed(true);
 			setQuickFixTestResult(null);
 			setShowLlmQuickFixPanel(true);
 			setLastPreflightMessage(
@@ -938,7 +972,7 @@ export default function CreateProjectScanDialog({
 				handleQuickFixProviderChange={handleQuickFixProviderChange}
 				handleQuickFixConfigChange={handleQuickFixConfigChange}
 				quickFixTestResult={quickFixTestResult}
-				disableQuickFixTest={llmGateStatus.hasUnsavedChanges || quickFixPanelOpening}
+				disableQuickFixTest={quickFixPanelOpening}
 				llmTestBlockedMessage={llmGateStatus.testBlockMessage}
 				handleQuickFixTest={handleQuickFixTest}
 				handleQuickFixSave={handleQuickFixSave}

@@ -8,6 +8,10 @@ import {
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
 import type { Project } from "@/shared/types";
+import {
+	getEstimatedTaskProgressPercent,
+	INTERRUPTED_STATUSES,
+} from "./taskProgress";
 
 export {
 	buildStaticScanGroups,
@@ -44,12 +48,6 @@ export interface TaskActivityItem {
 	durationMs?: number | null;
 	route: string;
 }
-
-export const INTERRUPTED_STATUSES = new Set([
-	"interrupted",
-	"aborted",
-	"cancelled",
-]);
 
 const PAIRING_WINDOW_MS = 60 * 1000;
 
@@ -409,27 +407,14 @@ export function getTaskProgressPercent(
 	activity: TaskActivityItem,
 	nowMs = Date.now(),
 ): number {
-	if (
-		activity.status === "completed" ||
-		activity.status === "failed" ||
-		INTERRUPTED_STATUSES.has(activity.status)
-	) {
-		return 100;
-	}
-	if (activity.status === "pending") {
-		return 15;
-	}
-	if (activity.status === "running") {
-		const startedAt = activity.startedAt || activity.createdAt;
-		const elapsed = nowMs - new Date(startedAt).getTime();
-		if (!Number.isFinite(elapsed) || elapsed <= 0) {
-			return 35;
-		}
-		const elapsedMinutes = elapsed / 60000;
-		const progress = 35 + Math.floor(elapsedMinutes * 4);
-		return Math.max(35, Math.min(95, progress));
-	}
-	return 0;
+	return getEstimatedTaskProgressPercent(
+		{
+			status: activity.status,
+			createdAt: activity.createdAt,
+			startedAt: activity.startedAt,
+		},
+		nowMs,
+	);
 }
 
 export function formatCreatedAt(time: string): string {
