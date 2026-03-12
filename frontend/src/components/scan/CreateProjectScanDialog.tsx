@@ -104,6 +104,7 @@ export default function CreateProjectScanDialog({
 	const [branchName, setBranchName] = useState("main");
 	const [opengrepEnabled, setOpengrepEnabled] = useState(true);
 	const [gitleaksEnabled, setGitleaksEnabled] = useState(false);
+	const [banditEnabled, setBanditEnabled] = useState(false);
 	const [activeRules, setActiveRules] = useState<OpengrepRule[]>([]);
 	const [loadingRules, setLoadingRules] = useState(false);
 
