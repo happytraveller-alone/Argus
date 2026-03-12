@@ -14,7 +14,7 @@ export function ReconPanel() {
   const [projectPath, setProjectPath] = useState("");
   const [projectName, setProjectName] = useState("test-project");
   const [frameworkHint, setFrameworkHint] = useState("");
-  const [maxIter, setMaxIter] = useState("6");
+  const [maxIter, setMaxIter] = useState("200");
 
   const handleRun = () => {
     if (!projectPath.trim()) {
@@ -219,7 +219,7 @@ export function VerificationPanel() {
   const { events, running, result, run, stop, clear } = useAgentTestStream();
   const [projectPath, setProjectPath] = useState("");
   const [findingsJson, setFindingsJson] = useState(FINDING_PLACEHOLDER);
-  const [maxIter, setMaxIter] = useState("6");
+  const [maxIter, setMaxIter] = useState("200");
 
   const handleRun = () => {
     if (!projectPath.trim()) {
@@ -418,7 +418,7 @@ export function BusinessLogicReconPanel() {
   const [projectPath, setProjectPath] = useState("");
   const [projectName, setProjectName] = useState("test-project");
   const [frameworkHint, setFrameworkHint] = useState("");
-  const [maxIter, setMaxIter] = useState("10");
+  const [maxIter, setMaxIter] = useState("200");
 
   const handleRun = () => {
     if (!projectPath.trim()) {
@@ -429,7 +429,7 @@ export function BusinessLogicReconPanel() {
       project_path: projectPath.trim(),
       project_name: projectName.trim() || "test-project",
       framework_hint: frameworkHint.trim() || null,
-      max_iterations: parseInt(maxIter, 10) || 10,
+      max_iterations: parseInt(maxIter, 200) || 200,
     });
   };
 
@@ -469,7 +469,7 @@ export function BusinessLogicReconPanel() {
           <Input
             type="number"
             min={1}
-            max={30}
+            max={200}
             value={maxIter}
             onChange={(e) => setMaxIter(e.target.value)}
             disabled={running}
@@ -496,7 +496,7 @@ export function BusinessLogicAnalysisPanel() {
     useAgentTestStream();
   const [projectPath, setProjectPath] = useState("");
   const [riskPointJson, setRiskPointJson] = useState(BL_RISK_POINT_PLACEHOLDER);
-  const [maxIter, setMaxIter] = useState("10");
+  const [maxIter, setMaxIter] = useState("200");
 
   const handleRun = () => {
     if (!projectPath.trim()) {
@@ -517,7 +517,7 @@ export function BusinessLogicAnalysisPanel() {
     run("business-logic-analysis", {
       project_path: projectPath.trim(),
       risk_point: riskPoint,
-      max_iterations: parseInt(maxIter, 10) || 10,
+      max_iterations: parseInt(maxIter, 200) || 200,
     });
   };
 
@@ -539,7 +539,7 @@ export function BusinessLogicAnalysisPanel() {
           <Input
             type="number"
             min={1}
-            max={30}
+            max={200}
             value={maxIter}
             onChange={(e) => setMaxIter(e.target.value)}
             disabled={running}

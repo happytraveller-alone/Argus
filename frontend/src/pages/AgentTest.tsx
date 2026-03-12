@@ -48,17 +48,17 @@ export default function AgentTestPage() {
               <TabsTrigger value="recon" className="gap-1.5 text-xs">
                 <Search className="w-3.5 h-3.5" /> Recon
               </TabsTrigger>
-              <TabsTrigger value="analysis" className="gap-1.5 text-xs">
-                <Cpu className="w-3.5 h-3.5" /> Analysis
-              </TabsTrigger>
-              <TabsTrigger value="verification" className="gap-1.5 text-xs">
-                <Shield className="w-3.5 h-3.5" /> Verification
-              </TabsTrigger>
               <TabsTrigger value="bl-recon" className="gap-1.5 text-xs">
                 <Telescope className="w-3.5 h-3.5" /> BL Recon
               </TabsTrigger>
+              <TabsTrigger value="analysis" className="gap-1.5 text-xs">
+                <Cpu className="w-3.5 h-3.5" /> Analysis
+              </TabsTrigger>
               <TabsTrigger value="bl-analysis" className="gap-1.5 text-xs">
                 <Zap className="w-3.5 h-3.5" /> BL Analysis
+              </TabsTrigger>
+              <TabsTrigger value="verification" className="gap-1.5 text-xs">
+                <Shield className="w-3.5 h-3.5" /> Verification
               </TabsTrigger>
             </TabsList>
 
