@@ -2946,6 +2946,8 @@ async def _execute_agent_task(task_id: str):
             analysis_agent.set_cancel_callback(check_global_cancel)
             verification_agent.set_cancel_callback(check_global_cancel)
             report_agent.set_cancel_callback(check_global_cancel)
+            bl_recon_agent.set_cancel_callback(check_global_cancel)
+            bl_analysis_agent.set_cancel_callback(check_global_cancel)
 
             # 注册到全局
             _running_orchestrators[task_id] = orchestrator

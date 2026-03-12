@@ -96,6 +96,10 @@ class ParallelPhaseExecutor:
             worker_agent.set_write_scope_guard(
                 getattr(base_agent, "_write_scope_guard", None)
             )
+        # 传播取消回调，确保 worker 能感知全局取消标志
+        cancel_callback = getattr(base_agent, "_cancel_callback", None)
+        if cancel_callback is not None and hasattr(worker_agent, "set_cancel_callback"):
+            worker_agent.set_cancel_callback(cancel_callback)
 
         logger.info(f"[ParallelExecutor] Created worker agent: {worker_agent.name}")
         return worker_agent
@@ -387,8 +391,14 @@ class ParallelPhaseExecutor:
             # 确保所有 worker task 收到取消信号
             for task in worker_tasks:
                 task.cancel()
-            # 等待所有 worker 真正结束后再向上传播，防止 orphaned task 继续打印日志
-            await asyncio.gather(*worker_tasks, return_exceptions=True)
+            # Python 3.12+: _num_cancels_requested > 0 会立即取消下一个 await，
+            # 用 asyncio.shield 保护清理 gather，防止被二次取消打断。
+            # Worker task 被 cancel() 后会在各自的下一个 await 点收到 CancelledError，
+            # 通过 shield 确保 gather 不被立即取消，让 worker 有机会完成清理。
+            try:
+                await asyncio.shield(asyncio.gather(*worker_tasks, return_exceptions=True))
+            except asyncio.CancelledError:
+                pass
             raise
         finally:
             # 清理
@@ -459,7 +469,7 @@ class ParallelPhaseExecutor:
                     "context": json.dumps(risk_point, ensure_ascii=False),
                 }
 
-                # 通知 orchestrator 当前注入的风险点
+                # 注入当前风险点（仅供 orchestrator 内部提取使用，并发时以各 worker 自身 params 为准）
                 self.orchestrator._last_recon_risk_point = risk_point
 
                 try:
@@ -513,7 +523,7 @@ class ParallelPhaseExecutor:
                 # 重置 worker agent 内存（任务隔离）
                 worker_agent.reset_session_memory()
 
-                # 标记 worker 为空闲
+                # 标记 worker 为空闲（finally 确保取消时也能清理）
                 async with self.lock:
                     self.active_workers.discard(worker_id)
 
@@ -615,7 +625,10 @@ class ParallelPhaseExecutor:
         except asyncio.CancelledError:
             for task in worker_tasks:
                 task.cancel()
-            await asyncio.gather(*worker_tasks, return_exceptions=True)
+            try:
+                await asyncio.shield(asyncio.gather(*worker_tasks, return_exceptions=True))
+            except asyncio.CancelledError:
+                pass
             raise
         finally:
             # 清理
@@ -716,6 +729,10 @@ class ParallelPhaseExecutor:
                     raise
                 except Exception as exc:
                     logger.error(f"[Worker-{worker_id}] Dispatch failed: {exc}", exc_info=True)
+                finally:
+                    # 确保取消时也能清理 active_workers
+                    async with self.lock:
+                        self.active_workers.discard(worker_id)
 
                 duration_ms = int((time.time() - step_start) * 1000)
 
@@ -760,10 +777,6 @@ class ParallelPhaseExecutor:
 
                 # 重置内存
                 worker_agent.reset_session_memory()
-
-                # 标记空闲
-                async with self.lock:
-                    self.active_workers.discard(worker_id)
 
         logger.info(f"[Worker-{worker_id}] Verification worker completed {iteration} iterations")
 
@@ -976,7 +989,10 @@ class ParallelPhaseExecutor:
         except asyncio.CancelledError:
             for task in worker_tasks:
                 task.cancel()
-            await asyncio.gather(*worker_tasks, return_exceptions=True)
+            try:
+                await asyncio.shield(asyncio.gather(*worker_tasks, return_exceptions=True))
+            except asyncio.CancelledError:
+                pass
             raise
         finally:
             self.worker_agents.clear()
@@ -1042,6 +1058,10 @@ class ParallelPhaseExecutor:
                     raise
                 except Exception as exc:
                     logger.error(f"[BLWorker-{worker_id}] Dispatch failed: {exc}", exc_info=True)
+                finally:
+                    # 确保取消时也能清理 active_workers
+                    async with self.lock:
+                        self.active_workers.discard(worker_id)
 
                 duration_ms = int((time.time() - step_start) * 1000)
 
@@ -1082,9 +1102,6 @@ class ParallelPhaseExecutor:
                     )
 
                 worker_agent.reset_session_memory()
-
-                async with self.lock:
-                    self.active_workers.discard(worker_id)
 
         logger.info(f"[BLWorker-{worker_id}] BL analysis worker completed {iteration} iterations")
 
