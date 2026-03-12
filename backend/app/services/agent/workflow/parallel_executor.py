@@ -374,17 +374,26 @@ class ParallelPhaseExecutor:
             for worker_id in range(self.max_workers)
         ]
 
-        # 等待所有 worker 完成
-        results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+        try:
+            # 等待所有 worker 完成
+            results = await asyncio.gather(*worker_tasks, return_exceptions=True)
 
-        # 处理 worker 错误（不阻塞其他 worker）
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"[ParallelExecutor] Worker {i} failed: {result}", exc_info=result)
+            # 处理 worker 错误（不阻塞其他 worker，忽略正常取消）
+            for i, result in enumerate(results):
+                if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                    logger.error(f"[ParallelExecutor] Worker {i} failed: {result}", exc_info=result)
 
-        # 清理
-        self.worker_agents.clear()
-        logger.info("[ParallelExecutor] Parallel analysis completed")
+        except asyncio.CancelledError:
+            # 确保所有 worker task 收到取消信号
+            for task in worker_tasks:
+                task.cancel()
+            # 等待所有 worker 真正结束后再向上传播，防止 orphaned task 继续打印日志
+            await asyncio.gather(*worker_tasks, return_exceptions=True)
+            raise
+        finally:
+            # 清理
+            self.worker_agents.clear()
+            logger.info("[ParallelExecutor] Parallel analysis completed")
 
     async def _analysis_worker(
         self,
@@ -594,17 +603,24 @@ class ParallelPhaseExecutor:
             for worker_id in range(self.max_workers)
         ]
 
-        # 等待所有 worker 完成
-        results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+        try:
+            # 等待所有 worker 完成
+            results = await asyncio.gather(*worker_tasks, return_exceptions=True)
 
-        # 处理 worker 错误
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"[ParallelExecutor] Worker {i} failed: {result}", exc_info=result)
+            # 处理 worker 错误（忽略正常取消）
+            for i, result in enumerate(results):
+                if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                    logger.error(f"[ParallelExecutor] Worker {i} failed: {result}", exc_info=result)
 
-        # 清理
-        self.worker_agents.clear()
-        logger.info("[ParallelExecutor] Parallel verification completed")
+        except asyncio.CancelledError:
+            for task in worker_tasks:
+                task.cancel()
+            await asyncio.gather(*worker_tasks, return_exceptions=True)
+            raise
+        finally:
+            # 清理
+            self.worker_agents.clear()
+            logger.info("[ParallelExecutor] Parallel verification completed")
 
     async def _verification_worker(
         self,
@@ -949,15 +965,22 @@ class ParallelPhaseExecutor:
             for worker_id in range(self.max_workers)
         ]
 
-        # 等待所有 worker 完成
-        results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+        try:
+            # 等待所有 worker 完成
+            results = await asyncio.gather(*worker_tasks, return_exceptions=True)
 
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"[ParallelExecutor] BL Worker {i} failed: {result}", exc_info=result)
+            for i, result in enumerate(results):
+                if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                    logger.error(f"[ParallelExecutor] BL Worker {i} failed: {result}", exc_info=result)
 
-        self.worker_agents.clear()
-        logger.info("[ParallelExecutor] Parallel BL analysis completed")
+        except asyncio.CancelledError:
+            for task in worker_tasks:
+                task.cancel()
+            await asyncio.gather(*worker_tasks, return_exceptions=True)
+            raise
+        finally:
+            self.worker_agents.clear()
+            logger.info("[ParallelExecutor] Parallel BL analysis completed")
 
     async def _bl_analysis_worker(
         self,

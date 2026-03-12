@@ -6,6 +6,11 @@ from pathlib import Path
 from .compression_strategy import CompressionStrategy
 
 
+def _preserve_tarinfo(tarinfo: tarfile.TarInfo) -> tarfile.TarInfo:
+    """Keep each TarInfo untouched so extraction metadata is preserved."""
+    return tarinfo
+
+
 class ZipCompressionStrategy(CompressionStrategy):
     """ZIP 格式处理器"""
 
@@ -74,7 +79,7 @@ class TarCompressionStrategy(CompressionStrategy):
             with tarfile.open(file_path, "r") as tar_ref:
                 for member in tar_ref.getmembers():
                     if not member.isdir():
-                        tar_ref.extract(member, extract_to)
+                        tar_ref.extract(member, extract_to, filter=_preserve_tarinfo)
                         extracted_files.append(member.name)
             return extracted_files
         except tarfile.ReadError as e:
@@ -115,7 +120,7 @@ class TarGzCompressionStrategy(CompressionStrategy):
             with tarfile.open(file_path, "r:gz") as tar_ref:
                 for member in tar_ref.getmembers():
                     if not member.isdir():
-                        tar_ref.extract(member, extract_to)
+                        tar_ref.extract(member, extract_to, filter=_preserve_tarinfo)
                         extracted_files.append(member.name)
             return extracted_files
         except (tarfile.ReadError, EOFError) as e:
@@ -156,7 +161,7 @@ class TarBz2CompressionStrategy(CompressionStrategy):
             with tarfile.open(file_path, "r:bz2") as tar_ref:
                 for member in tar_ref.getmembers():
                     if not member.isdir():
-                        tar_ref.extract(member, extract_to)
+                        tar_ref.extract(member, extract_to, filter=_preserve_tarinfo)
                         extracted_files.append(member.name)
             return extracted_files
         except (tarfile.ReadError, EOFError) as e:
