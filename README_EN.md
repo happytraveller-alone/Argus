@@ -4,20 +4,9 @@
   <a href="README.md">简体中文</a> | <strong>English</strong>
 </p>
 
-<div align="center">
-  <img src="frontend/public/images/logo.png" alt="VulHunter Logo" width="420" />
-</div>
 
-<div align="center">
 
-[![Version](https://img.shields.io/badge/version-3.0.4-blue.svg)](CHANGELOG.md)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6.svg)](https://www.typescriptlang.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776ab.svg)](https://www.python.org/)
 
-</div>
 
 VulHunter is an intelligent auditing platform for repository-scale projects. It is built on a **Multi-Agent** collaboration workflow (Orchestrator / Recon / Analysis / Verification) and combines:
 
@@ -26,52 +15,6 @@ VulHunter is an intelligent auditing platform for repository-scale projects. It 
 
 Optionally, VulHunter can run PoC validation inside a Docker sandbox.
 
-## Screenshots
-
-<div align="center">
-
-### Agent Audit Entry
-
-<img src="frontend/public/images/README-show/Agent审计入口（首页）.png" alt="VulHunter Agent Audit Entry" width="90%">
-
-</div>
-
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>Event Logs</strong><br/><br/>
-<img src="frontend/public/images/README-show/审计流日志.png" alt="Event Logs" width="95%"><br/>
-<em>Watch agent reasoning and execution in real time</em>
-</td>
-<td width="50%" align="center">
-<strong>Dashboard</strong><br/><br/>
-<img src="frontend/public/images/README-show/仪表盘.png" alt="Dashboard" width="95%"><br/>
-<em>Project security posture at a glance</em>
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Instant Analysis</strong><br/><br/>
-<img src="frontend/public/images/README-show/即时分析.png" alt="Instant Analysis" width="95%"><br/>
-<em>Paste code or upload files, get results quickly</em>
-</td>
-<td width="50%" align="center">
-<strong>Project Management</strong><br/><br/>
-<img src="frontend/public/images/README-show/项目管理.png" alt="Project Management" width="95%"><br/>
-<em>Import repos or upload ZIP, manage multiple projects</em>
-</td>
-</tr>
-</table>
-
-<div align="center">
-
-### Report Export
-
-<img src="frontend/public/images/README-show/审计报告示例.png" alt="Audit Report" width="90%">
-
-<em>Export to PDF / Markdown / JSON</em>
-
-</div>
 
 ## Key Capabilities
 

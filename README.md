@@ -13,54 +13,6 @@ VulHunter 是一个面向仓库级项目的智能审计平台，基于 **Multi-A
 
 并可在 Docker 沙箱中执行 PoC 验证（可选）。
 
-## 📸 界面预览
-
-<div align="center">
-
-### 🤖 智能审计入口
-
-<img src="frontend/public/images/README-show/Agent审计入口（首页）.png" alt="VulHunter 智能审计入口" width="90%">
-
-*从首页快速进入 Multi-Agent 智能审计*
-
-</div>
-
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>📋 事件日志</strong><br/><br/>
-<img src="frontend/public/images/README-show/审计流日志.png" alt="事件日志" width="95%"><br/>
-<em>实时查看 Agent 思考与执行过程</em>
-</td>
-<td width="50%" align="center">
-<strong>🎛️ 仪表盘</strong><br/><br/>
-<img src="frontend/public/images/README-show/仪表盘.png" alt="仪表盘" width="95%"><br/>
-<em>一眼掌握项目安全态势</em>
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>⚡ 即时分析</strong><br/><br/>
-<img src="frontend/public/images/README-show/即时分析.png" alt="即时分析" width="95%"><br/>
-<em>粘贴代码 / 上传文件，秒出结果</em>
-</td>
-<td width="50%" align="center">
-<strong>🗂️ 项目管理</strong><br/><br/>
-<img src="frontend/public/images/README-show/项目管理.png" alt="项目管理" width="95%"><br/>
-<em>导入仓库或上传 ZIP，多项目协同管理</em>
-</td>
-</tr>
-</table>
-
-<div align="center">
-
-### 📊 报告导出
-
-<img src="frontend/public/images/README-show/审计报告示例.png" alt="审计报告" width="90%">
-
-*支持导出 PDF / Markdown / JSON*
-
-</div>
 
 ## ✨ 核心能力
 
