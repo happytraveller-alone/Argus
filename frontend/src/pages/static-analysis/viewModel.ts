@@ -6,6 +6,7 @@ export type FindingStatus = "open" | "verified" | "false_positive" | "fixed";
 export type StatusFilter = "all" | FindingStatus;
 export type ConfidenceFilter = "all" | "HIGH" | "MEDIUM" | "LOW";
 export type NormalizedSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+export type SeverityFilter = "all" | NormalizedSeverity;
 export type NormalizedConfidence = "HIGH" | "MEDIUM" | "LOW";
 
 export interface StaticAnalysisProgressTaskLike {
@@ -316,6 +317,7 @@ export function buildStaticAnalysisListState(input: {
   rows: UnifiedFindingRow[];
   engineFilter: EngineFilter;
   statusFilter: StatusFilter;
+  severityFilter: SeverityFilter;
   confidenceFilter: ConfidenceFilter;
   page: number;
   pageSize?: number;
@@ -325,8 +327,11 @@ export function buildStaticAnalysisListState(input: {
     .filter((row) => input.engineFilter === "all" || row.engine === input.engineFilter)
     .filter((row) => input.statusFilter === "all" || row.status === input.statusFilter)
     .filter((row) => {
+      if (input.severityFilter === "all") return true;
+      return row.severity === input.severityFilter;
+    })
+    .filter((row) => {
       if (input.confidenceFilter === "all") return true;
-      if (row.engine === "gitleaks") return true;
       return row.confidence === input.confidenceFilter;
     })
     .sort((a, b) => {

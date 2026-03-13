@@ -115,6 +115,7 @@ test("buildStaticAnalysisListState filters, sorts and paginates rows", () => {
     rows: [...rows],
     engineFilter: "all",
     statusFilter: "all",
+    severityFilter: "all",
     confidenceFilter: "all",
     page: 1,
     pageSize: 2,
@@ -131,6 +132,7 @@ test("buildStaticAnalysisListState filters, sorts and paginates rows", () => {
     rows: [...rows],
     engineFilter: "opengrep",
     statusFilter: "verified",
+    severityFilter: "all",
     confidenceFilter: "HIGH",
     page: 1,
     pageSize: 10,
@@ -139,6 +141,102 @@ test("buildStaticAnalysisListState filters, sorts and paginates rows", () => {
   assert.deepEqual(
     filtered.pagedRows.map((row) => row.key),
     ["b"],
+  );
+});
+
+test("buildStaticAnalysisListState applies severityFilter across unified engine rows", () => {
+  const rows = [
+    {
+      key: "og-high",
+      id: "og-high",
+      taskId: "task-og",
+      engine: "opengrep",
+      rule: "rule-og",
+      filePath: "src/auth.ts",
+      line: 12,
+      severity: "HIGH",
+      severityScore: 3,
+      confidence: "HIGH",
+      confidenceScore: 3,
+      status: "open",
+    },
+    {
+      key: "gl-low",
+      id: "gl-low",
+      taskId: "task-gl",
+      engine: "gitleaks",
+      rule: "rule-gl",
+      filePath: "secrets.env",
+      line: 5,
+      severity: "LOW",
+      severityScore: 1,
+      confidence: "MEDIUM",
+      confidenceScore: 2,
+      status: "open",
+    },
+  ] as const;
+
+  const state = buildStaticAnalysisListState({
+    rows: [...rows],
+    engineFilter: "all",
+    statusFilter: "all",
+    severityFilter: "HIGH",
+    confidenceFilter: "all",
+    page: 1,
+    pageSize: 10,
+  });
+
+  assert.deepEqual(
+    state.pagedRows.map((row) => row.key),
+    ["og-high"],
+  );
+});
+
+test("buildStaticAnalysisListState applies confidenceFilter to gitleaks rows too", () => {
+  const rows = [
+    {
+      key: "og-high",
+      id: "og-high",
+      taskId: "task-og",
+      engine: "opengrep",
+      rule: "rule-og",
+      filePath: "src/auth.ts",
+      line: 12,
+      severity: "HIGH",
+      severityScore: 3,
+      confidence: "HIGH",
+      confidenceScore: 3,
+      status: "open",
+    },
+    {
+      key: "gl-medium",
+      id: "gl-medium",
+      taskId: "task-gl",
+      engine: "gitleaks",
+      rule: "rule-gl",
+      filePath: "secrets.env",
+      line: 5,
+      severity: "LOW",
+      severityScore: 1,
+      confidence: "MEDIUM",
+      confidenceScore: 2,
+      status: "open",
+    },
+  ] as const;
+
+  const state = buildStaticAnalysisListState({
+    rows: [...rows],
+    engineFilter: "all",
+    statusFilter: "all",
+    severityFilter: "all",
+    confidenceFilter: "HIGH",
+    page: 1,
+    pageSize: 10,
+  });
+
+  assert.deepEqual(
+    state.pagedRows.map((row) => row.key),
+    ["og-high"],
   );
 });
 

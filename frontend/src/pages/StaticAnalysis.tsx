@@ -37,6 +37,7 @@ import {
   type ConfidenceFilter,
   type Engine,
   type EngineFilter,
+  type SeverityFilter,
   type StatusFilter,
   toStaticAnalysisSafeMetric,
 } from "./static-analysis/viewModel";
@@ -91,6 +92,7 @@ export default function StaticAnalysis() {
   const hasEnabledEngine = Boolean(opengrepTaskId || gitleaksTaskId || banditTaskId);
   const [engineFilter, setEngineFilter] = useState<EngineFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [confidenceFilter, setConfidenceFilter] =
     useState<ConfidenceFilter>("all");
   const [page, setPage] = useState(1);
@@ -148,10 +150,11 @@ export default function StaticAnalysis() {
         rows: unifiedRows,
         engineFilter,
         statusFilter,
+        severityFilter,
         confidenceFilter,
         page,
       }),
-    [confidenceFilter, engineFilter, page, statusFilter, unifiedRows],
+    [confidenceFilter, engineFilter, page, severityFilter, statusFilter, unifiedRows],
   );
 
   const enabledEngines = useMemo(() => {
@@ -185,10 +188,12 @@ export default function StaticAnalysis() {
     toStaticAnalysisSafeMetric(opengrepTask?.files_scanned) +
     toStaticAnalysisSafeMetric(gitleaksTask?.files_scanned) +
     toStaticAnalysisSafeMetric(banditTask?.files_scanned);
+  const pageResetKey = `${engineFilter}:${statusFilter}:${severityFilter}:${confidenceFilter}`;
 
   useEffect(() => {
+    if (!pageResetKey) return;
     setPage(1);
-  }, [engineFilter, statusFilter, confidenceFilter]);
+  }, [pageResetKey]);
 
   useEffect(() => {
     if (page !== listState.clampedPage) {
@@ -335,11 +340,11 @@ export default function StaticAnalysis() {
       </div>
 
       <div className="cyber-card p-4 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <div>
-            <label className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
+            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
               引擎筛选
-            </label>
+            </div>
             <Select
               value={engineFilter}
               onValueChange={(value) => setEngineFilter(value as EngineFilter)}
@@ -356,9 +361,9 @@ export default function StaticAnalysis() {
             </Select>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
+            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
               状态筛选
-            </label>
+            </div>
             <Select
               value={statusFilter}
               onValueChange={(value) => setStatusFilter(value as StatusFilter)}
@@ -376,9 +381,29 @@ export default function StaticAnalysis() {
             </Select>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
+            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
+              漏洞危害
+            </div>
+            <Select
+              value={severityFilter}
+              onValueChange={(value) => setSeverityFilter(value as SeverityFilter)}
+            >
+              <SelectTrigger className="cyber-input">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="cyber-dialog border-border">
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="CRITICAL">严重</SelectItem>
+                <SelectItem value="HIGH">高危</SelectItem>
+                <SelectItem value="MEDIUM">中危</SelectItem>
+                <SelectItem value="LOW">低危</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
               置信度筛选
-            </label>
+            </div>
             <Select
               value={confidenceFilter}
               onValueChange={(value) => setConfidenceFilter(value as ConfidenceFilter)}
