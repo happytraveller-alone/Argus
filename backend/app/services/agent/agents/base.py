@@ -795,7 +795,7 @@ class BaseAgent(ABC):
         if value:
             return value
         if self._is_smart_audit_mode():
-            return "strict_anchor"
+            return "project_scope"
         return ""
 
     def set_write_scope_guard(self, guard: Optional["TaskWriteScopeGuard"]) -> None:

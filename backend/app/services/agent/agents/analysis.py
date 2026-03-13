@@ -609,10 +609,13 @@ class AnalysisAgent(BaseAgent):
             "safety_scan",
             "opengrep_scan",
             "kunlun_scan",
-            "list_files",
         }
         if action_name in blocked_actions:
             return f"单风险点模式禁止调用全局扫描工具: {action_name}"
+
+        # 文件查看类工具允许在项目范围内跨文件查看，具体路径边界交由底层工具守卫。
+        if action_name in {"read_file", "list_files"}:
+            return None
 
         target_keys = [
             "file_path",

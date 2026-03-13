@@ -3065,7 +3065,7 @@ async def _execute_agent_task(task_id: str):
                 "audit_mode": "smart_audit",
                 "disable_virtual_routing": True,
                 "mcp_only_enforced": True,
-                "read_scope_policy": "strict_anchor",
+                "read_scope_policy": "project_scope",
             }
 
             for agent in (recon_agent, analysis_agent, verification_agent, report_agent, bl_recon_agent, bl_analysis_agent):

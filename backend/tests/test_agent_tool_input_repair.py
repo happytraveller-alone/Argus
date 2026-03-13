@@ -6,6 +6,7 @@ import pytest
 from typing import Optional
 
 from app.services.agent.agents.base import AgentConfig, AgentResult, AgentType, BaseAgent
+from app.services.agent.agents.analysis import AnalysisAgent
 import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 
@@ -372,6 +373,49 @@ async def test_execute_tool_strict_anchor_bootstraps_read_file_via_search_code()
     tool_call_events = _events_by_type(emitter, "tool_call")
     ordered_names = [event.tool_name for event in tool_call_events]
     assert ordered_names == ["search_code", "read_file"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_smart_audit_allows_read_file_without_strict_anchor():
+    agent, emitter = _make_agent(
+        tools={"read_file": _ReadTool()},
+        metadata={"smart_audit_mode": True, "mcp_only_enforced": False},
+    )
+
+    output = await agent.execute_tool("read_file", {"file_path": "src/sql_vuln.py"})
+
+    assert "src/sql_vuln.py" in output
+    tool_result_events = [
+        event for event in _events_by_type(emitter, "tool_result")
+        if event.tool_name == "read_file"
+    ]
+    assert len(tool_result_events) == 1
+    metadata = tool_result_events[-1].metadata or {}
+    assert metadata.get("read_scope_policy") != "strict_anchor"
+
+
+def test_analysis_single_scope_allows_read_and_list_file_actions():
+    agent = AnalysisAgent(llm_service=SimpleNamespace(), tools={})
+
+    list_reason = agent._is_action_out_of_single_scope(
+        action="list_files",
+        action_input={"directory": "."},
+        risk_file_path="src/auth.py",
+    )
+    read_reason = agent._is_action_out_of_single_scope(
+        action="read_file",
+        action_input={"file_path": "src/other.py"},
+        risk_file_path="src/auth.py",
+    )
+    blocked_reason = agent._is_action_out_of_single_scope(
+        action="semgrep_scan",
+        action_input={"target": "src/auth.py"},
+        risk_file_path="src/auth.py",
+    )
+
+    assert list_reason is None
+    assert read_reason is None
+    assert "禁止调用全局扫描工具" in (blocked_reason or "")
 
 
 @pytest.mark.asyncio
