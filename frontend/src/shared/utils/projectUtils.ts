@@ -6,6 +6,13 @@
 import type { Project, ProjectSourceType } from '@/shared/types';
 import { REPOSITORY_PLATFORM_LABELS } from '@/shared/constants/projectTypes';
 
+export const HTTPS_ONLY_REPOSITORY_ERROR = '仅支持 HTTPS 仓库地址，不再支持 SSH 地址';
+
+export function isUnsupportedRepositoryUrl(repositoryUrl?: string | null): boolean {
+  const normalized = String(repositoryUrl || '').trim().toLowerCase();
+  return normalized.startsWith('git@') || normalized.startsWith('ssh://');
+}
+
 /**
  * 判断项目是否为仓库类型
  */
@@ -86,6 +93,8 @@ export function validateProjectConfig(project: Project): { valid: boolean; error
   if (isRepositoryProject(project)) {
     if (!project.repository_url?.trim()) {
       errors.push('仓库地址不能为空');
+    } else if (isUnsupportedRepositoryUrl(project.repository_url)) {
+      errors.push(HTTPS_ONLY_REPOSITORY_ERROR);
     }
   }
 

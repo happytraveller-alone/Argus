@@ -601,7 +601,7 @@ export default function CreateProjectDialog({
 									? "创建中..."
 									: uploadSummary
 										? "完成"
-										: "执行创建"}
+									: "执行创建"}
 							</Button>
 						</div>
 					</div>

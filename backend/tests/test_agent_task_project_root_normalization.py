@@ -1,4 +1,5 @@
 import os
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -149,3 +150,56 @@ async def test_execute_agent_task_normalizes_project_root_before_building_mcp_ru
     assert captured["project_root"] == expected_project_root
     assert os.path.isabs(captured["project_root"])
 
+
+@pytest.mark.asyncio
+async def test_get_project_root_rejects_legacy_ssh_repository_urls(monkeypatch, tmp_path):
+    project = SimpleNamespace(
+        id="project-ssh",
+        source_type="repository",
+        repository_url="git@github.com:org/repo.git",
+        repository_type="github",
+        default_branch="main",
+    )
+    subprocess_calls: list[list[str]] = []
+    fake_base_path = "/tmp/deepaudit/task-ssh"
+    real_base_path = tmp_path / "task-ssh"
+
+    def _fake_run(command, *args, **kwargs):
+        subprocess_calls.append(list(command))
+        if command[:2] == ["git", "--version"]:
+            return SimpleNamespace(returncode=0, stderr="", stdout="git version 2.43.0")
+        if command[:2] == ["git", "clone"]:
+            target_dir = real_base_path if command[-1] == fake_base_path else command[-1]
+            os.makedirs(target_dir, exist_ok=True)
+            with open(os.path.join(target_dir, "README.md"), "w", encoding="utf-8") as handle:
+                handle.write("# demo\n")
+            return SimpleNamespace(returncode=0, stderr="", stdout="")
+        raise AssertionError(f"unexpected subprocess command: {command}")
+
+    original_makedirs = agent_tasks_module.os.makedirs
+    original_listdir = agent_tasks_module.os.listdir
+
+    def _mapped_makedirs(path, *args, **kwargs):
+        if path == fake_base_path:
+            return original_makedirs(real_base_path, *args, **kwargs)
+        return original_makedirs(path, *args, **kwargs)
+
+    def _mapped_listdir(path):
+        if path == fake_base_path:
+            return original_listdir(real_base_path)
+        return original_listdir(path)
+
+    monkeypatch.setattr(agent_tasks_module, "is_task_cancelled", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    monkeypatch.setattr(agent_tasks_module.os, "makedirs", _mapped_makedirs)
+    monkeypatch.setattr(agent_tasks_module.os, "listdir", _mapped_listdir)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await agent_tasks_module._get_project_root(
+            project,
+            task_id="task-ssh",
+            branch_name="main",
+        )
+
+    assert str(exc_info.value) == "仅支持 HTTPS 仓库地址，不再支持 SSH 地址"
+    assert subprocess_calls == []

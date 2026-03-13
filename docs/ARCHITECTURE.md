@@ -57,7 +57,6 @@ PostgreSQL
 - `/rules`
 - `/agent-tasks`
 - `/embedding`
-- `/ssh-keys`
 - `/static-tasks`
 
 ## 3.2 Service 层
@@ -113,7 +112,6 @@ ProjectMember, User, UserConfig, ProjectInfo, PromptTemplate, AuditRuleSet/Audit
 - `agentTasks.ts` / `agentStream.ts`
 - `opengrep.ts` / `gitleaks.ts`
 - `rules.ts` / `prompts.ts`
-- `sshKeys.ts`
 
 ## 4.3 组件与状态
 
@@ -136,7 +134,6 @@ ProjectMember, User, UserConfig, ProjectInfo, PromptTemplate, AuditRuleSet/Audit
 | 审计规则集 | `/rules` | `shared/api/rules.ts` | Dashboard（统计）、配置页 |
 | 提示词模板 | `/prompts` | `shared/api/prompts.ts` | 暂无活跃前端入口、Dashboard（统计） |
 | 系统配置 | `/config`、`/embedding` | `shared/api/database.ts` + 局部 `apiClient` | SystemConfig、EmbeddingConfig |
-| SSH 能力 | `/ssh-keys` | `shared/api/sshKeys.ts` | 项目接入/配置流程 |
 
 ---
 

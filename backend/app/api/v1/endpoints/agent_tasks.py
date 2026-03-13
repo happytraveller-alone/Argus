@@ -64,9 +64,11 @@ from app.services.agent.mcp.protocol_verify import (
     normalize_listed_tools as normalize_mcp_listed_tools,
 )
 from app.services.agent.mcp.health_probe import probe_mcp_endpoint_readiness
-from app.services.git_mirror import get_mirror_candidates
-from app.services.git_ssh_service import GitSSHOperations
-from app.core.encryption import decrypt_sensitive_data
+from app.services.git_mirror import (
+    HTTPS_ONLY_REPOSITORY_ERROR,
+    get_mirror_candidates,
+    is_ssh_git_url,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -2709,23 +2711,13 @@ async def _execute_agent_task(task_id: str):
             # 获取用户配置（需要在获取项目根目录之前，以便传递 token）
             user_config = await _get_user_config(db, task.created_by)
 
-            # 从用户配置中提取 token和SSH密钥（用于私有仓库克隆）
+            # 从用户配置中提取 token（用于私有仓库克隆）
             other_config = (user_config or {}).get('otherConfig', {})
             github_token = other_config.get('githubToken') or settings.GITHUB_TOKEN
             gitlab_token = other_config.get('gitlabToken') or settings.GITLAB_TOKEN
             gitea_token = other_config.get('giteaToken') or settings.GITEA_TOKEN
 
-            # 解密SSH私钥
-            ssh_private_key = None
-            if 'sshPrivateKey' in other_config:
-                try:
-                    encrypted_key = other_config['sshPrivateKey']
-                    ssh_private_key = decrypt_sensitive_data(encrypted_key)
-                    logger.info("成功解密SSH私钥")
-                except Exception as e:
-                    logger.warning(f"解密SSH私钥失败: {e}")
-
-            # 获取项目根目录（传递任务指定的分支和认证 token/SSH密钥）
+            # 获取项目根目录（传递任务指定的分支和认证 token）
             # 🔥 传递 event_emitter 以发送克隆进度
             async def _prepare_project_root_once():
                 return await _get_project_root(
@@ -2735,7 +2727,6 @@ async def _execute_agent_task(task_id: str):
                     github_token=github_token,
                     gitlab_token=gitlab_token,
                     gitea_token=gitea_token,  # 🔥 新增
-                    ssh_private_key=ssh_private_key,  # 🔥 新增SSH密钥
                     event_emitter=event_emitter,  # 🔥 新增
                 )
 
@@ -7167,7 +7158,6 @@ async def _get_project_root(
     github_token: Optional[str] = None,
     gitlab_token: Optional[str] = None,
     gitea_token: Optional[str] = None,  # 🔥 新增
-    ssh_private_key: Optional[str] = None,  # 🔥 新增：SSH私钥（用于SSH认证）
     event_emitter: Optional[Any] = None,  # 🔥 新增：用于发送实时日志
 ) -> str:
     """
@@ -7184,7 +7174,6 @@ async def _get_project_root(
         github_token: GitHub 访问令牌（用于私有仓库）
         gitlab_token: GitLab 访问令牌（用于私有仓库）
         gitea_token: Gitea 访问令牌（用于私有仓库）
-        ssh_private_key: SSH私钥（用于SSH认证）
         event_emitter: 事件发送器（用于发送实时日志）
 
     Returns:
@@ -7259,9 +7248,10 @@ async def _get_project_root(
         repo_type = project.repository_type or "other"
 
         await emit(f"🔄 正在获取仓库: {repo_url}")
-
-        # 检测是否为SSH URL（SSH链接不支持ZIP下载）
-        is_ssh_url = GitSSHOperations.is_ssh_url(repo_url)
+        if is_ssh_git_url(repo_url):
+            logger.warning("检测到遗留 SSH 仓库地址，已拒绝继续处理: %s", repo_url)
+            await emit(f"❌ {HTTPS_ONLY_REPOSITORY_ERROR}", "error")
+            raise RuntimeError(HTTPS_ONLY_REPOSITORY_ERROR)
 
         # 解析仓库 URL 获取 owner/repo
         parsed = urlparse(repo_url)
@@ -7285,12 +7275,7 @@ async def _get_project_root(
         last_error = ""
 
         # ============ 方案1: 优先使用 ZIP 下载（更快更稳定）============
-        # SSH链接直接跳过ZIP下载，使用git clone
-        if is_ssh_url:
-            logger.info(f"检测到SSH URL，跳过ZIP下载，直接使用Git克隆")
-            await emit(f"🔑 检测到SSH认证，使用Git克隆...")
-
-        if owner and repo and not is_ssh_url:
+        if owner and repo:
             import httpx
 
             for branch in branches_to_try:
@@ -7438,12 +7423,8 @@ async def _get_project_root(
 
         # ============ 方案2: 回退到 git clone ============
         if not download_success:
-            if is_ssh_url:
-                # SSH链接直接使用git clone，不是"失败"
-                pass  # 已在上面输出提示
-            else:
-                await emit(f"🔄 ZIP 下载失败，回退到 Git 克隆...")
-                logger.info("ZIP download failed, falling back to git clone")
+            await emit(f"🔄 ZIP 下载失败，回退到 Git 克隆...")
+            logger.info("ZIP download failed, falling back to git clone")
 
             # 检查 git 是否可用
             try:
@@ -7495,10 +7476,8 @@ async def _get_project_root(
                     parsed.fragment
                 ))
                 await emit(f"🔐 使用 Gitea Token 认证")
-            elif is_ssh_url and ssh_private_key:
-                await emit(f"🔐 使用 SSH Key 认证")
 
-            clone_url_candidates = [auth_url] if is_ssh_url else get_mirror_candidates(
+            clone_url_candidates = get_mirror_candidates(
                 auth_url,
                 enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
                 mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.org"),
@@ -7522,15 +7501,20 @@ async def _get_project_root(
                 await emit(f"🔄 尝试克隆分支: {branch}")
 
                 try:
-                    # SSH URL使用GitSSHOperations（支持SSH密钥认证）
-                    if is_ssh_url and ssh_private_key:
-                        async def run_ssh_clone():
+                    result = None
+                    for idx, candidate_clone_url in enumerate(clone_url_candidates):
+                        using_mirror = candidate_clone_url != auth_url
+
+                        async def run_clone():
                             return await asyncio.to_thread(
-                                GitSSHOperations.clone_repo_with_ssh,
-                                repo_url, ssh_private_key, base_path, branch
+                                subprocess.run,
+                                ["git", "clone", "--depth", "1", "--branch", branch, candidate_clone_url, base_path],
+                                capture_output=True,
+                                text=True,
+                                timeout=120,
                             )
 
-                        clone_task = asyncio.create_task(run_ssh_clone())
+                        clone_task = asyncio.create_task(run_clone())
                         while not clone_task.done():
                             check_cancelled()
                             try:
@@ -7542,74 +7526,38 @@ async def _get_project_root(
                         if clone_task.done():
                             result = clone_task.result()
 
-                        # GitSSHOperations返回字典格式
-                        if result.get('success'):
-                            logger.info(f"✅ Git 克隆成功 (SSH, 分支: {branch})")
-                            await emit(f"✅ 仓库获取成功 (SSH克隆, 分支: {branch})")
-                            download_success = True
-                            break
-                        else:
-                            last_error = result.get('message', '未知错误')
-                            logger.warning(f"SSH克隆失败 (分支 {branch}): {last_error[:200]}")
-                            await emit(f"⚠️ 分支 {branch} SSH克隆失败...", "warning")
-                    else:
-                        result = None
-                        for idx, candidate_clone_url in enumerate(clone_url_candidates):
-                            using_mirror = candidate_clone_url != auth_url
-
-                            async def run_clone():
-                                return await asyncio.to_thread(
-                                    subprocess.run,
-                                    ["git", "clone", "--depth", "1", "--branch", branch, candidate_clone_url, base_path],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=120,
-                                )
-
-                            clone_task = asyncio.create_task(run_clone())
-                            while not clone_task.done():
-                                check_cancelled()
-                                try:
-                                    result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
-                                    break
-                                except asyncio.TimeoutError:
-                                    continue
-
-                            if clone_task.done():
-                                result = clone_task.result()
-
-                            if result.returncode == 0:
-                                break
-
-                            last_error = result.stderr
-                            if using_mirror:
-                                if idx < len(clone_url_candidates) - 1:
-                                    next_candidate = clone_url_candidates[idx + 1]
-                                    if next_candidate == auth_url:
-                                        logger.warning(
-                                            "Git 镜像 clone 失败 (分支 %s): %s，回源重试: %s",
-                                            branch,
-                                            (last_error or "")[:200],
-                                            next_candidate,
-                                        )
-                                    else:
-                                        logger.warning(
-                                            "Git 镜像 clone 失败 (分支 %s): %s，切换候选重试: %s",
-                                            branch,
-                                            (last_error or "")[:200],
-                                            next_candidate,
-                                        )
-                                elif not clone_has_origin_url:
-                                    logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
-
-                        if result is not None and result.returncode == 0:
-                            logger.info(f"✅ Git 克隆成功 (分支: {branch})")
-                            await emit(f"✅ 仓库获取成功 (Git克隆, 分支: {branch})")
-                            download_success = True
+                        if result.returncode == 0:
                             break
 
-                        logger.warning(f"克隆失败 (分支 {branch}): {str(last_error or '')[:200]}")
-                        await emit(f"⚠️ 分支 {branch} 克隆失败...", "warning")
+                        last_error = result.stderr
+                        if using_mirror:
+                            if idx < len(clone_url_candidates) - 1:
+                                next_candidate = clone_url_candidates[idx + 1]
+                                if next_candidate == auth_url:
+                                    logger.warning(
+                                        "Git 镜像 clone 失败 (分支 %s): %s，回源重试: %s",
+                                        branch,
+                                        (last_error or "")[:200],
+                                        next_candidate,
+                                    )
+                                else:
+                                    logger.warning(
+                                        "Git 镜像 clone 失败 (分支 %s): %s，切换候选重试: %s",
+                                        branch,
+                                        (last_error or "")[:200],
+                                        next_candidate,
+                                    )
+                            elif not clone_has_origin_url:
+                                logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
+
+                    if result is not None and result.returncode == 0:
+                        logger.info(f"✅ Git 克隆成功 (分支: {branch})")
+                        await emit(f"✅ 仓库获取成功 (Git克隆, 分支: {branch})")
+                        download_success = True
+                        break
+
+                    logger.warning(f"克隆失败 (分支 {branch}): {str(last_error or '')[:200]}")
+                    await emit(f"⚠️ 分支 {branch} 克隆失败...", "warning")
                 except subprocess.TimeoutExpired:
                     last_error = f"克隆分支 {branch} 超时"
                     logger.warning(last_error)
@@ -7628,15 +7576,20 @@ async def _get_project_root(
                     os.makedirs(base_path, exist_ok=True)
 
                 try:
-                    # SSH URL使用GitSSHOperations（不指定分支）
-                    if is_ssh_url and ssh_private_key:
-                        async def run_default_ssh_clone():
+                    result = None
+                    for idx, candidate_clone_url in enumerate(clone_url_candidates):
+                        using_mirror = candidate_clone_url != auth_url
+
+                        async def run_default_clone():
                             return await asyncio.to_thread(
-                                GitSSHOperations.clone_repo_with_ssh,
-                                repo_url, ssh_private_key, base_path, branch
+                                subprocess.run,
+                                ["git", "clone", "--depth", "1", candidate_clone_url, base_path],
+                                capture_output=True,
+                                text=True,
+                                timeout=120,
                             )
 
-                        clone_task = asyncio.create_task(run_default_ssh_clone())
+                        clone_task = asyncio.create_task(run_default_clone())
                         while not clone_task.done():
                             check_cancelled()
                             try:
@@ -7648,66 +7601,34 @@ async def _get_project_root(
                         if clone_task.done():
                             result = clone_task.result()
 
-                        if result.get('success'):
-                            logger.info(f"✅ Git 克隆成功 (SSH, 默认分支)")
-                            await emit(f"✅ 仓库获取成功 (SSH克隆, 默认分支)")
-                            download_success = True
-                        else:
-                            last_error = result.get('message', '未知错误')
+                        if result.returncode == 0:
+                            break
+
+                        last_error = result.stderr
+                        if using_mirror:
+                            if idx < len(clone_url_candidates) - 1:
+                                next_candidate = clone_url_candidates[idx + 1]
+                                if next_candidate == auth_url:
+                                    logger.warning(
+                                        "Git 镜像默认分支 clone 失败: %s，回源重试: %s",
+                                        (last_error or "")[:200],
+                                        next_candidate,
+                                    )
+                                else:
+                                    logger.warning(
+                                        "Git 镜像默认分支 clone 失败: %s，切换候选重试: %s",
+                                        (last_error or "")[:200],
+                                        next_candidate,
+                                    )
+                            elif not clone_has_origin_url:
+                                logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
+
+                    if result is not None and result.returncode == 0:
+                        logger.info(f"✅ Git 克隆成功 (默认分支)")
+                        await emit(f"✅ 仓库获取成功 (Git克隆, 默认分支)")
+                        download_success = True
                     else:
-                        result = None
-                        for idx, candidate_clone_url in enumerate(clone_url_candidates):
-                            using_mirror = candidate_clone_url != auth_url
-
-                            async def run_default_clone():
-                                return await asyncio.to_thread(
-                                    subprocess.run,
-                                    ["git", "clone", "--depth", "1", candidate_clone_url, base_path],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=120,
-                                )
-
-                            clone_task = asyncio.create_task(run_default_clone())
-                            while not clone_task.done():
-                                check_cancelled()
-                                try:
-                                    result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
-                                    break
-                                except asyncio.TimeoutError:
-                                    continue
-
-                            if clone_task.done():
-                                result = clone_task.result()
-
-                            if result.returncode == 0:
-                                break
-
-                            last_error = result.stderr
-                            if using_mirror:
-                                if idx < len(clone_url_candidates) - 1:
-                                    next_candidate = clone_url_candidates[idx + 1]
-                                    if next_candidate == auth_url:
-                                        logger.warning(
-                                            "Git 镜像默认分支 clone 失败: %s，回源重试: %s",
-                                            (last_error or "")[:200],
-                                            next_candidate,
-                                        )
-                                    else:
-                                        logger.warning(
-                                            "Git 镜像默认分支 clone 失败: %s，切换候选重试: %s",
-                                            (last_error or "")[:200],
-                                            next_candidate,
-                                        )
-                                elif not clone_has_origin_url:
-                                    logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
-
-                        if result is not None and result.returncode == 0:
-                            logger.info(f"✅ Git 克隆成功 (默认分支)")
-                            await emit(f"✅ 仓库获取成功 (Git克隆, 默认分支)")
-                            download_success = True
-                        else:
-                            last_error = str(last_error or "")
+                        last_error = str(last_error or "")
                 except subprocess.TimeoutExpired:
                     last_error = "克隆超时"
                 except asyncio.CancelledError:

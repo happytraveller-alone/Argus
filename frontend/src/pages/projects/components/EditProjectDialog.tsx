@@ -13,6 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { validateZipFile } from "@/features/projects/services";
 import type { CreateProjectForm, Project } from "@/shared/types";
+import {
+	HTTPS_ONLY_REPOSITORY_ERROR,
+	isUnsupportedRepositoryUrl,
+} from "@/shared/utils/projectUtils";
 import { toast } from "sonner";
 import {
 	createEmptyProjectForm,
@@ -81,6 +85,13 @@ export default function EditProjectDialog({
 
 		if (!form.name.trim()) {
 			toast.error("项目名称不能为空");
+			return;
+		}
+		if (
+			form.source_type === "repository" &&
+			isUnsupportedRepositoryUrl(form.repository_url)
+		) {
+			toast.error(HTTPS_ONLY_REPOSITORY_ERROR);
 			return;
 		}
 

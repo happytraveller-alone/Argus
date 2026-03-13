@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.repo_utils import parse_repository_url
 from app.models.audit import AuditTask, AuditIssue
 from app.models.project import Project
+from app.services.git_mirror import ensure_supported_repository_url
 from app.services.llm.service import LLMService
 from app.core.config import settings
 
@@ -338,6 +339,7 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                 raise Exception("仓库地址不存在")
 
             repo_url = project.repository_url
+            ensure_supported_repository_url(repo_url, RuntimeError)
             branch = task.branch_name or project.default_branch or "main"
             repo_type = project.repository_type or "other"
             
@@ -363,83 +365,56 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
 
             
 
-            # 获取SSH私钥（如果配置了）
-            ssh_private_key = None
-            if 'sshPrivateKey' in user_other_config:
-                from app.core.encryption import decrypt_sensitive_data
-                ssh_private_key = decrypt_sensitive_data(user_other_config['sshPrivateKey'])
-
             files: List[Dict[str, str]] = []
             extracted_gitlab_token = None
 
-            # 检查是否为SSH URL
-            from app.services.git_ssh_service import GitSSHOperations
-            is_ssh_url = GitSSHOperations.is_ssh_url(repo_url)
+            # 使用API方式获取文件（原有逻辑）
+            # 构建分支尝试顺序（分支降级机制）
+            branches_to_try = [branch]
+            if project.default_branch and project.default_branch != branch:
+                branches_to_try.append(project.default_branch)
+            for common_branch in ["main", "master"]:
+                if common_branch not in branches_to_try:
+                    branches_to_try.append(common_branch)
 
-            if is_ssh_url:
-                # 使用SSH方式获取文件
-                if not ssh_private_key:
-                    raise Exception("仓库使用SSH URL，但未配置SSH密钥。请先生成并配置SSH密钥。")
+            actual_branch = branch  # 实际使用的分支
+            last_error = None
 
-                print(f"🔐 使用SSH方式访问仓库: {repo_url}")
+            for try_branch in branches_to_try:
                 try:
-                    files_with_content = GitSSHOperations.get_repo_files_via_ssh(
-                        repo_url, ssh_private_key, branch, task_exclude_patterns
-                    )
-                    # 转换为统一格式
-                    files = [{'path': f['path'], 'content': f['content']} for f in files_with_content]
-                    actual_branch = branch
-                    print(f"✅ 通过SSH成功获取 {len(files)} 个文件")
+                    print(f"🔄 尝试获取分支 {try_branch} 的文件列表...")
+                    if repo_type == "github":
+                        files = await get_github_files(repo_url, try_branch, github_token, task_exclude_patterns)
+                    elif repo_type == "gitlab":
+                        files = await get_gitlab_files(repo_url, try_branch, gitlab_token, task_exclude_patterns)
+                        # GitLab文件可能带有token
+                        if files and 'token' in files[0]:
+                            extracted_gitlab_token = files[0].get('token')
+                    elif repo_type == "gitea":
+                        files = await get_gitea_files(repo_url, try_branch, gitea_token, task_exclude_patterns)
+                    else:
+                        raise Exception("不支持的仓库类型，仅支持 GitHub, GitLab 和 Gitea 仓库")
+
+                    if files:
+                        actual_branch = try_branch
+                        if try_branch != branch:
+                            print(f"⚠️ 分支 {branch} 不存在或无法访问，已降级到分支 {try_branch}")
+                        break
                 except Exception as e:
-                    raise Exception(f"SSH方式获取仓库文件失败: {str(e)}")
-            else:
-                # 使用API方式获取文件（原有逻辑）
-                # 构建分支尝试顺序（分支降级机制）
-                branches_to_try = [branch]
-                if project.default_branch and project.default_branch != branch:
-                    branches_to_try.append(project.default_branch)
-                for common_branch in ["main", "master"]:
-                    if common_branch not in branches_to_try:
-                        branches_to_try.append(common_branch)
+                    last_error = str(e)
+                    print(f"⚠️ 获取分支 {try_branch} 失败: {last_error[:100]}")
+                    continue
 
-                actual_branch = branch  # 实际使用的分支
-                last_error = None
-
-                for try_branch in branches_to_try:
-                    try:
-                        print(f"🔄 尝试获取分支 {try_branch} 的文件列表...")
-                        if repo_type == "github":
-                            files = await get_github_files(repo_url, try_branch, github_token, task_exclude_patterns)
-                        elif repo_type == "gitlab":
-                            files = await get_gitlab_files(repo_url, try_branch, gitlab_token, task_exclude_patterns)
-                            # GitLab文件可能带有token
-                            if files and 'token' in files[0]:
-                                extracted_gitlab_token = files[0].get('token')
-                        elif repo_type == "gitea":
-                            files = await get_gitea_files(repo_url, try_branch, gitea_token, task_exclude_patterns)
-                        else:
-                            raise Exception("不支持的仓库类型，仅支持 GitHub, GitLab 和 Gitea 仓库")
-
-                        if files:
-                            actual_branch = try_branch
-                            if try_branch != branch:
-                                print(f"⚠️ 分支 {branch} 不存在或无法访问，已降级到分支 {try_branch}")
-                            break
-                    except Exception as e:
-                        last_error = str(e)
-                        print(f"⚠️ 获取分支 {try_branch} 失败: {last_error[:100]}")
-                        continue
-
-                if not files:
-                    error_msg = f"无法获取仓库文件，所有分支尝试均失败"
-                    if last_error:
-                        if "404" in last_error or "Not Found" in last_error:
-                            error_msg = f"仓库或分支不存在: {branch}"
-                        elif "401" in last_error or "403" in last_error:
-                            error_msg = "无访问权限，请检查 Token 配置"
-                        else:
-                            error_msg = f"获取文件失败: {last_error[:100]}"
-                    raise Exception(error_msg)
+            if not files:
+                error_msg = f"无法获取仓库文件，所有分支尝试均失败"
+                if last_error:
+                    if "404" in last_error or "Not Found" in last_error:
+                        error_msg = f"仓库或分支不存在: {branch}"
+                    elif "401" in last_error or "403" in last_error:
+                        error_msg = "无访问权限，请检查 Token 配置"
+                    else:
+                        error_msg = f"获取文件失败: {last_error[:100]}"
+                raise Exception(error_msg)
 
             print(f"✅ 成功获取分支 {actual_branch} 的文件列表")
 
@@ -490,30 +465,25 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
                 try:
                     # 获取文件内容
 
-                    if is_ssh_url:
-                        # SSH方式已经包含了文件内容
-                        content = file_info.get('content', '')
-                        print(f"📥 正在处理SSH文件: {file_info['path']}")
-                    else:
-                        headers = {}
-                        # 使用提取的 token 或用户配置的 token
-                        
-                        if repo_type == "gitlab":
-                            token_to_use = file_info.get('token') or gitlab_token
-                            if token_to_use:
-                                headers["PRIVATE-TOKEN"] = token_to_use
-                        elif repo_type == "gitea":
-                            token_to_use = file_info.get('token') or gitea_token
-                            if token_to_use:
-                                headers["Authorization"] = f"token {token_to_use}"
-                        elif repo_type == "github":
-                            # GitHub raw URL 也是直接下载，通常public不需要token，private需要
-                            # GitHub raw user content url: raw.githubusercontent.com
-                            if github_token:
-                                headers["Authorization"] = f"Bearer {github_token}"
-                        
-                        print(f"📥 正在获取文件: {file_info['path']}")
-                        content = await fetch_file_content(file_info["url"], headers)
+                    headers = {}
+                    # 使用提取的 token 或用户配置的 token
+                    
+                    if repo_type == "gitlab":
+                        token_to_use = file_info.get('token') or gitlab_token
+                        if token_to_use:
+                            headers["PRIVATE-TOKEN"] = token_to_use
+                    elif repo_type == "gitea":
+                        token_to_use = file_info.get('token') or gitea_token
+                        if token_to_use:
+                            headers["Authorization"] = f"token {token_to_use}"
+                    elif repo_type == "github":
+                        # GitHub raw URL 也是直接下载，通常public不需要token，private需要
+                        # GitHub raw user content url: raw.githubusercontent.com
+                        if github_token:
+                            headers["Authorization"] = f"Bearer {github_token}"
+                    
+                    print(f"📥 正在获取文件: {file_info['path']}")
+                    content = await fetch_file_content(file_info["url"], headers)
 
                     if not content or not content.strip():
                         print(f"⚠️ 文件内容为空，跳过: {file_info['path']}")
