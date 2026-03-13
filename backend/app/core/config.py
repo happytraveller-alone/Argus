@@ -140,8 +140,10 @@ class Settings(BaseSettings):
     # Agent 并发配置
     ENABLE_PARALLEL_ANALYSIS: bool = True  # 是否启用 Analysis 阶段并行处理
     ENABLE_PARALLEL_VERIFICATION: bool = True  # 是否启用 Verification 阶段并行处理
+    ENABLE_PARALLEL_REPORT: bool = True  # 是否启用 Report 阶段并行处理
     ANALYSIS_MAX_WORKERS: int = 5  # Analysis 阶段最大 worker 数量
     VERIFICATION_MAX_WORKERS: int = 3  # Verification 阶段最大 worker 数量
+    REPORT_MAX_WORKERS: int = 3  # Report 阶段最大 worker 数量
     
     # 沙箱配置（必须）
     SANDBOX_IMAGE: str = "vulhunter/sandbox:latest"  # 沙箱 Docker 镜像

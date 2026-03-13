@@ -183,6 +183,32 @@ def _build_verification_run(ctx: Dict[str, Any]):
     return _run
 
 
+def _build_report_run(ctx: Dict[str, Any]):
+    async def _run(agent: ParallelStubAgent, input_data: Dict[str, Any]) -> AgentResult:
+        finding = input_data.get("finding") or {}
+        worker_name = agent.name
+        start = time.perf_counter()
+        event = {
+            "worker": worker_name,
+            "start": start,
+            "title": finding.get("title"),
+        }
+        ctx["report_events"].append(event)
+        idx = _extract_worker_index(worker_name)
+        await asyncio.sleep(0.02 + idx * 0.004)
+        event["end"] = time.perf_counter()
+        result = AgentResult(
+            success=True,
+            data={"vulnerability_report": f"# Report for {finding.get('title', 'unknown')}"},
+            iterations=1,
+            tool_calls=1,
+            tokens_used=42,
+        )
+        return result
+
+    return _run
+
+
 def _max_parallelism(events: List[Dict[str, Any]]) -> int:
     timeline: List[tuple[float, int]] = []
     for event in events:
@@ -203,7 +229,7 @@ def _max_parallelism(events: List[Dict[str, Any]]) -> int:
 
 @pytest.fixture
 def instrumentation() -> Dict[str, List[Dict[str, Any]]]:
-    return {"analysis_events": [], "verification_events": []}
+    return {"analysis_events": [], "verification_events": [], "report_events": []}
 
 
 @pytest.fixture
@@ -217,6 +243,8 @@ def workflow_harness(instrumentation):
         analysis_max_workers=3,
         enable_parallel_verification=True,
         verification_max_workers=2,
+        enable_parallel_report=True,
+        report_max_workers=2,
     )
     risk_points = _load_vulnerable_points()
 
@@ -246,10 +274,19 @@ def workflow_harness(instrumentation):
     }
     verification_ctx["run_impl"] = _build_verification_run(verification_ctx)
 
+    report_ctx = {
+        "agent_type": "report",
+        "name": "report_parallel_stub",
+        "task_id": TEST_TASK_ID,
+        "report_events": instrumentation["report_events"],
+    }
+    report_ctx["run_impl"] = _build_report_run(report_ctx)
+
     sub_agents = {
         "recon": ParallelStubAgent(llm_service, {"_stub_ctx": recon_ctx}, event_emitter),
         "analysis": ParallelStubAgent(llm_service, {"_stub_ctx": analysis_ctx}, event_emitter),
         "verification": ParallelStubAgent(llm_service, {"_stub_ctx": verification_ctx}, event_emitter),
+        "report": ParallelStubAgent(llm_service, {"_stub_ctx": report_ctx}, event_emitter),
     }
 
     orchestrator = WorkflowOrchestratorAgent(
@@ -280,6 +317,7 @@ async def test_parallel_workflow_end_to_end(workflow_harness, instrumentation):
 
     assert orchestrator._workflow_config.analysis_max_workers == workflow_config.analysis_max_workers
     assert orchestrator._workflow_config.verification_max_workers == workflow_config.verification_max_workers
+    assert orchestrator._workflow_config.report_max_workers == workflow_config.report_max_workers
 
     engine = AuditWorkflowEngine(
         recon_queue_service=recon_queue,
@@ -291,8 +329,10 @@ async def test_parallel_workflow_end_to_end(workflow_harness, instrumentation):
 
     assert engine.analysis_executor.max_workers == workflow_config.analysis_max_workers
     assert engine.verification_executor.max_workers == workflow_config.verification_max_workers
+    assert engine.report_executor.max_workers == workflow_config.report_max_workers
     assert engine.analysis_executor.enable_parallel is True
     assert engine.verification_executor.enable_parallel is True
+    assert engine.report_executor.enable_parallel is True
 
     start = time.perf_counter()
     state = await engine.run(
@@ -348,3 +388,50 @@ async def test_parallel_workflow_end_to_end(workflow_harness, instrumentation):
         ],
     }
     print("Parallel Workflow Report:\n" + json.dumps(report, ensure_ascii=False, indent=2))
+
+
+@pytest.mark.asyncio
+async def test_report_phase_runs_in_parallel(workflow_harness, instrumentation):
+    orchestrator = workflow_harness["orchestrator"]
+    recon_queue = workflow_harness["recon_queue"]
+    vuln_queue = workflow_harness["vuln_queue"]
+    workflow_config = workflow_harness["workflow_config"]
+
+    orchestrator._all_findings = [
+        {
+            "title": f"confirmed finding {idx}",
+            "verdict": "confirmed",
+            "file_path": str(VULNERABLE_FILE),
+            "line_start": idx,
+        }
+        for idx in range(1, 5)
+    ]
+
+    engine = AuditWorkflowEngine(
+        recon_queue_service=recon_queue,
+        vuln_queue_service=vuln_queue,
+        task_id=TEST_TASK_ID,
+        orchestrator=orchestrator,
+        workflow_config=workflow_config,
+    )
+
+    state = await engine.run(
+        project_info={"root": str(REPO_ROOT), "name": "parallel-report-test"},
+        config={},
+        project_root=str(REPO_ROOT),
+        task_id=TEST_TASK_ID,
+    )
+
+    assert state.phase == WorkflowPhase.COMPLETE
+    assert state.report_findings_total == 4
+    assert state.report_findings_processed == 4
+    assert len(state.finding_reports) == 4
+    assert all(finding.get("vulnerability_report") for finding in orchestrator._all_findings)
+
+    report_events = instrumentation["report_events"]
+    report_workers = {evt["worker"] for evt in report_events}
+    report_parallelism = _max_parallelism(report_events)
+
+    assert len(report_workers) == workflow_config.report_max_workers
+    assert report_parallelism >= 2
+    assert report_parallelism <= workflow_config.report_max_workers

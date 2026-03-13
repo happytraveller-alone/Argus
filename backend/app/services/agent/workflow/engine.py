@@ -12,6 +12,7 @@ AuditWorkflowEngine - 确定性审计工作流引擎
 """
 
 import asyncio
+import copy
 import json
 import logging
 import time
@@ -89,6 +90,13 @@ class AuditWorkflowEngine:
             enable_parallel=self.workflow_config.should_parallelize_verification,
         )
 
+        self.report_executor = ParallelPhaseExecutor(
+            orchestrator=orchestrator,
+            agent_type="report",
+            max_workers=self.workflow_config.report_max_workers,
+            enable_parallel=self.workflow_config.should_parallelize_report,
+        )
+
         # 🔥 业务逻辑分析并行执行器（仅在 bl_queue 存在时使用）
         self.bl_analysis_executor = ParallelPhaseExecutor(
             orchestrator=orchestrator,
@@ -105,6 +113,8 @@ class AuditWorkflowEngine:
             f"(enabled={self.workflow_config.should_parallelize_bl_analysis}), "
             f"verification_workers={self.workflow_config.verification_max_workers} "
             f"(enabled={self.workflow_config.should_parallelize_verification}), "
+            f"report_workers={self.workflow_config.report_max_workers} "
+            f"(enabled={self.workflow_config.should_parallelize_report}), "
             f"bl_queue={'enabled' if business_logic_queue_service else 'disabled'}"
         )
 
@@ -980,60 +990,19 @@ class AuditWorkflowEngine:
             f"📝 [Workflow] Report 阶段：共 {len(reportable)} 条漏洞需要生成报告",
         )
 
-        for idx, finding in enumerate(reportable, start=1):
-            if orc.is_cancelled:
-                break
-
-            title = finding.get("title") or f"漏洞 #{idx}"
-            await orc.emit_event(
-                "info",
-                f"📝 [Workflow] Report [{idx}/{len(reportable)}]：{title}",
+        if self.workflow_config.should_parallelize_report:
+            await self._run_parallel_report_phase(
+                state=state,
+                reportable=reportable,
+                project_info=project_info,
+                config=config,
             )
-
-            step_start = time.time()
-            report_text = ""
-            success = False
-            error_msg = None
-
-            try:
-                result = await report_agent.run(
-                    {
-                        "finding": finding,
-                        "project_info": project_info,
-                        "config": config,
-                    }
-                )
-                if result.success and result.data:
-                    report_text = result.data.get("vulnerability_report") or ""
-                    success = bool(report_text)
-                else:
-                    error_msg = result.error or "Report Agent 返回空结果"
-                    logger.warning("[WorkflowEngine] Report failed for '%s': %s", title, error_msg)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                error_msg = str(exc)
-                logger.exception("[WorkflowEngine] Report phase error for '%s': %s", title, exc)
-
-            duration_ms = int((time.time() - step_start) * 1000)
-
-            if report_text:
-                # 写回 orc._all_findings 中对应 finding
-                finding["vulnerability_report"] = report_text
-                # 汇总到 state
-                state.finding_reports[title] = report_text
-                state.report_findings_processed += 1
-
-            state.step_records.append(
-                WorkflowStepRecord(
-                    phase=WorkflowPhase.REPORT,
-                    agent="report",
-                    injected_context={"title": title, "verdict": finding.get("verdict")},
-                    success=success,
-                    error=error_msg,
-                    findings_count=len(orc._all_findings),
-                    duration_ms=duration_ms,
-                )
+        else:
+            await self._run_sequential_report_phase(
+                state=state,
+                reportable=reportable,
+                project_info=project_info,
+                config=config,
             )
 
         await orc.emit_event(
@@ -1045,3 +1014,215 @@ class AuditWorkflowEngine:
             state.report_findings_processed,
             state.report_findings_total,
         )
+
+    def _create_report_worker_agent(self, worker_id: int) -> Any:
+        """为 Report 阶段创建独立 worker agent，避免会话状态互相污染。"""
+        base_agent = self.orchestrator.sub_agents["report"]
+        worker_agent = base_agent.__class__(
+            llm_service=base_agent.llm_service,
+            tools=base_agent.tools,
+            event_emitter=base_agent.event_emitter,
+        )
+
+        worker_agent.config = copy.deepcopy(base_agent.config)
+        if isinstance(worker_agent.config, dict):
+            worker_agent.config["name"] = f"{base_agent.name}_worker_{worker_id}"
+        else:
+            worker_agent.config.name = f"{base_agent.name}_worker_{worker_id}"
+
+        if hasattr(worker_agent, "configure_trace_logger"):
+            try:
+                worker_agent.configure_trace_logger(worker_agent.name)
+            except Exception as exc:
+                logger.warning(
+                    "[WorkflowEngine] Failed to configure trace logger for report worker %s: %s",
+                    worker_id,
+                    exc,
+                )
+
+        worker_agent.tracer = getattr(base_agent, "tracer", None)
+
+        if hasattr(worker_agent, "set_mcp_runtime"):
+            worker_agent.set_mcp_runtime(getattr(base_agent, "_mcp_runtime", None))
+        if hasattr(worker_agent, "set_write_scope_guard"):
+            worker_agent.set_write_scope_guard(getattr(base_agent, "_write_scope_guard", None))
+
+        cancel_callback = getattr(base_agent, "_cancel_callback", None)
+        if cancel_callback is not None and hasattr(worker_agent, "set_cancel_callback"):
+            worker_agent.set_cancel_callback(cancel_callback)
+
+        return worker_agent
+
+    async def _run_sequential_report_phase(
+        self,
+        state: WorkflowState,
+        reportable: List[Dict[str, Any]],
+        project_info: Dict[str, Any],
+        config: Dict[str, Any],
+    ) -> None:
+        for idx, finding in enumerate(reportable, start=1):
+            if self.orchestrator.is_cancelled:
+                break
+            await self._process_single_report(
+                state=state,
+                finding=finding,
+                index=idx,
+                total=len(reportable),
+                project_info=project_info,
+                config=config,
+                worker_id=None,
+                lock=None,
+            )
+
+    async def _run_parallel_report_phase(
+        self,
+        state: WorkflowState,
+        reportable: List[Dict[str, Any]],
+        project_info: Dict[str, Any],
+        config: Dict[str, Any],
+    ) -> None:
+        worker_count = max(1, self.workflow_config.report_max_workers)
+        work_queue: asyncio.Queue[tuple[int, Dict[str, Any]]] = asyncio.Queue()
+        lock = asyncio.Lock()
+
+        for idx, finding in enumerate(reportable, start=1):
+            work_queue.put_nowait((idx, finding))
+
+        async def _worker(worker_id: int) -> None:
+            while not self.orchestrator.is_cancelled:
+                try:
+                    index, finding = work_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+                try:
+                    await self._process_single_report(
+                        state=state,
+                        finding=finding,
+                        index=index,
+                        total=len(reportable),
+                        project_info=project_info,
+                        config=config,
+                        worker_id=worker_id,
+                        lock=lock,
+                    )
+                finally:
+                    work_queue.task_done()
+
+        worker_tasks = [
+            asyncio.create_task(_worker(worker_id), name=f"report_worker_{worker_id}")
+            for worker_id in range(worker_count)
+        ]
+
+        try:
+            results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+            for worker_id, result in enumerate(results):
+                if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                    logger.error(
+                        "[WorkflowEngine] Report worker %s failed: %s",
+                        worker_id,
+                        result,
+                        exc_info=result,
+                    )
+        except asyncio.CancelledError:
+            for task in worker_tasks:
+                task.cancel()
+            try:
+                await asyncio.shield(asyncio.gather(*worker_tasks, return_exceptions=True))
+            except asyncio.CancelledError:
+                pass
+            raise
+
+    async def _process_single_report(
+        self,
+        state: WorkflowState,
+        finding: Dict[str, Any],
+        index: int,
+        total: int,
+        project_info: Dict[str, Any],
+        config: Dict[str, Any],
+        worker_id: Optional[int],
+        lock: Optional[asyncio.Lock],
+    ) -> None:
+        orc = self.orchestrator
+        title = finding.get("title") or f"漏洞 #{index}"
+        worker_prefix = f"[Worker-{worker_id}] " if worker_id is not None else ""
+
+        await orc.emit_event(
+            "info",
+            f"📝 [Workflow] {worker_prefix}Report [{index}/{total}]：{title}",
+        )
+
+        step_start = time.time()
+        report_text = ""
+        success = False
+        error_msg = None
+
+        report_agent = self._create_report_worker_agent(worker_id or 0) if worker_id is not None else orc.sub_agents["report"]
+        if hasattr(report_agent, "reset_cancellation_state"):
+            report_agent.reset_cancellation_state()
+
+        try:
+            result = await report_agent.run(
+                {
+                    "finding": finding,
+                    "project_info": project_info,
+                    "config": config,
+                }
+            )
+            if result.success and result.data:
+                report_text = result.data.get("vulnerability_report") or ""
+                success = bool(report_text)
+            else:
+                error_msg = result.error or "Report Agent 返回空结果"
+                logger.warning("[WorkflowEngine] Report failed for '%s': %s", title, error_msg)
+
+            if lock is not None:
+                async with lock:
+                    self.orchestrator._tool_calls += int(getattr(result, "tool_calls", 0) or 0)
+                    self.orchestrator._total_tokens += int(getattr(result, "tokens_used", 0) or 0)
+                    self.orchestrator._iteration += int(getattr(result, "iterations", 0) or 0)
+                    state.total_iterations += int(getattr(result, "iterations", 0) or 0)
+                    state.total_tokens += int(getattr(result, "tokens_used", 0) or 0)
+                    state.tool_calls += int(getattr(result, "tool_calls", 0) or 0)
+            else:
+                self.orchestrator._tool_calls += int(getattr(result, "tool_calls", 0) or 0)
+                self.orchestrator._total_tokens += int(getattr(result, "tokens_used", 0) or 0)
+                self.orchestrator._iteration += int(getattr(result, "iterations", 0) or 0)
+                state.total_iterations += int(getattr(result, "iterations", 0) or 0)
+                state.total_tokens += int(getattr(result, "tokens_used", 0) or 0)
+                state.tool_calls += int(getattr(result, "tool_calls", 0) or 0)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            error_msg = str(exc)
+            logger.exception("[WorkflowEngine] Report phase error for '%s': %s", title, exc)
+        finally:
+            if worker_id is not None and hasattr(report_agent, "reset_session_memory"):
+                report_agent.reset_session_memory()
+
+        duration_ms = int((time.time() - step_start) * 1000)
+
+        async def _update_state() -> None:
+            if report_text:
+                finding["vulnerability_report"] = report_text
+                state.finding_reports[title] = report_text
+                state.report_findings_processed += 1
+
+            state.step_records.append(
+                WorkflowStepRecord(
+                    phase=WorkflowPhase.REPORT,
+                    agent=f"report_worker_{worker_id}" if worker_id is not None else "report",
+                    injected_context={"title": title, "verdict": finding.get("verdict")},
+                    success=success,
+                    error=error_msg,
+                    findings_count=len(orc._all_findings),
+                    duration_ms=duration_ms,
+                )
+            )
+
+        if lock is not None:
+            async with lock:
+                await _update_state()
+        else:
+            await _update_state()

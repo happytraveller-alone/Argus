@@ -3080,8 +3080,10 @@ async def _execute_agent_task(task_id: str):
             workflow_config = WorkflowConfig(
                 enable_parallel_analysis=settings.ENABLE_PARALLEL_ANALYSIS,
                 enable_parallel_verification=settings.ENABLE_PARALLEL_VERIFICATION,
+                enable_parallel_report=settings.ENABLE_PARALLEL_REPORT,
                 analysis_max_workers=settings.ANALYSIS_MAX_WORKERS,
                 verification_max_workers=settings.VERIFICATION_MAX_WORKERS,
+                report_max_workers=settings.REPORT_MAX_WORKERS,
             )
 
             # 创建 Orchestrator Agent（使用确定性 Workflow 版本，注入两个队列服务）

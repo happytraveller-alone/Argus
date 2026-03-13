@@ -18,8 +18,10 @@ class WorkflowConfig:
     """
     enable_parallel_analysis: bool = True
     enable_parallel_verification: bool = True
+    enable_parallel_report: bool = True
     analysis_max_workers: int = 3
     verification_max_workers: int = 3
+    report_max_workers: int = 3
     bl_analysis_max_workers: int = 3
 
     @property
@@ -31,6 +33,11 @@ class WorkflowConfig:
     def should_parallelize_verification(self) -> bool:
         """是否应该并行化 Verification（workers > 1 且启用）"""
         return self.enable_parallel_verification and self.verification_max_workers > 1
+
+    @property
+    def should_parallelize_report(self) -> bool:
+        """是否应该并行化 Report（workers > 1 且启用）"""
+        return self.enable_parallel_report and self.report_max_workers > 1
 
     @property
     def should_parallelize_bl_analysis(self) -> bool:
