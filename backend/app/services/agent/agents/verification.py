@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import hashlib
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -41,6 +42,8 @@ from ..utils.vulnerability_naming import (
 )
 
 logger = logging.getLogger(__name__)
+
+_TRACE_HANDLER_LOCK = threading.Lock()
 
 _PSEUDO_FUNCTION_NAMES = {"__attribute__", "__declspec"}
 _CONTROL_KEYWORDS = {"if", "for", "while", "switch", "catch", "else", "return"}
@@ -522,6 +525,74 @@ class VerificationAgent(BaseAgent):
         
         self._conversation_history: List[Dict[str, str]] = []
         self._steps: List[VerificationStep] = []
+        self._trace_logger, self._trace_log_path = self._build_trace_logger(self.name, None)
+        self._trace("verification_agent_initialized", tool_count=len(tools or {}))
+
+    @staticmethod
+    def _sanitize_logger_identity(agent_name: str) -> str:
+        raw = str(agent_name or "verification").strip().lower()
+        safe = re.sub(r"[^a-z0-9._-]+", "_", raw)
+        return safe or "verification"
+
+    @staticmethod
+    def _resolve_trace_log_path(agent_name: str, task_id: Optional[str] = None) -> str:
+        safe = VerificationAgent._sanitize_logger_identity(agent_name)
+        safe_task = VerificationAgent._sanitize_logger_identity(task_id or "no_task")
+        log_dir = Path(__file__).resolve().parents[4] / "log" / "verification" / safe_task
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return str(log_dir / f"{safe}.log")
+
+    @classmethod
+    def _build_trace_logger(cls, agent_name: str, task_id: Optional[str] = None) -> tuple[logging.Logger, str]:
+        safe = cls._sanitize_logger_identity(agent_name)
+        safe_task = cls._sanitize_logger_identity(task_id or "no_task")
+        trace_logger_name = f"{__name__}.trace.{safe_task}.{safe}"
+        trace_logger = logging.getLogger(trace_logger_name)
+        trace_logger.setLevel(logging.INFO)
+        trace_logger.propagate = False
+
+        target_file = cls._resolve_trace_log_path(agent_name, task_id)
+        with _TRACE_HANDLER_LOCK:
+            has_handler = False
+            for handler in trace_logger.handlers:
+                if isinstance(handler, logging.FileHandler) and getattr(handler, "baseFilename", "") == target_file:
+                    has_handler = True
+                    break
+            if not has_handler:
+                file_handler = logging.FileHandler(target_file, encoding="utf-8")
+                file_handler.setLevel(logging.INFO)
+                file_handler.setFormatter(
+                    logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+                )
+                trace_logger.addHandler(file_handler)
+        return trace_logger, target_file
+
+    def configure_trace_logger(self, identity: Optional[str] = None, task_id: Optional[str] = None) -> str:
+        """根据运行时身份重建 trace logger，确保并发 worker 各自落盘。"""
+        final_identity = str(identity or self.name or "verification").strip() or "verification"
+        final_task_id = str(task_id or getattr(self, "_task_id", "") or "").strip() or None
+        self._task_id = final_task_id
+        self._trace_logger, self._trace_log_path = self._build_trace_logger(final_identity, final_task_id)
+        self._trace(
+            "trace_logger_configured",
+            logger_identity=final_identity,
+            task_id=final_task_id or "no_task",
+        )
+        return self._trace_log_path
+
+    def _trace(self, message: str, **fields: Any) -> None:
+        if not hasattr(self, "_trace_logger") or self._trace_logger is None:
+            return
+        details = []
+        for key, value in fields.items():
+            if value is None:
+                continue
+            text = str(value)
+            if len(text) > 400:
+                text = text[:400] + "..."
+            details.append(f"{key}={text}")
+        suffix = f" | {'; '.join(details)}" if details else ""
+        self._trace_logger.info(f"[{self.name}] {message}{suffix}")
 
 
 
@@ -543,6 +614,13 @@ class VerificationAgent(BaseAgent):
 
         if step.action and not step.action_input:
             logger.warning(f"[Verification] Action '{step.action}' found but Action Input is empty")
+
+        self._trace(
+            "llm_response_parsed",
+            is_final=step.is_final,
+            action=step.action,
+            thought_len=len(step.thought or ""),
+        )
 
         if step.is_final and isinstance(step.final_answer, dict) and "findings" in step.final_answer:
             step.final_answer["findings"] = [
@@ -2046,6 +2124,7 @@ class VerificationAgent(BaseAgent):
         """
         import time
         start_time = time.time()
+        self._trace("run_started", has_input=bool(input_data))
 
         previous_results = input_data.get("previous_results", {})
         config = input_data.get("config", {})
@@ -2091,6 +2170,12 @@ class VerificationAgent(BaseAgent):
         if queue_finding_from_context and isinstance(queue_finding_from_context, dict):
             findings_to_verify = [queue_finding_from_context]
             logger.info(f"[Verification] 🎯 从队列获取单个漏洞进行验证: {queue_finding_from_context.get('title', 'N/A')}")
+            self._trace(
+                "queue_finding_loaded",
+                title=queue_finding_from_context.get("title"),
+                file_path=queue_finding_from_context.get("file_path"),
+                line_start=queue_finding_from_context.get("line_start"),
+            )
 
         if self._incoming_handoff and self._incoming_handoff.key_findings and not findings_to_verify:
             findings_to_verify = self._incoming_handoff.key_findings.copy()
@@ -2153,6 +2238,7 @@ class VerificationAgent(BaseAgent):
                 await self.emit_event("warning", "无法从结构化数据获取发现列表，将基于任务描述进行验证")
 
         findings_to_verify = self._deduplicate(findings_to_verify)
+        self._trace("findings_collected", count=len(findings_to_verify))
 
         def has_valid_file_path(finding: Dict) -> bool:
             file_path = finding.get("file_path", "")
@@ -2197,6 +2283,7 @@ class VerificationAgent(BaseAgent):
             max_attempts_per_item=max_attempts_per_item,
             project_root=project_root,
         )
+        self._trace("todo_initialized", todo_count=len(todo_items), project_root=project_root)
         await self._emit_verification_todo_update(
             todo_items,
             f"初始化验证 TODO：共 {len(todo_items)} 条候选",
@@ -2341,6 +2428,12 @@ class VerificationAgent(BaseAgent):
         run_iteration_count = 0
 
         await self.emit_thinking("🔐 Verification Agent 启动，LLM 开始自主验证漏洞...")
+        self._trace(
+            "react_loop_started",
+            max_iterations=self.config.max_iterations,
+            tool_whitelist=",".join(sorted(self.tools.keys())) if isinstance(self.tools, dict) else "",
+            trace_log_path=self._trace_log_path,
+        )
 
         try:
             for iteration in range(self.config.max_iterations):
@@ -2349,6 +2442,7 @@ class VerificationAgent(BaseAgent):
 
                 self._iteration = iteration + 1
                 run_iteration_count = self._iteration
+                self._trace("iteration_started", iteration=self._iteration)
                 if self.is_cancelled:
                     await self.emit_thinking("🛑 任务已取消，停止执行")
                     break
@@ -2363,6 +2457,13 @@ class VerificationAgent(BaseAgent):
                     break
 
                 self._total_tokens += tokens_this_round
+                self._trace(
+                    "llm_round_completed",
+                    iteration=self._iteration,
+                    tokens_this_round=tokens_this_round,
+                    total_tokens=self._total_tokens,
+                    output_chars=len(llm_output or ""),
+                )
 
                 if not llm_output or not llm_output.strip():
                     logger.warning(f"[{self.name}] Empty LLM response in iteration {self._iteration}")
@@ -2436,6 +2537,12 @@ class VerificationAgent(BaseAgent):
 
                 if step.action:
                     await self.emit_llm_action(step.action, step.action_input or {})
+                    self._trace(
+                        "tool_dispatch",
+                        iteration=self._iteration,
+                        tool=step.action,
+                        action_input=json.dumps(step.action_input or {}, ensure_ascii=False)[:500],
+                    )
                     tool_call_key = f"{step.action}:{json.dumps(step.action_input or {}, sort_keys=True)}"
 
                     if not hasattr(self, "_tool_call_counts"):
@@ -2481,6 +2588,12 @@ class VerificationAgent(BaseAgent):
                     )
 
                     if is_tool_error:
+                        self._trace(
+                            "tool_result_error",
+                            iteration=self._iteration,
+                            tool=step.action,
+                            observation_preview=self._shorten_observation(observation, max_chars=500),
+                        )
                         self._tool_last_error[tool_call_key] = observation
                         self._failed_tool_calls[tool_call_key] = self._failed_tool_calls.get(tool_call_key, 0) + 1
                         fail_count = self._failed_tool_calls[tool_call_key]
@@ -2504,6 +2617,12 @@ class VerificationAgent(BaseAgent):
                             observation += "4. 继续当前漏洞验证，不要直接结束整个验证流程"
                             self._failed_tool_calls[tool_call_key] = 0
                     else:
+                        self._trace(
+                            "tool_result_ok",
+                            iteration=self._iteration,
+                            tool=step.action,
+                            observation_preview=self._shorten_observation(observation, max_chars=500),
+                        )
                         if tool_call_key in self._failed_tool_calls:
                             del self._failed_tool_calls[tool_call_key]
                         if tool_call_key in self._tool_last_error:
@@ -2804,6 +2923,16 @@ class VerificationAgent(BaseAgent):
             confirmed_count = len([item for item in verified_findings if item.get("verdict") == "confirmed"])
             likely_count = len([item for item in verified_findings if item.get("verdict") == "likely"])
             false_positive_count = len([item for item in verified_findings if item.get("verdict") == "false_positive"])
+            self._trace(
+                "run_completed",
+                findings=len(verified_findings),
+                confirmed=confirmed_count,
+                likely=likely_count,
+                false_positive=false_positive_count,
+                duration_ms=duration_ms,
+                tool_calls=self._tool_calls,
+                iterations=self._iteration,
+            )
             todo_summary = self._build_verification_todo_summary(todo_items)
             await self._emit_verification_todo_update(
                 todo_items,
@@ -2876,6 +3005,7 @@ class VerificationAgent(BaseAgent):
             )
 
         except Exception as e:
+            self._trace("run_failed", error=str(e))
             logger.error(f"Verification Agent failed: {e}", exc_info=True)
             return AgentResult(success=False, error=str(e))
     

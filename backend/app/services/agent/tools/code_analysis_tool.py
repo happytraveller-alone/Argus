@@ -60,11 +60,11 @@ class CodeAnalysisTool(AgentTool):
 - 生成详细的漏洞报告和修复建议
 
 输入:
-- code: 要分析的代码
-- file_path: 文件路径
-- language: 编程语言
-- focus: 可选，重点关注的漏洞类型
-- context: 可选，额外的上下文代码
+- code: 必填，待分析代码片段（建议最小化到与风险相关的函数或片段）
+- file_path: 选填，文件路径，用于结果标识
+- language: 选填，语言标记（如 c/python/javascript）
+- focus: 选填，重点关注的漏洞类型（如 sql_injection、xss、command_injection）
+- context: 选填，补充上下文（调用链、上游输入、下游危险操作等）
 
 这个工具会消耗较多的 Token，建议在确认有疑似问题后使用。"""
     

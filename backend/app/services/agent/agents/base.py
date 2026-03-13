@@ -25,6 +25,8 @@ import re
 import uuid
 import copy
 import ast
+import threading
+from pathlib import Path
 
 from ..core.state import AgentState, AgentStatus
 from ..core.registry import agent_registry
@@ -40,6 +42,8 @@ from ..utils.vulnerability_naming import (
 from ..skills.scan_core import SCAN_CORE_LOCAL_SKILL_IDS
 
 logger = logging.getLogger(__name__)
+
+_AGENT_TRACE_HANDLER_LOCK = threading.Lock()
 
 MAX_EVENT_PAYLOAD_CHARS = 120000
 
@@ -414,6 +418,7 @@ class BaseAgent(ABC):
         self._total_tokens = 0
         self._tool_calls = 0
         self._cancelled = False
+        self._task_id: Optional[str] = None
 
         # 获取超时配置
         self._timeout_config = self._get_timeout_config()
@@ -458,10 +463,95 @@ class BaseAgent(ABC):
         
         # 🔥 是否已注册到注册表
         self._registered = False
+
+        self._trace_logger: Optional[logging.Logger] = None
+        self._trace_log_path: Optional[str] = None
+        self.configure_trace_logger(identity=self.name, task_id=None)
+        self._trace("agent_initialized", agent_type=self.config.agent_type.value)
         
         # 🔥 加载知识模块到系统提示词
         if self.knowledge_modules:
             self._load_knowledge_modules()
+
+    @staticmethod
+    def _sanitize_log_token(value: Optional[str], default: str) -> str:
+        raw = str(value or "").strip().lower()
+        safe = re.sub(r"[^a-z0-9._-]+", "_", raw)
+        return safe or default
+
+    @classmethod
+    def _resolve_task_log_dir(cls, task_id: Optional[str]) -> Path:
+        safe_task_id = cls._sanitize_log_token(task_id, "no_task")
+        log_dir = Path(__file__).resolve().parents[4] / "log" / "agent_runs" / safe_task_id
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir
+
+    @classmethod
+    def _resolve_trace_log_path(cls, identity: str, task_id: Optional[str]) -> str:
+        safe_identity = cls._sanitize_log_token(identity, "agent")
+        log_dir = cls._resolve_task_log_dir(task_id)
+        return str(log_dir / f"{safe_identity}.log")
+
+    @classmethod
+    def _build_trace_logger(cls, identity: str, task_id: Optional[str]) -> tuple[logging.Logger, str]:
+        safe_identity = cls._sanitize_log_token(identity, "agent")
+        safe_task = cls._sanitize_log_token(task_id, "no_task")
+        logger_name = f"{__name__}.trace.{safe_task}.{safe_identity}"
+        trace_logger = logging.getLogger(logger_name)
+        trace_logger.setLevel(logging.INFO)
+        trace_logger.propagate = False
+        target_file = cls._resolve_trace_log_path(identity, task_id)
+
+        with _AGENT_TRACE_HANDLER_LOCK:
+            has_handler = False
+            for handler in trace_logger.handlers:
+                if isinstance(handler, logging.FileHandler) and getattr(handler, "baseFilename", "") == target_file:
+                    has_handler = True
+                    break
+            if not has_handler:
+                file_handler = logging.FileHandler(target_file, encoding="utf-8")
+                file_handler.setLevel(logging.INFO)
+                file_handler.setFormatter(
+                    logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+                )
+                trace_logger.addHandler(file_handler)
+
+        return trace_logger, target_file
+
+    def configure_trace_logger(
+        self,
+        identity: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> str:
+        """配置当前 Agent 的 trace 日志输出目录，按 task_id 归档。"""
+        final_identity = str(identity or self.name or "agent").strip() or "agent"
+        final_task_id = str(task_id or self._task_id or "").strip() or None
+        self._task_id = final_task_id
+        trace_logger, trace_path = self._build_trace_logger(final_identity, final_task_id)
+        self._trace_logger = trace_logger
+        self._trace_log_path = trace_path
+        self._trace(
+            "trace_logger_configured",
+            identity=final_identity,
+            task_id=final_task_id or "no_task",
+            trace_log_path=trace_path,
+        )
+        return trace_path
+
+    def _trace(self, message: str, **fields: Any) -> None:
+        trace_logger = getattr(self, "_trace_logger", None)
+        if trace_logger is None:
+            return
+        details: List[str] = []
+        for key, value in fields.items():
+            if value is None:
+                continue
+            text = str(value)
+            if len(text) > 500:
+                text = text[:500] + "..."
+            details.append(f"{key}={text}")
+        suffix = f" | {'; '.join(details)}" if details else ""
+        trace_logger.info(f"[{self.name}] {message}{suffix}")
     
     def _register_to_registry(self, task: Optional[str] = None) -> None:
         """注册到Agent注册表（延迟注册，在run时调用）"""
@@ -1035,6 +1125,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_start(self, iteration: int):
         """发射 LLM 开始思考事件"""
+        self._trace("llm_start", iteration=iteration)
         await self.emit_event(
             "llm_start",
             f"[{self.name}] 第 {iteration} 轮迭代开始",
@@ -1043,6 +1134,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_thought(self, thought: str, iteration: int):
         """发射 LLM 思考内容事件 - 这是核心！展示 LLM 在想什么"""
+        self._trace("llm_thought", iteration=iteration, thought_preview=(str(thought or "")[:300]))
         thought_text = str(thought or "").strip()
         if thought_text:
             self._recent_thought_texts.append(thought_text)
@@ -1112,6 +1204,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_decision(self, decision: str, reason: str = ""):
         """发射 LLM 决策事件 - 展示 LLM 做了什么决定"""
+        self._trace("llm_decision", decision=decision, reason=(reason or "")[:300])
         await self.emit_event(
             "llm_decision",
             f"[{self.name}] 决策: {decision}" + (f" ({reason})" if reason else ""),
@@ -1123,6 +1216,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_complete(self, result_summary: str, tokens_used: int):
         """发射 LLM 完成事件"""
+        self._trace("llm_complete", result_summary=(result_summary or "")[:300], tokens_used=tokens_used)
         await self.emit_event(
             "llm_complete",
             f"[{self.name}] 完成: {result_summary} (消耗 {tokens_used} tokens)",
@@ -1133,6 +1227,11 @@ class BaseAgent(ABC):
     
     async def emit_llm_action(self, action: str, action_input: Dict):
         """发射 LLM 动作决策事件"""
+        self._trace(
+            "llm_action",
+            action=action,
+            action_input=json.dumps(action_input or {}, ensure_ascii=False)[:500],
+        )
         await self.emit_event(
             "llm_action",
             f"[{self.name}] 执行动作: {action}",
@@ -1144,6 +1243,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_observation(self, observation: str):
         """发射 LLM 观察事件"""
+        self._trace("llm_observation", observation_preview=(str(observation or "")[:500]))
         obs_text = observation or ""
 
         # If the observation mostly repeats the latest tool_result output, avoid logging it twice.
@@ -1189,6 +1289,13 @@ class BaseAgent(ABC):
         extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射工具调用事件"""
+        self._trace(
+            "tool_call",
+            tool_name=tool_name,
+            tool_input=json.dumps(tool_input or {}, ensure_ascii=False)[:500],
+            tool_call_id=tool_call_id,
+            alias_used=alias_used,
+        )
         metadata: Dict[str, Any] = {}
         if tool_call_id:
             metadata["tool_call_id"] = tool_call_id
@@ -1229,6 +1336,14 @@ class BaseAgent(ABC):
         extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射工具结果事件"""
+        self._trace(
+            "tool_result",
+            tool_name=tool_name,
+            duration_ms=duration_ms,
+            tool_status=tool_status,
+            tool_call_id=tool_call_id,
+            result_preview=(str(result or "")[:500]),
+        )
         # 🔥 修复：确保 result 不为 None，避免显示 "None" 字符串
         safe_result = result if result and result != "None" else ""
         stored_result, truncated = _truncate_with_flag(safe_result)
@@ -1661,6 +1776,7 @@ class BaseAgent(ABC):
             "max_chunk_gap_ms": 0.0,
             "usage_source": "none",
         }
+        self._trace("llm_stream_started", message_count=len(messages or []))
 
         # 🔥 在开始 LLM 调用前检查取消
         if self.is_cancelled:
@@ -1845,6 +1961,13 @@ class BaseAgent(ABC):
             accumulated = f"[LLM调用错误: {str(e)}] 请重试。"
         finally:
             await self.emit_thinking_end(accumulated)
+            self._trace(
+                "llm_stream_finished",
+                chunk_count=chunk_count,
+                total_tokens=total_tokens,
+                finish_reason=self._last_llm_stream_meta.get("finish_reason"),
+                empty_reason=self._last_llm_stream_meta.get("empty_reason"),
+            )
         
         # 🔥 记录空响应警告，帮助调试
         if not accumulated or not accumulated.strip():

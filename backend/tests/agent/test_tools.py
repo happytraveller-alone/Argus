@@ -93,6 +93,40 @@ class TestFileTools:
         assert "config/settings.py" in str(result.data)
 
     @pytest.mark.asyncio
+    async def test_file_search_tool_single_file_mode_with_file_path(self, temp_project_dir):
+        """测试文件搜索工具 - 支持 file_path 单文件搜索"""
+        tool = FileSearchTool(temp_project_dir)
+
+        result = await tool.execute(
+            keyword="cursor.execute",
+            file_path="src/sql_vuln.py",
+        )
+
+        assert result.success is True
+        assert result.metadata.get("single_file_mode") is True
+        assert result.metadata.get("target_file") == "src/sql_vuln.py"
+        assert result.metadata.get("files_searched") == 1
+        assert result.metadata.get("normalized_file_patterns") == ["sql_vuln.py"]
+        assert "src/sql_vuln.py" in str(result.data)
+
+    @pytest.mark.asyncio
+    async def test_file_search_tool_infers_single_file_from_path_like_file_pattern(self, temp_project_dir):
+        """测试文件搜索工具 - file_pattern=src/foo.py 自动转单文件模式"""
+        tool = FileSearchTool(temp_project_dir)
+
+        result = await tool.execute(
+            keyword="cursor.execute",
+            file_pattern="src/sql_vuln.py",
+        )
+
+        assert result.success is True
+        assert result.metadata.get("single_file_mode") is True
+        assert result.metadata.get("target_file") == "src/sql_vuln.py"
+        assert result.metadata.get("files_searched") == 1
+        assert result.metadata.get("normalized_file_patterns") == ["sql_vuln.py"]
+        assert "src/sql_vuln.py" in str(result.data)
+
+    @pytest.mark.asyncio
     async def test_file_search_tool_engine_fallback_to_python(self, temp_project_dir):
         """测试文件搜索工具 - rg/grep 不可用时回退 Python 引擎"""
         tool = FileSearchTool(temp_project_dir)

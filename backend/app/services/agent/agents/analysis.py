@@ -592,10 +592,8 @@ class AnalysisAgent(BaseAgent):
         self,
         *,
         action: str,
-        action_input: Dict[str, Any],
-        risk_file_path: str,
     ) -> Optional[str]:
-        """判断 Action 是否越界到单风险点范围之外。返回原因字符串表示越界。"""
+        """检查 Action 是否触发单风险模式下的硬拦截规则。"""
         action_name = str(action or "").strip()
         if not action_name:
             return "Action 为空"
@@ -612,29 +610,6 @@ class AnalysisAgent(BaseAgent):
         }
         if action_name in blocked_actions:
             return f"单风险点模式禁止调用全局扫描工具: {action_name}"
-
-        # 文件查看类工具允许在项目范围内跨文件查看，具体路径边界交由底层工具守卫。
-        if action_name in {"read_file", "list_files"}:
-            return None
-
-        target_keys = [
-            "file_path",
-            "scan_file",
-            "target_file",
-            "path",
-            "target_path",
-            "target",
-            "directory",
-        ]
-        allowed = str(risk_file_path or "").strip()
-        for key in target_keys:
-            value = action_input.get(key)
-            if isinstance(value, str) and value.strip():
-                candidate = value.strip()
-                if candidate in {".", "./", "*", "./*"}:
-                    return f"参数 {key}={candidate} 超出单风险点文件范围"
-                if candidate != allowed:
-                    return f"参数 {key}={candidate} 与目标文件 {allowed} 不一致"
 
         return None
 
@@ -844,11 +819,9 @@ class AnalysisAgent(BaseAgent):
 - 风险点: {json.dumps(single_risk_point, ensure_ascii=False) if single_risk_point else "未提供"}
 
 ## ⚠️ 分析策略要求
-1. **首先**：只分析给定风险点所在文件与附近代码（前后至少20行）
-2. **然后**：仅在同一文件内做数据流/调用上下文扩展
-3. **最后**：给出该风险点是否成立的结论，禁止扩展到全局扫描
-
-**禁止**：不要跨文件、不要全局扫描、不要改为分析其他风险点
+1. **首先**：优先分析给定风险点所在文件与附近代码（前后至少20行）
+2. **然后**：按证据需要扩展到相关调用链与数据流
+3. **最后**：给出该风险点是否成立的结论，避免无关的全仓库扫描
 
 ## 目标漏洞类型
 {config.get('target_vulnerabilities', ['all'])}
@@ -1207,13 +1180,11 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                     if single_risk_mode and single_risk_file:
                         out_of_scope_reason = self._is_action_out_of_single_scope(
                             action=step.action,
-                            action_input=action_input,
-                            risk_file_path=single_risk_file,
                         )
                         if out_of_scope_reason:
                             scoped_observation = (
-                                f"⚠️ 单风险点范围约束：{out_of_scope_reason}。\n"
-                                f"请仅分析文件 {single_risk_file}，并优先使用 read_file/search_code/dataflow_analysis。"
+                                f"⚠️ 单风险点模式工具限制：{out_of_scope_reason}。\n"
+                                "请改用 read_file/search_code/dataflow_analysis 等非全局扫描工具继续分析。"
                             )
                             step.observation = scoped_observation
                             await self.emit_llm_observation(scoped_observation)

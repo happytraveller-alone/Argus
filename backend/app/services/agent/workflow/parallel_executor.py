@@ -88,6 +88,16 @@ class ParallelPhaseExecutor:
         else:
             # 如果 config 是对象，尝试设置属性
             worker_agent.config.name = f"{base_agent.name}_worker_{worker_id}"
+
+        if hasattr(worker_agent, "configure_trace_logger"):
+            try:
+                worker_agent.configure_trace_logger(worker_agent.name)
+            except Exception as exc:
+                logger.warning(
+                    "[ParallelExecutor] Failed to configure trace logger for worker %s: %s",
+                    worker_id,
+                    exc,
+                )
         worker_agent.tracer = getattr(base_agent, "tracer", None)
 
         if hasattr(worker_agent, "set_mcp_runtime"):
@@ -129,6 +139,9 @@ class ParallelPhaseExecutor:
         task_description = str(params.get("task", "") or "")
         context = str(params.get("context", "") or "")
         runtime_context = getattr(self.orchestrator, "_runtime_context", {})
+        task_id = params.get("task_id") or (
+            runtime_context.get("task_id") if isinstance(runtime_context, dict) else None
+        )
         project_info = (
             dict(runtime_context.get("project_info", {}))
             if isinstance(runtime_context, dict)
@@ -198,6 +211,7 @@ class ParallelPhaseExecutor:
             "task_context": context,
             "project_info": project_info,
             "config": runtime_config,
+            "task_id": task_id,
             "project_root": (
                 runtime_context.get("project_root", ".")
                 if isinstance(runtime_context, dict)
@@ -462,6 +476,7 @@ class ParallelPhaseExecutor:
                     "task": f"针对风险点 {fp_repr} 进行深度代码审计",
                     "risk_point": risk_point,
                     "context": json.dumps(risk_point, ensure_ascii=False),
+                    "task_id": task_id,
                 }
 
                 # 严格隔离：每个风险点创建全新 agent 实例，避免跨任务上下文/缓存复用。
@@ -542,6 +557,16 @@ class ParallelPhaseExecutor:
             params: 调度参数
         """
         agent_input = self._build_worker_input(params)
+
+        if hasattr(worker_agent, "configure_trace_logger"):
+            try:
+                worker_agent.configure_trace_logger(worker_agent.name, agent_input.get("task_id"))
+            except Exception as exc:
+                logger.warning(
+                    "[ParallelExecutor] Failed to bind task trace logger for %s: %s",
+                    worker_agent.name,
+                    exc,
+                )
 
         if hasattr(worker_agent, "reset_cancellation_state"):
             worker_agent.reset_cancellation_state()
@@ -714,6 +739,7 @@ class ParallelPhaseExecutor:
                     "task": f"验证漏洞：{title_repr}",
                     "finding": finding,
                     "context": json.dumps(finding, ensure_ascii=False),
+                    "task_id": task_id,
                 }
 
                 # 严格隔离：每个漏洞创建全新 agent 实例，避免跨任务上下文/缓存复用。
@@ -814,6 +840,7 @@ class ParallelPhaseExecutor:
                 "task": f"针对风险点 {fp_repr} 进行深度代码审计",
                 "risk_point": risk_point,
                 "context": json.dumps(risk_point, ensure_ascii=False),
+                "task_id": task_id,
             }
 
             orc._last_recon_risk_point = risk_point
@@ -903,6 +930,7 @@ class ParallelPhaseExecutor:
                 "task": f"验证漏洞：{title_repr}",
                 "finding": finding,
                 "context": json.dumps(finding, ensure_ascii=False),
+                "task_id": task_id,
             }
 
             try:
@@ -1041,6 +1069,7 @@ class ParallelPhaseExecutor:
                     "task": f"深度分析业务逻辑风险点 {fp_repr}",
                     "risk_point": risk_point,
                     "context": json.dumps(risk_point, ensure_ascii=False),
+                    "task_id": task_id,
                 }
 
                 # 严格隔离：每个业务逻辑风险点创建全新 agent 实例。
@@ -1134,6 +1163,7 @@ class ParallelPhaseExecutor:
                 "agent": "business_logic_analysis",
                 "task": f"深度分析业务逻辑风险点 {fp_repr}",
                 "risk_point": risk_point,
+                "task_id": task_id,
                 "context": json.dumps(risk_point, ensure_ascii=False),
             }
 

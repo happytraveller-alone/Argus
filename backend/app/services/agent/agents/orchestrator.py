@@ -525,6 +525,11 @@ class OrchestratorAgent(BaseAgent):
             "project_root": input_data.get("project_root", project_info.get("root", ".")),
             "task_id": input_data.get("task_id"),
         }
+        if hasattr(self, "configure_trace_logger"):
+            try:
+                self.configure_trace_logger(self.name, self._runtime_context.get("task_id"))
+            except Exception as exc:
+                logger.warning("[%s] configure_trace_logger failed: %s", self.name, exc)
 
         # 初始化状态
         self._steps = []
@@ -1255,6 +1260,15 @@ Action Input: {{}}
         # 🔥 设置父 Agent ID 并注册到注册表（动态 Agent 树）
         logger.debug(f"[Orchestrator] 准备调度 {agent_name} Agent, agent._registered={agent._registered}")
         agent.set_parent_id(self._agent_id)
+        if hasattr(agent, "configure_trace_logger"):
+            try:
+                agent.configure_trace_logger(agent.name, self._runtime_context.get("task_id"))
+            except Exception as exc:
+                logger.warning(
+                    "[Orchestrator] configure_trace_logger failed for %s: %s",
+                    agent_name,
+                    exc,
+                )
         logger.debug(f"[Orchestrator] 设置 parent_id 完成，准备注册 {agent_name}")
         agent._register_to_registry(task=task)
         logger.debug(f"[Orchestrator] {agent_name} 注册完成，agent._registered={agent._registered}")
@@ -1366,6 +1380,7 @@ Action Input: {{}}
                 "project_info": project_info,
                 "config": runtime_config,
                 "project_root": self._runtime_context.get("project_root", "."),
+                "task_id": self._runtime_context.get("task_id"),
                 "previous_results": previous_results,
                 "handoff": handoff.to_dict() if handoff else None,  # 🔥 传递 TaskHandoff
                 "file_planning": file_planning_payload,

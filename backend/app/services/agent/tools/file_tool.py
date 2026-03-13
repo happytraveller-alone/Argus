@@ -541,11 +541,22 @@ class FileReadTool(AgentTool):
 class FileSearchInput(BaseModel):
     """文件搜索输入"""
     keyword: str = Field(description="搜索关键字或正则表达式")
+    file_path: Optional[str] = Field(default=None, description="可选，限定搜索到单个文件（相对项目根目录）")
+    path: Optional[str] = Field(default=None, description="兼容字段：可选，限定搜索到单个文件")
     file_pattern: Optional[str] = Field(default=None, description="文件名模式，如 *.py, *.js")
     directory: Optional[str] = Field(default=None, description="搜索目录（相对路径）")
     case_sensitive: bool = Field(default=False, description="是否区分大小写")
     max_results: int = Field(default=50, description="最大结果数")
     is_regex: bool = Field(default=False, description="是否使用正则表达式")
+
+    @model_validator(mode="after")
+    def normalize_single_file_alias(self) -> "FileSearchInput":
+        if str(self.file_path or "").strip():
+            return self
+        alias = str(self.path or "").strip()
+        if alias:
+            self.file_path = alias
+        return self
 
 
 class FileSearchTool(AgentTool):
@@ -702,6 +713,57 @@ class FileSearchTool(AgentTool):
             "lines": structured_lines,
             "command_chain": command_chain,
         }
+
+    def _resolve_single_file_target(self, raw_path: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        requested = str(raw_path or "").strip()
+        parsed_path, _start, _end = _parse_file_path_with_line_range(requested)
+        candidate = parsed_path or requested
+        if not candidate:
+            return None, None, "必须提供 file_path"
+
+        if os.path.isabs(candidate):
+            full_path = os.path.normpath(candidate)
+            if not self._is_path_within_root(full_path, self.project_root):
+                return None, None, "安全错误：不允许搜索项目目录外的内容"
+            relative_path = _normalize_rel_path(
+                os.path.relpath(full_path, self.project_root).replace("\\", "/")
+            )
+        else:
+            relative_path = _normalize_rel_path(candidate)
+            full_path = os.path.normpath(os.path.join(self.project_root, relative_path))
+            if not self._is_path_within_root(full_path, self.project_root):
+                return None, None, "安全错误：不允许搜索项目目录外的内容"
+
+        if not relative_path:
+            return None, None, "必须提供 file_path"
+        if _has_hidden_or_test_segment(relative_path):
+            return None, None, f"文件被排除: {relative_path}"
+        if not os.path.exists(full_path):
+            return None, None, f"文件不存在: {relative_path}"
+        if not os.path.isfile(full_path):
+            return None, None, f"不是文件: {relative_path}"
+        if self.target_files and relative_path not in self.target_files:
+            return None, None, f"文件不在目标范围内: {relative_path}"
+
+        filename = os.path.basename(relative_path)
+        for excl_pattern in self.exclude_patterns:
+            if fnmatch.fnmatch(relative_path, excl_pattern) or fnmatch.fnmatch(filename, excl_pattern):
+                return None, None, f"文件被排除: {relative_path}"
+
+        return relative_path, full_path, None
+
+    @staticmethod
+    def _looks_like_specific_file_pattern(patterns: List[str]) -> Optional[str]:
+        if len(patterns) != 1:
+            return None
+        candidate = _normalize_rel_path(patterns[0])
+        if not candidate:
+            return None
+        if "/" not in candidate:
+            return None
+        if any(meta in candidate for meta in ("*", "?", "[", "]")):
+            return None
+        return candidate
 
     def _build_rg_command(
         self,
@@ -1049,6 +1111,8 @@ class FileSearchTool(AgentTool):
     async def _execute(
         self,
         keyword: str,
+        file_path: Optional[str] = None,
+        path: Optional[str] = None,
         file_pattern: Optional[str] = None,
         directory: Optional[str] = None,
         case_sensitive: bool = False,
@@ -1058,7 +1122,29 @@ class FileSearchTool(AgentTool):
     ) -> ToolResult:
         try:
             normalized_patterns = _split_file_patterns(file_pattern)
-            search_dir_rel, search_dir_abs, dir_error = self._normalize_directory(directory)
+            requested_single_file = str(file_path or path or "").strip()
+            if not requested_single_file:
+                inferred = self._looks_like_specific_file_pattern(normalized_patterns)
+                if inferred:
+                    requested_single_file = inferred
+
+            single_file_mode = False
+            single_file_rel: Optional[str] = None
+            single_file_abs: Optional[str] = None
+            if requested_single_file:
+                single_file_rel, single_file_abs, file_error = self._resolve_single_file_target(
+                    requested_single_file
+                )
+                if file_error or not single_file_rel or not single_file_abs:
+                    return ToolResult(success=False, error=file_error or "文件定位失败")
+                search_dir_rel, search_dir_abs, dir_error = self._normalize_directory(
+                    os.path.dirname(single_file_rel) or "."
+                )
+                normalized_patterns = [os.path.basename(single_file_rel)]
+                single_file_mode = True
+            else:
+                search_dir_rel, search_dir_abs, dir_error = self._normalize_directory(directory)
+
             if dir_error or not search_dir_abs or not search_dir_rel:
                 return ToolResult(success=False, error=dir_error or "搜索目录解析失败")
 
@@ -1090,9 +1176,12 @@ class FileSearchTool(AgentTool):
                 safe_max_results,
             )
 
+            if single_file_mode and single_file_abs is not None:
+                files_searched = 1
+
             scope_fallback_applied = False
             effective_directory = search_dir_rel
-            if not results and search_dir_rel not in {"", "."}:
+            if not single_file_mode and not results and search_dir_rel not in {"", "."}:
                 fallback_results, fallback_files_searched, fallback_engine = await asyncio.to_thread(
                     self._run_search_engines_sync,
                     keyword,
@@ -1140,6 +1229,8 @@ class FileSearchTool(AgentTool):
                         "scope_fallback_applied": scope_fallback_applied,
                         "original_directory": search_dir_rel,
                         "effective_directory": effective_directory,
+                        "single_file_mode": single_file_mode,
+                        "target_file": single_file_rel,
                     },
                 )
 
@@ -1208,6 +1299,8 @@ class FileSearchTool(AgentTool):
                     "scope_fallback_applied": scope_fallback_applied,
                     "original_directory": search_dir_rel,
                     "effective_directory": effective_directory,
+                    "single_file_mode": single_file_mode,
+                    "target_file": single_file_rel,
                 },
             )
         except Exception as e:

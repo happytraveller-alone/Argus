@@ -182,7 +182,7 @@ class Settings(BaseSettings):
     MCP_ENABLED: bool = True
     MCP_PREFER: bool = True
     MCP_STRICT_MODE: bool = True
-    MCP_TIMEOUT_SECONDS: int = 30
+    MCP_TIMEOUT_SECONDS: int = 150
     MCP_REQUIRE_ALL_READY_ON_STARTUP: bool = True
     MCP_REQUIRED_RUNTIME_DOMAIN: str = "stdio"
     MCP_RUNTIME_MODE_DEFAULT: str = "stdio_only"
