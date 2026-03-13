@@ -172,6 +172,7 @@ from app.models.audit import AuditTask, AuditIssue
 from app.models.agent_task import AgentTask, AgentFinding
 from app.models.opengrep import OpengrepScanTask, OpengrepFinding
 from app.models.gitleaks import GitleaksScanTask, GitleaksFinding
+from app.models.bandit import BanditScanTask, BanditFinding
 from app.models.user_config import UserConfig
 from app.models.project_info import ProjectInfo
 import zipfile
@@ -665,7 +666,7 @@ class DashboardSnapshotResponse(BaseModel):
 class StaticScanOverviewItem(BaseModel):
     project_id: str
     project_name: str
-    last_scan_tool: Literal["opengrep", "gitleaks"]
+    last_scan_tool: Literal["opengrep", "gitleaks", "bandit"]
     last_scan_task_id: str
     paired_gitleaks_task_id: Optional[str] = None
     last_scan_at: datetime
@@ -717,7 +718,12 @@ def _build_static_scan_overview_item_from_row(
     opengrep_task_id = row.get("opengrep_task_id")
     opengrep_created_at = row.get("opengrep_created_at")
     latest_gitleaks_created_at = row.get("latest_gitleaks_created_at")
-    if opengrep_created_at is None and latest_gitleaks_created_at is None:
+    latest_bandit_created_at = row.get("latest_bandit_created_at")
+    if (
+        opengrep_created_at is None
+        and latest_gitleaks_created_at is None
+        and latest_bandit_created_at is None
+    ):
         return None
 
     project_id = str(row.get("project_id") or "")
@@ -726,32 +732,78 @@ def _build_static_scan_overview_item_from_row(
         return None
 
     if opengrep_created_at is not None and opengrep_task_id:
-        severe_count = int(row.get("opengrep_error_count") or 0)
+        opengrep_severe_count = int(row.get("opengrep_error_count") or 0)
         opengrep_warning_count = int(row.get("opengrep_warning_count") or 0)
         opengrep_total_findings = int(row.get("opengrep_total_findings") or 0)
         paired_gitleaks_count = int(row.get("paired_gitleaks_total_findings") or 0)
-        hint_count = opengrep_warning_count + paired_gitleaks_count
-        info_count = max(opengrep_total_findings - severe_count - opengrep_warning_count, 0)
-        total_findings = severe_count + hint_count + info_count
-        task_id = str(opengrep_task_id)
+        opengrep_info_count = max(
+            opengrep_total_findings - opengrep_severe_count - opengrep_warning_count, 0
+        )
+
         paired_gitleaks_created_at = row.get("paired_gitleaks_created_at")
         if (
             paired_gitleaks_created_at is not None
             and paired_gitleaks_created_at > opengrep_created_at
         ):
-            last_scan_at = paired_gitleaks_created_at
+            opengrep_bundle_last_scan_at = paired_gitleaks_created_at
         else:
-            last_scan_at = opengrep_created_at
-        last_scan_tool: Literal["opengrep", "gitleaks"] = "opengrep"
-        paired_gitleaks_task_id = str(row.get("paired_gitleaks_task_id") or "") or None
+            opengrep_bundle_last_scan_at = opengrep_created_at
+
+        bandit_task_id = str(row.get("latest_bandit_task_id") or "")
+        bandit_high_count = int(row.get("latest_bandit_high_count") or 0)
+        bandit_medium_count = int(row.get("latest_bandit_medium_count") or 0)
+        bandit_low_count = int(row.get("latest_bandit_low_count") or 0)
+
+        # Bandit 计数映射口径：HIGH -> severe，MEDIUM+LOW -> hint，不计入 info。
+        # 仅当 Bandit 是最近来源时，才使用 Bandit 计数，避免跨批次误叠加。
+        if (
+            latest_bandit_created_at is not None
+            and latest_bandit_created_at > opengrep_bundle_last_scan_at
+            and bandit_task_id
+        ):
+            severe_count = bandit_high_count
+            hint_count = bandit_medium_count + bandit_low_count
+            info_count = 0
+            total_findings = severe_count + hint_count
+            task_id = bandit_task_id
+            last_scan_at = latest_bandit_created_at
+            last_scan_tool = "bandit"
+            paired_gitleaks_task_id = None
+        else:
+            severe_count = opengrep_severe_count
+            hint_count = opengrep_warning_count + paired_gitleaks_count
+            info_count = opengrep_info_count
+            total_findings = severe_count + hint_count + info_count
+            task_id = str(opengrep_task_id)
+            last_scan_at = opengrep_bundle_last_scan_at
+            last_scan_tool = "opengrep"
+            paired_gitleaks_task_id = str(row.get("paired_gitleaks_task_id") or "") or None
     else:
-        severe_count = 0
-        total_findings = int(row.get("latest_gitleaks_total_findings") or 0)
-        hint_count = total_findings
-        info_count = 0
-        task_id = str(row.get("latest_gitleaks_task_id") or "")
-        last_scan_at = latest_gitleaks_created_at
-        last_scan_tool = "gitleaks"
+        # Bandit 计数映射口径：HIGH -> severe，MEDIUM+LOW -> hint，不计入 info。
+        bandit_task_id = str(row.get("latest_bandit_task_id") or "")
+        bandit_high_count = int(row.get("latest_bandit_high_count") or 0)
+        bandit_medium_count = int(row.get("latest_bandit_medium_count") or 0)
+        bandit_low_count = int(row.get("latest_bandit_low_count") or 0)
+        if (
+            latest_bandit_created_at is not None
+            and (latest_gitleaks_created_at is None or latest_bandit_created_at >= latest_gitleaks_created_at)
+            and bandit_task_id
+        ):
+            severe_count = bandit_high_count
+            hint_count = bandit_medium_count + bandit_low_count
+            info_count = 0
+            total_findings = severe_count + hint_count
+            task_id = bandit_task_id
+            last_scan_at = latest_bandit_created_at
+            last_scan_tool = "bandit"
+        else:
+            severe_count = 0
+            total_findings = int(row.get("latest_gitleaks_total_findings") or 0)
+            hint_count = total_findings
+            info_count = 0
+            task_id = str(row.get("latest_gitleaks_task_id") or "")
+            last_scan_at = latest_gitleaks_created_at
+            last_scan_tool = "gitleaks"
         paired_gitleaks_task_id = None
 
     if not task_id or last_scan_at is None:
@@ -945,14 +997,28 @@ async def get_stats(
         GitleaksScanTask, func.lower(GitleaksScanTask.status).in_(interrupted_statuses)
     )
 
-    total_tasks = audit_total + agent_total + opengrep_total + gitleaks_total
-    completed_tasks = (
-        audit_completed + agent_completed + opengrep_completed + gitleaks_completed
+    bandit_total = await _count(BanditScanTask)
+    bandit_completed = await _count(
+        BanditScanTask, func.lower(BanditScanTask.status) == "completed"
     )
-    running_tasks = audit_running + agent_running + opengrep_running + gitleaks_running
-    failed_tasks = audit_failed + agent_failed + opengrep_failed + gitleaks_failed
+    bandit_running = await _count(
+        BanditScanTask, func.lower(BanditScanTask.status) == "running"
+    )
+    bandit_failed = await _count(
+        BanditScanTask, func.lower(BanditScanTask.status) == "failed"
+    )
+    bandit_interrupted = await _count(
+        BanditScanTask, func.lower(BanditScanTask.status).in_(interrupted_statuses)
+    )
+
+    total_tasks = audit_total + agent_total + opengrep_total + gitleaks_total + bandit_total
+    completed_tasks = (
+        audit_completed + agent_completed + opengrep_completed + gitleaks_completed + bandit_completed
+    )
+    running_tasks = audit_running + agent_running + opengrep_running + gitleaks_running + bandit_running
+    failed_tasks = audit_failed + agent_failed + opengrep_failed + gitleaks_failed + bandit_failed
     interrupted_tasks = (
-        audit_interrupted + agent_interrupted + opengrep_interrupted + gitleaks_interrupted
+        audit_interrupted + agent_interrupted + opengrep_interrupted + gitleaks_interrupted + bandit_interrupted
     )
 
     # 问题统计（统一聚合）
@@ -961,6 +1027,7 @@ async def get_stats(
         + await _count(AgentFinding)
         + await _count(OpengrepFinding)
         + await _count(GitleaksFinding)
+        + await _count(BanditFinding)
     )
     resolved_issues = (
         await _count(AuditIssue, func.lower(AuditIssue.status) == "resolved")
@@ -971,6 +1038,9 @@ async def get_stats(
         + await _count(OpengrepFinding, func.lower(OpengrepFinding.status) == "verified")
         + await _count(
             GitleaksFinding, func.lower(GitleaksFinding.status).in_(("verified", "fixed"))
+        )
+        + await _count(
+            BanditFinding, func.lower(BanditFinding.status).in_(("verified", "fixed"))
         )
     )
 
@@ -1020,10 +1090,24 @@ async def get_dashboard_snapshot(
     gitleaks_result = await db.execute(
         select(
             GitleaksScanTask.project_id,
+            GitleaksScanTask.status,
+            GitleaksScanTask.total_findings,
             GitleaksScanTask.scan_duration_ms,
         )
     )
     gitleaks_rows = gitleaks_result.all()
+
+    bandit_result = await db.execute(
+        select(
+            BanditScanTask.project_id,
+            BanditScanTask.status,
+            BanditScanTask.high_count,
+            BanditScanTask.medium_count,
+            BanditScanTask.low_count,
+            BanditScanTask.scan_duration_ms,
+        )
+    )
+    bandit_rows = bandit_result.all()
 
     agent_result = await db.execute(
         select(
@@ -1081,8 +1165,41 @@ async def get_dashboard_snapshot(
         opengrep_duration_ms += _to_non_negative_int(scan_duration_ms)
 
     gitleaks_duration_ms = 0
-    for _, scan_duration_ms in gitleaks_rows:
+    for project_id, status, total_findings, scan_duration_ms in gitleaks_rows:
+        if not project_id:
+            continue
+        normalized_project_id = str(project_id)
+        # gitleaks 在 dashboard 中计入 static_vulns（project-card aligned）
+        project_vulns = ensure_vulns(normalized_project_id)
+        project_vulns["static_vulns"] += _to_non_negative_int(total_findings)
+        if str(status or "").strip().lower() == "completed":
+            project_scan_runs = ensure_scan_runs(normalized_project_id)
+            project_scan_runs["static_runs"] += 1
         gitleaks_duration_ms += _to_non_negative_int(scan_duration_ms)
+
+    bandit_duration_ms = 0
+    for (
+        project_id,
+        status,
+        high_count,
+        medium_count,
+        low_count,
+        scan_duration_ms,
+    ) in bandit_rows:
+        if not project_id:
+            continue
+        normalized_project_id = str(project_id)
+        # Bandit 计数映射口径：HIGH + MEDIUM + LOW 全部计入 static_vulns。
+        project_vulns = ensure_vulns(normalized_project_id)
+        project_vulns["static_vulns"] += (
+            _to_non_negative_int(high_count)
+            + _to_non_negative_int(medium_count)
+            + _to_non_negative_int(low_count)
+        )
+        if str(status or "").strip().lower() == "completed":
+            project_scan_runs = ensure_scan_runs(normalized_project_id)
+            project_scan_runs["static_runs"] += 1
+        bandit_duration_ms += _to_non_negative_int(scan_duration_ms)
 
     agent_duration_ms = 0
     for (
@@ -1174,7 +1291,7 @@ async def get_dashboard_snapshot(
     )[:top_n]
 
     total_scan_duration_ms = max(
-        opengrep_duration_ms + gitleaks_duration_ms + agent_duration_ms,
+        opengrep_duration_ms + gitleaks_duration_ms + bandit_duration_ms + agent_duration_ms,
         0,
     )
 
@@ -1205,7 +1322,7 @@ async def get_static_scan_overview(
 ) -> Any:
     """
     获取项目静态扫描概览（分页）。
-    仅返回至少存在一次成功静态扫描（Opengrep/Gitleaks）的项目。
+    仅返回至少存在一次成功静态扫描（Opengrep/Gitleaks/Bandit）的项目。
     """
     opengrep_ranked_subquery = (
         select(
@@ -1265,6 +1382,39 @@ async def get_static_scan_overview(
         .subquery()
     )
 
+    bandit_ranked_subquery = (
+        select(
+            BanditScanTask.project_id.label("project_id"),
+            BanditScanTask.id.label("task_id"),
+            BanditScanTask.created_at.label("created_at"),
+            BanditScanTask.total_findings.label("total_findings"),
+            BanditScanTask.high_count.label("high_count"),
+            BanditScanTask.medium_count.label("medium_count"),
+            BanditScanTask.low_count.label("low_count"),
+            func.row_number()
+            .over(
+                partition_by=BanditScanTask.project_id,
+                order_by=BanditScanTask.created_at.desc(),
+            )
+            .label("rn"),
+        )
+        .where(func.lower(BanditScanTask.status) == "completed")
+        .subquery()
+    )
+    latest_bandit_subquery = (
+        select(
+            bandit_ranked_subquery.c.project_id,
+            bandit_ranked_subquery.c.task_id,
+            bandit_ranked_subquery.c.created_at,
+            bandit_ranked_subquery.c.total_findings,
+            bandit_ranked_subquery.c.high_count,
+            bandit_ranked_subquery.c.medium_count,
+            bandit_ranked_subquery.c.low_count,
+        )
+        .where(bandit_ranked_subquery.c.rn == 1)
+        .subquery()
+    )
+
     # 以 opengrep 最新 completed 为主锚，配对同批（60 秒窗口）gitleaks completed 任务
     paired_gitleaks_ranked_subquery = (
         select(
@@ -1318,7 +1468,7 @@ async def get_static_scan_overview(
         .subquery()
     )
 
-    last_scan_at_expr = case(
+    last_scan_without_bandit_expr = case(
         (
             latest_opengrep_subquery.c.created_at.is_not(None),
             case(
@@ -1334,6 +1484,19 @@ async def get_static_scan_overview(
             ),
         ),
         else_=latest_gitleaks_subquery.c.created_at,
+    )
+    last_scan_at_expr = case(
+        (
+            and_(
+                latest_bandit_subquery.c.created_at.is_not(None),
+                or_(
+                    last_scan_without_bandit_expr.is_(None),
+                    latest_bandit_subquery.c.created_at > last_scan_without_bandit_expr,
+                ),
+            ),
+            latest_bandit_subquery.c.created_at,
+        ),
+        else_=last_scan_without_bandit_expr,
     )
 
     base_stmt = (
@@ -1355,6 +1518,12 @@ async def get_static_scan_overview(
             latest_gitleaks_subquery.c.total_findings.label(
                 "latest_gitleaks_total_findings"
             ),
+            latest_bandit_subquery.c.task_id.label("latest_bandit_task_id"),
+            latest_bandit_subquery.c.created_at.label("latest_bandit_created_at"),
+            latest_bandit_subquery.c.total_findings.label("latest_bandit_total_findings"),
+            latest_bandit_subquery.c.high_count.label("latest_bandit_high_count"),
+            latest_bandit_subquery.c.medium_count.label("latest_bandit_medium_count"),
+            latest_bandit_subquery.c.low_count.label("latest_bandit_low_count"),
             last_scan_at_expr.label("last_scan_at"),
         )
         .select_from(Project)
@@ -1370,10 +1539,15 @@ async def get_static_scan_overview(
             paired_gitleaks_subquery,
             paired_gitleaks_subquery.c.project_id == Project.id,
         )
+        .outerjoin(
+            latest_bandit_subquery,
+            latest_bandit_subquery.c.project_id == Project.id,
+        )
         .where(
             or_(
                 latest_opengrep_subquery.c.project_id.is_not(None),
                 latest_gitleaks_subquery.c.project_id.is_not(None),
+                latest_bandit_subquery.c.project_id.is_not(None),
             )
         )
     )

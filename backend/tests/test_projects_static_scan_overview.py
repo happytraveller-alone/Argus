@@ -55,6 +55,12 @@ def test_overview_item_opengrep_counts():
         "latest_gitleaks_task_id": None,
         "latest_gitleaks_created_at": None,
         "latest_gitleaks_total_findings": None,
+        "latest_bandit_task_id": None,
+        "latest_bandit_created_at": None,
+        "latest_bandit_total_findings": None,
+        "latest_bandit_high_count": None,
+        "latest_bandit_medium_count": None,
+        "latest_bandit_low_count": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -82,6 +88,12 @@ def test_overview_item_gitleaks_mapped_to_hint():
         "latest_gitleaks_task_id": "git-1",
         "latest_gitleaks_created_at": datetime(2026, 2, 1, 8, 0, 0, tzinfo=timezone.utc),
         "latest_gitleaks_total_findings": 8,
+        "latest_bandit_task_id": None,
+        "latest_bandit_created_at": None,
+        "latest_bandit_total_findings": None,
+        "latest_bandit_high_count": None,
+        "latest_bandit_medium_count": None,
+        "latest_bandit_low_count": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -109,6 +121,12 @@ def test_overview_item_paired_gitleaks_is_merged_into_hint():
         "latest_gitleaks_task_id": "git-2",
         "latest_gitleaks_created_at": datetime(2026, 2, 1, 8, 3, 0, tzinfo=timezone.utc),
         "latest_gitleaks_total_findings": 1,
+        "latest_bandit_task_id": None,
+        "latest_bandit_created_at": None,
+        "latest_bandit_total_findings": None,
+        "latest_bandit_high_count": None,
+        "latest_bandit_medium_count": None,
+        "latest_bandit_low_count": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -137,6 +155,12 @@ def test_overview_item_unpaired_newer_gitleaks_does_not_override_opengrep():
         "latest_gitleaks_task_id": "git-99",
         "latest_gitleaks_created_at": datetime(2026, 2, 1, 8, 10, 0, tzinfo=timezone.utc),
         "latest_gitleaks_total_findings": 20,
+        "latest_bandit_task_id": None,
+        "latest_bandit_created_at": None,
+        "latest_bandit_total_findings": None,
+        "latest_bandit_high_count": None,
+        "latest_bandit_medium_count": None,
+        "latest_bandit_low_count": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -147,6 +171,73 @@ def test_overview_item_unpaired_newer_gitleaks_does_not_override_opengrep():
     assert item.severe_count == 2
     assert item.hint_count == 1
     assert item.info_count == 3
+    assert item.total_findings == 6
+
+
+def test_overview_item_bandit_mapped_to_severe_and_hint():
+    row = {
+        "project_id": "project-1",
+        "project_name": "demo",
+        "opengrep_task_id": None,
+        "opengrep_created_at": None,
+        "opengrep_total_findings": None,
+        "opengrep_error_count": None,
+        "opengrep_warning_count": None,
+        "paired_gitleaks_task_id": None,
+        "paired_gitleaks_created_at": None,
+        "paired_gitleaks_total_findings": None,
+        "latest_gitleaks_task_id": None,
+        "latest_gitleaks_created_at": None,
+        "latest_gitleaks_total_findings": None,
+        "latest_bandit_task_id": "bandit-1",
+        "latest_bandit_created_at": datetime(2026, 2, 1, 8, 10, 0, tzinfo=timezone.utc),
+        "latest_bandit_total_findings": 10,
+        "latest_bandit_high_count": 3,
+        "latest_bandit_medium_count": 4,
+        "latest_bandit_low_count": 3,
+    }
+
+    item = _build_static_scan_overview_item_from_row(row)
+    assert item is not None
+    assert item.last_scan_tool == "bandit"
+    assert item.last_scan_task_id == "bandit-1"
+    assert item.severe_count == 3
+    assert item.hint_count == 7
+    assert item.info_count == 0
+    assert item.total_findings == 10
+
+
+def test_overview_item_newer_bandit_overrides_opengrep_bundle_counts():
+    row = {
+        "project_id": "project-1",
+        "project_name": "demo",
+        "opengrep_task_id": "op-1",
+        "opengrep_created_at": datetime(2026, 2, 1, 8, 0, 0, tzinfo=timezone.utc),
+        "opengrep_total_findings": 12,
+        "opengrep_error_count": 2,
+        "opengrep_warning_count": 5,
+        "paired_gitleaks_task_id": "git-1",
+        "paired_gitleaks_created_at": datetime(2026, 2, 1, 8, 0, 20, tzinfo=timezone.utc),
+        "paired_gitleaks_total_findings": 3,
+        "latest_gitleaks_task_id": "git-99",
+        "latest_gitleaks_created_at": datetime(2026, 2, 1, 8, 10, 0, tzinfo=timezone.utc),
+        "latest_gitleaks_total_findings": 20,
+        "latest_bandit_task_id": "bandit-1",
+        "latest_bandit_created_at": datetime(2026, 2, 1, 8, 11, 0, tzinfo=timezone.utc),
+        "latest_bandit_total_findings": 6,
+        "latest_bandit_high_count": 1,
+        "latest_bandit_medium_count": 2,
+        "latest_bandit_low_count": 3,
+    }
+
+    item = _build_static_scan_overview_item_from_row(row)
+    assert item is not None
+    assert item.last_scan_tool == "bandit"
+    assert item.last_scan_task_id == "bandit-1"
+    assert item.paired_gitleaks_task_id is None
+    assert item.severe_count == 1
+    assert item.hint_count == 5
+    assert item.info_count == 0
     assert item.total_findings == 6
 
 
@@ -167,6 +258,12 @@ async def test_static_scan_overview_endpoint_keyword_pagination_and_completed_fi
             "latest_gitleaks_task_id": "git-2",
             "latest_gitleaks_created_at": datetime(2026, 2, 2, 10, 0, 20, tzinfo=timezone.utc),
             "latest_gitleaks_total_findings": 2,
+            "latest_bandit_task_id": None,
+            "latest_bandit_created_at": None,
+            "latest_bandit_total_findings": None,
+            "latest_bandit_high_count": None,
+            "latest_bandit_medium_count": None,
+            "latest_bandit_low_count": None,
             "last_scan_at": datetime(2026, 2, 2, 10, 0, 0, tzinfo=timezone.utc),
         }
     ]
@@ -197,8 +294,10 @@ async def test_static_scan_overview_endpoint_keyword_pagination_and_completed_fi
     assert "row_number()" in count_sql
     assert "opengrep_scan_tasks" in count_sql
     assert "gitleaks_scan_tasks" in count_sql
+    assert "bandit_scan_tasks" in count_sql
     assert "lower(opengrep_scan_tasks.status)" in count_sql
     assert "lower(gitleaks_scan_tasks.status)" in count_sql
+    assert "lower(bandit_scan_tasks.status)" in count_sql
     assert "lower(projects.name) like" in count_sql
 
     compiled_count = count_stmt.compile()

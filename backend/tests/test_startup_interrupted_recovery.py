@@ -6,10 +6,12 @@ import app.models.agent_task  # noqa: F401
 import app.models.audit  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 import app.models.opengrep  # noqa: F401
+import app.models.bandit  # noqa: F401
 from app.main import (
     INTERRUPTED_ERROR_MESSAGE,
     RECOVERABLE_AGENT_TASK_STATUSES,
     RECOVERABLE_AUDIT_TASK_STATUSES,
+    RECOVERABLE_BANDIT_TASK_STATUSES,
     RECOVERABLE_GITLEAKS_TASK_STATUSES,
     RECOVERABLE_OPENGREP_TASK_STATUSES,
     recover_interrupted_tasks,
@@ -18,6 +20,7 @@ from app.models.agent_task import AgentTask, AgentTaskStatus
 from app.models.audit import AuditTask
 from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
+from app.models.bandit import BanditScanTask
 
 
 class _FakeScalarResult:
@@ -51,6 +54,7 @@ class _FakeSession:
             AuditTask: RECOVERABLE_AUDIT_TASK_STATUSES,
             OpengrepScanTask: RECOVERABLE_OPENGREP_TASK_STATUSES,
             GitleaksScanTask: RECOVERABLE_GITLEAKS_TASK_STATUSES,
+            BanditScanTask: RECOVERABLE_BANDIT_TASK_STATUSES,
         }[entity]
         filtered = [item for item in items if str(item.status).lower() in recoverable_statuses]
         return _FakeScalarResult(filtered)
@@ -96,6 +100,14 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
         status="pending",
         error_message=None,
     )
+    bandit_task = BanditScanTask(
+        id="bandit-running",
+        project_id="project-1",
+        name="bandit",
+        target_path="/tmp/project",
+        status="running",
+        error_message=None,
+    )
 
     fake_session = _FakeSession(
         {
@@ -103,13 +115,14 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
             AuditTask: [audit_task],
             OpengrepScanTask: [opengrep_task],
             GitleaksScanTask: [gitleaks_task],
+            BanditScanTask: [bandit_task],
         }
     )
     monkeypatch.setattr("app.main.AsyncSessionLocal", lambda: fake_session)
 
     counts = await recover_interrupted_tasks()
 
-    assert counts == {"agent": 1, "audit": 1, "opengrep": 1, "gitleaks": 1}
+    assert counts == {"agent": 1, "audit": 1, "opengrep": 1, "gitleaks": 1, "bandit": 1}
     assert fake_session.commit_calls == 1
     assert fake_session.rollback_calls == 0
 
@@ -126,6 +139,8 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
 
     assert gitleaks_task.status == "interrupted"
     assert gitleaks_task.error_message == INTERRUPTED_ERROR_MESSAGE
+    assert bandit_task.status == "interrupted"
+    assert bandit_task.error_message == INTERRUPTED_ERROR_MESSAGE
 
     assert interrupted_time.tzinfo is not None
 
@@ -172,13 +187,14 @@ async def test_recover_interrupted_tasks_preserves_terminal_statuses_and_existin
             AuditTask: [audit_cancelled],
             OpengrepScanTask: [],
             GitleaksScanTask: [gitleaks_failed],
+            BanditScanTask: [],
         }
     )
     monkeypatch.setattr("app.main.AsyncSessionLocal", lambda: fake_session)
 
     counts = await recover_interrupted_tasks()
 
-    assert counts == {"agent": 0, "audit": 0, "opengrep": 0, "gitleaks": 0}
+    assert counts == {"agent": 0, "audit": 0, "opengrep": 0, "gitleaks": 0, "bandit": 0}
     assert fake_session.commit_calls == 0
     assert fake_session.rollback_calls == 1
 

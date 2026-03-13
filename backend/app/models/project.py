@@ -51,6 +51,10 @@ class Project(Base):
     gitleaks_scan_tasks = relationship(
         "GitleaksScanTask", back_populates="project", cascade="all, delete-orphan"
     )
+    # Bandit 静态扫描任务关系（新增）
+    bandit_scan_tasks = relationship(
+        "BanditScanTask", back_populates="project", cascade="all, delete-orphan"
+    )
 
 class ProjectMember(Base):
     __tablename__ = "project_members"
@@ -73,4 +77,3 @@ class ProjectMember(Base):
     # Relationships
     project = relationship("Project", back_populates="members")
     user = relationship("User", backref="project_memberships")
-

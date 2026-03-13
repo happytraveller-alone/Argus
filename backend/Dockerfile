@@ -666,7 +666,7 @@ RUN --mount=type=cache,id=vulhunter-backend-pip-cache,target=/root/.cache/pip \
     }; \
     install_python_helpers() { \
       idx="$1"; \
-      PIP_INDEX_URL="${idx}" pip install --retries 5 --timeout 60 --disable-pip-version-check code2flow; \
+      PIP_INDEX_URL="${idx}" pip install --retries 5 --timeout 60 --disable-pip-version-check code2flow bandit; \
     }; \
     installed=0; \
     ordered_indexes="$(order_indexes "${pypi_index_candidates}")"; \

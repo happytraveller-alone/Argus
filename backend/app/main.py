@@ -17,6 +17,7 @@ from app.models.agent_task import AgentTask, AgentTaskStatus
 from app.models.audit import AuditTask
 from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
+from app.models.bandit import BanditScanTask
 from sqlalchemy.future import select
 
 # 配置日志
@@ -105,6 +106,8 @@ RECOVERABLE_AGENT_TASK_STATUSES = {
 RECOVERABLE_AUDIT_TASK_STATUSES = {"pending", "running"}
 RECOVERABLE_OPENGREP_TASK_STATUSES = {"pending", "running"}
 RECOVERABLE_GITLEAKS_TASK_STATUSES = {"pending", "running"}
+# Bandit interrupted recovery support
+RECOVERABLE_BANDIT_TASK_STATUSES = {"pending", "running"}
 
 
 def _mark_task_interrupted(task) -> bool:
@@ -130,13 +133,15 @@ async def recover_interrupted_tasks() -> dict[str, int]:
     将上次异常退出时仍处于进行中的任务统一标记为 interrupted。
     """
     async with AsyncSessionLocal() as db:
-        counts = {"agent": 0, "audit": 0, "opengrep": 0, "gitleaks": 0}
+        counts = {"agent": 0, "audit": 0, "opengrep": 0, "gitleaks": 0, "bandit": 0}
 
         recovery_specs = [
             (AgentTask, RECOVERABLE_AGENT_TASK_STATUSES, "agent"),
             (AuditTask, RECOVERABLE_AUDIT_TASK_STATUSES, "audit"),
             (OpengrepScanTask, RECOVERABLE_OPENGREP_TASK_STATUSES, "opengrep"),
             (GitleaksScanTask, RECOVERABLE_GITLEAKS_TASK_STATUSES, "gitleaks"),
+            # Bandit interrupted recovery support
+            (BanditScanTask, RECOVERABLE_BANDIT_TASK_STATUSES, "bandit"),
         ]
 
         for model, recoverable_statuses, counter_key in recovery_specs:
@@ -150,11 +155,12 @@ async def recover_interrupted_tasks() -> dict[str, int]:
         if any(counts.values()):
             await db.commit()
             logger.warning(
-                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, audit=%s, opengrep=%s, gitleaks=%s",
+                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, audit=%s, opengrep=%s, gitleaks=%s, bandit=%s",
                 counts["agent"],
                 counts["audit"],
                 counts["opengrep"],
                 counts["gitleaks"],
+                counts["bandit"],
             )
         else:
             await db.rollback()
