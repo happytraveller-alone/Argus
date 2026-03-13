@@ -285,6 +285,7 @@ class AgentFindingResponse(BaseModel):
     suggestion: Optional[str] = None
     fix_code: Optional[str] = None
     fix_description: Optional[str] = None
+    report: Optional[str] = None
     has_poc: bool = False
     poc_code: Optional[str] = None
     poc_description: Optional[str] = None
@@ -5648,6 +5649,10 @@ async def _save_findings(
                 or finding.get("fix_explanation")
                 or finding.get("remediation_details")
             )
+            report_text = _normalize_optional_text(
+                finding.get("vulnerability_report")
+                or finding.get("report")
+            )
 
             if not suggestion_text or not fix_code_text:
                 default_suggestion, default_fix_code = _build_default_remediation(raw_type)
@@ -5813,6 +5818,8 @@ async def _save_findings(
                 db_finding.suggestion = suggestion_text
                 db_finding.fix_code = fix_code_text
                 db_finding.fix_description = fix_description_text
+                if report_text is not None:
+                    db_finding.report = report_text
                 db_finding.is_verified = is_verified
                 db_finding.ai_confidence = confidence
                 db_finding.status = db_status
@@ -5851,6 +5858,7 @@ async def _save_findings(
                     suggestion=suggestion_text,
                     fix_code=fix_code_text,
                     fix_description=fix_description_text,
+                    report=report_text,
                     is_verified=is_verified,
                     ai_confidence=confidence,
                     status=db_status,
@@ -6924,6 +6932,7 @@ def _serialize_agent_findings(
                     # Backward-compatible for test stubs / older schemas.
                     "fix_code": getattr(item, "fix_code", None),
                     "fix_description": getattr(item, "fix_description", None),
+                    "report": getattr(item, "report", None),
                     "has_poc": bool(item.has_poc),
                     "poc_code": item.poc_code,
                     "poc_description": item.poc_description,
@@ -8617,6 +8626,7 @@ async def get_finding_report(
         raise HTTPException(status_code=404, detail="漏洞不存在或已被过滤")
 
     finding_data = serialized[0].model_dump()
+    stored_report = _normalize_optional_text(finding_data.get("report"))
 
     if format == "json":
         return {
@@ -8630,6 +8640,17 @@ async def get_finding_report(
             },
             "finding": finding_data,
         }
+
+    if stored_report:
+        filename = f"finding_report_{task.id[:8]}_{finding.id[:8]}.md"
+        from fastapi.responses import Response
+        return Response(
+            content=stored_report,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+            },
+        )
 
     md_lines: List[str] = []
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
