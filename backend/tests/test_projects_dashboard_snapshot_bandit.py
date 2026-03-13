@@ -24,6 +24,7 @@ async def test_dashboard_snapshot_includes_bandit_in_static_metrics(monkeypatch)
             _AllResult([("op-1", "project-1", "completed", 1000)]),  # opengrep
             _AllResult([("project-1", "completed", 5, 500)]),  # gitleaks
             _AllResult([("project-1", "completed", 1, 2, 1, 300)]),  # bandit
+            _AllResult([("project-1", "completed", 4, 200)]),  # phpstan
             _AllResult(  # agent
                 [
                     (
@@ -56,8 +57,8 @@ async def test_dashboard_snapshot_includes_bandit_in_static_metrics(monkeypatch)
 
     scan_item = response.scan_runs[0]
     assert scan_item.project_id == "project-1"
-    assert scan_item.static_runs == 3  # opengrep + gitleaks + bandit
+    assert scan_item.static_runs == 4  # opengrep + gitleaks + bandit + phpstan
 
     vuln_item = response.vulns[0]
-    # static_vulns = opengrep_high_conf(2) + gitleaks(5) + bandit(1+2+1)
-    assert vuln_item.static_vulns == 11
+    # static_vulns = opengrep_high_conf(2) + gitleaks(5) + bandit(1+2+1) + phpstan(4)
+    assert vuln_item.static_vulns == 15

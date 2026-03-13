@@ -13,3 +13,4 @@ from .agent_task import (
 )
 from .gitleaks import GitleaksScanTask, GitleaksFinding, GitleaksRule
 from .bandit import BanditScanTask, BanditFinding
+from .phpstan import PhpstanScanTask, PhpstanFinding

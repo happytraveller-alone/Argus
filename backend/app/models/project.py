@@ -55,6 +55,10 @@ class Project(Base):
     bandit_scan_tasks = relationship(
         "BanditScanTask", back_populates="project", cascade="all, delete-orphan"
     )
+    # PHPStan 静态扫描任务关系（新增）
+    phpstan_scan_tasks = relationship(
+        "PhpstanScanTask", back_populates="project", cascade="all, delete-orphan"
+    )
 
 class ProjectMember(Base):
     __tablename__ = "project_members"

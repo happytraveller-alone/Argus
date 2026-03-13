@@ -61,6 +61,9 @@ def test_overview_item_opengrep_counts():
         "latest_bandit_high_count": None,
         "latest_bandit_medium_count": None,
         "latest_bandit_low_count": None,
+        "latest_phpstan_task_id": None,
+        "latest_phpstan_created_at": None,
+        "latest_phpstan_total_findings": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -94,6 +97,9 @@ def test_overview_item_gitleaks_mapped_to_hint():
         "latest_bandit_high_count": None,
         "latest_bandit_medium_count": None,
         "latest_bandit_low_count": None,
+        "latest_phpstan_task_id": None,
+        "latest_phpstan_created_at": None,
+        "latest_phpstan_total_findings": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -127,6 +133,9 @@ def test_overview_item_paired_gitleaks_is_merged_into_hint():
         "latest_bandit_high_count": None,
         "latest_bandit_medium_count": None,
         "latest_bandit_low_count": None,
+        "latest_phpstan_task_id": None,
+        "latest_phpstan_created_at": None,
+        "latest_phpstan_total_findings": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -161,6 +170,9 @@ def test_overview_item_unpaired_newer_gitleaks_does_not_override_opengrep():
         "latest_bandit_high_count": None,
         "latest_bandit_medium_count": None,
         "latest_bandit_low_count": None,
+        "latest_phpstan_task_id": None,
+        "latest_phpstan_created_at": None,
+        "latest_phpstan_total_findings": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -195,6 +207,9 @@ def test_overview_item_bandit_mapped_to_severe_and_hint():
         "latest_bandit_high_count": 3,
         "latest_bandit_medium_count": 4,
         "latest_bandit_low_count": 3,
+        "latest_phpstan_task_id": None,
+        "latest_phpstan_created_at": None,
+        "latest_phpstan_total_findings": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -228,6 +243,9 @@ def test_overview_item_newer_bandit_overrides_opengrep_bundle_counts():
         "latest_bandit_high_count": 1,
         "latest_bandit_medium_count": 2,
         "latest_bandit_low_count": 3,
+        "latest_phpstan_task_id": None,
+        "latest_phpstan_created_at": None,
+        "latest_phpstan_total_findings": None,
     }
 
     item = _build_static_scan_overview_item_from_row(row)
@@ -239,6 +257,42 @@ def test_overview_item_newer_bandit_overrides_opengrep_bundle_counts():
     assert item.hint_count == 5
     assert item.info_count == 0
     assert item.total_findings == 6
+
+
+def test_overview_item_phpstan_mapped_to_hint():
+    row = {
+        "project_id": "project-1",
+        "project_name": "demo",
+        "opengrep_task_id": None,
+        "opengrep_created_at": None,
+        "opengrep_total_findings": None,
+        "opengrep_error_count": None,
+        "opengrep_warning_count": None,
+        "paired_gitleaks_task_id": None,
+        "paired_gitleaks_created_at": None,
+        "paired_gitleaks_total_findings": None,
+        "latest_gitleaks_task_id": None,
+        "latest_gitleaks_created_at": None,
+        "latest_gitleaks_total_findings": None,
+        "latest_bandit_task_id": None,
+        "latest_bandit_created_at": None,
+        "latest_bandit_total_findings": None,
+        "latest_bandit_high_count": None,
+        "latest_bandit_medium_count": None,
+        "latest_bandit_low_count": None,
+        "latest_phpstan_task_id": "phpstan-1",
+        "latest_phpstan_created_at": datetime(2026, 2, 1, 8, 12, 0, tzinfo=timezone.utc),
+        "latest_phpstan_total_findings": 9,
+    }
+
+    item = _build_static_scan_overview_item_from_row(row)
+    assert item is not None
+    assert item.last_scan_tool == "phpstan"
+    assert item.last_scan_task_id == "phpstan-1"
+    assert item.severe_count == 0
+    assert item.hint_count == 9
+    assert item.info_count == 0
+    assert item.total_findings == 9
 
 
 @pytest.mark.asyncio
@@ -264,6 +318,9 @@ async def test_static_scan_overview_endpoint_keyword_pagination_and_completed_fi
             "latest_bandit_high_count": None,
             "latest_bandit_medium_count": None,
             "latest_bandit_low_count": None,
+            "latest_phpstan_task_id": None,
+            "latest_phpstan_created_at": None,
+            "latest_phpstan_total_findings": None,
             "last_scan_at": datetime(2026, 2, 2, 10, 0, 0, tzinfo=timezone.utc),
         }
     ]
@@ -295,9 +352,11 @@ async def test_static_scan_overview_endpoint_keyword_pagination_and_completed_fi
     assert "opengrep_scan_tasks" in count_sql
     assert "gitleaks_scan_tasks" in count_sql
     assert "bandit_scan_tasks" in count_sql
+    assert "phpstan_scan_tasks" in count_sql
     assert "lower(opengrep_scan_tasks.status)" in count_sql
     assert "lower(gitleaks_scan_tasks.status)" in count_sql
     assert "lower(bandit_scan_tasks.status)" in count_sql
+    assert "lower(phpstan_scan_tasks.status)" in count_sql
     assert "lower(projects.name) like" in count_sql
 
     compiled_count = count_stmt.compile()
