@@ -393,7 +393,7 @@ export function getProjectCardRecentTasks(params: {
   }).filter((group) => group.projectId === projectId);
 
   const staticItems: ProjectCardRecentTask[] = staticGroups
-    .map((group) => {
+    .map((group): ProjectCardRecentTask | null => {
       const opengrepTask = group.opengrepTask;
       const gitleaksTask = group.gitleaksTask;
       const banditTask = group.banditTask;
@@ -460,7 +460,7 @@ export function getProjectCardRecentTasks(params: {
       }, null);
 
       const status = resolveStaticScanGroupStatus(group);
-      return {
+      const item: ProjectCardRecentTask = {
         id: primaryTask.id,
         projectId: group.projectId,
         kind: "static",
@@ -480,8 +480,9 @@ export function getProjectCardRecentTasks(params: {
         supportsFindingsDetail: true,
         findingsButtonDisabledReason: null,
       };
+      return item;
     })
-    .filter((item): item is ProjectCardRecentTask => Boolean(item));
+    .filter((item): item is ProjectCardRecentTask => item !== null);
 
   const intelligentItems: ProjectCardRecentTask[] = agentTasks
     .filter((task) => task.project_id === projectId)

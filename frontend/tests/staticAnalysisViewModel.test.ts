@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import * as viewModel from "../src/pages/static-analysis/viewModel.ts";
 import {
   buildStaticAnalysisProgressSummary,
   buildStaticAnalysisListState,
@@ -244,6 +245,79 @@ test("formatStaticAnalysisDuration formats milliseconds into readable labels", (
   assert.equal(formatStaticAnalysisDuration(12), "12 ms");
   assert.equal(formatStaticAnalysisDuration(1200), "1.20 s");
   assert.equal(formatStaticAnalysisDuration(61_000), "1m 1s");
+});
+
+test("getStaticAnalysisTaskDisplayDurationMs uses elapsed time for running tasks when backend duration is stale", () => {
+  const duration = viewModel.getStaticAnalysisTaskDisplayDurationMs?.(
+    {
+      id: "og-running",
+      project_id: "project-1",
+      status: "running",
+      created_at: "2026-03-12T07:00:00.000Z",
+      updated_at: "2026-03-12T07:00:10.000Z",
+      scan_duration_ms: 0,
+    },
+    Date.parse("2026-03-12T07:01:30.000Z"),
+  );
+
+  assert.equal(duration, 90_000);
+});
+
+test("getStaticAnalysisTaskDisplayDurationMs does not move backwards when backend duration is ahead of elapsed time", () => {
+  const duration = viewModel.getStaticAnalysisTaskDisplayDurationMs?.(
+    {
+      id: "gl-running",
+      project_id: "project-2",
+      status: "running",
+      created_at: "2026-03-12T07:00:00.000Z",
+      updated_at: "2026-03-12T07:01:00.000Z",
+      scan_duration_ms: 120_000,
+    },
+    Date.parse("2026-03-12T07:01:50.000Z"),
+  );
+
+  assert.equal(duration, 120_000);
+});
+
+test("getStaticAnalysisTaskDisplayDurationMs falls back to updated_at for completed tasks without a persisted duration", () => {
+  const duration = viewModel.getStaticAnalysisTaskDisplayDurationMs?.(
+    {
+      id: "ba-completed",
+      project_id: "project-3",
+      status: "completed",
+      created_at: "2026-03-12T07:00:00.000Z",
+      updated_at: "2026-03-12T07:00:45.000Z",
+      scan_duration_ms: 0,
+    },
+    Date.parse("2026-03-12T07:05:00.000Z"),
+  );
+
+  assert.equal(duration, 45_000);
+});
+
+test("getStaticAnalysisTotalDisplayDurationMs sums completed and running engine durations", () => {
+  const duration = viewModel.getStaticAnalysisTotalDisplayDurationMs?.({
+    opengrepTask: {
+      id: "og-completed",
+      project_id: "project-4",
+      status: "completed",
+      created_at: "2026-03-12T07:00:00.000Z",
+      updated_at: "2026-03-12T07:01:35.000Z",
+      scan_duration_ms: 95_000,
+    },
+    gitleaksTask: {
+      id: "gl-running",
+      project_id: "project-4",
+      status: "running",
+      created_at: "2026-03-12T07:00:30.000Z",
+      updated_at: "2026-03-12T07:00:40.000Z",
+      scan_duration_ms: 0,
+    },
+    banditTask: null,
+    nowMs: Date.parse("2026-03-12T07:01:30.000Z"),
+  });
+
+  assert.equal(duration, 155_000);
 });
 
 test("buildStaticAnalysisProgressSummary matches the task management progress rules for grouped static scans", () => {

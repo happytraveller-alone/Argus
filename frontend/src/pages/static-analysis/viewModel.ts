@@ -1,11 +1,14 @@
 import { getEstimatedTaskProgressPercent } from "@/features/tasks/services/taskProgress";
+import {
+	normalizeStaticAnalysisSeverity,
+	type NormalizedSeverity,
+} from "@/shared/utils/staticAnalysisSeverity";
 
 export type Engine = "opengrep" | "gitleaks" | "bandit";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive" | "fixed";
 export type StatusFilter = "all" | FindingStatus;
 export type ConfidenceFilter = "all" | "HIGH" | "MEDIUM" | "LOW";
-export type NormalizedSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 export type SeverityFilter = "all" | NormalizedSeverity;
 export type NormalizedConfidence = "HIGH" | "MEDIUM" | "LOW";
 
@@ -15,6 +18,13 @@ export interface StaticAnalysisProgressTaskLike {
   status: string;
   created_at: string;
   updated_at?: string | null;
+}
+
+export interface StaticAnalysisSummaryTaskLike
+  extends StaticAnalysisProgressTaskLike {
+  scan_duration_ms?: number | null;
+  total_findings?: number | null;
+  files_scanned?: number | null;
 }
 
 export interface StaticAnalysisProgressSummary {
@@ -82,6 +92,14 @@ const CONFIDENCE_SCORE: Record<NormalizedConfidence, number> = {
   LOW: 1,
 };
 
+const STATIC_ANALYSIS_TERMINAL_STATUSES = new Set([
+  "completed",
+  "failed",
+  "interrupted",
+  "cancelled",
+  "aborted",
+]);
+
 export function decodeStaticAnalysisPathParam(raw: string | undefined): string {
   try {
     return decodeURIComponent(String(raw || "")).trim();
@@ -103,22 +121,6 @@ export function normalizeStaticAnalysisPath(path?: string | null): string {
     }
   }
   return unified.replace(/^\/+/, "") || "-";
-}
-
-export function normalizeStaticAnalysisSeverity(
-  severity?: string | null,
-): NormalizedSeverity {
-  const normalized = String(severity || "").trim().toUpperCase();
-  if (normalized === "CRITICAL") return "CRITICAL";
-  if (normalized === "HIGH") return "HIGH";
-  if (
-    normalized === "ERROR" ||
-    normalized === "WARNING" ||
-    normalized === "MEDIUM"
-  ) {
-    return "MEDIUM";
-  }
-  return "LOW";
 }
 
 export function getStaticAnalysisSeverityLabel(
@@ -206,9 +208,60 @@ export function isStaticAnalysisCompletedStatus(
   return String(status || "").trim().toLowerCase() === "completed";
 }
 
+function normalizeStaticAnalysisStatus(status?: string | null): string {
+  return String(status || "").trim().toLowerCase();
+}
+
+function toStaticAnalysisTimestampMs(value?: string | null): number | null {
+  const timestamp = new Date(String(value || "")).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 export function toStaticAnalysisSafeMetric(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+export function getStaticAnalysisTaskDisplayDurationMs(
+  task: StaticAnalysisSummaryTaskLike | null,
+  nowMs = Date.now(),
+): number {
+  if (!task) return 0;
+
+  const persistedDurationMs = toStaticAnalysisSafeMetric(task.scan_duration_ms);
+  const createdAtMs = toStaticAnalysisTimestampMs(task.created_at);
+  const updatedAtMs = toStaticAnalysisTimestampMs(task.updated_at);
+  const status = normalizeStaticAnalysisStatus(task.status);
+
+  if (status === "pending" || status === "running") {
+    const elapsedMs =
+      createdAtMs === null ? 0 : Math.max(0, Math.floor(nowMs - createdAtMs));
+    return Math.max(persistedDurationMs, elapsedMs, 0);
+  }
+
+  if (STATIC_ANALYSIS_TERMINAL_STATUSES.has(status)) {
+    if (persistedDurationMs > 0) {
+      return persistedDurationMs;
+    }
+    if (createdAtMs !== null && updatedAtMs !== null) {
+      return Math.max(0, Math.floor(updatedAtMs - createdAtMs));
+    }
+  }
+
+  return persistedDurationMs;
+}
+
+export function getStaticAnalysisTotalDisplayDurationMs(input: {
+  opengrepTask: StaticAnalysisSummaryTaskLike | null;
+  gitleaksTask: StaticAnalysisSummaryTaskLike | null;
+  banditTask: StaticAnalysisSummaryTaskLike | null;
+  nowMs?: number;
+}): number {
+  return (
+    getStaticAnalysisTaskDisplayDurationMs(input.opengrepTask, input.nowMs) +
+    getStaticAnalysisTaskDisplayDurationMs(input.gitleaksTask, input.nowMs) +
+    getStaticAnalysisTaskDisplayDurationMs(input.banditTask, input.nowMs)
+  );
 }
 
 export function buildStaticAnalysisProgressSummary(input: {

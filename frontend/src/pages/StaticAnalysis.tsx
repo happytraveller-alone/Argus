@@ -18,7 +18,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -27,19 +26,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
+import StaticAnalysisSummaryCards from "./static-analysis/StaticAnalysisSummaryCards";
 import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
 import {
-  buildStaticAnalysisProgressSummary,
   buildStaticAnalysisListState,
   buildUnifiedFindingRows,
   decodeStaticAnalysisPathParam,
-  formatStaticAnalysisDuration,
   type ConfidenceFilter,
   type Engine,
   type EngineFilter,
   type SeverityFilter,
   type StatusFilter,
-  toStaticAnalysisSafeMetric,
 } from "./static-analysis/viewModel";
 
 export default function StaticAnalysis() {
@@ -164,30 +161,6 @@ export default function StaticAnalysis() {
     if (banditTaskId) engines.push("bandit");
     return engines;
   }, [banditTaskId, gitleaksTaskId, opengrepTaskId]);
-
-  const progressSummary = useMemo(
-    () =>
-      buildStaticAnalysisProgressSummary({
-        opengrepTask,
-        gitleaksTask,
-        banditTask,
-      }),
-    [banditTask, gitleaksTask, opengrepTask],
-  );
-  const progressPercent = progressSummary.progressPercent;
-
-  const totalScanDurationMs =
-    toStaticAnalysisSafeMetric(opengrepTask?.scan_duration_ms) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.scan_duration_ms) +
-    toStaticAnalysisSafeMetric(banditTask?.scan_duration_ms);
-  const totalFindings =
-    toStaticAnalysisSafeMetric(opengrepTask?.total_findings) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.total_findings) +
-    toStaticAnalysisSafeMetric(banditTask?.total_findings);
-  const totalFilesScanned =
-    toStaticAnalysisSafeMetric(opengrepTask?.files_scanned) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.files_scanned) +
-    toStaticAnalysisSafeMetric(banditTask?.files_scanned);
   const pageResetKey = `${engineFilter}:${statusFilter}:${severityFilter}:${confidenceFilter}`;
 
   useEffect(() => {
@@ -283,61 +256,12 @@ export default function StaticAnalysis() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-        <div className="cyber-card p-4 space-y-2">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            进度比例
-          </p>
-          <p className="text-xl font-bold text-foreground">{progressPercent}%</p>
-          <Progress
-            value={progressPercent}
-            className="h-1.5 bg-muted [&>div]:bg-emerald-500"
-          />
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            扫描时间
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {formatStaticAnalysisDuration(totalScanDurationMs)}
-          </p>
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            扫描漏洞数量
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {totalFindings.toLocaleString()}
-          </p>
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            使用引擎数量
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {enabledEngines.length.toLocaleString()}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {enabledEngines
-              .map((engine) =>
-                engine === "opengrep"
-                  ? "Opengrep"
-                  : engine === "gitleaks"
-                    ? "Gitleaks"
-                    : "Bandit",
-              )
-              .join(" / ") || "-"}
-          </p>
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            涉及文件
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {totalFilesScanned.toLocaleString()}
-          </p>
-        </div>
-      </div>
+      <StaticAnalysisSummaryCards
+        opengrepTask={opengrepTask}
+        gitleaksTask={gitleaksTask}
+        banditTask={banditTask}
+        enabledEngines={enabledEngines}
+      />
 
       <div className="cyber-card p-4 space-y-3">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">

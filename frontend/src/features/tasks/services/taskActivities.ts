@@ -38,6 +38,13 @@ export type TaskActivitySourceMode =
 export const HYBRID_TASK_NAME_MARKER = "[HYBRID]";
 export const INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]";
 
+type StaticSeverityCounts = {
+	critical: number;
+	high: number;
+	medium: number;
+	low: number;
+};
+
 export interface TaskActivityItem {
 	id: string;
 	projectName: string;
@@ -45,11 +52,7 @@ export interface TaskActivityItem {
 	sourceMode: TaskActivitySourceMode;
 	status: string;
 	gitleaksEnabled?: boolean;
-	staticFindingStats?: {
-		severe: number;
-		hint: number;
-		total: number;
-	};
+	staticFindingStats?: StaticSeverityCounts;
 	agentFindingStats?: {
 		critical: number;
 		high: number;
@@ -130,6 +133,67 @@ function normalizeStatus(status: string | null | undefined): string {
 	return String(status || "").trim().toLowerCase();
 }
 
+function toNonNegativeInt(value: unknown): number {
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) {
+		return 0;
+	}
+	return Math.floor(parsed);
+}
+
+function buildOpengrepSeverityCounts(
+	task?: OpengrepScanTask | null,
+): StaticSeverityCounts {
+	const total = toNonNegativeInt(task?.total_findings);
+	const error = toNonNegativeInt(task?.error_count);
+	const warning = toNonNegativeInt(task?.warning_count);
+	return {
+		critical: 0,
+		high: 0,
+		medium: error + warning,
+		low: Math.max(total - error - warning, 0),
+	};
+}
+
+function buildGitleaksSeverityCounts(
+	task?: GitleaksScanTask | null,
+): StaticSeverityCounts {
+	return {
+		critical: 0,
+		high: 0,
+		medium: 0,
+		low: toNonNegativeInt(task?.total_findings),
+	};
+}
+
+function buildBanditSeverityCounts(
+	task?: BanditScanTask | null,
+): StaticSeverityCounts {
+	return {
+		critical: 0,
+		high: toNonNegativeInt(task?.high_count),
+		medium: toNonNegativeInt(task?.medium_count),
+		low: toNonNegativeInt(task?.low_count),
+	};
+}
+
+function mergeSeverityCounts(...counts: StaticSeverityCounts[]): StaticSeverityCounts {
+	return counts.reduce<StaticSeverityCounts>(
+		(acc, item) => ({
+			critical: acc.critical + item.critical,
+			high: acc.high + item.high,
+			medium: acc.medium + item.medium,
+			low: acc.low + item.low,
+		}),
+		{
+			critical: 0,
+			high: 0,
+			medium: 0,
+			low: 0,
+		},
+	);
+}
+
 function toRuleScanActivities(
 	opengrepTasks: OpengrepScanTask[],
 	gitleaksTasks: GitleaksScanTask[],
@@ -146,7 +210,8 @@ function toRuleScanActivities(
 		banditTasks,
 	});
 
-	return groups.map((group) => {
+	return groups
+		.map((group): TaskActivityItem | null => {
 		const opengrepTask = group.opengrepTask;
 		const gitleaksTask = group.gitleaksTask;
 		const banditTask = group.banditTask;
@@ -189,24 +254,11 @@ function toRuleScanActivities(
 			return (total ?? 0) + value;
 		}, null);
 
-		const severeCount =
-			Math.max(opengrepTask?.error_count || 0, 0) +
-			Math.max(banditTask?.high_count || 0, 0);
-		const hintCount =
-			Math.max(opengrepTask?.warning_count || 0, 0) +
-			Math.max(gitleaksTask?.total_findings || 0, 0) +
-			Math.max(banditTask?.medium_count || 0, 0) +
-			Math.max(banditTask?.low_count || 0, 0);
-		const totalFindings =
-			Math.max(opengrepTask?.total_findings || 0, 0) +
-			Math.max(gitleaksTask?.total_findings || 0, 0) +
-			Math.max(
-				banditTask?.total_findings ||
-					Math.max(banditTask?.high_count || 0, 0) +
-						Math.max(banditTask?.medium_count || 0, 0) +
-						Math.max(banditTask?.low_count || 0, 0),
-				0,
-			);
+		const staticFindingStats = mergeSeverityCounts(
+			buildOpengrepSeverityCounts(opengrepTask),
+			buildGitleaksSeverityCounts(gitleaksTask),
+			buildBanditSeverityCounts(banditTask),
+		);
 
 		const candidateStatuses = [opengrepTask, gitleaksTask, banditTask]
 			.map((task) => normalizeStatus(task?.status))
@@ -226,7 +278,7 @@ function toRuleScanActivities(
 		}, null);
 		const completedAt = hasRunningStatus ? null : latestUpdatedAt;
 
-		return {
+		const item: TaskActivityItem = {
 			id: `static-${primaryTask.id}`,
 			projectName: resolveProjectName(group.projectId),
 			kind: "rule_scan",
@@ -236,18 +288,16 @@ function toRuleScanActivities(
 			),
 			status: resolveStaticScanGroupStatus(group),
 			gitleaksEnabled: Boolean(gitleaksTask),
-			staticFindingStats: {
-				severe: severeCount,
-				hint: hintCount,
-				total: totalFindings,
-			},
+			staticFindingStats,
 			createdAt: group.createdAt,
 			startedAt: group.createdAt,
 			completedAt,
 			durationMs,
 			route: `/static-analysis/${primaryTask.id}?${params.toString()}`,
 		};
-	}).filter((item): item is TaskActivityItem => Boolean(item));
+		return item;
+	})
+		.filter((item): item is TaskActivityItem => item !== null);
 }
 
 function toAgentActivities(
