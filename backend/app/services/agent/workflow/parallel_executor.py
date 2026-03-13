@@ -365,10 +365,6 @@ class ParallelPhaseExecutor:
 
         logger.info(f"[ParallelExecutor] Starting parallel analysis with {self.max_workers} workers")
 
-        # 初始化 worker agents
-        for worker_id in range(self.max_workers):
-            self.worker_agents[worker_id] = self._create_worker_agent(worker_id)
-
         # 启动 worker 任务
         worker_tasks = [
             asyncio.create_task(
@@ -426,7 +422,6 @@ class ParallelPhaseExecutor:
             task_id: 任务 ID
             recon_queue: Recon 风险队列服务
         """
-        worker_agent = self.worker_agents[worker_id]
         iteration = 0
 
         logger.info(f"[Worker-{worker_id}] Analysis worker started")
@@ -468,6 +463,9 @@ class ParallelPhaseExecutor:
                     "risk_point": risk_point,
                     "context": json.dumps(risk_point, ensure_ascii=False),
                 }
+
+                # 严格隔离：每个风险点创建全新 agent 实例，避免跨任务上下文/缓存复用。
+                worker_agent = self._create_worker_agent(worker_id)
 
                 # 注入当前风险点（仅供 orchestrator 内部提取使用，并发时以各 worker 自身 params 为准）
                 self.orchestrator._last_recon_risk_point = risk_point
@@ -600,10 +598,6 @@ class ParallelPhaseExecutor:
 
         logger.info(f"[ParallelExecutor] Starting parallel verification with {self.max_workers} workers")
 
-        # 初始化 worker agents
-        for worker_id in range(self.max_workers):
-            self.worker_agents[worker_id] = self._create_worker_agent(worker_id)
-
         # 启动 worker 任务
         worker_tasks = [
             asyncio.create_task(
@@ -655,7 +649,6 @@ class ParallelPhaseExecutor:
             task_id: 任务 ID
             vuln_queue: 漏洞队列服务
         """
-        worker_agent = self.worker_agents[worker_id]
         iteration = 0
 
         logger.info(f"[Worker-{worker_id}] Verification worker started")
@@ -722,6 +715,9 @@ class ParallelPhaseExecutor:
                     "finding": finding,
                     "context": json.dumps(finding, ensure_ascii=False),
                 }
+
+                # 严格隔离：每个漏洞创建全新 agent 实例，避免跨任务上下文/缓存复用。
+                worker_agent = self._create_worker_agent(worker_id)
 
                 try:
                     await self._dispatch_to_worker_agent(worker_agent, params)
@@ -965,10 +961,6 @@ class ParallelPhaseExecutor:
 
         logger.info(f"[ParallelExecutor] Starting parallel BL analysis with {self.max_workers} workers")
 
-        # 初始化 worker agents
-        for worker_id in range(self.max_workers):
-            self.worker_agents[worker_id] = self._create_worker_agent(worker_id)
-
         # 启动 worker 任务
         worker_tasks = [
             asyncio.create_task(
@@ -1014,7 +1006,6 @@ class ParallelPhaseExecutor:
             task_id: 任务 ID
             bl_queue: 业务逻辑风险队列服务
         """
-        worker_agent = self.worker_agents[worker_id]
         iteration = 0
 
         logger.info(f"[BLWorker-{worker_id}] BL analysis worker started")
@@ -1051,6 +1042,9 @@ class ParallelPhaseExecutor:
                     "risk_point": risk_point,
                     "context": json.dumps(risk_point, ensure_ascii=False),
                 }
+
+                # 严格隔离：每个业务逻辑风险点创建全新 agent 实例。
+                worker_agent = self._create_worker_agent(worker_id)
 
                 try:
                     await self._dispatch_to_worker_agent(worker_agent, params)
