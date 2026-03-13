@@ -40,6 +40,7 @@ export function getProjectExecutionStats(
 	const staticGroups = buildStaticScanGroups({
 		opengrepTasks: projectTaskPool?.opengrepTasks || [],
 		gitleaksTasks: projectTaskPool?.gitleaksTasks || [],
+		banditTasks: projectTaskPool?.banditTasks || [],
 	});
 	const staticStats = staticGroups.reduce(
 		(accumulator, group) => {
@@ -111,6 +112,8 @@ export function buildProjectsPageViewModel(
 				auditTasks: projectTaskPool?.auditTasks || [],
 				agentTasks: projectTaskPool?.agentTasks || [],
 				opengrepTasks: projectTaskPool?.opengrepTasks || [],
+				gitleaksTasks: projectTaskPool?.gitleaksTasks || [],
+				banditTasks: projectTaskPool?.banditTasks || [],
 			});
 			return {
 				id: project.id,

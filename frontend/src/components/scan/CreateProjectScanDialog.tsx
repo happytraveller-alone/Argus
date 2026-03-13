@@ -16,6 +16,7 @@ import {
 	type OpengrepRule,
 } from "@/shared/api/opengrep";
 import { createGitleaksScanTask } from "@/shared/api/gitleaks";
+import { createBanditScanTask } from "@/shared/api/bandit";
 import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
 import {
@@ -23,6 +24,10 @@ import {
 	INTELLIGENT_TASK_NAME_MARKER,
 } from "@/features/tasks/services/taskActivities";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
+import {
+	appendStaticScanBatchMarker,
+	createStaticScanBatchId,
+} from "@/shared/utils/staticScanBatch";
 import CreateProjectScanDialogContent from "./create-project-scan/Content";
 import {
 	buildLlmProviderOptions,
@@ -246,6 +251,7 @@ export default function CreateProjectScanDialog({
 		setBranchName("main");
 		setOpengrepEnabled(true);
 		setGitleaksEnabled(false);
+		setBanditEnabled(false);
 		setShowLlmQuickFixPanel(false);
 		setLlmProviderOptions(
 			buildLlmProviderOptions({ backendProviders: [], currentProviderId: "openai" }),
@@ -427,7 +433,9 @@ export default function CreateProjectScanDialog({
 	): Promise<StaticTaskCreateResult> => {
 		let opengrepTask: { id: string } | null = null;
 		let gitleaksTask: { id: string } | null = null;
+		let banditTask: { id: string } | null = null;
 		const taskNamePrefix = "静态分析";
+		const staticBatchId = createStaticScanBatchId();
 
 		if (opengrepEnabled) {
 			const ruleIds = activeRules
@@ -438,7 +446,10 @@ export default function CreateProjectScanDialog({
 			}
 			opengrepTask = await createOpengrepScanTask({
 				project_id: project.id,
-				name: `${taskNamePrefix}-Opengrep-${project.name}`,
+				name: appendStaticScanBatchMarker(
+					`${taskNamePrefix}-Opengrep-${project.name}`,
+					staticBatchId,
+				),
 				rule_ids: ruleIds,
 				target_path: ".",
 			});
@@ -447,23 +458,46 @@ export default function CreateProjectScanDialog({
 		if (gitleaksEnabled) {
 			gitleaksTask = await createGitleaksScanTask({
 				project_id: project.id,
-				name: `${taskNamePrefix}-Gitleaks-${project.name}`,
+				name: appendStaticScanBatchMarker(
+					`${taskNamePrefix}-Gitleaks-${project.name}`,
+					staticBatchId,
+				),
 				target_path: ".",
 				no_git: true,
 			});
 		}
 
-		const primaryTaskId = opengrepTask?.id || gitleaksTask?.id;
+		if (banditEnabled) {
+			banditTask = await createBanditScanTask({
+				project_id: project.id,
+				name: appendStaticScanBatchMarker(
+					`${taskNamePrefix}-Bandit-${project.name}`,
+					staticBatchId,
+				),
+				target_path: ".",
+			});
+		}
+
+		const primaryTaskId = opengrepTask?.id || gitleaksTask?.id || banditTask?.id;
 		if (!primaryTaskId) {
 			throw new Error("静态扫描任务创建失败");
 		}
 
 		const params = new URLSearchParams();
-		if (opengrepTask && gitleaksTask) {
+		if (opengrepTask) {
 			params.set("opengrepTaskId", opengrepTask.id);
+		}
+		if (gitleaksTask) {
 			params.set("gitleaksTaskId", gitleaksTask.id);
-		} else if (!opengrepTask && gitleaksTask) {
+		}
+		if (banditTask) {
+			params.set("banditTaskId", banditTask.id);
+		}
+		if (!opengrepTask && !banditTask && gitleaksTask) {
 			params.set("tool", "gitleaks");
+		}
+		if (!opengrepTask && !gitleaksTask && banditTask) {
+			params.set("tool", "bandit");
 		}
 		return { primaryTaskId, params };
 	};
@@ -870,7 +904,7 @@ export default function CreateProjectScanDialog({
 					toast.error("该项目未上传源码压缩包");
 					return;
 				}
-				if (!opengrepEnabled && !gitleaksEnabled) {
+				if (!opengrepEnabled && !gitleaksEnabled && !banditEnabled) {
 					toast.error("请至少启用一个扫描引擎");
 					return;
 				}
@@ -960,6 +994,8 @@ export default function CreateProjectScanDialog({
 			setOpengrepEnabled={setOpengrepEnabled}
 			gitleaksEnabled={gitleaksEnabled}
 			setGitleaksEnabled={setGitleaksEnabled}
+			banditEnabled={banditEnabled}
+			setBanditEnabled={setBanditEnabled}
 			showLlmQuickFixPanel={showLlmQuickFixPanel}
 			openLlmQuickFixPanelManual={openLlmQuickFixPanelManual}
 			quickFixSaving={quickFixSaving}

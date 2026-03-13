@@ -9,11 +9,12 @@ import { cn } from "@/shared/utils/utils";
 
 export type ScanMode = "static" | "agent";
 
-export type StaticTool = "opengrep" | "gitleaks";
+export type StaticTool = "opengrep" | "gitleaks" | "bandit";
 
 export interface StaticToolSelection {
   opengrep: boolean;
   gitleaks: boolean;
+  bandit: boolean;
 }
 
 interface AgentModeSelectorProps {
@@ -36,6 +37,7 @@ export default function AgentModeSelector({
   const resolvedTools: StaticToolSelection = staticTools || {
     opengrep: true,
     gitleaks: false,
+    bandit: false,
   };
 
   const updateStaticTool = (tool: StaticTool, checked: boolean) => {
@@ -151,6 +153,17 @@ export default function AgentModeSelector({
                 />
                 <span className="tracking-wider">密钥泄露扫描</span>
               </label>
+              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
+                <Checkbox
+                  checked={resolvedTools.bandit}
+                  onCheckedChange={(checked) =>
+                    updateStaticTool("bandit", Boolean(checked))
+                  }
+                  disabled={disabled}
+                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
+                />
+                <span className="tracking-wider">Python 安全扫描</span>
+              </label>
             </div>
           )}
 
@@ -263,6 +276,7 @@ export default function AgentModeSelector({
           <ul className="list-disc list-inside space-y-0.5 text-sky-600 dark:text-sky-300/80">
             <li>基于规则引擎快速扫描代码缺陷</li>
             <li>支持按工具组合执行（Opengrep / Gitleaks）</li>
+            <li>支持 Python Bandit 扫描</li>
             <li>结果稳定、反馈快，适合日常基线检查</li>
           </ul>
         </div>

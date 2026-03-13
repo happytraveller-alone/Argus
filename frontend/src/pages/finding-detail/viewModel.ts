@@ -357,7 +357,7 @@ export function buildGitleaksFindingCodeViews(
 }
 
 export function buildBanditFindingCodeViews(finding: BanditFinding): FindingDetailCodeView[] {
-  const content = String(finding.code || "").trim();
+  const content = String(finding.code_snippet || "").trim();
   if (!content) return [];
   return [
     {

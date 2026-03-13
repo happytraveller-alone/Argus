@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  getBanditFindings,
+  getBanditScanTask,
+  interruptBanditScanTask,
+  updateBanditFindingStatus,
+  type BanditFinding,
+  type BanditScanTask,
+} from "@/shared/api/bandit";
+import {
   getGitleaksFindings,
   getGitleaksScanTask,
   interruptGitleaksScanTask,
@@ -53,19 +61,37 @@ async function fetchAllGitleaksFindings(taskId: string): Promise<GitleaksFinding
   return allFindings;
 }
 
+async function fetchAllBanditFindings(taskId: string): Promise<BanditFinding[]> {
+  const allFindings: BanditFinding[] = [];
+  for (let page = 0; page < MAX_FINDING_BATCH_PAGES; page += 1) {
+    const batch = await getBanditFindings({
+      taskId,
+      skip: page * FINDING_BATCH_SIZE,
+      limit: FINDING_BATCH_SIZE,
+    });
+    allFindings.push(...batch);
+    if (batch.length < FINDING_BATCH_SIZE) break;
+  }
+  return allFindings;
+}
+
 export function useStaticAnalysisData({
   hasEnabledEngine,
   opengrepTaskId,
   gitleaksTaskId,
+  banditTaskId,
 }: {
   hasEnabledEngine: boolean;
   opengrepTaskId: string;
   gitleaksTaskId: string;
+  banditTaskId: string;
 }) {
   const [opengrepTask, setOpengrepTask] = useState<OpengrepScanTask | null>(null);
   const [gitleaksTask, setGitleaksTask] = useState<GitleaksScanTask | null>(null);
+  const [banditTask, setBanditTask] = useState<BanditScanTask | null>(null);
   const [opengrepFindings, setOpengrepFindings] = useState<OpengrepFinding[]>([]);
   const [gitleaksFindings, setGitleaksFindings] = useState<GitleaksFinding[]>([]);
+  const [banditFindings, setBanditFindings] = useState<BanditFinding[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingTask, setLoadingTask] = useState(false);
   const [loadingFindings, setLoadingFindings] = useState(false);
@@ -75,6 +101,7 @@ export function useStaticAnalysisData({
 
   const opengrepSilentRefreshRef = useRef(false);
   const gitleaksSilentRefreshRef = useRef(false);
+  const banditSilentRefreshRef = useRef(false);
 
   const loadOpengrepTask = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
@@ -114,6 +141,25 @@ export function useStaticAnalysisData({
     }
   }, [gitleaksTaskId]);
 
+  const loadBanditTask = useCallback(async (silent = false) => {
+    if (!banditTaskId) {
+      setBanditTask(null);
+      return;
+    }
+    try {
+      if (!silent) setLoadingTask(true);
+      const task = await getBanditScanTask(banditTaskId);
+      setBanditTask(task);
+    } catch {
+      setBanditTask(null);
+      if (!silent) {
+        toast.error("加载 Bandit 任务失败");
+      }
+    } finally {
+      if (!silent) setLoadingTask(false);
+    }
+  }, [banditTaskId]);
+
   const loadOpengrepFindings = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
       setOpengrepFindings([]);
@@ -150,6 +196,24 @@ export function useStaticAnalysisData({
     }
   }, [gitleaksTaskId]);
 
+  const loadBanditFindings = useCallback(async (silent = false) => {
+    if (!banditTaskId) {
+      setBanditFindings([]);
+      return;
+    }
+    try {
+      if (!silent) setLoadingFindings(true);
+      setBanditFindings(await fetchAllBanditFindings(banditTaskId));
+    } catch {
+      setBanditFindings([]);
+      if (!silent) {
+        toast.error("加载 Bandit 漏洞失败");
+      }
+    } finally {
+      if (!silent) setLoadingFindings(false);
+    }
+  }, [banditTaskId]);
+
   const refreshAll = useCallback(async (silent = false) => {
     if (!hasEnabledEngine) {
       setLoadingInitial(false);
@@ -160,8 +224,10 @@ export function useStaticAnalysisData({
       await Promise.all([
         loadOpengrepTask(silent),
         loadGitleaksTask(silent),
+        loadBanditTask(silent),
         loadOpengrepFindings(silent),
         loadGitleaksFindings(silent),
+        loadBanditFindings(silent),
       ]);
     } finally {
       if (!silent) setLoadingInitial(false);
@@ -170,6 +236,8 @@ export function useStaticAnalysisData({
     hasEnabledEngine,
     loadGitleaksFindings,
     loadGitleaksTask,
+    loadBanditFindings,
+    loadBanditTask,
     loadOpengrepFindings,
     loadOpengrepTask,
   ]);
@@ -196,6 +264,17 @@ export function useStaticAnalysisData({
     }
   }, [gitleaksTaskId, loadGitleaksFindings, loadGitleaksTask]);
 
+  const refreshBanditSilently = useCallback(async () => {
+    if (!banditTaskId || banditSilentRefreshRef.current) return;
+    banditSilentRefreshRef.current = true;
+    try {
+      await loadBanditTask(true);
+      await loadBanditFindings(true);
+    } finally {
+      banditSilentRefreshRef.current = false;
+    }
+  }, [banditTaskId, loadBanditFindings, loadBanditTask]);
+
   const handleInterrupt = useCallback(async () => {
     if (!interruptTarget) return;
     setInterrupting(true);
@@ -208,6 +287,10 @@ export function useStaticAnalysisData({
         await interruptGitleaksScanTask(gitleaksTaskId);
         toast.success("Gitleaks 任务已中止");
       }
+      if (interruptTarget === "bandit" && banditTaskId) {
+        await interruptBanditScanTask(banditTaskId);
+        toast.success("Bandit 任务已中止");
+      }
       await refreshAll(true);
     } catch {
       toast.error("中止任务失败");
@@ -215,7 +298,7 @@ export function useStaticAnalysisData({
       setInterrupting(false);
       setInterruptTarget(null);
     }
-  }, [gitleaksTaskId, interruptTarget, opengrepTaskId, refreshAll]);
+  }, [banditTaskId, gitleaksTaskId, interruptTarget, opengrepTaskId, refreshAll]);
 
   const handleToggleStatus = useCallback(async (
     row: UnifiedFindingRow,
@@ -237,12 +320,22 @@ export function useStaticAnalysisData({
             finding.id === row.id ? { ...finding, status: nextStatus } : finding,
           ),
         );
-      } else {
+      } else if (row.engine === "gitleaks") {
         await updateGitleaksFindingStatus({
           findingId: row.id,
           status: nextStatus,
         });
         setGitleaksFindings((prev) =>
+          prev.map((finding) =>
+            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
+          ),
+        );
+      } else {
+        await updateBanditFindingStatus({
+          findingId: row.id,
+          status: nextStatus,
+        });
+        setBanditFindings((prev) =>
           prev.map((finding) =>
             finding.id === row.id ? { ...finding, status: nextStatus } : finding,
           ),
@@ -279,11 +372,23 @@ export function useStaticAnalysisData({
     return () => clearInterval(timer);
   }, [gitleaksTask?.status, gitleaksTaskId, refreshGitleaksSilently]);
 
+  useEffect(() => {
+    if (!banditTaskId || !isStaticAnalysisPollableStatus(banditTask?.status)) {
+      return;
+    }
+    const timer = setInterval(() => {
+      void refreshBanditSilently();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [banditTask?.status, banditTaskId, refreshBanditSilently]);
+
   return {
     opengrepTask,
     gitleaksTask,
+    banditTask,
     opengrepFindings,
     gitleaksFindings,
+    banditFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -299,6 +404,9 @@ export function useStaticAnalysisData({
     ),
     canInterruptGitleaks: Boolean(
       gitleaksTaskId && isStaticAnalysisInterruptibleStatus(gitleaksTask?.status),
+    ),
+    canInterruptBandit: Boolean(
+      banditTaskId && isStaticAnalysisInterruptibleStatus(banditTask?.status),
     ),
   };
 }

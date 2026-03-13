@@ -4,6 +4,10 @@ import {
 	getGitleaksScanTasks,
 } from "@/shared/api/gitleaks";
 import {
+	type BanditScanTask,
+	getBanditScanTasks,
+} from "@/shared/api/bandit";
+import {
 	getOpengrepScanTasks,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
@@ -12,6 +16,10 @@ import {
 	getEstimatedTaskProgressPercent,
 	INTERRUPTED_STATUSES,
 } from "./taskProgress";
+import {
+	buildStaticScanGroups,
+	resolveStaticScanGroupStatus,
+} from "./staticScanGrouping";
 
 export {
 	buildStaticScanGroups,
@@ -48,8 +56,6 @@ export interface TaskActivityItem {
 	durationMs?: number | null;
 	route: string;
 }
-
-const PAIRING_WINDOW_MS = 60 * 1000;
 
 function normalizeTaskName(name: string | null | undefined): string {
 	return String(name || "").trim().toLowerCase();
@@ -113,176 +119,128 @@ function mapProjectNames(projects: Project[]) {
 	return new Map(projects.map((project) => [project.id, project.name]));
 }
 
-interface GitleaksPairingResult {
-	pickPairedGitleaksTask: (opengrepTask: OpengrepScanTask) => GitleaksScanTask | null;
-	/** 返回所有被配对的独立 gitleaks 任务 */
-	getUnpairedGitleaksTasks: () => GitleaksScanTask[];
-}
-
-function pairGitleaksTasks(gitleaksTasks: GitleaksScanTask[]): GitleaksPairingResult {
-	const gitleaksByProject = new Map<string, GitleaksScanTask[]>();
-	for (const task of gitleaksTasks) {
-		const list = gitleaksByProject.get(task.project_id) || [];
-		list.push(task);
-		gitleaksByProject.set(task.project_id, list);
-	}
-
-	for (const [projectId, list] of gitleaksByProject.entries()) {
-		list.sort(
-			(a, b) =>
-				new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-		);
-		gitleaksByProject.set(projectId, list);
-	}
-
-	const usedGitleaksTaskIds = new Set<string>();
-
-	const pickPairedGitleaksTask = (opengrepTask: OpengrepScanTask) => {
-		const candidates = gitleaksByProject.get(opengrepTask.project_id) || [];
-		if (candidates.length === 0) return null;
-
-		const opengrepTime = new Date(opengrepTask.created_at).getTime();
-		let bestTask: GitleaksScanTask | null = null;
-		let bestDiff = Number.POSITIVE_INFINITY;
-
-		for (const candidate of candidates) {
-			if (usedGitleaksTaskIds.has(candidate.id)) continue;
-			const diff = Math.abs(
-				new Date(candidate.created_at).getTime() - opengrepTime,
-			);
-			if (diff <= PAIRING_WINDOW_MS && diff < bestDiff) {
-				bestTask = candidate;
-				bestDiff = diff;
-			}
-		}
-
-		if (bestTask) {
-			usedGitleaksTaskIds.add(bestTask.id);
-		}
-
-		return bestTask;
-	};
-
-	const getUnpairedGitleaksTasks = () =>
-		gitleaksTasks.filter((task) => !usedGitleaksTaskIds.has(task.id));
-
-	return { pickPairedGitleaksTask, getUnpairedGitleaksTasks };
+function normalizeStatus(status: string | null | undefined): string {
+	return String(status || "").trim().toLowerCase();
 }
 
 function toRuleScanActivities(
 	opengrepTasks: OpengrepScanTask[],
-	pickPairedGitleaksTask: (task: OpengrepScanTask) => GitleaksScanTask | null,
+	gitleaksTasks: GitleaksScanTask[],
+	banditTasks: BanditScanTask[],
 	resolveProjectName: (projectId: string) => string,
 ): TaskActivityItem[] {
+	// Multi-engine grouping: one activity item can contain any selected static engines.
 	const visibleOpengrepTasks = opengrepTasks.filter(
 		(task) => !task.name.startsWith("Agent Bootstrap OpenGrep"),
 	);
-
-	return visibleOpengrepTasks.map((task) => {
-		const pairedGitleaksTask = pickPairedGitleaksTask(task);
-		const opengrepTotalFindings = Math.max(task.total_findings || 0, 0);
-		const opengrepSevereCount = Math.max(task.error_count || 0, 0);
-		const opengrepWarningCount = Math.max(task.warning_count || 0, 0);
-		const pairedGitleaksFindings = Math.max(
-			pairedGitleaksTask?.total_findings || 0,
-			0,
-		);
-		const params = new URLSearchParams();
-		params.set("opengrepTaskId", task.id);
-		params.set("muteToast", "1");
-		if (pairedGitleaksTask) {
-			params.set("gitleaksTaskId", pairedGitleaksTask.id);
-		}
-		const durationCandidates = [
-			task.scan_duration_ms,
-			pairedGitleaksTask?.scan_duration_ms,
-		];
-		const durationMs = durationCandidates.reduce<number | null>(
-			(total, value) => {
-				if (
-					typeof value !== "number" ||
-					!Number.isFinite(value) ||
-					value <= 0
-				) {
-					return total;
-				}
-				return (total ?? 0) + value;
-			},
-			null,
-		);
-		const isTerminal =
-			task.status === "completed" ||
-			task.status === "failed" ||
-			INTERRUPTED_STATUSES.has(task.status);
-
-		return {
-			id: `opengrep-${task.id}`,
-			projectName: resolveProjectName(task.project_id),
-			kind: "rule_scan",
-			sourceMode: resolveSourceModeFromTaskMeta("rule_scan", task.name),
-			status: task.status,
-			gitleaksEnabled: Boolean(pairedGitleaksTask),
-			staticFindingStats: {
-				severe: opengrepSevereCount,
-				hint: opengrepWarningCount + pairedGitleaksFindings,
-				total: opengrepTotalFindings + pairedGitleaksFindings,
-			},
-			createdAt: task.created_at,
-			startedAt: task.created_at,
-			completedAt: isTerminal ? task.updated_at : null,
-			durationMs,
-			route: `/static-analysis/${task.id}?${params.toString()}`,
-		};
+	const groups = buildStaticScanGroups({
+		opengrepTasks: visibleOpengrepTasks,
+		gitleaksTasks,
+		banditTasks,
 	});
-}
 
-/**
- * 将未被配对的独立 gitleaks 任务转换为 TaskActivityItem。
- * 当用户仅启用 gitleaks 扫描时，这些任务不会与任何 opengrep 任务配对，
- * 需要独立展示在任务列表中。
- */
-function toStandaloneGitleaksActivities(
-	gitleaksTasks: GitleaksScanTask[],
-	resolveProjectName: (projectId: string) => string,
-): TaskActivityItem[] {
-	return gitleaksTasks.map((task) => {
-		const totalFindings = Math.max(task.total_findings || 0, 0);
+	return groups.map((group) => {
+		const opengrepTask = group.opengrepTask;
+		const gitleaksTask = group.gitleaksTask;
+		const banditTask = group.banditTask;
+		const primaryTask = opengrepTask || gitleaksTask || banditTask;
+		if (!primaryTask) {
+			return null;
+		}
+
 		const params = new URLSearchParams();
-		params.set("gitleaksTaskId", task.id);
-		params.set("tool", "gitleaks");
 		params.set("muteToast", "1");
+		if (opengrepTask) {
+			params.set("opengrepTaskId", opengrepTask.id);
+		}
+		if (gitleaksTask) {
+			params.set("gitleaksTaskId", gitleaksTask.id);
+		}
+		if (banditTask) {
+			params.set("banditTaskId", banditTask.id);
+		}
+		if (!opengrepTask && gitleaksTask && !banditTask) {
+			params.set("tool", "gitleaks");
+		}
+		if (!opengrepTask && !gitleaksTask && banditTask) {
+			params.set("tool", "bandit");
+		}
 
-		const durationMs =
-			typeof task.scan_duration_ms === "number" &&
-			Number.isFinite(task.scan_duration_ms) &&
-			task.scan_duration_ms > 0
-				? task.scan_duration_ms
-				: null;
+		const durationCandidates = [
+			opengrepTask?.scan_duration_ms,
+			gitleaksTask?.scan_duration_ms,
+			banditTask?.scan_duration_ms,
+		];
+		const durationMs = durationCandidates.reduce<number | null>((total, value) => {
+			if (
+				typeof value !== "number" ||
+				!Number.isFinite(value) ||
+				value <= 0
+			) {
+				return total;
+			}
+			return (total ?? 0) + value;
+		}, null);
 
-		const isTerminal =
-			task.status === "completed" ||
-			task.status === "failed" ||
-			INTERRUPTED_STATUSES.has(task.status);
+		const severeCount =
+			Math.max(opengrepTask?.error_count || 0, 0) +
+			Math.max(banditTask?.high_count || 0, 0);
+		const hintCount =
+			Math.max(opengrepTask?.warning_count || 0, 0) +
+			Math.max(gitleaksTask?.total_findings || 0, 0) +
+			Math.max(banditTask?.medium_count || 0, 0) +
+			Math.max(banditTask?.low_count || 0, 0);
+		const totalFindings =
+			Math.max(opengrepTask?.total_findings || 0, 0) +
+			Math.max(gitleaksTask?.total_findings || 0, 0) +
+			Math.max(
+				banditTask?.total_findings ||
+					Math.max(banditTask?.high_count || 0, 0) +
+						Math.max(banditTask?.medium_count || 0, 0) +
+						Math.max(banditTask?.low_count || 0, 0),
+				0,
+			);
+
+		const candidateStatuses = [opengrepTask, gitleaksTask, banditTask]
+			.map((task) => normalizeStatus(task?.status))
+			.filter(Boolean);
+		const hasRunningStatus = candidateStatuses.some(
+			(status) => status === "running" || status === "pending",
+		);
+		const latestUpdatedAt = [opengrepTask, gitleaksTask, banditTask].reduce<
+			string | null
+		>((latest, task) => {
+			const current = task?.updated_at || null;
+			if (!current) return latest;
+			if (!latest) return current;
+			return new Date(current).getTime() > new Date(latest).getTime()
+				? current
+				: latest;
+		}, null);
+		const completedAt = hasRunningStatus ? null : latestUpdatedAt;
 
 		return {
-			id: `gitleaks-${task.id}`,
-			projectName: resolveProjectName(task.project_id),
-			kind: "rule_scan" as const,
-			sourceMode: resolveSourceModeFromTaskMeta("rule_scan", task.name),
-			status: task.status,
-			gitleaksEnabled: true,
+			id: `static-${primaryTask.id}`,
+			projectName: resolveProjectName(group.projectId),
+			kind: "rule_scan",
+			sourceMode: resolveSourceModeFromTaskMeta(
+				"rule_scan",
+				opengrepTask?.name || gitleaksTask?.name || banditTask?.name,
+			),
+			status: resolveStaticScanGroupStatus(group),
+			gitleaksEnabled: Boolean(gitleaksTask),
 			staticFindingStats: {
-				severe: 0,
-				hint: totalFindings,
+				severe: severeCount,
+				hint: hintCount,
 				total: totalFindings,
 			},
-			createdAt: task.created_at,
-			startedAt: task.created_at,
-			completedAt: isTerminal ? (task.updated_at ?? null) : null,
+			createdAt: group.createdAt,
+			startedAt: group.createdAt,
+			completedAt,
 			durationMs,
-			route: `/static-analysis/${task.id}?${params.toString()}`,
+			route: `/static-analysis/${primaryTask.id}?${params.toString()}`,
 		};
-	});
+	}).filter((item): item is TaskActivityItem => Boolean(item));
 }
 
 function toAgentActivities(
@@ -310,27 +268,22 @@ export async function fetchTaskActivities(
 	projects: Project[],
 	limit = 100,
 ): Promise<TaskActivityItem[]> {
-	const [agentTasks, opengrepTasks, gitleaksTasks] = await Promise.all([
+	const [agentTasks, opengrepTasks, gitleaksTasks, banditTasks] = await Promise.all([
 		getAgentTasks({ limit }),
 		getOpengrepScanTasks({ limit }),
 		getGitleaksScanTasks({ limit }),
+		getBanditScanTasks({ limit }),
 	]);
 
 	const projectNameMap = mapProjectNames(projects);
 	const resolveProjectName = (projectId: string) =>
 		projectNameMap.get(projectId) || "未知项目";
 
-	const { pickPairedGitleaksTask, getUnpairedGitleaksTasks } =
-		pairGitleaksTasks(gitleaksTasks);
-
 	const activities = [
 		...toRuleScanActivities(
 			opengrepTasks,
-			pickPairedGitleaksTask,
-			resolveProjectName,
-		),
-		...toStandaloneGitleaksActivities(
-			getUnpairedGitleaksTasks(),
+			gitleaksTasks,
+			banditTasks,
 			resolveProjectName,
 		),
 		...toAgentActivities(agentTasks, resolveProjectName),

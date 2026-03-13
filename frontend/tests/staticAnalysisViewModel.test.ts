@@ -32,8 +32,22 @@ test("buildUnifiedFindingRows normalizes opengrep and gitleaks rows", () => {
         status: "open",
       },
     ],
+    banditFindings: [
+      {
+        id: "ba-1",
+        scan_task_id: "task-ba",
+        test_id: "B602",
+        test_name: "subprocess_shell_true",
+        issue_severity: "MEDIUM",
+        issue_confidence: "HIGH",
+        file_path: "app/main.py",
+        line_number: 42,
+        status: "open",
+      },
+    ],
     opengrepTaskId: "task-og",
     gitleaksTaskId: "task-gl",
+    banditTaskId: "task-ba",
   });
 
   assert.equal(rows[0]?.engine, "opengrep");
@@ -44,6 +58,11 @@ test("buildUnifiedFindingRows normalizes opengrep and gitleaks rows", () => {
   assert.equal(rows[1]?.engine, "gitleaks");
   assert.equal(rows[1]?.severity, "LOW");
   assert.equal(rows[1]?.confidence, "MEDIUM");
+
+  assert.equal(rows[2]?.engine, "bandit");
+  assert.equal(rows[2]?.severity, "MEDIUM");
+  assert.equal(rows[2]?.confidence, "HIGH");
+  assert.equal(rows[2]?.rule, "B602 · subprocess_shell_true");
 });
 
 test("buildStaticAnalysisListState filters, sorts and paginates rows", () => {
@@ -145,6 +164,7 @@ test("buildStaticAnalysisProgressSummary matches the task management progress ru
       created_at: "2026-03-12T07:00:30.000Z",
       updated_at: "2026-03-12T07:05:00.000Z",
     },
+    banditTask: null,
     nowMs: Date.parse("2026-03-12T07:12:00.000Z"),
   });
 
@@ -165,6 +185,7 @@ test("buildStaticAnalysisProgressSummary matches the task management progress ru
       created_at: "2026-03-12T07:00:15.000Z",
       updated_at: "2026-03-12T07:04:00.000Z",
     },
+    banditTask: null,
     nowMs: Date.parse("2026-03-12T07:12:00.000Z"),
   });
 
@@ -181,6 +202,7 @@ test("buildStaticAnalysisProgressSummary falls back to the primary task status w
       created_at: "2026-03-12T07:00:00.000Z",
       updated_at: "2026-03-12T07:01:00.000Z",
     },
+    banditTask: null,
     nowMs: Date.parse("2026-03-12T07:05:00.000Z"),
   });
 
@@ -203,6 +225,7 @@ test("buildStaticAnalysisProgressSummary keeps the management-page primary task 
       created_at: "2026-03-12T07:00:20.000Z",
       updated_at: "2026-03-12T07:12:00.000Z",
     },
+    banditTask: null,
     nowMs: Date.parse("2026-03-12T07:12:00.000Z"),
   });
 

@@ -6,7 +6,12 @@ export interface BanditScanTask {
   name: string;
   status: string;
   target_path: string;
+  severity_level: string;
+  confidence_level: string;
   total_findings: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
   scan_duration_ms: number;
   files_scanned: number;
   error_message?: string | null;
@@ -24,17 +29,18 @@ export interface BanditFinding {
   issue_confidence: string;
   file_path: string;
   line_number?: number | null;
-  code?: string | null;
+  code_snippet?: string | null;
   more_info?: string | null;
   status: string;
   created_at?: string;
-  updated_at?: string | null;
 }
 
 export async function createBanditScanTask(params: {
   project_id: string;
   name?: string;
   target_path?: string;
+  severity_level?: string;
+  confidence_level?: string;
 }): Promise<BanditScanTask> {
   const response = await apiClient.post("/static-tasks/bandit/scan", params);
   return response.data;

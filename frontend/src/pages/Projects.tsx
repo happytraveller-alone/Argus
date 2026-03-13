@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import ProjectsPage from "@/pages/projects/ProjectsPage";
-import { createApiProjectsPageDataSource } from "@/pages/projects/data/createApiProjectsPageDataSource";
+import { createApiProjectsPageDataSource } from "@/pages/projects/datasource/createApiProjectsPageDataSource";
 
 const CreateProjectScanDialog = lazy(
 	() => import("@/components/scan/CreateProjectScanDialog"),

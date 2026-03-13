@@ -246,7 +246,7 @@ export default function Dashboard() {
 		}
 
 		try {
-			const { projects, agentTasks, opengrepTasks, gitleaksTasks } =
+			const { projects, agentTasks, opengrepTasks, gitleaksTasks, banditTasks } =
 				await fetchTaskPoolsWithPagination();
 			if (requestSeq !== scanStatsRequestSeqRef.current) {
 				return;
@@ -260,6 +260,10 @@ export default function Dashboard() {
 				(sum, task) => sum + Math.max(Number(task.scan_duration_ms || 0), 0),
 				0,
 			);
+			const banditDurationMs = banditTasks.reduce(
+				(sum, task) => sum + Math.max(Number(task.scan_duration_ms || 0), 0),
+				0,
+			);
 			const agentDurationMs = agentTasks.reduce((sum, task) => {
 				const startedAt = parseTimestampMs(task.started_at);
 				const completedAt = parseTimestampMs(task.completed_at);
@@ -268,18 +272,22 @@ export default function Dashboard() {
 			}, 0);
 
 			setTotalScanDurationMs(
-				Math.max(opengrepDurationMs + gitleaksDurationMs + agentDurationMs, 0),
+				Math.max(opengrepDurationMs + gitleaksDurationMs + banditDurationMs + agentDurationMs, 0),
 			);
 
 			const scanRuns = buildProjectScanRunsChartData({
 				projects,
 				agentTasks,
 				opengrepTasks,
+				gitleaksTasks,
+				banditTasks,
 			});
 			const vulns = buildProjectVulnsChartData({
 				projects,
 				agentTasks,
 				opengrepTasks,
+				gitleaksTasks,
+				banditTasks,
 			});
 			setProjectScanRunsData(toTopNByField(scanRuns, "totalRuns", 10));
 			setProjectVulnsData(toTopNByField(vulns, "totalVulns", 10));

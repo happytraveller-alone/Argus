@@ -1,6 +1,6 @@
 import { getEstimatedTaskProgressPercent } from "@/features/tasks/services/taskProgress";
 
-export type Engine = "opengrep" | "gitleaks";
+export type Engine = "opengrep" | "gitleaks" | "bandit";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive" | "fixed";
 export type StatusFilter = "all" | FindingStatus;
@@ -53,6 +53,18 @@ type MinimalGitleaksFinding = {
   rule_id?: string | null;
   file_path?: string | null;
   start_line?: unknown;
+  status?: string | null;
+};
+
+type MinimalBanditFinding = {
+  id: string;
+  scan_task_id?: string | null;
+  test_id?: string | null;
+  test_name?: string | null;
+  issue_severity?: string | null;
+  issue_confidence?: string | null;
+  file_path?: string | null;
+  line_number?: unknown;
   status?: string | null;
 };
 
@@ -201,9 +213,11 @@ export function toStaticAnalysisSafeMetric(value: unknown): number {
 export function buildStaticAnalysisProgressSummary(input: {
   opengrepTask: StaticAnalysisProgressTaskLike | null;
   gitleaksTask: StaticAnalysisProgressTaskLike | null;
+  banditTask: StaticAnalysisProgressTaskLike | null;
   nowMs?: number;
 }): StaticAnalysisProgressSummary {
-  const primaryTask = input.opengrepTask || input.gitleaksTask || null;
+  const primaryTask =
+    input.opengrepTask || input.gitleaksTask || input.banditTask || null;
   if (!primaryTask) {
     return { progressPercent: 0 };
   }
@@ -234,8 +248,10 @@ export function getStaticAnalysisOpengrepRuleName(
 export function buildUnifiedFindingRows(input: {
   opengrepFindings: MinimalOpengrepFinding[];
   gitleaksFindings: MinimalGitleaksFinding[];
+  banditFindings: MinimalBanditFinding[];
   opengrepTaskId: string;
   gitleaksTaskId: string;
+  banditTaskId: string;
 }): UnifiedFindingRow[] {
   const opengrepRows = input.opengrepFindings.map((finding) => {
     const severity = normalizeStaticAnalysisSeverity(finding.severity);
@@ -271,7 +287,29 @@ export function buildUnifiedFindingRows(input: {
     status: String(finding.status || "open").trim().toLowerCase(),
   }));
 
-  return [...opengrepRows, ...gitleaksRows];
+  const banditRows = input.banditFindings.map((finding) => {
+    const severity = normalizeStaticAnalysisSeverity(finding.issue_severity);
+    const confidence = normalizeStaticAnalysisConfidence(finding.issue_confidence);
+    const testId = String(finding.test_id || "").trim();
+    const testName = String(finding.test_name || "").trim();
+    const rule = [testId, testName].filter(Boolean).join(" · ");
+    return {
+      key: `bandit:${finding.id}`,
+      id: finding.id,
+      taskId: finding.scan_task_id || input.banditTaskId,
+      engine: "bandit" as const,
+      rule: rule || "-",
+      filePath: normalizeStaticAnalysisPath(finding.file_path),
+      line: toStaticAnalysisPositiveLine(finding.line_number),
+      severity,
+      severityScore: SEVERITY_SCORE[severity],
+      confidence,
+      confidenceScore: CONFIDENCE_SCORE[confidence],
+      status: String(finding.status || "open").trim().toLowerCase(),
+    };
+  });
+
+  return [...opengrepRows, ...gitleaksRows, ...banditRows];
 }
 
 export function buildStaticAnalysisListState(input: {
@@ -288,7 +326,7 @@ export function buildStaticAnalysisListState(input: {
     .filter((row) => input.statusFilter === "all" || row.status === input.statusFilter)
     .filter((row) => {
       if (input.confidenceFilter === "all") return true;
-      if (row.engine !== "opengrep") return true;
+      if (row.engine === "gitleaks") return true;
       return row.confidence === input.confidenceFilter;
     })
     .sort((a, b) => {

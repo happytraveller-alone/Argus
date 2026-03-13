@@ -119,7 +119,7 @@ const banditFinding: BanditFinding = {
   line_number: 41,
   issue_severity: "HIGH",
   issue_confidence: "HIGH",
-  code: "subprocess.Popen(command, shell=True)",
+  code_snippet: "subprocess.Popen(command, shell=True)",
   more_info: "https://bandit.readthedocs.io/en/latest/plugins/b602_subprocess_popen_with_shell_equals_true.html",
   status: "open",
 };

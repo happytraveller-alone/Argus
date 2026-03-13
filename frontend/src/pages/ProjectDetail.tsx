@@ -45,6 +45,10 @@ import {
 	getGitleaksScanTasks,
 } from "@/shared/api/gitleaks";
 import {
+	type BanditScanTask,
+	getBanditScanTasks,
+} from "@/shared/api/bandit";
+import {
 	getOpengrepScanFindings,
 	getOpengrepScanTasks,
 	type OpengrepFinding,
@@ -70,6 +74,7 @@ export default function ProjectDetail() {
 	const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
 	const [staticTasks, setStaticTasks] = useState<OpengrepScanTask[]>([]);
 	const [gitleaksTasks, setGitleaksTasks] = useState<GitleaksScanTask[]>([]);
+	const [banditTasks, setBanditTasks] = useState<BanditScanTask[]>([]);
 	const [potentialVulnerabilities, setPotentialVulnerabilities] = useState<
 		ProjectCardPotentialVulnerability[]
 	>([]);
@@ -233,12 +238,14 @@ export default function ProjectDetail() {
 				agentTasksRes,
 				staticTasksRes,
 				gitleaksTasksRes,
+				banditTasksRes,
 			] = await Promise.allSettled([
 				api.getProjectById(id),
 				api.getAuditTasks(id),
 				getAgentTasks({ project_id: id }),
 				getOpengrepScanTasks({ projectId: id }),
 				getGitleaksScanTasks({ projectId: id }),
+				getBanditScanTasks({ projectId: id }),
 			]);
 
 			const nextAuditTasks =
@@ -261,6 +268,11 @@ export default function ProjectDetail() {
 				Array.isArray(gitleaksTasksRes.value)
 					? gitleaksTasksRes.value
 					: [];
+			const nextBanditTasks =
+				banditTasksRes.status === "fulfilled" &&
+				Array.isArray(banditTasksRes.value)
+					? banditTasksRes.value
+					: [];
 
 			if (projectRes.status === "fulfilled") {
 				setProject(projectRes.value);
@@ -281,11 +293,15 @@ export default function ProjectDetail() {
 			if (gitleaksTasksRes.status !== "fulfilled") {
 				console.warn("Failed to load gitleaks tasks:", gitleaksTasksRes.reason);
 			}
+			if (banditTasksRes.status !== "fulfilled") {
+				console.warn("Failed to load bandit tasks:", banditTasksRes.reason);
+			}
 
 			setAuditTasks(nextAuditTasks);
 			setAgentTasks(nextAgentTasks);
 			setStaticTasks(nextStaticTasks);
 			setGitleaksTasks(nextGitleaksTasks);
+			setBanditTasks(nextBanditTasks);
 
 			void fetchProjectPotentialVulnerabilities(
 				id,
@@ -315,9 +331,10 @@ export default function ProjectDetail() {
 			agentTasks,
 			opengrepTasks: staticTasks,
 			gitleaksTasks,
+			banditTasks,
 			limit: DETAIL_RECENT_TASK_LIMIT,
 		});
-	}, [id, auditTasks, agentTasks, staticTasks, gitleaksTasks]);
+	}, [id, auditTasks, agentTasks, staticTasks, gitleaksTasks, banditTasks]);
 
 	const handleRunScan = () => {
 		setShowCreateScanTaskDialog(true);
