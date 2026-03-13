@@ -46,6 +46,9 @@ else
 fi
 
 export BROWSER="${BROWSER:-none}"
+FRONTEND_PUBLIC_URL="${FRONTEND_PUBLIC_URL:-http://localhost:3000}"
+BACKEND_PUBLIC_URL="${BACKEND_PUBLIC_URL:-http://localhost:8000}"
+VITE_READY_URL="http://127.0.0.1:${FRONTEND_DEV_PORT:-5173}/"
 
 if [ -z "${CHOKIDAR_USEPOLLING:-}" ]; then
   case "$(uname -s)" in
@@ -58,4 +61,28 @@ if [ -z "${CHOKIDAR_USEPOLLING:-}" ]; then
   esac
 fi
 
-exec pnpm dev --host 0.0.0.0 --port "${FRONTEND_DEV_PORT:-5173}"
+pnpm dev --host 0.0.0.0 --port "${FRONTEND_DEV_PORT:-5173}" &
+vite_pid=$!
+
+cleanup() {
+  if kill -0 "$vite_pid" 2>/dev/null; then
+    kill "$vite_pid" 2>/dev/null || true
+  fi
+}
+
+trap cleanup INT TERM
+
+ready_logged=0
+while kill -0 "$vite_pid" 2>/dev/null; do
+  if curl -fsS "${VITE_READY_URL}" >/dev/null 2>&1; then
+    if [ "$ready_logged" -eq 0 ]; then
+      echo "[frontend-dev] frontend ready: ${FRONTEND_PUBLIC_URL}"
+      echo "[frontend-dev] backend docs: ${BACKEND_PUBLIC_URL}/docs"
+      ready_logged=1
+    fi
+    break
+  fi
+  sleep 1
+done
+
+wait "$vite_pid"

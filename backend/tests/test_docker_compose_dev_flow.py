@@ -29,6 +29,8 @@ def test_default_compose_is_dev_first_layout() -> None:
     assert "/app/node_modules" in compose_text
     assert "/pnpm/store" in compose_text
     assert "${VULHUNTER_FRONTEND_PORT:-3000}:5173" in compose_text
+    assert 'FRONTEND_PUBLIC_URL: http://localhost:${VULHUNTER_FRONTEND_PORT:-3000}' in compose_text
+    assert 'BACKEND_PUBLIC_URL: http://localhost:${VULHUNTER_BACKEND_PORT:-8000}' in compose_text
     assert "- BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
     assert "- BACKEND_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
     assert (
@@ -75,6 +77,20 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "VITE_API_BASE_URL: /api/v1" in full_overlay_text
     assert 'CODEX_SKILLS_AUTO_INSTALL: "false"' in full_overlay_text
     assert "\n  frontend-dev:" not in full_overlay_text
+
+
+def test_frontend_dev_entrypoint_prints_ready_banner() -> None:
+    frontend_entrypoint = (
+        REPO_ROOT / "frontend" / "scripts" / "dev-entrypoint.sh"
+    ).read_text(encoding="utf-8")
+
+    assert 'export BROWSER="${BROWSER:-none}"' in frontend_entrypoint
+    assert 'FRONTEND_PUBLIC_URL="${FRONTEND_PUBLIC_URL:-http://localhost:3000}"' in frontend_entrypoint
+    assert 'BACKEND_PUBLIC_URL="${BACKEND_PUBLIC_URL:-http://localhost:8000}"' in frontend_entrypoint
+    assert 'VITE_READY_URL="http://127.0.0.1:${FRONTEND_DEV_PORT:-5173}/"' in frontend_entrypoint
+    assert 'curl -fsS "${VITE_READY_URL}"' in frontend_entrypoint
+    assert 'frontend ready: ${FRONTEND_PUBLIC_URL}' in frontend_entrypoint
+    assert 'backend docs: ${BACKEND_PUBLIC_URL}/docs' in frontend_entrypoint
 
 
 def test_scripts_and_packaging_use_new_compose_layout() -> None:

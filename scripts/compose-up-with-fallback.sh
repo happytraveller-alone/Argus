@@ -65,6 +65,41 @@ compose_args_target_attached_up() {
   [ "$seen_up" -eq 1 ]
 }
 
+compose_args_target_detached_up() {
+  local -a args=("$@")
+  local seen_up=0
+  local idx=0
+  local arg=""
+
+  while [ "$idx" -lt "${#args[@]}" ]; do
+    arg="${args[$idx]}"
+    if [ "$seen_up" -eq 0 ]; then
+      case "$arg" in
+        up)
+          seen_up=1
+          ;;
+        -f|--file|--env-file|-p|--project-name|--project-directory|--profile|--ansi|--parallel)
+          idx=$((idx + 1))
+          ;;
+        -*)
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+    else
+      case "$arg" in
+        -d|--detach)
+          return 0
+          ;;
+      esac
+    fi
+    idx=$((idx + 1))
+  done
+
+  return 1
+}
+
 require_positive_int() {
   local name="$1"
   local value="$2"
@@ -72,6 +107,100 @@ require_positive_int() {
     log_error "${name} must be a positive integer, got: ${value}"
     exit 2
   fi
+}
+
+wait_for_services_ready() {
+  if ! command -v curl >/dev/null 2>&1; then
+    log_warn "curl not found; skipping readiness banner"
+    return 2
+  fi
+
+  local deadline now
+  local frontend_ready=0
+  local backend_ready=0
+  deadline=$(( $(date +%s) + READY_TIMEOUT_SECONDS ))
+
+  while :; do
+    if [ "$frontend_ready" -eq 0 ]; then
+      if curl -fsS \
+        --connect-timeout "$PROBE_CONNECT_TIMEOUT_SECONDS" \
+        --max-time "$PROBE_TIMEOUT_SECONDS" \
+        "$FRONTEND_READY_URL" >/dev/null 2>&1; then
+        frontend_ready=1
+      fi
+    fi
+
+    if [ "$backend_ready" -eq 0 ]; then
+      if curl -fsS \
+        --connect-timeout "$PROBE_CONNECT_TIMEOUT_SECONDS" \
+        --max-time "$PROBE_TIMEOUT_SECONDS" \
+        "$BACKEND_READY_URL" >/dev/null 2>&1; then
+        backend_ready=1
+      fi
+    fi
+
+    if [ "$frontend_ready" -eq 1 ] && [ "$backend_ready" -eq 1 ]; then
+      return 0
+    fi
+
+    now="$(date +%s)"
+    if [ "$now" -ge "$deadline" ]; then
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+open_browser_url() {
+  local url="$1"
+  local -a openers=(wslview powershell.exe xdg-open open)
+  local command_name
+
+  for command_name in "${openers[@]}"; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+      continue
+    fi
+
+    if [ "$command_name" = "powershell.exe" ]; then
+      if powershell.exe -NoProfile -Command "Start-Process '$url'" >/dev/null 2>&1; then
+        log_info "opened browser: ${url}"
+        return 0
+      fi
+    elif "$command_name" "$url" >/dev/null 2>&1; then
+      log_info "opened browser: ${url}"
+      return 0
+    fi
+    log_warn "failed to open browser with ${command_name}"
+  done
+
+  log_warn "unable to find a working browser opener for ${url}"
+  return 1
+}
+
+print_ready_banner() {
+  local attached_mode="${1:-0}"
+  log_info "services ready"
+  log_info "frontend: ${FRONTEND_PUBLIC_URL}"
+  log_info "backend docs: ${BACKEND_DOCS_URL}"
+  if [ "$attached_mode" -eq 1 ]; then
+    log_info "press Ctrl+C to stop containers"
+  fi
+}
+
+notify_when_ready() {
+  local attached_mode="${1:-0}"
+
+  if wait_for_services_ready; then
+    print_ready_banner "$attached_mode"
+    if [ "${VULHUNTER_OPEN_BROWSER:-0}" = "1" ]; then
+      open_browser_url "${FRONTEND_PUBLIC_URL}" || true
+    fi
+    return 0
+  fi
+
+  log_warn "timed out waiting for frontend/backend readiness after ${READY_TIMEOUT_SECONDS}s"
+  return 1
 }
 
 trim() {
@@ -423,6 +552,7 @@ run_with_retries() {
 
   local attempt=1
   local rc=1
+  local ready_watcher_pid=""
   while [ "$attempt" -le "$retry_count" ]; do
     log_info "Phase=${phase} attempt ${attempt}/${retry_count}"
     log_info "DOCKERHUB_LIBRARY_MIRROR=${dockerhub_mirror}"
@@ -434,6 +564,12 @@ run_with_retries() {
     log_info "BACKEND_NPM_REGISTRY_FALLBACK=${BACKEND_NPM_REGISTRY_FALLBACK_SELECTED}"
     log_info "FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY_SELECTED}"
     log_info "FRONTEND_NPM_REGISTRY_FALLBACK=${FRONTEND_NPM_REGISTRY_FALLBACK_SELECTED}"
+
+    ready_watcher_pid=""
+    if [ "$IS_ATTACHED_UP" -eq 1 ]; then
+      notify_when_ready 1 &
+      ready_watcher_pid="$!"
+    fi
 
     set +e
     DOCKERHUB_LIBRARY_MIRROR="${dockerhub_mirror}" \
@@ -463,7 +599,15 @@ run_with_retries() {
     rc=$?
     set -e
 
+    if [ -n "$ready_watcher_pid" ]; then
+      kill "$ready_watcher_pid" >/dev/null 2>&1 || true
+      wait "$ready_watcher_pid" >/dev/null 2>&1 || true
+    fi
+
     if [ "$rc" -eq 0 ]; then
+      if [ "$IS_DETACHED_UP" -eq 1 ]; then
+        notify_when_ready 0 || true
+      fi
       log_info "Phase=${phase} succeeded on attempt ${attempt}"
       return 0
     fi
@@ -492,6 +636,15 @@ if compose_args_target_attached_up "${COMPOSE_ARGS[@]}" && [ -z "${COMPOSE_MENU+
   log_info "Detected attached 'docker compose up'; defaulting COMPOSE_MENU=false to avoid Compose menu/watch crashes on affected versions."
 fi
 
+IS_ATTACHED_UP=0
+IS_DETACHED_UP=0
+if compose_args_target_attached_up "${COMPOSE_ARGS[@]}"; then
+  IS_ATTACHED_UP=1
+fi
+if compose_args_target_detached_up "${COMPOSE_ARGS[@]}"; then
+  IS_DETACHED_UP=1
+fi
+
 export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
 export COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}"
 
@@ -501,12 +654,20 @@ PROBE_ATTEMPTS="${PROBE_ATTEMPTS:-3}"
 PROBE_TIMEOUT_SECONDS="${PROBE_TIMEOUT_SECONDS:-10}"
 PROBE_CONNECT_TIMEOUT_SECONDS="${PROBE_CONNECT_TIMEOUT_SECONDS:-3}"
 APT_PROBE_CODENAME="${APT_PROBE_CODENAME:-bookworm}"
+READY_TIMEOUT_SECONDS="${VULHUNTER_READY_TIMEOUT_SECONDS:-900}"
+FRONTEND_PUBLIC_PORT="${VULHUNTER_FRONTEND_PORT:-3000}"
+BACKEND_PUBLIC_PORT="${VULHUNTER_BACKEND_PORT:-8000}"
+FRONTEND_READY_URL="http://127.0.0.1:${FRONTEND_PUBLIC_PORT}/"
+BACKEND_READY_URL="http://127.0.0.1:${BACKEND_PUBLIC_PORT}/health"
+FRONTEND_PUBLIC_URL="http://localhost:${FRONTEND_PUBLIC_PORT}"
+BACKEND_DOCS_URL="http://localhost:${BACKEND_PUBLIC_PORT}/docs"
 
 require_positive_int "PHASE_RETRY_COUNT" "${PHASE_RETRY_COUNT}"
 require_positive_int "RETRY_INTERVAL_SECONDS" "${RETRY_INTERVAL_SECONDS}"
 require_positive_int "PROBE_ATTEMPTS" "${PROBE_ATTEMPTS}"
 require_positive_int "PROBE_TIMEOUT_SECONDS" "${PROBE_TIMEOUT_SECONDS}"
 require_positive_int "PROBE_CONNECT_TIMEOUT_SECONDS" "${PROBE_CONNECT_TIMEOUT_SECONDS}"
+require_positive_int "VULHUNTER_READY_TIMEOUT_SECONDS" "${READY_TIMEOUT_SECONDS}"
 
 DOCKERHUB_CN_CANDIDATES_DEFAULT="${CN_DOCKERHUB_LIBRARY_MIRRORS:-${CN_DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library,docker.1ms.run/library}}"
 GHCR_CN_CANDIDATES_DEFAULT="${CN_GHCR_REGISTRIES:-${CN_GHCR_REGISTRY:-ghcr.nju.edu.cn,ghcr.m.daocloud.io}}"

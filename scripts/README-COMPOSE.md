@@ -32,6 +32,8 @@ scripts\compose-up-with-fallback.bat
 | 多阶段故障转移 | ✅ | ⚠️ 简化版 | ❌ |
 | 并行探测 | ✅ | ❌ | ❌ |
 | 自定义重试次数 | ✅ | ❌ | ❌ |
+| 启动完成 ready 提示 | ✅ | ❌ | ❌ |
+| 可选自动打开浏览器 | ✅ | ❌ | ❌ |
 
 ## 环境变量配置
 
@@ -111,6 +113,12 @@ export PROBE_CONNECT_TIMEOUT_SECONDS=5
 # 设置重试间隔（秒）
 export RETRY_INTERVAL_SECONDS=10
 
+# 设置服务 ready 等待上限（秒）
+export VULHUNTER_READY_TIMEOUT_SECONDS=900
+
+# 服务 ready 后自动打开默认浏览器（显式开启）
+export VULHUNTER_OPEN_BROWSER=1
+
 # 执行
 ./scripts/compose-up-with-fallback.sh
 ```
@@ -184,6 +192,9 @@ $env:BACKEND_PYPI_INDEX_PRIMARY="https://pypi.org/simple"
 # 克隆仓库后直接运行
 ./scripts/compose-up-with-fallback.sh
 
+# 服务 ready 后自动打开浏览器（可选）
+VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh
+
 # 或直接使用默认日常增量开发链路（前后端容器内热重载）
 docker compose up -d --build
 
@@ -210,6 +221,8 @@ docker compose up -d --build
 
 - 默认 `docker compose up --build` 已切到日常增量开发链路。
 - 该默认链路会把 `backend`/`frontend` 切到源码挂载 + 热重载，并默认关闭 `MCP_REQUIRE_ALL_READY_ON_STARTUP`、`SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP` 等重型启动项。
+- `./scripts/compose-up-with-fallback.sh` 在 `up` / `up -d` 时会等待前端首页和 backend `/health` 都可访问，再打印统一的 `services ready` 提示。
+- `VULHUNTER_OPEN_BROWSER=1` 仅在 Bash/WSL/Linux 包装脚本中生效；裸 `docker compose up --build` 只打印 ready 提示，不会自动打开浏览器。
 - 显式全量本地构建请叠加 `docker-compose.full.yml`。
 - Adminer 已并入 `tools` profile：`docker compose --profile tools up -d adminer`。
 - 预构建镜像部署模板已迁移到 `deploy/compose/docker-compose.prod.yml` 与 `deploy/compose/docker-compose.prod.cn.yml`。

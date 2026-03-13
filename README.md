@@ -88,6 +88,12 @@ COMPOSE_MENU=false docker compose up --build
 docker compose up --build --menu=false
 ```
 
+如需在服务 ready 后自动尝试打开默认浏览器，仅 Bash/WSL/Linux 包装脚本支持显式开启：
+
+```bash
+VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh
+```
+
 如需使用预构建镜像部署（生产/快速拉起）：
 
 ```bash
@@ -140,8 +146,10 @@ powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
 - 后端需要访问 Docker，用于沙箱验证，因此默认会挂载 `/var/run/docker.sock`。生产环境请评估权限边界与隔离策略。
 - 默认根目录 Compose 已切到日常增量开发：`docker compose up -d --build`。该路径会把前后端切到源码挂载 + 热重载，并默认关闭 `MCP_REQUIRE_ALL_READY_ON_STARTUP`、`SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP` 等重型启动项。
 - 默认开发 Compose 会等待 backend `/health` 通过后再启动 frontend；首次 `docker compose up --build` 可能会因为默认种子项目与规则初始化而停留 1 到 2 分钟，这属于预期行为。
+- 冷启动真正完成后，前端 dev 容器和 `./scripts/compose-up-with-fallback.sh` 都会打印 ready banner，明确提示访问 `http://localhost:3000` 和后端文档地址。
 - 如需显式执行全量本地构建，请叠加 `docker-compose.full.yml`：`docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build`。
 - 如需脚本版全量本地构建，可使用：`./scripts/compose-up-with-fallback.sh -f docker-compose.yml -f docker-compose.full.yml up -d --build`。
+- 裸 `docker compose up --build` 只会打印 ready 提示，不会自动打开浏览器；需要自动打开浏览器时，请使用 `VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh`。
 - 本地 Compose 启动（包括 `docker-compose.full.yml` 覆盖层）默认关闭 Codex skills 预安装，避免远程拉取阻塞后端启动。
 - 如需临时恢复预安装，可显式设置：`CODEX_SKILLS_AUTO_INSTALL=true docker compose -f docker-compose.yml -f docker-compose.full.yml up --build --menu=false`。
 - 如需在容器启动后手动安装，可执行：`docker compose -f docker-compose.yml -f docker-compose.full.yml exec backend /app/scripts/install_codex_skills.sh`。
@@ -151,6 +159,7 @@ powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
 - 预构建镜像部署模板已迁移到 `deploy/compose/docker-compose.prod.yml` 与 `deploy/compose/docker-compose.prod.cn.yml`。
 - 上述生产模板默认使用南京大学 GHCR 镜像站（`ghcr.nju.edu.cn/lintsinghua/*`）加速拉取。如需生产镜像部署，可替换为你们自己的镜像地址/私有仓库。
 - 开发构建链路默认使用 `./scripts/compose-up-with-fallback.sh`：先对候选镜像源测速并按延迟排序，再按排序分阶段重试构建（不再固定“国内→官方”两段式）。
+- `./scripts/compose-up-with-fallback.sh` 在 `up`/`up -d` 场景下会等待 `frontend` 与 `backend /health` 都可访问，再输出统一的 `services ready` 提示；可通过 `VULHUNTER_READY_TIMEOUT_SECONDS` 覆盖等待超时，默认 `900` 秒。
 - Docker 镜像拉取（DockerHub/GHCR）测速采用并行探测，失败候选会自动降到排序末位，不阻塞其他可用源。
 - DockerHub 默认候选池：`docker.m.daocloud.io/library,docker.1ms.run/library,docker.io/library`；GHCR 默认候选池：`ghcr.nju.edu.cn,ghcr.m.daocloud.io,ghcr.io`。
 - DockerHub 官方源测速会使用 `registry-1.docker.io`，避免直接探测 `docker.io` 带来的误差。

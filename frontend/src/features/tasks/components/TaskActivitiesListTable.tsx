@@ -40,7 +40,7 @@ function getDefectSummaryLabel(activity: TaskActivityItem): string {
 		return "-";
 	}
 	const { severe, hint, total } = activity.staticFindingStats;
-	return `高危 ${severe} / 提示 ${hint} / 总计 ${total}`;
+	return `高危 ${severe} / 中危 ${hint} / 低危 ${total}`;
 }
 
 export default function TaskActivitiesListTable({

@@ -85,7 +85,9 @@
     "streamdown": "^1.6.10",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
+    "three": "^0.183.2",
     "vaul": "^1.1.2",
+    "vanta": "^0.5.24",
     "video-react": "^0.16.0",
     "zod": "^3.25.76"
   },
