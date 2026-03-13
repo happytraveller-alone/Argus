@@ -181,6 +181,12 @@ GIT_MIRROR_FALLBACK_TO_ORIGIN=false \
 
 This usually means the Alembic revision stored in the DB volume does not match the migration files in the current backend image (for example, after switching from prebuilt images to local source builds).
 
+The current migration contract only supports:
+- initializing a brand-new empty database
+- upgrading a database already stamped at revision `5b0f3c9a6d7e`
+
+Older historical revisions are no longer upgraded automatically after the migration squash.
+
 Recommended recovery order:
 
 1. Ensure startup uses local source build:
@@ -198,6 +204,8 @@ docker volume rm audittool_postgres_data
 ```
 
 ⚠️ This removes local DB data. Back up important data first.
+
+If you must keep an older pre-squash database, use a manual Alembic `stamp` / migration recovery workflow before starting the backend. Automatic compatibility for those legacy revisions has been removed.
 
 ## Development
 

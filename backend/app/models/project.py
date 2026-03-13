@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Index, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Index, UniqueConstraint, text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -37,6 +37,11 @@ class Project(Base):
             created_at.desc(),
         ),
         Index("ix_projects_active_updated_at", "is_active", updated_at.desc()),
+        Index(
+            "ix_projects_name_trgm",
+            text("lower(name) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
     )
 
     # Relationships

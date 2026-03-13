@@ -960,39 +960,11 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                f"跳过 {skipped_count} 条已存在的规则，{error_count} 条错误并已删除")
 
 
-async def ensure_project_zip_hash_schema(db: AsyncSession) -> None:
-    """
-    兼容沙箱环境：直接在启动时补齐 projects.zip_file_hash 字段与索引。
-    避免依赖新增 alembic revision 文件。
-    """
-    await db.execute(
-        text(
-            """
-            ALTER TABLE projects
-            ADD COLUMN IF NOT EXISTS zip_file_hash VARCHAR(64)
-            """
-        )
-    )
-    await db.execute(
-        text(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS ix_projects_zip_file_hash
-            ON projects (zip_file_hash)
-            """
-        )
-    )
-    await db.commit()
-    logger.info("✓ 已确保 projects.zip_file_hash 字段与索引存在")
-
-
 async def init_db(db: AsyncSession) -> None:
     """
     初始化数据库
     """
     logger.info("开始初始化数据库...")
-
-    # 沙箱模式下直接补齐去重字段（不依赖额外 alembic 文件）
-    await ensure_project_zip_hash_schema(db)
 
     # 创建演示用户
     demo_user = await create_demo_user(db)

@@ -4341,13 +4341,26 @@ def _normalize_gitleaks_runtime_config(runtime_config: Optional[Dict[str, Any]])
     }
 
 
+def _missing_gitleaks_rules_migration_message() -> str:
+    return "数据库缺少 gitleaks_rules 表，请先运行 alembic upgrade head"
+
+
+def _raise_gitleaks_rules_migration_runtime_error(exc: ProgrammingError) -> None:
+    if "gitleaks_rules" not in str(exc):
+        raise exc
+    raise RuntimeError(_missing_gitleaks_rules_migration_message()) from exc
+
+
+def _raise_gitleaks_rules_migration_http_error(exc: ProgrammingError) -> None:
+    if "gitleaks_rules" not in str(exc):
+        raise exc
+    raise HTTPException(status_code=500, detail=_missing_gitleaks_rules_migration_message()) from exc
+
+
 async def _build_effective_gitleaks_config_toml(
     db: AsyncSession, runtime_config: Dict[str, Any]
 ) -> Optional[str]:
     try:
-        # Use a savepoint so that a ProgrammingError (e.g. table not yet migrated)
-        # only rolls back to the savepoint, leaving the outer transaction intact and
-        # already-loaded ORM objects (like `task`) un-expired.
         async with db.begin_nested():
             result = await db.execute(
                 select(GitleaksRule)
@@ -4356,11 +4369,7 @@ async def _build_effective_gitleaks_config_toml(
             )
             active_rules = result.scalars().all()
     except ProgrammingError as exc:
-        if "gitleaks_rules" in str(exc):
-            logger.warning("gitleaks_rules table not found, fallback to custom/default config only")
-            active_rules = []
-        else:
-            raise
+        _raise_gitleaks_rules_migration_runtime_error(exc)
     managed_rules_toml = _render_gitleaks_rules_toml(active_rules) if active_rules else ""
 
     custom_toml = str(runtime_config.get("customConfigToml") or "").strip()
@@ -5269,9 +5278,7 @@ async def list_gitleaks_rules(
         result = await db.execute(query)
         return [_serialize_gitleaks_rule(rule) for rule in result.scalars().all()]
     except ProgrammingError as exc:
-        if "gitleaks_rules" in str(exc):
-            return []
-        raise
+        _raise_gitleaks_rules_migration_http_error(exc)
 
 
 @router.get("/gitleaks/rules/{rule_pk}", response_model=GitleaksRuleResponse)

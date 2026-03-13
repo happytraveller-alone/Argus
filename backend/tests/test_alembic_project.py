@@ -61,3 +61,26 @@ def test_alembic_has_a_single_head_revision():
         if line.strip() and "(head)" in line
     ]
     assert len(head_lines) == 1, f"Expected a single Alembic head, got {len(head_lines)}: {head_lines}"
+
+
+def test_alembic_versions_directory_is_squashed_to_baseline_and_bridge():
+    versions_dir = BACKEND_ROOT / "alembic" / "versions"
+    version_files = sorted(path.name for path in versions_dir.glob("*.py"))
+
+    assert version_files == [
+        "5b0f3c9a6d7e_squashed_baseline.py",
+        "6c8d9e0f1a2b_finalize_projects_zip_file_hash.py",
+    ]
+
+
+def test_bridge_downgrade_keeps_zip_file_hash_baseline_contract():
+    bridge_file = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "6c8d9e0f1a2b_finalize_projects_zip_file_hash.py"
+    )
+    bridge_source = bridge_file.read_text(encoding="utf-8")
+
+    assert "DROP COLUMN IF EXISTS zip_file_hash" not in bridge_source
+    assert "DROP INDEX IF EXISTS ix_projects_zip_file_hash" not in bridge_source
