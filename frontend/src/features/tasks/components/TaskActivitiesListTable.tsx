@@ -36,6 +36,10 @@ interface TaskActivitiesListTableProps {
 }
 
 function getDefectSummaryLabel(activity: TaskActivityItem): string {
+	if (activity.agentFindingStats) {
+		const { critical, high, medium, low } = activity.agentFindingStats;
+		return `严重 ${critical} / 高危 ${high} / 中危 ${medium} / 低危 ${low}`;
+	}
 	if (!activity.staticFindingStats) {
 		return "-";
 	}
@@ -83,7 +87,7 @@ export default function TaskActivitiesListTable({
 								<TableHead className="w-[120px]">{TASK_ACTIVITIES_TABLE_HEADERS[3]}</TableHead>
 								<TableHead className="min-w-[220px]">{TASK_ACTIVITIES_TABLE_HEADERS[4]}</TableHead>
 								<TableHead className="min-w-[140px]">{TASK_ACTIVITIES_TABLE_HEADERS[5]}</TableHead>
-								<TableHead className="min-w-[160px]">{TASK_ACTIVITIES_TABLE_HEADERS[6]}</TableHead>
+								<TableHead className="min-w-[280px]">{TASK_ACTIVITIES_TABLE_HEADERS[6]}</TableHead>
 								<TableHead className="w-[120px]">{TASK_ACTIVITIES_TABLE_HEADERS[7]}</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -134,7 +138,7 @@ export default function TaskActivitiesListTable({
 												{getTaskStatusText(activity.status)}
 											</Badge>
 										</TableCell>
-										<TableCell className="text-sm text-muted-foreground">
+										<TableCell className="min-w-[280px] whitespace-normal break-words text-sm text-muted-foreground">
 											{getDefectSummaryLabel(activity)}
 										</TableCell>
 										<TableCell>

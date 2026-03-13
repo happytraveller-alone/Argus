@@ -50,6 +50,13 @@ export interface TaskActivityItem {
 		hint: number;
 		total: number;
 	};
+	agentFindingStats?: {
+		critical: number;
+		high: number;
+		medium: number;
+		low: number;
+		total: number;
+	};
 	createdAt: string;
 	startedAt?: string | null;
 	completedAt?: string | null;
@@ -257,6 +264,13 @@ function toAgentActivities(
 			task.description,
 		),
 		status: task.status,
+		agentFindingStats: {
+			critical: Math.max(task.critical_count || 0, 0),
+			high: Math.max(task.high_count || 0, 0),
+			medium: Math.max(task.medium_count || 0, 0),
+			low: Math.max(task.low_count || 0, 0),
+			total: Math.max(task.findings_count || 0, 0),
+		},
 		createdAt: task.created_at,
 		startedAt: task.started_at,
 		completedAt: task.completed_at,
