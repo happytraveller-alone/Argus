@@ -78,11 +78,36 @@ export const dashboardDictionary: DomDictionary = {
   "仅统计严重(ERROR)且中/高置信度规则": "Only severe (ERROR) rules with medium/high confidence are counted",
   "项目扫描次数横向统计图": "Project Scan Runs Bar Chart",
   "项目漏洞数量横向统计图": "Project Vulnerability Counts Bar Chart",
+  "规则置信度": "Rule Confidence",
+  "仅统计严重(ERROR)规则，对比已启用与未启用数量":
+    "Severe (ERROR) rules only, comparing enabled vs disabled counts",
+  "暂无规则置信度数据": "No rule-confidence data",
+  "已启用规则": "Enabled Rules",
+  "未启用规则": "Disabled Rules",
+  "CWE 漏洞类型占比": "CWE Vulnerability Share",
+  "仅统计可稳定解析到 CWE 的真实漏洞（Top 12）":
+    "Top 12 real findings with stable CWE resolution only",
+  "暂无 CWE 占比数据": "No CWE distribution data",
+  "项目扫描类型分布": "Project Scan Mode Distribution",
+  "各项目扫描方式对比（雷达图）":
+    "Radar comparison of scan modes per project",
+  "项目漏洞风险矩阵": "Project Vulnerability Risk Matrix",
+  "X=静态漏洞 Y=智能漏洞 大小=混合漏洞":
+    "X=Static, Y=Intelligent, bubble size=Hybrid",
+  "规则置信度覆盖情况": "Rule Confidence Coverage",
+  "各置信度桶的规则覆盖面积":
+    "Coverage area across confidence buckets",
+  "CWE 漏洞类型 Top 12": "Top 12 CWE Categories",
+  "按真实漏洞数量排序，并区分 Opengrep 与 Agent 来源":
+    "Ranked by real findings, split by Opengrep and Agent sources",
   "混合扫描已纳入统计": "Hybrid scan is included in statistics",
   "暂无项目扫描次数数据": "No project scan-run data",
   "暂无项目漏洞数量数据": "No project vulnerability-count data",
   "漏洞总数": "Total Vulnerabilities",
   "累计扫描用时": "Total Scan Duration",
+  "项目数：": "Projects:",
+  "置信度分桶：": "Confidence Buckets:",
+  "CWE 类型数：": "CWE Types:",
   "语言数：": "Languages:",
   "全部规则": "All Rules",
   "仅启用规则": "Enabled Only",

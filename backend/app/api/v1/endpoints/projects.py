@@ -170,7 +170,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.models.audit import AuditTask, AuditIssue
 from app.models.agent_task import AgentTask, AgentFinding
-from app.models.opengrep import OpengrepScanTask, OpengrepFinding
+from app.models.opengrep import OpengrepScanTask, OpengrepFinding, OpengrepRule
 from app.models.gitleaks import GitleaksScanTask, GitleaksFinding
 from app.models.bandit import BanditScanTask, BanditFinding
 from app.models.phpstan import PhpstanScanTask, PhpstanFinding
@@ -200,7 +200,15 @@ from app.services.upload.project_stats import (
     generate_project_description_from_extracted_dir,
 )
 from app.services.opengrep_confidence import (
+    build_rule_confidence_map,
     count_high_confidence_findings_by_task_ids,
+    extract_finding_payload_confidence,
+    extract_rule_lookup_keys,
+    normalize_confidence as normalize_opengrep_confidence,
+)
+from app.services.agent.utils.vulnerability_naming import (
+    normalize_cwe_id,
+    resolve_vulnerability_profile,
 )
 
 
@@ -643,6 +651,67 @@ class DashboardSnapshotResponse(BaseModel):
     total_scan_duration_ms: int
     scan_runs: List[DashboardScanRunsItem]
     vulns: List[DashboardVulnsItem]
+    rule_confidence: List["DashboardRuleConfidenceItem"]
+    cwe_distribution: List["DashboardCweDistributionItem"]
+
+
+class DashboardRuleConfidenceItem(BaseModel):
+    confidence: Literal["HIGH", "MEDIUM", "LOW", "UNSPECIFIED"]
+    total_rules: int
+    enabled_rules: int
+
+
+class DashboardCweDistributionItem(BaseModel):
+    cwe_id: str
+    cwe_name: str
+    total_findings: int
+    opengrep_findings: int
+    agent_findings: int
+
+
+def _normalize_dashboard_rule_confidence(
+    confidence: Any,
+) -> Literal["HIGH", "MEDIUM", "LOW", "UNSPECIFIED"]:
+    raw_value = str(confidence or "").strip().upper()
+    if raw_value in {"MIDIUM", "MIDDLE"}:
+        return "MEDIUM"
+    normalized = normalize_opengrep_confidence(raw_value)
+    if normalized in {"HIGH", "MEDIUM", "LOW"}:
+        return normalized
+    return "UNSPECIFIED"
+
+
+def _extract_cwe_candidates_from_rule_payload(rule_data: Any) -> List[str]:
+    if not isinstance(rule_data, dict):
+        return []
+
+    candidates: List[str] = []
+
+    def _append(values: Any) -> None:
+        if isinstance(values, list):
+            for value in values:
+                normalized = normalize_cwe_id(value)
+                if normalized and normalized not in candidates:
+                    candidates.append(normalized)
+            return
+        normalized = normalize_cwe_id(values)
+        if normalized and normalized not in candidates:
+            candidates.append(normalized)
+
+    _append(rule_data.get("cwe"))
+
+    metadata = rule_data.get("metadata")
+    if isinstance(metadata, dict):
+        _append(metadata.get("cwe"))
+
+    extra = rule_data.get("extra")
+    if isinstance(extra, dict):
+        _append(extra.get("cwe"))
+        extra_metadata = extra.get("metadata")
+        if isinstance(extra_metadata, dict):
+            _append(extra_metadata.get("cwe"))
+
+    return candidates
 
 
 def _is_public_project(project: Project | None) -> bool:
@@ -1215,9 +1284,50 @@ async def get_dashboard_snapshot(
     )
     agent_rows = agent_result.all()
 
+    rule_result = await db.execute(
+        select(
+            OpengrepRule.name,
+            OpengrepRule.severity,
+            OpengrepRule.confidence,
+            OpengrepRule.is_active,
+            OpengrepRule.cwe,
+        ).where(OpengrepRule.severity == "ERROR")
+    )
+    rule_rows = rule_result.all()
+
+    opengrep_finding_result = await db.execute(
+        select(OpengrepFinding.scan_task_id, OpengrepFinding.rule).where(
+            OpengrepFinding.scan_task_id.in_(opengrep_task_ids),
+            or_(
+                OpengrepFinding.status.is_(None),
+                OpengrepFinding.status != "false_positive",
+            ),
+        )
+    )
+    opengrep_finding_rows = opengrep_finding_result.all()
+
+    agent_finding_result = await db.execute(
+        select(
+            AgentFinding.is_verified,
+            AgentFinding.references,
+            AgentFinding.vulnerability_type,
+            AgentFinding.title,
+            AgentFinding.description,
+            AgentFinding.code_snippet,
+        )
+    )
+    agent_finding_rows = agent_finding_result.all()
+
     # project aggregates
     scan_runs_map: Dict[str, Dict[str, int]] = {}
     vulns_map: Dict[str, Dict[str, int]] = {}
+    rule_confidence_buckets: Dict[str, Dict[str, int]] = {
+        "HIGH": {"total_rules": 0, "enabled_rules": 0},
+        "MEDIUM": {"total_rules": 0, "enabled_rules": 0},
+        "LOW": {"total_rules": 0, "enabled_rules": 0},
+        "UNSPECIFIED": {"total_rules": 0, "enabled_rules": 0},
+    }
+    cwe_distribution_map: Dict[str, Dict[str, Any]] = {}
 
     def ensure_scan_runs(project_id: str) -> Dict[str, int]:
         existing = scan_runs_map.get(project_id)
@@ -1343,6 +1453,102 @@ async def get_dashboard_snapshot(
                 (completed_at - started_at).total_seconds() * 1000
             )
 
+    severe_rule_rows: List[tuple[Any, Any, Any, Any, Any]] = [
+        row for row in rule_rows if str(row[1] or "").strip().upper() == "ERROR"
+    ]
+    rule_confidence_map = build_rule_confidence_map(
+        [(row[0], row[2]) for row in severe_rule_rows]
+    )
+    rule_cwe_map: Dict[str, List[str]] = {}
+    for rule_name, _, confidence, is_active, cwe_list in severe_rule_rows:
+        bucket_key = _normalize_dashboard_rule_confidence(confidence)
+        rule_confidence_buckets[bucket_key]["total_rules"] += 1
+        if bool(is_active):
+            rule_confidence_buckets[bucket_key]["enabled_rules"] += 1
+
+        normalized_cwe_values: List[str] = []
+        for raw_cwe in cwe_list if isinstance(cwe_list, list) else []:
+            normalized_cwe = normalize_cwe_id(raw_cwe)
+            if normalized_cwe and normalized_cwe not in normalized_cwe_values:
+                normalized_cwe_values.append(normalized_cwe)
+
+        for lookup_key in extract_rule_lookup_keys(rule_name):
+            if lookup_key not in rule_cwe_map:
+                rule_cwe_map[lookup_key] = normalized_cwe_values
+
+    for scan_task_id, rule_data in opengrep_finding_rows:
+        resolved_confidence = extract_finding_payload_confidence(rule_data)
+        check_id = None
+        if isinstance(rule_data, dict):
+            check_id = rule_data.get("check_id") or rule_data.get("id")
+        if not resolved_confidence:
+            for lookup_key in extract_rule_lookup_keys(check_id):
+                mapped_confidence = rule_confidence_map.get(lookup_key)
+                if mapped_confidence:
+                    resolved_confidence = mapped_confidence
+                    break
+        if resolved_confidence != "HIGH":
+            continue
+
+        normalized_cwe_values = _extract_cwe_candidates_from_rule_payload(rule_data)
+        if not normalized_cwe_values:
+            for lookup_key in extract_rule_lookup_keys(check_id):
+                fallback_cwe_values = rule_cwe_map.get(lookup_key) or []
+                if fallback_cwe_values:
+                    normalized_cwe_values = fallback_cwe_values
+                    break
+        if not normalized_cwe_values:
+            continue
+
+        for cwe_id in normalized_cwe_values:
+            bucket = cwe_distribution_map.setdefault(
+                cwe_id,
+                {
+                    "cwe_id": cwe_id,
+                    "cwe_name": cwe_id,
+                    "total_findings": 0,
+                    "opengrep_findings": 0,
+                    "agent_findings": 0,
+                },
+            )
+            bucket["total_findings"] += 1
+            bucket["opengrep_findings"] += 1
+
+    for (
+        is_verified,
+        references,
+        vulnerability_type,
+        title,
+        description,
+        code_snippet,
+    ) in agent_finding_rows:
+        if not is_verified:
+            continue
+        cwe_id = normalize_cwe_id(references)
+        if not cwe_id:
+            continue
+        profile = resolve_vulnerability_profile(
+            vulnerability_type,
+            title=title,
+            description=description,
+            code_snippet=code_snippet,
+        )
+        cwe_name = str(profile.get("name") or cwe_id).strip() or cwe_id
+        bucket = cwe_distribution_map.setdefault(
+            cwe_id,
+            {
+                "cwe_id": cwe_id,
+                "cwe_name": cwe_name,
+                "total_findings": 0,
+                "opengrep_findings": 0,
+                "agent_findings": 0,
+            },
+        )
+        if bucket.get("cwe_name") == bucket.get("cwe_id") and cwe_name != cwe_id:
+            bucket["cwe_name"] = cwe_name
+        bucket["total_findings"] += 1
+        bucket["agent_findings"] += 1
+
     scan_runs_items: List[Dict[str, Any]] = []
     for project_id, item in scan_runs_map.items():
         total_runs = (
@@ -1405,6 +1611,14 @@ async def get_dashboard_snapshot(
         0,
     )
 
+    sorted_cwe_distribution = sorted(
+        cwe_distribution_map.values(),
+        key=lambda item: (
+            -_to_non_negative_int(item.get("total_findings", 0)),
+            str(item.get("cwe_id") or ""),
+        ),
+    )[:12]
+
     return DashboardSnapshotResponse(
         generated_at=datetime.now(timezone.utc),
         total_scan_duration_ms=total_scan_duration_ms,
@@ -1415,6 +1629,22 @@ async def get_dashboard_snapshot(
         vulns=[
             DashboardVulnsItem(**item)
             for item in sorted_vulns
+        ],
+        rule_confidence=[
+            DashboardRuleConfidenceItem(
+                confidence=confidence,
+                total_rules=_to_non_negative_int(
+                    rule_confidence_buckets[confidence]["total_rules"]
+                ),
+                enabled_rules=_to_non_negative_int(
+                    rule_confidence_buckets[confidence]["enabled_rules"]
+                ),
+            )
+            for confidence in ("HIGH", "MEDIUM", "LOW", "UNSPECIFIED")
+        ],
+        cwe_distribution=[
+            DashboardCweDistributionItem(**item)
+            for item in sorted_cwe_distribution
         ],
     )
 

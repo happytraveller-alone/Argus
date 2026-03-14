@@ -213,11 +213,27 @@ export interface DashboardVulnsItem {
   total_vulns: number;
 }
 
+export interface DashboardRuleConfidenceItem {
+  confidence: "HIGH" | "MEDIUM" | "LOW" | "UNSPECIFIED";
+  total_rules: number;
+  enabled_rules: number;
+}
+
+export interface DashboardCweDistributionItem {
+  cwe_id: string;
+  cwe_name: string;
+  total_findings: number;
+  opengrep_findings: number;
+  agent_findings: number;
+}
+
 export interface DashboardSnapshotResponse {
   generated_at: string;
   total_scan_duration_ms: number;
   scan_runs: DashboardScanRunsItem[];
   vulns: DashboardVulnsItem[];
+  rule_confidence: DashboardRuleConfidenceItem[];
+  cwe_distribution: DashboardCweDistributionItem[];
 }
 
 export interface StaticScanOverviewItem {
