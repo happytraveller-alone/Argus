@@ -219,12 +219,19 @@ export interface DashboardRuleConfidenceItem {
   enabled_rules: number;
 }
 
+export interface DashboardRuleConfidenceByLanguageItem {
+  language: string;
+  high_count: number;
+  medium_count: number;
+}
+
 export interface DashboardCweDistributionItem {
   cwe_id: string;
   cwe_name: string;
   total_findings: number;
   opengrep_findings: number;
   agent_findings: number;
+  bandit_findings: number;
 }
 
 export interface DashboardSnapshotResponse {
@@ -233,6 +240,7 @@ export interface DashboardSnapshotResponse {
   scan_runs: DashboardScanRunsItem[];
   vulns: DashboardVulnsItem[];
   rule_confidence: DashboardRuleConfidenceItem[];
+  rule_confidence_by_language: DashboardRuleConfidenceByLanguageItem[];
   cwe_distribution: DashboardCweDistributionItem[];
 }
 

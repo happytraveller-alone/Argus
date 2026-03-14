@@ -652,6 +652,7 @@ class DashboardSnapshotResponse(BaseModel):
     scan_runs: List[DashboardScanRunsItem]
     vulns: List[DashboardVulnsItem]
     rule_confidence: List["DashboardRuleConfidenceItem"]
+    rule_confidence_by_language: List["DashboardRuleConfidenceByLanguageItem"]
     cwe_distribution: List["DashboardCweDistributionItem"]
 
 
@@ -661,12 +662,19 @@ class DashboardRuleConfidenceItem(BaseModel):
     enabled_rules: int
 
 
+class DashboardRuleConfidenceByLanguageItem(BaseModel):
+    language: str
+    high_count: int
+    medium_count: int
+
+
 class DashboardCweDistributionItem(BaseModel):
     cwe_id: str
     cwe_name: str
     total_findings: int
     opengrep_findings: int
     agent_findings: int
+    bandit_findings: int
 
 
 def _normalize_dashboard_rule_confidence(
@@ -712,6 +720,84 @@ def _extract_cwe_candidates_from_rule_payload(rule_data: Any) -> List[str]:
             _append(extra_metadata.get("cwe"))
 
     return candidates
+
+
+_BANDIT_TEST_ID_TO_CWE: Dict[str, str] = {
+    "B102": "CWE-78",
+    "B105": "CWE-259",
+    "B106": "CWE-259",
+    "B107": "CWE-259",
+    "B108": "CWE-377",
+    "B110": "CWE-703",
+    "B112": "CWE-703",
+    "B301": "CWE-502",
+    "B302": "CWE-502",
+    "B303": "CWE-327",
+    "B304": "CWE-327",
+    "B305": "CWE-327",
+    "B306": "CWE-377",
+    "B307": "CWE-95",
+    "B308": "CWE-79",
+    "B310": "CWE-918",
+    "B311": "CWE-330",
+    "B313": "CWE-611",
+    "B314": "CWE-611",
+    "B315": "CWE-611",
+    "B316": "CWE-611",
+    "B317": "CWE-611",
+    "B318": "CWE-611",
+    "B319": "CWE-611",
+    "B320": "CWE-611",
+    "B323": "CWE-295",
+    "B324": "CWE-327",
+    "B325": "CWE-377",
+    "B401": "CWE-319",
+    "B402": "CWE-319",
+    "B403": "CWE-502",
+    "B405": "CWE-611",
+    "B406": "CWE-611",
+    "B407": "CWE-611",
+    "B408": "CWE-611",
+    "B409": "CWE-611",
+    "B410": "CWE-611",
+    "B411": "CWE-918",
+    "B501": "CWE-295",
+    "B502": "CWE-327",
+    "B503": "CWE-327",
+    "B504": "CWE-327",
+    "B505": "CWE-326",
+    "B506": "CWE-502",
+    "B507": "CWE-295",
+    "B602": "CWE-78",
+    "B603": "CWE-78",
+    "B604": "CWE-78",
+    "B605": "CWE-78",
+    "B606": "CWE-78",
+    "B607": "CWE-426",
+    "B608": "CWE-89",
+    "B609": "CWE-78",
+    "B610": "CWE-79",
+    "B611": "CWE-89",
+}
+
+
+def _normalize_agent_confidence(
+    value: Any,
+) -> Optional[Literal["HIGH", "MEDIUM", "LOW"]]:
+    if isinstance(value, (int, float)):
+        numeric_value = float(value)
+        if numeric_value >= 0.8:
+            return "HIGH"
+        if numeric_value >= 0.5:
+            return "MEDIUM"
+        if numeric_value > 0:
+            return "LOW"
+        return None
+
+    normalized = str(value or "").strip().upper()
+    if normalized in {"HIGH", "MEDIUM", "LOW"}:
+        return normalized
+    return None
 
 
 def _is_public_project(project: Project | None) -> bool:
@@ -1287,6 +1373,7 @@ async def get_dashboard_snapshot(
     rule_result = await db.execute(
         select(
             OpengrepRule.name,
+            OpengrepRule.language,
             OpengrepRule.severity,
             OpengrepRule.confidence,
             OpengrepRule.is_active,
@@ -1306,6 +1393,21 @@ async def get_dashboard_snapshot(
     )
     opengrep_finding_rows = opengrep_finding_result.all()
 
+    bandit_finding_result = await db.execute(
+        select(
+            BanditFinding.test_id,
+            BanditFinding.issue_confidence,
+            BanditFinding.issue_text,
+            BanditFinding.test_name,
+        ).where(
+            or_(
+                BanditFinding.status.is_(None),
+                BanditFinding.status != "false_positive",
+            )
+        )
+    )
+    bandit_finding_rows = bandit_finding_result.all()
+
     agent_finding_result = await db.execute(
         select(
             AgentFinding.is_verified,
@@ -1314,6 +1416,8 @@ async def get_dashboard_snapshot(
             AgentFinding.title,
             AgentFinding.description,
             AgentFinding.code_snippet,
+            AgentFinding.ai_confidence,
+            AgentFinding.confidence,
         )
     )
     agent_finding_rows = agent_finding_result.all()
@@ -1327,6 +1431,7 @@ async def get_dashboard_snapshot(
         "LOW": {"total_rules": 0, "enabled_rules": 0},
         "UNSPECIFIED": {"total_rules": 0, "enabled_rules": 0},
     }
+    rule_confidence_by_language: Dict[str, Dict[str, int]] = {}
     cwe_distribution_map: Dict[str, Dict[str, Any]] = {}
 
     def ensure_scan_runs(project_id: str) -> Dict[str, int]:
@@ -1453,18 +1558,31 @@ async def get_dashboard_snapshot(
                 (completed_at - started_at).total_seconds() * 1000
             )
 
-    severe_rule_rows: List[tuple[Any, Any, Any, Any, Any]] = [
-        row for row in rule_rows if str(row[1] or "").strip().upper() == "ERROR"
+    severe_rule_rows: List[tuple[Any, Any, Any, Any, Any, Any]] = [
+        row for row in rule_rows if str(row[2] or "").strip().upper() == "ERROR"
     ]
     rule_confidence_map = build_rule_confidence_map(
-        [(row[0], row[2]) for row in severe_rule_rows]
+        [(row[0], row[3]) for row in severe_rule_rows]
     )
     rule_cwe_map: Dict[str, List[str]] = {}
-    for rule_name, _, confidence, is_active, cwe_list in severe_rule_rows:
+    for rule_name, language, _, confidence, is_active, cwe_list in severe_rule_rows:
         bucket_key = _normalize_dashboard_rule_confidence(confidence)
         rule_confidence_buckets[bucket_key]["total_rules"] += 1
         if bool(is_active):
             rule_confidence_buckets[bucket_key]["enabled_rules"] += 1
+
+        normalized_language = str(language or "").strip() or "unknown"
+        language_bucket = rule_confidence_by_language.setdefault(
+            normalized_language,
+            {
+                "high_count": 0,
+                "medium_count": 0,
+            },
+        )
+        if bucket_key == "HIGH":
+            language_bucket["high_count"] += 1
+        elif bucket_key == "MEDIUM":
+            language_bucket["medium_count"] += 1
 
         normalized_cwe_values: List[str] = []
         for raw_cwe in cwe_list if isinstance(cwe_list, list) else []:
@@ -1487,7 +1605,7 @@ async def get_dashboard_snapshot(
                 if mapped_confidence:
                     resolved_confidence = mapped_confidence
                     break
-        if resolved_confidence != "HIGH":
+        if resolved_confidence not in {"HIGH", "MEDIUM"}:
             continue
 
         normalized_cwe_values = _extract_cwe_candidates_from_rule_payload(rule_data)
@@ -1509,10 +1627,33 @@ async def get_dashboard_snapshot(
                     "total_findings": 0,
                     "opengrep_findings": 0,
                     "agent_findings": 0,
+                    "bandit_findings": 0,
                 },
             )
             bucket["total_findings"] += 1
             bucket["opengrep_findings"] += 1
+
+    for test_id, issue_confidence, issue_text, test_name in bandit_finding_rows:
+        normalized_confidence = normalize_opengrep_confidence(issue_confidence)
+        if normalized_confidence not in {"HIGH", "MEDIUM"}:
+            continue
+        cwe_id = _BANDIT_TEST_ID_TO_CWE.get(str(test_id or "").strip().upper())
+        if not cwe_id:
+            continue
+        cwe_name = cwe_id
+        bucket = cwe_distribution_map.setdefault(
+            cwe_id,
+            {
+                "cwe_id": cwe_id,
+                "cwe_name": cwe_name,
+                "total_findings": 0,
+                "opengrep_findings": 0,
+                "agent_findings": 0,
+                "bandit_findings": 0,
+            },
+        )
+        bucket["total_findings"] += 1
+        bucket["bandit_findings"] += 1
 
     for (
         is_verified,
@@ -1521,8 +1662,15 @@ async def get_dashboard_snapshot(
         title,
         description,
         code_snippet,
+        ai_confidence,
+        confidence,
     ) in agent_finding_rows:
         if not is_verified:
+            continue
+        normalized_confidence = _normalize_agent_confidence(
+            ai_confidence if ai_confidence is not None else confidence
+        )
+        if normalized_confidence not in {"HIGH", "MEDIUM"}:
             continue
         cwe_id = normalize_cwe_id(references)
         if not cwe_id:
@@ -1542,6 +1690,7 @@ async def get_dashboard_snapshot(
                 "total_findings": 0,
                 "opengrep_findings": 0,
                 "agent_findings": 0,
+                "bandit_findings": 0,
             },
         )
         if bucket.get("cwe_name") == bucket.get("cwe_id") and cwe_name != cwe_id:
@@ -1618,6 +1767,26 @@ async def get_dashboard_snapshot(
             str(item.get("cwe_id") or ""),
         ),
     )[:12]
+    sorted_rule_confidence_by_language = sorted(
+        (
+            {
+                "language": language,
+                "high_count": _to_non_negative_int(item.get("high_count", 0)),
+                "medium_count": _to_non_negative_int(item.get("medium_count", 0)),
+            }
+            for language, item in rule_confidence_by_language.items()
+            if _to_non_negative_int(item.get("high_count", 0))
+            + _to_non_negative_int(item.get("medium_count", 0))
+            > 0
+        ),
+        key=lambda item: (
+            -(
+                _to_non_negative_int(item.get("high_count", 0))
+                + _to_non_negative_int(item.get("medium_count", 0))
+            ),
+            str(item.get("language") or ""),
+        ),
+    )
 
     return DashboardSnapshotResponse(
         generated_at=datetime.now(timezone.utc),
@@ -1641,6 +1810,10 @@ async def get_dashboard_snapshot(
                 ),
             )
             for confidence in ("HIGH", "MEDIUM", "LOW", "UNSPECIFIED")
+        ],
+        rule_confidence_by_language=[
+            DashboardRuleConfidenceByLanguageItem(**item)
+            for item in sorted_rule_confidence_by_language
         ],
         cwe_distribution=[
             DashboardCweDistributionItem(**item)

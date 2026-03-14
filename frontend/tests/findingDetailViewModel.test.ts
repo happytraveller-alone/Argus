@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import type { AgentFinding } from "../src/shared/api/agentTasks.ts";
 import {
   buildAgentFindingDetailModel,
+  buildFullFileDisplayLines,
   buildFindingDetailCodeSections,
 } from "../src/pages/finding-detail/viewModel.ts";
 import { buildFindingDetailPath } from "../src/shared/utils/findingRoute.ts";
@@ -178,20 +179,64 @@ test("buildAgentFindingDetailModel 将概览信息直接收敛为 overviewItems"
     finding: agentFinding,
     taskId: "task-agent",
     findingId: "finding-agent",
+    projectId: "project-zip",
+    projectSourceType: "zip",
+    projectName: "demo",
   });
 
-  assert.equal(Object.hasOwn(model, "sourceLabel"), false);
-  assert.equal(Object.hasOwn(model, "statusLabel"), false);
-  assert.equal(Object.hasOwn(model, "heroEyebrow"), false);
-  assert.equal(Object.hasOwn(model, "heroTitle"), false);
-  assert.equal(Object.hasOwn(model, "heroSubtitle"), false);
-  assert.equal(Object.hasOwn(model, "helperLocation"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(model, "sourceLabel"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(model, "statusLabel"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(model, "heroEyebrow"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(model, "heroTitle"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(model, "heroSubtitle"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(model, "helperLocation"), false);
   assert.equal(model.overviewItems[0]?.label, "状态");
   assert.equal(model.overviewItems[0]?.value, "已验证");
   assert.deepEqual(
     model.overviewItems.map((item) => item.label),
     ["状态", "漏洞类型", "漏洞危害", "漏洞置信度"],
   );
+  assert.equal(model.codeSections[0]?.displayFilePath, "src/main/java/demo/JdbcController.java");
+  assert.equal(model.codeSections[0]?.locationLabel, "第 69-83 行");
+  assert.equal(model.codeSections[0]?.fullFileAvailable, true);
+  assert.deepEqual(model.codeSections[0]?.fullFileRequest, {
+    projectId: "project-zip",
+    filePath: "src/main/java/demo/JdbcController.java",
+  });
+  assert.ok(Array.isArray(model.codeSections[0]?.relatedLines));
+  assert.equal(model.codeSections[0]?.relatedLines?.[0]?.lineNumber, 67);
+});
+
+test("buildAgentFindingDetailModel 在非 ZIP 项目下禁用全文查看", () => {
+  const model = buildAgentFindingDetailModel({
+    finding: agentFinding,
+    taskId: "task-agent",
+    findingId: "finding-agent",
+    projectId: "project-repo",
+    projectSourceType: "repository",
+    projectName: "demo",
+  });
+
+  assert.equal(model.codeSections[0]?.fullFileAvailable, false);
+  assert.equal(model.codeSections[0]?.fullFileRequest, null);
+});
+
+test("buildFullFileDisplayLines 生成全文视图并保持焦点与高亮区间", () => {
+  const lines = buildFullFileDisplayLines({
+    content: ["alpha", "beta", "gamma", "delta"].join("\n"),
+    focusLine: 3,
+    highlightStartLine: 2,
+    highlightEndLine: 3,
+    lineStart: 1,
+  });
+
+  assert.deepEqual(
+    lines.map((line) => line.lineNumber),
+    [1, 2, 3, 4],
+  );
+  assert.equal(lines[1]?.isHighlighted, true);
+  assert.equal(lines[2]?.isHighlighted, true);
+  assert.equal(lines[2]?.isFocus, true);
 });
 
 test("buildOverviewItems 不再使用 hero 历史命名", () => {

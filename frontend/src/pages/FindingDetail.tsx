@@ -14,6 +14,7 @@ import {
 } from "@/pages/finding-detail/viewModel";
 import {
   getAgentFinding,
+  getAgentTask,
   type AgentFinding,
 } from "@/shared/api/agentTasks";
 import {
@@ -36,6 +37,8 @@ import {
   type OpengrepFindingContext,
   type OpengrepScanTask,
 } from "@/shared/api/opengrep";
+import { api as databaseApi } from "@/shared/api/database";
+import type { Project } from "@/shared/types";
 import {
   isFindingDetailLocationState,
   normalizeReturnToPath,
@@ -149,6 +152,7 @@ export default function FindingDetail() {
   const [banditTask, setBanditTask] = useState<BanditScanTask | null>(null);
   const [banditFinding, setBanditFinding] = useState<BanditFinding | null>(null);
   const [agentFinding, setAgentFinding] = useState<AgentFinding | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,6 +174,7 @@ export default function FindingDetail() {
       setBanditTask(null);
       setBanditFinding(null);
       setAgentFinding(null);
+      setProject(null);
 
       try {
         if (source === "static") {
@@ -181,6 +186,9 @@ export default function FindingDetail() {
             if (cancelled) return;
             setGitleaksTask(task);
             setGitleaksFinding(finding);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
           } else if (staticEngine === "bandit") {
             const [task, finding] = await Promise.all([
               getBanditScanTask(taskId),
@@ -189,6 +197,9 @@ export default function FindingDetail() {
             if (cancelled) return;
             setBanditTask(task);
             setBanditFinding(finding);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
           } else {
             const [task, finding, context] = await Promise.all([
               getOpengrepScanTask(taskId),
@@ -204,8 +215,22 @@ export default function FindingDetail() {
             setStaticTask(task);
             setStaticFinding(finding);
             setStaticContext(context);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
           }
         } else {
+          try {
+            const agentTask = await getAgentTask(taskId);
+            if (cancelled) return;
+            const nextProject = await databaseApi.getProjectById(agentTask.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
+          } catch {
+            if (!cancelled) {
+              setProject(null);
+            }
+          }
           const canUseSnapshot =
             agentFindingSnapshot && isAgentFalsePositiveFinding(agentFindingSnapshot);
           const retryDelaysMs = canUseSnapshot ? [0, 1200, 2400] : [0];
@@ -268,6 +293,9 @@ export default function FindingDetail() {
         finding: agentFinding,
         taskId,
         findingId,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
       });
     }
 
@@ -278,6 +306,9 @@ export default function FindingDetail() {
         findingId,
         taskName: staticTask?.name,
         context: staticContext,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
       });
     }
 
@@ -287,6 +318,9 @@ export default function FindingDetail() {
         taskId,
         findingId,
         taskName: gitleaksTask?.name,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
       });
     }
 
@@ -296,6 +330,9 @@ export default function FindingDetail() {
         taskId,
         findingId,
         taskName: banditTask?.name,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
       });
     }
 
@@ -307,6 +344,9 @@ export default function FindingDetail() {
     findingId,
     gitleaksFinding,
     gitleaksTask?.name,
+    project?.id,
+    project?.name,
+    project?.source_type,
     source,
     staticContext,
     staticEngine,
@@ -326,6 +366,17 @@ export default function FindingDetail() {
       return;
     }
     navigate(target);
+  };
+
+  const handleLoadFullFile = async (request: { projectId: string; filePath: string }) => {
+    const response = await databaseApi.getProjectFileContent(request.projectId, request.filePath);
+    if (!response) {
+      throw new Error("Failed to load full file");
+    }
+    return {
+      content: response.content,
+      isText: response.is_text,
+    };
   };
 
   const fallbackTitle =
@@ -361,5 +412,11 @@ export default function FindingDetail() {
     );
   }
 
-  return <FindingDetailView model={model} onBack={handleBack} />;
+  return (
+    <FindingDetailView
+      model={model}
+      onBack={handleBack}
+      onLoadFullFile={handleLoadFullFile}
+    />
+  );
 }

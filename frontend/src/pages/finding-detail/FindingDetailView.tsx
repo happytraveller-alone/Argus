@@ -1,12 +1,21 @@
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import FindingCodeWindow from "@/pages/AgentAudit/components/FindingCodeWindow";
 import FindingNarrativeMarkdown from "@/pages/AgentAudit/components/FindingNarrativeMarkdown";
-import type { FindingDetailPageModel, FindingDetailTrackingItem } from "./viewModel";
+import FindingDetailCodePanel, {
+  type FindingDetailFullFileLoadResult,
+} from "./FindingDetailCodePanel";
+import type {
+  FindingDetailFullFileRequest,
+  FindingDetailPageModel,
+  FindingDetailTrackingItem,
+} from "./viewModel";
 
 interface FindingDetailViewProps {
   model: FindingDetailPageModel;
   onBack: () => void;
+  onLoadFullFile?: (
+    request: FindingDetailFullFileRequest,
+  ) => Promise<FindingDetailFullFileLoadResult>;
 }
 
 interface InfoSectionProps {
@@ -45,7 +54,11 @@ function InfoSection({ title, items }: InfoSectionProps) {
   );
 }
 
-export default function FindingDetailView({ model, onBack }: FindingDetailViewProps) {
+export default function FindingDetailView({
+  model,
+  onBack,
+  onLoadFullFile,
+}: FindingDetailViewProps) {
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6 flex flex-col gap-4 sm:gap-5">
       <div className="flex items-center justify-between gap-3">
@@ -82,40 +95,12 @@ export default function FindingDetailView({ model, onBack }: FindingDetailViewPr
           </section>
         </div>
 
-        <div className="order-2 xl:order-1 cyber-card p-5 min-h-0 flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold uppercase tracking-[0.18em] text-foreground">
-              {model.codePanelTitle}
-            </h2>
-            <span className="text-sm text-muted-foreground">
-              {model.codeSections.length} 个代码块
-            </span>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
-            {model.codeSections.length > 0 ? (
-              model.codeSections.map((section) => (
-                <FindingCodeWindow
-                  key={section.id}
-                  code={section.code}
-                  displayLines={section.displayLines}
-                  filePath={section.filePath}
-                  lineStart={section.lineStart}
-                  lineEnd={section.lineEnd}
-                  highlightStartLine={section.highlightStartLine}
-                  highlightEndLine={section.highlightEndLine}
-                  focusLine={section.focusLine}
-                  title={section.title || "命中代码"}
-                  variant="detail"
-                />
-              ))
-            ) : (
-              <div className="rounded-xl border border-dashed border-border/80 bg-card/25 p-5 text-sm leading-7 text-muted-foreground">
-                {model.emptyCodeMessage}
-              </div>
-            )}
-          </div>
-        </div>
+        <FindingDetailCodePanel
+          title={model.codePanelTitle}
+          sections={model.codeSections}
+          emptyMessage={model.emptyCodeMessage}
+          onLoadFullFile={onLoadFullFile}
+        />
       </div>
     </div>
   );

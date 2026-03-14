@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import { Activity, AlertTriangle, Bug } from "lucide-react";
 import {
-	Area,
-	AreaChart,
 	Bar,
 	BarChart,
 	CartesianGrid,
 	Cell,
-	Legend,
+	Line,
+	LineChart,
 	PolarAngleAxis,
 	PolarGrid,
 	PolarRadiusAxis,
@@ -24,7 +23,7 @@ import {
 } from "recharts";
 import type {
 	DashboardCweDistributionItem,
-	DashboardRuleConfidenceItem,
+	DashboardRuleConfidenceByLanguageItem,
 } from "@/shared/types";
 import type {
 	ProjectScanRunsChartItem,
@@ -49,16 +48,14 @@ type TreemapContentProps = {
 	fill?: string;
 };
 
-type ConfidenceChartItem = {
-	confidence: DashboardRuleConfidenceItem["confidence"];
-	label: string;
-	totalRules: number;
-	enabledRules: number;
-	disabledRules: number;
+type ConfidenceByLanguageChartItem = {
+	language: string;
+	highCount: number;
+	mediumCount: number;
 };
 
 interface DashboardChartsPanelsProps {
-	ruleConfidenceData: DashboardRuleConfidenceItem[];
+	ruleConfidenceByLanguageData: DashboardRuleConfidenceByLanguageItem[];
 	cweDistributionData: DashboardCweDistributionItem[];
 	projectScanRunsData: ProjectScanRunsChartItem[];
 	projectVulnsData: ProjectVulnsChartItem[];
@@ -93,8 +90,8 @@ const CHART_COLORS = {
 	totalVulns: "#fbbf24",
 	enabledRules: "#38bdf8",
 	disabledRules: "#64748b",
-	highConfidence: "#f59e0b",
-	mediumConfidence: "#38bdf8",
+	highConfidence: "#fb923c",
+	mediumConfidence: "#facc15",
 	lowConfidence: "#34d399",
 	unspecifiedConfidence: "#94a3b8",
 	cwePrimary: "#a78bfa",
@@ -120,6 +117,11 @@ const TREEMAP_COLORS = [
 	"#22c55e",
 	"#f97316",
 ];
+
+type LegendItem = {
+	label: string;
+	color: string;
+};
 
 function RotatedXAxisTick({ x = 0, y = 0, payload }: RotatedXAxisTickProps) {
 	return (
@@ -187,50 +189,94 @@ function CustomTreemapContent({
 	);
 }
 
+function ChartLegend({ items }: { items: LegendItem[] }) {
+	return (
+		<div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 text-xs text-muted-foreground">
+			{items.map((item) => (
+				<div key={item.label} className="inline-flex items-center gap-2 whitespace-nowrap">
+					<span
+						className="inline-block h-2.5 w-2.5 rounded-full"
+						style={{ backgroundColor: item.color }}
+						aria-hidden="true"
+					/>
+					<span>{item.label}</span>
+				</div>
+			))}
+		</div>
+	);
+}
+
 export default function DashboardChartsPanels({
-	ruleConfidenceData,
+	ruleConfidenceByLanguageData,
 	cweDistributionData,
 	projectScanRunsData,
 	projectVulnsData,
 	translate,
 }: DashboardChartsPanelsProps) {
-	const confidenceChartData = useMemo<ConfidenceChartItem[]>(
+	const confidenceByLanguageChartData = useMemo<ConfidenceByLanguageChartItem[]>(
 		() =>
-			ruleConfidenceData.map((item) => ({
-				confidence: item.confidence,
-				label: translate(
-					`dashboard.confidence.${item.confidence.toLowerCase()}`,
-					item.confidence,
-				),
-				totalRules: Math.max(Number(item.total_rules || 0), 0),
-				enabledRules: Math.max(Number(item.enabled_rules || 0), 0),
-				disabledRules: Math.max(
-					Math.max(Number(item.total_rules || 0), 0) -
-						Math.max(Number(item.enabled_rules || 0), 0),
-					0,
-				),
+			ruleConfidenceByLanguageData.map((item) => ({
+				language: String(item.language || "unknown").trim() || "unknown",
+				highCount: Math.max(Number(item.high_count || 0), 0),
+				mediumCount: Math.max(Number(item.medium_count || 0), 0),
 			})),
-		[ruleConfidenceData, translate],
+		[ruleConfidenceByLanguageData],
 	);
 
 	const confidenceChartMax = useMemo(() => {
-		if (confidenceChartData.length === 0) return 1;
+		if (confidenceByLanguageChartData.length === 0) return 1;
 		return Math.max(
 			1,
-			...confidenceChartData.map((item) => item.totalRules),
+			...confidenceByLanguageChartData.flatMap((item) => [
+				item.highCount,
+				item.mediumCount,
+			]),
 		);
-	}, [confidenceChartData]);
+	}, [confidenceByLanguageChartData]);
 
 	const cweBarData = useMemo(
-		() =>
+			() =>
 			cweDistributionData.map((item) => ({
 				cweId: item.cwe_id,
 				cweName: item.cwe_name || item.cwe_id,
 				totalFindings: Math.max(Number(item.total_findings || 0), 0),
 				opengrepFindings: Math.max(Number(item.opengrep_findings || 0), 0),
 				agentFindings: Math.max(Number(item.agent_findings || 0), 0),
+				banditFindings: Math.max(Number(item.bandit_findings || 0), 0),
 			})),
 		[cweDistributionData],
+	);
+
+	const projectScanRunsLegendItems = useMemo<LegendItem[]>(
+		() => [
+			{
+				label: translate("dashboard.staticScan"),
+				color: CHART_COLORS.staticRuns,
+			},
+			{
+				label: translate("dashboard.intelligentScan"),
+				color: CHART_COLORS.intelligentRuns,
+			},
+			{
+				label: translate("dashboard.hybridScan"),
+				color: CHART_COLORS.hybridRuns,
+			},
+		],
+		[translate],
+	);
+
+	const ruleConfidenceLegendItems = useMemo<LegendItem[]>(
+		() => [
+			{
+				label: translate("dashboard.confidence.medium", "中置信度"),
+				color: CHART_COLORS.mediumConfidence,
+			},
+			{
+				label: translate("dashboard.confidence.high", "高置信度"),
+				color: CHART_COLORS.highConfidence,
+			},
+		],
+		[translate],
 	);
 
 	const cweChartHeight = useMemo(() => {
@@ -305,17 +351,14 @@ export default function DashboardChartsPanels({
 								<h3 className="section-title">
 									{translate("dashboard.projectScanRunsChartTitle")}
 								</h3>
-								<span className="text-sm text-muted-foreground">
-									{translate("dashboard.projectCount", "项目数")}：
-									{projectScanRunsData.length}
-								</span>
+								<div className="flex flex-col items-end gap-2">
+									<span className="text-sm text-muted-foreground">
+										{translate("dashboard.projectCount", "项目数")}：
+										{projectScanRunsData.length}
+									</span>
+									<ChartLegend items={projectScanRunsLegendItems} />
+								</div>
 							</div>
-							<p className="text-sm text-muted-foreground mt-1">
-								{translate(
-									"dashboard.projectScanRunsChartSubtitle",
-									"按项目展示静态、智能与混合扫描累计次数（Top 10）",
-								)}
-							</p>
 						</div>
 					</div>
 
@@ -356,7 +399,6 @@ export default function DashboardChartsPanels({
 										tickLine={AXIS_TICK_LINE_STYLE}
 									/>
 									<Tooltip contentStyle={TOOLTIP_STYLE} />
-									<Legend wrapperStyle={LEGEND_STYLE} />
 									<Bar
 										dataKey="staticRuns"
 										stackId="runs"
@@ -400,12 +442,6 @@ export default function DashboardChartsPanels({
 									{projectVulnsData.length}
 								</span>
 							</div>
-							<p className="text-sm text-muted-foreground mt-1">
-								{translate(
-									"dashboard.projectVulnsChartSubtitle",
-									"按项目展示真实漏洞总量（Top 10）",
-								)}
-							</p>
 						</div>
 					</div>
 
@@ -468,21 +504,16 @@ export default function DashboardChartsPanels({
 							<div className="flex items-center justify-between gap-3 flex-wrap">
 								<h3 className="section-title">
 									{translate(
-										"dashboard.ruleConfidenceChartTitle",
-										"规则置信度",
+										"dashboard.ruleConfidenceCoverageTitle",
+										"规则置信度覆盖情况",
 									)}
 								</h3>
 								<span className="text-sm text-muted-foreground">
-									{translate("dashboard.confidenceBucketCount", "置信度分桶")}：
-									{confidenceChartData.length}
+									{translate("dashboard.languageCount", "语言数")}：
+									{confidenceByLanguageChartData.length}
 								</span>
+								<ChartLegend items={ruleConfidenceLegendItems} />
 							</div>
-							<p className="text-sm text-muted-foreground mt-1">
-								{translate(
-									"dashboard.ruleConfidenceChartSubtitle",
-									"仅统计严重(ERROR)规则，对比已启用与未启用数量",
-								)}
-							</p>
 						</div>
 					</div>
 
@@ -490,7 +521,7 @@ export default function DashboardChartsPanels({
 						className="mt-4 border border-border/60 rounded-lg bg-muted/15 p-3"
 						style={{ height: 320 }}
 					>
-						{confidenceChartData.length === 0 ? (
+						{confidenceByLanguageChartData.length === 0 ? (
 							<div className="h-full flex items-center justify-center text-base text-muted-foreground">
 								{translate(
 									"dashboard.noRuleConfidenceData",
@@ -499,47 +530,52 @@ export default function DashboardChartsPanels({
 							</div>
 						) : (
 							<ResponsiveContainer width="100%" height="100%">
-								<BarChart
-									data={confidenceChartData}
-									layout="horizontal"
-									margin={{ top: 6, right: 6, left: 4, bottom: 26 }}
-									barCategoryGap={20}
-									barGap={8}
-									barSize={28}
+								<LineChart
+									data={confidenceByLanguageChartData}
+									margin={{ top: 6, right: 12, left: 4, bottom: 42 }}
 								>
 									<CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
 									<XAxis
-										type="category"
-										dataKey="label"
+										dataKey="language"
+										tick={<RotatedXAxisTick />}
+										interval={0}
 										axisLine={AXIS_LINE_STYLE}
 										tickLine={AXIS_TICK_LINE_STYLE}
-										tick={AXIS_TICK_STYLE}
 									/>
 									<YAxis
-										type="number"
 										domain={[0, confidenceChartMax]}
 										allowDecimals={false}
 										axisLine={AXIS_LINE_STYLE}
 										tickLine={AXIS_TICK_LINE_STYLE}
 										tick={AXIS_TICK_STYLE}
+										tickFormatter={formatTick}
 									/>
-									<Tooltip contentStyle={TOOLTIP_STYLE} />
-									<Legend wrapperStyle={LEGEND_STYLE} />
-									<Bar
-										dataKey="enabledRules"
-										stackId="rules"
-										fill={CHART_COLORS.enabledRules}
-										name={translate("dashboard.enabledRules", "已启用规则")}
-										radius={[2, 2, 2, 2]}
+									<Tooltip
+										contentStyle={TOOLTIP_STYLE}
+										formatter={(value: number | string, name: string) => [
+											Number(value || 0).toLocaleString(),
+											name,
+										]}
 									/>
-									<Bar
-										dataKey="disabledRules"
-										stackId="rules"
-										fill={CHART_COLORS.disabledRules}
-										name={translate("dashboard.disabledRules", "未启用规则")}
-										radius={[2, 2, 2, 2]}
+									<Line
+										type="monotone"
+										dataKey="mediumCount"
+										name={translate("dashboard.confidence.medium", "中置信度")}
+										stroke={CHART_COLORS.mediumConfidence}
+										strokeWidth={3}
+										dot={{ r: 3, strokeWidth: 2 }}
+										activeDot={{ r: 5 }}
 									/>
-								</BarChart>
+									<Line
+										type="monotone"
+										dataKey="highCount"
+										name={translate("dashboard.confidence.high", "高置信度")}
+										stroke={CHART_COLORS.highConfidence}
+										strokeWidth={3}
+										dot={{ r: 3, strokeWidth: 2 }}
+										activeDot={{ r: 5 }}
+									/>
+								</LineChart>
 							</ResponsiveContainer>
 						)}
 					</div>
@@ -553,7 +589,7 @@ export default function DashboardChartsPanels({
 								<h3 className="section-title">
 									{translate(
 										"dashboard.cweDistributionChartTitle",
-										"CWE 漏洞类型占比",
+										"已挖掘漏洞类型占比",
 									)}
 								</h3>
 								<span className="text-sm text-muted-foreground">
@@ -561,12 +597,6 @@ export default function DashboardChartsPanels({
 									{cweBarData.length}
 								</span>
 							</div>
-							<p className="text-sm text-muted-foreground mt-1">
-								{translate(
-									"dashboard.cweDistributionChartSubtitle",
-									"仅统计可稳定解析到 CWE 的真实漏洞（Top 12）",
-								)}
-							</p>
 						</div>
 					</div>
 
@@ -598,6 +628,45 @@ export default function DashboardChartsPanels({
 											Number(value || 0).toLocaleString(),
 											String(props?.payload?.cweName || props?.payload?.name || ""),
 										]}
+										labelFormatter={(value, payload) =>
+											String(payload?.[0]?.payload?.cweName || value)
+										}
+										content={({ active, payload }) => {
+											if (!active || !payload?.length) return null;
+											const item = payload[0]?.payload as
+												| {
+														cweId: string;
+														cweName: string;
+														totalFindings: number;
+														opengrepFindings: number;
+														agentFindings: number;
+														banditFindings: number;
+												  }
+												| undefined;
+											if (!item) return null;
+											return (
+												<div className="rounded border border-border bg-background/95 px-3 py-2 text-xs shadow-xl">
+													<p className="font-semibold text-foreground">
+														{item.cweName}
+													</p>
+													<p className="mt-1 text-muted-foreground">
+														{translate("dashboard.totalVulns")}：
+														{formatTick(item.totalFindings)}
+													</p>
+													<div className="mt-1 space-y-0.5">
+														<p style={{ color: CHART_COLORS.opengrepFindings }}>
+															Opengrep：{formatTick(item.opengrepFindings)}
+														</p>
+														<p style={{ color: CHART_COLORS.agentFindings }}>
+															Agent：{formatTick(item.agentFindings)}
+														</p>
+														<p style={{ color: CHART_COLORS.totalVulns }}>
+															Bandit：{formatTick(item.banditFindings)}
+														</p>
+													</div>
+												</div>
+											);
+										}}
 									/>
 								</Treemap>
 							</ResponsiveContainer>
@@ -761,79 +830,6 @@ export default function DashboardChartsPanels({
 						)}
 					</div>
 				</div> */}
-
-				<div className="cyber-card p-4">
-					<div className="section-header mb-3">
-						<AlertTriangle className="w-5 h-5 text-sky-400" />
-						<div className="w-full">
-							<h3 className="section-title">
-								{translate(
-									"dashboard.ruleConfidenceCoverageTitle",
-									"规则置信度覆盖情况",
-								)}
-							</h3>
-							<p className="text-sm text-muted-foreground mt-1">
-								{translate(
-									"dashboard.ruleConfidenceCoverageSubtitle",
-									"各置信度桶的规则覆盖面积",
-								)}
-							</p>
-						</div>
-					</div>
-					<div className="mt-4 border border-border/60 rounded-lg bg-muted/15 p-3" style={{ height: 320 }}>
-						{confidenceChartData.length === 0 ? (
-							<div className="h-full flex items-center justify-center text-base text-muted-foreground">
-								{translate("dashboard.noRuleConfidenceData", "暂无规则置信度数据")}
-							</div>
-						) : (
-							<ResponsiveContainer width="100%" height="100%">
-								<AreaChart
-									data={confidenceChartData}
-									margin={{ top: 6, right: 6, left: 4, bottom: 20 }}
-								>
-									<defs>
-										<linearGradient id="confidence-coverage" x1="0" y1="0" x2="0" y2="1">
-											<stop
-												offset="5%"
-												stopColor={CHART_COLORS.mediumConfidence}
-												stopOpacity={0.48}
-											/>
-											<stop
-												offset="95%"
-												stopColor={CHART_COLORS.mediumConfidence}
-												stopOpacity={0.06}
-											/>
-										</linearGradient>
-									</defs>
-									<CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
-									<XAxis
-										dataKey="label"
-										axisLine={AXIS_LINE_STYLE}
-										tickLine={AXIS_TICK_LINE_STYLE}
-										tick={AXIS_TICK_STYLE}
-									/>
-									<YAxis
-										axisLine={AXIS_LINE_STYLE}
-										tickLine={AXIS_TICK_LINE_STYLE}
-										tick={AXIS_TICK_STYLE}
-										tickFormatter={formatTick}
-									/>
-									<Tooltip contentStyle={TOOLTIP_STYLE} />
-									<Legend wrapperStyle={LEGEND_STYLE} />
-									<Area
-										type="monotone"
-										dataKey="totalRules"
-										name={translate("dashboard.ruleCount", "规则总量")}
-										stroke={CHART_COLORS.mediumConfidence}
-										fill="url(#confidence-coverage)"
-										strokeWidth={2}
-										activeDot={{ r: 5 }}
-									/>
-								</AreaChart>
-							</ResponsiveContainer>
-						)}
-					</div>
-				</div>
 
 				{/* <div className="cyber-card p-4">
 					<div className="section-header mb-3">

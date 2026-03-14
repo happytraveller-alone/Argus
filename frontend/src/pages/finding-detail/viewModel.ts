@@ -7,6 +7,7 @@ import type {
   OpengrepFinding,
   OpengrepFindingContext,
 } from "@/shared/api/opengrep";
+import type { ProjectSourceType } from "@/shared/types";
 
 const CODE_CONTEXT_PADDING = 3;
 const ELLIPSIS_PLACEHOLDER = "// ....";
@@ -16,10 +17,17 @@ const MISSING_DESCRIPTION = "当前来源未提供扫描说明，请结合命中
 
 type FindingDetailTone = "danger" | "warning" | "info" | "success" | "muted";
 
+export type FindingDetailFullFileRequest = {
+  projectId: string;
+  filePath: string;
+};
+
 export type FindingDetailCodeView = {
   id: string;
   title: string;
   filePath: string | null;
+  displayFilePath?: string;
+  locationLabel?: string;
   code: string;
   lineStart: number | null;
   lineEnd: number | null;
@@ -27,6 +35,9 @@ export type FindingDetailCodeView = {
   highlightEndLine: number | null;
   focusLine: number | null;
   displayLines?: FindingCodeWindowDisplayLine[];
+  relatedLines?: FindingCodeWindowDisplayLine[];
+  fullFileAvailable?: boolean;
+  fullFileRequest?: FindingDetailFullFileRequest | null;
 };
 
 export type FindingDetailSummaryStat = {
@@ -67,6 +78,47 @@ function normalizeUpper(value: unknown): string {
 
 function splitCodeLines(code: string): string[] {
   return String(code || "").replace(/\r\n/g, "\n").split("\n");
+}
+
+function buildLineLabel(lineStart: number | null, lineEnd: number | null): string {
+  if (isFiniteLineNumber(lineStart) && isFiniteLineNumber(lineEnd) && lineEnd > lineStart) {
+    return `第 ${lineStart}-${lineEnd} 行`;
+  }
+  if (isFiniteLineNumber(lineStart)) {
+    return `第 ${lineStart} 行`;
+  }
+  return "行号未提供";
+}
+
+function buildDisplayFilePath(filePath: string | null | undefined, projectName?: string | null): string {
+  const trimmed = String(filePath || "").trim();
+  if (!trimmed) return "未定位文件";
+
+  const normalized = trimmed.replace(/\\/g, "/").replace(/^\/+/, "");
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.length === 0) return trimmed;
+
+  const sourceRootSegments = new Set(["src", "include", "lib", "app", "apps", "test", "tests"]);
+  const sourceRootIndex = segments.findIndex((segment) =>
+    sourceRootSegments.has(segment.toLowerCase()),
+  );
+
+  const projectNameLower = String(projectName || "").trim().toLowerCase();
+  if (projectNameLower) {
+    const projectIndex = segments.findIndex((segment) => segment.toLowerCase() === projectNameLower);
+    const isProjectRootPrefix =
+      projectIndex >= 0 &&
+      projectIndex < segments.length - 1 &&
+      (sourceRootIndex < 0 ? projectIndex <= 1 : projectIndex < sourceRootIndex);
+    if (isProjectRootPrefix) {
+      return segments.slice(projectIndex + 1).join("/");
+    }
+  }
+  if (sourceRootIndex >= 0) {
+    return segments.slice(sourceRootIndex).join("/");
+  }
+
+  return normalized;
 }
 
 function isFiniteLineNumber(value: number | null | undefined): value is number {
@@ -228,6 +280,83 @@ function getActualLineEnd(view: FindingDetailCodeView, lineCount: number): numbe
     }
   }
   return view.lineStart + lineCount - 1;
+}
+
+export function buildFullFileDisplayLines(params: {
+  content: string;
+  lineStart?: number | null;
+  focusLine?: number | null;
+  highlightStartLine?: number | null;
+  highlightEndLine?: number | null;
+}): FindingCodeWindowDisplayLine[] {
+  const lines = splitCodeLines(params.content);
+  const lineStart = isFiniteLineNumber(params.lineStart) ? params.lineStart : 1;
+  const highlightStart = isFiniteLineNumber(params.highlightStartLine)
+    ? params.highlightStartLine
+    : null;
+  const highlightEnd = isFiniteLineNumber(params.highlightEndLine)
+    ? params.highlightEndLine
+    : highlightStart;
+  const focusLine = isFiniteLineNumber(params.focusLine) ? params.focusLine : null;
+
+  return lines.map((content, index) => {
+    const lineNumber = lineStart + index;
+    const isHighlighted =
+      highlightStart !== null &&
+      highlightEnd !== null &&
+      lineNumber >= highlightStart &&
+      lineNumber <= highlightEnd;
+    return {
+      lineNumber,
+      content,
+      kind: "code",
+      isHighlighted,
+      isFocus: focusLine !== null && lineNumber === focusLine,
+    };
+  });
+}
+
+function finalizeCodeSectionView(
+  view: FindingDetailCodeView,
+  params: {
+    projectId?: string | null;
+    projectSourceType?: ProjectSourceType | null;
+    projectName?: string | null;
+  },
+): FindingDetailCodeView {
+  const displayFilePath = buildDisplayFilePath(view.filePath, params.projectName);
+  const locationLabel = buildLineLabel(
+    isFiniteLineNumber(view.highlightStartLine) ? view.highlightStartLine : view.lineStart,
+    isFiniteLineNumber(view.highlightEndLine) ? view.highlightEndLine : view.lineEnd,
+  );
+  const relatedLines =
+    Array.isArray(view.displayLines) && view.displayLines.length > 0
+      ? view.displayLines
+      : buildFullFileDisplayLines({
+          content: view.code,
+          lineStart: view.lineStart,
+          focusLine: view.focusLine,
+          highlightStartLine: view.highlightStartLine,
+          highlightEndLine: view.highlightEndLine,
+        });
+  const projectId = String(params.projectId || "").trim();
+  const filePath = String(view.filePath || "").trim();
+  const fullFileAvailable =
+    params.projectSourceType === "zip" && projectId.length > 0 && filePath.length > 0;
+
+  return {
+    ...view,
+    displayFilePath,
+    locationLabel,
+    relatedLines,
+    fullFileAvailable,
+    fullFileRequest: fullFileAvailable
+      ? {
+          projectId,
+          filePath,
+        }
+      : null,
+  };
 }
 
 export function isAgentFalsePositiveFinding(finding: AgentFinding | null): boolean {
@@ -458,6 +587,9 @@ function buildBaseModel(params: {
   trackingItems: FindingDetailTrackingItem[];
   overviewItems: FindingDetailTrackingItem[];
   codeSections: FindingDetailCodeView[];
+  projectId?: string | null;
+  projectSourceType?: ProjectSourceType | null;
+  projectName?: string | null;
 }): FindingDetailPageModel {
   return {
     pageTitle: params.pageTitle,
@@ -466,7 +598,13 @@ function buildBaseModel(params: {
     rootCause: params.rootCause,
     trackingItems: params.trackingItems,
     overviewItems: params.overviewItems,
-    codeSections: params.codeSections,
+    codeSections: params.codeSections.map((section) =>
+      finalizeCodeSectionView(section, {
+        projectId: params.projectId,
+        projectSourceType: params.projectSourceType,
+        projectName: params.projectName,
+      }),
+    ),
   };
 }
 
@@ -474,6 +612,9 @@ export function buildAgentFindingDetailModel(params: {
   finding: AgentFinding;
   taskId: string;
   findingId: string;
+  projectId?: string | null;
+  projectSourceType?: ProjectSourceType | null;
+  projectName?: string | null;
 }): FindingDetailPageModel {
   const { finding } = params;
   const isFalsePositive = isAgentFalsePositiveFinding(finding);
@@ -517,6 +658,9 @@ export function buildAgentFindingDetailModel(params: {
         summaryStats,
       }),
       codeSections,
+      projectId: params.projectId,
+      projectSourceType: params.projectSourceType,
+      projectName: params.projectName,
     });
   }
 
@@ -542,6 +686,9 @@ export function buildAgentFindingDetailModel(params: {
       summaryStats,
     }),
     codeSections,
+    projectId: params.projectId,
+    projectSourceType: params.projectSourceType,
+    projectName: params.projectName,
   });
 }
 
@@ -551,6 +698,9 @@ export function buildOpengrepFindingDetailModel(params: {
   findingId: string;
   taskName?: string | null;
   context?: OpengrepFindingContext | null;
+  projectId?: string | null;
+  projectSourceType?: ProjectSourceType | null;
+  projectName?: string | null;
 }): FindingDetailPageModel {
   const { finding } = params;
   const severity = resolveSeverityDisplay(finding.severity);
@@ -591,6 +741,9 @@ export function buildOpengrepFindingDetailModel(params: {
     codeSections: buildFindingDetailCodeSections(
       buildOpengrepFindingCodeViews(finding, params.context ?? null),
     ),
+    projectId: params.projectId,
+    projectSourceType: params.projectSourceType,
+    projectName: params.projectName,
   });
 }
 
@@ -599,6 +752,9 @@ export function buildGitleaksFindingDetailModel(params: {
   taskId: string;
   findingId: string;
   taskName?: string | null;
+  projectId?: string | null;
+  projectSourceType?: ProjectSourceType | null;
+  projectName?: string | null;
 }): FindingDetailPageModel {
   const { finding } = params;
   const location = formatLocation({
@@ -635,6 +791,9 @@ export function buildGitleaksFindingDetailModel(params: {
       summaryStats,
     }),
     codeSections: buildFindingDetailCodeSections(buildGitleaksFindingCodeViews(finding)),
+    projectId: params.projectId,
+    projectSourceType: params.projectSourceType,
+    projectName: params.projectName,
   });
 }
 
@@ -643,6 +802,9 @@ export function buildBanditFindingDetailModel(params: {
   taskId: string;
   findingId: string;
   taskName?: string | null;
+  projectId?: string | null;
+  projectSourceType?: ProjectSourceType | null;
+  projectName?: string | null;
 }): FindingDetailPageModel {
   const { finding } = params;
   const severity = resolveSeverityDisplay(finding.issue_severity);
@@ -689,5 +851,8 @@ export function buildBanditFindingDetailModel(params: {
       summaryStats,
     }),
     codeSections: buildFindingDetailCodeSections(buildBanditFindingCodeViews(finding)),
+    projectId: params.projectId,
+    projectSourceType: params.projectSourceType,
+    projectName: params.projectName,
   });
 }

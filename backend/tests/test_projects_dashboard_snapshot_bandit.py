@@ -43,6 +43,7 @@ async def test_dashboard_snapshot_includes_bandit_in_static_metrics(monkeypatch)
             ),
             _AllResult([]),  # rules
             _AllResult([]),  # opengrep findings
+            _AllResult([]),  # bandit findings
             _AllResult([]),  # agent findings
         ]
     )
@@ -97,11 +98,13 @@ async def test_dashboard_snapshot_includes_rule_confidence_and_cwe_distribution(
             ),
             _AllResult(  # severe opengrep rules only
                 [
-                    ("rule-sql", "ERROR", "HIGH", True, ["CWE-89"]),
-                    ("rule-xss", "ERROR", "MIDIUM", False, ["CWE-79"]),
-                    ("rule-low", "ERROR", "LOW", True, ["CWE-22"]),
-                    ("rule-unknown", "ERROR", None, True, None),
-                    ("rule-ignore", "WARNING", "HIGH", True, ["CWE-78"]),
+                    ("rule-sql", "python", "ERROR", "HIGH", True, ["CWE-89"]),
+                    ("rule-sql-2", "python", "ERROR", "HIGH", True, ["CWE-89"]),
+                    ("rule-xss", "javascript", "ERROR", "MIDIUM", False, ["CWE-79"]),
+                    ("rule-mid-2", "go", "ERROR", "MEDIUM", True, ["CWE-327"]),
+                    ("rule-low", "go", "ERROR", "LOW", True, ["CWE-22"]),
+                    ("rule-unknown", "", "ERROR", None, True, None),
+                    ("rule-ignore", "ruby", "WARNING", "HIGH", True, ["CWE-78"]),
                 ]
             ),
             _AllResult(  # opengrep findings for cwe_distribution
@@ -130,6 +133,28 @@ async def test_dashboard_snapshot_includes_rule_confidence_and_cwe_distribution(
                     ),
                 ]
             ),
+            _AllResult(  # bandit findings for cwe_distribution
+                [
+                    (
+                        "B105",
+                        "HIGH",
+                        "Possible hardcoded password",
+                        "hardcoded_password_string",
+                    ),
+                    (
+                        "B608",
+                        "MEDIUM",
+                        "Possible SQL injection vector through string-based query construction",
+                        "hardcoded_sql_expressions",
+                    ),
+                    (
+                        "B101",
+                        "LOW",
+                        "Use of assert detected",
+                        "assert_used",
+                    ),
+                ]
+            ),
             _AllResult(  # verified agent findings with resolved cwe
                 [
                     (
@@ -139,6 +164,8 @@ async def test_dashboard_snapshot_includes_rule_confidence_and_cwe_distribution(
                         "Reflected XSS",
                         "desc",
                         "print(user_input)",
+                        0.91,
+                        None,
                     ),
                     (
                         False,
@@ -146,6 +173,28 @@ async def test_dashboard_snapshot_includes_rule_confidence_and_cwe_distribution(
                         "path_traversal",
                         "Ignored because not verified",
                         "desc",
+                        None,
+                        0.92,
+                        None,
+                    ),
+                    (
+                        True,
+                        "CWE-89",
+                        "sql_injection",
+                        "Medium confidence agent finding",
+                        "desc",
+                        None,
+                        0.62,
+                        None,
+                    ),
+                    (
+                        True,
+                        "CWE-327",
+                        "weak_crypto",
+                        "Low confidence agent finding",
+                        "desc",
+                        None,
+                        0.2,
                         None,
                     ),
                 ]
@@ -171,17 +220,31 @@ async def test_dashboard_snapshot_includes_rule_confidence_and_cwe_distribution(
         "UNSPECIFIED",
     ]
     assert [(item.total_rules, item.enabled_rules) for item in response.rule_confidence] == [
-        (1, 1),
-        (1, 0),
+        (2, 2),
+        (2, 1),
         (1, 1),
         (1, 1),
     ]
-
-    assert [item.cwe_id for item in response.cwe_distribution] == ["CWE-89", "CWE-79"]
     assert [
-        (item.total_findings, item.opengrep_findings, item.agent_findings)
+        (item.language, item.high_count, item.medium_count)
+        for item in response.rule_confidence_by_language
+    ] == [
+        ("python", 2, 0),
+        ("go", 0, 1),
+        ("javascript", 0, 1),
+    ]
+
+    assert [item.cwe_id for item in response.cwe_distribution] == ["CWE-89", "CWE-79", "CWE-259"]
+    assert [
+        (
+            item.total_findings,
+            item.opengrep_findings,
+            item.agent_findings,
+            item.bandit_findings,
+        )
         for item in response.cwe_distribution
     ] == [
-        (2, 2, 0),
-        (1, 0, 1),
+        (4, 2, 1, 1),
+        (2, 1, 1, 0),
+        (1, 0, 0, 1),
     ]

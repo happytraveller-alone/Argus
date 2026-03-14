@@ -21,6 +21,7 @@ import { api, isDemoMode } from "@/shared/config/database";
 import type {
 	DashboardCweDistributionItem,
 	DashboardRuleConfidenceItem,
+	DashboardRuleConfidenceByLanguageItem,
 	ProjectStats,
 } from "@/shared/types";
 import { runWithRefreshMode } from "@/shared/utils/refreshMode";
@@ -96,6 +97,9 @@ export default function Dashboard() {
 	const [ruleConfidenceData, setRuleConfidenceData] = useState<
 		DashboardRuleConfidenceItem[]
 	>([]);
+	const [ruleConfidenceByLanguageData, setRuleConfidenceByLanguageData] = useState<
+		DashboardRuleConfidenceByLanguageItem[]
+	>([]);
 	const [cweDistributionData, setCweDistributionData] = useState<
 		DashboardCweDistributionItem[]
 	>([]);
@@ -147,15 +151,23 @@ export default function Dashboard() {
 					enabled_rules: Math.max(Number(item.enabled_rules || 0), 0),
 				}),
 			);
-			const snapshotCweDistribution = (snapshot.data.cwe_distribution || []).map(
-				(item) => ({
-					cwe_id: item.cwe_id || "CWE-UNKNOWN",
-					cwe_name: item.cwe_name || item.cwe_id || "CWE-UNKNOWN",
-					total_findings: Math.max(Number(item.total_findings || 0), 0),
-					opengrep_findings: Math.max(Number(item.opengrep_findings || 0), 0),
-					agent_findings: Math.max(Number(item.agent_findings || 0), 0),
-				}),
-			);
+			const snapshotRuleConfidenceByLanguage = (
+				snapshot.data.rule_confidence_by_language || []
+			).map((item) => ({
+				language: item.language || "unknown",
+				high_count: Math.max(Number(item.high_count || 0), 0),
+				medium_count: Math.max(Number(item.medium_count || 0), 0),
+			}));
+				const snapshotCweDistribution = (snapshot.data.cwe_distribution || []).map(
+					(item) => ({
+						cwe_id: item.cwe_id || "CWE-UNKNOWN",
+						cwe_name: item.cwe_name || item.cwe_id || "CWE-UNKNOWN",
+						total_findings: Math.max(Number(item.total_findings || 0), 0),
+						opengrep_findings: Math.max(Number(item.opengrep_findings || 0), 0),
+						agent_findings: Math.max(Number(item.agent_findings || 0), 0),
+						bandit_findings: Math.max(Number(item.bandit_findings || 0), 0),
+					}),
+				);
 
 			setTotalScanDurationMs(
 				Math.max(Number(snapshot.data.total_scan_duration_ms || 0), 0),
@@ -163,6 +175,7 @@ export default function Dashboard() {
 			setProjectScanRunsData(toTopNByField(snapshotScanRuns, "totalRuns", 10));
 			setProjectVulnsData(toTopNByField(snapshotVulns, "totalVulns", 10));
 			setRuleConfidenceData(snapshotRuleConfidence);
+			setRuleConfidenceByLanguageData(snapshotRuleConfidenceByLanguage);
 			setCweDistributionData(snapshotCweDistribution);
 			setRuleStats({
 				total: snapshotRuleConfidence.reduce(
@@ -183,6 +196,7 @@ export default function Dashboard() {
 			setProjectScanRunsData([]);
 			setProjectVulnsData([]);
 			setRuleConfidenceData([]);
+			setRuleConfidenceByLanguageData([]);
 			setCweDistributionData([]);
 			setRuleStats({ total: 0, enabled: 0 });
 			setTotalScanDurationMs(0);
@@ -367,14 +381,15 @@ export default function Dashboard() {
 				projectScanRunsData.length === 0 &&
 				projectVulnsData.length === 0 &&
 				ruleConfidenceData.length === 0 &&
+				ruleConfidenceByLanguageData.length === 0 &&
 				cweDistributionData.length === 0 ? (
 					<DashboardChartsFallback />
 				) : (
-					<Suspense fallback={<DashboardChartsFallback />}>
-						<DashboardChartsPanels
-							ruleConfidenceData={ruleConfidenceData}
-							cweDistributionData={cweDistributionData}
-							projectScanRunsData={projectScanRunsData}
+						<Suspense fallback={<DashboardChartsFallback />}>
+							<DashboardChartsPanels
+								ruleConfidenceByLanguageData={ruleConfidenceByLanguageData}
+								cweDistributionData={cweDistributionData}
+								projectScanRunsData={projectScanRunsData}
 							projectVulnsData={projectVulnsData}
 							translate={translate}
 						/>

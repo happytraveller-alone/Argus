@@ -84,9 +84,7 @@ export const dashboardDictionary: DomDictionary = {
   "暂无规则置信度数据": "No rule-confidence data",
   "已启用规则": "Enabled Rules",
   "未启用规则": "Disabled Rules",
-  "CWE 漏洞类型占比": "CWE Vulnerability Share",
-  "仅统计可稳定解析到 CWE 的真实漏洞（Top 12）":
-    "Top 12 real findings with stable CWE resolution only",
+  "已挖掘漏洞类型占比": "Hunted Vulnerability Share",
   "暂无 CWE 占比数据": "No CWE distribution data",
   "项目扫描类型分布": "Project Scan Mode Distribution",
   "各项目扫描方式对比（雷达图）":

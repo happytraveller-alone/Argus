@@ -30,9 +30,6 @@ export const I18N_MESSAGES = {
 		"projects.language.unsupported": "仓库项目暂不支持自动统计",
 		"dashboard.projectScanRunsChartTitle": "项目扫描次数统计图",
 		"dashboard.projectVulnsChartTitle": "项目漏洞数量统计图",
-		"dashboard.projectScanRunsChartSubtitle":
-			"按项目展示静态、智能与混合扫描累计次数（Top 10）",
-		"dashboard.projectVulnsChartSubtitle": "按项目展示真实漏洞总量（Top 10）",
 		"dashboard.hybridNotImplementedHint": "混合扫描已纳入统计",
 		"dashboard.noProjectScanRunsData": "暂无项目扫描次数数据",
 		"dashboard.noProjectVulnsData": "暂无项目漏洞数量数据",
@@ -50,16 +47,16 @@ export const I18N_MESSAGES = {
 			"仅统计严重(ERROR)规则，对比已启用与未启用数量",
 		"dashboard.enabledRules": "已启用规则",
 		"dashboard.disabledRules": "未启用规则",
-		"dashboard.cweDistributionChartTitle": "CWE 漏洞类型占比",
+		"dashboard.cweDistributionChartTitle": "已挖掘漏洞类型占比",
 		"dashboard.cweDistributionChartSubtitle":
-			"仅统计可稳定解析到 CWE 的真实漏洞（Top 12）",
+			"统计所有中高置信度且可稳定解析到 CWE 的漏洞（Top 12）",
 		"dashboard.projectScanModesChartTitle": "项目扫描类型分布",
 		"dashboard.projectScanModesChartSubtitle": "各项目扫描方式对比（雷达图）",
 		"dashboard.projectRiskScatterTitle": "项目漏洞风险矩阵",
 		"dashboard.projectRiskScatterSubtitle":
 			"X=静态漏洞 Y=智能漏洞 大小=混合漏洞",
 		"dashboard.ruleConfidenceCoverageTitle": "规则置信度覆盖情况",
-		"dashboard.ruleConfidenceCoverageSubtitle": "各置信度桶的规则覆盖面积",
+		"dashboard.languageCount": "语言数",
 		"dashboard.cweTopRankingTitle": "CWE 漏洞类型 Top 12",
 		"dashboard.cweTopRankingSubtitle":
 			"按真实漏洞数量排序，并区分 Opengrep 与 Agent 来源",
@@ -152,7 +149,7 @@ export const I18N_MESSAGES = {
 		"dashboard.disabledRules": "Disabled Rules",
 		"dashboard.cweDistributionChartTitle": "CWE Vulnerability Share",
 		"dashboard.cweDistributionChartSubtitle":
-			"Top 12 real findings with stable CWE resolution only",
+			"Top 12 medium/high-confidence findings with stable CWE resolution",
 		"dashboard.projectScanModesChartTitle": "Project Scan Mode Distribution",
 		"dashboard.projectScanModesChartSubtitle":
 			"Radar comparison of scan modes per project",
@@ -161,7 +158,8 @@ export const I18N_MESSAGES = {
 			"X=Static, Y=Intelligent, bubble size=Hybrid",
 		"dashboard.ruleConfidenceCoverageTitle": "Rule Confidence Coverage",
 		"dashboard.ruleConfidenceCoverageSubtitle":
-			"Coverage area across confidence buckets",
+			"Medium and high confidence rule counts by language",
+		"dashboard.languageCount": "Languages",
 		"dashboard.cweTopRankingTitle": "Top 12 CWE Categories",
 		"dashboard.cweTopRankingSubtitle":
 			"Ranked by real findings, split by Opengrep and Agent sources",

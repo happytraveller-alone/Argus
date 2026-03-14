@@ -53,6 +53,24 @@ interface AgentTaskPreflightPayload {
   savedConfig?: LlmQuickConfigSnapshotPayload | null;
 }
 
+export interface ProjectFileContentResponse {
+  file_path: string;
+  content: string;
+  size: number;
+  encoding: string;
+  is_text: boolean;
+  is_cached?: boolean;
+  created_at?: string;
+}
+
+function encodeProjectFilePath(filePath: string): string {
+  return String(filePath || "")
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
 // Implement the same interface as the original localDatabase.ts but using backend API
 export const api = {
   // ==================== Profile 相关方法 ====================
@@ -132,6 +150,31 @@ export const api = {
       return res.data;
     } catch (_error) {
       return [];
+    }
+  },
+
+  async getProjectFileContent(
+    id: string,
+    filePath: string,
+    options?: {
+      encoding?: string;
+      useCache?: boolean;
+      stream?: boolean;
+    },
+  ): Promise<ProjectFileContentResponse | null> {
+    try {
+      const res = await retryProjectReads(() =>
+        apiClient.get(`/projects/${id}/files/${encodeProjectFilePath(filePath)}`, {
+          params: {
+            encoding: options?.encoding ?? "utf-8",
+            use_cache: options?.useCache ?? true,
+            stream: options?.stream ?? false,
+          },
+        }),
+      );
+      return res.data;
+    } catch (_error) {
+      return null;
     }
   },
 
