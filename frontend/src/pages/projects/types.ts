@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { ScanCreateMode } from "@/components/scan/CreateProjectScanDialog";
-import type { ProjectCardLanguageStats } from "@/features/projects/services/projectCardPreview";
 import type { AgentTask } from "@/shared/api/agentTasks";
 import type { BanditScanTask } from "@/shared/api/bandit";
 import type { GitleaksScanTask } from "@/shared/api/gitleaks";
