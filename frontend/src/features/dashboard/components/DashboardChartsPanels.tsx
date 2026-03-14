@@ -607,7 +607,7 @@ export default function DashboardChartsPanels({
 			</div>
 
 			<div className="grid grid-cols-1 xl:grid-cols-4 gap-4 relative z-10">
-				<div className="cyber-card p-4">
+				{/* <div className="cyber-card p-4">
 					<div className="section-header mb-3">
 						<Activity className="w-5 h-5 text-emerald-400" />
 						<div className="w-full">
@@ -666,7 +666,7 @@ export default function DashboardChartsPanels({
 							</ResponsiveContainer>
 						)}
 					</div>
-				</div>
+				</div> */}
 
 				{/* <div className="cyber-card p-4">
 					<div className="section-header mb-3">

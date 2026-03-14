@@ -109,7 +109,7 @@ function buildTrackingItems(params: {
 
   items.push(
     { label: "任务 ID", value: params.taskId || "-", mono: true },
-    { label: "缺陷 ID", value: params.findingId || "-", mono: true },
+    { label: "漏洞 ID", value: params.findingId || "-", mono: true },
   );
 
   const location = String(params.location || "").trim();
@@ -527,7 +527,7 @@ export function buildAgentFindingDetailModel(params: {
   ];
 
   return buildBaseModel({
-    pageTitle: "统一缺陷详情",
+    pageTitle: "统一漏洞详情",
     codePanelTitle: "关联代码",
     emptyCodeMessage: "暂无可展示的命中代码。",
     rootCause: {
@@ -568,7 +568,7 @@ export function buildOpengrepFindingDetailModel(params: {
   ];
 
   return buildBaseModel({
-    pageTitle: "统一缺陷详情",
+    pageTitle: "统一漏洞详情",
     codePanelTitle: "关联代码",
     emptyCodeMessage: "暂无可展示的命中代码。",
     rootCause: {
@@ -614,7 +614,7 @@ export function buildGitleaksFindingDetailModel(params: {
   const headlineValue = String(finding.rule_id || "").trim() || "gitleaks-rule";
 
   return buildBaseModel({
-    pageTitle: "统一缺陷详情",
+    pageTitle: "统一漏洞详情",
     codePanelTitle: "关联代码",
     emptyCodeMessage: "暂无可展示的命中代码。",
     rootCause: {
@@ -665,7 +665,7 @@ export function buildBanditFindingDetailModel(params: {
   ];
 
   return buildBaseModel({
-    pageTitle: "统一缺陷详情",
+    pageTitle: "统一漏洞详情",
     codePanelTitle: "关联代码",
     emptyCodeMessage: "暂无可展示的命中代码。",
     rootCause: {

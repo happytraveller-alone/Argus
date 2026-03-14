@@ -551,7 +551,7 @@ export function getProjectCardRecentTasks(params: {
       vulnerabilities: toNullableNonNegativeNumber(task.issues_count),
       taskCategory: null,
       supportsFindingsDetail: false,
-      findingsButtonDisabledReason: "当前任务类型暂不支持缺陷详情",
+      findingsButtonDisabledReason: "当前任务类型暂不支持漏洞详情",
     }));
 
   return [...staticItems, ...intelligentItems, ...auditItems]

@@ -898,7 +898,7 @@ class VerificationAgent(BaseAgent):
             r"(?:SQL注入漏洞|跨站脚本漏洞|命令注入漏洞|路径遍历漏洞|服务器端请求伪造漏洞|XML外部实体漏洞|"
             r"不安全反序列化漏洞|硬编码密钥漏洞|认证绕过漏洞|越权访问漏洞|弱加密漏洞|NoSQL注入漏洞|代码注入漏洞|"
             r"缓冲区溢出漏洞|栈溢出漏洞|堆溢出漏洞|释放后使用漏洞|重复释放漏洞|越界访问漏洞|整数溢出漏洞|"
-            r"格式化字符串漏洞|空指针解引用缺陷|未知类型漏洞)",
+            r"格式化字符串漏洞|空指针解引用漏洞|未知类型漏洞)",
         ]
         for pattern in patterns:
             match = re.search(pattern, text)
@@ -2062,7 +2062,7 @@ class VerificationAgent(BaseAgent):
         verification_todo_id: Optional[str] = None,
         verification_fingerprint: Optional[str] = None,
     ) -> None:
-        title = str(finding.get("title") or "待验证缺陷").strip() or "待验证缺陷"
+        title = str(finding.get("title") or "待验证漏洞").strip() or "待验证漏洞"
         severity = str(finding.get("severity") or "medium").strip() or "medium"
         vuln_type = str(finding.get("vulnerability_type") or "unknown").strip() or "unknown"
         file_path, line_start, line_end = self._normalize_file_location(finding)

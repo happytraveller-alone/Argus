@@ -1761,7 +1761,7 @@ async def get_static_task_finding_context(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    """获取某条静态扫描缺陷的命中上下文代码。"""
+    """获取某条静态扫描漏洞的命中上下文代码。"""
     task_result = await db.execute(
         select(OpengrepScanTask).where(OpengrepScanTask.id == task_id)
     )

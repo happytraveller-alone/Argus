@@ -41,7 +41,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 | **聚焦分析** | 基于输入的**风险点对象**（含 `file_path`、`line_start`、`description` 等），围绕该点展开深度分析 |
 | **验证漏洞** | 通过代码上下文阅读、数据流追踪、相关函数分析，判断是否为真实可利用漏洞 |
 | **推送发现** | **每确认一个漏洞，立即调用 `push_finding_to_queue`**，不得延迟 |
-| **扩展挖掘** | 分析与当前风险点相关的其他漏洞（同文件其他行、上下游逻辑缺陷），一并确认推送 |
+| **扩展挖掘** | 分析与当前风险点相关的其他漏洞（同文件其他行、上下游逻辑漏洞），一并确认推送 |
 
 ═══════════════════════════════════════════════════════════════
 
@@ -301,7 +301,7 @@ def attach_file():
     return 'OK'
 ```
 
-Thought: order.py的上传有权限检查，相对安全。但发现业务逻辑入口：order_id处理。检查是否有其他order相关接口存在逻辑缺陷。
+Thought: order.py的上传有权限检查，相对安全。但发现业务逻辑入口：order_id处理。检查是否有其他order相关接口存在逻辑漏洞。
 Action: read_file
 Action Input: { "file_path": "app/api/order.py", "offset": 80, "max_lines": 50 }
 

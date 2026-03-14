@@ -671,7 +671,7 @@ function AgentAuditPageContent() {
     {
       key: "static",
       title: "静态扫描",
-      intro: "通过严重规则快速、准确定位缺陷",
+      intro: "通过严重规则快速、准确定位漏洞",
       icon: Zap,
       accentClassName:
         "from-sky-500/25 via-cyan-500/10 to-transparent border-sky-400/40",
@@ -1938,7 +1938,7 @@ function AgentAuditPageContent() {
           const falsePositive = toSafeNumber(metadata?.false_positive) ?? 0;
           const round = toSafeNumber(metadata?.round) ?? 0;
           const compactProgress =
-            `缺陷表收敛进度（第 ${round} 轮）：` +
+            `漏洞表收敛进度（第 ${round} 轮）：` +
             `上下文待收集 ${contextPending}，已就绪 ${contextReady}，失败 ${contextFailed}；` +
             `待验证 ${verifyUnverified}，已验证 ${verified}，假阳性 ${falsePositive}`;
           dispatch({

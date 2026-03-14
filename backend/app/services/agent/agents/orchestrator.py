@@ -1957,7 +1957,7 @@ Action Input: {{}}
             normalized["title"] = self._build_structured_title(normalized, fallback=title_value)
         normalized["display_title"] = normalized.get("title")
 
-        # 统一细化类型，避免保留“安全缺陷/other”。
+        # 统一细化类型，避免保留“安全漏洞/other”。
         profile = resolve_vulnerability_profile(
             normalized.get("vulnerability_type"),
             title=normalized.get("title"),

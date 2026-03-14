@@ -122,7 +122,7 @@ VULNERABILITY_PRIORITIES = """
    - Sink: requests.get(), fetch(), http.request()
    - 内网: 127.0.0.1, 169.254.169.254, localhost
 
-6. **认证绕过** - 权限控制缺陷
+6. **认证绕过** - 权限控制漏洞
    - 缺失认证装饰器
    - JWT漏洞: 无签名验证、弱密钥
    - IDOR: 直接对象引用

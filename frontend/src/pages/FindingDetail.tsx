@@ -72,11 +72,11 @@ function getErrorMessage(error: unknown): string {
     message?: string;
   };
   const status = Number(apiError?.response?.status || 0);
-  if (status === 404) return "缺陷不存在或已被清理";
+  if (status === 404) return "漏洞不存在或已被清理";
   return String(
     apiError?.response?.data?.detail ||
       apiError?.message ||
-      "缺陷详情加载失败，请稍后重试",
+      "漏洞详情加载失败，请稍后重试",
   );
 }
 
@@ -155,7 +155,7 @@ export default function FindingDetail() {
 
     async function load() {
       if (!source || !taskId || !findingId) {
-        setError("缺陷参数无效");
+        setError("漏洞参数无效");
         setLoading(false);
         return;
       }
@@ -331,12 +331,12 @@ export default function FindingDetail() {
   const fallbackTitle =
     source === "agent" && isAgentFalsePositiveFinding(agentFinding ?? agentFindingSnapshot)
       ? "误报判定依据"
-      : "统一缺陷详情";
+      : "统一漏洞详情";
 
   if (loading) {
     return (
       <FindingDetailShell title={fallbackTitle} onBack={handleBack}>
-        <div className="cyber-card p-8 text-base text-muted-foreground">缺陷详情加载中...</div>
+        <div className="cyber-card p-8 text-base text-muted-foreground">漏洞详情加载中...</div>
       </FindingDetailShell>
     );
   }
@@ -355,7 +355,7 @@ export default function FindingDetail() {
         <div className="cyber-card p-8 text-base text-muted-foreground">
           {source === "agent" && isAgentFalsePositiveFinding(agentFindingSnapshot)
             ? getAgentFalsePositiveEvidence(agentFindingSnapshot)
-            : "暂无缺陷信息"}
+            : "暂无漏洞信息"}
         </div>
       </FindingDetailShell>
     );

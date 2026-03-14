@@ -48,19 +48,19 @@ def test_build_cn_structured_title_is_three_segment_and_without_harm_suffix():
         file_path="src/time64.c",
         function_name="asctime64_r",
         vulnerability_type="other",
-        title="安全缺陷",
+        title="安全漏洞",
         description="sprintf 未做长度约束",
         code_snippet='sprintf(result, "%s", input);',
     )
     assert title == "src/time64.c中asctime64_r栈溢出漏洞"
     assert "可能造成的危害" not in title
-    assert "安全缺陷" not in title
+    assert "安全漏洞" not in title
 
 
 def test_orchestrator_normalize_finding_outputs_structured_title():
     orchestrator = _make_orchestrator()
     finding = {
-        "title": "安全缺陷",
+        "title": "安全漏洞",
         "vulnerability_type": "other",
         "severity": "high",
         "file_path": "src/time64.c",
@@ -82,7 +82,7 @@ def test_verification_repair_final_answer_uses_structured_title():
     agent = _make_verification_agent()
     findings_to_verify = [
         {
-            "title": "安全缺陷",
+            "title": "安全漏洞",
             "vulnerability_type": "other",
             "severity": "high",
             "file_path": "src/time64.c",
@@ -119,7 +119,7 @@ def test_agent_tasks_structured_helpers_follow_three_segment_contract():
         file_path="src/time64.c",
         function_name="asctime64_r",
         vulnerability_type="other",
-        title="安全缺陷",
+        title="安全漏洞",
         description="sprintf 写入风险",
         code_snippet='sprintf(result, "%s", input);',
     )
@@ -127,7 +127,7 @@ def test_agent_tasks_structured_helpers_follow_three_segment_contract():
         file_path="src/time64.c",
         function_name="asctime64_r",
         vulnerability_type="other",
-        title="安全缺陷",
+        title="安全漏洞",
         description="sprintf 写入风险",
         code_snippet='sprintf(result, "%s", input);',
         cwe_id="CWE-121",
@@ -135,7 +135,7 @@ def test_agent_tasks_structured_helpers_follow_three_segment_contract():
     )
 
     assert display_title == "src/time64.c中asctime64_r栈溢出漏洞"
-    assert "该缺陷位于src/time64.c的asctime64_r函数中" in description
+    assert "该漏洞位于src/time64.c的asctime64_r函数中" in description
     assert "代码存在栈溢出漏洞" in description
     assert "命中代码片段为" in description or "证据不足" in description
     assert "程序在该路径上缺少必要的输入约束或边界校验处理" in description

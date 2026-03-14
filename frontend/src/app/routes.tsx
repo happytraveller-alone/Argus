@@ -198,7 +198,7 @@ const routes: RouteConfig[] = [
 		navVisible: false,
 	},
 	{
-		name: "统一缺陷详情",
+		name: "统一漏洞详情",
 		path: "/finding-detail/:source/:taskId/:findingId",
 		element: <FindingDetail />,
 		visible: false,

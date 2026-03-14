@@ -113,7 +113,7 @@ function resolveAgentFindingTitle(finding: AgentFinding): string {
 		String(finding.title || "").trim() ||
 		String(finding.vulnerability_type || "").trim() ||
 		String(finding.description || "").trim() ||
-		"未命名缺陷"
+		"未命名漏洞"
 	);
 }
 
@@ -123,7 +123,7 @@ function resolveStaticFindingTitle(finding: OpengrepFinding): string {
 		String(finding.rule_name || "").trim() ||
 		String(rule.check_id || rule.id || "").trim() ||
 		String(finding.description || "").trim() ||
-		"未命名缺陷"
+		"未命名漏洞"
 	);
 }
 
@@ -350,7 +350,7 @@ export default function ProjectTaskFindingsDialog({
 				if (cancelled) return;
 				console.error("Failed to load task findings:", error);
 				setAllRows([]);
-				setErrorMessage("加载缺陷失败");
+				setErrorMessage("加载漏洞失败");
 				setStatus("failed");
 			}
 		};
@@ -386,7 +386,7 @@ export default function ProjectTaskFindingsDialog({
 					<TableCell colSpan={6} className="py-12 text-center">
 						<div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
 							<Loader2 className="h-4 w-4 animate-spin" />
-							加载缺陷中...
+							加载漏洞中...
 						</div>
 					</TableCell>
 				</TableRow>
@@ -399,7 +399,7 @@ export default function ProjectTaskFindingsDialog({
 					<TableCell colSpan={6} className="py-12 text-center">
 						<div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
 							<AlertTriangle className="h-4 w-4 text-rose-400" />
-							{errorMessage || "加载缺陷失败"}
+							{errorMessage || "加载漏洞失败"}
 						</div>
 					</TableCell>
 				</TableRow>
@@ -413,7 +413,7 @@ export default function ProjectTaskFindingsDialog({
 						colSpan={6}
 						className="py-12 text-center text-sm text-muted-foreground"
 					>
-						暂无缺陷
+						暂无漏洞
 					</TableCell>
 				</TableRow>
 			);
@@ -426,7 +426,7 @@ export default function ProjectTaskFindingsDialog({
 						colSpan={6}
 						className="py-12 text-center text-sm text-muted-foreground"
 					>
-						暂无符合条件的缺陷
+						暂无符合条件的漏洞
 					</TableCell>
 				</TableRow>
 			);
@@ -488,7 +488,7 @@ export default function ProjectTaskFindingsDialog({
 						<div className="min-w-0 space-y-2 text-left">
 						  <DialogTitle className="flex items-center gap-2 text-base leading-none">
 						    <Bug className="h-4 w-4 shrink-0 text-amber-400" />
-						    <span className="truncate">{taskLabel}缺陷详情</span>
+						    <span className="truncate">{taskLabel}漏洞详情</span>
 						  </DialogTitle>
 
 						  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

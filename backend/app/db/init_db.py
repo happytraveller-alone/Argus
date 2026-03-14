@@ -168,7 +168,7 @@ def _build_default_seed_projects() -> list[DefaultZipSeedProject]:
             name="DSVW",
             description=(
                 "DSVW（Damn Small Vulnerable Web）是轻量级 Web 漏洞练习项目，"
-                "聚焦常见输入验证与访问控制缺陷，便于快速复现与教学演示。"
+                "聚焦常见输入验证与访问控制漏洞，便于快速复现与教学演示。"
             ),
             archive_name="DSVW-master.zip",
             owner="stamparm",
@@ -181,7 +181,7 @@ def _build_default_seed_projects() -> list[DefaultZipSeedProject]:
             name="WebGoat",
             description=(
                 "WebGoat 是 OWASP 提供的交互式安全训练平台，"
-                "包含身份认证、注入、逻辑缺陷等多类教学关卡，适合后端与应用安全演练。"
+                "包含身份认证、注入、逻辑漏洞等多类教学关卡，适合后端与应用安全演练。"
             ),
             archive_name="WebGoat-main.zip",
             owner="WebGoat",
@@ -207,7 +207,7 @@ def _build_default_seed_projects() -> list[DefaultZipSeedProject]:
             name="govwa",
             description=(
                 "govwa 是 Go 语言 Web 漏洞练习项目，"
-                "用于演示输入校验、权限控制和请求处理中的安全缺陷，适合 Go 应用审计训练。"
+                "用于演示输入校验、权限控制和请求处理中的安全漏洞，适合 Go 应用审计训练。"
             ),
             archive_name="govwa-master.zip",
             owner="0c34",

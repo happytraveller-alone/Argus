@@ -152,7 +152,7 @@ test("FindingDetailView 渲染 agent 漏洞详情的新信息层级", () => {
   );
   const overviewMarkup = getSectionMarkup(markup, "概览信息", "根因说明");
 
-  assert.match(markup, /统一缺陷详情/);
+  assert.match(markup, /统一漏洞详情/);
   assert.match(markup, /sql injection/);
   assert.match(markup, /高危/);
   assert.match(markup, /高/);
@@ -165,14 +165,14 @@ test("FindingDetailView 渲染 agent 漏洞详情的新信息层级", () => {
   assert.match(markup, /根因说明/);
   assert.match(markup, /追踪信息/);
   assert.match(markup, /任务 ID/);
-  assert.match(markup, /缺陷 ID/);
+  assert.match(markup, /漏洞 ID/);
   assert.doesNotMatch(overviewMarkup, /来源/);
   assert.doesNotMatch(overviewMarkup, /标题/);
   assert.doesNotMatch(overviewMarkup, /补充说明/);
   assert.doesNotMatch(overviewMarkup, /位置/);
   assert.doesNotMatch(overviewMarkup, /VERIFIED/);
   assert.doesNotMatch(markup, /任务ID：/);
-  assert.doesNotMatch(markup, /缺陷ID：/);
+  assert.doesNotMatch(markup, /漏洞ID：/);
   assert.ok(markup.indexOf("追踪信息") < markup.indexOf("概览信息"));
   assert.ok(markup.indexOf("概览信息") < markup.indexOf("根因说明"));
 });

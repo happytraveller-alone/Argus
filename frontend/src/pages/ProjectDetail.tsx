@@ -604,7 +604,7 @@ export default function ProjectDetail() {
 	const potentialStatusMessage = useMemo(() => {
 		if (potentialStatus === "loading") return "加载中...";
 		if (potentialStatus === "failed") return "加载失败";
-		if (potentialStatus === "empty") return "暂无潜在缺陷";
+		if (potentialStatus === "empty") return "暂无潜在漏洞";
 		return null;
 	}, [potentialStatus]);
 
@@ -765,7 +765,7 @@ export default function ProjectDetail() {
 																	);
 																}}
 															>
-																缺陷详情
+																漏洞详情
 															</Button>
 														) : (
 															<span title={task.findingsButtonDisabledReason || undefined}>
@@ -776,7 +776,7 @@ export default function ProjectDetail() {
 																	className="cyber-btn-ghost h-7 px-3"
 																	disabled
 																>
-																	缺陷详情
+																	漏洞详情
 																</Button>
 															</span>
 														)}
@@ -803,7 +803,7 @@ export default function ProjectDetail() {
 					<div className="flex items-center gap-2 mb-3">
 						<Bug className="w-4 h-4 text-amber-400" />
 						<h3 className="text-sm font-semibold uppercase tracking-wider">
-							潜在缺陷
+							潜在漏洞
 						</h3>
 					</div>
 

@@ -208,7 +208,7 @@ export function fromAgentFinding(
     id: finding.id,
     merge_key: mergeKey,
     fingerprint,
-    title: toSafeTrimmedString(finding.title) || "发现缺陷",
+    title: toSafeTrimmedString(finding.title) || "发现漏洞",
     display_title: toOptionalString(finding.display_title),
     description: toOptionalString(finding.description),
     description_markdown: toOptionalString(finding.description_markdown),
@@ -279,7 +279,7 @@ export function fromAgentEvent(event: AgentEvent): RealtimeMergedFindingItem | n
     displayTitle ||
     toOptionalString(metadata.title) ||
     toOptionalString(event.message) ||
-    "发现缺陷";
+    "发现漏洞";
   const severity = toSafeTrimmedString(metadata.severity) || "medium";
   const vulnerabilityType =
     toSafeTrimmedString(metadata.vulnerability_type) || "unknown";

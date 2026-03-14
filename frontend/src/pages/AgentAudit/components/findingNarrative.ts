@@ -159,7 +159,6 @@ export function buildFindingNarrativeMarkdown(input: FindingNarrativeInput): str
   // const language = inferCodeLanguageFromPath(input.file_path);
 
   return [
-    "### 根因解释",
     rootCause,
   ].join("\n");
 }

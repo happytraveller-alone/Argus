@@ -274,7 +274,7 @@ export default function AgentModeSelector({
         <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-500/30 text-xs text-sky-700 dark:text-sky-300 rounded font-mono">
           <p className="font-bold mb-1 uppercase text-sky-700 dark:text-sky-400">静态分析模式说明：</p>
           <ul className="list-disc list-inside space-y-0.5 text-sky-600 dark:text-sky-300/80">
-            <li>基于规则引擎快速扫描代码缺陷</li>
+            <li>基于规则引擎快速扫描代码漏洞</li>
             <li>支持按工具组合执行（Opengrep / Gitleaks）</li>
             <li>支持 Python Bandit 扫描</li>
             <li>结果稳定、反馈快，适合日常基线检查</li>
