@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,6 +7,7 @@ import pytest
 from app.api.v1.endpoints.agent_tasks import (
     _filter_bootstrap_findings,
     _prepare_embedded_bootstrap_findings,
+    _run_bootstrap_gitleaks_scan,
     _resolve_static_bootstrap_config,
 )
 import app.models.opengrep  # noqa: F401
@@ -218,6 +220,84 @@ async def test_prepare_embedded_bootstrap_gitleaks_failed_abort(monkeypatch):
 
     assert "Gitleaks 预处理失败" in str(exc_info.value)
     event_emitter.emit_error.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_bootstrap_gitleaks_scan_parses_report(monkeypatch, tmp_path):
+    parsed_gitleaks = [
+        {
+            "RuleID": "generic-api-key",
+            "Description": "Potential API key",
+            "File": "src/secret.ts",
+            "StartLine": 3,
+            "EndLine": 3,
+            "Match": "apiKey = abc",
+        },
+    ]
+    captured_cmd = {}
+
+    def fake_run(cmd, capture_output, text, timeout):
+        assert capture_output is True
+        assert text is True
+        assert timeout == 900
+        captured_cmd["value"] = list(cmd)
+        report_path = cmd[cmd.index("--report-path") + 1]
+        with open(report_path, "w", encoding="utf-8") as report_file:
+            json.dump(parsed_gitleaks, report_file)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.agent_tasks.subprocess.run",
+        fake_run,
+    )
+
+    findings = await _run_bootstrap_gitleaks_scan(str(tmp_path))
+
+    assert findings == parsed_gitleaks
+    assert captured_cmd["value"] == [
+        "gitleaks",
+        "detect",
+        "--source",
+        str(tmp_path),
+        "--report-format",
+        "json",
+        "--report-path",
+        captured_cmd["value"][7],
+        "--exit-code",
+        "0",
+        "--no-git",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_embedded_bootstrap_gitleaks_missing_binary_abort(monkeypatch):
+    db = AsyncMock()
+
+    event_emitter = SimpleNamespace(
+        emit_info=AsyncMock(),
+        emit_warning=AsyncMock(),
+        emit_error=AsyncMock(),
+    )
+
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("gitleaks not found")
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.agent_tasks.subprocess.run",
+        fake_run,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await _prepare_embedded_bootstrap_findings(
+            db=db,
+            project_root="/tmp/project",
+            event_emitter=event_emitter,
+            opengrep_enabled=False,
+            gitleaks_enabled=True,
+        )
+
+    assert "Gitleaks 预处理失败：未安装 gitleaks" in str(exc_info.value)
+    event_emitter.emit_error.assert_awaited_once_with("❌ Gitleaks 预处理失败：未安装 gitleaks")
 
 
 def test_filter_bootstrap_findings_only_error_and_high_medium_confidence():
