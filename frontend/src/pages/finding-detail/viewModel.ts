@@ -51,13 +51,6 @@ export type FindingDetailPageModel = {
   pageTitle: string;
   codePanelTitle: string;
   emptyCodeMessage: string;
-  sourceLabel: string;
-  statusLabel: string;
-  heroEyebrow: string;
-  heroTitle: string;
-  heroSubtitle: string | null;
-  helperLocation: string | null;
-  summaryStats: FindingDetailSummaryStat[];
   rootCause: FindingDetailRootCause;
   trackingItems: FindingDetailTrackingItem[];
   overviewItems: FindingDetailTrackingItem[];
@@ -183,17 +176,17 @@ function buildStatusLabel(value: unknown): string {
 
 function buildOverviewItems(params: {
   statusLabel: string;
-  heroEyebrow: string;
-  heroTitle: string;
+  headlineLabel: string;
+  headlineValue: string;
   summaryStats: FindingDetailSummaryStat[];
 }): FindingDetailTrackingItem[] {
   const items: FindingDetailTrackingItem[] = [{ label: "状态", value: params.statusLabel }];
 
-  const heroTitle = String(params.heroTitle || "").trim();
-  if (heroTitle) {
+  const headlineValue = String(params.headlineValue || "").trim();
+  if (headlineValue) {
     items.push({
-      label: String(params.heroEyebrow || "").trim() || "概览",
-      value: heroTitle,
+      label: String(params.headlineLabel || "").trim() || "概览",
+      value: headlineValue,
     });
   }
 
@@ -461,36 +454,18 @@ function buildBaseModel(params: {
   pageTitle: string;
   codePanelTitle: string;
   emptyCodeMessage: string;
-  sourceLabel: string;
-  statusLabel: string;
-  heroEyebrow: string;
-  heroTitle: string;
-  heroSubtitle?: string | null;
-  helperLocation?: string | null;
-  summaryStats: FindingDetailSummaryStat[];
   rootCause: FindingDetailRootCause;
   trackingItems: FindingDetailTrackingItem[];
+  overviewItems: FindingDetailTrackingItem[];
   codeSections: FindingDetailCodeView[];
 }): FindingDetailPageModel {
   return {
     pageTitle: params.pageTitle,
     codePanelTitle: params.codePanelTitle,
     emptyCodeMessage: params.emptyCodeMessage,
-    sourceLabel: params.sourceLabel,
-    statusLabel: params.statusLabel,
-    heroEyebrow: params.heroEyebrow,
-    heroTitle: params.heroTitle,
-    heroSubtitle: params.heroSubtitle ?? null,
-    helperLocation: params.helperLocation ?? null,
-    summaryStats: params.summaryStats,
     rootCause: params.rootCause,
     trackingItems: params.trackingItems,
-    overviewItems: buildOverviewItems({
-      statusLabel: params.statusLabel,
-      heroEyebrow: params.heroEyebrow,
-      heroTitle: params.heroTitle,
-      summaryStats: params.summaryStats,
-    }),
+    overviewItems: params.overviewItems,
     codeSections: params.codeSections,
   };
 }
@@ -519,52 +494,53 @@ export function buildAgentFindingDetailModel(params: {
   const codeSections = buildFindingDetailCodeSections(buildAgentFindingCodeViews(finding));
 
   if (isFalsePositive) {
+    const statusLabel = buildStatusLabel(finding.status || "false_positive");
+    const summaryStats: FindingDetailSummaryStat[] = [
+      { label: "漏洞类型", value: typeLabel, tone: "info" },
+      { label: "漏洞危害", value: severity.label, tone: severity.tone },
+      { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
+    ];
+
     return buildBaseModel({
       pageTitle: "误报判定依据",
       codePanelTitle: "关联代码 / 命中位置",
       emptyCodeMessage: "该误报未保留可展示代码，仅提供判定结论。",
-      sourceLabel: "智能扫描",
-      statusLabel: buildStatusLabel(finding.status || "false_positive"),
-      heroEyebrow: "验证结论",
-      heroTitle: "该问题已在验证阶段判定为误报",
-      heroSubtitle:
-        [typeLabel, String(finding.display_title || finding.title || "").trim()]
-          .filter(Boolean)
-          .join(" · ") || null,
-      helperLocation: location,
-      summaryStats: [
-        { label: "漏洞类型", value: typeLabel, tone: "info" },
-        { label: "漏洞危害", value: severity.label, tone: severity.tone },
-        { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
-      ],
       rootCause: {
         title: "判定依据",
         body: getAgentFalsePositiveEvidence(finding),
       },
       trackingItems,
+      overviewItems: buildOverviewItems({
+        statusLabel,
+        headlineLabel: "验证结论",
+        headlineValue: "该问题已在验证阶段判定为误报",
+        summaryStats,
+      }),
       codeSections,
     });
   }
+
+  const statusLabel = buildStatusLabel(finding.status);
+  const summaryStats: FindingDetailSummaryStat[] = [
+    { label: "漏洞危害", value: severity.label, tone: severity.tone },
+    { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
+  ];
 
   return buildBaseModel({
     pageTitle: "统一缺陷详情",
     codePanelTitle: "关联代码",
     emptyCodeMessage: "暂无可展示的命中代码。",
-    sourceLabel: "智能扫描",
-    statusLabel: buildStatusLabel(finding.status),
-    heroEyebrow: "漏洞类型",
-    heroTitle: typeLabel,
-    heroSubtitle: String(finding.display_title || finding.title || "").trim() || null,
-    helperLocation: location,
-    summaryStats: [
-      { label: "漏洞危害", value: severity.label, tone: severity.tone },
-      { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
-    ],
     rootCause: {
       title: "根因说明",
       finding: buildAgentNarrativeFinding(finding),
     },
     trackingItems,
+    overviewItems: buildOverviewItems({
+      statusLabel,
+      headlineLabel: "漏洞类型",
+      headlineValue: typeLabel,
+      summaryStats,
+    }),
     codeSections,
   });
 }
@@ -579,27 +555,22 @@ export function buildOpengrepFindingDetailModel(params: {
   const { finding } = params;
   const severity = resolveSeverityDisplay(finding.severity);
   const confidence = resolveTextConfidenceDisplay(finding.confidence);
+  const statusLabel = buildStatusLabel(finding.status);
   const location = formatLocation({
     filePath: finding.file_path,
     lineStart: finding.start_line,
     lineEnd: parseStaticEndLine(finding),
   });
   const typeLabel = String(finding.rule_name || "").trim() || "unknown-rule";
+  const summaryStats: FindingDetailSummaryStat[] = [
+    { label: "漏洞危害", value: severity.label, tone: severity.tone },
+    { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
+  ];
 
   return buildBaseModel({
     pageTitle: "统一缺陷详情",
     codePanelTitle: "关联代码",
     emptyCodeMessage: "暂无可展示的命中代码。",
-    sourceLabel: "静态扫描 · Opengrep",
-    statusLabel: buildStatusLabel(finding.status),
-    heroEyebrow: "漏洞类型",
-    heroTitle: typeLabel,
-    heroSubtitle: null,
-    helperLocation: location,
-    summaryStats: [
-      { label: "漏洞危害", value: severity.label, tone: severity.tone },
-      { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
-    ],
     rootCause: {
       title: "扫描说明",
       body: String(finding.description || "").trim() || MISSING_DESCRIPTION,
@@ -610,6 +581,12 @@ export function buildOpengrepFindingDetailModel(params: {
       findingId: params.findingId,
       taskName: params.taskName,
       location,
+    }),
+    overviewItems: buildOverviewItems({
+      statusLabel,
+      headlineLabel: "漏洞类型",
+      headlineValue: typeLabel,
+      summaryStats,
     }),
     codeSections: buildFindingDetailCodeSections(
       buildOpengrepFindingCodeViews(finding, params.context ?? null),
@@ -629,21 +606,17 @@ export function buildGitleaksFindingDetailModel(params: {
     lineStart: finding.start_line,
     lineEnd: finding.end_line,
   });
+  const statusLabel = buildStatusLabel(finding.status);
+  const summaryStats: FindingDetailSummaryStat[] = [
+    { label: "漏洞危害", value: MISSING_SEVERITY, tone: "muted" },
+    { label: "漏洞置信度", value: MISSING_VALUE, tone: "muted" },
+  ];
+  const headlineValue = String(finding.rule_id || "").trim() || "gitleaks-rule";
 
   return buildBaseModel({
     pageTitle: "统一缺陷详情",
     codePanelTitle: "关联代码",
     emptyCodeMessage: "暂无可展示的命中代码。",
-    sourceLabel: "静态扫描 · Gitleaks",
-    statusLabel: buildStatusLabel(finding.status),
-    heroEyebrow: "漏洞类型",
-    heroTitle: String(finding.rule_id || "").trim() || "gitleaks-rule",
-    heroSubtitle: null,
-    helperLocation: location,
-    summaryStats: [
-      { label: "漏洞危害", value: MISSING_SEVERITY, tone: "muted" },
-      { label: "漏洞置信度", value: MISSING_VALUE, tone: "muted" },
-    ],
     rootCause: {
       title: "扫描说明",
       body: String(finding.description || "").trim() || MISSING_DESCRIPTION,
@@ -654,6 +627,12 @@ export function buildGitleaksFindingDetailModel(params: {
       findingId: params.findingId,
       taskName: params.taskName,
       location,
+    }),
+    overviewItems: buildOverviewItems({
+      statusLabel,
+      headlineLabel: "漏洞类型",
+      headlineValue,
+      summaryStats,
     }),
     codeSections: buildFindingDetailCodeSections(buildGitleaksFindingCodeViews(finding)),
   });
@@ -668,32 +647,27 @@ export function buildBanditFindingDetailModel(params: {
   const { finding } = params;
   const severity = resolveSeverityDisplay(finding.issue_severity);
   const confidence = resolveTextConfidenceDisplay(finding.issue_confidence);
+  const statusLabel = buildStatusLabel(finding.status);
   const location = formatLocation({
     filePath: finding.file_path,
     lineStart: finding.line_number,
     lineEnd: finding.line_number,
   });
-  const heroTitle = [
+  const headlineValue = [
     String(finding.test_id || "").trim(),
     String(finding.test_name || "").trim(),
   ]
     .filter(Boolean)
     .join(" · ");
+  const summaryStats: FindingDetailSummaryStat[] = [
+    { label: "漏洞危害", value: severity.label, tone: severity.tone },
+    { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
+  ];
 
   return buildBaseModel({
     pageTitle: "统一缺陷详情",
     codePanelTitle: "关联代码",
     emptyCodeMessage: "暂无可展示的命中代码。",
-    sourceLabel: "静态扫描 · Bandit",
-    statusLabel: buildStatusLabel(finding.status),
-    heroEyebrow: "漏洞类型",
-    heroTitle: heroTitle || "bandit-rule",
-    heroSubtitle: null,
-    helperLocation: location,
-    summaryStats: [
-      { label: "漏洞危害", value: severity.label, tone: severity.tone },
-      { label: "漏洞置信度", value: confidence.label, tone: confidence.tone },
-    ],
     rootCause: {
       title: "扫描说明",
       body:
@@ -707,6 +681,12 @@ export function buildBanditFindingDetailModel(params: {
       findingId: params.findingId,
       taskName: params.taskName,
       location,
+    }),
+    overviewItems: buildOverviewItems({
+      statusLabel,
+      headlineLabel: "漏洞类型",
+      headlineValue: headlineValue || "bandit-rule",
+      summaryStats,
     }),
     codeSections: buildFindingDetailCodeSections(buildBanditFindingCodeViews(finding)),
   });

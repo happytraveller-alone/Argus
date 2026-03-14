@@ -668,7 +668,7 @@ export default function DashboardChartsPanels({
 					</div>
 				</div>
 
-				<div className="cyber-card p-4">
+				{/* <div className="cyber-card p-4">
 					<div className="section-header mb-3">
 						<Bug className="w-5 h-5 text-amber-400" />
 						<div className="w-full">
@@ -760,7 +760,7 @@ export default function DashboardChartsPanels({
 							</ResponsiveContainer>
 						)}
 					</div>
-				</div>
+				</div> */}
 
 				<div className="cyber-card p-4">
 					<div className="section-header mb-3">
@@ -835,7 +835,7 @@ export default function DashboardChartsPanels({
 					</div>
 				</div>
 
-				<div className="cyber-card p-4">
+				{/* <div className="cyber-card p-4">
 					<div className="section-header mb-3">
 						<Bug className="w-5 h-5 text-violet-400" />
 						<div className="w-full">
@@ -913,7 +913,7 @@ export default function DashboardChartsPanels({
 							</ResponsiveContainer>
 						)}
 					</div>
-				</div>
+				</div> */}
 			</div>
 		</>
 	);
