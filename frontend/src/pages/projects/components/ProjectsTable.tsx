@@ -21,8 +21,10 @@ interface ProjectsTableProps {
 	onToggleProjectSelection: (projectId: string, checked: boolean) => void;
 	onToggleSelectCurrentPage: (checked: boolean) => void;
 	onCreateScan: (projectId: string) => void;
-	onDisableProject: (projectId: string) => void;
-	onEnableProject: (projectId: string) => void;
+	onToggleProjectStatus: (
+		projectId: string,
+		action: ProjectsPageRowViewModel["statusToggle"]["action"],
+	) => void;
 }
 
 export default function ProjectsTable({
@@ -33,8 +35,7 @@ export default function ProjectsTable({
 	onToggleProjectSelection,
 	onToggleSelectCurrentPage,
 	onCreateScan,
-	onDisableProject,
-	onEnableProject,
+	onToggleProjectStatus,
 }: ProjectsTableProps) {
 	return (
 		<Table>
@@ -144,20 +145,18 @@ export default function ProjectsTable({
 								<Button
 									size="sm"
 									variant="outline"
-									className="cyber-btn-ghost h-8 px-3 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30"
-									onClick={() => onDisableProject(row.id)}
-									disabled={!row.actions.canDisable}
+									aria-label={`切换项目状态 ${row.name}`}
+									className={
+										row.statusToggle.action === "disable"
+											? "cyber-btn-ghost h-8 px-3 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30"
+											: "cyber-btn-ghost h-8 px-3 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30"
+									}
+									onClick={() =>
+										onToggleProjectStatus(row.id, row.statusToggle.action)
+									}
+									disabled={row.statusToggle.disabled}
 								>
-									禁用
-								</Button>
-								<Button
-									size="sm"
-									variant="outline"
-									className="cyber-btn-ghost h-8 px-3 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30"
-									onClick={() => onEnableProject(row.id)}
-									disabled={!row.actions.canEnable}
-								>
-									启用
+									{row.statusToggle.label}
 								</Button>
 							</div>
 						</TableCell>

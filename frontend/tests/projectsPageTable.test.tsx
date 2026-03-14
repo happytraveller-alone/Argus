@@ -35,13 +35,17 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 					sizeText: "10 文件 / 200 行",
 					statusLabel: "启用",
 					statusClassName: "cyber-badge-success",
+					statusToggle: {
+						action: "disable",
+						label: "禁用",
+						requiresConfirmation: true,
+						disabled: false,
+					},
 					isActive: true,
 					totalIssues: 5,
 					executionStats: { completed: 2, running: 1 },
 					actions: {
 						canCreateScan: true,
-						canDisable: true,
-						canEnable: false,
 					},
 				},
 				{
@@ -53,13 +57,17 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 					sizeText: "-",
 					statusLabel: "禁用",
 					statusClassName: "cyber-badge-warning",
+					statusToggle: {
+						action: "enable",
+						label: "启用",
+						requiresConfirmation: false,
+						disabled: false,
+					},
 					isActive: false,
 					totalIssues: 0,
 					executionStats: { completed: 0, running: 0 },
 					actions: {
 						canCreateScan: false,
-						canDisable: false,
-						canEnable: true,
 					},
 				},
 			],
@@ -69,8 +77,7 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 			onToggleProjectSelection: () => {},
 			onToggleSelectCurrentPage: () => {},
 			onCreateScan: () => {},
-			onDisableProject: () => {},
-			onEnableProject: () => {},
+			onToggleProjectStatus: () => {},
 		})),
 	);
 
@@ -80,5 +87,6 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 	assert.match(markup, /创建扫描/);
 	assert.match(markup, /禁用/);
 	assert.match(markup, /启用/);
+	assert.equal((markup.match(/切换项目状态/g) || []).length, 2);
 	assert.match(markup, /disabled/);
 });

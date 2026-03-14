@@ -6,6 +6,8 @@ import type { BanditScanTask } from "@/shared/api/bandit";
 import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { OpengrepScanTask } from "@/shared/api/opengrep";
 import type { Project, AuditTask } from "@/shared/types";
+import type { ProjectsPageDataSource } from "./data/projectsPageDataSource";
+import type { ProjectStatusToggleAction } from "./viewModel";
 
 export type ProjectTaskPoolStatus = "idle" | "loading" | "ready" | "failed";
 
@@ -30,6 +32,9 @@ export interface ProjectsPageRowViewModel {
 	sizeText: string;
 	statusLabel: "启用" | "禁用";
 	statusClassName: string;
+	statusToggle: ProjectStatusToggleAction & {
+		disabled: boolean;
+	};
 	isActive: boolean;
 	totalIssues: number;
 	executionStats: {
@@ -38,8 +43,6 @@ export interface ProjectsPageRowViewModel {
 	};
 	actions: {
 		canCreateScan: boolean;
-		canDisable: boolean;
-		canEnable: boolean;
 	};
 }
 
@@ -104,24 +107,6 @@ export interface ProjectsPageScanDialogProps {
 }
 
 export interface ProjectsPageProps {
-	dataSource: {
-		listProjects: (params?: { includeDeleted?: boolean }) => Promise<Project[]>;
-		getProjectTaskPool: (projectId: string) => Promise<ProjectTaskPool>;
-		getProjectLanguageStats: (
-			projectId: string,
-		) => Promise<ProjectCardLanguageStats>;
-		createProject: (input: import("@/shared/types").CreateProjectForm) => Promise<Project>;
-		createZipProject: (
-			input: import("@/shared/types").CreateProjectForm,
-			file: File,
-		) => Promise<Project>;
-		updateProject: (
-			projectId: string,
-			input: Partial<import("@/shared/types").CreateProjectForm>,
-			zipFile?: File | null,
-		) => Promise<Project>;
-		disableProject: (projectId: string) => Promise<void>;
-		enableProject: (projectId: string) => Promise<void>;
-	};
+	dataSource: ProjectsPageDataSource;
 	renderCreateScanDialog?: (props: ProjectsPageScanDialogProps) => ReactNode;
 }

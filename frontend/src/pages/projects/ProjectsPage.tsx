@@ -366,14 +366,18 @@ export default function ProjectsPage({
 									navigateOnSuccess: true,
 								});
 							}}
-							onDisableProject={(projectId) => {
-								const project = projectMap.get(projectId) || null;
-								browser.setDisableProjectState({
-									open: true,
-									project,
-								});
+							onToggleProjectStatus={(projectId, action) => {
+								if (action === "disable") {
+									const project = projectMap.get(projectId) || null;
+									browser.setDisableProjectState({
+										open: true,
+										project,
+									});
+									return;
+								}
+
+								void handleEnableProject(projectId);
 							}}
-							onEnableProject={(projectId) => void handleEnableProject(projectId)}
 						/>
 						<ProjectsPagination
 							currentPage={viewModel.pagination.currentPage}

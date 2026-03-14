@@ -105,3 +105,71 @@ test("projects view model utilities build project size text and execution stats"
 
 	assert.deepEqual(stats, { completed: 3, running: 2 });
 });
+
+test("projects view model derives status toggle metadata from project active state", async () => {
+	const builder = await importOrFail<any>(
+		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
+	);
+
+	const makeProject = (overrides: Record<string, unknown>) => ({
+		id: "project-id",
+		name: "Project Name",
+		description: "Project Description",
+		source_type: "zip",
+		repository_url: undefined,
+		repository_type: "other",
+		default_branch: "main",
+		programming_languages: "TypeScript",
+		owner_id: "user-1",
+		is_active: true,
+		created_at: "2024-01-01T00:00:00Z",
+		updated_at: "2024-01-01T00:00:00Z",
+		...overrides,
+	});
+
+	const viewModel = builder.buildProjectsPageViewModel({
+		loading: false,
+		filteredProjects: [
+			makeProject({ id: "p1", name: "Enabled Project", is_active: true }),
+			makeProject({ id: "p2", name: "Disabled Project", is_active: false }),
+		],
+		pagedProjects: [
+			makeProject({ id: "p1", name: "Enabled Project", is_active: true }),
+			makeProject({ id: "p2", name: "Disabled Project", is_active: false }),
+		],
+		projectPage: 1,
+		totalProjectPages: 1,
+		selectedProjectIds: new Set(),
+		projectTaskPoolsMap: {},
+		projectLanguageStatsMap: {},
+		projectDetailFrom: "/projects",
+		searchTerm: "",
+		searchPlaceholder: "搜索项目",
+	});
+
+	assert.deepEqual(
+		viewModel.rows.map((row: any) => ({
+			id: row.id,
+			statusLabel: row.statusLabel,
+			statusToggleLabel: row.statusToggle.label,
+			statusToggleAction: row.statusToggle.action,
+			canCreateScan: row.actions.canCreateScan,
+		})),
+		[
+			{
+				id: "p1",
+				statusLabel: "启用",
+				statusToggleLabel: "禁用",
+				statusToggleAction: "disable",
+				canCreateScan: true,
+			},
+			{
+				id: "p2",
+				statusLabel: "禁用",
+				statusToggleLabel: "启用",
+				statusToggleAction: "enable",
+				canCreateScan: false,
+			},
+		],
+	);
+});

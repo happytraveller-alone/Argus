@@ -7,6 +7,7 @@ import {
 	resolveStaticScanGroupStatus,
 } from "@/features/tasks/services/taskActivities";
 import type { Project } from "@/shared/types";
+import { getProjectStatusToggleAction } from "../viewModel";
 import type {
 	ProjectTaskPoolState,
 	ProjectsPageViewModel,
@@ -126,13 +127,17 @@ export function buildProjectsPageViewModel(
 				statusClassName: project.is_active
 					? "cyber-badge-success"
 					: "cyber-badge-warning",
+				statusToggle: {
+					...getProjectStatusToggleAction({
+						is_active: project.is_active,
+					}),
+					disabled: false,
+				},
 				isActive: project.is_active,
 				totalIssues: summaryStats.totalIssues ?? 0,
 				executionStats: getProjectExecutionStats(projectTaskPool),
 				actions: {
 					canCreateScan: project.is_active,
-					canDisable: project.is_active,
-					canEnable: !project.is_active,
 				},
 			};
 		}),

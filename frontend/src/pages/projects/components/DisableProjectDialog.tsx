@@ -52,7 +52,7 @@ export default function DisableProjectDialog({
 								<span className="text-sky-400">&gt;</span> 扫描数据保留
 							</li>
 							<li className="flex items-center gap-2">
-								<span className="text-sky-400">&gt;</span> 可通过“启用”按钮恢复
+								<span className="text-sky-400">&gt;</span> 可通过状态切换按钮恢复
 							</li>
 						</ul>
 					</div>
