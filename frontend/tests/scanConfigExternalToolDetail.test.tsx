@@ -162,8 +162,8 @@ test("ScanConfigExternalToolDetailContent 在 mcp 类型下保留占位说明", 
   const markup = renderToStaticMarkup(
     createElement(MemoryRouter, {}, createElement(ScanConfigExternalToolDetailContent, {
       toolType: "mcp",
-      toolId: "filesystem",
-      toolName: "Filesystem",
+      toolId: "legacy-mcp",
+      toolName: "Legacy MCP",
       skillCatalogItem: null,
       skillDetail: null,
       prompt: "",

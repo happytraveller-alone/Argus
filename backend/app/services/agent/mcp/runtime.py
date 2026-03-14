@@ -140,7 +140,6 @@ class FastMCPStdioAdapter:
     """Minimal stdio MCP adapter backed by fastmcp.Client."""
     _PROJECT_PATH_BOOTSTRAP_TOOLS: set[str] = set()
     _NPX_PACKAGE_BINARIES = {
-        "@modelcontextprotocol/server-filesystem": "mcp-server-filesystem",
         "@modelcontextprotocol/server-sequential-thinking": "mcp-server-sequential-thinking",
     }
     _NPX_ONLY_FLAGS = {"-y", "--yes"}

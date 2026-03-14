@@ -270,53 +270,6 @@ def _known_tool_args(
             "root": project_root,
         }
 
-    if normalized_mcp == "filesystem":
-        probe_file_abs = _abs_project_path(filesystem_probe_file)
-        probe_media_abs = _abs_project_path(filesystem_media_probe_file)
-        probe_parent_dir = os.path.dirname(probe_file_abs) or normalized_project_root or "."
-        root_path = normalized_project_root or probe_parent_dir
-        moved_probe_file = (
-            f"{probe_file_abs[:-4]}_moved.txt"
-            if probe_file_abs.endswith(".txt")
-            else f"{probe_file_abs}.moved"
-        )
-        if normalized_tool in {"list_directory", "list_files"}:
-            return {"path": root_path, "directory": root_path}
-        if normalized_tool in {"read_file", "read_text_file"}:
-            return {"path": filesystem_probe_file}
-        if normalized_tool == "read_media_file":
-            return {"path": filesystem_media_probe_file}
-        if normalized_tool == "read_multiple_files":
-            return {"paths": [filesystem_probe_file]}
-        if normalized_tool == "write_file":
-            return {
-                "path": probe_file_abs,
-                "content": "mcp verify filesystem probe\n",
-            }
-        if normalized_tool == "edit_file":
-            before = "mcp verify filesystem probe\n"
-            after = "mcp verify filesystem probe edited\n"
-            return {
-                "path": probe_file_abs,
-                "edits": [{"oldText": before, "newText": after}],
-            }
-        if normalized_tool == "delete_file":
-            return {"path": probe_file_abs}
-        if normalized_tool == "create_directory":
-            return {"path": os.path.join(probe_parent_dir, ".mcp_verify_dir")}
-        if normalized_tool == "list_directory_with_sizes":
-            return {"path": root_path, "sortBy": "name"}
-        if normalized_tool == "directory_tree":
-            return {"path": root_path}
-        if normalized_tool == "move_file":
-            return {"source": probe_file_abs, "destination": moved_probe_file}
-        if normalized_tool == "search_files":
-            return {"path": "tmp", "pattern": "*.txt"}
-        if normalized_tool == "get_file_info":
-            return {"path": filesystem_probe_file}
-        if normalized_tool == "list_allowed_directories":
-            return {}
-
     if normalized_mcp == "sequentialthinking":
         if normalized_tool in {"sequentialthinking", "sequential_thinking", "reasoning_trace"}:
             return {

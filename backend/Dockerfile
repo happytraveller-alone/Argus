@@ -423,7 +423,6 @@ RUN --mount=type=cache,id=vulhunter-backend-pnpm-store,target=/pnpm/store \
       echo "pnpm add ${label} failed on all candidates; runtime will fallback to npx for ${package_name} (${binary_name})." >&2; \
       return 0; \
     }; \
-    install_or_mark_npx_fallback "filesystem" "${pnpm_step_timeout}" "@modelcontextprotocol/server-filesystem" "mcp-server-filesystem"; \
     install_or_mark_npx_fallback "sequential-thinking" "${pnpm_step_timeout}" "@modelcontextprotocol/server-sequential-thinking" "mcp-server-sequential-thinking"; \
     install_or_mark_npx_fallback "qmd-cli" "${qmd_step_timeout}" "@tobilu/qmd" "qmd"; \
     pnpm bin -g || true
@@ -728,7 +727,6 @@ RUN set -eux; \
       printf '%s\n' '#!/bin/sh' "exec /usr/local/bin/run_npx_from_candidates.sh '${package_name}' \"\\$@\"" > "/usr/local/bin/${binary_name}"; \
       chmod +x "/usr/local/bin/${binary_name}"; \
     }; \
-    ensure_npx_wrapper "mcp-server-filesystem" "@modelcontextprotocol/server-filesystem"; \
     ensure_npx_wrapper "mcp-server-sequential-thinking" "@modelcontextprotocol/server-sequential-thinking"; \
     ensure_npx_wrapper "qmd" "@tobilu/qmd"
 

@@ -196,11 +196,6 @@ class Settings(BaseSettings):
     MCP_REQUIRE_EVIDENCE_BINDING: bool = True
     MCP_FORBID_PROJECT_WIDE_WRITES: bool = True
 
-    # MCP adapters (stdio)
-    MCP_FILESYSTEM_ENABLED: bool = True
-    MCP_FILESYSTEM_RUNTIME_MODE: str = "stdio_only"
-    MCP_FILESYSTEM_COMMAND: str = "pnpm"
-    MCP_FILESYSTEM_ARGS: str = "dlx @modelcontextprotocol/server-filesystem"
     GIT_MIRROR_ENABLED: bool = True
     GIT_MIRROR_PREFIX: str = "https://gh-proxy.org"
     GIT_MIRROR_PREFIXES: str = "https://gh-proxy.org,https://v6.gh-proxy.org"

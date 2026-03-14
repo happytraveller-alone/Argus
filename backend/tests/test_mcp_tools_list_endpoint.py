@@ -75,23 +75,9 @@ def _setup_common(monkeypatch, runtime, *, catalog):
 
 
 @pytest.mark.asyncio
-async def test_list_mcp_tools_filters_internal_tools_by_default(monkeypatch):
-    catalog = [
-        {"id": "filesystem", "type": "mcp-server"},
-        {"id": "skill-pack-demo", "type": "skill-pack"},
-    ]
-    runtime = _FakeRuntime(
-        {
-            "filesystem": {
-                "success": True,
-                "tools": [
-                    {"name": "set_project_path", "description": "internal", "inputSchema": {}},
-                    {"name": "list_directory", "description": "list", "inputSchema": {}},
-                ],
-                "metadata": {"mcp_runtime_domain": "sandbox"},
-            },
-        }
-    )
+async def test_list_mcp_tools_returns_empty_when_catalog_has_no_active_mcps(monkeypatch):
+    catalog = []
+    runtime = _FakeRuntime({})
     _setup_common(monkeypatch, runtime, catalog=catalog)
 
     response = await list_mcp_tools_runtime(
@@ -100,52 +86,31 @@ async def test_list_mcp_tools_filters_internal_tools_by_default(monkeypatch):
         current_user=SimpleNamespace(id="user-1"),
     )
 
-    assert [item.mcp_id for item in response.results] == ["filesystem"]
-    assert runtime.calls == ["filesystem"]
-
-    filesystem = response.results[0]
-    assert filesystem.success is True
-    assert filesystem.runtime_domain == "sandbox"
-    assert filesystem.listed_count == 2
-    assert filesystem.visible_count == 1
-    assert [tool.name for tool in filesystem.tools] == ["list_directory"]
+    assert response.results == []
+    assert runtime.calls == []
 
 
 @pytest.mark.asyncio
-async def test_list_mcp_tools_can_include_internal_tools(monkeypatch):
-    catalog = [{"id": "filesystem", "type": "mcp-server"}]
-    runtime = _FakeRuntime(
-        {
-            "filesystem": {
-                "success": True,
-                "tools": [
-                    {"name": "set_project_path", "description": "internal", "inputSchema": {}},
-                    {"name": "list_directory", "description": "list", "inputSchema": {}},
-                ],
-                "metadata": {"mcp_runtime_domain": "sandbox"},
-            }
-        }
-    )
+async def test_list_mcp_tools_rejects_removed_filesystem(monkeypatch):
+    catalog = []
+    runtime = _FakeRuntime({})
     _setup_common(monkeypatch, runtime, catalog=catalog)
 
-    response = await list_mcp_tools_runtime(
-        MCPToolsListRequest(mcp_ids=["filesystem"], include_internal=True),
-        db=_FakeDB(),
-        current_user=SimpleNamespace(id="user-1"),
-    )
+    with pytest.raises(HTTPException) as excinfo:
+        await list_mcp_tools_runtime(
+            MCPToolsListRequest(mcp_ids=["filesystem"], include_internal=True),
+            db=_FakeDB(),
+            current_user=SimpleNamespace(id="user-1"),
+        )
 
-    assert len(response.results) == 1
-    item = response.results[0]
-    assert item.success is True
-    assert item.listed_count == 2
-    assert item.visible_count == 2
-    assert {tool.name for tool in item.tools} == {"set_project_path", "list_directory"}
+    assert excinfo.value.status_code == 400
+    assert "不支持的 MCP" in str(excinfo.value.detail)
 
 
 @pytest.mark.asyncio
 async def test_list_mcp_tools_rejects_removed_code_index(monkeypatch):
-    catalog = [{"id": "filesystem", "type": "mcp-server"}]
-    runtime = _FakeRuntime({"filesystem": {"success": True, "tools": []}})
+    catalog = []
+    runtime = _FakeRuntime({})
     _setup_common(monkeypatch, runtime, catalog=catalog)
 
     with pytest.raises(HTTPException) as excinfo:
@@ -161,38 +126,35 @@ async def test_list_mcp_tools_rejects_removed_code_index(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_call_mcp_tool_runtime_returns_unified_payload(monkeypatch):
-    catalog = [{"id": "filesystem", "type": "mcp-server"}]
+    catalog = []
     call_payload = MCPExecutionResult(
         handled=True,
         success=True,
         data="probe-ok",
         metadata={"mcp_runtime_domain": "sandbox", "mcp_used": True},
     )
-    runtime = _FakeRuntime({"filesystem": {"success": True, "tools": []}}, call_payload=call_payload)
+    runtime = _FakeRuntime({}, call_payload=call_payload)
     _setup_common(monkeypatch, runtime, catalog=catalog)
 
-    response = await call_mcp_tool_runtime(
-        MCPToolsCallRequest(
-            mcp_id="filesystem",
-            tool_name="list_directory",
-            arguments={"path": "."},
-        ),
-        db=_FakeDB(),
-        current_user=SimpleNamespace(id="user-1"),
-    )
+    with pytest.raises(HTTPException) as excinfo:
+        await call_mcp_tool_runtime(
+            MCPToolsCallRequest(
+                mcp_id="filesystem",
+                tool_name="list_directory",
+                arguments={"path": "."},
+            ),
+            db=_FakeDB(),
+            current_user=SimpleNamespace(id="user-1"),
+        )
 
-    assert response.success is True
-    assert response.handled is True
-    assert response.runtime_domain == "sandbox"
-    assert response.data == "probe-ok"
-    assert runtime.call_invocations
-    assert runtime.call_invocations[0]["tool_name"] == "list_directory"
+    assert excinfo.value.status_code == 400
+    assert "不支持的 MCP" in str(excinfo.value.detail)
 
 
 @pytest.mark.asyncio
 async def test_call_mcp_tool_runtime_blocks_internal_tool_by_default(monkeypatch):
-    catalog = [{"id": "filesystem", "type": "mcp-server"}]
-    runtime = _FakeRuntime({"filesystem": {"success": True, "tools": []}})
+    catalog = []
+    runtime = _FakeRuntime({})
     _setup_common(monkeypatch, runtime, catalog=catalog)
 
     with pytest.raises(HTTPException) as excinfo:
@@ -206,13 +168,13 @@ async def test_call_mcp_tool_runtime_blocks_internal_tool_by_default(monkeypatch
             current_user=SimpleNamespace(id="user-1"),
         )
     assert excinfo.value.status_code == 400
-    assert "internal tool blocked" in str(excinfo.value.detail)
+    assert "不支持的 MCP" in str(excinfo.value.detail)
 
 
 @pytest.mark.asyncio
 async def test_call_mcp_tool_runtime_rejects_removed_code_index(monkeypatch):
-    catalog = [{"id": "filesystem", "type": "mcp-server"}]
-    runtime = _FakeRuntime({"filesystem": {"success": True, "tools": []}})
+    catalog = []
+    runtime = _FakeRuntime({})
     _setup_common(monkeypatch, runtime, catalog=catalog)
 
     with pytest.raises(HTTPException) as excinfo:
@@ -232,11 +194,26 @@ async def test_call_mcp_tool_runtime_rejects_removed_code_index(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_verify_mcp_runtime_rejects_removed_code_index(monkeypatch):
-    _setup_common(monkeypatch, _FakeRuntime({}), catalog=[{"id": "filesystem", "type": "mcp-server"}])
+    _setup_common(monkeypatch, _FakeRuntime({}), catalog=[])
 
     with pytest.raises(HTTPException) as excinfo:
         await verify_mcp_runtime(
             MCPVerifyRequest(mcp_id="code_index"),
+            db=_FakeDB(),
+            current_user=SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 400
+    assert "不支持的 MCP" in str(excinfo.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_verify_mcp_runtime_rejects_removed_filesystem(monkeypatch):
+    _setup_common(monkeypatch, _FakeRuntime({}), catalog=[])
+
+    with pytest.raises(HTTPException) as excinfo:
+        await verify_mcp_runtime(
+            MCPVerifyRequest(mcp_id="filesystem"),
             db=_FakeDB(),
             current_user=SimpleNamespace(id="user-1"),
         )

@@ -913,51 +913,10 @@ async def _bootstrap_task_mcp_runtime(
     project_root: str,
     event_emitter: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    normalized_project_root = os.path.abspath(project_root)
-    details: Dict[str, Any] = {}
-
-    if event_emitter:
-        await event_emitter.emit_info(
-            "🔗 正在验证 filesystem MCP 项目根路径绑定...",
-            metadata={"step_name": "MCP_BIND_FILESYSTEM_ROOT", "status": "running"},
-        )
-    filesystem_result = await runtime.call_mcp_tool(
-        mcp_name="filesystem",
-        tool_name="list_allowed_directories",
-        arguments={},
-        agent_name="TASK_STARTUP",
-        alias_used="startup:filesystem_root_binding",
-    )
-    filesystem_allowed = _extract_allowed_directories_from_payload(filesystem_result.data)
-    project_root_allowed = _project_root_is_allowed(normalized_project_root, filesystem_allowed)
-    if not bool(filesystem_result.handled and filesystem_result.success) or not project_root_allowed:
-        error_text = str(filesystem_result.error or filesystem_result.data or "filesystem_project_root_not_allowed")
-        if event_emitter:
-            await event_emitter.emit_error(
-                f"❌ filesystem MCP 根路径绑定失败：{error_text}",
-                metadata={
-                    "step_name": "MCP_BIND_FILESYSTEM_ROOT",
-                    "status": "failed",
-                    "allowed_directories": filesystem_allowed,
-                    "project_root": normalized_project_root,
-                },
-            )
-        raise RuntimeError(f"filesystem MCP 根路径绑定失败：{error_text}")
-    details["filesystem"] = {
-        "allowed_directories": filesystem_allowed,
-        "project_root_allowed": project_root_allowed,
-    }
-    if event_emitter:
-        await event_emitter.emit_info(
-            "✅ filesystem MCP 已绑定项目根路径",
-            metadata={
-                "step_name": "MCP_BIND_FILESYSTEM_ROOT",
-                "status": "completed",
-                "allowed_directories": filesystem_allowed,
-            },
-        )
-
-    return details
+    _ = runtime
+    _ = project_root
+    _ = event_emitter
+    return {}
 
 
 def _build_task_mcp_runtime(
@@ -1021,35 +980,10 @@ def _build_task_mcp_runtime(
             return True
         return str(name or "").strip().lower() in active_ids
 
-    def _policy_enabled(name: str, setting_name: str, default: bool = True) -> bool:
-        entry = runtime_policy.get(name) if isinstance(runtime_policy.get(name), dict) else {}
-        if isinstance(entry.get("enabled"), bool):
-            return bool(entry.get("enabled"))
-        return bool(getattr(settings, setting_name, default))
-
-    def _build_filesystem_args(raw_args: Any) -> List[str]:
-        args = _parse_mcp_args(raw_args)
-        if normalized_project_root not in args:
-            args.append(normalized_project_root)
-        return args
-
     adapters: Dict[str, Any] = {}
     domain_adapters: Dict[str, Dict[str, Any]] = {}
     runtime_modes: Dict[str, str] = {}
-
-    if _is_active_mcp("filesystem") and _policy_enabled("filesystem", "MCP_FILESYSTEM_ENABLED", True):
-        adapters["filesystem"] = FastMCPStdioAdapter(
-            command=str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm") or "pnpm"),
-            args=_build_filesystem_args(
-                getattr(settings, "MCP_FILESYSTEM_ARGS", "dlx @modelcontextprotocol/server-filesystem")
-            ),
-            cwd=normalized_project_root,
-            timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-            runtime_domain="stdio",
-        )
-        runtime_modes["filesystem"] = "stdio_only"
-
-    required_mcps = [name for name in ("filesystem",) if name in adapters]
+    required_mcps: List[str] = []
 
     return MCPRuntime(
         enabled=bool(mcp_config.get("enabled", getattr(settings, "MCP_ENABLED", True))),

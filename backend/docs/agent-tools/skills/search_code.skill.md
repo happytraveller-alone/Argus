@@ -5,7 +5,7 @@
 - 为 `controlflow_analysis_light` 提供 `file_path:line` 级输入。
 
 ## 路由关键事实
-- `search_code` 现在优先走 `filesystem/search_files`。
+- `search_code` 现在优先走本地 `FileSearchTool`。
 - 公共 `action_input` 仍使用 `keyword`，不要发明额外字段名。
 - `search_code` 只负责定位，不负责自动展开文件上下文。
 

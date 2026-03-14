@@ -256,6 +256,9 @@ function getMcpRouteLabel(metadata?: Record<string, unknown>): string {
   const adapter = toSafeTrimmedString(metadata?.mcp_adapter);
   const mcpTool = toSafeTrimmedString(metadata?.mcp_tool);
   if (!adapter || !mcpTool) return "";
+  if (adapter.toLowerCase() === "filesystem") {
+    return "";
+  }
   const domain = toSafeTrimmedString(metadata?.mcp_runtime_domain);
   return domain ? `${adapter}/${mcpTool}@${domain}` : `${adapter}/${mcpTool}`;
 }

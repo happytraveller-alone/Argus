@@ -49,10 +49,16 @@ async def test_update_my_config_strips_frontend_mcp_payload_and_returns_backend_
     backend_owned_mcp = {
         "enabled": True,
         "preferMcp": True,
-        "runtimePolicy": {"default_mode": "backend_then_sandbox"},
+        "runtimePolicy": {"default_mode": "stdio_only"},
         "writePolicy": {"max_writable_files_per_task": 50},
-        "catalog": [{"id": "filesystem", "type": "mcp-server"}],
+        "catalog": [],
         "skillAvailability": {"read_file": {"enabled": True}},
+        "deprecatedConfigs": {
+            "filesystem": {
+                "deprecated": True,
+                "ignored": True,
+            }
+        },
     }
     monkeypatch.setattr(
         config_module,
@@ -68,7 +74,7 @@ async def test_update_my_config_strips_frontend_mcp_payload_and_returns_backend_
                 maxAnalyzeFiles=12,
                 mcpConfig={
                     "enabled": False,
-                    "catalog": [{"id": "frontend-fake"}],
+                    "catalog": [{"id": "filesystem"}],
                     "runtimePolicy": {
                         "filesystem": {
                             "runtime_mode": "backend_only",
@@ -98,10 +104,16 @@ async def test_get_my_config_rebuilds_backend_owned_mcp_even_if_legacy_data_cont
     backend_owned_mcp = {
         "enabled": True,
         "preferMcp": True,
-        "runtimePolicy": {"default_mode": "backend_then_sandbox"},
+        "runtimePolicy": {"default_mode": "stdio_only"},
         "writePolicy": {"max_writable_files_per_task": 50},
-        "catalog": [{"id": "filesystem", "type": "mcp-server"}],
+        "catalog": [],
         "skillAvailability": {"search_code": {"enabled": True}},
+        "deprecatedConfigs": {
+            "filesystem": {
+                "deprecated": True,
+                "ignored": True,
+            }
+        },
     }
     monkeypatch.setattr(
         config_module,

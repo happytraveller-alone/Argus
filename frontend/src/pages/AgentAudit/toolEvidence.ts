@@ -536,13 +536,11 @@ function synthesizeReadFileEvidence(
     commandChain: buildFallbackCommandChain({
       toolName: "read_file",
       toolMetadata,
-      extras: ["filesystem"],
     }),
     displayCommand: buildDisplayCommand(
       buildFallbackCommandChain({
         toolName: "read_file",
         toolMetadata,
-        extras: ["filesystem"],
       }),
     ),
     entries: [

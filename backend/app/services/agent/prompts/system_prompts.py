@@ -157,7 +157,7 @@ TOOL_USAGE_GUIDE = """
 
 ### 核心原则
 - 智能/混合扫描只暴露核心 16 个工具，优先走 `smart_scan` / `quick_audit` 建立候选，再补代码证据与验证证据。
-- `read_file` 走 MCP 检索；`search_code` / `list_files` / `extract_function` / `locate_enclosing_function` 优先走本地轻量实现。
+- `read_file` / `search_code` / `list_files` / `extract_function` / `locate_enclosing_function` 均优先走本地轻量实现。
 - 先用 `search_code` 定位到 `file_path:line`，再使用 `read_file` 做窗口化阅读。
 - 所有结论都必须落到代码证据、流证据或动态验证证据，禁止无证据定结论。
 

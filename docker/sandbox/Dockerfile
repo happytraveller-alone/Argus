@@ -134,7 +134,6 @@ RUN --mount=type=cache,id=deepaudit-sandbox-pnpm-store,target=/pnpm/store \
       pnpm config set registry "${reg}"; \
       while [ "${attempt}" -le 2 ]; do \
         if timeout "${pnpm_step_timeout}" pnpm add -g \
-          @modelcontextprotocol/server-filesystem \
           @modelcontextprotocol/server-memory \
           @modelcontextprotocol/server-sequential-thinking \
           @tobilu/qmd; then \

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
-import uuid
 
 
 ProbeAction = Literal["tool", "cleanup_file"]
@@ -21,7 +20,6 @@ class MCPProbeCheck:
 
 
 MCP_VERIFICATION_TOOLS: Dict[str, List[str]] = {
-    "filesystem": ["read_file"],
     "sequentialthinking": ["sequential_thinking", "reasoning_trace"],
     "qmd": ["qmd_status", "qmd_query", "qmd_get", "qmd_multi_get"],
 }
@@ -40,17 +38,6 @@ def build_probe_checks(
     code_probe_line: Optional[int] = None,
 ) -> List[MCPProbeCheck]:
     normalized_id = str(mcp_id or "").strip().lower()
-    if normalized_id == "filesystem":
-        probe_rel_path = str(filesystem_probe_file or "").strip()
-        if not probe_rel_path:
-            probe_rel_path = f"tmp/.mcp_probe_{uuid.uuid4().hex}.txt"
-        return [
-            MCPProbeCheck(
-                step="read_probe_file",
-                tool_name="read_file",
-                arguments={"file_path": probe_rel_path},
-            ),
-        ]
     if normalized_id == "sequentialthinking":
         return [
             MCPProbeCheck(

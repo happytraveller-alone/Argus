@@ -25,7 +25,7 @@ _SCAN_CORE_SKILLS: List[Dict[str, Any]] = [
 
 SCAN_CORE_SKILL_IDS = tuple(item["skill_id"] for item in _SCAN_CORE_SKILLS)
 _SCAN_CORE_BY_ID = {item["skill_id"]: item for item in _SCAN_CORE_SKILLS}
-SCAN_CORE_FILESYSTEM_BOUND_SKILL_IDS = frozenset({"read_file"})
+SCAN_CORE_FILESYSTEM_BOUND_SKILL_IDS = frozenset()
 SCAN_CORE_CODE_INDEX_BOUND_SKILL_IDS = frozenset()
 SCAN_CORE_MCP_BOUND_SKILL_IDS = (
     SCAN_CORE_FILESYSTEM_BOUND_SKILL_IDS | SCAN_CORE_CODE_INDEX_BOUND_SKILL_IDS
@@ -149,35 +149,14 @@ def search_scan_core_skills(
 
 
 def build_scan_core_skill_availability(catalog: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    catalog_by_id = {
-        str(item.get("id") or "").strip(): item
-        for item in catalog
-        if isinstance(item, dict) and str(item.get("id") or "").strip()
-    }
-
-    def _mcp_ready(mcp_id: str) -> bool:
-        item = catalog_by_id.get(mcp_id, {})
-        return bool(item.get("enabled")) and bool(item.get("startup_ready", True))
-
-    filesystem_ready = _mcp_ready("filesystem")
-
     availability: Dict[str, Dict[str, Any]] = {}
     for skill_id in SCAN_CORE_SKILL_IDS:
-        if skill_id in SCAN_CORE_FILESYSTEM_BOUND_SKILL_IDS:
-            enabled = filesystem_ready
-            source = "mcp"
-            reason = "ready" if enabled else "mcp_not_ready:filesystem"
-        else:
-            enabled = True
-            source = "local"
-            reason = "ready"
-
         availability[skill_id] = {
-            "enabled": enabled,
-            "startup_ready": enabled,
-            "runtime_ready": enabled,
-            "reason": reason,
-            "source": source,
+            "enabled": True,
+            "startup_ready": True,
+            "runtime_ready": True,
+            "reason": "ready",
+            "source": "local",
         }
 
     return availability
