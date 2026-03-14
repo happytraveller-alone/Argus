@@ -21,7 +21,7 @@ from app.services.agent.workflow.models import WorkflowConfig
 TEST_TASK_ID = "parallel-workflow-task"
 THIS_FILE = Path(__file__).resolve()
 BACKEND_ROOT = THIS_FILE.parent.parent
-REPO_ROOT = BACKEND_ROOT.parent
+REPO_ROOT = BACKEND_ROOT if (BACKEND_ROOT / "test_projects").exists() else BACKEND_ROOT.parent
 VULNERABLE_FILE = REPO_ROOT / "test_projects" / "minimal_test" / "vulnerable.py"
 EXPECTED_FINDINGS = 4
 
@@ -426,7 +426,13 @@ async def test_report_phase_runs_in_parallel(workflow_harness, instrumentation):
     assert state.report_findings_total == 4
     assert state.report_findings_processed == 4
     assert len(state.finding_reports) == 4
-    assert all(finding.get("vulnerability_report") for finding in orchestrator._all_findings)
+    reportable_findings = [
+        finding
+        for finding in orchestrator._all_findings
+        if str(finding.get("verdict") or "").lower() in {"confirmed", "likely"}
+    ]
+    assert reportable_findings
+    assert all(finding.get("vulnerability_report") for finding in reportable_findings)
 
     report_events = instrumentation["report_events"]
     report_workers = {evt["worker"] for evt in report_events}

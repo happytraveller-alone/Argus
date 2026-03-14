@@ -83,11 +83,13 @@ class ParallelPhaseExecutor:
 
         # 深拷贝并修改 config（config 在 deepcopy 后变成字典）
         worker_agent.config = copy.deepcopy(base_agent.config)
+        worker_name = f"{base_agent.name}_worker_{worker_id}"
         if isinstance(worker_agent.config, dict):
-            worker_agent.config["name"] = f"{base_agent.name}_worker_{worker_id}"
+            worker_agent.config["name"] = worker_name
         else:
             # 如果 config 是对象，尝试设置属性
-            worker_agent.config.name = f"{base_agent.name}_worker_{worker_id}"
+            worker_agent.config.name = worker_name
+        worker_agent.name = worker_name
 
         if hasattr(worker_agent, "configure_trace_logger"):
             try:
@@ -206,9 +208,17 @@ class ParallelPhaseExecutor:
         if not isinstance(file_planning, dict):
             file_planning = None
 
+        single_risk_point = runtime_config.get("single_risk_point")
+        if not isinstance(single_risk_point, dict):
+            single_risk_point = None
+
         return {
             "task": task_description,
+            "context": context,
             "task_context": context,
+            "risk_point": single_risk_point,
+            "single_risk_point": single_risk_point,
+            "finding": queue_finding if isinstance(queue_finding, dict) else None,
             "project_info": project_info,
             "config": runtime_config,
             "task_id": task_id,
@@ -588,6 +598,9 @@ class ParallelPhaseExecutor:
                     worker_payload[key] = value
                 elif value not in (None, "", [], {}):
                     worker_payload[key] = value
+        result_findings = getattr(result, "findings", None)
+        if isinstance(result_findings, list):
+            worker_payload["findings"] = list(result_findings)
         worker_payload["_run_success"] = bool(result.success)
         if result.error:
             worker_payload["_run_error"] = str(result.error)

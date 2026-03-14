@@ -43,7 +43,7 @@ function buildSkillExamplePrompts(skillId: string): string[] {
   return catalogPrompts[skillId] ?? ["这个 skill 在 libplist 上最适合怎么测试？"];
 }
 
-function resolveToolName(toolType: "skill", toolId: string): string {
+function resolveToolName(toolId: string): string {
   return SKILL_TOOLS_CATALOG.find((item) => item.id === toolId)?.id || toolId || "外部工具";
 }
 
@@ -325,7 +325,7 @@ export default function ScanConfigExternalToolDetail() {
     () => SKILL_TOOLS_CATALOG.find((item) => item.id === toolId) ?? null,
     [toolId],
   );
-  const toolName = useMemo(() => resolveToolName("skill", toolId), [toolId]);
+  const toolName = useMemo(() => resolveToolName(toolId), [toolId]);
   const examplePrompts = useMemo(() => buildSkillExamplePrompts(toolId), [toolId]);
   const { events, running, result, run, stop } = useSkillTestStream(toolId);
 

@@ -27,6 +27,7 @@ from app.models.user import User
 from app.models.project import Project
 from app.core.config import settings
 from app.core.encryption import encrypt_sensitive_data, decrypt_sensitive_data
+from app.services.agent.skills.scan_core import build_scan_core_skill_availability
 from app.services.llm.config_utils import (
     normalize_llm_base_url,
     parse_llm_custom_headers,
@@ -514,6 +515,40 @@ def _sanitize_mcp_write_policy(raw_policy: Any) -> dict:
         "forbid_project_wide_writes": True,
     }
 
+
+def _sanitize_mcp_config(raw_mcp_config: Any) -> dict:
+    candidate = raw_mcp_config if isinstance(raw_mcp_config, dict) else {}
+    has_legacy_filesystem = False
+    runtime_policy = candidate.get("runtimePolicy")
+    if isinstance(runtime_policy, dict) and isinstance(runtime_policy.get("filesystem"), dict):
+        has_legacy_filesystem = True
+    catalog = candidate.get("catalog")
+    if isinstance(catalog, list):
+        has_legacy_filesystem = has_legacy_filesystem or any(
+            isinstance(item, dict) and str(item.get("id") or "").strip().lower() == "filesystem"
+            for item in catalog
+        )
+
+    skill_availability = build_scan_core_skill_availability([])
+    return {
+        "enabled": bool(getattr(settings, "MCP_ENABLED", True)),
+        "preferMcp": bool(getattr(settings, "MCP_PREFER", True)),
+        "writePolicy": _sanitize_mcp_write_policy({}),
+        "runtimePolicy": {"default_mode": "stdio_only"},
+        "catalog": [],
+        "skillAvailability": skill_availability,
+        "deprecatedConfigs": (
+            {
+                "filesystem": {
+                    "deprecated": True,
+                    "ignored": True,
+                }
+            }
+            if has_legacy_filesystem
+            else {}
+        ),
+    }
+
 def _sanitize_other_config(raw_other_config: Any) -> dict:
     candidate = dict(raw_other_config) if isinstance(raw_other_config, dict) else {}
     for retired_key in ("githubToken", "gitlabToken", "giteaToken"):
@@ -540,6 +575,75 @@ def _normalize_extracted_project_root(base_path: str) -> str:
     if os.path.isdir(nested):
         return nested
     return base_path
+
+
+_VERIFY_DEFAULT_PROJECT_NAME = "libplist"
+
+
+async def _resolve_verify_project(
+    *,
+    db: AsyncSession,
+    current_user: User,
+) -> tuple[Project, str, bool]:
+    preferred_stmt = (
+        select(Project)
+        .where(
+            Project.owner_id == current_user.id,
+            Project.is_active == True,
+            Project.source_type == "zip",
+            Project.name == _VERIFY_DEFAULT_PROJECT_NAME,
+        )
+        .order_by(Project.created_at.desc())
+    )
+    preferred_result = await db.execute(preferred_stmt)
+    preferred_candidates = list(preferred_result.scalars().all())
+
+    fallback_used = False
+    selected_project: Optional[Project] = None
+    selected_zip_path: Optional[str] = None
+
+    async def _first_usable_zip(projects: list[Project]) -> tuple[Optional[Project], Optional[str]]:
+        for project in projects:
+            zip_path = await load_project_zip(project.id)
+            if not zip_path or not os.path.exists(zip_path):
+                continue
+            try:
+                with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                    if not zip_ref.namelist():
+                        continue
+                return project, zip_path
+            except Exception:
+                continue
+        return None, None
+
+    selected_project, selected_zip_path = await _first_usable_zip(preferred_candidates)
+
+    if not selected_project or not selected_zip_path:
+        fallback_stmt = (
+            select(Project)
+            .where(
+                Project.owner_id == current_user.id,
+                Project.is_active == True,
+                Project.source_type == "zip",
+            )
+            .order_by(Project.created_at.desc())
+        )
+        fallback_result = await db.execute(fallback_stmt)
+        fallback_candidates = [
+            project
+            for project in fallback_result.scalars().all()
+            if str(project.name or "").strip() != _VERIFY_DEFAULT_PROJECT_NAME
+        ]
+        selected_project, selected_zip_path = await _first_usable_zip(fallback_candidates)
+        fallback_used = bool(selected_project and selected_zip_path)
+
+    if not selected_project or not selected_zip_path:
+        raise HTTPException(
+            status_code=400,
+            detail="未找到可用于技能测试的 ZIP 项目，请先上传 ZIP 项目或修复默认 libplist 资源。",
+        )
+
+    return selected_project, selected_zip_path, fallback_used
 
 
 def encrypt_config(config: dict, sensitive_fields: list) -> dict:

@@ -1025,10 +1025,12 @@ class AuditWorkflowEngine:
         )
 
         worker_agent.config = copy.deepcopy(base_agent.config)
+        worker_name = f"{base_agent.name}_worker_{worker_id}"
         if isinstance(worker_agent.config, dict):
-            worker_agent.config["name"] = f"{base_agent.name}_worker_{worker_id}"
+            worker_agent.config["name"] = worker_name
         else:
-            worker_agent.config.name = f"{base_agent.name}_worker_{worker_id}"
+            worker_agent.config.name = worker_name
+        worker_agent.name = worker_name
 
         if hasattr(worker_agent, "configure_trace_logger"):
             try:
