@@ -479,79 +479,25 @@ class AuditWorkflowEngine:
 
     async def _dedup_bl_risk_queue(self, task_id: str) -> None:
         """
-        在 BL Recon 结束后，调用大模型对业务逻辑风险点队列进行语义级去重。
-        逻辑与 _dedup_recon_risk_queue 完全相同，但操作 bl_queue。
+        在 BL Recon 结束后输出诊断性去重信息。
+
+        BL 风险点已在队列层按指纹去重；这里不再进行 LLM 语义删减，
+        避免误删同一入口中的不同业务逻辑风险点。
         """
         if self.bl_queue is None:
             return
         orc = self.orchestrator
 
         try:
-            all_risk_points = self.bl_queue.peek(task_id, limit=1000)
-            if not all_risk_points or len(all_risk_points) <= 1:
-                return
-
-            queue_size = self.bl_queue.size(task_id)
+            stats = self.bl_queue.stats(task_id)
+            queue_size = int(stats.get("current_size") or 0)
+            deduped_count = int(stats.get("total_deduplicated") or 0)
             await orc.emit_event(
                 "info",
-                f"[Workflow] 开始 BL 风险点 LLM 去重：队列共 {queue_size} 条",
+                "✅ [Workflow] BL 风险点使用队列指纹去重，"
+                f"当前队列 {queue_size} 条，累计拦截重复 {deduped_count} 条；"
+                "已跳过 LLM 语义删减以保留相邻但不等价的业务风险点",
             )
-
-            risk_points_json = json.dumps(
-                [
-                    {
-                        "id": i,
-                        "file_path": rp.get("file_path", ""),
-                        "line_start": rp.get("line_start", 0),
-                        "description": rp.get("description", ""),
-                        "vulnerability_type": rp.get("vulnerability_type", ""),
-                        "entry_function": rp.get("entry_function", ""),
-                    }
-                    for i, rp in enumerate(all_risk_points[:50])
-                ],
-                ensure_ascii=False,
-                indent=2,
-            )
-
-            dedup_prompt = f"""请分析以下业务逻辑风险点列表，识别其中明确重复或基本相同的项目。
-
-风险点列表：
-{risk_points_json}
-
-分析标准：
-1. 相同文件、相同或相邻行号、相同漏洞类型 → 重复
-2. 相同文件、相同入口函数、类似描述 → 可能重复
-3. 不同文件 → 即使描述相似也不算重复
-
-请输出：
-{{
-  "duplicates": [
-    {{"keep_id": 0, "remove_ids": [1, 2]}},
-    ...
-  ],
-  "explanation": "简要说明去重原因"
-}}
-
-仅输出 JSON，不要其他内容。"""
-
-            messages = [{"role": "user", "content": dedup_prompt}]
-            llm_response, _ = await orc.stream_llm_call(messages)
-            dedup_result = self._parse_llm_dedup_response(llm_response)
-
-            if not dedup_result or not dedup_result.get("duplicates"):
-                await orc.emit_event("info", "[Workflow] BL 风险点 LLM 去重：无重复项")
-                return
-
-            removed_count = await self._remove_duplicate_recon_risk_points(
-                task_id, dedup_result["duplicates"], all_risk_points, queue=self.bl_queue
-            )
-
-            if removed_count > 0:
-                await orc.emit_event(
-                    "info",
-                    f"[Workflow] BL 风险点 LLM 去重完成：移除 {removed_count} 条重复项",
-                )
-
         except Exception as exc:
             logger.warning("[WorkflowEngine] BL queue LLM dedup failed: %s", exc)
 
@@ -881,6 +827,15 @@ class AuditWorkflowEngine:
             bl_recon_success,
             self.bl_queue.size(task_id) if self.bl_queue else 0,
         )
+        bl_recon_result = orc._agent_results.get("business_logic_recon", {})
+        if isinstance(bl_recon_result, dict):
+            state.bl_risk_points_generated = int(bl_recon_result.get("risk_points_pushed") or 0)
+        if self.bl_queue is not None:
+            try:
+                bl_stats = self.bl_queue.stats(task_id)
+            except Exception:
+                bl_stats = {}
+            state.bl_risk_points_deduped = int(bl_stats.get("total_deduplicated") or 0)
 
         bl_recon_agent = orc.sub_agents.get("business_logic_recon")
         if bl_recon_agent and hasattr(bl_recon_agent, "reset_session_memory"):

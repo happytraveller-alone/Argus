@@ -96,6 +96,8 @@ class WorkflowState:
 
     # BusinessLogicRecon
     bl_recon_done: bool = False
+    bl_risk_points_generated: int = 0
+    bl_risk_points_deduped: int = 0
 
     # Analysis（对应 Recon 风险点队列）
     analysis_risk_points_total: int = 0
@@ -104,6 +106,10 @@ class WorkflowState:
     # BusinessLogicAnalysis（对应 BL 风险点队列）
     bl_risk_points_total: int = 0
     bl_risk_points_processed: int = 0
+    bl_analysis_confirmed_count: int = 0
+    bl_analysis_false_positive_suspects: int = 0
+    bl_findings_with_complete_evidence: int = 0
+    bl_analysis_with_evidence: int = 0
 
     # Verification（对应漏洞验证队列）
     vuln_queue_findings_total: int = 0
@@ -139,10 +145,16 @@ class WorkflowState:
             "phase": self.phase.value,
             "recon_done": self.recon_done,
             "bl_recon_done": self.bl_recon_done,
+            "bl_risk_points_generated": self.bl_risk_points_generated,
+            "bl_risk_points_deduped": self.bl_risk_points_deduped,
             "analysis_risk_points_total": self.analysis_risk_points_total,
             "analysis_risk_points_processed": self.analysis_risk_points_processed,
             "bl_risk_points_total": self.bl_risk_points_total,
             "bl_risk_points_processed": self.bl_risk_points_processed,
+            "bl_analysis_confirmed_count": self.bl_analysis_confirmed_count,
+            "bl_analysis_false_positive_suspects": self.bl_analysis_false_positive_suspects,
+            "bl_findings_with_complete_evidence": self.bl_findings_with_complete_evidence,
+            "bl_analysis_with_evidence": self.bl_analysis_with_evidence,
             "vuln_queue_findings_total": self.vuln_queue_findings_total,
             "vuln_queue_findings_processed": self.vuln_queue_findings_processed,
             "all_findings_count": len(self.all_findings),

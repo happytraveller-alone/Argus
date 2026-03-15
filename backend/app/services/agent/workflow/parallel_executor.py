@@ -212,6 +212,12 @@ class ParallelPhaseExecutor:
         if not isinstance(single_risk_point, dict):
             single_risk_point = None
 
+        context_pack = params.get("context_pack")
+        if not isinstance(context_pack, dict):
+            context_pack = None
+        if self.agent_type == "business_logic_analysis" and isinstance(single_risk_point, dict):
+            context_pack = self._build_bl_context_pack(single_risk_point, context_pack)
+
         return {
             "task": task_description,
             "context": context,
@@ -227,10 +233,53 @@ class ParallelPhaseExecutor:
                 if isinstance(runtime_context, dict)
                 else "."
             ),
+            "context_pack": context_pack,
             "previous_results": previous_results,
             "handoff": handoff.to_dict() if handoff else None,
             "file_planning": file_planning,
         }
+
+    @staticmethod
+    def _build_bl_context_pack(
+        risk_point: dict[str, Any],
+        context_pack: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        merged = dict(context_pack) if isinstance(context_pack, dict) else {}
+        for key in (
+            "route",
+            "http_method",
+            "auth_context",
+            "object_type",
+            "sensitive_action",
+            "context",
+        ):
+            if not merged.get(key) and risk_point.get(key):
+                merged[key] = risk_point.get(key)
+
+        for key in ("related_symbols", "evidence_refs"):
+            existing = merged.get(key)
+            values: list[str] = []
+            if isinstance(existing, list):
+                values.extend(str(item).strip() for item in existing if str(item).strip())
+            incoming = risk_point.get(key)
+            if isinstance(incoming, list):
+                values.extend(str(item).strip() for item in incoming if str(item).strip())
+            if risk_point.get("entry_function"):
+                values.append(str(risk_point.get("entry_function")).strip())
+            deduped: list[str] = []
+            for item in values:
+                if item and item not in deduped:
+                    deduped.append(item)
+            if deduped:
+                merged[key] = deduped
+
+        if risk_point.get("file_path"):
+            anchor = f"{risk_point.get('file_path')}:{risk_point.get('line_start') or 1}"
+            evidence_refs = list(merged.get("evidence_refs") or [])
+            if anchor not in evidence_refs:
+                evidence_refs.append(anchor)
+                merged["evidence_refs"] = evidence_refs
+        return merged
 
     @staticmethod
     def _merge_list_field(existing: Any, incoming: Any) -> list[Any]:
@@ -300,6 +349,11 @@ class ParallelPhaseExecutor:
             "likely_count",
             "false_positive_count",
             "candidate_count",
+            "risk_points_confirmed",
+            "findings_pushed",
+            "analysis_with_evidence",
+            "findings_with_complete_evidence",
+            "false_positive_suspects",
         ):
             merged[counter] = int(merged.get(counter) or 0) + int(worker_result.get(counter) or 0)
 
@@ -1082,6 +1136,7 @@ class ParallelPhaseExecutor:
                     "task": f"深度分析业务逻辑风险点 {fp_repr}",
                     "risk_point": risk_point,
                     "context": json.dumps(risk_point, ensure_ascii=False),
+                    "context_pack": self._build_bl_context_pack(risk_point, None),
                     "task_id": task_id,
                 }
 
@@ -1118,6 +1173,16 @@ class ParallelPhaseExecutor:
 
                     worker_findings = worker_result.get("findings", [])
                     self._merge_findings_into_all_findings(worker_findings)
+                    state.bl_analysis_confirmed_count += int(worker_result.get("risk_points_confirmed") or 0)
+                    state.bl_analysis_false_positive_suspects += int(
+                        worker_result.get("false_positive_suspects") or 0
+                    )
+                    state.bl_findings_with_complete_evidence += int(
+                        worker_result.get("findings_with_complete_evidence") or 0
+                    )
+                    state.bl_analysis_with_evidence += int(
+                        worker_result.get("analysis_with_evidence") or 0
+                    )
 
                     state.step_records.append(
                         WorkflowStepRecord(
@@ -1178,6 +1243,7 @@ class ParallelPhaseExecutor:
                 "risk_point": risk_point,
                 "task_id": task_id,
                 "context": json.dumps(risk_point, ensure_ascii=False),
+                "context_pack": self._build_bl_context_pack(risk_point, None),
             }
 
             try:
@@ -1190,6 +1256,14 @@ class ParallelPhaseExecutor:
             duration_ms = int((time.time() - step_start) * 1000)
             bl_result = orc._agent_results.get("business_logic_analysis", {})
             bl_success = bool(bl_result.get("_run_success"))
+            state.bl_analysis_confirmed_count += int(bl_result.get("risk_points_confirmed") or 0)
+            state.bl_analysis_false_positive_suspects += int(
+                bl_result.get("false_positive_suspects") or 0
+            )
+            state.bl_findings_with_complete_evidence += int(
+                bl_result.get("findings_with_complete_evidence") or 0
+            )
+            state.bl_analysis_with_evidence += int(bl_result.get("analysis_with_evidence") or 0)
 
             state.step_records.append(
                 WorkflowStepRecord(

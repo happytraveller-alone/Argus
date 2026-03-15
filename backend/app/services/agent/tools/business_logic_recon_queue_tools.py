@@ -42,6 +42,13 @@ class BLRiskPointInput(BaseModel):
     vulnerability_type: Optional[str] = Field("business_logic", description="业务逻辑漏洞类型：idor/privilege_escalation/amount_tampering/race_condition/auth_bypass/state_machine_bypass/etc.")
     entry_function: Optional[str] = Field(None, description="涉及的入口函数名（如 update_order, create_payment）")
     context: Optional[str] = Field(None, description="附加上下文（如 HTTP 方法、路由、相关表名）")
+    route: Optional[str] = Field(None, description="入口路由或业务入口标识（HTTP/Webhook/RPC 等）")
+    http_method: Optional[str] = Field(None, description="入口方法，如 GET/POST/WEBHOOK/RPC")
+    auth_context: Optional[str] = Field(None, description="认证鉴权上下文，如 login_required、tenant middleware、service guard")
+    related_symbols: Optional[List[str]] = Field(None, description="关联符号，如 handler/service/model/guard 名称")
+    object_type: Optional[str] = Field(None, description="业务对象类型，如 order/user/payment/tenant")
+    sensitive_action: Optional[str] = Field(None, description="敏感动作，如 update/refund/approve/export/share")
+    evidence_refs: Optional[List[str]] = Field(None, description="证据锚点列表，如 file.py:42、OrderService.cancel")
 
 
 class BLRiskPointsBatchInput(BaseModel):
