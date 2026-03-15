@@ -102,19 +102,13 @@ export default function ProjectsTable({
 						<TableCell>
 							<div className="grid grid-cols-2 gap-2 min-w-[180px]">
 								<div className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-1">
-									<p className="text-[10px] leading-4 text-muted-foreground">
-										已完成
-									</p>
 									<p className="text-sm leading-5 font-semibold text-emerald-300">
-										{row.executionStats.completed}
+										已完成 {row.executionStats.completed}
 									</p>
 								</div>
 								<div className="rounded border border-sky-500/25 bg-sky-500/10 px-2 py-1">
-									<p className="text-[10px] leading-4 text-muted-foreground">
-										进行中
-									</p>
 									<p className="text-sm leading-5 font-semibold text-sky-300">
-										{row.executionStats.running}
+										进行中 {row.executionStats.running}
 									</p>
 								</div>
 							</div>
@@ -134,6 +128,32 @@ export default function ProjectsTable({
 										查看详情
 									</Link>
 								</Button>
+								{row.actions.canBrowseCode ? (
+									<Button
+										asChild
+										size="sm"
+										variant="outline"
+										className="cyber-btn-ghost h-8 px-3 hover:bg-sky-500/10 hover:text-sky-200 hover:border-sky-500/30"
+									>
+										<Link
+											to={row.actions.browseCodePath}
+											state={row.actions.browseCodeState}
+										>
+											代码浏览
+										</Link>
+									</Button>
+								) : (
+									<Button
+										size="sm"
+										variant="outline"
+										className="cyber-btn-ghost h-8 px-3"
+										disabled
+										title={row.actions.browseCodeDisabledReason ?? undefined}
+										aria-label={`代码浏览 ${row.name}（${row.actions.browseCodeDisabledReason ?? "暂不可用"}）`}
+									>
+										代码浏览
+									</Button>
+								)}
 								<Button
 									size="sm"
 									className={`${PROJECT_ACTION_BTN_SUBTLE} h-8 px-3`}

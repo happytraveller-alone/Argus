@@ -46,6 +46,10 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 					executionStats: { completed: 2, running: 1 },
 					actions: {
 						canCreateScan: true,
+						canBrowseCode: true,
+						browseCodePath: "/projects/p1/code-browser",
+						browseCodeState: { from: "/projects#project-browser" },
+						browseCodeDisabledReason: null,
 					},
 				},
 				{
@@ -68,6 +72,10 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 					executionStats: { completed: 0, running: 0 },
 					actions: {
 						canCreateScan: false,
+						canBrowseCode: false,
+						browseCodePath: "/projects/p2/code-browser",
+						browseCodeState: { from: "/projects#project-browser" },
+						browseCodeDisabledReason: "仅 ZIP 类型项目支持代码浏览",
 					},
 				},
 			],
@@ -84,9 +92,14 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 	assert.match(markup, /Demo Project/);
 	assert.match(markup, /Disabled Project/);
 	assert.match(markup, /查看详情/);
+	assert.match(markup, /代码浏览/);
 	assert.match(markup, /创建扫描/);
 	assert.match(markup, /禁用/);
 	assert.match(markup, /启用/);
+	assert.match(markup, /仅 ZIP 类型项目支持代码浏览/);
+	assert.ok(markup.indexOf("查看详情") < markup.indexOf("代码浏览"));
+	assert.ok(markup.indexOf("代码浏览") < markup.indexOf("创建扫描"));
+	assert.ok(markup.indexOf("创建扫描") < markup.indexOf("禁用"));
 	assert.equal((markup.match(/切换项目状态/g) || []).length, 2);
 	assert.match(markup, /disabled/);
 });

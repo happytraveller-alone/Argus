@@ -131,11 +131,21 @@ test("projects view model derives status toggle metadata from project active sta
 		loading: false,
 		filteredProjects: [
 			makeProject({ id: "p1", name: "Enabled Project", is_active: true }),
-			makeProject({ id: "p2", name: "Disabled Project", is_active: false }),
+			makeProject({
+				id: "p2",
+				name: "Disabled Project",
+				is_active: false,
+				source_type: "repository",
+			}),
 		],
 		pagedProjects: [
 			makeProject({ id: "p1", name: "Enabled Project", is_active: true }),
-			makeProject({ id: "p2", name: "Disabled Project", is_active: false }),
+			makeProject({
+				id: "p2",
+				name: "Disabled Project",
+				is_active: false,
+				source_type: "repository",
+			}),
 		],
 		projectPage: 1,
 		totalProjectPages: 1,
@@ -154,6 +164,9 @@ test("projects view model derives status toggle metadata from project active sta
 			statusToggleLabel: row.statusToggle.label,
 			statusToggleAction: row.statusToggle.action,
 			canCreateScan: row.actions.canCreateScan,
+			canBrowseCode: row.actions.canBrowseCode,
+			browseCodePath: row.actions.browseCodePath,
+			browseCodeDisabledReason: row.actions.browseCodeDisabledReason,
 		})),
 		[
 			{
@@ -162,6 +175,9 @@ test("projects view model derives status toggle metadata from project active sta
 				statusToggleLabel: "禁用",
 				statusToggleAction: "disable",
 				canCreateScan: true,
+				canBrowseCode: true,
+				browseCodePath: "/projects/p1/code-browser",
+				browseCodeDisabledReason: null,
 			},
 			{
 				id: "p2",
@@ -169,6 +185,9 @@ test("projects view model derives status toggle metadata from project active sta
 				statusToggleLabel: "启用",
 				statusToggleAction: "enable",
 				canCreateScan: false,
+				canBrowseCode: false,
+				browseCodePath: "/projects/p2/code-browser",
+				browseCodeDisabledReason: "仅 ZIP 类型项目支持代码浏览",
 			},
 		],
 	);

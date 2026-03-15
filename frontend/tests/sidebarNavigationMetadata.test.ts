@@ -43,3 +43,14 @@ test("agent task detail route uses a different page component than the home rout
 		(agentTaskRoute.element as any)?.type,
 	);
 });
+
+test("project code browser route stays hidden under the projects section", () => {
+	const codeBrowserRoute = routes.find(
+		(route) => route.path === "/projects/:id/code-browser",
+	);
+
+	assert.ok(codeBrowserRoute);
+	assert.equal(codeBrowserRoute.visible, false);
+	assert.equal(codeBrowserRoute.navVisible, false);
+	assert.equal(codeBrowserRoute.navParentPath, "/projects");
+});

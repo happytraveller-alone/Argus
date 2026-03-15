@@ -7,6 +7,7 @@ import { buildOpengrepRulesRedirectPath } from "@/shared/utils/legacyRouteRedire
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Projects = lazy(() => import("@/pages/Projects"));
+const ProjectCodeBrowser = lazy(() => import("@/pages/ProjectCodeBrowser"));
 const AgentAuditHome = lazy(() => import("@/pages/AgentAudit"));
 const AgentAuditTaskDetail = lazy(
 	() => import("@/pages/AgentAudit/TaskDetailPage"),
@@ -95,6 +96,14 @@ const routes: RouteConfig[] = [
 		nameKey: "route.projectDetail",
 		path: "/projects/:id",
 		element: <ProjectDetail />,
+		visible: false,
+		navVisible: false,
+		navParentPath: "/projects",
+	},
+	{
+		name: "项目代码浏览",
+		path: "/projects/:id/code-browser",
+		element: <ProjectCodeBrowser />,
 		visible: false,
 		navVisible: false,
 		navParentPath: "/projects",

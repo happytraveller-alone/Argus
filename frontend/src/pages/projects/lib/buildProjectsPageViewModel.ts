@@ -138,6 +138,13 @@ export function buildProjectsPageViewModel(
 				executionStats: getProjectExecutionStats(projectTaskPool),
 				actions: {
 					canCreateScan: project.is_active,
+					canBrowseCode: project.source_type === "zip",
+					browseCodePath: `/projects/${project.id}/code-browser`,
+					browseCodeState: { from: projectDetailFrom },
+					browseCodeDisabledReason:
+						project.source_type === "zip"
+							? null
+							: "仅 ZIP 类型项目支持代码浏览",
 				},
 			};
 		}),

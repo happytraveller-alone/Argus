@@ -42,6 +42,10 @@ export interface ProjectsPageRowViewModel {
 	};
 	actions: {
 		canCreateScan: boolean;
+		canBrowseCode: boolean;
+		browseCodePath: string;
+		browseCodeState: { from: string };
+		browseCodeDisabledReason: string | null;
 	};
 }
 
