@@ -185,10 +185,10 @@ function buildTrackingItems(params: {
     { label: "来源", value: params.sourceLabel },
   ];
 
-  const taskName = String(params.taskName || "").trim();
-  if (taskName) {
-    items.push({ label: "任务名称", value: taskName });
-  }
+  // const taskName = String(params.taskName || "").trim();
+  // if (taskName) {
+  //   items.push({ label: "任务名称", value: taskName });
+  // }
 
   items.push(
     { label: "任务 ID", value: params.taskId || "-", mono: true },

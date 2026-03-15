@@ -21,7 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.models.bandit import BanditFinding, BanditScanTask
-from app.db.static_finding_paths import normalize_static_scan_file_path
+from app.db.static_finding_paths import (
+    build_zip_member_path_candidates,
+    normalize_static_scan_file_path,
+)
 from app.models.gitleaks import GitleaksFinding, GitleaksRule, GitleaksScanTask
 from app.models.opengrep import OpengrepFinding, OpengrepRule, OpengrepScanTask
 from app.models.phpstan import PhpstanFinding, PhpstanScanTask
@@ -1264,36 +1267,22 @@ def _build_finding_path_candidates(file_path: Optional[str]) -> List[str]:
     if not raw:
         return []
 
-    candidates: List[str] = [raw]
-    parts = [part for part in raw.split("/") if part]
-
-    if not raw.startswith("/") and len(parts) >= 2:
-        candidates.append("/".join(parts[1:]))
-
-    tmp_index = raw.find("/tmp/")
-    if tmp_index >= 0:
-        trimmed = raw[tmp_index + 5 :]
-        trimmed_parts = [part for part in trimmed.split("/") if part]
-        if len(trimmed_parts) >= 2:
-            candidates.append("/".join(trimmed_parts[1:]))
-        if len(trimmed_parts) >= 3:
-            candidates.append("/".join(trimmed_parts[2:]))
-
-    if raw.startswith("/"):
-        candidates.append(raw.lstrip("/"))
-
-    base_name = os.path.basename(raw)
-    if base_name:
-        candidates.append(base_name)
-
     deduplicated: List[str] = []
     seen = set()
-    for item in candidates:
-        normalized = item.strip()
+
+    def _append(value: str) -> None:
+        normalized = value.strip()
         if not normalized or normalized in seen:
-            continue
+            return
         deduplicated.append(normalized)
         seen.add(normalized)
+
+    if raw.startswith("/"):
+        _append(raw)
+
+    for item in build_zip_member_path_candidates(raw):
+        _append(item)
+
     return deduplicated
 
 

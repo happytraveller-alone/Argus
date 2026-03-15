@@ -28,6 +28,11 @@ import asyncio
 import base64
 from pathlib import Path
 
+from app.db.static_finding_paths import (
+    collect_zip_relative_paths,
+    resolve_zip_member_path,
+)
+
 logger = logging.getLogger(__name__)
 
 # 需要过滤的目录和文件
@@ -2601,6 +2606,12 @@ async def get_project_file_content(
     zip_path = await load_project_zip(id)
     if not zip_path or not os.path.exists(zip_path):
         raise HTTPException(status_code=404, detail="项目文件不存在")
+
+    loop = asyncio.get_event_loop()
+    known_relative_paths = await loop.run_in_executor(None, collect_zip_relative_paths, zip_path)
+    resolved_zip_path = resolve_zip_member_path(validated_path, known_relative_paths)
+    if not resolved_zip_path:
+        raise HTTPException(status_code=404, detail=f"文件不存在: {validated_path}")
     
     zip_hash = _calculate_zip_file_hash(zip_path)
     
@@ -2613,12 +2624,12 @@ async def get_project_file_content(
         is_cached = False
         
         if use_cache:
-            cached_entry = await cache_manager.get(id, validated_path, zip_hash)
+            cached_entry = await cache_manager.get(id, resolved_zip_path, zip_hash)
             if cached_entry is not None and cached_entry.is_text:
-                logger.info(f"从缓存读取文件: {validated_path}")
+                logger.info(f"从缓存读取文件: {resolved_zip_path}")
                 is_cached = True
                 return FileContentResponse(
-                    file_path=validated_path,
+                    file_path=resolved_zip_path,
                     content=cached_entry.content,
                     size=cached_entry.size,
                     encoding=cached_entry.encoding,
@@ -2632,9 +2643,9 @@ async def get_project_file_content(
         def _read_from_zip() -> tuple:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 try:
-                    info = zf.getinfo(validated_path)
+                    info = zf.getinfo(resolved_zip_path)
                 except KeyError:
-                    raise HTTPException(status_code=404, detail=f"文件不存在: {validated_path}")
+                    raise HTTPException(status_code=404, detail=f"文件不存在: {resolved_zip_path}")
                 
                 # 8. 检查文件大小
                 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
@@ -2644,28 +2655,27 @@ async def get_project_file_content(
                         detail=f"文件过大 ({info.file_size / 1024 / 1024:.2f}MB)，最大限制为 {MAX_FILE_SIZE / 1024 / 1024:.0f}MB"
                     )
                 
-                file_bytes = zf.read(validated_path)
+                file_bytes = zf.read(resolved_zip_path)
                 created_at = datetime(*info.date_time, tzinfo=timezone.utc)
                 return file_bytes, info.file_size, created_at
         
         # 在线程池执行阻塞操作
-        loop = asyncio.get_event_loop()
         file_bytes, file_size, created_at = await loop.run_in_executor(None, _read_from_zip)
         
         # 9. 检测文件类型
-        is_binary = _is_binary_file(validated_path, file_bytes[:1024])
+        is_binary = _is_binary_file(resolved_zip_path, file_bytes[:1024])
         
         # 10. 大文件使用流式传输
         STREAM_THRESHOLD = 1 * 1024 * 1024  # 1MB阈值
         if stream or (file_size > STREAM_THRESHOLD):
-            logger.info(f"使用流式传输读取文件: {validated_path} (大小: {file_size / 1024:.1f}KB)")
+            logger.info(f"使用流式传输读取文件: {resolved_zip_path} (大小: {file_size / 1024:.1f}KB)")
             
             async def file_stream():
                 """异步流式生成文件内容"""
                 if is_binary:
                     # 二进制文件：返回base64编码
                     encoded = base64.b64encode(file_bytes).decode('ascii')
-                    yield f'{{"file_path": "{validated_path}", "content": "{encoded}", "encoding": "base64", "size": {file_size}, "is_binary": true}}'
+                    yield f'{{"file_path": "{resolved_zip_path}", "content": "{encoded}", "encoding": "base64", "size": {file_size}, "is_binary": true}}'
                 else:
                     # 文本文件：返回JSON格式
                     
@@ -2682,7 +2692,7 @@ async def get_project_file_content(
                             actual_encoding = "latin-1"
                     
                     response_data = {
-                        "file_path": validated_path,
+                        "file_path": resolved_zip_path,
                         "content": content,
                         "size": file_size,
                         "encoding": actual_encoding,
@@ -2696,7 +2706,7 @@ async def get_project_file_content(
                 file_stream(),
                 media_type="application/json",
                 headers={
-                    "X-File-Path": validated_path,
+                    "X-File-Path": resolved_zip_path,
                     "X-File-Size": str(file_size),
                     "X-Is-Binary": str(is_binary),
                 }
@@ -2704,7 +2714,7 @@ async def get_project_file_content(
         
         # 11. 小文件直接返回
         if is_binary:
-            logger.info(f"返回二进制文件（不解码）: {validated_path}")
+            logger.info(f"返回二进制文件（不解码）: {resolved_zip_path}")
             # 对于二进制文件，返回base64编码
             content = base64.b64encode(file_bytes).decode('ascii')
             actual_encoding = "base64"
@@ -2728,7 +2738,7 @@ async def get_project_file_content(
         if is_text and use_cache and file_size < 5 * 1024 * 1024:  # 5MB限制
             await cache_manager.set(
                 id,
-                validated_path,
+                resolved_zip_path,
                 zip_hash,
                 content,
                 file_size,
@@ -2738,7 +2748,7 @@ async def get_project_file_content(
         
         # 14. 返回结果
         return FileContentResponse(
-            file_path=validated_path,
+            file_path=resolved_zip_path,
             content=content,
             size=file_size,
             encoding=actual_encoding,
@@ -2750,7 +2760,7 @@ async def get_project_file_content(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"读取文件 {validated_path} 失败: {e}", exc_info=True)
+        logger.error(f"读取文件 {resolved_zip_path} 失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"无法读取项目文件: {str(e)}")
 
 

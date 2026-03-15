@@ -7,6 +7,17 @@ from typing import Iterable, Optional, Set
 
 
 _PATH_SEPARATORS_RE = re.compile(r"/+")
+_LIKELY_PROJECT_ROOT_SEGMENTS = {
+    "src",
+    "include",
+    "lib",
+    "app",
+    "apps",
+    "test",
+    "tests",
+    "config",
+    "configs",
+}
 
 
 def _normalize_path_text(path_value: str) -> str:
@@ -88,7 +99,45 @@ def build_legacy_static_finding_path_candidates(file_path: str) -> list[str]:
     return deduplicated
 
 
-def resolve_legacy_static_finding_path(
+def build_zip_member_path_candidates(file_path: str) -> list[str]:
+    normalized = _normalize_relative_path(file_path)
+    if not normalized:
+        return []
+
+    candidates: list[str] = []
+    seen = set()
+
+    def _append(value: str) -> None:
+        normalized_value = _normalize_relative_path(value)
+        if not normalized_value or normalized_value in seen:
+            return
+        candidates.append(normalized_value)
+        seen.add(normalized_value)
+
+    _append(normalized)
+
+    parts = [part for part in normalized.split("/") if part]
+    if len(parts) >= 2:
+        first_segment = parts[0].lower()
+        second_segment = parts[1].lower()
+        should_strip_archive_root = (
+            first_segment != "tmp"
+            and first_segment not in _LIKELY_PROJECT_ROOT_SEGMENTS
+            and (
+                second_segment in _LIKELY_PROJECT_ROOT_SEGMENTS
+                or "." in parts[1]
+            )
+        )
+        if should_strip_archive_root:
+            _append("/".join(parts[1:]))
+
+    for candidate in build_legacy_static_finding_path_candidates(file_path):
+        _append(candidate)
+
+    return candidates
+
+
+def resolve_zip_member_path(
     file_path: str,
     known_relative_paths: Iterable[str],
 ) -> Optional[str]:
@@ -97,10 +146,17 @@ def resolve_legacy_static_finding_path(
         for item in known_relative_paths
         if _normalize_relative_path(item)
     }
-    for candidate in build_legacy_static_finding_path_candidates(file_path):
+    for candidate in build_zip_member_path_candidates(file_path):
         if candidate in normalized_known:
             return candidate
     return None
+
+
+def resolve_legacy_static_finding_path(
+    file_path: str,
+    known_relative_paths: Iterable[str],
+) -> Optional[str]:
+    return resolve_zip_member_path(file_path, known_relative_paths)
 
 
 def collect_zip_relative_paths(zip_path: str | Path) -> Set[str]:

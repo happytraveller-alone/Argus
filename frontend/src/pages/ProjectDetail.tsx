@@ -667,10 +667,10 @@ export default function ProjectDetail() {
 						<ArrowLeft className="w-5 h-5" />
 						返回
 					</Button>
-					<Button onClick={handleRunScan} className="cyber-btn-primary">
+					{/* <Button onClick={handleRunScan} className="cyber-btn-primary">
 						<Shield className="w-4 h-4 mr-2" />
 						启动扫描
-					</Button>
+					</Button> */}
 				</div>
 			</div>
 

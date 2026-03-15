@@ -1,14 +1,14 @@
-import { FileSearch, LoaderCircle, SearchCode } from "lucide-react";
-import { startTransition, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+// import { FileSearch, LoaderCircle, SearchCode } from "lucide-react";
+import {useEffect, useRef, useState } from "react";
+// import { Button } from "@/components/ui/button";
 import type { FindingCodeWindowDisplayLine } from "@/pages/AgentAudit/components/FindingCodeWindow";
 import { cn } from "@/shared/utils/utils";
-import { classifyFullFileLoadError } from "./fullFileLoad";
+// import { classifyFullFileLoadError } from "./fullFileLoad";
 import type {
 	FindingDetailCodeView,
 	FindingDetailFullFileRequest,
 } from "./viewModel";
-import { buildFullFileDisplayLines } from "./viewModel";
+// import { buildFullFileDisplayLines } from "./viewModel";
 
 export type FindingDetailFullFileLoadResult = {
 	content: string;
@@ -123,9 +123,9 @@ export default function FindingDetailCodePanel({
 	title,
 	sections,
 	emptyMessage,
-	onLoadFullFile,
+	// onLoadFullFile,
 }: FindingDetailCodePanelProps) {
-	const [panelState, setPanelState] = useState<FindingDetailPanelState>({
+	const [panelState] = useState<FindingDetailPanelState>({
 		expandedSectionId: null,
 		fullFileStates: {},
 	});
@@ -148,92 +148,92 @@ export default function FindingDetailCodePanel({
 		target?.scrollIntoView({ block: "center", behavior: "smooth" });
 	}, [expandedSectionId, expandedSectionStateStatus, sections]);
 
-	const handleOpenFullFile = async (section: FindingDetailCodeView) => {
-		if (
-			!section.fullFileAvailable ||
-			!section.fullFileRequest ||
-			!onLoadFullFile
-		) {
-			setPanelState((current) =>
-				reduceFindingDetailPanelState(current, {
-					type: "resolve",
-					sectionId: section.id,
-					nextState: { status: "unavailable", message: UNAVAILABLE_MESSAGE },
-				}),
-			);
-			return;
-		}
+	// const handleOpenFullFile = async (section: FindingDetailCodeView) => {
+	// 	if (
+	// 		!section.fullFileAvailable ||
+	// 		!section.fullFileRequest ||
+	// 		!onLoadFullFile
+	// 	) {
+	// 		setPanelState((current) =>
+	// 			reduceFindingDetailPanelState(current, {
+	// 				type: "resolve",
+	// 				sectionId: section.id,
+	// 				nextState: { status: "unavailable", message: UNAVAILABLE_MESSAGE },
+	// 			}),
+	// 		);
+	// 		return;
+	// 	}
 
-		setPanelState((current) =>
-			reduceFindingDetailPanelState(current, {
-				type: "expand",
-				sectionId: section.id,
-			}),
-		);
-		const existingState = fullFileStates[section.id];
-		if (existingState?.status === "ready") {
-			return;
-		}
+	// 	setPanelState((current) =>
+	// 		reduceFindingDetailPanelState(current, {
+	// 			type: "expand",
+	// 			sectionId: section.id,
+	// 		}),
+	// 	);
+	// 	const existingState = fullFileStates[section.id];
+	// 	if (existingState?.status === "ready") {
+	// 		return;
+	// 	}
 
-		setPanelState((current) =>
-			reduceFindingDetailPanelState(current, {
-				type: "resolve",
-				sectionId: section.id,
-				nextState: { status: "loading" },
-			}),
-		);
+	// 	setPanelState((current) =>
+	// 		reduceFindingDetailPanelState(current, {
+	// 			type: "resolve",
+	// 			sectionId: section.id,
+	// 			nextState: { status: "loading" },
+	// 		}),
+	// 	);
 
-		try {
-			const result = await onLoadFullFile(section.fullFileRequest);
-			if (!result.isText) {
-				startTransition(() => {
-					setPanelState((current) =>
-						reduceFindingDetailPanelState(current, {
-							type: "resolve",
-							sectionId: section.id,
-							nextState: {
-								status: "unavailable",
-								message: "当前文件不是文本内容，无法展示完整文件",
-							},
-						}),
-					);
-				});
-				return;
-			}
+	// 	try {
+	// 		const result = await onLoadFullFile(section.fullFileRequest);
+	// 		if (!result.isText) {
+	// 			startTransition(() => {
+	// 				setPanelState((current) =>
+	// 					reduceFindingDetailPanelState(current, {
+	// 						type: "resolve",
+	// 						sectionId: section.id,
+	// 						nextState: {
+	// 							status: "unavailable",
+	// 							message: "当前文件不是文本内容，无法展示完整文件",
+	// 						},
+	// 					}),
+	// 				);
+	// 			});
+	// 			return;
+	// 		}
 
-			const lines = buildFullFileDisplayLines({
-				content: result.content,
-				focusLine: section.focusLine,
-				highlightStartLine: section.highlightStartLine,
-				highlightEndLine: section.highlightEndLine,
-				lineStart: 1,
-			});
+	// 		const lines = buildFullFileDisplayLines({
+	// 			content: result.content,
+	// 			focusLine: section.focusLine,
+	// 			highlightStartLine: section.highlightStartLine,
+	// 			highlightEndLine: section.highlightEndLine,
+	// 			lineStart: 1,
+	// 		});
 
-			startTransition(() => {
-				setPanelState((current) =>
-					reduceFindingDetailPanelState(current, {
-						type: "resolve",
-						sectionId: section.id,
-						nextState: { status: "ready", lines },
-					}),
-				);
-			});
-		} catch (error) {
-			const failure = classifyFullFileLoadError(error);
-			startTransition(() => {
-				setPanelState((current) =>
-					reduceFindingDetailPanelState(current, {
-						type: "resolve",
-						sectionId: section.id,
-						nextState:
-							failure.kind === "unavailable"
-								? { status: "unavailable", message: failure.message }
-								: { status: "failed", message: failure.message },
-					}),
-				);
-			});
-		}
-	};
+	// 		startTransition(() => {
+	// 			setPanelState((current) =>
+	// 				reduceFindingDetailPanelState(current, {
+	// 					type: "resolve",
+	// 					sectionId: section.id,
+	// 					nextState: { status: "ready", lines },
+	// 				}),
+	// 			);
+	// 		});
+	// 	} catch (error) {
+	// 		const failure = classifyFullFileLoadError(error);
+	// 		startTransition(() => {
+	// 			setPanelState((current) =>
+	// 				reduceFindingDetailPanelState(current, {
+	// 					type: "resolve",
+	// 					sectionId: section.id,
+	// 					nextState:
+	// 						failure.kind === "unavailable"
+	// 							? { status: "unavailable", message: failure.message }
+	// 							: { status: "failed", message: failure.message },
+	// 				}),
+	// 			);
+	// 		});
+	// 	}
+	// };
 
 	return (
 		<section
@@ -280,7 +280,7 @@ export default function FindingDetailCodePanel({
 									</span>
 								</div>
 
-								<Button
+								{/* <Button
 									type="button"
 									variant="outline"
 									size="sm"
@@ -311,7 +311,7 @@ export default function FindingDetailCodePanel({
 										<FileSearch className="h-4 w-4" />
 									)}
 									{isExpanded ? "仅看漏洞代码" : "查看文件"}
-								</Button>
+								</Button> */}
 							</div>
 
 							{helperMessage ? (
