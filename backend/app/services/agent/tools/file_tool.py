@@ -289,47 +289,42 @@ class FileReadTool(AgentTool):
         self.project_root = project_root
         self.exclude_patterns = exclude_patterns or []
         self.target_files = set(target_files) if target_files else None
+        self._project_scope_index: Optional[Dict[str, List[str]]] = None
 
     @staticmethod
-    def _read_all_lines_sync(file_path: str) -> List[str]:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.readlines()
-
-    @staticmethod
-    def _read_window_with_sed_sync(
+    def _read_window_and_count_sync(
         file_path: str,
         start_line: int,
         end_line: int,
-    ) -> Optional[List[str]]:
-        if not shutil.which("sed"):
-            return None
-        proc = subprocess.run(
-            ["sed", "-n", f"{start_line},{end_line}p", file_path],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            return None
-        return [line.rstrip("\n") for line in str(proc.stdout or "").splitlines()]
+    ) -> tuple[List[str], int]:
+        selected_lines: List[str] = []
+        total_lines = 0
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            for total_lines, raw_line in enumerate(f, start=1):
+                if start_line <= total_lines <= end_line:
+                    selected_lines.append(raw_line.rstrip("\n"))
+        return selected_lines, total_lines
 
-    def _resolve_project_scope_match(self, file_path: str) -> Optional[str]:
+    def _build_project_scope_index_sync(self) -> Dict[str, List[str]]:
+        index: Dict[str, List[str]] = {}
+        for root, dirs, files in os.walk(self.project_root):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for filename in files:
+                rel_path = _normalize_rel_path(
+                    os.path.relpath(os.path.join(root, filename), self.project_root).replace("\\", "/")
+                )
+                if self._should_exclude(rel_path):
+                    continue
+                index.setdefault(filename, []).append(rel_path)
+        return index
+
+    async def _resolve_project_scope_match(self, file_path: str) -> Optional[str]:
         basename = os.path.basename(str(file_path or "").strip())
         if not basename:
             return None
-        matches: List[str] = []
-        for root, dirs, files in os.walk(self.project_root):
-            dirs[:] = [d for d in dirs if not d.startswith(".")]
-            if basename not in files:
-                continue
-            rel_path = _normalize_rel_path(
-                os.path.relpath(os.path.join(root, basename), self.project_root).replace("\\", "/")
-            )
-            if self._should_exclude(rel_path):
-                continue
-            matches.append(rel_path)
-            if len(matches) > 1:
-                break
+        if self._project_scope_index is None:
+            self._project_scope_index = await asyncio.to_thread(self._build_project_scope_index_sync)
+        matches = self._project_scope_index.get(basename) or []
         if len(matches) == 1:
             return matches[0]
         return None
@@ -417,7 +412,7 @@ class FileReadTool(AgentTool):
 
             display_path = _normalize_display_path(candidate_path, self.project_root)
             if project_scope and not os.path.exists(full_path):
-                scoped_match = self._resolve_project_scope_match(display_path or candidate_path)
+                scoped_match = await self._resolve_project_scope_match(display_path or candidate_path)
                 if scoped_match:
                     display_path = scoped_match
                     full_path = os.path.realpath(os.path.join(self.project_root, scoped_match))
@@ -451,33 +446,26 @@ class FileReadTool(AgentTool):
                     error=f"文件过大 ({file_size / 1024:.1f}KB)，请指定 start_line 和 end_line 读取部分内容",
                 )
             
-            # 读取文件
-            all_lines = await asyncio.to_thread(self._read_all_lines_sync, full_path)
-            total_lines = len(all_lines)
-            
-            # 处理行范围
             if start_line is not None:
                 start_idx = max(0, start_line - 1)
             else:
                 start_idx = 0
 
-            if end_line is not None:
-                end_idx = min(total_lines, end_line)
-            else:
-                end_idx = min(total_lines, start_idx + max_lines)
-
-            # 截取指定行
-            selected_lines = [line.rstrip("\n") for line in all_lines[start_idx:end_idx]]
-            command_chain = ["read_file"]
-            sed_lines = await asyncio.to_thread(
-                self._read_window_with_sed_sync,
-                full_path,
-                start_idx + 1,
-                end_idx,
+            requested_start_line = start_idx + 1
+            requested_end_line = (
+                max(requested_start_line, int(end_line))
+                if end_line is not None
+                else requested_start_line + max(1, int(max_lines)) - 1
             )
-            if sed_lines is not None and len(sed_lines) == len(selected_lines):
-                selected_lines = sed_lines
-                command_chain.append("sed")
+
+            selected_lines, total_lines = await asyncio.to_thread(
+                self._read_window_and_count_sync,
+                full_path,
+                requested_start_line,
+                requested_end_line,
+            )
+            end_idx = min(total_lines, requested_end_line)
+            command_chain = ["read_file"]
 
             focus_line = start_idx + 1 if total_lines > 0 else 1
             structured_lines = _build_structured_lines(
