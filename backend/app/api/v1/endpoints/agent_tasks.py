@@ -50,7 +50,11 @@ from app.services.agent.utils.vulnerability_naming import (
     resolve_cwe_id as resolve_cwe_id_util,
     resolve_vulnerability_profile as resolve_vulnerability_profile_util,
 )
-from app.services.agent.bootstrap import OpenGrepBootstrapScanner, BanditBootstrapScanner
+from app.services.agent.bootstrap import (
+    OpenGrepBootstrapScanner,
+    BanditBootstrapScanner,
+    PhpstanBootstrapScanner,
+)
 from app.services.agent.mcp import (
     HARD_MAX_WRITABLE_FILES_PER_TASK,
     FastMCPStdioAdapter,
@@ -764,6 +768,7 @@ def _resolve_static_bootstrap_config(
         "opengrep_enabled": False,
         "bandit_enabled": False,
         "gitleaks_enabled": False,
+        "phpstan_enabled": False,
     }
     if source_mode == "hybrid":
         defaults = {
@@ -771,6 +776,7 @@ def _resolve_static_bootstrap_config(
             "opengrep_enabled": True,
             "bandit_enabled": False,
             "gitleaks_enabled": False,
+            "phpstan_enabled": False,
         }
 
     audit_scope = task.audit_scope if isinstance(task.audit_scope, dict) else {}
@@ -794,16 +800,21 @@ def _resolve_static_bootstrap_config(
     gitleaks_enabled = bool(
         static_bootstrap.get("gitleaks_enabled", defaults["gitleaks_enabled"])
     )
+    phpstan_enabled = bool(
+        static_bootstrap.get("phpstan_enabled", defaults["phpstan_enabled"])
+    )
     if mode == "disabled":
         opengrep_enabled = False
         bandit_enabled = False
         gitleaks_enabled = False
+        phpstan_enabled = False
 
     return {
         "mode": mode,
         "opengrep_enabled": opengrep_enabled,
         "bandit_enabled": bandit_enabled,
         "gitleaks_enabled": gitleaks_enabled,
+        "phpstan_enabled": phpstan_enabled,
     }
 
 
@@ -1847,15 +1858,18 @@ async def _prepare_embedded_bootstrap_findings(
     opengrep_enabled: bool = True,
     bandit_enabled: bool = False,
     gitleaks_enabled: bool = False,
+    phpstan_enabled: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str], str]:
     opengrep_candidates: List[Dict[str, Any]] = []
     bandit_candidates: List[Dict[str, Any]] = []
     gitleaks_candidates: List[Dict[str, Any]] = []
+    phpstan_candidates: List[Dict[str, Any]] = []
     opengrep_total_findings = 0
     bandit_total_findings = 0
     gitleaks_total_findings = 0
+    phpstan_total_findings = 0
 
-    if not opengrep_enabled and not bandit_enabled and not gitleaks_enabled:
+    if not opengrep_enabled and not bandit_enabled and not gitleaks_enabled and not phpstan_enabled:
         if event_emitter:
             await event_emitter.emit_info(
                 "⏭️ 静态预扫未启用：返回空候选，继续后续流程",
@@ -1992,10 +2006,54 @@ async def _prepare_embedded_bootstrap_findings(
             exclude_patterns=exclude_patterns,
         )
 
+    if phpstan_enabled:
+        if event_emitter:
+            await event_emitter.emit_info(
+                "🧪 PHPStan 内嵌预扫开始",
+                metadata={
+                    "bootstrap": True,
+                    "bootstrap_task_id": None,
+                    "bootstrap_source": "embedded_phpstan",
+                    "bootstrap_total_findings": 0,
+                    "bootstrap_candidate_count": 0,
+                },
+            )
+        try:
+            scanner = PhpstanBootstrapScanner(level=8)
+            scan_result = await scanner.scan(project_root)
+        except FileNotFoundError as exc:
+            if event_emitter:
+                await event_emitter.emit_error("❌ PHPStan 预处理失败：未安装 phpstan")
+            raise RuntimeError("PHPStan 预处理失败：未安装 phpstan") from exc
+        except Exception as exc:
+            if event_emitter:
+                await event_emitter.emit_error(f"❌ PHPStan 预处理失败：{str(exc)[:160]}")
+            raise RuntimeError(f"PHPStan 预处理失败：{str(exc)[:200]}") from exc
+
+        phpstan_total_findings = int(getattr(scan_result, "total_findings", 0) or 0)
+        normalized_phpstan_findings = []
+        for finding in getattr(scan_result, "findings", []) or []:
+            if hasattr(finding, "to_dict"):
+                finding_payload = finding.to_dict()
+            elif isinstance(finding, dict):
+                finding_payload = dict(finding)
+            else:
+                continue
+            normalized_phpstan_findings.append(finding_payload)
+        phpstan_candidates = _filter_bootstrap_findings(
+            normalized_phpstan_findings,
+            exclude_patterns=exclude_patterns,
+        )
+
     merged_candidates = _dedupe_bootstrap_findings(
-        [*opengrep_candidates, *bandit_candidates, *gitleaks_candidates]
+        [*opengrep_candidates, *bandit_candidates, *gitleaks_candidates, *phpstan_candidates]
     )
-    total_findings = opengrep_total_findings + bandit_total_findings + gitleaks_total_findings
+    total_findings = (
+        opengrep_total_findings
+        + bandit_total_findings
+        + gitleaks_total_findings
+        + phpstan_total_findings
+    )
 
     enabled_sources: List[str] = []
     if opengrep_enabled:
@@ -2004,6 +2062,8 @@ async def _prepare_embedded_bootstrap_findings(
         enabled_sources.append("bandit")
     if gitleaks_enabled:
         enabled_sources.append("gitleaks")
+    if phpstan_enabled:
+        enabled_sources.append("phpstan")
     bootstrap_source = f"embedded_{'_'.join(enabled_sources)}"
 
     if event_emitter:
@@ -2021,6 +2081,8 @@ async def _prepare_embedded_bootstrap_findings(
                 "bootstrap_bandit_candidate_count": len(bandit_candidates),
                 "bootstrap_gitleaks_total_findings": gitleaks_total_findings,
                 "bootstrap_gitleaks_candidate_count": len(gitleaks_candidates),
+                "bootstrap_phpstan_total_findings": phpstan_total_findings,
+                "bootstrap_phpstan_candidate_count": len(phpstan_candidates),
             },
         )
     return merged_candidates, None, bootstrap_source
@@ -3005,6 +3067,9 @@ async def _execute_agent_task(task_id: str):
                         ),
                         gitleaks_enabled=bool(
                             static_bootstrap_config.get("gitleaks_enabled")
+                        ),
+                        phpstan_enabled=bool(
+                            static_bootstrap_config.get("phpstan_enabled")
                         ),
                     )
 

@@ -462,7 +462,141 @@ async def test_prepare_embedded_bootstrap_with_opengrep_and_bandit(monkeypatch):
     }
 
 
-def test_resolve_static_bootstrap_config_supports_bandit():
+@pytest.mark.asyncio
+async def test_prepare_embedded_bootstrap_with_phpstan_only(monkeypatch):
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarListResult([]))
+
+    event_emitter = SimpleNamespace(
+        emit_info=AsyncMock(),
+        emit_warning=AsyncMock(),
+        emit_error=AsyncMock(),
+    )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.agent_tasks.PhpstanBootstrapScanner.scan",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                total_findings=3,
+                findings=[
+                    {
+                        "id": "phpstan-0",
+                        "title": "security.eval",
+                        "description": "eval sink",
+                        "file_path": "src/a.php",
+                        "line_start": 12,
+                        "line_end": 12,
+                        "code_snippet": "Avoid eval",
+                        "severity": "ERROR",
+                        "confidence": "MEDIUM",
+                        "vulnerability_type": "security.eval",
+                        "source": "phpstan_bootstrap",
+                    }
+                ],
+            )
+        ),
+    )
+
+    candidates, bootstrap_task_id, source = await _prepare_embedded_bootstrap_findings(
+        db=db,
+        project_root="/tmp/project",
+        event_emitter=event_emitter,
+        opengrep_enabled=False,
+        bandit_enabled=False,
+        gitleaks_enabled=False,
+        phpstan_enabled=True,
+    )
+
+    assert bootstrap_task_id is None
+    assert source == "embedded_phpstan"
+    assert len(candidates) == 1
+    assert candidates[0]["source"] == "phpstan_bootstrap"
+
+    metadata = event_emitter.emit_info.await_args_list[-1].kwargs.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("bootstrap_phpstan_total_findings") == 3
+    assert metadata.get("bootstrap_phpstan_candidate_count") == 1
+    assert metadata.get("bootstrap_candidate_count") == 1
+
+
+@pytest.mark.asyncio
+async def test_prepare_embedded_bootstrap_with_opengrep_and_phpstan(monkeypatch):
+    active_rules = [SimpleNamespace(id="rule-1", pattern_yaml="rules: []", confidence="HIGH")]
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarListResult(active_rules))
+
+    event_emitter = SimpleNamespace(
+        emit_info=AsyncMock(),
+        emit_warning=AsyncMock(),
+        emit_error=AsyncMock(),
+    )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.agent_tasks.OpenGrepBootstrapScanner.scan",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                total_findings=1,
+                findings=[
+                    {
+                        "id": "og-1",
+                        "title": "danger",
+                        "description": "danger",
+                        "file_path": "src/a.py",
+                        "line_start": 6,
+                        "line_end": 6,
+                        "code_snippet": "danger()",
+                        "severity": "ERROR",
+                        "confidence": "HIGH",
+                        "vulnerability_type": "rule-1",
+                        "source": "opengrep_bootstrap",
+                    }
+                ],
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.agent_tasks.PhpstanBootstrapScanner.scan",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                total_findings=2,
+                findings=[
+                    {
+                        "id": "phpstan-0",
+                        "title": "security.eval",
+                        "description": "eval sink",
+                        "file_path": "src/b.php",
+                        "line_start": 10,
+                        "line_end": 10,
+                        "code_snippet": "Avoid eval",
+                        "severity": "ERROR",
+                        "confidence": "MEDIUM",
+                        "vulnerability_type": "security.eval",
+                        "source": "phpstan_bootstrap",
+                    }
+                ],
+            )
+        ),
+    )
+
+    candidates, _, source = await _prepare_embedded_bootstrap_findings(
+        db=db,
+        project_root="/tmp/project",
+        event_emitter=event_emitter,
+        opengrep_enabled=True,
+        bandit_enabled=False,
+        gitleaks_enabled=False,
+        phpstan_enabled=True,
+    )
+
+    assert source == "embedded_opengrep_phpstan"
+    assert len(candidates) == 2
+    assert {item["source"] for item in candidates} == {
+        "opengrep_bootstrap",
+        "phpstan_bootstrap",
+    }
+
+
+def test_resolve_static_bootstrap_config_supports_phpstan():
     task = SimpleNamespace(
         audit_scope={
             "static_bootstrap": {
@@ -470,6 +604,7 @@ def test_resolve_static_bootstrap_config_supports_bandit():
                 "opengrep_enabled": False,
                 "bandit_enabled": True,
                 "gitleaks_enabled": True,
+                "phpstan_enabled": True,
             }
         }
     )
@@ -479,6 +614,7 @@ def test_resolve_static_bootstrap_config_supports_bandit():
         "opengrep_enabled": False,
         "bandit_enabled": True,
         "gitleaks_enabled": True,
+        "phpstan_enabled": True,
     }
 
     disabled_task = SimpleNamespace(
@@ -488,6 +624,7 @@ def test_resolve_static_bootstrap_config_supports_bandit():
                 "opengrep_enabled": True,
                 "bandit_enabled": True,
                 "gitleaks_enabled": True,
+                "phpstan_enabled": True,
             }
         }
     )
@@ -497,4 +634,5 @@ def test_resolve_static_bootstrap_config_supports_bandit():
         "opengrep_enabled": False,
         "bandit_enabled": False,
         "gitleaks_enabled": False,
+        "phpstan_enabled": False,
     }
