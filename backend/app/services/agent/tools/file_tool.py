@@ -355,7 +355,7 @@ class FileReadTool(AgentTool):
 ```
 可直接引用行号定位代码位置。
 
-注意: 为避免输出过长，建议指定行范围或使用 RAG 搜索定位代码。"""
+注意: 为避免输出过长，建议指定行范围搜索定位代码。"""
     
     @property
     def args_schema(self):
