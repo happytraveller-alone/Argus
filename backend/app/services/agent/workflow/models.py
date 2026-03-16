@@ -121,7 +121,7 @@ class WorkflowState:
     # 所有收集到的发现
     all_findings: List[Dict[str, Any]] = field(default_factory=list)
 
-    # Report 阶段：每条已验证漏洞的详情报告（finding title -> Markdown 报告内容）
+    # Report 阶段：每条已验证漏洞的详情报告（finding_identity 或 title -> Markdown 报告内容）
     finding_reports: Dict[str, str] = field(default_factory=dict)
 
     # Report 阶段统计

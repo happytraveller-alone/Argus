@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
 from sqlalchemy import (
-    Column, String, Integer, Float, Text, Boolean, 
+    Column, String, Integer, Float, Text, Boolean,
     DateTime, ForeignKey, Enum as SQLEnum, JSON, Index, text
 )
 from sqlalchemy.orm import relationship
@@ -426,6 +426,24 @@ class AgentFinding(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     __table_args__ = (
+        Index(
+            "ux_agent_findings_task_finding_identity",
+            "task_id",
+            "finding_identity",
+            unique=True,
+            postgresql_where=text(
+                "finding_identity IS NOT NULL AND btrim(finding_identity) <> ''"
+            ),
+        ),
+        Index(
+            "ux_agent_findings_task_fingerprint",
+            "task_id",
+            "fingerprint",
+            unique=True,
+            postgresql_where=text(
+                "fingerprint IS NOT NULL AND btrim(fingerprint) <> ''"
+            ),
+        ),
         Index("ix_agent_findings_task_status_created", "task_id", "status", created_at.desc()),
         Index(
             "ix_agent_findings_task_verified_created",

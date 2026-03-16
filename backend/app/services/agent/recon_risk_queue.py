@@ -45,6 +45,8 @@ class RedisReconRiskQueue:
                 return False
             if self.redis.sadd(seen_key, fp) == 0:
                 self.redis.hincrby(stats_key, "total_deduplicated", 1)
+                logger.info("[ReconRiskQueue] Skip duplicate risk point %s for task %s", fp, task_id)
+                return False
             self.redis.rpush(queue_key, json.dumps(risk_point, ensure_ascii=False))
             self.redis.hincrby(stats_key, "total_enqueued", 1)
             self.redis.hset(stats_key, "last_enqueue_time", datetime.now(timezone.utc).isoformat())
@@ -71,6 +73,7 @@ class RedisReconRiskQueue:
                     continue
                 if self.redis.sadd(seen_key, fp) == 0:
                     dedup_count += 1
+                    continue
                 serialized.append(json.dumps(risk_point, ensure_ascii=False))
 
             count = len(serialized)
@@ -189,8 +192,8 @@ class InMemoryReconRiskQueue:
                 return False
             if fp in self.seen[task_id]:
                 self._stats[task_id]["total_deduplicated"] += 1
-            else:
-                self.seen[task_id].add(fp)
+                return False
+            self.seen[task_id].add(fp)
             self.queues[task_id].append(risk_point)
             self._stats[task_id]["total_enqueued"] += 1
             self._stats[task_id]["last_enqueue_time"] = datetime.now(timezone.utc).isoformat()

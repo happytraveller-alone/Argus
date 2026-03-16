@@ -1201,7 +1201,8 @@ class AuditWorkflowEngine:
                             refreshed["vulnerability_report"] = report_text
                             orc._all_findings[index] = refreshed
                             break
-                state.finding_reports[title] = report_text
+                report_key = finding_identity or title
+                state.finding_reports[report_key] = report_text
                 state.report_findings_processed += 1
 
             state.step_records.append(

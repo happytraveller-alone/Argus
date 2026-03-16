@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import case, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, ConfigDict, Field
@@ -3026,10 +3027,6 @@ async def _execute_agent_task(task_id: str):
             _running_tasks[task_id] = orchestrator  # 兼容旧的取消逻辑
             _running_event_managers[task_id] = event_manager  # 用于 SSE 流
             
-            # 🔥 清理旧的 Agent 注册表，避免显示多个树
-            from app.services.agent.core import agent_registry
-            agent_registry.clear()
-            
             # 注册 Orchestrator 到 Agent Registry（使用其内置方法）
             orchestrator._register_to_registry(task="Root orchestrator for security audit")
             
@@ -3254,13 +3251,14 @@ async def _execute_agent_task(task_id: str):
                     )
                     return 0
 
-                saved = await _save_findings(
-                    db,
-                    task_id,
-                    findings_list,
-                    project_root=normalized_project_root,
-                    save_diagnostics=finding_save_diagnostics,
-                )
+                async with async_session_factory() as persist_db:
+                    saved = await _save_findings(
+                        persist_db,
+                        task_id,
+                        findings_list,
+                        project_root=normalized_project_root,
+                        save_diagnostics=finding_save_diagnostics,
+                    )
                 if isinstance(seen_payload_digests, set):
                     seen_payload_digests.add(payload_digest)
                 persist_state["saved_count"] = int(persist_state.get("saved_count") or 0) + int(saved)
@@ -4026,9 +4024,6 @@ async def _execute_agent_task(task_id: str):
             _running_recon_queue_services.pop(task_id, None)
             _running_bl_queue_services.pop(task_id, None)
             _cancelled_tasks.discard(task_id)  # 🔥 清理取消标志
-
-            # 🔥 清理整个 Agent 注册表（包括所有子 Agent）
-            agent_registry.clear()
 
             logger.debug(f"Task {task_id} cleaned up")
 
@@ -5114,6 +5109,7 @@ async def _save_findings(
     findings: List[Dict],
     project_root: Optional[str] = None,
     save_diagnostics: Optional[Dict[str, Any]] = None,
+    _retry_on_conflict: bool = True,
 ) -> int:
     """
     保存发现到数据库
@@ -5514,8 +5510,9 @@ async def _save_findings(
                 and file_lines
                 and localization_status == "failed"
             ):
-                mark_filtered("missing_enclosing_function", finding)
-                continue
+                # 定位失败不再作为硬过滤条件：保留发现并记录降级状态，避免有效漏洞被误丢弃
+                mark_filtered("missing_enclosing_function")
+                localization_status = "partial"
             
             # 降级策略：函数定位失败时仍允许保存，且确保 function_name 始终非空
             if not reachability_target_function:
@@ -5835,6 +5832,27 @@ async def _save_findings(
     try:
         await db.commit()
         logger.info(f"[SaveFindings] Successfully committed {saved_count} findings to database")
+    except IntegrityError as e:
+        logger.warning(
+            "[SaveFindings] Integrity conflict on commit for task %s: %s",
+            task_id,
+            e,
+        )
+        await db.rollback()
+        if _retry_on_conflict:
+            logger.info("[SaveFindings] Retrying once after integrity conflict for task %s", task_id)
+            return await _save_findings(
+                db,
+                task_id,
+                findings,
+                project_root=project_root,
+                save_diagnostics=save_diagnostics,
+                _retry_on_conflict=False,
+            )
+        if isinstance(save_diagnostics, dict):
+            save_diagnostics["commit_failed"] = True
+            save_diagnostics["commit_failed_reason"] = "integrity_conflict"
+        return 0
     except Exception as e:
         logger.error(f"Failed to commit findings: {e}")
         await db.rollback()
@@ -6085,7 +6103,7 @@ async def list_agent_tasks(
     """
     # 获取用户的项目
     projects_result = await db.execute(
-        select(Project.id)
+        select(Project.id).where(Project.owner_id == current_user.id)
     )
     user_project_ids = [p[0] for p in projects_result.fetchall()]
     
@@ -6230,17 +6248,7 @@ async def cancel_agent_task(
         runner.cancel()
         logger.info(f"[Cancel] Set cancel flag for task {task_id}")
 
-    # 🔥 2. 通过 agent_registry 取消所有子 Agent
-    from app.services.agent.core import agent_registry
-    from app.services.agent.core.graph_controller import stop_all_agents
-    try:
-        # 停止所有 Agent（包括子 Agent）
-        stop_result = stop_all_agents(exclude_root=False)
-        logger.info(f"[Cancel] Stopped all agents: {stop_result}")
-    except Exception as e:
-        logger.warning(f"[Cancel] Failed to stop agents via registry: {e}")
-
-    # 🔥 3. 强制取消 asyncio Task（立即中断 LLM 调用）
+    # 🔥 2. 强制取消 asyncio Task（立即中断 LLM 调用）
     asyncio_task = _running_asyncio_tasks.get(task_id)
     if asyncio_task and not asyncio_task.done():
         asyncio_task.cancel()
