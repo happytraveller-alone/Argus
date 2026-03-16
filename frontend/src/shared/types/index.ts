@@ -234,6 +234,82 @@ export interface DashboardCweDistributionItem {
   bandit_findings: number;
 }
 
+export interface DashboardSummaryItem {
+  total_projects: number;
+  current_effective_findings: number;
+  current_verified_findings: number;
+  false_positive_rate: number;
+  scan_success_rate: number;
+  avg_scan_duration_ms: number;
+  window_scanned_projects: number;
+  window_new_effective_findings: number;
+  window_verified_findings: number;
+  window_false_positive_rate: number;
+  window_scan_success_rate: number;
+  window_avg_scan_duration_ms: number;
+}
+
+export interface DashboardDailyActivityItem {
+  date: string;
+  completed_scans: number;
+  agent_findings: number;
+  opengrep_findings: number;
+  gitleaks_findings: number;
+  bandit_findings: number;
+  phpstan_findings: number;
+}
+
+export interface DashboardVerificationFunnelItem {
+  raw_findings: number;
+  effective_findings: number;
+  verified_findings: number;
+  false_positive_count: number;
+}
+
+export interface DashboardTaskStatusBreakdownItem {
+  pending: number;
+  running: number;
+  completed: number;
+  failed: number;
+  interrupted: number;
+  cancelled: number;
+}
+
+export interface DashboardEngineBreakdownItem {
+  engine: "agent" | "opengrep" | "gitleaks" | "bandit" | "phpstan";
+  completed_scans: number;
+  effective_findings: number;
+  verified_findings: number;
+  false_positive_count: number;
+  avg_scan_duration_ms: number;
+  success_rate: number;
+}
+
+export interface DashboardProjectHotspotItem {
+  project_id: string;
+  project_name: string;
+  risk_score: number;
+  scan_runs_window: number;
+  effective_findings: number;
+  verified_findings: number;
+  false_positive_rate: number;
+  dominant_language: string;
+  last_scan_at?: string | null;
+  top_engine: string;
+}
+
+export interface DashboardLanguageRiskItem {
+  language: string;
+  project_count: number;
+  loc_number: number;
+  effective_findings: number;
+  verified_findings: number;
+  false_positive_count: number;
+  findings_per_kloc: number;
+  rules_high: number;
+  rules_medium: number;
+}
+
 export interface DashboardSnapshotResponse {
   generated_at: string;
   total_scan_duration_ms: number;
@@ -242,6 +318,13 @@ export interface DashboardSnapshotResponse {
   rule_confidence: DashboardRuleConfidenceItem[];
   rule_confidence_by_language: DashboardRuleConfidenceByLanguageItem[];
   cwe_distribution: DashboardCweDistributionItem[];
+  summary: DashboardSummaryItem;
+  daily_activity: DashboardDailyActivityItem[];
+  verification_funnel: DashboardVerificationFunnelItem;
+  task_status_breakdown: DashboardTaskStatusBreakdownItem;
+  engine_breakdown: DashboardEngineBreakdownItem[];
+  project_hotspots: DashboardProjectHotspotItem[];
+  language_risk: DashboardLanguageRiskItem[];
 }
 
 export interface StaticScanOverviewItem {

@@ -12,6 +12,7 @@ export interface DashboardSnapshot {
 	staleAt: number;
 	expiresAt: number;
 	topN: number;
+	rangeDays: 7 | 14 | 30;
 }
 
 export interface DashboardSnapshotStoreState {
@@ -32,6 +33,7 @@ let state: DashboardSnapshotStoreState = {
 
 let inFlightRequest: Promise<DashboardSnapshot> | null = null;
 let inFlightTopN = 10;
+let inFlightRangeDays: 7 | 14 | 30 = 14;
 
 function emitChange() {
 	for (const listener of listeners) {
@@ -60,6 +62,7 @@ function normalizeError(error: unknown): string {
 function buildSnapshot(
 	data: DashboardSnapshotResponse,
 	topN: number,
+	rangeDays: 7 | 14 | 30,
 ): DashboardSnapshot {
 	const fetchedAt = Date.now();
 	return {
@@ -68,30 +71,40 @@ function buildSnapshot(
 		staleAt: fetchedAt + STALE_MS,
 		expiresAt: fetchedAt + MAX_AGE_MS,
 		topN,
+		rangeDays,
 	};
 }
 
-async function requestSnapshot(topN: number): Promise<DashboardSnapshot> {
-	const data = await api.getDashboardSnapshot(topN);
-	return buildSnapshot(data, topN);
+async function requestSnapshot(
+	topN: number,
+	rangeDays: 7 | 14 | 30,
+): Promise<DashboardSnapshot> {
+	const data = await api.getDashboardSnapshot(topN, rangeDays);
+	return buildSnapshot(data, topN, rangeDays);
 }
 
 async function fetchSnapshot(
 	background: boolean,
 	topN: number,
+	rangeDays: 7 | 14 | 30,
 ): Promise<DashboardSnapshot> {
-	if (inFlightRequest && inFlightTopN === topN) {
+	if (
+		inFlightRequest &&
+		inFlightTopN === topN &&
+		inFlightRangeDays === rangeDays
+	) {
 		return inFlightRequest;
 	}
 
 	inFlightTopN = topN;
+	inFlightRangeDays = rangeDays;
 	if (background) {
 		setState({ refreshing: true, error: null });
 	} else {
 		setState({ loading: true, refreshing: false, error: null });
 	}
 
-	inFlightRequest = requestSnapshot(topN)
+	inFlightRequest = requestSnapshot(topN, rangeDays)
 		.then((snapshot) => {
 			setState({
 				snapshot,
@@ -107,7 +120,11 @@ async function fetchSnapshot(
 				refreshing: false,
 				error: normalizeError(error),
 			});
-			if (state.snapshot && state.snapshot.topN === topN) {
+			if (
+				state.snapshot &&
+				state.snapshot.topN === topN &&
+				state.snapshot.rangeDays === rangeDays
+			) {
 				return state.snapshot;
 			}
 			throw error;
@@ -122,43 +139,52 @@ async function fetchSnapshot(
 export async function loadDashboardSnapshot(options?: {
 	force?: boolean;
 	topN?: number;
+	rangeDays?: 7 | 14 | 30;
 }): Promise<DashboardSnapshot> {
 	const force = Boolean(options?.force);
 	const requestedTopN = Number(options?.topN ?? 10);
 	const topN = Number.isFinite(requestedTopN)
 		? Math.min(Math.max(Math.floor(requestedTopN), 1), 50)
 		: 10;
+	const requestedRangeDays = options?.rangeDays;
+	const rangeDays =
+		requestedRangeDays === 7 || requestedRangeDays === 30 ? requestedRangeDays : 14;
 	const snapshot = state.snapshot;
-	const snapshotMatchesTopN = Boolean(snapshot && snapshot.topN === topN);
+	const snapshotMatchesRequest = Boolean(
+		snapshot && snapshot.topN === topN && snapshot.rangeDays === rangeDays,
+	);
 
-	if (!force && snapshot && snapshotMatchesTopN) {
+	if (!force && snapshot && snapshotMatchesRequest) {
 		const now = Date.now();
 		if (now < snapshot.staleAt) {
 			return snapshot;
 		}
 		if (now < snapshot.expiresAt) {
-			void fetchSnapshot(true, topN);
+			void fetchSnapshot(true, topN, rangeDays);
 			return snapshot;
 		}
 	}
 
-	return fetchSnapshot(Boolean(snapshot && snapshotMatchesTopN), topN);
+	return fetchSnapshot(Boolean(snapshot && snapshotMatchesRequest), topN, rangeDays);
 }
 
 export async function refreshDashboardSnapshot(
 	topN = 10,
+	rangeDays: 7 | 14 | 30 = 14,
 ): Promise<DashboardSnapshot> {
 	const requestedTopN = Number(topN);
 	const safeTopN = Number.isFinite(requestedTopN)
 		? Math.min(Math.max(Math.floor(requestedTopN), 1), 50)
 		: 10;
-	return fetchSnapshot(Boolean(state.snapshot), safeTopN);
+	const safeRangeDays = rangeDays === 7 || rangeDays === 30 ? rangeDays : 14;
+	return fetchSnapshot(Boolean(state.snapshot), safeTopN, safeRangeDays);
 }
 
 export async function prefetchDashboardSnapshot(
 	topN = 10,
+	rangeDays: 7 | 14 | 30 = 14,
 ): Promise<DashboardSnapshot> {
-	return loadDashboardSnapshot({ topN });
+	return loadDashboardSnapshot({ topN, rangeDays });
 }
 
 export function getDashboardSnapshotStoreState(): DashboardSnapshotStoreState {

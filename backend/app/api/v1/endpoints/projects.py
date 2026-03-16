@@ -16,7 +16,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import shutil
 import os
 import uuid
@@ -27,6 +27,7 @@ import hashlib
 import asyncio
 import base64
 from pathlib import Path
+from collections import defaultdict
 
 from app.db.static_finding_paths import (
     collect_zip_relative_paths,
@@ -199,6 +200,7 @@ from app.services.upload.upload_manager import UploadManager
 from app.services.upload.compression_factory import CompressionStrategyFactory
 from app.services.upload.language_detection import detect_languages_from_paths
 from app.services.upload.project_stats import (
+    EXTENSION_LANGUAGE_MAP,
     get_cloc_stats,
     build_static_project_description,
     get_cloc_stats_from_extracted_dir,
@@ -659,6 +661,13 @@ class DashboardSnapshotResponse(BaseModel):
     rule_confidence: List["DashboardRuleConfidenceItem"]
     rule_confidence_by_language: List["DashboardRuleConfidenceByLanguageItem"]
     cwe_distribution: List["DashboardCweDistributionItem"]
+    summary: "DashboardSummaryItem"
+    daily_activity: List["DashboardDailyActivityItem"]
+    verification_funnel: "DashboardVerificationFunnelItem"
+    task_status_breakdown: "DashboardTaskStatusBreakdownItem"
+    engine_breakdown: List["DashboardEngineBreakdownItem"]
+    project_hotspots: List["DashboardProjectHotspotItem"]
+    language_risk: List["DashboardLanguageRiskItem"]
 
 
 class DashboardRuleConfidenceItem(BaseModel):
@@ -680,6 +689,82 @@ class DashboardCweDistributionItem(BaseModel):
     opengrep_findings: int
     agent_findings: int
     bandit_findings: int
+
+
+class DashboardSummaryItem(BaseModel):
+    total_projects: int
+    current_effective_findings: int
+    current_verified_findings: int
+    false_positive_rate: float
+    scan_success_rate: float
+    avg_scan_duration_ms: int
+    window_scanned_projects: int
+    window_new_effective_findings: int
+    window_verified_findings: int
+    window_false_positive_rate: float
+    window_scan_success_rate: float
+    window_avg_scan_duration_ms: int
+
+
+class DashboardDailyActivityItem(BaseModel):
+    date: str
+    completed_scans: int
+    agent_findings: int
+    opengrep_findings: int
+    gitleaks_findings: int
+    bandit_findings: int
+    phpstan_findings: int
+
+
+class DashboardVerificationFunnelItem(BaseModel):
+    raw_findings: int
+    effective_findings: int
+    verified_findings: int
+    false_positive_count: int
+
+
+class DashboardTaskStatusBreakdownItem(BaseModel):
+    pending: int
+    running: int
+    completed: int
+    failed: int
+    interrupted: int
+    cancelled: int
+
+
+class DashboardEngineBreakdownItem(BaseModel):
+    engine: Literal["agent", "opengrep", "gitleaks", "bandit", "phpstan"]
+    completed_scans: int
+    effective_findings: int
+    verified_findings: int
+    false_positive_count: int
+    avg_scan_duration_ms: int
+    success_rate: float
+
+
+class DashboardProjectHotspotItem(BaseModel):
+    project_id: str
+    project_name: str
+    risk_score: float
+    scan_runs_window: int
+    effective_findings: int
+    verified_findings: int
+    false_positive_rate: float
+    dominant_language: str
+    last_scan_at: Optional[datetime] = None
+    top_engine: str
+
+
+class DashboardLanguageRiskItem(BaseModel):
+    language: str
+    project_count: int
+    loc_number: int
+    effective_findings: int
+    verified_findings: int
+    false_positive_count: int
+    findings_per_kloc: float
+    rules_high: int
+    rules_medium: int
 
 
 def _normalize_dashboard_rule_confidence(
@@ -1051,6 +1136,241 @@ def _sort_dashboard_items_by_total_and_name(
             str(item.get("project_name") or ""),
         ),
     )
+
+
+DASHBOARD_ENGINE_ORDER: tuple[str, ...] = (
+    "agent",
+    "opengrep",
+    "gitleaks",
+    "bandit",
+    "phpstan",
+)
+
+OPENGREP_RISK_WEIGHTS: Dict[str, int] = {
+    "ERROR": 5,
+    "WARNING": 3,
+    "INFO": 1,
+}
+
+SEVERITY_RISK_WEIGHTS: Dict[str, int] = {
+    "critical": 8,
+    "high": 5,
+    "medium": 3,
+    "low": 1,
+    "info": 1,
+}
+
+TERMINAL_FAILURE_STATUSES = {"failed", "interrupted", "cancelled"}
+EXCLUDED_CURRENT_RISK_STATUSES = {"false_positive", "fixed", "resolved"}
+
+
+def _normalize_status_token(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _to_ratio(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(float(numerator) / float(denominator), 4)
+
+
+def _round_non_negative_int(value: float) -> int:
+    if not isinstance(value, (int, float)) or value <= 0:
+        return 0
+    return max(int(round(value)), 0)
+
+
+def _coerce_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value
+        return value.replace(tzinfo=timezone.utc)
+    return None
+
+
+def _bucket_dashboard_task_status(status: Any) -> str:
+    normalized = _normalize_status_token(status)
+    if normalized == "completed":
+        return "completed"
+    if normalized == "failed":
+        return "failed"
+    if normalized == "interrupted":
+        return "interrupted"
+    if normalized == "cancelled":
+        return "cancelled"
+    if normalized == "pending":
+        return "pending"
+    return "running"
+
+
+def _is_static_finding_verified(status: Any) -> bool:
+    return _normalize_status_token(status) == "verified"
+
+
+def _is_static_finding_false_positive(status: Any) -> bool:
+    return _normalize_status_token(status) == "false_positive"
+
+
+def _is_static_finding_effective(status: Any) -> bool:
+    return _normalize_status_token(status) not in EXCLUDED_CURRENT_RISK_STATUSES
+
+
+def _is_agent_finding_false_positive(status: Any, verdict: Any) -> bool:
+    normalized_status = _normalize_status_token(status)
+    normalized_verdict = _normalize_status_token(verdict)
+    return normalized_status == "false_positive" or normalized_verdict == "false_positive"
+
+
+def _is_agent_finding_verified(
+    is_verified: Any,
+    status: Any,
+    verdict: Any,
+) -> bool:
+    if bool(is_verified):
+        return True
+    normalized_status = _normalize_status_token(status)
+    normalized_verdict = _normalize_status_token(verdict)
+    return normalized_status == "verified" or normalized_verdict in {"confirmed", "likely"}
+
+
+def _is_agent_finding_effective(status: Any, verdict: Any) -> bool:
+    normalized_status = _normalize_status_token(status)
+    normalized_verdict = _normalize_status_token(verdict)
+    if normalized_status in EXCLUDED_CURRENT_RISK_STATUSES:
+        return False
+    if normalized_verdict == "false_positive":
+        return False
+    return True
+
+
+def _risk_multiplier(is_verified: bool) -> float:
+    return 1.5 if is_verified else 1.0
+
+
+def _risk_weight_from_severity(severity: Any) -> int:
+    normalized = _normalize_status_token(severity)
+    return SEVERITY_RISK_WEIGHTS.get(normalized, 1)
+
+
+def _risk_weight_for_opengrep(severity: Any) -> int:
+    normalized = str(severity or "").strip().upper()
+    return OPENGREP_RISK_WEIGHTS.get(normalized, 1)
+
+
+def _parse_dashboard_language_info(payload: Any) -> Dict[str, Dict[str, int]]:
+    parsed = payload
+    if isinstance(payload, str):
+        try:
+            parsed = json.loads(payload)
+        except (TypeError, ValueError):
+            return {}
+    if not isinstance(parsed, dict):
+        return {}
+
+    languages = parsed.get("languages")
+    if not isinstance(languages, dict):
+        return {}
+
+    normalized: Dict[str, Dict[str, int]] = {}
+    for raw_language, stats in languages.items():
+        language = str(raw_language or "").strip() or "unknown"
+        if not isinstance(stats, dict):
+            continue
+        normalized[language] = {
+            "loc_number": _to_non_negative_int(stats.get("loc_number")),
+            "files_count": _to_non_negative_int(stats.get("files_count")),
+        }
+    return normalized
+
+
+def _resolve_dashboard_language_from_path(
+    file_path: Any,
+    dominant_language: str,
+) -> str:
+    normalized_path = str(file_path or "").strip()
+    if normalized_path:
+        path = Path(normalized_path)
+        lower_name = path.name.lower()
+        suffix = path.suffix.lower()
+        if lower_name == "dockerfile":
+            suffix = ".dockerfile"
+        mapped_language = EXTENSION_LANGUAGE_MAP.get(suffix)
+        if mapped_language:
+            return str(mapped_language).strip() or dominant_language or "unknown"
+    return dominant_language or "unknown"
+
+
+def _dashboard_activity_bucket(day: datetime) -> str:
+    normalized = _coerce_datetime(day)
+    if normalized is None:
+        normalized = datetime.now(timezone.utc)
+    return normalized.astimezone(timezone.utc).date().isoformat()
+
+
+def _update_window_activity(
+    activity_map: Dict[str, Dict[str, int]],
+    timestamp: Optional[datetime],
+    window_start: datetime,
+    field: str,
+) -> None:
+    normalized = _coerce_datetime(timestamp)
+    if normalized is None or normalized < window_start:
+        return
+    bucket = activity_map.setdefault(
+        _dashboard_activity_bucket(normalized),
+        {
+            "completed_scans": 0,
+            "agent_findings": 0,
+            "opengrep_findings": 0,
+            "gitleaks_findings": 0,
+            "bandit_findings": 0,
+            "phpstan_findings": 0,
+        },
+    )
+    bucket[field] = _to_non_negative_int(bucket.get(field, 0)) + 1
+
+
+def _update_project_hotspot_scan_meta(
+    hotspot: Dict[str, Any],
+    project_id: str,
+    project_name_map: Dict[str, str],
+    dominant_language_map: Dict[str, str],
+    timestamp: Optional[datetime],
+) -> None:
+    hotspot["project_id"] = project_id
+    hotspot["project_name"] = project_name_map.get(project_id, "未知项目")
+    hotspot["dominant_language"] = dominant_language_map.get(project_id, "unknown")
+    normalized = _coerce_datetime(timestamp)
+    if normalized is not None and (
+        hotspot.get("last_scan_at") is None or normalized > hotspot["last_scan_at"]
+    ):
+        hotspot["last_scan_at"] = normalized
+
+
+def _record_project_hotspot_finding(
+    hotspot: Dict[str, Any],
+    engine: str,
+    effective: bool,
+    verified: bool,
+    false_positive: bool,
+    risk_weight: float,
+) -> None:
+    hotspot["raw_findings"] = _to_non_negative_int(hotspot.get("raw_findings", 0)) + 1
+    if effective:
+        hotspot["effective_findings"] = _to_non_negative_int(
+            hotspot.get("effective_findings", 0)
+        ) + 1
+        hotspot["risk_score"] = float(hotspot.get("risk_score", 0.0)) + float(risk_weight)
+        engine_counts = hotspot.setdefault("engine_effective_counts", {})
+        engine_counts[engine] = _to_non_negative_int(engine_counts.get(engine, 0)) + 1
+    if verified:
+        hotspot["verified_findings"] = _to_non_negative_int(
+            hotspot.get("verified_findings", 0)
+        ) + 1
+    if false_positive:
+        hotspot["false_positive_count"] = _to_non_negative_int(
+            hotspot.get("false_positive_count", 0)
+        ) + 1
     
 
 @router.post("/", response_model=ProjectResponse)
@@ -1303,10 +1623,14 @@ async def get_stats(
 @router.get("/dashboard-snapshot", response_model=DashboardSnapshotResponse)
 async def get_dashboard_snapshot(
     top_n: int = Query(10, ge=1, le=50, description="Top N projects"),
+    range_days: Literal[7, 14, 30] = Query(14, description="Window size in days"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """Get aggregated dashboard data with project-card aligned vulnerability metric."""
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=int(range_days))
+
     projects_result = await db.execute(select(Project.id, Project.name))
     project_rows = projects_result.all()
     project_name_map: Dict[str, str] = {
@@ -1315,12 +1639,49 @@ async def get_dashboard_snapshot(
         if project_id
     }
 
+    project_info_result = await db.execute(
+        select(ProjectInfo.project_id, ProjectInfo.language_info, ProjectInfo.status)
+    )
+    project_info_rows = project_info_result.all()
+
+    project_dominant_language_map: Dict[str, str] = {}
+    project_language_loc_map: Dict[str, Dict[str, int]] = {}
+    language_project_sets: Dict[str, set[str]] = defaultdict(set)
+    language_loc_totals: Dict[str, int] = defaultdict(int)
+    for project_id, language_info, info_status in project_info_rows:
+        normalized_project_id = str(project_id or "")
+        if not normalized_project_id:
+            continue
+        if _normalize_status_token(info_status) != "completed":
+            continue
+        parsed_language_info = _parse_dashboard_language_info(language_info)
+        if not parsed_language_info:
+            continue
+        project_language_loc_map[normalized_project_id] = {
+            language: _to_non_negative_int(stats.get("loc_number"))
+            for language, stats in parsed_language_info.items()
+        }
+        dominant_language = max(
+            parsed_language_info.items(),
+            key=lambda item: (
+                _to_non_negative_int(item[1].get("loc_number")),
+                _to_non_negative_int(item[1].get("files_count")),
+                item[0],
+            ),
+        )[0]
+        project_dominant_language_map[normalized_project_id] = dominant_language
+        for language, stats in parsed_language_info.items():
+            loc_number = _to_non_negative_int(stats.get("loc_number"))
+            language_loc_totals[language] += loc_number
+            language_project_sets[language].add(normalized_project_id)
+
     opengrep_result = await db.execute(
         select(
             OpengrepScanTask.id,
             OpengrepScanTask.project_id,
             OpengrepScanTask.status,
             OpengrepScanTask.scan_duration_ms,
+            OpengrepScanTask.created_at,
         )
     )
     opengrep_rows = opengrep_result.all()
@@ -1332,38 +1693,45 @@ async def get_dashboard_snapshot(
 
     gitleaks_result = await db.execute(
         select(
+            GitleaksScanTask.id,
             GitleaksScanTask.project_id,
             GitleaksScanTask.status,
             GitleaksScanTask.total_findings,
             GitleaksScanTask.scan_duration_ms,
+            GitleaksScanTask.created_at,
         )
     )
     gitleaks_rows = gitleaks_result.all()
 
     bandit_result = await db.execute(
         select(
+            BanditScanTask.id,
             BanditScanTask.project_id,
             BanditScanTask.status,
             BanditScanTask.high_count,
             BanditScanTask.medium_count,
             BanditScanTask.low_count,
             BanditScanTask.scan_duration_ms,
+            BanditScanTask.created_at,
         )
     )
     bandit_rows = bandit_result.all()
 
     phpstan_result = await db.execute(
         select(
+            PhpstanScanTask.id,
             PhpstanScanTask.project_id,
             PhpstanScanTask.status,
             PhpstanScanTask.total_findings,
             PhpstanScanTask.scan_duration_ms,
+            PhpstanScanTask.created_at,
         )
     )
     phpstan_rows = phpstan_result.all()
 
     agent_result = await db.execute(
         select(
+            AgentTask.id,
             AgentTask.project_id,
             AgentTask.status,
             AgentTask.name,
@@ -1371,6 +1739,7 @@ async def get_dashboard_snapshot(
             AgentTask.verified_count,
             AgentTask.started_at,
             AgentTask.completed_at,
+            AgentTask.created_at,
         )
     )
     agent_rows = agent_result.all()
@@ -1388,33 +1757,57 @@ async def get_dashboard_snapshot(
     rule_rows = rule_result.all()
 
     opengrep_finding_result = await db.execute(
-        select(OpengrepFinding.scan_task_id, OpengrepFinding.rule).where(
-            OpengrepFinding.scan_task_id.in_(opengrep_task_ids),
-            or_(
-                OpengrepFinding.status.is_(None),
-                OpengrepFinding.status != "false_positive",
-            ),
+        select(
+            OpengrepFinding.scan_task_id,
+            OpengrepFinding.rule,
+            OpengrepFinding.severity,
+            OpengrepFinding.status,
+            OpengrepFinding.file_path,
+            OpengrepScanTask.created_at,
         )
+        .join(OpengrepScanTask, OpengrepScanTask.id == OpengrepFinding.scan_task_id)
+        .where(OpengrepFinding.scan_task_id.in_(opengrep_task_ids))
     )
     opengrep_finding_rows = opengrep_finding_result.all()
 
+    gitleaks_finding_result = await db.execute(
+        select(
+            GitleaksFinding.scan_task_id,
+            GitleaksFinding.status,
+            GitleaksFinding.file_path,
+            GitleaksFinding.created_at,
+        )
+    )
+    gitleaks_finding_rows = gitleaks_finding_result.all()
+
     bandit_finding_result = await db.execute(
         select(
+            BanditFinding.scan_task_id,
             BanditFinding.test_id,
-            BanditFinding.issue_confidence,
+            BanditFinding.issue_severity,
             BanditFinding.issue_text,
             BanditFinding.test_name,
-        ).where(
-            or_(
-                BanditFinding.status.is_(None),
-                BanditFinding.status != "false_positive",
-            )
+            BanditFinding.issue_confidence,
+            BanditFinding.status,
+            BanditFinding.file_path,
+            BanditFinding.created_at,
         )
     )
     bandit_finding_rows = bandit_finding_result.all()
 
+    phpstan_finding_result = await db.execute(
+        select(
+            PhpstanFinding.scan_task_id,
+            PhpstanFinding.status,
+            PhpstanFinding.file_path,
+            PhpstanFinding.created_at,
+        )
+    )
+    phpstan_finding_rows = phpstan_finding_result.all()
+
     agent_finding_result = await db.execute(
         select(
+            AgentFinding.task_id,
             AgentFinding.is_verified,
             AgentFinding.references,
             AgentFinding.vulnerability_type,
@@ -1423,11 +1816,15 @@ async def get_dashboard_snapshot(
             AgentFinding.code_snippet,
             AgentFinding.ai_confidence,
             AgentFinding.confidence,
+            AgentFinding.status,
+            AgentFinding.verdict,
+            AgentFinding.severity,
+            AgentFinding.file_path,
+            AgentFinding.created_at,
         )
     )
     agent_finding_rows = agent_finding_result.all()
 
-    # project aggregates
     scan_runs_map: Dict[str, Dict[str, int]] = {}
     vulns_map: Dict[str, Dict[str, int]] = {}
     rule_confidence_buckets: Dict[str, Dict[str, int]] = {
@@ -1438,6 +1835,40 @@ async def get_dashboard_snapshot(
     }
     rule_confidence_by_language: Dict[str, Dict[str, int]] = {}
     cwe_distribution_map: Dict[str, Dict[str, Any]] = {}
+    task_status_breakdown = {
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0,
+        "interrupted": 0,
+        "cancelled": 0,
+    }
+    engine_metrics: Dict[str, Dict[str, int]] = {
+        engine: {
+            "completed_scans": 0,
+            "effective_findings": 0,
+            "verified_findings": 0,
+            "false_positive_count": 0,
+            "duration_total": 0,
+            "duration_count": 0,
+            "terminal_total": 0,
+            "success_total": 0,
+        }
+        for engine in DASHBOARD_ENGINE_ORDER
+    }
+    activity_map: Dict[str, Dict[str, int]] = {}
+    hotspots_map: Dict[str, Dict[str, Any]] = {}
+    language_risk_map: Dict[str, Dict[str, int]] = {}
+    opengrep_task_project_map: Dict[str, str] = {}
+    gitleaks_task_project_map: Dict[str, str] = {}
+    bandit_task_project_map: Dict[str, str] = {}
+    phpstan_task_project_map: Dict[str, str] = {}
+    agent_task_project_map: Dict[str, str] = {}
+    window_scanned_projects: set[str] = set()
+    all_counts = {"raw": 0, "effective": 0, "verified": 0, "false_positive": 0}
+    window_counts = {"raw": 0, "effective": 0, "verified": 0, "false_positive": 0}
+    success_totals = {"completed": 0, "terminal": 0}
+    duration_totals = {"sum": 0, "count": 0, "window_sum": 0, "window_count": 0}
 
     def ensure_scan_runs(project_id: str) -> Dict[str, int]:
         existing = scan_runs_map.get(project_id)
@@ -1463,72 +1894,233 @@ async def get_dashboard_snapshot(
         vulns_map[project_id] = created
         return created
 
+    def ensure_hotspot(project_id: str) -> Dict[str, Any]:
+        existing = hotspots_map.get(project_id)
+        if existing is not None:
+            return existing
+        created = {
+            "project_id": project_id,
+            "project_name": project_name_map.get(project_id, "未知项目"),
+            "risk_score": 0.0,
+            "scan_runs_window": 0,
+            "effective_findings": 0,
+            "verified_findings": 0,
+            "false_positive_count": 0,
+            "raw_findings": 0,
+            "dominant_language": project_dominant_language_map.get(project_id, "unknown"),
+            "last_scan_at": None,
+            "engine_effective_counts": {},
+        }
+        hotspots_map[project_id] = created
+        return created
+
+    def ensure_language_risk(language: str) -> Dict[str, int]:
+        normalized_language = str(language or "").strip() or "unknown"
+        existing = language_risk_map.get(normalized_language)
+        if existing is not None:
+            return existing
+        created = {
+            "effective_findings": 0,
+            "verified_findings": 0,
+            "false_positive_count": 0,
+        }
+        language_risk_map[normalized_language] = created
+        return created
+
+    def register_task(
+        engine: str,
+        project_id: str,
+        status: Any,
+        timestamp: Optional[datetime],
+        duration_ms: int,
+    ) -> None:
+        hotspot = ensure_hotspot(project_id)
+        _update_project_hotspot_scan_meta(
+            hotspot,
+            project_id,
+            project_name_map,
+            project_dominant_language_map,
+            timestamp,
+        )
+
+        status_bucket = _bucket_dashboard_task_status(status)
+        task_status_breakdown[status_bucket] = _to_non_negative_int(
+            task_status_breakdown.get(status_bucket, 0)
+        ) + 1
+
+        if status_bucket == "completed":
+            success_totals["completed"] += 1
+            duration_totals["sum"] += duration_ms
+            duration_totals["count"] += 1
+            normalized_timestamp = _coerce_datetime(timestamp)
+            if normalized_timestamp is not None and normalized_timestamp >= window_start:
+                window_scanned_projects.add(project_id)
+                hotspot["scan_runs_window"] = _to_non_negative_int(
+                    hotspot.get("scan_runs_window", 0)
+                ) + 1
+                engine_metrics[engine]["completed_scans"] += 1
+                engine_metrics[engine]["duration_total"] += duration_ms
+                engine_metrics[engine]["duration_count"] += 1
+                duration_totals["window_sum"] += duration_ms
+                duration_totals["window_count"] += 1
+                _update_window_activity(activity_map, normalized_timestamp, window_start, "completed_scans")
+
+        if status_bucket in {"completed", "failed", "interrupted", "cancelled"}:
+            success_totals["terminal"] += 1
+            normalized_timestamp = _coerce_datetime(timestamp)
+            if normalized_timestamp is not None and normalized_timestamp >= window_start:
+                engine_metrics[engine]["terminal_total"] += 1
+                if status_bucket == "completed":
+                    engine_metrics[engine]["success_total"] += 1
+
+    def register_finding(
+        *,
+        project_id: str,
+        engine: str,
+        effective: bool,
+        verified: bool,
+        false_positive: bool,
+        risk_weight: float,
+        timestamp: Optional[datetime],
+        file_path: Any,
+    ) -> None:
+        hotspot = ensure_hotspot(project_id)
+        _record_project_hotspot_finding(
+            hotspot,
+            engine=engine,
+            effective=effective,
+            verified=verified,
+            false_positive=false_positive,
+            risk_weight=risk_weight,
+        )
+
+        all_counts["raw"] += 1
+        if effective:
+            all_counts["effective"] += 1
+        if verified:
+            all_counts["verified"] += 1
+        if false_positive:
+            all_counts["false_positive"] += 1
+
+        finding_language = _resolve_dashboard_language_from_path(
+            file_path,
+            hotspot.get("dominant_language") or "unknown",
+        )
+        language_bucket = ensure_language_risk(finding_language)
+        if effective:
+            language_bucket["effective_findings"] += 1
+        if verified:
+            language_bucket["verified_findings"] += 1
+        if false_positive:
+            language_bucket["false_positive_count"] += 1
+
+        normalized_timestamp = _coerce_datetime(timestamp)
+        if normalized_timestamp is None or normalized_timestamp < window_start:
+            return
+
+        window_counts["raw"] += 1
+        if effective:
+            window_counts["effective"] += 1
+            engine_metrics[engine]["effective_findings"] += 1
+            _update_window_activity(
+                activity_map,
+                normalized_timestamp,
+                window_start,
+                f"{engine}_findings",
+            )
+        if verified:
+            window_counts["verified"] += 1
+            engine_metrics[engine]["verified_findings"] += 1
+        if false_positive:
+            window_counts["false_positive"] += 1
+            engine_metrics[engine]["false_positive_count"] += 1
+
     opengrep_duration_ms = 0
-    for task_id, project_id, status, scan_duration_ms in opengrep_rows:
+    for task_id, project_id, status, scan_duration_ms, created_at in opengrep_rows:
         if not project_id:
             continue
         normalized_project_id = str(project_id)
+        normalized_task_id = str(task_id or "")
+        duration_ms = _to_non_negative_int(scan_duration_ms)
+        task_timestamp = _coerce_datetime(created_at)
+        if normalized_task_id:
+            opengrep_task_project_map[normalized_task_id] = normalized_project_id
         project_vulns = ensure_vulns(normalized_project_id)
         project_vulns["static_vulns"] += _to_non_negative_int(
-            high_confidence_counts.get(str(task_id), 0)
+            high_confidence_counts.get(normalized_task_id, 0)
         )
-        if str(status or "").strip().lower() == "completed":
-            project_scan_runs = ensure_scan_runs(normalized_project_id)
-            project_scan_runs["static_runs"] += 1
-        opengrep_duration_ms += _to_non_negative_int(scan_duration_ms)
+        if _normalize_status_token(status) == "completed":
+            ensure_scan_runs(normalized_project_id)["static_runs"] += 1
+        opengrep_duration_ms += duration_ms
+        register_task("opengrep", normalized_project_id, status, task_timestamp, duration_ms)
 
     gitleaks_duration_ms = 0
-    for project_id, status, total_findings, scan_duration_ms in gitleaks_rows:
+    for task_id, project_id, status, total_findings, scan_duration_ms, created_at in gitleaks_rows:
         if not project_id:
             continue
         normalized_project_id = str(project_id)
-        # gitleaks 在 dashboard 中计入 static_vulns（project-card aligned）
+        normalized_task_id = str(task_id or "")
+        duration_ms = _to_non_negative_int(scan_duration_ms)
+        task_timestamp = _coerce_datetime(created_at)
+        if normalized_task_id:
+            gitleaks_task_project_map[normalized_task_id] = normalized_project_id
         project_vulns = ensure_vulns(normalized_project_id)
         project_vulns["static_vulns"] += _to_non_negative_int(total_findings)
-        if str(status or "").strip().lower() == "completed":
-            project_scan_runs = ensure_scan_runs(normalized_project_id)
-            project_scan_runs["static_runs"] += 1
-        gitleaks_duration_ms += _to_non_negative_int(scan_duration_ms)
+        if _normalize_status_token(status) == "completed":
+            ensure_scan_runs(normalized_project_id)["static_runs"] += 1
+        gitleaks_duration_ms += duration_ms
+        register_task("gitleaks", normalized_project_id, status, task_timestamp, duration_ms)
 
     bandit_duration_ms = 0
     for (
+        task_id,
         project_id,
         status,
         high_count,
         medium_count,
         low_count,
         scan_duration_ms,
+        created_at,
     ) in bandit_rows:
         if not project_id:
             continue
         normalized_project_id = str(project_id)
-        # Bandit 计数映射口径：HIGH + MEDIUM + LOW 全部计入 static_vulns。
+        normalized_task_id = str(task_id or "")
+        duration_ms = _to_non_negative_int(scan_duration_ms)
+        task_timestamp = _coerce_datetime(created_at)
+        if normalized_task_id:
+            bandit_task_project_map[normalized_task_id] = normalized_project_id
         project_vulns = ensure_vulns(normalized_project_id)
         project_vulns["static_vulns"] += (
             _to_non_negative_int(high_count)
             + _to_non_negative_int(medium_count)
             + _to_non_negative_int(low_count)
         )
-        if str(status or "").strip().lower() == "completed":
-            project_scan_runs = ensure_scan_runs(normalized_project_id)
-            project_scan_runs["static_runs"] += 1
-        bandit_duration_ms += _to_non_negative_int(scan_duration_ms)
+        if _normalize_status_token(status) == "completed":
+            ensure_scan_runs(normalized_project_id)["static_runs"] += 1
+        bandit_duration_ms += duration_ms
+        register_task("bandit", normalized_project_id, status, task_timestamp, duration_ms)
 
     phpstan_duration_ms = 0
-    for project_id, status, total_findings, scan_duration_ms in phpstan_rows:
+    for task_id, project_id, status, total_findings, scan_duration_ms, created_at in phpstan_rows:
         if not project_id:
             continue
         normalized_project_id = str(project_id)
-        # PHPStan 计数映射口径：全部归入 static_vulns。
+        normalized_task_id = str(task_id or "")
+        duration_ms = _to_non_negative_int(scan_duration_ms)
+        task_timestamp = _coerce_datetime(created_at)
+        if normalized_task_id:
+            phpstan_task_project_map[normalized_task_id] = normalized_project_id
         project_vulns = ensure_vulns(normalized_project_id)
         project_vulns["static_vulns"] += _to_non_negative_int(total_findings)
-        if str(status or "").strip().lower() == "completed":
-            project_scan_runs = ensure_scan_runs(normalized_project_id)
-            project_scan_runs["static_runs"] += 1
-        phpstan_duration_ms += _to_non_negative_int(scan_duration_ms)
+        if _normalize_status_token(status) == "completed":
+            ensure_scan_runs(normalized_project_id)["static_runs"] += 1
+        phpstan_duration_ms += duration_ms
+        register_task("phpstan", normalized_project_id, status, task_timestamp, duration_ms)
 
     agent_duration_ms = 0
     for (
+        task_id,
         project_id,
         status,
         name,
@@ -1536,32 +2128,35 @@ async def get_dashboard_snapshot(
         verified_count,
         started_at,
         completed_at,
+        created_at,
     ) in agent_rows:
         if not project_id:
             continue
         normalized_project_id = str(project_id)
+        normalized_task_id = str(task_id or "")
+        task_timestamp = _coerce_datetime(completed_at) or _coerce_datetime(created_at)
         source_mode = _resolve_agent_source_mode(name, description)
-
-        # vulns: project-card aligned metric (not filtered by completed)
+        if normalized_task_id:
+            agent_task_project_map[normalized_task_id] = normalized_project_id
         verified = _to_non_negative_int(verified_count)
         project_vulns = ensure_vulns(normalized_project_id)
         if source_mode == "intelligent":
             project_vulns["intelligent_vulns"] += verified
         else:
             project_vulns["hybrid_vulns"] += verified
-
-        # scan runs: completed only
-        if str(status or "").strip().lower() == "completed":
+        if _normalize_status_token(status) == "completed":
             project_scan_runs = ensure_scan_runs(normalized_project_id)
             if source_mode == "intelligent":
                 project_scan_runs["intelligent_runs"] += 1
             else:
                 project_scan_runs["hybrid_runs"] += 1
-
+        duration_ms = 0
         if started_at is not None and completed_at is not None:
-            agent_duration_ms += _to_non_negative_int(
-                (completed_at - started_at).total_seconds() * 1000
+            duration_ms = _to_non_negative_int(
+                (_coerce_datetime(completed_at) - _coerce_datetime(started_at)).total_seconds() * 1000
             )
+            agent_duration_ms += duration_ms
+        register_task("agent", normalized_project_id, status, task_timestamp, duration_ms)
 
     severe_rule_rows: List[tuple[Any, Any, Any, Any, Any, Any]] = [
         row for row in rule_rows if str(row[2] or "").strip().upper() == "ERROR"
@@ -1579,10 +2174,7 @@ async def get_dashboard_snapshot(
         normalized_language = str(language or "").strip() or "unknown"
         language_bucket = rule_confidence_by_language.setdefault(
             normalized_language,
-            {
-                "high_count": 0,
-                "medium_count": 0,
-            },
+            {"high_count": 0, "medium_count": 0},
         )
         if bucket_key == "HIGH":
             language_bucket["high_count"] += 1
@@ -1599,7 +2191,28 @@ async def get_dashboard_snapshot(
             if lookup_key not in rule_cwe_map:
                 rule_cwe_map[lookup_key] = normalized_cwe_values
 
-    for scan_task_id, rule_data in opengrep_finding_rows:
+    for scan_task_id, rule_data, severity, status, file_path, created_at in opengrep_finding_rows:
+        project_id = opengrep_task_project_map.get(str(scan_task_id or ""))
+        if not project_id:
+            continue
+        normalized_status = _normalize_status_token(status)
+        is_false_positive = _is_static_finding_false_positive(normalized_status)
+        is_verified = _is_static_finding_verified(normalized_status)
+        is_effective = _is_static_finding_effective(normalized_status)
+        register_finding(
+            project_id=project_id,
+            engine="opengrep",
+            effective=is_effective,
+            verified=is_verified,
+            false_positive=is_false_positive,
+            risk_weight=float(_risk_weight_for_opengrep(severity)) * _risk_multiplier(is_verified),
+            timestamp=_coerce_datetime(created_at),
+            file_path=file_path,
+        )
+
+        if not is_effective:
+            continue
+
         resolved_confidence = extract_finding_payload_confidence(rule_data)
         check_id = None
         if isinstance(rule_data, dict):
@@ -1638,19 +2251,68 @@ async def get_dashboard_snapshot(
             bucket["total_findings"] += 1
             bucket["opengrep_findings"] += 1
 
-    for test_id, issue_confidence, issue_text, test_name in bandit_finding_rows:
+    for scan_task_id, status, file_path, created_at in gitleaks_finding_rows:
+        project_id = gitleaks_task_project_map.get(str(scan_task_id or ""))
+        if not project_id:
+            continue
+        normalized_status = _normalize_status_token(status)
+        is_false_positive = _is_static_finding_false_positive(normalized_status)
+        is_verified = _is_static_finding_verified(normalized_status)
+        is_effective = _is_static_finding_effective(normalized_status)
+        register_finding(
+            project_id=project_id,
+            engine="gitleaks",
+            effective=is_effective,
+            verified=is_verified,
+            false_positive=is_false_positive,
+            risk_weight=5.0 * _risk_multiplier(is_verified),
+            timestamp=_coerce_datetime(created_at),
+            file_path=file_path,
+        )
+
+    for (
+        scan_task_id,
+        test_id,
+        issue_severity,
+        issue_text,
+        test_name,
+        issue_confidence,
+        status,
+        file_path,
+        created_at,
+    ) in bandit_finding_rows:
+        project_id = bandit_task_project_map.get(str(scan_task_id or ""))
+        if not project_id:
+            continue
+        normalized_status = _normalize_status_token(status)
+        is_false_positive = _is_static_finding_false_positive(normalized_status)
+        is_verified = _is_static_finding_verified(normalized_status)
+        is_effective = _is_static_finding_effective(normalized_status)
+        register_finding(
+            project_id=project_id,
+            engine="bandit",
+            effective=is_effective,
+            verified=is_verified,
+            false_positive=is_false_positive,
+            risk_weight=float(_risk_weight_from_severity(issue_severity)) * _risk_multiplier(is_verified),
+            timestamp=_coerce_datetime(created_at),
+            file_path=file_path,
+        )
+
+        if not is_effective:
+            continue
+
         normalized_confidence = normalize_opengrep_confidence(issue_confidence)
         if normalized_confidence not in {"HIGH", "MEDIUM"}:
             continue
         cwe_id = _BANDIT_TEST_ID_TO_CWE.get(str(test_id or "").strip().upper())
         if not cwe_id:
             continue
-        cwe_name = cwe_id
         bucket = cwe_distribution_map.setdefault(
             cwe_id,
             {
                 "cwe_id": cwe_id,
-                "cwe_name": cwe_name,
+                "cwe_name": cwe_id,
                 "total_findings": 0,
                 "opengrep_findings": 0,
                 "agent_findings": 0,
@@ -1660,7 +2322,27 @@ async def get_dashboard_snapshot(
         bucket["total_findings"] += 1
         bucket["bandit_findings"] += 1
 
+    for scan_task_id, status, file_path, created_at in phpstan_finding_rows:
+        project_id = phpstan_task_project_map.get(str(scan_task_id or ""))
+        if not project_id:
+            continue
+        normalized_status = _normalize_status_token(status)
+        is_false_positive = _is_static_finding_false_positive(normalized_status)
+        is_verified = _is_static_finding_verified(normalized_status)
+        is_effective = _is_static_finding_effective(normalized_status)
+        register_finding(
+            project_id=project_id,
+            engine="phpstan",
+            effective=is_effective,
+            verified=is_verified,
+            false_positive=is_false_positive,
+            risk_weight=1.0 * _risk_multiplier(is_verified),
+            timestamp=_coerce_datetime(created_at),
+            file_path=file_path,
+        )
+
     for (
+        task_id,
         is_verified,
         references,
         vulnerability_type,
@@ -1669,8 +2351,30 @@ async def get_dashboard_snapshot(
         code_snippet,
         ai_confidence,
         confidence,
+        status,
+        verdict,
+        severity,
+        file_path,
+        created_at,
     ) in agent_finding_rows:
-        if not is_verified:
+        project_id = agent_task_project_map.get(str(task_id or ""))
+        if not project_id:
+            continue
+        is_false_positive = _is_agent_finding_false_positive(status, verdict)
+        verified_flag = _is_agent_finding_verified(is_verified, status, verdict)
+        is_effective = _is_agent_finding_effective(status, verdict)
+        register_finding(
+            project_id=project_id,
+            engine="agent",
+            effective=is_effective,
+            verified=verified_flag,
+            false_positive=is_false_positive,
+            risk_weight=float(_risk_weight_from_severity(severity)) * _risk_multiplier(verified_flag),
+            timestamp=_coerce_datetime(created_at),
+            file_path=file_path,
+        )
+
+        if not verified_flag or not is_effective:
             continue
         normalized_confidence = _normalize_agent_confidence(
             ai_confidence if ai_confidence is not None else confidence
@@ -1717,9 +2421,7 @@ async def get_dashboard_snapshot(
                 "project_id": project_id,
                 "project_name": project_name_map.get(project_id, "未知项目"),
                 "static_runs": _to_non_negative_int(item.get("static_runs", 0)),
-                "intelligent_runs": _to_non_negative_int(
-                    item.get("intelligent_runs", 0)
-                ),
+                "intelligent_runs": _to_non_negative_int(item.get("intelligent_runs", 0)),
                 "hybrid_runs": _to_non_negative_int(item.get("hybrid_runs", 0)),
                 "total_runs": total_runs,
             }
@@ -1739,9 +2441,7 @@ async def get_dashboard_snapshot(
                 "project_id": project_id,
                 "project_name": project_name_map.get(project_id, "未知项目"),
                 "static_vulns": _to_non_negative_int(item.get("static_vulns", 0)),
-                "intelligent_vulns": _to_non_negative_int(
-                    item.get("intelligent_vulns", 0)
-                ),
+                "intelligent_vulns": _to_non_negative_int(item.get("intelligent_vulns", 0)),
                 "hybrid_vulns": _to_non_negative_int(item.get("hybrid_vulns", 0)),
                 "total_vulns": total_vulns,
             }
@@ -1793,26 +2493,121 @@ async def get_dashboard_snapshot(
         ),
     )
 
+    daily_activity = [
+        DashboardDailyActivityItem(date=date, **activity)
+        for date, activity in sorted(activity_map.items(), key=lambda item: item[0])
+    ]
+
+    engine_breakdown = [
+        DashboardEngineBreakdownItem(
+            engine=engine,  # type: ignore[arg-type]
+            completed_scans=_to_non_negative_int(engine_metrics[engine]["completed_scans"]),
+            effective_findings=_to_non_negative_int(engine_metrics[engine]["effective_findings"]),
+            verified_findings=_to_non_negative_int(engine_metrics[engine]["verified_findings"]),
+            false_positive_count=_to_non_negative_int(engine_metrics[engine]["false_positive_count"]),
+            avg_scan_duration_ms=_round_non_negative_int(
+                engine_metrics[engine]["duration_total"] / engine_metrics[engine]["duration_count"]
+            )
+            if engine_metrics[engine]["duration_count"] > 0
+            else 0,
+            success_rate=_to_ratio(
+                engine_metrics[engine]["success_total"],
+                engine_metrics[engine]["terminal_total"],
+            ),
+        )
+        for engine in DASHBOARD_ENGINE_ORDER
+    ]
+
+    language_risk_items = []
+    for language, counts in language_risk_map.items():
+        loc_number = _to_non_negative_int(language_loc_totals.get(language, 0))
+        findings_per_kloc = 0.0
+        if loc_number > 0:
+            findings_per_kloc = round(
+                (_to_non_negative_int(counts.get("effective_findings", 0)) * 1000.0) / float(loc_number),
+                2,
+            )
+        language_risk_items.append(
+            {
+                "language": language,
+                "project_count": len(language_project_sets.get(language, set())),
+                "loc_number": loc_number,
+                "effective_findings": _to_non_negative_int(counts.get("effective_findings", 0)),
+                "verified_findings": _to_non_negative_int(counts.get("verified_findings", 0)),
+                "false_positive_count": _to_non_negative_int(counts.get("false_positive_count", 0)),
+                "findings_per_kloc": findings_per_kloc,
+                "rules_high": _to_non_negative_int(
+                    rule_confidence_by_language.get(language, {}).get("high_count", 0)
+                ),
+                "rules_medium": _to_non_negative_int(
+                    rule_confidence_by_language.get(language, {}).get("medium_count", 0)
+                ),
+            }
+        )
+
+    sorted_language_risk = sorted(
+        language_risk_items,
+        key=lambda item: (
+            -_to_non_negative_int(item.get("effective_findings", 0)),
+            -_to_non_negative_int(item.get("verified_findings", 0)),
+            -_to_non_negative_int(item.get("rules_high", 0)),
+            -_to_non_negative_int(item.get("rules_medium", 0)),
+            str(item.get("language") or ""),
+        ),
+    )[:12]
+
+    hotspot_items = []
+    for project_id, hotspot in hotspots_map.items():
+        risk_score = float(hotspot.get("risk_score", 0.0))
+        if risk_score <= 0:
+            continue
+        engine_effective_counts = hotspot.get("engine_effective_counts", {})
+        top_engine = next(
+            (
+                engine
+                for engine in DASHBOARD_ENGINE_ORDER
+                if _to_non_negative_int(engine_effective_counts.get(engine, 0)) > 0
+            ),
+            "agent",
+        )
+        hotspot_items.append(
+            DashboardProjectHotspotItem(
+                project_id=project_id,
+                project_name=str(hotspot.get("project_name") or "未知项目"),
+                risk_score=round(risk_score, 2),
+                scan_runs_window=_to_non_negative_int(hotspot.get("scan_runs_window", 0)),
+                effective_findings=_to_non_negative_int(hotspot.get("effective_findings", 0)),
+                verified_findings=_to_non_negative_int(hotspot.get("verified_findings", 0)),
+                false_positive_rate=_to_ratio(
+                    _to_non_negative_int(hotspot.get("false_positive_count", 0)),
+                    _to_non_negative_int(hotspot.get("raw_findings", 0)),
+                ),
+                dominant_language=str(hotspot.get("dominant_language") or "unknown"),
+                last_scan_at=_coerce_datetime(hotspot.get("last_scan_at")),
+                top_engine=top_engine,
+            )
+        )
+
+    sorted_hotspots = sorted(
+        hotspot_items,
+        key=lambda item: (
+            -float(item.risk_score),
+            -int(item.verified_findings),
+            -(item.last_scan_at.timestamp() if item.last_scan_at else 0.0),
+            item.project_name,
+        ),
+    )[:top_n]
+
     return DashboardSnapshotResponse(
-        generated_at=datetime.now(timezone.utc),
+        generated_at=now,
         total_scan_duration_ms=total_scan_duration_ms,
-        scan_runs=[
-            DashboardScanRunsItem(**item)
-            for item in sorted_scan_runs
-        ],
-        vulns=[
-            DashboardVulnsItem(**item)
-            for item in sorted_vulns
-        ],
+        scan_runs=[DashboardScanRunsItem(**item) for item in sorted_scan_runs],
+        vulns=[DashboardVulnsItem(**item) for item in sorted_vulns],
         rule_confidence=[
             DashboardRuleConfidenceItem(
                 confidence=confidence,
-                total_rules=_to_non_negative_int(
-                    rule_confidence_buckets[confidence]["total_rules"]
-                ),
-                enabled_rules=_to_non_negative_int(
-                    rule_confidence_buckets[confidence]["enabled_rules"]
-                ),
+                total_rules=_to_non_negative_int(rule_confidence_buckets[confidence]["total_rules"]),
+                enabled_rules=_to_non_negative_int(rule_confidence_buckets[confidence]["enabled_rules"]),
             )
             for confidence in ("HIGH", "MEDIUM", "LOW", "UNSPECIFIED")
         ],
@@ -1823,6 +2618,48 @@ async def get_dashboard_snapshot(
         cwe_distribution=[
             DashboardCweDistributionItem(**item)
             for item in sorted_cwe_distribution
+        ],
+        summary=DashboardSummaryItem(
+            total_projects=len(project_name_map),
+            current_effective_findings=all_counts["effective"],
+            current_verified_findings=all_counts["verified"],
+            false_positive_rate=_to_ratio(all_counts["false_positive"], all_counts["raw"]),
+            scan_success_rate=_to_ratio(success_totals["completed"], success_totals["terminal"]),
+            avg_scan_duration_ms=_round_non_negative_int(
+                duration_totals["sum"] / duration_totals["count"]
+            )
+            if duration_totals["count"] > 0
+            else 0,
+            window_scanned_projects=len(window_scanned_projects),
+            window_new_effective_findings=window_counts["effective"],
+            window_verified_findings=window_counts["verified"],
+            window_false_positive_rate=_to_ratio(
+                window_counts["false_positive"],
+                window_counts["raw"],
+            ),
+            window_scan_success_rate=_to_ratio(
+                sum(item["success_total"] for item in engine_metrics.values()),
+                sum(item["terminal_total"] for item in engine_metrics.values()),
+            ),
+            window_avg_scan_duration_ms=_round_non_negative_int(
+                duration_totals["window_sum"] / duration_totals["window_count"]
+            )
+            if duration_totals["window_count"] > 0
+            else 0,
+        ),
+        daily_activity=daily_activity,
+        verification_funnel=DashboardVerificationFunnelItem(
+            raw_findings=window_counts["raw"],
+            effective_findings=window_counts["effective"],
+            verified_findings=window_counts["verified"],
+            false_positive_count=window_counts["false_positive"],
+        ),
+        task_status_breakdown=DashboardTaskStatusBreakdownItem(**task_status_breakdown),
+        engine_breakdown=engine_breakdown,
+        project_hotspots=sorted_hotspots,
+        language_risk=[
+            DashboardLanguageRiskItem(**item)
+            for item in sorted_language_risk
         ],
     )
 

@@ -397,10 +397,14 @@ export const api = {
     }
   },
 
-  async getDashboardSnapshot(topN = 10): Promise<DashboardSnapshotResponse> {
+  async getDashboardSnapshot(
+    topN = 10,
+    rangeDays: 7 | 14 | 30 = 14,
+  ): Promise<DashboardSnapshotResponse> {
     const safeTopN = Number.isFinite(topN) ? Math.min(Math.max(Math.floor(topN), 1), 50) : 10;
+    const safeRangeDays = rangeDays === 7 || rangeDays === 30 ? rangeDays : 14;
     const res = await apiClient.get('/projects/dashboard-snapshot', {
-      params: { top_n: safeTopN },
+      params: { top_n: safeTopN, range_days: safeRangeDays },
     });
     return res.data;
   },
