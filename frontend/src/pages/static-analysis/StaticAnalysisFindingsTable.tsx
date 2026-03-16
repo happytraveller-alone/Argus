@@ -117,14 +117,18 @@ export default function StaticAnalysisFindingsTable({
                             ? "bg-sky-500/20 text-sky-300 border-sky-500/30"
                             : row.engine === "gitleaks"
                               ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                              : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                              : row.engine === "bandit"
+                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                : "bg-violet-500/20 text-violet-300 border-violet-500/30"
                         }
                       >
                         {row.engine === "opengrep"
                           ? "Opengrep"
                           : row.engine === "gitleaks"
                             ? "Gitleaks"
-                            : "Bandit"}
+                            : row.engine === "bandit"
+                              ? "Bandit"
+                              : "PHPStan"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm break-all">

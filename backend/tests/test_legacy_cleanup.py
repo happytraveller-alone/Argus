@@ -42,5 +42,8 @@ def test_legacy_mcp_and_skill_exports_removed():
 
     assert getattr(skills_module, "__all__", []) == []
     assert not hasattr(config_module, "verify_qmd_cli_runtime")
+    assert not hasattr(config_module, "verify_mcp_runtime")
+    assert not hasattr(config_module, "list_mcp_tools_runtime")
+    assert not hasattr(config_module, "call_mcp_tool_runtime")
     assert not hasattr(runtime_module.MCPRuntime, "register_local_tool")
     assert not hasattr(runtime_module.MCPRuntime, "register_local_tools")

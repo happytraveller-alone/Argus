@@ -14,13 +14,13 @@ class MCPToolRoute:
 
 
 class MCPToolRouter:
-    """Route public scan-core tool names to stdio MCP tools."""
+    """Route public scan-core tool names to local tools or MCP tools."""
 
     _LOCAL_ROUTE_ADAPTER = "__local__"
 
     def __init__(self) -> None:
         self._route_map = {
-            "read_file": ("filesystem", "read_file", False),
+            "read_file": (self._LOCAL_ROUTE_ADAPTER, "read_file", False),
             "list_files": (self._LOCAL_ROUTE_ADAPTER, "list_files", False),
             "search_code": (self._LOCAL_ROUTE_ADAPTER, "search_code", False),
             "extract_function": (self._LOCAL_ROUTE_ADAPTER, "extract_function", False),
@@ -55,6 +55,11 @@ class MCPToolRouter:
                 self._LOCAL_ROUTE_ADAPTER,
                 "save_verification_result",
                 False,
+            ),
+            "update_vulnerability_finding": (
+                self._LOCAL_ROUTE_ADAPTER,
+                "update_vulnerability_finding",
+                True,
             ),
             "push_finding_to_queue": (self._LOCAL_ROUTE_ADAPTER, "push_finding_to_queue", True),
             "is_finding_in_queue": (self._LOCAL_ROUTE_ADAPTER, "is_finding_in_queue", False),

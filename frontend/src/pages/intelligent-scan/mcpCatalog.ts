@@ -26,27 +26,7 @@ export interface McpCatalogItem {
   sandbox?: McpDomainStatus;
 }
 
-export const DEFAULT_MCP_CATALOG: McpCatalogItem[] = [
-  {
-    id: "filesystem",
-    name: "Filesystem MCP",
-    type: "mcp-server",
-    enabled: true,
-    description: "任务解压目录挂载（只读），支持项目文件读取与目录访问。",
-    executionFunctions: ["read_file", "list_directory", "search_files", "get_file_info"],
-    inputInterface: ["path/file_path", "directory", "pattern"],
-    outputInterface: ["content", "metadata.file_path", "entries"],
-    includedSkills: ["read_file"],
-    verificationTools: ["read_file"],
-    source: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
-    runtime_mode: "stdio_only",
-    required: true,
-    startup_ready: true,
-    startup_error: null,
-    backend: undefined,
-    sandbox: undefined,
-  },
-];
+export const DEFAULT_MCP_CATALOG: McpCatalogItem[] = [];
 
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];

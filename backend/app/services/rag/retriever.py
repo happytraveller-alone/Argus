@@ -201,7 +201,7 @@ class CodeRetriever:
                         api_key=api_key,
                         base_url=stored_base_url,
                     )
-                    logger.info(f"✅ 已切换到: {stored_provider}/{stored_model}")
+                    logger.info(f"已切换到: {stored_provider}/{stored_model}")
 
         # 如果仍然没有 embedding 服务，创建默认的
         if not self.embedding_service:
@@ -864,7 +864,7 @@ class CodeRetriever:
             file_chunks.sort(key=lambda x: x.line_start)
 
             # 构建文件头
-            header = f"📄 File: {file_path}"
+            header = f"File: {file_path}"
             if include_position and file_chunks:
                 first = file_chunks[0]
                 last = file_chunks[-1]

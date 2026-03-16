@@ -1248,7 +1248,7 @@ async def main():
             demo_user = result.scalars().first()
 
             if not demo_user:
-                print("❌ 未找到演示用户 (demo@example.com)")
+                print("未找到演示用户 (demo@example.com)")
                 print("请先运行应用初始化数据库")
                 return
 
@@ -1273,7 +1273,7 @@ async def main():
             await db.commit()
 
             print("=" * 60)
-            print("✅ Agent 演示数据创建完成！")
+            print("Agent 演示数据创建完成！")
             print(f"   任务 ID: {task.id}")
             print(f"   项目: {project.name}")
             print(f"   发现漏洞: {task.findings_count} 个")
@@ -1286,7 +1286,7 @@ async def main():
 
         except Exception as e:
             await db.rollback()
-            print(f"❌ 创建失败: {e}")
+            print(f"创建失败: {e}")
             import traceback
             traceback.print_exc()
             raise

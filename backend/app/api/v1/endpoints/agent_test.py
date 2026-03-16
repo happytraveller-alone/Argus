@@ -464,27 +464,12 @@ def _validate_project_path(path: str) -> str:
 
 async def _get_user_config(db: AsyncSession, user_id: str) -> Optional[Dict]:
     try:
-        from app.models.user_config import UserConfig
-        from sqlalchemy.future import select
-        from app.api.v1.endpoints.config import (
-            decrypt_config,
-            SENSITIVE_LLM_FIELDS,
-            SENSITIVE_OTHER_FIELDS,
-            _sanitize_other_config,
+        from app.api.v1.endpoints.config import _load_effective_user_config
+
+        return await _load_effective_user_config(
+            db=db,
+            user_id=user_id,
         )
-
-        result = await db.execute(select(UserConfig).where(UserConfig.user_id == user_id))
-        cfg = result.scalar_one_or_none()
-
-        if cfg and cfg.llm_config:
-            llm_cfg = json.loads(cfg.llm_config) if isinstance(cfg.llm_config, str) else (cfg.llm_config or {})
-            other_cfg = json.loads(cfg.other_config) if isinstance(cfg.other_config, str) else (cfg.other_config or {})
-
-            llm_cfg = decrypt_config(llm_cfg, SENSITIVE_LLM_FIELDS)
-            other_cfg = decrypt_config(other_cfg, SENSITIVE_OTHER_FIELDS)
-            other_cfg = _sanitize_other_config(other_cfg)
-
-            return {"llmConfig": llm_cfg, "otherConfig": other_cfg}
     except Exception as e:
         logger.warning("Failed to get user config: %s", e)
     return None

@@ -112,23 +112,23 @@ def test_json_upload_rule(base_url: str, token: str):
 
         if response.status_code == 200:
             result = response.json()
-            print(f"  ✅ 成功")
+            print(f"  成功")
             print(f"     规则 ID: {result['rule_id']}")
             print(f"     语言: {result['language']}")
             print(f"     严重程度: {result['severity']}")
             print(f"     创建时间: {result['created_at']}")
         elif response.status_code == 400:
             error = response.json()
-            print(f"  ⚠️  验证失败: {error.get('detail', '未知错误')}")
+            print(f"   验证失败: {error.get('detail', '未知错误')}")
         else:
-            print(f"  ❌ 请求失败 (HTTP {response.status_code})")
+            print(f"  请求失败 (HTTP {response.status_code})")
             print(f"     {response.text}")
         print()
 
 
 def generate_curl_examples():
     """生成 curl 命令示例"""
-    print("\n📝 curl 命令示例\n")
+    print("\ncurl 命令示例\n")
 
     rule_example = {
         "name": "custom-security-rule",
@@ -151,7 +151,7 @@ def generate_curl_examples():
 
 def show_request_format():
     """显示请求格式说明"""
-    print("\n📋 JSON 请求格式\n")
+    print("\nJSON 请求格式\n")
 
     print("""
 字段说明：
@@ -223,7 +223,7 @@ def show_response_format():
 
 def show_validation_rules():
     """显示验证规则"""
-    print("\n✅ 验证规则\n")
+    print("\n验证规则\n")
 
     print("""
 1. YAML 格式验证
@@ -256,7 +256,7 @@ def show_validation_rules():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("🔧 Opengrep 规则 JSON 上传 API 测试指南")
+    print("Opengrep 规则 JSON 上传 API 测试指南")
     print("=" * 60)
 
     show_request_format()
@@ -305,4 +305,4 @@ if __name__ == "__main__":
    .then(data => console.log(data))
 """)
 
-    print("\n✅ 文档生成完成！")
+    print("\n文档生成完成！")

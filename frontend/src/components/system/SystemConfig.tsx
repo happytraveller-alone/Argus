@@ -54,16 +54,17 @@ import {
 	RotateCcw,
 	Save,
 	Settings,
-	Shield,
 	Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/shared/api/database";
 import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
+import { resolveProviderSwitchFieldValue } from "@/components/system/llmProviderSwitch";
 import {
 	buildLlmProviderOptions,
 	getDefaultBaseUrlForProvider as resolveDefaultBaseUrlForProvider,
 	getDefaultModelForProvider as resolveDefaultModelForProvider,
+	getLlmCustomHeadersParseErrorMessage,
 	getLlmProviderInfo,
 	normalizeLlmProviderId,
 	parseLlmCustomHeadersInput,
@@ -148,19 +149,9 @@ interface SystemConfigData {
 	llmConcurrency: number;
 	llmGapMs: number;
 	outputLanguage: string;
-	mcpConfig: {
-		enabled: boolean;
-		preferMcp: boolean;
-		writePolicy: {
-			all_agents_writable: boolean;
-			max_writable_files_per_task: number;
-			require_evidence_binding: boolean;
-			forbid_project_wide_writes: boolean;
-		};
-	};
 }
 
-type ConfigSection = "llm" | "embedding" | "analysis" | "mcp";
+type ConfigSection = "llm" | "embedding" | "analysis";
 
 export interface SystemConfigSharedDraftState {
 	config: SystemConfigData | null;
@@ -235,54 +226,7 @@ const DEFAULT_CONFIG: SystemConfigData = {
 	llmConcurrency: 1,
 	llmGapMs: 3000,
 	outputLanguage: "zh-CN",
-	mcpConfig: {
-		enabled: true,
-		preferMcp: true,
-		writePolicy: {
-			all_agents_writable: true,
-			max_writable_files_per_task: 50,
-			require_evidence_binding: true,
-			forbid_project_wide_writes: true,
-		},
-	},
 };
-
-function clampWritableFilesLimit(value: unknown): number {
-	const parsed = Number(value);
-	if (!Number.isFinite(parsed)) {
-		return DEFAULT_CONFIG.mcpConfig.writePolicy.max_writable_files_per_task;
-	}
-	return Math.min(50, Math.max(1, Math.floor(parsed)));
-}
-
-function normalizeMcpConfig(
-	rawOtherConfig: Record<string, unknown>,
-): SystemConfigData["mcpConfig"] {
-	const rawMcp = (rawOtherConfig?.mcpConfig ?? {}) as Record<string, unknown>;
-	const rawWritePolicy = (rawMcp?.writePolicy ?? {}) as Record<string, unknown>;
-	return {
-		enabled:
-			rawMcp.enabled !== undefined
-				? Boolean(rawMcp.enabled)
-				: DEFAULT_CONFIG.mcpConfig.enabled,
-		preferMcp:
-			rawMcp.preferMcp !== undefined
-				? Boolean(rawMcp.preferMcp)
-				: DEFAULT_CONFIG.mcpConfig.preferMcp,
-		writePolicy: {
-			all_agents_writable: true,
-			max_writable_files_per_task: clampWritableFilesLimit(
-				rawWritePolicy.max_writable_files_per_task ??
-					DEFAULT_CONFIG.mcpConfig.writePolicy.max_writable_files_per_task,
-			),
-			require_evidence_binding:
-				rawWritePolicy.require_evidence_binding !== undefined
-					? Boolean(rawWritePolicy.require_evidence_binding)
-					: DEFAULT_CONFIG.mcpConfig.writePolicy.require_evidence_binding,
-			forbid_project_wide_writes: true,
-		},
-	};
-}
 
 function buildSystemConfigDataFromBackendConfig(
 	backendConfig:
@@ -357,7 +301,6 @@ function buildSystemConfigDataFromBackendConfig(
 			typeof otherConfig.outputLanguage === "string"
 				? otherConfig.outputLanguage
 				: DEFAULT_CONFIG.outputLanguage,
-		mcpConfig: normalizeMcpConfig(otherConfig),
 	};
 }
 
@@ -448,7 +391,7 @@ function AdvancedConfigDialog(props: {
 					<Textarea
 						value={cfg.llmCustomHeaders}
 						onChange={(e) => update("llmCustomHeaders", e.target.value)}
-						placeholder='{"HTTP-Referer":"https://app.example.com","X-Title":"DeepAudit"}'
+						placeholder='{"HTTP-Referer":"https://app.example.com","X-Title":"VulHunter"}'
 						className="min-h-32 cyber-input font-mono"
 					/>
 				),
@@ -746,7 +689,7 @@ function AdvancedConfigDialog(props: {
 }
 
 export function SystemConfig({
-	visibleSections = ["llm", "embedding", "analysis", "mcp"],
+	visibleSections = ["llm", "embedding", "analysis"],
 	defaultSection = "llm",
 	mergedView = false,
 	showLlmSummaryCards = true,
@@ -877,45 +820,6 @@ export function SystemConfig({
 			llmMaxTokensTouchedRef.current = true;
 		}
 		setConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
-		setHasChanges(true);
-	};
-
-	const updateMcpConfig = (key: "enabled" | "preferMcp", value: boolean) => {
-		setConfig((prev) => {
-			if (!prev) return prev;
-			return {
-				...prev,
-				mcpConfig: {
-					...prev.mcpConfig,
-					[key]: value,
-				},
-			};
-		});
-		setHasChanges(true);
-	};
-
-	const updateMcpWritePolicy = (
-		key: "max_writable_files_per_task" | "require_evidence_binding",
-		value: number | boolean,
-	) => {
-		setConfig((prev) => {
-			if (!prev) return prev;
-			return {
-				...prev,
-				mcpConfig: {
-					...prev.mcpConfig,
-					writePolicy: {
-						...prev.mcpConfig.writePolicy,
-						[key]:
-							key === "max_writable_files_per_task"
-								? clampWritableFilesLimit(value)
-								: Boolean(value),
-						all_agents_writable: true,
-						forbid_project_wide_writes: true,
-					},
-				},
-			};
-		});
 		setHasChanges(true);
 	};
 
@@ -1062,8 +966,11 @@ export function SystemConfig({
 			config.llmCustomHeaders,
 		);
 		if (!parsedCustomHeaders.ok) {
+			const parseErrorMessage = getLlmCustomHeadersParseErrorMessage(
+				parsedCustomHeaders,
+			);
 			toast.error(
-				`无法${source === "save" ? "保存" : "测试"}：${parsedCustomHeaders.message}`,
+				`无法${source === "save" ? "保存" : "测试"}：${parseErrorMessage || "自定义请求头格式不正确"}`,
 			);
 			return {
 				ok: false,
@@ -1126,26 +1033,30 @@ export function SystemConfig({
 
 	const handleProviderChange = (newProvider: string) => {
 		const defaultModel = getDefaultModelForProvider(newProvider);
+		const defaultBaseUrl = getDefaultBaseUrlForProvider(newProvider);
+		const nextModel = resolveProviderSwitchFieldValue({
+			currentValue: latestConfigRef.current?.llmModel,
+			wasTouched: llmModelTouchedRef.current,
+			nextDefaultValue: defaultModel,
+		});
 		setConfig((prev) => {
 			if (!prev) return prev;
-			const defaultBaseUrl = getDefaultBaseUrlForProvider(newProvider);
-			const shouldUpdateBaseUrl =
-				!llmBaseUrlTouchedRef.current || !(prev.llmBaseUrl || "").trim();
-			const shouldUpdateModel =
-				!llmModelTouchedRef.current || !(prev.llmModel || "").trim();
 			return {
 				...prev,
 				llmProvider: newProvider,
-				llmModel: shouldUpdateModel ? defaultModel || prev.llmModel : prev.llmModel,
-				llmBaseUrl: shouldUpdateBaseUrl ? defaultBaseUrl : prev.llmBaseUrl,
+				llmModel: resolveProviderSwitchFieldValue({
+					currentValue: prev.llmModel,
+					wasTouched: llmModelTouchedRef.current,
+					nextDefaultValue: defaultModel,
+				}),
+				llmBaseUrl: resolveProviderSwitchFieldValue({
+					currentValue: prev.llmBaseUrl,
+					wasTouched: llmBaseUrlTouchedRef.current,
+					nextDefaultValue: defaultBaseUrl,
+				}),
 			};
 		});
 		setLlmModelPopoverOpen(false);
-		const nextModel =
-			!llmModelTouchedRef.current ||
-			!(String(latestConfigRef.current?.llmModel || "").trim())
-				? defaultModel
-				: String(latestConfigRef.current?.llmModel || "").trim();
 		applyRecommendedMaxTokens(newProvider, nextModel, {
 			force: false,
 			markChanges: true,
@@ -1175,12 +1086,15 @@ export function SystemConfig({
 
 		if (!providerId || !baseUrl) return;
 		if (!parsedCustomHeaders.ok) {
+			const parseErrorMessage = getLlmCustomHeadersParseErrorMessage(
+				parsedCustomHeaders,
+			);
 			setModelStatsFetchStateBySignature((prev) => ({
 				...prev,
 				[signature]: "failed",
 			}));
 			if (!silent) {
-				toast.error(parsedCustomHeaders.message);
+				toast.error(parseErrorMessage || "自定义请求头格式不正确");
 			}
 			return;
 		}
@@ -1392,20 +1306,6 @@ export function SystemConfig({
 					llmConcurrency: config.llmConcurrency,
 					llmGapMs: config.llmGapMs,
 					outputLanguage: config.outputLanguage,
-					mcpConfig: {
-						enabled: Boolean(config.mcpConfig.enabled),
-						preferMcp: Boolean(config.mcpConfig.preferMcp),
-						writePolicy: {
-							all_agents_writable: true,
-							max_writable_files_per_task: clampWritableFilesLimit(
-								config.mcpConfig.writePolicy.max_writable_files_per_task,
-							),
-							require_evidence_binding: Boolean(
-								config.mcpConfig.writePolicy.require_evidence_binding,
-							),
-							forbid_project_wide_writes: true,
-						},
-					},
 				},
 			});
 
@@ -1596,14 +1496,6 @@ export function SystemConfig({
 								className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"
 							>
 								<Settings className="w-3 h-3" /> 分析参数
-							</TabsTrigger>
-						)}
-						{sections.includes("mcp") && (
-							<TabsTrigger
-								value="mcp"
-								className="data-[state=active]:bg-primary data-[state=active]:text-foreground font-mono font-bold uppercase py-2.5 text-muted-foreground transition-all rounded text-xs flex items-center gap-2"
-							>
-								<Shield className="w-3 h-3" /> MCP 配置
 							</TabsTrigger>
 						)}
 					</TabsList>
@@ -1939,18 +1831,6 @@ export function SystemConfig({
 										</div>
 									</div>
 
-									<div className="flex items-center justify-end">
-										<Button
-											variant="outline"
-											className="cyber-btn-ghost h-9"
-											onClick={() => setAdvancedOpen(true)}
-											type="button"
-										>
-											<Settings className="w-4 h-4 mr-2" />
-											高级配置
-										</Button>
-									</div>
-
 									<div className="pt-4 border-t border-border border-dashed flex items-center justify-between flex-wrap gap-4">
 										<div className="flex items-center gap-2">
 											<Button
@@ -1992,6 +1872,15 @@ export function SystemConfig({
 												<RotateCcw className="w-4 h-4 mr-2" />
 												重置
 											</Button>
+											<Button
+											variant="outline"
+											className="cyber-btn-ghost h-9"
+											onClick={() => setAdvancedOpen(true)}
+											type="button"
+										>
+											<Settings className="w-4 h-4 mr-2" />
+											高级配置
+										</Button>
 										</div>
 									</div>
 
@@ -2135,146 +2024,6 @@ export function SystemConfig({
 					</TabsContent>
 				)}
 
-				{!mergedView && sections.includes("mcp") && (
-					<TabsContent value="mcp" className="space-y-6">
-						<div className="cyber-card p-6 space-y-6">
-							<div className="space-y-1">
-								<div className="font-mono font-bold uppercase text-sm text-foreground">
-									MCP 运行时策略
-								</div>
-								<div className="text-xs text-muted-foreground">
-									全部 Agent
-									可写已启用；项目全量写入永久禁用；单任务可写文件数后端硬上限为
-									50。
-								</div>
-							</div>
-
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-								<div className="space-y-2">
-									<Label className="text-xs font-bold text-muted-foreground uppercase">
-										MCP 开关
-									</Label>
-									<Select
-										value={config.mcpConfig.enabled ? "enabled" : "disabled"}
-										onValueChange={(value) =>
-											updateMcpConfig("enabled", value === "enabled")
-										}
-									>
-										<SelectTrigger className="h-10 cyber-input">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent className="cyber-dialog border-border">
-											<SelectItem value="enabled" className="font-mono">
-												启用
-											</SelectItem>
-											<SelectItem value="disabled" className="font-mono">
-												禁用
-											</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
-
-								<div className="space-y-2">
-									<Label className="text-xs font-bold text-muted-foreground uppercase">
-										MCP 优先执行
-									</Label>
-									<Select
-										value={config.mcpConfig.preferMcp ? "enabled" : "disabled"}
-										onValueChange={(value) =>
-											updateMcpConfig("preferMcp", value === "enabled")
-										}
-									>
-										<SelectTrigger className="h-10 cyber-input">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent className="cyber-dialog border-border">
-											<SelectItem value="enabled" className="font-mono">
-												启用
-											</SelectItem>
-											<SelectItem value="disabled" className="font-mono">
-												禁用
-											</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
-
-								<div className="space-y-2">
-									<Label className="text-xs font-bold text-muted-foreground uppercase">
-										全部 Agent 可写
-									</Label>
-									<Input
-										value="已启用（受写入白名单与上限约束）"
-										disabled
-										className="h-10 cyber-input opacity-80"
-									/>
-								</div>
-
-								<div className="space-y-2">
-									<Label className="text-xs font-bold text-muted-foreground uppercase">
-										项目全量写入
-									</Label>
-									<Input
-										value="永久禁用（不可关闭）"
-										disabled
-										className="h-10 cyber-input opacity-80"
-									/>
-								</div>
-
-								<div className="space-y-2">
-									<Label className="text-xs font-bold text-muted-foreground uppercase">
-										单任务最多可写文件数（1-50）
-									</Label>
-									<Input
-										type="number"
-										min={1}
-										max={50}
-										value={
-											config.mcpConfig.writePolicy.max_writable_files_per_task
-										}
-										onChange={(event) =>
-											updateMcpWritePolicy(
-												"max_writable_files_per_task",
-												Number(event.target.value || 0),
-											)
-										}
-										className="h-10 cyber-input"
-									/>
-								</div>
-
-								<div className="space-y-2">
-									<Label className="text-xs font-bold text-muted-foreground uppercase">
-										需要证据绑定
-									</Label>
-									<Select
-										value={
-											config.mcpConfig.writePolicy.require_evidence_binding
-												? "enabled"
-												: "disabled"
-										}
-										onValueChange={(value) =>
-											updateMcpWritePolicy(
-												"require_evidence_binding",
-												value === "enabled",
-											)
-										}
-									>
-										<SelectTrigger className="h-10 cyber-input">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent className="cyber-dialog border-border">
-											<SelectItem value="enabled" className="font-mono">
-												启用
-											</SelectItem>
-											<SelectItem value="disabled" className="font-mono">
-												禁用
-											</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-						</div>
-					</TabsContent>
-				)}
 			</Tabs>
 
 			{hasChanges && !advancedOpen && showFloatingSaveButton && (

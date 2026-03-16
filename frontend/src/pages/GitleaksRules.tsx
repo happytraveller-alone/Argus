@@ -45,7 +45,7 @@ import {
 	updateGitleaksRule,
 } from "@/shared/api/gitleaks";
 
-type EngineTab = "opengrep" | "gitleaks";
+type EngineTab = "opengrep" | "gitleaks" | "bandit" | "phpstan";
 
 interface GitleaksRulesProps {
 	showEngineSelector?: boolean;
@@ -405,7 +405,12 @@ export default function GitleaksRules({
 									<Select
 										value={engineValue}
 										onValueChange={(val) => {
-											if (val === "opengrep" || val === "gitleaks") {
+											if (
+												val === "opengrep" ||
+												val === "gitleaks" ||
+												val === "bandit" ||
+												val === "phpstan"
+											) {
 												onEngineChange?.(val);
 											}
 										}}
@@ -416,6 +421,8 @@ export default function GitleaksRules({
 										<SelectContent className="cyber-dialog border-border">
 											<SelectItem value="opengrep">opengrep</SelectItem>
 											<SelectItem value="gitleaks">gitleaks</SelectItem>
+											<SelectItem value="bandit">bandit</SelectItem>
+											<SelectItem value="phpstan">phpstan</SelectItem>
 										</SelectContent>
 									</Select>
 								</div>

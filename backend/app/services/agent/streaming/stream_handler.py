@@ -283,7 +283,7 @@ class StreamHandler:
             data={
                 "tool_name": tool_name,
                 "input": self._truncate_data(tool_input),
-                "message": f"🔧 调用工具: {tool_name}",
+                "message": f"调用工具: {tool_name}",
             },
         )
     
@@ -313,7 +313,7 @@ class StreamHandler:
                 "tool_name": tool_name,
                 "output": self._truncate_data(output),
                 "duration_ms": duration_ms,
-                "message": f"✅ 工具 {tool_name} 完成 ({duration_ms}ms)",
+                "message": f"工具 {tool_name} 完成 ({duration_ms}ms)",
             },
         )
     
@@ -467,7 +467,7 @@ class StreamHandler:
                 "file_path": finding.get("file_path"),
                 "line_start": finding.get("line_start"),
                 "is_verified": is_verified,
-                "message": f"{'✅ 已验证' if is_verified else '🔍 新发现'}: [{finding.get('severity', 'medium').upper()}] {finding.get('title', 'Unknown')}",
+                "message": f"{'已验证' if is_verified else ' 新发现'}: [{finding.get('severity', 'medium').upper()}] {finding.get('title', 'Unknown')}",
             },
         )
     

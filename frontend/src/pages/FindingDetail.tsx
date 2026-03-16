@@ -9,11 +9,13 @@ import {
   buildBanditFindingDetailModel,
   buildGitleaksFindingDetailModel,
   buildOpengrepFindingDetailModel,
+  buildPhpstanFindingDetailModel,
   getAgentFalsePositiveEvidence,
   isAgentFalsePositiveFinding,
 } from "@/pages/finding-detail/viewModel";
 import {
   getAgentFinding,
+  getAgentTask,
   type AgentFinding,
 } from "@/shared/api/agentTasks";
 import {
@@ -29,6 +31,12 @@ import {
   type GitleaksScanTask,
 } from "@/shared/api/gitleaks";
 import {
+  getPhpstanFinding,
+  getPhpstanScanTask,
+  type PhpstanFinding,
+  type PhpstanScanTask,
+} from "@/shared/api/phpstan";
+import {
   getOpengrepFindingContext,
   getOpengrepScanFinding,
   getOpengrepScanTask,
@@ -36,6 +44,8 @@ import {
   type OpengrepFindingContext,
   type OpengrepScanTask,
 } from "@/shared/api/opengrep";
+import { api as databaseApi } from "@/shared/api/database";
+import type { Project } from "@/shared/types";
 import {
   isFindingDetailLocationState,
   normalizeReturnToPath,
@@ -43,7 +53,7 @@ import {
 } from "@/shared/utils/findingRoute";
 
 type FindingSource = "static" | "agent";
-type StaticEngine = "opengrep" | "gitleaks" | "bandit";
+type StaticEngine = "opengrep" | "gitleaks" | "bandit" | "phpstan";
 
 function decodePathParam(raw: string | undefined): string {
   try {
@@ -63,6 +73,7 @@ function resolveStaticEngine(raw: string | null): StaticEngine {
   const value = decodePathParam(raw ?? undefined).toLowerCase();
   if (value === "gitleaks") return "gitleaks";
   if (value === "bandit") return "bandit";
+  if (value === "phpstan") return "phpstan";
   return "opengrep";
 }
 
@@ -72,11 +83,11 @@ function getErrorMessage(error: unknown): string {
     message?: string;
   };
   const status = Number(apiError?.response?.status || 0);
-  if (status === 404) return "缺陷不存在或已被清理";
+  if (status === 404) return "漏洞不存在或已被清理";
   return String(
     apiError?.response?.data?.detail ||
       apiError?.message ||
-      "缺陷详情加载失败，请稍后重试",
+      "漏洞详情加载失败，请稍后重试",
   );
 }
 
@@ -148,14 +159,17 @@ export default function FindingDetail() {
   const [gitleaksFinding, setGitleaksFinding] = useState<GitleaksFinding | null>(null);
   const [banditTask, setBanditTask] = useState<BanditScanTask | null>(null);
   const [banditFinding, setBanditFinding] = useState<BanditFinding | null>(null);
+  const [phpstanTask, setPhpstanTask] = useState<PhpstanScanTask | null>(null);
+  const [phpstanFinding, setPhpstanFinding] = useState<PhpstanFinding | null>(null);
   const [agentFinding, setAgentFinding] = useState<AgentFinding | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       if (!source || !taskId || !findingId) {
-        setError("缺陷参数无效");
+        setError("漏洞参数无效");
         setLoading(false);
         return;
       }
@@ -169,7 +183,10 @@ export default function FindingDetail() {
       setGitleaksFinding(null);
       setBanditTask(null);
       setBanditFinding(null);
+      setPhpstanTask(null);
+      setPhpstanFinding(null);
       setAgentFinding(null);
+      setProject(null);
 
       try {
         if (source === "static") {
@@ -181,6 +198,9 @@ export default function FindingDetail() {
             if (cancelled) return;
             setGitleaksTask(task);
             setGitleaksFinding(finding);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
           } else if (staticEngine === "bandit") {
             const [task, finding] = await Promise.all([
               getBanditScanTask(taskId),
@@ -189,6 +209,21 @@ export default function FindingDetail() {
             if (cancelled) return;
             setBanditTask(task);
             setBanditFinding(finding);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
+          } else if (staticEngine === "phpstan") {
+            // PHPStan integration: static finding detail fetch path.
+            const [task, finding] = await Promise.all([
+              getPhpstanScanTask(taskId),
+              getPhpstanFinding({ taskId, findingId }),
+            ]);
+            if (cancelled) return;
+            setPhpstanTask(task);
+            setPhpstanFinding(finding);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
           } else {
             const [task, finding, context] = await Promise.all([
               getOpengrepScanTask(taskId),
@@ -204,8 +239,22 @@ export default function FindingDetail() {
             setStaticTask(task);
             setStaticFinding(finding);
             setStaticContext(context);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
           }
         } else {
+          try {
+            const agentTask = await getAgentTask(taskId);
+            if (cancelled) return;
+            const nextProject = await databaseApi.getProjectById(agentTask.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
+          } catch {
+            if (!cancelled) {
+              setProject(null);
+            }
+          }
           const canUseSnapshot =
             agentFindingSnapshot && isAgentFalsePositiveFinding(agentFindingSnapshot);
           const retryDelaysMs = canUseSnapshot ? [0, 1200, 2400] : [0];
@@ -268,6 +317,9 @@ export default function FindingDetail() {
         finding: agentFinding,
         taskId,
         findingId,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
       });
     }
 
@@ -278,6 +330,9 @@ export default function FindingDetail() {
         findingId,
         taskName: staticTask?.name,
         context: staticContext,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
       });
     }
 
@@ -287,6 +342,9 @@ export default function FindingDetail() {
         taskId,
         findingId,
         taskName: gitleaksTask?.name,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
       });
     }
 
@@ -296,6 +354,21 @@ export default function FindingDetail() {
         taskId,
         findingId,
         taskName: banditTask?.name,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
+      });
+    }
+
+    if (source === "static" && staticEngine === "phpstan" && phpstanFinding) {
+      return buildPhpstanFindingDetailModel({
+        finding: phpstanFinding,
+        taskId,
+        findingId,
+        taskName: phpstanTask?.name,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
       });
     }
 
@@ -307,6 +380,11 @@ export default function FindingDetail() {
     findingId,
     gitleaksFinding,
     gitleaksTask?.name,
+    phpstanFinding,
+    phpstanTask?.name,
+    project?.id,
+    project?.name,
+    project?.source_type,
     source,
     staticContext,
     staticEngine,
@@ -328,15 +406,23 @@ export default function FindingDetail() {
     navigate(target);
   };
 
+  const handleLoadFullFile = async (request: { projectId: string; filePath: string }) => {
+    const response = await databaseApi.getProjectFileContent(request.projectId, request.filePath);
+    return {
+      content: response.content,
+      isText: response.is_text,
+    };
+  };
+
   const fallbackTitle =
     source === "agent" && isAgentFalsePositiveFinding(agentFinding ?? agentFindingSnapshot)
       ? "误报判定依据"
-      : "统一缺陷详情";
+      : "统一漏洞详情";
 
   if (loading) {
     return (
       <FindingDetailShell title={fallbackTitle} onBack={handleBack}>
-        <div className="cyber-card p-8 text-base text-muted-foreground">缺陷详情加载中...</div>
+        <div className="cyber-card p-8 text-base text-muted-foreground">漏洞详情加载中...</div>
       </FindingDetailShell>
     );
   }
@@ -355,11 +441,17 @@ export default function FindingDetail() {
         <div className="cyber-card p-8 text-base text-muted-foreground">
           {source === "agent" && isAgentFalsePositiveFinding(agentFindingSnapshot)
             ? getAgentFalsePositiveEvidence(agentFindingSnapshot)
-            : "暂无缺陷信息"}
+            : "暂无漏洞信息"}
         </div>
       </FindingDetailShell>
     );
   }
 
-  return <FindingDetailView model={model} onBack={handleBack} />;
+  return (
+    <FindingDetailView
+      model={model}
+      onBack={handleBack}
+      onLoadFullFile={handleLoadFullFile}
+    />
+  );
 }

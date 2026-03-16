@@ -1,6 +1,6 @@
 from __future__ import annotations
-from typing import List, Union, Optional
-from pydantic import AnyHttpUrl, validator
+from typing import List, Union, Optional, Self
+from pydantic import AnyHttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
 
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
@@ -23,7 +24,8 @@ class Settings(BaseSettings):
             return v
         raise ValueError(v)
 
-    @validator("FUNCTION_LOCATOR_LANGUAGES", pre=True)
+    @field_validator("FUNCTION_LOCATOR_LANGUAGES", mode="before")
+    @classmethod
     def assemble_function_locator_languages(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str):
             text = v.strip()
@@ -50,11 +52,15 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "vulhunter"
     DATABASE_URL: str | None = None
 
-    @validator("DATABASE_URL", pre=True)
-    def assemble_db_connection(cls, v: str | None, values: dict[str, any]) -> str:
-        if isinstance(v, str):
-            return v
-        return str(f"postgresql+asyncpg://{values.get('POSTGRES_USER')}:{values.get('POSTGRES_PASSWORD')}@{values.get('POSTGRES_SERVER')}/{values.get('POSTGRES_DB')}")
+    @model_validator(mode="after")
+    def assemble_db_connection(self) -> Self:
+        if isinstance(self.DATABASE_URL, str) and self.DATABASE_URL:
+            return self
+        self.DATABASE_URL = (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_SERVER}/{self.POSTGRES_DB}"
+        )
+        return self
 
     # LLM配置
     LLM_PROVIDER: str = "openai"  # gemini, openai, claude, qwen, deepseek, zhipu, moonshot, baidu, minimax, doubao, ollama
@@ -126,12 +132,6 @@ class Settings(BaseSettings):
     # 向量数据库配置
     VECTOR_DB_PATH: str = "./data/vector_db"  # 向量数据库持久化目录
 
-    # SSH配置
-    SSH_CONFIG_PATH: str = "./data/ssh"  # SSH配置目录（存储known_hosts等）
-    SSH_CLONE_TIMEOUT: int = 300  # SSH克隆超时时间（秒）
-    SSH_TEST_TIMEOUT: int = 15  # SSH测试连接超时时间（秒）
-    SSH_CONNECT_TIMEOUT: int = 10  # SSH连接超时时间（秒）
-    
     # Agent 配置
     AGENT_MAX_ITERATIONS: int = 50  # Agent 最大迭代次数
     AGENT_TOKEN_BUDGET: int = 100000  # Agent Token 预算
@@ -140,8 +140,10 @@ class Settings(BaseSettings):
     # Agent 并发配置
     ENABLE_PARALLEL_ANALYSIS: bool = True  # 是否启用 Analysis 阶段并行处理
     ENABLE_PARALLEL_VERIFICATION: bool = True  # 是否启用 Verification 阶段并行处理
+    ENABLE_PARALLEL_REPORT: bool = True  # 是否启用 Report 阶段并行处理
     ANALYSIS_MAX_WORKERS: int = 5  # Analysis 阶段最大 worker 数量
     VERIFICATION_MAX_WORKERS: int = 3  # Verification 阶段最大 worker 数量
+    REPORT_MAX_WORKERS: int = 3  # Report 阶段最大 worker 数量
     
     # 沙箱配置（必须）
     SANDBOX_IMAGE: str = "vulhunter/sandbox:latest"  # 沙箱 Docker 镜像
@@ -182,7 +184,7 @@ class Settings(BaseSettings):
     MCP_ENABLED: bool = True
     MCP_PREFER: bool = True
     MCP_STRICT_MODE: bool = True
-    MCP_TIMEOUT_SECONDS: int = 30
+    MCP_TIMEOUT_SECONDS: int = 150
     MCP_REQUIRE_ALL_READY_ON_STARTUP: bool = True
     MCP_REQUIRED_RUNTIME_DOMAIN: str = "stdio"
     MCP_RUNTIME_MODE_DEFAULT: str = "stdio_only"
@@ -194,11 +196,6 @@ class Settings(BaseSettings):
     MCP_REQUIRE_EVIDENCE_BINDING: bool = True
     MCP_FORBID_PROJECT_WIDE_WRITES: bool = True
 
-    # MCP adapters (stdio)
-    MCP_FILESYSTEM_ENABLED: bool = True
-    MCP_FILESYSTEM_RUNTIME_MODE: str = "stdio_only"
-    MCP_FILESYSTEM_COMMAND: str = "pnpm"
-    MCP_FILESYSTEM_ARGS: str = "dlx @modelcontextprotocol/server-filesystem"
     GIT_MIRROR_ENABLED: bool = True
     GIT_MIRROR_PREFIX: str = "https://gh-proxy.org"
     GIT_MIRROR_PREFIXES: str = "https://gh-proxy.org,https://v6.gh-proxy.org"

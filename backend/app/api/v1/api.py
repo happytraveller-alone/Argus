@@ -11,7 +11,6 @@ from app.api.v1.endpoints import (
     scan,
     search,
     skills,
-    ssh_keys,
     static_tasks,
     tasks,
     users,
@@ -31,5 +30,4 @@ api_router.include_router(agent_tasks.router, prefix="/agent-tasks", tags=["agen
 api_router.include_router(agent_test.router, prefix="/agent-test", tags=["agent-test"])
 api_router.include_router(skills.router, prefix="/skills", tags=["skills"])
 api_router.include_router(embedding_config.router, prefix="/embedding", tags=["embedding"])
-api_router.include_router(ssh_keys.router, prefix="/ssh-keys", tags=["ssh-keys"])
 api_router.include_router(static_tasks.router, prefix="/static-tasks", tags=["static-tasks"])

@@ -17,7 +17,7 @@ const EXTRA_EVENT_COLORS: Record<string, string> = {
 };
 
 const EXTRA_EVENT_ICONS: Record<string, string> = {
-  project_prepare: "📦",
+  project_prepare: "",
   project_cleanup: "🧹",
 };
 

@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul 2>&1
-title DeepAudit 安全工具安装
+title VulHunter 安全工具安装
 
 echo.
 echo ╔═══════════════════════════════════════════════════════════════╗
-echo ║     DeepAudit 安全工具一键安装脚本 (Windows)                 ║
+echo ║     VulHunter 安全工具一键安装脚本 (Windows)                 ║
 echo ╚═══════════════════════════════════════════════════════════════╝
 echo.
 

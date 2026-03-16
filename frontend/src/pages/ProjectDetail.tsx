@@ -9,7 +9,6 @@ import {
 	ArrowLeft,
 	Bug,
 	Search,
-	Shield,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -49,12 +48,16 @@ import {
 	getBanditScanTasks,
 } from "@/shared/api/bandit";
 import {
+	type PhpstanScanTask,
+	getPhpstanScanTasks,
+} from "@/shared/api/phpstan";
+import {
 	getOpengrepScanFindings,
 	getOpengrepScanTasks,
 	type OpengrepFinding,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
-import { api } from "@/shared/config/database";
+import { api } from "@/shared/api/database";
 import type { AuditTask, Project } from "@/shared/types";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 
@@ -75,6 +78,7 @@ export default function ProjectDetail() {
 	const [staticTasks, setStaticTasks] = useState<OpengrepScanTask[]>([]);
 	const [gitleaksTasks, setGitleaksTasks] = useState<GitleaksScanTask[]>([]);
 	const [banditTasks, setBanditTasks] = useState<BanditScanTask[]>([]);
+	const [phpstanTasks, setPhpstanTasks] = useState<PhpstanScanTask[]>([]);
 	const [potentialVulnerabilities, setPotentialVulnerabilities] = useState<
 		ProjectCardPotentialVulnerability[]
 	>([]);
@@ -239,6 +243,7 @@ export default function ProjectDetail() {
 				staticTasksRes,
 				gitleaksTasksRes,
 				banditTasksRes,
+				phpstanTasksRes,
 			] = await Promise.allSettled([
 				api.getProjectById(id),
 				api.getAuditTasks(id),
@@ -246,6 +251,7 @@ export default function ProjectDetail() {
 				getOpengrepScanTasks({ projectId: id }),
 				getGitleaksScanTasks({ projectId: id }),
 				getBanditScanTasks({ projectId: id }),
+				getPhpstanScanTasks({ projectId: id }),
 			]);
 
 			const nextAuditTasks =
@@ -273,6 +279,11 @@ export default function ProjectDetail() {
 				Array.isArray(banditTasksRes.value)
 					? banditTasksRes.value
 					: [];
+			const nextPhpstanTasks =
+				phpstanTasksRes.status === "fulfilled" &&
+				Array.isArray(phpstanTasksRes.value)
+					? phpstanTasksRes.value
+					: [];
 
 			if (projectRes.status === "fulfilled") {
 				setProject(projectRes.value);
@@ -296,12 +307,16 @@ export default function ProjectDetail() {
 			if (banditTasksRes.status !== "fulfilled") {
 				console.warn("Failed to load bandit tasks:", banditTasksRes.reason);
 			}
+			if (phpstanTasksRes.status !== "fulfilled") {
+				console.warn("Failed to load phpstan tasks:", phpstanTasksRes.reason);
+			}
 
 			setAuditTasks(nextAuditTasks);
 			setAgentTasks(nextAgentTasks);
 			setStaticTasks(nextStaticTasks);
 			setGitleaksTasks(nextGitleaksTasks);
 			setBanditTasks(nextBanditTasks);
+			setPhpstanTasks(nextPhpstanTasks);
 
 			void fetchProjectPotentialVulnerabilities(
 				id,
@@ -332,13 +347,10 @@ export default function ProjectDetail() {
 			opengrepTasks: staticTasks,
 			gitleaksTasks,
 			banditTasks,
+			phpstanTasks,
 			limit: DETAIL_RECENT_TASK_LIMIT,
 		});
-	}, [id, auditTasks, agentTasks, staticTasks, gitleaksTasks, banditTasks]);
-
-	const handleRunScan = () => {
-		setShowCreateScanTaskDialog(true);
-	};
+	}, [id, auditTasks, agentTasks, staticTasks, gitleaksTasks, banditTasks, phpstanTasks]);
 
 	const handleTaskCreated = () => {
 		toast.success("扫描任务已创建", {
@@ -604,7 +616,7 @@ export default function ProjectDetail() {
 	const potentialStatusMessage = useMemo(() => {
 		if (potentialStatus === "loading") return "加载中...";
 		if (potentialStatus === "failed") return "加载失败";
-		if (potentialStatus === "empty") return "暂无潜在缺陷";
+		if (potentialStatus === "empty") return "暂无潜在漏洞";
 		return null;
 	}, [potentialStatus]);
 
@@ -667,10 +679,10 @@ export default function ProjectDetail() {
 						<ArrowLeft className="w-5 h-5" />
 						返回
 					</Button>
-					<Button onClick={handleRunScan} className="cyber-btn-primary">
+					{/* <Button onClick={handleRunScan} className="cyber-btn-primary">
 						<Shield className="w-4 h-4 mr-2" />
 						启动扫描
-					</Button>
+					</Button> */}
 				</div>
 			</div>
 
@@ -765,7 +777,7 @@ export default function ProjectDetail() {
 																	);
 																}}
 															>
-																缺陷详情
+																漏洞详情
 															</Button>
 														) : (
 															<span title={task.findingsButtonDisabledReason || undefined}>
@@ -776,7 +788,7 @@ export default function ProjectDetail() {
 																	className="cyber-btn-ghost h-7 px-3"
 																	disabled
 																>
-																	缺陷详情
+																	漏洞详情
 																</Button>
 															</span>
 														)}
@@ -803,7 +815,7 @@ export default function ProjectDetail() {
 					<div className="flex items-center gap-2 mb-3">
 						<Bug className="w-4 h-4 text-amber-400" />
 						<h3 className="text-sm font-semibold uppercase tracking-wider">
-							潜在缺陷
+							潜在漏洞
 						</h3>
 					</div>
 
@@ -845,7 +857,9 @@ export default function ProjectDetail() {
 									<TableRow key={`${item.taskId}:${item.id}`}>
 										<TableCell
 											className="text-left text-sm text-foreground whitespace-nowrap overflow-hidden text-ellipsis"
-											title={`${item.cweLabel} ${item.title}`}
+											title={[item.cweLabel, item.cweTooltip, item.title]
+												.filter(Boolean)
+												.join("\n")}
 										>
 											{item.cweLabel}
 										</TableCell>

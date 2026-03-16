@@ -8,6 +8,10 @@ import {
 	getBanditScanTasks,
 } from "@/shared/api/bandit";
 import {
+	type PhpstanScanTask,
+	getPhpstanScanTasks,
+} from "@/shared/api/phpstan";
+import {
 	getOpengrepScanTasks,
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
@@ -38,6 +42,13 @@ export type TaskActivitySourceMode =
 export const HYBRID_TASK_NAME_MARKER = "[HYBRID]";
 export const INTELLIGENT_TASK_NAME_MARKER = "[INTELLIGENT]";
 
+type StaticSeverityCounts = {
+	critical: number;
+	high: number;
+	medium: number;
+	low: number;
+};
+
 export interface TaskActivityItem {
 	id: string;
 	projectName: string;
@@ -45,9 +56,12 @@ export interface TaskActivityItem {
 	sourceMode: TaskActivitySourceMode;
 	status: string;
 	gitleaksEnabled?: boolean;
-	staticFindingStats?: {
-		severe: number;
-		hint: number;
+	staticFindingStats?: StaticSeverityCounts;
+	agentFindingStats?: {
+		critical: number;
+		high: number;
+		medium: number;
+		low: number;
 		total: number;
 	};
 	createdAt: string;
@@ -123,10 +137,84 @@ function normalizeStatus(status: string | null | undefined): string {
 	return String(status || "").trim().toLowerCase();
 }
 
+function toNonNegativeInt(value: unknown): number {
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) {
+		return 0;
+	}
+	return Math.floor(parsed);
+}
+
+function buildOpengrepSeverityCounts(
+	task?: OpengrepScanTask | null,
+): StaticSeverityCounts {
+	const total = toNonNegativeInt(task?.total_findings);
+	const error = toNonNegativeInt(task?.error_count);
+	const warning = toNonNegativeInt(task?.warning_count);
+	return {
+		critical: 0,
+		high: 0,
+		medium: error + warning,
+		low: Math.max(total - error - warning, 0),
+	};
+}
+
+function buildGitleaksSeverityCounts(
+	task?: GitleaksScanTask | null,
+): StaticSeverityCounts {
+	return {
+		critical: 0,
+		high: 0,
+		medium: 0,
+		low: toNonNegativeInt(task?.total_findings),
+	};
+}
+
+function buildBanditSeverityCounts(
+	task?: BanditScanTask | null,
+): StaticSeverityCounts {
+	return {
+		critical: 0,
+		high: toNonNegativeInt(task?.high_count),
+		medium: toNonNegativeInt(task?.medium_count),
+		low: toNonNegativeInt(task?.low_count),
+	};
+}
+
+function buildPhpstanSeverityCounts(
+	task?: PhpstanScanTask | null,
+): StaticSeverityCounts {
+	// PHPStan integration: dashboard/task活动口径将 phpstan 发现全部归入 low(hint)。
+	return {
+		critical: 0,
+		high: 0,
+		medium: 0,
+		low: toNonNegativeInt(task?.total_findings),
+	};
+}
+
+function mergeSeverityCounts(...counts: StaticSeverityCounts[]): StaticSeverityCounts {
+	return counts.reduce<StaticSeverityCounts>(
+		(acc, item) => ({
+			critical: acc.critical + item.critical,
+			high: acc.high + item.high,
+			medium: acc.medium + item.medium,
+			low: acc.low + item.low,
+		}),
+		{
+			critical: 0,
+			high: 0,
+			medium: 0,
+			low: 0,
+		},
+	);
+}
+
 function toRuleScanActivities(
 	opengrepTasks: OpengrepScanTask[],
 	gitleaksTasks: GitleaksScanTask[],
 	banditTasks: BanditScanTask[],
+	phpstanTasks: PhpstanScanTask[],
 	resolveProjectName: (projectId: string) => string,
 ): TaskActivityItem[] {
 	// Multi-engine grouping: one activity item can contain any selected static engines.
@@ -137,13 +225,16 @@ function toRuleScanActivities(
 		opengrepTasks: visibleOpengrepTasks,
 		gitleaksTasks,
 		banditTasks,
+		phpstanTasks,
 	});
 
-	return groups.map((group) => {
+	return groups
+		.map((group): TaskActivityItem | null => {
 		const opengrepTask = group.opengrepTask;
 		const gitleaksTask = group.gitleaksTask;
 		const banditTask = group.banditTask;
-		const primaryTask = opengrepTask || gitleaksTask || banditTask;
+		const phpstanTask = group.phpstanTask;
+		const primaryTask = opengrepTask || gitleaksTask || banditTask || phpstanTask;
 		if (!primaryTask) {
 			return null;
 		}
@@ -159,17 +250,24 @@ function toRuleScanActivities(
 		if (banditTask) {
 			params.set("banditTaskId", banditTask.id);
 		}
-		if (!opengrepTask && gitleaksTask && !banditTask) {
+		if (phpstanTask) {
+			params.set("phpstanTaskId", phpstanTask.id);
+		}
+		if (!opengrepTask && gitleaksTask && !banditTask && !phpstanTask) {
 			params.set("tool", "gitleaks");
 		}
-		if (!opengrepTask && !gitleaksTask && banditTask) {
+		if (!opengrepTask && !gitleaksTask && banditTask && !phpstanTask) {
 			params.set("tool", "bandit");
+		}
+		if (!opengrepTask && !gitleaksTask && !banditTask && phpstanTask) {
+			params.set("tool", "phpstan");
 		}
 
 		const durationCandidates = [
 			opengrepTask?.scan_duration_ms,
 			gitleaksTask?.scan_duration_ms,
 			banditTask?.scan_duration_ms,
+			phpstanTask?.scan_duration_ms,
 		];
 		const durationMs = durationCandidates.reduce<number | null>((total, value) => {
 			if (
@@ -182,32 +280,20 @@ function toRuleScanActivities(
 			return (total ?? 0) + value;
 		}, null);
 
-		const severeCount =
-			Math.max(opengrepTask?.error_count || 0, 0) +
-			Math.max(banditTask?.high_count || 0, 0);
-		const hintCount =
-			Math.max(opengrepTask?.warning_count || 0, 0) +
-			Math.max(gitleaksTask?.total_findings || 0, 0) +
-			Math.max(banditTask?.medium_count || 0, 0) +
-			Math.max(banditTask?.low_count || 0, 0);
-		const totalFindings =
-			Math.max(opengrepTask?.total_findings || 0, 0) +
-			Math.max(gitleaksTask?.total_findings || 0, 0) +
-			Math.max(
-				banditTask?.total_findings ||
-					Math.max(banditTask?.high_count || 0, 0) +
-						Math.max(banditTask?.medium_count || 0, 0) +
-						Math.max(banditTask?.low_count || 0, 0),
-				0,
-			);
+		const staticFindingStats = mergeSeverityCounts(
+			buildOpengrepSeverityCounts(opengrepTask),
+			buildGitleaksSeverityCounts(gitleaksTask),
+			buildBanditSeverityCounts(banditTask),
+			buildPhpstanSeverityCounts(phpstanTask),
+		);
 
-		const candidateStatuses = [opengrepTask, gitleaksTask, banditTask]
+		const candidateStatuses = [opengrepTask, gitleaksTask, banditTask, phpstanTask]
 			.map((task) => normalizeStatus(task?.status))
 			.filter(Boolean);
 		const hasRunningStatus = candidateStatuses.some(
 			(status) => status === "running" || status === "pending",
 		);
-		const latestUpdatedAt = [opengrepTask, gitleaksTask, banditTask].reduce<
+		const latestUpdatedAt = [opengrepTask, gitleaksTask, banditTask, phpstanTask].reduce<
 			string | null
 		>((latest, task) => {
 			const current = task?.updated_at || null;
@@ -219,28 +305,29 @@ function toRuleScanActivities(
 		}, null);
 		const completedAt = hasRunningStatus ? null : latestUpdatedAt;
 
-		return {
+		const item: TaskActivityItem = {
 			id: `static-${primaryTask.id}`,
 			projectName: resolveProjectName(group.projectId),
 			kind: "rule_scan",
 			sourceMode: resolveSourceModeFromTaskMeta(
 				"rule_scan",
-				opengrepTask?.name || gitleaksTask?.name || banditTask?.name,
+				opengrepTask?.name ||
+					gitleaksTask?.name ||
+					banditTask?.name ||
+					phpstanTask?.name,
 			),
 			status: resolveStaticScanGroupStatus(group),
 			gitleaksEnabled: Boolean(gitleaksTask),
-			staticFindingStats: {
-				severe: severeCount,
-				hint: hintCount,
-				total: totalFindings,
-			},
+			staticFindingStats,
 			createdAt: group.createdAt,
 			startedAt: group.createdAt,
 			completedAt,
 			durationMs,
 			route: `/static-analysis/${primaryTask.id}?${params.toString()}`,
 		};
-	}).filter((item): item is TaskActivityItem => Boolean(item));
+		return item;
+	})
+		.filter((item): item is TaskActivityItem => item !== null);
 }
 
 function toAgentActivities(
@@ -257,6 +344,13 @@ function toAgentActivities(
 			task.description,
 		),
 		status: task.status,
+		agentFindingStats: {
+			critical: Math.max(task.critical_count || 0, 0),
+			high: Math.max(task.high_count || 0, 0),
+			medium: Math.max(task.medium_count || 0, 0),
+			low: Math.max(task.low_count || 0, 0),
+			total: Math.max(task.findings_count || 0, 0),
+		},
 		createdAt: task.created_at,
 		startedAt: task.started_at,
 		completedAt: task.completed_at,
@@ -268,11 +362,13 @@ export async function fetchTaskActivities(
 	projects: Project[],
 	limit = 100,
 ): Promise<TaskActivityItem[]> {
-	const [agentTasks, opengrepTasks, gitleaksTasks, banditTasks] = await Promise.all([
+	const [agentTasks, opengrepTasks, gitleaksTasks, banditTasks, phpstanTasks] =
+		await Promise.all([
 		getAgentTasks({ limit }),
 		getOpengrepScanTasks({ limit }),
 		getGitleaksScanTasks({ limit }),
 		getBanditScanTasks({ limit }),
+		getPhpstanScanTasks({ limit }),
 	]);
 
 	const projectNameMap = mapProjectNames(projects);
@@ -284,6 +380,7 @@ export async function fetchTaskActivities(
 			opengrepTasks,
 			gitleaksTasks,
 			banditTasks,
+			phpstanTasks,
 			resolveProjectName,
 		),
 		...toAgentActivities(agentTasks, resolveProjectName),

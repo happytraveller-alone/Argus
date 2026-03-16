@@ -50,7 +50,7 @@ async def test_structured_description_denoises_tool_wrapper_and_enforces_length(
 
     assert "CallToolResult" not in description
     assert "TextContent" not in description
-    assert "该缺陷位于src/command.c:41-44的run_command函数中" in description
+    assert "该漏洞位于src/command.c:41-44的run_command函数中" in description
     assert 120 <= len(description) <= 300
 
 

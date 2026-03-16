@@ -1,6 +1,6 @@
 import type { Project } from "@/shared/types";
 
-export function filterProjects<T extends Pick<Project, "name" | "description" | "repository_url">>(
+export function filterProjects<T extends Pick<Project, "name" | "description">>(
 	projects: T[],
 	searchTerm: string,
 ) {
@@ -10,8 +10,7 @@ export function filterProjects<T extends Pick<Project, "name" | "description" | 
 	return projects.filter((project) => {
 		return (
 			project.name.toLowerCase().includes(keyword) ||
-			(project.description || "").toLowerCase().includes(keyword) ||
-			(project.repository_url || "").toLowerCase().includes(keyword)
+			(project.description || "").toLowerCase().includes(keyword)
 		);
 	});
 }

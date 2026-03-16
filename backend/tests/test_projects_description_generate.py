@@ -298,7 +298,7 @@ async def test_generate_project_description_preview_invalid_format(monkeypatch):
 async def test_get_project_info_does_not_generate_description(monkeypatch):
     from app.api.v1.endpoints import projects as projects_endpoint
 
-    project = SimpleNamespace(id="project-1", name="demo")
+    project = SimpleNamespace(id="project-1", name="demo", source_type="zip")
 
     db = AsyncMock()
     db.execute = AsyncMock(
@@ -339,7 +339,7 @@ async def test_get_project_info_does_not_generate_description(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_project_info_repository_returns_unsupported(monkeypatch):
+async def test_get_project_info_repository_is_hidden(monkeypatch):
     from app.api.v1.endpoints import projects as projects_endpoint
 
     project = SimpleNamespace(
@@ -364,16 +364,15 @@ async def test_get_project_info_repository_returns_unsupported(monkeypatch):
 
     monkeypatch.setattr(projects_endpoint, "get_cloc_stats", _fail_if_called)
 
-    info = await get_project_info(
-        id="project-1",
-        db=db,
-        current_user=SimpleNamespace(id="u-1"),
-    )
+    with pytest.raises(HTTPException) as exc_info:
+        await get_project_info(
+            id="project-1",
+            db=db,
+            current_user=SimpleNamespace(id="u-1"),
+        )
 
-    assert info.project_id == "project-1"
-    assert info.status == "unsupported"
-    assert info.language_info == '{"total": 0, "total_files": 0, "languages": {}}'
-    assert info.description == ""
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "项目不存在"
 
 
 @pytest.mark.asyncio

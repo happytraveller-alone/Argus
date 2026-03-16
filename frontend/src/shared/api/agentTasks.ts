@@ -187,7 +187,6 @@ export interface CreateAgentTaskRequest {
   target_vulnerabilities?: string[];
   // unified mode, backend still accepts legacy values and normalizes them
   verification_level?: "analysis_with_poc_plan";
-  branch_name?: string;
   exclude_patterns?: string[];
   target_files?: string[];
   max_iterations?: number;
@@ -198,7 +197,9 @@ export interface CreateAgentTaskRequest {
 export interface AgentStaticBootstrapScope {
   mode?: "embedded" | "disabled";
   opengrep_enabled?: boolean;
+  bandit_enabled?: boolean;
   gitleaks_enabled?: boolean;
+  phpstan_enabled?: boolean;
 }
 
 export interface AgentAuditScope extends Record<string, unknown> {

@@ -29,6 +29,7 @@ from app.services.agent.workflow import (
     WorkflowState,
     WorkflowStepRecord,
 )
+from app.services.agent.workflow.models import WorkflowConfig
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -98,6 +99,11 @@ def _build_orchestrator(
         sub_agents={"recon": MagicMock(), "analysis": MagicMock(), "verification": MagicMock()},
         recon_queue_service=recon_queue,
         vuln_queue_service=vuln_queue,
+        workflow_config=WorkflowConfig(
+            enable_parallel_analysis=False,
+            enable_parallel_verification=False,
+            enable_parallel_report=False,
+        ),
     )
     return agent
 
@@ -496,6 +502,81 @@ class TestStepRecords:
 
         phases = [r.phase for r in state.step_records]
         assert phases == [WorkflowPhase.RECON, WorkflowPhase.ANALYSIS, WorkflowPhase.VERIFICATION]
+
+
+class TestReportCorrectionFlow:
+    @pytest.mark.asyncio
+    async def test_report_phase_merges_updated_finding_into_all_findings(self, orchestrator_with_queues):
+        orch, recon_q, vuln_q = orchestrator_with_queues
+        vuln_q.enqueue_finding(
+            TASK_ID,
+            {
+                "finding_identity": "fid:test-report",
+                "title": "wrong title",
+                "file_path": "app.py",
+                "line_start": 99,
+                "vulnerability_type": "sql_injection",
+                "severity": "high",
+            },
+        )
+
+        async def mock_dispatch(params: Dict) -> str:
+            if params.get("agent") == "verification":
+                finding_from_params = dict(params.get("finding") or {})
+                finding_from_params.update(
+                    {
+                        "verdict": "confirmed",
+                        "confidence": 0.9,
+                        "finding_identity": "fid:test-report",
+                    }
+                )
+                orch._agent_results["verification"] = {
+                    "_run_success": True,
+                    "findings": [finding_from_params],
+                }
+                orch._all_findings.append(dict(finding_from_params))
+                return "Verification 完成"
+            return "ok"
+
+        class _FakeReportAgent:
+            async def run(self, input_data: Dict[str, Any]) -> AgentResult:
+                finding = dict(input_data.get("finding") or {})
+                finding.update(
+                    {
+                        "title": "app.py中correct_func函数SQL注入漏洞",
+                        "line_start": 10,
+                        "line_end": 11,
+                        "function_name": "correct_func",
+                    }
+                )
+                return AgentResult(
+                    success=True,
+                    data={
+                        "vulnerability_report": "# corrected report",
+                        "updated_finding": finding,
+                    },
+                    iterations=1,
+                    tool_calls=1,
+                    tokens_used=10,
+                )
+
+            def reset_cancellation_state(self) -> None:
+                return None
+
+        orch._dispatch_agent = mock_dispatch
+        orch.sub_agents["report"] = _FakeReportAgent()
+        orch._agent_results["recon"] = {"_run_success": True}
+
+        engine = AuditWorkflowEngine(recon_q, vuln_q, TASK_ID, orch)
+        state = await engine.run({}, {}, "/tmp", TASK_ID)
+
+        assert state.phase == WorkflowPhase.COMPLETE
+        assert orch._all_findings
+        final_finding = orch._all_findings[0]
+        assert final_finding["finding_identity"] == "fid:test-report"
+        assert final_finding["line_start"] == 10
+        assert final_finding["function_name"] == "correct_func"
+        assert final_finding["vulnerability_report"] == "# corrected report"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
 	BUILTIN_LLM_PROVIDERS,
 	buildLlmProviderOptions,
+	getLlmCustomHeadersParseErrorMessage,
 	getCreateProjectScanProviderLabel,
 	normalizeLlmProviderId,
 	parseLlmCustomHeadersInput,
@@ -70,6 +71,17 @@ test("parseLlmCustomHeadersInput validates JSON object strings", () => {
 		ok: false,
 		message: "自定义请求头必须是 JSON 对象",
 	});
+});
+
+test("getLlmCustomHeadersParseErrorMessage only exposes validation errors", () => {
+	assert.equal(
+		getLlmCustomHeadersParseErrorMessage(parseLlmCustomHeadersInput("")),
+		null,
+	);
+	assert.equal(
+		getLlmCustomHeadersParseErrorMessage(parseLlmCustomHeadersInput('["invalid"]')),
+		"自定义请求头必须是 JSON 对象",
+	);
 });
 
 test("getCreateProjectScanProviderLabel highlights the compatibility entry", () => {

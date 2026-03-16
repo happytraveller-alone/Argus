@@ -1,5 +1,5 @@
 def main():
-    print("Hello from deepaudit-backend!")
+    print("Hello from VulHunter-backend!")
 
 
 if __name__ == "__main__":

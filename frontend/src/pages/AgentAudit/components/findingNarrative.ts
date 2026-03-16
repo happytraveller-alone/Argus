@@ -33,70 +33,6 @@ export interface RawEvidenceEntry {
   truncated: boolean;
 }
 
-const CODE_LANGUAGE_MAP: Record<string, string> = {
-  py: "python",
-  pyw: "python",
-  pyi: "python",
-  js: "javascript",
-  mjs: "javascript",
-  cjs: "javascript",
-  ts: "typescript",
-  mts: "typescript",
-  jsx: "jsx",
-  tsx: "tsx",
-  java: "java",
-  kt: "kotlin",
-  kts: "kotlin",
-  go: "go",
-  rs: "rust",
-  rb: "ruby",
-  php: "php",
-  c: "c",
-  h: "c",
-  cpp: "cpp",
-  cc: "cpp",
-  cxx: "cpp",
-  hpp: "cpp",
-  cs: "csharp",
-  sh: "bash",
-  bash: "bash",
-  zsh: "zsh",
-  ps1: "powershell",
-  json: "json",
-  yaml: "yaml",
-  yml: "yaml",
-  toml: "toml",
-  ini: "ini",
-  xml: "xml",
-  sql: "sql",
-  html: "html",
-  htm: "html",
-  css: "css",
-  scss: "scss",
-  sass: "sass",
-  less: "less",
-  vue: "vue",
-  svelte: "svelte",
-  md: "markdown",
-  markdown: "markdown",
-  sol: "solidity",
-  swift: "swift",
-  lua: "lua",
-  pl: "perl",
-  pm: "perl",
-  ex: "elixir",
-  exs: "elixir",
-  erl: "erlang",
-  hs: "haskell",
-  scala: "scala",
-  sc: "scala",
-  clj: "clojure",
-  cljs: "clojure",
-  dart: "dart",
-  groovy: "groovy",
-  gradle: "groovy",
-};
-
 const RAW_EVIDENCE_FIELDS: Array<{ key: string; label: string }> = [
   { key: "description", label: "description" },
   { key: "verification_evidence", label: "verification_evidence" },
@@ -117,28 +53,6 @@ function asTrimmedText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function inferCodeLanguageFromPath(filePath?: string | null): string {
-  const normalized = asTrimmedText(filePath);
-  if (!normalized || !normalized.includes(".")) {
-    return "text";
-  }
-  const ext = normalized.split(".").pop()?.toLowerCase() || "";
-  return CODE_LANGUAGE_MAP[ext] || "text";
-}
-
-function getLocationText(input: FindingNarrativeInput): string {
-  const path = asTrimmedText(input.file_path) || "未知路径";
-  const lineStart = typeof input.line_start === "number" ? input.line_start : null;
-  const lineEnd = typeof input.line_end === "number" ? input.line_end : null;
-  if (lineStart && lineEnd && lineEnd !== lineStart) {
-    return `${path}:${lineStart}-${lineEnd}`;
-  }
-  if (lineStart) {
-    return `${path}:${lineStart}`;
-  }
-  return path;
-}
-
 export function buildFindingNarrativeMarkdown(input: FindingNarrativeInput): string {
   const existingMarkdown = asTrimmedText(input.description_markdown);
   if (existingMarkdown) {
@@ -147,31 +61,17 @@ export function buildFindingNarrativeMarkdown(input: FindingNarrativeInput): str
 
   const rootCause =
     asTrimmedText(input.description) || "当前证据不足，请补充上下文代码与可达性分析结果后复核。";
-  const codeSource =
-    asTrimmedText(input.code_context) ||
-    asTrimmedText(input.code_snippet) ||
-    "（暂无可展示代码片段，请结合原始文件复核。）";
-  const safeCode = codeSource.replace(/```/g, "``");
-  const flowSummary =
-    Array.isArray(input.function_trigger_flow) && input.function_trigger_flow.length > 0
-      ? input.function_trigger_flow.map((item) => String(item)).join(" -> ")
-      : "当前未提供完整触发路径，请结合 flow 证据继续验证。";
-  const language = inferCodeLanguageFromPath(input.file_path);
-
+  // const codeSource =
+  //   asTrimmedText(input.code_context) ||
+  //   asTrimmedText(input.code_snippet) ||
+  //   "（暂无可展示代码片段，请结合原始文件复核。）";
+  // const safeCode = codeSource.replace(/```/g, "``");
+  // const flowSummary =
+  //   Array.isArray(input.function_trigger_flow) && input.function_trigger_flow.length > 0
+  //     ? input.function_trigger_flow.map((item) => String(item)).join(" -> ")
+  //     : "当前未提供完整触发路径，请结合 flow 证据继续验证。";
   return [
-    "### 定位与结论",
-    `定位到 \`${getLocationText(input)}\`，该问题需要结合上下文进行进一步复核。`,
-    "",
-    "### 根因解释",
     rootCause,
-    "",
-    "### 代码说明",
-    `\`\`\`${language}`,
-    safeCode,
-    "\`\`\`",
-    "",
-    "### 触发路径",
-    flowSummary,
   ].join("\n");
 }
 

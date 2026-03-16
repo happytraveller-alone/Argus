@@ -65,7 +65,6 @@ class AuditTaskSchema(BaseModel):
     project_id: str
     task_type: str
     status: str
-    branch_name: Optional[str] = None
     exclude_patterns: Optional[str] = None
     scan_config: Optional[str] = None
     total_files: int = 0
@@ -245,7 +244,6 @@ async def export_task_report_pdf(
     task_dict = {
         'id': task.id,
         'status': task.status,
-        'branch_name': task.branch_name,
         'total_files': task.total_files,
         'scanned_files': task.scanned_files,
         'total_lines': task.total_lines,

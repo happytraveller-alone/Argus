@@ -43,23 +43,9 @@ class _FakeDB:
 
 
 @pytest.mark.asyncio
-async def test_update_my_config_strips_frontend_mcp_payload_and_returns_backend_owned(
+async def test_update_my_config_strips_frontend_mcp_payload_and_does_not_return_mcp_config(
     monkeypatch,
 ):
-    backend_owned_mcp = {
-        "enabled": True,
-        "preferMcp": True,
-        "runtimePolicy": {"default_mode": "backend_then_sandbox"},
-        "writePolicy": {"max_writable_files_per_task": 50},
-        "catalog": [{"id": "filesystem", "type": "mcp-server"}],
-        "skillAvailability": {"read_file": {"enabled": True}},
-    }
-    monkeypatch.setattr(
-        config_module,
-        "_sanitize_mcp_config",
-        lambda _raw: backend_owned_mcp,
-    )
-
     fake_db = _FakeDB()
 
     response = await update_my_config(
@@ -68,7 +54,7 @@ async def test_update_my_config_strips_frontend_mcp_payload_and_returns_backend_
                 maxAnalyzeFiles=12,
                 mcpConfig={
                     "enabled": False,
-                    "catalog": [{"id": "frontend-fake"}],
+                    "catalog": [{"id": "filesystem"}],
                     "runtimePolicy": {
                         "filesystem": {
                             "runtime_mode": "backend_only",
@@ -87,28 +73,14 @@ async def test_update_my_config_strips_frontend_mcp_payload_and_returns_backend_
     stored_other = json.loads(fake_db.saved_config.other_config or "{}")
     assert "mcpConfig" not in stored_other
 
-    assert response.otherConfig.get("mcpConfig") == backend_owned_mcp
+    assert "mcpConfig" not in response.otherConfig
     assert response.otherConfig.get("maxAnalyzeFiles") == 12
 
 
 @pytest.mark.asyncio
-async def test_get_my_config_rebuilds_backend_owned_mcp_even_if_legacy_data_contains_it(
+async def test_get_my_config_strips_legacy_mcp_config_from_response(
     monkeypatch,
 ):
-    backend_owned_mcp = {
-        "enabled": True,
-        "preferMcp": True,
-        "runtimePolicy": {"default_mode": "backend_then_sandbox"},
-        "writePolicy": {"max_writable_files_per_task": 50},
-        "catalog": [{"id": "filesystem", "type": "mcp-server"}],
-        "skillAvailability": {"search_code": {"enabled": True}},
-    }
-    monkeypatch.setattr(
-        config_module,
-        "_sanitize_mcp_config",
-        lambda _raw: backend_owned_mcp,
-    )
-
     existing = UserConfig(
         user_id="user-1",
         llm_config=json.dumps({}),
@@ -133,4 +105,34 @@ async def test_get_my_config_rebuilds_backend_owned_mcp_even_if_legacy_data_cont
     )
 
     assert response.otherConfig.get("maxAnalyzeFiles") == 7
-    assert response.otherConfig.get("mcpConfig") == backend_owned_mcp
+    assert "mcpConfig" not in response.otherConfig
+
+
+@pytest.mark.asyncio
+async def test_get_my_config_strips_legacy_git_tokens_from_other_config(
+    monkeypatch,
+):
+    existing = UserConfig(
+        user_id="user-1",
+        llm_config=json.dumps({}),
+        other_config=json.dumps(
+            {
+                "githubToken": "legacy-gh-token",
+                "gitlabToken": "legacy-gl-token",
+                "maxAnalyzeFiles": 9,
+            }
+        ),
+    )
+    existing.id = "cfg-existing"
+    existing.created_at = datetime.now(timezone.utc)
+
+    fake_db = _FakeDB(existing)
+
+    response = await get_my_config(
+        db=fake_db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert response.otherConfig.get("maxAnalyzeFiles") == 9
+    assert "githubToken" not in response.otherConfig
+    assert "gitlabToken" not in response.otherConfig

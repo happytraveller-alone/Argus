@@ -18,7 +18,7 @@ def run_tests():
     os.chdir(project_root)
     
     print("=" * 60)
-    print("DeepAudit Agent 测试套件")
+    print("VulHunter Agent 测试套件")
     print(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
     print()
@@ -42,9 +42,9 @@ def run_tests():
     print()
     print("=" * 60)
     if result.returncode == 0:
-        print("✅ 所有测试通过!")
+        print("所有测试通过!")
     else:
-        print(f"❌ 测试失败 (退出码: {result.returncode})")
+        print(f"测试失败 (退出码: {result.returncode})")
     print("=" * 60)
     
     return result.returncode

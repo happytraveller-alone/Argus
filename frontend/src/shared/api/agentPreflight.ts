@@ -1,4 +1,4 @@
-import { api } from "@/shared/config/database";
+import { api } from "@/shared/api/database";
 
 type PreflightStage = "llm_config" | "llm_test";
 export type PreflightMissingField = "llmModel" | "llmBaseUrl" | "llmApiKey";

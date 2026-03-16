@@ -41,11 +41,11 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 | **聚焦分析** | 基于输入的**风险点对象**（含 `file_path`、`line_start`、`description` 等），围绕该点展开深度分析 |
 | **验证漏洞** | 通过代码上下文阅读、数据流追踪、相关函数分析，判断是否为真实可利用漏洞 |
 | **推送发现** | **每确认一个漏洞，立即调用 `push_finding_to_queue`**，不得延迟 |
-| **扩展挖掘** | 分析与当前风险点相关的其他漏洞（同文件其他行、上下游逻辑缺陷），一并确认推送 |
+| **扩展挖掘** | 分析与当前风险点相关的其他漏洞（同文件其他行、上下游逻辑漏洞），一并确认推送 |
 
 ═══════════════════════════════════════════════════════════════
 
-## 📥 输入风险点格式
+## 输入风险点格式
 
 ```json
 {
@@ -95,7 +95,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 
 ═══════════════════════════════════════════════════════════════
 
-## 🛠️ 分析工具箱
+## 分析工具箱
 
 | 工具 | 用途 | 调用时机 |
 |------|------|---------|
@@ -112,7 +112,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 
 ═══════════════════════════════════════════════════════════════
 
-## 🛠️ 工具调用失败处理（关键）
+## 工具调用失败处理（关键）
 
 ### 失败响应原则
 **遇到工具调用失败时，你必须：**
@@ -147,7 +147,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 
 ═══════════════════════════════════════════════════════════════
 
-## ⚠️ 关键约束（零容忍）
+## 关键约束（零容忍）
 
 | 约束项 | 要求 |
 |--------|------|
@@ -166,7 +166,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 
 ═══════════════════════════════════════════════════════════════
 
-## 📝 输出格式
+## 输出格式
 
 **标准行动格式：**
 ```
@@ -183,7 +183,7 @@ Final Answer: 分析完成，所有确认的漏洞已推送至队列。
 
 ═══════════════════════════════════════════════════════════════
 
-## 📋 完整示例交互
+## 完整示例交互
 
 **初始输入：**
 ```json
@@ -301,7 +301,7 @@ def attach_file():
     return 'OK'
 ```
 
-Thought: order.py的上传有权限检查，相对安全。但发现业务逻辑入口：order_id处理。检查是否有其他order相关接口存在逻辑缺陷。
+Thought: order.py的上传有权限检查，相对安全。但发现业务逻辑入口：order_id处理。检查是否有其他order相关接口存在逻辑漏洞。
 Action: read_file
 Action Input: { "file_path": "app/api/order.py", "offset": 80, "max_lines": 50 }
 
@@ -592,10 +592,8 @@ class AnalysisAgent(BaseAgent):
         self,
         *,
         action: str,
-        action_input: Dict[str, Any],
-        risk_file_path: str,
     ) -> Optional[str]:
-        """判断 Action 是否越界到单风险点范围之外。返回原因字符串表示越界。"""
+        """检查 Action 是否触发单风险模式下的硬拦截规则。"""
         action_name = str(action or "").strip()
         if not action_name:
             return "Action 为空"
@@ -609,29 +607,9 @@ class AnalysisAgent(BaseAgent):
             "safety_scan",
             "opengrep_scan",
             "kunlun_scan",
-            "list_files",
         }
         if action_name in blocked_actions:
             return f"单风险点模式禁止调用全局扫描工具: {action_name}"
-
-        target_keys = [
-            "file_path",
-            "scan_file",
-            "target_file",
-            "path",
-            "target_path",
-            "target",
-            "directory",
-        ]
-        allowed = str(risk_file_path or "").strip()
-        for key in target_keys:
-            value = action_input.get(key)
-            if isinstance(value, str) and value.strip():
-                candidate = value.strip()
-                if candidate in {".", "./", "*", "./*"}:
-                    return f"参数 {key}={candidate} 超出单风险点文件范围"
-                if candidate != allowed:
-                    return f"参数 {key}={candidate} 与目标文件 {allowed} 不一致"
 
         return None
 
@@ -741,7 +719,7 @@ class AnalysisAgent(BaseAgent):
             agent_mem = str(markdown_memory.get("analysis") or "").strip()
             skills_mem = str(markdown_memory.get("skills") or "").strip()
             if shared_mem or agent_mem or skills_mem:
-                initial_message += f"""## 🧠 项目长期记忆（Markdown，无 RAG）
+                initial_message += f"""## 项目长期记忆（Markdown，无 RAG）
 ### shared.md（节选）
 {shared_mem or "(空)"}
 
@@ -754,7 +732,7 @@ class AnalysisAgent(BaseAgent):
 """
         # 🔥 如果指定了目标文件，明确告知 Agent
         if target_files:
-            initial_message += f"""## ⚠️ 审计范围
+            initial_message += f"""## 审计范围
 用户指定了 {len(target_files)} 个目标文件进行审计：
 """
             for tf in target_files[:10]:
@@ -818,7 +796,7 @@ class AnalysisAgent(BaseAgent):
             )
 
         initial_message += f"""{handoff_context if handoff_context else f'''## 上下文信息
-### ⚠️ 高风险区域（来自 Recon Agent，必须优先分析）
+### 高风险区域（来自 Recon Agent，必须优先分析）
 以下是 Recon Agent 识别的高风险区域，请**务必优先**读取和分析这些文件：
 {json.dumps(high_risk_areas[:20], ensure_ascii=False)}
 
@@ -840,12 +818,10 @@ class AnalysisAgent(BaseAgent):
 - 启用状态: {single_risk_mode}
 - 风险点: {json.dumps(single_risk_point, ensure_ascii=False) if single_risk_point else "未提供"}
 
-## ⚠️ 分析策略要求
-1. **首先**：只分析给定风险点所在文件与附近代码（前后至少20行）
-2. **然后**：仅在同一文件内做数据流/调用上下文扩展
-3. **最后**：给出该风险点是否成立的结论，禁止扩展到全局扫描
-
-**禁止**：不要跨文件、不要全局扫描、不要改为分析其他风险点
+## 分析策略要求
+1. **首先**：优先分析给定风险点所在文件与附近代码（前后至少20行）
+2. **然后**：按证据需要扩展到相关调用链与数据流
+3. **最后**：给出该风险点是否成立的结论，避免无关的全仓库扫描
 
 ## 目标漏洞类型
 {config.get('target_vulnerabilities', ['all'])}
@@ -947,7 +923,7 @@ class AnalysisAgent(BaseAgent):
                     },
                 )
             return (
-                "⚠️ 系统无法自动执行最小工具调用（缺少 read_file 或目标文件未知）。"
+                "系统无法自动执行最小工具调用（缺少 read_file 或目标文件未知）。"
                 "请改用 read_file/search_code 获取证据后再总结。"
             )
 
@@ -1086,7 +1062,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                         # 首次触发：系统自动执行一次最小 read_file/list_files，确保有 Observation 证据
                         if not forced_min_tool_done:
                             forced_min_tool_done = True
-                            await self.emit_thinking("⚠️ 拒绝过早完成：系统将自动执行一次最小工具调用获取证据")
+                            await self.emit_thinking("拒绝过早完成：系统将自动执行一次最小工具调用获取证据")
                             observation = await run_minimal_evidence_tool()
 
                             await self.emit_llm_observation(observation)
@@ -1204,13 +1180,11 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                     if single_risk_mode and single_risk_file:
                         out_of_scope_reason = self._is_action_out_of_single_scope(
                             action=step.action,
-                            action_input=action_input,
-                            risk_file_path=single_risk_file,
                         )
                         if out_of_scope_reason:
                             scoped_observation = (
-                                f"⚠️ 单风险点范围约束：{out_of_scope_reason}。\n"
-                                f"请仅分析文件 {single_risk_file}，并优先使用 read_file/search_code/dataflow_analysis。"
+                                f"单风险点模式工具限制：{out_of_scope_reason}。\n"
+                                "请改用 read_file/search_code/dataflow_analysis 等非全局扫描工具继续分析。"
                             )
                             step.observation = scoped_observation
                             await self.emit_llm_observation(scoped_observation)
@@ -1246,7 +1220,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                         # 🔥 如果同一调用连续失败3次，添加强制跳过提示
                         if fail_count >= 3:
                             logger.warning(f"[{self.name}] Tool call failed {fail_count} times: {tool_call_key}")
-                            observation += f"\n\n⚠️ **系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
+                            observation += f"\n\n**系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
                             observation += "1. 尝试使用不同的参数（如指定较小的行范围）\n"
                             observation += "2. 使用 search_code 工具定位关键代码片段\n"
                             observation += "3. 跳过此文件，继续分析其他文件\n"
@@ -1290,7 +1264,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                             ),
                         })
                     elif no_action_streak == 5:
-                        await self.emit_thinking("⚠️ 检测到连续无 Action，系统自动执行最小证据工具以打破空转。")
+                        await self.emit_thinking("检测到连续无 Action，系统自动执行最小证据工具以打破空转。")
                         observation = await run_minimal_evidence_tool()
                         await self.emit_llm_observation(observation)
                         self._conversation_history.append({
@@ -1320,7 +1294,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
             
             # 🔥 如果循环结束但没有发现，强制 LLM 总结
             if not all_findings and not self.is_cancelled and not error_message and not degraded_reason:
-                await self.emit_thinking("📝 分析阶段结束，正在生成漏洞总结...")
+                await self.emit_thinking("分析阶段结束，正在生成漏洞总结...")
                 
                 # 添加强制总结的提示
                 self._conversation_history.append({
@@ -1398,7 +1372,7 @@ Final Answer:""",
             if error_message:
                 await self.emit_event(
                     "error",
-                    f"❌ Analysis Agent 失败: {error_message}"
+                    f"Analysis Agent 失败: {error_message}"
                 )
                 return AgentResult(
                     success=False,
@@ -1455,7 +1429,7 @@ Final Answer:""",
             
             if fallback_result:
                 logger.warning(
-                    f"[{self.name}] 🔧 兜底机制执行完成: 补救推送了 "
+                    f"[{self.name}] 兜底机制执行完成: 补救推送了 "
                     f"{fallback_result.get('pushed_count', 0)}/{fallback_result.get('total_findings', 0)} 个发现"
                 )
                 await self.emit_event(

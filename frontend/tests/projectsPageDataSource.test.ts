@@ -38,6 +38,8 @@ test("api projects data source loads paginated projects and task pools", async (
 		getAgentTasks: async () => [{ id: "agt-1", status: "running" }],
 		getOpengrepScanTasks: async () => [{ id: "o1", project_id: "p1", status: "completed", created_at: "2024-01-01T00:00:00Z" }],
 		getGitleaksScanTasks: async () => [{ id: "g1", project_id: "p1", status: "completed", created_at: "2024-01-01T00:00:01Z" }],
+		getBanditScanTasks: async () => [{ id: "b1", project_id: "p1", status: "completed", created_at: "2024-01-01T00:00:02Z" }],
+		getPhpstanScanTasks: async () => [{ id: "p1", project_id: "p1", status: "completed", created_at: "2024-01-01T00:00:03Z" }],
 		getProjectInfo: async () => ({
 			status: "ready",
 			language_info: {
@@ -60,6 +62,8 @@ test("api projects data source loads paginated projects and task pools", async (
 	assert.equal(taskPool.agentTasks.length, 1);
 	assert.equal(taskPool.opengrepTasks.length, 1);
 	assert.equal(taskPool.gitleaksTasks.length, 1);
+	assert.equal(taskPool.banditTasks.length, 1);
+	assert.equal(taskPool.phpstanTasks.length, 1);
 	assert.equal(languageStats.status, "ready");
 	assert.equal(languageStats.totalFiles, 10);
 });
@@ -78,4 +82,50 @@ test("mock projects data source exposes the same data source surface", async () 
 	assert.equal(Array.isArray(projects), true);
 	assert.equal(Array.isArray(taskPool.auditTasks), true);
 	assert.match(stats.status, /loading|pending|ready|failed|unsupported|empty/);
+});
+
+test("legacy projects data source toggles project status via delete and restore endpoints", async () => {
+	const legacyFactory = await importOrFail<any>(
+		"../src/pages/projects/datasource/createApiProjectsPageDataSource.ts",
+	);
+	const databaseModule = await importOrFail<any>(
+		"../src/shared/api/database.ts",
+	);
+
+	const originalApi = {
+		updateProject: databaseModule.api.updateProject,
+		deleteProject: databaseModule.api.deleteProject,
+		restoreProject: databaseModule.api.restoreProject,
+	};
+	const calls = {
+		updateProject: 0,
+		deleteProject: 0,
+		restoreProject: 0,
+	};
+
+	databaseModule.api.updateProject = async () => {
+		calls.updateProject += 1;
+		return { id: "updated-project" };
+	};
+	databaseModule.api.deleteProject = async () => {
+		calls.deleteProject += 1;
+	};
+	databaseModule.api.restoreProject = async () => {
+		calls.restoreProject += 1;
+	};
+
+	try {
+		const source = legacyFactory.createApiProjectsPageDataSource();
+
+		await source.disableProject("project-1");
+		await source.enableProject("project-1");
+
+		assert.equal(calls.updateProject, 0);
+		assert.equal(calls.deleteProject, 1);
+		assert.equal(calls.restoreProject, 1);
+	} finally {
+		databaseModule.api.updateProject = originalApi.updateProject;
+		databaseModule.api.deleteProject = originalApi.deleteProject;
+		databaseModule.api.restoreProject = originalApi.restoreProject;
+	}
 });

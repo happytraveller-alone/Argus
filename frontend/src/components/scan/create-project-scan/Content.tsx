@@ -33,7 +33,7 @@ import {
 	getCreateProjectScanProviderLabel,
 	type LLMProviderItem,
 } from "@/shared/llm/providerCatalog";
-import { isRepositoryProject, isZipProject } from "@/shared/utils/projectUtils";
+import { isZipProject } from "@/shared/utils/projectUtils";
 import {
   normalizeCreateProjectScanProvider,
 } from "./utils";
@@ -80,6 +80,8 @@ export default function CreateProjectScanDialogContent({
   setGitleaksEnabled,
   banditEnabled,
   setBanditEnabled,
+  phpstanEnabled,
+  setPhpstanEnabled,
   showLlmQuickFixPanel,
   openLlmQuickFixPanelManual,
   quickFixSaving,
@@ -96,8 +98,6 @@ export default function CreateProjectScanDialogContent({
   llmTestBlockedMessage,
   handleQuickFixTest,
   handleQuickFixSave,
-  branchName,
-  setBranchName,
   showReturnButton,
   onReturn,
   primaryCreateLabel,
@@ -140,6 +140,8 @@ export default function CreateProjectScanDialogContent({
   setGitleaksEnabled: (enabled: boolean) => void;
   banditEnabled: boolean;
   setBanditEnabled: (enabled: boolean) => void;
+  phpstanEnabled: boolean;
+  setPhpstanEnabled: (enabled: boolean) => void;
   showLlmQuickFixPanel: boolean;
   openLlmQuickFixPanelManual: () => void | Promise<void>;
   quickFixSaving: boolean;
@@ -160,8 +162,6 @@ export default function CreateProjectScanDialogContent({
   llmTestBlockedMessage: string;
   handleQuickFixTest: () => void | Promise<void>;
   handleQuickFixSave: () => void | Promise<void>;
-  branchName: string;
-  setBranchName: (value: string) => void;
   showReturnButton: boolean;
   onReturn?: () => void;
   primaryCreateLabel: string;
@@ -231,7 +231,8 @@ export default function CreateProjectScanDialogContent({
               <p className="text-xs uppercase tracking-wider text-muted-foreground">
                 扫描方式
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              {/* PHPStan integration: keep the same static-engine card layout */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <Button
                   type="button"
                   variant={mode === "static" ? "default" : "outline"}
@@ -483,12 +484,24 @@ export default function CreateProjectScanDialogContent({
                   <Checkbox
                     checked={banditEnabled}
                     onCheckedChange={(checked) => setBanditEnabled(Boolean(checked))}
-                    disabled={creating || mode === "hybrid"}
+                    disabled={creating}
                     className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
                   />
                   <div>
                     <p className="text-sm text-foreground font-semibold">Bandit</p>
                     <p className="text-xs text-muted-foreground">Python 安全扫描</p>
+                  </div>
+                </label>
+                <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
+                  <Checkbox
+                    checked={phpstanEnabled}
+                    onCheckedChange={(checked) => setPhpstanEnabled(Boolean(checked))}
+                    disabled={creating}
+                    className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
+                  />
+                  <div>
+                    <p className="text-sm text-foreground font-semibold">PHPStan</p>
+                    <p className="text-xs text-muted-foreground">PHP 规则扫描</p>
                   </div>
                 </label>
               </div>
@@ -696,20 +709,6 @@ export default function CreateProjectScanDialogContent({
             </div>
           )}
 
-          {mode === "agent" && selectedProject && isRepositoryProject(selectedProject) && (
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                扫描分支
-              </p>
-              <Input
-                value={branchName}
-                onChange={(event) => setBranchName(event.target.value)}
-                placeholder="main"
-                className="h-9 cyber-input"
-                disabled={creating}
-              />
-            </div>
-          )}
         </div>
 
         <div className="px-6 py-4 border-t border-border bg-muted flex justify-end gap-2">

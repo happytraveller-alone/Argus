@@ -8,7 +8,7 @@ COMPOSE=(docker compose -f "$REPO_ROOT/docker-compose.yml")
 SERVICE="frontend"
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "❌ 未找到 docker，无法使用容器前端环境。" >&2
+  echo "未找到 docker，无法使用容器前端环境。" >&2
   exit 1
 fi
 
@@ -18,7 +18,7 @@ fi
 
 CONTAINER_ID="$(${COMPOSE[@]} ps -q "$SERVICE" 2>/dev/null || true)"
 if [ -z "$CONTAINER_ID" ] || ! docker ps --filter "id=$CONTAINER_ID" --format '{{.ID}}' | grep -q .; then
-  echo "ℹ️ frontend 容器未运行，正在启动..."
+  echo "frontend 容器未运行，正在启动..."
   "${COMPOSE[@]}" up -d "$SERVICE"
   CONTAINER_ID="$(${COMPOSE[@]} ps -q "$SERVICE")"
 fi

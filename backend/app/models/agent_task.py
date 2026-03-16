@@ -391,6 +391,7 @@ class AgentFinding(Base):
     # AI 解释
     ai_explanation = Column(Text, nullable=True)
     ai_confidence = Column(Float, nullable=True)  # AI 置信度 0-1
+    report = Column(Text, nullable=True)  # ReportAgent 生成的漏洞详情报告（Markdown）
     
     # 验证 Agent 的标准化结果（与 VerificationResultModel 对应）
     verdict = Column(String(20), nullable=True, index=True)  # confirmed|likely|uncertain|false_positive
@@ -417,6 +418,7 @@ class AgentFinding(Base):
     tags = Column(JSON, nullable=True)
     
     # 去重标识
+    finding_identity = Column(String(128), nullable=True, index=True)  # Report/DB 修正时使用的稳定身份标识
     fingerprint = Column(String(64), nullable=True, index=True)  # 用于去重的指纹
     
     # 时间戳
@@ -480,6 +482,8 @@ class AgentFinding(Base):
             "fix_code": self.fix_code,
             "ai_explanation": self.ai_explanation,
             "ai_confidence": self.ai_confidence,
+            "report": self.report,
+            "finding_identity": self.finding_identity,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

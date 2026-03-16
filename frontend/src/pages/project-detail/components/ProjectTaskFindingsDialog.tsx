@@ -29,6 +29,7 @@ import {
 	getOpengrepScanFindings,
 	type OpengrepFinding,
 } from "@/shared/api/opengrep";
+import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import {
 	appendReturnTo,
 	buildFindingDetailPath,
@@ -113,7 +114,7 @@ function resolveAgentFindingTitle(finding: AgentFinding): string {
 		String(finding.title || "").trim() ||
 		String(finding.vulnerability_type || "").trim() ||
 		String(finding.description || "").trim() ||
-		"未命名缺陷"
+		"未命名漏洞"
 	);
 }
 
@@ -123,7 +124,7 @@ function resolveStaticFindingTitle(finding: OpengrepFinding): string {
 		String(finding.rule_name || "").trim() ||
 		String(rule.check_id || rule.id || "").trim() ||
 		String(finding.description || "").trim() ||
-		"未命名缺陷"
+		"未命名漏洞"
 	);
 }
 
@@ -229,47 +230,69 @@ function normalizeAgentFindings(
 	taskId: string,
 	findings: AgentFinding[],
 ): TaskFindingRow[] {
-	return findings.map((finding) => ({
-		id: finding.id,
-		taskId,
-		taskCategory: "intelligent",
-		title: resolveAgentFindingTitle(finding),
-		filePath: String(finding.file_path || "").trim() || "-",
-		line: toPositiveLine(finding.line_start),
-		severity: normalizeTaskFindingSeverity(finding.severity),
-		confidence: normalizeTaskFindingConfidence(
-			finding.ai_confidence ?? finding.confidence ?? null,
-		),
-		route: buildFindingDetailPath({
-			source: "agent",
+	return findings.map((finding) => {
+		const typeDisplay = resolveCweDisplay({
+			cwe: finding.cwe_id,
+			fallbackLabel:
+				String(finding.vulnerability_type || "").trim() ||
+				resolveAgentFindingTitle(finding),
+		});
+
+		return {
+			id: finding.id,
 			taskId,
-			findingId: finding.id,
-		}),
-		createdAt: finding.created_at ?? null,
-	}));
+			taskCategory: "intelligent",
+			title: resolveAgentFindingTitle(finding),
+			typeLabel: typeDisplay.label,
+			typeTooltip: typeDisplay.tooltip,
+			filePath: String(finding.file_path || "").trim() || "-",
+			line: toPositiveLine(finding.line_start),
+			severity: normalizeTaskFindingSeverity(finding.severity),
+			confidence: normalizeTaskFindingConfidence(
+				finding.ai_confidence ?? finding.confidence ?? null,
+			),
+			route: buildFindingDetailPath({
+				source: "agent",
+				taskId,
+				findingId: finding.id,
+			}),
+			createdAt: finding.created_at ?? null,
+		};
+	});
 }
 
 function normalizeStaticFindings(
 	taskId: string,
 	findings: OpengrepFinding[],
 ): TaskFindingRow[] {
-	return findings.map((finding) => ({
-		id: finding.id,
-		taskId,
-		taskCategory: "static",
-		title: resolveStaticFindingTitle(finding),
-		filePath: String(finding.file_path || "").trim() || "-",
-		line: toPositiveLine(finding.start_line),
-		severity: normalizeTaskFindingSeverity(finding.severity),
-		confidence: normalizeTaskFindingConfidence(finding.confidence),
-		route: buildFindingDetailPath({
-			source: "static",
+	return findings.map((finding) => {
+		const typeDisplay = resolveCweDisplay({
+			cwe: finding.cwe,
+			fallbackLabel:
+				String(finding.rule_name || "").trim() ||
+				resolveStaticFindingTitle(finding),
+		});
+
+		return {
+			id: finding.id,
 			taskId,
-			findingId: finding.id,
-			engine: "opengrep",
-		}),
-		createdAt: null,
-	}));
+			taskCategory: "static",
+			title: resolveStaticFindingTitle(finding),
+			typeLabel: typeDisplay.label,
+			typeTooltip: typeDisplay.tooltip,
+			filePath: String(finding.file_path || "").trim() || "-",
+			line: toPositiveLine(finding.start_line),
+			severity: normalizeTaskFindingSeverity(finding.severity),
+			confidence: normalizeTaskFindingConfidence(finding.confidence),
+			route: buildFindingDetailPath({
+				source: "static",
+				taskId,
+				findingId: finding.id,
+				engine: "opengrep",
+			}),
+			createdAt: null,
+		};
+	});
 }
 
 export default function ProjectTaskFindingsDialog({
@@ -350,7 +373,7 @@ export default function ProjectTaskFindingsDialog({
 				if (cancelled) return;
 				console.error("Failed to load task findings:", error);
 				setAllRows([]);
-				setErrorMessage("加载缺陷失败");
+				setErrorMessage("加载漏洞失败");
 				setStatus("failed");
 			}
 		};
@@ -361,10 +384,6 @@ export default function ProjectTaskFindingsDialog({
 			cancelled = true;
 		};
 	}, [cacheKey, open, taskCategory, taskId]);
-
-	useEffect(() => {
-		setPage(1);
-	}, [confidenceFilter, severityFilter]);
 
 	const filteredRows = useMemo(
 		() => filterTaskFindings(allRows, severityFilter, confidenceFilter),
@@ -386,7 +405,7 @@ export default function ProjectTaskFindingsDialog({
 					<TableCell colSpan={6} className="py-12 text-center">
 						<div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
 							<Loader2 className="h-4 w-4 animate-spin" />
-							加载缺陷中...
+							加载漏洞中...
 						</div>
 					</TableCell>
 				</TableRow>
@@ -399,7 +418,7 @@ export default function ProjectTaskFindingsDialog({
 					<TableCell colSpan={6} className="py-12 text-center">
 						<div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
 							<AlertTriangle className="h-4 w-4 text-rose-400" />
-							{errorMessage || "加载缺陷失败"}
+							{errorMessage || "加载漏洞失败"}
 						</div>
 					</TableCell>
 				</TableRow>
@@ -413,7 +432,7 @@ export default function ProjectTaskFindingsDialog({
 						colSpan={6}
 						className="py-12 text-center text-sm text-muted-foreground"
 					>
-						暂无缺陷
+						暂无漏洞
 					</TableCell>
 				</TableRow>
 			);
@@ -426,7 +445,7 @@ export default function ProjectTaskFindingsDialog({
 						colSpan={6}
 						className="py-12 text-center text-sm text-muted-foreground"
 					>
-						暂无符合条件的缺陷
+						暂无符合条件的漏洞
 					</TableCell>
 				</TableRow>
 			);
@@ -442,9 +461,9 @@ export default function ProjectTaskFindingsDialog({
 					</TableCell>
 					<TableCell
 						className="min-w-[280px] text-sm text-foreground break-words"
-						title={item.title}
+						title={item.typeTooltip || item.title}
 					>
-						{item.title}
+						{item.typeLabel}
 					</TableCell>
 					<TableCell
 						className="min-w-[260px] text-xs text-muted-foreground break-all"
@@ -488,7 +507,7 @@ export default function ProjectTaskFindingsDialog({
 						<div className="min-w-0 space-y-2 text-left">
 						  <DialogTitle className="flex items-center gap-2 text-base leading-none">
 						    <Bug className="h-4 w-4 shrink-0 text-amber-400" />
-						    <span className="truncate">{taskLabel}缺陷详情</span>
+						    <span className="truncate">{taskLabel}漏洞详情</span>
 						  </DialogTitle>
 
 						  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -516,14 +535,15 @@ export default function ProjectTaskFindingsDialog({
 				<div className="flex-1 min-h-0 overflow-hidden px-6 py-4 space-y-4">
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 						<div>
-							<label className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
+							<p className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
 								危害
-							</label>
+							</p>
 							<Select
 								value={severityFilter}
-								onValueChange={(value) =>
-									setSeverityFilter(value as TaskFindingSeverityFilter)
-								}
+								onValueChange={(value) => {
+									setSeverityFilter(value as TaskFindingSeverityFilter);
+									setPage(1);
+								}}
 							>
 								<SelectTrigger className="h-9 text-sm">
 									<SelectValue />
@@ -539,14 +559,15 @@ export default function ProjectTaskFindingsDialog({
 							</Select>
 						</div>
 						<div>
-							<label className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
+							<p className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
 								置信度
-							</label>
+							</p>
 							<Select
 								value={confidenceFilter}
-								onValueChange={(value) =>
-									setConfidenceFilter(value as TaskFindingConfidenceFilter)
-								}
+								onValueChange={(value) => {
+									setConfidenceFilter(value as TaskFindingConfidenceFilter);
+									setPage(1);
+								}}
 							>
 								<SelectTrigger className="h-9 text-sm">
 									<SelectValue />

@@ -1,4 +1,4 @@
-# DeepAudit Agent Sandbox
+# VulHunter Agent Sandbox
 # 安全沙箱环境用于漏洞验证和 PoC 执行
 # 集成各类安全扫描工具 (Opengrep, Bandit, Gitleaks, etc.)
 
@@ -42,7 +42,7 @@ RUN set -eux; \
       echo 'Acquire::http::Timeout "30";'; \
       echo 'Acquire::https::Timeout "30";'; \
       echo 'Acquire::ForceIPv4 "true";'; \
-    } > /etc/apt/apt.conf.d/99-deepaudit-network; \
+    } > /etc/apt/apt.conf.d/99-VulHunter-network; \
     . /etc/os-release; \
     CODENAME="${VERSION_CODENAME:-bookworm}"; \
     write_sources() { \
@@ -84,7 +84,7 @@ RUN set -eux; \
 # 引入 Node.js 22 运行时并用 corepack 安装 pnpm（主源失败后回退）
 COPY --from=nodebase /usr/local/bin/node /usr/local/bin/node
 COPY --from=nodebase /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN --mount=type=cache,id=deepaudit-sandbox-npm,target=/root/.npm \
+RUN --mount=type=cache,id=VulHunter-sandbox-npm,target=/root/.npm \
     set -eux; \
     ln -sf /usr/local/bin/node /usr/local/bin/nodejs; \
     ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm; \
@@ -110,7 +110,7 @@ RUN --mount=type=cache,id=deepaudit-sandbox-npm,target=/root/.npm \
     node --version; npm --version; pnpm --version
 
 # 安装 MCP 与 qmd CLI（供沙盒域运行时调用）
-RUN --mount=type=cache,id=deepaudit-sandbox-pnpm-store,target=/pnpm/store \
+RUN --mount=type=cache,id=VulHunter-sandbox-pnpm-store,target=/pnpm/store \
     set -eux; \
     mkdir -p /pnpm /pnpm/global /pnpm/store; \
     cmd_timeout="${SANDBOX_PNPM_CMD_TIMEOUT_SECONDS:-420}"; \
@@ -134,7 +134,6 @@ RUN --mount=type=cache,id=deepaudit-sandbox-pnpm-store,target=/pnpm/store \
       pnpm config set registry "${reg}"; \
       while [ "${attempt}" -le 2 ]; do \
         if timeout "${pnpm_step_timeout}" pnpm add -g \
-          @modelcontextprotocol/server-filesystem \
           @modelcontextprotocol/server-memory \
           @modelcontextprotocol/server-sequential-thinking \
           @tobilu/qmd; then \
@@ -155,7 +154,7 @@ RUN --mount=type=cache,id=deepaudit-sandbox-pnpm-store,target=/pnpm/store \
     command -v qmd
 
 # 安装 Python 安全工具（主源失败后回退）
-RUN --mount=type=cache,id=deepaudit-sandbox-pip,target=/root/.cache/pip \
+RUN --mount=type=cache,id=VulHunter-sandbox-pip,target=/root/.cache/pip \
     set -eux; \
     pip_install_with_index() { \
       idx="$1"; \
@@ -267,10 +266,10 @@ RUN groupadd -g 1000 sandbox && \
 
 # 创建工作目录
 RUN mkdir -p /workspace /tmp/sandbox \
-    /workspace/.deepaudit/mcp/xdg-data \
-    /workspace/.deepaudit/mcp/xdg-cache \
-    /workspace/.deepaudit/mcp/xdg-config \
-    /workspace/.deepaudit/qmd && \
+    /workspace/.VulHunter/mcp/xdg-data \
+    /workspace/.VulHunter/mcp/xdg-cache \
+    /workspace/.VulHunter/mcp/xdg-config \
+    /workspace/.VulHunter/qmd && \
     chown -R sandbox:sandbox /workspace /tmp/sandbox
 
 # 设置环境变量
@@ -278,11 +277,11 @@ ENV HOME=/home/sandbox
 ENV PATH=/home/sandbox/.local/bin:$PATH
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV XDG_DATA_HOME=/workspace/.deepaudit/mcp/xdg-data
-ENV XDG_CACHE_HOME=/workspace/.deepaudit/mcp/xdg-cache
-ENV XDG_CONFIG_HOME=/workspace/.deepaudit/mcp/xdg-config
-RUN mkdir -p /workspace/.deepaudit/mcp/xdg-data /workspace/.deepaudit/mcp/xdg-cache /workspace/.deepaudit/mcp/xdg-config
-ENV QMD_DATA_DIR=/workspace/.deepaudit/qmd
+ENV XDG_DATA_HOME=/workspace/.VulHunter/mcp/xdg-data
+ENV XDG_CACHE_HOME=/workspace/.VulHunter/mcp/xdg-cache
+ENV XDG_CONFIG_HOME=/workspace/.VulHunter/mcp/xdg-config
+RUN mkdir -p /workspace/.VulHunter/mcp/xdg-data /workspace/.VulHunter/mcp/xdg-cache /workspace/.VulHunter/mcp/xdg-config
+ENV QMD_DATA_DIR=/workspace/.VulHunter/qmd
 
 # 限制 Python 导入路径
 ENV PYTHONPATH=/workspace

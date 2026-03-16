@@ -120,7 +120,7 @@ async def test_execute_bandit_scan_transitions_to_completed(monkeypatch):
                     "test_name": "subprocess_popen_with_shell_equals_true",
                     "issue_severity": "HIGH",
                     "issue_confidence": "HIGH",
-                    "filename": "app/main.py",
+                    "filename": "/tmp/app/main.py",
                     "line_number": 42,
                     "code": "subprocess.Popen(cmd, shell=True)",
                     "issue_text": "subprocess call with shell=True identified",
@@ -159,3 +159,4 @@ async def test_execute_bandit_scan_transitions_to_completed(monkeypatch):
     assert task.low_count == 0
     assert task.files_scanned == 1
     assert len(fake_session.findings) == 1
+    assert fake_session.findings[0].file_path == "app/main.py"

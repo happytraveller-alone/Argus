@@ -50,7 +50,7 @@ index a4babfa757..8ec415e82c 100644
 +    ResponseEntity proxyForGet(String path, Class responseEntityClazz);
  
      /**
-      * 同步MS缺陷附件到第三方平台
+      * 同步MS漏洞附件到第三方平台
 diff --git a/pom.xml b/pom.xml
 index 681e50d053..965179b7a3 100644
 --- a/pom.xml

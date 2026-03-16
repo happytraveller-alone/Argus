@@ -6,7 +6,7 @@ import {
 	LANGUAGE_STATS_RETRY_INTERVAL_MS,
 } from "../constants";
 import type { ProjectTaskPoolState } from "../types";
-import type { ProjectsPageDataSource } from "../datasource/projectsPageDataSource";
+import type { ProjectsPageDataSource } from "../data/projectsPageDataSource";
 
 function createEmptyTaskPoolState(
 	status: ProjectTaskPoolState["status"] = "idle",
@@ -18,6 +18,7 @@ function createEmptyTaskPoolState(
 		opengrepTasks: [],
 		gitleaksTasks: [],
 		banditTasks: [],
+		phpstanTasks: [],
 	};
 }
 

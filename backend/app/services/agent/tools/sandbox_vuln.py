@@ -771,7 +771,7 @@ class XssTestTool(AgentTool):
             poc = f"curl 'http://target/{target_file}?{param_name}={encoded_payload}'"
 
         # 格式化输出
-        output_parts = ["🔍 XSS 测试结果\n"]
+        output_parts = [" XSS 测试结果\n"]
         output_parts.append(f"目标文件: {target_file}")
         output_parts.append(f"XSS 类型: {xss_type}")
         output_parts.append(f"注入参数: {param_name}")

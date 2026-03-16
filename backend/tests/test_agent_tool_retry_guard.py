@@ -119,7 +119,7 @@ class _StrictReadFileAutoRepairRuntime:
                     data="",
                     error=(
                         "mcp_call_failed:ENOENT: no such file or directory, open "
-                        "'/tmp/deepaudit/task/JavaSecLab-1.4/src/main/java/top/whgojp/modules/rce/command/CeshiController.java'"
+                        "'/tmp/VulHunter/task/JavaSecLab-1.4/src/main/java/top/whgojp/modules/rce/command/CeshiController.java'"
                     ),
                     metadata={
                         "mcp_used": True,

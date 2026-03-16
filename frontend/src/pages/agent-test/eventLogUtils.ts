@@ -35,18 +35,18 @@ export const AGENT_TEST_EVENT_COLORS: Record<string, string> = {
 
 export const AGENT_TEST_EVENT_ICONS: Record<string, string> = {
   info: "ℹ",
-  thinking: "🧠",
+  thinking: "",
   llm_decision: "◆",
   llm_action: "→",
   llm_thought: "…",
   llm_observation: "←",
-  tool_call: "🔧",
+  tool_call: "",
   tool_result: "✓",
   warning: "⚠",
   error: "✗",
   agent_error: "✗",
   finding_new: "🔴",
-  finding_verified: "✅",
+  finding_verified: "",
   result: "■",
   done: "■",
 };

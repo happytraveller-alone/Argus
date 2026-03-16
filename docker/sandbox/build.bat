@@ -5,7 +5,7 @@ REM =============================================
 
 setlocal
 
-set "IMAGE_NAME=deepaudit/sandbox"
+set "IMAGE_NAME=VulHunter/sandbox"
 set "IMAGE_TAG=latest"
 
 echo Building sandbox image: %IMAGE_NAME%:%IMAGE_TAG%

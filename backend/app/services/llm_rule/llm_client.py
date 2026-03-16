@@ -142,7 +142,7 @@ class LLMClient:
 
         # 🔥 记录LLM配置信息
         config = self.client.config
-        logger.info(f"🤖 调用LLM生成规则 - Provider: {config.provider.value}, Model: {config.model}")
+        logger.info(f"调用LLM生成规则 - Provider: {config.provider.value}, Model: {config.model}")
 
         try:
             response = await self.client.chat_completion(

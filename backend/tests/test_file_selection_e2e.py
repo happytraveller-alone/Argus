@@ -81,7 +81,7 @@ def create_test_zip() -> str:
         for filename, content in TEST_FILES.items():
             zf.writestr(filename, content)
 
-    print(f"✅ 创建测试 ZIP 文件: {zip_path}")
+    print(f"创建测试 ZIP 文件: {zip_path}")
     return zip_path
 
 
@@ -114,9 +114,9 @@ def get_headers():
 #                 data = response.json()
 #                 return data.get("access_token")
 #             else:
-#                 print(f"⚠️ 登录失败: {response.status_code} - {response.text}")
+#                 print(f"登录失败: {response.status_code} - {response.text}")
 #     except Exception as e:
-#         print(f"⚠️ 登录请求失败: {e}")
+#         print(f"登录请求失败: {e}")
 #     return None
 
 
@@ -135,7 +135,7 @@ class FileSelectionE2ETest:
         if self.zip_path and os.path.exists(self.zip_path):
             os.remove(self.zip_path)
             os.rmdir(os.path.dirname(self.zip_path))
-            print("✅ 清理临时文件")
+            print("清理临时文件")
 
         if self.project_id:
             try:
@@ -144,9 +144,9 @@ class FileSelectionE2ETest:
                     # headers=get_headers(self.token)
                     headers=get_headers(),
                 )
-                print(f"✅ 删除测试项目: {self.project_id}")
+                print(f"删除测试项目: {self.project_id}")
             except Exception as e:
-                print(f"⚠️ 删除项目失败: {e}")
+                print(f"删除项目失败: {e}")
 
         self.client.close()
 
@@ -164,12 +164,12 @@ class FileSelectionE2ETest:
             response = self.client.get(health_url)
             print(f"  响应状态: {response.status_code}")
             if response.status_code == 200:
-                print(f"✅ 服务运行正常")
+                print(f"服务运行正常")
             else:
-                print(f"⚠️ 健康检查返回: {response.status_code} - {response.text}")
+                print(f"健康检查返回: {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            print(f"❌ 无法连接服务: {e}")
+            print(f"无法连接服务: {e}")
             return False
 
         # 如果没有 token，尝试用演示账户登录
@@ -177,9 +177,9 @@ class FileSelectionE2ETest:
         #     print("\n[测试] 使用演示账户登录...")
         #     self.token = login_demo_account()
         #     if self.token:
-        #         print(f"✅ 登录成功，获取到 token")
+        #         print(f"登录成功，获取到 token")
         #     else:
-        #         print("❌ 登录失败，无法继续测试")
+        #         print("登录失败，无法继续测试")
         #         return False
 
         return True
@@ -205,22 +205,22 @@ class FileSelectionE2ETest:
             if response.status_code == 200:
                 data = response.json()
                 self.project_id = data.get("id")
-                print(f"✅ 项目创建成功: {self.project_id}")
+                print(f"项目创建成功: {self.project_id}")
                 return True
             # elif response.status_code == 401:
-            #     print("⚠️ 需要认证，跳过此测试")
+            #     print("需要认证，跳过此测试")
             #     return False
             else:
-                print(f"❌ 创建项目失败: {response.status_code} - {response.text}")
+                print(f"创建项目失败: {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            print(f"❌ 请求失败: {e}")
+            print(f"请求失败: {e}")
             return False
 
     def test_upload_zip(self) -> bool:
         """测试上传 ZIP 文件"""
         if not self.project_id:
-            print("⚠️ 跳过：没有项目 ID")
+            print("跳过：没有项目 ID")
             return False
 
         print("\n[测试] 上传 ZIP 文件...")
@@ -242,19 +242,19 @@ class FileSelectionE2ETest:
                 )
 
             if response.status_code == 200:
-                print("✅ ZIP 文件上传成功")
+                print("ZIP 文件上传成功")
                 return True
             else:
-                print(f"❌ 上传失败: {response.status_code} - {response.text}")
+                print(f"上传失败: {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            print(f"❌ 请求失败: {e}")
+            print(f"请求失败: {e}")
             return False
 
     def test_get_files_without_exclude(self) -> bool:
         """测试获取文件列表（无排除模式）"""
         if not self.project_id:
-            print("⚠️ 跳过：没有项目 ID")
+            print("跳过：没有项目 ID")
             return False
 
         print("\n[测试] 获取文件列表（无排除模式）...")
@@ -268,7 +268,7 @@ class FileSelectionE2ETest:
 
             if response.status_code == 200:
                 files = response.json()
-                print(f"✅ 获取到 {len(files)} 个文件")
+                print(f"获取到 {len(files)} 个文件")
 
                 # 验证默认排除生效
                 paths = [f["path"] for f in files]
@@ -291,16 +291,16 @@ class FileSelectionE2ETest:
 
                 return True
             else:
-                print(f"❌ 获取失败: {response.status_code} - {response.text}")
+                print(f"获取失败: {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            print(f"❌ 请求失败: {e}")
+            print(f"请求失败: {e}")
             return False
 
     def test_get_files_with_exclude(self) -> bool:
         """测试获取文件列表（带排除模式）"""
         if not self.project_id:
-            print("⚠️ 跳过：没有项目 ID")
+            print("跳过：没有项目 ID")
             return False
 
         print("\n[测试] 获取文件列表（带自定义排除模式）...")
@@ -318,7 +318,7 @@ class FileSelectionE2ETest:
 
             if response.status_code == 200:
                 files = response.json()
-                print(f"✅ 获取到 {len(files)} 个文件（应用自定义排除）")
+                print(f"获取到 {len(files)} 个文件（应用自定义排除）")
 
                 paths = [f["path"] for f in files]
 
@@ -333,20 +333,20 @@ class FileSelectionE2ETest:
                 if not test_files:
                     print("  ✓ 已排除所有测试文件")
                 else:
-                    print(f"  ⚠️ 仍包含测试文件: {test_files}")
+                    print(f"  仍包含测试文件: {test_files}")
 
                 return True
             else:
-                print(f"❌ 获取失败: {response.status_code} - {response.text}")
+                print(f"获取失败: {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            print(f"❌ 请求失败: {e}")
+            print(f"请求失败: {e}")
             return False
 
     def test_scan_with_file_selection(self) -> bool:
         """测试带文件选择的扫描"""
         if not self.project_id:
-            print("⚠️ 跳过：没有项目 ID")
+            print("跳过：没有项目 ID")
             return False
 
         print("\n[测试] 启动扫描（带文件选择和排除模式）...")
@@ -369,16 +369,16 @@ class FileSelectionE2ETest:
             if response.status_code == 200:
                 data = response.json()
                 task_id = data.get("task_id")
-                print(f"✅ 扫描任务已创建: {task_id}")
+                print(f"扫描任务已创建: {task_id}")
                 return True
             elif response.status_code == 400:
-                print(f"⚠️ 扫描请求被拒绝（可能没有存储的 ZIP）: {response.text}")
+                print(f"扫描请求被拒绝（可能没有存储的 ZIP）: {response.text}")
                 return False
             else:
-                print(f"❌ 扫描失败: {response.status_code} - {response.text}")
+                print(f"扫描失败: {response.status_code} - {response.text}")
                 return False
         except Exception as e:
-            print(f"❌ 请求失败: {e}")
+            print(f"请求失败: {e}")
             return False
 
 
@@ -394,7 +394,7 @@ def run_mock_tests():
     json_str = json.dumps(exclude_patterns)
     parsed = json.loads(json_str)
     assert parsed == exclude_patterns
-    print(f"✅ JSON 序列化正确: {json_str}")
+    print(f"JSON 序列化正确: {json_str}")
 
     # 测试 2: 扫描请求格式
     print("\n[模拟测试 2] 扫描请求格式...")
@@ -409,7 +409,7 @@ def run_mock_tests():
     parsed = json.loads(json_str)
     assert "exclude_patterns" in parsed
     assert parsed["full_scan"] is False
-    print(f"✅ 扫描请求格式正确")
+    print(f"扫描请求格式正确")
 
     # 测试 3: ZIP 文件创建和读取
     print("\n[模拟测试 3] ZIP 文件处理...")
@@ -417,7 +417,7 @@ def run_mock_tests():
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         file_list = zf.namelist()
-        print(f"✅ ZIP 包含 {len(file_list)} 个文件")
+        print(f"ZIP 包含 {len(file_list)} 个文件")
 
         # 验证文件存在
         assert "src/main.py" in file_list
@@ -426,10 +426,10 @@ def run_mock_tests():
     # 清理
     os.remove(zip_path)
     os.rmdir(os.path.dirname(zip_path))
-    print("✅ 清理完成")
+    print("清理完成")
 
     print("\n" + "=" * 60)
-    print("🎉 所有模拟测试通过！")
+    print("所有模拟测试通过！")
     print("=" * 60)
 
 
@@ -448,7 +448,7 @@ def run_e2e_tests():
     try:
         # 健康检查
         if not test.test_health_check():
-            print("\n⚠️ 服务不可用，切换到模拟测试模式")
+            print("\n服务不可用，切换到模拟测试模式")
             run_mock_tests()
             return
 
@@ -473,22 +473,22 @@ def run_e2e_tests():
 
     for name, result in results:
         if result is True:
-            status = "✅ 通过"
+            status = "通过"
             passed += 1
         elif result is False:
-            status = "❌ 失败"
+            status = "失败"
             failed += 1
         else:
-            status = "⚠️ 跳过"
+            status = "跳过"
             skipped += 1
         print(f"  {name}: {status}")
 
     print(f"\n总计: {passed} 通过, {failed} 失败, {skipped} 跳过")
 
     if failed == 0:
-        print("\n🎉 所有测试通过！")
+        print("\n所有测试通过！")
     else:
-        print("\n⚠️ 部分测试失败，请检查日志")
+        print("\n部分测试失败，请检查日志")
 
 
 if __name__ == "__main__":

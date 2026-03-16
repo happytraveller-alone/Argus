@@ -151,7 +151,7 @@ class SmartScanTool(AgentTool):
     
     @property
     def description(self) -> str:
-        return """🚀 智能批量安全扫描工具 - 一次调用完成多项检查
+        return """智能批量安全扫描工具 - 一次调用完成多项检查
 
 这是 Analysis Agent 的首选工具！在分析开始时优先使用此工具获取项目安全概览。
 
@@ -379,7 +379,7 @@ class SmartScanTool(AgentTool):
         
         # 构建报告
         output_parts = [
-            f"🔍 智能安全扫描报告",
+            f" 智能安全扫描报告",
             f"{'(快速模式)' if quick_mode else '(完整模式)'}",
             "",
             f"📊 扫描概览:",
@@ -401,7 +401,7 @@ class SmartScanTool(AgentTool):
         
         # 漏洞类型统计
         if by_type:
-            output_parts.append("📋 按漏洞类型分布:")
+            output_parts.append("按漏洞类型分布:")
             for vtype, vfindings in sorted(by_type.items(), key=lambda x: -len(x[1])):
                 output_parts.append(f"  - {vtype}: {len(vfindings)}")
         
@@ -409,7 +409,7 @@ class SmartScanTool(AgentTool):
         
         # 详细发现（按严重程度排序，最多显示15个）
         if findings:
-            output_parts.append("⚠️ 重点发现 (按严重程度排序):")
+            output_parts.append("重点发现 (按严重程度排序):")
             shown = 0
             for sev in ["critical", "high", "medium", "low"]:
                 for f in by_severity[sev][:5]:  # 每个级别最多5个
@@ -418,8 +418,8 @@ class SmartScanTool(AgentTool):
                     icon = severity_icons[f["severity"]]
                     output_parts.append(f"\n{icon} [{f['severity'].upper()}] {f['vulnerability_type']}")
                     output_parts.append(f"   📍 {f['file_path']}:{f['line_number']}")
-                    output_parts.append(f"   🔍 模式: {f['pattern_name']}")
-                    output_parts.append(f"   📝 代码: {f['matched_line'][:80]}")
+                    output_parts.append(f"    模式: {f['pattern_name']}")
+                    output_parts.append(f"   代码: {f['matched_line'][:80]}")
                     shown += 1
                 if shown >= 15:
                     break
@@ -432,9 +432,9 @@ class SmartScanTool(AgentTool):
         output_parts.append("💡 建议的下一步:")
         
         if by_severity["critical"]:
-            output_parts.append("  1. ⚠️ 优先处理 CRITICAL 级别问题 - 使用 read_file 深入分析")
+            output_parts.append("  1. 优先处理 CRITICAL 级别问题 - 使用 read_file 深入分析")
         if by_severity["high"]:
-            output_parts.append("  2. 🔍 分析 HIGH 级别问题的上下文和数据流")
+            output_parts.append("  2.  分析 HIGH 级别问题的上下文和数据流")
         if files_with_issues:
             top_files = list(files_with_issues)[:3]
             output_parts.append(f"  3. 📁 重点审查这些文件: {', '.join(top_files)}")
@@ -612,7 +612,7 @@ class QuickAuditTool(AgentTool):
         findings = audit_result["findings"]
         
         output_parts = [
-            f"📋 文件审计报告: {audit_result['file_path']}",
+            f"文件审计报告: {audit_result['file_path']}",
             "",
             f"📊 代码统计:",
             f"  - 总行数: {audit_result['code_metrics']['total_lines']}",
@@ -621,7 +621,7 @@ class QuickAuditTool(AgentTool):
         ]
         
         if not findings:
-            output_parts.append("✅ 未发现已知的安全问题")
+            output_parts.append("未发现已知的安全问题")
         else:
             # 按严重程度分组
             by_severity = {"critical": [], "high": [], "medium": [], "low": []}
@@ -630,7 +630,7 @@ class QuickAuditTool(AgentTool):
             
             severity_icons = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}
             
-            output_parts.append(f"⚠️ 发现 {len(findings)} 个潜在问题:")
+            output_parts.append(f"发现 {len(findings)} 个潜在问题:")
             output_parts.append("")
             
             for sev in ["critical", "high", "medium", "low"]:

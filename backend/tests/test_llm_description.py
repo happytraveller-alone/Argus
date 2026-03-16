@@ -22,9 +22,9 @@ pytestmark = pytest.mark.integration
 
 @pytest.mark.asyncio
 async def test_generate_project_description_smoke():
-    project_id = os.environ.get("DEEPAUDIT_TEST_PROJECT_ID")
+    project_id = os.environ.get("VulHunter_TEST_PROJECT_ID")
     if not project_id:
-        pytest.skip("Set DEEPAUDIT_TEST_PROJECT_ID to run this integration test.")
+        pytest.skip("Set VulHunter_TEST_PROJECT_ID to run this integration test.")
 
     zip_path = get_project_zip_path(project_id)
     if not zip_path or not os.path.exists(zip_path):

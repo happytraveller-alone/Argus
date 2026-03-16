@@ -83,11 +83,23 @@ class ParallelPhaseExecutor:
 
         # 深拷贝并修改 config（config 在 deepcopy 后变成字典）
         worker_agent.config = copy.deepcopy(base_agent.config)
+        worker_name = f"{base_agent.name}_worker_{worker_id}"
         if isinstance(worker_agent.config, dict):
-            worker_agent.config["name"] = f"{base_agent.name}_worker_{worker_id}"
+            worker_agent.config["name"] = worker_name
         else:
             # 如果 config 是对象，尝试设置属性
-            worker_agent.config.name = f"{base_agent.name}_worker_{worker_id}"
+            worker_agent.config.name = worker_name
+        worker_agent.name = worker_name
+
+        if hasattr(worker_agent, "configure_trace_logger"):
+            try:
+                worker_agent.configure_trace_logger(worker_agent.name)
+            except Exception as exc:
+                logger.warning(
+                    "[ParallelExecutor] Failed to configure trace logger for worker %s: %s",
+                    worker_id,
+                    exc,
+                )
         worker_agent.tracer = getattr(base_agent, "tracer", None)
 
         if hasattr(worker_agent, "set_mcp_runtime"):
@@ -129,6 +141,9 @@ class ParallelPhaseExecutor:
         task_description = str(params.get("task", "") or "")
         context = str(params.get("context", "") or "")
         runtime_context = getattr(self.orchestrator, "_runtime_context", {})
+        task_id = params.get("task_id") or (
+            runtime_context.get("task_id") if isinstance(runtime_context, dict) else None
+        )
         project_info = (
             dict(runtime_context.get("project_info", {}))
             if isinstance(runtime_context, dict)
@@ -193,11 +208,20 @@ class ParallelPhaseExecutor:
         if not isinstance(file_planning, dict):
             file_planning = None
 
+        single_risk_point = runtime_config.get("single_risk_point")
+        if not isinstance(single_risk_point, dict):
+            single_risk_point = None
+
         return {
             "task": task_description,
+            "context": context,
             "task_context": context,
+            "risk_point": single_risk_point,
+            "single_risk_point": single_risk_point,
+            "finding": queue_finding if isinstance(queue_finding, dict) else None,
             "project_info": project_info,
             "config": runtime_config,
+            "task_id": task_id,
             "project_root": (
                 runtime_context.get("project_root", ".")
                 if isinstance(runtime_context, dict)
@@ -365,10 +389,6 @@ class ParallelPhaseExecutor:
 
         logger.info(f"[ParallelExecutor] Starting parallel analysis with {self.max_workers} workers")
 
-        # 初始化 worker agents
-        for worker_id in range(self.max_workers):
-            self.worker_agents[worker_id] = self._create_worker_agent(worker_id)
-
         # 启动 worker 任务
         worker_tasks = [
             asyncio.create_task(
@@ -426,7 +446,6 @@ class ParallelPhaseExecutor:
             task_id: 任务 ID
             recon_queue: Recon 风险队列服务
         """
-        worker_agent = self.worker_agents[worker_id]
         iteration = 0
 
         logger.info(f"[Worker-{worker_id}] Analysis worker started")
@@ -456,7 +475,7 @@ class ParallelPhaseExecutor:
                 fp_repr = f"{risk_point.get('file_path', '')}:{risk_point.get('line_start', '')}"
                 await self.orchestrator.emit_event(
                     "info",
-                    f"🔍 [Worker-{worker_id}] Analysis 第 {iteration} 轮：{fp_repr}",
+                    f" [Worker-{worker_id}] Analysis 第 {iteration} 轮：{fp_repr}",
                 )
 
                 step_start = time.time()
@@ -467,7 +486,11 @@ class ParallelPhaseExecutor:
                     "task": f"针对风险点 {fp_repr} 进行深度代码审计",
                     "risk_point": risk_point,
                     "context": json.dumps(risk_point, ensure_ascii=False),
+                    "task_id": task_id,
                 }
+
+                # 严格隔离：每个风险点创建全新 agent 实例，避免跨任务上下文/缓存复用。
+                worker_agent = self._create_worker_agent(worker_id)
 
                 # 注入当前风险点（仅供 orchestrator 内部提取使用，并发时以各 worker 自身 params 为准）
                 self.orchestrator._last_recon_risk_point = risk_point
@@ -545,6 +568,16 @@ class ParallelPhaseExecutor:
         """
         agent_input = self._build_worker_input(params)
 
+        if hasattr(worker_agent, "configure_trace_logger"):
+            try:
+                worker_agent.configure_trace_logger(worker_agent.name, agent_input.get("task_id"))
+            except Exception as exc:
+                logger.warning(
+                    "[ParallelExecutor] Failed to bind task trace logger for %s: %s",
+                    worker_agent.name,
+                    exc,
+                )
+
         if hasattr(worker_agent, "reset_cancellation_state"):
             worker_agent.reset_cancellation_state()
 
@@ -565,6 +598,9 @@ class ParallelPhaseExecutor:
                     worker_payload[key] = value
                 elif value not in (None, "", [], {}):
                     worker_payload[key] = value
+        result_findings = getattr(result, "findings", None)
+        if isinstance(result_findings, list):
+            worker_payload["findings"] = list(result_findings)
         worker_payload["_run_success"] = bool(result.success)
         if result.error:
             worker_payload["_run_error"] = str(result.error)
@@ -599,10 +635,6 @@ class ParallelPhaseExecutor:
             return await self._run_sequential_verification(state, task_id, vuln_queue)
 
         logger.info(f"[ParallelExecutor] Starting parallel verification with {self.max_workers} workers")
-
-        # 初始化 worker agents
-        for worker_id in range(self.max_workers):
-            self.worker_agents[worker_id] = self._create_worker_agent(worker_id)
 
         # 启动 worker 任务
         worker_tasks = [
@@ -655,7 +687,6 @@ class ParallelPhaseExecutor:
             task_id: 任务 ID
             vuln_queue: 漏洞队列服务
         """
-        worker_agent = self.worker_agents[worker_id]
         iteration = 0
 
         logger.info(f"[Worker-{worker_id}] Verification worker started")
@@ -721,7 +752,11 @@ class ParallelPhaseExecutor:
                     "task": f"验证漏洞：{title_repr}",
                     "finding": finding,
                     "context": json.dumps(finding, ensure_ascii=False),
+                    "task_id": task_id,
                 }
+
+                # 严格隔离：每个漏洞创建全新 agent 实例，避免跨任务上下文/缓存复用。
+                worker_agent = self._create_worker_agent(worker_id)
 
                 try:
                     await self._dispatch_to_worker_agent(worker_agent, params)
@@ -810,7 +845,7 @@ class ParallelPhaseExecutor:
             state.total_iterations += 1
 
             fp_repr = f"{risk_point.get('file_path', '')}:{risk_point.get('line_start', '')}"
-            await orc.emit_event("info", f"🔍 [Workflow] Analysis 第 {iteration} 轮：风险点 {fp_repr}")
+            await orc.emit_event("info", f" [Workflow] Analysis 第 {iteration} 轮：风险点 {fp_repr}")
 
             step_start = time.time()
             params = {
@@ -818,6 +853,7 @@ class ParallelPhaseExecutor:
                 "task": f"针对风险点 {fp_repr} 进行深度代码审计",
                 "risk_point": risk_point,
                 "context": json.dumps(risk_point, ensure_ascii=False),
+                "task_id": task_id,
             }
 
             orc._last_recon_risk_point = risk_point
@@ -907,6 +943,7 @@ class ParallelPhaseExecutor:
                 "task": f"验证漏洞：{title_repr}",
                 "finding": finding,
                 "context": json.dumps(finding, ensure_ascii=False),
+                "task_id": task_id,
             }
 
             try:
@@ -965,10 +1002,6 @@ class ParallelPhaseExecutor:
 
         logger.info(f"[ParallelExecutor] Starting parallel BL analysis with {self.max_workers} workers")
 
-        # 初始化 worker agents
-        for worker_id in range(self.max_workers):
-            self.worker_agents[worker_id] = self._create_worker_agent(worker_id)
-
         # 启动 worker 任务
         worker_tasks = [
             asyncio.create_task(
@@ -1014,7 +1047,6 @@ class ParallelPhaseExecutor:
             task_id: 任务 ID
             bl_queue: 业务逻辑风险队列服务
         """
-        worker_agent = self.worker_agents[worker_id]
         iteration = 0
 
         logger.info(f"[BLWorker-{worker_id}] BL analysis worker started")
@@ -1040,7 +1072,7 @@ class ParallelPhaseExecutor:
                 fp_repr = f"{risk_point.get('file_path', '')}:{risk_point.get('line_start', '')}"
                 await self.orchestrator.emit_event(
                     "info",
-                    f"🔍 [BLWorker-{worker_id}] BLAnalysis 第 {iteration} 轮：{fp_repr}",
+                    f" [BLWorker-{worker_id}] BLAnalysis 第 {iteration} 轮：{fp_repr}",
                 )
 
                 step_start = time.time()
@@ -1050,7 +1082,11 @@ class ParallelPhaseExecutor:
                     "task": f"深度分析业务逻辑风险点 {fp_repr}",
                     "risk_point": risk_point,
                     "context": json.dumps(risk_point, ensure_ascii=False),
+                    "task_id": task_id,
                 }
+
+                # 严格隔离：每个业务逻辑风险点创建全新 agent 实例。
+                worker_agent = self._create_worker_agent(worker_id)
 
                 try:
                     await self._dispatch_to_worker_agent(worker_agent, params)
@@ -1133,13 +1169,14 @@ class ParallelPhaseExecutor:
             state.total_iterations += 1
 
             fp_repr = f"{risk_point.get('file_path', '')}:{risk_point.get('line_start', '')}"
-            await orc.emit_event("info", f"🔍 [Workflow] BLAnalysis 第 {iteration} 轮：{fp_repr}")
+            await orc.emit_event("info", f" [Workflow] BLAnalysis 第 {iteration} 轮：{fp_repr}")
 
             step_start = time.time()
             params = {
                 "agent": "business_logic_analysis",
                 "task": f"深度分析业务逻辑风险点 {fp_repr}",
                 "risk_point": risk_point,
+                "task_id": task_id,
                 "context": json.dumps(risk_point, ensure_ascii=False),
             }
 

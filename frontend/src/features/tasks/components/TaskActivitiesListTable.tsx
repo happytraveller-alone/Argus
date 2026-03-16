@@ -36,11 +36,15 @@ interface TaskActivitiesListTableProps {
 }
 
 function getDefectSummaryLabel(activity: TaskActivityItem): string {
+	if (activity.agentFindingStats) {
+		const { critical, high, medium, low } = activity.agentFindingStats;
+		return `严重 ${critical} / 高危 ${high} / 中危 ${medium} / 低危 ${low}`;
+	}
 	if (!activity.staticFindingStats) {
 		return "-";
 	}
-	const { severe, hint, total } = activity.staticFindingStats;
-	return `高危 ${severe} / 提示 ${hint} / 总计 ${total}`;
+	const { critical, high, medium, low } = activity.staticFindingStats;
+	return `严重 ${critical} / 高危 ${high} / 中危 ${medium} / 低危 ${low}`;
 }
 
 export default function TaskActivitiesListTable({
@@ -83,7 +87,7 @@ export default function TaskActivitiesListTable({
 								<TableHead className="w-[120px]">{TASK_ACTIVITIES_TABLE_HEADERS[3]}</TableHead>
 								<TableHead className="min-w-[220px]">{TASK_ACTIVITIES_TABLE_HEADERS[4]}</TableHead>
 								<TableHead className="min-w-[140px]">{TASK_ACTIVITIES_TABLE_HEADERS[5]}</TableHead>
-								<TableHead className="min-w-[160px]">{TASK_ACTIVITIES_TABLE_HEADERS[6]}</TableHead>
+								<TableHead className="min-w-[260px]">{TASK_ACTIVITIES_TABLE_HEADERS[6]}</TableHead>
 								<TableHead className="w-[120px]">{TASK_ACTIVITIES_TABLE_HEADERS[7]}</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -111,8 +115,7 @@ export default function TaskActivitiesListTable({
 											{activity.projectName}
 										</TableCell>
 										<TableCell className="text-sm text-muted-foreground">
-											<div>{formatCreatedAt(activity.createdAt)}</div>
-											<div className="text-xs">{getRelativeTime(activity.createdAt, nowMs)}</div>
+											<div>{formatCreatedAt(activity.createdAt)} {getRelativeTime(activity.createdAt, nowMs)}</div>
 										</TableCell>
 										<TableCell className="font-mono text-foreground">{durationText}</TableCell>
 										<TableCell>
@@ -134,7 +137,7 @@ export default function TaskActivitiesListTable({
 												{getTaskStatusText(activity.status)}
 											</Badge>
 										</TableCell>
-										<TableCell className="text-sm text-muted-foreground">
+										<TableCell className="min-w-[260px] whitespace-nowrap text-xs text-muted-foreground">
 											{getDefectSummaryLabel(activity)}
 										</TableCell>
 										<TableCell>

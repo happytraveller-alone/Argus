@@ -28,6 +28,11 @@ import asyncio
 import base64
 from pathlib import Path
 
+from app.db.static_finding_paths import (
+    collect_zip_relative_paths,
+    resolve_zip_member_path,
+)
+
 logger = logging.getLogger(__name__)
 
 # 需要过滤的目录和文件
@@ -170,20 +175,16 @@ from app.models.project import Project
 from app.models.user import User
 from app.models.audit import AuditTask, AuditIssue
 from app.models.agent_task import AgentTask, AgentFinding
-from app.models.opengrep import OpengrepScanTask, OpengrepFinding
+from app.models.opengrep import OpengrepScanTask, OpengrepFinding, OpengrepRule
 from app.models.gitleaks import GitleaksScanTask, GitleaksFinding
 from app.models.bandit import BanditScanTask, BanditFinding
+from app.models.phpstan import PhpstanScanTask, PhpstanFinding
 from app.models.user_config import UserConfig
 from app.models.project_info import ProjectInfo
 import zipfile
 from app.services.zip_cache_manager import get_zip_cache_manager
 from app.services.scanner import (
     scan_repo_task,
-    get_github_files,
-    get_gitlab_files,
-    get_github_branches,
-    get_gitlab_branches,
-    get_gitea_branches,
     should_exclude,
     is_text_file,
 )
@@ -204,7 +205,15 @@ from app.services.upload.project_stats import (
     generate_project_description_from_extracted_dir,
 )
 from app.services.opengrep_confidence import (
+    build_rule_confidence_map,
     count_high_confidence_findings_by_task_ids,
+    extract_finding_payload_confidence,
+    extract_rule_lookup_keys,
+    normalize_confidence as normalize_opengrep_confidence,
+)
+from app.services.agent.utils.vulnerability_naming import (
+    normalize_cwe_id,
+    resolve_vulnerability_profile,
 )
 
 
@@ -481,26 +490,12 @@ async def _get_user_config(db: AsyncSession, user_id: Optional[str]) -> Optional
         return None
 
     try:
-        from app.api.v1.endpoints.config import (
-            decrypt_config,
-            SENSITIVE_LLM_FIELDS,
-            SENSITIVE_OTHER_FIELDS,
+        from app.api.v1.endpoints.config import _load_effective_user_config
+
+        return await _load_effective_user_config(
+            db=db,
+            user_id=user_id,
         )
-
-        result = await db.execute(select(UserConfig).where(UserConfig.user_id == user_id))
-        config = result.scalar_one_or_none()
-
-        if config and config.llm_config:
-            user_llm_config = json.loads(config.llm_config) if config.llm_config else {}
-            user_other_config = json.loads(config.other_config) if config.other_config else {}
-
-            user_llm_config = decrypt_config(user_llm_config, SENSITIVE_LLM_FIELDS)
-            user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
-
-            return {
-                "llmConfig": user_llm_config,
-                "otherConfig": user_other_config,
-            }
     except Exception as e:
         logger.warning(f"Failed to get user config: {e}")
 
@@ -580,7 +575,7 @@ router = APIRouter()
 # Schemas
 class ProjectCreate(BaseModel):
     name: str
-    source_type: Optional[str] = "repository"  # 'repository' 或 'zip'
+    source_type: Optional[str] = "zip"  # 仅支持 'zip'
     repository_url: Optional[str] = None
     repository_type: Optional[str] = "other"  # github, gitlab, other
     description: Optional[str] = None
@@ -612,7 +607,7 @@ class ProjectResponse(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
-    source_type: Optional[str] = "repository"  # 'repository' 或 'zip'
+    source_type: Optional[str] = "zip"  # 'repository' 或 'zip'
     repository_url: Optional[str] = None
     repository_type: Optional[str] = None  # github, gitlab, other
     default_branch: Optional[str] = None
@@ -661,12 +656,172 @@ class DashboardSnapshotResponse(BaseModel):
     total_scan_duration_ms: int
     scan_runs: List[DashboardScanRunsItem]
     vulns: List[DashboardVulnsItem]
+    rule_confidence: List["DashboardRuleConfidenceItem"]
+    rule_confidence_by_language: List["DashboardRuleConfidenceByLanguageItem"]
+    cwe_distribution: List["DashboardCweDistributionItem"]
+
+
+class DashboardRuleConfidenceItem(BaseModel):
+    confidence: Literal["HIGH", "MEDIUM", "LOW", "UNSPECIFIED"]
+    total_rules: int
+    enabled_rules: int
+
+
+class DashboardRuleConfidenceByLanguageItem(BaseModel):
+    language: str
+    high_count: int
+    medium_count: int
+
+
+class DashboardCweDistributionItem(BaseModel):
+    cwe_id: str
+    cwe_name: str
+    total_findings: int
+    opengrep_findings: int
+    agent_findings: int
+    bandit_findings: int
+
+
+def _normalize_dashboard_rule_confidence(
+    confidence: Any,
+) -> Literal["HIGH", "MEDIUM", "LOW", "UNSPECIFIED"]:
+    raw_value = str(confidence or "").strip().upper()
+    if raw_value in {"MIDIUM", "MIDDLE"}:
+        return "MEDIUM"
+    normalized = normalize_opengrep_confidence(raw_value)
+    if normalized in {"HIGH", "MEDIUM", "LOW"}:
+        return normalized
+    return "UNSPECIFIED"
+
+
+def _extract_cwe_candidates_from_rule_payload(rule_data: Any) -> List[str]:
+    if not isinstance(rule_data, dict):
+        return []
+
+    candidates: List[str] = []
+
+    def _append(values: Any) -> None:
+        if isinstance(values, list):
+            for value in values:
+                normalized = normalize_cwe_id(value)
+                if normalized and normalized not in candidates:
+                    candidates.append(normalized)
+            return
+        normalized = normalize_cwe_id(values)
+        if normalized and normalized not in candidates:
+            candidates.append(normalized)
+
+    _append(rule_data.get("cwe"))
+
+    metadata = rule_data.get("metadata")
+    if isinstance(metadata, dict):
+        _append(metadata.get("cwe"))
+
+    extra = rule_data.get("extra")
+    if isinstance(extra, dict):
+        _append(extra.get("cwe"))
+        extra_metadata = extra.get("metadata")
+        if isinstance(extra_metadata, dict):
+            _append(extra_metadata.get("cwe"))
+
+    return candidates
+
+
+_BANDIT_TEST_ID_TO_CWE: Dict[str, str] = {
+    "B102": "CWE-78",
+    "B105": "CWE-259",
+    "B106": "CWE-259",
+    "B107": "CWE-259",
+    "B108": "CWE-377",
+    "B110": "CWE-703",
+    "B112": "CWE-703",
+    "B301": "CWE-502",
+    "B302": "CWE-502",
+    "B303": "CWE-327",
+    "B304": "CWE-327",
+    "B305": "CWE-327",
+    "B306": "CWE-377",
+    "B307": "CWE-95",
+    "B308": "CWE-79",
+    "B310": "CWE-918",
+    "B311": "CWE-330",
+    "B313": "CWE-611",
+    "B314": "CWE-611",
+    "B315": "CWE-611",
+    "B316": "CWE-611",
+    "B317": "CWE-611",
+    "B318": "CWE-611",
+    "B319": "CWE-611",
+    "B320": "CWE-611",
+    "B323": "CWE-295",
+    "B324": "CWE-327",
+    "B325": "CWE-377",
+    "B401": "CWE-319",
+    "B402": "CWE-319",
+    "B403": "CWE-502",
+    "B405": "CWE-611",
+    "B406": "CWE-611",
+    "B407": "CWE-611",
+    "B408": "CWE-611",
+    "B409": "CWE-611",
+    "B410": "CWE-611",
+    "B411": "CWE-918",
+    "B501": "CWE-295",
+    "B502": "CWE-327",
+    "B503": "CWE-327",
+    "B504": "CWE-327",
+    "B505": "CWE-326",
+    "B506": "CWE-502",
+    "B507": "CWE-295",
+    "B602": "CWE-78",
+    "B603": "CWE-78",
+    "B604": "CWE-78",
+    "B605": "CWE-78",
+    "B606": "CWE-78",
+    "B607": "CWE-426",
+    "B608": "CWE-89",
+    "B609": "CWE-78",
+    "B610": "CWE-79",
+    "B611": "CWE-89",
+}
+
+
+def _normalize_agent_confidence(
+    value: Any,
+) -> Optional[Literal["HIGH", "MEDIUM", "LOW"]]:
+    if isinstance(value, (int, float)):
+        numeric_value = float(value)
+        if numeric_value >= 0.8:
+            return "HIGH"
+        if numeric_value >= 0.5:
+            return "MEDIUM"
+        if numeric_value > 0:
+            return "LOW"
+        return None
+
+    normalized = str(value or "").strip().upper()
+    if normalized in {"HIGH", "MEDIUM", "LOW"}:
+        return normalized
+    return None
+
+
+def _is_public_project(project: Project | None) -> bool:
+    return bool(project and getattr(project, "source_type", None) == "zip")
+
+
+def _filter_public_projects(projects: List[Project]) -> List[Project]:
+    return [project for project in projects if _is_public_project(project)]
+
+
+def _raise_if_project_hidden(project: Project | None) -> None:
+    if not _is_public_project(project):
+        raise HTTPException(status_code=404, detail="项目不存在")
 
 
 class StaticScanOverviewItem(BaseModel):
     project_id: str
     project_name: str
-    last_scan_tool: Literal["opengrep", "gitleaks", "bandit"]
+    last_scan_tool: Literal["opengrep", "gitleaks", "bandit", "phpstan"]
     last_scan_task_id: str
     paired_gitleaks_task_id: Optional[str] = None
     last_scan_at: datetime
@@ -719,10 +874,12 @@ def _build_static_scan_overview_item_from_row(
     opengrep_created_at = row.get("opengrep_created_at")
     latest_gitleaks_created_at = row.get("latest_gitleaks_created_at")
     latest_bandit_created_at = row.get("latest_bandit_created_at")
+    latest_phpstan_created_at = row.get("latest_phpstan_created_at")
     if (
         opengrep_created_at is None
         and latest_gitleaks_created_at is None
         and latest_bandit_created_at is None
+        and latest_phpstan_created_at is None
     ):
         return None
 
@@ -753,6 +910,8 @@ def _build_static_scan_overview_item_from_row(
         bandit_high_count = int(row.get("latest_bandit_high_count") or 0)
         bandit_medium_count = int(row.get("latest_bandit_medium_count") or 0)
         bandit_low_count = int(row.get("latest_bandit_low_count") or 0)
+        phpstan_task_id = str(row.get("latest_phpstan_task_id") or "")
+        phpstan_total_findings = int(row.get("latest_phpstan_total_findings") or 0)
 
         # Bandit 计数映射口径：HIGH -> severe，MEDIUM+LOW -> hint，不计入 info。
         # 仅当 Bandit 是最近来源时，才使用 Bandit 计数，避免跨批次误叠加。
@@ -778,12 +937,29 @@ def _build_static_scan_overview_item_from_row(
             last_scan_at = opengrep_bundle_last_scan_at
             last_scan_tool = "opengrep"
             paired_gitleaks_task_id = str(row.get("paired_gitleaks_task_id") or "") or None
+
+        # PHPStan 计数映射口径：全部归入 hint，不计入 severe/info。
+        if (
+            latest_phpstan_created_at is not None
+            and latest_phpstan_created_at > last_scan_at
+            and phpstan_task_id
+        ):
+            severe_count = 0
+            hint_count = phpstan_total_findings
+            info_count = 0
+            total_findings = hint_count
+            task_id = phpstan_task_id
+            last_scan_at = latest_phpstan_created_at
+            last_scan_tool = "phpstan"
+            paired_gitleaks_task_id = None
     else:
         # Bandit 计数映射口径：HIGH -> severe，MEDIUM+LOW -> hint，不计入 info。
         bandit_task_id = str(row.get("latest_bandit_task_id") or "")
         bandit_high_count = int(row.get("latest_bandit_high_count") or 0)
         bandit_medium_count = int(row.get("latest_bandit_medium_count") or 0)
         bandit_low_count = int(row.get("latest_bandit_low_count") or 0)
+        phpstan_task_id = str(row.get("latest_phpstan_task_id") or "")
+        phpstan_total_findings = int(row.get("latest_phpstan_total_findings") or 0)
         if (
             latest_bandit_created_at is not None
             and (latest_gitleaks_created_at is None or latest_bandit_created_at >= latest_gitleaks_created_at)
@@ -804,6 +980,20 @@ def _build_static_scan_overview_item_from_row(
             task_id = str(row.get("latest_gitleaks_task_id") or "")
             last_scan_at = latest_gitleaks_created_at
             last_scan_tool = "gitleaks"
+
+        # PHPStan 计数映射口径：全部归入 hint，不计入 severe/info。
+        if (
+            latest_phpstan_created_at is not None
+            and (last_scan_at is None or latest_phpstan_created_at > last_scan_at)
+            and phpstan_task_id
+        ):
+            severe_count = 0
+            hint_count = phpstan_total_findings
+            info_count = 0
+            total_findings = hint_count
+            task_id = phpstan_task_id
+            last_scan_at = latest_phpstan_created_at
+            last_scan_tool = "phpstan"
         paired_gitleaks_task_id = None
 
     if not task_id or last_scan_at is None:
@@ -875,16 +1065,15 @@ async def create_project(
     """
     import json
 
-    # 根据 source_type 设置默认值
-    source_type = project_in.source_type or "repository"
+    source_type = project_in.source_type or "zip"
+    if source_type != "zip" or project_in.repository_url:
+        raise HTTPException(status_code=400, detail="仅支持 ZIP 项目创建")
 
     project = Project(
         name=project_in.name,
         source_type=source_type,
-        repository_url=project_in.repository_url if source_type == "repository" else None,
-        repository_type=(
-            project_in.repository_type or "other" if source_type == "repository" else "other"
-        ),
+        repository_url=None,
+        repository_type="other",
         description=project_in.description,
         default_branch=project_in.default_branch or "main",
         programming_languages=json.dumps(project_in.programming_languages or []),
@@ -907,12 +1096,16 @@ async def read_projects(
     """
     Retrieve projects.
     """
-    query = select(Project).options(selectinload(Project.owner))
+    query = (
+        select(Project)
+        .options(selectinload(Project.owner))
+        .where(Project.source_type == "zip")
+    )
     if not include_deleted:
         query = query.where(Project.is_active == True)
     query = query.order_by(Project.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    return _filter_public_projects(result.scalars().all())
 
 
 @router.get("/deleted", response_model=List[ProjectResponse])
@@ -927,9 +1120,10 @@ async def read_deleted_projects(
         select(Project)
         .options(selectinload(Project.owner))
         .where(Project.is_active == False)
+        .where(Project.source_type == "zip")
         .order_by(Project.updated_at.desc())
     )
-    return result.scalars().all()
+    return _filter_public_projects(result.scalars().all())
 
 
 @router.get("/stats", response_model=StatsResponse)
@@ -1011,14 +1205,59 @@ async def get_stats(
         BanditScanTask, func.lower(BanditScanTask.status).in_(interrupted_statuses)
     )
 
-    total_tasks = audit_total + agent_total + opengrep_total + gitleaks_total + bandit_total
-    completed_tasks = (
-        audit_completed + agent_completed + opengrep_completed + gitleaks_completed + bandit_completed
+    phpstan_total = await _count(PhpstanScanTask)
+    phpstan_completed = await _count(
+        PhpstanScanTask, func.lower(PhpstanScanTask.status) == "completed"
     )
-    running_tasks = audit_running + agent_running + opengrep_running + gitleaks_running + bandit_running
-    failed_tasks = audit_failed + agent_failed + opengrep_failed + gitleaks_failed + bandit_failed
+    phpstan_running = await _count(
+        PhpstanScanTask, func.lower(PhpstanScanTask.status) == "running"
+    )
+    phpstan_failed = await _count(
+        PhpstanScanTask, func.lower(PhpstanScanTask.status) == "failed"
+    )
+    phpstan_interrupted = await _count(
+        PhpstanScanTask, func.lower(PhpstanScanTask.status).in_(interrupted_statuses)
+    )
+
+    total_tasks = (
+        audit_total
+        + agent_total
+        + opengrep_total
+        + gitleaks_total
+        + bandit_total
+        + phpstan_total
+    )
+    completed_tasks = (
+        audit_completed
+        + agent_completed
+        + opengrep_completed
+        + gitleaks_completed
+        + bandit_completed
+        + phpstan_completed
+    )
+    running_tasks = (
+        audit_running
+        + agent_running
+        + opengrep_running
+        + gitleaks_running
+        + bandit_running
+        + phpstan_running
+    )
+    failed_tasks = (
+        audit_failed
+        + agent_failed
+        + opengrep_failed
+        + gitleaks_failed
+        + bandit_failed
+        + phpstan_failed
+    )
     interrupted_tasks = (
-        audit_interrupted + agent_interrupted + opengrep_interrupted + gitleaks_interrupted + bandit_interrupted
+        audit_interrupted
+        + agent_interrupted
+        + opengrep_interrupted
+        + gitleaks_interrupted
+        + bandit_interrupted
+        + phpstan_interrupted
     )
 
     # 问题统计（统一聚合）
@@ -1028,6 +1267,7 @@ async def get_stats(
         + await _count(OpengrepFinding)
         + await _count(GitleaksFinding)
         + await _count(BanditFinding)
+        + await _count(PhpstanFinding)
     )
     resolved_issues = (
         await _count(AuditIssue, func.lower(AuditIssue.status) == "resolved")
@@ -1041,6 +1281,9 @@ async def get_stats(
         )
         + await _count(
             BanditFinding, func.lower(BanditFinding.status).in_(("verified", "fixed"))
+        )
+        + await _count(
+            PhpstanFinding, func.lower(PhpstanFinding.status).in_(("verified", "fixed"))
         )
     )
 
@@ -1109,6 +1352,16 @@ async def get_dashboard_snapshot(
     )
     bandit_rows = bandit_result.all()
 
+    phpstan_result = await db.execute(
+        select(
+            PhpstanScanTask.project_id,
+            PhpstanScanTask.status,
+            PhpstanScanTask.total_findings,
+            PhpstanScanTask.scan_duration_ms,
+        )
+    )
+    phpstan_rows = phpstan_result.all()
+
     agent_result = await db.execute(
         select(
             AgentTask.project_id,
@@ -1122,9 +1375,69 @@ async def get_dashboard_snapshot(
     )
     agent_rows = agent_result.all()
 
+    rule_result = await db.execute(
+        select(
+            OpengrepRule.name,
+            OpengrepRule.language,
+            OpengrepRule.severity,
+            OpengrepRule.confidence,
+            OpengrepRule.is_active,
+            OpengrepRule.cwe,
+        ).where(OpengrepRule.severity == "ERROR")
+    )
+    rule_rows = rule_result.all()
+
+    opengrep_finding_result = await db.execute(
+        select(OpengrepFinding.scan_task_id, OpengrepFinding.rule).where(
+            OpengrepFinding.scan_task_id.in_(opengrep_task_ids),
+            or_(
+                OpengrepFinding.status.is_(None),
+                OpengrepFinding.status != "false_positive",
+            ),
+        )
+    )
+    opengrep_finding_rows = opengrep_finding_result.all()
+
+    bandit_finding_result = await db.execute(
+        select(
+            BanditFinding.test_id,
+            BanditFinding.issue_confidence,
+            BanditFinding.issue_text,
+            BanditFinding.test_name,
+        ).where(
+            or_(
+                BanditFinding.status.is_(None),
+                BanditFinding.status != "false_positive",
+            )
+        )
+    )
+    bandit_finding_rows = bandit_finding_result.all()
+
+    agent_finding_result = await db.execute(
+        select(
+            AgentFinding.is_verified,
+            AgentFinding.references,
+            AgentFinding.vulnerability_type,
+            AgentFinding.title,
+            AgentFinding.description,
+            AgentFinding.code_snippet,
+            AgentFinding.ai_confidence,
+            AgentFinding.confidence,
+        )
+    )
+    agent_finding_rows = agent_finding_result.all()
+
     # project aggregates
     scan_runs_map: Dict[str, Dict[str, int]] = {}
     vulns_map: Dict[str, Dict[str, int]] = {}
+    rule_confidence_buckets: Dict[str, Dict[str, int]] = {
+        "HIGH": {"total_rules": 0, "enabled_rules": 0},
+        "MEDIUM": {"total_rules": 0, "enabled_rules": 0},
+        "LOW": {"total_rules": 0, "enabled_rules": 0},
+        "UNSPECIFIED": {"total_rules": 0, "enabled_rules": 0},
+    }
+    rule_confidence_by_language: Dict[str, Dict[str, int]] = {}
+    cwe_distribution_map: Dict[str, Dict[str, Any]] = {}
 
     def ensure_scan_runs(project_id: str) -> Dict[str, int]:
         existing = scan_runs_map.get(project_id)
@@ -1201,6 +1514,19 @@ async def get_dashboard_snapshot(
             project_scan_runs["static_runs"] += 1
         bandit_duration_ms += _to_non_negative_int(scan_duration_ms)
 
+    phpstan_duration_ms = 0
+    for project_id, status, total_findings, scan_duration_ms in phpstan_rows:
+        if not project_id:
+            continue
+        normalized_project_id = str(project_id)
+        # PHPStan 计数映射口径：全部归入 static_vulns。
+        project_vulns = ensure_vulns(normalized_project_id)
+        project_vulns["static_vulns"] += _to_non_negative_int(total_findings)
+        if str(status or "").strip().lower() == "completed":
+            project_scan_runs = ensure_scan_runs(normalized_project_id)
+            project_scan_runs["static_runs"] += 1
+        phpstan_duration_ms += _to_non_negative_int(scan_duration_ms)
+
     agent_duration_ms = 0
     for (
         project_id,
@@ -1236,6 +1562,146 @@ async def get_dashboard_snapshot(
             agent_duration_ms += _to_non_negative_int(
                 (completed_at - started_at).total_seconds() * 1000
             )
+
+    severe_rule_rows: List[tuple[Any, Any, Any, Any, Any, Any]] = [
+        row for row in rule_rows if str(row[2] or "").strip().upper() == "ERROR"
+    ]
+    rule_confidence_map = build_rule_confidence_map(
+        [(row[0], row[3]) for row in severe_rule_rows]
+    )
+    rule_cwe_map: Dict[str, List[str]] = {}
+    for rule_name, language, _, confidence, is_active, cwe_list in severe_rule_rows:
+        bucket_key = _normalize_dashboard_rule_confidence(confidence)
+        rule_confidence_buckets[bucket_key]["total_rules"] += 1
+        if bool(is_active):
+            rule_confidence_buckets[bucket_key]["enabled_rules"] += 1
+
+        normalized_language = str(language or "").strip() or "unknown"
+        language_bucket = rule_confidence_by_language.setdefault(
+            normalized_language,
+            {
+                "high_count": 0,
+                "medium_count": 0,
+            },
+        )
+        if bucket_key == "HIGH":
+            language_bucket["high_count"] += 1
+        elif bucket_key == "MEDIUM":
+            language_bucket["medium_count"] += 1
+
+        normalized_cwe_values: List[str] = []
+        for raw_cwe in cwe_list if isinstance(cwe_list, list) else []:
+            normalized_cwe = normalize_cwe_id(raw_cwe)
+            if normalized_cwe and normalized_cwe not in normalized_cwe_values:
+                normalized_cwe_values.append(normalized_cwe)
+
+        for lookup_key in extract_rule_lookup_keys(rule_name):
+            if lookup_key not in rule_cwe_map:
+                rule_cwe_map[lookup_key] = normalized_cwe_values
+
+    for scan_task_id, rule_data in opengrep_finding_rows:
+        resolved_confidence = extract_finding_payload_confidence(rule_data)
+        check_id = None
+        if isinstance(rule_data, dict):
+            check_id = rule_data.get("check_id") or rule_data.get("id")
+        if not resolved_confidence:
+            for lookup_key in extract_rule_lookup_keys(check_id):
+                mapped_confidence = rule_confidence_map.get(lookup_key)
+                if mapped_confidence:
+                    resolved_confidence = mapped_confidence
+                    break
+        if resolved_confidence not in {"HIGH", "MEDIUM"}:
+            continue
+
+        normalized_cwe_values = _extract_cwe_candidates_from_rule_payload(rule_data)
+        if not normalized_cwe_values:
+            for lookup_key in extract_rule_lookup_keys(check_id):
+                fallback_cwe_values = rule_cwe_map.get(lookup_key) or []
+                if fallback_cwe_values:
+                    normalized_cwe_values = fallback_cwe_values
+                    break
+        if not normalized_cwe_values:
+            continue
+
+        for cwe_id in normalized_cwe_values:
+            bucket = cwe_distribution_map.setdefault(
+                cwe_id,
+                {
+                    "cwe_id": cwe_id,
+                    "cwe_name": cwe_id,
+                    "total_findings": 0,
+                    "opengrep_findings": 0,
+                    "agent_findings": 0,
+                    "bandit_findings": 0,
+                },
+            )
+            bucket["total_findings"] += 1
+            bucket["opengrep_findings"] += 1
+
+    for test_id, issue_confidence, issue_text, test_name in bandit_finding_rows:
+        normalized_confidence = normalize_opengrep_confidence(issue_confidence)
+        if normalized_confidence not in {"HIGH", "MEDIUM"}:
+            continue
+        cwe_id = _BANDIT_TEST_ID_TO_CWE.get(str(test_id or "").strip().upper())
+        if not cwe_id:
+            continue
+        cwe_name = cwe_id
+        bucket = cwe_distribution_map.setdefault(
+            cwe_id,
+            {
+                "cwe_id": cwe_id,
+                "cwe_name": cwe_name,
+                "total_findings": 0,
+                "opengrep_findings": 0,
+                "agent_findings": 0,
+                "bandit_findings": 0,
+            },
+        )
+        bucket["total_findings"] += 1
+        bucket["bandit_findings"] += 1
+
+    for (
+        is_verified,
+        references,
+        vulnerability_type,
+        title,
+        description,
+        code_snippet,
+        ai_confidence,
+        confidence,
+    ) in agent_finding_rows:
+        if not is_verified:
+            continue
+        normalized_confidence = _normalize_agent_confidence(
+            ai_confidence if ai_confidence is not None else confidence
+        )
+        if normalized_confidence not in {"HIGH", "MEDIUM"}:
+            continue
+        cwe_id = normalize_cwe_id(references)
+        if not cwe_id:
+            continue
+        profile = resolve_vulnerability_profile(
+            vulnerability_type,
+            title=title,
+            description=description,
+            code_snippet=code_snippet,
+        )
+        cwe_name = str(profile.get("name") or cwe_id).strip() or cwe_id
+        bucket = cwe_distribution_map.setdefault(
+            cwe_id,
+            {
+                "cwe_id": cwe_id,
+                "cwe_name": cwe_name,
+                "total_findings": 0,
+                "opengrep_findings": 0,
+                "agent_findings": 0,
+                "bandit_findings": 0,
+            },
+        )
+        if bucket.get("cwe_name") == bucket.get("cwe_id") and cwe_name != cwe_id:
+            bucket["cwe_name"] = cwe_name
+        bucket["total_findings"] += 1
+        bucket["agent_findings"] += 1
 
     scan_runs_items: List[Dict[str, Any]] = []
     for project_id, item in scan_runs_map.items():
@@ -1291,8 +1757,40 @@ async def get_dashboard_snapshot(
     )[:top_n]
 
     total_scan_duration_ms = max(
-        opengrep_duration_ms + gitleaks_duration_ms + bandit_duration_ms + agent_duration_ms,
+        opengrep_duration_ms
+        + gitleaks_duration_ms
+        + bandit_duration_ms
+        + phpstan_duration_ms
+        + agent_duration_ms,
         0,
+    )
+
+    sorted_cwe_distribution = sorted(
+        cwe_distribution_map.values(),
+        key=lambda item: (
+            -_to_non_negative_int(item.get("total_findings", 0)),
+            str(item.get("cwe_id") or ""),
+        ),
+    )[:12]
+    sorted_rule_confidence_by_language = sorted(
+        (
+            {
+                "language": language,
+                "high_count": _to_non_negative_int(item.get("high_count", 0)),
+                "medium_count": _to_non_negative_int(item.get("medium_count", 0)),
+            }
+            for language, item in rule_confidence_by_language.items()
+            if _to_non_negative_int(item.get("high_count", 0))
+            + _to_non_negative_int(item.get("medium_count", 0))
+            > 0
+        ),
+        key=lambda item: (
+            -(
+                _to_non_negative_int(item.get("high_count", 0))
+                + _to_non_negative_int(item.get("medium_count", 0))
+            ),
+            str(item.get("language") or ""),
+        ),
     )
 
     return DashboardSnapshotResponse(
@@ -1305,6 +1803,26 @@ async def get_dashboard_snapshot(
         vulns=[
             DashboardVulnsItem(**item)
             for item in sorted_vulns
+        ],
+        rule_confidence=[
+            DashboardRuleConfidenceItem(
+                confidence=confidence,
+                total_rules=_to_non_negative_int(
+                    rule_confidence_buckets[confidence]["total_rules"]
+                ),
+                enabled_rules=_to_non_negative_int(
+                    rule_confidence_buckets[confidence]["enabled_rules"]
+                ),
+            )
+            for confidence in ("HIGH", "MEDIUM", "LOW", "UNSPECIFIED")
+        ],
+        rule_confidence_by_language=[
+            DashboardRuleConfidenceByLanguageItem(**item)
+            for item in sorted_rule_confidence_by_language
+        ],
+        cwe_distribution=[
+            DashboardCweDistributionItem(**item)
+            for item in sorted_cwe_distribution
         ],
     )
 
@@ -1322,7 +1840,7 @@ async def get_static_scan_overview(
 ) -> Any:
     """
     获取项目静态扫描概览（分页）。
-    仅返回至少存在一次成功静态扫描（Opengrep/Gitleaks/Bandit）的项目。
+    仅返回至少存在一次成功静态扫描（Opengrep/Gitleaks/Bandit/PHPStan）的项目。
     """
     opengrep_ranked_subquery = (
         select(
@@ -1415,6 +1933,33 @@ async def get_static_scan_overview(
         .subquery()
     )
 
+    phpstan_ranked_subquery = (
+        select(
+            PhpstanScanTask.project_id.label("project_id"),
+            PhpstanScanTask.id.label("task_id"),
+            PhpstanScanTask.created_at.label("created_at"),
+            PhpstanScanTask.total_findings.label("total_findings"),
+            func.row_number()
+            .over(
+                partition_by=PhpstanScanTask.project_id,
+                order_by=PhpstanScanTask.created_at.desc(),
+            )
+            .label("rn"),
+        )
+        .where(func.lower(PhpstanScanTask.status) == "completed")
+        .subquery()
+    )
+    latest_phpstan_subquery = (
+        select(
+            phpstan_ranked_subquery.c.project_id,
+            phpstan_ranked_subquery.c.task_id,
+            phpstan_ranked_subquery.c.created_at,
+            phpstan_ranked_subquery.c.total_findings,
+        )
+        .where(phpstan_ranked_subquery.c.rn == 1)
+        .subquery()
+    )
+
     # 以 opengrep 最新 completed 为主锚，配对同批（60 秒窗口）gitleaks completed 任务
     paired_gitleaks_ranked_subquery = (
         select(
@@ -1485,7 +2030,7 @@ async def get_static_scan_overview(
         ),
         else_=latest_gitleaks_subquery.c.created_at,
     )
-    last_scan_at_expr = case(
+    last_scan_with_bandit_expr = case(
         (
             and_(
                 latest_bandit_subquery.c.created_at.is_not(None),
@@ -1497,6 +2042,19 @@ async def get_static_scan_overview(
             latest_bandit_subquery.c.created_at,
         ),
         else_=last_scan_without_bandit_expr,
+    )
+    last_scan_at_expr = case(
+        (
+            and_(
+                latest_phpstan_subquery.c.created_at.is_not(None),
+                or_(
+                    last_scan_with_bandit_expr.is_(None),
+                    latest_phpstan_subquery.c.created_at > last_scan_with_bandit_expr,
+                ),
+            ),
+            latest_phpstan_subquery.c.created_at,
+        ),
+        else_=last_scan_with_bandit_expr,
     )
 
     base_stmt = (
@@ -1524,6 +2082,9 @@ async def get_static_scan_overview(
             latest_bandit_subquery.c.high_count.label("latest_bandit_high_count"),
             latest_bandit_subquery.c.medium_count.label("latest_bandit_medium_count"),
             latest_bandit_subquery.c.low_count.label("latest_bandit_low_count"),
+            latest_phpstan_subquery.c.task_id.label("latest_phpstan_task_id"),
+            latest_phpstan_subquery.c.created_at.label("latest_phpstan_created_at"),
+            latest_phpstan_subquery.c.total_findings.label("latest_phpstan_total_findings"),
             last_scan_at_expr.label("last_scan_at"),
         )
         .select_from(Project)
@@ -1543,11 +2104,16 @@ async def get_static_scan_overview(
             latest_bandit_subquery,
             latest_bandit_subquery.c.project_id == Project.id,
         )
+        .outerjoin(
+            latest_phpstan_subquery,
+            latest_phpstan_subquery.c.project_id == Project.id,
+        )
         .where(
             or_(
                 latest_opengrep_subquery.c.project_id.is_not(None),
                 latest_gitleaks_subquery.c.project_id.is_not(None),
                 latest_bandit_subquery.c.project_id.is_not(None),
+                latest_phpstan_subquery.c.project_id.is_not(None),
             )
         )
     )
@@ -1614,7 +2180,7 @@ async def generate_project_description_preview(
             detail=f"不支持的文件格式: {file_ext}。支持的格式: {', '.join(sorted(supported_formats))}",
         )
 
-    with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_desc_generate") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="VulHunter_", suffix="_desc_generate") as temp_dir:
         try:
             temp_upload_path = os.path.join(temp_dir, file.filename)
             with open(temp_upload_path, "wb") as buffer:
@@ -1667,8 +2233,7 @@ async def read_project(
         select(Project).options(selectinload(Project.owner)).where(Project.id == id)
     )
     project = result.scalars().first()
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查权限：只有项目所有者可以查看
 
@@ -1687,8 +2252,7 @@ async def get_project_info(
     # 1. 获取项目基本信息
     result = await db.execute(select(Project).where(Project.id == id))
     project = result.scalars().first()
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 2. 检查权限
 
@@ -1699,22 +2263,6 @@ async def get_project_info(
         select(ProjectInfo).where(ProjectInfo.project_id == id)
     )
     existing_info = existing_info_result.scalars().first()
-
-    source_type = getattr(project, "source_type", None)
-
-    # 仓库项目暂不执行语言统计，统一返回 unsupported
-    if source_type == "repository":
-        project_info = existing_info or ProjectInfo(
-            project_id=id,
-            created_at=datetime.now(timezone.utc),
-        )
-        project_info.status = "unsupported"
-        project_info.language_info = project_info.language_info or empty_language_info
-        project_info.description = project_info.description or ""
-        db.add(project_info)
-        await db.commit()
-        await db.refresh(project_info)
-        return project_info
 
     if existing_info and existing_info.status == "completed" and existing_info.language_info:
         existing_info.description = existing_info.description or ""
@@ -1786,12 +2334,21 @@ async def update_project(
 
     result = await db.execute(select(Project).where(Project.id == id))
     project = result.scalars().first()
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查权限：只有项目所有者可以更新
 
     update_data = project_in.model_dump(exclude_unset=True)
+    if update_data.get("source_type") not in (None, "zip"):
+        raise HTTPException(status_code=400, detail="仅支持 ZIP 项目")
+    if update_data.get("repository_url"):
+        raise HTTPException(status_code=400, detail="仅支持 ZIP 项目")
+    if "source_type" in update_data:
+        update_data["source_type"] = "zip"
+    if "repository_url" in update_data:
+        update_data["repository_url"] = None
+    if "repository_type" in update_data:
+        update_data["repository_type"] = "other"
     if "programming_languages" in update_data and update_data["programming_languages"] is not None:
         update_data["programming_languages"] = json.dumps(update_data["programming_languages"])
 
@@ -1815,8 +2372,7 @@ async def delete_project(
     """
     result = await db.execute(select(Project).where(Project.id == id))
     project = result.scalars().first()
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查权限：只有项目所有者可以删除
 
@@ -1837,8 +2393,7 @@ async def restore_project(
     """
     result = await db.execute(select(Project).where(Project.id == id))
     project = result.scalars().first()
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查权限：只有项目所有者可以恢复
 
@@ -1859,8 +2414,7 @@ async def permanently_delete_project(
     """
     result = await db.execute(select(Project).where(Project.id == id))
     project = result.scalars().first()
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查权限：只有项目所有者可以永久删除
 
@@ -1880,7 +2434,6 @@ async def permanently_delete_project(
 @router.get("/{id}/files")
 async def get_project_files(
     id: str,
-    branch: Optional[str] = None,
     exclude_patterns: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -1888,12 +2441,10 @@ async def get_project_files(
     """
     Get list of files in the project.
     可选参数:
-    - branch: 指定仓库分支（仅对仓库类型项目有效）
     - exclude_patterns: JSON 格式的排除模式数组，如 ["node_modules/**", "*.log"]
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # Check permissions
 
@@ -1910,9 +2461,9 @@ async def get_project_files(
     if project.source_type == "zip":
         # Handle ZIP project
         zip_path = await load_project_zip(id)
-        print(f"📦 ZIP项目 {id} 文件路径: {zip_path}")
+        print(f"ZIP项目 {id} 文件路径: {zip_path}")
         if not zip_path or not os.path.exists(zip_path):
-            print(f"⚠️ ZIP文件不存在: {zip_path}")
+            print(f"ZIP文件不存在: {zip_path}")
             return []
 
         try:
@@ -1931,90 +2482,12 @@ async def get_project_files(
             print(f"Error reading zip file: {e}")
             raise HTTPException(status_code=500, detail="无法读取项目文件")
 
-    elif project.source_type == "repository":
-        # Handle Repository project
-        if not project.repository_url:
-            return []
-
-        # Get tokens from user config
-        from sqlalchemy.future import select
-        from app.core.encryption import decrypt_sensitive_data
-        from app.core.config import settings
-        from app.services.git_ssh_service import GitSSHOperations
-
-        SENSITIVE_OTHER_FIELDS = ["githubToken", "gitlabToken", "sshPrivateKey"]
-
-        result = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
-        config = result.scalar_one_or_none()
-
-        github_token = settings.GITHUB_TOKEN
-        gitlab_token = settings.GITLAB_TOKEN
-        ssh_private_key = None
-
-        if config and config.other_config:
-            other_config = json.loads(config.other_config)
-            for field in SENSITIVE_OTHER_FIELDS:
-                if field in other_config and other_config[field]:
-                    decrypted_val = decrypt_sensitive_data(other_config[field])
-                    if field == "githubToken":
-                        github_token = decrypted_val
-                    elif field == "gitlabToken":
-                        gitlab_token = decrypted_val
-                    elif field == "sshPrivateKey":
-                        ssh_private_key = decrypted_val
-
-        # 检查是否为SSH URL
-        is_ssh_url = GitSSHOperations.is_ssh_url(project.repository_url)
-        target_branch = branch or project.default_branch or "main"
-
-        try:
-            if is_ssh_url:
-                # 使用SSH方式获取文件列表
-                if not ssh_private_key:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="仓库使用SSH URL，但未配置SSH密钥。请先在设置中生成SSH密钥。",
-                    )
-
-                print(f"🔐 使用SSH方式获取文件列表: {project.repository_url}")
-                files_with_content = GitSSHOperations.get_repo_files_via_ssh(
-                    project.repository_url, ssh_private_key, target_branch, parsed_exclude_patterns
-                )
-                files = [
-                    {"path": f["path"], "size": len(f.get("content", ""))}
-                    for f in files_with_content
-                ]
-            else:
-                # 使用API方式获取文件列表
-                repo_type = project.repository_type or "other"
-
-                if repo_type == "github":
-                    # 传入用户自定义排除模式
-                    repo_files = await get_github_files(
-                        project.repository_url, target_branch, github_token, parsed_exclude_patterns
-                    )
-                    files = [{"path": f["path"], "size": 0} for f in repo_files]
-                elif repo_type == "gitlab":
-                    # 传入用户自定义排除模式
-                    repo_files = await get_gitlab_files(
-                        project.repository_url, target_branch, gitlab_token, parsed_exclude_patterns
-                    )
-                    files = [{"path": f["path"], "size": 0} for f in repo_files]
-                else:
-                    raise HTTPException(status_code=400, detail="不支持的仓库类型")
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"Error fetching repo files: {e}")
-            raise HTTPException(status_code=500, detail=f"无法获取仓库文件: {str(e)}")
-
     return files
 
 
 @router.get("/{id}/files-tree", response_model=FileTreeResponse)
 async def get_project_files_tree(
     id: str,
-    branch: Optional[str] = None,
     exclude_patterns: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -2030,7 +2503,6 @@ async def get_project_files_tree(
     
     参数:
     - id: 项目ID
-    - branch: 指定仓库分支（仅对仓库类型项目有效）
     - exclude_patterns: JSON 格式的排除模式数组
     
     返回:
@@ -2044,8 +2516,7 @@ async def get_project_files_tree(
     - children: 子节点列表（仅目录有值）
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # Check permissions
 
@@ -2075,86 +2546,8 @@ async def get_project_files_tree(
             logger.error(f"构建ZIP文件树失败: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"无法构建文件树: {str(e)}")
 
-    elif project.source_type == "repository":
-        # 处理仓库项目 - 先获取文件列表再构建树
-        if not project.repository_url:
-            raise HTTPException(status_code=400, detail="仓库URL未配置")
-
-        from sqlalchemy.future import select
-        from app.core.encryption import decrypt_sensitive_data
-        from app.core.config import settings
-        from app.services.git_ssh_service import GitSSHOperations
-
-        SENSITIVE_OTHER_FIELDS = ["githubToken", "gitlabToken", "sshPrivateKey"]
-
-        result = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
-        config = result.scalar_one_or_none()
-
-        github_token = settings.GITHUB_TOKEN
-        gitlab_token = settings.GITLAB_TOKEN
-        ssh_private_key = None
-
-        if config and config.other_config:
-            other_config = json.loads(config.other_config)
-            for field in SENSITIVE_OTHER_FIELDS:
-                if field in other_config and other_config[field]:
-                    decrypted_val = decrypt_sensitive_data(other_config[field])
-                    if field == "githubToken":
-                        github_token = decrypted_val
-                    elif field == "gitlabToken":
-                        gitlab_token = decrypted_val
-                    elif field == "sshPrivateKey":
-                        ssh_private_key = decrypted_val
-
-        is_ssh_url = GitSSHOperations.is_ssh_url(project.repository_url)
-        target_branch = branch or project.default_branch or "main"
-
-        try:
-            files = []
-            
-            if is_ssh_url:
-                if not ssh_private_key:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="仓库使用SSH URL，但未配置SSH密钥。请先在设置中生成SSH密钥。",
-                    )
-
-                logger.info(f"通过SSH获取文件树: {project.repository_url}")
-                files_with_content = GitSSHOperations.get_repo_files_via_ssh(
-                    project.repository_url, ssh_private_key, target_branch, parsed_exclude_patterns
-                )
-                files = [
-                    {"path": f["path"], "size": len(f.get("content", ""))}
-                    for f in files_with_content
-                ]
-            else:
-                repo_type = project.repository_type or "other"
-
-                if repo_type == "github":
-                    repo_files = await get_github_files(
-                        project.repository_url, target_branch, github_token, parsed_exclude_patterns
-                    )
-                    files = [{"path": f["path"], "size": 0} for f in repo_files]
-                elif repo_type == "gitlab":
-                    repo_files = await get_gitlab_files(
-                        project.repository_url, target_branch, gitlab_token, parsed_exclude_patterns
-                    )
-                    files = [{"path": f["path"], "size": 0} for f in repo_files]
-                else:
-                    raise HTTPException(status_code=400, detail="不支持的仓库类型")
-
-            # 构建文件树
-            root_node = _build_file_tree_from_repo_files(files)
-            return FileTreeResponse(root=root_node)
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"构建仓库文件树失败: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"无法构建文件树: {str(e)}")
-
     else:
-        raise HTTPException(status_code=400, detail="不支持的项目类型")
+        raise HTTPException(status_code=400, detail="仅支持ZIP类型项目")
 
 
 @router.get("/{id}/files/{file_path:path}", response_model=Optional[FileContentResponse])
@@ -2200,8 +2593,7 @@ async def get_project_file_content(
     """
     # 1. 验证项目存在
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
     
     # 2. 检查是否为ZIP项目
     if project.source_type != "zip":
@@ -2214,6 +2606,12 @@ async def get_project_file_content(
     zip_path = await load_project_zip(id)
     if not zip_path or not os.path.exists(zip_path):
         raise HTTPException(status_code=404, detail="项目文件不存在")
+
+    loop = asyncio.get_event_loop()
+    known_relative_paths = await loop.run_in_executor(None, collect_zip_relative_paths, zip_path)
+    resolved_zip_path = resolve_zip_member_path(validated_path, known_relative_paths)
+    if not resolved_zip_path:
+        raise HTTPException(status_code=404, detail=f"文件不存在: {validated_path}")
     
     zip_hash = _calculate_zip_file_hash(zip_path)
     
@@ -2226,12 +2624,12 @@ async def get_project_file_content(
         is_cached = False
         
         if use_cache:
-            cached_entry = await cache_manager.get(id, validated_path, zip_hash)
+            cached_entry = await cache_manager.get(id, resolved_zip_path, zip_hash)
             if cached_entry is not None and cached_entry.is_text:
-                logger.info(f"从缓存读取文件: {validated_path}")
+                logger.info(f"从缓存读取文件: {resolved_zip_path}")
                 is_cached = True
                 return FileContentResponse(
-                    file_path=validated_path,
+                    file_path=resolved_zip_path,
                     content=cached_entry.content,
                     size=cached_entry.size,
                     encoding=cached_entry.encoding,
@@ -2245,9 +2643,9 @@ async def get_project_file_content(
         def _read_from_zip() -> tuple:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 try:
-                    info = zf.getinfo(validated_path)
+                    info = zf.getinfo(resolved_zip_path)
                 except KeyError:
-                    raise HTTPException(status_code=404, detail=f"文件不存在: {validated_path}")
+                    raise HTTPException(status_code=404, detail=f"文件不存在: {resolved_zip_path}")
                 
                 # 8. 检查文件大小
                 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
@@ -2257,28 +2655,27 @@ async def get_project_file_content(
                         detail=f"文件过大 ({info.file_size / 1024 / 1024:.2f}MB)，最大限制为 {MAX_FILE_SIZE / 1024 / 1024:.0f}MB"
                     )
                 
-                file_bytes = zf.read(validated_path)
+                file_bytes = zf.read(resolved_zip_path)
                 created_at = datetime(*info.date_time, tzinfo=timezone.utc)
                 return file_bytes, info.file_size, created_at
         
         # 在线程池执行阻塞操作
-        loop = asyncio.get_event_loop()
         file_bytes, file_size, created_at = await loop.run_in_executor(None, _read_from_zip)
         
         # 9. 检测文件类型
-        is_binary = _is_binary_file(validated_path, file_bytes[:1024])
+        is_binary = _is_binary_file(resolved_zip_path, file_bytes[:1024])
         
         # 10. 大文件使用流式传输
         STREAM_THRESHOLD = 1 * 1024 * 1024  # 1MB阈值
         if stream or (file_size > STREAM_THRESHOLD):
-            logger.info(f"使用流式传输读取文件: {validated_path} (大小: {file_size / 1024:.1f}KB)")
+            logger.info(f"使用流式传输读取文件: {resolved_zip_path} (大小: {file_size / 1024:.1f}KB)")
             
             async def file_stream():
                 """异步流式生成文件内容"""
                 if is_binary:
                     # 二进制文件：返回base64编码
                     encoded = base64.b64encode(file_bytes).decode('ascii')
-                    yield f'{{"file_path": "{validated_path}", "content": "{encoded}", "encoding": "base64", "size": {file_size}, "is_binary": true}}'
+                    yield f'{{"file_path": "{resolved_zip_path}", "content": "{encoded}", "encoding": "base64", "size": {file_size}, "is_binary": true}}'
                 else:
                     # 文本文件：返回JSON格式
                     
@@ -2295,7 +2692,7 @@ async def get_project_file_content(
                             actual_encoding = "latin-1"
                     
                     response_data = {
-                        "file_path": validated_path,
+                        "file_path": resolved_zip_path,
                         "content": content,
                         "size": file_size,
                         "encoding": actual_encoding,
@@ -2309,7 +2706,7 @@ async def get_project_file_content(
                 file_stream(),
                 media_type="application/json",
                 headers={
-                    "X-File-Path": validated_path,
+                    "X-File-Path": resolved_zip_path,
                     "X-File-Size": str(file_size),
                     "X-Is-Binary": str(is_binary),
                 }
@@ -2317,7 +2714,7 @@ async def get_project_file_content(
         
         # 11. 小文件直接返回
         if is_binary:
-            logger.info(f"返回二进制文件（不解码）: {validated_path}")
+            logger.info(f"返回二进制文件（不解码）: {resolved_zip_path}")
             # 对于二进制文件，返回base64编码
             content = base64.b64encode(file_bytes).decode('ascii')
             actual_encoding = "base64"
@@ -2341,7 +2738,7 @@ async def get_project_file_content(
         if is_text and use_cache and file_size < 5 * 1024 * 1024:  # 5MB限制
             await cache_manager.set(
                 id,
-                validated_path,
+                resolved_zip_path,
                 zip_hash,
                 content,
                 file_size,
@@ -2351,7 +2748,7 @@ async def get_project_file_content(
         
         # 14. 返回结果
         return FileContentResponse(
-            file_path=validated_path,
+            file_path=resolved_zip_path,
             content=content,
             size=file_size,
             encoding=actual_encoding,
@@ -2363,7 +2760,7 @@ async def get_project_file_content(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"读取文件 {validated_path} 失败: {e}", exc_info=True)
+        logger.error(f"读取文件 {resolved_zip_path} 失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"无法读取项目文件: {str(e)}")
 
 
@@ -2371,7 +2768,6 @@ class ScanRequest(BaseModel):
     file_paths: Optional[List[str]] = None
     full_scan: bool = True
     exclude_patterns: Optional[List[str]] = None
-    branch_name: Optional[str] = None
 
 
 @router.post("/{id}/scan")
@@ -2386,11 +2782,8 @@ async def scan_project(
     Start a scan task.
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
-    # 获取分支和排除模式
-    branch_name = scan_request.branch_name if scan_request else None
     exclude_patterns = scan_request.exclude_patterns if scan_request else None
 
     # Create Task Record
@@ -2399,9 +2792,8 @@ async def scan_project(
         created_by=current_user.id,
         task_type="repository",
         status="pending",
-        branch_name=branch_name or project.default_branch or "main",
         exclude_patterns=json.dumps(exclude_patterns or []),
-        scan_config=json.dumps(scan_request.dict()) if scan_request else "{}",
+        scan_config=json.dumps(scan_request.model_dump()) if scan_request else "{}",
     )
     db.add(task)
     await db.commit()
@@ -2424,7 +2816,7 @@ async def scan_project(
         "minimaxApiKey",
         "doubaoApiKey",
     ]
-    SENSITIVE_OTHER_FIELDS = ["githubToken", "gitlabToken"]
+    SENSITIVE_OTHER_FIELDS: list[str] = []
 
     def decrypt_config(config_dict: dict, sensitive_fields: list) -> dict:
         """解密配置中的敏感字段"""
@@ -2478,8 +2870,7 @@ async def get_project_zip_info(
     获取项目ZIP文件信息
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查是否有ZIP文件
     has_file = await has_project_zip(id)
@@ -2522,8 +2913,7 @@ async def upload_project_zip(
     7. 清理临时文件
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查权限
 
@@ -2551,7 +2941,7 @@ async def upload_project_zip(
         )
 
     # 使用 tempfile 创建临时目录
-    with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_zip_upload") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="VulHunter_", suffix="_zip_upload") as temp_dir:
         try:
             # 保存上传的原始文件到临时位置
             temp_upload_path = os.path.join(temp_dir, file.filename)
@@ -2685,8 +3075,7 @@ async def preview_upload_file(
     返回压缩包内的文件列表和统计信息
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     if project.source_type != "zip":
         raise HTTPException(status_code=400, detail="仅ZIP类型项目支持")
@@ -2729,8 +3118,7 @@ async def upload_project_directory(
     - files: 多个文件，前端应该保持相对路径信息（通过 webkitRelativePath）
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查权限
 
@@ -2742,7 +3130,7 @@ async def upload_project_directory(
         raise HTTPException(status_code=400, detail="至少需要上传一个文件")
 
     # 使用 tempfile 创建临时目录（自动清理）
-    with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_upload") as temp_base_dir:
+    with tempfile.TemporaryDirectory(prefix="VulHunter_", suffix="_upload") as temp_base_dir:
         try:
             total_size = 0
             file_count = 0
@@ -2795,7 +3183,7 @@ async def upload_project_directory(
 
             # 使用 tempfile 创建临时 ZIP 文件
             with tempfile.NamedTemporaryFile(
-                suffix=".zip", prefix="deepaudit_", delete=False
+                suffix=".zip", prefix="VulHunter_", delete=False
             ) as temp_zip_file:
                 temp_zip_path = temp_zip_file.name
 
@@ -2904,8 +3292,7 @@ async def delete_project_zip_file(
     删除项目ZIP文件
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
 
     # 检查权限
 
@@ -2922,96 +3309,6 @@ async def delete_project_zip_file(
 
 # ============ 分支管理端点 ============
 
-
-@router.get("/{id}/branches")
-async def get_project_branches(
-    id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    """
-    获取项目仓库的分支列表
-    """
-    project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
-
-    # 检查是否为仓库类型项目
-    if project.source_type != "repository":
-        raise HTTPException(status_code=400, detail="仅仓库类型项目支持获取分支")
-
-    if not project.repository_url:
-        raise HTTPException(status_code=400, detail="项目未配置仓库地址")
-
-    # 获取用户配置的 Token
-    from app.core.config import settings
-    from app.core.encryption import decrypt_sensitive_data
-
-    config = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
-    config = config.scalar_one_or_none()
-
-    github_token = settings.GITHUB_TOKEN
-    gitea_token = settings.GITEA_TOKEN
-    gitlab_token = settings.GITLAB_TOKEN
-
-    SENSITIVE_OTHER_FIELDS = ["githubToken", "gitlabToken", "giteaToken"]
-
-    if config and config.other_config:
-        import json
-
-        other_config = json.loads(config.other_config)
-        for field in SENSITIVE_OTHER_FIELDS:
-            if field in other_config and other_config[field]:
-                decrypted_val = decrypt_sensitive_data(other_config[field])
-                if field == "githubToken":
-                    github_token = decrypted_val
-                elif field == "gitlabToken":
-                    gitlab_token = decrypted_val
-                elif field == "giteaToken":
-                    gitea_token = decrypted_val
-
-    repo_type = project.repository_type or "other"
-
-    # 详细日志
-    print(f"[Branch] 项目: {project.name}, 类型: {repo_type}, URL: {project.repository_url}")
-
-    try:
-        if repo_type == "github":
-            if not github_token:
-                print("[Branch] 警告: GitHub Token 未配置，可能会遇到 API 限制")
-            branches = await get_github_branches(project.repository_url, github_token)
-        elif repo_type == "gitlab":
-            if not gitlab_token:
-                print("[Branch] 警告: GitLab Token 未配置，可能无法访问私有仓库")
-            branches = await get_gitlab_branches(project.repository_url, gitlab_token)
-        elif repo_type == "gitea":
-            if not gitea_token:
-                print("[Branch] 警告: Gitea Token 未配置，可能无法访问私有仓库")
-            branches = await get_gitea_branches(project.repository_url, gitea_token)
-        else:
-            # 对于其他类型，返回默认分支
-            print(f"[Branch] 仓库类型 '{repo_type}' 不支持获取分支，返回默认分支")
-            branches = [project.default_branch or "main"]
-
-        print(f"[Branch] 成功获取 {len(branches)} 个分支")
-
-        # 将默认分支放在第一位
-        default_branch = project.default_branch or "main"
-        if default_branch in branches:
-            branches.remove(default_branch)
-            branches.insert(0, default_branch)
-
-        return {"branches": branches, "default_branch": default_branch}
-
-    except Exception as e:
-        error_msg = str(e)
-        print(f"[Branch] 获取分支列表失败: {error_msg}")
-        # 返回默认分支作为后备
-        return {
-            "branches": [project.default_branch or "main"],
-            "default_branch": project.default_branch or "main",
-            "error": str(e),
-        }
 
 # ============ 缓存管理端点 ============
 
@@ -3065,8 +3362,7 @@ async def invalidate_project_cache(
         清除的缓存条目数
     """
     project = await db.get(Project, id)
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    _raise_if_project_hidden(project)
     
     zip_path = await load_project_zip(id)
     if not zip_path:

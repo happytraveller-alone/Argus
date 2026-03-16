@@ -3,6 +3,7 @@
 ## 目标
 - 在已定位代码行附近读取最小必要上下文，形成可复核证据。
 - 避免路径污染（如 `"(和其他多处)"`）导致 ENOENT 和误熔断。
+- 当前由本地 `FileReadTool` 执行，不再依赖 filesystem MCP。
 
 ## 输入契约
 - 标准: `file_path`, `start_line`, `end_line`（推荐同时传 `max_lines<=200`）。

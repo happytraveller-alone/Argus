@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 VulHunter 后端启动中..."
+echo "VulHunter 后端启动中..."
 
 is_true() {
     case "${1:-}" in
@@ -17,11 +17,11 @@ is_true() {
 ensure_code2flow() {
     export CODE2FLOW_AUTO_INSTALL_FAILED=0
     if command -v code2flow >/dev/null 2>&1; then
-        echo "✅ code2flow 已可用"
+        echo "code2flow 已可用"
         return 0
     fi
 
-    echo "🔧 code2flow 缺失，尝试自动安装..."
+    echo "code2flow 缺失，尝试自动安装..."
     index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-${PIP_INDEX_URL:-https://pypi.org/simple}}"
     install_ok=0
     old_ifs="$IFS"
@@ -36,11 +36,11 @@ ensure_code2flow() {
     IFS="$old_ifs"
 
     if [ "$install_ok" -eq 1 ] && command -v code2flow >/dev/null 2>&1; then
-        echo "✅ code2flow 安装完成"
+        echo "code2flow 安装完成"
         return 0
     fi
 
-    echo "⚠️ code2flow 自动安装失败，控制流分析将退化为无 code2flow 模式"
+    echo "code2flow 自动安装失败，控制流分析将退化为无 code2flow 模式"
     export CODE2FLOW_AUTO_INSTALL_FAILED=1
     return 0
 }
@@ -84,7 +84,7 @@ async def check_db():
 from sqlalchemy import text
 exit(0 if asyncio.run(check_db()) else 1)
 " 2>/dev/null; then
-        echo "✅ 数据库连接成功"
+        echo "数据库连接成功"
         break
     fi
 
@@ -94,21 +94,21 @@ exit(0 if asyncio.run(check_db()) else 1)
 done
 
 if [ $retry_count -eq $max_retries ]; then
-    echo "❌ 无法连接到数据库，请检查 DATABASE_URL 配置"
+    echo "无法连接到数据库，请检查 DATABASE_URL 配置"
     exit 1
 fi
 
 # 运行数据库迁移
-echo "📦 执行数据库迁移..."
+echo "执行数据库迁移..."
 .venv/bin/alembic upgrade head
 
-echo "✅ 数据库迁移完成"
+echo "数据库迁移完成"
 
 # 可选：重置 opengrep_rules 表并重建规则（结构升级时使用）
 if [ "${RESET_STATIC_SCAN_TABLES_ON_DEPLOY}" = "true" ] || [ "${RESET_STATIC_SCAN_TABLES_ON_DEPLOY}" = "1" ]; then
     echo "🧹 重置 opengrep_rules 表并重建规则..."
     .venv/bin/python scripts/reset_static_scan_tables.py
-    echo "✅ opengrep_rules 表重置完成"
+    echo "opengrep_rules 表重置完成"
 fi
 
 # 启动 uvicorn

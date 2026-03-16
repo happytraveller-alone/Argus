@@ -16,10 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BranchSelector } from "@/components/ui/branch-selector";
 import {
 	Search,
-	GitBranch,
 	Upload,
 	Package,
 	Shield,
@@ -28,7 +26,7 @@ import {
 	Bot,
 } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/shared/config/database";
+import { api } from "@/shared/api/database";
 import { createAgentTask } from "@/shared/api/agentTasks";
 import {
 	createOpengrepScanTask,
@@ -37,6 +35,7 @@ import {
 } from "@/shared/api/opengrep";
 import { createGitleaksScanTask } from "@/shared/api/gitleaks";
 import { createBanditScanTask } from "@/shared/api/bandit";
+import { createPhpstanScanTask } from "@/shared/api/phpstan";
 import {
 	getOpengrepActiveRules,
 	setOpengrepActiveRules,
@@ -61,7 +60,7 @@ import {
 
 import { validateZipFile } from "@/features/projects/services/repoZipScan";
 import { uploadZipFile } from "@/shared/utils/zipStorage";
-import { isRepositoryProject, isZipProject } from "@/shared/utils/projectUtils";
+import { isZipProject } from "@/shared/utils/projectUtils";
 import type { Project } from "@/shared/types";
 import { INTELLIGENT_TASK_NAME_MARKER } from "@/features/tasks/services/taskActivities";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
@@ -104,9 +103,6 @@ export default function CreateScanTaskDialog({
 	);
 	const [selectedProjectId, setSelectedProjectId] = useState<string>("");
 	const [searchTerm, setSearchTerm] = useState("");
-	const [branch, setBranch] = useState("main");
-	const [branches, setBranches] = useState<string[]>([]);
-	const [loadingBranches, setLoadingBranches] = useState(false);
 	const [excludePatterns, setExcludePatterns] = useState(DEFAULT_SCAN_EXCLUDES);
 	const [selectedFiles, setSelectedFiles] = useState<string[] | undefined>();
 	const [showAdvanced, setShowAdvanced] = useState(false);
@@ -122,6 +118,7 @@ export default function CreateScanTaskDialog({
 		opengrep: true,
 		gitleaks: false,
 		bandit: false,
+		phpstan: false,
 	});
 	const [staticRules, setStaticRules] = useState<OpengrepRule[]>([]);
 	const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
@@ -130,40 +127,11 @@ export default function CreateScanTaskDialog({
 	const selectedProject = projects.find((p) => p.id === selectedProjectId);
 	const zipState = useZipFile(selectedProject, projects);
 
-	useEffect(() => {
-		const loadBranches = async () => {
-			const project = projects.find((p) => p.id === selectedProjectId);
-			if (!project || !isRepositoryProject(project)) {
-				setBranches([]);
-				return;
-			}
-
-			setLoadingBranches(true);
-			try {
-				const result = await api.getProjectBranches(project.id);
-				if (result.error) {
-					toast.error(`加载分支失败: ${result.error}`);
-				}
-				setBranches(result.branches);
-				if (result.default_branch) {
-					setBranch(result.default_branch);
-				}
-			} catch (error) {
-				const msg = error instanceof Error ? error.message : "未知错误";
-				toast.error(`加载分支失败: ${msg}`);
-				setBranches([project.default_branch || "main"]);
-			} finally {
-				setLoadingBranches(false);
-			}
-		};
-
-		loadBranches();
-	}, [selectedProjectId, projects]);
-
 	const filteredProjects = useMemo(() => {
-		if (!searchTerm) return projects;
+		const visibleProjects = projects.filter((project) => isZipProject(project));
+		if (!searchTerm) return visibleProjects;
 		const term = searchTerm.toLowerCase();
-		return projects.filter(
+		return visibleProjects.filter(
 			(p) =>
 				p.name.toLowerCase().includes(term) ||
 				p.description?.toLowerCase().includes(term),
@@ -212,7 +180,7 @@ export default function CreateScanTaskDialog({
 			setShowAdvanced(false);
 			setSelectedRuleIds([]);
 			setScanMode(initialScanMode || "agent");
-			setStaticTools({ opengrep: true, gitleaks: false, bandit: false });
+			setStaticTools({ opengrep: true, gitleaks: false, bandit: false, phpstan: false });
 			setSourceMode("existing");
 			setNewProjectName("");
 			setNewProjectFile(null);
@@ -261,7 +229,6 @@ export default function CreateScanTaskDialog({
 		setSelectedFiles(undefined);
 		if (mode === "upload") {
 			setSelectedProjectId("");
-			setBranch("main");
 			zipState.reset();
 			return;
 		}
@@ -279,24 +246,30 @@ export default function CreateScanTaskDialog({
 	}, [selectedFiles]);
 	const canSelectFiles = useMemo(() => {
 		if (!selectedProject) return false;
-		const isRepo = isRepositoryProject(selectedProject);
 		const isZip = isZipProject(selectedProject);
 		const hasStoredZip = Boolean(zipState.storedZipInfo?.has_file);
 		const useStored = zipState.useStoredZip;
-		return isRepo || (isZip && useStored && hasStoredZip);
+		return isZip && useStored && hasStoredZip;
 	}, [selectedProject, zipState.storedZipInfo?.has_file, zipState.useStoredZip]);
 
 	const createStaticScanTasksForProject = async (
 		projectId: string,
 		projectName: string,
 	) => {
-		if (!staticTools.opengrep && !staticTools.gitleaks && !staticTools.bandit) {
+		// PHPStan integration: enforce 4-engine minimum selection check.
+		if (
+			!staticTools.opengrep &&
+			!staticTools.gitleaks &&
+			!staticTools.bandit &&
+			!staticTools.phpstan
+		) {
 			throw new Error("请选择至少一个静态分析工具");
 		}
 
 		let opengrepTask: { id: string } | null = null;
 		let gitleaksTask: { id: string } | null = null;
 		let banditTask: { id: string } | null = null;
+		let phpstanTask: { id: string } | null = null;
 		const staticBatchId = createStaticScanBatchId();
 
 		if (staticTools.opengrep) {
@@ -374,8 +347,20 @@ export default function CreateScanTaskDialog({
 				target_path: ".",
 			});
 		}
+		// PHPStan integration: create static task in the same batch marker group.
+		if (staticTools.phpstan) {
+			phpstanTask = await createPhpstanScanTask({
+				project_id: projectId,
+				name: appendStaticScanBatchMarker(
+					`静态分析-PHPStan-${projectName}`,
+					staticBatchId,
+				),
+				target_path: ".",
+			});
+		}
 
-		const primaryTaskId = opengrepTask?.id || gitleaksTask?.id || banditTask?.id;
+		const primaryTaskId =
+			opengrepTask?.id || gitleaksTask?.id || banditTask?.id || phpstanTask?.id;
 		if (!primaryTaskId) {
 			throw new Error("静态分析任务创建失败");
 		}
@@ -390,11 +375,17 @@ export default function CreateScanTaskDialog({
 		if (banditTask) {
 			params.set("banditTaskId", banditTask.id);
 		}
-		if (!opengrepTask && !banditTask && gitleaksTask) {
+		if (phpstanTask) {
+			params.set("phpstanTaskId", phpstanTask.id);
+		}
+		if (!opengrepTask && !banditTask && !phpstanTask && gitleaksTask) {
 			params.set("tool", "gitleaks");
 		}
-		if (!opengrepTask && !gitleaksTask && banditTask) {
+		if (!opengrepTask && !gitleaksTask && !phpstanTask && banditTask) {
 			params.set("tool", "bandit");
+		}
+		if (!opengrepTask && !gitleaksTask && !banditTask && phpstanTask) {
+			params.set("tool", "phpstan");
 		}
 
 		return {
@@ -444,7 +435,9 @@ export default function CreateScanTaskDialog({
 								static_bootstrap: {
 									mode: "disabled",
 									opengrep_enabled: false,
+									bandit_enabled: false,
 									gitleaks_enabled: false,
+									phpstan_enabled: false,
 								},
 							},
 							target_files:
@@ -508,12 +501,11 @@ export default function CreateScanTaskDialog({
 						static_bootstrap: {
 							mode: "disabled",
 							opengrep_enabled: false,
+							bandit_enabled: false,
 							gitleaks_enabled: false,
+							phpstan_enabled: false,
 						},
 					},
-					branch_name: isRepositoryProject(selectedProject)
-						? branch
-						: undefined,
 					exclude_patterns: excludePatterns,
 					target_files:
 						effectiveTargetFiles.length > 0 ? effectiveTargetFiles : undefined,
@@ -568,7 +560,12 @@ export default function CreateScanTaskDialog({
 			if (sourceMode === "upload") {
 				if (!newProjectName.trim() || !newProjectFile) return false;
 				if (scanMode === "static") {
-					return staticTools.opengrep || staticTools.gitleaks || staticTools.bandit;
+					return (
+						staticTools.opengrep ||
+						staticTools.gitleaks ||
+						staticTools.bandit ||
+						staticTools.phpstan
+					);
 				}
 				return true;
 			}
@@ -577,17 +574,17 @@ export default function CreateScanTaskDialog({
 				return (
 					isZipProject(selectedProject) &&
 				!!zipState.storedZipInfo?.has_file &&
-				(staticTools.opengrep || staticTools.gitleaks || staticTools.bandit)
+				(staticTools.opengrep ||
+					staticTools.gitleaks ||
+					staticTools.bandit ||
+					staticTools.phpstan)
 			);
 		}
-			if (isZipProject(selectedProject)) {
-				const ready =
-					(zipState.useStoredZip && zipState.storedZipInfo?.has_file) ||
-					!!zipState.zipFile;
-				if (!ready) return false;
-				return true;
-			}
-			if (!selectedProject.repository_url || !branch.trim()) return false;
+			if (!isZipProject(selectedProject)) return false;
+			const ready =
+				(zipState.useStoredZip && zipState.storedZipInfo?.has_file) ||
+				!!zipState.zipFile;
+			if (!ready) return false;
 			return true;
 		}, [
 			sourceMode,
@@ -595,12 +592,12 @@ export default function CreateScanTaskDialog({
 			newProjectFile,
 			selectedProject,
 			zipState,
-			branch,
 			scanMode,
 			effectiveTargetFiles,
 			staticTools.opengrep,
 			staticTools.gitleaks,
 			staticTools.bandit,
+			staticTools.phpstan,
 		]);
 
 	return (
@@ -776,54 +773,29 @@ export default function CreateScanTaskDialog({
 									配置
 								</span>
 
-								{isRepositoryProject(selectedProject) ? (
-									<div className="flex items-center gap-3 p-3 border border-border rounded bg-blue-50 dark:bg-blue-950/20">
-										<GitBranch className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-										<span className="font-mono text-base text-muted-foreground w-12">
-											分支
-										</span>
-										{loadingBranches ? (
-											<div className="flex items-center gap-2 flex-1">
-												<Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
-												<span className="text-sm text-blue-600 dark:text-blue-400 font-mono">
-													加载中...
-												</span>
-											</div>
-										) : (
-											<BranchSelector
-												value={branch}
-												onChange={setBranch}
-												branches={branches}
-												placeholder="选择分支"
-												className="flex-1"
-											/>
-										)}
-									</div>
-								) : (
-									<ZipUploadCard
-										zipState={zipState}
-										onUpload={async () => {
-											if (!zipState.zipFile || !selectedProject) return;
-											setUploading(true);
-											try {
-												await api.uploadProjectZip(
-													selectedProject.id,
-													zipState.zipFile,
-												);
-												toast.success("文件上传成功");
-												zipState.switchToStored();
-												loadProjects();
-											} catch (error) {
-												const msg =
-													error instanceof Error ? error.message : "上传失败";
-												toast.error(msg);
-											} finally {
-												setUploading(false);
-											}
-										}}
-										uploading={uploading}
-									/>
-								)}
+								<ZipUploadCard
+									zipState={zipState}
+									onUpload={async () => {
+										if (!zipState.zipFile || !selectedProject) return;
+										setUploading(true);
+										try {
+											await api.uploadProjectZip(
+												selectedProject.id,
+												zipState.zipFile,
+											);
+											toast.success("文件上传成功");
+											zipState.switchToStored();
+											loadProjects();
+										} catch (error) {
+											const msg =
+												error instanceof Error ? error.message : "上传失败";
+											toast.error(msg);
+										} finally {
+											setUploading(false);
+										}
+									}}
+									uploading={uploading}
+								/>
 
 								{scanMode === "static" && null}
 
@@ -913,7 +885,6 @@ export default function CreateScanTaskDialog({
 					open={showFileSelection}
 					onOpenChange={setShowFileSelection}
 					projectId={selectedProjectId}
-					branch={branch}
 					excludePatterns={excludePatterns}
 					onConfirm={setSelectedFiles}
 				/>

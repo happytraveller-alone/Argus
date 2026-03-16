@@ -22,7 +22,7 @@ from .business_logic_scan_tool import BusinessLogicScanTool
 from .run_code import RunCodeTool, ExtractFunctionTool
 from .control_flow_tool import ControlFlowAnalysisLightTool
 from .logic_authz_tool import LogicAuthzAnalysisTool
-from .verification_result_tools import SaveVerificationResultTool
+from .verification_result_tools import SaveVerificationResultTool, UpdateVulnerabilityFindingTool
 
 __all__ = [
     "AgentTool",
@@ -57,4 +57,5 @@ __all__ = [
     "ControlFlowAnalysisLightTool",
     "LogicAuthzAnalysisTool",
     "SaveVerificationResultTool",
+    "UpdateVulnerabilityFindingTool",
 ]

@@ -1,12 +1,12 @@
 [project]
-name = "deepaudit-backend"
+name = "VulHunter-backend"
 version = "3.0.4"
-description = "DeepAudit Backend API - AI-Powered Code Security Audit Platform"
+description = "VulHunter Backend API - AI-Powered Code Security Audit Platform"
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-    { name = "DeepAudit Team" }
+    { name = "VulHunter Team" }
 ]
 keywords = ["security", "audit", "code-review", "vulnerability", "ai", "llm"]
 
@@ -88,6 +88,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.1.0",
+    "aiosqlite>=0.20.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
@@ -102,11 +103,11 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/lintsinghua/DeepAudit"
-Documentation = "https://github.com/lintsinghua/DeepAudit/tree/main/docs"
-Repository = "https://github.com/lintsinghua/DeepAudit"
-Issues = "https://github.com/lintsinghua/DeepAudit/issues"
-Changelog = "https://github.com/lintsinghua/DeepAudit/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/lintsinghua/VulHunter"
+Documentation = "https://github.com/lintsinghua/VulHunter/tree/main/docs"
+Repository = "https://github.com/lintsinghua/VulHunter"
+Issues = "https://github.com/lintsinghua/VulHunter/issues"
+Changelog = "https://github.com/lintsinghua/VulHunter/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
@@ -204,6 +205,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.1.0",
+    "aiosqlite>=0.20.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",

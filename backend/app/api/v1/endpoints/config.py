@@ -27,12 +27,7 @@ from app.models.user import User
 from app.models.project import Project
 from app.core.config import settings
 from app.core.encryption import encrypt_sensitive_data, decrypt_sensitive_data
-from app.services.agent.mcp.catalog import build_mcp_catalog
 from app.services.agent.skills.scan_core import build_scan_core_skill_availability
-from app.services.agent.mcp.protocol_verify import (
-    normalize_listed_tools,
-    run_protocol_verification,
-)
 from app.services.llm.config_utils import (
     normalize_llm_base_url,
     parse_llm_custom_headers,
@@ -52,7 +47,7 @@ SENSITIVE_LLM_FIELDS = [
     'qwenApiKey', 'deepseekApiKey', 'zhipuApiKey', 'moonshotApiKey',
     'baiduApiKey', 'minimaxApiKey', 'doubaoApiKey'
 ]
-SENSITIVE_OTHER_FIELDS = ['githubToken', 'gitlabToken']
+SENSITIVE_OTHER_FIELDS: list[str] = []
 LLM_PROVIDER_API_KEY_FIELD_MAP = {
     "custom": "openaiApiKey",
     "openai": "openaiApiKey",
@@ -180,6 +175,54 @@ async def _load_user_config_payload(
             SENSITIVE_OTHER_FIELDS,
         )
     return saved_llm_config, saved_other_config
+
+
+async def _load_user_config_payload_with_effective_defaults(
+    *,
+    db: AsyncSession,
+    user_id: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    saved_llm_config, saved_other_config = await _load_user_config_payload(
+        db=db,
+        user_id=user_id,
+    )
+    default_config = get_default_config()
+    effective_llm_config = {
+        **default_config["llmConfig"],
+        **saved_llm_config,
+    }
+    effective_other_config = _sanitize_other_config(
+        {
+            **default_config["otherConfig"],
+            **_strip_mcp_config(saved_other_config),
+        }
+    )
+    return (
+        saved_llm_config,
+        saved_other_config,
+        effective_llm_config,
+        effective_other_config,
+    )
+
+
+async def _load_effective_user_config(
+    *,
+    db: AsyncSession,
+    user_id: str,
+) -> dict[str, dict[str, Any]]:
+    (
+        _saved_llm_config,
+        _saved_other_config,
+        effective_llm_config,
+        effective_other_config,
+    ) = await _load_user_config_payload_with_effective_defaults(
+        db=db,
+        user_id=user_id,
+    )
+    return {
+        "llmConfig": effective_llm_config,
+        "otherConfig": effective_other_config,
+    }
 
 def _extract_model_names_from_payload(payload: Any) -> list[str]:
     candidates: list[str] = []
@@ -426,8 +469,6 @@ async def _fetch_models_azure_openai(
         raise last_error
     return [], {}
 
-_VALID_MCP_RUNTIME_MODES = {"stdio_only", "backend_only"}
-
 def _default_mcp_write_policy() -> dict:
     hard_limit = max(1, int(getattr(settings, "MCP_WRITE_HARD_LIMIT", 50)))
     default_limit = int(
@@ -444,47 +485,6 @@ def _default_mcp_write_policy() -> dict:
             getattr(settings, "MCP_FORBID_PROJECT_WIDE_WRITES", True)
         ),
     }
-
-def _default_mcp_runtime_policy() -> dict:
-    return {
-        "default_mode": "stdio_only",
-        "filesystem": {
-            "runtime_mode": "stdio_only",
-            "enabled": bool(getattr(settings, "MCP_FILESYSTEM_ENABLED", True)),
-        },
-    }
-
-def _sanitize_runtime_mode(raw_mode: Any, default_mode: str) -> str:
-    mode = str(raw_mode or "").strip().lower()
-    if mode in _VALID_MCP_RUNTIME_MODES:
-        return mode
-    fallback = str(default_mode or "").strip().lower()
-    if fallback in _VALID_MCP_RUNTIME_MODES:
-        return fallback
-    return "stdio_only"
-
-def _sanitize_mcp_runtime_policy(raw_policy: Any) -> dict:
-    _ = raw_policy
-    default_policy = _default_mcp_runtime_policy()
-    return {
-        "default_mode": "stdio_only",
-        "filesystem": {
-            "runtime_mode": "stdio_only",
-            "enabled": bool(default_policy["filesystem"]["enabled"]),
-        },
-    }
-
-def _build_mcp_runtime_persistence() -> dict:
-    return {
-        "data_dir": "/app/data/mcp",
-        "xdg_config_home": str(
-            getattr(settings, "XDG_CONFIG_HOME", "/app/data/mcp/xdg-config")
-            or "/app/data/mcp/xdg-config"
-        ),
-    }
-
-def _build_skill_availability(catalog: list[dict]) -> dict:
-    return build_scan_core_skill_availability(catalog)
 
 def _sanitize_mcp_write_policy(raw_policy: Any) -> dict:
     default_policy = _default_mcp_write_policy()
@@ -515,57 +515,53 @@ def _sanitize_mcp_write_policy(raw_policy: Any) -> dict:
         "forbid_project_wide_writes": True,
     }
 
+
 def _sanitize_mcp_config(raw_mcp_config: Any) -> dict:
-    # MCP runtime policy is backend-owned. Frontend input is ignored.
-    _ = raw_mcp_config
-    enabled = bool(getattr(settings, "MCP_ENABLED", True))
-    runtime_policy = _sanitize_mcp_runtime_policy({})
-    catalog = build_mcp_catalog(
-        mcp_enabled=enabled,
-        runtime_policy=runtime_policy,
-    )
+    candidate = raw_mcp_config if isinstance(raw_mcp_config, dict) else {}
+    has_legacy_filesystem = False
+    runtime_policy = candidate.get("runtimePolicy")
+    if isinstance(runtime_policy, dict) and isinstance(runtime_policy.get("filesystem"), dict):
+        has_legacy_filesystem = True
+    catalog = candidate.get("catalog")
+    if isinstance(catalog, list):
+        has_legacy_filesystem = has_legacy_filesystem or any(
+            isinstance(item, dict) and str(item.get("id") or "").strip().lower() == "filesystem"
+            for item in catalog
+        )
+
+    skill_availability = build_scan_core_skill_availability([])
     return {
-        "enabled": enabled,
+        "enabled": bool(getattr(settings, "MCP_ENABLED", True)),
         "preferMcp": bool(getattr(settings, "MCP_PREFER", True)),
         "writePolicy": _sanitize_mcp_write_policy({}),
-        "runtimePolicy": runtime_policy,
-        "runtimePersistence": _build_mcp_runtime_persistence(),
-        # Read-only catalog: always generated by backend.
-        "catalog": catalog,
-        "skillAvailability": _build_skill_availability(catalog),
+        "runtimePolicy": {"default_mode": "stdio_only"},
+        "catalog": [],
+        "skillAvailability": skill_availability,
+        "deprecatedConfigs": (
+            {
+                "filesystem": {
+                    "deprecated": True,
+                    "ignored": True,
+                }
+            }
+            if has_legacy_filesystem
+            else {}
+        ),
     }
 
 def _sanitize_other_config(raw_other_config: Any) -> dict:
     candidate = dict(raw_other_config) if isinstance(raw_other_config, dict) else {}
-    candidate["mcpConfig"] = _sanitize_mcp_config(candidate.get("mcpConfig"))
+    for retired_key in ("githubToken", "gitlabToken", "giteaToken"):
+        candidate.pop(retired_key, None)
+    candidate.pop("mcpConfig", None)
     return candidate
 
 def _strip_mcp_config(raw_other_config: Any) -> dict:
     candidate = dict(raw_other_config) if isinstance(raw_other_config, dict) else {}
+    for retired_key in ("githubToken", "gitlabToken", "giteaToken"):
+        candidate.pop(retired_key, None)
     candidate.pop("mcpConfig", None)
     return candidate
-
-_VERIFY_DEFAULT_PROJECT_NAME = "libplist"
-_VERIFY_SUPPORTED_MCP_IDS = {
-    "filesystem",
-}
-_MCP_INTERNAL_TOOLS = {
-    "set_project_path",
-    "configure_file_watcher",
-    "refresh_index",
-    "build_deep_index",
-}
-
-
-def _ensure_supported_mcp_ids(mcp_ids: list[str]) -> list[str]:
-    normalized_ids = [str(item or "").strip().lower() for item in mcp_ids if str(item or "").strip()]
-    unsupported = [mcp_id for mcp_id in normalized_ids if mcp_id not in _VERIFY_SUPPORTED_MCP_IDS]
-    if unsupported:
-        raise HTTPException(
-            status_code=400,
-            detail=f"不支持的 MCP: {', '.join(sorted(dict.fromkeys(unsupported)))}",
-        )
-    return normalized_ids
 
 def _normalize_extracted_project_root(base_path: str) -> str:
     candidates = [
@@ -580,44 +576,9 @@ def _normalize_extracted_project_root(base_path: str) -> str:
         return nested
     return base_path
 
-def _is_mcp_infra_failure(*, handled: bool, error_text: str, metadata: dict[str, Any]) -> bool:
-    normalized_error = str(error_text or "").strip()
-    skip_reason = str(metadata.get("mcp_skip_reason") or "").strip()
-    return (
-        not bool(handled)
-        or normalized_error.startswith("mcp_call_failed:")
-        or normalized_error.startswith("mcp_adapter_unavailable:")
-        or skip_reason
-        in {
-            "adapter_unavailable",
-            "adapter_disabled_after_failures",
-            "domain_adapter_missing",
-            "command_not_found",
-        }
-    )
 
-def _prepare_code_probe_file(project_root: str) -> dict[str, Any]:
-    probe_rel_path = "tmp/.mcp_verify_code_probe.c"
-    probe_abs_path = os.path.normpath(os.path.join(project_root, probe_rel_path))
-    if not probe_abs_path.startswith(os.path.normpath(project_root)):
-        raise RuntimeError("code_probe_outside_project_root")
-    os.makedirs(os.path.dirname(probe_abs_path), exist_ok=True)
-    probe_content = (
-        "#include <stdio.h>\n"
-        "int mcp_probe_sum(int a, int b) {\n"
-        "    return a + b;\n"
-        "}\n"
-        "int mcp_probe_main(void) {\n"
-        "    return mcp_probe_sum(1, 2);\n"
-        "}\n"
-    )
-    with open(probe_abs_path, "w", encoding="utf-8") as handle:
-        handle.write(probe_content)
-    return {
-        "file_path": probe_rel_path,
-        "function_name": "mcp_probe_sum",
-        "line_start": 2,
-    }
+_VERIFY_DEFAULT_PROJECT_NAME = "libplist"
+
 
 async def _resolve_verify_project(
     *,
@@ -679,10 +640,11 @@ async def _resolve_verify_project(
     if not selected_project or not selected_zip_path:
         raise HTTPException(
             status_code=400,
-            detail="未找到可用于 MCP 验证的 ZIP 项目，请先上传 ZIP 项目或修复默认 libplist 资源。",
+            detail="未找到可用于技能测试的 ZIP 项目，请先上传 ZIP 项目或修复默认 libplist 资源。",
         )
 
     return selected_project, selected_zip_path, fallback_used
+
 
 def encrypt_config(config: dict, sensitive_fields: list) -> dict:
     """加密配置中的敏感字段"""
@@ -733,13 +695,10 @@ class LLMConfigSchema(BaseModel):
 
 class OtherConfigSchema(BaseModel):
     """其他配置Schema"""
-    githubToken: Optional[str] = None
-    gitlabToken: Optional[str] = None
     maxAnalyzeFiles: Optional[int] = None
     llmConcurrency: Optional[int] = None
     llmGapMs: Optional[int] = None
     outputLanguage: Optional[str] = None
-    mcpConfig: Optional[dict] = None
 
 class UserConfigRequest(BaseModel):
     """用户配置请求"""
@@ -756,106 +715,6 @@ class UserConfigResponse(BaseModel):
     updated_at: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
-
-class MCPVerifyRequest(BaseModel):
-    mcp_id: str
-
-class MCPVerifyCheck(BaseModel):
-    step: str
-    action: str
-    success: bool
-    tool: Optional[str] = None
-    runtime_domain: Optional[str] = None
-    duration_ms: int
-    error: Optional[str] = None
-
-class MCPVerifyResponse(BaseModel):
-    success: bool
-    mcp_id: str
-    checks: list[MCPVerifyCheck]
-    verification_tools: list[str]
-    project_context: dict[str, Any]
-    discovered_tools: list[dict[str, Any]]
-    protocol_summary: dict[str, Any]
-
-class MCPToolsListRequest(BaseModel):
-    mcp_ids: Optional[list[str]] = None
-    include_internal: bool = False
-
-class MCPToolsListTool(BaseModel):
-    name: str
-    description: str
-    inputSchema: dict[str, Any]
-
-class MCPToolsListItem(BaseModel):
-    mcp_id: str
-    success: bool
-    tools: list[MCPToolsListTool]
-    error: Optional[str] = None
-    runtime_domain: Optional[str] = None
-    listed_count: int
-    visible_count: int
-
-class MCPToolsListResponse(BaseModel):
-    results: list[MCPToolsListItem]
-
-class MCPToolsCallRequest(BaseModel):
-    mcp_id: str
-    tool_name: str
-    arguments: dict[str, Any] = Field(default_factory=dict)
-    include_internal: bool = False
-
-class MCPToolsCallResponse(BaseModel):
-    success: bool
-    handled: bool
-    mcp_id: str
-    tool_name: str
-    data: Optional[str] = None
-    error: Optional[str] = None
-    runtime_domain: Optional[str] = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-def _resolve_target_mcp_ids(
-    requested_ids: Optional[list[str]],
-    *,
-    mcp_catalog: Any,
-) -> list[str]:
-    if isinstance(requested_ids, list) and requested_ids:
-        return [
-            mcp_id
-            for mcp_id in dict.fromkeys(
-                str(item or "").strip().lower() for item in requested_ids
-            )
-            if mcp_id
-        ]
-
-    target_ids: list[str] = []
-    for item in mcp_catalog if isinstance(mcp_catalog, list) else []:
-        if not isinstance(item, dict):
-            continue
-        if str(item.get("type") or "").strip().lower() != "mcp-server":
-            continue
-        mcp_id = str(item.get("id") or "").strip().lower()
-        if mcp_id:
-            target_ids.append(mcp_id)
-    return list(dict.fromkeys(target_ids))
-
-
-def _filter_internal_tools(
-    tools: list[dict[str, Any]],
-    *,
-    include_internal: bool,
-) -> list[dict[str, Any]]:
-    if include_internal:
-        return list(tools)
-    visible: list[dict[str, Any]] = []
-    for tool in tools:
-        name = str(tool.get("name") or "").strip()
-        if not name or name in _MCP_INTERNAL_TOOLS:
-            continue
-        visible.append(tool)
-    return visible
-
 
 def get_default_config() -> dict:
     """获取系统默认配置"""
@@ -889,13 +748,10 @@ def get_default_config() -> dict:
             "ollamaBaseUrl": settings.OLLAMA_BASE_URL or "http://localhost:11434/v1",
         },
         "otherConfig": {
-            "githubToken": settings.GITHUB_TOKEN or "",
-            "gitlabToken": settings.GITLAB_TOKEN or "",
             "maxAnalyzeFiles": settings.MAX_ANALYZE_FILES,
             "llmConcurrency": settings.LLM_CONCURRENCY,
             "llmGapMs": settings.LLM_GAP_MS,
             "outputLanguage": settings.OUTPUT_LANGUAGE,
-            "mcpConfig": _sanitize_mcp_config({}),
         }
     }
 
@@ -915,10 +771,8 @@ async def get_my_config(
     )
     config = result.scalar_one_or_none()
     
-    # 获取系统默认配置
-    default_config = get_default_config()
-    
     if not config:
+        default_config = get_default_config()
         print(f"[Config] 用户 {current_user.id} 没有保存的配置，返回默认配置")
         # 返回系统默认配置
         return UserConfigResponse(
@@ -929,25 +783,21 @@ async def get_my_config(
             created_at="",
         )
     
-    # 合并用户配置和默认配置（用户配置优先）
-    user_llm_config = json.loads(config.llm_config) if config.llm_config else {}
-    user_other_config = json.loads(config.other_config) if config.other_config else {}
-    
-    # 解密敏感字段
-    user_llm_config = decrypt_config(user_llm_config, SENSITIVE_LLM_FIELDS)
-    user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
-    user_other_config = _strip_mcp_config(user_other_config)
+    (
+        user_llm_config,
+        user_other_config,
+        merged_llm_config,
+        merged_other_config,
+    ) = await _load_user_config_payload_with_effective_defaults(
+        db=db,
+        user_id=current_user.id,
+    )
     
     print(f"[Config] 用户 {current_user.id} 的保存配置:")
     print(f"  - llmProvider: {user_llm_config.get('llmProvider')}")
     print(f"  - llmApiKey: {'***' + user_llm_config.get('llmApiKey', '')[-4:] if user_llm_config.get('llmApiKey') else '(空)'}")
     print(f"  - llmModel: {user_llm_config.get('llmModel')}")
-    
-    merged_llm_config = {**default_config["llmConfig"], **user_llm_config}
-    merged_other_config = _sanitize_other_config(
-        {**default_config["otherConfig"], **user_other_config}
-    )
-    
+
     return UserConfigResponse(
         id=config.id,
         user_id=config.user_id,
@@ -1067,265 +917,6 @@ async def delete_my_config(
         await db.commit()
     
     return {"message": "配置已删除"}
-
-@router.post("/mcp/verify", response_model=MCPVerifyResponse)
-async def verify_mcp_runtime(
-    request: MCPVerifyRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    mcp_id = str(request.mcp_id or "").strip().lower()
-    if mcp_id not in _VERIFY_SUPPORTED_MCP_IDS:
-        raise HTTPException(status_code=400, detail=f"不支持的 MCP: {request.mcp_id}")
-
-    default_config = get_default_config()
-    result = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
-    saved_config = result.scalar_one_or_none()
-
-    user_other_config = {}
-    if saved_config and saved_config.other_config:
-        user_other_config = decrypt_config(
-            json.loads(saved_config.other_config),
-            SENSITIVE_OTHER_FIELDS,
-        )
-        user_other_config = _strip_mcp_config(user_other_config)
-
-    merged_other_config = _sanitize_other_config(
-        {**default_config["otherConfig"], **user_other_config}
-    )
-    effective_user_config = {"otherConfig": merged_other_config}
-
-    project, zip_path, fallback_used = await _resolve_verify_project(
-        db=db,
-        current_user=current_user,
-    )
-
-    extracted_dir = tempfile.mkdtemp(prefix=f"mcp-verify-{mcp_id}-")
-    checks: list[MCPVerifyCheck] = []
-    project_root = extracted_dir
-    try:
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(extracted_dir)
-        project_root = _normalize_extracted_project_root(extracted_dir)
-        code_probe_context = _prepare_code_probe_file(project_root)
-        filesystem_probe_path: Optional[str] = None
-        filesystem_media_probe_path: Optional[str] = None
-        verify_target_files: list[str] = []
-        if mcp_id == "filesystem":
-            filesystem_probe_path = f"tmp/.mcp_verify_filesystem_probe_{uuid.uuid4().hex}.txt"
-            filesystem_media_probe_path = f"tmp/.mcp_verify_filesystem_probe_{uuid.uuid4().hex}.png"
-            verify_target_files = [filesystem_probe_path, filesystem_media_probe_path]
-            filesystem_probe_abs = os.path.join(project_root, filesystem_probe_path)
-            filesystem_media_probe_abs = os.path.join(project_root, filesystem_media_probe_path)
-            os.makedirs(os.path.dirname(filesystem_probe_abs), exist_ok=True)
-            with open(filesystem_probe_abs, "w", encoding="utf-8") as handle:
-                handle.write("mcp verify filesystem probe\n")
-            one_pixel_png = base64.b64decode(
-                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7+WQ0AAAAASUVORK5CYII="
-            )
-            with open(filesystem_media_probe_abs, "wb") as handle:
-                handle.write(one_pixel_png)
-
-        from app.api.v1.endpoints.agent_tasks import _build_task_mcp_runtime
-
-        runtime = _build_task_mcp_runtime(
-            project_root=project_root,
-            user_config=effective_user_config,
-            target_files=verify_target_files,
-            project_id=project.id,
-            prefer_stdio_when_http_unavailable=True,
-            active_mcp_ids=[mcp_id],
-        )
-        protocol_result = await run_protocol_verification(
-            runtime=runtime,
-            mcp_id=mcp_id,
-            project_root=project_root,
-            filesystem_probe_file=filesystem_probe_path,
-            filesystem_media_probe_file=filesystem_media_probe_path,
-            code_probe_file=code_probe_context["file_path"],
-            code_probe_function=code_probe_context["function_name"],
-            code_probe_line=code_probe_context["line_start"],
-        )
-        checks = [MCPVerifyCheck(**item) for item in protocol_result.get("checks", [])]
-
-        return MCPVerifyResponse(
-            success=bool(protocol_result.get("success")),
-            mcp_id=mcp_id,
-            checks=checks,
-            verification_tools=list(protocol_result.get("verification_tools", [])),
-            project_context={
-                "project_id": project.id,
-                "project_name": project.name,
-                "source_type": project.source_type,
-                "project_root": project_root,
-                "fallback_used": fallback_used,
-            },
-            discovered_tools=list(protocol_result.get("discovered_tools", [])),
-            protocol_summary=dict(protocol_result.get("protocol_summary", {})),
-        )
-    finally:
-        shutil.rmtree(extracted_dir, ignore_errors=True)
-
-@router.post("/mcp/tools/list", response_model=MCPToolsListResponse)
-async def list_mcp_tools_runtime(
-    request: MCPToolsListRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    default_config = get_default_config()
-    result = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
-    saved_config = result.scalar_one_or_none()
-
-    user_other_config = {}
-    if saved_config and saved_config.other_config:
-        user_other_config = decrypt_config(
-            json.loads(saved_config.other_config),
-            SENSITIVE_OTHER_FIELDS,
-        )
-        user_other_config = _strip_mcp_config(user_other_config)
-
-    merged_other_config = _sanitize_other_config(
-        {**default_config["otherConfig"], **user_other_config}
-    )
-    effective_user_config = {"otherConfig": merged_other_config}
-    mcp_config = (
-        merged_other_config.get("mcpConfig")
-        if isinstance(merged_other_config.get("mcpConfig"), dict)
-        else {}
-    )
-    target_mcp_ids = _resolve_target_mcp_ids(
-        request.mcp_ids,
-        mcp_catalog=mcp_config.get("catalog"),
-    )
-    target_mcp_ids = _ensure_supported_mcp_ids(target_mcp_ids)
-    if not target_mcp_ids:
-        return MCPToolsListResponse(results=[])
-
-    temp_project_root = tempfile.mkdtemp(prefix="mcp-tools-list-")
-    os.makedirs(os.path.join(temp_project_root, "tmp"), exist_ok=True)
-
-    try:
-        from app.api.v1.endpoints.agent_tasks import _build_task_mcp_runtime
-
-        runtime = _build_task_mcp_runtime(
-            project_root=temp_project_root,
-            user_config=effective_user_config,
-            target_files=[],
-            prefer_stdio_when_http_unavailable=True,
-            active_mcp_ids=target_mcp_ids,
-        )
-        results: list[MCPToolsListItem] = []
-        for mcp_id in target_mcp_ids:
-            try:
-                list_result = await runtime.list_mcp_tools(mcp_id)
-            except Exception as exc:
-                list_result = {
-                    "success": False,
-                    "tools": [],
-                    "error": f"tools_list_failed:{exc}",
-                    "metadata": {},
-                }
-
-            normalized_tools = normalize_listed_tools(list_result.get("tools"))
-            visible_tools = _filter_internal_tools(
-                normalized_tools,
-                include_internal=bool(request.include_internal),
-            )
-            metadata = list_result.get("metadata")
-            if not isinstance(metadata, dict):
-                metadata = {}
-            runtime_domain = str(metadata.get("mcp_runtime_domain") or "").strip() or None
-            success = bool(list_result.get("success"))
-            error = str(list_result.get("error") or "").strip() or None
-            results.append(
-                MCPToolsListItem(
-                    mcp_id=mcp_id,
-                    success=success,
-                    tools=[
-                        MCPToolsListTool(
-                            name=str(tool.get("name") or "").strip(),
-                            description=str(tool.get("description") or "").strip(),
-                            inputSchema=(
-                                dict(tool.get("inputSchema"))
-                                if isinstance(tool.get("inputSchema"), dict)
-                                else {}
-                            ),
-                        )
-                        for tool in visible_tools
-                    ],
-                    error=error,
-                    runtime_domain=runtime_domain,
-                    listed_count=len(normalized_tools),
-                    visible_count=len(visible_tools),
-                )
-            )
-        return MCPToolsListResponse(results=results)
-    finally:
-        shutil.rmtree(temp_project_root, ignore_errors=True)
-
-@router.post("/mcp/tools/call", response_model=MCPToolsCallResponse)
-async def call_mcp_tool_runtime(
-    request: MCPToolsCallRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    default_config = get_default_config()
-    result = await db.execute(select(UserConfig).where(UserConfig.user_id == current_user.id))
-    saved_config = result.scalar_one_or_none()
-
-    user_other_config = {}
-    if saved_config and saved_config.other_config:
-        user_other_config = decrypt_config(
-            json.loads(saved_config.other_config),
-            SENSITIVE_OTHER_FIELDS,
-        )
-        user_other_config = _strip_mcp_config(user_other_config)
-
-    merged_other_config = _sanitize_other_config(
-        {**default_config["otherConfig"], **user_other_config}
-    )
-    effective_user_config = {"otherConfig": merged_other_config}
-
-    mcp_id = str(request.mcp_id or "").strip().lower()
-    tool_name = str(request.tool_name or "").strip()
-    if not mcp_id or not tool_name:
-        raise HTTPException(status_code=400, detail="mcp_id and tool_name are required")
-    _ensure_supported_mcp_ids([mcp_id])
-    if not bool(request.include_internal) and tool_name in _MCP_INTERNAL_TOOLS:
-        raise HTTPException(status_code=400, detail=f"internal tool blocked: {tool_name}")
-
-    temp_project_root = tempfile.mkdtemp(prefix="mcp-tools-call-")
-    os.makedirs(os.path.join(temp_project_root, "tmp"), exist_ok=True)
-    try:
-        from app.api.v1.endpoints.agent_tasks import _build_task_mcp_runtime
-
-        runtime = _build_task_mcp_runtime(
-            project_root=temp_project_root,
-            user_config=effective_user_config,
-            target_files=[],
-            prefer_stdio_when_http_unavailable=True,
-            active_mcp_ids=[mcp_id],
-        )
-        call_result = await runtime.call_mcp_tool(
-            mcp_name=mcp_id,
-            tool_name=tool_name,
-            arguments=dict(request.arguments or {}),
-            agent_name="mcp_tools_call_api",
-        )
-        metadata = dict(call_result.metadata) if isinstance(call_result.metadata, dict) else {}
-        runtime_domain = str(metadata.get("mcp_runtime_domain") or "").strip() or None
-        return MCPToolsCallResponse(
-            success=bool(call_result.success),
-            handled=bool(call_result.handled),
-            mcp_id=mcp_id,
-            tool_name=tool_name,
-            data=str(call_result.data or "") or None,
-            error=str(call_result.error or "").strip() or None,
-            runtime_domain=runtime_domain,
-            metadata=metadata,
-        )
-    finally:
-        shutil.rmtree(temp_project_root, ignore_errors=True)
 
 class LLMTestRequest(BaseModel):
     """LLM测试请求"""
@@ -1617,14 +1208,16 @@ async def agent_task_llm_preflight(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
-    default_config = get_default_config()
-    saved_llm_config, saved_other_config = await _load_user_config_payload(
+    (
+        saved_llm_config,
+        saved_other_config,
+        effective_llm_config,
+        _effective_other_config,
+    ) = await _load_user_config_payload_with_effective_defaults(
         db=db,
         user_id=current_user.id,
     )
-
-    merged_llm_config = {**default_config["llmConfig"], **saved_llm_config}
-    effective_snapshot = _build_llm_quick_config_snapshot(merged_llm_config)
+    effective_snapshot = _build_llm_quick_config_snapshot(effective_llm_config)
 
     if not _has_saved_llm_connection_config(saved_llm_config):
         return AgentTaskLLMPreflightResponse(

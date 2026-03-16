@@ -9,12 +9,13 @@ import { cn } from "@/shared/utils/utils";
 
 export type ScanMode = "static" | "agent";
 
-export type StaticTool = "opengrep" | "gitleaks" | "bandit";
+export type StaticTool = "opengrep" | "gitleaks" | "bandit" | "phpstan";
 
 export interface StaticToolSelection {
   opengrep: boolean;
   gitleaks: boolean;
   bandit: boolean;
+  phpstan: boolean;
 }
 
 interface AgentModeSelectorProps {
@@ -38,6 +39,7 @@ export default function AgentModeSelector({
     opengrep: true,
     gitleaks: false,
     bandit: false,
+    phpstan: false,
   };
 
   const updateStaticTool = (tool: StaticTool, checked: boolean) => {
@@ -164,6 +166,18 @@ export default function AgentModeSelector({
                 />
                 <span className="tracking-wider">Python 安全扫描</span>
               </label>
+              {/* PHPStan integration: static tool selector entry */}
+              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
+                <Checkbox
+                  checked={resolvedTools.phpstan}
+                  onCheckedChange={(checked) =>
+                    updateStaticTool("phpstan", Boolean(checked))
+                  }
+                  disabled={disabled}
+                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
+                />
+                <span className="tracking-wider">PHP 规则扫描</span>
+              </label>
             </div>
           )}
 
@@ -274,7 +288,7 @@ export default function AgentModeSelector({
         <div className="p-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-500/30 text-xs text-sky-700 dark:text-sky-300 rounded font-mono">
           <p className="font-bold mb-1 uppercase text-sky-700 dark:text-sky-400">静态分析模式说明：</p>
           <ul className="list-disc list-inside space-y-0.5 text-sky-600 dark:text-sky-300/80">
-            <li>基于规则引擎快速扫描代码缺陷</li>
+            <li>基于规则引擎快速扫描代码漏洞</li>
             <li>支持按工具组合执行（Opengrep / Gitleaks）</li>
             <li>支持 Python Bandit 扫描</li>
             <li>结果稳定、反馈快，适合日常基线检查</li>

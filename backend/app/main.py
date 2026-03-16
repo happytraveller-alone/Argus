@@ -18,6 +18,7 @@ from app.models.audit import AuditTask
 from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
 from app.models.bandit import BanditScanTask
+from app.models.phpstan import PhpstanScanTask
 from sqlalchemy.future import select
 
 # 配置日志
@@ -108,6 +109,8 @@ RECOVERABLE_OPENGREP_TASK_STATUSES = {"pending", "running"}
 RECOVERABLE_GITLEAKS_TASK_STATUSES = {"pending", "running"}
 # Bandit interrupted recovery support
 RECOVERABLE_BANDIT_TASK_STATUSES = {"pending", "running"}
+# PHPStan interrupted recovery support
+RECOVERABLE_PHPSTAN_TASK_STATUSES = {"pending", "running"}
 
 
 def _mark_task_interrupted(task) -> bool:
@@ -133,7 +136,14 @@ async def recover_interrupted_tasks() -> dict[str, int]:
     将上次异常退出时仍处于进行中的任务统一标记为 interrupted。
     """
     async with AsyncSessionLocal() as db:
-        counts = {"agent": 0, "audit": 0, "opengrep": 0, "gitleaks": 0, "bandit": 0}
+        counts = {
+            "agent": 0,
+            "audit": 0,
+            "opengrep": 0,
+            "gitleaks": 0,
+            "bandit": 0,
+            "phpstan": 0,
+        }
 
         recovery_specs = [
             (AgentTask, RECOVERABLE_AGENT_TASK_STATUSES, "agent"),
@@ -142,6 +152,8 @@ async def recover_interrupted_tasks() -> dict[str, int]:
             (GitleaksScanTask, RECOVERABLE_GITLEAKS_TASK_STATUSES, "gitleaks"),
             # Bandit interrupted recovery support
             (BanditScanTask, RECOVERABLE_BANDIT_TASK_STATUSES, "bandit"),
+            # PHPStan interrupted recovery support
+            (PhpstanScanTask, RECOVERABLE_PHPSTAN_TASK_STATUSES, "phpstan"),
         ]
 
         for model, recoverable_statuses, counter_key in recovery_specs:
@@ -155,12 +167,13 @@ async def recover_interrupted_tasks() -> dict[str, int]:
         if any(counts.values()):
             await db.commit()
             logger.warning(
-                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, audit=%s, opengrep=%s, gitleaks=%s, bandit=%s",
+                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, audit=%s, opengrep=%s, gitleaks=%s, bandit=%s, phpstan=%s",
                 counts["agent"],
                 counts["audit"],
                 counts["opengrep"],
                 counts["gitleaks"],
                 counts["bandit"],
+                counts["phpstan"],
             )
         else:
             await db.rollback()
@@ -175,7 +188,7 @@ async def lifespan(app: FastAPI):
     应用生命周期管理
     启动时初始化数据库（创建默认账户等）和全局缓存管理
     """
-    logger.info("DeepAudit 后端服务启动中...")
+    logger.info("VulHunter 后端服务启动中...")
 
     # 初始化全局 Git 项目缓存管理器
     try:
@@ -290,7 +303,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"清理过期缓存失败: {e}")
 
-    logger.info("DeepAudit 后端服务已关闭")
+    logger.info("VulHunter 后端服务已关闭")
 
 
 app = FastAPI(
@@ -319,7 +332,7 @@ async def health_check():
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to DeepAudit API",
+        "message": "Welcome to VulHunter API",
         "docs": "/docs",
         # "demo_account": {"email": "demo@example.com", "password": "demo123"},
     }

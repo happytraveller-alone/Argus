@@ -54,17 +54,73 @@ fi
     docker_path.chmod(docker_path.stat().st_mode | stat.S_IXUSR)
 
 
+def _write_fake_curl(bin_dir: Path) -> None:
+    curl_path = bin_dir / "curl"
+    curl_path.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+
+url="${@: -1}"
+printf 'URL=%s\\n' "$url" >>"${STUB_CURL_LOG:?}"
+
+mode="${STUB_CURL_MODE:-success}"
+case "$mode" in
+  success)
+    exit 0
+    ;;
+  timeout)
+    exit 7
+    ;;
+  frontend-only)
+    case "$url" in
+      *":3000/"*|*":3000")
+        exit 0
+        ;;
+      *)
+        exit 7
+        ;;
+    esac
+    ;;
+  *)
+    echo "unsupported STUB_CURL_MODE=$mode" >&2
+    exit 2
+    ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    curl_path.chmod(curl_path.stat().st_mode | stat.S_IXUSR)
+
+
+def _write_fake_browser(bin_dir: Path, name: str = "wslview") -> None:
+    browser_path = bin_dir / name
+    browser_path.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'BROWSER=%s\\n' "$0" >>"${STUB_BROWSER_LOG:?}"
+printf 'URL=%s\\n' "${1:-}" >>"${STUB_BROWSER_LOG:?}"
+""",
+        encoding="utf-8",
+    )
+    browser_path.chmod(browser_path.stat().st_mode | stat.S_IXUSR)
+
+
 def _run_compose_wrapper(
     tmp_path: Path, args: list[str], extra_env: dict[str, str] | None = None
-) -> str:
+) -> subprocess.CompletedProcess[str]:
     _write_fake_docker(tmp_path)
+    _write_fake_curl(tmp_path)
     log_path = tmp_path / "docker-invocation.log"
+    curl_log_path = tmp_path / "curl-invocation.log"
 
     env = os.environ.copy()
     env.update(_EXPLICIT_MIRROR_ENV)
     env["PATH"] = f"{tmp_path}{os.pathsep}{env['PATH']}"
     env["PHASE_RETRY_COUNT"] = "1"
     env["STUB_DOCKER_LOG"] = str(log_path)
+    env["STUB_CURL_LOG"] = str(curl_log_path)
+    env.setdefault("VULHUNTER_READY_TIMEOUT_SECONDS", "2")
 
     if extra_env:
         env.update(extra_env)
@@ -77,38 +133,100 @@ def _run_compose_wrapper(
         text=True,
     )
 
-    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
-    assert result.returncode == 0, combined_output
-    return log_path.read_text(encoding="utf-8")
+    return result
+
+
+def _read_log(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
 
 
 def test_attached_up_disables_compose_menu_by_default(tmp_path: Path) -> None:
-    log_output = _run_compose_wrapper(tmp_path, ["up", "--build"])
+    result = _run_compose_wrapper(tmp_path, ["up", "--build"])
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+    assert result.returncode == 0, combined_output
+    log_output = _read_log(tmp_path / "docker-invocation.log")
 
     assert "COMPOSE_MENU=false" in log_output
     assert "ARGS=compose up --build " in log_output
 
 
 def test_attached_up_with_global_file_flags_disables_compose_menu(tmp_path: Path) -> None:
-    log_output = _run_compose_wrapper(
+    result = _run_compose_wrapper(
         tmp_path, ["-f", "docker-compose.yml", "-f", "docker-compose.full.yml", "up", "--build"]
     )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+    assert result.returncode == 0, combined_output
+    log_output = _read_log(tmp_path / "docker-invocation.log")
 
     assert "COMPOSE_MENU=false" in log_output
     assert "ARGS=compose -f docker-compose.yml -f docker-compose.full.yml up --build " in log_output
 
 
 def test_detached_up_keeps_compose_menu_unset(tmp_path: Path) -> None:
-    log_output = _run_compose_wrapper(tmp_path, ["up", "-d", "--build"])
+    result = _run_compose_wrapper(tmp_path, ["up", "-d", "--build"])
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+    assert result.returncode == 0, combined_output
+    log_output = _read_log(tmp_path / "docker-invocation.log")
 
     assert "COMPOSE_MENU=__UNSET__" in log_output
 
 
 def test_explicit_compose_menu_is_preserved(tmp_path: Path) -> None:
-    log_output = _run_compose_wrapper(
+    result = _run_compose_wrapper(
         tmp_path,
         ["up", "--build"],
         extra_env={"COMPOSE_MENU": "true"},
     )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+    assert result.returncode == 0, combined_output
+    log_output = _read_log(tmp_path / "docker-invocation.log")
 
     assert "COMPOSE_MENU=true" in log_output
+
+
+def test_detached_up_prints_ready_banner_after_successful_probes(tmp_path: Path) -> None:
+    result = _run_compose_wrapper(tmp_path, ["up", "-d", "--build"])
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 0, combined_output
+    assert "services ready" in combined_output
+    assert "frontend: http://localhost:3000" in combined_output
+    assert "backend docs: http://localhost:8000/docs" in combined_output
+    curl_log = _read_log(tmp_path / "curl-invocation.log")
+    assert "URL=http://127.0.0.1:3000/" in curl_log
+    assert "URL=http://127.0.0.1:8000/health" in curl_log
+
+
+def test_detached_up_can_open_browser_after_ready(tmp_path: Path) -> None:
+    _write_fake_browser(tmp_path, "wslview")
+    browser_log_path = tmp_path / "browser-invocation.log"
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["up", "-d", "--build"],
+        extra_env={
+            "VULHUNTER_OPEN_BROWSER": "1",
+            "STUB_BROWSER_LOG": str(browser_log_path),
+        },
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 0, combined_output
+    browser_log = _read_log(browser_log_path)
+    assert "URL=http://localhost:3000" in browser_log
+
+
+def test_detached_up_ready_timeout_warns_without_failing(tmp_path: Path) -> None:
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["up", "-d", "--build"],
+        extra_env={
+            "STUB_CURL_MODE": "timeout",
+            "VULHUNTER_READY_TIMEOUT_SECONDS": "1",
+        },
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 0, combined_output
+    assert "timed out waiting for frontend/backend readiness" in combined_output

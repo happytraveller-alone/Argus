@@ -59,13 +59,13 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 | 职责 | 说明 |
 |------|------|
 | **全面扫描** | 遍历项目的所有关键目录和文件，建立完整的项目结构认知 |
-| **识别风险** | 基于预定义的高风险模式，主动发现代码中的潜在漏洞或安全缺陷 |
+| **识别风险** | 基于预定义的高风险模式，主动发现代码中的潜在漏洞或安全漏洞 |
 | **推送风险点** | **每发现一个风险点，立即调用 `push_risk_point_to_queue`**；若在同一文件/扫描中发现多个风险点，可一次调用 `push_risk_points_to_queue` 批量入队 |
 | **避免重复** | 请勿将同一风险点重复入队 |
 
 ═══════════════════════════════════════════════════════════════
 
-## ⚠️ 关键约束（必须严格遵守）
+## 关键约束（必须严格遵守）
 
 1. **禁止自行分析可行性** —— 只需标记"可疑区域"，准确描述风险即可（如"此处使用了 eval，可能导致代码注入"），具体验证由后续 Agent 完成
 2. **必须基于实际代码** —— 只推送通过 `read_file` 成功读取并确认存在的行，**杜绝幻觉**
@@ -77,7 +77,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 ## 📌 风险点的定义
 
 ### 什么是风险点？
-风险点是代码中**存在潜在安全缺陷的具体位置**，表现为：
+风险点是代码中**存在潜在安全漏洞的具体位置**，表现为：
 - **危险函数调用**：使用已知不安全的函数处理用户输入
 - **危险代码模式**：存在已知漏洞模式的代码结构（如 SQL 拼接、路径遍历）
 - **敏感操作缺失**：关键位置缺少必要的安全检查（如认证、授权、校验）
@@ -92,13 +92,13 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 
 ### 风险点 vs 漏洞
 - **风险点**：可疑区域，**可能**存在漏洞（由侦察 Agent 标记）
-- **漏洞**：确认可利用的安全缺陷（由分析/验证 Agent 确认）
+- **漏洞**：确认可利用的安全漏洞（由分析/验证 Agent 确认）
 
 **你的职责是标记风险点，不是确认漏洞！** 即使只有 50% 把握，也应标记供后续分析。
 
 ═══════════════════════════════════════════════════════════════
 
-## 🔍 高风险区域识别指南
+##  高风险区域识别指南
 
 主动搜索以下代码模式，一旦发现立即推送：
 
@@ -202,7 +202,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 
 ═══════════════════════════════════════════════════════════════
 
-## 🛠️ 工具调用失败处理（关键）
+## 工具调用失败处理（关键）
 
 ### 失败响应原则
 **遇到工具调用失败时，你必须：**
@@ -212,7 +212,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 
 ═══════════════════════════════════════════════════════════════
 
-## 📝 输出格式（严格遵循）
+## 输出格式（严格遵循）
 
 **禁止使用 Markdown 格式标记！** 输出必须是纯文本格式：
 
@@ -222,7 +222,7 @@ Action: [工具名称]
 Action Input: {}
 ```
 
-✅ 正确示例：
+正确示例：
 ```
 Thought: 我需要先查看项目结构来了解项目组成，然后使用语义搜索快速定位风险点
 Action: list_files
@@ -249,7 +249,7 @@ Final Answer: 侦察任务完成，已将所有识别的风险点推入队列。
 
 ═══════════════════════════════════════════════════════════════
 
-## 📋 示例交互（完整流程）
+## 示例交互（完整流程）
 
 ```bash
 Thought: 我需要先查看项目根目录，了解基本结构，确定技术栈
@@ -631,7 +631,7 @@ class ReconAgent(BaseAgent):
             agent_mem = str(markdown_memory.get("recon") or "").strip()
             skills_mem = str(markdown_memory.get("skills") or "").strip()
             if shared_mem or agent_mem or skills_mem:
-                initial_message += f"""## 🧠 项目长期记忆（Markdown，无 RAG）
+                initial_message += f"""## 项目长期记忆（Markdown，无 RAG）
 ### shared.md（节选）
 {shared_mem or "(空)"}
 
@@ -646,7 +646,7 @@ class ReconAgent(BaseAgent):
         initial_message += "## 审计范围\n"
         # 🔥 如果指定了目标文件，明确告知 Agent
         if target_files:
-            initial_message += f"""⚠️ **部分文件审计模式**: 用户指定了 {len(target_files)} 个目标文件进行审计：
+            initial_message += f"""**部分文件审计模式**: 用户指定了 {len(target_files)} 个目标文件进行审计：
 """
             for tf in target_files[:10]:
                 initial_message += f"- {tf}\n"
@@ -661,7 +661,7 @@ class ReconAgent(BaseAgent):
 """
         
         if exclude_patterns:
-            initial_message += f"\n⚠️ 排除模式: {', '.join(exclude_patterns[:5])}\n"
+            initial_message += f"\n排除模式: {', '.join(exclude_patterns[:5])}\n"
         
         initial_message += f"""
 ## 任务上下文
@@ -866,7 +866,7 @@ Final Answer: [JSON格式的结果]"""
 
                     if repeated_action_streak >= 3:
                         observation = (
-                            "⚠️ 检测到连续重复工具调用，已自动跳过本次执行以避免无效消耗。"
+                            "检测到连续重复工具调用，已自动跳过本次执行以避免无效消耗。"
                             "请更换参数、切换工具或直接输出 Final Answer。"
                         )
                         step.observation = observation
@@ -905,7 +905,7 @@ Final Answer: [JSON格式的结果]"""
                         # 🔥 如果同一调用连续失败3次，添加强制跳过提示
                         if fail_count >= 3:
                             logger.warning(f"[{self.name}] Tool call failed {fail_count} times: {tool_call_key}")
-                            observation += f"\n\n⚠️ **系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
+                            observation += f"\n\n**系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
                             observation += "1. 尝试使用不同的参数（如指定较小的行范围）\n"
                             observation += "2. 使用 search_code 工具定位关键代码片段\n"
                             observation += "3. 跳过此文件，继续分析其他文件\n"
@@ -979,7 +979,7 @@ Final Answer: [JSON格式的结果]"""
             
             # 🔥 如果循环结束但没有 final_result，强制 LLM 总结
             if not final_result and not self.is_cancelled and not error_message:
-                await self.emit_thinking("📝 信息收集阶段结束，正在生成总结...")
+                await self.emit_thinking("信息收集阶段结束，正在生成总结...")
                 
                 # 添加强制总结的提示
                 self._conversation_history.append({
@@ -1048,7 +1048,7 @@ Final Answer:""",
             if error_message:
                 await self.emit_event(
                     "error",
-                    f"❌ Recon Agent 失败: {error_message}"
+                    f"Recon Agent 失败: {error_message}"
                 )
                 return AgentResult(
                     success=False,

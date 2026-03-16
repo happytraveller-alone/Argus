@@ -26,7 +26,7 @@ def event_loop():
 @pytest.fixture
 def temp_project_dir():
     """创建临时项目目录，包含测试代码"""
-    temp_dir = tempfile.mkdtemp(prefix="deepaudit_test_")
+    temp_dir = tempfile.mkdtemp(prefix="VulHunter_test_")
     
     # 创建测试项目结构
     os.makedirs(os.path.join(temp_dir, "src"), exist_ok=True)

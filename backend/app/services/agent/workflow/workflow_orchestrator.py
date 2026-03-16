@@ -131,7 +131,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
         self._total_tokens = 0
         self._tool_calls = 0
 
-        await self.emit_thinking("🧠 WorkflowOrchestrator 启动，执行确定性 Workflow 模式...")
+        await self.emit_thinking("WorkflowOrchestrator 启动，执行确定性 Workflow 模式...")
 
         # ── 打印初始队列状态（调试用）───────────────────────────────────
         await self._log_queue_status("启动前")
@@ -183,7 +183,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
         # ── 处理失败 ────────────────────────────────────────────────────
         if workflow_state.phase == WorkflowPhase.FAILED:
             error_msg = workflow_state.error or "Workflow 执行失败"
-            await self.emit_event("error", f"❌ WorkflowOrchestrator 失败: {error_msg}")
+            await self.emit_event("error", f"WorkflowOrchestrator 失败: {error_msg}")
             return AgentResult(
                 success=False,
                 error=error_msg,
@@ -326,7 +326,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
                     vuln_remaining = vuln_stats.get("total_enqueued", 0) - vuln_stats.get("total_dequeued", 0)
                     if recon_remaining > 0 or vuln_remaining > 0:
                         logger.warning(
-                            "[QueueStatus|%s] ⚠️ 队列中有未处理项: Recon剩余=%d, Vuln剩余=%d",
+                            "[QueueStatus|%s] 队列中有未处理项: Recon剩余=%d, Vuln剩余=%d",
                             stage,
                             recon_remaining,
                             vuln_remaining,

@@ -315,14 +315,14 @@ def run_tests():
     test_exclude.test_default_not_excluded()
     test_exclude.test_custom_exclude_patterns()
     test_exclude.test_combined_patterns()
-    print("✅ should_exclude 测试通过")
+    print("should_exclude 测试通过")
     
     # 测试 is_text_file
     print("\n[2/6] 测试 is_text_file 函数...")
     test_text = TestIsTextFile()
     test_text.test_supported_extensions()
     test_text.test_unsupported_extensions()
-    print("✅ is_text_file 测试通过")
+    print("is_text_file 测试通过")
     
     # 测试排除模式集成
     print("\n[3/6] 测试排除模式集成...")
@@ -330,7 +330,7 @@ def run_tests():
     test_integration.test_exclude_patterns_with_path_segments()
     test_integration.test_empty_exclude_patterns()
     test_integration.test_none_exclude_patterns()
-    print("✅ 排除模式集成测试通过")
+    print("排除模式集成测试通过")
     
     # 测试文件选择工作流
     print("\n[4/6] 测试文件选择工作流...")
@@ -338,7 +338,7 @@ def run_tests():
     test_workflow.test_zip_file_filtering()
     test_workflow.test_file_selection_with_exclude()
     test_workflow.test_exclude_patterns_change_clears_selection()
-    print("✅ 文件选择工作流测试通过")
+    print("文件选择工作流测试通过")
     
     # 测试边界情况
     print("\n[5/6] 测试边界情况...")
@@ -347,7 +347,7 @@ def run_tests():
     test_edge.test_all_files_excluded()
     test_edge.test_special_characters_in_path()
     test_edge.test_deep_nested_paths()
-    print("✅ 边界情况测试通过")
+    print("边界情况测试通过")
     
     # 测试 API 端点（同步版本）
     print("\n[6/6] 测试 API 端点参数...")
@@ -355,10 +355,10 @@ def run_tests():
     # 使用 asyncio 运行异步测试
     asyncio.run(test_api.test_get_project_files_with_exclude())
     asyncio.run(test_api.test_scan_request_with_exclude())
-    print("✅ API 端点测试通过")
+    print("API 端点测试通过")
     
     print("\n" + "=" * 60)
-    print("🎉 所有测试通过！")
+    print("所有测试通过！")
     print("=" * 60)
 
 

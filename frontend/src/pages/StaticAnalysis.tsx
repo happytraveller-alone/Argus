@@ -18,7 +18,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -27,18 +26,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
+import StaticAnalysisSummaryCards from "./static-analysis/StaticAnalysisSummaryCards";
 import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
 import {
-  buildStaticAnalysisProgressSummary,
   buildStaticAnalysisListState,
   buildUnifiedFindingRows,
   decodeStaticAnalysisPathParam,
-  formatStaticAnalysisDuration,
   type ConfidenceFilter,
   type Engine,
   type EngineFilter,
+  type SeverityFilter,
   type StatusFilter,
-  toStaticAnalysisSafeMetric,
 } from "./static-analysis/viewModel";
 
 export default function StaticAnalysis() {
@@ -66,11 +64,15 @@ export default function StaticAnalysis() {
   const opengrepTaskId = useMemo(() => {
     const explicit = searchParams.get("opengrepTaskId");
     const hasOtherExplicitEngineTaskId = Boolean(
-      searchParams.get("gitleaksTaskId") || searchParams.get("banditTaskId"),
+      searchParams.get("gitleaksTaskId") ||
+        searchParams.get("banditTaskId") ||
+        searchParams.get("phpstanTaskId"),
     );
     if (explicit) return explicit;
     if (hasOtherExplicitEngineTaskId) return "";
-    if (toolParam === "gitleaks" || toolParam === "bandit") return "";
+    if (toolParam === "gitleaks" || toolParam === "bandit" || toolParam === "phpstan") {
+      return "";
+    }
     return taskId;
   }, [searchParams, taskId, toolParam]);
 
@@ -88,9 +90,20 @@ export default function StaticAnalysis() {
     return "";
   }, [searchParams, taskId, toolParam]);
 
-  const hasEnabledEngine = Boolean(opengrepTaskId || gitleaksTaskId || banditTaskId);
+  // PHPStan integration: parse phpstan task id and compatible tool fallback.
+  const phpstanTaskId = useMemo(() => {
+    const explicit = searchParams.get("phpstanTaskId");
+    if (explicit) return explicit;
+    if (toolParam === "phpstan") return taskId;
+    return "";
+  }, [searchParams, taskId, toolParam]);
+
+  const hasEnabledEngine = Boolean(
+    opengrepTaskId || gitleaksTaskId || banditTaskId || phpstanTaskId,
+  );
   const [engineFilter, setEngineFilter] = useState<EngineFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [confidenceFilter, setConfidenceFilter] =
     useState<ConfidenceFilter>("all");
   const [page, setPage] = useState(1);
@@ -99,9 +112,11 @@ export default function StaticAnalysis() {
     opengrepTask,
     gitleaksTask,
     banditTask,
+    phpstanTask,
     opengrepFindings,
     gitleaksFindings,
     banditFindings,
+    phpstanFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -115,11 +130,13 @@ export default function StaticAnalysis() {
     canInterruptOpengrep,
     canInterruptGitleaks,
     canInterruptBandit,
+    canInterruptPhpstan,
   } = useStaticAnalysisData({
     hasEnabledEngine,
     opengrepTaskId,
     gitleaksTaskId,
     banditTaskId,
+    phpstanTaskId,
   });
 
   const unifiedRows = useMemo(
@@ -128,9 +145,11 @@ export default function StaticAnalysis() {
         opengrepFindings,
         gitleaksFindings,
         banditFindings,
+        phpstanFindings,
         opengrepTaskId,
         gitleaksTaskId,
         banditTaskId,
+        phpstanTaskId,
       }),
     [
       banditFindings,
@@ -139,6 +158,8 @@ export default function StaticAnalysis() {
       gitleaksTaskId,
       opengrepFindings,
       opengrepTaskId,
+      phpstanFindings,
+      phpstanTaskId,
     ],
   );
 
@@ -148,10 +169,11 @@ export default function StaticAnalysis() {
         rows: unifiedRows,
         engineFilter,
         statusFilter,
+        severityFilter,
         confidenceFilter,
         page,
       }),
-    [confidenceFilter, engineFilter, page, statusFilter, unifiedRows],
+    [confidenceFilter, engineFilter, page, severityFilter, statusFilter, unifiedRows],
   );
 
   const enabledEngines = useMemo(() => {
@@ -159,36 +181,15 @@ export default function StaticAnalysis() {
     if (opengrepTaskId) engines.push("opengrep");
     if (gitleaksTaskId) engines.push("gitleaks");
     if (banditTaskId) engines.push("bandit");
+    if (phpstanTaskId) engines.push("phpstan");
     return engines;
-  }, [banditTaskId, gitleaksTaskId, opengrepTaskId]);
-
-  const progressSummary = useMemo(
-    () =>
-      buildStaticAnalysisProgressSummary({
-        opengrepTask,
-        gitleaksTask,
-        banditTask,
-      }),
-    [banditTask, gitleaksTask, opengrepTask],
-  );
-  const progressPercent = progressSummary.progressPercent;
-
-  const totalScanDurationMs =
-    toStaticAnalysisSafeMetric(opengrepTask?.scan_duration_ms) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.scan_duration_ms) +
-    toStaticAnalysisSafeMetric(banditTask?.scan_duration_ms);
-  const totalFindings =
-    toStaticAnalysisSafeMetric(opengrepTask?.total_findings) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.total_findings) +
-    toStaticAnalysisSafeMetric(banditTask?.total_findings);
-  const totalFilesScanned =
-    toStaticAnalysisSafeMetric(opengrepTask?.files_scanned) +
-    toStaticAnalysisSafeMetric(gitleaksTask?.files_scanned) +
-    toStaticAnalysisSafeMetric(banditTask?.files_scanned);
+  }, [banditTaskId, gitleaksTaskId, opengrepTaskId, phpstanTaskId]);
+  const pageResetKey = `${engineFilter}:${statusFilter}:${severityFilter}:${confidenceFilter}`;
 
   useEffect(() => {
+    if (!pageResetKey) return;
     setPage(1);
-  }, [engineFilter, statusFilter, confidenceFilter]);
+  }, [pageResetKey]);
 
   useEffect(() => {
     if (page !== listState.clampedPage) {
@@ -260,6 +261,16 @@ export default function StaticAnalysis() {
               中止 Bandit
             </Button>
           ) : null}
+          {canInterruptPhpstan ? (
+            <Button
+              variant="outline"
+              className="cyber-btn-outline h-8"
+              onClick={() => setInterruptTarget("phpstan")}
+            >
+              <Ban className="w-3.5 h-3.5 mr-1.5" />
+              中止 PHPStan
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             className="cyber-btn-outline h-8"
@@ -278,68 +289,20 @@ export default function StaticAnalysis() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-        <div className="cyber-card p-4 space-y-2">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            进度比例
-          </p>
-          <p className="text-xl font-bold text-foreground">{progressPercent}%</p>
-          <Progress
-            value={progressPercent}
-            className="h-1.5 bg-muted [&>div]:bg-emerald-500"
-          />
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            扫描时间
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {formatStaticAnalysisDuration(totalScanDurationMs)}
-          </p>
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            扫描漏洞数量
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {totalFindings.toLocaleString()}
-          </p>
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            使用引擎数量
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {enabledEngines.length.toLocaleString()}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {enabledEngines
-              .map((engine) =>
-                engine === "opengrep"
-                  ? "Opengrep"
-                  : engine === "gitleaks"
-                    ? "Gitleaks"
-                    : "Bandit",
-              )
-              .join(" / ") || "-"}
-          </p>
-        </div>
-        <div className="cyber-card p-4 space-y-1">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            涉及文件
-          </p>
-          <p className="text-xl font-bold text-foreground">
-            {totalFilesScanned.toLocaleString()}
-          </p>
-        </div>
-      </div>
+      <StaticAnalysisSummaryCards
+        opengrepTask={opengrepTask}
+        gitleaksTask={gitleaksTask}
+        banditTask={banditTask}
+        phpstanTask={phpstanTask}
+        enabledEngines={enabledEngines}
+      />
 
       <div className="cyber-card p-4 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <div>
-            <label className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
+            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
               引擎筛选
-            </label>
+            </div>
             <Select
               value={engineFilter}
               onValueChange={(value) => setEngineFilter(value as EngineFilter)}
@@ -352,13 +315,14 @@ export default function StaticAnalysis() {
                 <SelectItem value="opengrep">Opengrep</SelectItem>
                 <SelectItem value="gitleaks">Gitleaks</SelectItem>
                 <SelectItem value="bandit">Bandit</SelectItem>
+                <SelectItem value="phpstan">PHPStan</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
+            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
               状态筛选
-            </label>
+            </div>
             <Select
               value={statusFilter}
               onValueChange={(value) => setStatusFilter(value as StatusFilter)}
@@ -376,9 +340,29 @@ export default function StaticAnalysis() {
             </Select>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
+            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
+              漏洞危害
+            </div>
+            <Select
+              value={severityFilter}
+              onValueChange={(value) => setSeverityFilter(value as SeverityFilter)}
+            >
+              <SelectTrigger className="cyber-input">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="cyber-dialog border-border">
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="CRITICAL">严重</SelectItem>
+                <SelectItem value="HIGH">高危</SelectItem>
+                <SelectItem value="MEDIUM">中危</SelectItem>
+                <SelectItem value="LOW">低危</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
               置信度筛选
-            </label>
+            </div>
             <Select
               value={confidenceFilter}
               onValueChange={(value) => setConfidenceFilter(value as ConfidenceFilter)}
@@ -425,7 +409,9 @@ export default function StaticAnalysis() {
                 ? " Opengrep "
                 : interruptTarget === "gitleaks"
                   ? " Gitleaks "
-                  : " Bandit "}
+                  : interruptTarget === "bandit"
+                    ? " Bandit "
+                    : " PHPStan "}
               扫描任务。中止后任务状态将更新为已中断。
             </AlertDialogDescription>
           </AlertDialogHeader>

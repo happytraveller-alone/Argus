@@ -23,6 +23,11 @@ import ProjectsEmptyState from "./components/ProjectsEmptyState";
 import CreateProjectDialog from "./components/CreateProjectDialog";
 import EditProjectDialog from "./components/EditProjectDialog";
 import DisableProjectDialog from "./components/DisableProjectDialog";
+import {
+	createZipProjectsWorkflow,
+	type BatchCreateZipProjectItem,
+	type BatchCreateZipProjectsProgressEvent,
+} from "./data/projectsPageWorkflows";
 
 function scrollToProjectBrowser() {
 	window.setTimeout(() => {
@@ -50,6 +55,34 @@ async function logUserAction(action: string, payload: Record<string, unknown>) {
 async function handleErrorMessage(error: unknown, fallbackMessage: string) {
 	const errorHandlerModule = await import("@/shared/utils/errorHandler");
 	errorHandlerModule.handleError(error, fallbackMessage);
+}
+
+function getBatchZipCreationToast(
+	successCount: number,
+	failureCount: number,
+	total: number,
+) {
+	if (failureCount === 0) {
+		return {
+			kind: "success" as const,
+			title: `已创建 ${successCount} 个项目`,
+			description: "所有压缩包都已成功导入，项目列表已刷新。",
+		};
+	}
+
+	if (successCount === 0) {
+		return {
+			kind: "error" as const,
+			title: "批量导入失败",
+			description: `共 ${total} 个压缩包，均未创建成功。`,
+		};
+	}
+
+	return {
+		kind: "warning" as const,
+		title: `批量导入完成：成功 ${successCount} / 失败 ${failureCount}`,
+		description: "成功项目已保留，失败项可稍后重试。",
+	};
 }
 
 export default function ProjectsPage({
@@ -121,10 +154,7 @@ export default function ProjectsPage({
 				projectLanguageStatsMap: data.projectLanguageStatsMap,
 				projectDetailFrom,
 				searchTerm: browser.searchTerm,
-				searchPlaceholder: t(
-					"projects.searchPlaceholder",
-					"按项目名称/描述/仓库地址搜索",
-				),
+				searchPlaceholder: t("projects.searchPlaceholder", "按项目名称/描述搜索"),
 			}),
 		[
 			browser.projectPage,
@@ -147,50 +177,55 @@ export default function ProjectsPage({
 		[data.projects],
 	);
 
-	async function handleCreateRepositoryProject(input: Parameters<typeof data.createProject>[0]) {
-		try {
-			await data.createProject(input);
-			void logUserAction("创建项目", {
-				projectName: input.name,
-				repositoryType: input.repository_type,
-				languages: input.programming_languages,
-			});
-			toast.success("项目创建成功");
-			pinToProjectBrowserHash();
-			scrollToProjectBrowser();
-		} catch (error) {
-			console.error("Failed to create project:", error);
-			void handleErrorMessage(error, "创建项目失败");
-			const errorMessage = error instanceof Error ? error.message : "未知错误";
-			toast.error(`创建项目失败: ${errorMessage}`);
-			throw error;
-		}
-	}
-
-	async function handleCreateZipProject(
-		input: Parameters<typeof data.createZipProject>[0],
-		file: Parameters<typeof data.createZipProject>[1],
+	async function handleCreateZipProjects(
+		items: BatchCreateZipProjectItem[],
+		sharedInput: Omit<Parameters<typeof data.createProject>[0], "name">,
+		onProgress?: (event: BatchCreateZipProjectsProgressEvent) => void,
 	) {
-		try {
-			const project = await data.createZipProject(input, file);
-			void logUserAction("上传ZIP文件创建项目", {
-				projectName: project.name,
-				fileName: file.name,
-				fileSize: file.size,
-			});
-			toast.success(`项目 "${project.name}" 已创建`, {
-				description: "项目压缩包已保存，您可以启动代码扫描",
+		const result = await createZipProjectsWorkflow({
+			items,
+			sharedInput,
+			createZipProject: (input, file) => dataSource.createZipProject(input, file),
+			onProgress,
+		});
+
+		await data.loadProjects();
+		void logUserAction("批量上传ZIP文件创建项目", {
+			total: result.total,
+			successCount: result.successCount,
+			failureCount: result.failureCount,
+			projectNames: result.successes.map((project) => project.name),
+			failedFiles: result.failures.map((failure) => failure.fileName),
+		});
+
+		const toastConfig = getBatchZipCreationToast(
+			result.successCount,
+			result.failureCount,
+			result.total,
+		);
+		if (toastConfig.kind === "success") {
+			toast.success(toastConfig.title, {
+				description: toastConfig.description,
 				duration: 4000,
 			});
+		} else if (toastConfig.kind === "error") {
+			toast.error(toastConfig.title, {
+				description: toastConfig.description,
+				duration: 5000,
+			});
+		} else {
+			toast.warning(toastConfig.title, {
+				description: toastConfig.description,
+				duration: 5000,
+			});
+		}
+
+		if (result.successCount > 0) {
 			pinToProjectBrowserHash();
 			scrollToProjectBrowser();
-		} catch (error) {
-			console.error("Upload failed:", error);
-			void handleErrorMessage(error, "上传ZIP文件失败");
-			const errorMessage = error instanceof Error ? error.message : "未知错误";
-			toast.error(`上传失败: ${errorMessage}`);
-			throw error;
 		}
+
+		return result;
 	}
 
 	async function handleUpdateProject(
@@ -284,8 +319,7 @@ export default function ProjectsPage({
 						scrollToProjectBrowser();
 					}
 				}}
-				onCreateRepositoryProject={handleCreateRepositoryProject}
-				onCreateZipProject={handleCreateZipProject}
+				onCreateZipProjects={handleCreateZipProjects}
 			/>
 
 			<div
@@ -332,14 +366,18 @@ export default function ProjectsPage({
 									navigateOnSuccess: true,
 								});
 							}}
-							onDisableProject={(projectId) => {
-								const project = projectMap.get(projectId) || null;
-								browser.setDisableProjectState({
-									open: true,
-									project,
-								});
+							onToggleProjectStatus={(projectId, action) => {
+								if (action === "disable") {
+									const project = projectMap.get(projectId) || null;
+									browser.setDisableProjectState({
+										open: true,
+										project,
+									});
+									return;
+								}
+
+								void handleEnableProject(projectId);
 							}}
-							onEnableProject={(projectId) => void handleEnableProject(projectId)}
 						/>
 						<ProjectsPagination
 							currentPage={viewModel.pagination.currentPage}

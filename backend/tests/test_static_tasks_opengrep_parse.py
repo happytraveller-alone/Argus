@@ -24,9 +24,9 @@ pytestmark = pytest.mark.integration
 
 @pytest.mark.asyncio
 async def test_opengrep_parse_smoke():
-    project_id = os.environ.get("DEEPAUDIT_OPENGREP_PARSE_PROJECT_ID")
+    project_id = os.environ.get("VulHunter_OPENGREP_PARSE_PROJECT_ID")
     if not project_id:
-        pytest.skip("Set DEEPAUDIT_OPENGREP_PARSE_PROJECT_ID to run this integration test.")
+        pytest.skip("Set VulHunter_OPENGREP_PARSE_PROJECT_ID to run this integration test.")
 
     zip_dir = Path(getattr(settings, "ZIP_STORAGE_PATH", "./uploads/zip_files"))
     zip_path = zip_dir / f"{project_id}.zip"
@@ -37,7 +37,7 @@ async def test_opengrep_parse_smoke():
     if not zip_path or not zip_path.exists():
         pytest.skip(f"Project ZIP not found for {project_id}; skipping integration test.")
 
-    temp_dir = tempfile.mkdtemp(prefix=f"deepaudit_{project_id}_")
+    temp_dir = tempfile.mkdtemp(prefix=f"VulHunter_{project_id}_")
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(temp_dir)

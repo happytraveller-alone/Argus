@@ -16,21 +16,13 @@ import { api } from "@/shared/api/database";
 import { SKILL_TOOLS_CATALOG } from "./skillToolsCatalog";
 import {
 	DEFAULT_MCP_CATALOG,
-	normalizeMcpCatalog,
 	type McpCatalogItem,
 } from "./mcpCatalog";
 import {
-	EXTERNAL_TOOLS_PAGE_SIZE,
 	buildExternalToolListState,
 	buildExternalToolRows,
 	type SkillAvailabilityMap,
 } from "./externalToolsViewModel";
-
-function toObjectRecord(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-}
 
 function renderCapabilities(capabilities: string[]) {
 	if (!capabilities.length) {
@@ -47,52 +39,17 @@ function renderCapabilities(capabilities: string[]) {
 export default function SkillToolsPanel() {
 	const [mcpCatalog, setMcpCatalog] = useState<McpCatalogItem[]>(DEFAULT_MCP_CATALOG);
 	const [skillAvailability, setSkillAvailability] = useState<SkillAvailabilityMap>({});
-	const [mcpCatalogLoading, setMcpCatalogLoading] = useState(false);
-	const [mcpCatalogFallbackNotice, setMcpCatalogFallbackNotice] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [page, setPage] = useState(1);
 
 	useEffect(() => {
-		let mounted = true;
-		const loadRuntimeCatalog = async () => {
-			setMcpCatalogLoading(true);
-			try {
-				const config = await api.getUserConfig();
-				if (!mounted) return;
-
-				const otherConfig = toObjectRecord(config?.otherConfig);
-				const mcpConfig = toObjectRecord(otherConfig.mcpConfig);
-				const runtimeSkillAvailability = mcpConfig.skillAvailability;
-				if (runtimeSkillAvailability && typeof runtimeSkillAvailability === "object") {
-					setSkillAvailability(runtimeSkillAvailability as SkillAvailabilityMap);
-				} else {
-					setSkillAvailability({});
-				}
-
-				const serverCatalog = mcpConfig.catalog;
-				if (Array.isArray(serverCatalog) && serverCatalog.length > 0) {
-					setMcpCatalog(normalizeMcpCatalog(serverCatalog));
-					setMcpCatalogFallbackNotice(null);
-				} else {
-					setMcpCatalog(DEFAULT_MCP_CATALOG);
-					setMcpCatalogFallbackNotice("后端未返回 MCP 目录，当前展示默认目录（非实时状态）。");
-				}
-			} catch {
-				if (!mounted) return;
-				setSkillAvailability({});
-				setMcpCatalog(DEFAULT_MCP_CATALOG);
-				setMcpCatalogFallbackNotice("MCP 目录加载失败，当前展示默认目录（非实时状态）。");
-			} finally {
-				if (mounted) {
-					setMcpCatalogLoading(false);
-				}
-			}
-		};
-
-		void loadRuntimeCatalog();
-		return () => {
-			mounted = false;
-		};
+		void api.getUserConfig().then(() => {
+			setSkillAvailability({});
+			setMcpCatalog(DEFAULT_MCP_CATALOG);
+		}).catch(() => {
+			setSkillAvailability({});
+			setMcpCatalog(DEFAULT_MCP_CATALOG);
+		});
 	}, []);
 
 	const rows = useMemo(
@@ -138,11 +95,6 @@ export default function SkillToolsPanel() {
 						wrapperClassName="max-w-full"
 						aria-label="搜索工具名称或执行功能"
 					/>
-					{mcpCatalogFallbackNotice ? (
-						<div className="text-xs leading-relaxed text-amber-700 dark:text-amber-300">
-							{mcpCatalogFallbackNotice}
-						</div>
-					) : null}
 				</div>
 			</div>
 

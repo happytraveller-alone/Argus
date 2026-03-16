@@ -231,7 +231,7 @@ class LLMService:
 }"""
 
         if is_chinese:
-            return f"""⚠️⚠️⚠️ 只输出JSON，禁止输出其他任何格式！禁止markdown！禁止文本分析！⚠️⚠️⚠️
+            return f"""只输出JSON，禁止输出其他任何格式！禁止markdown！禁止文本分析！
 
 你是一个专业的代码审计助手。你的任务是分析代码并返回严格符合JSON Schema的结果。
 
@@ -284,9 +284,9 @@ class LLMService:
 - 禁止在JSON字符串值中使用真实换行符，必须用\\n转义
 - 禁止输出markdown代码块标记（如```json）
 
-⚠️ 重要提醒：line字段必须从代码左侧的行号标注中读取，不要猜测或填0！"""
+重要提醒：line字段必须从代码左侧的行号标注中读取，不要猜测或填0！"""
         else:
-            return f"""⚠️⚠️⚠️ OUTPUT JSON ONLY! NO OTHER FORMAT! NO MARKDOWN! NO TEXT ANALYSIS! ⚠️⚠️⚠️
+            return f"""OUTPUT JSON ONLY! NO OTHER FORMAT! NO MARKDOWN! NO TEXT ANALYSIS! 
 
 You are a professional code auditing assistant. Your task is to analyze code and return results in strict JSON Schema format.
 
@@ -339,7 +339,7 @@ Note:
 - NO real newline characters in JSON string values - must use \\n
 - NO markdown code block markers (like ```json)
 
-⚠️ CRITICAL: Read line numbers from the "lineNumber|" prefix on the left of each code line. Do NOT guess or use 0!"""
+CRITICAL: Read line numbers from the "lineNumber|" prefix on the left of each code line. Do NOT guess or use 0!"""
 
     async def analyze_code(self, code: str, language: str) -> Dict[str, Any]:
         """
@@ -365,7 +365,7 @@ Note:
         if is_chinese:
             user_prompt = f"""编程语言: {language}
 
-⚠️ 代码已标注行号（格式：行号| 代码内容），请根据行号准确填写 line 字段！
+代码已标注行号（格式：行号| 代码内容），请根据行号准确填写 line 字段！
 
 请分析以下代码:
 
@@ -373,7 +373,7 @@ Note:
         else:
             user_prompt = f"""Programming Language: {language}
 
-⚠️ Code is annotated with line numbers (format: lineNumber| code), please fill the 'line' field accurately based on these numbers!
+Code is annotated with line numbers (format: lineNumber| code), please fill the 'line' field accurately based on these numbers!
 
 Please analyze the following code:
 
@@ -396,8 +396,8 @@ Please analyze the following code:
             content = response.content
             
             # 记录 LLM 原始响应（用于调试）
-            logger.info(f"📥 LLM 原始响应长度: {len(content) if content else 0} 字符")
-            logger.info(f"📥 LLM 原始响应内容:\n{content}")
+            logger.info(f"LLM 原始响应长度: {len(content) if content else 0} 字符")
+            logger.info(f"LLM 原始响应内容:\n{content}")
             
             # 检查响应内容是否为空
             if not content or not content.strip():
@@ -692,7 +692,7 @@ Please analyze the following code:
                 result = attempt()
                 if result and isinstance(result, dict):
                     if i > 0:
-                        logger.info(f"✅ JSON解析成功（方法 {i + 1}/{len(attempts)}）")
+                        logger.info(f"JSON解析成功（方法 {i + 1}/{len(attempts)}）")
                     return result
             except Exception as e:
                 last_error = e
@@ -700,7 +700,7 @@ Please analyze the following code:
                     logger.debug(f"直接解析失败，尝试其他方法... {e}")
         
         # 所有尝试都失败
-        logger.error("❌ 无法解析LLM响应为JSON")
+        logger.error("无法解析LLM响应为JSON")
         logger.error(f"原始内容长度: {len(text)} 字符")
         logger.error(f"原始内容（前500字符）: {text[:500]}")
         logger.error(f"原始内容（后500字符）: {text[-500:] if len(text) > 500 else text}")
@@ -821,7 +821,7 @@ Please analyze the following code:
         repaired = repair_json(json_str, return_objects=True)
         
         if isinstance(repaired, dict):
-            logger.info("✅ json-repair 库成功修复 JSON")
+            logger.info("json-repair 库成功修复 JSON")
             return repaired
         
         raise ValueError(f"json-repair returned unexpected type: {type(repaired)}")
@@ -1030,7 +1030,7 @@ Please analyze the following code:
                 if template:
                     output_language = self._get_output_language()
                     custom_prompt = template.content_zh if output_language == 'zh-CN' else template.content_en
-                    logger.info(f"📋 使用默认提示词模板: {template.name}")
+                    logger.info(f"使用默认提示词模板: {template.name}")
             
             # 获取规则集
             if rule_set_id:

@@ -259,8 +259,8 @@ index 26cf4a6b4..b72cdc545 100644
 -      uses: github/codeql-action/autobuild@v2
 +      uses: github/codeql-action/autobuild@v3
  
-     # ℹ️ Command-line programs to run using the OS shell.
-     # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
+     # Command-line programs to run using the OS shell.
+     # See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
 @@ -71,6 +71,6 @@ jobs:
      #     ./location_of_script_within_repo/buildscript.sh
  

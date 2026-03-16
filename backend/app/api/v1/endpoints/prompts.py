@@ -328,7 +328,7 @@ async def test_prompt_template(
     except Exception as e:
         execution_time = time.time() - start_time
         import traceback
-        print(f"❌ 提示词测试失败: {e}")
+        print(f"提示词测试失败: {e}")
         print(traceback.format_exc())
         return PromptTestResponse(
             success=False,

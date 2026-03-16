@@ -90,6 +90,12 @@ COMPOSE_MENU=false docker compose up --build
 docker compose up --build --menu=false
 ```
 
+If you want the Bash/WSL/Linux wrapper to auto-open the app after readiness is confirmed, opt in explicitly:
+
+```bash
+VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh
+```
+
 If you want prebuilt-image deployment (production / quick bootstrap), use:
 
 ```bash
@@ -109,8 +115,10 @@ docker compose -f deploy/compose/docker-compose.prod.cn.yml up -d
 - The backend mounts `/var/run/docker.sock` for sandbox execution. Review security boundaries before using in production.
 - The root Compose default now targets day-to-day incremental development: `docker compose up -d --build`. This path switches frontend/backend to bind-mounted source + hot reload and disables heavyweight startup defaults such as `MCP_REQUIRE_ALL_READY_ON_STARTUP` and `SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP`.
 - The default dev Compose now waits for backend `/health` before starting the frontend; on the first `docker compose up --build`, expect a 1-2 minute delay while seed projects and rules initialize.
+- Once cold start actually finishes, both the frontend dev container and `./scripts/compose-up-with-fallback.sh` print a ready banner with `http://localhost:3000` and the backend docs URL.
 - For the explicit full local build path, add `docker-compose.full.yml`: `docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build`.
 - The fallback-script variant of the full local build path is `./scripts/compose-up-with-fallback.sh -f docker-compose.yml -f docker-compose.full.yml up -d --build`.
+- Bare `docker compose up --build` only prints the ready hint; it does not auto-open a browser. Use `VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh` if you want that behavior.
 - Local Compose startup, including the `docker-compose.full.yml` overlay, now disables Codex skills preinstallation by default so remote skill sync cannot block the backend.
 - To temporarily restore that preinstall step, run: `CODEX_SKILLS_AUTO_INSTALL=true docker compose -f docker-compose.yml -f docker-compose.full.yml up --build --menu=false`.
 - To install Codex skills manually after the container is up, run: `docker compose -f docker-compose.yml -f docker-compose.full.yml exec backend /app/scripts/install_codex_skills.sh`.
@@ -120,6 +128,7 @@ docker compose -f deploy/compose/docker-compose.prod.cn.yml up -d
 - Prebuilt-image deployment templates now live at `deploy/compose/docker-compose.prod.yml` and `deploy/compose/docker-compose.prod.cn.yml`.
 - Those production templates use the Nanjing University GHCR mirror (`ghcr.nju.edu.cn/lintsinghua/*`) for faster pulls in CN regions. Replace with your own images/registry for production deployments if needed.
 - The dev build flow defaults to `./scripts/compose-up-with-fallback.sh`: it probes candidate mirrors first, ranks by latency, then retries build phases in ranked order (instead of fixed CN->official phases).
+- For `up` and `up -d`, `./scripts/compose-up-with-fallback.sh` waits until both the frontend and backend `/health` are reachable before printing a unified `services ready` banner. Override the wait budget with `VULHUNTER_READY_TIMEOUT_SECONDS`; the default is `900`.
 - Docker image source probing (DockerHub/GHCR) now runs in parallel; failed candidates are downgraded to the tail instead of blocking other sources.
 - Default DockerHub candidates: `docker.m.daocloud.io/library,docker.1ms.run/library,docker.io/library`; default GHCR candidates: `ghcr.nju.edu.cn,ghcr.m.daocloud.io,ghcr.io`.
 - DockerHub official probing uses `registry-1.docker.io` to avoid inaccurate checks against `docker.io`.
@@ -172,6 +181,12 @@ GIT_MIRROR_FALLBACK_TO_ORIGIN=false \
 
 This usually means the Alembic revision stored in the DB volume does not match the migration files in the current backend image (for example, after switching from prebuilt images to local source builds).
 
+The current migration contract only supports:
+- initializing a brand-new empty database
+- upgrading a database already stamped at revision `5b0f3c9a6d7e`
+
+Older historical revisions are no longer upgraded automatically after the migration squash.
+
 Recommended recovery order:
 
 1. Ensure startup uses local source build:
@@ -188,7 +203,9 @@ docker volume rm audittool_postgres_data
 ./scripts/compose-up-with-fallback.sh
 ```
 
-⚠️ This removes local DB data. Back up important data first.
+This removes local DB data. Back up important data first.
+
+If you must keep an older pre-squash database, use a manual Alembic `stamp` / migration recovery workflow before starting the backend. Automatic compatibility for those legacy revisions has been removed.
 
 ## Development
 
@@ -222,7 +239,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `docs/DEPLOYMENT.md`
 - `docs/AGENT_AUDIT.md`
 
-Note: `docs/` may still contain historical names like `AuditTool` / `deepaudit` (deployment/code-level legacy naming), which do not represent the product brand.
+Note: `docs/` may still contain historical names like `AuditTool` / `VulHunter` (deployment/code-level legacy naming), which do not represent the product brand.
 
 ## Contributing
 
@@ -245,4 +262,4 @@ This project is licensed under the [AGPL-3.0 License](LICENSE).
 
 ## Naming History
 
-Some internal identifiers may keep historical naming (e.g., `deepaudit`). This is legacy naming and does not affect VulHunter usage.
+Some internal identifiers may keep historical naming (e.g., `VulHunter`). This is legacy naming and does not affect VulHunter usage.

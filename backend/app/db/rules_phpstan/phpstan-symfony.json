@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-03-16T02:16:34.575067+00:00",
+  "repo": "phpstan-symfony",
+  "package": "phpstan/phpstan-symfony",
+  "count": 6,
+  "rules": [
+    {
+      "id": "phpstan/phpstan-symfony:PHPStan\\Rules\\Symfony\\ContainerInterfacePrivateServiceRule",
+      "package": "phpstan/phpstan-symfony",
+      "repo": "phpstan-symfony",
+      "rule_class": "PHPStan\\Rules\\Symfony\\ContainerInterfacePrivateServiceRule",
+      "name": "ContainerInterfacePrivateServiceRule",
+      "description_summary": "@implements Rule<MethodCall>",
+      "source_file": "src/Rules/Symfony/ContainerInterfacePrivateServiceRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-symfony:PHPStan\\Rules\\Symfony\\ContainerInterfaceUnknownServiceRule",
+      "package": "phpstan/phpstan-symfony",
+      "repo": "phpstan-symfony",
+      "rule_class": "PHPStan\\Rules\\Symfony\\ContainerInterfaceUnknownServiceRule",
+      "name": "ContainerInterfaceUnknownServiceRule",
+      "description_summary": "@implements Rule<MethodCall>",
+      "source_file": "src/Rules/Symfony/ContainerInterfaceUnknownServiceRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-symfony:PHPStan\\Rules\\Symfony\\InvalidArgumentDefaultValueRule",
+      "package": "phpstan/phpstan-symfony",
+      "repo": "phpstan-symfony",
+      "rule_class": "PHPStan\\Rules\\Symfony\\InvalidArgumentDefaultValueRule",
+      "name": "InvalidArgumentDefaultValueRule",
+      "description_summary": "@implements Rule<MethodCall>",
+      "source_file": "src/Rules/Symfony/InvalidArgumentDefaultValueRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-symfony:PHPStan\\Rules\\Symfony\\InvalidOptionDefaultValueRule",
+      "package": "phpstan/phpstan-symfony",
+      "repo": "phpstan-symfony",
+      "rule_class": "PHPStan\\Rules\\Symfony\\InvalidOptionDefaultValueRule",
+      "name": "InvalidOptionDefaultValueRule",
+      "description_summary": "@implements Rule<MethodCall>",
+      "source_file": "src/Rules/Symfony/InvalidOptionDefaultValueRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-symfony:PHPStan\\Rules\\Symfony\\UndefinedArgumentRule",
+      "package": "phpstan/phpstan-symfony",
+      "repo": "phpstan-symfony",
+      "rule_class": "PHPStan\\Rules\\Symfony\\UndefinedArgumentRule",
+      "name": "UndefinedArgumentRule",
+      "description_summary": "@implements Rule<MethodCall>",
+      "source_file": "src/Rules/Symfony/UndefinedArgumentRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-symfony:PHPStan\\Rules\\Symfony\\UndefinedOptionRule",
+      "package": "phpstan/phpstan-symfony",
+      "repo": "phpstan-symfony",
+      "rule_class": "PHPStan\\Rules\\Symfony\\UndefinedOptionRule",
+      "name": "UndefinedOptionRule",
+      "description_summary": "@implements Rule<MethodCall>",
+      "source_file": "src/Rules/Symfony/UndefinedOptionRule.php",
+      "source": "official_extension",
+      "is_active": true
+    }
+  ]
+}

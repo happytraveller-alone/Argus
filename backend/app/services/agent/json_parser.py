@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 try:
     from json_repair import repair_json
     JSON_REPAIR_AVAILABLE = True
-    logger.info("✅ json-repair 库已加载")
+    logger.info("json-repair 库已加载")
 except ImportError:
     JSON_REPAIR_AVAILABLE = False
-    logger.warning("⚠️ json-repair 库未安装，将使用备用解析方法")
+    logger.warning("json-repair 库未安装，将使用备用解析方法")
 
 
 class AgentJsonParser:
@@ -225,7 +225,7 @@ class AgentJsonParser:
                 result = attempt()
                 if result and isinstance(result, dict):
                     if name != "直接解析":
-                        logger.debug(f"✅ JSON 解析成功（方法: {name}）")
+                        logger.debug(f"JSON 解析成功（方法: {name}）")
                     return result
             except Exception as e:
                 last_error = e
@@ -236,7 +236,7 @@ class AgentJsonParser:
             logger.warning(f"JSON 解析失败，返回默认值。原始内容: {text[:200]}...")
             return default
 
-        logger.error(f"❌ 无法解析 JSON，原始内容: {text[:500]}...")
+        logger.error(f"无法解析 JSON，原始内容: {text[:500]}...")
         raise ValueError(f"无法解析 JSON: {last_error}")
 
     @classmethod

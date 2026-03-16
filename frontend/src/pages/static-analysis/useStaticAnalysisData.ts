@@ -9,6 +9,14 @@ import {
   type BanditScanTask,
 } from "@/shared/api/bandit";
 import {
+  getPhpstanFindings,
+  getPhpstanScanTask,
+  interruptPhpstanScanTask,
+  updatePhpstanFindingStatus,
+  type PhpstanFinding,
+  type PhpstanScanTask,
+} from "@/shared/api/phpstan";
+import {
   getGitleaksFindings,
   getGitleaksScanTask,
   interruptGitleaksScanTask,
@@ -75,23 +83,42 @@ async function fetchAllBanditFindings(taskId: string): Promise<BanditFinding[]> 
   return allFindings;
 }
 
+async function fetchAllPhpstanFindings(taskId: string): Promise<PhpstanFinding[]> {
+  const allFindings: PhpstanFinding[] = [];
+  for (let page = 0; page < MAX_FINDING_BATCH_PAGES; page += 1) {
+    const batch = await getPhpstanFindings({
+      taskId,
+      skip: page * FINDING_BATCH_SIZE,
+      limit: FINDING_BATCH_SIZE,
+    });
+    allFindings.push(...batch);
+    if (batch.length < FINDING_BATCH_SIZE) break;
+  }
+  return allFindings;
+}
+
 export function useStaticAnalysisData({
   hasEnabledEngine,
   opengrepTaskId,
   gitleaksTaskId,
   banditTaskId,
+  phpstanTaskId,
 }: {
   hasEnabledEngine: boolean;
   opengrepTaskId: string;
   gitleaksTaskId: string;
   banditTaskId: string;
+  phpstanTaskId: string;
 }) {
+  // PHPStan integration: keep task/findings lifecycle aligned with existing engines.
   const [opengrepTask, setOpengrepTask] = useState<OpengrepScanTask | null>(null);
   const [gitleaksTask, setGitleaksTask] = useState<GitleaksScanTask | null>(null);
   const [banditTask, setBanditTask] = useState<BanditScanTask | null>(null);
+  const [phpstanTask, setPhpstanTask] = useState<PhpstanScanTask | null>(null);
   const [opengrepFindings, setOpengrepFindings] = useState<OpengrepFinding[]>([]);
   const [gitleaksFindings, setGitleaksFindings] = useState<GitleaksFinding[]>([]);
   const [banditFindings, setBanditFindings] = useState<BanditFinding[]>([]);
+  const [phpstanFindings, setPhpstanFindings] = useState<PhpstanFinding[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingTask, setLoadingTask] = useState(false);
   const [loadingFindings, setLoadingFindings] = useState(false);
@@ -102,6 +129,7 @@ export function useStaticAnalysisData({
   const opengrepSilentRefreshRef = useRef(false);
   const gitleaksSilentRefreshRef = useRef(false);
   const banditSilentRefreshRef = useRef(false);
+  const phpstanSilentRefreshRef = useRef(false);
 
   const loadOpengrepTask = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
@@ -160,6 +188,25 @@ export function useStaticAnalysisData({
     }
   }, [banditTaskId]);
 
+  const loadPhpstanTask = useCallback(async (silent = false) => {
+    if (!phpstanTaskId) {
+      setPhpstanTask(null);
+      return;
+    }
+    try {
+      if (!silent) setLoadingTask(true);
+      const task = await getPhpstanScanTask(phpstanTaskId);
+      setPhpstanTask(task);
+    } catch {
+      setPhpstanTask(null);
+      if (!silent) {
+        toast.error("加载 PHPStan 任务失败");
+      }
+    } finally {
+      if (!silent) setLoadingTask(false);
+    }
+  }, [phpstanTaskId]);
+
   const loadOpengrepFindings = useCallback(async (silent = false) => {
     if (!opengrepTaskId) {
       setOpengrepFindings([]);
@@ -214,6 +261,24 @@ export function useStaticAnalysisData({
     }
   }, [banditTaskId]);
 
+  const loadPhpstanFindings = useCallback(async (silent = false) => {
+    if (!phpstanTaskId) {
+      setPhpstanFindings([]);
+      return;
+    }
+    try {
+      if (!silent) setLoadingFindings(true);
+      setPhpstanFindings(await fetchAllPhpstanFindings(phpstanTaskId));
+    } catch {
+      setPhpstanFindings([]);
+      if (!silent) {
+        toast.error("加载 PHPStan 漏洞失败");
+      }
+    } finally {
+      if (!silent) setLoadingFindings(false);
+    }
+  }, [phpstanTaskId]);
+
   const refreshAll = useCallback(async (silent = false) => {
     if (!hasEnabledEngine) {
       setLoadingInitial(false);
@@ -225,9 +290,11 @@ export function useStaticAnalysisData({
         loadOpengrepTask(silent),
         loadGitleaksTask(silent),
         loadBanditTask(silent),
+        loadPhpstanTask(silent),
         loadOpengrepFindings(silent),
         loadGitleaksFindings(silent),
         loadBanditFindings(silent),
+        loadPhpstanFindings(silent),
       ]);
     } finally {
       if (!silent) setLoadingInitial(false);
@@ -238,6 +305,8 @@ export function useStaticAnalysisData({
     loadGitleaksTask,
     loadBanditFindings,
     loadBanditTask,
+    loadPhpstanFindings,
+    loadPhpstanTask,
     loadOpengrepFindings,
     loadOpengrepTask,
   ]);
@@ -275,6 +344,17 @@ export function useStaticAnalysisData({
     }
   }, [banditTaskId, loadBanditFindings, loadBanditTask]);
 
+  const refreshPhpstanSilently = useCallback(async () => {
+    if (!phpstanTaskId || phpstanSilentRefreshRef.current) return;
+    phpstanSilentRefreshRef.current = true;
+    try {
+      await loadPhpstanTask(true);
+      await loadPhpstanFindings(true);
+    } finally {
+      phpstanSilentRefreshRef.current = false;
+    }
+  }, [loadPhpstanFindings, loadPhpstanTask, phpstanTaskId]);
+
   const handleInterrupt = useCallback(async () => {
     if (!interruptTarget) return;
     setInterrupting(true);
@@ -291,6 +371,10 @@ export function useStaticAnalysisData({
         await interruptBanditScanTask(banditTaskId);
         toast.success("Bandit 任务已中止");
       }
+      if (interruptTarget === "phpstan" && phpstanTaskId) {
+        await interruptPhpstanScanTask(phpstanTaskId);
+        toast.success("PHPStan 任务已中止");
+      }
       await refreshAll(true);
     } catch {
       toast.error("中止任务失败");
@@ -298,7 +382,14 @@ export function useStaticAnalysisData({
       setInterrupting(false);
       setInterruptTarget(null);
     }
-  }, [banditTaskId, gitleaksTaskId, interruptTarget, opengrepTaskId, refreshAll]);
+  }, [
+    banditTaskId,
+    gitleaksTaskId,
+    interruptTarget,
+    opengrepTaskId,
+    phpstanTaskId,
+    refreshAll,
+  ]);
 
   const handleToggleStatus = useCallback(async (
     row: UnifiedFindingRow,
@@ -330,12 +421,22 @@ export function useStaticAnalysisData({
             finding.id === row.id ? { ...finding, status: nextStatus } : finding,
           ),
         );
-      } else {
+      } else if (row.engine === "bandit") {
         await updateBanditFindingStatus({
           findingId: row.id,
           status: nextStatus,
         });
         setBanditFindings((prev) =>
+          prev.map((finding) =>
+            finding.id === row.id ? { ...finding, status: nextStatus } : finding,
+          ),
+        );
+      } else {
+        await updatePhpstanFindingStatus({
+          findingId: row.id,
+          status: nextStatus,
+        });
+        setPhpstanFindings((prev) =>
           prev.map((finding) =>
             finding.id === row.id ? { ...finding, status: nextStatus } : finding,
           ),
@@ -382,13 +483,25 @@ export function useStaticAnalysisData({
     return () => clearInterval(timer);
   }, [banditTask?.status, banditTaskId, refreshBanditSilently]);
 
+  useEffect(() => {
+    if (!phpstanTaskId || !isStaticAnalysisPollableStatus(phpstanTask?.status)) {
+      return;
+    }
+    const timer = setInterval(() => {
+      void refreshPhpstanSilently();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [phpstanTask?.status, phpstanTaskId, refreshPhpstanSilently]);
+
   return {
     opengrepTask,
     gitleaksTask,
     banditTask,
+    phpstanTask,
     opengrepFindings,
     gitleaksFindings,
     banditFindings,
+    phpstanFindings,
     loadingInitial,
     loadingTask,
     loadingFindings,
@@ -407,6 +520,9 @@ export function useStaticAnalysisData({
     ),
     canInterruptBandit: Boolean(
       banditTaskId && isStaticAnalysisInterruptibleStatus(banditTask?.status),
+    ),
+    canInterruptPhpstan: Boolean(
+      phpstanTaskId && isStaticAnalysisInterruptibleStatus(phpstanTask?.status),
     ),
   };
 }

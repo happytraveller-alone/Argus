@@ -53,7 +53,7 @@ def check_dependencies():
         missing.append("fastapi")
     
     if missing:
-        print(f"❌ 缺少依赖: {', '.join(missing)}")
+        print(f"缺少依赖: {', '.join(missing)}")
         print("\n安装依赖:")
         print("  pip install -r requirements.txt")
         sys.exit(1)
@@ -68,7 +68,7 @@ try:
     )
     from app.services.agent.tools.sandbox_tool import SandboxManager
 except ModuleNotFoundError as e:
-    print(f"❌ 导入错误: {e}")
+    print(f"导入错误: {e}")
     print("\n确保依赖已安装:")
     print("  pip install -r requirements.txt")
     sys.exit(1)
@@ -77,7 +77,7 @@ except ModuleNotFoundError as e:
 async def test_opengrep(project_root: str):
     """测试 Opengrep 工具"""
     print("\n" + "="*60)
-    print("🔍 测试 Opengrep 工具")
+    print(" 测试 Opengrep 工具")
     print("="*60)
     
     sandbox_manager = SandboxManager()
@@ -118,7 +118,7 @@ async def test_bandit(project_root: str):
     # 检查是否是 Python 项目
     py_files = list(Path(project_root).rglob("*.py"))
     if not py_files:
-        print("⚠️  该项目中未找到 Python 文件，跳过 Bandit 测试")
+        print(" 该项目中未找到 Python 文件，跳过 Bandit 测试")
         return None
     
     print(f"发现 {len(py_files)} 个 Python 文件")
@@ -168,13 +168,13 @@ async def test_gitleaks(project_root: str):
 async def test_npm_audit(project_root: str):
     """测试 npm audit 工具（仅限有 package.json 的项目）"""
     print("\n" + "="*60)
-    print("📦 测试 npm audit 工具")
+    print("测试 npm audit 工具")
     print("="*60)
     
     # 检查是否有 package.json
     package_json = Path(project_root) / "package.json"
     if not package_json.exists():
-        print("⚠️  未找到 package.json，跳过 npm audit 测试")
+        print(" 未找到 package.json，跳过 npm audit 测试")
         return None
     
     sandbox_manager = SandboxManager()
@@ -206,7 +206,7 @@ async def test_safety(project_root: str):
     # 检查是否有 requirements.txt
     req_file = Path(project_root) / "requirements.txt"
     if not req_file.exists():
-        print("⚠️  未找到 requirements.txt，跳过 Safety 测试")
+        print(" 未找到 requirements.txt，跳过 Safety 测试")
         return None
     
     sandbox_manager = SandboxManager()
@@ -229,7 +229,7 @@ async def test_safety(project_root: str):
 async def test_trufflehog(project_root: str):
     """测试 TruffleHog 工具"""
     print("\n" + "="*60)
-    print("🔍 测试 TruffleHog 工具")
+    print(" 测试 TruffleHog 工具")
     print("="*60)
     
     sandbox_manager = SandboxManager()
@@ -255,7 +255,7 @@ async def test_trufflehog(project_root: str):
 async def test_osv_scanner(project_root: str):
     """测试 OSV-Scanner 工具"""
     print("\n" + "="*60)
-    print("📋 测试 OSV-Scanner 工具")
+    print("测试 OSV-Scanner 工具")
     print("="*60)
     
     sandbox_manager = SandboxManager()
@@ -277,7 +277,7 @@ async def test_osv_scanner(project_root: str):
 async def test_pmd(project_root: str):
     """测试 PMD 工具"""
     print("\n" + "="*60)
-    print("🔍 测试 PMD Java 源码扫描工具")
+    print(" 测试 PMD Java 源码扫描工具")
     print("="*60)
     
     sandbox_manager = SandboxManager()
@@ -306,7 +306,7 @@ async def test_pmd(project_root: str):
 async def test_phpstan(project_root: str):
     """测试 PHPStan 工具"""
     print("\n" + "="*60)
-    print("🔍 测试 PHPStan PHP 静态分析工具")
+    print(" 测试 PHPStan PHP 静态分析工具")
     print("="*60)
     
     sandbox_manager = SandboxManager()
@@ -366,7 +366,7 @@ async def main():
     project_root = os.path.abspath(args.path)
     
     if not os.path.isdir(project_root):
-        print(f"❌ 错误: {project_root} 不是一个有效的目录")
+        print(f"错误: {project_root} 不是一个有效的目录")
         sys.exit(1)
     
     print(f"📍 项目路径: {project_root}")
@@ -377,12 +377,12 @@ async def main():
     await sandbox_manager.initialize()
     
     if not sandbox_manager.is_available:
-        print(f"❌ Docker 不可用: {sandbox_manager.get_diagnosis()}")
+        print(f"Docker 不可用: {sandbox_manager.get_diagnosis()}")
         print("\n提示: 这些工具需要 Docker 才能运行。请先启动 Docker:")
         print("  docker daemon  # 或使用 Docker Desktop")
         sys.exit(1)
     
-    print("✅ Docker 可用")
+    print("Docker 可用")
     
     # 执行测试
     results = {}
@@ -419,7 +419,7 @@ async def main():
         print("\n\n⏹️  测试被中断")
         sys.exit(0)
     except Exception as e:
-        print(f"\n❌ 错误: {e}")
+        print(f"\n错误: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
@@ -433,9 +433,9 @@ async def main():
         if result is None:
             status = "⏭️  跳过 (不适用)"
         elif result is True:
-            status = "✅ 成功"
+            status = "成功"
         else:
-            status = "❌ 失败"
+            status = "失败"
         
         print(f"{tool_name:15} {status}")
 

@@ -2,6 +2,7 @@ import type { AgentTask } from "@/shared/api/agentTasks";
 import type { AgentFinding } from "@/shared/api/agentTasks";
 import type { BanditScanTask } from "@/shared/api/bandit";
 import type { GitleaksScanTask } from "@/shared/api/gitleaks";
+import type { PhpstanScanTask } from "@/shared/api/phpstan";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import type { AuditTask } from "@/shared/types";
 import { resolveSourceModeFromTaskMeta } from "@/features/tasks/services/taskActivities";
@@ -9,6 +10,7 @@ import {
   buildStaticScanGroups,
   resolveStaticScanGroupStatus,
 } from "@/features/tasks/services/staticScanGrouping";
+import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import { buildFindingDetailPath } from "@/shared/utils/findingRoute";
 
 export type ProjectCardTaskKind = "static" | "intelligent" | "audit";
@@ -83,6 +85,7 @@ export interface ProjectCardPotentialVulnerability {
   taskCategory: ProjectCardTaskFindingCategory;
   title: string;
   cweLabel: string;
+  cweTooltip?: string | null;
   severity: ProjectCardVulnerabilitySeverity;
   confidence: ProjectCardVulnerabilityConfidence;
   filePath: string;
@@ -266,36 +269,42 @@ export function getProjectCardSummaryStats(params: {
   opengrepTasks: OpengrepScanTask[];
   gitleaksTasks?: GitleaksScanTask[];
   banditTasks?: BanditScanTask[];
+  phpstanTasks?: PhpstanScanTask[];
 }): ProjectCardSummaryStats {
   const { projectId, auditTasks, agentTasks, opengrepTasks } = params;
   const gitleaksTasks = params.gitleaksTasks || [];
   const banditTasks = params.banditTasks || [];
+  const phpstanTasks = params.phpstanTasks || [];
 
   const projectAuditTasks = auditTasks.filter((task) => task.project_id === projectId);
   const projectAgentTasks = agentTasks.filter((task) => task.project_id === projectId);
   const projectOpengrepTasks = opengrepTasks.filter((task) => task.project_id === projectId);
   const projectGitleaksTasks = gitleaksTasks.filter((task) => task.project_id === projectId);
   const projectBanditTasks = banditTasks.filter((task) => task.project_id === projectId);
+  const projectPhpstanTasks = phpstanTasks.filter((task) => task.project_id === projectId);
 
   const totalTasks =
     projectAuditTasks.length +
     projectAgentTasks.length +
     projectOpengrepTasks.length +
     projectGitleaksTasks.length +
-    projectBanditTasks.length;
+    projectBanditTasks.length +
+    projectPhpstanTasks.length;
 
   const completedTasks =
     projectAuditTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectAgentTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectOpengrepTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectGitleaksTasks.filter((task) => isCompletedStatus(task.status)).length +
-    projectBanditTasks.filter((task) => isCompletedStatus(task.status)).length;
+    projectBanditTasks.filter((task) => isCompletedStatus(task.status)).length +
+    projectPhpstanTasks.filter((task) => isCompletedStatus(task.status)).length;
   const runningTasks =
     projectAuditTasks.filter((task) => isRunningStatus(task.status)).length +
     projectAgentTasks.filter((task) => isRunningStatus(task.status)).length +
     projectOpengrepTasks.filter((task) => isRunningStatus(task.status)).length +
     projectGitleaksTasks.filter((task) => isRunningStatus(task.status)).length +
-    projectBanditTasks.filter((task) => isRunningStatus(task.status)).length;
+    projectBanditTasks.filter((task) => isRunningStatus(task.status)).length +
+    projectPhpstanTasks.filter((task) => isRunningStatus(task.status)).length;
 
   const issueBreakdown = getProjectFoundIssuesBreakdown({
     projectId,
@@ -303,6 +312,7 @@ export function getProjectCardSummaryStats(params: {
     opengrepTasks,
     gitleaksTasks,
     banditTasks,
+    phpstanTasks,
   });
 
   return {
@@ -319,10 +329,12 @@ export function getProjectFoundIssuesBreakdown(params: {
   opengrepTasks: OpengrepScanTask[];
   gitleaksTasks?: GitleaksScanTask[];
   banditTasks?: BanditScanTask[];
+  phpstanTasks?: PhpstanScanTask[];
 }): ProjectFoundIssuesBreakdown {
   const { projectId, agentTasks, opengrepTasks } = params;
   const gitleaksTasks = params.gitleaksTasks || [];
   const banditTasks = params.banditTasks || [];
+  const phpstanTasks = params.phpstanTasks || [];
 
   const opengrepIssues = opengrepTasks
     .filter((task) => task.project_id === projectId)
@@ -344,7 +356,11 @@ export function getProjectFoundIssuesBreakdown(params: {
   const gitleaksIssues = gitleaksTasks
     .filter((task) => task.project_id === projectId)
     .reduce((sum, task) => sum + Math.max(Number(task.total_findings || 0), 0), 0);
-  const staticIssues = opengrepIssues + gitleaksIssues + banditIssues;
+  const phpstanIssues = phpstanTasks
+    .filter((task) => task.project_id === projectId)
+    .reduce((sum, task) => sum + Math.max(Number(task.total_findings || 0), 0), 0);
+  // PHPStan integration: static issues 统计中将 phpstan 发现按提示类全量计入。
+  const staticIssues = opengrepIssues + gitleaksIssues + banditIssues + phpstanIssues;
 
   const projectAgentTasks = agentTasks.filter((task) => task.project_id === projectId);
 
@@ -379,25 +395,29 @@ export function getProjectCardRecentTasks(params: {
   opengrepTasks: OpengrepScanTask[];
   gitleaksTasks: GitleaksScanTask[];
   banditTasks?: BanditScanTask[];
+  phpstanTasks?: PhpstanScanTask[];
   limit?: number;
 }): ProjectCardRecentTask[] {
   const { projectId, auditTasks, agentTasks, opengrepTasks, gitleaksTasks } =
     params;
   const banditTasks = params.banditTasks || [];
+  const phpstanTasks = params.phpstanTasks || [];
   const limit = params.limit ?? 3;
   // Multi-engine grouping: a static creation with N engines should render as one recent task item.
   const staticGroups = buildStaticScanGroups({
     opengrepTasks,
     gitleaksTasks,
     banditTasks,
+    phpstanTasks,
   }).filter((group) => group.projectId === projectId);
 
   const staticItems: ProjectCardRecentTask[] = staticGroups
-    .map((group) => {
+    .map((group): ProjectCardRecentTask | null => {
       const opengrepTask = group.opengrepTask;
       const gitleaksTask = group.gitleaksTask;
       const banditTask = group.banditTask;
-      const primaryTask = opengrepTask || gitleaksTask || banditTask;
+      const phpstanTask = group.phpstanTask;
+      const primaryTask = opengrepTask || gitleaksTask || banditTask || phpstanTask;
       if (!primaryTask) return null;
 
       const params = new URLSearchParams();
@@ -410,17 +430,24 @@ export function getProjectCardRecentTasks(params: {
       if (banditTask) {
         params.set("banditTaskId", banditTask.id);
       }
-      if (!opengrepTask && gitleaksTask && !banditTask) {
+      if (phpstanTask) {
+        params.set("phpstanTaskId", phpstanTask.id);
+      }
+      if (!opengrepTask && gitleaksTask && !banditTask && !phpstanTask) {
         params.set("tool", "gitleaks");
       }
-      if (!opengrepTask && !gitleaksTask && banditTask) {
+      if (!opengrepTask && !gitleaksTask && banditTask && !phpstanTask) {
         params.set("tool", "bandit");
+      }
+      if (!opengrepTask && !gitleaksTask && !banditTask && phpstanTask) {
+        params.set("tool", "phpstan");
       }
 
       const filesScanned = [
         opengrepTask?.files_scanned,
         gitleaksTask?.files_scanned,
         banditTask?.files_scanned,
+        phpstanTask?.files_scanned,
       ].reduce<number | null>((maxValue, value) => {
         const numeric = toNullableNonNegativeNumber(value);
         if (numeric === null) return maxValue;
@@ -429,8 +456,9 @@ export function getProjectCardRecentTasks(params: {
       }, null);
       const scannedLines = toNullableNonNegativeNumber(opengrepTask?.lines_scanned);
       const vulnerabilities = toNullableNonNegativeNumber(
-        Math.max(opengrepTask?.high_confidence_count ?? 0, 0) +
+          Math.max(opengrepTask?.high_confidence_count ?? 0, 0) +
           Math.max(gitleaksTask?.total_findings ?? 0, 0) +
+          Math.max(phpstanTask?.total_findings ?? 0, 0) +
           Math.max(
             banditTask?.total_findings ??
               Math.max(banditTask?.high_count ?? 0, 0) +
@@ -443,12 +471,13 @@ export function getProjectCardRecentTasks(params: {
         opengrepTask?.scan_duration_ms,
         gitleaksTask?.scan_duration_ms,
         banditTask?.scan_duration_ms,
+        phpstanTask?.scan_duration_ms,
       ].reduce<number | null>((sum, value) => {
         const numeric = toNullableNonNegativeNumber(value);
         if (numeric === null || numeric === 0) return sum;
         return (sum ?? 0) + numeric;
       }, null);
-      const latestUpdatedAt = [opengrepTask, gitleaksTask, banditTask].reduce<
+      const latestUpdatedAt = [opengrepTask, gitleaksTask, banditTask, phpstanTask].reduce<
         string | null
       >((latest, task) => {
         const current = task?.updated_at || null;
@@ -460,7 +489,7 @@ export function getProjectCardRecentTasks(params: {
       }, null);
 
       const status = resolveStaticScanGroupStatus(group);
-      return {
+      const item: ProjectCardRecentTask = {
         id: primaryTask.id,
         projectId: group.projectId,
         kind: "static",
@@ -480,8 +509,9 @@ export function getProjectCardRecentTasks(params: {
         supportsFindingsDetail: true,
         findingsButtonDisabledReason: null,
       };
+      return item;
     })
-    .filter((item): item is ProjectCardRecentTask => Boolean(item));
+    .filter((item): item is ProjectCardRecentTask => item !== null);
 
   const intelligentItems: ProjectCardRecentTask[] = agentTasks
     .filter((task) => task.project_id === projectId)
@@ -550,7 +580,7 @@ export function getProjectCardRecentTasks(params: {
       vulnerabilities: toNullableNonNegativeNumber(task.issues_count),
       taskCategory: null,
       supportsFindingsDetail: false,
-      findingsButtonDisabledReason: "当前任务类型暂不支持缺陷详情",
+      findingsButtonDisabledReason: "当前任务类型暂不支持漏洞详情",
     }));
 
   return [...staticItems, ...intelligentItems, ...auditItems]
@@ -594,43 +624,6 @@ function confidenceRank(confidence: ProjectCardVulnerabilityConfidence): number 
   if (confidence === "MEDIUM") return 2;
   if (confidence === "LOW") return 1;
   return 0;
-}
-
-function normalizeCwe(raw: unknown): string | null {
-  const value = String(raw ?? "").trim();
-  if (!value) return null;
-
-  const cweMatch = value.match(/CWE[\s:_-]*(\d{1,6})/i);
-  if (cweMatch?.[1]) {
-    const id = Number.parseInt(cweMatch[1], 10);
-    return Number.isFinite(id) && id > 0 ? `CWE-${id}` : null;
-  }
-
-  const definitionMatch = value.match(/definitions\/(\d{1,6})(?:\.html)?/i);
-  if (definitionMatch?.[1]) {
-    const id = Number.parseInt(definitionMatch[1], 10);
-    return Number.isFinite(id) && id > 0 ? `CWE-${id}` : null;
-  }
-
-  if (/^\d{1,6}$/.test(value)) {
-    const id = Number.parseInt(value, 10);
-    return Number.isFinite(id) && id > 0 ? `CWE-${id}` : null;
-  }
-
-  return null;
-}
-
-function resolveFirstCweLabel(raw: unknown): string {
-  if (Array.isArray(raw)) {
-    for (const item of raw) {
-      const normalized = normalizeCwe(item);
-      if (normalized) return normalized;
-    }
-    return "-";
-  }
-
-  const normalized = normalizeCwe(raw);
-  return normalized || "-";
 }
 
 export function getProjectCardPotentialVulnerabilities(params: {
@@ -680,7 +673,11 @@ export function getProjectCardPotentialVulnerabilities(params: {
         String(finding.description || "").trim() ||
         "潜在漏洞";
       const filePath = String(finding.file_path || "").trim() || "-";
-      const cweLabel = resolveFirstCweLabel(finding.cwe_id);
+      const cweDisplay = resolveCweDisplay({
+        cwe: finding.cwe_id,
+        fallbackLabel:
+          String(finding.vulnerability_type || "").trim() || title || "潜在漏洞",
+      });
       const taskCategory: ProjectCardPotentialVulnerability["taskCategory"] =
         params.agentTaskCategoryMap?.[finding.task_id] === "hybrid"
           ? "hybrid"
@@ -691,7 +688,8 @@ export function getProjectCardPotentialVulnerabilities(params: {
         source: "agent" as const,
         taskCategory,
         title,
-        cweLabel,
+        cweLabel: cweDisplay.label,
+        cweTooltip: cweDisplay.tooltip,
         severity,
         confidence,
         filePath,
@@ -726,14 +724,18 @@ export function getProjectCardPotentialVulnerabilities(params: {
         String(finding.rule_name || "").trim() ||
         String(finding.description || "").trim() ||
         "潜在漏洞";
-      const cweLabel = resolveFirstCweLabel(finding.cwe);
+      const cweDisplay = resolveCweDisplay({
+        cwe: finding.cwe,
+        fallbackLabel: title,
+      });
       return {
         id: finding.id,
         taskId: finding.scan_task_id,
         source: "static" as const,
         taskCategory: "static" as const,
         title,
-        cweLabel,
+        cweLabel: cweDisplay.label,
+        cweTooltip: cweDisplay.tooltip,
         severity,
         confidence,
         filePath: finding.file_path,
@@ -780,6 +782,7 @@ export function getProjectCardPotentialVulnerabilities(params: {
     taskCategory: item.taskCategory,
     title: item.title,
     cweLabel: item.cweLabel,
+    cweTooltip: item.cweTooltip,
     severity: item.severity,
     confidence: item.confidence,
     filePath: item.filePath,

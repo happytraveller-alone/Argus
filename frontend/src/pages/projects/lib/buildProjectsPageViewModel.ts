@@ -7,6 +7,7 @@ import {
 	resolveStaticScanGroupStatus,
 } from "@/features/tasks/services/taskActivities";
 import type { Project } from "@/shared/types";
+import { getProjectStatusToggleAction } from "../viewModel";
 import type {
 	ProjectTaskPoolState,
 	ProjectsPageViewModel,
@@ -41,6 +42,7 @@ export function getProjectExecutionStats(
 		opengrepTasks: projectTaskPool?.opengrepTasks || [],
 		gitleaksTasks: projectTaskPool?.gitleaksTasks || [],
 		banditTasks: projectTaskPool?.banditTasks || [],
+		phpstanTasks: projectTaskPool?.phpstanTasks || [],
 	});
 	const staticStats = staticGroups.reduce(
 		(accumulator, group) => {
@@ -114,6 +116,7 @@ export function buildProjectsPageViewModel(
 				opengrepTasks: projectTaskPool?.opengrepTasks || [],
 				gitleaksTasks: projectTaskPool?.gitleaksTasks || [],
 				banditTasks: projectTaskPool?.banditTasks || [],
+				phpstanTasks: projectTaskPool?.phpstanTasks || [],
 			});
 			return {
 				id: project.id,
@@ -126,13 +129,24 @@ export function buildProjectsPageViewModel(
 				statusClassName: project.is_active
 					? "cyber-badge-success"
 					: "cyber-badge-warning",
+				statusToggle: {
+					...getProjectStatusToggleAction({
+						is_active: project.is_active,
+					}),
+					disabled: false,
+				},
 				isActive: project.is_active,
 				totalIssues: summaryStats.totalIssues ?? 0,
 				executionStats: getProjectExecutionStats(projectTaskPool),
 				actions: {
 					canCreateScan: project.is_active,
-					canDisable: project.is_active,
-					canEnable: !project.is_active,
+					canBrowseCode: project.source_type === "zip",
+					browseCodePath: `/projects/${project.id}/code-browser`,
+					browseCodeState: { from: projectDetailFrom },
+					browseCodeDisabledReason:
+						project.source_type === "zip"
+							? null
+							: "仅 ZIP 类型项目支持代码浏览",
 				},
 			};
 		}),

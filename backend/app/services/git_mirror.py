@@ -4,6 +4,8 @@ import os
 from typing import Any, List
 from urllib.parse import urlparse
 
+HTTPS_ONLY_REPOSITORY_ERROR = "仅支持 HTTPS 仓库地址，不再支持 SSH 地址"
+
 
 def _as_bool(value: Any, default: bool = False) -> bool:
     if value is None:
@@ -43,6 +45,14 @@ def is_ssh_git_url(url: str) -> bool:
     if not text:
         return False
     return text.startswith("git@") or text.startswith("ssh://")
+
+
+def ensure_supported_repository_url(
+    url: str,
+    exc_type: type[Exception] = ValueError,
+) -> None:
+    if is_ssh_git_url(url):
+        raise exc_type(HTTPS_ONLY_REPOSITORY_ERROR)
 
 
 def has_url_auth(url: str) -> bool:

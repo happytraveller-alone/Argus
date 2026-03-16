@@ -7,7 +7,6 @@ import { parseToolEvidence } from "@/pages/AgentAudit/toolEvidence";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { DEFAULT_MCP_CATALOG } from "@/pages/intelligent-scan/mcpCatalog";
 import {
   SKILL_TOOLS_CATALOG,
   type SkillToolCatalogItem,
@@ -44,10 +43,7 @@ function buildSkillExamplePrompts(skillId: string): string[] {
   return catalogPrompts[skillId] ?? ["这个 skill 在 libplist 上最适合怎么测试？"];
 }
 
-function resolveToolName(toolType: "mcp" | "skill", toolId: string): string {
-  if (toolType === "mcp") {
-    return DEFAULT_MCP_CATALOG.find((item) => item.id === toolId)?.name || toolId || "外部工具";
-  }
+function resolveToolName(toolId: string): string {
   return SKILL_TOOLS_CATALOG.find((item) => item.id === toolId)?.id || toolId || "外部工具";
 }
 
@@ -67,7 +63,7 @@ function resolveCleanupSummary(result: SkillTestResult | null, events: SkillTest
 }
 
 export interface ExternalToolDetailContentProps {
-  toolType: "mcp" | "skill";
+  toolType: "skill";
   toolId: string;
   toolName: string;
   skillCatalogItem: SkillToolCatalogItem | null;
@@ -84,7 +80,7 @@ export interface ExternalToolDetailContentProps {
   error?: string | null;
 }
 
-function ToolHeader({ toolType, toolName, toolId }: { toolType: "mcp" | "skill"; toolName: string; toolId: string }) {
+function ToolHeader({ toolType, toolName, toolId }: { toolType: "skill"; toolName: string; toolId: string }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-3">
@@ -96,7 +92,7 @@ function ToolHeader({ toolType, toolName, toolId }: { toolType: "mcp" | "skill";
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-lg font-mono font-semibold text-foreground break-all">{toolName}</div>
             <Badge variant="outline" className="text-[10px] uppercase">
-              {toolType === "mcp" ? "MCP" : "SKILL"}
+              {toolType === "skill" ? "SKILL" : ""}
             </Badge>
           </div>
           <div className="text-xs font-mono text-muted-foreground break-all">{toolId || "-"}</div>
@@ -109,17 +105,6 @@ function ToolHeader({ toolType, toolName, toolId }: { toolType: "mcp" | "skill";
           返回列表
         </Link>
       </Button>
-    </div>
-  );
-}
-
-function McpPlaceholder() {
-  return (
-    <div className="border-t border-border/50 pt-6 space-y-3">
-      <div className="text-[11px] font-mono font-semibold uppercase tracking-[0.28em] text-muted-foreground">详情页待设计</div>
-      <div className="max-w-2xl text-sm leading-7 text-muted-foreground">
-        当前页面只保留详情页骨架，后续会在这里补充外部工具说明、执行约束和展示结构。
-      </div>
     </div>
   );
 }
@@ -295,9 +280,7 @@ export function ScanConfigExternalToolDetailContent({
       <div className="relative z-10 space-y-6">
         <div className="cyber-card p-5 space-y-6">
           <ToolHeader toolType={toolType} toolName={toolName} toolId={toolId} />
-          {toolType === "mcp" ? (
-            <McpPlaceholder />
-          ) : loading ? (
+          {loading ? (
             <div className="border-t border-border/50 pt-6 text-sm text-muted-foreground">加载技能详情中…</div>
           ) : error ? (
             <div className="border-t border-border/50 pt-6 text-sm text-red-300">{error}</div>
@@ -342,17 +325,16 @@ export default function ScanConfigExternalToolDetail() {
     () => SKILL_TOOLS_CATALOG.find((item) => item.id === toolId) ?? null,
     [toolId],
   );
-  const toolName = useMemo(() => resolveToolName(toolType === "mcp" ? "mcp" : "skill", toolId), [toolId, toolType]);
+  const toolName = useMemo(() => resolveToolName(toolId), [toolId]);
   const examplePrompts = useMemo(() => buildSkillExamplePrompts(toolId), [toolId]);
   const { events, running, result, run, stop } = useSkillTestStream(toolId);
 
   useEffect(() => {
-    if (toolType !== "skill") return;
     setPrompt((previous) => previous || examplePrompts[0] || "");
-  }, [examplePrompts, toolType]);
+  }, [examplePrompts]);
 
   useEffect(() => {
-    if (toolType !== "skill" || !toolId) return;
+    if (!toolId) return;
     let cancelled = false;
 
     async function loadSkillDetail() {
@@ -385,27 +367,27 @@ export default function ScanConfigExternalToolDetail() {
     };
   }, [toolId, toolType]);
 
-  if (toolType !== "mcp" && toolType !== "skill") {
+  if (toolType !== "skill") {
     return <Navigate to="/scan-config/external-tools" replace />;
   }
 
   return (
     <ScanConfigExternalToolDetailContent
-      toolType={toolType}
+      toolType="skill"
       toolId={toolId}
       toolName={toolName}
-      skillCatalogItem={toolType === "skill" ? skillCatalogItem : null}
-      skillDetail={toolType === "skill" ? skillDetail : null}
+      skillCatalogItem={skillCatalogItem}
+      skillDetail={skillDetail}
       prompt={prompt}
-      examplePrompts={toolType === "skill" ? examplePrompts : []}
-      events={toolType === "skill" ? events : []}
-      result={toolType === "skill" ? result : null}
-      running={toolType === "skill" ? running : false}
+      examplePrompts={examplePrompts}
+      events={events}
+      result={result}
+      running={running}
       onPromptChange={setPrompt}
       onRun={() => void run(prompt)}
       onStop={stop}
-      loading={toolType === "skill" ? loading : false}
-      error={toolType === "skill" ? error : null}
+      loading={loading}
+      error={error}
     />
   );
 }

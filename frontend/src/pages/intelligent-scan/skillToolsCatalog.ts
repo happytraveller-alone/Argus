@@ -129,7 +129,7 @@ export const SKILL_TOOLS_CATALOG: SkillToolCatalogItem[] = [
     id: "logic_authz_analysis",
     category: "可达性与逻辑分析",
     summary: "分析认证、授权与业务逻辑约束。",
-    goal: "识别鉴权缺陷、越权与边界失效。",
+    goal: "识别鉴权漏洞、越权与边界失效。",
     taskList: ["识别鉴权点", "分析边界条件", "输出授权风险"],
     inputChecklist: ["`file_path` (string, required): 文件路径"],
     exampleInput: "```json\n{\n  \"file_path\": \"src/auth/controller.py\"\n}\n```",

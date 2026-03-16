@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
-import uuid
 
 
 ProbeAction = Literal["tool", "cleanup_file"]
@@ -20,11 +19,7 @@ class MCPProbeCheck:
     cleanup_path: Optional[str] = None
 
 
-MCP_VERIFICATION_TOOLS: Dict[str, List[str]] = {
-    "filesystem": ["read_file"],
-    "sequentialthinking": ["sequential_thinking", "reasoning_trace"],
-    "qmd": ["qmd_status", "qmd_query", "qmd_get", "qmd_multi_get"],
-}
+MCP_VERIFICATION_TOOLS: Dict[str, List[str]] = {}
 
 
 def get_verification_tools(mcp_id: str) -> List[str]:
@@ -39,62 +34,9 @@ def build_probe_checks(
     code_probe_function: Optional[str] = None,
     code_probe_line: Optional[int] = None,
 ) -> List[MCPProbeCheck]:
-    normalized_id = str(mcp_id or "").strip().lower()
-    if normalized_id == "filesystem":
-        probe_rel_path = str(filesystem_probe_file or "").strip()
-        if not probe_rel_path:
-            probe_rel_path = f"tmp/.mcp_probe_{uuid.uuid4().hex}.txt"
-        return [
-            MCPProbeCheck(
-                step="read_probe_file",
-                tool_name="read_file",
-                arguments={"file_path": probe_rel_path},
-            ),
-        ]
-    if normalized_id == "sequentialthinking":
-        return [
-            MCPProbeCheck(
-                step="sequential_thinking_probe",
-                tool_name="sequential_thinking",
-                arguments={
-                    "goal": "mcp_verify_sequential",
-                    "thought": "mcp_verify_sequential",
-                    "nextThoughtNeeded": False,
-                    "thoughtNumber": 1,
-                    "totalThoughts": 1,
-                },
-            ),
-            MCPProbeCheck(
-                step="reasoning_trace_probe",
-                tool_name="reasoning_trace",
-                arguments={
-                    "goal": "mcp_verify_reasoning",
-                    "thought": "mcp_verify_reasoning",
-                    "nextThoughtNeeded": False,
-                    "thoughtNumber": 1,
-                    "totalThoughts": 1,
-                },
-            )
-        ]
-    if normalized_id == "qmd":
-        return [
-            MCPProbeCheck(step="qmd_status_probe", tool_name="qmd_status", arguments={}),
-            MCPProbeCheck(
-                step="qmd_query_probe",
-                tool_name="qmd_query",
-                arguments={"query": "mcp_probe_sum"},
-            ),
-            MCPProbeCheck(
-                step="qmd_get_probe",
-                tool_name="qmd_get",
-                arguments={"doc_id": "__mcp_probe_missing_doc__"},
-                accept_any_result=True,
-            ),
-            MCPProbeCheck(
-                step="qmd_multi_get_probe",
-                tool_name="qmd_multi_get",
-                arguments={"doc_ids": ["__mcp_probe_missing_doc__"]},
-                accept_any_result=True,
-            ),
-        ]
+    _ = mcp_id
+    _ = filesystem_probe_file
+    _ = code_probe_file
+    _ = code_probe_function
+    _ = code_probe_line
     return []

@@ -95,7 +95,7 @@ class RAGQueryTool(AgentTool):
                 # 文件变化时显示文件头
                 if result.file_path != current_file:
                     current_file = result.file_path
-                    output_parts.append(f"\n📄 文件: {result.file_path}")
+                    output_parts.append(f"\n文件: {result.file_path}")
                     if result.file_total_lines > 0:
                         output_parts.append(f"   (共 {result.file_total_lines} 行)")
 
@@ -109,7 +109,7 @@ class RAGQueryTool(AgentTool):
                 if result.name:
                     output_parts.append(f"名称: {result.name}")
                 if result.security_indicators:
-                    output_parts.append(f"⚠️ 安全指标: {', '.join(result.security_indicators)}")
+                    output_parts.append(f"安全指标: {', '.join(result.security_indicators)}")
                 output_parts.append(f"```{result.language}\n{result.content}\n```")
 
             return ToolResult(
@@ -194,7 +194,7 @@ class SecurityCodeSearchTool(AgentTool):
                 output_parts.append(f"\n--- 可疑代码 {i+1} ---")
                 output_parts.append(f"文件: {result.file_path}:{result.line_start}")
                 if result.security_indicators:
-                    output_parts.append(f"⚠️ 安全指标: {', '.join(result.security_indicators)}")
+                    output_parts.append(f"安全指标: {', '.join(result.security_indicators)}")
                 output_parts.append(f"代码:\n```{result.language}\n{result.content}\n```")
 
             return ToolResult(

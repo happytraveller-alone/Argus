@@ -41,41 +41,32 @@ class GitManager:
         try:
             if not repo_path.exists():
                 logging.info(f"Cloning repository: {patch_info.repo_owner}/{patch_info.repo_name}")
-                # Try HTTPS first
                 repo_url = f"https://github.com/{patch_info.repo_owner}/{patch_info.repo_name}"
-                try:
-                    repo = None
-                    clone_error = None
-                    clone_candidates = get_mirror_candidates(repo_url)
-                    for idx, candidate_url in enumerate(clone_candidates):
-                        using_mirror = idx == 0 and len(clone_candidates) > 1
-                        try:
-                            repo = git.Repo.clone_from(candidate_url, repo_path, progress=git.RemoteProgress())
-                            if candidate_url != repo_url:
-                                try:
-                                    repo.remote().set_url(repo_url)
-                                except Exception:
-                                    pass
-                            break
-                        except git.exc.GitCommandError as inner_exc:
-                            clone_error = inner_exc
-                            if using_mirror:
-                                logging.warning(
-                                    "Git mirror clone failed, reason=%s; fallback origin=%s",
-                                    inner_exc,
-                                    repo_url,
-                                )
-                            if repo_path.exists():
-                                shutil.rmtree(repo_path)
-                    if repo is None and clone_error is not None:
-                        raise clone_error
-                except git.exc.GitCommandError as e:
-                    # If HTTPS fails, clean up and try SSH
-                    if repo_path.exists():
-                        shutil.rmtree(repo_path)
-                    logging.info("HTTPS clone failed, trying SSH...")
-                    repo_url = f"git@github.com:{patch_info.repo_owner}/{patch_info.repo_name}.git"
-                    repo = git.Repo.clone_from(repo_url, repo_path, progress=git.RemoteProgress())
+                repo = None
+                clone_error = None
+                clone_candidates = get_mirror_candidates(repo_url)
+                for idx, candidate_url in enumerate(clone_candidates):
+                    using_mirror = idx == 0 and len(clone_candidates) > 1
+                    try:
+                        repo = git.Repo.clone_from(candidate_url, repo_path, progress=git.RemoteProgress())
+                        if candidate_url != repo_url:
+                            try:
+                                repo.remote().set_url(repo_url)
+                            except Exception:
+                                pass
+                        break
+                    except git.exc.GitCommandError as inner_exc:
+                        clone_error = inner_exc
+                        if using_mirror:
+                            logging.warning(
+                                "Git mirror clone failed, reason=%s; fallback origin=%s",
+                                inner_exc,
+                                repo_url,
+                            )
+                        if repo_path.exists():
+                            shutil.rmtree(repo_path)
+                if repo is None and clone_error is not None:
+                    raise clone_error
             else:
                 logging.info(f"Using cached repository at {repo_path}")
                 repo = git.Repo(repo_path)

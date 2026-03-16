@@ -218,5 +218,5 @@ def create_test_finding(file_path: str = "test.py", line_start: int = 10) -> Dic
 
 if __name__ == "__main__":
     # 快速测试
-    print("✅ 内存隔离测试模块已加载")
+    print("内存隔离测试模块已加载")
     print("运行方式: pytest tests/test_agent_memory_isolation.py -v")

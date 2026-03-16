@@ -4,10 +4,11 @@ Bandit 静态扫描模型
 用途：
 - 持久化 Bandit 静态扫描任务元数据（bandit_scan_tasks）
 - 持久化 Bandit 扫描发现明细（bandit_findings）
+- 持久化 Bandit 规则启停状态（bandit_rule_states）
 """
 
 import uuid
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Index
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Index, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -98,3 +99,22 @@ class BanditFinding(Base):
     )
 
     scan_task = relationship("BanditScanTask", back_populates="findings")
+
+
+class BanditRuleState(Base):
+    """Bandit 规则启停状态（仅用于前端规则页展示，不影响扫描命令）。"""
+
+    __tablename__ = "bandit_rule_states"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    test_id = Column(String, nullable=False, unique=True, comment="Bandit 规则ID，例如 B602")
+    is_active = Column(Boolean, nullable=False, default=True, comment="规则是否启用")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_bandit_rule_states_test_id", "test_id"),
+        Index("ix_bandit_rule_states_is_active", "is_active"),
+    )

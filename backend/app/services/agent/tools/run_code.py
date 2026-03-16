@@ -127,7 +127,7 @@ for payload in payloads:
         print(f"Error: {e}")
 ```
 
-⚠️ 重要提示：
+重要提示：
 - 代码在 Docker 沙箱中执行，与真实环境隔离
 - 你需要自己 mock 依赖（数据库、HTTP、文件系统等）
 - 你需要自己设计 payload 和检测逻辑
@@ -534,7 +534,7 @@ class ExtractFunctionTool(AgentTool):
                 ],
             }
             validate_evidence_metadata(**metadata)
-            output_parts = [f"📦 函数提取结果\n"]
+            output_parts = [f"函数提取结果\n"]
             output_parts.append(f"文件: {file_path}")
             output_parts.append(f"函数: {symbol_name}")
 

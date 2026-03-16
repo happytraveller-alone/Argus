@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle, Edit, GitBranch, Upload } from "lucide-react";
+import { CheckCircle, Edit, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -9,18 +9,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { validateZipFile } from "@/features/projects/services";
-import { REPOSITORY_PLATFORMS } from "@/shared/constants";
 import type { CreateProjectForm, Project } from "@/shared/types";
+import {
+	HTTPS_ONLY_REPOSITORY_ERROR,
+	isUnsupportedRepositoryUrl,
+} from "@/shared/utils/projectUtils";
 import { toast } from "sonner";
 import {
 	createEmptyProjectForm,
@@ -61,9 +57,9 @@ export default function EditProjectDialog({
 		setForm({
 			name: project.name,
 			description: project.description || "",
-			source_type: project.source_type,
-			repository_url: project.repository_url || "",
-			repository_type: project.repository_type || "github",
+			source_type: "zip",
+			repository_url: undefined,
+			repository_type: "other",
 			default_branch: project.default_branch || "main",
 			programming_languages: normalizeProgrammingLanguages(
 				project.programming_languages,
@@ -91,6 +87,13 @@ export default function EditProjectDialog({
 			toast.error("项目名称不能为空");
 			return;
 		}
+		if (
+			form.source_type === "repository" &&
+			isUnsupportedRepositoryUrl(form.repository_url)
+		) {
+			toast.error(HTTPS_ONLY_REPOSITORY_ERROR);
+			return;
+		}
 
 		try {
 			await onSubmit(projectId, form, zipFile);
@@ -115,15 +118,7 @@ export default function EditProjectDialog({
 					<DialogTitle className="font-mono text-lg uppercase tracking-wider flex items-center gap-2 text-foreground">
 						<Edit className="w-5 h-5 text-primary" />
 						编辑项目配置
-						<Badge
-							className={`ml-2 ${
-								form.source_type === "repository"
-									? "cyber-badge-info"
-									: "cyber-badge-warning"
-							}`}
-						>
-							{form.source_type === "repository" ? "远程仓库" : "上传项目"}
-						</Badge>
+						<Badge className="ml-2 cyber-badge-warning">上传项目</Badge>
 					</DialogTitle>
 				</DialogHeader>
 
@@ -157,97 +152,37 @@ export default function EditProjectDialog({
 						</div>
 					</div>
 
-					{form.source_type === "repository" ? (
-						<div className="space-y-4">
-							<h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2 flex items-center gap-2">
-								<GitBranch className="w-4 h-4" />
-								仓库信息
-							</h3>
-							<div>
-								<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-									仓库地址
-								</Label>
-								<Input
-									value={form.repository_url}
-									onChange={(event) =>
-										updateForm({ repository_url: event.target.value })
-									}
-									className="cyber-input mt-1"
-								/>
-							</div>
-							<div className="grid grid-cols-2 gap-4">
-								<div>
-									<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-										认证类型
-									</Label>
-									<Select
-										value={form.repository_type}
-										onValueChange={(value) =>
-											updateForm({
-												repository_type:
-													value as CreateProjectForm["repository_type"],
-											})
-										}
-									>
-										<SelectTrigger className="cyber-input mt-1">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent className="cyber-dialog border-border">
-											{REPOSITORY_PLATFORMS.map((platform) => (
-												<SelectItem key={platform.value} value={platform.value}>
-													{platform.label}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
-								<div>
-									<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-										默认分支
-									</Label>
-									<Input
-										value={form.default_branch}
-										onChange={(event) =>
-											updateForm({ default_branch: event.target.value })
-										}
-										className="cyber-input mt-1"
-									/>
-								</div>
-							</div>
-						</div>
-					) : (
-						<div className="space-y-4">
-							<h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2 flex items-center gap-2">
-								<Upload className="w-4 h-4" />
-								ZIP 文件管理
-							</h3>
-							<input
-								ref={zipInputRef}
-								type="file"
-								accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
-								className="hidden"
-								onChange={(event) => {
-									const file = event.target.files?.[0];
-									if (!file) return;
-									const validation = validateZipFile(file);
-									if (!validation.valid) {
-										toast.error(validation.error || "文件无效");
-										event.target.value = "";
-										return;
-									}
-									setZipFile(file);
-								}}
-							/>
-							<Button
-								variant="outline"
-								onClick={() => zipInputRef.current?.click()}
-								className="cyber-btn-outline w-full"
-							>
-								<Upload className="w-4 h-4 mr-2" />
-								{zipFile ? `已选择: ${zipFile.name}` : "选择 ZIP 文件"}
-							</Button>
-						</div>
-					)}
+					<div className="space-y-4">
+						<h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2 flex items-center gap-2">
+							<Upload className="w-4 h-4" />
+							ZIP 文件管理
+						</h3>
+						<input
+							ref={zipInputRef}
+							type="file"
+							accept=".zip,.tar,.tar.gz,.tar.bz2,.7z,.rar"
+							className="hidden"
+							onChange={(event) => {
+								const file = event.target.files?.[0];
+								if (!file) return;
+								const validation = validateZipFile(file);
+								if (!validation.valid) {
+									toast.error(validation.error || "文件无效");
+									event.target.value = "";
+									return;
+								}
+								setZipFile(file);
+							}}
+						/>
+						<Button
+							variant="outline"
+							onClick={() => zipInputRef.current?.click()}
+							className="cyber-btn-outline w-full"
+						>
+							<Upload className="w-4 h-4 mr-2" />
+							{zipFile ? `已选择: ${zipFile.name}` : "选择 ZIP 文件"}
+						</Button>
+					</div>
 
 					<div className="space-y-4">
 						<h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">

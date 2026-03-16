@@ -532,7 +532,7 @@ const req = {{
     query: {params_json},
     body: {params_json},
     params: {params_json},
-    headers: {{'user-agent': 'DeepAudit-Scanner/1.0', 'content-type': 'application/json','x-forwarded-for': {ip_value}}},
+    headers: {{'user-agent': 'VulHunter-Scanner/1.0', 'content-type': 'application/json','x-forwarded-for': {ip_value}}},
     get: function(h) {{ return this.headers[h.toLowerCase()]; }},
     header: function(h) {{ return this.headers[h.toLowerCase()]; }},
     method: 'GET',

@@ -11,7 +11,9 @@ import app.models.gitleaks  # noqa: F401
 
 def _mock_db_with_project(project_id: str = "project-1"):
     db = AsyncMock()
-    db.get = AsyncMock(return_value=SimpleNamespace(id=project_id, name="demo-project"))
+    db.get = AsyncMock(
+        return_value=SimpleNamespace(id=project_id, name="demo-project", source_type="zip")
+    )
     db.add = MagicMock()
     db.commit = AsyncMock()
     db.refresh = AsyncMock()

@@ -42,28 +42,28 @@ async def test_build_zip_tree():
             for path, content in test_files.items():
                 zf.writestr(path, content)
         
-        print(f"✅ 创建测试ZIP文件: {zip_path}")
+        print(f"创建测试ZIP文件: {zip_path}")
         print(f"   包含 {len(test_files)} 个文件")
         
         # 构建树
         loop = asyncio.get_event_loop()
         tree = await loop.run_in_executor(None, _build_file_tree_from_zip, zip_path)
         
-        print(f"\n📦 文件树结构:")
+        print(f"\n文件树结构:")
         print(f"   根节点: {tree.name} (type={tree.type})")
         print(f"   直接子节点数: {len(tree.children) if tree.children else 0}")
         
         # 检查结构
         if tree.children:
             for child in sorted(tree.children, key=lambda x: x.name):
-                prefix = "📁" if child.type == "directory" else "📄"
+                prefix = "📁" if child.type == "directory" else ""
                 size_info = f" ({child.size} bytes)" if child.size else ""
                 print(f"   {prefix} {child.name}{size_info}")
                 
                 # 如果是目录，显示子文件
                 if child.type == "directory" and child.children:
                     for subchild in sorted(child.children, key=lambda x: x.name):
-                        subprefix = "📁" if subchild.type == "directory" else "📄"
+                        subprefix = "📁" if subchild.type == "directory" else ""
                         sub_size = f" ({subchild.size} bytes)" if subchild.size else ""
                         print(f"      {subprefix} {subchild.name}{sub_size}")
         
@@ -71,7 +71,7 @@ async def test_build_zip_tree():
         response = FileTreeResponse(root=tree)
         json_str = response.model_dump_json(indent=2)
         parsed = json.loads(json_str)
-        print(f"\n✅ JSON序列化成功，输出大小: {len(json_str)} 字符")
+        print(f"\nJSON序列化成功，输出大小: {len(json_str)} 字符")
         
 
 async def test_build_repo_tree():
@@ -96,12 +96,12 @@ async def test_build_repo_tree():
         {"path": "docs/SETUP.md", "size": 3584},
     ]
     
-    print(f"✅ 创建模拟仓库文件列表: {len(files)} 文件")
+    print(f"创建模拟仓库文件列表: {len(files)} 文件")
     
     # 构建树
     tree = _build_file_tree_from_repo_files(files)
     
-    print(f"\n📦 文件树结构:")
+    print(f"\n文件树结构:")
     print(f"   根节点: {tree.name} (type={tree.type})")
     print(f"   直接子节点数: {len(tree.children) if tree.children else 0}")
     
@@ -109,7 +109,7 @@ async def test_build_repo_tree():
     def print_tree(node, depth=0):
         if node.children:
             for child in node.children:
-                prefix = "  " * depth + ("📁" if child.type == "directory" else "📄")
+                prefix = "  " * depth + ("📁" if child.type == "directory" else "")
                 size_info = f" ({child.size} bytes)" if child.size else ""
                 print(f"{prefix} {child.name}{size_info}")
                 print_tree(child, depth + 1)
@@ -120,7 +120,7 @@ async def test_build_repo_tree():
     response = FileTreeResponse(root=tree)
     json_str = response.model_dump_json(indent=2)
     parsed = json.loads(json_str)
-    print(f"\n✅ JSON序列化成功，输出大小: {len(json_str)} 字符")
+    print(f"\nJSON序列化成功，输出大小: {len(json_str)} 字符")
     
     # 验证树的完整性
     assert tree.type == "directory"
@@ -131,7 +131,7 @@ async def test_build_repo_tree():
     assert src_dir.type == "directory"
     assert len(src_dir.children) == 3  # index.js, utils, components
     
-    print("\n✅ 树结构验证通过")
+    print("\n树结构验证通过")
 
 
 async def test_tree_properties():
@@ -149,7 +149,7 @@ async def test_tree_properties():
     
     tree = _build_file_tree_from_repo_files(files)
     
-    print(f"✅ 树节点验证:")
+    print(f"树节点验证:")
     print(f"   根节点path: '{tree.path}'")
     print(f"   根节点type: {tree.type}")
     
@@ -177,11 +177,11 @@ async def main():
         await test_tree_properties()
         
         print("\n" + "="*60)
-        print("✅ 所有测试通过！".center(60))
+        print("所有测试通过！".center(60))
         print("="*60 + "\n")
         
     except Exception as e:
-        print(f"\n❌ 测试失败: {e}")
+        print(f"\n测试失败: {e}")
         import traceback
         traceback.print_exc()
         exit(1)

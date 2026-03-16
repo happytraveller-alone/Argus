@@ -140,7 +140,6 @@ class FastMCPStdioAdapter:
     """Minimal stdio MCP adapter backed by fastmcp.Client."""
     _PROJECT_PATH_BOOTSTRAP_TOOLS: set[str] = set()
     _NPX_PACKAGE_BINARIES = {
-        "@modelcontextprotocol/server-filesystem": "mcp-server-filesystem",
         "@modelcontextprotocol/server-sequential-thinking": "mcp-server-sequential-thinking",
     }
     _NPX_ONLY_FLAGS = {"-y", "--yes"}
@@ -878,7 +877,7 @@ class MCPRuntime:
         self._retrieval_cache: Dict[str, Dict[str, Any]] = {}
         self._retrieval_cache_hits = 0
         self._retrieval_cache_misses = 0
-        self._retrieval_cache_tools = {"qmd_query", "read_file", "search_code"}
+        self._retrieval_cache_tools = {"read_file", "search_code"}
 
     @staticmethod
     def _path_within_root(path_value: str, root_value: str) -> bool:
@@ -1059,25 +1058,10 @@ class MCPRuntime:
         agent_name: Optional[str],
         error_text: str,
     ) -> bool:
-        if str(mcp_name or "").strip().lower() != "qmd":
-            return False
-        if str(agent_name or "").strip().lower() != "mcp_verify":
-            return False
-        lowered = str(error_text or "").strip().lower()
-        if not lowered:
-            return False
-        expected_tokens = (
-            "vector index not found",
-            "run 'qmd embed'",
-            "node-llama-cpp",
-            "document not found",
-            "collection not found",
-            "no documents",
-            "failed to parse jsonrpc",
-            "compiler toolset",
-            "failed to build llama.cpp",
-        )
-        return any(token in lowered for token in expected_tokens)
+        _ = mcp_name
+        _ = agent_name
+        _ = error_text
+        return False
 
     def _register_adapter_failure(self, adapter_key: str) -> None:
         key = str(adapter_key or "").strip()
@@ -1515,42 +1499,6 @@ class MCPRuntime:
         _ = route
         return None
 
-    @staticmethod
-    def _build_qmd_query_route_fallback(
-        *,
-        tool_name: str,
-        route: MCPToolRoute,
-    ) -> Optional[MCPToolRoute]:
-        normalized_tool = str(tool_name or "").strip().lower()
-        normalized_adapter = str(route.adapter_name or "").strip().lower()
-        normalized_mcp_tool = str(route.mcp_tool_name or "").strip().lower()
-        if normalized_tool != "qmd_query":
-            return None
-        if normalized_adapter != "qmd" or normalized_mcp_tool != "deep_search":
-            return None
-
-        fallback_args = dict(route.arguments or {})
-        query_text = str(fallback_args.get("query") or "").strip()
-        if not query_text:
-            searches = fallback_args.get("searches")
-            if isinstance(searches, list):
-                parts: list[str] = []
-                for item in searches:
-                    if not isinstance(item, dict):
-                        continue
-                    segment = str(item.get("query") or "").strip()
-                    if segment:
-                        parts.append(segment)
-                query_text = "\n".join(parts).strip()
-        if query_text:
-            fallback_args["query"] = query_text
-        return MCPToolRoute(
-            adapter_name="qmd",
-            mcp_tool_name="query",
-            arguments=fallback_args,
-            is_write=False,
-        )
-
     async def execute_tool(
         self,
         *,
@@ -1572,11 +1520,6 @@ class MCPRuntime:
             tool_name=normalized_tool_name,
             route=primary_route,
         )
-        if fallback_route is None:
-            fallback_route = self._build_qmd_query_route_fallback(
-                tool_name=normalized_tool_name,
-                route=primary_route,
-            )
         route_primary_label = self._route_label(primary_route)
         route_fallback_label = self._route_label(fallback_route)
 

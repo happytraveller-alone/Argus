@@ -168,7 +168,7 @@ def _build_default_seed_projects() -> list[DefaultZipSeedProject]:
             name="DSVW",
             description=(
                 "DSVW（Damn Small Vulnerable Web）是轻量级 Web 漏洞练习项目，"
-                "聚焦常见输入验证与访问控制缺陷，便于快速复现与教学演示。"
+                "聚焦常见输入验证与访问控制漏洞，便于快速复现与教学演示。"
             ),
             archive_name="DSVW-master.zip",
             owner="stamparm",
@@ -181,7 +181,7 @@ def _build_default_seed_projects() -> list[DefaultZipSeedProject]:
             name="WebGoat",
             description=(
                 "WebGoat 是 OWASP 提供的交互式安全训练平台，"
-                "包含身份认证、注入、逻辑缺陷等多类教学关卡，适合后端与应用安全演练。"
+                "包含身份认证、注入、逻辑漏洞等多类教学关卡，适合后端与应用安全演练。"
             ),
             archive_name="WebGoat-main.zip",
             owner="WebGoat",
@@ -207,7 +207,7 @@ def _build_default_seed_projects() -> list[DefaultZipSeedProject]:
             name="govwa",
             description=(
                 "govwa 是 Go 语言 Web 漏洞练习项目，"
-                "用于演示输入校验、权限控制和请求处理中的安全缺陷，适合 Go 应用审计训练。"
+                "用于演示输入校验、权限控制和请求处理中的安全漏洞，适合 Go 应用审计训练。"
             ),
             archive_name="govwa-master.zip",
             owner="0c34",
@@ -412,18 +412,18 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
         {
             "name": "电商平台后端",
             "description": "基于 Spring Boot 的电商平台后端服务，包含用户管理、商品管理、订单处理等模块",
-            "source_type": "repository",
-            "repository_url": "https://github.com/example/ecommerce-backend",
-            "repository_type": "github",
+            "source_type": "zip",
+            "repository_url": None,
+            "repository_type": "other",
             "default_branch": "main",
             "programming_languages": json.dumps(["Java", "SQL"]),
         },
         {
             "name": "移动端 App",
             "description": "React Native 跨平台移动应用，支持 iOS 和 Android",
-            "source_type": "repository",
-            "repository_url": "https://github.com/example/mobile-app",
-            "repository_type": "github",
+            "source_type": "zip",
+            "repository_url": None,
+            "repository_type": "other",
             "default_branch": "develop",
             "programming_languages": json.dumps(["TypeScript", "JavaScript"]),
         },
@@ -439,18 +439,18 @@ async def create_demo_data(db: AsyncSession, user: User) -> None:
         {
             "name": "微服务网关",
             "description": "基于 Go 的高性能 API 网关，支持限流、熔断、负载均衡",
-            "source_type": "repository",
-            "repository_url": "https://gitlab.com/example/api-gateway",
-            "repository_type": "gitlab",
+            "source_type": "zip",
+            "repository_url": None,
+            "repository_type": "other",
             "default_branch": "master",
             "programming_languages": json.dumps(["Go"]),
         },
         {
             "name": "智能客服系统",
             "description": "基于 NLP 的智能客服系统，支持多轮对话、意图识别和知识库问答",
-            "source_type": "repository",
-            "repository_url": "https://github.com/example/smart-customer-service",
-            "repository_type": "github",
+            "source_type": "zip",
+            "repository_url": None,
+            "repository_type": "other",
             "default_branch": "main",
             "programming_languages": json.dumps(["Python", "JavaScript"]),
         },
@@ -960,39 +960,11 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
                f"跳过 {skipped_count} 条已存在的规则，{error_count} 条错误并已删除")
 
 
-async def ensure_project_zip_hash_schema(db: AsyncSession) -> None:
-    """
-    兼容沙箱环境：直接在启动时补齐 projects.zip_file_hash 字段与索引。
-    避免依赖新增 alembic revision 文件。
-    """
-    await db.execute(
-        text(
-            """
-            ALTER TABLE projects
-            ADD COLUMN IF NOT EXISTS zip_file_hash VARCHAR(64)
-            """
-        )
-    )
-    await db.execute(
-        text(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS ix_projects_zip_file_hash
-            ON projects (zip_file_hash)
-            """
-        )
-    )
-    await db.commit()
-    logger.info("✓ 已确保 projects.zip_file_hash 字段与索引存在")
-
-
 async def init_db(db: AsyncSession) -> None:
     """
     初始化数据库
     """
     logger.info("开始初始化数据库...")
-
-    # 沙箱模式下直接补齐去重字段（不依赖额外 alembic 文件）
-    await ensure_project_zip_hash_schema(db)
 
     # 创建演示用户
     demo_user = await create_demo_user(db)

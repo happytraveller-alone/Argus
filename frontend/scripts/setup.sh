@@ -7,7 +7,7 @@ REPO_ROOT="$(cd -- "$FRONTEND_DIR/.." && pwd)"
 
 if [ ! -f "$FRONTEND_DIR/.env" ] && [ -f "$FRONTEND_DIR/.env.example" ]; then
   cp "$FRONTEND_DIR/.env.example" "$FRONTEND_DIR/.env"
-  echo "✅ 已从 .env.example 创建 frontend/.env"
+  echo "已从 .env.example 创建 frontend/.env"
 fi
 
 NODE_OK="0"
@@ -25,12 +25,12 @@ if [ "$NODE_OK" = "1" ]; then
     corepack prepare pnpm@9.15.4 --activate || true
   fi
   if command -v pnpm >/dev/null 2>&1; then
-    echo "✅ 使用本机 Node + pnpm 安装前端依赖"
+    echo "使用本机 Node + pnpm 安装前端依赖"
     cd "$FRONTEND_DIR"
     exec pnpm install --no-frozen-lockfile
   fi
 fi
 
-echo "ℹ️ 本机前端工具链不可用，切换到 Docker 前端环境完成安装"
+echo "本机前端工具链不可用，切换到 Docker 前端环境完成安装"
 cd "$REPO_ROOT"
 exec bash "$SCRIPT_DIR/run-in-dev-container.sh" pnpm install --no-frozen-lockfile

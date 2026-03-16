@@ -9,6 +9,7 @@ export const AGENT_TASK_PAGE_LIMIT = 100;
 export const OPENGREP_TASK_PAGE_LIMIT = 200;
 export const GITLEAKS_TASK_PAGE_LIMIT = 200;
 export const BANDIT_TASK_PAGE_LIMIT = 200;
+export const PHPSTAN_TASK_PAGE_LIMIT = 200;
 export const LANGUAGE_STATS_RETRY_INTERVAL_MS = 2500;
 export const LANGUAGE_STATS_MAX_RETRIES = 6;
 
@@ -63,9 +64,9 @@ export function createEmptyProjectForm(): CreateProjectForm {
 	return {
 		name: "",
 		description: "",
-		source_type: "repository",
-		repository_url: "",
-		repository_type: "github",
+		source_type: "zip",
+		repository_url: undefined,
+		repository_type: "other",
 		default_branch: "main",
 		programming_languages: [],
 	};

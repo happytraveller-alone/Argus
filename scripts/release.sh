@@ -122,7 +122,7 @@ fi
 # 更新 docker-compose.yml 中的版本注释
 print_info "更新 docker-compose.yml 版本注释..."
 if [ -f "docker-compose.yml" ]; then
-    sed -i.bak "s/DeepAudit v[0-9]*\.[0-9]*\.[0-9]*/DeepAudit v$NEW_VERSION/" docker-compose.yml
+    sed -i.bak "s/VulHunter v[0-9]*\.[0-9]*\.[0-9]*/VulHunter v$NEW_VERSION/" docker-compose.yml
     rm -f docker-compose.yml.bak
 fi
 
@@ -154,7 +154,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     git push origin "v$NEW_VERSION"
     
     echo ""
-    print_info "✅ 版本 v$NEW_VERSION 发布成功！"
+    print_info "版本 v$NEW_VERSION 发布成功！"
     echo ""
     print_info "GitHub Actions 将自动开始构建和发布流程"
     print_info "查看进度: https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/actions"

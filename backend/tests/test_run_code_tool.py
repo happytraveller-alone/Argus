@@ -106,18 +106,18 @@ class TestSandboxManagerImageResolution:
         assert candidates == [
             "custom/sandbox:latest",
             "vulhunter/sandbox:latest",
-            "deepaudit/sandbox:latest",
-            "deepaudit-sandbox:latest",
+            "VulHunter/sandbox:latest",
+            "VulHunter-sandbox:latest",
             "ghcr.nju.edu.cn/lintsinghua/vulhunter-sandbox:latest",
         ]
 
     def test_select_runtime_image_uses_local_legacy_fallback_when_present(self):
         manager = SandboxManager(SandboxConfig(image="ghcr.nju.edu.cn/lintsinghua/vulhunter-sandbox:latest"))
-        manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"deepaudit/sandbox:latest": object()}[image]))
+        manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"VulHunter/sandbox:latest": object()}[image]))
 
         selected = manager._select_runtime_image(manager._image_candidates())
 
-        assert selected == "deepaudit/sandbox:latest"
+        assert selected == "VulHunter/sandbox:latest"
 
 
 class TestBuildCommand:
@@ -729,7 +729,7 @@ async def test_sandbox_exec_returns_execution_result_metadata():
             "stdout": "partial output",
             "stderr": "permission denied",
             "image": "vulhunter/sandbox:latest",
-            "image_candidates": ["vulhunter/sandbox:latest", "deepaudit/sandbox:latest"],
+            "image_candidates": ["vulhunter/sandbox:latest", "VulHunter/sandbox:latest"],
         }
     )
     tool = SandboxTool(sandbox_manager=sandbox_manager)

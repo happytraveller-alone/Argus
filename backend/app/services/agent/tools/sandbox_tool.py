@@ -59,7 +59,7 @@ class SandboxManager:
     async def initialize(self):
         """初始化 Docker 客户端"""
         if self._initialized:
-            logger.info("✅ SandboxManager already initialized")
+            logger.info("SandboxManager already initialized")
             return
 
         try:
@@ -70,13 +70,13 @@ class SandboxManager:
             self._docker_client.ping()
             self._initialized = True
             self._init_error = None
-            logger.info("✅ Docker sandbox manager initialized successfully")
+            logger.info("Docker sandbox manager initialized successfully")
         except ImportError as e:
-            logger.error(f"❌ Docker library not installed: {e}")
+            logger.error(f"Docker library not installed: {e}")
             self._docker_client = None
             self._init_error = f"ImportError: {e}"
         except Exception as e:
-            logger.warning(f"❌ Docker not available: {e}")
+            logger.warning(f"Docker not available: {e}")
             import traceback
             logger.warning(f"Docker connection traceback: {traceback.format_exc()}")
             self._docker_client = None
@@ -101,8 +101,8 @@ class SandboxManager:
         ordered_candidates = [
             explicit_image,
             "vulhunter/sandbox:latest",
-            "deepaudit/sandbox:latest",
-            "deepaudit-sandbox:latest",
+            "VulHunter/sandbox:latest",
+            "VulHunter-sandbox:latest",
             remote_image,
         ]
         deduped: List[str] = []
@@ -685,7 +685,7 @@ class SandboxTool(AgentTool):
         return """在安全沙箱中执行命令或代码。
 用于验证漏洞、测试 PoC 或执行安全检查。
 
-⚠️ 安全限制:
+安全限制:
 - 命令在 Docker 容器中执行
 - 网络默认隔离
 - 资源有限制
@@ -1068,7 +1068,7 @@ class VulnerabilityVerifyTool(AgentTool):
             expected_pattern=expected_pattern,
         )
         
-        output_parts = ["🔍 漏洞验证结果\n"]
+        output_parts = [" 漏洞验证结果\n"]
         output_parts.append(f"漏洞类型: {vulnerability_type}")
         output_parts.append(f"目标: {target_url}")
         output_parts.append(f"Payload: {payload[:200]}")
@@ -1143,7 +1143,7 @@ class PhpTestTool(AgentTool):
 2. 直接测试代码:
    {"php_code": "<?php echo shell_exec($_GET['cmd']); ?>", "get_params": {"cmd": "id"}}
 
-⚠️ 在沙箱中执行，不影响真实环境。"""
+在沙箱中执行，不影响真实环境。"""
 
     @property
     def args_schema(self):

@@ -1,5 +1,5 @@
 """
-DeepAudit Agent 服务模块
+VulHunter Agent 服务模块
 基于动态 Agent 树架构的 AI 代码安全审计
 
 架构:

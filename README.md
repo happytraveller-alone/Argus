@@ -14,16 +14,16 @@ VulHunter 是一个面向仓库级项目的智能审计平台，基于 **Multi-A
 并可在 Docker 沙箱中执行 PoC 验证（可选）。
 
 
-## ✨ 核心能力
+## 核心能力
 
 - **智能审计（Agent 审计）**：Multi-Agent 协作，自主编排审计策略
-- **潜在缺陷**：统一展示缺陷列表，严重度使用中文分级：严重 / 高危 / 中危 / 低危
+- **潜在漏洞**：统一展示漏洞列表，严重度使用中文分级：严重 / 高危 / 中危 / 低危
 - **LLM + RAG 分离配置**：LLM 负责逻辑推理，RAG 负责向量索引与语义检索
 - **沙箱 PoC 验证（可选）**：在 Docker 隔离环境执行验证脚本（需挂载 Docker socket）
 - **静态规则审计**：规则扫描与结果聚合（如 Opengrep、Gitleaks）
 - **报告导出**：PDF / Markdown / JSON 一键导出
 
-## 🏗️ 系统架构（简述）
+## 系统架构（简述）
 
 ```text
 React + TypeScript (frontend)
@@ -38,7 +38,7 @@ PostgreSQL + Redis + Docker Sandbox(optional)
 
 更多细节见：`docs/ARCHITECTURE.md`。
 
-## 🚀 快速开始（Docker Compose，推荐）
+## 快速开始（Docker Compose，推荐）
 
 ### 1) 克隆仓库
 
@@ -86,6 +86,12 @@ docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build
 COMPOSE_MENU=false docker compose up --build
 # 或
 docker compose up --build --menu=false
+```
+
+如需在服务 ready 后自动尝试打开默认浏览器，仅 Bash/WSL/Linux 包装脚本支持显式开启：
+
+```bash
+VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh
 ```
 
 如需使用预构建镜像部署（生产/快速拉起）：
@@ -140,8 +146,10 @@ powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
 - 后端需要访问 Docker，用于沙箱验证，因此默认会挂载 `/var/run/docker.sock`。生产环境请评估权限边界与隔离策略。
 - 默认根目录 Compose 已切到日常增量开发：`docker compose up -d --build`。该路径会把前后端切到源码挂载 + 热重载，并默认关闭 `MCP_REQUIRE_ALL_READY_ON_STARTUP`、`SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP` 等重型启动项。
 - 默认开发 Compose 会等待 backend `/health` 通过后再启动 frontend；首次 `docker compose up --build` 可能会因为默认种子项目与规则初始化而停留 1 到 2 分钟，这属于预期行为。
+- 冷启动真正完成后，前端 dev 容器和 `./scripts/compose-up-with-fallback.sh` 都会打印 ready banner，明确提示访问 `http://localhost:3000` 和后端文档地址。
 - 如需显式执行全量本地构建，请叠加 `docker-compose.full.yml`：`docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build`。
 - 如需脚本版全量本地构建，可使用：`./scripts/compose-up-with-fallback.sh -f docker-compose.yml -f docker-compose.full.yml up -d --build`。
+- 裸 `docker compose up --build` 只会打印 ready 提示，不会自动打开浏览器；需要自动打开浏览器时，请使用 `VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh`。
 - 本地 Compose 启动（包括 `docker-compose.full.yml` 覆盖层）默认关闭 Codex skills 预安装，避免远程拉取阻塞后端启动。
 - 如需临时恢复预安装，可显式设置：`CODEX_SKILLS_AUTO_INSTALL=true docker compose -f docker-compose.yml -f docker-compose.full.yml up --build --menu=false`。
 - 如需在容器启动后手动安装，可执行：`docker compose -f docker-compose.yml -f docker-compose.full.yml exec backend /app/scripts/install_codex_skills.sh`。
@@ -151,6 +159,7 @@ powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
 - 预构建镜像部署模板已迁移到 `deploy/compose/docker-compose.prod.yml` 与 `deploy/compose/docker-compose.prod.cn.yml`。
 - 上述生产模板默认使用南京大学 GHCR 镜像站（`ghcr.nju.edu.cn/lintsinghua/*`）加速拉取。如需生产镜像部署，可替换为你们自己的镜像地址/私有仓库。
 - 开发构建链路默认使用 `./scripts/compose-up-with-fallback.sh`：先对候选镜像源测速并按延迟排序，再按排序分阶段重试构建（不再固定“国内→官方”两段式）。
+- `./scripts/compose-up-with-fallback.sh` 在 `up`/`up -d` 场景下会等待 `frontend` 与 `backend /health` 都可访问，再输出统一的 `services ready` 提示；可通过 `VULHUNTER_READY_TIMEOUT_SECONDS` 覆盖等待超时，默认 `900` 秒。
 - Docker 镜像拉取（DockerHub/GHCR）测速采用并行探测，失败候选会自动降到排序末位，不阻塞其他可用源。
 - DockerHub 默认候选池：`docker.m.daocloud.io/library,docker.1ms.run/library,docker.io/library`；GHCR 默认候选池：`ghcr.nju.edu.cn,ghcr.m.daocloud.io,ghcr.io`。
 - DockerHub 官方源测速会使用 `registry-1.docker.io`，避免直接探测 `docker.io` 带来的误差。
@@ -213,6 +222,12 @@ MCP_SOURCE_UPDATE_ON_STARTUP=true \
 
 这通常是数据库卷里的 Alembic 版本记录与当前后端镜像迁移文件不一致导致的（例如从预构建镜像切换到本地源码构建）。
 
+当前迁移契约只支持两类数据库：
+- 全新空库初始化
+- Alembic revision 已经处于 `5b0f3c9a6d7e` 的数据库继续升级
+
+更早的历史 revision 在迁移压缩后不再提供自动升级兼容。
+
 建议按以下顺序处理：
 
 1. 先确保使用本地源码构建启动：
@@ -229,9 +244,11 @@ docker volume rm audittool_postgres_data
 ./scripts/compose-up-with-fallback.sh
 ```
 
-⚠️ 以上会删除本地数据库数据；请先备份重要数据。
+以上会删除本地数据库数据；请先备份重要数据。
 
-## 🧑‍💻 源码开发
+如果必须保留压缩前的旧数据库，请先进行人工 Alembic `stamp` 或手动迁移恢复，再启动后端；系统已不再自动兼容这些历史 revision。
+
+## 源码开发
 
 ### 前端（Vite）
 
@@ -256,26 +273,26 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 - 开发模式通常由 `docker compose` 负责构建/使用沙箱镜像，镜像定义见 `docker/sandbox/`。
 
-## 📚 文档索引
+## 文档索引
 
 - `docs/ARCHITECTURE.md`：架构与关键链路说明
 - `docs/CONFIGURATION.md`：配置项与运行时配置
 - `docs/DEPLOYMENT.md`：部署建议
 - `docs/AGENT_AUDIT.md`：智能审计（Agent 审计）说明
 
-> 说明：`docs/` 内可能仍出现 `AuditTool` / `deepaudit` 等历史命名，它们属于代码层/部署层命名遗留，不代表产品品牌名称。
+> 说明：`docs/` 内可能仍出现 `AuditTool` / `VulHunter` 等历史命名，它们属于代码层/部署层命名遗留，不代表产品品牌名称。
 
-## 🤝 贡献
+## 贡献
 
 - `CONTRIBUTING.md`：贡献指南
 - `SECURITY.md`：安全政策与漏洞报告
 - Issues：`https://github.com/unbengable12/AuditTool/issues`
 
-## 📄 许可证
+## 许可证
 
 本项目采用 [AGPL-3.0 License](LICENSE) 开源。
 
-## ⚠️ 安全与合规提示
+## 安全与合规提示
 
 - 禁止在未授权目标上进行漏洞测试/渗透测试。
 - 详细安全声明与免责声明见：`DISCLAIMER.md`、`SECURITY.md`。
@@ -286,4 +303,4 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## 命名历史
 
-本仓库文档与代码中可能存在历史命名（例如 `deepaudit`），属于演进过程中的遗留。仅用于背景说明，不影响当前 VulHunter 的功能与使用。
+本仓库文档与代码中可能存在历史命名（例如 `VulHunter`），属于演进过程中的遗留。仅用于背景说明，不影响当前 VulHunter 的功能与使用。

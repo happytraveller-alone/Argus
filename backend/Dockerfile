@@ -256,6 +256,7 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
         curl \
         git \
         unzip \
+        php-cli \
         openjdk-21-jre-headless \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
@@ -422,7 +423,6 @@ RUN --mount=type=cache,id=vulhunter-backend-pnpm-store,target=/pnpm/store \
       echo "pnpm add ${label} failed on all candidates; runtime will fallback to npx for ${package_name} (${binary_name})." >&2; \
       return 0; \
     }; \
-    install_or_mark_npx_fallback "filesystem" "${pnpm_step_timeout}" "@modelcontextprotocol/server-filesystem" "mcp-server-filesystem"; \
     install_or_mark_npx_fallback "sequential-thinking" "${pnpm_step_timeout}" "@modelcontextprotocol/server-sequential-thinking" "mcp-server-sequential-thinking"; \
     install_or_mark_npx_fallback "qmd-cli" "${qmd_step_timeout}" "@tobilu/qmd" "qmd"; \
     pnpm bin -g || true
@@ -541,7 +541,19 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
     chmod +x "${OPENGREP_WRAPPER_BIN}"; \
     ln -sf "${OPENGREP_REAL_BIN}" /usr/local/bin/opengrep.real; \
     ln -sf "${OPENGREP_WRAPPER_BIN}" /usr/local/bin/opengrep; \
-    opengrep --version
+    opengrep --version; \
+    PHPSTAN_CACHE="/var/cache/vulhunter-tools/phpstan.phar"; \
+    if [ ! -s "${PHPSTAN_CACHE}" ]; then \
+      download_with_fallback \
+        "${PHPSTAN_CACHE}" \
+        "https://gh-proxy.com/https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar" \
+        "https://v6.gh-proxy.org/https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar" \
+        "https://gh-proxy.org/https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar" \
+        "https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar"; \
+    fi; \
+    cp "${PHPSTAN_CACHE}" /usr/local/bin/phpstan; \
+    chmod +x /usr/local/bin/phpstan; \
+    phpstan --version
 
 
 ENV PATH=/app/.venv/bin:/pnpm:${PATH}
@@ -646,7 +658,19 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
     cp "${PMD_CACHE}" /tmp/pmd.zip; \
     unzip -q /tmp/pmd.zip -d /opt; \
     ln -s /opt/pmd-bin-7.0.0/bin/pmd /usr/local/bin/pmd; \
-    rm /tmp/pmd.zip
+    rm /tmp/pmd.zip; \
+    PHPSTAN_CACHE="/var/cache/vulhunter-tools/phpstan.phar"; \
+    if [ ! -s "${PHPSTAN_CACHE}" ]; then \
+      download_with_fallback \
+        "${PHPSTAN_CACHE}" \
+        "https://gh-proxy.com/https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar" \
+        "https://v6.gh-proxy.org/https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar" \
+        "https://gh-proxy.org/https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar" \
+        "https://github.com/phpstan/phpstan/releases/latest/download/phpstan.phar"; \
+    fi; \
+    cp "${PHPSTAN_CACHE}" /usr/local/bin/phpstan; \
+    chmod +x /usr/local/bin/phpstan; \
+    phpstan --version
 
 # MCP / QMD 持久化目录
 ENV XDG_DATA_HOME=/app/data/mcp/xdg-data
@@ -703,7 +727,6 @@ RUN set -eux; \
       printf '%s\n' '#!/bin/sh' "exec /usr/local/bin/run_npx_from_candidates.sh '${package_name}' \"\\$@\"" > "/usr/local/bin/${binary_name}"; \
       chmod +x "/usr/local/bin/${binary_name}"; \
     }; \
-    ensure_npx_wrapper "mcp-server-filesystem" "@modelcontextprotocol/server-filesystem"; \
     ensure_npx_wrapper "mcp-server-sequential-thinking" "@modelcontextprotocol/server-sequential-thinking"; \
     ensure_npx_wrapper "qmd" "@tobilu/qmd"
 

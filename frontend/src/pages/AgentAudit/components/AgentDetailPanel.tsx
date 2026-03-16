@@ -163,7 +163,7 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
 						/>
 						<div>
 							<div className="text-xs text-muted-foreground uppercase">
-								缺陷数
+								漏洞数
 							</div>
 							<div
 								className={`text-sm font-mono ${agent.findings_count > 0 ? "text-red-400" : "text-foreground"}`}

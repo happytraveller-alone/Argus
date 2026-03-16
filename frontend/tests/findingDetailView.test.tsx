@@ -133,27 +133,57 @@ function renderMarkup(markupModel: Parameters<typeof FindingDetailView>[0]["mode
   );
 }
 
-test("FindingDetailView 渲染 agent 漏洞详情的新信息层级", () => {
+function getSectionMarkup(markup: string, title: string, nextTitle: string) {
+  const start = markup.indexOf(title);
+  const end = markup.indexOf(nextTitle);
+  if (start < 0 || end < 0 || end <= start) {
+    return "";
+  }
+  return markup.slice(start, end);
+}
+
+test("FindingDetailView 渲染 agent 漏洞详情的新信息层级并隐藏完整文件入口", () => {
   const markup = renderMarkup(
     buildAgentFindingDetailModel({
       finding: agentFinding,
       taskId: "task-agent",
       findingId: "finding-agent",
+      projectId: "project-zip",
+      projectSourceType: "zip",
+      projectName: "demo",
     }),
   );
+  const overviewMarkup = getSectionMarkup(markup, "概览信息", "追踪信息");
 
-  assert.match(markup, /统一缺陷详情/);
-  assert.match(markup, /sql injection/);
+  assert.match(markup, /统一漏洞详情/);
+  assert.match(markup, /CWE-89 SQL注入/);
+  assert.match(markup, /SQL Injection/);
   assert.match(markup, /高危/);
   assert.match(markup, /高/);
+  assert.match(markup, /概览信息/);
+  assert.match(overviewMarkup, /状态/);
+  assert.match(overviewMarkup, /已验证/);
+  assert.match(overviewMarkup, /漏洞类型/);
+  assert.match(markup, /漏洞危害/);
+  assert.match(markup, /漏洞置信度/);
   assert.match(markup, /根因说明/);
   assert.match(markup, /追踪信息/);
   assert.match(markup, /任务 ID/);
-  assert.match(markup, /缺陷 ID/);
+  assert.match(markup, /漏洞 ID/);
+  assert.doesNotMatch(overviewMarkup, /来源/);
+  assert.doesNotMatch(overviewMarkup, /标题/);
+  assert.doesNotMatch(overviewMarkup, /补充说明/);
+  assert.doesNotMatch(overviewMarkup, /位置/);
+  assert.doesNotMatch(overviewMarkup, /VERIFIED/);
   assert.doesNotMatch(markup, /任务ID：/);
-  assert.doesNotMatch(markup, /缺陷ID：/);
-  assert.ok(markup.indexOf("漏洞危害") < markup.indexOf("根因说明"));
-  assert.ok(markup.indexOf("根因说明") < markup.indexOf("追踪信息"));
+  assert.doesNotMatch(markup, /漏洞ID：/);
+  assert.ok(markup.indexOf("概览信息") < markup.indexOf("追踪信息"));
+  assert.ok(markup.indexOf("追踪信息") < markup.indexOf("根因说明"));
+  assert.doesNotMatch(markup, /查看文件/);
+  assert.doesNotMatch(markup, /查看文件全部内容/);
+  assert.match(markup, /src\/main\/java\/demo\/JdbcController\.java/);
+  assert.match(markup, /第 69-83 行/);
+  assert.doesNotMatch(markup, /1 个代码块/);
 });
 
 test("FindingDetailView 渲染 agent 误报场景并突出验证结论", () => {
@@ -169,7 +199,7 @@ test("FindingDetailView 渲染 agent 误报场景并突出验证结论", () => {
   assert.match(markup, /验证结论/);
   assert.match(markup, /判定依据/);
   assert.match(markup, /误报/);
-  assert.match(markup, /sql injection/);
+  assert.match(markup, /CWE-89 SQL注入/);
 });
 
 test("FindingDetailView 渲染 opengrep 场景并将描述降级为扫描说明", () => {
@@ -182,7 +212,8 @@ test("FindingDetailView 渲染 opengrep 场景并将描述降级为扫描说明"
     }),
   );
 
-  assert.match(markup, /java-sql-injection/);
+  assert.match(markup, /CWE-89 SQL注入/);
+  assert.match(markup, /SQL Injection/);
   assert.match(markup, /严重/);
   assert.match(markup, /高/);
   assert.match(markup, /扫描说明/);
@@ -213,6 +244,9 @@ test("FindingDetailView 渲染 bandit 场景并保留核心漏洞信息", () => 
       taskId: "task-bandit",
       findingId: "finding-bandit",
       taskName: "Bandit Scan",
+      projectId: "project-repo",
+      projectSourceType: "repository",
+      projectName: "demo",
     }),
   );
 
@@ -221,4 +255,5 @@ test("FindingDetailView 渲染 bandit 场景并保留核心漏洞信息", () => 
   assert.match(markup, /高/);
   assert.match(markup, /扫描说明/);
   assert.match(markup, /静态扫描 . Bandit/);
+  assert.match(markup, /当前项目暂不支持查看完整文件，仅展示漏洞相关代码/);
 });

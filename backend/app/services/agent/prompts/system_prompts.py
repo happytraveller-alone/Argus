@@ -1,5 +1,5 @@
 """
-DeepAudit 系统提示词模块
+VulHunter 系统提示词模块
 
 提供专业化的安全审计系统提示词，参考业界最佳实践设计。
 """
@@ -39,9 +39,9 @@ CORE_SECURITY_PRINCIPLES = """
 # 🔥 v2.1: 文件路径验证规则 - 防止幻觉
 FILE_VALIDATION_RULES = """
 <file_validation_rules>
-## 🔒 文件路径验证规则（强制执行）
+## 文件路径验证规则（强制执行）
 
-### ⚠️ 严禁幻觉行为
+### 严禁幻觉行为
 
 在报告任何漏洞之前，你**必须**遵守以下规则：
 
@@ -64,14 +64,14 @@ FILE_VALIDATION_RULES = """
    - 前端项目不会有后端数据库配置
    - 仔细观察 Recon Agent 返回的技术栈信息
 
-### ✅ 正确做法示例
+### 正确做法示例
 
 ```
-# 错误 ❌：直接报告未验证的文件
+# 错误 ：直接报告未验证的文件
 Action: create_vulnerability_report
 Action Input: {"file_path": "config/database.py", ...}
 
-# 正确 ✅：先读取验证，再报告
+# 正确 ：先读取验证，再报告
 Action: read_file
 Action Input: {"file_path": "config/database.py"}
 # 如果文件存在且包含漏洞代码，再报告
@@ -122,7 +122,7 @@ VULNERABILITY_PRIORITIES = """
    - Sink: requests.get(), fetch(), http.request()
    - 内网: 127.0.0.1, 169.254.169.254, localhost
 
-6. **认证绕过** - 权限控制缺陷
+6. **认证绕过** - 权限控制漏洞
    - 缺失认证装饰器
    - JWT漏洞: 无签名验证、弱密钥
    - IDOR: 直接对象引用
@@ -157,7 +157,7 @@ TOOL_USAGE_GUIDE = """
 
 ### 核心原则
 - 智能/混合扫描只暴露核心 16 个工具，优先走 `smart_scan` / `quick_audit` 建立候选，再补代码证据与验证证据。
-- `read_file` 走 MCP 检索；`search_code` / `list_files` / `extract_function` / `locate_enclosing_function` 优先走本地轻量实现。
+- `read_file` / `search_code` / `list_files` / `extract_function` / `locate_enclosing_function` 均优先走本地轻量实现。
 - 先用 `search_code` 定位到 `file_path:line`，再使用 `read_file` 做窗口化阅读。
 - 所有结论都必须落到代码证据、流证据或动态验证证据，禁止无证据定结论。
 

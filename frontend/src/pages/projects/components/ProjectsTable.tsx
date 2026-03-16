@@ -21,8 +21,10 @@ interface ProjectsTableProps {
 	onToggleProjectSelection: (projectId: string, checked: boolean) => void;
 	onToggleSelectCurrentPage: (checked: boolean) => void;
 	onCreateScan: (projectId: string) => void;
-	onDisableProject: (projectId: string) => void;
-	onEnableProject: (projectId: string) => void;
+	onToggleProjectStatus: (
+		projectId: string,
+		action: ProjectsPageRowViewModel["statusToggle"]["action"],
+	) => void;
 }
 
 export default function ProjectsTable({
@@ -33,8 +35,7 @@ export default function ProjectsTable({
 	onToggleProjectSelection,
 	onToggleSelectCurrentPage,
 	onCreateScan,
-	onDisableProject,
-	onEnableProject,
+	onToggleProjectStatus,
 }: ProjectsTableProps) {
 	return (
 		<Table>
@@ -101,19 +102,13 @@ export default function ProjectsTable({
 						<TableCell>
 							<div className="grid grid-cols-2 gap-2 min-w-[180px]">
 								<div className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-1">
-									<p className="text-[10px] leading-4 text-muted-foreground">
-										已完成
-									</p>
 									<p className="text-sm leading-5 font-semibold text-emerald-300">
-										{row.executionStats.completed}
+										已完成 {row.executionStats.completed}
 									</p>
 								</div>
 								<div className="rounded border border-sky-500/25 bg-sky-500/10 px-2 py-1">
-									<p className="text-[10px] leading-4 text-muted-foreground">
-										进行中
-									</p>
 									<p className="text-sm leading-5 font-semibold text-sky-300">
-										{row.executionStats.running}
+										进行中 {row.executionStats.running}
 									</p>
 								</div>
 							</div>
@@ -133,6 +128,32 @@ export default function ProjectsTable({
 										查看详情
 									</Link>
 								</Button>
+								{row.actions.canBrowseCode ? (
+									<Button
+										asChild
+										size="sm"
+										variant="outline"
+										className="cyber-btn-ghost h-8 px-3 hover:bg-sky-500/10 hover:text-sky-200 hover:border-sky-500/30"
+									>
+										<Link
+											to={row.actions.browseCodePath}
+											state={row.actions.browseCodeState}
+										>
+											代码浏览
+										</Link>
+									</Button>
+								) : (
+									<Button
+										size="sm"
+										variant="outline"
+										className="cyber-btn-ghost h-8 px-3"
+										disabled
+										title={row.actions.browseCodeDisabledReason ?? undefined}
+										aria-label={`代码浏览 ${row.name}（${row.actions.browseCodeDisabledReason ?? "暂不可用"}）`}
+									>
+										代码浏览
+									</Button>
+								)}
 								<Button
 									size="sm"
 									className={`${PROJECT_ACTION_BTN_SUBTLE} h-8 px-3`}
@@ -144,20 +165,18 @@ export default function ProjectsTable({
 								<Button
 									size="sm"
 									variant="outline"
-									className="cyber-btn-ghost h-8 px-3 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30"
-									onClick={() => onDisableProject(row.id)}
-									disabled={!row.actions.canDisable}
+									aria-label={`切换项目状态 ${row.name}`}
+									className={
+										row.statusToggle.action === "disable"
+											? "cyber-btn-ghost h-8 px-3 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30"
+											: "cyber-btn-ghost h-8 px-3 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30"
+									}
+									onClick={() =>
+										onToggleProjectStatus(row.id, row.statusToggle.action)
+									}
+									disabled={row.statusToggle.disabled}
 								>
-									禁用
-								</Button>
-								<Button
-									size="sm"
-									variant="outline"
-									className="cyber-btn-ghost h-8 px-3 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30"
-									onClick={() => onEnableProject(row.id)}
-									disabled={!row.actions.canEnable}
-								>
-									启用
+									{row.statusToggle.label}
 								</Button>
 							</div>
 						</TableCell>

@@ -64,7 +64,7 @@ async def _measure_seed_archive_first_byte(url: str, timeout_seconds: float) -> 
     started_at = time.perf_counter()
     async with httpx.AsyncClient(
         follow_redirects=True,
-        headers={"User-Agent": "DeepAudit seed archive installer"},
+        headers={"User-Agent": "VulHunter seed archive installer"},
         timeout=_build_http_timeout(timeout_seconds),
     ) as client:
         async with client.stream("GET", url) as response:
@@ -143,7 +143,7 @@ async def _download_seed_archive_candidate(
 ) -> None:
     async with httpx.AsyncClient(
         follow_redirects=True,
-        headers={"User-Agent": "DeepAudit seed archive installer"},
+        headers={"User-Agent": "VulHunter seed archive installer"},
         timeout=_build_http_timeout(timeout_seconds),
     ) as client:
         async with client.stream("GET", url) as response:

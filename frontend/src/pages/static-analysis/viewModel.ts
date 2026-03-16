@@ -1,11 +1,15 @@
 import { getEstimatedTaskProgressPercent } from "@/features/tasks/services/taskProgress";
+import {
+	normalizeStaticAnalysisSeverity,
+	type NormalizedSeverity,
+} from "@/shared/utils/staticAnalysisSeverity";
 
-export type Engine = "opengrep" | "gitleaks" | "bandit";
+export type Engine = "opengrep" | "gitleaks" | "bandit" | "phpstan";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive" | "fixed";
 export type StatusFilter = "all" | FindingStatus;
 export type ConfidenceFilter = "all" | "HIGH" | "MEDIUM" | "LOW";
-export type NormalizedSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+export type SeverityFilter = "all" | NormalizedSeverity;
 export type NormalizedConfidence = "HIGH" | "MEDIUM" | "LOW";
 
 export interface StaticAnalysisProgressTaskLike {
@@ -14,6 +18,13 @@ export interface StaticAnalysisProgressTaskLike {
   status: string;
   created_at: string;
   updated_at?: string | null;
+}
+
+export interface StaticAnalysisSummaryTaskLike
+  extends StaticAnalysisProgressTaskLike {
+  scan_duration_ms?: number | null;
+  total_findings?: number | null;
+  files_scanned?: number | null;
 }
 
 export interface StaticAnalysisProgressSummary {
@@ -68,6 +79,16 @@ type MinimalBanditFinding = {
   status?: string | null;
 };
 
+type MinimalPhpstanFinding = {
+  id: string;
+  scan_task_id?: string | null;
+  file_path?: string | null;
+  line?: unknown;
+  message?: string | null;
+  identifier?: string | null;
+  status?: string | null;
+};
+
 const SEVERITY_SCORE: Record<NormalizedSeverity, number> = {
   CRITICAL: 4,
   HIGH: 3,
@@ -80,6 +101,14 @@ const CONFIDENCE_SCORE: Record<NormalizedConfidence, number> = {
   MEDIUM: 2,
   LOW: 1,
 };
+
+const STATIC_ANALYSIS_TERMINAL_STATUSES = new Set([
+  "completed",
+  "failed",
+  "interrupted",
+  "cancelled",
+  "aborted",
+]);
 
 export function decodeStaticAnalysisPathParam(raw: string | undefined): string {
   try {
@@ -102,22 +131,6 @@ export function normalizeStaticAnalysisPath(path?: string | null): string {
     }
   }
   return unified.replace(/^\/+/, "") || "-";
-}
-
-export function normalizeStaticAnalysisSeverity(
-  severity?: string | null,
-): NormalizedSeverity {
-  const normalized = String(severity || "").trim().toUpperCase();
-  if (normalized === "CRITICAL") return "CRITICAL";
-  if (normalized === "HIGH") return "HIGH";
-  if (
-    normalized === "ERROR" ||
-    normalized === "WARNING" ||
-    normalized === "MEDIUM"
-  ) {
-    return "MEDIUM";
-  }
-  return "LOW";
 }
 
 export function getStaticAnalysisSeverityLabel(
@@ -205,19 +218,77 @@ export function isStaticAnalysisCompletedStatus(
   return String(status || "").trim().toLowerCase() === "completed";
 }
 
+function normalizeStaticAnalysisStatus(status?: string | null): string {
+  return String(status || "").trim().toLowerCase();
+}
+
+function toStaticAnalysisTimestampMs(value?: string | null): number | null {
+  const timestamp = new Date(String(value || "")).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 export function toStaticAnalysisSafeMetric(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+export function getStaticAnalysisTaskDisplayDurationMs(
+  task: StaticAnalysisSummaryTaskLike | null,
+  nowMs = Date.now(),
+): number {
+  if (!task) return 0;
+
+  const persistedDurationMs = toStaticAnalysisSafeMetric(task.scan_duration_ms);
+  const createdAtMs = toStaticAnalysisTimestampMs(task.created_at);
+  const updatedAtMs = toStaticAnalysisTimestampMs(task.updated_at);
+  const status = normalizeStaticAnalysisStatus(task.status);
+
+  if (status === "pending" || status === "running") {
+    const elapsedMs =
+      createdAtMs === null ? 0 : Math.max(0, Math.floor(nowMs - createdAtMs));
+    return Math.max(persistedDurationMs, elapsedMs, 0);
+  }
+
+  if (STATIC_ANALYSIS_TERMINAL_STATUSES.has(status)) {
+    if (persistedDurationMs > 0) {
+      return persistedDurationMs;
+    }
+    if (createdAtMs !== null && updatedAtMs !== null) {
+      return Math.max(0, Math.floor(updatedAtMs - createdAtMs));
+    }
+  }
+
+  return persistedDurationMs;
+}
+
+export function getStaticAnalysisTotalDisplayDurationMs(input: {
+  opengrepTask: StaticAnalysisSummaryTaskLike | null;
+  gitleaksTask: StaticAnalysisSummaryTaskLike | null;
+  banditTask: StaticAnalysisSummaryTaskLike | null;
+  phpstanTask: StaticAnalysisSummaryTaskLike | null;
+  nowMs?: number;
+}): number {
+  return (
+    getStaticAnalysisTaskDisplayDurationMs(input.opengrepTask, input.nowMs) +
+    getStaticAnalysisTaskDisplayDurationMs(input.gitleaksTask, input.nowMs) +
+    getStaticAnalysisTaskDisplayDurationMs(input.banditTask, input.nowMs) +
+    getStaticAnalysisTaskDisplayDurationMs(input.phpstanTask, input.nowMs)
+  );
 }
 
 export function buildStaticAnalysisProgressSummary(input: {
   opengrepTask: StaticAnalysisProgressTaskLike | null;
   gitleaksTask: StaticAnalysisProgressTaskLike | null;
   banditTask: StaticAnalysisProgressTaskLike | null;
+  phpstanTask: StaticAnalysisProgressTaskLike | null;
   nowMs?: number;
 }): StaticAnalysisProgressSummary {
   const primaryTask =
-    input.opengrepTask || input.gitleaksTask || input.banditTask || null;
+    input.opengrepTask ||
+    input.gitleaksTask ||
+    input.banditTask ||
+    input.phpstanTask ||
+    null;
   if (!primaryTask) {
     return { progressPercent: 0 };
   }
@@ -249,9 +320,11 @@ export function buildUnifiedFindingRows(input: {
   opengrepFindings: MinimalOpengrepFinding[];
   gitleaksFindings: MinimalGitleaksFinding[];
   banditFindings: MinimalBanditFinding[];
+  phpstanFindings: MinimalPhpstanFinding[];
   opengrepTaskId: string;
   gitleaksTaskId: string;
   banditTaskId: string;
+  phpstanTaskId: string;
 }): UnifiedFindingRow[] {
   const opengrepRows = input.opengrepFindings.map((finding) => {
     const severity = normalizeStaticAnalysisSeverity(finding.severity);
@@ -308,14 +381,35 @@ export function buildUnifiedFindingRows(input: {
       status: String(finding.status || "open").trim().toLowerCase(),
     };
   });
+  // PHPStan integration: normalize phpstan rows into unified static finding table.
+  const phpstanRows = input.phpstanFindings.map((finding) => {
+    const identifier = String(finding.identifier || "").trim();
+    const message = String(finding.message || "").trim();
+    const rule = identifier || message || "-";
+    return {
+      key: `phpstan:${finding.id}`,
+      id: finding.id,
+      taskId: finding.scan_task_id || input.phpstanTaskId,
+      engine: "phpstan" as const,
+      rule,
+      filePath: normalizeStaticAnalysisPath(finding.file_path),
+      line: toStaticAnalysisPositiveLine(finding.line),
+      severity: "LOW" as const,
+      severityScore: SEVERITY_SCORE.LOW,
+      confidence: "MEDIUM" as const,
+      confidenceScore: CONFIDENCE_SCORE.MEDIUM,
+      status: String(finding.status || "open").trim().toLowerCase(),
+    };
+  });
 
-  return [...opengrepRows, ...gitleaksRows, ...banditRows];
+  return [...opengrepRows, ...gitleaksRows, ...banditRows, ...phpstanRows];
 }
 
 export function buildStaticAnalysisListState(input: {
   rows: UnifiedFindingRow[];
   engineFilter: EngineFilter;
   statusFilter: StatusFilter;
+  severityFilter: SeverityFilter;
   confidenceFilter: ConfidenceFilter;
   page: number;
   pageSize?: number;
@@ -325,8 +419,11 @@ export function buildStaticAnalysisListState(input: {
     .filter((row) => input.engineFilter === "all" || row.engine === input.engineFilter)
     .filter((row) => input.statusFilter === "all" || row.status === input.statusFilter)
     .filter((row) => {
+      if (input.severityFilter === "all") return true;
+      return row.severity === input.severityFilter;
+    })
+    .filter((row) => {
       if (input.confidenceFilter === "all") return true;
-      if (row.engine === "gitleaks") return true;
       return row.confidence === input.confidenceFilter;
     })
     .sort((a, b) => {

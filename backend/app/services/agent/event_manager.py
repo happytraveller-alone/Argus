@@ -237,7 +237,7 @@ class AgentEventEmitter:
         await self.emit(AgentEventData(
             event_type=event_type,
             finding_id=finding_id,
-            message=f"{'✅ 已验证' if is_verified else '🔍 新发现'}: [{severity.upper()}] {title}",
+            message=f"{'已验证' if is_verified else ' 新发现'}: [{severity.upper()}] {title}",
             metadata=metadata,
         ))
     
@@ -299,7 +299,7 @@ class AgentEventEmitter:
             metadata.update(extra_metadata)
         await self.emit(AgentEventData(
             event_type="task_complete",
-            message=message or f"✅ 审计完成！发现 {findings_count} 个漏洞，耗时 {duration_ms/1000:.1f}秒",
+            message=message or f"审计完成！发现 {findings_count} 个漏洞，耗时 {duration_ms/1000:.1f}秒",
             metadata=metadata,
         ))
     
@@ -315,7 +315,7 @@ class AgentEventEmitter:
             payload.update(metadata)
         await self.emit(AgentEventData(
             event_type="task_error",
-            message=message or f"❌ 任务失败: {error}",
+            message=message or f"任务失败: {error}",
             metadata=payload,
         ))
     
@@ -323,7 +323,7 @@ class AgentEventEmitter:
         """发射任务取消事件"""
         await self.emit(AgentEventData(
             event_type="task_cancel",
-            message=message or "⚠️ 任务已取消",
+            message=message or "任务已取消",
         ))
 
 

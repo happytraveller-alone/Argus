@@ -344,6 +344,12 @@ export function parseLlmCustomHeadersInput(
 	};
 }
 
+export function getLlmCustomHeadersParseErrorMessage(
+	result: LlmCustomHeadersParseResult,
+): string | null {
+	return "message" in result ? result.message : null;
+}
+
 export function getCreateProjectScanProviderLabel(
 	provider: Pick<LLMProviderItem, "id" | "name"> | undefined,
 ): string {

@@ -76,14 +76,28 @@ import {
 	type OpengrepRule,
 	type OpengrepRuleDetail,
 } from "@/shared/api/opengrep";
+import {
+	formatCweDisplayLabel,
+	normalizeCweId,
+	resolveCweDisplay,
+} from "@/shared/security/cweCatalog";
 import { setOpengrepActiveRules } from "@/shared/stores/opengrepRulesStore";
 import { useI18n } from "@/shared/i18n";
+
+export function formatRuleCweDisplayLabel(cwe?: string) {
+	return formatCweDisplayLabel(cwe);
+}
+
+function formatRuleCweDisplayTitle(cwe?: string) {
+	const display = resolveCweDisplay({ cwe });
+	return display.tooltip || display.label;
+}
 
 interface OpengrepRulesProps {
 	embedded?: boolean;
 	showEngineSelector?: boolean;
-	engineValue?: "opengrep" | "gitleaks";
-	onEngineChange?: (value: "opengrep" | "gitleaks") => void;
+	engineValue?: "opengrep" | "gitleaks" | "bandit" | "phpstan";
+	onEngineChange?: (value: "opengrep" | "gitleaks" | "bandit" | "phpstan") => void;
 }
 
 export default function OpengrepRules({
@@ -375,7 +389,7 @@ export default function OpengrepRules({
 
 				if (Array.isArray(rule.cwe)) {
 					for (const cwe of rule.cwe) {
-						const normalizedCwe = normalizeCweCode(cwe);
+						const normalizedCwe = normalizeCweId(cwe);
 						if (normalizedCwe) {
 							vulnerabilityTypeSet.add(normalizedCwe);
 						}
@@ -1119,19 +1133,6 @@ export default function OpengrepRules({
 		(currentPage - 1) * pageSize,
 		currentPage * pageSize,
 	);
-	function normalizeCweCode(cwe?: string) {
-		const raw = cwe?.trim();
-		if (!raw) return "";
-		const upper = raw.toUpperCase().replace(/_/g, "-");
-		const digits = upper.match(/(\d+)/)?.[1];
-		if (digits) return `CWE-${digits}`;
-		if (upper.startsWith("CWE-")) return upper;
-		if (upper.startsWith("CWE")) {
-			return upper.replace(/^CWE[-:]?/, "CWE-");
-		}
-		return `CWE-${upper}`;
-	}
-
 	function normalizeConfidence(confidence?: string | null) {
 		const normalized = confidence?.trim().toUpperCase();
 		if (!normalized) return "";
@@ -1288,21 +1289,28 @@ export default function OpengrepRules({
 											</Label>
 											<Select
 												value={engineValue}
-												onValueChange={(val) => {
-													if (val === "opengrep" || val === "gitleaks") {
-														onEngineChange?.(val);
-													}
-												}}
+											onValueChange={(val) => {
+												if (
+													val === "opengrep" ||
+													val === "gitleaks" ||
+													val === "bandit" ||
+													val === "phpstan"
+												) {
+													onEngineChange?.(val);
+												}
+											}}
 											>
 												<SelectTrigger className="cyber-input mt-1.5 h-10">
 													<SelectValue placeholder="选择引擎" />
 												</SelectTrigger>
 												<SelectContent className="cyber-dialog border-border">
-													<SelectItem value="opengrep">opengrep</SelectItem>
-													<SelectItem value="gitleaks">gitleaks</SelectItem>
-												</SelectContent>
-											</Select>
-										</div>
+												<SelectItem value="opengrep">opengrep</SelectItem>
+												<SelectItem value="gitleaks">gitleaks</SelectItem>
+												<SelectItem value="bandit">bandit</SelectItem>
+												<SelectItem value="phpstan">phpstan</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
 									) : null}
 
 									<div className="min-w-[150px] flex-1">
@@ -1651,12 +1659,6 @@ export default function OpengrepRules({
 															>
 																{rule.name}
 															</div>
-															<div
-																className="text-xs text-muted-foreground font-mono truncate mt-1"
-																title={rule.id}
-															>
-																{rule.id}
-															</div>
 														</div>
 													</TableCell>
 													<TableCell className="font-mono text-sm">
@@ -1957,8 +1959,9 @@ export default function OpengrepRules({
 																<Badge
 																	key={idx}
 																	className="cyber-badge bg-violet-500/20 text-violet-300 border-violet-500/30"
+																	title={formatRuleCweDisplayTitle(cwe)}
 																>
-																	{normalizeCweCode(cwe)}
+																	{formatRuleCweDisplayLabel(cwe)}
 																</Badge>
 															))
 														) : (

@@ -158,30 +158,6 @@ function renderContent(props: Partial<ExternalToolDetailContentProps>) {
   );
 }
 
-test("ScanConfigExternalToolDetailContent 在 mcp 类型下保留占位说明", () => {
-  const markup = renderToStaticMarkup(
-    createElement(MemoryRouter, {}, createElement(ScanConfigExternalToolDetailContent, {
-      toolType: "mcp",
-      toolId: "filesystem",
-      toolName: "Filesystem",
-      skillCatalogItem: null,
-      skillDetail: null,
-      prompt: "",
-      examplePrompts: [],
-      events: [],
-      result: null,
-      running: false,
-      onPromptChange: () => {},
-      onRun: () => {},
-      onStop: () => {},
-    })),
-  );
-
-  assert.match(markup, /MCP/);
-  assert.match(markup, /详情页待设计/);
-  assert.match(markup, /当前页面只保留详情页骨架/);
-});
-
 test("ScanConfigExternalToolDetailContent 对 disabled skill 展示禁用原因并隐藏运行按钮", () => {
   const markup = renderContent({
     toolId: "dataflow_analysis",
@@ -211,8 +187,10 @@ test("ScanConfigExternalToolDetailContent 渲染 skill 概览、事件流、结�
   assert.match(markup, /示例提问/);
   assert.match(markup, /运行测试/);
   assert.match(markup, /思考（已折叠）/);
-  assert.match(markup, /read_file -&gt; sed/);
+  assert.match(markup, /Action: read_file/);
+  assert.match(markup, /文件: src\/main\.c/);
   assert.match(markup, /src\/main\.c:1-3/);
+  assert.match(markup, /return 0;/);
   assert.match(markup, /最终结果/);
   assert.match(markup, /主解析入口位于/);
   assert.match(markup, /临时目录已清理/);

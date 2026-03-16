@@ -1,10 +1,10 @@
-# AuditTool（DeepAudit）前后端架构梳理与对齐指南
+# AuditTool（VulHunter）前后端架构梳理与对齐指南
 
 > 目的：建立一份“可落地”的架构对齐文档，帮助后续快速做接口与 UI 的增删改查（CRUD），减少前后端口径偏差。
 
 ## 1. 项目定位与演进背景
 
-- 当前仓库目录名为 `AuditTool`，代码与文档历史命名仍大量保留 `DeepAudit`。
+- 当前仓库目录名为 `AuditTool`，代码与文档历史命名仍大量保留 `VulHunter`。
 - 项目已从“单一审计链路”演进为 **三条并行审计链路**：
   1. 传统审计（`/tasks` + `/scan`，LLM 扫描）
   2. Agent 审计（`/agent-tasks`，多 Agent + 流式事件）
@@ -57,7 +57,6 @@ PostgreSQL
 - `/rules`
 - `/agent-tasks`
 - `/embedding`
-- `/ssh-keys`
 - `/static-tasks`
 
 ## 3.2 Service 层
@@ -109,17 +108,16 @@ ProjectMember, User, UserConfig, ProjectInfo, PromptTemplate, AuditRuleSet/Audit
 目录：`frontend/src/shared/api/`
 
 - `serverClient.ts`：axios 实例
-- `database.ts`：兼容层（保留旧 deepaudit 的调用习惯）
+- `database.ts`：项目级 API 聚合封装
 - `agentTasks.ts` / `agentStream.ts`
 - `opengrep.ts` / `gitleaks.ts`
 - `rules.ts` / `prompts.ts`
-- `sshKeys.ts`
 
 ## 4.3 组件与状态
 
 - `components/`：通用 UI 与业务组件
 - `shared/stores/opengrepRulesStore.ts`：本地规则缓存
-- `shared/config/database.ts`：把 `api` 兼容导出到旧调用点
+- `shared/api/database.ts`：统一的前端数据库/API 访问入口
 
 ---
 
@@ -136,7 +134,6 @@ ProjectMember, User, UserConfig, ProjectInfo, PromptTemplate, AuditRuleSet/Audit
 | 审计规则集 | `/rules` | `shared/api/rules.ts` | Dashboard（统计）、配置页 |
 | 提示词模板 | `/prompts` | `shared/api/prompts.ts` | 暂无活跃前端入口、Dashboard（统计） |
 | 系统配置 | `/config`、`/embedding` | `shared/api/database.ts` + 局部 `apiClient` | SystemConfig、EmbeddingConfig |
-| SSH 能力 | `/ssh-keys` | `shared/api/sshKeys.ts` | 项目接入/配置流程 |
 
 ---
 
@@ -204,7 +201,7 @@ ProjectMember, User, UserConfig, ProjectInfo, PromptTemplate, AuditRuleSet/Audit
 1. **兼容层过厚**：`shared/api/database.ts` 承担了大量旧接口适配，建议逐步按业务拆分。
 2. **调用风格不统一**：部分页面直接 `apiClient.get(...)`，部分走 `shared/api/*`，建议统一。
 3. **响应结构不统一**：有的列表返回数组，有的返回 `{items,total}`，建议统一规范。
-4. **命名历史包袱**：DeepAudit/AuditTool 混用，建议统一品牌层与代码层命名策略。
+4. **命名历史包袱**：VulHunter/AuditTool 混用，建议统一品牌层与代码层命名策略。
 5. **链路并存复杂度高**：传统/Agent/静态三套任务体系并存，建议在 UI 上明确来源标签与生命周期。
 
 ---

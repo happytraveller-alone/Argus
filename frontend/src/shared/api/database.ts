@@ -53,6 +53,24 @@ interface AgentTaskPreflightPayload {
   savedConfig?: LlmQuickConfigSnapshotPayload | null;
 }
 
+export interface ProjectFileContentResponse {
+  file_path: string;
+  content: string;
+  size: number;
+  encoding: string;
+  is_text: boolean;
+  is_cached?: boolean;
+  created_at?: string;
+}
+
+function encodeProjectFilePath(filePath: string): string {
+  return String(filePath || "")
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
 // Implement the same interface as the original localDatabase.ts but using backend API
 export const api = {
   // ==================== Profile 相关方法 ====================
@@ -122,10 +140,9 @@ export const api = {
     }
   },
 
-  async getProjectFiles(id: string, branch?: string, excludePatterns?: string[]): Promise<Array<{ path: string; size: number }>> {
+  async getProjectFiles(id: string, excludePatterns?: string[]): Promise<Array<{ path: string; size: number }>> {
     try {
       const params: Record<string, string> = {};
-      if (branch) params.branch = branch;
       if (excludePatterns && excludePatterns.length > 0) {
         params.exclude_patterns = JSON.stringify(excludePatterns);
       }
@@ -136,13 +153,25 @@ export const api = {
     }
   },
 
-  async getProjectBranches(id: string): Promise<{ branches: string[]; default_branch: string; error?: string }> {
-    try {
-      const res = await apiClient.get(`/projects/${id}/branches`);
-      return res.data;
-    } catch (error) {
-      return { branches: ["main"], default_branch: "main", error: String(error) };
-    }
+  async getProjectFileContent(
+    id: string,
+    filePath: string,
+    options?: {
+      encoding?: string;
+      useCache?: boolean;
+      stream?: boolean;
+    },
+  ): Promise<ProjectFileContentResponse> {
+    const res = await retryProjectReads(() =>
+      apiClient.get(`/projects/${id}/files/${encodeProjectFilePath(filePath)}`, {
+        params: {
+          encoding: options?.encoding ?? "utf-8",
+          use_cache: options?.useCache ?? true,
+          stream: options?.stream ?? false,
+        },
+      }),
+    );
+    return res.data;
   },
 
   async uploadProjectZip(id: string, file: File): Promise<{ message: string; original_filename: string; file_size: number }> {
@@ -177,7 +206,7 @@ export const api = {
     const res = await apiClient.post('/projects/', {
       name: project.name,
       description: project.description,
-      source_type: project.source_type || 'repository',
+      source_type: project.source_type || 'zip',
       repository_url: project.repository_url,
       repository_type: project.repository_type,
       default_branch: project.default_branch,
@@ -254,7 +283,6 @@ export const api = {
       file_paths: task.scan_config?.file_paths,
       full_scan: !task.scan_config?.file_paths || task.scan_config.file_paths.length === 0,
       exclude_patterns: task.exclude_patterns || [],
-      branch_name: task.branch_name || "main"
     };
     const res = await apiClient.post(`/projects/${task.project_id}/scan`, scanRequest);
     // Fetch the created task
@@ -443,93 +471,6 @@ export const api = {
 
   async deleteUserConfig(): Promise<void> {
     await apiClient.delete('/config/me');
-  },
-
-  async listMcpTools(params?: {
-    mcp_ids?: string[];
-    include_internal?: boolean;
-  }): Promise<{
-    results: Array<{
-      mcp_id: string;
-      success: boolean;
-      tools: Array<{
-        name: string;
-        description: string;
-        inputSchema: Record<string, unknown>;
-      }>;
-      error?: string | null;
-      runtime_domain?: string | null;
-      listed_count: number;
-      visible_count: number;
-    }>;
-  }> {
-    const payload = {
-      mcp_ids: Array.isArray(params?.mcp_ids) ? params?.mcp_ids : undefined,
-      include_internal: Boolean(params?.include_internal),
-    };
-    const res = await apiClient.post('/config/mcp/tools/list', payload);
-    return res.data;
-  },
-
-  async verifyMcp(mcpId: string): Promise<{
-    success: boolean;
-    mcp_id: string;
-    checks: Array<{
-      step: string;
-      action: "tools/list" | "tools/call" | "policy/skip" | string;
-      success: boolean;
-      tool?: string | null;
-      runtime_domain?: string | null;
-      duration_ms: number;
-      error?: string | null;
-    }>;
-    verification_tools: string[];
-    discovered_tools: Array<{
-      name: string;
-      description?: string;
-      inputSchema?: Record<string, unknown>;
-    }>;
-    protocol_summary: {
-      mcp_id?: string;
-      list_tools_success?: boolean;
-      discovered_count?: number;
-      called_count?: number;
-      call_success_count?: number;
-      call_failed_count?: number;
-      arg_failed_count?: number;
-      skipped_unsupported_count?: number;
-      runtime_domains?: string[];
-      required_gate?: string[];
-      [key: string]: unknown;
-    };
-    project_context: {
-      project_id?: string;
-      project_name?: string;
-      source_type?: string;
-      project_root?: string;
-      fallback_used?: boolean;
-    };
-  }> {
-    const res = await apiClient.post('/config/mcp/verify', { mcp_id: mcpId });
-    return res.data;
-  },
-
-  async testQmdCli(): Promise<{
-    success: boolean;
-    command_base: string[];
-    checks: Array<{
-      name: string;
-      success: boolean;
-      command: string[];
-      exit_code?: number | null;
-      duration_ms: number;
-      stdout?: string;
-      stderr?: string;
-      error?: string | null;
-    }>;
-  }> {
-    const res = await apiClient.post('/config/qmd/cli/test');
-    return res.data;
   },
 
   async testLLMConnection(params: {

@@ -12,6 +12,7 @@ AuditWorkflowEngine - 确定性审计工作流引擎
 """
 
 import asyncio
+import copy
 import json
 import logging
 import time
@@ -68,7 +69,8 @@ class AuditWorkflowEngine:
         self.bl_queue = business_logic_queue_service
         self.task_id = task_id
         self.orchestrator = orchestrator
-        self.workflow_config = workflow_config or WorkflowConfig()
+        inherited_workflow_config = getattr(orchestrator, "_workflow_config", None)
+        self.workflow_config = workflow_config or inherited_workflow_config or WorkflowConfig()
 
         # 🔥 内存监控
         self.memory_monitor = MemoryMonitor()
@@ -89,6 +91,13 @@ class AuditWorkflowEngine:
             enable_parallel=self.workflow_config.should_parallelize_verification,
         )
 
+        self.report_executor = ParallelPhaseExecutor(
+            orchestrator=orchestrator,
+            agent_type="report",
+            max_workers=self.workflow_config.report_max_workers,
+            enable_parallel=self.workflow_config.should_parallelize_report,
+        )
+
         # 🔥 业务逻辑分析并行执行器（仅在 bl_queue 存在时使用）
         self.bl_analysis_executor = ParallelPhaseExecutor(
             orchestrator=orchestrator,
@@ -105,6 +114,8 @@ class AuditWorkflowEngine:
             f"(enabled={self.workflow_config.should_parallelize_bl_analysis}), "
             f"verification_workers={self.workflow_config.verification_max_workers} "
             f"(enabled={self.workflow_config.should_parallelize_verification}), "
+            f"report_workers={self.workflow_config.report_max_workers} "
+            f"(enabled={self.workflow_config.should_parallelize_report}), "
             f"bl_queue={'enabled' if business_logic_queue_service else 'disabled'}"
         )
 
@@ -238,7 +249,7 @@ class AuditWorkflowEngine:
             if has_bl_analysis:
                 await orc.emit_event(
                     "info",
-                    f"🔍 [Workflow] 开始 Analysis + BusinessLogicAnalysis 并行阶段，"
+                    f" [Workflow] 开始 Analysis + BusinessLogicAnalysis 并行阶段，"
                     f"Recon 队列 {recon_queue_size} 条，BL 队列 {bl_queue_size} 条",
                 )
                 gather_results = await asyncio.gather(
@@ -250,11 +261,11 @@ class AuditWorkflowEngine:
                     if isinstance(result, Exception):
                         phase_name = ["Analysis", "BusinessLogicAnalysis"][i]
                         logger.error("[WorkflowEngine] %s phase raised exception: %s", phase_name, result, exc_info=result)
-                        await orc.emit_event("warning", f"⚠️ [Workflow] {phase_name} 阶段异常（非关键）：{str(result)[:100]}")
+                        await orc.emit_event("warning", f"[Workflow] {phase_name} 阶段异常（非关键）：{str(result)[:100]}")
             else:
                 await orc.emit_event(
                     "info",
-                    f"🔍 [Workflow] 开始 Analysis 阶段，Recon 队列共 {recon_queue_size} 条风险点",
+                    f" [Workflow] 开始 Analysis 阶段，Recon 队列共 {recon_queue_size} 条风险点",
                 )
                 await self._run_analysis_phase(state, task_id)
             
@@ -297,7 +308,7 @@ class AuditWorkflowEngine:
                     await orc.emit_event(
                         "warning",
                         (
-                            "⚠️ [Workflow] Verification 队列为空但已存在 Analysis 发现，"
+                            "[Workflow] Verification 队列为空但已存在 Analysis 发现，"
                             f"已自动回填 {vuln_queue_size} 条并继续验证"
                         ),
                     )
@@ -323,7 +334,7 @@ class AuditWorkflowEngine:
 
             # ── 阶段 4: REPORT（为每条 confirmed/likely 漏洞生成详情报告）──
             state.phase = WorkflowPhase.REPORT
-            await orc.emit_event("info", "📝 [Workflow] 开始 Report 阶段，生成漏洞详情报告")
+            await orc.emit_event("info", "[Workflow] 开始 Report 阶段，生成漏洞详情报告")
             await self._run_report_phase(state, project_info, config)
 
             # 🔥 记录 Report 完成后的内存
@@ -339,7 +350,7 @@ class AuditWorkflowEngine:
             state.all_findings = list(orc._all_findings)  # 同步最终发现
             await orc.emit_event(
                 "info",
-                f"✅ [Workflow] 所有阶段完成，共收集 {len(state.all_findings)} 个发现",
+                f"[Workflow] 所有阶段完成，共收集 {len(state.all_findings)} 个发现",
             )
             
             # 🔥 记录最终内存
@@ -387,7 +398,7 @@ class AuditWorkflowEngine:
             queue_size = self.recon_queue.size(task_id)
             await orc.emit_event(
                 "info",
-                f"🤖 [Workflow] 开始 Recon 风险点 LLM 去重：队列共 {queue_size} 条",
+                f"[Workflow] 开始 Recon 风险点 LLM 去重：队列共 {queue_size} 条",
             )
             
             # 构建 prompt 让 LLM 分析可能重复的风险点
@@ -444,7 +455,7 @@ class AuditWorkflowEngine:
             
             if not dedup_result or not dedup_result.get("duplicates"):
                 logger.info("[WorkflowEngine] No duplicates identified by LLM")
-                await orc.emit_event("info", "✅ [Workflow] Recon 风险点 LLM 去重：无重复项")
+                await orc.emit_event("info", "[Workflow] Recon 风险点 LLM 去重：无重复项")
                 return
             
             # 根据 LLM 分析结果删除重复的风险点
@@ -455,7 +466,7 @@ class AuditWorkflowEngine:
             if removed_count > 0:
                 await orc.emit_event(
                     "info",
-                    f"✅ [Workflow] Recon 风险点 LLM 去重完成：移除 {removed_count} 条重复项",
+                    f"[Workflow] Recon 风险点 LLM 去重完成：移除 {removed_count} 条重复项",
                 )
                 logger.info("[WorkflowEngine] Removed %s duplicate recon risk points", removed_count)
             
@@ -463,7 +474,7 @@ class AuditWorkflowEngine:
             logger.warning("[WorkflowEngine] Recon queue LLM dedup failed: %s", exc)
             await orc.emit_event(
                 "warning",
-                f"⚠️ [Workflow] Recon 风险点 LLM 去重失败（非关键）：{str(exc)[:100]}",
+                f"[Workflow] Recon 风险点 LLM 去重失败（非关键）：{str(exc)[:100]}",
             )
 
     async def _dedup_bl_risk_queue(self, task_id: str) -> None:
@@ -483,7 +494,7 @@ class AuditWorkflowEngine:
             queue_size = self.bl_queue.size(task_id)
             await orc.emit_event(
                 "info",
-                f"🤖 [Workflow] 开始 BL 风险点 LLM 去重：队列共 {queue_size} 条",
+                f"[Workflow] 开始 BL 风险点 LLM 去重：队列共 {queue_size} 条",
             )
 
             risk_points_json = json.dumps(
@@ -528,7 +539,7 @@ class AuditWorkflowEngine:
             dedup_result = self._parse_llm_dedup_response(llm_response)
 
             if not dedup_result or not dedup_result.get("duplicates"):
-                await orc.emit_event("info", "✅ [Workflow] BL 风险点 LLM 去重：无重复项")
+                await orc.emit_event("info", "[Workflow] BL 风险点 LLM 去重：无重复项")
                 return
 
             removed_count = await self._remove_duplicate_recon_risk_points(
@@ -538,7 +549,7 @@ class AuditWorkflowEngine:
             if removed_count > 0:
                 await orc.emit_event(
                     "info",
-                    f"✅ [Workflow] BL 风险点 LLM 去重完成：移除 {removed_count} 条重复项",
+                    f"[Workflow] BL 风险点 LLM 去重完成：移除 {removed_count} 条重复项",
                 )
 
         except Exception as exc:
@@ -566,7 +577,7 @@ class AuditWorkflowEngine:
             queue_size = self.vuln_queue.get_queue_size(task_id)
             await orc.emit_event(
                 "info",
-                f"🤖 [Workflow] 开始漏洞队列 LLM 去重：队列共 {queue_size} 条",
+                f"[Workflow] 开始漏洞队列 LLM 去重：队列共 {queue_size} 条",
             )
             
             # 构建 prompt 让 LLM 分析可能重复的漏洞
@@ -625,7 +636,7 @@ class AuditWorkflowEngine:
             
             if not dedup_result or not dedup_result.get("duplicates"):
                 logger.info("[WorkflowEngine] No duplicates identified by LLM")
-                await orc.emit_event("info", "✅ [Workflow] 漏洞队列 LLM 去重：无重复项")
+                await orc.emit_event("info", "[Workflow] 漏洞队列 LLM 去重：无重复项")
                 return
             
             # 根据 LLM 分析结果删除重复的漏洞
@@ -637,7 +648,7 @@ class AuditWorkflowEngine:
                 current_size = int(self.vuln_queue.get_queue_size(task_id))
                 await orc.emit_event(
                     "info",
-                    f"✅ [Workflow] 漏洞队列 LLM 去重完成：移除 {removed_count} 条重复项，剩余 {current_size} 条",
+                    f"[Workflow] 漏洞队列 LLM 去重完成：移除 {removed_count} 条重复项，剩余 {current_size} 条",
                 )
                 logger.info(
                     "[WorkflowEngine] Removed %s duplicate findings, queue_size_after_dedup=%s",
@@ -649,7 +660,7 @@ class AuditWorkflowEngine:
             logger.warning("[WorkflowEngine] Vuln queue LLM dedup failed: %s", exc)
             await orc.emit_event(
                 "warning",
-                f"⚠️ [Workflow] 漏洞队列 LLM 去重失败（非关键）：{str(exc)[:100]}",
+                f"[Workflow] 漏洞队列 LLM 去重失败（非关键）：{str(exc)[:100]}",
             )
 
     @staticmethod
@@ -977,57 +988,271 @@ class AuditWorkflowEngine:
         state.report_findings_total = len(reportable)
         await orc.emit_event(
             "info",
-            f"📝 [Workflow] Report 阶段：共 {len(reportable)} 条漏洞需要生成报告",
+            f"[Workflow] Report 阶段：共 {len(reportable)} 条漏洞需要生成报告",
         )
 
-        for idx, finding in enumerate(reportable, start=1):
-            if orc.is_cancelled:
-                break
-
-            title = finding.get("title") or f"漏洞 #{idx}"
-            await orc.emit_event(
-                "info",
-                f"📝 [Workflow] Report [{idx}/{len(reportable)}]：{title}",
+        if self.workflow_config.should_parallelize_report:
+            await self._run_parallel_report_phase(
+                state=state,
+                reportable=reportable,
+                project_info=project_info,
+                config=config,
+            )
+        else:
+            await self._run_sequential_report_phase(
+                state=state,
+                reportable=reportable,
+                project_info=project_info,
+                config=config,
             )
 
-            step_start = time.time()
-            report_text = ""
-            success = False
-            error_msg = None
+        await orc.emit_event(
+            "info",
+            f"[Workflow] Report 阶段完成：{state.report_findings_processed}/{state.report_findings_total} 条报告已生成",
+        )
+        logger.info(
+            "[WorkflowEngine] Report phase done: %s/%s reports generated",
+            state.report_findings_processed,
+            state.report_findings_total,
+        )
 
+    def _create_report_worker_agent(self, worker_id: int) -> Any:
+        """为 Report 阶段创建独立 worker agent，避免会话状态互相污染。"""
+        base_agent = self.orchestrator.sub_agents["report"]
+        worker_agent = base_agent.__class__(
+            llm_service=base_agent.llm_service,
+            tools=base_agent.tools,
+            event_emitter=base_agent.event_emitter,
+        )
+
+        worker_agent.config = copy.deepcopy(base_agent.config)
+        worker_name = f"{base_agent.name}_worker_{worker_id}"
+        if isinstance(worker_agent.config, dict):
+            worker_agent.config["name"] = worker_name
+        else:
+            worker_agent.config.name = worker_name
+        worker_agent.name = worker_name
+
+        if hasattr(worker_agent, "configure_trace_logger"):
             try:
-                result = await report_agent.run(
-                    {
-                        "finding": finding,
-                        "project_info": project_info,
-                        "config": config,
-                    }
-                )
-                if result.success and result.data:
-                    report_text = result.data.get("vulnerability_report") or ""
-                    success = bool(report_text)
-                else:
-                    error_msg = result.error or "Report Agent 返回空结果"
-                    logger.warning("[WorkflowEngine] Report failed for '%s': %s", title, error_msg)
-            except asyncio.CancelledError:
-                raise
+                worker_agent.configure_trace_logger(worker_agent.name)
             except Exception as exc:
-                error_msg = str(exc)
-                logger.exception("[WorkflowEngine] Report phase error for '%s': %s", title, exc)
+                logger.warning(
+                    "[WorkflowEngine] Failed to configure trace logger for report worker %s: %s",
+                    worker_id,
+                    exc,
+                )
 
-            duration_ms = int((time.time() - step_start) * 1000)
+        worker_agent.tracer = getattr(base_agent, "tracer", None)
 
+        if hasattr(worker_agent, "set_mcp_runtime"):
+            worker_agent.set_mcp_runtime(getattr(base_agent, "_mcp_runtime", None))
+        if hasattr(worker_agent, "set_write_scope_guard"):
+            worker_agent.set_write_scope_guard(getattr(base_agent, "_write_scope_guard", None))
+
+        cancel_callback = getattr(base_agent, "_cancel_callback", None)
+        if cancel_callback is not None and hasattr(worker_agent, "set_cancel_callback"):
+            worker_agent.set_cancel_callback(cancel_callback)
+
+        return worker_agent
+
+    async def _run_sequential_report_phase(
+        self,
+        state: WorkflowState,
+        reportable: List[Dict[str, Any]],
+        project_info: Dict[str, Any],
+        config: Dict[str, Any],
+    ) -> None:
+        for idx, finding in enumerate(reportable, start=1):
+            if self.orchestrator.is_cancelled:
+                break
+            await self._process_single_report(
+                state=state,
+                finding=finding,
+                index=idx,
+                total=len(reportable),
+                project_info=project_info,
+                config=config,
+                worker_id=None,
+                lock=None,
+            )
+
+    async def _run_parallel_report_phase(
+        self,
+        state: WorkflowState,
+        reportable: List[Dict[str, Any]],
+        project_info: Dict[str, Any],
+        config: Dict[str, Any],
+    ) -> None:
+        worker_count = max(1, self.workflow_config.report_max_workers)
+        work_queue: asyncio.Queue[tuple[int, Dict[str, Any]]] = asyncio.Queue()
+        lock = asyncio.Lock()
+
+        for idx, finding in enumerate(reportable, start=1):
+            work_queue.put_nowait((idx, finding))
+
+        async def _worker(worker_id: int) -> None:
+            while not self.orchestrator.is_cancelled:
+                try:
+                    index, finding = work_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+                try:
+                    await self._process_single_report(
+                        state=state,
+                        finding=finding,
+                        index=index,
+                        total=len(reportable),
+                        project_info=project_info,
+                        config=config,
+                        worker_id=worker_id,
+                        lock=lock,
+                    )
+                finally:
+                    work_queue.task_done()
+
+        worker_tasks = [
+            asyncio.create_task(_worker(worker_id), name=f"report_worker_{worker_id}")
+            for worker_id in range(worker_count)
+        ]
+
+        try:
+            results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+            for worker_id, result in enumerate(results):
+                if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
+                    logger.error(
+                        "[WorkflowEngine] Report worker %s failed: %s",
+                        worker_id,
+                        result,
+                        exc_info=result,
+                    )
+        except asyncio.CancelledError:
+            for task in worker_tasks:
+                task.cancel()
+            try:
+                await asyncio.shield(asyncio.gather(*worker_tasks, return_exceptions=True))
+            except asyncio.CancelledError:
+                pass
+            raise
+
+    async def _process_single_report(
+        self,
+        state: WorkflowState,
+        finding: Dict[str, Any],
+        index: int,
+        total: int,
+        project_info: Dict[str, Any],
+        config: Dict[str, Any],
+        worker_id: Optional[int],
+        lock: Optional[asyncio.Lock],
+    ) -> None:
+        orc = self.orchestrator
+        title = finding.get("title") or f"漏洞 #{index}"
+        worker_prefix = f"[Worker-{worker_id}] " if worker_id is not None else ""
+
+        await orc.emit_event(
+            "info",
+            f"[Workflow] {worker_prefix}Report [{index}/{total}]：{title}",
+        )
+
+        step_start = time.time()
+        report_text = ""
+        updated_finding: Optional[Dict[str, Any]] = None
+        success = False
+        error_msg = None
+
+        report_agent = self._create_report_worker_agent(worker_id or 0) if worker_id is not None else orc.sub_agents["report"]
+        if hasattr(report_agent, "reset_cancellation_state"):
+            report_agent.reset_cancellation_state()
+
+        try:
+            result = await report_agent.run(
+                {
+                    "finding": finding,
+                    "project_info": project_info,
+                    "config": config,
+                }
+            )
+            if result.success and result.data:
+                report_text = result.data.get("vulnerability_report") or ""
+                payload_updated_finding = result.data.get("updated_finding")
+                if isinstance(payload_updated_finding, dict):
+                    updated_finding = payload_updated_finding
+                success = bool(report_text)
+            else:
+                error_msg = result.error or "Report Agent 返回空结果"
+                logger.warning("[WorkflowEngine] Report failed for '%s': %s", title, error_msg)
+
+            if lock is not None:
+                async with lock:
+                    self.orchestrator._tool_calls += int(getattr(result, "tool_calls", 0) or 0)
+                    self.orchestrator._total_tokens += int(getattr(result, "tokens_used", 0) or 0)
+                    self.orchestrator._iteration += int(getattr(result, "iterations", 0) or 0)
+                    state.total_iterations += int(getattr(result, "iterations", 0) or 0)
+                    state.total_tokens += int(getattr(result, "tokens_used", 0) or 0)
+                    state.tool_calls += int(getattr(result, "tool_calls", 0) or 0)
+            else:
+                self.orchestrator._tool_calls += int(getattr(result, "tool_calls", 0) or 0)
+                self.orchestrator._total_tokens += int(getattr(result, "tokens_used", 0) or 0)
+                self.orchestrator._iteration += int(getattr(result, "iterations", 0) or 0)
+                state.total_iterations += int(getattr(result, "iterations", 0) or 0)
+                state.total_tokens += int(getattr(result, "tokens_used", 0) or 0)
+                state.tool_calls += int(getattr(result, "tool_calls", 0) or 0)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            error_msg = str(exc)
+            logger.exception("[WorkflowEngine] Report phase error for '%s': %s", title, exc)
+        finally:
+            if worker_id is not None and hasattr(report_agent, "reset_session_memory"):
+                report_agent.reset_session_memory()
+
+        duration_ms = int((time.time() - step_start) * 1000)
+
+        async def _update_state() -> None:
+            finding_identity = str(
+                (updated_finding or {}).get("finding_identity")
+                or finding.get("finding_identity")
+                or ""
+            ).strip()
+            if updated_finding:
+                merged_finding = dict(finding)
+                for key, value in updated_finding.items():
+                    if value is not None:
+                        if key == "verification_result" and isinstance(value, dict):
+                            verification_payload = dict(merged_finding.get("verification_result") or {})
+                            verification_payload.update(value)
+                            merged_finding["verification_result"] = verification_payload
+                        else:
+                            merged_finding[key] = value
+                finding.clear()
+                finding.update(merged_finding)
+                if finding_identity:
+                    for index, existing in enumerate(orc._all_findings):
+                        if not isinstance(existing, dict):
+                            continue
+                        if str(existing.get("finding_identity") or "").strip() == finding_identity:
+                            orc._all_findings[index] = dict(merged_finding)
+                            break
             if report_text:
-                # 写回 orc._all_findings 中对应 finding
                 finding["vulnerability_report"] = report_text
-                # 汇总到 state
+                if finding_identity:
+                    for index, existing in enumerate(orc._all_findings):
+                        if not isinstance(existing, dict):
+                            continue
+                        if str(existing.get("finding_identity") or "").strip() == finding_identity:
+                            refreshed = dict(existing)
+                            refreshed["vulnerability_report"] = report_text
+                            orc._all_findings[index] = refreshed
+                            break
                 state.finding_reports[title] = report_text
                 state.report_findings_processed += 1
 
             state.step_records.append(
                 WorkflowStepRecord(
                     phase=WorkflowPhase.REPORT,
-                    agent="report",
+                    agent=f"report_worker_{worker_id}" if worker_id is not None else "report",
                     injected_context={"title": title, "verdict": finding.get("verdict")},
                     success=success,
                     error=error_msg,
@@ -1036,12 +1261,8 @@ class AuditWorkflowEngine:
                 )
             )
 
-        await orc.emit_event(
-            "info",
-            f"✅ [Workflow] Report 阶段完成：{state.report_findings_processed}/{state.report_findings_total} 条报告已生成",
-        )
-        logger.info(
-            "[WorkflowEngine] Report phase done: %s/%s reports generated",
-            state.report_findings_processed,
-            state.report_findings_total,
-        )
+        if lock is not None:
+            async with lock:
+                await _update_state()
+        else:
+            await _update_state()

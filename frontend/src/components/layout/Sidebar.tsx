@@ -136,9 +136,9 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 	const prefetchProjectsAssets = useCallback(() => {
 		if (hasPrefetchedProjectsRef.current) return;
 		hasPrefetchedProjectsRef.current = true;
-		void import("@/shared/config/database").then(({ api }) => {
-			void api.getProjects();
-		});
+			void import("@/shared/api/database").then(({ api }) => {
+				void api.getProjects();
+			});
 		void import("@/pages/Projects");
 	}, []);
 

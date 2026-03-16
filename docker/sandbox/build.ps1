@@ -4,7 +4,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$ImageName = "deepaudit/sandbox"
+$ImageName = "VulHunter/sandbox"
 $ImageTag = "latest"
 
 Write-Host "Building sandbox image: ${ImageName}:${ImageTag}" -ForegroundColor Green

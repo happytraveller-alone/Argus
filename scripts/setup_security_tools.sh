@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# DeepAudit 安全工具一键安装脚本 (增强版)
+# VulHunter 安全工具一键安装脚本 (增强版)
 # 自动安装沙盒和外部安全扫描工具
 #
 # 特性:
@@ -627,7 +627,7 @@ install_docker_sandbox() {
         create_sandbox_dockerfile "$sandbox_dir"
     fi
 
-    log_info "构建 DeepAudit 沙盒镜像..."
+    log_info "构建 VulHunter 沙盒镜像..."
 
     cd "$sandbox_dir"
 
@@ -635,15 +635,15 @@ install_docker_sandbox() {
     for attempt in $(seq 1 $MAX_RETRIES); do
         log_info "构建镜像 (尝试 $attempt/$MAX_RETRIES)..."
 
-        if docker build -t deepaudit-sandbox:latest -f Dockerfile . 2>&1; then
-            log_success "沙盒镜像构建成功: deepaudit-sandbox:latest"
+        if docker build -t VulHunter-sandbox:latest -f Dockerfile . 2>&1; then
+            log_success "沙盒镜像构建成功: VulHunter-sandbox:latest"
 
             # 验证
             log_info "验证沙盒镜像..."
-            if docker run --rm deepaudit-sandbox:latest python3 --version; then
+            if docker run --rm VulHunter-sandbox:latest python3 --version; then
                 log_success "Python 环境正常"
             fi
-            if docker run --rm deepaudit-sandbox:latest node --version 2>/dev/null; then
+            if docker run --rm VulHunter-sandbox:latest node --version 2>/dev/null; then
                 log_success "Node.js 环境正常"
             fi
 
@@ -662,7 +662,7 @@ create_sandbox_dockerfile() {
     local dir="$1"
 
     cat > "$dir/Dockerfile" << 'EOF'
-# DeepAudit 安全沙盒
+# VulHunter 安全沙盒
 FROM python:3.11-slim-bookworm
 
 # 安装基础工具
@@ -750,9 +750,9 @@ verify_installation() {
 
     # Docker 沙盒检查
     if command_exists docker && docker info &>/dev/null; then
-        if docker image inspect deepaudit-sandbox:latest &>/dev/null; then
+        if docker image inspect VulHunter-sandbox:latest &>/dev/null; then
             echo ""
-            log_success "Docker 沙盒镜像: deepaudit-sandbox:latest ✓"
+            log_success "Docker 沙盒镜像: VulHunter-sandbox:latest ✓"
         else
             echo ""
             log_warning "Docker 沙盒镜像未构建"
@@ -799,7 +799,7 @@ update_env_config() {
 # =============================================
 # 沙盒配置 (自动添加)
 # =============================================
-SANDBOX_IMAGE=deepaudit-sandbox:latest
+SANDBOX_IMAGE=VulHunter-sandbox:latest
 SANDBOX_MEMORY_LIMIT=512m
 SANDBOX_CPU_LIMIT=1.0
 SANDBOX_TIMEOUT=60
@@ -815,7 +815,7 @@ EOF
 
 show_help() {
     cat << 'EOF'
-DeepAudit 安全工具一键安装脚本
+VulHunter 安全工具一键安装脚本
 
 用法:
     ./setup_security_tools.sh [选项]
@@ -872,7 +872,7 @@ main() {
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                                                               ║${NC}"
-    echo -e "${BLUE}║     🔐 DeepAudit 安全工具一键安装脚本 (增强版)               ║${NC}"
+    echo -e "${BLUE}║     🔐 VulHunter 安全工具一键安装脚本 (增强版)               ║${NC}"
     echo -e "${BLUE}║                                                               ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""

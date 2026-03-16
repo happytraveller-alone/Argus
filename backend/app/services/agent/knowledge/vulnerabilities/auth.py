@@ -40,7 +40,7 @@ session_id = hashlib.md5(username.encode()).hexdigest()
 session['user'] = user  # 登录后未重新生成session
 ```
 
-### 认证逻辑缺陷
+### 认证逻辑漏洞
 ```python
 # 危险 - 逻辑绕过
 if user.is_admin or request.args.get('admin') == 'true':

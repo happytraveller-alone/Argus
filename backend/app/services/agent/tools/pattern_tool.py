@@ -323,7 +323,7 @@ class PatternMatchTool(AgentTool):
     @property
     def description(self) -> str:
         vuln_types = ", ".join(self.PATTERNS.keys())
-        return f"""🔍 快速扫描代码中的危险模式和常见漏洞。
+        return f""" 快速扫描代码中的危险模式和常见漏洞。
 
 支持两种使用方式：
 1. ⭐ 推荐：直接扫描文件 - 使用 scan_file 参数指定文件路径

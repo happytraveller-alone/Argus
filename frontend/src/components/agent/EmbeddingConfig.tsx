@@ -356,11 +356,6 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
               )}
             </Button>
           </div>
-          {requiresApiKey ? (
-            <p className="text-xs text-muted-foreground">
-              API Key 将安全存储，不会显示在页面上
-            </p>
-          ) : null}
         </div>
 
         <div className={`grid grid-cols-1 md:grid-cols-2 ${compact ? "gap-3" : "gap-4"}`}>
@@ -495,7 +490,6 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
               }
               className="h-10 cyber-input"
             />
-            <p className="text-xs text-muted-foreground">用于 API 代理或自托管服务</p>
           </div>
         </div>
 
@@ -596,10 +590,6 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
 
         {/* 操作按钮（对齐 LLM） */}
         <div className={`${compact ? "pt-3" : "pt-4"} border-t border-border border-dashed flex items-center justify-between flex-wrap ${compact ? "gap-3" : "gap-4"}`}>
-          <div className="text-sm">
-            <span className="font-bold text-foreground">测试连接</span>
-            <span className="text-muted-foreground ml-2">验证配置是否正确</span>
-          </div>
 
           <div className="flex items-center gap-2">
             <Button

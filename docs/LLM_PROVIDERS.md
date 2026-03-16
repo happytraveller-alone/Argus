@@ -1,6 +1,6 @@
 # LLM 平台支持
 
-DeepAudit 支持 10+ 主流 LLM 平台，可根据需求自由选择。本文档介绍各平台的配置方法。
+VulHunter 支持 10+ 主流 LLM 平台，可根据需求自由选择。本文档介绍各平台的配置方法。
 
 ## 目录
 
@@ -175,7 +175,7 @@ LLM_MODEL=moonshot-v1-8k
 
 **获取 API Key**: https://console.bce.baidu.com/qianfan/
 
-**⚠️ 特殊配置**: 百度需要同时提供 API Key 和 Secret Key，用冒号分隔：
+**特殊配置**: 百度需要同时提供 API Key 和 Secret Key，用冒号分隔：
 
 ```env
 LLM_PROVIDER=baidu

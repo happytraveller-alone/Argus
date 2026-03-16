@@ -149,3 +149,23 @@ async def test_execute_agent_task_normalizes_project_root_before_building_mcp_ru
     assert captured["project_root"] == expected_project_root
     assert os.path.isabs(captured["project_root"])
 
+
+@pytest.mark.asyncio
+async def test_get_project_root_rejects_non_zip_projects(monkeypatch):
+    project = SimpleNamespace(
+        id="project-repo",
+        source_type="repository",
+        repository_url="https://github.com/org/repo.git",
+        repository_type="github",
+        default_branch="main",
+    )
+
+    monkeypatch.setattr(agent_tasks_module, "is_task_cancelled", lambda *_args, **_kwargs: False)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await agent_tasks_module._get_project_root(
+            project,
+            task_id="task-repo",
+        )
+
+    assert str(exc_info.value) == "仅支持 ZIP 项目"

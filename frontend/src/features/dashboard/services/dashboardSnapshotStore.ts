@@ -1,4 +1,4 @@
-import { api } from "@/shared/config/database";
+import { api } from "@/shared/api/database";
 import type { DashboardSnapshotResponse } from "@/shared/types";
 
 const STALE_MS = 30_000;

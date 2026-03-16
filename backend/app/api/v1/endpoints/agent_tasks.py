@@ -1,5 +1,5 @@
 """
-DeepAudit Agent 审计任务 API
+VulHunter Agent 审计任务 API
 基于 LangGraph 的 Agent 审计
 """
 
@@ -50,24 +50,22 @@ from app.services.agent.utils.vulnerability_naming import (
     resolve_cwe_id as resolve_cwe_id_util,
     resolve_vulnerability_profile as resolve_vulnerability_profile_util,
 )
-from app.services.agent.bootstrap import OpenGrepBootstrapScanner
+from app.services.agent.bootstrap import (
+    OpenGrepBootstrapScanner,
+    BanditBootstrapScanner,
+    PhpstanBootstrapScanner,
+)
 from app.services.agent.mcp import (
     HARD_MAX_WRITABLE_FILES_PER_TASK,
-    FastMCPHttpAdapter,
     FastMCPStdioAdapter,
     MCPRuntime,
     TaskWriteScopeGuard,
-    build_mcp_catalog,
 )
 from app.services.agent.mcp.protocol_verify import (
     build_tool_args as build_mcp_probe_tool_args,
     normalize_listed_tools as normalize_mcp_listed_tools,
 )
 from app.services.agent.mcp.health_probe import probe_mcp_endpoint_readiness
-from app.services.git_mirror import get_mirror_candidates
-from app.services.git_ssh_service import GitSSHOperations
-from app.core.encryption import decrypt_sensitive_data
-
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -129,10 +127,7 @@ class AgentTaskCreate(BaseModel):
         False,
         description="兼容字段：保留请求结构，不再作为强制门禁",
     )
-    
-    # 分支
-    branch_name: Optional[str] = Field(None, description="分支名称")
-    
+
     # 排除模式
     exclude_patterns: Optional[List[str]] = Field(
         default=["node_modules", "__pycache__", ".git", "*.min.js"],
@@ -285,6 +280,7 @@ class AgentFindingResponse(BaseModel):
     suggestion: Optional[str] = None
     fix_code: Optional[str] = None
     fix_description: Optional[str] = None
+    report: Optional[str] = None
     has_poc: bool = False
     poc_code: Optional[str] = None
     poc_description: Optional[str] = None
@@ -339,6 +335,124 @@ def _build_tool_drain_metadata(drain_result: Dict[str, Any]) -> Dict[str, Any]:
         "tool_drain_wait_ms": int(drain_result.get("elapsed_ms") or 0),
         "tool_drain_timeout": bool(drain_result.get("timed_out", False)),
         "pending_tool_calls": pending_calls[:50],
+    }
+
+
+async def _finalize_task_terminal_state(
+    *,
+    db: AsyncSession,
+    task: AgentTask,
+    task_id: str,
+    event_emitter: Any,
+    event_manager: Optional[EventManager],
+    desired_status: str,
+    success_payload: Optional[Dict[str, Any]] = None,
+    failure_message: Optional[str] = None,
+    failure_metadata: Optional[Dict[str, Any]] = None,
+    verification_gate_message: Optional[str] = None,
+    verification_gate_metadata: Optional[Dict[str, Any]] = None,
+    cancel_message: Optional[str] = None,
+    skip_drain_wait: bool = False,
+    timeout_seconds: int = TOOL_DRAIN_TIMEOUT_SECONDS,
+) -> Dict[str, Any]:
+    if skip_drain_wait:
+        drain_result = {
+            "ready": True,
+            "timed_out": False,
+            "elapsed_ms": 0,
+            "pending_tool_calls": [],
+        }
+    else:
+        drain_result = await _wait_for_terminal_tool_drain(
+            event_manager=event_manager,
+            task_id=task_id,
+            skip_wait=False,
+            timeout_seconds=timeout_seconds,
+        )
+    drain_metadata = _build_tool_drain_metadata(drain_result)
+
+    final_status = str(desired_status or AgentTaskStatus.FAILED)
+    final_failure_message = str(failure_message or "").strip() or None
+    final_failure_metadata = dict(failure_metadata or {})
+
+    if bool(drain_result.get("timed_out")) and final_status != AgentTaskStatus.CANCELLED:
+        final_status = AgentTaskStatus.FAILED
+        final_failure_message = "终态收敛超时：存在未完成工具调用，已将任务标记为失败。"
+        final_failure_metadata = {
+            "step_name": "TERMINAL_TOOL_DRAIN",
+            "attempt": 1,
+            "retry_attempt": 1,
+            "max_attempts": 1,
+            "is_terminal": True,
+            "retry_error_class": "tool_drain_timeout",
+            "retryable": False,
+            "cancel_origin": "none",
+            **drain_metadata,
+        }
+    elif (
+        final_status != AgentTaskStatus.CANCELLED
+        and str(verification_gate_message or "").strip()
+    ):
+        final_status = AgentTaskStatus.FAILED
+        final_failure_message = str(verification_gate_message).strip()
+        final_failure_metadata = {
+            "step_name": "VERIFICATION_PENDING_GATE",
+            "attempt": 1,
+            "retry_attempt": 1,
+            "max_attempts": 1,
+            "is_terminal": True,
+            "retry_error_class": "verification_pending_gate",
+            "retryable": False,
+            "cancel_origin": "none",
+            **dict(verification_gate_metadata or {}),
+            **drain_metadata,
+        }
+    elif final_status == AgentTaskStatus.FAILED:
+        final_failure_metadata = {
+            **final_failure_metadata,
+            **drain_metadata,
+        }
+
+    task.status = final_status
+    task.completed_at = datetime.now(timezone.utc)
+    if final_status == AgentTaskStatus.FAILED:
+        task.error_message = final_failure_message or "Unknown error"
+    else:
+        task.error_message = None
+    await db.commit()
+
+    if final_status == AgentTaskStatus.COMPLETED:
+        payload = dict(success_payload or {})
+        extra_metadata = {
+            **dict(payload.get("extra_metadata") or {}),
+            **drain_metadata,
+        }
+        await event_emitter.emit_task_complete(
+            findings_count=int(payload.get("findings_count") or 0),
+            duration_ms=int(payload.get("duration_ms") or 0),
+            message=payload.get("message"),
+            extra_metadata=extra_metadata,
+        )
+    elif final_status == AgentTaskStatus.CANCELLED:
+        await event_emitter.emit_task_cancelled(cancel_message or "任务已取消")
+    else:
+        emit_message = task.error_message or "Unknown error"
+        await event_emitter.emit_task_error(
+            emit_message,
+            message=f"任务失败: {emit_message}",
+            metadata=final_failure_metadata,
+        )
+        await event_emitter.emit_error(
+            emit_message,
+            metadata=final_failure_metadata,
+        )
+
+    return {
+        "status": final_status,
+        "drain_result": drain_result,
+        "drain_metadata": drain_metadata,
+        "failure_message": task.error_message,
+        "failure_metadata": final_failure_metadata,
     }
 
 
@@ -652,13 +766,17 @@ def _resolve_static_bootstrap_config(
     defaults: Dict[str, Any] = {
         "mode": "disabled",
         "opengrep_enabled": False,
+        "bandit_enabled": False,
         "gitleaks_enabled": False,
+        "phpstan_enabled": False,
     }
     if source_mode == "hybrid":
         defaults = {
             "mode": "embedded",
             "opengrep_enabled": True,
+            "bandit_enabled": False,
             "gitleaks_enabled": False,
+            "phpstan_enabled": False,
         }
 
     audit_scope = task.audit_scope if isinstance(task.audit_scope, dict) else {}
@@ -676,17 +794,27 @@ def _resolve_static_bootstrap_config(
     opengrep_enabled = bool(
         static_bootstrap.get("opengrep_enabled", defaults["opengrep_enabled"])
     )
+    bandit_enabled = bool(
+        static_bootstrap.get("bandit_enabled", defaults["bandit_enabled"])
+    )
     gitleaks_enabled = bool(
         static_bootstrap.get("gitleaks_enabled", defaults["gitleaks_enabled"])
     )
+    phpstan_enabled = bool(
+        static_bootstrap.get("phpstan_enabled", defaults["phpstan_enabled"])
+    )
     if mode == "disabled":
         opengrep_enabled = False
+        bandit_enabled = False
         gitleaks_enabled = False
+        phpstan_enabled = False
 
     return {
         "mode": mode,
         "opengrep_enabled": opengrep_enabled,
+        "bandit_enabled": bandit_enabled,
         "gitleaks_enabled": gitleaks_enabled,
+        "phpstan_enabled": phpstan_enabled,
     }
 
 
@@ -777,7 +905,7 @@ async def _run_task_llm_connection_test(
     usage = dict(response.get("usage") or {}) if isinstance(response, dict) else {}
     if event_emitter:
         await event_emitter.emit_info(
-            f"✅ LLM 连接测试通过 ({elapsed_ms}ms)",
+            f"LLM 连接测试通过 ({elapsed_ms}ms)",
             metadata={
                 "step_name": "LLM_CONNECTION_TEST",
                 "status": "completed",
@@ -795,51 +923,10 @@ async def _bootstrap_task_mcp_runtime(
     project_root: str,
     event_emitter: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    normalized_project_root = os.path.abspath(project_root)
-    details: Dict[str, Any] = {}
-
-    if event_emitter:
-        await event_emitter.emit_info(
-            "🔗 正在验证 filesystem MCP 项目根路径绑定...",
-            metadata={"step_name": "MCP_BIND_FILESYSTEM_ROOT", "status": "running"},
-        )
-    filesystem_result = await runtime.call_mcp_tool(
-        mcp_name="filesystem",
-        tool_name="list_allowed_directories",
-        arguments={},
-        agent_name="TASK_STARTUP",
-        alias_used="startup:filesystem_root_binding",
-    )
-    filesystem_allowed = _extract_allowed_directories_from_payload(filesystem_result.data)
-    project_root_allowed = _project_root_is_allowed(normalized_project_root, filesystem_allowed)
-    if not bool(filesystem_result.handled and filesystem_result.success) or not project_root_allowed:
-        error_text = str(filesystem_result.error or filesystem_result.data or "filesystem_project_root_not_allowed")
-        if event_emitter:
-            await event_emitter.emit_error(
-                f"❌ filesystem MCP 根路径绑定失败：{error_text}",
-                metadata={
-                    "step_name": "MCP_BIND_FILESYSTEM_ROOT",
-                    "status": "failed",
-                    "allowed_directories": filesystem_allowed,
-                    "project_root": normalized_project_root,
-                },
-            )
-        raise RuntimeError(f"filesystem MCP 根路径绑定失败：{error_text}")
-    details["filesystem"] = {
-        "allowed_directories": filesystem_allowed,
-        "project_root_allowed": project_root_allowed,
-    }
-    if event_emitter:
-        await event_emitter.emit_info(
-            "✅ filesystem MCP 已绑定项目根路径",
-            metadata={
-                "step_name": "MCP_BIND_FILESYSTEM_ROOT",
-                "status": "completed",
-                "allowed_directories": filesystem_allowed,
-            },
-        )
-
-    return details
+    _ = runtime
+    _ = project_root
+    _ = event_emitter
+    return {}
 
 
 def _build_task_mcp_runtime(
@@ -860,13 +947,8 @@ def _build_task_mcp_runtime(
 
     normalized_project_root = os.path.abspath(project_root)
 
-    user_other_config = (user_config or {}).get("otherConfig", {})
-    mcp_config = user_other_config.get("mcpConfig") if isinstance(user_other_config, dict) else {}
-    if not isinstance(mcp_config, dict):
-        mcp_config = {}
-    write_policy = mcp_config.get("writePolicy") if isinstance(mcp_config.get("writePolicy"), dict) else {}
-    if not isinstance(write_policy, dict):
-        write_policy = {}
+    _ = user_config
+    write_policy: Dict[str, Any] = {}
 
     hard_limit = max(1, int(getattr(settings, "MCP_WRITE_HARD_LIMIT", HARD_MAX_WRITABLE_FILES_PER_TASK)))
     configured_max = write_policy.get(
@@ -892,54 +974,16 @@ def _build_task_mcp_runtime(
     )
     write_guard.seed_from_task_inputs(target_files=target_files, findings=bootstrap_findings or [])
 
-    runtime_policy = mcp_config.get("runtimePolicy") if isinstance(mcp_config.get("runtimePolicy"), dict) else {}
-    if not isinstance(runtime_policy, dict):
-        runtime_policy = {}
-
     active_ids = {str(item).strip().lower() for item in (active_mcp_ids or []) if str(item).strip()}
-
-    def _is_active_mcp(name: str) -> bool:
-        if not active_ids:
-            return True
-        return str(name or "").strip().lower() in active_ids
-
-    def _policy_enabled(name: str, setting_name: str, default: bool = True) -> bool:
-        entry = runtime_policy.get(name) if isinstance(runtime_policy.get(name), dict) else {}
-        if isinstance(entry.get("enabled"), bool):
-            return bool(entry.get("enabled"))
-        return bool(getattr(settings, setting_name, default))
-
-    def _build_filesystem_args(raw_args: Any) -> List[str]:
-        args = _parse_mcp_args(raw_args)
-        if normalized_project_root not in args:
-            args.append(normalized_project_root)
-        return args
 
     adapters: Dict[str, Any] = {}
     domain_adapters: Dict[str, Dict[str, Any]] = {}
     runtime_modes: Dict[str, str] = {}
-
-    if _is_active_mcp("filesystem") and _policy_enabled("filesystem", "MCP_FILESYSTEM_ENABLED", True):
-        adapters["filesystem"] = FastMCPStdioAdapter(
-            command=str(getattr(settings, "MCP_FILESYSTEM_COMMAND", "pnpm") or "pnpm"),
-            args=_build_filesystem_args(
-                getattr(settings, "MCP_FILESYSTEM_ARGS", "dlx @modelcontextprotocol/server-filesystem")
-            ),
-            cwd=normalized_project_root,
-            timeout=int(getattr(settings, "MCP_TIMEOUT_SECONDS", 30)),
-            runtime_domain="stdio",
-        )
-        runtime_modes["filesystem"] = "stdio_only"
-
-    required_mcps = [name for name in ("filesystem",) if name in adapters]
+    required_mcps: List[str] = []
 
     return MCPRuntime(
-        enabled=bool(mcp_config.get("enabled", getattr(settings, "MCP_ENABLED", True))),
-        prefer_mcp=(
-            True
-            if enforce_mcp_only
-            else bool(mcp_config.get("preferMcp", getattr(settings, "MCP_PREFER", True)))
-        ),
+        enabled=bool(getattr(settings, "MCP_ENABLED", True)),
+        prefer_mcp=(True if enforce_mcp_only else bool(getattr(settings, "MCP_PREFER", True))),
         adapters=adapters,
         domain_adapters=domain_adapters,
         runtime_modes=runtime_modes,
@@ -947,11 +991,7 @@ def _build_task_mcp_runtime(
         write_scope_guard=write_guard,
         allow_filesystem_writes=False,
         default_runtime_mode="stdio_only",
-        strict_mode=(
-            True
-            if enforce_mcp_only
-            else bool(mcp_config.get("strictMode", getattr(settings, "MCP_STRICT_MODE", True)))
-        ),
+        strict_mode=(True if enforce_mcp_only else bool(getattr(settings, "MCP_STRICT_MODE", True))),
         project_root=normalized_project_root,
     )
 
@@ -978,7 +1018,6 @@ async def _probe_required_mcp_runtime(
                 "project_root": "",
                 "filesystem_probe_file": "README.md",
                 "filesystem_media_probe_file": "tmp/.mcp_required_media_probe.png",
-                "qmd_probe_file": "tmp/.mcp_required_qmd_probe.md",
                 "code_probe_file": "tmp/.mcp_required_code_probe.c",
                 "code_probe_function": "mcp_required_probe_sum",
                 "code_probe_line": 2,
@@ -988,7 +1027,6 @@ async def _probe_required_mcp_runtime(
         filesystem_probe_abs = os.path.join(probe_dir, ".mcp_required_filesystem_probe.txt")
         filesystem_media_abs = os.path.join(probe_dir, ".mcp_required_media_probe.png")
         code_probe_abs = os.path.join(probe_dir, ".mcp_required_code_probe.c")
-        qmd_probe_abs = os.path.join(probe_dir, ".mcp_required_qmd_probe.md")
         try:
             with open(filesystem_probe_abs, "w", encoding="utf-8") as handle:
                 handle.write("mcp required filesystem probe\n")
@@ -1009,16 +1047,10 @@ async def _probe_required_mcp_runtime(
                 )
         except Exception:
             pass
-        try:
-            with open(qmd_probe_abs, "w", encoding="utf-8") as handle:
-                handle.write("# mcp required qmd probe\n")
-        except Exception:
-            pass
         return {
             "project_root": project_root,
             "filesystem_probe_file": os.path.relpath(filesystem_probe_abs, project_root).replace("\\", "/"),
             "filesystem_media_probe_file": os.path.relpath(filesystem_media_abs, project_root).replace("\\", "/"),
-            "qmd_probe_file": os.path.relpath(qmd_probe_abs, project_root).replace("\\", "/"),
             "code_probe_file": os.path.relpath(code_probe_abs, project_root).replace("\\", "/"),
             "code_probe_function": "mcp_required_probe_sum",
             "code_probe_line": 2,
@@ -1234,7 +1266,6 @@ async def _probe_required_mcp_runtime(
             filesystem_media_probe_file=str(
                 probe_context.get("filesystem_media_probe_file") or "tmp/.mcp_required_media_probe.png"
             ),
-            qmd_probe_file=str(probe_context.get("qmd_probe_file") or "tmp/.mcp_required_qmd_probe.md"),
             code_probe_file=str(probe_context.get("code_probe_file") or "tmp/.mcp_required_code_probe.c"),
             code_probe_function=str(probe_context.get("code_probe_function") or "mcp_required_probe_sum"),
             code_probe_line=int(probe_context.get("code_probe_line") or 2),
@@ -1825,14 +1856,20 @@ async def _prepare_embedded_bootstrap_findings(
     event_emitter: Any,
     exclude_patterns: Optional[List[str]] = None,
     opengrep_enabled: bool = True,
+    bandit_enabled: bool = False,
     gitleaks_enabled: bool = False,
+    phpstan_enabled: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str], str]:
     opengrep_candidates: List[Dict[str, Any]] = []
+    bandit_candidates: List[Dict[str, Any]] = []
     gitleaks_candidates: List[Dict[str, Any]] = []
+    phpstan_candidates: List[Dict[str, Any]] = []
     opengrep_total_findings = 0
+    bandit_total_findings = 0
     gitleaks_total_findings = 0
+    phpstan_total_findings = 0
 
-    if not opengrep_enabled and not gitleaks_enabled:
+    if not opengrep_enabled and not bandit_enabled and not gitleaks_enabled and not phpstan_enabled:
         if event_emitter:
             await event_emitter.emit_info(
                 "⏭️ 静态预扫未启用：返回空候选，继续后续流程",
@@ -1854,7 +1891,7 @@ async def _prepare_embedded_bootstrap_findings(
         if not active_rules:
             if event_emitter:
                 await event_emitter.emit_error(
-                    "❌ OpenGrep 预处理失败：当前没有启用规则，无法继续智能审计"
+                    "OpenGrep 预处理失败：当前没有启用规则，无法继续智能审计"
                 )
             raise RuntimeError("OpenGrep 预处理失败：当前没有启用规则")
 
@@ -1874,11 +1911,11 @@ async def _prepare_embedded_bootstrap_findings(
             scan_result = await scanner.scan(project_root)
         except FileNotFoundError as exc:
             if event_emitter:
-                await event_emitter.emit_error("❌ OpenGrep 预处理失败：未安装 opengrep")
+                await event_emitter.emit_error("OpenGrep 预处理失败：未安装 opengrep")
             raise RuntimeError("OpenGrep 预处理失败：未安装 opengrep") from exc
         except Exception as exc:
             if event_emitter:
-                await event_emitter.emit_error(f"❌ OpenGrep 预处理失败：{str(exc)[:160]}")
+                await event_emitter.emit_error(f"OpenGrep 预处理失败：{str(exc)[:160]}")
             raise RuntimeError(f"OpenGrep 预处理失败：{str(exc)[:200]}") from exc
 
         opengrep_total_findings = int(getattr(scan_result, "total_findings", 0) or 0)
@@ -1893,6 +1930,45 @@ async def _prepare_embedded_bootstrap_findings(
             normalized_opengrep_findings.append(finding_payload)
         opengrep_candidates = _filter_bootstrap_findings(
             normalized_opengrep_findings,
+            exclude_patterns=exclude_patterns,
+        )
+
+    if bandit_enabled:
+        if event_emitter:
+            await event_emitter.emit_info(
+                "🧪 Bandit 内嵌预扫开始",
+                metadata={
+                    "bootstrap": True,
+                    "bootstrap_task_id": None,
+                    "bootstrap_source": "embedded_bandit",
+                    "bootstrap_total_findings": 0,
+                    "bootstrap_candidate_count": 0,
+                },
+            )
+        try:
+            scanner = BanditBootstrapScanner()
+            scan_result = await scanner.scan(project_root)
+        except FileNotFoundError as exc:
+            if event_emitter:
+                await event_emitter.emit_error("Bandit 预处理失败：未安装 bandit")
+            raise RuntimeError("Bandit 预处理失败：未安装 bandit") from exc
+        except Exception as exc:
+            if event_emitter:
+                await event_emitter.emit_error(f"Bandit 预处理失败：{str(exc)[:160]}")
+            raise RuntimeError(f"Bandit 预处理失败：{str(exc)[:200]}") from exc
+
+        bandit_total_findings = int(getattr(scan_result, "total_findings", 0) or 0)
+        normalized_bandit_findings = []
+        for finding in getattr(scan_result, "findings", []) or []:
+            if hasattr(finding, "to_dict"):
+                finding_payload = finding.to_dict()
+            elif isinstance(finding, dict):
+                finding_payload = dict(finding)
+            else:
+                continue
+            normalized_bandit_findings.append(finding_payload)
+        bandit_candidates = _filter_bootstrap_findings(
+            normalized_bandit_findings,
             exclude_patterns=exclude_patterns,
         )
 
@@ -1912,11 +1988,11 @@ async def _prepare_embedded_bootstrap_findings(
             parsed_gitleaks_findings = await _run_bootstrap_gitleaks_scan(project_root)
         except FileNotFoundError as exc:
             if event_emitter:
-                await event_emitter.emit_error("❌ Gitleaks 预处理失败：未安装 gitleaks")
+                await event_emitter.emit_error("Gitleaks 预处理失败：未安装 gitleaks")
             raise RuntimeError("Gitleaks 预处理失败：未安装 gitleaks") from exc
         except Exception as exc:
             if event_emitter:
-                await event_emitter.emit_error(f"❌ Gitleaks 预处理失败：{str(exc)[:160]}")
+                await event_emitter.emit_error(f"Gitleaks 预处理失败：{str(exc)[:160]}")
             raise RuntimeError(f"Gitleaks 预处理失败：{str(exc)[:200]}") from exc
 
         gitleaks_total_findings = len(parsed_gitleaks_findings)
@@ -1930,21 +2006,69 @@ async def _prepare_embedded_bootstrap_findings(
             exclude_patterns=exclude_patterns,
         )
 
-    merged_candidates = _dedupe_bootstrap_findings(
-        [*opengrep_candidates, *gitleaks_candidates]
-    )
-    total_findings = opengrep_total_findings + gitleaks_total_findings
+    if phpstan_enabled:
+        if event_emitter:
+            await event_emitter.emit_info(
+                "🧪 PHPStan 内嵌预扫开始",
+                metadata={
+                    "bootstrap": True,
+                    "bootstrap_task_id": None,
+                    "bootstrap_source": "embedded_phpstan",
+                    "bootstrap_total_findings": 0,
+                    "bootstrap_candidate_count": 0,
+                },
+            )
+        try:
+            scanner = PhpstanBootstrapScanner(level=8)
+            scan_result = await scanner.scan(project_root)
+        except FileNotFoundError as exc:
+            if event_emitter:
+                await event_emitter.emit_error("PHPStan 预处理失败：未安装 phpstan")
+            raise RuntimeError("PHPStan 预处理失败：未安装 phpstan") from exc
+        except Exception as exc:
+            if event_emitter:
+                await event_emitter.emit_error(f"PHPStan 预处理失败：{str(exc)[:160]}")
+            raise RuntimeError(f"PHPStan 预处理失败：{str(exc)[:200]}") from exc
 
-    if opengrep_enabled and gitleaks_enabled:
-        bootstrap_source = "embedded_opengrep_gitleaks"
-    elif opengrep_enabled:
-        bootstrap_source = "embedded_opengrep"
-    else:
-        bootstrap_source = "embedded_gitleaks"
+        phpstan_total_findings = int(getattr(scan_result, "total_findings", 0) or 0)
+        normalized_phpstan_findings = []
+        for finding in getattr(scan_result, "findings", []) or []:
+            if hasattr(finding, "to_dict"):
+                finding_payload = finding.to_dict()
+            elif isinstance(finding, dict):
+                finding_payload = dict(finding)
+            else:
+                continue
+            normalized_phpstan_findings.append(finding_payload)
+        phpstan_candidates = _filter_bootstrap_findings(
+            normalized_phpstan_findings,
+            exclude_patterns=exclude_patterns,
+        )
+
+    merged_candidates = _dedupe_bootstrap_findings(
+        [*opengrep_candidates, *bandit_candidates, *gitleaks_candidates, *phpstan_candidates]
+    )
+    total_findings = (
+        opengrep_total_findings
+        + bandit_total_findings
+        + gitleaks_total_findings
+        + phpstan_total_findings
+    )
+
+    enabled_sources: List[str] = []
+    if opengrep_enabled:
+        enabled_sources.append("opengrep")
+    if bandit_enabled:
+        enabled_sources.append("bandit")
+    if gitleaks_enabled:
+        enabled_sources.append("gitleaks")
+    if phpstan_enabled:
+        enabled_sources.append("phpstan")
+    bootstrap_source = f"embedded_{'_'.join(enabled_sources)}"
 
     if event_emitter:
         await event_emitter.emit_info(
-            "✅ 内嵌静态预扫完成",
+            "内嵌静态预扫完成",
             metadata={
                 "bootstrap": True,
                 "bootstrap_task_id": None,
@@ -1953,8 +2077,12 @@ async def _prepare_embedded_bootstrap_findings(
                 "bootstrap_candidate_count": len(merged_candidates),
                 "bootstrap_opengrep_total_findings": opengrep_total_findings,
                 "bootstrap_opengrep_candidate_count": len(opengrep_candidates),
+                "bootstrap_bandit_total_findings": bandit_total_findings,
+                "bootstrap_bandit_candidate_count": len(bandit_candidates),
                 "bootstrap_gitleaks_total_findings": gitleaks_total_findings,
                 "bootstrap_gitleaks_candidate_count": len(gitleaks_candidates),
+                "bootstrap_phpstan_total_findings": phpstan_total_findings,
+                "bootstrap_phpstan_candidate_count": len(phpstan_candidates),
             },
         )
     return merged_candidates, None, bootstrap_source
@@ -2477,7 +2605,7 @@ async def _execute_agent_task(task_id: str):
     
     # 🔥 在任务最开始就初始化 Docker 沙箱管理器
     # 这样可以确保整个任务生命周期内使用同一个管理器，并且尽早发现 Docker 问题
-    logger.info(f"🚀 Starting execution for task {task_id}")
+    logger.info(f"Starting execution for task {task_id}")
     sandbox_manager = SandboxManager()
     await sandbox_manager.initialize()
     logger.info(f"🐳 Global Sandbox Manager initialized (Available: {sandbox_manager.is_available})")
@@ -2495,18 +2623,6 @@ async def _execute_agent_task(task_id: str):
         memory_store = None
         markdown_memory: Dict[str, str] = {}
         start_time = time.time()
-
-        async def _qmd_upsert_json(relative_path: str, payload: Any) -> bool:
-            del relative_path, payload
-            return False
-
-        async def _qmd_upsert_text(relative_path: str, text: str) -> bool:
-            del relative_path, text
-            return False
-
-        async def _qmd_update_index(force: bool = False) -> bool:
-            del force
-            return False
 
         async def _set_current_step(step: str) -> None:
             task.current_step = step
@@ -2526,7 +2642,7 @@ async def _execute_agent_task(task_id: str):
                 return
 
             # 🔥 发送任务开始事件 - 使用 phase_start 让前端知道进入准备阶段
-            await event_emitter.emit_phase_start("preparation", f"🚀 任务开始执行: {project.name}")
+            await event_emitter.emit_phase_start("preparation", f"任务开始执行: {project.name}")
 
             # 更新任务阶段为准备中
             task.status = AgentTaskStatus.RUNNING
@@ -2534,37 +2650,13 @@ async def _execute_agent_task(task_id: str):
             task.current_phase = AgentTaskPhase.PLANNING  # preparation 对应 PLANNING
             await db.commit()
 
-            # 获取用户配置（需要在获取项目根目录之前，以便传递 token）
             user_config = await _get_user_config(db, task.created_by)
 
-            # 从用户配置中提取 token和SSH密钥（用于私有仓库克隆）
-            other_config = (user_config or {}).get('otherConfig', {})
-            github_token = other_config.get('githubToken') or settings.GITHUB_TOKEN
-            gitlab_token = other_config.get('gitlabToken') or settings.GITLAB_TOKEN
-            gitea_token = other_config.get('giteaToken') or settings.GITEA_TOKEN
-
-            # 解密SSH私钥
-            ssh_private_key = None
-            if 'sshPrivateKey' in other_config:
-                try:
-                    encrypted_key = other_config['sshPrivateKey']
-                    ssh_private_key = decrypt_sensitive_data(encrypted_key)
-                    logger.info("成功解密SSH私钥")
-                except Exception as e:
-                    logger.warning(f"解密SSH私钥失败: {e}")
-
-            # 获取项目根目录（传递任务指定的分支和认证 token/SSH密钥）
-            # 🔥 传递 event_emitter 以发送克隆进度
             async def _prepare_project_root_once():
                 return await _get_project_root(
                     project,
                     task_id,
-                    task.branch_name,
-                    github_token=github_token,
-                    gitlab_token=gitlab_token,
-                    gitea_token=gitea_token,  # 🔥 新增
-                    ssh_private_key=ssh_private_key,  # 🔥 新增SSH密钥
-                    event_emitter=event_emitter,  # 🔥 新增
+                    event_emitter=event_emitter,
                 )
 
             project_root = await _run_with_retries(
@@ -2620,8 +2712,8 @@ async def _execute_agent_task(task_id: str):
                                 new_target_files.append(tf)
                     
                     if fixed_count > 0:
-                        logger.info(f"🔧 Auto-fixed {fixed_count} target file paths")
-                        await event_emitter.emit_info(f"🔧 自动修正了 {fixed_count} 个目标文件的路径")
+                        logger.info(f"Auto-fixed {fixed_count} target file paths")
+                        await event_emitter.emit_info(f"自动修正了 {fixed_count} 个目标文件的路径")
                         task.target_files = new_target_files
                         
             # 🔥 重新验证修正后的文件
@@ -2631,24 +2723,24 @@ async def _execute_agent_task(task_id: str):
                     if os.path.exists(os.path.join(project_root, tf)):
                         valid_target_files.append(tf)
                     else:
-                        logger.warning(f"⚠️ Target file not found: {tf}")
+                        logger.warning(f"Target file not found: {tf}")
                 
                 if not valid_target_files:
-                    logger.warning("❌ No valid target files found after adjustment!")
-                    await event_emitter.emit_warning("⚠️ 警告：无法找到指定的目标文件，将扫描所有文件")
+                    logger.warning("No valid target files found after adjustment!")
+                    await event_emitter.emit_warning("警告：无法找到指定的目标文件，将扫描所有文件")
                     task.target_files = None  # 回退到全量扫描
                 elif len(valid_target_files) < len(task.target_files):
-                    logger.warning(f"⚠️ Partial target files missing. Found {len(valid_target_files)}/{len(task.target_files)}")
+                    logger.warning(f"Partial target files missing. Found {len(valid_target_files)}/{len(task.target_files)}")
                     task.target_files = valid_target_files
 
-            logger.info(f"🚀 Task {task_id} started with Dynamic Agent Tree architecture")
+            logger.info(f"Task {task_id} started with Dynamic Agent Tree architecture")
 
             # 🔥 获取项目根目录后检查取消
             if is_task_cancelled(task_id):
                 logger.info(f"[Cancel] Task {task_id} cancelled after project preparation")
                 raise asyncio.CancelledError("任务已取消")
 
-            # await event_emitter.emit_info("🧠 QMD 任务知识库已移除，跳过任务内知识库初始化")
+            # await event_emitter.emit_info("QMD 任务知识库已移除，跳过任务内知识库初始化")
 
             # 创建 LLM 服务
             await _set_current_step("正在校验 LLM 配置")
@@ -2656,7 +2748,7 @@ async def _execute_agent_task(task_id: str):
             try:
                 _ = llm_service.config
                 await event_emitter.emit_info(
-                    "✅ LLM 配置校验通过",
+                    "LLM 配置校验通过",
                     metadata={"step_name": "LLM_CONFIG_VALIDATION", "status": "completed"},
                 )
             except LLMConfigError as cfg_exc:
@@ -2743,38 +2835,18 @@ async def _execute_agent_task(task_id: str):
                 enforce_mcp_only=True,
             )
 
-            if mcp_runtime:
-                adapter_entries: List[str] = []
-                domain_adapters = getattr(mcp_runtime, "domain_adapters", {}) or {}
-                if isinstance(domain_adapters, dict):
-                    for mcp_name, domain_map in sorted(domain_adapters.items()):
-                        if not isinstance(domain_map, dict) or not domain_map:
-                            continue
-                        domains = ",".join(sorted(str(domain).strip() for domain in domain_map.keys() if str(domain).strip()))
-                        if domains:
-                            adapter_entries.append(f"{mcp_name}[{domains}]")
-                if not adapter_entries:
-                    flat_adapters = getattr(mcp_runtime, "adapters", {}) or {}
-                    if isinstance(flat_adapters, dict):
-                        adapter_entries = sorted(str(name).strip() for name in flat_adapters.keys() if str(name).strip())
-                adapters_text = ", ".join(adapter_entries) if adapter_entries else "(none)"
-                await event_emitter.emit_info(
-                    "🛰️ MCP Runtime 已就绪: "
-                    f"strict_mode={bool(getattr(mcp_runtime, 'strict_mode', False))}, "
-                    f"prefer_mcp={bool(getattr(mcp_runtime, 'prefer_mcp', True))}, "
-                    f"adapters={adapters_text}"
-                )
+            required_gate_mcps = [
+                str(item).strip()
+                for item in (getattr(mcp_runtime, "required_mcps", []) or [])
+                if str(item).strip()
+            ] if mcp_runtime else []
 
-            # MCP 启动门禁：默认可启动，仅 required MCP 明确未就绪时阻断。
+            # 已退役的 MCP 不再参与任务启动门禁；仅当仍存在 required MCP 时才执行兼容检查。
             if (
                 mcp_runtime
+                and required_gate_mcps
                 and bool(getattr(settings, "MCP_REQUIRE_ALL_READY_ON_STARTUP", True))
             ):
-                required_gate_mcps = [
-                    str(item).strip()
-                    for item in (getattr(mcp_runtime, "required_mcps", []) or [])
-                    if str(item).strip()
-                ]
                 required_domain = str(
                     getattr(settings, "MCP_REQUIRED_RUNTIME_DOMAIN", "all") or "all"
                 ).strip().lower()
@@ -2802,8 +2874,6 @@ async def _execute_agent_task(task_id: str):
                         },
                     )
                     raise RuntimeError(message)
-
-                await _set_current_step("正在绑定 MCP 根路径并构建索引")
 
                 async def _bootstrap_mcp_runtime_once():
                     return await _bootstrap_task_mcp_runtime(
@@ -2845,7 +2915,7 @@ async def _execute_agent_task(task_id: str):
                         },
                     )
                     raise RuntimeError(probe_message)
-                await event_emitter.emit_info("✅ MCP 启动检查与运行时自检通过")
+                await event_emitter.emit_info("MCP 启动检查与运行时自检通过")
 
             # 🔥 初始化工具后检查取消
             if is_task_cancelled(task_id):
@@ -2894,7 +2964,7 @@ async def _execute_agent_task(task_id: str):
                 "audit_mode": "smart_audit",
                 "disable_virtual_routing": True,
                 "mcp_only_enforced": True,
-                "read_scope_policy": "strict_anchor",
+                "read_scope_policy": "project_scope",
             }
 
             for agent in (recon_agent, analysis_agent, verification_agent, report_agent, bl_recon_agent, bl_analysis_agent):
@@ -2908,8 +2978,10 @@ async def _execute_agent_task(task_id: str):
             workflow_config = WorkflowConfig(
                 enable_parallel_analysis=settings.ENABLE_PARALLEL_ANALYSIS,
                 enable_parallel_verification=settings.ENABLE_PARALLEL_VERIFICATION,
+                enable_parallel_report=settings.ENABLE_PARALLEL_REPORT,
                 analysis_max_workers=settings.ANALYSIS_MAX_WORKERS,
                 verification_max_workers=settings.VERIFICATION_MAX_WORKERS,
+                report_max_workers=settings.REPORT_MAX_WORKERS,
             )
 
             # 创建 Orchestrator Agent（使用确定性 Workflow 版本，注入两个队列服务）
@@ -2961,7 +3033,7 @@ async def _execute_agent_task(task_id: str):
             # 注册 Orchestrator 到 Agent Registry（使用其内置方法）
             orchestrator._register_to_registry(task="Root orchestrator for security audit")
             
-            await event_emitter.emit_info("🧠 动态 Agent 树架构启动")
+            await event_emitter.emit_info("动态 Agent 树架构启动")
             await event_emitter.emit_info(f"📁 项目路径: {project_root}")
             
             # 收集项目信息 - 传递排除模式和目标文件
@@ -2990,8 +3062,14 @@ async def _execute_agent_task(task_id: str):
                         opengrep_enabled=bool(
                             static_bootstrap_config.get("opengrep_enabled")
                         ),
+                        bandit_enabled=bool(
+                            static_bootstrap_config.get("bandit_enabled")
+                        ),
                         gitleaks_enabled=bool(
                             static_bootstrap_config.get("gitleaks_enabled")
+                        ),
+                        phpstan_enabled=bool(
+                            static_bootstrap_config.get("phpstan_enabled")
                         ),
                     )
 
@@ -3007,7 +3085,7 @@ async def _execute_agent_task(task_id: str):
                 )
             else:
                 await event_emitter.emit_info(
-                    "ℹ️ 当前任务未启用静态预扫，直接进入入口点回退流程",
+                    "当前任务未启用静态预扫，直接进入入口点回退流程",
                     metadata={
                         "bootstrap": True,
                         "bootstrap_task_id": None,
@@ -3030,11 +3108,11 @@ async def _execute_agent_task(task_id: str):
             else:
                 if bootstrap_source == "disabled":
                     await event_emitter.emit_info(
-                        "ℹ️ 静态预扫未启用，启动入口点回退流程"
+                        "静态预扫未启用，启动入口点回退流程"
                     )
                 else:
                     await event_emitter.emit_warning(
-                        "⚠️ 静态预扫未筛选出 ERROR + HIGH/MEDIUM 候选，启动入口点回退流程"
+                        "静态预扫未筛选出 ERROR + HIGH/MEDIUM 候选，启动入口点回退流程"
                     )
                 entry = _discover_entry_points_deterministic(
                     project_root=normalized_project_root,
@@ -3060,21 +3138,6 @@ async def _execute_agent_task(task_id: str):
                     f"🌱 固定种子候选已生成（入口点回退）：entry_points={len(entry_points_payload)}，"
                     f"entry_funcs={len(entry_function_names)}，seeds={len(seed_findings)}"
                 )
-
-            await _qmd_upsert_json("artifacts/project_info.json", project_info)
-            await _qmd_upsert_json(
-                "artifacts/bootstrap_seed.json",
-                {
-                    "bootstrap_source": bootstrap_source,
-                    "bootstrap_task_id": bootstrap_task_id,
-                    "bootstrap_findings_count": len(bootstrap_findings or []),
-                    "seed_findings_count": len(seed_findings or []),
-                    "entry_points_count": len(entry_points_payload or []),
-                    "entry_function_names_count": len(entry_function_names or []),
-                    "target_vulnerabilities": list(task.target_vulnerabilities or []),
-                },
-            )
-            await _qmd_update_index(force=False)
 
             if mcp_runtime:
                 seed_paths: List[str] = []
@@ -3118,10 +3181,6 @@ async def _execute_agent_task(task_id: str):
                 logger.warning("[MarkdownMemory] init/load failed: %s", exc)
                 markdown_memory = {}
 
-            if markdown_memory:
-                await _qmd_upsert_json("artifacts/markdown_memory_bundle.json", markdown_memory)
-                await _qmd_update_index(force=False)
-            
             # 更新任务文件统计
             task.total_files = project_info.get("file_count", 0)
             await db.commit()
@@ -3153,17 +3212,6 @@ async def _execute_agent_task(task_id: str):
                 "task_id": task_id,
             }
 
-            await _qmd_upsert_json(
-                "artifacts/task_input.json",
-                {
-                    "project_root": project_root,
-                    "task_id": task_id,
-                    "project_info": project_info,
-                    "config": input_data["config"],
-                },
-            )
-            await _qmd_update_index(force=False)
-
             # Provide deterministic persistence callback for Orchestrator TODO mode.
             # The callback is idempotent per task run to avoid double inserts on retries.
             finding_save_diagnostics: Dict[str, Any] = {}
@@ -3171,11 +3219,19 @@ async def _execute_agent_task(task_id: str):
                 "saved_count": 0,
                 "seen_payload_digests": set(),
             }
+            from app.models.agent_task import AgentFinding
+            from app.services.agent.tools.verification_result_tools import (
+                ensure_finding_identity,
+                merge_finding_patch,
+            )
 
             async def _persist_findings_callback(findings_payload: Any) -> int:
                 findings_list = findings_payload if isinstance(findings_payload, list) else []
                 if not findings_list:
                     return 0
+                for finding_item in findings_list:
+                    if isinstance(finding_item, dict):
+                        ensure_finding_identity(task_id, finding_item)
 
                 try:
                     payload_digest_raw = json.dumps(
@@ -3210,6 +3266,73 @@ async def _execute_agent_task(task_id: str):
                 persist_state["saved_count"] = int(persist_state.get("saved_count") or 0) + int(saved)
                 return int(saved)
 
+            async def _update_finding_callback(
+                finding_identity: str,
+                fields_to_update: Dict[str, Any],
+                update_reason: str,
+            ) -> Dict[str, Any]:
+                async with async_session_factory() as update_db:
+                    finding_stmt = select(AgentFinding).where(
+                        AgentFinding.task_id == task_id,
+                        AgentFinding.finding_identity == finding_identity,
+                    )
+                    finding_row = (await update_db.execute(finding_stmt)).scalar_one_or_none()
+                    if finding_row is None:
+                        legacy_stmt = select(AgentFinding).where(
+                            AgentFinding.task_id == task_id,
+                            AgentFinding.finding_metadata["finding_identity"].as_string() == finding_identity,
+                        )
+                        finding_row = (await update_db.execute(legacy_stmt)).scalar_one_or_none()
+                    if finding_row is None:
+                        raise ValueError(f"未找到 finding_identity={finding_identity} 对应的漏洞记录")
+
+                    verification_patch = fields_to_update.get("verification_result")
+                    if isinstance(verification_patch, dict):
+                        verification_result = dict(finding_row.verification_result or {})
+                        verification_result.update(verification_patch)
+                        verification_result["finding_identity"] = finding_identity
+                        finding_row.verification_result = verification_result
+
+                    for field_name, field_value in fields_to_update.items():
+                        if field_name == "verification_result":
+                            continue
+                        setattr(finding_row, field_name, field_value)
+
+                    metadata_payload = dict(finding_row.finding_metadata or {})
+                    metadata_payload["finding_identity"] = finding_identity
+                    metadata_payload["report_update_reason"] = update_reason
+                    finding_row.finding_metadata = metadata_payload
+                    finding_row.finding_identity = finding_identity
+                    await update_db.commit()
+                    await update_db.refresh(finding_row)
+
+                    updated_finding = merge_finding_patch(
+                        {
+                            "id": finding_row.id,
+                            "finding_identity": finding_row.finding_identity,
+                            "title": finding_row.title,
+                            "file_path": finding_row.file_path,
+                            "line_start": finding_row.line_start,
+                            "line_end": finding_row.line_end,
+                            "function_name": finding_row.function_name,
+                            "vulnerability_type": finding_row.vulnerability_type,
+                            "severity": finding_row.severity,
+                            "description": finding_row.description,
+                            "code_snippet": finding_row.code_snippet,
+                            "source": finding_row.source,
+                            "sink": finding_row.sink,
+                            "suggestion": finding_row.suggestion,
+                            "verification_result": (
+                                dict(finding_row.verification_result)
+                                if isinstance(finding_row.verification_result, dict)
+                                else {}
+                            ),
+                        },
+                        fields_to_update,
+                    )
+                    updated_finding["finding_identity"] = finding_identity
+                    return updated_finding
+
             input_data["persist_findings"] = _persist_findings_callback
 
             # 🔥 将持久化回调注入到已初始化的 Verification 保存工具
@@ -3222,6 +3345,14 @@ async def _execute_agent_task(task_id: str):
             if _save_tool_instance is not None and hasattr(_save_tool_instance, "_save_callback"):
                 _save_tool_instance._save_callback = _persist_findings_callback
                 logger.info("[Task] Injected persist_findings_callback into save_verification_result tool")
+            _update_tool_instance = (
+                tools.get("report", {}).get("update_vulnerability_finding")
+                if isinstance(tools, dict)
+                else None
+            )
+            if _update_tool_instance is not None and hasattr(_update_tool_instance, "_update_callback"):
+                _update_tool_instance._update_callback = _update_finding_callback
+                logger.info("[Task] Injected update_finding_callback into update_vulnerability_finding tool")
 
             # 执行 Orchestrator
             await event_emitter.emit_phase_start("orchestration", "🎯 Orchestrator 开始编排审计流程")
@@ -3348,14 +3479,17 @@ async def _execute_agent_task(task_id: str):
                         len(findings),
                     )
 
+                final_findings_sync_required = False
                 if _tool_saved_count is not None:
                     saved_count = _tool_saved_count
+                    final_findings_sync_required = bool(findings)
                     logger.info(
                         "[AgentTask] 跳过重复持久化（工具已保存 %s 条）",
                         saved_count,
                     )
                 elif int(persist_state.get("saved_count") or 0) > 0:
                     saved_count = int(persist_state["saved_count"])
+                    final_findings_sync_required = bool(findings)
                     logger.info(
                         "[AgentTask] Findings were already persisted by Orchestrator TODO step: saved_count=%s",
                         saved_count,
@@ -3375,6 +3509,26 @@ async def _execute_agent_task(task_id: str):
                         task_id,
                         event_emitter,
                         _persist_findings_once,
+                    )
+
+                if final_findings_sync_required:
+                    async def _sync_final_findings_once():
+                        return await _save_findings(
+                            db,
+                            task_id,
+                            findings,
+                            project_root=normalized_project_root,
+                        )
+
+                    synced_count = await _run_with_retries(
+                        "SYNC_FINAL_FINDINGS",
+                        task_id,
+                        event_emitter,
+                        _sync_final_findings_once,
+                    )
+                    logger.info(
+                        "[AgentTask] Final findings synced back to database after report/update stage: %s",
+                        synced_count,
                     )
                 logger.info(f"[AgentTask] Saved {saved_count}/{len(findings)} findings (filtered {len(findings) - saved_count} hallucinations)")
 
@@ -3499,35 +3653,6 @@ async def _execute_agent_task(task_id: str):
                 except Exception as exc:
                     logger.warning("[MarkdownMemory] append failed: %s", exc)
 
-                await _qmd_upsert_json(
-                    "artifacts/final_summary.json",
-                    {
-                        "task_id": task_id,
-                        "bootstrap_source": bootstrap_source,
-                        "seed_findings_count": len(seed_findings or []),
-                        "orchestrator_findings_count": len(findings or []),
-                        "persisted_effective_findings_count": len(effective_findings or []),
-                        "false_positive_count": false_positive_count,
-                        "filtered_reasons": filtered_reasons or {},
-                    },
-                )
-                await _qmd_upsert_json(
-                    "agents/orchestrator.json",
-                    {
-                        "result_keys": list(result.data.keys()) if isinstance(result.data, dict) else [],
-                        "findings_count": len(findings or []),
-                    },
-                )
-                for agent_key in ("recon", "analysis", "verification", "report"):
-                    payload = agent_payloads.get(agent_key)
-                    if not isinstance(payload, dict):
-                        continue
-                    await _qmd_upsert_json(f"agents/{agent_key}.json", payload)
-                    summary_text = str(payload.get("summary") or payload.get("note") or "").strip()
-                    if summary_text:
-                        await _qmd_upsert_text(f"agents/{agent_key}.md", summary_text + "\n")
-                await _qmd_update_index(force=False)
-
                 # 更新任务统计
                 # 🔥 CRITICAL FIX: 在设置完成前再次检查取消状态
                 # 避免 "取消后后端继续运行并最终标记为完成" 的问题
@@ -3556,17 +3681,12 @@ async def _execute_agent_task(task_id: str):
                     "pending_examples": gate_stats.get("pending_examples") or [],
                 }
 
+                desired_terminal_status = AgentTaskStatus.COMPLETED
                 if is_task_cancelled(task_id):
                     logger.info(f"[AgentTask] Task {task_id} was cancelled, overriding success result")
-                    task.status = AgentTaskStatus.CANCELLED
-                    task.error_message = None
+                    desired_terminal_status = AgentTaskStatus.CANCELLED
                 elif verification_pending_gate_triggered:
-                    task.status = AgentTaskStatus.FAILED
-                    task.error_message = verification_pending_gate_message
-                else:
-                    task.status = AgentTaskStatus.COMPLETED
-                    task.error_message = None
-                task.completed_at = datetime.now(timezone.utc)
+                    desired_terminal_status = AgentTaskStatus.FAILED
                 task.current_phase = AgentTaskPhase.REPORTING
                 task.findings_count = len(effective_findings)
                 task.false_positive_count = false_positive_count
@@ -3674,83 +3794,45 @@ async def _execute_agent_task(task_id: str):
                     _commit_summary_once,
                 )
 
-                drain_result = await _wait_for_terminal_tool_drain(
-                    event_manager=event_manager,
+                terminal_result = await _finalize_task_terminal_state(
+                    db=db,
+                    task=task,
                     task_id=task_id,
-                    skip_wait=bool(task.status == AgentTaskStatus.CANCELLED or is_task_cancelled(task_id)),
-                    timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
-                )
-                drain_metadata = _build_tool_drain_metadata(drain_result)
-
-                terminal_failure_message: Optional[str] = None
-                terminal_failure_metadata: Dict[str, Any] = {}
-                if bool(drain_result.get("timed_out")):
-                    timeout_message = (
-                        "终态收敛超时：存在未完成工具调用，已将任务标记为失败。"
-                    )
-                    task.status = AgentTaskStatus.FAILED
-                    task.error_message = timeout_message
-                    task.completed_at = datetime.now(timezone.utc)
-                    await db.commit()
-                    terminal_failure_message = timeout_message
-                    terminal_failure_metadata = {
-                        "step_name": "TERMINAL_TOOL_DRAIN",
-                        "attempt": 1,
-                        "retry_attempt": 1,
-                        "max_attempts": 1,
-                        "is_terminal": True,
-                        "retry_error_class": "tool_drain_timeout",
-                        "retryable": False,
-                        "cancel_origin": "none",
-                        **drain_metadata,
-                    }
-                elif verification_pending_gate_triggered:
-                    terminal_failure_message = (
-                        "终态门禁阻断：verification 队列仍有待验证候选，任务已标记失败。"
-                    )
-                    terminal_failure_metadata = {
-                        "step_name": "VERIFICATION_PENDING_GATE",
-                        "attempt": 1,
-                        "retry_attempt": 1,
-                        "max_attempts": 1,
-                        "is_terminal": True,
-                        "retry_error_class": "verification_pending_gate",
-                        "retryable": False,
-                        "cancel_origin": "none",
-                        **verification_pending_gate_metadata,
-                        **drain_metadata,
-                    }
-                if terminal_failure_message:
-                    await event_emitter.emit_task_error(
-                        terminal_failure_message,
-                        message=f"❌ 任务失败: {terminal_failure_message}",
-                        metadata=terminal_failure_metadata,
-                    )
-                    await event_emitter.emit_error(
-                        terminal_failure_message,
-                        metadata=terminal_failure_metadata,
-                    )
-                else:
-                    await event_emitter.emit_task_complete(
-                        findings_count=persisted_findings_count,
-                        duration_ms=duration_ms,
-                        message=(
-                            f"✅ 审计完成：编排发现 {orchestrator_findings_count}，"
+                    event_emitter=event_emitter,
+                    event_manager=event_manager,
+                    desired_status=desired_terminal_status,
+                    success_payload={
+                        "findings_count": persisted_findings_count,
+                        "duration_ms": duration_ms,
+                        "message": (
+                            f"审计完成：编排发现 {orchestrator_findings_count}，"
                             f"入库 {persisted_findings_count}，过滤 {filtered_findings_count}，"
                             f"耗时 {duration_ms/1000:.1f} 秒"
                         ),
-                        extra_metadata={
+                        "extra_metadata": {
                             "orchestrator_findings_count": orchestrator_findings_count,
                             "persisted_findings_count": persisted_findings_count,
                             "filtered_findings_count": filtered_findings_count,
                             "filtered_reasons": filtered_reasons or {},
-                            **drain_metadata,
                         },
-                    )
+                    },
+                    verification_gate_message=(
+                        verification_pending_gate_message
+                        if verification_pending_gate_triggered
+                        else None
+                    ),
+                    verification_gate_metadata=verification_pending_gate_metadata,
+                    cancel_message="任务已取消",
+                    skip_drain_wait=bool(desired_terminal_status == AgentTaskStatus.CANCELLED),
+                    timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
+                )
+                drain_result = terminal_result["drain_result"]
+                drain_metadata = terminal_result["drain_metadata"]
+                final_terminal_status = terminal_result["status"]
                 if orchestrator_findings_count > 0 and persisted_findings_count == 0:
                     # 分析为什么全部被过滤
                     await event_emitter.emit_warning(
-                        "⚠️ 编排阶段识别到漏洞，但入库结果为 0，疑似参数验证或质量门限制",
+                        "编排阶段识别到漏洞，但入库结果为 0，疑似参数验证或质量门限制",
                         metadata={
                             "orchestrator_findings_count": orchestrator_findings_count,
                             "persisted_findings_count": persisted_findings_count,
@@ -3780,9 +3862,11 @@ async def _execute_agent_task(task_id: str):
                         verification_pending_gate_metadata.get("candidate_count", 0),
                         verification_pending_gate_metadata.get("pending_count", 0),
                     )
+                elif final_terminal_status == AgentTaskStatus.CANCELLED:
+                    logger.info("🛑 Task %s cancelled during terminal finalization", task_id)
                 else:
                     logger.info(
-                        f"✅ Task {task_id} completed: "
+                        f"Task {task_id} completed: "
                         f"effective={len(effective_findings)}, false_positive={false_positive_count}, "
                         f"saved={saved_count}, duration={duration_ms}ms"
                     )
@@ -3791,28 +3875,21 @@ async def _execute_agent_task(task_id: str):
                 if result.error == "任务已取消":
                     # 状态可能已经被 cancel API 更新，只需确保一致性
                     _snapshot_runtime_stats_to_task(task, orchestrator)
-                    if task.status != AgentTaskStatus.CANCELLED:
-                        task.status = AgentTaskStatus.CANCELLED
-                        task.completed_at = datetime.now(timezone.utc)
-                        await db.commit()
-                    await _qmd_upsert_json(
-                        "artifacts/task_terminal_state.json",
-                        {
-                            "task_id": task_id,
-                            "status": "cancelled",
-                            "error": result.error,
-                        },
+                    terminal_result = await _finalize_task_terminal_state(
+                        db=db,
+                        task=task,
+                        task_id=task_id,
+                        event_emitter=event_emitter,
+                        event_manager=event_manager,
+                        desired_status=AgentTaskStatus.CANCELLED,
+                        cancel_message="任务已取消",
+                        skip_drain_wait=True,
+                        timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
                     )
-                    await _qmd_update_index(force=False)
                     logger.info(f"🛑 Task {task_id} cancelled")
                 else:
                     _snapshot_runtime_stats_to_task(task, orchestrator)
-                    task.status = AgentTaskStatus.FAILED
-                    task.error_message = result.error or "Unknown error"
-                    task.completed_at = datetime.now(timezone.utc)
-                    await db.commit()
-
-                    failure_message = task.error_message
+                    failure_message = result.error or "Unknown error"
                     retry_diag = _classify_retry_error(failure_message)
                     failure_metadata = {
                         "step_name": "ORCHESTRATOR_RUN",
@@ -3824,33 +3901,21 @@ async def _execute_agent_task(task_id: str):
                         "retryable": bool(retry_diag["retryable"]),
                         "cancel_origin": "none",
                     }
-                    drain_result = await _wait_for_terminal_tool_drain(
-                        event_manager=event_manager,
+                    terminal_result = await _finalize_task_terminal_state(
+                        db=db,
+                        task=task,
                         task_id=task_id,
-                        skip_wait=bool(is_task_cancelled(task_id)),
+                        event_emitter=event_emitter,
+                        event_manager=event_manager,
+                        desired_status=AgentTaskStatus.FAILED,
+                        failure_message=failure_message,
+                        failure_metadata=failure_metadata,
+                        skip_drain_wait=bool(is_task_cancelled(task_id)),
                         timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
                     )
-                    failure_metadata.update(_build_tool_drain_metadata(drain_result))
-                    await event_emitter.emit_task_error(
-                        failure_message,
-                        message=f"❌ 任务失败: {failure_message}",
-                        metadata=failure_metadata,
-                    )
-                    await event_emitter.emit_error(
-                        failure_message,
-                        metadata=failure_metadata,
-                    )
-                    await _qmd_upsert_json(
-                        "artifacts/task_terminal_state.json",
-                        {
-                            "task_id": task_id,
-                            "status": "failed",
-                            "error": failure_message,
-                            "metadata": failure_metadata,
-                        },
-                    )
-                    await _qmd_update_index(force=False)
-                    logger.error(f"❌ Task {task_id} failed: {result.error}")
+                    failure_message = terminal_result["failure_message"] or failure_message
+                    failure_metadata = terminal_result["failure_metadata"]
+                    logger.error(f"Task {task_id} failed: {result.error}")
             
         except asyncio.CancelledError:
             logger.info(f"Task {task_id} cancelled")
@@ -3858,9 +3923,17 @@ async def _execute_agent_task(task_id: str):
                 task = await db.get(AgentTask, task_id)
                 if task:
                     _snapshot_runtime_stats_to_task(task, _running_orchestrators.get(task_id))
-                    task.status = AgentTaskStatus.CANCELLED
-                    task.completed_at = datetime.now(timezone.utc)
-                    await db.commit()
+                    await _finalize_task_terminal_state(
+                        db=db,
+                        task=task,
+                        task_id=task_id,
+                        event_emitter=event_emitter,
+                        event_manager=event_manager,
+                        desired_status=AgentTaskStatus.CANCELLED,
+                        cancel_message="任务已取消",
+                        skip_drain_wait=True,
+                        timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
+                    )
             except Exception:
                 pass
                 
@@ -3896,14 +3969,11 @@ async def _execute_agent_task(task_id: str):
                 }
                 failure_message = e.final_message[:1000]
 
+            task = None
             try:
                 task = await db.get(AgentTask, task_id)
                 if task:
                     _snapshot_runtime_stats_to_task(task, _running_orchestrators.get(task_id))
-                    task.status = AgentTaskStatus.FAILED
-                    task.error_message = failure_message
-                    task.completed_at = datetime.now(timezone.utc)
-                    await db.commit()
             except Exception as db_error:
                 logger.error(f"Failed to update task status: {db_error}")
 
@@ -3912,38 +3982,33 @@ async def _execute_agent_task(task_id: str):
                     is_task_cancelled(task_id)
                     or str(failure_metadata.get("cancel_origin") or "").strip().lower() == "user"
                 )
-                drain_result = await _wait_for_terminal_tool_drain(
-                    event_manager=event_manager,
-                    task_id=task_id,
-                    skip_wait=skip_drain_wait,
-                    timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
-                )
-                failure_metadata.update(_build_tool_drain_metadata(drain_result))
-                await event_emitter.emit_task_error(
-                    failure_message,
-                    message=f"❌ 任务失败: {failure_message}",
-                    metadata=failure_metadata,
-                )
-                await event_emitter.emit_error(
-                    failure_message,
-                    metadata=failure_metadata,
-                )
+                if task:
+                    terminal_result = await _finalize_task_terminal_state(
+                        db=db,
+                        task=task,
+                        task_id=task_id,
+                        event_emitter=event_emitter,
+                        event_manager=event_manager,
+                        desired_status=AgentTaskStatus.FAILED,
+                        failure_message=failure_message,
+                        failure_metadata=failure_metadata,
+                        skip_drain_wait=skip_drain_wait,
+                        timeout_seconds=TOOL_DRAIN_TIMEOUT_SECONDS,
+                    )
+                    failure_message = terminal_result["failure_message"] or failure_message
+                    failure_metadata = terminal_result["failure_metadata"]
+                else:
+                    await event_emitter.emit_task_error(
+                        failure_message,
+                        message=f"任务失败: {failure_message}",
+                        metadata=failure_metadata,
+                    )
+                    await event_emitter.emit_error(
+                        failure_message,
+                        metadata=failure_metadata,
+                    )
             except Exception as emit_error:
                 logger.warning(f"Failed to emit terminal task error event: {emit_error}")
-            try:
-                await _qmd_upsert_json(
-                    "artifacts/task_terminal_state.json",
-                    {
-                        "task_id": task_id,
-                        "status": "failed",
-                        "error": failure_message,
-                        "metadata": failure_metadata,
-                    },
-                )
-                await _qmd_update_index(force=False)
-            except Exception as qmd_error:
-                logger.debug("[QMD TaskKB] failed to persist terminal state: %s", qmd_error)
-        
         finally:
             # 🔥 在清理之前保存 Agent 树到数据库
             try:
@@ -3974,29 +4039,12 @@ async def _get_user_config(db: AsyncSession, user_id: Optional[str]) -> Optional
         return None
     
     try:
-        from app.api.v1.endpoints.config import (
-            decrypt_config, 
-            SENSITIVE_LLM_FIELDS, SENSITIVE_OTHER_FIELDS,
-            _sanitize_other_config,
+        from app.api.v1.endpoints.config import _load_effective_user_config
+
+        return await _load_effective_user_config(
+            db=db,
+            user_id=user_id,
         )
-        
-        result = await db.execute(
-            select(UserConfig).where(UserConfig.user_id == user_id)
-        )
-        config = result.scalar_one_or_none()
-        
-        if config and config.llm_config:
-            user_llm_config = json.loads(config.llm_config) if config.llm_config else {}
-            user_other_config = json.loads(config.other_config) if config.other_config else {}
-            
-            user_llm_config = decrypt_config(user_llm_config, SENSITIVE_LLM_FIELDS)
-            user_other_config = decrypt_config(user_other_config, SENSITIVE_OTHER_FIELDS)
-            user_other_config = _sanitize_other_config(user_other_config)
-            
-            return {
-                "llmConfig": user_llm_config,
-                "otherConfig": user_other_config,
-            }
     except Exception as e:
         logger.warning(f"Failed to get user config: {e}")
     
@@ -4169,11 +4217,10 @@ async def _initialize_tools(
     llm_service,
     user_config: Optional[Dict[str, Any]],
     sandbox_manager: Any, # 传递预初始化的 SandboxManager
-    rag_enabled: bool = False,
     verification_level: str = "analysis_with_poc_plan",
     exclude_patterns: Optional[List[str]] = None,
     target_files: Optional[List[str]] = None,
-    project_id: Optional[str] = None,  # 🔥 用于 RAG collection_name
+    project_id: Optional[str] = None,
     event_emitter: Optional[Any] = None,  # 🔥 新增：用于发送实时日志
     task_id: Optional[str] = None,  # 🔥 新增：用于取消检查
     queue_service: Optional[Any] = None,  # 🔥 新增：漏洞队列服务
@@ -4223,7 +4270,6 @@ async def _initialize_tools(
         IsBLRiskPointInQueueTool,
     )
 
-    _ = rag_enabled
     _ = verification_level
     _ = project_id
     _ = user_config
@@ -4299,13 +4345,22 @@ async def _initialize_tools(
     }
 
     if task_id:
-        from app.services.agent.tools.verification_result_tools import SaveVerificationResultTool
+        from app.services.agent.tools.verification_result_tools import (
+            SaveVerificationResultTool,
+            UpdateVulnerabilityFindingTool,
+        )
 
         verification_tools["save_verification_result"] = SaveVerificationResultTool(
             task_id=task_id,
             save_callback=save_callback,
         )
         logger.info("[Tools] Added save_verification_result tool for task %s", task_id)
+        report_update_tool = UpdateVulnerabilityFindingTool(
+            task_id=task_id,
+            update_callback=None,
+        )
+    else:
+        report_update_tool = None
 
     orchestrator_tools = {**base_tools}
 
@@ -4398,6 +4453,11 @@ async def _initialize_tools(
             "search_code": FileSearchTool(project_root, exclude_patterns, target_files),
             "extract_function": ExtractFunctionTool(project_root=project_root),
             "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
+            **(
+                {"update_vulnerability_finding": report_update_tool}
+                if report_update_tool is not None
+                else {}
+            ),
         },
     }
 
@@ -5072,6 +5132,7 @@ async def _save_findings(
         int: 实际保存的发现数量
     """
     from app.models.agent_task import VulnerabilityType
+    from app.services.agent.tools.verification_result_tools import ensure_finding_identity
 
     logger.info(f"[SaveFindings] Starting to save {len(findings)} findings for task {task_id}")
 
@@ -5167,6 +5228,7 @@ async def _save_findings(
             continue
 
         try:
+            finding_identity = ensure_finding_identity(task_id, finding)
             # 1) normalize severity
             raw_severity = str(
                 finding.get("severity") or
@@ -5501,6 +5563,10 @@ async def _save_findings(
                 or finding.get("fix_explanation")
                 or finding.get("remediation_details")
             )
+            report_text = _normalize_optional_text(
+                finding.get("vulnerability_report")
+                or finding.get("report")
+            )
 
             if not suggestion_text or not fix_code_text:
                 default_suggestion, default_fix_code = _build_default_remediation(raw_type)
@@ -5523,6 +5589,8 @@ async def _save_findings(
             reachability_value = reachability  # reachable|likely_reachable|unknown|unreachable
 
             verification_result_payload = dict(verification_result_payload_input)
+            if finding_identity:
+                verification_result_payload["finding_identity"] = finding_identity
             existing_reachability_target = (
                 verification_result_payload_input.get("reachability_target")
                 if isinstance(verification_result_payload_input, dict)
@@ -5578,6 +5646,8 @@ async def _save_findings(
                 finding_metadata_payload["verification_todo_id"] = verification_todo_id
             if verification_fingerprint:
                 finding_metadata_payload["verification_fingerprint"] = verification_fingerprint
+            if finding_identity:
+                finding_metadata_payload["finding_identity"] = finding_identity
             if raw_file_path:
                 finding_metadata_payload["raw_file_path"] = _normalize_relative_file_path(
                     str(raw_file_path),
@@ -5643,10 +5713,17 @@ async def _save_findings(
             # Find existing finding in current task
             existing_finding_stmt = select(AgentFinding).where(
                 AgentFinding.task_id == task_id,
-                AgentFinding.fingerprint == fingerprint
+                AgentFinding.finding_identity == finding_identity,
             )
             existing_finding_result = await db.execute(existing_finding_stmt)
             db_finding = existing_finding_result.scalar_one_or_none()
+            if db_finding is None:
+                existing_finding_stmt = select(AgentFinding).where(
+                    AgentFinding.task_id == task_id,
+                    AgentFinding.fingerprint == fingerprint
+                )
+                existing_finding_result = await db.execute(existing_finding_stmt)
+                db_finding = existing_finding_result.scalar_one_or_none()
 
             if db_finding:
                 logger.info(f"[SaveFindings] Updating existing finding {db_finding.id} (fingerprint: {fingerprint})")
@@ -5666,6 +5743,8 @@ async def _save_findings(
                 db_finding.suggestion = suggestion_text
                 db_finding.fix_code = fix_code_text
                 db_finding.fix_description = fix_description_text
+                if report_text is not None:
+                    db_finding.report = report_text
                 db_finding.is_verified = is_verified
                 db_finding.ai_confidence = confidence
                 db_finding.status = db_status
@@ -5680,6 +5759,7 @@ async def _save_findings(
                 db_finding.verification_method = verification_method_text
                 db_finding.verification_result = verification_result_payload
                 db_finding.finding_metadata = finding_metadata_payload or None
+                db_finding.finding_identity = finding_identity
                 db_finding.cvss_score = cvss_score
                 db_finding.references = [{"cwe": cwe_id}] if cwe_id else None
                 db_finding.fingerprint = fingerprint
@@ -5704,6 +5784,7 @@ async def _save_findings(
                     suggestion=suggestion_text,
                     fix_code=fix_code_text,
                     fix_description=fix_description_text,
+                    report=report_text,
                     is_verified=is_verified,
                     ai_confidence=confidence,
                     status=db_status,
@@ -5718,6 +5799,7 @@ async def _save_findings(
                     verification_method=verification_method_text,
                     verification_result=verification_result_payload,
                     finding_metadata=finding_metadata_payload or None,
+                    finding_identity=finding_identity,
                     cvss_score=cvss_score,
                     references=[{"cwe": cwe_id}] if cwe_id else None,
                     fingerprint=fingerprint,
@@ -5942,6 +6024,8 @@ async def create_agent_task(
     project = await db.get(Project, request.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    if getattr(project, "source_type", None) != "zip":
+        raise HTTPException(status_code=400, detail="仅支持 ZIP 项目")
 
     verification_level = _normalize_verification_level(request.verification_level)
     normalized_target_files = [
@@ -5965,7 +6049,6 @@ async def create_agent_task(
         audit_scope=normalized_audit_scope,
         target_vulnerabilities=request.target_vulnerabilities,
         verification_level=verification_level,
-        branch_name=request.branch_name,  # 保存用户选择的分支
         exclude_patterns=merged_exclude_patterns,
         target_files=normalized_target_files or None,
         agent_config={
@@ -6777,6 +6860,7 @@ def _serialize_agent_findings(
                     # Backward-compatible for test stubs / older schemas.
                     "fix_code": getattr(item, "fix_code", None),
                     "fix_description": getattr(item, "fix_description", None),
+                    "report": getattr(item, "report", None),
                     "has_poc": bool(item.has_poc),
                     "poc_code": item.poc_code,
                     "poc_description": item.poc_description,
@@ -7005,28 +7089,14 @@ async def update_finding_status(
 async def _get_project_root(
     project: Project,
     task_id: str,
-    branch_name: Optional[str] = None,
-    github_token: Optional[str] = None,
-    gitlab_token: Optional[str] = None,
-    gitea_token: Optional[str] = None,  # 🔥 新增
-    ssh_private_key: Optional[str] = None,  # 🔥 新增：SSH私钥（用于SSH认证）
-    event_emitter: Optional[Any] = None,  # 🔥 新增：用于发送实时日志
+    event_emitter: Optional[Any] = None,
 ) -> str:
     """
-    获取项目根目录
-
-    支持两种项目类型：
-    - ZIP 项目：解压 ZIP 文件到临时目录
-    - 仓库项目：克隆仓库到临时目录
+    为 ZIP 项目准备临时工作目录。
 
     Args:
         project: 项目对象
         task_id: 任务ID
-        branch_name: 分支名称（仓库项目使用，优先于 project.default_branch）
-        github_token: GitHub 访问令牌（用于私有仓库）
-        gitlab_token: GitLab 访问令牌（用于私有仓库）
-        gitea_token: Gitea 访问令牌（用于私有仓库）
-        ssh_private_key: SSH私钥（用于SSH认证）
         event_emitter: 事件发送器（用于发送实时日志）
 
     Returns:
@@ -7036,9 +7106,6 @@ async def _get_project_root(
         RuntimeError: 当项目文件获取失败时
     """
     import zipfile
-    import subprocess
-    import shutil
-    from urllib.parse import urlparse, urlunparse
 
     # 辅助函数：发送事件
     async def emit(message: str, level: str = "info"):
@@ -7055,7 +7122,7 @@ async def _get_project_root(
         if is_task_cancelled(task_id):
             raise asyncio.CancelledError("任务已取消")
 
-    base_path = f"/tmp/deepaudit/{task_id}"
+    base_path = f"/tmp/VulHunter/{task_id}"
 
     # 确保目录存在且为空
     if os.path.exists(base_path):
@@ -7065,523 +7132,44 @@ async def _get_project_root(
     # 🔥 在开始任何操作前检查取消
     check_cancelled()
 
-    # 根据项目类型处理
-    if project.source_type == "zip":
-        # 🔥 ZIP 项目：解压 ZIP 文件
-        check_cancelled()  # 🔥 解压前检查
-        await emit(f"📦 正在解压项目文件...")
-        from app.services.zip_storage import load_project_zip
+    if project.source_type != "zip":
+        await emit("仅支持 ZIP 项目", "error")
+        raise RuntimeError("仅支持 ZIP 项目")
 
-        zip_path = await load_project_zip(project.id)
+    check_cancelled()
+    await emit("正在解压项目文件...")
+    from app.services.zip_storage import load_project_zip
 
-        if zip_path and os.path.exists(zip_path):
-            try:
-                check_cancelled()  # 🔥 解压前再次检查
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    # 🔥 逐个文件解压，支持取消检查
-                    file_list = zip_ref.namelist()
-                    for i, file_name in enumerate(file_list):
-                        if i % 50 == 0:  # 每50个文件检查一次
-                            check_cancelled()
-                        zip_ref.extract(file_name, base_path)
-                logger.info(f"✅ Extracted ZIP project {project.id} to {base_path}")
-                await emit(f"✅ ZIP 文件解压完成")
-            except Exception as e:
-                logger.error(f"Failed to extract ZIP {zip_path}: {e}")
-                await emit(f"❌ 解压失败: {e}", "error")
-                raise RuntimeError(f"无法解压项目文件: {e}")
-        else:
-            logger.warning(f"⚠️ ZIP file not found for project {project.id}")
-            await emit(f"❌ ZIP 文件不存在", "error")
-            raise RuntimeError(f"项目 ZIP 文件不存在: {project.id}")
+    zip_path = await load_project_zip(project.id)
 
-    elif project.source_type == "repository" and project.repository_url:
-        # 🔥 仓库项目：优先使用 ZIP 下载（更快更稳定），git clone 作为回退
-        repo_url = project.repository_url
-        repo_type = project.repository_type or "other"
-
-        await emit(f"🔄 正在获取仓库: {repo_url}")
-
-        # 检测是否为SSH URL（SSH链接不支持ZIP下载）
-        is_ssh_url = GitSSHOperations.is_ssh_url(repo_url)
-
-        # 解析仓库 URL 获取 owner/repo
-        parsed = urlparse(repo_url)
-        path_parts = parsed.path.strip('/').replace('.git', '').split('/')
-        if len(path_parts) >= 2:
-            owner, repo = path_parts[0], path_parts[1]
-        else:
-            owner, repo = None, None
-
-        # 构建分支尝试顺序
-        branches_to_try = []
-        if branch_name:
-            branches_to_try.append(branch_name)
-        if project.default_branch and project.default_branch not in branches_to_try:
-            branches_to_try.append(project.default_branch)
-        for common_branch in ["main", "master"]:
-            if common_branch not in branches_to_try:
-                branches_to_try.append(common_branch)
-
-        download_success = False
-        last_error = ""
-
-        # ============ 方案1: 优先使用 ZIP 下载（更快更稳定）============
-        # SSH链接直接跳过ZIP下载，使用git clone
-        if is_ssh_url:
-            logger.info(f"检测到SSH URL，跳过ZIP下载，直接使用Git克隆")
-            await emit(f"🔑 检测到SSH认证，使用Git克隆...")
-
-        if owner and repo and not is_ssh_url:
-            import httpx
-
-            for branch in branches_to_try:
-                check_cancelled()
-
-                # 清理目录
-                if os.path.exists(base_path) and os.listdir(base_path):
-                    shutil.rmtree(base_path)
-                os.makedirs(base_path, exist_ok=True)
-
-                # 构建 ZIP 下载 URL
-                if repo_type == "github" or "github.com" in repo_url:
-                    # GitHub ZIP 下载 URL
-                    zip_url = f"https://gh-proxy.org/https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
-                    headers = {}
-                    if github_token:
-                        headers["Authorization"] = f"token {github_token}"
-                elif repo_type == "gitlab" or "gitlab" in repo_url:
-                    # GitLab ZIP 下载 URL（需要对 owner/repo 进行 URL 编码）
-                    import urllib.parse
-                    project_path = urllib.parse.quote(f"{owner}/{repo}", safe='')
-                    gitlab_host = parsed.netloc
-                    zip_url = f"https://{gitlab_host}/api/v4/projects/{project_path}/repository/archive.zip?sha={branch}"
-                    headers = {}
-                    if gitlab_token:
-                        headers["PRIVATE-TOKEN"] = gitlab_token
-                else:
-                    # 其他平台，跳过 ZIP 下载
-                    break
-
-                zip_url_candidates = get_mirror_candidates(
-                    zip_url,
-                    enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
-                    mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.org"),
-                    mirror_prefixes=getattr(
-                        settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.org,https://v6.gh-proxy.org"
-                    ),
-                    allow_hosts=getattr(settings, "GIT_MIRROR_HOSTS", "github.com"),
-                    allow_auth_url=getattr(settings, "GIT_MIRROR_ALLOW_AUTH_URL", False),
-                    fallback_to_origin=getattr(settings, "GIT_MIRROR_FALLBACK_TO_ORIGIN", False),
-                )
-                zip_has_origin_url = zip_url in zip_url_candidates
-
-                logger.info(f"📦 尝试下载 ZIP 归档 (分支: {branch})...")
-                await emit(f"📦 尝试下载 ZIP 归档 (分支: {branch})")
-
-                try:
-                    zip_temp_path = f"/tmp/repo_{task_id}_{branch}.zip"
-                    success = False
-                    error = None
-
-                    for idx, candidate_zip_url in enumerate(zip_url_candidates):
-                        using_mirror = candidate_zip_url != zip_url
-
-                        async def download_zip():
-                            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-                                resp = await client.get(candidate_zip_url, headers=headers)
-                                if resp.status_code == 200:
-                                    with open(zip_temp_path, "wb") as f:
-                                        f.write(resp.content)
-                                    return True, None
-                                return False, f"HTTP {resp.status_code}"
-
-                        # 使用取消检查循环
-                        download_task = asyncio.create_task(download_zip())
-                        while not download_task.done():
-                            check_cancelled()
-                            try:
-                                success, error = await asyncio.wait_for(
-                                    asyncio.shield(download_task),
-                                    timeout=1.0,
-                                )
-                                break
-                            except asyncio.TimeoutError:
-                                continue
-
-                        if download_task.done():
-                            success, error = download_task.result()
-
-                        if success:
-                            break
-                        if using_mirror:
-                            if idx < len(zip_url_candidates) - 1:
-                                next_candidate = zip_url_candidates[idx + 1]
-                                if next_candidate == zip_url:
-                                    logger.warning(
-                                        "ZIP 镜像下载失败，原因: %s，回源重试: %s",
-                                        error,
-                                        next_candidate,
-                                    )
-                                else:
-                                    logger.warning(
-                                        "ZIP 镜像下载失败，原因: %s，切换候选重试: %s",
-                                        error,
-                                        next_candidate,
-                                    )
-                            elif not zip_has_origin_url:
-                                logger.warning("ZIP 镜像全部失败，已按策略终止当前候选（未启用回源）")
-
-                    if success and os.path.exists(zip_temp_path):
-                        # 解压 ZIP
+    if zip_path and os.path.exists(zip_path):
+        try:
+            check_cancelled()
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                file_list = zip_ref.namelist()
+                for i, file_name in enumerate(file_list):
+                    if i % 50 == 0:
                         check_cancelled()
-                        with zipfile.ZipFile(zip_temp_path, 'r') as zip_ref:
-                            # ZIP 内通常有一个根目录如 repo-branch/
-                            file_list = zip_ref.namelist()
-                            # 找到公共前缀
-                            if file_list:
-                                common_prefix = file_list[0].split('/')[0] + '/'
-                                for i, file_name in enumerate(file_list):
-                                    if i % 50 == 0:
-                                        check_cancelled()
-                                    # 去掉公共前缀
-                                    if file_name.startswith(common_prefix):
-                                        target_path = file_name[len(common_prefix):]
-                                        if target_path:  # 跳过空路径（根目录本身）
-                                            full_target = os.path.join(base_path, target_path)
-                                            if file_name.endswith('/'):
-                                                os.makedirs(full_target, exist_ok=True)
-                                            else:
-                                                os.makedirs(os.path.dirname(full_target), exist_ok=True)
-                                                with zip_ref.open(file_name) as src, open(full_target, 'wb') as dst:
-                                                    dst.write(src.read())
-
-                        # 清理临时文件
-                        os.remove(zip_temp_path)
-                        logger.info(f"✅ ZIP 下载成功 (分支: {branch})")
-                        await emit(f"✅ 仓库获取成功 (ZIP下载, 分支: {branch})")
-                        download_success = True
-                        break
-                    else:
-                        last_error = error or "下载失败"
-                        logger.warning(f"ZIP 下载失败 (分支 {branch}): {last_error}")
-                        await emit(f"⚠️ ZIP 下载失败，尝试其他分支...", "warning")
-                        # 清理临时文件
-                        if os.path.exists(zip_temp_path):
-                            os.remove(zip_temp_path)
-
-                except asyncio.CancelledError:
-                    logger.info(f"[Cancel] ZIP download cancelled for task {task_id}")
-                    raise
-                except Exception as e:
-                    last_error = str(e)
-                    logger.warning(f"ZIP 下载异常 (分支 {branch}): {e}")
-                    await emit(f"⚠️ ZIP 下载异常: {str(e)[:50]}...", "warning")
-
-        # ============ 方案2: 回退到 git clone ============
-        if not download_success:
-            if is_ssh_url:
-                # SSH链接直接使用git clone，不是"失败"
-                pass  # 已在上面输出提示
-            else:
-                await emit(f"🔄 ZIP 下载失败，回退到 Git 克隆...")
-                logger.info("ZIP download failed, falling back to git clone")
-
-            # 检查 git 是否可用
-            try:
-                git_check = subprocess.run(
-                    ["git", "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if git_check.returncode != 0:
-                    await emit(f"❌ Git 未安装", "error")
-                    raise RuntimeError("Git 未安装，无法克隆仓库。")
-            except FileNotFoundError:
-                await emit(f"❌ Git 未安装", "error")
-                raise RuntimeError("Git 未安装，无法克隆仓库。")
-            except subprocess.TimeoutExpired:
-                await emit(f"❌ Git 检测超时", "error")
-                raise RuntimeError("Git 检测超时")
-
-            # 构建带认证的 URL
-            auth_url = repo_url
-            if repo_type == "github" and github_token:
-                auth_url = urlunparse((
-                    parsed.scheme,
-                    f"{github_token}@{parsed.netloc}",
-                    parsed.path,
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment
-                ))
-                await emit(f"🔐 使用 GitHub Token 认证")
-            elif repo_type == "gitlab" and gitlab_token:
-                auth_url = urlunparse((
-                    parsed.scheme,
-                    f"oauth2:{gitlab_token}@{parsed.netloc}",
-                    parsed.path,
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment
-                ))
-                await emit(f"🔐 使用 GitLab Token 认证")
-            elif repo_type == "gitea" and gitea_token:
-                auth_url = urlunparse((
-                    parsed.scheme,
-                    f"{gitea_token}@{parsed.netloc}",
-                    parsed.path,
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment
-                ))
-                await emit(f"🔐 使用 Gitea Token 认证")
-            elif is_ssh_url and ssh_private_key:
-                await emit(f"🔐 使用 SSH Key 认证")
-
-            clone_url_candidates = [auth_url] if is_ssh_url else get_mirror_candidates(
-                auth_url,
-                enabled=getattr(settings, "GIT_MIRROR_ENABLED", True),
-                mirror_prefix=getattr(settings, "GIT_MIRROR_PREFIX", "https://gh-proxy.org"),
-                mirror_prefixes=getattr(
-                    settings, "GIT_MIRROR_PREFIXES", "https://gh-proxy.org,https://v6.gh-proxy.org"
-                ),
-                allow_hosts=getattr(settings, "GIT_MIRROR_HOSTS", "github.com"),
-                allow_auth_url=getattr(settings, "GIT_MIRROR_ALLOW_AUTH_URL", False),
-                fallback_to_origin=getattr(settings, "GIT_MIRROR_FALLBACK_TO_ORIGIN", False),
-            )
-            clone_has_origin_url = auth_url in clone_url_candidates
-
-            for branch in branches_to_try:
-                check_cancelled()
-
-                if os.path.exists(base_path) and os.listdir(base_path):
-                    shutil.rmtree(base_path)
-                    os.makedirs(base_path, exist_ok=True)
-
-                logger.info(f"🔄 尝试克隆分支: {branch}")
-                await emit(f"🔄 尝试克隆分支: {branch}")
-
-                try:
-                    # SSH URL使用GitSSHOperations（支持SSH密钥认证）
-                    if is_ssh_url and ssh_private_key:
-                        async def run_ssh_clone():
-                            return await asyncio.to_thread(
-                                GitSSHOperations.clone_repo_with_ssh,
-                                repo_url, ssh_private_key, base_path, branch
-                            )
-
-                        clone_task = asyncio.create_task(run_ssh_clone())
-                        while not clone_task.done():
-                            check_cancelled()
-                            try:
-                                result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
-                                break
-                            except asyncio.TimeoutError:
-                                continue
-
-                        if clone_task.done():
-                            result = clone_task.result()
-
-                        # GitSSHOperations返回字典格式
-                        if result.get('success'):
-                            logger.info(f"✅ Git 克隆成功 (SSH, 分支: {branch})")
-                            await emit(f"✅ 仓库获取成功 (SSH克隆, 分支: {branch})")
-                            download_success = True
-                            break
-                        else:
-                            last_error = result.get('message', '未知错误')
-                            logger.warning(f"SSH克隆失败 (分支 {branch}): {last_error[:200]}")
-                            await emit(f"⚠️ 分支 {branch} SSH克隆失败...", "warning")
-                    else:
-                        result = None
-                        for idx, candidate_clone_url in enumerate(clone_url_candidates):
-                            using_mirror = candidate_clone_url != auth_url
-
-                            async def run_clone():
-                                return await asyncio.to_thread(
-                                    subprocess.run,
-                                    ["git", "clone", "--depth", "1", "--branch", branch, candidate_clone_url, base_path],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=120,
-                                )
-
-                            clone_task = asyncio.create_task(run_clone())
-                            while not clone_task.done():
-                                check_cancelled()
-                                try:
-                                    result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
-                                    break
-                                except asyncio.TimeoutError:
-                                    continue
-
-                            if clone_task.done():
-                                result = clone_task.result()
-
-                            if result.returncode == 0:
-                                break
-
-                            last_error = result.stderr
-                            if using_mirror:
-                                if idx < len(clone_url_candidates) - 1:
-                                    next_candidate = clone_url_candidates[idx + 1]
-                                    if next_candidate == auth_url:
-                                        logger.warning(
-                                            "Git 镜像 clone 失败 (分支 %s): %s，回源重试: %s",
-                                            branch,
-                                            (last_error or "")[:200],
-                                            next_candidate,
-                                        )
-                                    else:
-                                        logger.warning(
-                                            "Git 镜像 clone 失败 (分支 %s): %s，切换候选重试: %s",
-                                            branch,
-                                            (last_error or "")[:200],
-                                            next_candidate,
-                                        )
-                                elif not clone_has_origin_url:
-                                    logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
-
-                        if result is not None and result.returncode == 0:
-                            logger.info(f"✅ Git 克隆成功 (分支: {branch})")
-                            await emit(f"✅ 仓库获取成功 (Git克隆, 分支: {branch})")
-                            download_success = True
-                            break
-
-                        logger.warning(f"克隆失败 (分支 {branch}): {str(last_error or '')[:200]}")
-                        await emit(f"⚠️ 分支 {branch} 克隆失败...", "warning")
-                except subprocess.TimeoutExpired:
-                    last_error = f"克隆分支 {branch} 超时"
-                    logger.warning(last_error)
-                    await emit(f"⚠️ 分支 {branch} 克隆超时...", "warning")
-                except asyncio.CancelledError:
-                    logger.info(f"[Cancel] Git clone cancelled for task {task_id}")
-                    raise
-
-            # 尝试默认分支
-            if not download_success:
-                check_cancelled()
-                await emit(f"🔄 尝试使用仓库默认分支...")
-
-                if os.path.exists(base_path) and os.listdir(base_path):
-                    shutil.rmtree(base_path)
-                    os.makedirs(base_path, exist_ok=True)
-
-                try:
-                    # SSH URL使用GitSSHOperations（不指定分支）
-                    if is_ssh_url and ssh_private_key:
-                        async def run_default_ssh_clone():
-                            return await asyncio.to_thread(
-                                GitSSHOperations.clone_repo_with_ssh,
-                                repo_url, ssh_private_key, base_path, branch
-                            )
-
-                        clone_task = asyncio.create_task(run_default_ssh_clone())
-                        while not clone_task.done():
-                            check_cancelled()
-                            try:
-                                result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
-                                break
-                            except asyncio.TimeoutError:
-                                continue
-
-                        if clone_task.done():
-                            result = clone_task.result()
-
-                        if result.get('success'):
-                            logger.info(f"✅ Git 克隆成功 (SSH, 默认分支)")
-                            await emit(f"✅ 仓库获取成功 (SSH克隆, 默认分支)")
-                            download_success = True
-                        else:
-                            last_error = result.get('message', '未知错误')
-                    else:
-                        result = None
-                        for idx, candidate_clone_url in enumerate(clone_url_candidates):
-                            using_mirror = candidate_clone_url != auth_url
-
-                            async def run_default_clone():
-                                return await asyncio.to_thread(
-                                    subprocess.run,
-                                    ["git", "clone", "--depth", "1", candidate_clone_url, base_path],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=120,
-                                )
-
-                            clone_task = asyncio.create_task(run_default_clone())
-                            while not clone_task.done():
-                                check_cancelled()
-                                try:
-                                    result = await asyncio.wait_for(asyncio.shield(clone_task), timeout=1.0)
-                                    break
-                                except asyncio.TimeoutError:
-                                    continue
-
-                            if clone_task.done():
-                                result = clone_task.result()
-
-                            if result.returncode == 0:
-                                break
-
-                            last_error = result.stderr
-                            if using_mirror:
-                                if idx < len(clone_url_candidates) - 1:
-                                    next_candidate = clone_url_candidates[idx + 1]
-                                    if next_candidate == auth_url:
-                                        logger.warning(
-                                            "Git 镜像默认分支 clone 失败: %s，回源重试: %s",
-                                            (last_error or "")[:200],
-                                            next_candidate,
-                                        )
-                                    else:
-                                        logger.warning(
-                                            "Git 镜像默认分支 clone 失败: %s，切换候选重试: %s",
-                                            (last_error or "")[:200],
-                                            next_candidate,
-                                        )
-                                elif not clone_has_origin_url:
-                                    logger.warning("Git 镜像全部失败，已按策略终止当前候选（未启用回源）")
-
-                        if result is not None and result.returncode == 0:
-                            logger.info(f"✅ Git 克隆成功 (默认分支)")
-                            await emit(f"✅ 仓库获取成功 (Git克隆, 默认分支)")
-                            download_success = True
-                        else:
-                            last_error = str(last_error or "")
-                except subprocess.TimeoutExpired:
-                    last_error = "克隆超时"
-                except asyncio.CancelledError:
-                    logger.info(f"[Cancel] Git clone cancelled for task {task_id}")
-                    raise
-
-        if not download_success:
-            # 分析错误原因
-            error_msg = "克隆仓库失败"
-            if "Authentication failed" in last_error or "401" in last_error:
-                error_msg = "认证失败，请检查 GitHub/GitLab Token 配置"
-            elif "not found" in last_error.lower() or "404" in last_error:
-                error_msg = "仓库不存在或无访问权限"
-            elif "Could not resolve host" in last_error:
-                error_msg = "无法解析主机名，请检查网络连接"
-            elif "Permission denied" in last_error or "403" in last_error:
-                error_msg = "无访问权限，请检查仓库权限或 Token"
-            else:
-                error_msg = f"克隆仓库失败: {last_error[:200]}"
-
-            logger.error(f"❌ {error_msg}")
-            await emit(f"❌ {error_msg}", "error")
-            raise RuntimeError(error_msg)
+                    zip_ref.extract(file_name, base_path)
+            logger.info("Extracted ZIP project %s to %s", project.id, base_path)
+            await emit("ZIP 文件解压完成")
+        except Exception as exc:
+            logger.error("Failed to extract ZIP %s: %s", zip_path, exc)
+            await emit(f"解压失败: {exc}", "error")
+            raise RuntimeError(f"无法解压项目文件: {exc}")
+    else:
+        logger.warning("ZIP file not found for project %s", project.id)
+        await emit("ZIP 文件不存在", "error")
+        raise RuntimeError(f"项目 ZIP 文件不存在: {project.id}")
 
     # 验证目录不为空
     if not os.listdir(base_path):
-        await emit(f"❌ 项目目录为空", "error")
+        await emit(f"项目目录为空", "error")
         raise RuntimeError(f"项目目录为空，可能是克隆/解压失败: {base_path}")
 
     # 🔥 智能检测：如果解压后只有一个子目录（常见于 ZIP 文件），
     # 则使用那个子目录作为真正的项目根目录
-    # 例如：/tmp/deepaudit/UUID/PHP-Project/ -> 返回 /tmp/deepaudit/UUID/PHP-Project
+    # 例如：/tmp/VulHunter/UUID/PHP-Project/ -> 返回 /tmp/VulHunter/UUID/PHP-Project
     items = os.listdir(base_path)
     # 过滤掉 macOS 产生的 __MACOSX 目录和隐藏文件
     real_items = [item for item in items if not item.startswith('__') and not item.startswith('.')]
@@ -7589,8 +7177,8 @@ async def _get_project_root(
     if len(real_items) == 1:
         single_item_path = os.path.join(base_path, real_items[0])
         if os.path.isdir(single_item_path):
-            logger.info(f"🔍 检测到单层嵌套目录，自动调整项目根目录: {base_path} -> {single_item_path}")
-            await emit(f"🔍 检测到嵌套目录，自动调整为: {real_items[0]}")
+            logger.info(f" 检测到单层嵌套目录，自动调整项目根目录: {base_path} -> {single_item_path}")
+            await emit(f" 检测到嵌套目录，自动调整为: {real_items[0]}")
             base_path = single_item_path
 
     await emit(f"📁 项目准备完成: {base_path}")
@@ -8128,6 +7716,7 @@ async def generate_audit_report(
             "findings": [
                 {
                     "id": f.id,
+                    "finding_identity": getattr(f, "finding_identity", None),
                     "title": f.title,
                     "severity": f.severity,
                     "vulnerability_type": f.vulnerability_type,
@@ -8432,6 +8021,198 @@ async def generate_audit_report(
         headers={
             "Content-Disposition": f"attachment; filename={filename}"
         }
+    )
+
+
+@router.get("/{task_id}/findings/{finding_id}/report")
+async def get_finding_report(
+    task_id: str,
+    finding_id: str,
+    format: str = Query("markdown", pattern="^(markdown|json)$"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """按 finding_id 获取单条漏洞详情报告（Markdown/JSON）。"""
+    task = await db.get(AgentTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    project = await db.get(Project, task.project_id)
+    if not project:
+        raise HTTPException(status_code=403, detail="无权访问此任务")
+
+    finding_result = await db.execute(
+        select(AgentFinding).where(
+            AgentFinding.task_id == task_id,
+            AgentFinding.id == finding_id,
+        )
+    )
+    finding = finding_result.scalar_one_or_none()
+    if not finding:
+        raise HTTPException(status_code=404, detail="漏洞不存在")
+
+    serialized = _serialize_agent_findings(
+        [finding],
+        include_false_positive=True,
+    )
+    if not serialized:
+        raise HTTPException(status_code=404, detail="漏洞不存在或已被过滤")
+
+    finding_data = serialized[0].model_dump()
+    stored_report = _normalize_optional_text(finding_data.get("report"))
+
+    if format == "json":
+        return {
+            "report_metadata": {
+                "task_id": task.id,
+                "finding_id": finding.id,
+                "project_id": task.project_id,
+                "project_name": project.name,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "task_status": task.status,
+            },
+            "finding": finding_data,
+        }
+
+    if stored_report:
+        filename = f"finding_report_{task.id[:8]}_{finding.id[:8]}.md"
+        from fastapi.responses import Response
+        return Response(
+            content=stored_report,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+            },
+        )
+
+    md_lines: List[str] = []
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    title = str(finding_data.get("display_title") or finding_data.get("title") or "未命名漏洞")
+    severity = str(finding_data.get("severity") or "unknown").upper()
+    vuln_type = str(finding_data.get("vulnerability_type") or "unknown")
+    authenticity = str(finding_data.get("authenticity") or "unknown")
+    reachability = str(finding_data.get("reachability") or "unknown")
+
+    md_lines.append(f"# 漏洞详情报告：{_escape_markdown_inline(title)}")
+    md_lines.append("")
+    md_lines.append("---")
+    md_lines.append("")
+    md_lines.append("## 报告信息")
+    md_lines.append("")
+    md_lines.append("| 属性 | 内容 |")
+    md_lines.append("|----------|-------|")
+    md_lines.append(f"| **项目名称** | {_escape_markdown_table_cell(project.name)} |")
+    md_lines.append(f"| **任务 ID** | `{task.id[:8]}...` |")
+    md_lines.append(f"| **漏洞 ID** | `{finding.id}` |")
+    md_lines.append(f"| **生成时间** | {timestamp} |")
+    md_lines.append("")
+
+    md_lines.append("## 漏洞概览")
+    md_lines.append("")
+    md_lines.append(f"- **严重程度:** {severity}")
+    md_lines.append(f"- **漏洞类型:** `{_escape_markdown_inline(vuln_type)}`")
+    md_lines.append(f"- **真实性判定:** {_escape_markdown_inline(authenticity)}")
+    md_lines.append(f"- **可达性:** {_escape_markdown_inline(reachability)}")
+
+    confidence = finding_data.get("confidence")
+    if isinstance(confidence, (int, float)):
+        md_lines.append(f"- **AI 置信度:** {float(confidence) * 100:.1f}%")
+
+    file_path = finding_data.get("file_path")
+    line_start = finding_data.get("line_start")
+    line_end = finding_data.get("line_end")
+    if file_path:
+        location = _escape_markdown_inline(str(file_path))
+        if line_start:
+            location += f":{line_start}"
+            if line_end and line_end != line_start:
+                location += f"-{line_end}"
+        md_lines.append(f"- **位置:** {location}")
+    md_lines.append("")
+
+    description_markdown = finding_data.get("description_markdown") or finding_data.get("description")
+    if description_markdown:
+        md_lines.append("## 漏洞描述")
+        md_lines.append("")
+        md_lines.append(str(description_markdown))
+        md_lines.append("")
+
+    code_snippet = finding_data.get("code_snippet")
+    if code_snippet:
+        lang = infer_code_fence_language(str(file_path or ""))
+        md_lines.append("## 漏洞代码")
+        md_lines.append("")
+        md_lines.append(f"```{lang}")
+        md_lines.append(str(code_snippet).strip())
+        md_lines.append("```")
+        md_lines.append("")
+
+    verification_evidence = finding_data.get("verification_evidence")
+    if verification_evidence:
+        md_lines.append("## 验证证据")
+        md_lines.append("")
+        md_lines.append(str(verification_evidence))
+        md_lines.append("")
+
+    suggestion = finding_data.get("suggestion")
+    if suggestion:
+        md_lines.append("## 修复建议")
+        md_lines.append("")
+        md_lines.append(str(suggestion))
+        md_lines.append("")
+
+    fix_code = finding_data.get("fix_code")
+    if fix_code:
+        lang = infer_code_fence_language(str(file_path or ""))
+        md_lines.append("## 参考修复代码")
+        md_lines.append("")
+        md_lines.append(f"```{lang if file_path else 'text'}")
+        md_lines.append(str(fix_code).strip())
+        md_lines.append("```")
+        md_lines.append("")
+
+    if bool(finding_data.get("has_poc")):
+        md_lines.append("## 概念验证 (PoC)")
+        md_lines.append("")
+        poc_description = finding_data.get("poc_description")
+        if poc_description:
+            md_lines.append(str(poc_description))
+            md_lines.append("")
+
+        poc_steps = finding_data.get("poc_steps")
+        if isinstance(poc_steps, list) and poc_steps:
+            md_lines.append("### 复现步骤")
+            md_lines.append("")
+            for index, step in enumerate(poc_steps, start=1):
+                md_lines.append(f"{index}. {step}")
+            md_lines.append("")
+
+        poc_code = finding_data.get("poc_code")
+        if poc_code:
+            md_lines.append("### PoC 代码")
+            md_lines.append("")
+            md_lines.append("```")
+            md_lines.append(str(poc_code).strip())
+            md_lines.append("```")
+            md_lines.append("")
+
+    md_lines.append("---")
+    md_lines.append("")
+    md_lines.append("*本报告由自动化安全审计系统生成*")
+    md_lines.append("")
+
+    content = "\n".join(md_lines)
+    filename = f"finding_report_{task.id[:8]}_{finding.id[:8]}.md"
+
+    from fastapi.responses import Response
+
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+        },
     )
 
 

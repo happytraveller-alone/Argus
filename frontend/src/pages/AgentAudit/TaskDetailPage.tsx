@@ -86,6 +86,7 @@ import {
   buildStatsSummary,
   createTokenUsageAccumulator,
 } from "./detailViewModel";
+import { getTerminalStatusTransitionPolicy } from "./terminalStatePolicy";
 import {
   getTaskAutoScroll,
   persistTaskAutoScroll,
@@ -255,6 +256,9 @@ function getMcpRouteLabel(metadata?: Record<string, unknown>): string {
   const adapter = toSafeTrimmedString(metadata?.mcp_adapter);
   const mcpTool = toSafeTrimmedString(metadata?.mcp_tool);
   if (!adapter || !mcpTool) return "";
+  if (adapter.toLowerCase() === "filesystem") {
+    return "";
+  }
   const domain = toSafeTrimmedString(metadata?.mcp_runtime_domain);
   return domain ? `${adapter}/${mcpTool}@${domain}` : `${adapter}/${mcpTool}`;
 }
@@ -667,7 +671,7 @@ function AgentAuditPageContent() {
     {
       key: "static",
       title: "静态扫描",
-      intro: "通过严重规则快速、准确定位缺陷",
+      intro: "通过严重规则快速、准确定位漏洞",
       icon: Zap,
       accentClassName:
         "from-sky-500/25 via-cyan-500/10 to-transparent border-sky-400/40",
@@ -1934,7 +1938,7 @@ function AgentAuditPageContent() {
           const falsePositive = toSafeNumber(metadata?.false_positive) ?? 0;
           const round = toSafeNumber(metadata?.round) ?? 0;
           const compactProgress =
-            `缺陷表收敛进度（第 ${round} 轮）：` +
+            `漏洞表收敛进度（第 ${round} 轮）：` +
             `上下文待收集 ${contextPending}，已就绪 ${contextReady}，失败 ${contextFailed}；` +
             `待验证 ${verifyUnverified}，已验证 ${verified}，假阳性 ${falsePositive}`;
           dispatch({
@@ -2729,23 +2733,26 @@ function AgentAuditPageContent() {
   useEffect(() => {
     const previousStatus = previousTaskStatusRef.current;
     const currentStatus = task?.status;
-    if (
-      (previousStatus === "running" || previousStatus === "pending") &&
-      currentStatus &&
-      TERMINAL_STATUSES.has(currentStatus)
-    ) {
-      markTerminalBoundary(currentStatus, lastEventSequenceRef.current);
-      reconcileTerminalLogs(currentStatus, lastEventSequenceRef.current);
+    const normalizedCurrentStatus = String(currentStatus || "").trim().toLowerCase();
+    const terminalPolicy = getTerminalStatusTransitionPolicy({
+      previousStatus,
+      currentStatus,
+    });
+    if (terminalPolicy.didEnterTerminal) {
+      if (terminalPolicy.shouldReconcileLogs) {
+        reconcileTerminalLogs(normalizedCurrentStatus, lastEventSequenceRef.current);
+      }
       compactToolLogsAfterReplay();
-      void backfillEventsSince(
-        lastEventSequenceRef.current,
-        "status_transition_to_terminal",
-      );
+      if (terminalPolicy.shouldBackfill) {
+        void backfillEventsSince(
+          lastEventSequenceRef.current,
+          "status_transition_to_terminal",
+        );
+      }
       void loadFindings({ silent: true });
     }
     previousTaskStatusRef.current = currentStatus;
   }, [
-    markTerminalBoundary,
     task?.status,
     backfillEventsSince,
     compactToolLogsAfterReplay,
@@ -3214,7 +3221,7 @@ function AgentAuditPageContent() {
               <div
                 ref={logsContainerRef}
                 onScroll={handleLogsScroll}
-                className="overflow-y-auto custom-scrollbar"
+                className="overflow-y-auto custom-scrollbar-dark"
                 style={{ height: LOG_VIEWPORT_HEIGHT_PX, maxHeight: "30vh" }}
               >
                 {filteredLogs.length === 0 ? (

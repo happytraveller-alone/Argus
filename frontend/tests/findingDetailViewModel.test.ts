@@ -1,8 +1,100 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
-import { buildFindingDetailCodeSections } from "../src/pages/finding-detail/viewModel.ts";
+import type { AgentFinding } from "../src/shared/api/agentTasks.ts";
+import type { BanditFinding } from "../src/shared/api/bandit.ts";
+import type { OpengrepFinding } from "../src/shared/api/opengrep.ts";
+import {
+  buildAgentFindingDetailModel,
+  buildBanditFindingDetailModel,
+  buildFullFileDisplayLines,
+  buildFindingDetailCodeSections,
+  buildOpengrepFindingDetailModel,
+  isFindingDetailFullFilePathSupported,
+} from "../src/pages/finding-detail/viewModel.ts";
 import { buildFindingDetailPath } from "../src/shared/utils/findingRoute.ts";
+
+const agentFinding: AgentFinding = {
+  id: "agent-1",
+  task_id: "task-agent",
+  vulnerability_type: "sql injection",
+  severity: "high",
+  title: "JdbcController.java 中存在 SQL 注入",
+  display_title: "JdbcController.java 中存在 SQL 注入",
+  description: "用户输入被直接拼接进 SQL 语句，攻击者可构造恶意参数读取数据。",
+  description_markdown: null,
+  file_path: "src/main/java/demo/JdbcController.java",
+  line_start: 69,
+  line_end: 83,
+  code_snippet: "String sql = \"select * from t where id = \" + id;",
+  code_context: [
+    "public String find(String id) {",
+    "  String sql = \"select * from t where id = \" + id;",
+    "  return jdbcTemplate.queryForObject(sql, String.class);",
+    "}",
+  ].join("\n"),
+  cwe_id: "CWE-89",
+  cwe_name: "SQL Injection",
+  context_start_line: 67,
+  context_end_line: 85,
+  status: "verified",
+  is_verified: true,
+  reachability: "reachable",
+  authenticity: "true_positive",
+  verification_evidence: "参数 id 未经过滤直接进入 SQL 字符串。",
+  verification_todo_id: null,
+  verification_fingerprint: null,
+  reachability_file: null,
+  reachability_function: null,
+  reachability_function_start_line: null,
+  reachability_function_end_line: null,
+  flow_path_score: null,
+  flow_call_chain: null,
+  function_trigger_flow: ["Controller.find", "JdbcTemplate.queryForObject"],
+  flow_control_conditions: null,
+  logic_authz_evidence: null,
+  has_poc: false,
+  poc_code: null,
+  trigger_flow: null,
+  poc_trigger_chain: null,
+  suggestion: null,
+  fix_code: null,
+  ai_explanation: null,
+  ai_confidence: 0.91,
+  confidence: 0.91,
+  created_at: "2026-03-12T00:00:00Z",
+};
+
+const opengrepFinding: OpengrepFinding = {
+  id: "og-1",
+  scan_task_id: "task-og",
+  rule: {},
+  rule_name: "python-sqli",
+  cwe: ["CWE-89"],
+  description: "Possible SQL injection",
+  file_path: "/tmp/VulHunter_project/archive-root/src/app/db.py",
+  start_line: 23,
+  code_snippet: "query = f\"SELECT * FROM users WHERE id = {user_id}\"",
+  severity: "ERROR",
+  status: "open",
+  confidence: "HIGH",
+};
+
+const banditFinding: BanditFinding = {
+  id: "bandit-1",
+  scan_task_id: "task-bandit",
+  test_id: "B602",
+  test_name: "subprocess_popen_with_shell_equals_true",
+  issue_text: "shell=True may trigger command injection",
+  file_path: "/tmp/VulHunter_project/archive-root/app/tasks/run_cmd.py",
+  line_number: 41,
+  issue_severity: "HIGH",
+  issue_confidence: "HIGH",
+  code_snippet: "subprocess.Popen(command, shell=True)",
+  more_info: "https://bandit.readthedocs.io/",
+  status: "open",
+};
 
 test("buildFindingDetailCodeSections 裁剪命中代码并插入省略占位", () => {
   const code = Array.from({ length: 21 }, (_, index) => `line ${20 + index}`).join("\n");
@@ -115,4 +207,119 @@ test("buildFindingDetailPath 为 bandit 详情保留 engine 查询参数", () =>
     route,
     "/finding-detail/static/task-bandit/finding-bandit?engine=bandit",
   );
+});
+
+test("buildAgentFindingDetailModel 将概览信息直接收敛为 overviewItems", () => {
+  const model = buildAgentFindingDetailModel({
+    finding: agentFinding,
+    taskId: "task-agent",
+    findingId: "finding-agent",
+    projectId: "project-zip",
+    projectSourceType: "zip",
+    projectName: "demo",
+  });
+
+  assert.equal("sourceLabel" in model, false);
+  assert.equal("statusLabel" in model, false);
+  assert.equal("heroEyebrow" in model, false);
+  assert.equal("heroTitle" in model, false);
+  assert.equal("heroSubtitle" in model, false);
+  assert.equal("helperLocation" in model, false);
+  assert.equal(model.overviewItems[0]?.label, "状态");
+  assert.equal(model.overviewItems[0]?.value, "已验证");
+  assert.deepEqual(
+    model.overviewItems.map((item) => item.label),
+    ["状态", "漏洞类型", "漏洞危害", "漏洞置信度"],
+  );
+  assert.equal(model.overviewItems[1]?.value, "CWE-89 SQL注入");
+  assert.equal(model.codeSections[0]?.displayFilePath, "src/main/java/demo/JdbcController.java");
+  assert.equal(model.codeSections[0]?.locationLabel, "第 69-83 行");
+  assert.equal(model.codeSections[0]?.fullFileAvailable, true);
+  assert.deepEqual(model.codeSections[0]?.fullFileRequest, {
+    projectId: "project-zip",
+    filePath: "src/main/java/demo/JdbcController.java",
+  });
+  assert.ok(Array.isArray(model.codeSections[0]?.relatedLines));
+  assert.equal(model.codeSections[0]?.relatedLines?.[0]?.lineNumber, 67);
+});
+
+test("buildAgentFindingDetailModel 在非 ZIP 项目下禁用全文查看", () => {
+  const model = buildAgentFindingDetailModel({
+    finding: agentFinding,
+    taskId: "task-agent",
+    findingId: "finding-agent",
+    projectId: "project-repo",
+    projectSourceType: "repository",
+    projectName: "demo",
+  });
+
+  assert.equal(model.codeSections[0]?.fullFileAvailable, false);
+  assert.equal(model.codeSections[0]?.fullFileRequest, null);
+});
+
+test("isFindingDetailFullFilePathSupported 仅接受 ZIP 内相对路径", () => {
+  assert.equal(isFindingDetailFullFilePathSupported("src/main.py"), true);
+  assert.equal(isFindingDetailFullFilePathSupported("./src/main.py"), true);
+  assert.equal(isFindingDetailFullFilePathSupported("/tmp/VulHunter_project/src/main.py"), false);
+  assert.equal(isFindingDetailFullFilePathSupported("/abs/path/src/main.py"), false);
+  assert.equal(isFindingDetailFullFilePathSupported(""), false);
+});
+
+test("buildBanditFindingDetailModel 在 ZIP 项目下遇到旧绝对路径时禁用全文查看", () => {
+  const model = buildBanditFindingDetailModel({
+    finding: banditFinding,
+    taskId: "task-bandit",
+    findingId: "finding-bandit",
+    taskName: "Bandit Scan",
+    projectId: "project-zip",
+    projectSourceType: "zip",
+  });
+
+  assert.equal(model.codeSections[0]?.fullFileAvailable, false);
+  assert.equal(model.codeSections[0]?.fullFileRequest, null);
+});
+
+test("buildOpengrepFindingDetailModel 在 ZIP 项目下遇到旧绝对路径时禁用全文查看", () => {
+  const model = buildOpengrepFindingDetailModel({
+    finding: opengrepFinding,
+    taskId: "task-og",
+    findingId: "finding-og",
+    taskName: "Opengrep Scan",
+    projectId: "project-zip",
+    projectSourceType: "zip",
+  });
+
+  assert.equal(model.codeSections[0]?.fullFileAvailable, false);
+  assert.equal(model.codeSections[0]?.fullFileRequest, null);
+  assert.equal(model.overviewItems[1]?.value, "CWE-89 SQL注入");
+});
+
+test("buildFullFileDisplayLines 生成全文视图并保持焦点与高亮区间", () => {
+  const lines = buildFullFileDisplayLines({
+    content: ["alpha", "beta", "gamma", "delta"].join("\n"),
+    focusLine: 3,
+    highlightStartLine: 2,
+    highlightEndLine: 3,
+    lineStart: 1,
+  });
+
+  assert.deepEqual(
+    lines.map((line) => line.lineNumber),
+    [1, 2, 3, 4],
+  );
+  assert.equal(lines[1]?.isHighlighted, true);
+  assert.equal(lines[2]?.isHighlighted, true);
+  assert.equal(lines[2]?.isFocus, true);
+});
+
+test("buildOverviewItems 不再使用 hero 历史命名", () => {
+  const source = readFileSync(
+    new URL("../src/pages/finding-detail/viewModel.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /headlineLabel/);
+  assert.match(source, /headlineValue/);
+  assert.doesNotMatch(source, /buildOverviewItems[\s\S]*heroEyebrow/);
+  assert.doesNotMatch(source, /buildOverviewItems[\s\S]*heroTitle/);
 });

@@ -204,7 +204,7 @@ class GetVulnerabilityKnowledgeTool(AgentTool):
                 if knowledge_lang.lower() != project_lang_lower:
                     output_parts.append("")
                     output_parts.append("=" * 60)
-                    output_parts.append(f"⚠️ **重要警告**: 以下示例代码是 {knowledge_lang.upper()} 语言")
+                    output_parts.append(f"**重要警告**: 以下示例代码是 {knowledge_lang.upper()} 语言")
                     output_parts.append(f"   你正在审计的项目是 {project_language.upper()} 项目")
                     output_parts.append("   **这些代码示例仅供概念参考，不要直接套用到目标项目！**")
                     output_parts.append("   请在目标项目中查找该语言特有的等效漏洞模式。")

@@ -24,7 +24,7 @@ function hasCommand(command, args = ['--version']) {
 function ensureEnvFile() {
   if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
     fs.copyFileSync(envExamplePath, envPath);
-    console.log('✅ 已从 .env.example 创建 frontend/.env');
+    console.log('已从 .env.example 创建 frontend/.env');
   }
 }
 
@@ -51,12 +51,12 @@ function main() {
 
   const localSupported = isNodeVersionSupported() && ensurePnpm();
   if (localSupported) {
-    console.log('✅ 使用本机 Node + pnpm 安装前端依赖');
+    console.log('使用本机 Node + pnpm 安装前端依赖');
     run('pnpm', ['install', '--no-frozen-lockfile']);
     return;
   }
 
-  console.log('ℹ️ 本机前端工具链不可用，切换到 Docker 前端环境完成安装');
+  console.log('本机前端工具链不可用，切换到 Docker 前端环境完成安装');
   run('bash', [dockerSetupScript, 'pnpm', 'install', '--no-frozen-lockfile'], repoRoot);
 }
 

@@ -86,8 +86,8 @@ class ThinkTool(AgentTool):
         
         # 根据类别添加标记
         category_labels = {
-            "analysis": "🔍 分析",
-            "planning": "📋 规划",
+            "analysis": " 分析",
+            "planning": "规划",
             "evaluation": "⚖️ 评估",
             "decision": "🎯 决策",
             "general": "💭 思考",

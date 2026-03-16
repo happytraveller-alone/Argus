@@ -88,6 +88,52 @@ test("provider switching refreshes default model and only refreshes Base URL bef
 	});
 });
 
+test("system provider switch preserves existing values when next defaults are blank", async () => {
+	const systemLlmDraft = await importOrFail<any>(
+		"../src/components/system/llmProviderSwitch.ts",
+	);
+
+	assert.equal(
+		systemLlmDraft.resolveProviderSwitchFieldValue({
+			currentValue: "https://gateway.internal/v1",
+			wasTouched: false,
+			nextDefaultValue: "",
+		}),
+		"https://gateway.internal/v1",
+	);
+	assert.equal(
+		systemLlmDraft.resolveProviderSwitchFieldValue({
+			currentValue: "gpt-5-user",
+			wasTouched: false,
+			nextDefaultValue: "",
+		}),
+		"gpt-5-user",
+	);
+});
+
+test("system provider switch still applies next defaults when current field is empty", async () => {
+	const systemLlmDraft = await importOrFail<any>(
+		"../src/components/system/llmProviderSwitch.ts",
+	);
+
+	assert.equal(
+		systemLlmDraft.resolveProviderSwitchFieldValue({
+			currentValue: "",
+			wasTouched: false,
+			nextDefaultValue: "https://api.openai.com/v1",
+		}),
+		"https://api.openai.com/v1",
+	);
+	assert.equal(
+		systemLlmDraft.resolveProviderSwitchFieldValue({
+			currentValue: "",
+			wasTouched: false,
+			nextDefaultValue: "gpt-5",
+		}),
+		"gpt-5",
+	);
+});
+
 test("LLM gate marks only required missing fields and exempts ollama API keys", async () => {
 	const providerCatalog = await importOrFail<any>(
 		"../src/shared/llm/providerCatalog.ts",

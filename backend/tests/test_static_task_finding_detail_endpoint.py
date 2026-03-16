@@ -1,11 +1,13 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
 from app.api.v1.endpoints.static_tasks import (
     get_gitleaks_finding,
+    get_static_task_finding_context,
     get_static_task_finding,
 )
 
@@ -118,6 +120,70 @@ async def test_get_static_task_finding_returns_enriched_finding_payload():
     assert result["confidence"] == "HIGH"
     assert result["cwe"] == ["CWE-89"]
     assert result["rule_name"] == "python.security.sql-injection"
+
+
+@pytest.mark.asyncio
+async def test_get_static_task_finding_context_accepts_paths_with_zip_root_prefix(
+    monkeypatch,
+    tmp_path,
+):
+    project_root = tmp_path / "openclaw-2026.3.7"
+    source_file = project_root / "src" / "discord" / "voice-message.ts"
+    source_file.parent.mkdir(parents=True, exist_ok=True)
+    source_file.write_text(
+        "\n".join(
+            [
+                "const noop = 0;"
+                if index == 1
+                else "const url = input;"
+                if index == 264
+                else "const res = await fetch(url, {});"
+                if index == 265
+                else "const method = \"POST\";"
+                if index == 266
+                else f"line {index}"
+                for index in range(1, 271)
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    db = AsyncMock()
+    db.execute = AsyncMock(
+        side_effect=[
+            _ScalarOneOrNoneResult(
+                SimpleNamespace(id="task-1", project_id="project-1"),
+            ),
+            _ScalarOneOrNoneResult(
+                SimpleNamespace(
+                    id="finding-1",
+                    scan_task_id="task-1",
+                    file_path="openclaw-2026.3.7/src/discord/voice-message.ts",
+                    start_line=265,
+                    rule={},
+                )
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.static_tasks_opengrep._get_project_root",
+        AsyncMock(return_value=str(project_root)),
+    )
+
+    result = await get_static_task_finding_context(
+        task_id="task-1",
+        finding_id="finding-1",
+        before=1,
+        after=1,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert result["file_path"] == "src/discord/voice-message.ts"
+    assert result["start_line"] == 265
+    assert result["end_line"] == 265
+    assert [line["line_number"] for line in result["lines"]] == [264, 265, 266]
 
 
 @pytest.mark.asyncio

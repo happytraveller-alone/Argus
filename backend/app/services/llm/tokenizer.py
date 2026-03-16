@@ -153,14 +153,14 @@ class TokenEstimator:
             try:
                 count = len(encoder.encode(text))
                 strategy = "预热 tiktoken 精确计数" if mode == _RUNTIME_MODE_AUTO else "tiktoken 精确计数"
-                _log_method_once(f"✅ Token 计数方案: {strategy}")
+                _log_method_once(f"Token 计数方案: {strategy}")
                 return count
             except Exception as exc:
                 logger.debug("tiktoken encode failed: %s, falling back to heuristic", exc)
 
         if mode == _RUNTIME_MODE_PRECISE:
             _log_method_once(
-                "⚠️ Token 计数方案: 启发式估算（精确计数不可用，已回退）",
+                "Token 计数方案: 启发式估算（精确计数不可用，已回退）",
                 level=logging.WARNING,
             )
         elif mode == _RUNTIME_MODE_AUTO:
@@ -256,7 +256,7 @@ def prewarm_tiktoken(model: Optional[str] = None) -> bool:
             warmed += 1
 
         if warmed:
-            logger.info("✅ tiktoken 预热完成: warmed=%s, cache_dir=%s", warmed, get_tiktoken_cache_dir() or "<default>")
+            logger.info("tiktoken 预热完成: warmed=%s, cache_dir=%s", warmed, get_tiktoken_cache_dir() or "<default>")
             return True
 
         logger.warning("tiktoken 预热未命中任何编码器")

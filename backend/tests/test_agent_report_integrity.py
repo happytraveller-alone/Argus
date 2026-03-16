@@ -78,5 +78,5 @@ async def test_generate_report_keeps_long_text_and_escapes_markdown_fields():
     assert "Unsafe \\[link\\]\\(x\\) \\#1 \\| critical" in body
     assert "src/security/\\[core\\]\\(module\\)\\#file.py:12-15" in body
     assert long_description in body
-    assert "DeepAudit" not in body
+    assert "VulHunter" not in body
     assert "VulHunter" not in body

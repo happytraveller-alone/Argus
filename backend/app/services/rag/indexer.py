@@ -276,7 +276,7 @@ class ChromaVectorStore(VectorStore):
                     metadata=collection_metadata,
                 )
                 self._is_new_collection = True
-                logger.info(f"✨ 创建新 collection '{self.collection_name}'")
+                logger.info(f"创建新 collection '{self.collection_name}'")
 
         except ImportError:
             raise ImportError("chromadb is required. Install with: pip install chromadb")
@@ -885,7 +885,7 @@ class CodeIndexer:
                 logger.info(f"🔄 智能模式: 选择全量重建 (原因: {rebuild_reason})")
             else:
                 actual_mode = IndexUpdateMode.INCREMENTAL
-                logger.info("📝 智能模式: 选择增量更新")
+                logger.info("智能模式: 选择增量更新")
         else:
             actual_mode = update_mode
 
@@ -970,7 +970,7 @@ class CodeIndexer:
                 progress.errors.append(f"{file_path}: {str(e)}")
                 progress.processed_files += 1
 
-        logger.info(f"📝 创建了 {len(all_chunks)} 个代码块")
+        logger.info(f"创建了 {len(all_chunks)} 个代码块")
 
         # 批量嵌入和索引
         if all_chunks:
@@ -988,7 +988,7 @@ class CodeIndexer:
         })
 
         progress.indexed_chunks = len(all_chunks)
-        logger.info(f"✅ 全量索引完成: {progress.added_files} 个文件, {len(all_chunks)} 个代码块")
+        logger.info(f"全量索引完成: {progress.added_files} 个文件, {len(all_chunks)} 个代码块")
         yield progress
 
     async def _incremental_index(
@@ -1002,7 +1002,7 @@ class CodeIndexer:
         cancel_check: Optional[Callable[[], bool]] = None,
     ) -> AsyncGenerator[IndexingProgress, None]:
         """增量索引"""
-        logger.info("📝 开始增量索引...")
+        logger.info("开始增量索引...")
 
         # 获取已索引文件的 hash
         indexed_file_hashes = await self.vector_store.get_file_hashes()
@@ -1141,7 +1141,7 @@ class CodeIndexer:
 
         progress.indexed_chunks = len(all_chunks)
         logger.info(
-            f"✅ 增量索引完成: 新增 {progress.added_files}, "
+            f"增量索引完成: 新增 {progress.added_files}, "
             f"更新 {progress.updated_files}, 删除 {progress.deleted_files}"
         )
         yield progress
@@ -1318,7 +1318,7 @@ class CodeIndexer:
                 metadatas=metadatas,
             )
 
-        logger.info(f"✅ 索引 {len(chunks)} 个代码块成功")
+        logger.info(f"索引 {len(chunks)} 个代码块成功")
 
     def _collect_files(
         self,

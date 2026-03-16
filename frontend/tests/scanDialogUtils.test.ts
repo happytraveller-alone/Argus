@@ -64,6 +64,20 @@ test("buildCreateProjectStaticTaskRoute preserves query params", () => {
   );
 });
 
+test("buildCreateProjectStaticTaskRoute preserves phpstan-only query params", () => {
+  const params = new URLSearchParams();
+  params.set("phpstanTaskId", "ps-1");
+  params.set("tool", "phpstan");
+
+  assert.equal(
+    buildCreateProjectStaticTaskRoute({
+      primaryTaskId: "task-phpstan",
+      params,
+    }),
+    "/static-analysis/task-phpstan?phpstanTaskId=ps-1&tool=phpstan",
+  );
+});
+
 test("extractCreateProjectScanApiErrorMessage falls back to error.message", () => {
   assert.equal(
     extractCreateProjectScanApiErrorMessage(new Error("请求失败")),

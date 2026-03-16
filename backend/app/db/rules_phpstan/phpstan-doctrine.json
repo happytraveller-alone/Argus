@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-03-16T02:16:34.563281+00:00",
+  "repo": "phpstan-doctrine",
+  "package": "phpstan/phpstan-doctrine",
+  "count": 8,
+  "rules": [
+    {
+      "id": "phpstan/phpstan-doctrine:PHPStan\\Rules\\Doctrine\\ORM\\DqlRule",
+      "package": "phpstan/phpstan-doctrine",
+      "repo": "phpstan-doctrine",
+      "rule_class": "PHPStan\\Rules\\Doctrine\\ORM\\DqlRule",
+      "name": "DqlRule",
+      "description_summary": "@implements Rule<Node\\Expr\\MethodCall>",
+      "source_file": "src/Rules/Doctrine/ORM/DqlRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-doctrine:PHPStan\\Rules\\Doctrine\\ORM\\EntityColumnRule",
+      "package": "phpstan/phpstan-doctrine",
+      "repo": "phpstan-doctrine",
+      "rule_class": "PHPStan\\Rules\\Doctrine\\ORM\\EntityColumnRule",
+      "name": "EntityColumnRule",
+      "description_summary": "@implements Rule<ClassPropertyNode>",
+      "source_file": "src/Rules/Doctrine/ORM/EntityColumnRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-doctrine:PHPStan\\Rules\\Doctrine\\ORM\\EntityConstructorNotFinalRule",
+      "package": "phpstan/phpstan-doctrine",
+      "repo": "phpstan-doctrine",
+      "rule_class": "PHPStan\\Rules\\Doctrine\\ORM\\EntityConstructorNotFinalRule",
+      "name": "EntityConstructorNotFinalRule",
+      "description_summary": "@implements Rule<ClassMethod>",
+      "source_file": "src/Rules/Doctrine/ORM/EntityConstructorNotFinalRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-doctrine:PHPStan\\Rules\\Doctrine\\ORM\\EntityMappingExceptionRule",
+      "package": "phpstan/phpstan-doctrine",
+      "repo": "phpstan-doctrine",
+      "rule_class": "PHPStan\\Rules\\Doctrine\\ORM\\EntityMappingExceptionRule",
+      "name": "EntityMappingExceptionRule",
+      "description_summary": "@implements Rule<InClassNode>",
+      "source_file": "src/Rules/Doctrine/ORM/EntityMappingExceptionRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-doctrine:PHPStan\\Rules\\Doctrine\\ORM\\EntityNotFinalRule",
+      "package": "phpstan/phpstan-doctrine",
+      "repo": "phpstan-doctrine",
+      "rule_class": "PHPStan\\Rules\\Doctrine\\ORM\\EntityNotFinalRule",
+      "name": "EntityNotFinalRule",
+      "description_summary": "@implements Rule<InClassNode>",
+      "source_file": "src/Rules/Doctrine/ORM/EntityNotFinalRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-doctrine:PHPStan\\Rules\\Doctrine\\ORM\\EntityRelationRule",
+      "package": "phpstan/phpstan-doctrine",
+      "repo": "phpstan-doctrine",
+      "rule_class": "PHPStan\\Rules\\Doctrine\\ORM\\EntityRelationRule",
+      "name": "EntityRelationRule",
+      "description_summary": "@implements Rule<ClassPropertyNode>",
+      "source_file": "src/Rules/Doctrine/ORM/EntityRelationRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-doctrine:PHPStan\\Rules\\Doctrine\\ORM\\QueryBuilderDqlRule",
+      "package": "phpstan/phpstan-doctrine",
+      "repo": "phpstan-doctrine",
+      "rule_class": "PHPStan\\Rules\\Doctrine\\ORM\\QueryBuilderDqlRule",
+      "name": "QueryBuilderDqlRule",
+      "description_summary": "@implements Rule<Node\\Expr\\MethodCall>",
+      "source_file": "src/Rules/Doctrine/ORM/QueryBuilderDqlRule.php",
+      "source": "official_extension",
+      "is_active": true
+    },
+    {
+      "id": "phpstan/phpstan-doctrine:PHPStan\\Rules\\Doctrine\\ORM\\RepositoryMethodCallRule",
+      "package": "phpstan/phpstan-doctrine",
+      "repo": "phpstan-doctrine",
+      "rule_class": "PHPStan\\Rules\\Doctrine\\ORM\\RepositoryMethodCallRule",
+      "name": "RepositoryMethodCallRule",
+      "description_summary": "@implements Rule<Node\\Expr\\MethodCall>",
+      "source_file": "src/Rules/Doctrine/ORM/RepositoryMethodCallRule.php",
+      "source": "official_extension",
+      "is_active": true
+    }
+  ]
+}

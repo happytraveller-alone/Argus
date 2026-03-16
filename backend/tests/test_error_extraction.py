@@ -53,9 +53,9 @@ AttributeError: 'BaseHTTPRequestHandler' object has no attribute 'request_versio
     print(f"提取的错误: {extracted[:100]}...")
     
     if extracted and "AttributeError" in extracted:
-        print("✅ 成功：从 stderr 提取了 AttributeError")
+        print("成功：从 stderr 提取了 AttributeError")
     else:
-        print("❌ 失败：未能提取错误信息")
+        print("失败：未能提取错误信息")
         return False
     
     # 测试用例2: error 字段已有内容
@@ -72,9 +72,9 @@ AttributeError: 'BaseHTTPRequestHandler' object has no attribute 'request_versio
     print(f"提取的错误: {extracted2}")
     
     if extracted2 == "Execution failed: something went wrong":
-        print("✅ 成功：保留原有 error 字段")
+        print("成功：保留原有 error 字段")
     else:
-        print("❌ 失败：error 字段被覆盖")
+        print("失败：error 字段被覆盖")
         return False
     
     # 测试用例3: 执行成功
@@ -91,9 +91,9 @@ AttributeError: 'BaseHTTPRequestHandler' object has no attribute 'request_versio
     print(f"提取的错误: {extracted3}")
     
     if not extracted3:
-        print("✅ 成功：执行成功时 error 为空")
+        print("成功：执行成功时 error 为空")
     else:
-        print("❌ 失败：不应该有错误信息")
+        print("失败：不应该有错误信息")
         return False
     
     # 测试用例4: 仅有非零退出码
@@ -110,9 +110,9 @@ AttributeError: 'BaseHTTPRequestHandler' object has no attribute 'request_versio
     print(f"提取的错误: {extracted4}")
     
     if extracted4 and "退出码" in extracted4 and "137" in extracted4:
-        print("✅ 成功：从退出码生成错误信息")
+        print("成功：从退出码生成错误信息")
     else:
-        print("❌ 失败：未能从退出码生成错误")
+        print("失败：未能从退出码生成错误")
         return False
     
     # 测试用例5: stderr 很长（超过 500 字符）
@@ -130,13 +130,13 @@ AttributeError: 'BaseHTTPRequestHandler' object has no attribute 'request_versio
     print(f"提取的错误长度: {len(extracted5 or '')}")
     
     if extracted5 and len(extracted5) == 500:
-        print("✅ 成功：stderr 被截断到 500 字符")
+        print("成功：stderr 被截断到 500 字符")
     else:
-        print(f"❌ 失败：长度应该是 500，实际是 {len(extracted5 or '')}")
+        print(f"失败：长度应该是 500，实际是 {len(extracted5 or '')}")
         return False
     
     print("\n" + "=" * 60)
-    print("✅ 所有测试通过！")
+    print("所有测试通过！")
     print("=" * 60)
     return True
 

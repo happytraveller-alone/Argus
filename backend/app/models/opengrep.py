@@ -19,6 +19,7 @@ from sqlalchemy import (
     JSON,
     Index,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -119,4 +120,9 @@ class OpengrepRule(Base):
             "confidence",
         ),
         Index("ix_opengrep_rules_source_correct", "source", "correct"),
+        Index(
+            "ix_opengrep_rules_name_trgm",
+            text("lower(name) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
     )

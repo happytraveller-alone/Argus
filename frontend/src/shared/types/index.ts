@@ -61,7 +61,6 @@ export interface AuditTask {
   project_id: string;
   task_type: 'repository' | 'instant';
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-  branch_name?: string;
   exclude_patterns: string;
   scan_config: string;
   total_files: number;
@@ -165,7 +164,6 @@ export interface CreateProjectForm {
 export interface CreateAuditTaskForm {
   project_id: string;
   task_type: 'repository' | 'instant';
-  branch_name?: string;
   exclude_patterns: string[];
   rule_set_id?: string;
   prompt_template_id?: string;
@@ -215,17 +213,41 @@ export interface DashboardVulnsItem {
   total_vulns: number;
 }
 
+export interface DashboardRuleConfidenceItem {
+  confidence: "HIGH" | "MEDIUM" | "LOW" | "UNSPECIFIED";
+  total_rules: number;
+  enabled_rules: number;
+}
+
+export interface DashboardRuleConfidenceByLanguageItem {
+  language: string;
+  high_count: number;
+  medium_count: number;
+}
+
+export interface DashboardCweDistributionItem {
+  cwe_id: string;
+  cwe_name: string;
+  total_findings: number;
+  opengrep_findings: number;
+  agent_findings: number;
+  bandit_findings: number;
+}
+
 export interface DashboardSnapshotResponse {
   generated_at: string;
   total_scan_duration_ms: number;
   scan_runs: DashboardScanRunsItem[];
   vulns: DashboardVulnsItem[];
+  rule_confidence: DashboardRuleConfidenceItem[];
+  rule_confidence_by_language: DashboardRuleConfidenceByLanguageItem[];
+  cwe_distribution: DashboardCweDistributionItem[];
 }
 
 export interface StaticScanOverviewItem {
   project_id: string;
   project_name: string;
-  last_scan_tool: "opengrep" | "gitleaks";
+  last_scan_tool: "opengrep" | "gitleaks" | "bandit" | "phpstan";
   last_scan_task_id: string;
   paired_gitleaks_task_id?: string | null;
   last_scan_at: string;

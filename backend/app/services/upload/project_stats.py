@@ -298,7 +298,7 @@ async def get_cloc_stats_from_archive(archive_path: str) -> str:
         logger.warning(f"项目ZIP文件不存在: {archive_path}")
         return "{}"
 
-    with tempfile.TemporaryDirectory(prefix="deepaudit_", suffix="_cloc") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="VulHunter_", suffix="_cloc") as temp_dir:
         strategy = CompressionStrategyFactory.get_strategy(archive_path)
         extracted_files = await strategy.extract(archive_path, temp_dir)
         if not extracted_files:
@@ -383,7 +383,7 @@ async def generate_project_description_from_archive(
         return {"error": "项目ZIP文件不存在"}
 
     try:
-        with tempfile.TemporaryDirectory(prefix="deepaudit_desc_", suffix="_proj") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="VulHunter_desc_", suffix="_proj") as temp_dir:
             strategy = CompressionStrategyFactory.get_strategy(archive_path)
             extracted = await strategy.extract(archive_path, temp_dir)
             if not extracted:

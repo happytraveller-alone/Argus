@@ -69,7 +69,7 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
                 task.status = "failed"
                 task.completed_at = datetime.now(timezone.utc)
                 await db.commit()
-                print(f"❌ ZIP任务 {task_id} 失败: LLM配置错误 - {cfg_exc}")
+                print(f"ZIP任务 {task_id} 失败: LLM配置错误 - {cfg_exc}")
                 task_control.cleanup_task(task_id)
                 return
 
@@ -201,7 +201,7 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
 
                 except Exception as file_error:
                     failed_files += 1
-                    print(f"❌ ZIP任务分析文件失败 ({file_info['path']}): {file_error}")
+                    print(f"ZIP任务分析文件失败 ({file_info['path']}): {file_error}")
                     await asyncio.sleep(llm_gap_ms / 1000)
 
             # 完成任务
@@ -216,7 +216,7 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
                 task.issues_count = 0
                 task.quality_score = 0
                 await db.commit()
-                print(f"❌ ZIP任务 {task_id} 失败: 所有 {len(files_to_scan)} 个文件分析均失败，请检查 LLM API 配置")
+                print(f"ZIP任务 {task_id} 失败: 所有 {len(files_to_scan)} 个文件分析均失败，请检查 LLM API 配置")
             else:
                 task.status = "completed"
                 task.completed_at = datetime.now(timezone.utc)
@@ -225,11 +225,11 @@ async def process_zip_task(task_id: str, file_path: str, db_session_factory, use
                 task.issues_count = total_issues
                 task.quality_score = avg_quality_score
                 await db.commit()
-                print(f"✅ ZIP任务 {task_id} 完成: 扫描 {scanned_files} 个文件, 发现 {total_issues} 个问题")
+                print(f"ZIP任务 {task_id} 完成: 扫描 {scanned_files} 个文件, 发现 {total_issues} 个问题")
             task_control.cleanup_task(task_id)
             
         except Exception as e:
-            print(f"❌ ZIP扫描失败: {e}")
+            print(f"ZIP扫描失败: {e}")
             task.status = "failed"
             task.completed_at = datetime.now(timezone.utc)
             await db.commit()
@@ -262,7 +262,7 @@ async def scan_zip(
         raise HTTPException(status_code=400, detail="文件名不能为空")
 
     # 支持多种压缩格式，统一转换为 zip 保存
-    with tempfile.TemporaryDirectory(prefix="deepaudit_scan_", suffix="_upload") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="VulHunter_scan_", suffix="_upload") as temp_dir:
         upload_path = os.path.join(temp_dir, file.filename)
         with open(upload_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -406,43 +406,12 @@ class InstantAnalysisResponse(BaseModel):
 
 async def get_user_config_dict(db: AsyncSession, user_id: str) -> dict:
     """获取用户配置字典（包含解密敏感字段）"""
-    from app.core.encryption import decrypt_sensitive_data
-    
-    # 需要解密的敏感字段列表（与 config.py 保持一致）
-    SENSITIVE_LLM_FIELDS = [
-        'llmApiKey', 'geminiApiKey', 'openaiApiKey', 'claudeApiKey',
-        'qwenApiKey', 'deepseekApiKey', 'zhipuApiKey', 'moonshotApiKey',
-        'baiduApiKey', 'minimaxApiKey', 'doubaoApiKey'
-    ]
-    SENSITIVE_OTHER_FIELDS = ['githubToken', 'gitlabToken']
-    
-    def decrypt_config(config: dict, sensitive_fields: list) -> dict:
-        """解密配置中的敏感字段"""
-        decrypted = config.copy()
-        for field in sensitive_fields:
-            if field in decrypted and decrypted[field]:
-                decrypted[field] = decrypt_sensitive_data(decrypted[field])
-        return decrypted
-    
-    result = await db.execute(
-        select(UserConfig).where(UserConfig.user_id == user_id)
+    from app.api.v1.endpoints.config import _load_effective_user_config
+
+    return await _load_effective_user_config(
+        db=db,
+        user_id=user_id,
     )
-    config = result.scalar_one_or_none()
-    if not config:
-        return {}
-    
-    # 解析配置
-    llm_config = json.loads(config.llm_config) if config.llm_config else {}
-    other_config = json.loads(config.other_config) if config.other_config else {}
-    
-    # 解密敏感字段
-    llm_config = decrypt_config(llm_config, SENSITIVE_LLM_FIELDS)
-    other_config = decrypt_config(other_config, SENSITIVE_OTHER_FIELDS)
-    
-    return {
-        'llmConfig': llm_config,
-        'otherConfig': other_config,
-    }
 
 
 @router.post("/instant")
@@ -480,7 +449,7 @@ async def instant_analysis(
     except Exception as e:
         # 分析失败，返回错误信息
         error_msg = str(e)
-        print(f"❌ 即时分析失败: {error_msg}")
+        print(f"即时分析失败: {error_msg}")
         raise HTTPException(
             status_code=500, 
             detail=f"代码分析失败: {error_msg}"

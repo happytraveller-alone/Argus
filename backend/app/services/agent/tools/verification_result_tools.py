@@ -24,6 +24,136 @@ from .base import AgentTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
+_UPDATE_ALLOWED_TOP_LEVEL_FIELDS = {
+    "file_path",
+    "line_start",
+    "line_end",
+    "function_name",
+    "title",
+    "vulnerability_type",
+    "severity",
+    "description",
+    "code_snippet",
+    "source",
+    "sink",
+    "suggestion",
+}
+_UPDATE_ALLOWED_VERIFICATION_FIELDS = {
+    "localization_status",
+    "function_trigger_flow",
+    "verification_evidence",
+}
+_UPDATE_FORBIDDEN_FIELDS = {
+    "finding_identity",
+    "verdict",
+    "confidence",
+    "reachability",
+    "id",
+    "task_id",
+    "fingerprint",
+}
+
+
+def build_finding_identity(task_id: str, finding: Dict[str, Any]) -> str:
+    file_path = str(finding.get("file_path") or finding.get("file") or "").strip().lower()
+    vuln_type = str(finding.get("vulnerability_type") or finding.get("type") or "").strip().lower()
+    title = str(finding.get("title") or "").strip().lower()
+    function_name = str(finding.get("function_name") or "").strip().lower()
+    try:
+        line_start = int(finding.get("line_start") or finding.get("line") or 0)
+    except Exception:
+        line_start = 0
+    raw = "|".join(
+        [
+            str(task_id or "").strip(),
+            file_path,
+            str(line_start),
+            vuln_type,
+            title,
+            function_name,
+        ]
+    )
+    digest = hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()
+    return f"fid:{digest}"
+
+
+def ensure_finding_identity(task_id: str, finding: Dict[str, Any]) -> str:
+    if not isinstance(finding, dict):
+        return ""
+    existing = str(
+        finding.get("finding_identity")
+        or ((finding.get("finding_metadata") or {}).get("finding_identity") if isinstance(finding.get("finding_metadata"), dict) else "")
+        or ((finding.get("verification_result") or {}).get("finding_identity") if isinstance(finding.get("verification_result"), dict) else "")
+        or ""
+    ).strip()
+    identity = existing or build_finding_identity(task_id, finding)
+    finding["finding_identity"] = identity
+    metadata = dict(finding.get("finding_metadata") or {})
+    metadata["finding_identity"] = identity
+    finding["finding_metadata"] = metadata
+    verification_result = dict(finding.get("verification_result") or {})
+    verification_result["finding_identity"] = identity
+    finding["verification_result"] = verification_result
+    return identity
+
+
+def merge_finding_patch(base_finding: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base_finding or {})
+    for key, value in (patch or {}).items():
+        if key == "verification_result" and isinstance(value, dict):
+            vr = dict(merged.get("verification_result") or {})
+            for vr_key, vr_value in value.items():
+                if vr_value is not None:
+                    vr[vr_key] = vr_value
+            merged["verification_result"] = vr
+            continue
+        if value is not None:
+            merged[key] = value
+    return merged
+
+
+def validate_finding_update_patch(fields_to_update: Dict[str, Any]) -> tuple[bool, Optional[str], Dict[str, Any], List[str]]:
+    if not isinstance(fields_to_update, dict) or not fields_to_update:
+        return False, "fields_to_update 不能为空", {}, []
+
+    sanitized: Dict[str, Any] = {}
+    updated_fields: List[str] = []
+    verification_patch: Dict[str, Any] = {}
+
+    for key, value in fields_to_update.items():
+        key_text = str(key or "").strip()
+        if not key_text:
+            continue
+        if key_text in _UPDATE_FORBIDDEN_FIELDS:
+            return False, f"禁止更新字段: {key_text}", {}, []
+        if key_text.startswith("verification_result."):
+            nested_key = key_text.split(".", 1)[1]
+            if nested_key not in _UPDATE_ALLOWED_VERIFICATION_FIELDS:
+                return False, f"禁止更新字段: {key_text}", {}, []
+            verification_patch[nested_key] = value
+            updated_fields.append(key_text)
+            continue
+        if key_text == "verification_result":
+            if not isinstance(value, dict) or not value:
+                return False, "verification_result 必须是非空对象", {}, []
+            for nested_key, nested_value in value.items():
+                nested_text = str(nested_key or "").strip()
+                if nested_text not in _UPDATE_ALLOWED_VERIFICATION_FIELDS:
+                    return False, f"禁止更新字段: verification_result.{nested_text}", {}, []
+                verification_patch[nested_text] = nested_value
+                updated_fields.append(f"verification_result.{nested_text}")
+            continue
+        if key_text not in _UPDATE_ALLOWED_TOP_LEVEL_FIELDS:
+            return False, f"禁止更新字段: {key_text}", {}, []
+        sanitized[key_text] = value
+        updated_fields.append(key_text)
+
+    if verification_patch:
+        sanitized["verification_result"] = verification_patch
+    if not sanitized:
+        return False, "fields_to_update 不包含可更新字段", {}, []
+    return True, None, sanitized, updated_fields
+
 
 class VerificationResultModel(BaseModel):
     """验证结果的标准化嵌套结构 - 每条 finding 的 verification_result 必须符合此模型"""
@@ -141,6 +271,11 @@ class VerificationResultModel(BaseModel):
 
 class AgentFindingModel(BaseModel):
     """Agent 发现的漏洞的标准化结构 - 每条 finding 必须符合此模型"""
+
+    finding_identity: Optional[str] = Field(
+        default=None,
+        description="漏洞稳定身份标识。若未提供，将在保存时按 task_id + 原始定位信息生成。",
+    )
 
     file_path: str = Field(
         ...,
@@ -386,6 +521,38 @@ class SaveVerificationResultsInput(BaseModel):
         return result
 
 
+class UpdateVulnerabilityFindingInput(BaseModel):
+    finding_identity: str = Field(
+        ...,
+        min_length=8,
+        description="要修正的漏洞稳定身份标识。",
+    )
+    fields_to_update: Dict[str, Any] = Field(
+        ...,
+        description=(
+            "需要更新的字段。允许顶层字段："
+            "file_path,line_start,line_end,function_name,title,vulnerability_type,"
+            "severity,description,code_snippet,source,sink,suggestion；"
+            "允许嵌套字段：verification_result.localization_status,"
+            "verification_result.function_trigger_flow,"
+            "verification_result.verification_evidence"
+        ),
+    )
+    update_reason: str = Field(
+        ...,
+        min_length=5,
+        description="本次修正原因，例如“Report阶段核对源码后修正行号”。",
+    )
+
+    @field_validator("fields_to_update")
+    @classmethod
+    def validate_patch(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        ok, error, sanitized, _ = validate_finding_update_patch(value)
+        if not ok:
+            raise ValueError(error or "非法更新字段")
+        return sanitized
+
+
 class SaveVerificationResultTool(AgentTool):
     """
     Verification Agent 专用：将单个验证结果持久化保存到数据库。
@@ -521,6 +688,7 @@ class SaveVerificationResultTool(AgentTool):
         confidence: float,
         reachability: str,
         verification_evidence: str,
+        finding_identity: Optional[str] = None,
         line_end: Optional[int] = None,
         cwe_id: Optional[str] = None,
         description: Optional[str] = None,
@@ -555,6 +723,7 @@ class SaveVerificationResultTool(AgentTool):
 
         # 构造 finding 字典
         finding = {
+            "finding_identity": finding_identity,
             "file_path": file_path,
             "line_start": line_start,
             "line_end": line_end if line_end is not None else line_start,
@@ -577,9 +746,13 @@ class SaveVerificationResultTool(AgentTool):
                 "localization_status": localization_status,
             },
         }
+        ensure_finding_identity(task_id, finding)
 
         # 生成指纹用于去重
-        fingerprint_data = f"{file_path}:{line_start}:{function_name}:{vulnerability_type}:{verdict}"
+        fingerprint_data = (
+            f"{finding.get('finding_identity')}:{file_path}:{line_start}:"
+            f"{function_name}:{vulnerability_type}:{verdict}"
+        )
         fingerprint = hashlib.sha1(fingerprint_data.encode("utf-8")).hexdigest()[:12]
 
         if fingerprint in self._seen_payload_digests:
@@ -646,7 +819,7 @@ class SaveVerificationResultTool(AgentTool):
                 data={
                     "saved": saved > 0,
                     "total_saved": self._saved_count,
-                    "message": f"✅ 验证结果已保存：{title}（verdict={verdict}, confidence={confidence:.2f}），累计 {self._saved_count} 条",
+                    "message": f"验证结果已保存：{title}（verdict={verdict}, confidence={confidence:.2f}），累计 {self._saved_count} 条",
                 },
             )
         except Exception as exc:
@@ -662,6 +835,91 @@ class SaveVerificationResultTool(AgentTool):
                 data={
                     "saved": False,
                     "total_saved": self._saved_count or 0,
-                    "message": f"❌ 持久化失败: {exc}",
+                    "message": f"持久化失败: {exc}",
+                },
+            )
+
+
+class UpdateVulnerabilityFindingTool(AgentTool):
+    """Report 阶段用于修正已保存 finding 的工具。"""
+
+    def __init__(
+        self,
+        task_id: str,
+        update_callback: Optional[
+            Callable[[str, Dict[str, Any], str], Coroutine[Any, Any, Dict[str, Any]]]
+        ] = None,
+    ) -> None:
+        super().__init__()
+        self.task_id = task_id
+        self._update_callback = update_callback
+
+    @property
+    def name(self) -> str:
+        return "update_vulnerability_finding"
+
+    @property
+    def description(self) -> str:
+        return (
+            "在 Report 阶段修正已验证漏洞的结构化信息。"
+            "必须提供 finding_identity、fields_to_update、update_reason。"
+            "只允许修正定位/描述类字段，禁止修改 verdict/confidence/reachability。"
+        )
+
+    @property
+    def args_schema(self):
+        return UpdateVulnerabilityFindingInput
+
+    async def _execute(
+        self,
+        finding_identity: str,
+        fields_to_update: Dict[str, Any],
+        update_reason: str,
+    ) -> ToolResult:
+        ok, error, sanitized, updated_fields = validate_finding_update_patch(fields_to_update)
+        if not ok:
+            return ToolResult(success=False, error=error, data={"updated": False, "message": error})
+
+        if self._update_callback is None:
+            return ToolResult(
+                success=False,
+                error="未注入 update_callback",
+                data={
+                    "updated": False,
+                    "finding_identity": finding_identity,
+                    "message": "update_vulnerability_finding 未配置后端更新回调",
+                },
+            )
+
+        try:
+            updated_finding = await self._update_callback(
+                finding_identity,
+                sanitized,
+                update_reason,
+            )
+            return ToolResult(
+                success=True,
+                data={
+                    "updated": True,
+                    "finding_identity": finding_identity,
+                    "updated_fields": updated_fields,
+                    "updated_finding": updated_finding,
+                    "message": f"已修正 finding：{finding_identity}",
+                },
+            )
+        except Exception as exc:
+            logger.error(
+                "[UpdateVulnerabilityFinding][%s] 更新失败: %s",
+                self.task_id,
+                exc,
+                exc_info=True,
+            )
+            return ToolResult(
+                success=False,
+                error=str(exc),
+                data={
+                    "updated": False,
+                    "finding_identity": finding_identity,
+                    "message": f"更新失败: {exc}",
                 },
             )

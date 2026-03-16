@@ -49,17 +49,17 @@ handler.send_header('Content-Type', 'text/html\\r\\nX-Injected: malicious')
     # 验证修复效果
     print("\n【验证结果】")
     if result.success:
-        print("❌ 失败：工具应该返回 success=False")
+        print("失败：工具应该返回 success=False")
         return False
     
     if not result.error:
-        print("❌ 失败：error 字段为空（修复未生效）")
+        print("失败：error 字段为空（修复未生效）")
         return False
     
     if "AttributeError" in str(result.error):
-        print("✅ 成功：error 字段包含 AttributeError 信息")
+        print("成功：error 字段包含 AttributeError 信息")
     else:
-        print(f"⚠️  警告：error 字段未包含 AttributeError")
+        print(f" 警告：error 字段未包含 AttributeError")
         print(f"   实际内容: {result.error[:200]}")
     
     # 测试用例2: 简单的 Python 语法错误
@@ -82,9 +82,9 @@ print("hello world"
     print(f"error 字段: {result2.error}")
     
     if not result2.success and result2.error:
-        print("✅ 成功：语法错误被正确捕获并填充到 error 字段")
+        print("成功：语法错误被正确捕获并填充到 error 字段")
     else:
-        print("❌ 失败：语法错误处理异常")
+        print("失败：语法错误处理异常")
         return False
     
     # 测试用例3: 正常执行成功的情况
@@ -105,13 +105,13 @@ print("hello world"
     print(f"是否包含输出: {'Hello from test' in str(result3.data)}")
     
     if result3.success and not result3.error:
-        print("✅ 成功：正常执行时 error 为空")
+        print("成功：正常执行时 error 为空")
     else:
-        print("❌ 失败：正常执行的返回值异常")
+        print("失败：正常执行的返回值异常")
         return False
     
     print("\n" + "=" * 60)
-    print("✅ 所有测试通过！修复生效。")
+    print("所有测试通过！修复生效。")
     print("=" * 60)
     return True
 
@@ -121,7 +121,7 @@ async def main():
         success = await test_run_code_error_handling()
         sys.exit(0 if success else 1)
     except Exception as e:
-        print(f"\n❌ 测试执行出错: {e}")
+        print(f"\n测试执行出错: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

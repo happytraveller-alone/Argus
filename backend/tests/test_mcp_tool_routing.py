@@ -1,5 +1,7 @@
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -79,29 +81,26 @@ class _ProbeAdapter:
 
 def _make_agent(*, tools, runtime, metadata=None):
     emitter = SimpleNamespace(emit=AsyncMock())
-    agent = _DummyAgent(
-        config=AgentConfig(
-            name="test-agent",
-            agent_type=AgentType.ANALYSIS,
-            metadata=metadata or {},
-        ),
-        llm_service=SimpleNamespace(),
-        tools=tools,
-        event_emitter=emitter,
-    )
+    trace_dir = Path(tempfile.mkdtemp(prefix="agent-trace-"))
+    trace_path = trace_dir / "test-agent.log"
+    with patch.object(BaseAgent, "_resolve_trace_log_path", return_value=str(trace_path)):
+        agent = _DummyAgent(
+            config=AgentConfig(
+                name="test-agent",
+                agent_type=AgentType.ANALYSIS,
+                metadata=metadata or {},
+            ),
+            llm_service=SimpleNamespace(),
+            tools=tools,
+            event_emitter=emitter,
+        )
     agent.set_mcp_runtime(runtime)
     return agent
 
 
 @pytest.mark.asyncio
-async def test_task_mcp_runtime_uses_only_stdio_adapters(monkeypatch, tmp_path):
+async def test_task_mcp_runtime_does_not_register_filesystem_adapters(monkeypatch, tmp_path):
     monkeypatch.setattr("app.core.config.settings.MCP_ENABLED", True)
-    monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_ENABLED", True)
-    monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_COMMAND", "python3")
-    monkeypatch.setattr(
-        "app.core.config.settings.MCP_FILESYSTEM_ARGS",
-        "-c 'print(\"filesystem\")'",
-    )
 
     runtime = _build_task_mcp_runtime(
         project_root=str(tmp_path),
@@ -110,26 +109,16 @@ async def test_task_mcp_runtime_uses_only_stdio_adapters(monkeypatch, tmp_path):
     )
 
     assert isinstance(runtime, MCPRuntime)
-    assert set(runtime.adapters.keys()) == {"filesystem"}
-    assert "local_proxy" not in runtime.adapters
+    assert runtime.adapters == {}
     assert runtime.domain_adapters == {}
-    assert isinstance(runtime.adapters["filesystem"], FastMCPStdioAdapter)
     assert runtime.default_runtime_mode == "stdio_only"
-    assert runtime.runtime_modes == {
-        "filesystem": "stdio_only",
-    }
-    assert runtime.required_mcps == ["filesystem"]
+    assert runtime.runtime_modes == {}
+    assert runtime.required_mcps == []
 
 
 @pytest.mark.asyncio
-async def test_task_mcp_runtime_injects_project_root_into_filesystem_stdio_args(monkeypatch, tmp_path):
+async def test_task_mcp_runtime_keeps_project_root_without_filesystem_stdio_args(monkeypatch, tmp_path):
     monkeypatch.setattr("app.core.config.settings.MCP_ENABLED", True)
-    monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_ENABLED", True)
-    monkeypatch.setattr("app.core.config.settings.MCP_FILESYSTEM_COMMAND", "pnpm")
-    monkeypatch.setattr(
-        "app.core.config.settings.MCP_FILESYSTEM_ARGS",
-        "dlx @modelcontextprotocol/server-filesystem",
-    )
 
     runtime = _build_task_mcp_runtime(
         project_root=str(tmp_path),
@@ -137,16 +126,16 @@ async def test_task_mcp_runtime_injects_project_root_into_filesystem_stdio_args(
         target_files=[],
     )
 
-    filesystem_adapter = runtime.adapters["filesystem"]
-    assert str(tmp_path) in filesystem_adapter.args
+    assert runtime.project_root == str(tmp_path)
+    assert runtime.adapters == {}
 
 
-def test_mcp_router_exposes_only_core_stdio_routes():
+def test_mcp_router_exposes_local_scan_core_routes():
     router = MCPToolRouter()
 
     read_route = router.route("read_file", {"file_path": "src/main.py"})
     assert read_route is not None
-    assert read_route.adapter_name == "filesystem"
+    assert read_route.adapter_name == "__local__"
     assert read_route.mcp_tool_name == "read_file"
     assert read_route.arguments["path"] == "src/main.py"
 
@@ -226,7 +215,7 @@ def test_mcp_router_exposes_only_core_stdio_routes():
 
 
 @pytest.mark.asyncio
-async def test_agent_does_not_fallback_to_local_read_tool_when_mcp_is_unavailable(tmp_path):
+async def test_agent_ignores_unavailable_filesystem_adapter_for_local_read_tool(tmp_path):
     runtime = MCPRuntime(
         enabled=True,
         prefer_mcp=True,
@@ -249,8 +238,28 @@ async def test_agent_does_not_fallback_to_local_read_tool_when_mcp_is_unavailabl
 
     output = await agent.execute_tool("read_file", {"file_path": "src/main.py"})
 
-    assert "mcp_adapter_unavailable:filesystem" in output
-    assert local_tool.execute_calls == 0
+    assert "local-read:src/main.py" in output
+    assert local_tool.execute_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_agent_runs_local_read_file_when_strict_mode_route_is_local_only(tmp_path):
+    runtime = MCPRuntime(
+        enabled=True,
+        prefer_mcp=True,
+        adapters={},
+        runtime_modes={},
+        default_runtime_mode="stdio_only",
+        project_root=str(tmp_path),
+        strict_mode=True,
+    )
+    local_tool = _LocalReadTool()
+    agent = _make_agent(tools={"read_file": local_tool}, runtime=runtime)
+
+    output = await agent.execute_tool("read_file", {"file_path": "src/main.py"})
+
+    assert "local-read:src/main.py" in output
+    assert local_tool.execute_calls == 1
 
 
 @pytest.mark.asyncio
@@ -367,4 +376,3 @@ async def test_probe_runtime_classifies_filesystem_allowed_dir_failure(tmp_path)
     assert probe["not_ready"][0]["reason"] == "filesystem_project_root_not_allowed"
     assert probe["details"]["filesystem"]["reason_class"] == "filesystem_project_root_not_allowed"
     assert probe["details"]["filesystem"]["project_root"] == str(tmp_path)
-    assert str(tmp_path) in str(probe["details"]["filesystem"]["probe_path"])

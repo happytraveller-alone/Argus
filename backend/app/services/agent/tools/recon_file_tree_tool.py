@@ -73,7 +73,7 @@ def _build_markdown(tree: List[str], done: Set[str]) -> str:
     pending_files = [f for f in tree if f not in done]
 
     if done_files:
-        lines.append(f"### ✅ 已侦查（{len(done_files)}个）")
+        lines.append(f"### 已侦查（{len(done_files)}个）")
         for f in done_files:
             lines.append(f"- [x] {f}")
         lines.append("")
@@ -137,7 +137,7 @@ class UpdateReconFileTreeTool(AgentTool):
 3. **status** - 查看当前侦查进度（不修改状态）
    - 示例：{"action": "status"}
 
-返回当前文件侦查 Markdown 清单，展示已侦查（✅）和待侦查（⏳）文件列表。"""
+返回当前文件侦查 Markdown 清单，展示已侦查（）和待侦查（⏳）文件列表。"""
 
     @property
     def args_schema(self):
@@ -172,7 +172,7 @@ class UpdateReconFileTreeTool(AgentTool):
             return ToolResult(
                 success=True,
                 data=(
-                    f"✅ 文件侦查清单已建立，共 {len(self._tree)} 个文件待侦查。\n\n"
+                    f"文件侦查清单已建立，共 {len(self._tree)} 个文件待侦查。\n\n"
                     + markdown
                 ),
             )
@@ -198,7 +198,7 @@ class UpdateReconFileTreeTool(AgentTool):
                 return ToolResult(
                     success=True,
                     data=(
-                        f"✅ 已标记「{matched}」为侦查完成（{done_count}/{len(self._tree)}）。\n\n"
+                        f"已标记「{matched}」为侦查完成（{done_count}/{len(self._tree)}）。\n\n"
                         + markdown
                     ),
                 )
@@ -211,7 +211,7 @@ class UpdateReconFileTreeTool(AgentTool):
                 return ToolResult(
                     success=True,
                     data=(
-                        f"⚠️ 文件「{normalized}」不在初始清单中，已记录为已侦查（{done_count}/{len(self._tree)}）。\n\n"
+                        f"文件「{normalized}」不在初始清单中，已记录为已侦查（{done_count}/{len(self._tree)}）。\n\n"
                         + markdown
                     ),
                 )

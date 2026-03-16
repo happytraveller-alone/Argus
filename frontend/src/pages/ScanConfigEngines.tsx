@@ -2,10 +2,12 @@ import { useMemo } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import OpengrepRules from "@/pages/OpengrepRules";
 import GitleaksRules from "@/pages/GitleaksRules";
+import BanditRules from "@/pages/BanditRules";
+import PhpstanRules from "@/pages/PhpstanRules";
 
-type EngineTab = "opengrep" | "gitleaks";
+type EngineTab = "opengrep" | "gitleaks" | "bandit" | "phpstan";
 
-const ENGINE_TABS: EngineTab[] = ["opengrep", "gitleaks"];
+const ENGINE_TABS: EngineTab[] = ["opengrep", "gitleaks", "bandit", "phpstan"];
 
 export default function ScanConfigEngines() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -41,8 +43,20 @@ export default function ScanConfigEngines() {
 							engineValue={currentTab}
 							onEngineChange={handleEngineChange}
 						/>
-					) : (
+					) : currentTab === "gitleaks" ? (
 						<GitleaksRules
+							showEngineSelector
+							engineValue={currentTab}
+							onEngineChange={handleEngineChange}
+						/>
+					) : currentTab === "bandit" ? (
+						<BanditRules
+							showEngineSelector
+							engineValue={currentTab}
+							onEngineChange={handleEngineChange}
+						/>
+					) : (
+						<PhpstanRules
 							showEngineSelector
 							engineValue={currentTab}
 							onEngineChange={handleEngineChange}

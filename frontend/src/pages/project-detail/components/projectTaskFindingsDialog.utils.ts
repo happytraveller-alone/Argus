@@ -12,6 +12,8 @@ export interface TaskFindingRow {
 	taskId: string;
 	taskCategory: TaskFindingCategory;
 	title: string;
+	typeLabel: string;
+	typeTooltip?: string | null;
 	filePath: string;
 	line: number | null;
 	severity: TaskFindingSeverity;

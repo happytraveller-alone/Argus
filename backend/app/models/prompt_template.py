@@ -3,7 +3,7 @@
 """
 
 import uuid
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Integer, Index
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Integer, Index, text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -43,6 +43,11 @@ class PromptTemplate(Base):
 
     __table_args__ = (
         Index("ix_prompt_templates_active_type_sort", "is_active", "template_type", "sort_order"),
+        Index(
+            "ix_prompt_templates_name_trgm",
+            text("lower(name) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
     )
 
     # Relationships

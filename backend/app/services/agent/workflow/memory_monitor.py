@@ -218,7 +218,7 @@ class AgentMemoryTracker:
     def log_summary(self) -> None:
         """输出追踪摘要到日志"""
         delta = self.get_delta()
-        status = "⚠️ LEAK" if self.detect_leak() else "✅ OK"
+        status = "LEAK" if self.detect_leak() else "OK"
         logger.info(
             f"[AgentMemoryTracker] {self.agent_name}: "
             f"before={self.before_rss_mb:.2f}MB, "

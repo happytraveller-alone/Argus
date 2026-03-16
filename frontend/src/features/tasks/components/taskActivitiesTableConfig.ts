@@ -5,7 +5,7 @@ export const TASK_ACTIVITIES_TABLE_HEADERS = [
 	"用时",
 	"扫描进度",
 	"扫描状态",
-	"缺陷统计",
+	"漏洞统计",
 	"操作",
 ] as const;
 

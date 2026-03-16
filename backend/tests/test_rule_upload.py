@@ -37,7 +37,7 @@ def test_create_yaml_rule():
     assert "test-rule-001" in content
     assert "python" in content
     assert "WARNING" in content
-    print("✅ YAML 规则创建测试通过")
+    print("YAML 规则创建测试通过")
 
 
 def test_create_zip_with_rules():
@@ -63,7 +63,7 @@ def test_create_zip_with_rules():
             assert len(files) == 5
             assert all(f.endswith(".yml") for f in files)
 
-        print(f"✅ ZIP 文件创建测试通过：{len(files)} 个规则文件")
+        print(f"ZIP 文件创建测试通过：{len(files)} 个规则文件")
 
 
 def test_yaml_parsing():
@@ -80,7 +80,7 @@ def test_yaml_parsing():
     assert "java" in rule["languages"]
     assert rule["severity"] == "WARNING"
 
-    print("✅ YAML 解析测试通过")
+    print("YAML 解析测试通过")
 
 
 def test_duplicate_detection():
@@ -100,7 +100,7 @@ def test_duplicate_detection():
     # 不同内容应该有不同的 MD5
     assert md5_1 != md5_3
 
-    print("✅ MD5 重复检测测试通过")
+    print("MD5 重复检测测试通过")
 
 
 def create_sample_zip_file(output_path: str, num_rules: int = 10):
@@ -121,7 +121,7 @@ def create_sample_zip_file(output_path: str, num_rules: int = 10):
         # 添加一个空文件
         zf.writestr("rules/empty.yml", "")
 
-    print(f"✅ 创建示例 ZIP 文件: {output_path}")
+    print(f"创建示例 ZIP 文件: {output_path}")
     print(f"   - {num_rules} 个有效规则")
     print(f"   - 1 个无效规则")
     print(f"   - 1 个空文件")
@@ -137,11 +137,11 @@ if __name__ == "__main__":
     test_duplicate_detection()
 
     # 创建示例文件
-    print("\n📦 创建示例测试文件...")
+    print("\n创建示例测试文件...")
     sample_zip_path = "/tmp/test_opengrep_rules.zip"
     create_sample_zip_file(sample_zip_path, num_rules=20)
 
-    print("\n✅ 所有测试通过！")
+    print("\n所有测试通过！")
     print(f"\n💡 可以使用以下命令测试上传功能：")
     print(f"   curl -X POST http://localhost:8000/api/v1/static-tasks/rules/upload \\")
     print(f"        -H 'Authorization: Bearer YOUR_TOKEN' \\")

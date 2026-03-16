@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import HTTPException
 
+from app.api.v1.endpoints import agent_tasks as agent_tasks_module
 from app.api.v1.endpoints import config as config_module
 from app.api.v1.endpoints.config import (
     LLMTestRequest,
@@ -313,3 +314,97 @@ async def test_agent_task_llm_preflight_reports_timeout(monkeypatch):
     assert response.ok is False
     assert response.reasonCode == "llm_test_timeout"
     assert response.stage == "llm_test"
+
+
+@pytest.mark.asyncio
+async def test_load_user_config_payload_with_effective_defaults_merges_env_values(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        config_module,
+        "get_default_config",
+        lambda: {
+            "llmConfig": {
+                "llmProvider": "openai",
+                "llmApiKey": "",
+                "llmModel": "gpt-5-default",
+                "llmBaseUrl": "https://default.example.com/v1",
+                "openaiApiKey": "sk-default-provider",
+                "llmTimeout": 150000,
+            },
+            "otherConfig": {
+                "llmConcurrency": 2,
+            },
+        },
+    )
+
+    saved_llm_config, saved_other_config, effective_llm_config, effective_other_config = (
+        await config_module._load_user_config_payload_with_effective_defaults(
+            db=_ConfigDB(
+                _build_saved_user_config(
+                    {
+                        "llmProvider": "openai",
+                        "llmModel": "gpt-5-user",
+                    }
+                )
+            ),
+            user_id="test-user",
+        )
+    )
+
+    assert saved_llm_config == {
+        "llmProvider": "openai",
+        "llmModel": "gpt-5-user",
+    }
+    assert saved_other_config == {}
+    assert effective_llm_config["llmProvider"] == "openai"
+    assert effective_llm_config["llmModel"] == "gpt-5-user"
+    assert effective_llm_config["llmBaseUrl"] == "https://default.example.com/v1"
+    assert effective_llm_config["openaiApiKey"] == "sk-default-provider"
+    assert effective_llm_config["llmTimeout"] == 150000
+    assert effective_other_config["llmConcurrency"] == 2
+
+
+@pytest.mark.asyncio
+async def test_agent_tasks_runtime_user_config_uses_effective_defaults(monkeypatch):
+    monkeypatch.setattr(
+        config_module,
+        "get_default_config",
+        lambda: {
+            "llmConfig": {
+                "llmProvider": "openai",
+                "llmApiKey": "",
+                "llmModel": "gpt-5-default",
+                "llmBaseUrl": "https://default.example.com/v1",
+                "openaiApiKey": "sk-default-provider",
+            },
+            "otherConfig": {
+                "llmConcurrency": 3,
+            },
+        },
+    )
+
+    runtime_user_config = await agent_tasks_module._get_user_config(
+        db=_ConfigDB(
+            _build_saved_user_config(
+                {
+                    "llmProvider": "openai",
+                    "llmModel": "gpt-5-user",
+                }
+            )
+        ),
+        user_id="test-user",
+    )
+
+    assert runtime_user_config is not None
+    assert runtime_user_config["llmConfig"]["llmModel"] == "gpt-5-user"
+    assert (
+        runtime_user_config["llmConfig"]["llmBaseUrl"]
+        == "https://default.example.com/v1"
+    )
+    assert runtime_user_config["llmConfig"]["openaiApiKey"] == "sk-default-provider"
+
+    service = LLMService(user_config=runtime_user_config)
+    config = service.config
+    assert config.base_url == "https://default.example.com/v1"
+    assert config.api_key == "sk-default-provider"

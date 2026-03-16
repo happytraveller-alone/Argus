@@ -16,6 +16,14 @@ from app.models.gitleaks import GitleaksScanTask, GitleaksFinding
 from app.core.security import get_password_hash
 
 
+def _is_sqlite_incompatible_index(index) -> bool:
+    postgresql_opts = getattr(index, "dialect_options", {}).get("postgresql", {})
+    if postgresql_opts.get("using") == "gin":
+        return True
+    expressions = getattr(index, "expressions", ()) or ()
+    return any("gin_trgm_ops" in str(expr) for expr in expressions)
+
+
 # 配置异步事件循环
 @pytest.fixture(scope="session")
 def event_loop():
@@ -38,26 +46,39 @@ async def db():
         poolclass=StaticPool,
         echo=False,
     )
-    
-    # 创建所有表
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    
-    # 创建会话工厂
-    async_session = async_sessionmaker(
-        engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autoflush=False,
-    )
-    
-    # 创建并返回会话
-    async with async_session() as session:
-        yield session
-        await session.rollback()
-    
-    # 清理
-    await engine.dispose()
+
+    removed_indexes = []
+    for table in Base.metadata.tables.values():
+        incompatible_indexes = [
+            index for index in list(table.indexes) if _is_sqlite_incompatible_index(index)
+        ]
+        for index in incompatible_indexes:
+            table.indexes.remove(index)
+            removed_indexes.append((table, index))
+
+    try:
+        # 创建所有表
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        # 创建会话工厂
+        async_session = async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+
+        # 创建并返回会话
+        async with async_session() as session:
+            yield session
+            await session.rollback()
+
+        # 清理
+        await engine.dispose()
+    finally:
+        for table, index in removed_indexes:
+            table.indexes.add(index)
 
 
 @pytest.fixture

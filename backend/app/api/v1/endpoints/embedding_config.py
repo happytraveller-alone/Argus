@@ -79,8 +79,8 @@ class TestEmbeddingResponse(BaseModel):
 EMBEDDING_PROVIDERS: List[EmbeddingProvider] = [
     EmbeddingProvider(
         id="openai",
-        name="OpenAI (兼容 DeepSeek/Moonshot/智谱 等)",
-        description="OpenAI 官方或兼容 API，填写自定义端点可接入其他服务商",
+        name="OpenAI Compatible",
+        description="",
         models=[
             "text-embedding-3-small",
             "text-embedding-3-large",
@@ -92,7 +92,7 @@ EMBEDDING_PROVIDERS: List[EmbeddingProvider] = [
     EmbeddingProvider(
         id="azure",
         name="Azure OpenAI",
-        description="Azure 托管的 OpenAI 嵌入模型",
+        description="",
         models=[
             "text-embedding-3-small",
             "text-embedding-3-large",
@@ -104,7 +104,7 @@ EMBEDDING_PROVIDERS: List[EmbeddingProvider] = [
     EmbeddingProvider(
         id="ollama",
         name="Ollama (本地)",
-        description="本地运行的开源嵌入模型 (使用 /api/embed 端点)",
+        description="",
         models=[
             "nomic-embed-text",
             "mxbai-embed-large",
@@ -119,7 +119,7 @@ EMBEDDING_PROVIDERS: List[EmbeddingProvider] = [
     EmbeddingProvider(
         id="cohere",
         name="Cohere",
-        description="Cohere Embed v2 API (api.cohere.com/v2)",
+        description="",
         models=[
             "embed-english-v3.0",
             "embed-multilingual-v3.0",
@@ -133,7 +133,7 @@ EMBEDDING_PROVIDERS: List[EmbeddingProvider] = [
     EmbeddingProvider(
         id="huggingface",
         name="HuggingFace",
-        description="HuggingFace Inference Providers (router.huggingface.co)",
+        description="",
         models=[
             "sentence-transformers/all-MiniLM-L6-v2",
             "sentence-transformers/all-mpnet-base-v2",

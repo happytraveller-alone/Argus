@@ -289,47 +289,42 @@ class FileReadTool(AgentTool):
         self.project_root = project_root
         self.exclude_patterns = exclude_patterns or []
         self.target_files = set(target_files) if target_files else None
+        self._project_scope_index: Optional[Dict[str, List[str]]] = None
 
     @staticmethod
-    def _read_all_lines_sync(file_path: str) -> List[str]:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.readlines()
-
-    @staticmethod
-    def _read_window_with_sed_sync(
+    def _read_window_and_count_sync(
         file_path: str,
         start_line: int,
         end_line: int,
-    ) -> Optional[List[str]]:
-        if not shutil.which("sed"):
-            return None
-        proc = subprocess.run(
-            ["sed", "-n", f"{start_line},{end_line}p", file_path],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            return None
-        return [line.rstrip("\n") for line in str(proc.stdout or "").splitlines()]
+    ) -> tuple[List[str], int]:
+        selected_lines: List[str] = []
+        total_lines = 0
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            for total_lines, raw_line in enumerate(f, start=1):
+                if start_line <= total_lines <= end_line:
+                    selected_lines.append(raw_line.rstrip("\n"))
+        return selected_lines, total_lines
 
-    def _resolve_project_scope_match(self, file_path: str) -> Optional[str]:
+    def _build_project_scope_index_sync(self) -> Dict[str, List[str]]:
+        index: Dict[str, List[str]] = {}
+        for root, dirs, files in os.walk(self.project_root):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for filename in files:
+                rel_path = _normalize_rel_path(
+                    os.path.relpath(os.path.join(root, filename), self.project_root).replace("\\", "/")
+                )
+                if self._should_exclude(rel_path):
+                    continue
+                index.setdefault(filename, []).append(rel_path)
+        return index
+
+    async def _resolve_project_scope_match(self, file_path: str) -> Optional[str]:
         basename = os.path.basename(str(file_path or "").strip())
         if not basename:
             return None
-        matches: List[str] = []
-        for root, dirs, files in os.walk(self.project_root):
-            dirs[:] = [d for d in dirs if not d.startswith(".")]
-            if basename not in files:
-                continue
-            rel_path = _normalize_rel_path(
-                os.path.relpath(os.path.join(root, basename), self.project_root).replace("\\", "/")
-            )
-            if self._should_exclude(rel_path):
-                continue
-            matches.append(rel_path)
-            if len(matches) > 1:
-                break
+        if self._project_scope_index is None:
+            self._project_scope_index = await asyncio.to_thread(self._build_project_scope_index_sync)
+        matches = self._project_scope_index.get(basename) or []
         if len(matches) == 1:
             return matches[0]
         return None
@@ -360,7 +355,7 @@ class FileReadTool(AgentTool):
 ```
 可直接引用行号定位代码位置。
 
-注意: 为避免输出过长，建议指定行范围或使用 RAG 搜索定位代码。"""
+注意: 为避免输出过长，建议指定行范围搜索定位代码。"""
     
     @property
     def args_schema(self):
@@ -417,7 +412,7 @@ class FileReadTool(AgentTool):
 
             display_path = _normalize_display_path(candidate_path, self.project_root)
             if project_scope and not os.path.exists(full_path):
-                scoped_match = self._resolve_project_scope_match(display_path or candidate_path)
+                scoped_match = await self._resolve_project_scope_match(display_path or candidate_path)
                 if scoped_match:
                     display_path = scoped_match
                     full_path = os.path.realpath(os.path.join(self.project_root, scoped_match))
@@ -451,33 +446,26 @@ class FileReadTool(AgentTool):
                     error=f"文件过大 ({file_size / 1024:.1f}KB)，请指定 start_line 和 end_line 读取部分内容",
                 )
             
-            # 读取文件
-            all_lines = await asyncio.to_thread(self._read_all_lines_sync, full_path)
-            total_lines = len(all_lines)
-            
-            # 处理行范围
             if start_line is not None:
                 start_idx = max(0, start_line - 1)
             else:
                 start_idx = 0
 
-            if end_line is not None:
-                end_idx = min(total_lines, end_line)
-            else:
-                end_idx = min(total_lines, start_idx + max_lines)
-
-            # 截取指定行
-            selected_lines = [line.rstrip("\n") for line in all_lines[start_idx:end_idx]]
-            command_chain = ["read_file"]
-            sed_lines = await asyncio.to_thread(
-                self._read_window_with_sed_sync,
-                full_path,
-                start_idx + 1,
-                end_idx,
+            requested_start_line = start_idx + 1
+            requested_end_line = (
+                max(requested_start_line, int(end_line))
+                if end_line is not None
+                else requested_start_line + max(1, int(max_lines)) - 1
             )
-            if sed_lines is not None and len(sed_lines) == len(selected_lines):
-                selected_lines = sed_lines
-                command_chain.append("sed")
+
+            selected_lines, total_lines = await asyncio.to_thread(
+                self._read_window_and_count_sync,
+                full_path,
+                requested_start_line,
+                requested_end_line,
+            )
+            end_idx = min(total_lines, requested_end_line)
+            command_chain = ["read_file"]
 
             focus_line = start_idx + 1 if total_lines > 0 else 1
             structured_lines = _build_structured_lines(
@@ -541,11 +529,22 @@ class FileReadTool(AgentTool):
 class FileSearchInput(BaseModel):
     """文件搜索输入"""
     keyword: str = Field(description="搜索关键字或正则表达式")
+    file_path: Optional[str] = Field(default=None, description="可选，限定搜索到单个文件（相对项目根目录）")
+    path: Optional[str] = Field(default=None, description="兼容字段：可选，限定搜索到单个文件")
     file_pattern: Optional[str] = Field(default=None, description="文件名模式，如 *.py, *.js")
     directory: Optional[str] = Field(default=None, description="搜索目录（相对路径）")
     case_sensitive: bool = Field(default=False, description="是否区分大小写")
     max_results: int = Field(default=50, description="最大结果数")
     is_regex: bool = Field(default=False, description="是否使用正则表达式")
+
+    @model_validator(mode="after")
+    def normalize_single_file_alias(self) -> "FileSearchInput":
+        if str(self.file_path or "").strip():
+            return self
+        alias = str(self.path or "").strip()
+        if alias:
+            self.file_path = alias
+        return self
 
 
 class FileSearchTool(AgentTool):
@@ -702,6 +701,57 @@ class FileSearchTool(AgentTool):
             "lines": structured_lines,
             "command_chain": command_chain,
         }
+
+    def _resolve_single_file_target(self, raw_path: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        requested = str(raw_path or "").strip()
+        parsed_path, _start, _end = _parse_file_path_with_line_range(requested)
+        candidate = parsed_path or requested
+        if not candidate:
+            return None, None, "必须提供 file_path"
+
+        if os.path.isabs(candidate):
+            full_path = os.path.normpath(candidate)
+            if not self._is_path_within_root(full_path, self.project_root):
+                return None, None, "安全错误：不允许搜索项目目录外的内容"
+            relative_path = _normalize_rel_path(
+                os.path.relpath(full_path, self.project_root).replace("\\", "/")
+            )
+        else:
+            relative_path = _normalize_rel_path(candidate)
+            full_path = os.path.normpath(os.path.join(self.project_root, relative_path))
+            if not self._is_path_within_root(full_path, self.project_root):
+                return None, None, "安全错误：不允许搜索项目目录外的内容"
+
+        if not relative_path:
+            return None, None, "必须提供 file_path"
+        if _has_hidden_or_test_segment(relative_path):
+            return None, None, f"文件被排除: {relative_path}"
+        if not os.path.exists(full_path):
+            return None, None, f"文件不存在: {relative_path}"
+        if not os.path.isfile(full_path):
+            return None, None, f"不是文件: {relative_path}"
+        if self.target_files and relative_path not in self.target_files:
+            return None, None, f"文件不在目标范围内: {relative_path}"
+
+        filename = os.path.basename(relative_path)
+        for excl_pattern in self.exclude_patterns:
+            if fnmatch.fnmatch(relative_path, excl_pattern) or fnmatch.fnmatch(filename, excl_pattern):
+                return None, None, f"文件被排除: {relative_path}"
+
+        return relative_path, full_path, None
+
+    @staticmethod
+    def _looks_like_specific_file_pattern(patterns: List[str]) -> Optional[str]:
+        if len(patterns) != 1:
+            return None
+        candidate = _normalize_rel_path(patterns[0])
+        if not candidate:
+            return None
+        if "/" not in candidate:
+            return None
+        if any(meta in candidate for meta in ("*", "?", "[", "]")):
+            return None
+        return candidate
 
     def _build_rg_command(
         self,
@@ -1049,6 +1099,8 @@ class FileSearchTool(AgentTool):
     async def _execute(
         self,
         keyword: str,
+        file_path: Optional[str] = None,
+        path: Optional[str] = None,
         file_pattern: Optional[str] = None,
         directory: Optional[str] = None,
         case_sensitive: bool = False,
@@ -1058,7 +1110,29 @@ class FileSearchTool(AgentTool):
     ) -> ToolResult:
         try:
             normalized_patterns = _split_file_patterns(file_pattern)
-            search_dir_rel, search_dir_abs, dir_error = self._normalize_directory(directory)
+            requested_single_file = str(file_path or path or "").strip()
+            if not requested_single_file:
+                inferred = self._looks_like_specific_file_pattern(normalized_patterns)
+                if inferred:
+                    requested_single_file = inferred
+
+            single_file_mode = False
+            single_file_rel: Optional[str] = None
+            single_file_abs: Optional[str] = None
+            if requested_single_file:
+                single_file_rel, single_file_abs, file_error = self._resolve_single_file_target(
+                    requested_single_file
+                )
+                if file_error or not single_file_rel or not single_file_abs:
+                    return ToolResult(success=False, error=file_error or "文件定位失败")
+                search_dir_rel, search_dir_abs, dir_error = self._normalize_directory(
+                    os.path.dirname(single_file_rel) or "."
+                )
+                normalized_patterns = [os.path.basename(single_file_rel)]
+                single_file_mode = True
+            else:
+                search_dir_rel, search_dir_abs, dir_error = self._normalize_directory(directory)
+
             if dir_error or not search_dir_abs or not search_dir_rel:
                 return ToolResult(success=False, error=dir_error or "搜索目录解析失败")
 
@@ -1090,9 +1164,12 @@ class FileSearchTool(AgentTool):
                 safe_max_results,
             )
 
+            if single_file_mode and single_file_abs is not None:
+                files_searched = 1
+
             scope_fallback_applied = False
             effective_directory = search_dir_rel
-            if not results and search_dir_rel not in {"", "."}:
+            if not single_file_mode and not results and search_dir_rel not in {"", "."}:
                 fallback_results, fallback_files_searched, fallback_engine = await asyncio.to_thread(
                     self._run_search_engines_sync,
                     keyword,
@@ -1140,6 +1217,8 @@ class FileSearchTool(AgentTool):
                         "scope_fallback_applied": scope_fallback_applied,
                         "original_directory": search_dir_rel,
                         "effective_directory": effective_directory,
+                        "single_file_mode": single_file_mode,
+                        "target_file": single_file_rel,
                     },
                 )
 
@@ -1208,6 +1287,8 @@ class FileSearchTool(AgentTool):
                     "scope_fallback_applied": scope_fallback_applied,
                     "original_directory": search_dir_rel,
                     "effective_directory": effective_directory,
+                    "single_file_mode": single_file_mode,
+                    "target_file": single_file_rel,
                 },
             )
         except Exception as e:
@@ -1435,7 +1516,7 @@ class ListFilesTool(AgentTool):
             
             # 🔥 如果设置了 target_files，显示提示信息
             if self.target_files:
-                output_parts.append(f"⚠️ 注意: 审计范围限定为 {len(self.target_files)} 个指定文件\n")
+                output_parts.append(f"注意: 审计范围限定为 {len(self.target_files)} 个指定文件\n")
             
             if dirs:
                 output_parts.append("目录:")
@@ -1447,12 +1528,12 @@ class ListFilesTool(AgentTool):
             if files:
                 output_parts.append(f"\n文件 ({len(files)}):")
                 for f in sorted(files):
-                    output_parts.append(f"  📄 {f}")
+                    output_parts.append(f"  {f}")
             elif self.target_files:
                 # 如果没有文件但设置了 target_files，显示目标文件列表
                 output_parts.append(f"\n指定的目标文件 ({len(self.target_files)}):")
                 for f in sorted(self.target_files)[:20]:
-                    output_parts.append(f"  📄 {f}")
+                    output_parts.append(f"  {f}")
                 if len(self.target_files) > 20:
                     output_parts.append(f"  ... 还有 {len(self.target_files) - 20} 个文件")
             

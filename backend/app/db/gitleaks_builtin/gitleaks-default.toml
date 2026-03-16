@@ -1,5 +1,5 @@
 # extracted from local gitleaks binary via strings
-title = "DeepAudit bundled gitleaks rules"
+title = "VulHunter bundled gitleaks rules"
 minVersion = "v8.30.0"
 
 [[rules]]

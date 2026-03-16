@@ -16,6 +16,14 @@ test("agent test route is grouped under devTest navigation", () => {
 	assert.equal(agentTestRoute.navGroup, "devTest");
 });
 
+test("code window demo route has been removed from devTest navigation", () => {
+	const demoRoute = routes.find(
+		(route) => route.path === "/agent-test/code-window-demo",
+	);
+
+	assert.equal(demoRoute, undefined);
+});
+
 test("sidebar navigation groups keep the expected parent order", () => {
 	assert.deepEqual(
 		SIDEBAR_NAV_GROUPS.map((group) => group.id),
@@ -42,4 +50,15 @@ test("agent task detail route uses a different page component than the home rout
 		(homeRoute.element as any)?.type,
 		(agentTaskRoute.element as any)?.type,
 	);
+});
+
+test("project code browser route stays hidden under the projects section", () => {
+	const codeBrowserRoute = routes.find(
+		(route) => route.path === "/projects/:id/code-browser",
+	);
+
+	assert.ok(codeBrowserRoute);
+	assert.equal(codeBrowserRoute.visible, false);
+	assert.equal(codeBrowserRoute.navVisible, false);
+	assert.equal(codeBrowserRoute.navParentPath, "/projects");
 });

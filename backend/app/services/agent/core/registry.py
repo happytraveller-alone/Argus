@@ -239,8 +239,8 @@ class AgentRegistry:
                 status_emoji = {
                     "running": "🔄",
                     "waiting": "⏳",
-                    "completed": "✅",
-                    "failed": "❌",
+                    "completed": "",
+                    "failed": "",
                     "stopped": "🛑",
                 }.get(node["status"], "❓")
                 

@@ -13,7 +13,7 @@ async function importOrFail<TModule = Record<string, unknown>>(
 	}
 }
 
-test("projects selectors filter by name description and repository url", async () => {
+test("projects selectors filter by name and description only", async () => {
 	const selectors = await importOrFail<any>(
 		"../src/pages/projects/lib/projectsPageSelectors.ts",
 	);
@@ -39,7 +39,7 @@ test("projects selectors filter by name description and repository url", async (
 	);
 	assert.deepEqual(
 		selectors.filterProjects(projects, "alpha.git").map((project: any) => project.id),
-		["1"],
+		[],
 	);
 	assert.equal(selectors.filterProjects(projects, "").length, 2);
 });
@@ -104,4 +104,91 @@ test("projects view model utilities build project size text and execution stats"
 	});
 
 	assert.deepEqual(stats, { completed: 3, running: 2 });
+});
+
+test("projects view model derives status toggle metadata from project active state", async () => {
+	const builder = await importOrFail<any>(
+		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
+	);
+
+	const makeProject = (overrides: Record<string, unknown>) => ({
+		id: "project-id",
+		name: "Project Name",
+		description: "Project Description",
+		source_type: "zip",
+		repository_url: undefined,
+		repository_type: "other",
+		default_branch: "main",
+		programming_languages: "TypeScript",
+		owner_id: "user-1",
+		is_active: true,
+		created_at: "2024-01-01T00:00:00Z",
+		updated_at: "2024-01-01T00:00:00Z",
+		...overrides,
+	});
+
+	const viewModel = builder.buildProjectsPageViewModel({
+		loading: false,
+		filteredProjects: [
+			makeProject({ id: "p1", name: "Enabled Project", is_active: true }),
+			makeProject({
+				id: "p2",
+				name: "Disabled Project",
+				is_active: false,
+				source_type: "repository",
+			}),
+		],
+		pagedProjects: [
+			makeProject({ id: "p1", name: "Enabled Project", is_active: true }),
+			makeProject({
+				id: "p2",
+				name: "Disabled Project",
+				is_active: false,
+				source_type: "repository",
+			}),
+		],
+		projectPage: 1,
+		totalProjectPages: 1,
+		selectedProjectIds: new Set(),
+		projectTaskPoolsMap: {},
+		projectLanguageStatsMap: {},
+		projectDetailFrom: "/projects",
+		searchTerm: "",
+		searchPlaceholder: "搜索项目",
+	});
+
+	assert.deepEqual(
+		viewModel.rows.map((row: any) => ({
+			id: row.id,
+			statusLabel: row.statusLabel,
+			statusToggleLabel: row.statusToggle.label,
+			statusToggleAction: row.statusToggle.action,
+			canCreateScan: row.actions.canCreateScan,
+			canBrowseCode: row.actions.canBrowseCode,
+			browseCodePath: row.actions.browseCodePath,
+			browseCodeDisabledReason: row.actions.browseCodeDisabledReason,
+		})),
+		[
+			{
+				id: "p1",
+				statusLabel: "启用",
+				statusToggleLabel: "禁用",
+				statusToggleAction: "disable",
+				canCreateScan: true,
+				canBrowseCode: true,
+				browseCodePath: "/projects/p1/code-browser",
+				browseCodeDisabledReason: null,
+			},
+			{
+				id: "p2",
+				statusLabel: "禁用",
+				statusToggleLabel: "启用",
+				statusToggleAction: "enable",
+				canCreateScan: false,
+				canBrowseCode: false,
+				browseCodePath: "/projects/p2/code-browser",
+				browseCodeDisabledReason: "仅 ZIP 类型项目支持代码浏览",
+			},
+		],
+	);
 });

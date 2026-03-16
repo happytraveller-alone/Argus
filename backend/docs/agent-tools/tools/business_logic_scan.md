@@ -2,7 +2,7 @@
 
 ## 概述
 
-**BusinessLogicScanTool** 是 DeepAudit 针对 **Web 应用**的业务逻辑漏洞发现工具。它通过 **5 步内部 LLM 协调分析**流程，自动识别常见的业务逻辑缺陷，包括：
+**BusinessLogicScanTool** 是 VulHunter 针对 **Web 应用**的业务逻辑漏洞发现工具。它通过 **5 步内部 LLM 协调分析**流程，自动识别常见的业务逻辑漏洞，包括：
 
 - 🔓 **身份识别与授权 (IDOR/权限提升)**
   - 缺少或不完整的授权检查
@@ -10,12 +10,12 @@
   - 权限提升漏洞
 
 - 🔄 **业务流程绕过**
-  - 状态转换逻辑缺陷
+  - 状态转换逻辑漏洞
   - 多步骤流程的跳过攻击
   - 条件验证被绕过
 
 - 💰 **金融与账户操作**
-  - 转账/支付逻辑缺陷
+  - 转账/支付逻辑漏洞
   - 余额检查绕过
   - 双花/重放攻击
 
@@ -46,7 +46,7 @@
 4. **污点分析阶段**
    - 从用户输入追踪到敏感操作
    - 检测是否有完整的验证逻辑
-   - 输出：污点路径和缺陷位置
+   - 输出：污点路径和漏洞位置
 
 5. **漏洞确认阶段**
    - 综合前 4 步结果，确认实际的业务逻辑漏洞
@@ -55,11 +55,11 @@
 
 ### 特点
 
-✅ **内部 LLM 协调** - 5 个步骤无需 Analysis Agent 手动管理  
-✅ **自动重试机制** - 每个阶段失败时最多重试 3 次  
-✅ **上下文累积** - 每个阶段的输出成为后续阶段的输入  
-✅ **Demo 模式** - 开发/测试时可生成示例漏洞而不需要真实的 LLM 调用  
-✅ **框架无关** - 支持 Django、FastAPI、Express、Spring 等常见 Web 框架  
+**内部 LLM 协调** - 5 个步骤无需 Analysis Agent 手动管理  
+**自动重试机制** - 每个阶段失败时最多重试 3 次  
+**上下文累积** - 每个阶段的输出成为后续阶段的输入  
+**Demo 模式** - 开发/测试时可生成示例漏洞而不需要真实的 LLM 调用  
+**框架无关** - 支持 Django、FastAPI、Express、Spring 等常见 Web 框架  
 
 ## 使用方法
 
@@ -142,7 +142,7 @@ Action Input: {
 
 - `idor` - 间接对象引用 (IDOR)
 - `privilege_escalation` - 权限提升
-- `business_logic_flaw` - 业务流程缺陷
+- `business_logic_flaw` - 业务流程漏洞
 - `account_takeover` - 账户接管
 - `race_condition` - 竞态条件
 - `authorization_bypass` - 授权绕过
@@ -156,7 +156,7 @@ Action Input: {
 ```javascript
 // 项目中的 Express 路由代码
 app.get('/api/orders/:orderId', (req, res) => {
-  // ❌ 缺少权限检查：任何认证用户都可以查看任何订单
+  // 缺少权限检查：任何认证用户都可以查看任何订单
   const order = db.getOrder(req.params.orderId);
   res.json(order);
 });
@@ -177,10 +177,10 @@ app.get('/api/orders/:orderId', (req, res) => {
 def process_payment(request):
     amount = request.POST.get('amount')
     
-    # ❌ 缺少金额验证：用户可以输入任意金额
+    # 缺少金额验证：用户可以输入任意金额
     if amount > 0:  # 只检查大于 0，没有上限
         charge_card(request.user, amount)
         return "Payment successful"
 
-# 工具会识别这个缺陷
+# 工具会识别这个漏洞
 ```

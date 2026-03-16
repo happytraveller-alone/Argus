@@ -165,7 +165,7 @@ async def test_business_logic_scan_real_llm_end_to_end(tmp_path: Path):
     """真 LLM 端到端测试（可选执行）。
 
     启用方式：
-    RUN_LIVE_LLM_E2E=1 /home/yl/PHDlife/DeepAudit/backend/.venv/bin/python -m pytest tests/test_refactored_business_logic_scan.py -k real_llm_end_to_end -q -s
+    RUN_LIVE_LLM_E2E=1 /home/yl/PHDlife/VulHunter/backend/.venv/bin/python -m pytest tests/test_refactored_business_logic_scan.py -k real_llm_end_to_end -q -s
     """
     if os.getenv("RUN_LIVE_LLM_E2E") != "1":
         pytest.skip("未启用真 LLM 端到端测试。设置 RUN_LIVE_LLM_E2E=1 后执行。")

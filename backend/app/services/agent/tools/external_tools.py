@@ -83,7 +83,7 @@ class OpengrepInput(BaseModel):
     """Opengrep 扫描输入"""
     target_path: str = Field(
         default=".",
-        description="要扫描的路径。⚠️ 重要：使用 '.' 扫描整个项目（推荐），或使用 'src/' 等子目录。不要使用项目目录名如 'PHP-Project'！"
+        description="要扫描的路径。重要：使用 '.' 扫描整个项目（推荐），或使用 'src/' 等子目录。不要使用项目目录名如 'PHP-Project'！"
     )
     rules: Optional[str] = Field(
         default="p/security-audit",
@@ -144,7 +144,7 @@ class OpengrepTool(AgentTool):
         return """使用 Opengrep 进行静态安全分析。
 Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
 
-⚠️ 重要提示:
+重要提示:
 - target_path 使用 '.' 扫描整个项目（推荐）
 - 或使用子目录如 'src/'、'app/' 等
 - 不要使用项目目录名（如 'PHP-Project'、'MyApp'）！
@@ -270,7 +270,7 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
                 )
             
             # 格式化输出
-            output_parts = [f"🔍 Opengrep 扫描结果 (规则集: {rules})\n"]
+            output_parts = [f" Opengrep 扫描结果 (规则集: {rules})\n"]
             output_parts.append(f"发现 {len(findings)} 个问题:\n")
             
             severity_icons = {"ERROR": "🔴", "WARNING": "🟠", "INFO": "🟡"}
@@ -349,7 +349,7 @@ class BanditTool(AgentTool):
         return """使用 Bandit 扫描 Python 代码的安全问题。
 Bandit 是 Python 专用的安全分析工具。
 
-⚠️ 重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
+重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
 
 检测项目:
 - shell/SQL 注入
@@ -520,7 +520,7 @@ class GitleaksTool(AgentTool):
         return """使用 Gitleaks 检测代码中的密钥泄露。
 Gitleaks 是专业的密钥检测工具，支持 150+ 种密钥类型。
 
-⚠️ 重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
+重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
 
 检测类型:
 - AWS/GCP/Azure 凭据
@@ -612,7 +612,7 @@ Gitleaks 是专业的密钥检测工具，支持 150+ 种密钥类型。
             findings = findings[:max_results]
             
             output_parts = ["🔐 Gitleaks 密钥泄露检测结果\n"]
-            output_parts.append(f"⚠️ 发现 {len(findings)} 处密钥泄露!\n")
+            output_parts.append(f"发现 {len(findings)} 处密钥泄露!\n")
             
             for i, finding in enumerate(findings):
                 output_parts.append(f"\n🔴 [{i+1}] {finding.get('RuleID', 'unknown')}")
@@ -755,11 +755,11 @@ class NpmAuditTool(AgentTool):
             if not vulnerabilities:
                 return ToolResult(
                     success=True,
-                    data="📦 npm audit 完成，未发现依赖漏洞",
+                    data="npm audit 完成，未发现依赖漏洞",
                     metadata={"findings_count": 0}
                 )
             
-            output_parts = ["📦 npm audit 依赖漏洞扫描结果\n"]
+            output_parts = ["npm audit 依赖漏洞扫描结果\n"]
             
             severity_counts = {"critical": 0, "high": 0, "moderate": 0, "low": 0}
             for name, vuln in vulnerabilities.items():
@@ -954,7 +954,7 @@ class TruffleHogTool(AgentTool):
     def description(self) -> str:
         return """使用 TruffleHog 进行深度密钥扫描。
 
-⚠️ 重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
+重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
 
 特点:
 - 支持 700+ 种密钥类型
@@ -1005,7 +1005,7 @@ class TruffleHogTool(AgentTool):
             if not stdout.strip():
                 return ToolResult(
                     success=True,
-                    data="🔍 TruffleHog 扫描完成，未发现密钥泄露",
+                    data=" TruffleHog 扫描完成，未发现密钥泄露",
                     metadata={"findings_count": 0}
                 )
             
@@ -1021,15 +1021,15 @@ class TruffleHogTool(AgentTool):
             if not findings:
                 return ToolResult(
                     success=True,
-                    data="🔍 TruffleHog 扫描完成，未发现密钥泄露",
+                    data=" TruffleHog 扫描完成，未发现密钥泄露",
                     metadata={"findings_count": 0}
                 )
             
-            output_parts = ["🔍 TruffleHog 密钥扫描结果\n"]
-            output_parts.append(f"⚠️ 发现 {len(findings)} 处密钥泄露!\n")
+            output_parts = [" TruffleHog 密钥扫描结果\n"]
+            output_parts.append(f"发现 {len(findings)} 处密钥泄露!\n")
             
             for i, finding in enumerate(findings[:20]):
-                verified = "✅ 已验证有效" if finding.get("Verified") else "⚠️ 未验证"
+                verified = "已验证有效" if finding.get("Verified") else "未验证"
                 output_parts.append(f"\n🔴 [{i+1}] {finding.get('DetectorName', 'unknown')} - {verified}")
                 output_parts.append(f"   文件: {finding.get('SourceMetadata', {}).get('Data', {}).get('Filesystem', {}).get('file', '')}")
             
@@ -1078,7 +1078,7 @@ class OSVScannerTool(AgentTool):
         return """使用 OSV-Scanner 扫描开源依赖漏洞。
 Google 开源的漏洞扫描工具。
 
-⚠️ 重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
+重要提示: target_path 使用 '.' 扫描整个项目，不要使用项目目录名！
 
 支持:
 - package.json (npm)
@@ -1136,13 +1136,13 @@ Google 开源的漏洞扫描工具。
             if not vulns:
                 return ToolResult(
                     success=True,
-                    data="📋 OSV-Scanner 扫描完成，未发现依赖漏洞",
+                    data="OSV-Scanner 扫描完成，未发现依赖漏洞",
                     metadata={"findings_count": 0}
                 )
             
             total_vulns = sum(len(r.get("vulnerabilities", [])) for r in vulns)
             
-            output_parts = ["📋 OSV-Scanner 开源漏洞扫描结果\n"]
+            output_parts = ["OSV-Scanner 开源漏洞扫描结果\n"]
             output_parts.append(f"发现 {total_vulns} 个漏洞:\n")
             
             for result in vulns[:10]:
@@ -1210,7 +1210,7 @@ class PMDTool(AgentTool):
         return """使用 PMD 扫描 Java 源代码的安全和质量问题。
 PMD 直接分析源代码，无需编译！
 
-⚠️ 重要提示: target_path 使用 '.' 扫描整个项目
+重要提示: target_path 使用 '.' 扫描整个项目
 
 检测能力:
 - 硬编码密码/凭证
@@ -1364,7 +1364,7 @@ PMD 直接分析源代码，无需编译！
                     )
                 return ToolResult(
                     success=True,
-                    data="🔍 PMD 扫描完成，未发现问题",
+                    data=" PMD 扫描完成，未发现问题",
                     metadata={"findings_count": 0}
                 )
             
@@ -1376,13 +1376,13 @@ PMD 直接分析源代码，无需编译！
                 else:
                     return ToolResult(
                         success=True,
-                        data=f"🔍 PMD 扫描结果:\n{stdout[:3000]}",
+                        data=f" PMD 扫描结果:\n{stdout[:3000]}",
                         metadata={"raw_output": True}
                     )
             except json.JSONDecodeError:
                 return ToolResult(
                     success=True,
-                    data=f"🔍 PMD 扫描结果:\n{stdout[:3000]}",
+                    data=f" PMD 扫描结果:\n{stdout[:3000]}",
                     metadata={"raw_output": True}
                 )
             
@@ -1405,7 +1405,7 @@ PMD 直接分析源代码，无需编译！
             if not violations:
                 return ToolResult(
                     success=True,
-                    data="🔍 PMD 扫描完成，未发现安全问题",
+                    data=" PMD 扫描完成，未发现安全问题",
                     metadata={"findings_count": 0}
                 )
             
@@ -1413,8 +1413,8 @@ PMD 直接分析源代码，无需编译！
             violations.sort(key=lambda x: x.get('priority', 5))
             
             # 格式化输出
-            output_parts = ["🔍 PMD Java 源码安全扫描结果\n"]
-            output_parts.append(f"⚠️ 发现 {len(violations)} 个问题!\n")
+            output_parts = [" PMD Java 源码安全扫描结果\n"]
+            output_parts.append(f"发现 {len(violations)} 个问题!\n")
             
             # 统计
             high_count = sum(1 for v in violations if v.get('priority', 5) <= 2)
@@ -1512,7 +1512,7 @@ class PHPStanTool(AgentTool):
         return """使用 PHPStan 扫描 PHP 代码的质量和潜在安全问题。
 PHPStan 是 PHP 静态分析工具，无需运行代码即可发现错误。
 
-⚠️ 重要提示: target_path 使用 '.' 扫描整个项目
+重要提示: target_path 使用 '.' 扫描整个项目
 
 检测能力:
 - 类型错误和不匹配
@@ -1604,7 +1604,7 @@ PHPStan 是 PHP 静态分析工具，无需运行代码即可发现错误。
                 if exit_code == 0:
                     return ToolResult(
                         success=True,
-                        data="🔍 PHPStan 扫描完成，未发现问题",
+                        data=" PHPStan 扫描完成，未发现问题",
                         metadata={"findings_count": 0}
                     )
                 else:
@@ -1638,7 +1638,7 @@ PHPStan 是 PHP 静态分析工具，无需运行代码即可发现错误。
             if total_errors == 0:
                 return ToolResult(
                     success=True,
-                    data="🔍 PHPStan 扫描完成，未发现问题",
+                    data=" PHPStan 扫描完成，未发现问题",
                     metadata={"findings_count": 0}
                 )
             
@@ -1663,9 +1663,9 @@ PHPStan 是 PHP 静态分析工具，无需运行代码即可发现错误。
             security_count = sum(1 for i in all_issues if i['is_security'])
             
             # 格式化输出
-            output_parts = ["🔍 PHPStan PHP 静态分析结果\n"]
+            output_parts = [" PHPStan PHP 静态分析结果\n"]
             output_parts.append(f"📊 分析级别: {level}/9\n")
-            output_parts.append(f"⚠️ 发现 {total_errors} 个问题")
+            output_parts.append(f"发现 {total_errors} 个问题")
             if security_count > 0:
                 output_parts.append(f" (其中 {security_count} 个安全相关)")
             output_parts.append("\n")

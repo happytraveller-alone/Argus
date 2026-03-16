@@ -41,7 +41,7 @@ class ReportGenerator:
                     vertical-align: middle;
                 }
                 @top-right {
-                    content: "DeepAudit Audit Report";
+                    content: "VulHunter Audit Report";
                     font-size: 8pt;
                     color: #666;
                     font-family: sans-serif;
@@ -492,7 +492,7 @@ class ReportGenerator:
         
         context = {
             'title': '项目代码审计报告',
-            'subtitle': f"项目: {project} | 分支: {task.get('branch_name', 'default')}",
+            'subtitle': f"项目: {project}",
             'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'report_id': f"TASK-{task.get('id', '')[:8]}",
             'score': score,

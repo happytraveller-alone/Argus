@@ -19,7 +19,7 @@ TASK_TIMEOUT=7200
 POLL_INTERVAL=5
 OUTPUT_DIR="${ROOT_DIR}/artifacts/libplist-audit/${TIMESTAMP}"
 REBUILD_SANDBOX=false
-AUTH_TOKEN="${DEEPAUDIT_AUTH_TOKEN:-${AUTH_TOKEN:-}}"
+AUTH_TOKEN="${VulHunter_AUTH_TOKEN:-${AUTH_TOKEN:-}}"
 
 COMPOSE_BIN=()
 
@@ -57,7 +57,7 @@ Options:
                            (default: artifacts/libplist-audit/<timestamp>)
   --rebuild-sandbox        Force rebuild sandbox image
   --auth-token <token>     Optional bearer token
-                           (or env: DEEPAUDIT_AUTH_TOKEN / AUTH_TOKEN)
+                           (or env: VulHunter_AUTH_TOKEN / AUTH_TOKEN)
   -h, --help               Show this help
 EOF
 }
@@ -238,8 +238,8 @@ wait_for_http_ok() {
 }
 
 start_services() {
-  if [[ "${REBUILD_SANDBOX}" == "true" ]] || ! docker image inspect deepaudit/sandbox:latest >/dev/null 2>&1; then
-    log_info "Building sandbox image (deepaudit/sandbox:latest)..."
+  if [[ "${REBUILD_SANDBOX}" == "true" ]] || ! docker image inspect VulHunter/sandbox:latest >/dev/null 2>&1; then
+    log_info "Building sandbox image (VulHunter/sandbox:latest)..."
     compose_cmd --profile build build sandbox || die "${EXIT_SERVICE_UNREADY}" "Failed to build sandbox image"
   else
     log_info "Sandbox image exists, skip rebuild"

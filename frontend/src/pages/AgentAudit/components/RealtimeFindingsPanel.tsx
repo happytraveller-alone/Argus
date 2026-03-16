@@ -3,7 +3,15 @@ import {
 	ChevronLeft,
 	ChevronRight,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type MutableRefObject,
+	type RefObject,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import {
 	AGENT_AUDIT_FINDINGS_PAGE_SIZE,
+	calculateResponsiveFindingsPageSize,
 	buildFindingTableState,
 	shouldResetFindingPage,
 } from "../detailViewModel";
@@ -169,7 +178,20 @@ export default function RealtimeFindingsPanel(props: {
 	scrollContainerRef?: RefObject<HTMLDivElement | null>;
 }) {
 	const [page, setPage] = useState(1);
+	const [pageSize, setPageSize] = useState(AGENT_AUDIT_FINDINGS_PAGE_SIZE);
 	const previousFiltersRef = useRef<FindingsViewFilters>(props.filters);
+	const viewportRef = useRef<HTMLDivElement | null>(null);
+
+	const syncViewportRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			viewportRef.current = node;
+			if (props.scrollContainerRef) {
+				(props.scrollContainerRef as MutableRefObject<HTMLDivElement | null>).current =
+					node;
+			}
+		},
+		[props.scrollContainerRef],
+	);
 
 	useEffect(() => {
 		if (shouldResetFindingPage(previousFiltersRef.current, props.filters)) {
@@ -184,9 +206,9 @@ export default function RealtimeFindingsPanel(props: {
 				items: props.items,
 				filters: props.filters,
 				page,
-				pageSize: AGENT_AUDIT_FINDINGS_PAGE_SIZE,
+				pageSize,
 			}),
-		[page, props.filters, props.items],
+		[page, pageSize, props.filters, props.items],
 	);
 
 	useEffect(() => {
@@ -194,6 +216,29 @@ export default function RealtimeFindingsPanel(props: {
 			setPage(tableState.page);
 		}
 	}, [page, tableState.page]);
+
+	useEffect(() => {
+		if (typeof ResizeObserver === "undefined" || !viewportRef.current) {
+			return;
+		}
+
+		const node = viewportRef.current;
+		const updatePageSize = (height: number) => {
+			setPageSize((current) => {
+				const next = calculateResponsiveFindingsPageSize(height);
+				return current === next ? current : next;
+			});
+		};
+
+		updatePageSize(node.clientHeight);
+		const observer = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (!entry) return;
+			updatePageSize(entry.contentRect.height);
+		});
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
 
 	function getActionLabel(item: RealtimeMergedFindingItem): string {
 		if (!props.isRunning && isFalsePositiveFinding(item)) {
@@ -204,7 +249,7 @@ export default function RealtimeFindingsPanel(props: {
 
 	return (
 		<div
-			className="rounded-xl border border-border/70 bg-card/50"
+			className="rounded-xl bg-card/50"
 			style={{ height: "100%" }}
 		>
 			<div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -218,7 +263,7 @@ export default function RealtimeFindingsPanel(props: {
 									keyword: event.target.value,
 								})
 							}
-							placeholder="搜索漏洞类型 / 标题 / 文件"
+							placeholder="搜索漏洞类型 / 危害 / 状态"
 							className="cyber-input h-10 pl-11 pr-3 text-sm"
 						/>
 					</div>
@@ -263,8 +308,8 @@ export default function RealtimeFindingsPanel(props: {
 					</Select>
 				</div>
 
-				<div className="min-h-0 flex-1 overflow-hidden px-4 py-3">
-					<div ref={props.scrollContainerRef} className="h-full overflow-auto custom-scrollbar">
+				<div className="min-h-0 flex-1 px-4 py-3">
+					<div ref={syncViewportRef} className="h-full">
 						{tableState.rows.length === 0 ? (
 							<div className="flex h-full items-center justify-center text-muted-foreground">
 								<div className="flex flex-col items-center gap-2 px-6 text-center">
@@ -277,14 +322,11 @@ export default function RealtimeFindingsPanel(props: {
 								</div>
 							</div>
 						) : (
-							<table className="min-w-[1180px] w-full caption-bottom text-base font-mono">
+							<table className="w-full caption-bottom text-base font-mono">
 								<TableHeader className="bg-transparent">
 									<TableRow className="border-b border-border/60 hover:bg-transparent">
 										<TableHead className="w-[72px]">序号</TableHead>
-										<TableHead className="min-w-[260px]">类型 / 标题</TableHead>
-										<TableHead className="min-w-[260px]" data-no-i18n="true">
-											命中位置
-										</TableHead>
+										<TableHead className="w-auto">漏洞类型</TableHead>
 										<TableHead className="w-[120px]" data-no-i18n="true">
 											漏洞危害
 										</TableHead>
@@ -310,32 +352,18 @@ export default function RealtimeFindingsPanel(props: {
 												id={`finding-item-${row.id}`}
 												className="border-b border-border/40 last:border-b-0"
 											>
-												<TableCell className="font-mono text-xs text-muted-foreground">
+												<TableCell className="py-3 font-mono text-xs text-muted-foreground">
 													{(tableState.pageStart + index + 1).toLocaleString()}
 												</TableCell>
-												<TableCell className="align-top">
-													<div className="min-w-0">
-														<div
-															className="truncate text-sm font-medium text-foreground"
-															title={row.typeLabel}
-														>
-															{row.typeLabel}
-														</div>
-														<div
-															className="mt-1 truncate text-xs text-muted-foreground"
-															title={row.title}
-														>
-															{row.title}
-														</div>
+												<TableCell className="py-3 align-top">
+													<div
+														className="truncate text-sm font-medium text-foreground"
+														title={row.typeTooltip || row.typeLabel}
+													>
+														{row.typeLabel}
 													</div>
 												</TableCell>
-												<TableCell
-													className="font-mono text-xs text-muted-foreground whitespace-normal break-all"
-													title={row.location}
-												>
-													{row.location}
-												</TableCell>
-												<TableCell>
+												<TableCell className="py-3">
 													<Badge
 														variant="outline"
 														className={`text-[11px] ${getSeverityBadgeClass(row.severity)}`}
@@ -344,7 +372,7 @@ export default function RealtimeFindingsPanel(props: {
 													</Badge>
 												</TableCell>
 												{tableState.hasVisibleConfidence ? (
-													<TableCell>
+													<TableCell className="py-3">
 														{row.confidenceLabel ? (
 															<Badge
 																variant="outline"
@@ -355,7 +383,7 @@ export default function RealtimeFindingsPanel(props: {
 														) : null}
 													</TableCell>
 												) : null}
-												<TableCell>
+												<TableCell className="py-3">
 													<Badge
 														variant="outline"
 														className={`text-[11px] ${processingStatus.className}`}
@@ -363,7 +391,7 @@ export default function RealtimeFindingsPanel(props: {
 														{processingStatus.label}
 													</Badge>
 												</TableCell>
-												<TableCell className="text-center">
+												<TableCell className="py-3 text-center">
 													<Button
 														type="button"
 														size="sm"

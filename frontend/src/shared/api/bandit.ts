@@ -35,6 +35,20 @@ export interface BanditFinding {
   created_at?: string;
 }
 
+export interface BanditRule {
+  id: string;
+  test_id: string;
+  name: string;
+  description: string;
+  description_summary: string;
+  checks: string[];
+  source: string;
+  bandit_version: string;
+  is_active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export async function createBanditScanTask(params: {
   project_id: string;
   name?: string;
@@ -112,5 +126,54 @@ export async function updateBanditFindingStatus(params: {
     undefined,
     { params: { status: params.status } },
   );
+  return response.data;
+}
+
+export async function getBanditRules(params?: {
+  is_active?: boolean;
+  source?: string;
+  keyword?: string;
+  skip?: number;
+  limit?: number;
+}): Promise<BanditRule[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.is_active !== undefined) {
+    searchParams.set("is_active", String(params.is_active));
+  }
+  if (params?.source) searchParams.set("source", params.source);
+  if (params?.keyword) searchParams.set("keyword", params.keyword);
+  if (params?.skip !== undefined) searchParams.set("skip", String(params.skip));
+  searchParams.set("limit", String(params?.limit ?? 1000));
+  const query = searchParams.toString();
+  const response = await apiClient.get(
+    `/static-tasks/bandit/rules${query ? `?${query}` : ""}`,
+  );
+  return response.data;
+}
+
+export async function getBanditRule(ruleId: string): Promise<BanditRule> {
+  const response = await apiClient.get(`/static-tasks/bandit/rules/${ruleId}`);
+  return response.data;
+}
+
+export async function updateBanditRuleEnabled(params: {
+  ruleId: string;
+  is_active: boolean;
+}): Promise<{ message: string; rule_id: string; is_active: boolean }> {
+  const response = await apiClient.post(
+    `/static-tasks/bandit/rules/${params.ruleId}/enabled`,
+    { is_active: params.is_active },
+  );
+  return response.data;
+}
+
+export async function batchUpdateBanditRulesEnabled(params: {
+  rule_ids?: string[];
+  source?: string;
+  keyword?: string;
+  current_is_active?: boolean;
+  is_active: boolean;
+}): Promise<{ message: string; updated_count: number; is_active: boolean }> {
+  const response = await apiClient.post(`/static-tasks/bandit/rules/batch/enabled`, params);
   return response.data;
 }

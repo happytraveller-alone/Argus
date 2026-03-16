@@ -25,6 +25,9 @@ import re
 import uuid
 import copy
 import ast
+import threading
+import tempfile
+from pathlib import Path
 
 from ..core.state import AgentState, AgentStatus
 from ..core.registry import agent_registry
@@ -40,6 +43,8 @@ from ..utils.vulnerability_naming import (
 from ..skills.scan_core import SCAN_CORE_LOCAL_SKILL_IDS
 
 logger = logging.getLogger(__name__)
+
+_AGENT_TRACE_HANDLER_LOCK = threading.Lock()
 
 MAX_EVENT_PAYLOAD_CHARS = 120000
 
@@ -336,7 +341,7 @@ class TaskHandoff:
             lines.append("")
         
         if self.attention_points:
-            lines.append("### ⚠️ 需要特别关注")
+            lines.append("### 需要特别关注")
             for point in self.attention_points:
                 lines.append(f"- {point}")
             lines.append("")
@@ -414,6 +419,7 @@ class BaseAgent(ABC):
         self._total_tokens = 0
         self._tool_calls = 0
         self._cancelled = False
+        self._task_id: Optional[str] = None
 
         # 获取超时配置
         self._timeout_config = self._get_timeout_config()
@@ -458,10 +464,101 @@ class BaseAgent(ABC):
         
         # 🔥 是否已注册到注册表
         self._registered = False
+
+        self._trace_logger: Optional[logging.Logger] = None
+        self._trace_log_path: Optional[str] = None
+        self.configure_trace_logger(identity=self.name, task_id=None)
+        self._trace("agent_initialized", agent_type=self.config.agent_type.value)
         
         # 🔥 加载知识模块到系统提示词
         if self.knowledge_modules:
             self._load_knowledge_modules()
+
+    @staticmethod
+    def _sanitize_log_token(value: Optional[str], default: str) -> str:
+        raw = str(value or "").strip().lower()
+        safe = re.sub(r"[^a-z0-9._-]+", "_", raw)
+        return safe or default
+
+    @classmethod
+    def _resolve_task_log_dir(cls, task_id: Optional[str]) -> Path:
+        safe_task_id = cls._sanitize_log_token(task_id, "no_task")
+        log_dir = Path(__file__).resolve().parents[4] / "log" / "agent_runs" / safe_task_id
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir
+
+    @classmethod
+    def _resolve_trace_log_path(cls, identity: str, task_id: Optional[str]) -> str:
+        safe_identity = cls._sanitize_log_token(identity, "agent")
+        log_dir = cls._resolve_task_log_dir(task_id)
+        return str(log_dir / f"{safe_identity}.log")
+
+    @classmethod
+    def _build_trace_logger(cls, identity: str, task_id: Optional[str]) -> tuple[logging.Logger, str]:
+        safe_identity = cls._sanitize_log_token(identity, "agent")
+        safe_task = cls._sanitize_log_token(task_id, "no_task")
+        logger_name = f"{__name__}.trace.{safe_task}.{safe_identity}"
+        trace_logger = logging.getLogger(logger_name)
+        trace_logger.setLevel(logging.INFO)
+        trace_logger.propagate = False
+        target_file = cls._resolve_trace_log_path(identity, task_id)
+
+        with _AGENT_TRACE_HANDLER_LOCK:
+            has_handler = False
+            for handler in trace_logger.handlers:
+                if isinstance(handler, logging.FileHandler) and getattr(handler, "baseFilename", "") == target_file:
+                    has_handler = True
+                    break
+            if not has_handler:
+                try:
+                    file_handler = logging.FileHandler(target_file, encoding="utf-8")
+                except PermissionError:
+                    fallback_dir = Path(tempfile.gettempdir()) / "audittool-agent-runs" / safe_task
+                    fallback_dir.mkdir(parents=True, exist_ok=True)
+                    target_file = str(fallback_dir / f"{safe_identity}.log")
+                    file_handler = logging.FileHandler(target_file, encoding="utf-8")
+                file_handler.setLevel(logging.INFO)
+                file_handler.setFormatter(
+                    logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+                )
+                trace_logger.addHandler(file_handler)
+
+        return trace_logger, target_file
+
+    def configure_trace_logger(
+        self,
+        identity: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> str:
+        """配置当前 Agent 的 trace 日志输出目录，按 task_id 归档。"""
+        final_identity = str(identity or self.name or "agent").strip() or "agent"
+        final_task_id = str(task_id or self._task_id or "").strip() or None
+        self._task_id = final_task_id
+        trace_logger, trace_path = self._build_trace_logger(final_identity, final_task_id)
+        self._trace_logger = trace_logger
+        self._trace_log_path = trace_path
+        self._trace(
+            "trace_logger_configured",
+            identity=final_identity,
+            task_id=final_task_id or "no_task",
+            trace_log_path=trace_path,
+        )
+        return trace_path
+
+    def _trace(self, message: str, **fields: Any) -> None:
+        trace_logger = getattr(self, "_trace_logger", None)
+        if trace_logger is None:
+            return
+        details: List[str] = []
+        for key, value in fields.items():
+            if value is None:
+                continue
+            text = str(value)
+            if len(text) > 500:
+                text = text[:500] + "..."
+            details.append(f"{key}={text}")
+        suffix = f" | {'; '.join(details)}" if details else ""
+        trace_logger.info(f"[{self.name}] {message}{suffix}")
     
     def _register_to_registry(self, task: Optional[str] = None) -> None:
         """注册到Agent注册表（延迟注册，在run时调用）"""
@@ -795,7 +892,7 @@ class BaseAgent(ABC):
         if value:
             return value
         if self._is_smart_audit_mode():
-            return "strict_anchor"
+            return "project_scope"
         return ""
 
     def set_write_scope_guard(self, guard: Optional["TaskWriteScopeGuard"]) -> None:
@@ -1035,6 +1132,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_start(self, iteration: int):
         """发射 LLM 开始思考事件"""
+        self._trace("llm_start", iteration=iteration)
         await self.emit_event(
             "llm_start",
             f"[{self.name}] 第 {iteration} 轮迭代开始",
@@ -1043,6 +1141,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_thought(self, thought: str, iteration: int):
         """发射 LLM 思考内容事件 - 这是核心！展示 LLM 在想什么"""
+        self._trace("llm_thought", iteration=iteration, thought_preview=(str(thought or "")[:300]))
         thought_text = str(thought or "").strip()
         if thought_text:
             self._recent_thought_texts.append(thought_text)
@@ -1112,6 +1211,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_decision(self, decision: str, reason: str = ""):
         """发射 LLM 决策事件 - 展示 LLM 做了什么决定"""
+        self._trace("llm_decision", decision=decision, reason=(reason or "")[:300])
         await self.emit_event(
             "llm_decision",
             f"[{self.name}] 决策: {decision}" + (f" ({reason})" if reason else ""),
@@ -1123,6 +1223,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_complete(self, result_summary: str, tokens_used: int):
         """发射 LLM 完成事件"""
+        self._trace("llm_complete", result_summary=(result_summary or "")[:300], tokens_used=tokens_used)
         await self.emit_event(
             "llm_complete",
             f"[{self.name}] 完成: {result_summary} (消耗 {tokens_used} tokens)",
@@ -1133,6 +1234,11 @@ class BaseAgent(ABC):
     
     async def emit_llm_action(self, action: str, action_input: Dict):
         """发射 LLM 动作决策事件"""
+        self._trace(
+            "llm_action",
+            action=action,
+            action_input=json.dumps(action_input or {}, ensure_ascii=False)[:500],
+        )
         await self.emit_event(
             "llm_action",
             f"[{self.name}] 执行动作: {action}",
@@ -1144,6 +1250,7 @@ class BaseAgent(ABC):
     
     async def emit_llm_observation(self, observation: str):
         """发射 LLM 观察事件"""
+        self._trace("llm_observation", observation_preview=(str(observation or "")[:500]))
         obs_text = observation or ""
 
         # If the observation mostly repeats the latest tool_result output, avoid logging it twice.
@@ -1189,6 +1296,13 @@ class BaseAgent(ABC):
         extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射工具调用事件"""
+        self._trace(
+            "tool_call",
+            tool_name=tool_name,
+            tool_input=json.dumps(tool_input or {}, ensure_ascii=False)[:500],
+            tool_call_id=tool_call_id,
+            alias_used=alias_used,
+        )
         metadata: Dict[str, Any] = {}
         if tool_call_id:
             metadata["tool_call_id"] = tool_call_id
@@ -1229,6 +1343,14 @@ class BaseAgent(ABC):
         extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射工具结果事件"""
+        self._trace(
+            "tool_result",
+            tool_name=tool_name,
+            duration_ms=duration_ms,
+            tool_status=tool_status,
+            tool_call_id=tool_call_id,
+            result_preview=(str(result or "")[:500]),
+        )
         # 🔥 修复：确保 result 不为 None，避免显示 "None" 字符串
         safe_result = result if result and result != "None" else ""
         stored_result, truncated = _truncate_with_flag(safe_result)
@@ -1661,15 +1783,16 @@ class BaseAgent(ABC):
             "max_chunk_gap_ms": 0.0,
             "usage_source": "none",
         }
+        self._trace("llm_stream_started", message_count=len(messages or []))
 
         # 🔥 在开始 LLM 调用前检查取消
         if self.is_cancelled:
             logger.info(f"[{self.name}] Cancelled before LLM call")
             return "", 0
 
-        logger.info(f"[{self.name}] 🚀 Starting stream_llm_call, emitting thinking_start...")
+        logger.info(f"[{self.name}] Starting stream_llm_call, emitting thinking_start...")
         await self.emit_thinking_start()
-        logger.info(f"[{self.name}] ✅ thinking_start emitted, starting LLM stream...")
+        logger.info(f"[{self.name}] thinking_start emitted, starting LLM stream...")
 
         try:
             # 获取流式迭代器（传入 None 时使用用户配置）
@@ -1845,6 +1968,13 @@ class BaseAgent(ABC):
             accumulated = f"[LLM调用错误: {str(e)}] 请重试。"
         finally:
             await self.emit_thinking_end(accumulated)
+            self._trace(
+                "llm_stream_finished",
+                chunk_count=chunk_count,
+                total_tokens=total_tokens,
+                finish_reason=self._last_llm_stream_meta.get("finish_reason"),
+                empty_reason=self._last_llm_stream_meta.get("empty_reason"),
+            )
         
         # 🔥 记录空响应警告，帮助调试
         if not accumulated or not accumulated.strip():
@@ -1890,7 +2020,7 @@ class BaseAgent(ABC):
         if not text:
             return True
         lowered = text.lower()
-        if lowered.startswith(("⚠️", "❌", "错误:", "error:", "failed:", "失败")):
+        if lowered.startswith(("", "", "错误:", "error:", "failed:", "失败")):
             return True
         failure_hints = (
             "工具执行失败",
@@ -1949,10 +2079,6 @@ class BaseAgent(ABC):
         normalized_tool = str(tool_name or "").strip().lower()
         if not fallback_names:
             fallback_map: Dict[str, List[str]] = {
-                "qmd_query": ["search_code", "read_file"],
-                "qmd_get": ["read_file", "search_code"],
-                "qmd_multi_get": ["search_code", "read_file"],
-                "qmd_status": ["search_code"],
                 "query_security_knowledge": ["search_code"],
                 "get_vulnerability_knowledge": ["search_code", "read_file"],
             }
@@ -3074,7 +3200,7 @@ class BaseAgent(ABC):
 
         if blocked_reason:
             output_lines = [
-                "⚠️ verify_reachability 执行错误",
+                "verify_reachability 执行错误",
                 f"blocked_reason: {blocked_reason}",
                 f"location: {file_path or 'unknown'}:{line_start or 'unknown'}",
                 "verify_pipeline_json:",
@@ -4090,11 +4216,11 @@ class BaseAgent(ABC):
         """
         # 🔥 在执行工具前检查取消
         if self.is_cancelled:
-            return "⚠️ 任务已取消"
+            return "任务已取消"
 
         requested_tool_name = str(tool_name or "").strip()
         if requested_tool_name in DOWNLINED_TOOL_MESSAGES and requested_tool_name not in self.tools:
-            return f"⚠️ {DOWNLINED_TOOL_MESSAGES[requested_tool_name]}"
+            return f"{DOWNLINED_TOOL_MESSAGES[requested_tool_name]}"
         raw_tool_input = tool_input if isinstance(tool_input, dict) else {}
         raw_input_text = self._extract_raw_input_text(raw_tool_input, raw_tool_input)
 
@@ -4155,9 +4281,9 @@ class BaseAgent(ABC):
         if alias_blocked:
             tool_call_id = str(uuid.uuid4())
             blocked_message = (
-                "⚠️ 工具名不可用（需标准名）\n\n"
+                "工具名不可用（需标准名）\n\n"
                 f"**请求工具**: {requested_tool_name}\n"
-                "请改用标准 MCP 工具名（如 qmd_query、search_code、read_file、locate_enclosing_function）。"
+                "请改用当前支持的标准工具名（如 search_code、read_file、locate_enclosing_function）。"
             )
             await self.emit_tool_call(
                 requested_tool_name,
@@ -4180,7 +4306,7 @@ class BaseAgent(ABC):
 
         if not local_tool_available and not mcp_can_handle:
             if requested_tool_name in DOWNLINED_TOOL_MESSAGES:
-                return f"⚠️ {DOWNLINED_TOOL_MESSAGES[requested_tool_name]}"
+                return f"{DOWNLINED_TOOL_MESSAGES[requested_tool_name]}"
             return (
                 f"错误: 工具 '{requested_tool_name}' 不存在。"
                 f"可用工具: {list(self.tools.keys())}"
@@ -4291,7 +4417,7 @@ class BaseAgent(ABC):
                     extra_metadata=write_scope_metadata or None,
                 )
                 failure_output = (
-                    "⚠️ 写入策略校验失败\n\n"
+                    "写入策略校验失败\n\n"
                     f"**请求工具**: {requested_tool_name}\n"
                     f"**实际工具**: {resolved_tool_name}\n"
                     f"**原因**: {write_scope_error}\n"
@@ -4302,7 +4428,6 @@ class BaseAgent(ABC):
             normalized_resolved_tool_name = str(resolved_tool_name or "").strip().lower()
             cached_output = self._tool_success_cache.get(tool_call_key)
             runtime_cache_priority = normalized_resolved_tool_name in {
-                "qmd_query",
                 "read_file",
                 "search_code",
             }
@@ -4359,7 +4484,7 @@ class BaseAgent(ABC):
                     extra_metadata=short_circuit_metadata or None,
                 )
                 return (
-                    "⚠️ 工具调用已短路\n\n"
+                    "工具调用已短路\n\n"
                     f"**请求工具**: {requested_tool_name}\n"
                     f"**实际工具**: {resolved_tool_name}\n"
                     f"**原因**: {short_circuit_msg}\n"
@@ -4391,7 +4516,7 @@ class BaseAgent(ABC):
                 )
                 if strict_read_error and not missing_required:
                     failure_output = (
-                        "⚠️ 工具参数校验失败\n\n"
+                        "工具参数校验失败\n\n"
                         f"**请求工具**: {requested_tool_name}\n"
                         f"**实际执行工具**: {resolved_tool_name}\n"
                         f"**错误**: {validation_error}\n"
@@ -4418,6 +4543,16 @@ class BaseAgent(ABC):
                         "verification_evidence": "<验证证据，至少10字符>",
                         "cwe_id": "<CWE编号，如 CWE-89，可选>",
                         "suggestion": "<修复建议，可选>",
+                    }
+                elif str(resolved_tool_name or "").strip().lower() == "update_vulnerability_finding":
+                    example_dict = {
+                        "finding_identity": "<稳定身份标识，如 fid:...>",
+                        "fields_to_update": {
+                            "line_start": 123,
+                            "function_name": "target_func",
+                            "verification_result.localization_status": "success",
+                        },
+                        "update_reason": "<修正原因，如 Report阶段核对源码后修正定位>",
                     }
                 elif local_tool_available and tool:
                     # 尝试从工具的 args_schema 获取字段类型和描述
@@ -4483,7 +4618,7 @@ class BaseAgent(ABC):
                     example_str = f"{{{example_fields}}}"
                 
                 failure_output = (
-                    "⚠️ 工具参数校验失败\n\n"
+                    "工具参数校验失败\n\n"
                     f"**请求工具**: {requested_tool_name}\n"
                     f"**实际执行工具**: {resolved_tool_name}\n"
                     f"**缺失必填字段**: {', '.join(missing_required)}\n"
@@ -4728,7 +4863,7 @@ class BaseAgent(ABC):
                     or None,
                 )
                 return (
-                    "⚠️ 工具不可用\n\n"
+                    "工具不可用\n\n"
                     f"**请求工具**: {requested_tool_name}\n"
                     f"**实际工具**: {resolved_tool_name}\n"
                     "MCP 运行时未就绪，且未命中本地回退。"
@@ -4780,7 +4915,7 @@ class BaseAgent(ABC):
                         )
                         
                         # 🔥 MCP 工具成功执行后追踪关键工具调用
-                        critical_tools = {"push_finding_to_queue", "save_verification_result"}
+                        critical_tools = {"push_finding_to_queue", "save_verification_result", "update_vulnerability_finding"}
                         if resolved_tool_name in critical_tools:
                             self._critical_tool_called = True
                             self._critical_tool_name = resolved_tool_name
@@ -4791,7 +4926,7 @@ class BaseAgent(ABC):
                                 "success": True,
                                 "via": "mcp",
                             })
-                            logger.info(f"[{self.name}] ✅ 关键工具成功执行 (MCP): {resolved_tool_name}")
+                            logger.info(f"[{self.name}] 关键工具成功执行 (MCP): {resolved_tool_name}")
                         
                         if not is_write_tool and not cache_bypass:
                             self._tool_success_cache[tool_call_key] = mcp_output
@@ -4829,7 +4964,7 @@ class BaseAgent(ABC):
                         )
                         
                         # 🔥 MCP fallback 成功执行后追踪关键工具调用
-                        critical_tools = {"push_finding_to_queue", "save_verification_result"}
+                        critical_tools = {"push_finding_to_queue", "save_verification_result", "update_vulnerability_finding"}
                         if resolved_tool_name in critical_tools:
                             self._critical_tool_called = True
                             self._critical_tool_name = resolved_tool_name
@@ -4840,7 +4975,7 @@ class BaseAgent(ABC):
                                 "success": True,
                                 "via": "mcp_fallback",
                             })
-                            logger.info(f"[{self.name}] ✅ 关键工具成功执行 (MCP fallback): {resolved_tool_name}")
+                            logger.info(f"[{self.name}] 关键工具成功执行 (MCP fallback): {resolved_tool_name}")
                         
                         if not is_write_tool and not cache_bypass:
                             self._tool_success_cache[tool_call_key] = fallback_output
@@ -4869,7 +5004,7 @@ class BaseAgent(ABC):
                             extra_metadata=merged_meta or None,
                         )
                         failure_output = (
-                            "⚠️ MCP 工具执行失败\n\n"
+                            "MCP 工具执行失败\n\n"
                             f"**请求工具**: {requested_tool_name}\n"
                             f"**实际工具**: {resolved_tool_name}\n"
                             f"**错误**: {mcp_result.error or 'unknown'}\n"
@@ -4889,7 +5024,7 @@ class BaseAgent(ABC):
                             extra_metadata=merged_meta or None,
                         )
                         failure_output = (
-                            "⚠️ MCP 工具执行失败且无本地回退\n\n"
+                            "MCP 工具执行失败且无本地回退\n\n"
                             f"**请求工具**: {requested_tool_name}\n"
                             f"**实际工具**: {resolved_tool_name}\n"
                             f"**错误**: {mcp_result.error or 'unknown'}"
@@ -4898,7 +5033,7 @@ class BaseAgent(ABC):
 
             if not local_tool_available:
                 return (
-                    "⚠️ 工具不可用\n\n"
+                    "工具不可用\n\n"
                     f"**请求工具**: {requested_tool_name}\n"
                     f"**实际工具**: {resolved_tool_name}\n"
                     "MCP 未处理且本地工具不可用。"
@@ -4964,7 +5099,7 @@ class BaseAgent(ABC):
                     ),
                 )
                 failure_output = (
-                    f"⚠️ 工具 '{resolved_tool_name}' 执行超时 ({timeout}秒)，"
+                    f"工具 '{resolved_tool_name}' 执行超时 ({timeout}秒)，"
                     "请尝试其他方法或减小操作范围。"
                 )
                 return failure_output
@@ -4984,7 +5119,7 @@ class BaseAgent(ABC):
                         else None
                     ),
                 )
-                return "⚠️ 任务已取消"
+                return "任务已取消"
 
             duration_ms = int((time.time() - start) * 1000)
             # 🔥 修复：确保传递有意义的结果字符串，避免 "None"
@@ -5016,7 +5151,7 @@ class BaseAgent(ABC):
 
             # 🔥 工具执行后再次检查取消
             if self.is_cancelled:
-                return "⚠️ 任务已取消"
+                return "任务已取消"
 
             if result.success:
                 metadata_dict = dict(result.metadata) if isinstance(result.metadata, dict) else {}
@@ -5027,7 +5162,7 @@ class BaseAgent(ABC):
                 )
                 
                 # 🔥 仅在工具成功执行后才追踪关键工具调用（push/save）
-                critical_tools = {"push_finding_to_queue", "save_verification_result"}
+                critical_tools = {"push_finding_to_queue", "save_verification_result", "update_vulnerability_finding"}
                 if resolved_tool_name in critical_tools:
                     self._critical_tool_called = True
                     self._critical_tool_name = resolved_tool_name
@@ -5037,7 +5172,7 @@ class BaseAgent(ABC):
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "success": True,
                     })
-                    logger.info(f"[{self.name}] ✅ 关键工具成功执行: {resolved_tool_name}")
+                    logger.info(f"[{self.name}] 关键工具成功执行: {resolved_tool_name}")
                 
                 output = str(result.data)
 
@@ -5081,7 +5216,7 @@ class BaseAgent(ABC):
                 
                 error_output = "\n".join(error_details) if error_details else "未知错误"
                 
-                error_msg = f"""⚠️ 工具执行失败
+                error_msg = f"""工具执行失败
 
 **请求工具**: {requested_tool_name}
 **实际工具**: {resolved_tool_name}
@@ -5093,7 +5228,7 @@ class BaseAgent(ABC):
 
         except asyncio.CancelledError:
             logger.info(f"[{self.name}] Tool '{resolved_tool_name}' execution cancelled")
-            return "⚠️ 任务已取消"
+            return "任务已取消"
         except Exception as e:
             import traceback
             logger.error(f"Tool execution error: {e}")
@@ -5114,7 +5249,7 @@ class BaseAgent(ABC):
                     ),
                 )
             # 🔥 输出完整的原始错误信息，包括堆栈跟踪
-            error_msg = f"""❌ 工具执行异常
+            error_msg = f"""工具执行异常
 
 **请求工具**: {requested_tool_name}
 **实际工具**: {resolved_tool_name}
@@ -5160,10 +5295,10 @@ class BaseAgent(ABC):
             如果补救成功返回结果，否则返回 None
         """
         if self._critical_tool_called:
-            logger.info(f"[{self.name}] ✅ 已调用关键工具 {self._critical_tool_name}，无需兜底")
+            logger.info(f"[{self.name}] 已调用关键工具 {self._critical_tool_name}，无需兜底")
             return None
         
-        logger.warning(f"[{self.name}] ⚠️ 未检测到 {expected_tool} 成功调用，启动兜底分析...")
+        logger.warning(f"[{self.name}] 未检测到 {expected_tool} 成功调用，启动兜底分析...")
         
         # 根据 agent_type 构建不同的输出格式示例
         if agent_type == "analysis":
@@ -5256,7 +5391,7 @@ class BaseAgent(ABC):
 ### 第二步：检查是否成功调用了保存工具
 
 查找对话中是否有以下模式之一：
-- `Action: {expected_tool}` 后面紧跟 `Observation: ✅` 或 `成功` 或 `已入队` 或 `已保存`
+- `Action: {expected_tool}` 后面紧跟 `Observation: ` 或 `成功` 或 `已入队` 或 `已保存`
 - `Action: {expected_tool}` 后面的 Observation 没有包含错误信息（如"失败"、"错误"、"Error"）
 
 **如果只看到 `Action: {expected_tool}` 但 Observation 显示失败，则视为未成功调用。**
@@ -5278,31 +5413,31 @@ class BaseAgent(ABC):
 
 ## 示例场景
 
-### ✅ 需要兜底的情况（{agent_type}）
+### 需要兜底的情况（{agent_type}）
 ```
 assistant: {"分析发现以下漏洞：" if agent_type == "analysis" else "验证完成，结果："}
 {{"findings": [{{"file_path": "src/auth.py", "vulnerability_type": "sql_injection"}}]}}
 ```
 → `needs_fallback = true`（有数据但未调用工具）
 
-### ❌ 不需要兜底的情况
+### 不需要兜底的情况
 ```
 assistant: 正在分析代码...
 assistant: 继续深入查看...
 ```
 → `needs_fallback = false`（无结构化数据）
 
-### ❌ 不需要兜底的情况（已成功调用）
+### 不需要兜底的情况（已成功调用）
 ```
 assistant: Action: {expected_tool}
-user: Observation: ✅ {"漏洞已成功入队" if agent_type == "analysis" else "验证结果已保存"}
+user: Observation: {"漏洞已成功入队" if agent_type == "analysis" else "验证结果已保存"}
 ```
 → `needs_fallback = false`（已成功调用工具）
 
-### ✅ 需要兜底的情况（调用失败）
+### 需要兜底的情况（调用失败）
 ```
 assistant: Action: {expected_tool}
-user: Observation: ❌ 数据库连接失败
+user: Observation: 数据库连接失败
 ```
 → `needs_fallback = true`（调用失败，需要补救）
 
@@ -5333,7 +5468,7 @@ user: Observation: ❌ 数据库连接失败
                 logger.info(f"[{self.name}] LLM 判断不需要兜底: {analysis_result.get('reason', '未提供理由')}")
                 return None
             
-            logger.warning(f"[{self.name}] 🔧 LLM 判断需要兜底保存: {analysis_result.get('reason')}")
+            logger.warning(f"[{self.name}] LLM 判断需要兜底保存: {analysis_result.get('reason')}")
             
             # 执行补救操作
             fallback_result = await self._execute_fallback_save(
@@ -5411,7 +5546,7 @@ user: Observation: ❌ 数据库连接失败
                 logger.info(f"[{self.name}] 开始补救推送 {len(findings)} 个 findings")
                 await self.emit_event(
                     "info",
-                    f"🔧 兜底机制启动：开始补救推送 {len(findings)} 个漏洞到队列",
+                    f"兜底机制启动：开始补救推送 {len(findings)} 个漏洞到队列",
                     metadata={"agent_type": agent_type, "total_findings": len(findings)},
                 )
                 pushed_count = 0
@@ -5427,7 +5562,7 @@ user: Observation: ❌ 数据库连接失败
                 
                 await self.emit_event(
                     "success" if pushed_count > 0 else "warning",
-                    f"✅ 兜底机制完成：成功补救推送 {pushed_count}/{len(findings)} 个漏洞",
+                    f"兜底机制完成：成功补救推送 {pushed_count}/{len(findings)} 个漏洞",
                     metadata={
                         "agent_type": agent_type,
                         "tool": expected_tool,
@@ -5455,7 +5590,7 @@ user: Observation: ❌ 数据库连接失败
                 logger.info(f"[{self.name}] 开始补救保存验证结果（共 {len(findings)} 条）")
                 await self.emit_event(
                     "info",
-                    f"🔧 兜底机制启动：开始补救保存 {len(findings)} 个验证结果",
+                    f"兜底机制启动：开始补救保存 {len(findings)} 个验证结果",
                     metadata={"agent_type": agent_type, "total_findings": len(findings)},
                 )
                 
@@ -5487,8 +5622,8 @@ user: Observation: ❌ 数据库连接失败
                         # 成功判断：工具未返回错误，且有"已保存"/"成功"/"buffered"等成功标志
                         tool_succeeded = (
                             result
-                            and not result_str.startswith("⚠️")
-                            and not result_str.startswith("❌")
+                            and not result_str.startswith("")
+                            and not result_str.startswith("")
                             and not result_str.startswith("Error:")
                             and (
                                 "已保存" in result_str
@@ -5509,7 +5644,7 @@ user: Observation: ❌ 数据库连接失败
                     logger.info(f"[{self.name}] 补救保存完成：{saved_count}/{len(findings)} 条成功")
                     await self.emit_event(
                         "success",
-                        f"✅ 兜底机制完成：成功补救保存 {saved_count}/{len(findings)} 个验证结果",
+                        f"兜底机制完成：成功补救保存 {saved_count}/{len(findings)} 个验证结果",
                         metadata={
                             "agent_type": agent_type,
                             "tool": expected_tool,
@@ -5527,7 +5662,7 @@ user: Observation: ❌ 数据库连接失败
                 else:
                     await self.emit_event(
                         "error",
-                        f"❌ 兜底机制失败：未能补救保存任何验证结果（共 {len(findings)} 条）",
+                        f"兜底机制失败：未能补救保存任何验证结果（共 {len(findings)} 条）",
                         metadata={"agent_type": agent_type, "total_findings": len(findings)},
                     )
                     return None
@@ -5536,7 +5671,7 @@ user: Observation: ❌ 数据库连接失败
                 logger.warning(f"[{self.name}] 不支持的兜底类型: {agent_type}/{expected_tool}")
                 await self.emit_event(
                     "warning",
-                    f"⚠️ 兜底机制：不支持的类型 {agent_type}/{expected_tool}",
+                    f"兜底机制：不支持的类型 {agent_type}/{expected_tool}",
                     metadata={"agent_type": agent_type, "expected_tool": expected_tool},
                 )
                 return None
@@ -5545,7 +5680,7 @@ user: Observation: ❌ 数据库连接失败
             logger.error(f"[{self.name}] 执行补救保存失败: {e}", exc_info=True)
             await self.emit_event(
                 "error",
-                f"❌ 兜底机制异常：{str(e)[:100]}",
+                f"兜底机制异常：{str(e)[:100]}",
                 metadata={"agent_type": agent_type, "error": str(e)},
             )
             return None

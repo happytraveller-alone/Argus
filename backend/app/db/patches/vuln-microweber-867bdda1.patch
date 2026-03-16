@@ -242,7 +242,7 @@ index 358bd7fe18e..92b390c2ec9 100644
 -                    "homepage": "https://nette.org/contributors"
 -                }
 -            ],
--            "description": "🔍 Nette Finder: find files and directories with an intuitive API.",
+-            "description": " Nette Finder: find files and directories with an intuitive API.",
 -            "homepage": "https://nette.org",
 -            "keywords": [
 -                "filesystem",

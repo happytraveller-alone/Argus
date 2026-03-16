@@ -62,7 +62,6 @@ services:
       - backend_uploads:/app/uploads
       - mcp_data:/app/data/mcp
       - /tmp/vulhunter:/tmp/vulhunter
-      - /tmp/vulhunter:/tmp/deepaudit
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "${VULHUNTER_BACKEND_PORT:-8000}:8000"
@@ -79,9 +78,6 @@ services:
       MCP_ENABLED: "true"
       MCP_REQUIRE_ALL_READY_ON_STARTUP: "false"
       MCP_REQUIRED_RUNTIME_DOMAIN: stdio
-      MCP_FILESYSTEM_ENABLED: "true"
-      MCP_FILESYSTEM_RUNTIME_MODE: stdio_only
-      MCP_FILESYSTEM_FORCE_STDIO: ${MCP_FILESYSTEM_FORCE_STDIO:-true}
       MCP_CODE_INDEX_ENABLED: "true"
       GIT_MIRROR_ENABLED: ${GIT_MIRROR_ENABLED:-true}
       GIT_MIRROR_PREFIX: ${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
@@ -147,6 +143,8 @@ services:
       NO_PROXY: "*"
       VITE_API_TARGET: http://backend:8000
       FRONTEND_DEV_PORT: "5173"
+      FRONTEND_PUBLIC_URL: http://localhost:${VULHUNTER_FRONTEND_PORT:-3000}
+      BACKEND_PUBLIC_URL: http://localhost:${VULHUNTER_BACKEND_PORT:-8000}
       FRONTEND_NPM_REGISTRY: ${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}
       FRONTEND_DEV_INSTALL_MODE: ${FRONTEND_DEV_INSTALL_MODE:-auto}
       CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-}

@@ -32,14 +32,13 @@ import {
     RefreshCw,
     Terminal,
 } from "lucide-react";
-import { api } from "@/shared/config/database";
+import { api } from "@/shared/api/database";
 import { toast } from "sonner";
 
 interface FileSelectionDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     projectId: string;
-    branch?: string;
     excludePatterns?: string[];
     onConfirm: (selectedFiles: string[]) => void;
 }
@@ -123,7 +122,6 @@ export default function FileSelectionDialog({
     open,
     onOpenChange,
     projectId,
-    branch,
     excludePatterns,
     onConfirm,
 }: FileSelectionDialogProps) {
@@ -145,12 +143,12 @@ export default function FileSelectionDialog({
             setExpandedFolders(new Set());
             setFilterType("");
         }
-    }, [open, projectId, branch, excludePatterns]);
+    }, [open, projectId, excludePatterns]);
 
     const loadFiles = async () => {
         try {
             setLoading(true);
-            const data = await api.getProjectFiles(projectId, branch, excludePatterns);
+            const data = await api.getProjectFiles(projectId, excludePatterns);
             setFiles(data);
             setSelectedFiles(new Set(data.map((f) => f.path)));
             // 默认展开所有文件夹

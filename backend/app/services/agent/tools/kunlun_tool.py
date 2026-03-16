@@ -437,7 +437,7 @@ Kunlun-M 是一款专注于代码安全审计的工具，特别擅长 PHP 和 Ja
     def _format_findings(self, findings: List[Dict[str, Any]], target: str) -> str:
         """格式化漏洞发现"""
         output_parts = [
-            f"🔍 Kunlun-M 扫描结果",
+            f" Kunlun-M 扫描结果",
             f"目标: {target}",
             f"发现 {len(findings)} 个潜在安全问题:\n"
         ]
@@ -569,7 +569,7 @@ class KunlunRuleListTool(AgentTool):
 
             return ToolResult(
                 success=True,
-                data=f"📋 Kunlun-M 规则列表{f' ({language})' if language else ''}:\n\n{output}",
+                data=f"Kunlun-M 规则列表{f' ({language})' if language else ''}:\n\n{output}",
                 metadata={"language": language}
             )
 

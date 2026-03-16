@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { cn } from "@/shared/utils/utils";
 
 export interface FindingCodeWindowDisplayLine {
   lineNumber: number | null;
@@ -7,6 +8,15 @@ export interface FindingCodeWindowDisplayLine {
   isHighlighted?: boolean;
   isFocus?: boolean;
 }
+
+export type FindingCodeWindowAppearance =
+  | "native-explorer"
+  | "terminal-flat"
+  | "dense-ide";
+
+export type FindingCodeWindowDisplayPreset =
+  | "default"
+  | "project-browser";
 
 interface FindingCodeWindowProps {
   code: string;
@@ -23,6 +33,8 @@ interface FindingCodeWindowProps {
   badges?: string[];
   meta?: string[];
   variant?: "default" | "detail";
+  appearance?: FindingCodeWindowAppearance;
+  displayPreset?: FindingCodeWindowDisplayPreset;
 }
 
 function formatHeader(
@@ -46,6 +58,102 @@ function formatHeader(
   return path;
 }
 
+function getShellClasses(appearance: FindingCodeWindowAppearance) {
+  if (appearance === "terminal-flat") {
+    return "rounded-md border border-white/8 shadow-none";
+  }
+  if (appearance === "dense-ide") {
+    return "rounded-lg border border-white/10 shadow-[0_14px_32px_rgba(0,0,0,0.28)]";
+  }
+  return "rounded-2xl border border-white/10 shadow-[0_18px_44px_rgba(0,0,0,0.34)]";
+}
+
+function getHeaderClasses(appearance: FindingCodeWindowAppearance, isDetail: boolean) {
+  return cn(
+    "border-b border-white/8 bg-[#050505]",
+    isDetail ? "px-4 py-3" : "px-3 py-2.5",
+    appearance === "terminal-flat" && "bg-black",
+    appearance === "dense-ide" && "bg-[#080808]",
+  );
+}
+
+function getViewportClasses(
+  appearance: FindingCodeWindowAppearance,
+  isDetail: boolean,
+  displayPreset: FindingCodeWindowDisplayPreset,
+) {
+  if (displayPreset === "project-browser") {
+    return cn(
+      "min-h-0 flex-1 max-h-none overflow-auto overflow-x-auto custom-scrollbar-dark bg-black",
+      appearance === "dense-ide" && "bg-[#040404]",
+    );
+  }
+
+  return cn(
+    isDetail ? "max-h-[52vh]" : "max-h-[46vh]",
+    "overflow-auto overflow-x-auto custom-scrollbar-dark bg-black",
+    appearance === "dense-ide" && "bg-[#040404]",
+  );
+}
+
+function getGridColumns(
+  appearance: FindingCodeWindowAppearance,
+  isDetail: boolean,
+  displayPreset: FindingCodeWindowDisplayPreset,
+) {
+  if (displayPreset === "project-browser") {
+    return "grid-cols-[minmax(56px,max-content)_minmax(0,1fr)]";
+  }
+
+  if (appearance === "dense-ide") {
+    return isDetail ? "grid-cols-[72px_minmax(0,1fr)]" : "grid-cols-[64px_minmax(0,1fr)]";
+  }
+  if (appearance === "terminal-flat") {
+    return isDetail ? "grid-cols-[60px_minmax(0,1fr)]" : "grid-cols-[52px_minmax(0,1fr)]";
+  }
+  return isDetail ? "grid-cols-[68px_minmax(0,1fr)]" : "grid-cols-[60px_minmax(0,1fr)]";
+}
+
+function getHeaderTextClasses(
+  isDetail: boolean,
+  displayPreset: FindingCodeWindowDisplayPreset,
+) {
+  if (displayPreset === "project-browser") {
+    return "text-[14px] leading-6";
+  }
+  return isDetail ? "text-[13px] leading-5" : "text-[12px] leading-5";
+}
+
+function getBodyTextClasses(
+  isDetail: boolean,
+  displayPreset: FindingCodeWindowDisplayPreset,
+) {
+  if (displayPreset === "project-browser") {
+    return "text-[14px] leading-7";
+  }
+  return isDetail ? "text-[12.5px] leading-6" : "text-[11.5px] leading-5";
+}
+
+function getLineNumberPaddingClasses(
+  isDetail: boolean,
+  displayPreset: FindingCodeWindowDisplayPreset,
+) {
+  if (displayPreset === "project-browser") {
+    return "px-2.5 py-0.5";
+  }
+  return isDetail ? "px-3 py-0.5" : "px-2 py-0.5";
+}
+
+function getCodePaddingClasses(
+  isDetail: boolean,
+  displayPreset: FindingCodeWindowDisplayPreset,
+) {
+  if (displayPreset === "project-browser") {
+    return "px-4 py-0.5";
+  }
+  return isDetail ? "px-4 py-0.5" : "px-3 py-0.5";
+}
+
 export default function FindingCodeWindow({
   code,
   displayLines,
@@ -61,7 +169,13 @@ export default function FindingCodeWindow({
   badges = [],
   meta = [],
   variant = "default",
+  appearance = "native-explorer",
+  displayPreset = "default",
 }: FindingCodeWindowProps) {
+  void title;
+  void chrome;
+  void badges;
+  void meta;
   const rawLines = useMemo(
     () => String(code || "").replace(/\r\n/g, "\n").split("\n"),
     [code],
@@ -74,20 +188,18 @@ export default function FindingCodeWindow({
   const normalizedHighlightStart =
     typeof highlightStartLine === "number" && Number.isFinite(highlightStartLine)
       ? highlightStartLine
-      : lineStart ?? null;
+      : null;
   const normalizedHighlightEnd =
     typeof highlightEndLine === "number" && Number.isFinite(highlightEndLine)
       ? highlightEndLine
-      : lineEnd ?? normalizedHighlightStart;
+      : normalizedHighlightStart;
   const normalizedFocusLine =
     typeof focusLine === "number" && Number.isFinite(focusLine)
       ? focusLine
-      : lineStart ?? null;
+      : null;
   const resolvedDensity = density ?? (variant === "detail" ? "detail" : "compact");
   const isDetail = resolvedDensity === "detail";
-  const headerMeta = meta.filter((item) => String(item || "").trim().length > 0);
-  const headerBadges = badges.filter((item) => String(item || "").trim().length > 0);
-  const showEditorChrome = chrome === "editor";
+  const gridColumns = getGridColumns(appearance, isDetail, displayPreset);
   const renderedLines = useMemo(() => {
     if (Array.isArray(displayLines) && displayLines.length > 0) {
       return displayLines;
@@ -127,79 +239,36 @@ export default function FindingCodeWindow({
   }, [displayLines, normalizedFocusLine, code]);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border/70 bg-[linear-gradient(180deg,rgba(15,23,42,0.86),rgba(15,23,42,0.68))] shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
-      <div
-        className={`border-b border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] ${
-          isDetail ? "px-4 py-3" : "px-3 py-2.5"
-        }`}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            {showEditorChrome ? (
-              <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-300/80" />
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-              </div>
-            ) : null}
-            <div className="min-w-0">
-              <div
-                className={`truncate font-mono uppercase tracking-[0.22em] text-slate-300 ${
-                  isDetail ? "text-[11px]" : "text-[10px]"
-                }`}
-              >
-                {title}
-              </div>
-              <div
-                className={`truncate font-mono text-slate-100 ${
-                  isDetail ? "text-[13px]" : "text-[12px]"
-                }`}
-              >
-                {header}
-              </div>
-            </div>
-          </div>
-
-          {headerBadges.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              {headerBadges.map((badge) => (
-                <span
-                  key={badge}
-                  className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.18em] text-cyan-100"
-                >
-                  {badge}
-                </span>
-              ))}
-            </div>
-          ) : null}
+    <section
+      data-appearance={appearance}
+      data-display-preset={displayPreset}
+      className={cn(
+        "overflow-hidden bg-black text-white",
+        getShellClasses(appearance),
+        displayPreset === "project-browser" && "flex h-full min-h-0 flex-col",
+      )}
+    >
+      <div className={getHeaderClasses(appearance, isDetail)}>
+        <div
+          title={header}
+          className={cn(
+            "truncate font-mono text-white/78",
+            getHeaderTextClasses(isDetail, displayPreset),
+          )}
+        >
+          {header}
         </div>
-
-        {headerMeta.length > 0 ? (
-          <div
-            className={`mt-2 flex flex-wrap items-center gap-2 ${
-              isDetail ? "text-[11px]" : "text-[10px]"
-            }`}
-          >
-            {headerMeta.map((item) => (
-              <span
-                key={item}
-                className="rounded-md border border-white/8 bg-white/5 px-2 py-0.5 font-mono text-slate-300"
-              >
-                {item}
-              </span>
-            ))}
-          </div>
-        ) : null}
       </div>
 
       <div
         ref={containerRef}
-        className={`${isDetail ? "max-h-[52vh]" : "max-h-[46vh]"} overflow-auto overflow-x-auto bg-[#151922]/85`}
+        className={getViewportClasses(appearance, isDetail, displayPreset)}
       >
         <div
-          className={`min-w-max font-mono ${
-            isDetail ? "text-[12.5px] leading-6" : "text-[11.5px] leading-5"
-          }`}
+          className={cn(
+            "min-w-max font-mono",
+            getBodyTextClasses(isDetail, displayPreset),
+          )}
         >
           {renderedLines.map((line, index) => {
             const inHighlightRange = Boolean(line.isHighlighted);
@@ -210,33 +279,34 @@ export default function FindingCodeWindow({
               <div
                 key={`${line.lineNumber ?? `placeholder-${index}`}-${index}`}
                 data-line-number={line.lineNumber ?? undefined}
-                className={`grid ${isDetail ? "grid-cols-[64px_1fr]" : "grid-cols-[56px_1fr]"} ${
-                  inHighlightRange ? "bg-cyan-400/8" : ""
-                } ${isFocusLine ? "bg-cyan-400/12" : ""}`}
+                className={cn(
+                  "grid",
+                  gridColumns,
+                  isPlaceholder && "bg-white/[0.015]",
+                  inHighlightRange && "bg-white/[0.04]",
+                  isFocusLine && "bg-white/[0.08]",
+                )}
               >
                 <div
-                  className={`${isDetail ? "px-3 py-0.5" : "px-2 py-0.5"} select-none text-right font-mono ${
-                    isPlaceholder
-                      ? "border-r border-white/6 bg-white/[0.02] text-slate-600"
-                      : isFocusLine
-                        ? "border-r border-cyan-300/30 bg-cyan-400/10 text-cyan-100"
-                        : inHighlightRange
-                          ? "border-r border-cyan-300/15 bg-cyan-400/5 text-cyan-200/85"
-                          : "border-r border-white/6 bg-white/[0.03] text-slate-500"
-                  }`}
+                  className={cn(
+                    getLineNumberPaddingClasses(isDetail, displayPreset),
+                    "select-none text-right font-mono tabular-nums border-r border-white/8",
+                    isPlaceholder && "bg-white/[0.02] text-white/20",
+                    !isPlaceholder && !inHighlightRange && !isFocusLine && "bg-white/[0.02] text-white/34",
+                    inHighlightRange && "bg-white/[0.04] text-white/52",
+                    isFocusLine && "bg-white/[0.08] text-white/80",
+                  )}
                 >
                   {line.lineNumber ?? ""}
                 </div>
                 <pre
-                  className={`${isDetail ? "px-4 py-0.5" : "px-3 py-0.5"} overflow-visible whitespace-pre ${
-                    isPlaceholder ? "italic text-slate-400/80" : "text-slate-100"
-                  } ${
-                    isFocusLine
-                      ? "bg-cyan-400/6"
-                      : inHighlightRange
-                        ? "bg-cyan-400/[0.03]"
-                        : "bg-transparent"
-                  }`}
+                  className={cn(
+                    getCodePaddingClasses(isDetail, displayPreset),
+                    "overflow-visible whitespace-pre bg-transparent",
+                    isPlaceholder ? "italic text-white/35" : "text-white/92",
+                    inHighlightRange && "text-white/96",
+                    isFocusLine && "font-medium text-white",
+                  )}
                 >
                   {line.content || " "}
                 </pre>

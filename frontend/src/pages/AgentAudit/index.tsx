@@ -3,45 +3,36 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useRef } from "react";
 import { useLogoVariant } from "@/shared/branding/useLogoVariant";
 
-declare global {
-  interface Window {
-    VANTA?: {
-      NET: (config: Record<string, unknown>) => { destroy: () => void };
-    };
-    THREE?: unknown;
-  }
-}
-
 type HomeScanCard = {
-  key: "static" | "agent" | "hybrid";
-  title: string;
-  intro: string;
-  icon: typeof Zap;
-  targetRoute: string;
+	key: "static" | "agent" | "hybrid";
+	title: string;
+	intro: string;
+	icon: typeof Zap;
+	targetRoute: string;
 };
 
 const homeScanCards: HomeScanCard[] = [
-  {
-    key: "static",
-    title: "静态扫描",
-    intro: "规则驱动漏洞检测",
-    icon: Zap,
-    targetRoute: "/tasks/static?openCreate=1&source=home-card",
-  },
-  {
-    key: "agent",
-    title: "智能扫描",
-    intro: "AI Agent 代码推理",
-    icon: Bot,
-    targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",
-  },
-  {
-    key: "hybrid",
-    title: "混合扫描",
-    intro: "静态分析 + AI 推理",
-    icon: Layers,
-    targetRoute: "/tasks/hybrid?openCreate=1&source=home-card",
-  },
+	{
+		key: "static",
+		title: "静态扫描",
+		intro: "规则驱动漏洞检测",
+		icon: Zap,
+		targetRoute: "/tasks/static?openCreate=1&source=home-card",
+	},
+	{
+		key: "agent",
+		title: "智能扫描",
+		intro: "AI Agent 代码推理",
+		icon: Bot,
+		targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",
+	},
+	{
+		key: "hybrid",
+		title: "混合扫描",
+		intro: "静态分析 + AI 推理",
+		icon: Layers,
+		targetRoute: "/tasks/hybrid?openCreate=1&source=home-card",
+	},
 ];
 
 function loadScript(src: string): Promise<void> {
@@ -63,8 +54,8 @@ function loadScript(src: string): Promise<void> {
 }
 
 export function HomeScanCards() {
-  const navigate = useNavigate();
-  const { logoSrc, cycleLogoVariant } = useLogoVariant();
+	const navigate = useNavigate();
+	const { logoSrc, cycleLogoVariant } = useLogoVariant();
 
   const vantaRef = useRef<HTMLDivElement>(null);
   const vantaEffect = useRef<{ destroy: () => void } | null>(null);
