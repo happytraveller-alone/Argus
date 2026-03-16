@@ -907,6 +907,15 @@ export default function PhpstanRules({
 
                 <div className="space-y-3">
                   <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">
+                    规则文件内容
+                  </h3>
+                  <div className="rounded border border-border/50 p-3 text-xs whitespace-pre-wrap break-words font-mono max-h-[320px] overflow-auto">
+                    {selectedRule.source_content || "未找到对应源码内容"}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-mono font-bold uppercase text-sm text-muted-foreground border-b border-border pb-2">
                     元数据
                   </h3>
                   <div className="text-sm font-mono text-muted-foreground">

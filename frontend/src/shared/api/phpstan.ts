@@ -39,6 +39,7 @@ export interface PhpstanRule {
   description_summary: string;
   source_file: string;
   source: string;
+  source_content?: string | null;
   is_active: boolean;
   is_deleted: boolean;
   created_at?: string | null;

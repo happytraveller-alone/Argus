@@ -129,6 +129,7 @@ class PhpstanRuleResponse(BaseModel):
     description_summary: str
     source_file: str
     source: str
+    source_content: Optional[str] = None
     is_active: bool
     is_deleted: bool
     created_at: Optional[datetime] = None
@@ -219,6 +220,31 @@ def _raise_phpstan_rules_migration_http_error(exc: ProgrammingError) -> None:
 
 def _phpstan_rules_snapshot_path() -> Path:
     return Path(__file__).resolve().parents[3] / "db" / "rules_phpstan" / "phpstan_rules_combined.json"
+
+
+def _phpstan_rule_sources_root_path() -> Path:
+    return Path(__file__).resolve().parents[3] / "db" / "rules_phpstan" / "rule_sources"
+
+
+def _read_phpstan_rule_source_content(repo: str, source_file: str) -> Optional[str]:
+    # PHPStan rules integration: 仅用于规则详情源码展示，不参与扫描执行命令构建。
+    repo_name = str(repo or "").strip()
+    source_relative = str(source_file or "").strip()
+    if not repo_name or not source_relative:
+        return None
+
+    sources_root = _phpstan_rule_sources_root_path().resolve()
+    candidate_path = (sources_root / repo_name / source_relative).resolve()
+    try:
+        candidate_path.relative_to(sources_root)
+    except ValueError:
+        return None
+    if not candidate_path.exists() or not candidate_path.is_file():
+        return None
+    try:
+        return candidate_path.read_text(encoding="utf-8")
+    except Exception:
+        return None
 
 
 def _load_phpstan_rules_snapshot() -> Dict[str, Any]:
@@ -696,6 +722,10 @@ async def get_phpstan_rule(
     )
     for item in merged_rules:
         if item["id"] == rule_id:
+            item["source_content"] = _read_phpstan_rule_source_content(
+                repo=str(item.get("repo") or ""),
+                source_file=str(item.get("source_file") or ""),
+            )
             return item
     raise HTTPException(status_code=404, detail="PHPStan 规则不存在")
 
