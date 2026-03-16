@@ -508,9 +508,9 @@ export default function DashboardCommandCenter({
 
 			<SummaryStrip snapshot={snapshot} />
 
-			<div className="grid gap-1 xl:grid-cols-12">
+			<div data-layout="primary-grid" className="grid gap-4 lg:grid-cols-12">
 				<DashboardSection
-					className="xl:col-span-7"
+					className="lg:col-span-7"
 					panel="trend"
 					title="漏洞态势趋势"
 					description={`过去 ${rangeDays} 天内各扫描引擎的有效风险发现和扫描活跃度。`}
@@ -544,20 +544,21 @@ export default function DashboardCommandCenter({
 					)}
 				</DashboardSection>
 				<DashboardSection
-						panel="funnel"
-						title="验证漏斗"
-						description={`窗口内原始发现、有效风险和已验证结果的收敛情况。`}
-						icon={<Target className="h-5 w-120" />}
-					>
-						<VerificationFunnel
-							raw={snapshot.verification_funnel.raw_findings}
-							effective={snapshot.verification_funnel.effective_findings}
-							verified={snapshot.verification_funnel.verified_findings}
-							falsePositive={snapshot.verification_funnel.false_positive_count}
-						/>
+					className="lg:col-span-5"
+					panel="funnel"
+					title="验证漏斗"
+					description={`窗口内原始发现、有效风险和已验证结果的收敛情况。`}
+					icon={<Target className="h-5 w-5" />}
+				>
+					<VerificationFunnel
+						raw={snapshot.verification_funnel.raw_findings}
+						effective={snapshot.verification_funnel.effective_findings}
+						verified={snapshot.verification_funnel.verified_findings}
+						falsePositive={snapshot.verification_funnel.false_positive_count}
+					/>
 				</DashboardSection>
 				<DashboardSection
-					className="xl:col-span-7"
+					className="lg:col-span-7"
 					panel="hotspots"
 					title="风险热点项目"
 					description="按风险加权排序的项目视图，横轴为窗口扫描次数，纵轴为有效风险数，气泡大小为已验证数。"
@@ -600,27 +601,19 @@ export default function DashboardCommandCenter({
 					) : (
 						<p className="text-sm text-slate-400">暂无热点项目</p>
 					)}
-				</DashboardSection>	
-				
-
-					<DashboardSection
-						panel="status"
-						title="任务状态"
-						description="全量任务分布，便于快速识别失败、中断和运行中队列。"
-						icon={<AlertTriangle className="h-5 w-5" />}
-					>
-						<TaskStatusRing breakdown={snapshot.task_status_breakdown} />
-					</DashboardSection>
-				{/* <div className="grid gap-4 xl:col-span-4">
-					
-				</div> */}
-			</div>
-
-			<div className="grid gap-4 xl:grid-cols-12">
-				
+				</DashboardSection>
+				<DashboardSection
+					className="lg:col-span-5"
+					panel="status"
+					title="任务状态"
+					description="全量任务分布，便于快速识别失败、中断和运行中队列。"
+					icon={<AlertTriangle className="h-5 w-5" />}
+				>
+					<TaskStatusRing breakdown={snapshot.task_status_breakdown} />
+				</DashboardSection>
 
 				<DashboardSection
-					className="xl:col-span-5"
+					className="lg:col-span-7"
 					panel="engines"
 					title="引擎贡献"
 					description={`过去 ${rangeDays} 天内各引擎的扫描成功率、有效发现和平均耗时。`}
@@ -695,11 +688,8 @@ export default function DashboardCommandCenter({
 						<p className="text-sm text-slate-400">暂无引擎贡献数据</p>
 					)}
 				</DashboardSection>
-			</div>
-
-			<div className="grid gap-4 xl:grid-cols-12">
 				<DashboardSection
-					className="xl:col-span-5"
+					className="lg:col-span-5"
 					panel="language-risk"
 					title="语言风险热力"
 					description="按语言聚合有效风险密度、已验证结果和误报质量。"
@@ -707,17 +697,16 @@ export default function DashboardCommandCenter({
 				>
 					<RiskHeatmap items={snapshot.language_risk || []} />
 				</DashboardSection>
-
-				<DashboardSection
-					className="xl:col-span-7"
-					panel="cwe"
-					title="CWE 攻击面"
-					description="具备 CWE 语义的引擎发现分布，用于观察攻击面聚集。"
-					icon={<Target className="h-5 w-5" />}
-				>
-					<AttackSurfaceTreemap items={snapshot.cwe_distribution || []} />
-				</DashboardSection>
 			</div>
+
+			<DashboardSection
+				panel="cwe"
+				title="CWE 攻击面"
+				description="具备 CWE 语义的引擎发现分布，用于观察攻击面聚集。"
+				icon={<Target className="h-5 w-5" />}
+			>
+				<AttackSurfaceTreemap items={snapshot.cwe_distribution || []} />
+			</DashboardSection>
 
 			<DashboardSection
 				panel="actions"
