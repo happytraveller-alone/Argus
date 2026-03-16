@@ -63,9 +63,6 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 	const location = useLocation();
 	const [mobileOpen, setMobileOpen] = useState(false);
-	const [expandedGroup, setExpandedGroup] = useState<SidebarNavGroupId | null>(
-		null,
-	);
 	const { t, isEnglish } = useI18n();
 	const { logoSrc } = useLogoVariant();
 	const hasPrefetchedTaskGroupRef = useRef(false);
@@ -104,10 +101,6 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 			matchesRoute(route.path) || activeNavPath === route.path,
 		[activeNavPath, matchesRoute],
 	);
-
-	const toggleGroupExpanded = (group: SidebarNavGroupId) => {
-		setExpandedGroup((prev) => (prev === group ? null : group));
-	};
 
 	const prefetchTaskGroupAssets = useCallback(() => {
 		if (hasPrefetchedTaskGroupRef.current) return;
@@ -371,31 +364,18 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 								}
 
 								const isGroupActive = group.routes.some(isRouteActive);
-								const isGroupExpanded =
-									!collapsed && (isGroupActive || expandedGroup === group.id);
+								const isGroupExpanded = !collapsed;
 								const groupLabel = t(group.titleKey, group.fallbackLabel);
 								const GroupIcon = group.icon;
 								const prefetchGroupAssets = groupPrefetchers[group.id];
 
 								return (
 									<div key={group.id} className="pt-1">
-										<Link
-											to={group.routes[0]?.path || group.defaultEntryPath}
-											className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300 ${isGroupActive ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted/20 border-border/40 text-muted-foreground"}`}
-											onClick={(event) => {
-												prefetchGroupAssets?.();
-												if (collapsed) {
-													setMobileOpen(false);
-													return;
-												}
-												event.preventDefault();
-												toggleGroupExpanded(group.id);
-											}}
+										<div
+											data-sidebar-group-header={group.id}
+											className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300 cursor-default ${isGroupActive ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted/20 border-border/40 text-muted-foreground"}`}
 											title={collapsed ? groupLabel : undefined}
 											onMouseEnter={() => {
-												prefetchGroupAssets?.();
-											}}
-											onFocus={() => {
 												prefetchGroupAssets?.();
 											}}
 										>
@@ -411,7 +391,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
 													{groupLabel}
 												</span>
 											)}
-										</Link>
+										</div>
 
 										{isGroupExpanded && group.routes.length > 0 && (
 											<div className="mt-1 pl-4 space-y-1">
