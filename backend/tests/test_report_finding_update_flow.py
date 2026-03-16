@@ -163,7 +163,77 @@ async def test_report_agent_returns_updated_finding_after_update_tool():
     assert result.success is True
     assert updated_findings
     assert result.data["updated_finding"]["line_start"] == 10
+    assert result.data["finding_validated"] is True
     assert "correct_func" in result.data["vulnerability_report"]
+
+
+@pytest.mark.asyncio
+async def test_report_agent_rejects_inconsistent_final_finding_identity():
+    async def _update_callback(identity: str, patch: Dict[str, Any], reason: str) -> Dict[str, Any]:
+        return {
+            "finding_identity": "fid:other",
+            "title": "app/api.py中correct_func函数SQL注入漏洞",
+            "file_path": "app/api.py",
+            "line_start": 10,
+            "line_end": 11,
+            "function_name": "correct_func",
+            "vulnerability_type": "sql_injection",
+            "severity": "high",
+        }
+
+    llm = _SequenceLLM(
+        [
+            (
+                "Thought: 先读取源码。\n"
+                "Action: read_file\n"
+                'Action Input: {"file_path": "app/api.py", "start_line": 1, "end_line": 20}'
+            ),
+            (
+                "Thought: 需要修正 finding。\n"
+                "Action: update_vulnerability_finding\n"
+                'Action Input: {"finding_identity": "fid:test", "fields_to_update": {"line_start": 10, "line_end": 11, "function_name": "correct_func"}, "update_reason": "Report阶段核对源码后修正定位"}'
+            ),
+            (
+                "Thought: 信息已充分，输出报告。\n"
+                "Final Answer:\n"
+                "# 漏洞报告：app/api.py中correct_func函数SQL注入漏洞\n\n"
+                "## 漏洞概述\n\n已完成修正。"
+            ),
+        ]
+    )
+    agent = ReportAgent(
+        llm_service=llm,
+        tools={
+            "read_file": _ReadFileTool(),
+            "update_vulnerability_finding": UpdateVulnerabilityFindingTool(
+                task_id="task-4",
+                update_callback=_update_callback,
+            ),
+        },
+        event_emitter=None,
+    )
+
+    result = await agent.run(
+        {
+            "finding": {
+                "finding_identity": "fid:test",
+                "title": "wrong title",
+                "file_path": "app/api.py",
+                "line_start": 99,
+                "vulnerability_type": "sql_injection",
+                "severity": "high",
+                "verdict": "confirmed",
+                "confidence": 0.9,
+                "function_name": "wrong_func",
+            },
+            "project_info": {"name": "demo"},
+            "config": {},
+        }
+    )
+
+    assert result.success is False
+    assert "finding_identity" in str(result.error)
+    assert result.data["finding_validated"] is False
 
 
 @pytest.mark.asyncio
