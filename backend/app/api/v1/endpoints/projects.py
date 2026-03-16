@@ -10,6 +10,7 @@ from fastapi import (
     Form,
 )
 from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, case, or_, and_
 from sqlalchemy.future import select
@@ -205,6 +206,11 @@ from app.services.zip_storage import (
     get_project_zip_meta,
     delete_project_zip,
     has_project_zip,
+)
+from app.services.project_transfer_service import (
+    cleanup_export_bundle,
+    export_projects_bundle,
+    import_projects_bundle,
 )
 from app.services.upload.upload_manager import UploadManager
 from app.services.upload.compression_factory import CompressionStrategyFactory
@@ -603,6 +609,26 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     default_branch: Optional[str] = None
     programming_languages: Optional[List[str]] = None
+
+
+class ProjectExportRequest(BaseModel):
+    project_ids: Optional[List[str]] = None
+    include_archives: bool = True
+
+
+class ProjectImportItem(BaseModel):
+    source_project_id: str
+    name: Optional[str] = None
+    project_id: Optional[str] = None
+    reason: Optional[str] = None
+    existing_project_id: Optional[str] = None
+
+
+class ProjectImportResponse(BaseModel):
+    imported_projects: List[ProjectImportItem]
+    skipped_projects: List[ProjectImportItem]
+    failed_projects: List[ProjectImportItem]
+    warnings: List[str]
 
 
 class OwnerSchema(BaseModel):
@@ -1413,6 +1439,46 @@ async def create_project(
     await db.commit()
     await db.refresh(project)
     return project
+
+
+@router.post("/export")
+async def export_project_bundle(
+    request: ProjectExportRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> FileResponse:
+    bundle = await export_projects_bundle(
+        db=db,
+        current_user=current_user,
+        project_ids=request.project_ids,
+        include_archives=request.include_archives,
+    )
+    return FileResponse(
+        bundle.path,
+        media_type="application/zip",
+        filename=bundle.filename,
+        background=BackgroundTask(cleanup_export_bundle, bundle.path),
+    )
+
+
+@router.post("/import", response_model=ProjectImportResponse)
+async def import_project_bundle(
+    bundle: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    summary = await import_projects_bundle(
+        db=db,
+        current_user=current_user,
+        bundle_file=bundle,
+        conflict_policy="skip",
+    )
+    return {
+        "imported_projects": summary.imported_projects,
+        "skipped_projects": summary.skipped_projects,
+        "failed_projects": summary.failed_projects,
+        "warnings": summary.warnings,
+    }
 
 
 @router.get("/", response_model=List[ProjectResponse])

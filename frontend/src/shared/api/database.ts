@@ -53,6 +53,21 @@ interface AgentTaskPreflightPayload {
   savedConfig?: LlmQuickConfigSnapshotPayload | null;
 }
 
+export interface ProjectTransferItem {
+  source_project_id: string;
+  name?: string | null;
+  project_id?: string | null;
+  reason?: string | null;
+  existing_project_id?: string | null;
+}
+
+export interface ProjectImportResponse {
+  imported_projects: ProjectTransferItem[];
+  skipped_projects: ProjectTransferItem[];
+  failed_projects: ProjectTransferItem[];
+  warnings: string[];
+}
+
 export interface ProjectFileContentResponse {
   file_path: string;
   content: string;
@@ -235,6 +250,42 @@ export const api = {
 
   async permanentlyDeleteProject(id: string): Promise<void> {
     await apiClient.delete(`/projects/${id}/permanent`);
+  },
+
+  async exportProjectBundle(params?: {
+    projectIds?: string[];
+    includeArchives?: boolean;
+  }): Promise<{ blob: Blob; filename: string }> {
+    const res = await apiClient.post(
+      "/projects/export",
+      {
+        project_ids: params?.projectIds?.length ? params.projectIds : null,
+        include_archives: params?.includeArchives ?? true,
+      },
+      {
+        responseType: "blob",
+      },
+    );
+
+    const disposition = String(res.headers["content-disposition"] || "");
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    const basicMatch = disposition.match(/filename="?([^";]+)"?/i);
+    const decodedUtf8 = utf8Match?.[1] ? decodeURIComponent(utf8Match[1]) : null;
+    const filename = decodedUtf8 || basicMatch?.[1] || "deepaudit-project-export.zip";
+
+    return {
+      blob: res.data,
+      filename,
+    };
+  },
+
+  async importProjectBundle(file: File): Promise<ProjectImportResponse> {
+    const formData = new FormData();
+    formData.append("bundle", file);
+    const res = await apiClient.post("/projects/import", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
   },
 
   // ==================== ProjectMember 相关方法 ====================
