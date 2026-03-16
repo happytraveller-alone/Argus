@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type ReactNode,
+	type RefObject,
+} from "react";
 import {
 	ArrowLeft,
 	ChevronDown,
@@ -6,6 +14,7 @@ import {
 	FileCode2,
 	Folder,
 	FolderOpen,
+	Search,
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FindingCodeWindow, {
@@ -16,32 +25,59 @@ import { api } from "@/shared/api/database";
 import type { Project } from "@/shared/types";
 import { cn } from "@/shared/utils/utils";
 import {
+	buildProjectCodeBrowserContentSearchResults,
+	buildProjectCodeBrowserFileSearchResults,
 	buildProjectCodeBrowserTree,
+	filterProjectCodeBrowserFilesByPath,
+	mergeProjectCodeBrowserSearchResults,
+	normalizeProjectCodeBrowserSearchQuery,
+	parseProjectCodeBrowserFileFilterTokens,
 	PROJECT_CODE_BROWSER_EMPTY_MESSAGE,
 	PROJECT_CODE_BROWSER_FAILED_MESSAGE,
+	PROJECT_CODE_BROWSER_SEARCH_EMPTY_MESSAGE,
+	PROJECT_CODE_BROWSER_SEARCH_LOADING_MESSAGE,
+	PROJECT_CODE_BROWSER_SEARCH_NO_RESULTS_MESSAGE,
 	resolveProjectCodeBrowserBackTarget,
 	resolveProjectCodeBrowserFileFailure,
 	resolveProjectCodeBrowserFileSuccess,
+	resolveProjectCodeBrowserPreviewDecorationForSearchResult,
+	shouldProjectCodeBrowserSearchContent,
 	toggleProjectCodeBrowserFolder,
+	type ProjectCodeBrowserFileEntry,
 	type ProjectCodeBrowserFileViewState,
+	type ProjectCodeBrowserMode,
+	type ProjectCodeBrowserPreviewDecoration,
+	type ProjectCodeBrowserSearchHighlightPart,
+	type ProjectCodeBrowserSearchResult,
+	type ProjectCodeBrowserSearchStatus,
 	type ProjectCodeBrowserTreeNode,
 } from "@/pages/project-code-browser/model";
 
-type ProjectCodeBrowserPreviewDecoration = {
-	focusLine?: number | null;
-	highlightStartLine?: number | null;
-	highlightEndLine?: number | null;
-};
+const SEARCH_CONTENT_CONCURRENCY = 4;
+const MAX_CONTENT_MATCHES_PER_FILE = 3;
+const MAX_TOTAL_SEARCH_RESULTS = 50;
 
 interface ProjectCodeBrowserWorkspaceProps {
 	tree: ProjectCodeBrowserTreeNode[];
 	expandedFolders: Set<string>;
 	selectedFilePath: string | null;
 	selectedFileState: ProjectCodeBrowserFileViewState;
+	browserMode?: ProjectCodeBrowserMode;
+	searchQuery?: string;
+	includeFileQuery?: string;
+	excludeFileQuery?: string;
+	searchStatus?: ProjectCodeBrowserSearchStatus;
+	searchResults?: ProjectCodeBrowserSearchResult[];
 	onToggleFolder: (folderPath: string) => void;
 	onSelectFile: (filePath: string) => void;
+	onSelectMode?: (mode: ProjectCodeBrowserMode) => void;
+	onSearchQueryChange?: (query: string) => void;
+	onIncludeFileQueryChange?: (query: string) => void;
+	onExcludeFileQueryChange?: (query: string) => void;
+	onSelectSearchResult?: (result: ProjectCodeBrowserSearchResult) => void;
 	appearance?: FindingCodeWindowAppearance;
 	previewDecorations?: Record<string, ProjectCodeBrowserPreviewDecoration | undefined>;
+	searchInputRef?: RefObject<HTMLInputElement | null>;
 	className?: string;
 }
 
@@ -63,6 +99,26 @@ interface ProjectCodeBrowserTreeProps {
 	depth?: number;
 }
 
+interface ProjectCodeBrowserModeRailProps {
+	browserMode: ProjectCodeBrowserMode;
+	onSelectMode: (mode: ProjectCodeBrowserMode) => void;
+	appearance: FindingCodeWindowAppearance;
+}
+
+interface ProjectCodeBrowserSearchPanelProps {
+	searchQuery: string;
+	includeFileQuery: string;
+	excludeFileQuery: string;
+	searchStatus: ProjectCodeBrowserSearchStatus;
+	searchResults: ProjectCodeBrowserSearchResult[];
+	selectedFilePath: string | null;
+	onSearchQueryChange: (query: string) => void;
+	onIncludeFileQueryChange: (query: string) => void;
+	onExcludeFileQueryChange: (query: string) => void;
+	onSelectSearchResult: (result: ProjectCodeBrowserSearchResult) => void;
+	inputRef?: RefObject<HTMLInputElement | null>;
+}
+
 function renderFileSize(size?: number) {
 	if (typeof size !== "number" || !Number.isFinite(size)) return null;
 	return `${size.toLocaleString()} B`;
@@ -80,6 +136,45 @@ function getPaneShellClasses(appearance: FindingCodeWindowAppearance) {
 
 function getEmptyStateClasses() {
 	return "flex h-full min-h-0 items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/[0.02] px-6 py-10 text-center font-mono text-base text-white/48";
+}
+
+function renderHighlightedParts(
+	parts: ProjectCodeBrowserSearchHighlightPart[],
+	fallbackText: string,
+): ReactNode {
+	if (!parts.length) return fallbackText;
+	return parts.map((part, index) =>
+		part.matched ? (
+			<mark
+				key={`${part.text}-${index}`}
+				className="rounded bg-[#c7ff6a]/20 px-1 text-[#efffc3]"
+			>
+				{part.text}
+			</mark>
+		) : (
+			<span key={`${part.text}-${index}`}>{part.text}</span>
+		),
+	);
+}
+
+function getSearchStatusLabel(
+	searchQuery: string,
+	searchStatus: ProjectCodeBrowserSearchStatus,
+) {
+	const normalizedQuery = normalizeProjectCodeBrowserSearchQuery(searchQuery);
+	if (!normalizedQuery) {
+		return "文件名即时命中，输入 2 个字符后补充内容命中";
+	}
+	if (searchStatus.state === "failed") {
+		return searchStatus.error || "搜索失败，请稍后重试";
+	}
+	if (searchStatus.state === "scanning") {
+		return `已扫描 ${searchStatus.scanned} / ${searchStatus.total}`;
+	}
+	if (shouldProjectCodeBrowserSearchContent(normalizedQuery)) {
+		return `已扫描 ${searchStatus.scanned} / ${searchStatus.total}`;
+	}
+	return "正在显示文件名即时命中";
 }
 
 function ProjectCodeBrowserTree({
@@ -166,6 +261,199 @@ function ProjectCodeBrowserTree({
 	);
 }
 
+function ProjectCodeBrowserModeRail({
+	browserMode,
+	onSelectMode,
+	appearance,
+}: ProjectCodeBrowserModeRailProps) {
+	const items = [
+		{
+			mode: "files" as const,
+			label: "文件",
+			ariaLabel: "切换到文件浏览",
+			icon: FileCode2,
+		},
+		{
+			mode: "search" as const,
+			label: "搜索",
+			ariaLabel: "切换到搜索",
+			icon: Search,
+		},
+	];
+
+	return (
+		<div
+			className={cn(
+				getPaneShellClasses(appearance),
+				"min-h-[52px] overflow-hidden xl:min-h-0",
+			)}
+		>
+			<div className="flex h-full items-center justify-center gap-2 p-2 xl:flex-col xl:justify-start xl:gap-3 xl:p-3">
+				{items.map((item) => {
+					const Icon = item.icon;
+					const isActive = browserMode === item.mode;
+					return (
+						<button
+							key={item.mode}
+							type="button"
+							aria-label={item.ariaLabel}
+							aria-pressed={isActive}
+							title={item.label}
+							onClick={() => onSelectMode(item.mode)}
+							className={cn(
+								"group flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 cursor-pointer",
+								isActive
+									? "border-[#c7ff6a]/40 bg-[#c7ff6a]/10 text-[#efffc3] shadow-[0_0_30px_rgba(199,255,106,0.08)]"
+									: "border-white/8 bg-white/[0.02] text-white/55 hover:border-white/14 hover:bg-white/[0.05] hover:text-white/84",
+							)}
+						>
+							<Icon className="h-4.5 w-4.5" />
+						</button>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
+function ProjectCodeBrowserSearchPanel({
+	searchQuery,
+	includeFileQuery,
+	excludeFileQuery,
+	searchStatus,
+	searchResults,
+	selectedFilePath,
+	onSearchQueryChange,
+	onIncludeFileQueryChange,
+	onExcludeFileQueryChange,
+	onSelectSearchResult,
+	inputRef,
+}: ProjectCodeBrowserSearchPanelProps) {
+	const normalizedQuery = normalizeProjectCodeBrowserSearchQuery(searchQuery);
+	const canSearchContent = shouldProjectCodeBrowserSearchContent(normalizedQuery);
+	const statusLabel = getSearchStatusLabel(searchQuery, searchStatus);
+	const includeTokens = parseProjectCodeBrowserFileFilterTokens(includeFileQuery);
+	const excludeTokens = parseProjectCodeBrowserFileFilterTokens(excludeFileQuery);
+
+	let body: ReactNode = (
+		<div className={getEmptyStateClasses()}>{PROJECT_CODE_BROWSER_SEARCH_EMPTY_MESSAGE}</div>
+	);
+
+	if (normalizedQuery) {
+		if (searchResults.length > 0) {
+			body = (
+				<div className="space-y-2">
+					{searchResults.map((result) => {
+						const isSelected = selectedFilePath === result.filePath;
+						return (
+							<button
+								key={result.id}
+								type="button"
+								onClick={() => onSelectSearchResult(result)}
+								className={cn(
+									"w-full rounded-xl border px-3 py-3 text-left transition-all cursor-pointer",
+									isSelected
+										? "border-[#c7ff6a]/28 bg-[#c7ff6a]/[0.07]"
+										: "border-white/8 bg-white/[0.02] hover:border-white/14 hover:bg-white/[0.05]",
+								)}
+							>
+								<div className="flex items-start justify-between gap-3">
+									<div className="min-w-0 space-y-1.5">
+										<div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-white/34">
+											<span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] tracking-[0.18em] text-white/45">
+												{result.kind === "file" ? "文件" : "内容"}
+											</span>
+											{result.lineNumber ? <span>第 {result.lineNumber} 行</span> : null}
+										</div>
+										<div className="truncate text-sm font-semibold text-white/88">
+											{renderHighlightedParts(
+												result.fileNameParts,
+												result.fileName,
+											)}
+										</div>
+										<div className="truncate text-xs text-white/46">
+											{renderHighlightedParts(result.pathParts, result.filePath)}
+										</div>
+										{result.kind === "content" ? (
+											<p className="line-clamp-2 text-xs leading-6 text-white/68">
+												{renderHighlightedParts(
+													result.excerptParts,
+													result.excerpt,
+												)}
+											</p>
+										) : null}
+									</div>
+								</div>
+							</button>
+						);
+					})}
+				</div>
+			);
+		} else if (searchStatus.state === "scanning") {
+			body = (
+				<div className={getEmptyStateClasses()}>
+					{PROJECT_CODE_BROWSER_SEARCH_LOADING_MESSAGE}
+				</div>
+			);
+		} else {
+			body = (
+				<div className={getEmptyStateClasses()}>
+					{PROJECT_CODE_BROWSER_SEARCH_NO_RESULTS_MESSAGE}
+				</div>
+			);
+		}
+	}
+
+	return (
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="border-b border-white/8 px-4 py-4">
+				<label className="mt-3 flex items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-3 py-3 transition-colors focus-within:border-[#c7ff6a]/30 focus-within:bg-black">
+					<Search className="h-4 w-4 shrink-0 text-white/42" />
+					<input
+						ref={inputRef}
+						type="search"
+						value={searchQuery}
+						onChange={(event) => onSearchQueryChange(event.target.value)}
+						placeholder="输入文件名或代码片段"
+						className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/28"
+					/>
+				</label>
+				<div className="mt-3 grid grid-cols-1 gap-2">
+					<label className="space-y-1">
+						<span className="text-[13px] uppercase tracking-[0.18em] text-white/34">
+							包含文件
+						</span>
+						<input
+							type="text"
+							value={includeFileQuery}
+							onChange={(event) => onIncludeFileQueryChange(event.target.value)}
+							placeholder="例如 src/, api"
+							className="w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/28 focus:border-[#c7ff6a]/28 focus:bg-black/50"
+						/>
+					</label>
+					<label className="space-y-1">
+						<span className="text-[13px] uppercase tracking-[0.18em] text-white/34">
+							排除文件
+						</span>
+						<input
+							type="text"
+							value={excludeFileQuery}
+							onChange={(event) => onExcludeFileQueryChange(event.target.value)}
+							placeholder="例如 dist, mock"
+							className="w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/28 focus:border-[#c7ff6a]/28 focus:bg-black/50"
+						/>
+					</label>
+				</div>
+				
+			</div>
+
+			<div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 custom-scrollbar-dark">
+				{body}
+			</div>
+		</div>
+	);
+}
+
 function ProjectCodeBrowserPreview({
 	selectedFilePath,
 	selectedFileState,
@@ -180,11 +468,7 @@ function ProjectCodeBrowserPreview({
 	const previewDecoration = filePath ? previewDecorations?.[filePath] : undefined;
 
 	if (selectedFileState.status === "loading") {
-		return (
-			<div className={getEmptyStateClasses()}>
-				正在加载文件内容...
-			</div>
-		);
+		return <div className={getEmptyStateClasses()}>正在加载文件内容...</div>;
 	}
 
 	if (selectedFileState.status === "failed") {
@@ -196,8 +480,7 @@ function ProjectCodeBrowserPreview({
 	}
 
 	if (selectedFileState.status === "ready") {
-		const lineEnd = selectedFileState.content.replace(/\r\n/g, "\n").split("\n")
-			.length;
+		const lineEnd = selectedFileState.content.replace(/\r\n/g, "\n").split("\n").length;
 		return (
 			<FindingCodeWindow
 				filePath={selectedFileState.filePath}
@@ -221,48 +504,157 @@ function ProjectCodeBrowserPreview({
 	);
 }
 
+function ProjectCodeBrowserSidePanel({
+	tree,
+	expandedFolders,
+	selectedFilePath,
+	browserMode,
+	searchQuery,
+	includeFileQuery,
+	excludeFileQuery,
+	searchStatus,
+	searchResults,
+	onToggleFolder,
+	onSelectFile,
+	onSearchQueryChange,
+	onIncludeFileQueryChange,
+	onExcludeFileQueryChange,
+	onSelectSearchResult,
+	appearance,
+	searchInputRef,
+}: Pick<
+	ProjectCodeBrowserWorkspaceProps,
+	| "tree"
+	| "expandedFolders"
+	| "selectedFilePath"
+	| "browserMode"
+	| "searchQuery"
+	| "includeFileQuery"
+	| "excludeFileQuery"
+	| "searchStatus"
+	| "searchResults"
+	| "onToggleFolder"
+	| "onSelectFile"
+	| "onSearchQueryChange"
+	| "onIncludeFileQueryChange"
+	| "onExcludeFileQueryChange"
+	| "onSelectSearchResult"
+	| "appearance"
+	| "searchInputRef"
+>) {
+	if (
+		browserMode === "search" &&
+		searchStatus &&
+		searchResults &&
+		onSearchQueryChange &&
+		onSelectSearchResult
+	) {
+		return (
+			<ProjectCodeBrowserSearchPanel
+				searchQuery={searchQuery ?? ""}
+				includeFileQuery={includeFileQuery ?? ""}
+				excludeFileQuery={excludeFileQuery ?? ""}
+				searchStatus={searchStatus}
+				searchResults={searchResults}
+				selectedFilePath={selectedFilePath}
+				onSearchQueryChange={onSearchQueryChange}
+				onIncludeFileQueryChange={onIncludeFileQueryChange ?? (() => {})}
+				onExcludeFileQueryChange={onExcludeFileQueryChange ?? (() => {})}
+				onSelectSearchResult={onSelectSearchResult}
+				inputRef={searchInputRef}
+			/>
+		);
+	}
+
+	return (
+		<div className="flex h-full min-h-0 flex-col">
+			{/* <div className="border-b border-white/8 px-4 py-4">
+				<p className="text-[11px] uppercase tracking-[0.24em] text-white/34">
+					文件浏览
+				</p>
+				<p className="mt-1 text-xs text-white/44">按目录浏览项目文本文件</p>
+			</div> */}
+			<div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 custom-scrollbar-dark">
+				{tree.length > 0 ? (
+					<ProjectCodeBrowserTree
+						nodes={tree}
+						expandedFolders={expandedFolders}
+						selectedFilePath={selectedFilePath}
+						onToggleFolder={onToggleFolder}
+						onSelectFile={onSelectFile}
+						appearance={appearance ?? "native-explorer"}
+					/>
+				) : (
+					<div className="px-3 py-8 text-center text-sm text-white/42">
+						当前项目没有可浏览的文本文件
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
 export function ProjectCodeBrowserWorkspace({
 	tree,
 	expandedFolders,
 	selectedFilePath,
 	selectedFileState,
+	browserMode = "files",
+	searchQuery = "",
+	includeFileQuery = "",
+	excludeFileQuery = "",
+	searchStatus = { state: "idle", scanned: 0, total: 0 },
+	searchResults = [],
 	onToggleFolder,
 	onSelectFile,
+	onSelectMode = () => {},
+	onSearchQueryChange = () => {},
+	onIncludeFileQueryChange = () => {},
+	onExcludeFileQueryChange = () => {},
+	onSelectSearchResult = () => {},
 	appearance = "native-explorer",
 	previewDecorations,
+	searchInputRef,
 	className,
 }: ProjectCodeBrowserWorkspaceProps) {
 	return (
-			<section
-				className={cn(
-					"grid min-h-0 grid-cols-1 gap-4 overflow-hidden xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]",
-					className,
-				)}
-			>
+		<section
+			className={cn(
+				"grid min-h-0 grid-cols-1 gap-4 overflow-hidden xl:grid-cols-[52px_minmax(280px,320px)_minmax(0,1fr)]",
+				className,
+			)}
+		>
+			<ProjectCodeBrowserModeRail
+				browserMode={browserMode}
+				onSelectMode={onSelectMode}
+				appearance={appearance}
+			/>
+
 			<div
 				className={cn(
 					getPaneShellClasses(appearance),
 					"min-h-[360px] overflow-hidden xl:min-h-0",
 				)}
 			>
-				<div className="flex h-full min-h-0 flex-col">
-					<div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 custom-scrollbar-dark">
-						{tree.length > 0 ? (
-							<ProjectCodeBrowserTree
-								nodes={tree}
-								expandedFolders={expandedFolders}
-								selectedFilePath={selectedFilePath}
-								onToggleFolder={onToggleFolder}
-								onSelectFile={onSelectFile}
-								appearance={appearance}
-							/>
-						) : (
-							<div className="px-3 py-8 text-center text-sm text-white/42">
-								当前项目没有可浏览的文本文件
-							</div>
-						)}
-					</div>
-				</div>
+				<ProjectCodeBrowserSidePanel
+					tree={tree}
+					expandedFolders={expandedFolders}
+					selectedFilePath={selectedFilePath}
+					browserMode={browserMode}
+					searchQuery={searchQuery}
+					includeFileQuery={includeFileQuery}
+					excludeFileQuery={excludeFileQuery}
+					searchStatus={searchStatus}
+					searchResults={searchResults}
+					onToggleFolder={onToggleFolder}
+					onSelectFile={onSelectFile}
+					onSearchQueryChange={onSearchQueryChange}
+					onIncludeFileQueryChange={onIncludeFileQueryChange}
+					onExcludeFileQueryChange={onExcludeFileQueryChange}
+					onSelectSearchResult={onSelectSearchResult}
+					appearance={appearance}
+					searchInputRef={searchInputRef}
+				/>
 			</div>
 
 			<div
@@ -295,11 +687,23 @@ export function ProjectCodeBrowserContent({
 	expandedFolders,
 	selectedFilePath,
 	selectedFileState,
+	browserMode = "files",
+	searchQuery = "",
+	includeFileQuery = "",
+	excludeFileQuery = "",
+	searchStatus = { state: "idle", scanned: 0, total: 0 },
+	searchResults = [],
 	onBack,
 	onToggleFolder,
 	onSelectFile,
+	onSelectMode = () => {},
+	onSearchQueryChange = () => {},
+	onIncludeFileQueryChange = () => {},
+	onExcludeFileQueryChange = () => {},
+	onSelectSearchResult = () => {},
 	appearance = "native-explorer",
 	previewDecorations,
+	searchInputRef,
 }: ProjectCodeBrowserContentProps) {
 	const filesCountLabel = `${filesCount} 个文件`;
 	const isZipProject = project?.source_type === "zip";
@@ -358,10 +762,22 @@ export function ProjectCodeBrowserContent({
 					expandedFolders={expandedFolders}
 					selectedFilePath={selectedFilePath}
 					selectedFileState={selectedFileState}
+					browserMode={browserMode}
+					searchQuery={searchQuery}
+					includeFileQuery={includeFileQuery}
+					excludeFileQuery={excludeFileQuery}
+					searchStatus={searchStatus}
+					searchResults={searchResults}
 					onToggleFolder={onToggleFolder}
 					onSelectFile={onSelectFile}
+					onSelectMode={onSelectMode}
+					onSearchQueryChange={onSearchQueryChange}
+					onIncludeFileQueryChange={onIncludeFileQueryChange}
+					onExcludeFileQueryChange={onExcludeFileQueryChange}
+					onSelectSearchResult={onSelectSearchResult}
 					appearance={appearance}
 					previewDecorations={previewDecorations}
+					searchInputRef={searchInputRef}
 					className="flex-1 min-h-0 overflow-hidden"
 				/>
 			)}
@@ -376,6 +792,7 @@ export default function ProjectCodeBrowser() {
 	const [project, setProject] = useState<Project | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [projectFiles, setProjectFiles] = useState<ProjectCodeBrowserFileEntry[]>([]);
 	const [tree, setTree] = useState<ProjectCodeBrowserTreeNode[]>([]);
 	const [filesCount, setFilesCount] = useState(0);
 	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
@@ -385,11 +802,105 @@ export default function ProjectCodeBrowser() {
 	const [fileStates, setFileStates] = useState<
 		Record<string, ProjectCodeBrowserFileViewState>
 	>({});
+	const [browserMode, setBrowserMode] = useState<ProjectCodeBrowserMode>("files");
+	const [searchQuery, setSearchQuery] = useState("");
+	const [includeFileQuery, setIncludeFileQuery] = useState("");
+	const [excludeFileQuery, setExcludeFileQuery] = useState("");
+	const [searchStatus, setSearchStatus] = useState<ProjectCodeBrowserSearchStatus>({
+		state: "idle",
+		scanned: 0,
+		total: 0,
+	});
+	const [searchResults, setSearchResults] = useState<ProjectCodeBrowserSearchResult[]>([]);
+	const [previewDecorations, setPreviewDecorations] = useState<
+		Record<string, ProjectCodeBrowserPreviewDecoration | undefined>
+	>({});
+	const searchInputRef = useRef<HTMLInputElement | null>(null);
+	const fileStatesRef = useRef<Record<string, ProjectCodeBrowserFileViewState>>({});
+	const pendingFileLoadsRef = useRef<
+		Record<string, Promise<ProjectCodeBrowserFileViewState>>
+	>({});
+	const searchSessionRef = useRef(0);
 
 	const from =
 		typeof (location.state as { from?: unknown } | null)?.from === "string"
 			? ((location.state as { from?: string }).from ?? "")
 			: "";
+
+	const updateFileState = useCallback(
+		(filePath: string, nextState: ProjectCodeBrowserFileViewState) => {
+			setFileStates((current) => {
+				const next = {
+					...current,
+					[filePath]: nextState,
+				};
+				fileStatesRef.current = next;
+				return next;
+			});
+		},
+		[],
+	);
+
+	useEffect(() => {
+		fileStatesRef.current = fileStates;
+	}, [fileStates]);
+
+	useEffect(() => {
+		return () => {
+			searchSessionRef.current += 1;
+		};
+	}, []);
+
+	useEffect(() => {
+		if (browserMode !== "search") return;
+		const frame = window.requestAnimationFrame(() => {
+			searchInputRef.current?.focus();
+		});
+		return () => window.cancelAnimationFrame(frame);
+	}, [browserMode]);
+
+	const loadFileState = useCallback(
+		async (filePath: string, options?: { selectFile?: boolean }) => {
+			if (!id || project?.source_type !== "zip") {
+				return { status: "idle" } as ProjectCodeBrowserFileViewState;
+			}
+
+			if (options?.selectFile) {
+				setSelectedFilePath(filePath);
+			}
+
+			const cachedState = fileStatesRef.current[filePath];
+			if (cachedState && cachedState.status !== "idle" && cachedState.status !== "loading") {
+				return cachedState;
+			}
+
+			const pending = pendingFileLoadsRef.current[filePath];
+			if (pending) {
+				return pending;
+			}
+
+			updateFileState(filePath, { status: "loading" });
+			const request = api
+				.getProjectFileContent(id, filePath)
+				.then((response) => {
+					const nextState = resolveProjectCodeBrowserFileSuccess(response);
+					updateFileState(filePath, nextState);
+					return nextState;
+				})
+				.catch((requestError) => {
+					const nextState = resolveProjectCodeBrowserFileFailure(requestError);
+					updateFileState(filePath, nextState);
+					return nextState;
+				})
+				.finally(() => {
+					delete pendingFileLoadsRef.current[filePath];
+				});
+
+			pendingFileLoadsRef.current[filePath] = request;
+			return request;
+		},
+		[id, project?.source_type, updateFileState],
+	);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -398,11 +909,21 @@ export default function ProjectCodeBrowser() {
 			setLoading(true);
 			setError(null);
 			setProject(null);
+			setProjectFiles([]);
 			setTree([]);
 			setFilesCount(0);
 			setExpandedFolders(new Set());
 			setSelectedFilePath(null);
 			setFileStates({});
+			fileStatesRef.current = {};
+			pendingFileLoadsRef.current = {};
+			setBrowserMode("files");
+			setSearchQuery("");
+			setIncludeFileQuery("");
+			setExcludeFileQuery("");
+			setSearchStatus({ state: "idle", scanned: 0, total: 0 });
+			setSearchResults([]);
+			setPreviewDecorations({});
 
 			if (!id) {
 				setError("项目不存在或已被删除");
@@ -430,6 +951,7 @@ export default function ProjectCodeBrowser() {
 				const files = await api.getProjectFiles(id);
 				if (cancelled) return;
 
+				setProjectFiles(files);
 				setFilesCount(files.length);
 				setTree(buildProjectCodeBrowserTree(files));
 			} catch (_error) {
@@ -448,6 +970,113 @@ export default function ProjectCodeBrowser() {
 			cancelled = true;
 		};
 	}, [id]);
+
+	const filteredProjectFiles = useMemo(
+		() =>
+			filterProjectCodeBrowserFilesByPath(projectFiles, {
+				include: includeFileQuery,
+				exclude: excludeFileQuery,
+			}),
+		[excludeFileQuery, includeFileQuery, projectFiles],
+	);
+
+	useEffect(() => {
+		const normalizedQuery = normalizeProjectCodeBrowserSearchQuery(searchQuery);
+		const sessionId = searchSessionRef.current + 1;
+		searchSessionRef.current = sessionId;
+		const totalFiles = filteredProjectFiles.length;
+
+		if (!normalizedQuery) {
+			setSearchResults([]);
+			setSearchStatus({ state: "idle", scanned: 0, total: totalFiles });
+			return;
+		}
+
+		const fileResults = buildProjectCodeBrowserFileSearchResults(
+			filteredProjectFiles,
+			normalizedQuery,
+		);
+		setSearchResults(fileResults.slice(0, MAX_TOTAL_SEARCH_RESULTS));
+
+		if (!shouldProjectCodeBrowserSearchContent(normalizedQuery)) {
+			setSearchStatus({ state: "done", scanned: 0, total: 0 });
+			return;
+		}
+
+		let cancelled = false;
+		const contentResults: ProjectCodeBrowserSearchResult[] = [];
+		let scanned = 0;
+		setSearchStatus({ state: "scanning", scanned: 0, total: totalFiles });
+
+		const applyProgress = () => {
+			if (cancelled || searchSessionRef.current !== sessionId) return;
+			setSearchResults(
+				mergeProjectCodeBrowserSearchResults(fileResults, contentResults, {
+					maxResults: MAX_TOTAL_SEARCH_RESULTS,
+				}),
+			);
+			setSearchStatus({
+				state: "scanning",
+				scanned,
+				total: totalFiles,
+			});
+		};
+
+		const scanFile = async (file: ProjectCodeBrowserFileEntry) => {
+			const state = await loadFileState(file.path);
+			if (cancelled || searchSessionRef.current !== sessionId) return;
+
+			if (state.status === "ready") {
+				contentResults.push(
+					...buildProjectCodeBrowserContentSearchResults(
+						file.path,
+						state.content,
+						normalizedQuery,
+						{ maxMatchesPerFile: MAX_CONTENT_MATCHES_PER_FILE },
+					),
+				);
+			}
+
+			scanned += 1;
+			applyProgress();
+		};
+
+		const workerCount = Math.min(SEARCH_CONTENT_CONCURRENCY, Math.max(totalFiles, 1));
+		void Promise.all(
+			Array.from({ length: workerCount }, async (_, workerIndex) => {
+				for (let index = workerIndex; index < filteredProjectFiles.length; index += workerCount) {
+					if (cancelled || searchSessionRef.current !== sessionId) return;
+					await scanFile(filteredProjectFiles[index]);
+				}
+			}),
+		)
+			.then(() => {
+				if (cancelled || searchSessionRef.current !== sessionId) return;
+				setSearchResults(
+					mergeProjectCodeBrowserSearchResults(fileResults, contentResults, {
+						maxResults: MAX_TOTAL_SEARCH_RESULTS,
+					}),
+				);
+				setSearchStatus({
+					state: "done",
+					scanned,
+					total: totalFiles,
+				});
+			})
+			.catch(() => {
+				if (cancelled || searchSessionRef.current !== sessionId) return;
+				setSearchStatus({
+					state: "failed",
+					scanned,
+					total: totalFiles,
+					error: "搜索失败，请稍后重试",
+				});
+			});
+
+			return () => {
+				cancelled = true;
+			};
+	}, [excludeFileQuery, filteredProjectFiles, includeFileQuery, loadFileState, searchQuery]);
 
 	const selectedFileState = useMemo<ProjectCodeBrowserFileViewState>(() => {
 		if (!selectedFilePath) {
@@ -474,35 +1103,26 @@ export default function ProjectCodeBrowser() {
 		);
 	}, []);
 
+	const handleSelectMode = useCallback((mode: ProjectCodeBrowserMode) => {
+		setBrowserMode(mode);
+	}, []);
+
 	const handleSelectFile = useCallback(
 		async (filePath: string) => {
-			if (!id || project?.source_type !== "zip") return;
-			setSelectedFilePath(filePath);
-
-			const cachedState = fileStates[filePath];
-			if (cachedState && cachedState.status !== "idle") {
-				return;
-			}
-
-			setFileStates((current) => ({
-				...current,
-				[filePath]: { status: "loading" },
-			}));
-
-			try {
-				const response = await api.getProjectFileContent(id, filePath);
-				setFileStates((current) => ({
-					...current,
-					[filePath]: resolveProjectCodeBrowserFileSuccess(response),
-				}));
-			} catch (error) {
-				setFileStates((current) => ({
-					...current,
-					[filePath]: resolveProjectCodeBrowserFileFailure(error),
-				}));
-			}
+			setPreviewDecorations({});
+			await loadFileState(filePath, { selectFile: true });
 		},
-		[fileStates, id, project?.source_type],
+		[loadFileState],
+	);
+
+	const handleSelectSearchResult = useCallback(
+		async (result: ProjectCodeBrowserSearchResult) => {
+			setPreviewDecorations(
+				resolveProjectCodeBrowserPreviewDecorationForSearchResult(result),
+			);
+			await loadFileState(result.filePath, { selectFile: true });
+		},
+		[loadFileState],
 	);
 
 	return (
@@ -515,9 +1135,22 @@ export default function ProjectCodeBrowser() {
 			expandedFolders={expandedFolders}
 			selectedFilePath={selectedFilePath}
 			selectedFileState={selectedFileState}
+			browserMode={browserMode}
+			searchQuery={searchQuery}
+			includeFileQuery={includeFileQuery}
+			excludeFileQuery={excludeFileQuery}
+			searchStatus={searchStatus}
+			searchResults={searchResults}
 			onBack={handleBack}
 			onToggleFolder={handleToggleFolder}
 			onSelectFile={handleSelectFile}
+			onSelectMode={handleSelectMode}
+			onSearchQueryChange={setSearchQuery}
+			onIncludeFileQueryChange={setIncludeFileQuery}
+			onExcludeFileQueryChange={setExcludeFileQuery}
+			onSelectSearchResult={handleSelectSearchResult}
+			previewDecorations={previewDecorations}
+			searchInputRef={searchInputRef}
 		/>
 	);
 }

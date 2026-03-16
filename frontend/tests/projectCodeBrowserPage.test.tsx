@@ -144,3 +144,154 @@ test("ProjectCodeBrowserContent keeps preview pane full height for empty state",
 	assert.match(markup, /h-full min-h-0/);
 	assert.doesNotMatch(markup, /data-display-preset="project-browser"/);
 });
+
+test("ProjectCodeBrowserContent renders the file/search mode rail and defaults to file mode", async () => {
+	const pageModule = await importOrFail<any>(
+		"../src/pages/ProjectCodeBrowser.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(pageModule.ProjectCodeBrowserContent, {
+			project: createProject(),
+			loading: false,
+			error: null,
+			filesCount: 1,
+			tree: [],
+			expandedFolders: new Set<string>(),
+			selectedFilePath: null,
+			selectedFileState: { status: "idle" },
+			browserMode: "files",
+			searchQuery: "",
+			searchStatus: { state: "idle", scanned: 0, total: 0 },
+			searchResults: [],
+			onBack: () => {},
+			onToggleFolder: () => {},
+			onSelectFile: () => {},
+			onSelectMode: () => {},
+			onSearchQueryChange: () => {},
+			onSelectSearchResult: () => {},
+		}),
+	);
+
+	assert.match(markup, /xl:grid-cols-\[52px_minmax\(280px,320px\)_minmax\(0,1fr\)\]/);
+	assert.match(markup, /aria-label="切换到文件浏览"/);
+	assert.match(markup, /aria-label="切换到搜索"/);
+	assert.match(markup, /aria-pressed="true"/);
+});
+
+test("ProjectCodeBrowserContent renders the search panel empty state", async () => {
+	const pageModule = await importOrFail<any>(
+		"../src/pages/ProjectCodeBrowser.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(pageModule.ProjectCodeBrowserContent, {
+			project: createProject(),
+			loading: false,
+			error: null,
+			filesCount: 2,
+			tree: [],
+			expandedFolders: new Set<string>(),
+			selectedFilePath: null,
+			selectedFileState: { status: "idle" },
+			browserMode: "search",
+			searchQuery: "",
+			includeFileQuery: "src/",
+			excludeFileQuery: "dist",
+			searchStatus: { state: "idle", scanned: 0, total: 2 },
+			searchResults: [],
+			onBack: () => {},
+			onToggleFolder: () => {},
+			onSelectFile: () => {},
+			onSelectMode: () => {},
+			onSearchQueryChange: () => {},
+			onIncludeFileQueryChange: () => {},
+			onExcludeFileQueryChange: () => {},
+			onSelectSearchResult: () => {},
+		}),
+	);
+
+	assert.match(markup, /搜索代码/);
+	assert.match(markup, /placeholder="输入文件名或代码片段"/);
+	assert.match(markup, /placeholder="例如 src\/, api"/);
+	assert.match(markup, /placeholder="例如 dist, mock"/);
+	assert.match(markup, /value="src\/"/);
+	assert.match(markup, /value="dist"/);
+	assert.match(markup, /包含文件/);
+	assert.match(markup, /排除文件/);
+	assert.match(markup, /输入文件名或代码片段开始搜索/);
+});
+
+test("ProjectCodeBrowserContent renders highlighted search results and preview focus decorations", async () => {
+	const pageModule = await importOrFail<any>(
+		"../src/pages/ProjectCodeBrowser.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(pageModule.ProjectCodeBrowserContent, {
+			project: createProject(),
+			loading: false,
+			error: null,
+			filesCount: 3,
+			tree: [],
+			expandedFolders: new Set<string>(),
+			selectedFilePath: "src/main.ts",
+			selectedFileState: {
+				status: "ready",
+				filePath: "src/main.ts",
+				content: ["alpha", "const danger = true;", "omega"].join("\n"),
+				size: 40,
+				encoding: "utf-8",
+			},
+			browserMode: "search",
+			searchQuery: "danger",
+			includeFileQuery: "src/",
+			excludeFileQuery: "",
+			searchStatus: { state: "done", scanned: 3, total: 3 },
+			searchResults: [
+				{
+					id: "content:src/main.ts:2",
+					kind: "content",
+					filePath: "src/main.ts",
+					fileName: "main.ts",
+					lineNumber: 2,
+					score: 100,
+					pathParts: [
+						{ text: "src/main.ts", matched: false },
+					],
+					fileNameParts: [
+						{ text: "main.ts", matched: false },
+					],
+					excerpt: "const danger = true;",
+					excerptParts: [
+						{ text: "const ", matched: false },
+						{ text: "danger", matched: true },
+						{ text: " = true;", matched: false },
+					],
+				},
+			],
+			previewDecorations: {
+				"src/main.ts": {
+					focusLine: 2,
+					highlightStartLine: 2,
+					highlightEndLine: 2,
+				},
+			},
+			onBack: () => {},
+			onToggleFolder: () => {},
+			onSelectFile: () => {},
+			onSelectMode: () => {},
+			onSearchQueryChange: () => {},
+			onIncludeFileQueryChange: () => {},
+			onExcludeFileQueryChange: () => {},
+			onSelectSearchResult: () => {},
+		}),
+	);
+
+	assert.match(markup, /已扫描 3 \/ 3/);
+	assert.match(markup, /src\/main\.ts/);
+	assert.match(markup, /第 2 行/);
+	assert.match(markup, /<mark[^>]*>danger<\/mark>/);
+	assert.match(markup, /data-line-number="2"/);
+	assert.match(markup, /bg-white\/\[0\.08\]/);
+});

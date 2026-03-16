@@ -127,3 +127,152 @@ test("resolveProjectCodeBrowserFileFailure returns the fixed fallback message", 
 		message: "读取文件失败，请稍后重试",
 	});
 });
+
+test("buildProjectCodeBrowserFileSearchResults returns highlighted file matches", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const results = model.buildProjectCodeBrowserFileSearchResults(
+		[
+			{ path: "src/components/SearchPanel.tsx", size: 100 },
+			{ path: "src/main.ts", size: 80 },
+		],
+		"search",
+	);
+
+	assert.equal(results.length, 1);
+	assert.equal(results[0].kind, "file");
+	assert.equal(results[0].filePath, "src/components/SearchPanel.tsx");
+	assert.equal(results[0].fileName, "SearchPanel.tsx");
+	assert.equal(
+		results[0].fileNameParts.some((part: any) => part.matched && /Search/i.test(part.text)),
+		true,
+	);
+	assert.equal(
+		results[0].pathParts.some((part: any) => part.matched && /Search/i.test(part.text)),
+		true,
+	);
+});
+
+test("buildProjectCodeBrowserContentSearchResults returns line matches with highlighted excerpt", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const results = model.buildProjectCodeBrowserContentSearchResults(
+		"src/main.ts",
+		[
+			"export const answer = 42;",
+			"const searchToken = 'needle';",
+			"console.log(searchToken);",
+		].join("\n"),
+		"needle",
+		{ maxMatchesPerFile: 2 },
+	);
+
+	assert.equal(results.length, 1);
+	assert.equal(results[0].kind, "content");
+	assert.equal(results[0].lineNumber, 2);
+	assert.match(results[0].excerpt, /needle/);
+	assert.equal(
+		results[0].excerptParts.some((part: any) => part.matched && /needle/i.test(part.text)),
+		true,
+	);
+});
+
+test("mergeProjectCodeBrowserSearchResults keeps file hits before content hits and enforces the cap", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const fileResults = model.buildProjectCodeBrowserFileSearchResults(
+		[
+			{ path: "src/search.ts", size: 100 },
+			{ path: "src/search-panel.tsx", size: 100 },
+		],
+		"search",
+	);
+	const contentResults = model.buildProjectCodeBrowserContentSearchResults(
+		"src/main.ts",
+		["const first = search();", "const second = search();"].join("\n"),
+		"search",
+		{ maxMatchesPerFile: 3 },
+	);
+
+	const merged = model.mergeProjectCodeBrowserSearchResults(
+		fileResults,
+		contentResults,
+		{ maxResults: 2 },
+	);
+
+	assert.equal(merged.length, 2);
+	assert.deepEqual(
+		merged.map((result: any) => result.kind),
+		["file", "file"],
+	);
+});
+
+test("shouldProjectCodeBrowserSearchContent uses the >=2 character threshold", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	assert.equal(model.shouldProjectCodeBrowserSearchContent(""), false);
+	assert.equal(model.shouldProjectCodeBrowserSearchContent("a"), false);
+	assert.equal(model.shouldProjectCodeBrowserSearchContent("ab"), true);
+});
+
+test("resolveProjectCodeBrowserPreviewDecorationForSearchResult maps content hits to focus and highlight lines", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const [result] = model.buildProjectCodeBrowserContentSearchResults(
+		"src/main.ts",
+		["alpha", "needle", "omega"].join("\n"),
+		"needle",
+		{ maxMatchesPerFile: 3 },
+	);
+
+	assert.deepEqual(
+		model.resolveProjectCodeBrowserPreviewDecorationForSearchResult(result),
+		{
+			"src/main.ts": {
+				focusLine: 2,
+				highlightStartLine: 2,
+				highlightEndLine: 2,
+			},
+		},
+	);
+});
+
+test("filterProjectCodeBrowserFilesByPath applies include and exclude fragments", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const files = [
+		{ path: "src/components/SearchPanel.tsx", size: 100 },
+		{ path: "src/api/search.ts", size: 80 },
+		{ path: "docs/search-notes.md", size: 40 },
+	];
+
+	const filtered = model.filterProjectCodeBrowserFilesByPath(files, {
+		include: "src/, api",
+		exclude: "components",
+	});
+
+	assert.deepEqual(filtered, [{ path: "src/api/search.ts", size: 80 }]);
+});
+
+test("parseProjectCodeBrowserFileFilterTokens ignores blanks and supports comma plus newline", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	assert.deepEqual(
+		model.parseProjectCodeBrowserFileFilterTokens("src/, \napi\n，docs"),
+		["src/", "api", "docs"],
+	);
+});

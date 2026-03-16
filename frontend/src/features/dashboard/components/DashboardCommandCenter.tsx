@@ -808,7 +808,6 @@ export default function DashboardCommandCenter({
 										<div className="mt-3 grid grid-cols-4 gap-1 text-sm text-slate-300">
 											<div>完成扫描：{formatNumber(item.completed_scans)}</div>
 											<div>有效风险：{formatNumber(item.effective_findings)}</div>
-											<div>模型验证：{formatNumber(item.verified_findings)}</div>
 											<div>平均耗时：{formatDurationShort(item.avg_scan_duration_ms)}</div>
 										</div>
 									</div>
