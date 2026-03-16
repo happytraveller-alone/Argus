@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Literal
+from typing import Any, Dict, List, Optional, Literal, cast
 from fastapi import (
     APIRouter,
     Depends,
@@ -143,6 +143,16 @@ def should_exclude_file(file_path: str, is_directory: Optional[bool] = None) -> 
             return True
     
     return False
+
+
+def _normalize_dashboard_range_days(range_days: int) -> Literal[7, 14, 30]:
+    normalized_range_days = int(range_days)
+    if normalized_range_days not in {7, 14, 30}:
+        raise HTTPException(
+            status_code=422,
+            detail="range_days must be one of: 7, 14, 30",
+        )
+    return cast(Literal[7, 14, 30], normalized_range_days)
 
 
 def create_zip_with_exclusions(source_dir: str, zip_file_path: str) -> None:
@@ -1623,11 +1633,12 @@ async def get_stats(
 @router.get("/dashboard-snapshot", response_model=DashboardSnapshotResponse)
 async def get_dashboard_snapshot(
     top_n: int = Query(10, ge=1, le=50, description="Top N projects"),
-    range_days: Literal[7, 14, 30] = Query(14, description="Window size in days"),
+    range_days: int = Query(14, description="Window size in days"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """Get aggregated dashboard data with project-card aligned vulnerability metric."""
+    range_days = _normalize_dashboard_range_days(range_days)
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(days=int(range_days))
 

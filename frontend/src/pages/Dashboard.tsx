@@ -7,13 +7,20 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { toast } from "sonner";
 import DeferredSection from "@/components/performance/DeferredSection";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+	DashboardPageFeedback,
+	resolveDashboardPageState,
+} from "@/features/dashboard/components/DashboardPageState";
+import {
+	getDashboardSnapshotStoreState,
+	loadDashboardSnapshot,
+	subscribeDashboardSnapshotStore,
+} from "@/features/dashboard/services/dashboardSnapshotStore";
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import type { DashboardSnapshotResponse } from "@/shared/types";
 import { runWithRefreshMode } from "@/shared/utils/refreshMode";
-import { loadDashboardSnapshot } from "@/features/dashboard/services/dashboardSnapshotStore";
 
 const DashboardCommandCenter = lazy(
 	() => import("@/features/dashboard/components/DashboardCommandCenter"),
@@ -116,20 +123,13 @@ function normalizeSnapshot(snapshot: DashboardSnapshotResponse): DashboardSnapsh
 	};
 }
 
-function hasSnapshotContent(snapshot: DashboardSnapshotResponse) {
-	return (
-		snapshot.summary.total_projects > 0 ||
-		snapshot.daily_activity.length > 0 ||
-		snapshot.project_hotspots.length > 0 ||
-		snapshot.language_risk.length > 0 ||
-		snapshot.cwe_distribution.length > 0
-	);
-}
-
 export default function Dashboard() {
 	const [snapshot, setSnapshot] = useState<DashboardSnapshotResponse>(EMPTY_SNAPSHOT);
 	const [loading, setLoading] = useState(true);
 	const [rangeDays, setRangeDays] = useState<RangeDays>(14);
+	const [storeState, setStoreState] = useState(() =>
+		getDashboardSnapshotStoreState(),
+	);
 	const requestSeqRef = useRef(0);
 
 	const loadDashboardData = useCallback(
@@ -157,11 +157,16 @@ export default function Dashboard() {
 					return;
 				}
 				console.error("仪表盘数据加载失败:", error);
-				toast.error("数据加载失败");
 			}
 		},
 		[rangeDays],
 	);
+
+	useEffect(() => {
+		return subscribeDashboardSnapshotStore(() => {
+			setStoreState(getDashboardSnapshotStoreState());
+		});
+	}, []);
 
 	useEffect(() => {
 		void loadDashboardData();
@@ -181,7 +186,15 @@ export default function Dashboard() {
 		});
 	}, []);
 
-	const showFallback = loading && !hasSnapshotContent(snapshot);
+	const handleRetry = useCallback(() => {
+		void loadDashboardData();
+	}, [loadDashboardData]);
+
+	const pageState = resolveDashboardPageState({
+		loading,
+		error: storeState.error,
+		snapshot,
+	});
 
 	return (
 		<div className="min-h-screen space-y-6 bg-background p-6 font-mono relative">
@@ -193,16 +206,29 @@ export default function Dashboard() {
 			) : null}
 
 			<DeferredSection minHeight={1600} priority>
-				{showFallback ? (
+				{pageState.showFallback ? (
 					<DashboardFallback />
+				) : pageState.variant === "blocking-error" ? (
+					<DashboardPageFeedback
+						state={pageState}
+						onRetry={handleRetry}
+						retrying={loading}
+					/>
 				) : (
-					<Suspense fallback={<DashboardFallback />}>
-						<DashboardCommandCenter
-							snapshot={snapshot}
-							rangeDays={rangeDays}
-							onRangeDaysChange={handleRangeDaysChange}
+					<div className="space-y-4">
+						<DashboardPageFeedback
+							state={pageState}
+							onRetry={handleRetry}
+							retrying={loading}
 						/>
-					</Suspense>
+						<Suspense fallback={<DashboardFallback />}>
+							<DashboardCommandCenter
+								snapshot={snapshot}
+								rangeDays={rangeDays}
+								onRangeDaysChange={handleRangeDaysChange}
+							/>
+						</Suspense>
+					</div>
 				)}
 			</DeferredSection>
 		</div>
