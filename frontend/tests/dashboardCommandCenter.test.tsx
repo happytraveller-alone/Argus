@@ -172,7 +172,7 @@ test("DashboardCommandCenter renders the control-center sections and hotspot dat
 		}),
 	);
 
-	assert.match(markup, /漏洞扫描态势指挥中心/);
+	assert.match(markup, /漏洞扫描统计/);
 	assert.match(markup, /当前有效风险/);
 	assert.match(markup, /验证漏斗/);
 	assert.match(markup, /任务状态/);
@@ -186,6 +186,47 @@ test("DashboardCommandCenter renders the control-center sections and hotspot dat
 	assert.match(markup, />7 天</);
 	assert.match(markup, />14 天</);
 	assert.match(markup, />30 天</);
+});
+
+test("DashboardCommandCenter uses the planned main-grid pairing on large screens", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(module.default, {
+			snapshot: createSnapshotFixture(),
+			rangeDays: 14,
+			onRangeDaysChange: () => {},
+		}),
+	);
+
+	assert.match(
+		markup,
+		/data-layout="primary-grid"[^>]*class="[^"]*grid[^"]*gap-4[^"]*lg:grid-cols-12/,
+	);
+	assert.match(markup, /data-panel="trend"[^>]*class="[^"]*lg:col-span-7/);
+	assert.match(markup, /data-panel="funnel"[^>]*class="[^"]*lg:col-span-5/);
+	assert.match(markup, /data-panel="hotspots"[^>]*class="[^"]*lg:col-span-7/);
+	assert.match(markup, /data-panel="status"[^>]*class="[^"]*lg:col-span-5/);
+	assert.match(markup, /data-panel="engines"[^>]*class="[^"]*lg:col-span-7/);
+	assert.match(markup, /data-panel="language-risk"[^>]*class="[^"]*lg:col-span-5/);
+
+	const trendIndex = markup.indexOf('data-panel="trend"');
+	const funnelIndex = markup.indexOf('data-panel="funnel"');
+	const hotspotsIndex = markup.indexOf('data-panel="hotspots"');
+	const statusIndex = markup.indexOf('data-panel="status"');
+	const enginesIndex = markup.indexOf('data-panel="engines"');
+	const languageRiskIndex = markup.indexOf('data-panel="language-risk"');
+	const cweIndex = markup.indexOf('data-panel="cwe"');
+
+	assert.notEqual(trendIndex, -1);
+	assert.ok(trendIndex < funnelIndex);
+	assert.ok(funnelIndex < hotspotsIndex);
+	assert.ok(hotspotsIndex < statusIndex);
+	assert.ok(statusIndex < enginesIndex);
+	assert.ok(enginesIndex < languageRiskIndex);
+	assert.ok(languageRiskIndex < cweIndex);
 });
 
 test("DashboardCommandCenter shows empty-state copy when snapshot panels are empty", async () => {
