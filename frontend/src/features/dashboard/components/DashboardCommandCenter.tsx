@@ -125,23 +125,6 @@ function computeMiniTrendValues(items: DashboardDailyActivityItem[], key: "compl
 	return items.map((item) => Math.max(Number(item[key] || 0), 0));
 }
 
-function SummaryMiniTrend({ values }: { values: number[] }) {
-	const maxValue = Math.max(1, ...values, 0);
-	return (
-		<div className="mt-3 flex h-10 items-end gap-1">
-			{(values.length > 0 ? values : [0, 0, 0, 0, 0]).map((value, index) => (
-				<div
-					key={`${index}-${value}`}
-					className="flex-1 rounded-full bg-cyan-400/20"
-					style={{
-						height: `${Math.max((value / maxValue) * 100, 16)}%`,
-					}}
-				/>
-			))}
-		</div>
-	);
-}
-
 function DashboardSection({
 	title,
 	description,
@@ -190,14 +173,14 @@ function SummaryStrip({
 		{
 			label: "项目总数",
 			value: formatNumber(summary.total_projects),
-			subtitle: `窗口内已扫描 ${formatNumber(summary.window_scanned_projects)} 个项目`,
+			// subtitle: `窗口内已扫描 ${formatNumber(summary.window_scanned_projects)} 个项目`,
 			accent: "text-cyan-200",
 			values: computeMiniTrendValues(snapshot.daily_activity, "completed_scans"),
 		},
 		{
 			label: "当前有效风险",
 			value: formatNumber(summary.current_effective_findings),
-			subtitle: `窗口新增 ${formatNumber(summary.window_new_effective_findings)} 项`,
+			// subtitle: `窗口新增 ${formatNumber(summary.window_new_effective_findings)} 项`,
 			accent: "text-amber-200",
 			values: snapshot.daily_activity.map((item) => {
 				const total =
@@ -212,28 +195,28 @@ function SummaryStrip({
 		{
 			label: "已验证风险",
 			value: formatNumber(summary.current_verified_findings),
-			subtitle: `窗口已验证 ${formatNumber(summary.window_verified_findings)} 项`,
+			// subtitle: `窗口已验证 ${formatNumber(summary.window_verified_findings)} 项`,
 			accent: "text-emerald-200",
 			values: computeMiniTrendValues(snapshot.daily_activity, "agent_findings"),
 		},
 		{
 			label: "误报率",
 			value: formatPercent(summary.false_positive_rate),
-			subtitle: `窗口误报率 ${formatPercent(summary.window_false_positive_rate)}`,
+			// subtitle: `窗口误报率 ${formatPercent(summary.window_false_positive_rate)}`,
 			accent: "text-rose-200",
 			values: computeMiniTrendValues(snapshot.daily_activity, "opengrep_findings"),
 		},
 		{
 			label: "扫描成功率",
 			value: formatPercent(summary.scan_success_rate),
-			subtitle: `窗口成功率 ${formatPercent(summary.window_scan_success_rate)}`,
+			// subtitle: `窗口成功率 ${formatPercent(summary.window_scan_success_rate)}`,
 			accent: "text-sky-200",
 			values: computeMiniTrendValues(snapshot.daily_activity, "gitleaks_findings"),
 		},
 		{
 			label: "平均扫描耗时",
 			value: formatDurationShort(summary.avg_scan_duration_ms),
-			subtitle: `窗口平均 ${formatDurationShort(summary.window_avg_scan_duration_ms)}`,
+			// subtitle: `窗口平均 ${formatDurationShort(summary.window_avg_scan_duration_ms)}`,
 			accent: "text-violet-200",
 			values: computeMiniTrendValues(snapshot.daily_activity, "phpstan_findings"),
 		},
@@ -252,8 +235,7 @@ function SummaryStrip({
 					<p className={`mt-3 text-3xl font-semibold ${card.accent}`}>
 						{card.value}
 					</p>
-					<p className="mt-2 text-sm text-slate-400">{card.subtitle}</p>
-					<SummaryMiniTrend values={card.values} />
+					{/* <SummaryMiniTrend values={card.values} /> */}
 				</div>
 			))}
 		</div>
@@ -501,15 +483,9 @@ export default function DashboardCommandCenter({
 			<header className="rounded-[2rem] border border-border/70 bg-slate-950/85 px-6 py-6 shadow-2xl shadow-cyan-950/20">
 				<div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
 					<div>
-						<p className="text-xs uppercase tracking-[0.32em] text-cyan-300/75">
-							Dashboard V2
-						</p>
 						<h1 className="mt-3 text-3xl font-semibold text-slate-50">
-							漏洞扫描态势指挥中心
+							漏洞扫描统计
 						</h1>
-						<p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400">
-							聚焦项目扫描、漏洞发现、验证质量、误报质量、引擎贡献、语言风险与 CWE 攻击面。
-						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
 						{RANGE_OPTIONS.map((option) => (
@@ -532,9 +508,9 @@ export default function DashboardCommandCenter({
 
 			<SummaryStrip snapshot={snapshot} />
 
-			<div className="grid gap-4 xl:grid-cols-12">
+			<div className="grid gap-1 xl:grid-cols-12">
 				<DashboardSection
-					className="xl:col-span-8"
+					className="xl:col-span-7"
 					panel="trend"
 					title="漏洞态势趋势"
 					description={`过去 ${rangeDays} 天内各扫描引擎的有效风险发现和扫描活跃度。`}
@@ -567,13 +543,11 @@ export default function DashboardCommandCenter({
 						<p className="text-sm text-slate-400">暂无趋势数据</p>
 					)}
 				</DashboardSection>
-
-				<div className="grid gap-4 xl:col-span-4">
-					<DashboardSection
+				<DashboardSection
 						panel="funnel"
 						title="验证漏斗"
 						description={`窗口内原始发现、有效风险和已验证结果的收敛情况。`}
-						icon={<Target className="h-5 w-5" />}
+						icon={<Target className="h-5 w-120" />}
 					>
 						<VerificationFunnel
 							raw={snapshot.verification_funnel.raw_findings}
@@ -581,20 +555,7 @@ export default function DashboardCommandCenter({
 							verified={snapshot.verification_funnel.verified_findings}
 							falsePositive={snapshot.verification_funnel.false_positive_count}
 						/>
-					</DashboardSection>
-
-					<DashboardSection
-						panel="status"
-						title="任务状态"
-						description="全量任务分布，便于快速识别失败、中断和运行中队列。"
-						icon={<AlertTriangle className="h-5 w-5" />}
-					>
-						<TaskStatusRing breakdown={snapshot.task_status_breakdown} />
-					</DashboardSection>
-				</div>
-			</div>
-
-			<div className="grid gap-4 xl:grid-cols-12">
+				</DashboardSection>
 				<DashboardSection
 					className="xl:col-span-7"
 					panel="hotspots"
@@ -639,7 +600,24 @@ export default function DashboardCommandCenter({
 					) : (
 						<p className="text-sm text-slate-400">暂无热点项目</p>
 					)}
-				</DashboardSection>
+				</DashboardSection>	
+				
+
+					<DashboardSection
+						panel="status"
+						title="任务状态"
+						description="全量任务分布，便于快速识别失败、中断和运行中队列。"
+						icon={<AlertTriangle className="h-5 w-5" />}
+					>
+						<TaskStatusRing breakdown={snapshot.task_status_breakdown} />
+					</DashboardSection>
+				{/* <div className="grid gap-4 xl:col-span-4">
+					
+				</div> */}
+			</div>
+
+			<div className="grid gap-4 xl:grid-cols-12">
+				
 
 				<DashboardSection
 					className="xl:col-span-5"
@@ -744,7 +722,7 @@ export default function DashboardCommandCenter({
 			<DashboardSection
 				panel="actions"
 				title="行动清单"
-				description="优先关注高风险项目、最近扫描时间和主导引擎，便于进一步下钻排查。"
+				description=""
 				icon={<Clock3 className="h-5 w-5" />}
 			>
 				{(snapshot.project_hotspots || []).length > 0 ? (

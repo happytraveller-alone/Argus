@@ -95,7 +95,10 @@ export function DashboardPageFeedback({
 	if (state.variant === "blocking-error") {
 		return (
 			<div className="cyber-card rounded-3xl border border-rose-500/30 bg-slate-950/80 p-6 shadow-2xl shadow-rose-950/20">
-				<Alert variant="destructive" className="border border-rose-500/20 bg-rose-500/10">
+				<Alert
+					variant="destructive"
+					className="border border-rose-500/20 bg-rose-500/10"
+				>
 					<AlertTriangle className="h-5 w-5" />
 					<AlertTitle>仪表盘数据加载失败</AlertTitle>
 					<AlertDescription>

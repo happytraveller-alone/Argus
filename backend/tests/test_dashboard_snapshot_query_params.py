@@ -17,7 +17,11 @@ def _build_test_client():
     app.include_router(projects.router, prefix="/api/v1/projects")
 
     db = SimpleNamespace(
-        execute=AsyncMock(side_effect=_build_execute_side_effect(projects.datetime.now(projects.timezone.utc)))
+        execute=AsyncMock(
+            side_effect=_build_execute_side_effect(
+                projects.datetime.now(projects.timezone.utc)
+            )
+        )
     )
 
     async def override_db():
