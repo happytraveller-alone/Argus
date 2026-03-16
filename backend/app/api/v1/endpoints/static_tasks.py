@@ -149,6 +149,10 @@ list_bandit_rules = _bandit.list_bandit_rules
 get_bandit_rule = _bandit.get_bandit_rule
 update_bandit_rule_enabled = _bandit.update_bandit_rule_enabled
 batch_update_bandit_rules_enabled = _bandit.batch_update_bandit_rules_enabled
+delete_bandit_rule = _bandit.delete_bandit_rule
+restore_bandit_rule = _bandit.restore_bandit_rule
+batch_delete_bandit_rules = _bandit.batch_delete_bandit_rules
+batch_restore_bandit_rules = _bandit.batch_restore_bandit_rules
 
 create_phpstan_scan = _phpstan.create_phpstan_scan
 list_phpstan_tasks = _phpstan.list_phpstan_tasks

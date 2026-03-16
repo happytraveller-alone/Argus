@@ -120,3 +120,61 @@ def test_write_bandit_builtin_snapshot_no_file_created_when_build_failed(
         bandit_rules_snapshot.write_bandit_builtin_snapshot(target_path)
 
     assert not target_path.exists()
+
+
+def test_update_bandit_builtin_snapshot_rule_updates_target_rule_atomically(tmp_path: Path):
+    target_path = tmp_path / "bandit_builtin_rules.json"
+    target_path.write_text(
+        """{
+  "schema_version": "1.0",
+  "generated_at": "2026-03-16T00:00:00+00:00",
+  "bandit_version": "1.9.4",
+  "count": 1,
+  "rules": [
+    {
+      "test_id": "B101",
+      "name": "assert_used",
+      "description": "old",
+      "description_summary": "old summary",
+      "checks": ["Assert"],
+      "source": "builtin",
+      "bandit_version": "1.9.4"
+    }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    updated = bandit_rules_snapshot.update_bandit_builtin_snapshot_rule(
+        rule_id="b101",
+        updates={
+            "name": "assert_used_custom",
+            "description_summary": "new summary",
+            "description": "new description",
+            "checks": ["Assert", "Call"],
+        },
+        snapshot_path=target_path,
+    )
+
+    payload = bandit_rules_snapshot.load_bandit_builtin_snapshot(target_path)
+    assert updated["name"] == "assert_used_custom"
+    assert payload["count"] == 1
+    assert payload["rules"][0]["test_id"] == "B101"
+    assert payload["rules"][0]["description_summary"] == "new summary"
+    assert payload["rules"][0]["checks"] == ["Assert", "Call"]
+
+
+def test_update_bandit_builtin_snapshot_rule_raises_when_rule_not_found(tmp_path: Path):
+    target_path = tmp_path / "bandit_builtin_rules.json"
+    target_path.write_text(
+        '{"schema_version":"1.0","generated_at":"x","bandit_version":"1.9.4","count":0,"rules":[]}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(KeyError, match="Bandit rule not found"):
+        bandit_rules_snapshot.update_bandit_builtin_snapshot_rule(
+            rule_id="B999",
+            updates={"name": "x"},
+            snapshot_path=target_path,
+        )

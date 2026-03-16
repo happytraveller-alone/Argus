@@ -42,7 +42,10 @@ from app.schemas.opengrep import (
     OpengrepRuleUpdateRequest,
 )
 from app.services.gitleaks_rules_seed import ensure_builtin_gitleaks_rules
-from app.services.bandit_rules_snapshot import load_bandit_builtin_snapshot
+from app.services.bandit_rules_snapshot import (
+    load_bandit_builtin_snapshot,
+    update_bandit_builtin_snapshot_rule,
+)
 from app.services.llm_rule.repo_cache_manager import GlobalRepoCacheManager
 from app.services.opengrep_confidence import (
     count_high_confidence_findings_by_task_ids as shared_count_high_confidence_findings_by_task_ids,
@@ -141,6 +144,7 @@ class BanditRuleResponse(BaseModel):
     source: str
     bandit_version: str
     is_active: bool
+    is_deleted: bool
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -157,6 +161,32 @@ class BanditRuleBatchEnabledUpdateRequest(BaseModel):
     is_active: bool
 
 
+class BanditRuleDeletedUpdateRequest(BaseModel):
+    is_deleted: bool
+
+
+class BanditRuleBatchDeletedUpdateRequest(BaseModel):
+    rule_ids: Optional[List[str]] = None
+    source: Optional[str] = None
+    keyword: Optional[str] = None
+    current_is_deleted: Optional[bool] = None
+    is_deleted: bool
+
+
+class BanditRuleUpdateRequest(BaseModel):
+    """Bandit 规则编辑请求（仅用于规则页展示字段）。"""
+
+    name: Optional[str] = None
+    description_summary: Optional[str] = None
+    description: Optional[str] = None
+    checks: Optional[List[str]] = None
+
+
+class BanditRuleUpdateResponse(BaseModel):
+    message: str
+    rule: BanditRuleResponse
+
+
 def _missing_bandit_rules_migration_message() -> str:
     return "数据库缺少 bandit_rule_states 表，请先运行 alembic upgrade head"
 
@@ -169,6 +199,20 @@ def _raise_bandit_rules_migration_http_error(exc: ProgrammingError) -> None:
 
 def _normalize_bandit_rule_id(raw_rule_id: Any) -> str:
     return str(raw_rule_id or "").strip().upper()
+
+
+def _normalize_bandit_rule_checks(raw_checks: Optional[List[str]]) -> List[str]:
+    """规范化可编辑的 checks 字段，过滤空项并去重。"""
+    if not isinstance(raw_checks, list):
+        return []
+    normalized: List[str] = []
+    for item in raw_checks:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if text not in normalized:
+            normalized.append(text)
+    return normalized
 
 
 def _extract_bandit_snapshot_rules() -> List[Dict[str, Any]]:
@@ -232,6 +276,7 @@ def _merge_bandit_rule_payload(
             {
                 **item,
                 "is_active": bool(state.is_active) if state is not None else True,
+                "is_deleted": bool(state.is_deleted) if state is not None else False,
                 "created_at": state.created_at if state is not None else None,
                 "updated_at": state.updated_at if state is not None else None,
             }
@@ -476,6 +521,7 @@ async def list_bandit_rules(
     is_active: Optional[bool] = Query(None, description="按启用状态过滤"),
     source: Optional[str] = Query(None, description="按来源过滤"),
     keyword: Optional[str] = Query(None, description="按 test_id/name/description 关键词过滤"),
+    deleted: str = Query("false", description="软删除筛选：false(默认)/true/all"),
     skip: int = Query(0, ge=0),
     limit: int = Query(1000, ge=1, le=2000),
     db: AsyncSession = Depends(get_db),
@@ -492,7 +538,14 @@ async def list_bandit_rules(
     filtered: List[Dict[str, Any]] = []
     keyword_text = str(keyword or "").strip().lower()
     source_text = str(source or "").strip()
+    deleted_text = str(deleted or "false").strip().lower()
+    if deleted_text not in {"false", "true", "all"}:
+        raise HTTPException(status_code=400, detail="deleted 必须为 false/true/all")
     for item in merged_rules:
+        if deleted_text != "all":
+            target_deleted = deleted_text == "true"
+            if bool(item["is_deleted"]) != target_deleted:
+                continue
         if is_active is not None and bool(item["is_active"]) != is_active:
             continue
         if source_text and item["source"] != source_text:
@@ -532,6 +585,58 @@ async def get_bandit_rule(
     raise HTTPException(status_code=404, detail="Bandit 规则不存在")
 
 
+@router.patch("/bandit/rules/{rule_id}", response_model=BanditRuleUpdateResponse)
+async def update_bandit_rule(
+    rule_id: str,
+    request: BanditRuleUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    # Bandit integration: 规则编辑仅影响规则页展示，不参与 bandit 扫描命令构建。
+    normalized_rule_id = _normalize_bandit_rule_id(rule_id)
+    known_rule_ids = {item["test_id"] for item in _extract_bandit_snapshot_rules()}
+    if normalized_rule_id not in known_rule_ids:
+        raise HTTPException(status_code=404, detail="Bandit 规则不存在")
+
+    updates: Dict[str, Any] = {}
+    if request.name is not None:
+        name = str(request.name).strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name 不能为空")
+        updates["name"] = name
+    if request.description_summary is not None:
+        updates["description_summary"] = str(request.description_summary).strip()
+    if request.description is not None:
+        updates["description"] = str(request.description).strip()
+    if request.checks is not None:
+        updates["checks"] = _normalize_bandit_rule_checks(request.checks)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="至少需要提供一个可更新字段")
+
+    try:
+        update_bandit_builtin_snapshot_rule(
+            rule_id=normalized_rule_id,
+            updates=updates,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Bandit 规则不存在") from exc
+    except (FileNotFoundError, OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"更新 Bandit 规则快照失败: {exc}") from exc
+
+    snapshot_rules = _extract_bandit_snapshot_rules()
+    states_by_test_id = await _load_bandit_rule_states(db)
+    merged_rules = _merge_bandit_rule_payload(
+        snapshot_rules=snapshot_rules,
+        states_by_test_id=states_by_test_id,
+    )
+    for item in merged_rules:
+        if item["test_id"] == normalized_rule_id:
+            return {"message": "规则更新成功", "rule": item}
+
+    raise HTTPException(status_code=404, detail="Bandit 规则不存在")
+
+
 @router.post("/bandit/rules/{rule_id}/enabled")
 async def update_bandit_rule_enabled(
     rule_id: str,
@@ -556,9 +661,12 @@ async def update_bandit_rule_enabled(
             id=str(uuid.uuid4()),
             test_id=normalized_rule_id,
             is_active=request.is_active,
+            is_deleted=False,
         )
         db.add(state)
     else:
+        if bool(state.is_deleted):
+            raise HTTPException(status_code=409, detail="规则已删除，请先恢复后再启用/禁用")
         state.is_active = request.is_active
     await db.commit()
     await db.refresh(state)
@@ -593,6 +701,8 @@ async def batch_update_bandit_rules_enabled(
     selected_rule_ids: List[str] = []
 
     for item in merged_rules:
+        if bool(item["is_deleted"]):
+            continue
         if rule_ids_filter is not None and item["test_id"] not in rule_ids_filter:
             continue
         if source_text and item["source"] != source_text:
@@ -648,6 +758,187 @@ async def batch_update_bandit_rules_enabled(
         "message": f"已{'启用' if request.is_active else '禁用'} {updated_count} 条规则",
         "updated_count": updated_count,
         "is_active": request.is_active,
+    }
+
+
+@router.post("/bandit/rules/{rule_id}/delete")
+async def delete_bandit_rule(
+    rule_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    normalized_rule_id = _normalize_bandit_rule_id(rule_id)
+    known_rule_ids = {item["test_id"] for item in _extract_bandit_snapshot_rules()}
+    if normalized_rule_id not in known_rule_ids:
+        raise HTTPException(status_code=404, detail="Bandit 规则不存在")
+
+    try:
+        result = await db.execute(
+            select(BanditRuleState).where(BanditRuleState.test_id == normalized_rule_id)
+        )
+    except ProgrammingError as exc:
+        _raise_bandit_rules_migration_http_error(exc)
+
+    state = result.scalar_one_or_none()
+    if state is None:
+        state = BanditRuleState(
+            id=str(uuid.uuid4()),
+            test_id=normalized_rule_id,
+            is_active=False,
+            is_deleted=True,
+        )
+        db.add(state)
+    else:
+        state.is_active = False
+        state.is_deleted = True
+    await db.commit()
+    return {"message": "规则已删除", "rule_id": normalized_rule_id, "is_deleted": True}
+
+
+@router.post("/bandit/rules/{rule_id}/restore")
+async def restore_bandit_rule(
+    rule_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    normalized_rule_id = _normalize_bandit_rule_id(rule_id)
+    known_rule_ids = {item["test_id"] for item in _extract_bandit_snapshot_rules()}
+    if normalized_rule_id not in known_rule_ids:
+        raise HTTPException(status_code=404, detail="Bandit 规则不存在")
+
+    try:
+        result = await db.execute(
+            select(BanditRuleState).where(BanditRuleState.test_id == normalized_rule_id)
+        )
+    except ProgrammingError as exc:
+        _raise_bandit_rules_migration_http_error(exc)
+
+    state = result.scalar_one_or_none()
+    if state is None:
+        state = BanditRuleState(
+            id=str(uuid.uuid4()),
+            test_id=normalized_rule_id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(state)
+    else:
+        state.is_deleted = False
+    await db.commit()
+    return {"message": "规则已恢复", "rule_id": normalized_rule_id, "is_deleted": False}
+
+
+@router.post("/bandit/rules/batch/delete")
+async def batch_delete_bandit_rules(
+    request: BanditRuleBatchDeletedUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    payload = BanditRuleBatchDeletedUpdateRequest(
+        rule_ids=request.rule_ids,
+        source=request.source,
+        keyword=request.keyword,
+        current_is_deleted=request.current_is_deleted,
+        is_deleted=True,
+    )
+    return await _batch_update_bandit_rules_deleted(payload, db)
+
+
+@router.post("/bandit/rules/batch/restore")
+async def batch_restore_bandit_rules(
+    request: BanditRuleBatchDeletedUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    payload = BanditRuleBatchDeletedUpdateRequest(
+        rule_ids=request.rule_ids,
+        source=request.source,
+        keyword=request.keyword,
+        current_is_deleted=request.current_is_deleted,
+        is_deleted=False,
+    )
+    return await _batch_update_bandit_rules_deleted(payload, db)
+
+
+async def _batch_update_bandit_rules_deleted(
+    request: BanditRuleBatchDeletedUpdateRequest,
+    db: AsyncSession,
+):
+    snapshot_rules = _extract_bandit_snapshot_rules()
+    states_by_test_id = await _load_bandit_rule_states(db)
+    merged_rules = _merge_bandit_rule_payload(
+        snapshot_rules=snapshot_rules,
+        states_by_test_id=states_by_test_id,
+    )
+    rule_ids_filter = (
+        {_normalize_bandit_rule_id(rule_id) for rule_id in (request.rule_ids or []) if rule_id}
+        if request.rule_ids
+        else None
+    )
+    keyword_text = str(request.keyword or "").strip().lower()
+    source_text = str(request.source or "").strip()
+    selected_rule_ids: List[str] = []
+
+    for item in merged_rules:
+        if rule_ids_filter is not None and item["test_id"] not in rule_ids_filter:
+            continue
+        if source_text and item["source"] != source_text:
+            continue
+        if request.current_is_deleted is not None and bool(item["is_deleted"]) != request.current_is_deleted:
+            continue
+        if keyword_text:
+            search_blob = " ".join(
+                [
+                    str(item["test_id"]),
+                    str(item["name"]),
+                    str(item["description"]),
+                    str(item["description_summary"]),
+                ]
+            ).lower()
+            if keyword_text not in search_blob:
+                continue
+        selected_rule_ids.append(item["test_id"])
+
+    if not selected_rule_ids:
+        return {
+            "message": "没有找到符合条件的规则",
+            "updated_count": 0,
+            "is_deleted": request.is_deleted,
+        }
+
+    try:
+        existing_result = await db.execute(
+            select(BanditRuleState).where(BanditRuleState.test_id.in_(selected_rule_ids))
+        )
+    except ProgrammingError as exc:
+        _raise_bandit_rules_migration_http_error(exc)
+
+    existing_rows = existing_result.scalars().all()
+    existing_by_rule_id = {_normalize_bandit_rule_id(row.test_id): row for row in existing_rows}
+
+    updated_count = 0
+    for rule_id in selected_rule_ids:
+        existing = existing_by_rule_id.get(rule_id)
+        if existing is None:
+            db.add(
+                BanditRuleState(
+                    id=str(uuid.uuid4()),
+                    test_id=rule_id,
+                    is_active=not request.is_deleted,
+                    is_deleted=request.is_deleted,
+                )
+            )
+        else:
+            existing.is_deleted = request.is_deleted
+            if request.is_deleted:
+                existing.is_active = False
+        updated_count += 1
+    await db.commit()
+
+    return {
+        "message": f"已{'删除' if request.is_deleted else '恢复'} {updated_count} 条规则",
+        "updated_count": updated_count,
+        "is_deleted": request.is_deleted,
     }
 
 

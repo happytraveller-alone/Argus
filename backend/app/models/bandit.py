@@ -109,6 +109,7 @@ class BanditRuleState(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     test_id = Column(String, nullable=False, unique=True, comment="Bandit 规则ID，例如 B602")
     is_active = Column(Boolean, nullable=False, default=True, comment="规则是否启用")
+    is_deleted = Column(Boolean, nullable=False, default=False, comment="规则是否软删除")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -117,4 +118,5 @@ class BanditRuleState(Base):
     __table_args__ = (
         Index("ix_bandit_rule_states_test_id", "test_id"),
         Index("ix_bandit_rule_states_is_active", "is_active"),
+        Index("ix_bandit_rule_states_is_deleted", "is_deleted"),
     )

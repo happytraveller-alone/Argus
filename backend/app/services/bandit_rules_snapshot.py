@@ -12,7 +12,9 @@ from datetime import datetime, timezone
 import importlib
 import json
 import logging
+import os
 from pathlib import Path
+import tempfile
 from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
@@ -144,3 +146,66 @@ def load_bandit_builtin_snapshot(snapshot_path: Path | str | None = None) -> Dic
     if not isinstance(payload, dict):
         raise ValueError("Invalid bandit builtin snapshot payload")
     return payload
+
+
+def update_bandit_builtin_snapshot_rule(
+    *,
+    rule_id: str,
+    updates: Dict[str, Any],
+    snapshot_path: Path | str | None = None,
+) -> Dict[str, Any]:
+    """更新快照中的单条规则并原子写回文件。"""
+    if not isinstance(updates, dict) or not updates:
+        raise ValueError("updates must contain at least one field")
+
+    target_path = Path(snapshot_path) if snapshot_path is not None else _BANDIT_BUILTIN_JSON_PATH
+    payload = load_bandit_builtin_snapshot(target_path)
+    rules = payload.get("rules")
+    if not isinstance(rules, list):
+        raise ValueError("Invalid bandit builtin snapshot payload: rules is not a list")
+
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if not normalized_rule_id:
+        raise ValueError("rule_id is required")
+
+    matched_rule: Dict[str, Any] | None = None
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        current_rule_id = str(rule.get("test_id") or "").strip().upper()
+        if current_rule_id == normalized_rule_id:
+            matched_rule = rule
+            break
+
+    if matched_rule is None:
+        raise KeyError(f"Bandit rule not found: {normalized_rule_id}")
+
+    for field, value in updates.items():
+        matched_rule[field] = value
+
+    payload["count"] = len([item for item in rules if isinstance(item, dict)])
+    payload["generated_at"] = _utc_now_iso()
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".json",
+        prefix="bandit_builtin_rules.",
+        dir=target_path.parent,
+        delete=False,
+        encoding="utf-8",
+    ) as tmp_file:
+        tmp_file.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        tmp_path = Path(tmp_file.name)
+
+    try:
+        os.replace(tmp_path, target_path)
+    except Exception:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except Exception:
+            pass
+        raise
+
+    return matched_rule

@@ -45,8 +45,17 @@ export interface BanditRule {
   source: string;
   bandit_version: string;
   is_active: boolean;
+  is_deleted: boolean;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface BanditRuleUpdateRequest {
+  ruleId: string;
+  name?: string;
+  description_summary?: string;
+  description?: string;
+  checks?: string[];
 }
 
 export async function createBanditScanTask(params: {
@@ -133,6 +142,7 @@ export async function getBanditRules(params?: {
   is_active?: boolean;
   source?: string;
   keyword?: string;
+  deleted?: "false" | "true" | "all";
   skip?: number;
   limit?: number;
 }): Promise<BanditRule[]> {
@@ -142,6 +152,7 @@ export async function getBanditRules(params?: {
   }
   if (params?.source) searchParams.set("source", params.source);
   if (params?.keyword) searchParams.set("keyword", params.keyword);
+  if (params?.deleted) searchParams.set("deleted", params.deleted);
   if (params?.skip !== undefined) searchParams.set("skip", String(params.skip));
   searchParams.set("limit", String(params?.limit ?? 1000));
   const query = searchParams.toString();
@@ -153,6 +164,18 @@ export async function getBanditRules(params?: {
 
 export async function getBanditRule(ruleId: string): Promise<BanditRule> {
   const response = await apiClient.get(`/static-tasks/bandit/rules/${ruleId}`);
+  return response.data;
+}
+
+export async function updateBanditRule(
+  params: BanditRuleUpdateRequest,
+): Promise<{ message: string; rule: BanditRule }> {
+  const response = await apiClient.patch(`/static-tasks/bandit/rules/${params.ruleId}`, {
+    name: params.name,
+    description_summary: params.description_summary,
+    description: params.description,
+    checks: params.checks,
+  });
   return response.data;
 }
 
@@ -175,5 +198,43 @@ export async function batchUpdateBanditRulesEnabled(params: {
   is_active: boolean;
 }): Promise<{ message: string; updated_count: number; is_active: boolean }> {
   const response = await apiClient.post(`/static-tasks/bandit/rules/batch/enabled`, params);
+  return response.data;
+}
+
+export async function deleteBanditRule(ruleId: string): Promise<{
+  message: string;
+  rule_id: string;
+  is_deleted: boolean;
+}> {
+  const response = await apiClient.post(`/static-tasks/bandit/rules/${ruleId}/delete`);
+  return response.data;
+}
+
+export async function restoreBanditRule(ruleId: string): Promise<{
+  message: string;
+  rule_id: string;
+  is_deleted: boolean;
+}> {
+  const response = await apiClient.post(`/static-tasks/bandit/rules/${ruleId}/restore`);
+  return response.data;
+}
+
+export async function batchDeleteBanditRules(params: {
+  rule_ids?: string[];
+  source?: string;
+  keyword?: string;
+  current_is_deleted?: boolean;
+}): Promise<{ message: string; updated_count: number; is_deleted: boolean }> {
+  const response = await apiClient.post(`/static-tasks/bandit/rules/batch/delete`, params);
+  return response.data;
+}
+
+export async function batchRestoreBanditRules(params: {
+  rule_ids?: string[];
+  source?: string;
+  keyword?: string;
+  current_is_deleted?: boolean;
+}): Promise<{ message: string; updated_count: number; is_deleted: boolean }> {
+  const response = await apiClient.post(`/static-tasks/bandit/rules/batch/restore`, params);
   return response.data;
 }
