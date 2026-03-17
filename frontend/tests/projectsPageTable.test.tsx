@@ -28,7 +28,6 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 			rows: [
 				{
 					id: "p1",
-					rowNumber: 1,
 					name: "Demo Project",
 					detailPath: "/projects/p1",
 					detailState: { from: "/projects" },
@@ -54,7 +53,6 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 				},
 				{
 					id: "p2",
-					rowNumber: 2,
 					name: "Disabled Project",
 					detailPath: "/projects/p2",
 					detailState: { from: "/projects" },
@@ -79,11 +77,6 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 					},
 				},
 			],
-			selectedProjectIds: new Set(["p1"]),
-			isAllCurrentPageSelected: false,
-			isSomeCurrentPageSelected: true,
-			onToggleProjectSelection: () => {},
-			onToggleSelectCurrentPage: () => {},
 			onCreateScan: () => {},
 			onToggleProjectStatus: () => {},
 		})),
@@ -97,6 +90,9 @@ test("ProjectsTable renders rows and disabled project actions", async () => {
 	assert.match(markup, /禁用/);
 	assert.match(markup, /启用/);
 	assert.match(markup, /仅 ZIP 类型项目支持代码浏览/);
+	assert.doesNotMatch(markup, /序号/);
+	assert.doesNotMatch(markup, /全选当前页/);
+	assert.doesNotMatch(markup, /选择项目/);
 	assert.ok(markup.indexOf("查看详情") < markup.indexOf("代码浏览"));
 	assert.ok(markup.indexOf("代码浏览") < markup.indexOf("创建扫描"));
 	assert.ok(markup.indexOf("创建扫描") < markup.indexOf("禁用"));

@@ -5,9 +5,6 @@ import type { Project } from "@/shared/types";
 export function useProjectsBrowserState() {
 	const [searchTerm, setSearchTerm] = useState("");
 	const [projectPage, setProjectPage] = useState(1);
-	const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(
-		() => new Set(),
-	);
 	const [showCreateDialog, setShowCreateDialog] = useState(false);
 	const [createScanState, setCreateScanState] = useState({
 		open: false,
@@ -33,48 +30,6 @@ export function useProjectsBrowserState() {
 	useEffect(() => {
 		setProjectPage(1);
 	}, [searchTerm]);
-
-	function toggleProjectSelection(projectId: string, checked: boolean) {
-		setSelectedProjectIds((previous) => {
-			const next = new Set(previous);
-			if (checked) {
-				next.add(projectId);
-			} else {
-				next.delete(projectId);
-			}
-			return next;
-		});
-	}
-
-	function toggleSelectProjects(projectIds: string[], checked: boolean) {
-		setSelectedProjectIds((previous) => {
-			const next = new Set(previous);
-			if (checked) {
-				for (const projectId of projectIds) {
-					next.add(projectId);
-				}
-			} else {
-				for (const projectId of projectIds) {
-					next.delete(projectId);
-				}
-			}
-			return next;
-		});
-	}
-
-	function pruneSelectedProjects(projects: Pick<Project, "id">[]) {
-		setSelectedProjectIds((previous) => {
-			if (previous.size === 0) return previous;
-			const validProjectIds = new Set(projects.map((project) => project.id));
-			const next = new Set<string>();
-			for (const projectId of previous) {
-				if (validProjectIds.has(projectId)) {
-					next.add(projectId);
-				}
-			}
-			return next.size === previous.size ? previous : next;
-		});
-	}
 
 	function openCreateScanDialog(
 		initialMode: ScanCreateMode = "static",
@@ -103,7 +58,6 @@ export function useProjectsBrowserState() {
 		setSearchTerm,
 		projectPage,
 		setProjectPage,
-		selectedProjectIds,
 		showCreateDialog,
 		setShowCreateDialog,
 		createScanState,
@@ -111,9 +65,6 @@ export function useProjectsBrowserState() {
 		setEditProjectState,
 		disableProjectState,
 		setDisableProjectState,
-		toggleProjectSelection,
-		toggleSelectProjects,
-		pruneSelectedProjects,
 		openCreateScanDialog,
 		closeCreateScanDialog,
 	};

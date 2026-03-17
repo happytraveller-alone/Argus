@@ -26,7 +26,6 @@ export interface ProjectTaskPoolState extends ProjectTaskPool {
 
 export interface ProjectsPageRowViewModel {
 	id: string;
-	rowNumber: number;
 	name: string;
 	detailPath: string;
 	detailState: { from: string };
@@ -64,14 +63,6 @@ export interface ProjectsPaginationViewModel {
 	items: Array<number | "ellipsis">;
 }
 
-export interface ProjectsSelectionViewModel {
-	selectedProjectIds: Set<string>;
-	currentPageProjectIds: string[];
-	isAllCurrentPageSelected: boolean;
-	isSomeCurrentPageSelected: boolean;
-	selectedCount: number;
-}
-
 export interface ProjectsDialogControllerState {
 	createProjectOpen: boolean;
 	createScan: {
@@ -95,7 +86,6 @@ export interface ProjectsPageViewModel {
 	rows: ProjectsPageRowViewModel[];
 	toolbar: ProjectsToolbarViewModel;
 	pagination: ProjectsPaginationViewModel;
-	selection: ProjectsSelectionViewModel;
 	emptyState: {
 		hasSearchTerm: boolean;
 	};

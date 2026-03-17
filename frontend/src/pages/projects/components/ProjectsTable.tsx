@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Table,
 	TableBody,
@@ -15,11 +14,6 @@ import { PROJECT_ACTION_BTN_SUBTLE } from "../constants";
 
 interface ProjectsTableProps {
 	rows: ProjectsPageRowViewModel[];
-	selectedProjectIds: Set<string>;
-	isAllCurrentPageSelected: boolean;
-	isSomeCurrentPageSelected: boolean;
-	onToggleProjectSelection: (projectId: string, checked: boolean) => void;
-	onToggleSelectCurrentPage: (checked: boolean) => void;
 	onCreateScan: (projectId: string) => void;
 	onToggleProjectStatus: (
 		projectId: string,
@@ -29,11 +23,6 @@ interface ProjectsTableProps {
 
 export default function ProjectsTable({
 	rows,
-	selectedProjectIds,
-	isAllCurrentPageSelected,
-	isSomeCurrentPageSelected,
-	onToggleProjectSelection,
-	onToggleSelectCurrentPage,
 	onCreateScan,
 	onToggleProjectStatus,
 }: ProjectsTableProps) {
@@ -41,22 +30,6 @@ export default function ProjectsTable({
 		<Table>
 			<TableHeader>
 				<TableRow>
-					<TableHead className="w-[52px]">
-						<Checkbox
-							checked={
-								isAllCurrentPageSelected
-									? true
-									: isSomeCurrentPageSelected
-										? "indeterminate"
-										: false
-							}
-							onCheckedChange={(checked) =>
-								onToggleSelectCurrentPage(Boolean(checked))
-							}
-							aria-label="全选当前页"
-						/>
-					</TableHead>
-					<TableHead className="w-[80px] text-center">序号</TableHead>
 					<TableHead className="min-w-[180px]">项目名称</TableHead>
 					<TableHead className="min-w-[150px]">项目大小</TableHead>
 					<TableHead className="w-[120px]">状态</TableHead>
@@ -71,18 +44,6 @@ export default function ProjectsTable({
 						key={row.id}
 						className={row.isActive ? undefined : "opacity-80"}
 					>
-						<TableCell>
-							<Checkbox
-								checked={selectedProjectIds.has(row.id)}
-								onCheckedChange={(checked) =>
-									onToggleProjectSelection(row.id, Boolean(checked))
-								}
-								aria-label={`选择项目 ${row.name}`}
-							/>
-						</TableCell>
-						<TableCell className="text-muted-foreground text-center">
-							{row.rowNumber}
-						</TableCell>
 						<TableCell>
 							<Link
 								to={row.detailPath}

@@ -239,7 +239,10 @@ test("DashboardCommandCenter places cwe in the third primary row and moves langu
 	assert.match(markup, /data-panel="hotspots"[^>]*class="[^"]*lg:col-span-7/);
 	assert.match(markup, /data-panel="status"[^>]*class="[^"]*lg:col-span-5/);
 	assert.match(markup, /data-panel="engines"[^>]*class="[^"]*lg:col-span-7/);
-	assert.match(markup, /data-panel="cwe"[^>]*class="[^"]*lg:col-span-5[^"]*flex[^"]*flex-col/);
+	assert.match(
+		markup,
+		/data-panel="cwe"[^>]*class="[^"]*rounded-none[^"]*lg:col-span-5[^"]*flex[^"]*flex-col/,
+	);
 	assert.match(markup, /data-panel="language-risk"/);
 	assert.match(markup, /min-h-\[31rem\]/);
 
@@ -349,7 +352,35 @@ test("AttackSurfaceTreemapContent renders tile text from flat treemap node props
 		),
 	);
 
-	assert.match(markup, /CWE-79/);
 	assert.match(markup, /跨站脚本/);
 	assert.match(markup, /3 条发现/);
+	assert.doesNotMatch(markup, /\srx="/);
+	assert.doesNotMatch(markup, /\sry="/);
+});
+
+test("AttackSurfaceTreemapTooltipContent uses straight-edge tooltip styling", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(module.AttackSurfaceTreemapTooltipContent, {
+			item: {
+				cweId: "CWE-79",
+				cweName: "跨站脚本",
+				totalFindings: 3,
+				opengrepFindings: 2,
+				agentFindings: 1,
+				banditFindings: 0,
+				name: "CWE-79",
+				size: 3,
+				fill: "#155e75",
+			},
+		}),
+	);
+
+	assert.match(markup, /rounded-none/);
+	assert.doesNotMatch(markup, /rounded-2xl/);
+	assert.match(markup, /跨站脚本/);
+	assert.match(markup, /发现总数：3/);
 });
