@@ -1,6 +1,7 @@
 from .user import User
 from .user_config import UserConfig
 from .project import Project, ProjectMember
+from .project_management_metrics import ProjectManagementMetrics
 from .project_info import ProjectInfo
 from .audit import AuditTask, AuditIssue
 from .analysis import InstantAnalysis

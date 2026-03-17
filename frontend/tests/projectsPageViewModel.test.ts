@@ -87,224 +87,103 @@ test("projects selectors calculate responsive project page size from container m
 	);
 });
 
-test("projects view model utilities build project size text and execution stats", async () => {
+test("projects view model renders placeholder when metrics pending", async () => {
 	const builder = await importOrFail<any>(
 		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
 	);
 
-	assert.equal(
-		builder.getProjectSizeText("zip", {
-			has_file: true,
-			file_size: 2_621_440,
-		}),
-		"2.50 Mb",
-	);
-	assert.equal(
-		builder.getProjectSizeText("zip", {
-			has_file: true,
-			file_size: 512,
-		}),
-		"512 B",
-	);
-	assert.equal(
-		builder.getProjectSizeText("zip", {
-			has_file: true,
-			file_size: 7680,
-		}),
-		"7.50 Kb",
-	);
-	assert.equal(
-		builder.getProjectSizeText("zip", {
-			has_file: false,
-		}),
-		"-",
-	);
-	assert.equal(
-		builder.getProjectSizeText("repository", {
-			has_file: true,
-			file_size: 2_621_440,
-		}),
-		"-",
-	);
-
-	const stats = builder.getProjectExecutionStats({
-		auditTasks: [{ status: "completed" }, { status: "running" }],
-		agentTasks: [{ status: "pending" }, { status: "completed" }],
-		opengrepTasks: [
-			{ id: "o1", project_id: "p1", status: "completed", created_at: "2024-01-01T00:00:00Z" },
-		],
-		gitleaksTasks: [
-			{ id: "g1", project_id: "p1", status: "completed", created_at: "2024-01-01T00:00:01Z" },
-		],
-	});
-
-	assert.deepEqual(stats, { completed: 3, running: 2 });
-});
-
-test("projects view model exposes vulnerability stats and browse guards", async () => {
-	const builder = await importOrFail<any>(
-		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
-	);
-
-	const makeProject = (overrides: Record<string, unknown>) => ({
-		id: "project-id",
-		name: "Project Name",
-		description: "Project Description",
-		source_type: "zip",
-		repository_url: undefined,
-		repository_type: "other",
-		default_branch: "main",
-		programming_languages: "TypeScript",
-		owner_id: "user-1",
-		is_active: true,
-		created_at: "2024-01-01T00:00:00Z",
-		updated_at: "2024-01-01T00:00:00Z",
-		...overrides,
-	});
-
-	const projectTaskPoolsMap = {
-		p1: {
-			status: "ready",
-			auditTasks: [],
-			agentTasks: [
-				{
-					project_id: "p1",
-					status: "completed",
-					critical_count: 1,
-					high_count: 2,
-					medium_count: 3,
-					low_count: 4,
-					verified_count: 6,
-					name: "[INTELLIGENT] Enabled Project",
-					description: "",
-				},
-			],
-			opengrepTasks: [
-				{
-					id: "op-1",
-					project_id: "p1",
-					status: "completed",
-					created_at: "2024-01-01T00:00:00Z",
-					total_findings: 9,
-					error_count: 2,
-					warning_count: 1,
-				},
-			],
-			gitleaksTasks: [
-				{
-					id: "gl-1",
-					project_id: "p1",
-					status: "completed",
-					created_at: "2024-01-01T00:00:01Z",
-					total_findings: 5,
-				},
-			],
-			banditTasks: [
-				{
-					id: "bd-1",
-					project_id: "p1",
-					status: "completed",
-					created_at: "2024-01-01T00:00:02Z",
-					high_count: 2,
-					medium_count: 4,
-					low_count: 6,
-				},
-			],
-			phpstanTasks: [
-				{
-					id: "ps-1",
-					project_id: "p1",
-					status: "completed",
-					created_at: "2024-01-01T00:00:03Z",
-					total_findings: 7,
-				},
-			],
+	const projects = [
+		{
+			id: "p1",
+			name: "Pending Metrics",
+			detailPath: "",
+			description: "",
+			source_type: "zip",
+			repository_url: undefined,
+			repository_type: "other",
+			default_branch: "main",
+			programming_languages: "ts",
+			owner_id: "u1",
+			is_active: true,
+			created_at: "2024-01-01T00:00:00Z",
+			updated_at: "2024-01-01T00:00:00Z",
+			management_metrics: {
+				status: "pending",
+			},
 		},
-		p2: {
-			status: "ready",
-			auditTasks: [],
-			agentTasks: [],
-			opengrepTasks: [],
-			gitleaksTasks: [],
-			banditTasks: [],
-			phpstanTasks: [],
-		},
-	};
+	];
 
 	const viewModel = builder.buildProjectsPageViewModel({
 		loading: false,
-		filteredProjects: [
-			makeProject({ id: "p1", name: "Enabled Project", is_active: true }),
-			makeProject({
-				id: "p2",
-				name: "Disabled Project",
-				is_active: false,
-				source_type: "repository",
-			}),
-		],
-		pagedProjects: [
-			makeProject({ id: "p1", name: "Enabled Project", is_active: true }),
-			makeProject({
-				id: "p2",
-				name: "Disabled Project",
-				is_active: false,
-				source_type: "repository",
-			}),
-		],
+		filteredProjects: projects,
+		pagedProjects: projects,
 		projectPage: 1,
 		totalProjectPages: 1,
-		projectTaskPoolsMap,
-		projectZipMetaMap: {
-			p1: { has_file: true, file_size: 2_621_440 },
-			p2: { has_file: false },
-		},
-		projectDetailFrom: "/projects",
+		projectDetailFrom: "/",
 		searchTerm: "",
-		searchPlaceholder: "搜索项目",
+		searchPlaceholder: "Search",
 	});
 
-	assert.deepEqual(
-		viewModel.rows.map((row: any) => ({
-			id: row.id,
-			sizeText: row.sizeText,
-			vulnerabilityStats: row.vulnerabilityStats,
-			canCreateScan: row.actions.canCreateScan,
-			canBrowseCode: row.actions.canBrowseCode,
-			browseCodePath: row.actions.browseCodePath,
-			browseCodeDisabledReason: row.actions.browseCodeDisabledReason,
-		})),
-		[
-			{
-				id: "p1",
-				sizeText: "2.50 Mb",
-				vulnerabilityStats: {
-					critical: 1,
-					high: 4,
-					medium: 10,
-					low: 28,
-					total: 43,
-				},
-				canCreateScan: true,
-				canBrowseCode: true,
-				browseCodePath: "/projects/p1/code-browser",
-				browseCodeDisabledReason: null,
-			},
-			{
-				id: "p2",
-				sizeText: "-",
-				vulnerabilityStats: {
-					critical: 0,
-					high: 0,
-					medium: 0,
-					low: 0,
-					total: 0,
-				},
-				canCreateScan: true,
-				canBrowseCode: false,
-				browseCodePath: "/projects/p2/code-browser",
-				browseCodeDisabledReason: "仅 ZIP 类型项目支持代码浏览",
-			},
-		],
-	);
-	assert.equal("selection" in viewModel, false);
+	assert.equal(viewModel.rows[0].sizeText, "--");
+	assert.equal(viewModel.rows[0].metricsStatus, "pending");
 });
+
+test("projects view model exposes metrics when ready", async () => {
+	const builder = await importOrFail<any>(
+		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
+	);
+
+	const projects = [
+		{
+			id: "p-ready",
+			name: "Ready Project",
+			description: "",
+			source_type: "zip",
+			repository_url: undefined,
+			repository_type: "other",
+			default_branch: "main",
+			programming_languages: "ts",
+			owner_id: "u1",
+			is_active: true,
+			created_at: "2024-01-01T00:00:00Z",
+			updated_at: "2024-01-01T00:00:00Z",
+			management_metrics: {
+				status: "ready",
+				archive_size_bytes: 2_621_440,
+				completed_tasks: 5,
+				running_tasks: 1,
+				total_tasks: 8,
+				audit_tasks: 2,
+				agent_tasks: 3,
+				opengrep_tasks: 1,
+				gitleaks_tasks: 1,
+				bandit_tasks: 1,
+				phpstan_tasks: 0,
+				critical: 2,
+				high: 3,
+				medium: 4,
+				low: 1,
+				created_at: "2024-01-01T00:00:00Z",
+				updated_at: "2024-01-01T00:00:00Z",
+			},
+		},
+	];
+
+	const viewModel = builder.buildProjectsPageViewModel({
+		loading: false,
+		filteredProjects: projects,
+		pagedProjects: projects,
+		projectPage: 1,
+		totalProjectPages: 1,
+		projectDetailFrom: "/",
+		searchTerm: "",
+		searchPlaceholder: "Search",
+	});
+	const row = viewModel.rows[0];
+	assert.equal(row.sizeText, "2.50 Mb");
+	assert.equal(row.executionStats.completed, 5);
+	assert.equal(row.vulnerabilityStats.critical, 2);
+	assert.equal(row.metricsStatus, "ready");
+});
+
+test("projects view model exposes vulnerability stats and browse guards", async () => {

@@ -65,9 +65,11 @@ const VULNERABILITY_COLUMNS = [
 ] as const;
 
 const METRIC_CHIP_CLASSNAME =
-	"inline-grid grid-cols-[2ch_auto] items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm leading-none";
+	"inline-grid grid-cols-[2ch_auto] items-center gap-1 rounded-md border px-2.5 py-1 text-sm leading-none";
+const METRIC_CHIP_CLASSNAME_2 =
+	"inline-grid grid-cols-[2ch_auto] items-center gap-5 rounded-md border px-2.5 py-1 text-sm leading-none";
 const METRIC_CHIP_VALUE_CLASSNAME =
-	"text-right font-semibold tabular-nums text-[16px]";
+	"text-left font-semibold tabular-nums text-[16px] gap-2";
 const METRIC_CHIP_LABEL_CLASSNAME =
 	"whitespace-nowrap text-left text-[16px] font-medium tracking-[0.02em]";
 
@@ -75,6 +77,16 @@ export default function ProjectsTable({
 	rows,
 	onCreateScan,
 }: ProjectsTableProps) {
+	const formatMetricValue = (
+		row: ProjectsPageRowViewModel,
+		value: number,
+	) => {
+		if (row.metricsStatus !== "ready") {
+			return "—";
+		}
+		return value;
+	};
+
 	return (
 		<Table>
 			<TableHeader>
@@ -110,7 +122,9 @@ export default function ProjectsTable({
 							</Link>
 						</TableCell>
 						<TableCell className="text-base text-muted-foreground">
-							{row.sizeText}
+							<span title={row.metricsStatusMessage ?? undefined}>
+								{row.sizeText}
+							</span>
 						</TableCell>
 						{EXECUTION_COLUMNS.map((column) => (
 							<TableCell
@@ -120,9 +134,15 @@ export default function ProjectsTable({
 								<span
 									data-project-metric-chip={column.key}
 									className={`${METRIC_CHIP_CLASSNAME} ${column.chipClassName}`}
+									title={row.metricsStatus !== "ready"
+										? row.metricsStatusMessage ?? undefined
+										: undefined}
 								>
 									<span className={METRIC_CHIP_VALUE_CLASSNAME}>
-										{row.executionStats[column.key]}
+										{formatMetricValue(
+											row,
+											row.executionStats[column.key],
+										)}
 									</span>
 									<span className={METRIC_CHIP_LABEL_CLASSNAME}>
 										{column.label}
@@ -137,10 +157,16 @@ export default function ProjectsTable({
 							>
 								<span
 									data-project-metric-chip={column.key}
-									className={`${METRIC_CHIP_CLASSNAME} ${column.chipClassName}`}
+									className={`${METRIC_CHIP_CLASSNAME_2} ${column.chipClassName}`}
+									title={row.metricsStatus !== "ready"
+										? row.metricsStatusMessage ?? undefined
+										: undefined}
 								>
 									<span className={METRIC_CHIP_VALUE_CLASSNAME}>
-										{row.vulnerabilityStats[column.key]}
+										{formatMetricValue(
+											row,
+											row.vulnerabilityStats[column.key],
+										)}
 									</span>
 									<span className={METRIC_CHIP_LABEL_CLASSNAME}> 
 										{column.label}

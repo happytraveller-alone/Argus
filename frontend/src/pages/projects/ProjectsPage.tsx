@@ -176,10 +176,6 @@ export default function ProjectsPage({
 	}, [filteredProjects.length, totalProjectPages]);
 
 	useEffect(() => {
-		data.ensureProjectData(currentPageProjectIds);
-	}, [currentPageProjectIds, data]);
-
-	useEffect(() => {
 		const hash = window.location.hash;
 		if (hash !== "#project-browser") {
 			return;
@@ -195,8 +191,6 @@ export default function ProjectsPage({
 				pagedProjects,
 				projectPage: browser.projectPage,
 				totalProjectPages,
-				projectTaskPoolsMap: data.projectTaskPoolsMap,
-				projectZipMetaMap: data.projectZipMetaMap,
 				projectDetailFrom,
 				searchTerm: browser.searchTerm,
 				searchPlaceholder: t("projects.searchPlaceholder", "按项目名称/描述搜索"),
@@ -205,8 +199,6 @@ export default function ProjectsPage({
 			browser.projectPage,
 			browser.searchTerm,
 			data.loading,
-			data.projectZipMetaMap,
-			data.projectTaskPoolsMap,
 			filteredProjects,
 			pagedProjects,
 			projectDetailFrom,
@@ -282,10 +274,7 @@ export default function ProjectsPage({
 	}
 
 	function handleTaskCreated() {
-		const targetProjectIds = browser.createScanState.preselectedProjectId
-			? [browser.createScanState.preselectedProjectId]
-			: currentPageProjectIds;
-		data.invalidateProjectMetrics(targetProjectIds);
+		void data.loadProjects();
 		toast.success("扫描任务已创建", {
 			description:
 				"因为网络和代码文件大小等因素，扫描时长通常至少需要1分钟，请耐心等待...",

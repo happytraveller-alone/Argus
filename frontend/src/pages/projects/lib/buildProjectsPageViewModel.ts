@@ -1,19 +1,14 @@
-import {
-	getProjectCardSummaryStats,
-} from "@/features/projects/services/projectCardPreview";
-import {
-	buildStaticScanGroups,
-	resolveStaticScanGroupStatus,
-} from "@/features/tasks/services/taskActivities";
-import type { Project } from "@/shared/types";
-import type { ZipFileMeta } from "@/shared/utils/zipStorage";
 import type {
-	ProjectTaskPoolState,
-	ProjectsPageViewModel,
-} from "../types";
+	Project,
+	ProjectManagementMetrics,
+} from "@/shared/types";
+import type { ProjectsPageViewModel } from "../types";
 import { buildPaginationItems } from "./projectsPageSelectors";
 
-function formatProjectArchiveSize(bytes: number) {
+function formatArchiveSize(bytes?: number | null) {
+	if (!Number.isFinite(bytes) || !bytes) {
+		return "-";
+	}
 	if (bytes >= 1024 * 1024) {
 		return `${(bytes / 1024 / 1024).toFixed(2)} Mb`;
 	}
@@ -23,13 +18,17 @@ function formatProjectArchiveSize(bytes: number) {
 	return `${bytes} B`;
 }
 
-export function getProjectSizeText(
-	sourceType?: Project["source_type"],
-	zipMeta?: ZipFileMeta,
-) {
-	if (sourceType !== "zip") return "-";
-	if (!zipMeta?.has_file || typeof zipMeta.file_size !== "number") return "-";
-	return formatProjectArchiveSize(zipMeta.file_size);
+function buildExecutionStats(metrics?: ProjectManagementMetrics | null) {
+	if (!metrics || metrics.status !== "ready") {
+		return {
+			completed: 0,
+			running: 0,
+		};
+	}
+	return {
+		completed: metrics.completed_tasks,
+		running: metrics.running_tasks,
+	};
 }
 
 export function getProjectExecutionStats(
@@ -60,15 +59,38 @@ export function getProjectExecutionStats(
 		{ completed: 0, running: 0 },
 	);
 
+function buildVulnerabilityStats(metrics?: ProjectManagementMetrics | null) {
+	if (!metrics || metrics.status !== "ready") {
+		return {
+			critical: 0,
+			high: 0,
+			medium: 0,
+			low: 0,
+			total: 0,
+		};
+	}
+	const total =
+		(metrics.critical ?? 0) +
+		(metrics.high ?? 0) +
+		(metrics.medium ?? 0) +
+		(metrics.low ?? 0);
 	return {
-		completed:
-			nonStaticStatuses.filter((status) => status === "completed").length +
-			staticStats.completed,
-		running:
-			nonStaticStatuses.filter(
-				(status) => status === "running" || status === "pending",
-			).length + staticStats.running,
+		critical: metrics.critical,
+		high: metrics.high,
+		medium: metrics.medium,
+		low: metrics.low,
+		total,
 	};
+}
+
+function getMetricsStatusMessage(metrics?: ProjectManagementMetrics | null) {
+	if (!metrics || metrics.status === "pending") {
+		return "指标同步中...";
+	}
+	if (metrics.status === "failed") {
+		return metrics.error_message || "指标刷新失败";
+	}
+	return null;
 }
 
 interface BuildProjectsPageViewModelParams {
@@ -77,8 +99,6 @@ interface BuildProjectsPageViewModelParams {
 	pagedProjects: Project[];
 	projectPage: number;
 	totalProjectPages: number;
-	projectTaskPoolsMap: Record<string, ProjectTaskPoolState>;
-	projectZipMetaMap: Record<string, ZipFileMeta>;
 	projectDetailFrom: string;
 	searchTerm: string;
 	searchPlaceholder: string;
@@ -93,8 +113,6 @@ export function buildProjectsPageViewModel(
 		pagedProjects,
 		projectPage,
 		totalProjectPages,
-		projectTaskPoolsMap,
-		projectZipMetaMap,
 		projectDetailFrom,
 		searchTerm,
 		searchPlaceholder,
@@ -114,17 +132,22 @@ export function buildProjectsPageViewModel(
 				phpstanTasks: projectTaskPool?.phpstanTasks || [],
 				yasaTasks: projectTaskPool?.yasaTasks || [],
 			});
+			const metrics = project.management_metrics;
+			const metricsStatus = metrics?.status ?? "pending";
+			const metricsStatusMessage = getMetricsStatusMessage(metrics);
 			return {
 				id: project.id,
 				name: project.name,
 				detailPath: `/projects/${project.id}`,
 				detailState: { from: projectDetailFrom },
-				sizeText: getProjectSizeText(
-					project.source_type,
-					projectZipMetaMap[project.id],
-				),
-				vulnerabilityStats: summaryStats.severityBreakdown,
-				executionStats: getProjectExecutionStats(projectTaskPool),
+				sizeText:
+					metricsStatus === "ready"
+						? formatArchiveSize(metrics?.archive_size_bytes)
+						: "--",
+				vulnerabilityStats: buildVulnerabilityStats(metrics),
+				executionStats: buildExecutionStats(metrics),
+				metricsStatus,
+				metricsStatusMessage,
 				actions: {
 					canCreateScan: true,
 					canBrowseCode: project.source_type === "zip",

@@ -10,7 +10,7 @@ import { getYasaScanTasks } from "@/shared/api/yasa";
 import { getOpengrepScanTasks } from "@/shared/api/opengrep";
 import { apiClient } from "@/shared/api/serverClient";
 import { api } from "@/shared/api/database";
-import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
+import { uploadZipFile } from "@/shared/utils/zipStorage";
 import type { CreateProjectForm, Project } from "@/shared/types";
 import {
 	AGENT_TASK_PAGE_LIMIT,
@@ -23,15 +23,22 @@ import {
 	YASA_TASK_PAGE_LIMIT,
 } from "../constants";
 import type { ProjectTaskPool } from "../types";
+import { PROJECT_FETCH_BATCH_SIZE } from "../constants";
 import type { ProjectsPageDataSource } from "./projectsPageDataSource";
 import {
 	createZipProjectWorkflow,
 	updateProjectWorkflow,
 } from "./projectsPageWorkflows";
 
-function getErrorStatusCode(error: unknown): number {
-	const apiError = error as { response?: { status?: number } };
-	return Number(apiError?.response?.status || 0);
+type ApiSurface = Pick<
+	typeof api,
+	"getProjects" | "createProject" | "createProjectWithZip" | "updateProject"
+>;
+
+interface CreateApiProjectsPageDataSourceOptions {
+	api?: ApiSurface;
+	projectFetchBatchSize?: number;
+	uploadZipFile?: typeof uploadZipFile;
 }
 
 function sortProjectsByCreatedAt(projects: Project[]) {
@@ -144,6 +151,7 @@ export function createApiProjectsPageDataSource(
 				const batch = await apiSurface.getProjects({
 					skip,
 					limit: fetchBatchSize,
+					includeMetrics: true,
 				});
 				const normalizedBatch = Array.isArray(batch) ? batch : [];
 				mergedProjects.push(...normalizedBatch);

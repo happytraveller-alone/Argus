@@ -1,4 +1,7 @@
+from fastapi import Query
+
 from app.api.v1.endpoints.projects_shared import *
+from app.services.project_metrics import project_metrics_refresher
 
 router = APIRouter()
 
@@ -27,6 +30,7 @@ async def create_project(
     db.add(project)
     await db.commit()
     await db.refresh(project)
+    project_metrics_refresher.enqueue(project.id)
     return project
 
 @router.get("/", response_model=List[ProjectResponse])
@@ -34,16 +38,16 @@ async def read_projects(
     db: AsyncSession = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
+    include_metrics: bool = Query(False, description="是否加载项目管理指标"),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     """
     Retrieve projects.
     """
-    query = (
-        select(Project)
-        .options(selectinload(Project.owner))
-        .where(Project.source_type == "zip")
-    )
+    options = [selectinload(Project.owner)]
+    if include_metrics:
+        options.append(selectinload(Project.management_metrics))
+    query = select(Project).options(*options).where(Project.source_type == "zip")
     query = query.order_by(Project.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return _filter_public_projects(result.scalars().all())
@@ -58,7 +62,12 @@ async def read_project(
     Get project by ID.
     """
     result = await db.execute(
-        select(Project).options(selectinload(Project.owner)).where(Project.id == id)
+        select(Project)
+            .options(
+                selectinload(Project.owner),
+                selectinload(Project.management_metrics),
+            )
+            .where(Project.id == id)
     )
     project = result.scalars().first()
     _raise_if_project_hidden(project)
@@ -186,6 +195,7 @@ async def update_project(
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(project)
+    project_metrics_refresher.enqueue(project.id)
     return project
 
 @router.post("/{id}/scan")
@@ -266,3 +276,21 @@ async def scan_project(
     background_tasks.add_task(scan_repo_task, task.id, AsyncSessionLocal, user_config)
 
     return {"task_id": task.id, "status": "started"}
+
+
+@router.post(
+    "/{id}/metrics/recalculate",
+    response_model=ProjectManagementMetricsResponse,
+)
+async def recalc_project_metrics(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    手动刷新项目管理指标。
+    """
+    project = await db.get(Project, id)
+    _raise_if_project_hidden(project)
+    metrics = await project_metrics_refresher.recalc_now(id)
+    return metrics

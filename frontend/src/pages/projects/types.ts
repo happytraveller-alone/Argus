@@ -1,10 +1,5 @@
 import type { ReactNode } from "react";
 import type { ScanCreateMode } from "@/components/scan/CreateProjectScanDialog";
-import type { AgentTask } from "@/shared/api/agentTasks";
-import type { BanditScanTask } from "@/shared/api/bandit";
-import type { GitleaksScanTask } from "@/shared/api/gitleaks";
-import type { PhpstanScanTask } from "@/shared/api/phpstan";
-import type { OpengrepScanTask } from "@/shared/api/opengrep";
 import type { ProjectSeverityBreakdown } from "@/features/projects/services/projectCardPreview";
 import type { YasaScanTask } from "@/shared/api/yasa";
 import type { Project, AuditTask } from "@/shared/types";
@@ -25,6 +20,12 @@ export interface ProjectTaskPool {
 export interface ProjectTaskPoolState extends ProjectTaskPool {
 	status: ProjectTaskPoolStatus;
 }
+import type { Project, ProjectManagementMetrics } from "@/shared/types";
+import type { ProjectsPageDataSource } from "./data/projectsPageDataSource";
+
+export type ProjectMetricsStatus = NonNullable<
+	ProjectManagementMetrics["status"]
+>;
 
 export interface ProjectsPageRowViewModel {
 	id: string;
@@ -37,6 +38,8 @@ export interface ProjectsPageRowViewModel {
 		completed: number;
 		running: number;
 	};
+	metricsStatus: ProjectMetricsStatus | "pending";
+	metricsStatusMessage: string | null;
 	actions: {
 		canCreateScan: boolean;
 		canBrowseCode: boolean;

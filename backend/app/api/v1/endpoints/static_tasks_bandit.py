@@ -78,6 +78,7 @@ from app.api.v1.endpoints.static_tasks_shared import (
     logger,
     settings,
 )
+from app.services.project_metrics import project_metrics_refresher
 
 router = APIRouter()
 
@@ -471,6 +472,7 @@ async def _execute_bandit_scan(
                 task.files_scanned = len(scanned_files)
                 _sync_task_scan_duration(task)
                 await db.commit()
+                project_metrics_refresher.enqueue(task.project_id)
             finally:
                 try:
                     if os.path.exists(report_file):

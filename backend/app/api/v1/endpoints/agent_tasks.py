@@ -39,6 +39,7 @@ from app.models.agent_task import (
 )
 from app.models.project import Project
 from app.models.opengrep import OpengrepRule
+from app.services.project_metrics import project_metrics_refresher
 from app.models.user import User
 from app.models.user_config import UserConfig
 from app.services.agent.event_manager import EventManager
@@ -428,6 +429,8 @@ async def _finalize_task_terminal_state(
     else:
         task.error_message = None
     await db.commit()
+    if task.project_id:
+        project_metrics_refresher.enqueue(task.project_id)
 
     if final_status == AgentTaskStatus.COMPLETED:
         payload = dict(success_payload or {})
@@ -6194,6 +6197,7 @@ async def create_agent_task(
     db.add(task)
     await db.commit()
     await db.refresh(task)
+    project_metrics_refresher.enqueue(task.project_id)
     
     # 在后台启动任务（项目根目录在任务内部获取）
     background_tasks.add_task(_execute_agent_task, task.id)

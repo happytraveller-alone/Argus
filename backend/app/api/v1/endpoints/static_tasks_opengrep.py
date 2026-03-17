@@ -77,6 +77,7 @@ from app.api.v1.endpoints.static_tasks_shared import (
     logger,
     settings,
 )
+from app.services.project_metrics import project_metrics_refresher
 
 router = APIRouter()
 
@@ -1045,6 +1046,7 @@ async def _execute_opengrep_scan(
             _sync_task_scan_duration(task)
 
             await db.commit()
+            project_metrics_refresher.enqueue(task.project_id)
             _record_scan_progress(
                 task_id,
                 status="completed",

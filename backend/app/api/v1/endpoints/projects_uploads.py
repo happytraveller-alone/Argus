@@ -1,4 +1,5 @@
 from app.api.v1.endpoints.projects_shared import *
+from app.services.project_metrics import project_metrics_refresher
 
 router = APIRouter()
 
@@ -91,6 +92,7 @@ async def create_project_with_zip(
         try:
             await db.commit()
             await db.refresh(project)
+            project_metrics_refresher.enqueue(project.id)
         except IntegrityError:
             await db.rollback()
             await delete_project_zip(project.id)
@@ -162,13 +164,15 @@ async def upload_project_zip(
     """
     project = await db.get(Project, id)
     _raise_if_project_hidden(project)
-    return await _store_uploaded_archive_for_project(
+    result = await _store_uploaded_archive_for_project(
         db=db,
         project=project,
         file=file,
         user_id=current_user.id,
         commit=True,
     )
+    project_metrics_refresher.enqueue(project.id)
+    return result
 
 
 @router.get("/{id}/upload/preview")
@@ -361,6 +365,7 @@ async def upload_project_directory(
             try:
                 await db.commit()
                 await db.refresh(project)
+                project_metrics_refresher.enqueue(project.id)
             except IntegrityError:
                 await db.rollback()
                 await delete_project_zip(id)
@@ -408,6 +413,7 @@ async def delete_project_zip_file(
     if deleted:
         project.zip_file_hash = None
         await db.commit()
+        project_metrics_refresher.enqueue(project.id)
 
     if deleted:
         return {"message": "ZIP文件已删除"}

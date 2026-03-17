@@ -830,6 +830,32 @@ class OwnerSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProjectManagementMetricsResponse(BaseModel):
+    archive_size_bytes: Optional[int] = None
+    archive_original_filename: Optional[str] = None
+    archive_uploaded_at: Optional[datetime] = None
+    total_tasks: int
+    completed_tasks: int
+    running_tasks: int
+    audit_tasks: int
+    agent_tasks: int
+    opengrep_tasks: int
+    gitleaks_tasks: int
+    bandit_tasks: int
+    phpstan_tasks: int
+    critical: int
+    high: int
+    medium: int
+    low: int
+    last_completed_task_at: Optional[datetime] = None
+    status: Literal["pending", "ready", "failed"]
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProjectResponse(BaseModel):
     id: str
     name: str
@@ -844,6 +870,7 @@ class ProjectResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     owner: Optional[OwnerSchema] = None
+    management_metrics: Optional[ProjectManagementMetricsResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
 

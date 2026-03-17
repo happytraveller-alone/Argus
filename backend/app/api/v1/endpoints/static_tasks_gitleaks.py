@@ -40,6 +40,7 @@ from app.schemas.opengrep import (
     OpengrepRuleUpdateRequest,
 )
 from app.services.gitleaks_rules_seed import ensure_builtin_gitleaks_rules
+from app.services.project_metrics import project_metrics_refresher
 from app.services.llm_rule.repo_cache_manager import GlobalRepoCacheManager
 from app.services.opengrep_confidence import (
     count_high_confidence_findings_by_task_ids as shared_count_high_confidence_findings_by_task_ids,
@@ -782,6 +783,7 @@ async def _execute_gitleaks_scan(
                     task.total_findings = 0
                     _sync_task_scan_duration(task)
                     await db.commit()
+                    project_metrics_refresher.enqueue(task.project_id)
                     logger.info(
                         f"Gitleaks scan task {task_id} completed with no findings"
                     )
@@ -849,6 +851,7 @@ async def _execute_gitleaks_scan(
                 _sync_task_scan_duration(task)
 
                 await db.commit()
+                project_metrics_refresher.enqueue(task.project_id)
                 logger.info(
                     f"Gitleaks scan task {task_id} completed: "
                     f"{len(findings)} findings in {len(files_scanned)} files"

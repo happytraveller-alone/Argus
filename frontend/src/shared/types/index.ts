@@ -27,6 +27,30 @@ export type ProjectSourceType = 'repository' | 'zip';
 export type RepositoryPlatform = 'github' | 'gitlab' | 'gitea' | 'other';
 
 // 项目相关类型
+export interface ProjectManagementMetrics {
+  archive_size_bytes?: number | null;
+  archive_original_filename?: string | null;
+  archive_uploaded_at?: string | null;
+  total_tasks: number;
+  completed_tasks: number;
+  running_tasks: number;
+  audit_tasks: number;
+  agent_tasks: number;
+  opengrep_tasks: number;
+  gitleaks_tasks: number;
+  bandit_tasks: number;
+  phpstan_tasks: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  last_completed_task_at?: string | null;
+  status: "pending" | "ready" | "failed";
+  error_message?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -41,6 +65,7 @@ export interface Project {
   created_at: string;
   updated_at: string;
   owner?: Profile;
+  management_metrics?: ProjectManagementMetrics | null;
 }
 
 export interface ProjectMember {

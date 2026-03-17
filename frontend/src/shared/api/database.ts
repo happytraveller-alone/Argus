@@ -128,6 +128,7 @@ export const api = {
   async getProjects(options?: {
     skip?: number;
     limit?: number;
+    includeMetrics?: boolean;
   }): Promise<Project[]> {
     const params: Record<string, unknown> = {};
     if (typeof options?.skip === "number") {
@@ -135,6 +136,9 @@ export const api = {
     }
     if (typeof options?.limit === "number") {
       params.limit = options.limit;
+    }
+    if (options?.includeMetrics) {
+      params.include_metrics = true;
     }
     const res = await retryProjectReads(() =>
       apiClient.get('/projects/', { params }),

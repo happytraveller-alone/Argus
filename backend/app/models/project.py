@@ -67,6 +67,11 @@ class Project(Base):
     # YASA 静态扫描任务关系（新增）
     yasa_scan_tasks = relationship(
         "YasaScanTask", back_populates="project", cascade="all, delete-orphan"
+    management_metrics = relationship(
+        "ProjectManagementMetrics",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
 class ProjectMember(Base):

@@ -15,6 +15,7 @@ from app.models.audit import AuditIssue, AuditTask
 from app.models.project import Project
 from app.services.llm.service import LLMConfigError, LLMService
 from app.services.zip_storage import load_project_zip
+from app.services.project_metrics import project_metrics_refresher
 
 
 def get_analysis_config(user_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -309,3 +310,5 @@ async def scan_repo_task(task_id: str, db_session_factory, user_config: dict = N
         finally:
             if extract_dir.exists():
                 shutil.rmtree(extract_dir)
+            if task and task.project_id:
+                project_metrics_refresher.enqueue(task.project_id)
