@@ -13,10 +13,8 @@ async function renderSidebar(collapsed: boolean) {
 	]);
 
 	return renderToStaticMarkup(
-		createElement(
-			LanguageProvider,
-			{},
-			createElement(
+		createElement(LanguageProvider, {
+			children: createElement(
 				MemoryRouter,
 				{},
 				createElement(Sidebar, {
@@ -24,7 +22,7 @@ async function renderSidebar(collapsed: boolean) {
 					setCollapsed: () => {},
 				}),
 			),
-		),
+		}),
 	);
 }
 

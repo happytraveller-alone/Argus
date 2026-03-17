@@ -639,11 +639,11 @@ export default function CreateProjectScanDialog({
 							opengrep_enabled: false,
 							bandit_enabled: false,
 							gitleaks_enabled: false,
-							phpstan_enabled: false,
-							yasa_enabled: false,
-							yasa_language: "auto",
-						},
-		},
+								phpstan_enabled: false,
+								yasa_enabled: false,
+								yasa_language: "auto" as const,
+							},
+			},
 		verification_level: "analysis_with_poc_plan" as const,
 	});
 

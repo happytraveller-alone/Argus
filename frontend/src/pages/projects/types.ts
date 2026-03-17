@@ -5,10 +5,10 @@ import type { BanditScanTask } from "@/shared/api/bandit";
 import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { PhpstanScanTask } from "@/shared/api/phpstan";
 import type { OpengrepScanTask } from "@/shared/api/opengrep";
+import type { ProjectSeverityBreakdown } from "@/features/projects/services/projectCardPreview";
 import type { YasaScanTask } from "@/shared/api/yasa";
 import type { Project, AuditTask } from "@/shared/types";
 import type { ProjectsPageDataSource } from "./data/projectsPageDataSource";
-import type { ProjectStatusToggleAction } from "./viewModel";
 
 export type ProjectTaskPoolStatus = "idle" | "loading" | "ready" | "failed";
 
@@ -28,18 +28,11 @@ export interface ProjectTaskPoolState extends ProjectTaskPool {
 
 export interface ProjectsPageRowViewModel {
 	id: string;
-	rowNumber: number;
 	name: string;
 	detailPath: string;
 	detailState: { from: string };
 	sizeText: string;
-	statusLabel: "启用" | "禁用";
-	statusClassName: string;
-	statusToggle: ProjectStatusToggleAction & {
-		disabled: boolean;
-	};
-	isActive: boolean;
-	totalIssues: number;
+	vulnerabilityStats: ProjectSeverityBreakdown;
 	executionStats: {
 		completed: number;
 		running: number;
@@ -66,14 +59,6 @@ export interface ProjectsPaginationViewModel {
 	items: Array<number | "ellipsis">;
 }
 
-export interface ProjectsSelectionViewModel {
-	selectedProjectIds: Set<string>;
-	currentPageProjectIds: string[];
-	isAllCurrentPageSelected: boolean;
-	isSomeCurrentPageSelected: boolean;
-	selectedCount: number;
-}
-
 export interface ProjectsDialogControllerState {
 	createProjectOpen: boolean;
 	createScan: {
@@ -86,10 +71,6 @@ export interface ProjectsDialogControllerState {
 		open: boolean;
 		project: Project | null;
 	};
-	disableProject: {
-		open: boolean;
-		project: Project | null;
-	};
 }
 
 export interface ProjectsPageViewModel {
@@ -97,7 +78,6 @@ export interface ProjectsPageViewModel {
 	rows: ProjectsPageRowViewModel[];
 	toolbar: ProjectsToolbarViewModel;
 	pagination: ProjectsPaginationViewModel;
-	selection: ProjectsSelectionViewModel;
 	emptyState: {
 		hasSearchTerm: boolean;
 	};

@@ -1,4 +1,4 @@
-import { Zap, Bot, Layers, ArrowRight, GitBranch } from "lucide-react";
+import { Zap, Bot, Layers, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef } from "react";
 import { useLogoVariant } from "@/shared/branding/useLogoVariant";

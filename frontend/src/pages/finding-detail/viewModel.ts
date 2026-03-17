@@ -576,6 +576,12 @@ export function buildPhpstanFindingCodeViews(
   return [];
 }
 
+export function buildYasaFindingCodeViews(
+  _finding: YasaFinding,
+): FindingDetailCodeView[] {
+  return [];
+}
+
 export function buildAgentFindingCodeViews(finding: AgentFinding): FindingDetailCodeView[] {
   const contextCode = String(finding.code_context || "").trim();
   const snippetCode = String(finding.code_snippet || "").trim();

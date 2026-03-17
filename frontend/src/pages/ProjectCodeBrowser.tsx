@@ -31,7 +31,6 @@ import {
 	filterProjectCodeBrowserFilesByPath,
 	mergeProjectCodeBrowserSearchResults,
 	normalizeProjectCodeBrowserSearchQuery,
-	parseProjectCodeBrowserFileFilterTokens,
 	PROJECT_CODE_BROWSER_EMPTY_MESSAGE,
 	PROJECT_CODE_BROWSER_FAILED_MESSAGE,
 	PROJECT_CODE_BROWSER_SEARCH_EMPTY_MESSAGE,
@@ -155,26 +154,6 @@ function renderHighlightedParts(
 			<span key={`${part.text}-${index}`}>{part.text}</span>
 		),
 	);
-}
-
-function getSearchStatusLabel(
-	searchQuery: string,
-	searchStatus: ProjectCodeBrowserSearchStatus,
-) {
-	const normalizedQuery = normalizeProjectCodeBrowserSearchQuery(searchQuery);
-	if (!normalizedQuery) {
-		return "文件名即时命中，输入 2 个字符后补充内容命中";
-	}
-	if (searchStatus.state === "failed") {
-		return searchStatus.error || "搜索失败，请稍后重试";
-	}
-	if (searchStatus.state === "scanning") {
-		return `已扫描 ${searchStatus.scanned} / ${searchStatus.total}`;
-	}
-	if (shouldProjectCodeBrowserSearchContent(normalizedQuery)) {
-		return `已扫描 ${searchStatus.scanned} / ${searchStatus.total}`;
-	}
-	return "正在显示文件名即时命中";
 }
 
 function ProjectCodeBrowserTree({
@@ -330,10 +309,6 @@ function ProjectCodeBrowserSearchPanel({
 	inputRef,
 }: ProjectCodeBrowserSearchPanelProps) {
 	const normalizedQuery = normalizeProjectCodeBrowserSearchQuery(searchQuery);
-	const canSearchContent = shouldProjectCodeBrowserSearchContent(normalizedQuery);
-	const statusLabel = getSearchStatusLabel(searchQuery, searchStatus);
-	const includeTokens = parseProjectCodeBrowserFileFilterTokens(includeFileQuery);
-	const excludeTokens = parseProjectCodeBrowserFileFilterTokens(excludeFileQuery);
 
 	let body: ReactNode = (
 		<div className={getEmptyStateClasses()}>{PROJECT_CODE_BROWSER_SEARCH_EMPTY_MESSAGE}</div>
@@ -707,7 +682,7 @@ export function ProjectCodeBrowserContent({
 	previewDecorations,
 	searchInputRef,
 }: ProjectCodeBrowserContentProps) {
-	const filesCountLabel = `${filesCount} 个文件`;
+	void filesCount;
 	const isZipProject = project?.source_type === "zip";
 
 	return (

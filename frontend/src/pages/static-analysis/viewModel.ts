@@ -279,15 +279,16 @@ export function getStaticAnalysisTotalDisplayDurationMs(input: {
   gitleaksTask: StaticAnalysisSummaryTaskLike | null;
   banditTask: StaticAnalysisSummaryTaskLike | null;
   phpstanTask: StaticAnalysisSummaryTaskLike | null;
-  yasaTask: StaticAnalysisSummaryTaskLike | null;
+  yasaTask?: StaticAnalysisSummaryTaskLike | null;
   nowMs?: number;
 }): number {
+  const yasaTask = input.yasaTask ?? null;
   return (
     getStaticAnalysisTaskDisplayDurationMs(input.opengrepTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.gitleaksTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.banditTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.phpstanTask, input.nowMs) +
-    getStaticAnalysisTaskDisplayDurationMs(input.yasaTask, input.nowMs)
+    getStaticAnalysisTaskDisplayDurationMs(yasaTask, input.nowMs)
   );
 }
 
@@ -296,15 +297,16 @@ export function buildStaticAnalysisProgressSummary(input: {
   gitleaksTask: StaticAnalysisProgressTaskLike | null;
   banditTask: StaticAnalysisProgressTaskLike | null;
   phpstanTask: StaticAnalysisProgressTaskLike | null;
-  yasaTask: StaticAnalysisProgressTaskLike | null;
+  yasaTask?: StaticAnalysisProgressTaskLike | null;
   nowMs?: number;
 }): StaticAnalysisProgressSummary {
+  const yasaTask = input.yasaTask ?? null;
   const primaryTask =
     input.opengrepTask ||
     input.gitleaksTask ||
     input.banditTask ||
     input.phpstanTask ||
-    input.yasaTask ||
+    yasaTask ||
     null;
   if (!primaryTask) {
     return { progressPercent: 0 };
@@ -338,13 +340,15 @@ export function buildUnifiedFindingRows(input: {
   gitleaksFindings: MinimalGitleaksFinding[];
   banditFindings: MinimalBanditFinding[];
   phpstanFindings: MinimalPhpstanFinding[];
-  yasaFindings: MinimalYasaFinding[];
+  yasaFindings?: MinimalYasaFinding[];
   opengrepTaskId: string;
   gitleaksTaskId: string;
   banditTaskId: string;
   phpstanTaskId: string;
-  yasaTaskId: string;
+  yasaTaskId?: string;
 }): UnifiedFindingRow[] {
+  const yasaFindings = input.yasaFindings || [];
+  const yasaTaskId = input.yasaTaskId || "";
   const opengrepRows = input.opengrepFindings.map((finding) => {
     const severity = normalizeStaticAnalysisSeverity(finding.severity);
     const confidence = normalizeStaticAnalysisConfidence(finding.confidence);
@@ -421,7 +425,7 @@ export function buildUnifiedFindingRows(input: {
     };
   });
 
-  const yasaRows = input.yasaFindings.map((finding) => {
+  const yasaRows = yasaFindings.map((finding) => {
     const ruleId = String(finding.rule_id || "").trim();
     const ruleName = String(finding.rule_name || "").trim();
     const message = String(finding.message || "").trim();
@@ -430,7 +434,7 @@ export function buildUnifiedFindingRows(input: {
     return {
       key: `yasa:${finding.id}`,
       id: finding.id,
-      taskId: finding.scan_task_id || input.yasaTaskId,
+      taskId: finding.scan_task_id || yasaTaskId,
       engine: "yasa" as const,
       rule: ruleId || ruleName || message || "-",
       filePath: normalizeStaticAnalysisPath(finding.file_path),

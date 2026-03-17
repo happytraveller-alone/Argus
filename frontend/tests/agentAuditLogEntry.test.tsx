@@ -174,7 +174,7 @@ test("LogEntry 以六列表格化布局展示并保留查看详情操作", () =>
     }),
   );
 
-  assert.match(markup, /grid-cols-\[72px_84px_minmax\(0,1fr\)_120px_110px_auto\]/);
+  assert.match(markup, /grid-template-columns:72px 84px minmax\(0,1fr\) 120px 110px 104px/);
   assert.match(markup, /验证智能体/);
   assert.match(markup, /已完成/);
   assert.match(markup, /查看详情/);

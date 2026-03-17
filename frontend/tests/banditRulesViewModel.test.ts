@@ -12,7 +12,6 @@ test("BanditRules renders detail/delete/recover related controls", () => {
 
   assert.match(markup, /搜索规则/);
   assert.match(markup, /删除状态/);
-  assert.match(markup, /批量删除/);
-  assert.match(markup, /批量恢复/);
-  assert.match(markup, /未找到规则/);
+  assert.match(markup, /重置/);
+  assert.match(markup, /加载中\.\.\./);
 });

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { DashboardSnapshotResponse } from "../src/shared/types/index.ts";
 
 globalThis.React = React;
 
@@ -19,7 +20,7 @@ async function importOrFail<TModule = Record<string, unknown>>(
 	}
 }
 
-function createEmptySnapshot() {
+function createEmptySnapshot(): DashboardSnapshotResponse {
 	return {
 		generated_at: "",
 		total_scan_duration_ms: 0,

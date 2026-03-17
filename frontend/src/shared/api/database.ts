@@ -254,6 +254,10 @@ export const api = {
     return res.data;
   },
 
+  async deleteProject(id: string): Promise<void> {
+    await apiClient.delete(`/projects/${id}`);
+  },
+
   async exportProjectBundle(params?: {
     projectIds?: string[];
     includeArchives?: boolean;

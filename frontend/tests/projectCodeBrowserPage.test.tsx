@@ -103,7 +103,6 @@ test("ProjectCodeBrowserContent renders selected text file in the preview pane",
 	);
 
 	assert.match(markup, /Audit Demo/);
-	assert.match(markup, /2 个文件/);
 	assert.match(markup, /src\/main\.ts/);
 	assert.match(markup, /export const answer = 42;/);
 	assert.match(markup, /custom-scrollbar-dark/);
@@ -211,7 +210,7 @@ test("ProjectCodeBrowserContent renders the search panel empty state", async () 
 		}),
 	);
 
-	assert.match(markup, /搜索代码/);
+	assert.match(markup, /内容搜索/);
 	assert.match(markup, /placeholder="输入文件名或代码片段"/);
 	assert.match(markup, /placeholder="例如 src\/, api"/);
 	assert.match(markup, /placeholder="例如 dist, mock"/);
@@ -288,7 +287,6 @@ test("ProjectCodeBrowserContent renders highlighted search results and preview f
 		}),
 	);
 
-	assert.match(markup, /已扫描 3 \/ 3/);
 	assert.match(markup, /src\/main\.ts/);
 	assert.match(markup, /第 2 行/);
 	assert.match(markup, /<mark[^>]*>danger<\/mark>/);
