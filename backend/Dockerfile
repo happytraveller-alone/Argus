@@ -80,14 +80,6 @@ RUN --mount=type=cache,id=vulhunter-backend-builder-apt-lists,target=/var/lib/ap
     fi; \
     rm -rf /var/lib/apt/lists/*
 
-# 下载并安装 Gitleaks 预编译二进制文件
-# ENV GITLEAKS_VERSION=8.30.0
-# RUN wget -q https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz && \
-#     tar -xzf gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz && \
-#     mv gitleaks /usr/local/bin/gitleaks && \
-#     chmod +x /usr/local/bin/gitleaks && \
-#     rm gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
-
 # 安装 uv
 COPY --from=uvbin /uv /usr/local/bin/uv
 

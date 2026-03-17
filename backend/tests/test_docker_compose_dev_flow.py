@@ -31,6 +31,8 @@ def test_default_compose_is_dev_first_layout() -> None:
     assert "${VULHUNTER_FRONTEND_PORT:-3000}:5173" in compose_text
     assert 'FRONTEND_PUBLIC_URL: http://localhost:${VULHUNTER_FRONTEND_PORT:-3000}' in compose_text
     assert 'BACKEND_PUBLIC_URL: http://localhost:${VULHUNTER_BACKEND_PORT:-8000}' in compose_text
+    assert "command: /app/scripts/dev-entrypoint.sh" not in compose_text
+    assert "command:\n      - sh\n      - /app/scripts/dev-entrypoint.sh" in compose_text
     assert "- BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
     assert "- BACKEND_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
     assert (
