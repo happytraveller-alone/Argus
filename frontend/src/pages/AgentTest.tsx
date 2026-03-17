@@ -23,7 +23,6 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, type ProjectImportResponse } from "@/shared/api/database";
 import type { Project } from "@/shared/types";
@@ -211,11 +210,11 @@ function TransferPanel() {
           </div>
 
           <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Input
+            <input
               value={projectFilter}
               onChange={(event) => setProjectFilter(event.target.value)}
               placeholder="按项目名称或描述过滤"
-              className="cyber-input h-9"
+              className="cyber-input h-9 w-full min-w-0 rounded-sm border border-input bg-background px-4 py-2 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-focus"
             />
             <Label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Checkbox
@@ -320,7 +319,7 @@ function TransferPanel() {
                 选择迁移包文件
               </Label>
               <div className="mt-2 space-y-2">
-                <Input
+                <input
                   id="project-transfer-bundle"
                   ref={fileInputRef}
                   type="file"
