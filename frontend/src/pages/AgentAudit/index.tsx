@@ -35,24 +35,6 @@ const homeScanCards: HomeScanCard[] = [
 	},
 ];
 
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
-
-    document.head.appendChild(script);
-  });
-}
-
 export function HomeScanCards() {
 	const navigate = useNavigate();
 	const { logoSrc, cycleLogoVariant } = useLogoVariant();
@@ -65,8 +47,9 @@ export function HomeScanCards() {
 
     async function initVanta() {
       try {
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js");
-        await loadScript("https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js");
+        const THREE = await import("three");
+        window.THREE = THREE;
+        await import("vanta/dist/vanta.net.min.js");
 
         if (cancelled || !vantaRef.current || !window.VANTA) return;
 
