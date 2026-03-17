@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ProjectCardLanguageStats } from "@/features/projects/services/projectCardPreview";
 import type { CreateProjectForm, Project } from "@/shared/types";
-import {
-	LANGUAGE_STATS_MAX_RETRIES,
-	LANGUAGE_STATS_RETRY_INTERVAL_MS,
-} from "../constants";
+import type { ZipFileMeta } from "@/shared/utils/zipStorage";
 import type { ProjectTaskPoolState } from "../types";
 import type { ProjectsPageDataSource } from "../data/projectsPageDataSource";
 
@@ -28,29 +24,12 @@ export function useProjectsPageData(dataSource: ProjectsPageDataSource) {
 	const [projectTaskPoolsMap, setProjectTaskPoolsMap] = useState<
 		Record<string, ProjectTaskPoolState>
 	>({});
-	const [projectLanguageStatsMap, setProjectLanguageStatsMap] = useState<
-		Record<string, ProjectCardLanguageStats>
+	const [projectZipMetaMap, setProjectZipMetaMap] = useState<
+		Record<string, ZipFileMeta>
 	>({});
 
 	const projectTaskPoolLoadingRef = useRef<Record<string, boolean>>({});
-	const languageStatsRetryCountRef = useRef<Record<string, number>>({});
-	const languageStatsPollTimerRef = useRef<Record<string, number>>({});
-
-	const clearLanguageStatsPollTimer = useCallback((projectId: string) => {
-		const timer = languageStatsPollTimerRef.current[projectId];
-		if (timer) {
-			window.clearTimeout(timer);
-			delete languageStatsPollTimerRef.current[projectId];
-		}
-	}, []);
-
-	const clearAllLanguageStatsPollTimers = useCallback(() => {
-		for (const timer of Object.values(languageStatsPollTimerRef.current)) {
-			window.clearTimeout(timer);
-		}
-		languageStatsPollTimerRef.current = {};
-		languageStatsRetryCountRef.current = {};
-	}, []);
+	const projectZipMetaLoadingRef = useRef<Record<string, boolean>>({});
 
 	const loadProjects = useCallback(async () => {
 		try {
@@ -58,69 +37,43 @@ export function useProjectsPageData(dataSource: ProjectsPageDataSource) {
 			const nextProjects = await dataSource.listProjects();
 			setProjects(nextProjects);
 			setProjectTaskPoolsMap({});
-			setProjectLanguageStatsMap({});
+			setProjectZipMetaMap({});
 			projectTaskPoolLoadingRef.current = {};
-			clearAllLanguageStatsPollTimers();
+			projectZipMetaLoadingRef.current = {};
 		} finally {
 			setLoading(false);
 		}
-	}, [clearAllLanguageStatsPollTimers, dataSource]);
+	}, [dataSource]);
 
 	useEffect(() => {
 		void loadProjects();
 	}, [loadProjects]);
 
-	const fetchProjectLanguageStats = useCallback(
+	const loadProjectZipMeta = useCallback(
 		async (projectId: string) => {
+			if (projectZipMetaLoadingRef.current[projectId]) {
+				return;
+			}
+
+			projectZipMetaLoadingRef.current[projectId] = true;
 			try {
-				const stats = await dataSource.getProjectLanguageStats(projectId);
-				setProjectLanguageStatsMap((previous) => ({
+				const zipMeta = await dataSource.getProjectZipMeta(projectId);
+				setProjectZipMetaMap((previous) => ({
 					...previous,
-					[projectId]: stats,
+					[projectId]: zipMeta,
 				}));
-
-				if (stats.status === "pending") {
-					const retryCount = languageStatsRetryCountRef.current[projectId] ?? 0;
-					if (retryCount < LANGUAGE_STATS_MAX_RETRIES) {
-						clearLanguageStatsPollTimer(projectId);
-						languageStatsRetryCountRef.current[projectId] = retryCount + 1;
-						languageStatsPollTimerRef.current[projectId] = window.setTimeout(
-							() => {
-								delete languageStatsPollTimerRef.current[projectId];
-								void fetchProjectLanguageStats(projectId);
-							},
-							LANGUAGE_STATS_RETRY_INTERVAL_MS,
-						);
-						return;
-					}
-
-					setProjectLanguageStatsMap((previous) => ({
-						...previous,
-						[projectId]: {
-							status: "failed",
-							total: 0,
-							totalFiles: 0,
-							slices: [],
-						},
-					}));
-				}
-
-				languageStatsRetryCountRef.current[projectId] = 0;
-				clearLanguageStatsPollTimer(projectId);
 			} catch {
-				setProjectLanguageStatsMap((previous) => ({
+				setProjectZipMetaMap((previous) => ({
 					...previous,
 					[projectId]: {
-						status: "failed",
-						total: 0,
-						totalFiles: 0,
-						slices: [],
+						has_file: false,
 					},
 				}));
-				clearLanguageStatsPollTimer(projectId);
+			} finally {
+				delete projectZipMetaLoadingRef.current[projectId];
 			}
 		},
-		[clearLanguageStatsPollTimer, dataSource],
+		[dataSource],
 	);
 
 	const loadProjectTaskPool = useCallback(
@@ -175,21 +128,12 @@ export function useProjectsPageData(dataSource: ProjectsPageDataSource) {
 
 			for (const projectId of projectIds) {
 				void loadProjectTaskPool(projectId);
-				if (!projectLanguageStatsMap[projectId]) {
-					setProjectLanguageStatsMap((previous) => ({
-						...previous,
-						[projectId]: {
-							status: "loading",
-							total: 0,
-							totalFiles: 0,
-							slices: [],
-						},
-					}));
-					void fetchProjectLanguageStats(projectId);
+				if (!projectZipMetaMap[projectId]) {
+					void loadProjectZipMeta(projectId);
 				}
 			}
 		},
-		[fetchProjectLanguageStats, loadProjectTaskPool, projectLanguageStatsMap],
+		[loadProjectTaskPool, loadProjectZipMeta, projectZipMetaMap],
 	);
 
 	const invalidateProjectMetrics = useCallback(
@@ -207,31 +151,30 @@ export function useProjectsPageData(dataSource: ProjectsPageDataSource) {
 				return next;
 			});
 
-			setProjectLanguageStatsMap((previous) => {
+			setProjectZipMetaMap((previous) => {
 				const next = { ...previous };
 				for (const projectId of projectIds) {
 					delete next[projectId];
-					clearLanguageStatsPollTimer(projectId);
-					delete languageStatsRetryCountRef.current[projectId];
+					delete projectZipMetaLoadingRef.current[projectId];
 				}
 				return next;
 			});
 		},
-		[clearLanguageStatsPollTimer],
+		[],
 	);
 
 	useEffect(() => {
 		return () => {
-			clearAllLanguageStatsPollTimers();
 			projectTaskPoolLoadingRef.current = {};
+			projectZipMetaLoadingRef.current = {};
 		};
-	}, [clearAllLanguageStatsPollTimers]);
+	}, []);
 
 	return {
 		projects,
 		loading,
 		projectTaskPoolsMap,
-		projectLanguageStatsMap,
+		projectZipMetaMap,
 		loadProjects,
 		ensureProjectData,
 		invalidateProjectMetrics,

@@ -59,22 +59,38 @@ test("projects view model utilities build project size text and execution stats"
 	);
 
 	assert.equal(
-		builder.getProjectSizeText({
-			status: "ready",
-			total: 12345,
-			totalFiles: 88,
-			slices: [],
+		builder.getProjectSizeText("zip", {
+			has_file: true,
+			file_size: 2_621_440,
 		}),
-		"88 文件 / 12,345 行",
+		"2.50 Mb",
 	);
 	assert.equal(
-		builder.getProjectSizeText({
-			status: "pending",
-			total: 0,
-			totalFiles: 0,
-			slices: [],
+		builder.getProjectSizeText("zip", {
+			has_file: true,
+			file_size: 512,
 		}),
-		"统计中...",
+		"512 B",
+	);
+	assert.equal(
+		builder.getProjectSizeText("zip", {
+			has_file: true,
+			file_size: 7680,
+		}),
+		"7.50 Kb",
+	);
+	assert.equal(
+		builder.getProjectSizeText("zip", {
+			has_file: false,
+		}),
+		"-",
+	);
+	assert.equal(
+		builder.getProjectSizeText("repository", {
+			has_file: true,
+			file_size: 2_621_440,
+		}),
+		"-",
 	);
 
 	const stats = builder.getProjectExecutionStats({

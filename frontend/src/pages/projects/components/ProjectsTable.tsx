@@ -21,26 +21,26 @@ const VULNERABILITY_COLUMNS = [
 	{
 		key: "critical",
 		label: "严重",
-		headClassName: "text-center text-rose-300",
-		cellClassName: "text-center font-semibold tabular-nums text-rose-300",
+		headClassName: "text-left text-rose-300",
+		cellClassName: "text-left font-semibold tabular-nums text-rose-300",
 	},
 	{
 		key: "high",
 		label: "高危",
-		headClassName: "text-center text-amber-300",
-		cellClassName: "text-center font-semibold tabular-nums text-amber-300",
+		headClassName: "text-left text-amber-300",
+		cellClassName: "text-left font-semibold tabular-nums text-amber-300",
 	},
 	{
 		key: "medium",
 		label: "中危",
-		headClassName: "text-center text-sky-300",
-		cellClassName: "text-center font-semibold tabular-nums text-sky-300",
+		headClassName: "text-left text-sky-300",
+		cellClassName: "text-left font-semibold tabular-nums text-sky-300",
 	},
 	{
 		key: "low",
 		label: "低危",
-		headClassName: "text-center text-emerald-300",
-		cellClassName: "text-center font-semibold tabular-nums text-emerald-300",
+		headClassName: "text-left text-emerald-300",
+		cellClassName: "text-left font-semibold tabular-nums text-emerald-300",
 	},
 ] as const;
 
@@ -95,7 +95,7 @@ export default function ProjectsTable({
 								key={`${row.id}-${column.key}`}
 								className={column.cellClassName}
 							>
-								{row.vulnerabilityStats[column.key]}
+								{column.label}: {row.vulnerabilityStats[column.key]}
 							</TableCell>
 						))}
 						<TableCell>

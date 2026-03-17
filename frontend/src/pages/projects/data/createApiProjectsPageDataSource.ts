@@ -9,7 +9,7 @@ import { getPhpstanScanTasks } from "@/shared/api/phpstan";
 import { getOpengrepScanTasks } from "@/shared/api/opengrep";
 import { apiClient } from "@/shared/api/serverClient";
 import { api } from "@/shared/api/database";
-import { uploadZipFile } from "@/shared/utils/zipStorage";
+import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
 import type { CreateProjectForm, Project } from "@/shared/types";
 import {
 	AGENT_TASK_PAGE_LIMIT,
@@ -94,6 +94,7 @@ interface CreateApiProjectsPageDataSourceOptions {
 	getBanditScanTasks?: typeof getBanditScanTasks;
 	getPhpstanScanTasks?: typeof getPhpstanScanTasks;
 	getProjectInfo?: (projectId: string) => Promise<unknown>;
+	getZipFileInfo?: typeof getZipFileInfo;
 	uploadZipFile?: typeof uploadZipFile;
 }
 
@@ -124,6 +125,7 @@ export function createApiProjectsPageDataSource(
 			const response = await apiClient.get(`/projects/info/${projectId}`);
 			return response.data;
 		});
+	const fetchProjectZipInfo = options.getZipFileInfo ?? getZipFileInfo;
 	const uploadProjectZip = options.uploadZipFile ?? uploadZipFile;
 
 	return {
@@ -265,6 +267,10 @@ export function createApiProjectsPageDataSource(
 					slices: [],
 				};
 			}
+		},
+
+		async getProjectZipMeta(projectId) {
+			return fetchProjectZipInfo(projectId);
 		},
 
 		async createProject(input: CreateProjectForm) {

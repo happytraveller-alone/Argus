@@ -140,6 +140,20 @@ export function createMockProjectsPageDataSource(): ProjectsPageDataSource {
 			};
 		},
 
+		async getProjectZipMeta(projectId) {
+			await wait();
+			if (projectId === "mock-project-2") {
+				return {
+					has_file: true,
+					file_size: 2_621_440,
+					original_filename: "mock-project-2.zip",
+				};
+			}
+			return {
+				has_file: false,
+			};
+		},
+
 		async createProject(input: CreateProjectForm) {
 			await wait();
 			const created = createMockProject({

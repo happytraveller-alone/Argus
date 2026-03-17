@@ -49,12 +49,17 @@ test("api projects data source loads paginated projects and task pools", async (
 				},
 			},
 		}),
+		getZipFileInfo: async () => ({
+			has_file: true,
+			file_size: 2_621_440,
+			original_filename: "p1.zip",
+		}),
 		uploadZipFile: async () => ({ success: true }),
 	});
 
 	const projects = await source.listProjects();
 	const taskPool = await source.getProjectTaskPool("p1");
-	const languageStats = await source.getProjectLanguageStats("p1");
+	const zipMeta = await source.getProjectZipMeta("p1");
 
 	assert.deepEqual(projects.map((project: any) => project.id), ["p3", "p2", "p1"]);
 	assert.equal(taskPool.auditTasks.length, 1);
@@ -63,8 +68,8 @@ test("api projects data source loads paginated projects and task pools", async (
 	assert.equal(taskPool.gitleaksTasks.length, 1);
 	assert.equal(taskPool.banditTasks.length, 1);
 	assert.equal(taskPool.phpstanTasks.length, 1);
-	assert.equal(languageStats.status, "ready");
-	assert.equal(languageStats.totalFiles, 10);
+	assert.equal(zipMeta.has_file, true);
+	assert.equal(zipMeta.file_size, 2_621_440);
 });
 
 test("mock projects data source exposes the same data source surface", async () => {
@@ -75,12 +80,12 @@ test("mock projects data source exposes the same data source surface", async () 
 	const source = mockFactory.createMockProjectsPageDataSource();
 	const projects = await source.listProjects();
 	const taskPool = await source.getProjectTaskPool(projects[0].id);
-	const stats = await source.getProjectLanguageStats(projects[0].id);
+	const zipMeta = await source.getProjectZipMeta(projects[0].id);
 
 	assert.equal(typeof source.createProject, "function");
 	assert.equal(Array.isArray(projects), true);
 	assert.equal(Array.isArray(taskPool.auditTasks), true);
-	assert.match(stats.status, /loading|pending|ready|failed|unsupported|empty/);
+	assert.equal(typeof zipMeta.has_file, "boolean");
 });
 
 test("legacy projects data source creates zip projects via atomic api", async () => {

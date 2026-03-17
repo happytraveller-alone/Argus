@@ -1,32 +1,35 @@
 import {
 	getProjectCardSummaryStats,
-	type ProjectCardLanguageStats,
 } from "@/features/projects/services/projectCardPreview";
 import {
 	buildStaticScanGroups,
 	resolveStaticScanGroupStatus,
 } from "@/features/tasks/services/taskActivities";
 import type { Project } from "@/shared/types";
+import type { ZipFileMeta } from "@/shared/utils/zipStorage";
 import type {
 	ProjectTaskPoolState,
 	ProjectsPageViewModel,
 } from "../types";
 import { buildPaginationItems } from "./projectsPageSelectors";
 
+function formatProjectArchiveSize(bytes: number) {
+	if (bytes >= 1024 * 1024) {
+		return `${(bytes / 1024 / 1024).toFixed(2)} Mb`;
+	}
+	if (bytes >= 1024) {
+		return `${(bytes / 1024).toFixed(2)} Kb`;
+	}
+	return `${bytes} B`;
+}
+
 export function getProjectSizeText(
-	languageStats?: ProjectCardLanguageStats,
+	sourceType?: Project["source_type"],
+	zipMeta?: ZipFileMeta,
 ) {
-	if (!languageStats) return "-";
-	if (languageStats.status === "ready") {
-		return `${languageStats.totalFiles} 文件 / ${languageStats.total.toLocaleString()} 行`;
-	}
-	if (
-		languageStats.status === "loading" ||
-		languageStats.status === "pending"
-	) {
-		return "统计中...";
-	}
-	return "-";
+	if (sourceType !== "zip") return "-";
+	if (!zipMeta?.has_file || typeof zipMeta.file_size !== "number") return "-";
+	return formatProjectArchiveSize(zipMeta.file_size);
 }
 
 export function getProjectExecutionStats(
@@ -74,7 +77,7 @@ interface BuildProjectsPageViewModelParams {
 	projectPage: number;
 	totalProjectPages: number;
 	projectTaskPoolsMap: Record<string, ProjectTaskPoolState>;
-	projectLanguageStatsMap: Record<string, ProjectCardLanguageStats>;
+	projectZipMetaMap: Record<string, ZipFileMeta>;
 	projectDetailFrom: string;
 	searchTerm: string;
 	searchPlaceholder: string;
@@ -90,7 +93,7 @@ export function buildProjectsPageViewModel(
 		projectPage,
 		totalProjectPages,
 		projectTaskPoolsMap,
-		projectLanguageStatsMap,
+		projectZipMetaMap,
 		projectDetailFrom,
 		searchTerm,
 		searchPlaceholder,
