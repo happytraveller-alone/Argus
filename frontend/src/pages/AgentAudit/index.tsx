@@ -189,12 +189,6 @@ export function HomeScanCards() {
           </span>
 
           <span className="text-foreground/20 text-sm">|</span>
-
-          <div className="flex items-center gap-1.5 text-sm text-foreground/35">
-            <GitBranch className="w-3.5 h-3.5" />
-            文件依赖图
-          </div>
-
         </div>
 
         {/* 扫描模式卡片 */}
