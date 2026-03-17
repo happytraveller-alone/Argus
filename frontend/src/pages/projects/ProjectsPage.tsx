@@ -14,7 +14,6 @@ import {
 import {
 	filterProjects,
 	paginateItems,
-	pruneSelectedProjectIds,
 } from "./lib/projectsPageSelectors";
 import ProjectsToolbar from "./components/ProjectsToolbar";
 import ProjectsTable from "./components/ProjectsTable";
@@ -114,16 +113,6 @@ export default function ProjectsPage({
 	const projectDetailFrom = `${location.pathname}${location.search}${location.hash}`;
 
 	useEffect(() => {
-		const nextSelected = pruneSelectedProjectIds(
-			browser.selectedProjectIds,
-			data.projects,
-		);
-		if (nextSelected !== browser.selectedProjectIds) {
-			browser.pruneSelectedProjects(data.projects);
-		}
-	}, [browser, data.projects]);
-
-	useEffect(() => {
 		if (browser.projectPage > totalProjectPages) {
 			browser.setProjectPage(totalProjectPages);
 		}
@@ -149,7 +138,6 @@ export default function ProjectsPage({
 				pagedProjects,
 				projectPage: browser.projectPage,
 				totalProjectPages,
-				selectedProjectIds: browser.selectedProjectIds,
 				projectTaskPoolsMap: data.projectTaskPoolsMap,
 				projectLanguageStatsMap: data.projectLanguageStatsMap,
 				projectDetailFrom,
@@ -159,7 +147,6 @@ export default function ProjectsPage({
 		[
 			browser.projectPage,
 			browser.searchTerm,
-			browser.selectedProjectIds,
 			data.loading,
 			data.projectLanguageStatsMap,
 			data.projectTaskPoolsMap,
@@ -346,20 +333,6 @@ export default function ProjectsPage({
 					<div className="flex-1 flex flex-col">
 						<ProjectsTable
 							rows={viewModel.rows}
-							selectedProjectIds={viewModel.selection.selectedProjectIds}
-							isAllCurrentPageSelected={
-								viewModel.selection.isAllCurrentPageSelected
-							}
-							isSomeCurrentPageSelected={
-								viewModel.selection.isSomeCurrentPageSelected
-							}
-							onToggleProjectSelection={browser.toggleProjectSelection}
-							onToggleSelectCurrentPage={(checked) =>
-								browser.toggleSelectProjects(
-									viewModel.selection.currentPageProjectIds,
-									checked,
-								)
-							}
 							onCreateScan={(projectId) => {
 								pinToProjectBrowserHash();
 								browser.openCreateScanDialog("agent", projectId, {

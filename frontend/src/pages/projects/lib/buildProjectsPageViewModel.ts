@@ -12,7 +12,7 @@ import type {
 	ProjectTaskPoolState,
 	ProjectsPageViewModel,
 } from "../types";
-import { buildPaginationItems, getCurrentPageSelectionState } from "./projectsPageSelectors";
+import { buildPaginationItems } from "./projectsPageSelectors";
 
 export function getProjectSizeText(
 	languageStats?: ProjectCardLanguageStats,
@@ -74,7 +74,6 @@ interface BuildProjectsPageViewModelParams {
 	pagedProjects: Project[];
 	projectPage: number;
 	totalProjectPages: number;
-	selectedProjectIds: Set<string>;
 	projectTaskPoolsMap: Record<string, ProjectTaskPoolState>;
 	projectLanguageStatsMap: Record<string, ProjectCardLanguageStats>;
 	projectDetailFrom: string;
@@ -91,7 +90,6 @@ export function buildProjectsPageViewModel(
 		pagedProjects,
 		projectPage,
 		totalProjectPages,
-		selectedProjectIds,
 		projectTaskPoolsMap,
 		projectLanguageStatsMap,
 		projectDetailFrom,
@@ -99,15 +97,9 @@ export function buildProjectsPageViewModel(
 		searchPlaceholder,
 	} = params;
 
-	const currentPageProjectIds = pagedProjects.map((project) => project.id);
-	const selectionState = getCurrentPageSelectionState({
-		currentPageProjectIds,
-		selectedProjectIds,
-	});
-
 	return {
 		loading,
-		rows: pagedProjects.map((project, rowIndex) => {
+		rows: pagedProjects.map((project) => {
 			const projectTaskPool = projectTaskPoolsMap[project.id];
 			const summaryStats = getProjectCardSummaryStats({
 				projectId: project.id,
@@ -120,7 +112,6 @@ export function buildProjectsPageViewModel(
 			});
 			return {
 				id: project.id,
-				rowNumber: (projectPage - 1) * 10 + rowIndex + 1,
 				name: project.name,
 				detailPath: `/projects/${project.id}`,
 				detailState: { from: projectDetailFrom },
@@ -160,13 +151,6 @@ export function buildProjectsPageViewModel(
 			totalPages: totalProjectPages,
 			totalCount: filteredProjects.length,
 			items: buildPaginationItems(projectPage, totalProjectPages),
-		},
-		selection: {
-			selectedProjectIds,
-			currentPageProjectIds,
-			isAllCurrentPageSelected: selectionState.isAllSelected,
-			isSomeCurrentPageSelected: selectionState.isSomeSelected,
-			selectedCount: selectionState.selectedCount,
 		},
 		emptyState: {
 			hasSearchTerm: Boolean(searchTerm.trim()),

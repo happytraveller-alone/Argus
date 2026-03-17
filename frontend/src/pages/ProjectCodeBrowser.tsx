@@ -731,14 +731,6 @@ export function ProjectCodeBrowserContent({
 							</h1>
 						</div>
 					</div>
-					<div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-white/40">
-						<span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1">
-							{project?.source_type === "zip" ? "ZIP 项目" : "仓库项目"}
-						</span>
-						<span className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1">
-							{filesCountLabel}
-						</span>
-					</div>
 				</div>
 			</section>
 

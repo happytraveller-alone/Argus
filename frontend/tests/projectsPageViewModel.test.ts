@@ -53,21 +53,6 @@ test("projects selectors build compact pagination items with ellipsis", async ()
 	assert.deepEqual(selectors.buildPaginationItems(5, 10), [1, "ellipsis", 4, 5, 6, "ellipsis", 10]);
 });
 
-test("projects selectors expose current-page selection summary", async () => {
-	const selectors = await importOrFail<any>(
-		"../src/pages/projects/lib/projectsPageSelectors.ts",
-	);
-
-	const summary = selectors.getCurrentPageSelectionState({
-		currentPageProjectIds: ["a", "b", "c"],
-		selectedProjectIds: new Set(["a", "c"]),
-	});
-
-	assert.equal(summary.isAllSelected, false);
-	assert.equal(summary.isSomeSelected, true);
-	assert.equal(summary.selectedCount, 2);
-});
-
 test("projects view model utilities build project size text and execution stats", async () => {
 	const builder = await importOrFail<any>(
 		"../src/pages/projects/lib/buildProjectsPageViewModel.ts",
@@ -149,7 +134,6 @@ test("projects view model derives status toggle metadata from project active sta
 		],
 		projectPage: 1,
 		totalProjectPages: 1,
-		selectedProjectIds: new Set(),
 		projectTaskPoolsMap: {},
 		projectLanguageStatsMap: {},
 		projectDetailFrom: "/projects",
@@ -163,6 +147,7 @@ test("projects view model derives status toggle metadata from project active sta
 			statusLabel: row.statusLabel,
 			statusToggleLabel: row.statusToggle.label,
 			statusToggleAction: row.statusToggle.action,
+			rowNumber: row.rowNumber,
 			canCreateScan: row.actions.canCreateScan,
 			canBrowseCode: row.actions.canBrowseCode,
 			browseCodePath: row.actions.browseCodePath,
@@ -174,6 +159,7 @@ test("projects view model derives status toggle metadata from project active sta
 				statusLabel: "启用",
 				statusToggleLabel: "禁用",
 				statusToggleAction: "disable",
+				rowNumber: undefined,
 				canCreateScan: true,
 				canBrowseCode: true,
 				browseCodePath: "/projects/p1/code-browser",
@@ -184,6 +170,7 @@ test("projects view model derives status toggle metadata from project active sta
 				statusLabel: "禁用",
 				statusToggleLabel: "启用",
 				statusToggleAction: "enable",
+				rowNumber: undefined,
 				canCreateScan: false,
 				canBrowseCode: false,
 				browseCodePath: "/projects/p2/code-browser",
@@ -191,4 +178,5 @@ test("projects view model derives status toggle metadata from project active sta
 			},
 		],
 	);
+	assert.equal("selection" in viewModel, false);
 });

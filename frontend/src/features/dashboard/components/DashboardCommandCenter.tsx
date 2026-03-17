@@ -3,7 +3,6 @@ import {
 	Activity,
 	AlertTriangle,
 	Bug,
-	Clock3,
 	Radar,
 	ShieldAlert,
 	Target,
@@ -124,17 +123,6 @@ export function formatCumulativeDuration(durationMs: number | null | undefined) 
 	return `${seconds}秒`;
 }
 
-function formatDateTime(value: string | null | undefined) {
-	if (!value) return "暂无";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "暂无";
-	return date.toLocaleString("zh-CN", {
-		month: "2-digit",
-		day: "2-digit",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-}
 
 function normalizeTrendSeries(items: DashboardDailyActivityItem[]) {
 	return items.map((item) => ({
@@ -159,6 +147,7 @@ function DashboardSection({
 	children,
 	panel,
 	className,
+	straightEdges = false,
 }: {
 	title: string;
 	description?: string;
@@ -166,11 +155,12 @@ function DashboardSection({
 	children: React.ReactNode;
 	panel: string;
 	className?: string;
+	straightEdges?: boolean;
 }) {
 	return (
 		<section
 			data-panel={panel}
-			className={`cyber-card rounded-3xl border border-border/60 bg-slate-950/70 p-5 shadow-2xl shadow-cyan-950/20 ${className || ""}`}
+			className={`cyber-card ${straightEdges ? "rounded-none" : "rounded-3xl"} border border-border/60 bg-slate-950/70 p-5 shadow-2xl shadow-cyan-950/20 ${className || ""}`}
 		>
 			<div className="mb-4 flex items-start justify-between gap-4">
 				<div>
@@ -273,7 +263,6 @@ function VerificationFunnel({
 	raw,
 	effective,
 	verified,
-	falsePositive,
 }: {
 	raw: number;
 	effective: number;
@@ -493,8 +482,6 @@ export function AttackSurfaceTreemapContent({
 				y={y}
 				width={width}
 				height={height}
-				rx={8}
-				ry={8}
 				fill={tileFill}
 				fillOpacity={0.94}
 				stroke="rgba(241,245,249,0.22)"
@@ -542,6 +529,24 @@ export function AttackSurfaceTreemapContent({
 	);
 }
 
+export function AttackSurfaceTreemapTooltipContent({
+	item,
+}: {
+	item: CweTreemapNode;
+}) {
+	return (
+		<div className="rounded-none border border-border/70 bg-slate-950/95 px-3 py-2 text-xs text-slate-100 shadow-xl">
+			<p className="font-semibold text-slate-100">{item.cweName}</p>
+			<p className="mt-2">发现总数：{formatNumber(item.totalFindings)}</p>
+			<div className="mt-2 space-y-1 text-slate-300">
+				<p>Opengrep：{formatNumber(item.opengrepFindings)}</p>
+				<p>Agent：{formatNumber(item.agentFindings)}</p>
+				<p>Bandit：{formatNumber(item.banditFindings)}</p>
+			</div>
+		</div>
+	);
+}
+
 function AttackSurfaceTreemap({ items }: { items: DashboardCweDistributionItem[] }) {
 	const data = useMemo(() => buildCweTreemapNodes(items), [items]);
 
@@ -570,18 +575,7 @@ function AttackSurfaceTreemap({ items }: { items: DashboardCweDistributionItem[]
 						if (!active || !payload?.length) return null;
 						const item = payload[0]?.payload as CweTreemapNode | undefined;
 						if (!item) return null;
-						return (
-							<div className="rounded-2xl border border-border/70 bg-slate-950/95 px-3 py-2 text-xs text-slate-100 shadow-xl">
-								<p className="font-semibold text-slate-100">{item.cweName}</p>
-								{/* <p className="mt-1 text-slate-400">{item.cweId}</p> */}
-								<p className="mt-2">发现总数：{formatNumber(item.totalFindings)}</p>
-								<div className="mt-2 space-y-1 text-slate-300">
-									<p>Opengrep：{formatNumber(item.opengrepFindings)}</p>
-									<p>Agent：{formatNumber(item.agentFindings)}</p>
-									<p>Bandit：{formatNumber(item.banditFindings)}</p>
-								</div>
-							</div>
-						);
+						return <AttackSurfaceTreemapTooltipContent item={item} />;
 					}}
 				/>
 			</Treemap>
@@ -822,8 +816,9 @@ export default function DashboardCommandCenter({
 					className="lg:col-span-5 flex flex-col"
 					panel="cwe"
 					title="CWE 攻击面"
-					description="具备 CWE 语义的攻击面聚集视图，面积表示发现规模，颜色区分漏洞类型。"
+					description="攻击面聚集视图，面积表示发现规模，颜色区分漏洞类型。"
 					icon={<Target className="h-5 w-5" />}
+					straightEdges
 				>
 					<AttackSurfaceTreemap items={snapshot.cwe_distribution || []} />
 				</DashboardSection>
