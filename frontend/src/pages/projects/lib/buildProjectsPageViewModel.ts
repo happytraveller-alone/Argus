@@ -31,34 +31,6 @@ function buildExecutionStats(metrics?: ProjectManagementMetrics | null) {
 	};
 }
 
-export function getProjectExecutionStats(
-	projectTaskPool?: Partial<ProjectTaskPoolState>,
-) {
-	const nonStaticStatuses = [
-		...((projectTaskPool?.auditTasks || []).map((task) => task.status)),
-		...((projectTaskPool?.agentTasks || []).map((task) => task.status)),
-	].map((status) => String(status || "").trim().toLowerCase());
-
-	const staticGroups = buildStaticScanGroups({
-		opengrepTasks: projectTaskPool?.opengrepTasks || [],
-		gitleaksTasks: projectTaskPool?.gitleaksTasks || [],
-		banditTasks: projectTaskPool?.banditTasks || [],
-		phpstanTasks: projectTaskPool?.phpstanTasks || [],
-		yasaTasks: projectTaskPool?.yasaTasks || [],
-	});
-	const staticStats = staticGroups.reduce(
-		(accumulator, group) => {
-			const status = resolveStaticScanGroupStatus(group);
-			if (status === "completed") {
-				accumulator.completed += 1;
-			} else if (status === "running" || status === "pending") {
-				accumulator.running += 1;
-			}
-			return accumulator;
-		},
-		{ completed: 0, running: 0 },
-	);
-
 function buildVulnerabilityStats(metrics?: ProjectManagementMetrics | null) {
 	if (!metrics || metrics.status !== "ready") {
 		return {
@@ -121,17 +93,6 @@ export function buildProjectsPageViewModel(
 	return {
 		loading,
 		rows: pagedProjects.map((project) => {
-			const projectTaskPool = projectTaskPoolsMap[project.id];
-			const summaryStats = getProjectCardSummaryStats({
-				projectId: project.id,
-				auditTasks: projectTaskPool?.auditTasks || [],
-				agentTasks: projectTaskPool?.agentTasks || [],
-				opengrepTasks: projectTaskPool?.opengrepTasks || [],
-				gitleaksTasks: projectTaskPool?.gitleaksTasks || [],
-				banditTasks: projectTaskPool?.banditTasks || [],
-				phpstanTasks: projectTaskPool?.phpstanTasks || [],
-				yasaTasks: projectTaskPool?.yasaTasks || [],
-			});
 			const metrics = project.management_metrics;
 			const metricsStatus = metrics?.status ?? "pending";
 			const metricsStatusMessage = getMetricsStatusMessage(metrics);

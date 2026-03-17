@@ -1,8 +1,17 @@
 import type { ReactNode } from "react";
 import type { ScanCreateMode } from "@/components/scan/CreateProjectScanDialog";
 import type { ProjectSeverityBreakdown } from "@/features/projects/services/projectCardPreview";
+import type { AgentTask } from "@/shared/api/agentTasks";
+import type { BanditScanTask } from "@/shared/api/bandit";
+import type { GitleaksScanTask } from "@/shared/api/gitleaks";
+import type { OpengrepScanTask } from "@/shared/api/opengrep";
+import type { PhpstanScanTask } from "@/shared/api/phpstan";
 import type { YasaScanTask } from "@/shared/api/yasa";
-import type { Project, AuditTask } from "@/shared/types";
+import type {
+	AuditTask,
+	Project,
+	ProjectManagementMetrics,
+} from "@/shared/types";
 import type { ProjectsPageDataSource } from "./data/projectsPageDataSource";
 
 export type ProjectTaskPoolStatus = "idle" | "loading" | "ready" | "failed";
@@ -20,8 +29,6 @@ export interface ProjectTaskPool {
 export interface ProjectTaskPoolState extends ProjectTaskPool {
 	status: ProjectTaskPoolStatus;
 }
-import type { Project, ProjectManagementMetrics } from "@/shared/types";
-import type { ProjectsPageDataSource } from "./data/projectsPageDataSource";
 
 export type ProjectMetricsStatus = NonNullable<
 	ProjectManagementMetrics["status"]

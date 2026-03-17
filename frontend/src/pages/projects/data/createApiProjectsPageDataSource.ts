@@ -10,7 +10,7 @@ import { getYasaScanTasks } from "@/shared/api/yasa";
 import { getOpengrepScanTasks } from "@/shared/api/opengrep";
 import { apiClient } from "@/shared/api/serverClient";
 import { api } from "@/shared/api/database";
-import { uploadZipFile } from "@/shared/utils/zipStorage";
+import { getZipFileInfo, uploadZipFile } from "@/shared/utils/zipStorage";
 import type { CreateProjectForm, Project } from "@/shared/types";
 import {
 	AGENT_TASK_PAGE_LIMIT,
@@ -23,7 +23,6 @@ import {
 	YASA_TASK_PAGE_LIMIT,
 } from "../constants";
 import type { ProjectTaskPool } from "../types";
-import { PROJECT_FETCH_BATCH_SIZE } from "../constants";
 import type { ProjectsPageDataSource } from "./projectsPageDataSource";
 import {
 	createZipProjectWorkflow,
@@ -32,14 +31,12 @@ import {
 
 type ApiSurface = Pick<
 	typeof api,
-	"getProjects" | "createProject" | "createProjectWithZip" | "updateProject"
+	| "getProjects"
+	| "getAuditTasks"
+	| "createProject"
+	| "createProjectWithZip"
+	| "updateProject"
 >;
-
-interface CreateApiProjectsPageDataSourceOptions {
-	api?: ApiSurface;
-	projectFetchBatchSize?: number;
-	uploadZipFile?: typeof uploadZipFile;
-}
 
 function sortProjectsByCreatedAt(projects: Project[]) {
 	return [...projects].sort((a, b) => {
@@ -78,15 +75,6 @@ async function collectPagedItems<T>({
 
 	return items.slice(0, maxTotal);
 }
-
-type ApiSurface = Pick<
-	typeof api,
-	| "getProjects"
-	| "getAuditTasks"
-	| "createProject"
-	| "createProjectWithZip"
-	| "updateProject"
->;
 
 interface CreateApiProjectsPageDataSourceOptions {
 	api?: ApiSurface;

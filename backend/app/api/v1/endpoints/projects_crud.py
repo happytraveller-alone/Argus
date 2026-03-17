@@ -29,9 +29,12 @@ async def create_project(
     )
     db.add(project)
     await db.commit()
-    await db.refresh(project)
     project_metrics_refresher.enqueue(project.id)
-    return project
+    return await load_project_for_response(
+        db,
+        project.id,
+        include_metrics=False,
+    )
 
 @router.get("/", response_model=List[ProjectResponse])
 async def read_projects(
@@ -44,10 +47,11 @@ async def read_projects(
     """
     Retrieve projects.
     """
-    options = [selectinload(Project.owner)]
-    if include_metrics:
-        options.append(selectinload(Project.management_metrics))
-    query = select(Project).options(*options).where(Project.source_type == "zip")
+    query = (
+        select(Project)
+        .options(*build_project_response_load_options(include_metrics=include_metrics))
+        .where(Project.source_type == "zip")
+    )
     query = query.order_by(Project.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return _filter_public_projects(result.scalars().all())
@@ -61,15 +65,11 @@ async def read_project(
     """
     Get project by ID.
     """
-    result = await db.execute(
-        select(Project)
-            .options(
-                selectinload(Project.owner),
-                selectinload(Project.management_metrics),
-            )
-            .where(Project.id == id)
+    project = await load_project_for_response(
+        db,
+        id,
+        include_metrics=True,
     )
-    project = result.scalars().first()
     _raise_if_project_hidden(project)
 
     # 检查权限：只有项目所有者可以查看
@@ -194,9 +194,12 @@ async def update_project(
 
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
-    await db.refresh(project)
     project_metrics_refresher.enqueue(project.id)
-    return project
+    return await load_project_for_response(
+        db,
+        project.id,
+        include_metrics=False,
+    )
 
 @router.post("/{id}/scan")
 async def scan_project(

@@ -91,7 +91,6 @@ async def create_project_with_zip(
         )
         try:
             await db.commit()
-            await db.refresh(project)
             project_metrics_refresher.enqueue(project.id)
         except IntegrityError:
             await db.rollback()
@@ -100,7 +99,11 @@ async def create_project_with_zip(
                 status_code=409,
                 detail="检测到相同压缩包已存在，请勿重复上传",
             )
-        return project
+        return await load_project_for_response(
+            db,
+            project.id,
+            include_metrics=False,
+        )
     except HTTPException:
         await db.rollback()
         await delete_project_zip(project.id)

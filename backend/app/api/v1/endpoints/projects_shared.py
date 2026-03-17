@@ -14,7 +14,7 @@ from starlette.background import BackgroundTask
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, case, or_, and_
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime, timedelta, timezone
@@ -1157,6 +1157,35 @@ def ensure_zip_project_exists(project: Project | None) -> None:
 
 def _raise_if_project_hidden(project: Project | None) -> None:
     ensure_zip_project_exists(project)
+
+
+def build_project_response_load_options(
+    *,
+    include_metrics: bool,
+) -> list[Any]:
+    metrics_loader = (
+        selectinload(Project.management_metrics)
+        if include_metrics
+        else noload(Project.management_metrics)
+    )
+    return [
+        selectinload(Project.owner),
+        metrics_loader,
+    ]
+
+
+async def load_project_for_response(
+    db: AsyncSession,
+    project_id: str,
+    *,
+    include_metrics: bool,
+) -> Project | None:
+    result = await db.execute(
+        select(Project)
+        .options(*build_project_response_load_options(include_metrics=include_metrics))
+        .where(Project.id == project_id)
+    )
+    return result.scalars().first()
 
 
 class StaticScanOverviewItem(BaseModel):

@@ -302,11 +302,9 @@ build_probe_url() {
   local apt_codename="$3"
   case "$kind" in
     dockerhub)
-      # docker.m.daocloud.io/library -> docker.m.daocloud.io
-      # docker.io/library -> registry-1.docker.io (canonical Docker Hub registry host)
       local host="${candidate%%/*}"
       if [ "$host" = "docker.io" ] || [ "$host" = "index.docker.io" ]; then
-        host="registry-1.docker.io"
+        host="docker.m.daocloud.io"
       fi
       printf 'https://%s/v2/' "$host"
       ;;
