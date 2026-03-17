@@ -407,18 +407,20 @@ function ProjectCodeBrowserSearchPanel({
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="border-b border-white/8 px-4 py-4">
-				<label className="mt-3 flex items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-3 py-3 transition-colors focus-within:border-[#c7ff6a]/30 focus-within:bg-black">
-					<Search className="h-4 w-4 shrink-0 text-white/42" />
-					<input
-						ref={inputRef}
-						type="search"
-						value={searchQuery}
-						onChange={(event) => onSearchQueryChange(event.target.value)}
-						placeholder="输入文件名或代码片段"
-						className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/28"
-					/>
-				</label>
 				<div className="mt-3 grid grid-cols-1 gap-2">
+					<label className="space-y-1">
+						<span className="text-[13px] uppercase tracking-[0.18em] text-white/34">
+							内容搜索
+						</span>
+						<input
+							ref={inputRef}
+							type="search"
+							value={searchQuery}
+							onChange={(event) => onSearchQueryChange(event.target.value)}
+							placeholder="输入文件名或代码片段"
+							className="w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/28 focus:border-[#c7ff6a]/28 focus:bg-black/50"
+						/>
+					</label>
 					<label className="space-y-1">
 						<span className="text-[13px] uppercase tracking-[0.18em] text-white/34">
 							包含文件

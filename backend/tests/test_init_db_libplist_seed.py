@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +22,13 @@ class _ScalarFirstResult:
     def first(self):
         return self._value
 
+    def all(self):
+        if self._value is None:
+            return []
+        if isinstance(self._value, list):
+            return self._value
+        return [self._value]
+
 
 def _make_db(existing_project=None):
     db = AsyncMock()
@@ -30,6 +38,14 @@ def _make_db(existing_project=None):
     db.rollback = AsyncMock()
     db.add = Mock()
     return db
+
+
+def _libplist_seed():
+    return next(
+        seed
+        for seed in init_db_module._build_default_seed_projects()
+        if seed.name == init_db_module.DEFAULT_LIBPLIST_NAME
+    )
 
 
 @pytest.mark.asyncio
@@ -46,11 +62,6 @@ async def test_remote_seed_success(monkeypatch, tmp_path: Path):
     with zipfile.ZipFile(seed_zip, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("libplist-2.7.0/src/main.c", "int main() { return 0; }\n")
 
-    monkeypatch.setattr(
-        init_db_module,
-        "cleanup_legacy_default_projects",
-        AsyncMock(),
-    )
     monkeypatch.setattr(init_db_module, "has_project_zip", AsyncMock(return_value=False))
     save_mock = AsyncMock()
     monkeypatch.setattr(init_db_module, "save_project_zip", save_mock)
@@ -62,9 +73,10 @@ async def test_remote_seed_success(monkeypatch, tmp_path: Path):
         lambda _paths: ["C"],
     )
 
-    await init_db_module.ensure_default_libplist_project(
+    await init_db_module._ensure_default_zip_seed_project(
         db=db,
         user=SimpleNamespace(id="user-1"),
+        seed=_libplist_seed(),
     )
 
     created_project = db.add.call_args[0][0]
@@ -91,16 +103,12 @@ async def test_description_default_on_create(monkeypatch):
 
     db.refresh.side_effect = _refresh
 
-    monkeypatch.setattr(
-        init_db_module,
-        "cleanup_legacy_default_projects",
-        AsyncMock(),
-    )
     monkeypatch.setattr(init_db_module, "has_project_zip", AsyncMock(return_value=True))
 
-    await init_db_module.ensure_default_libplist_project(
+    await init_db_module._ensure_default_zip_seed_project(
         db=db,
         user=SimpleNamespace(id="user-1"),
+        seed=_libplist_seed(),
     )
 
     created_project = db.add.call_args[0][0]
@@ -125,16 +133,12 @@ async def test_description_upgrade_legacy(monkeypatch):
     )
     db = _make_db(existing_project=legacy_project)
 
-    monkeypatch.setattr(
-        init_db_module,
-        "cleanup_legacy_default_projects",
-        AsyncMock(),
-    )
     monkeypatch.setattr(init_db_module, "has_project_zip", AsyncMock(return_value=True))
 
-    await init_db_module.ensure_default_libplist_project(
+    await init_db_module._ensure_default_zip_seed_project(
         db=db,
         user=SimpleNamespace(id="user-1"),
+        seed=_libplist_seed(),
     )
 
     assert legacy_project.description == init_db_module.DEFAULT_LIBPLIST_DESCRIPTION
@@ -158,16 +162,12 @@ async def test_description_keep_user_edited(monkeypatch):
     )
     db = _make_db(existing_project=project)
 
-    monkeypatch.setattr(
-        init_db_module,
-        "cleanup_legacy_default_projects",
-        AsyncMock(),
-    )
     monkeypatch.setattr(init_db_module, "has_project_zip", AsyncMock(return_value=True))
 
-    await init_db_module.ensure_default_libplist_project(
+    await init_db_module._ensure_default_zip_seed_project(
         db=db,
         user=SimpleNamespace(id="user-1"),
+        seed=_libplist_seed(),
     )
 
     assert project.description == custom_description
@@ -190,11 +190,6 @@ async def test_seed_asset_missing(monkeypatch, tmp_path: Path, caplog):
     )
     db = _make_db(existing_project=project)
 
-    monkeypatch.setattr(
-        init_db_module,
-        "cleanup_legacy_default_projects",
-        AsyncMock(),
-    )
     monkeypatch.setattr(init_db_module, "has_project_zip", AsyncMock(return_value=False))
     save_mock = AsyncMock()
     monkeypatch.setattr(init_db_module, "save_project_zip", save_mock)
@@ -205,9 +200,10 @@ async def test_seed_asset_missing(monkeypatch, tmp_path: Path, caplog):
     )
 
     caplog.set_level(logging.WARNING)
-    await init_db_module.ensure_default_libplist_project(
+    await init_db_module._ensure_default_zip_seed_project(
         db=db,
         user=SimpleNamespace(id="user-1"),
+        seed=_libplist_seed(),
     )
 
     save_mock.assert_not_awaited()
@@ -236,7 +232,7 @@ def test_build_default_remote_seed_projects():
 
 @pytest.mark.asyncio
 async def test_ensure_default_seed_projects(monkeypatch):
-    db = AsyncMock()
+    db = _make_db(existing_project=[])
     user = SimpleNamespace(id="user-1")
     seeds = [
         init_db_module.DefaultZipSeedProject(
@@ -267,16 +263,72 @@ async def test_ensure_default_seed_projects(monkeypatch):
         lambda: seeds,
     )
     ensure_mock = AsyncMock()
-    cleanup_mock = AsyncMock()
-    monkeypatch.setattr(init_db_module, "cleanup_legacy_default_projects", cleanup_mock)
     monkeypatch.setattr(init_db_module, "_ensure_default_zip_seed_project", ensure_mock)
 
     await init_db_module.ensure_default_seed_projects(db=db, user=user)
 
-    cleanup_mock.assert_awaited_once_with(db, "user-1")
     assert ensure_mock.await_count == 2
     called_names = [call.kwargs["seed"].name for call in ensure_mock.await_args_list]
     assert called_names == ["seed-a", "seed-b"]
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_seed_projects_discards_legacy_demo_projects(monkeypatch):
+    legacy_projects = [
+        Project(
+            id="legacy-1",
+            owner_id="user-1",
+            name="电商平台后端",
+            description="legacy",
+            source_type="zip",
+            repository_url=None,
+            repository_type="other",
+            default_branch="main",
+            programming_languages="[]",
+            is_active=True,
+        ),
+        Project(
+            id="legacy-2",
+            owner_id="user-1",
+            name="移动端 App",
+            description="legacy",
+            source_type="zip",
+            repository_url=None,
+            repository_type="other",
+            default_branch="main",
+            programming_languages="[]",
+            is_active=True,
+        ),
+    ]
+    db = _make_db(existing_project=legacy_projects)
+    db.delete = AsyncMock()
+    user = SimpleNamespace(id="user-1")
+    seeds = [
+        init_db_module.DefaultZipSeedProject(
+            name="seed-a",
+            description="A",
+            archive_name="a.zip",
+            owner="owner-a",
+            repo="repo-a",
+            ref_type="commit",
+            ref="sha-a",
+            fallback_languages=["Python"],
+        ),
+    ]
+
+    monkeypatch.setattr(init_db_module, "_build_default_seed_projects", lambda: seeds)
+    delete_project_zip_mock = AsyncMock()
+    monkeypatch.setattr(init_db_module, "delete_project_zip", delete_project_zip_mock)
+    ensure_mock = AsyncMock()
+    monkeypatch.setattr(init_db_module, "_ensure_default_zip_seed_project", ensure_mock)
+
+    await init_db_module.ensure_default_seed_projects(db=db, user=user)
+
+    delete_project_zip_mock.assert_any_await("legacy-1")
+    delete_project_zip_mock.assert_any_await("legacy-2")
+    assert db.delete.await_count == 2
+    db.commit.assert_awaited_once()
+    ensure_mock.assert_awaited_once_with(db=db, user=user, seed=seeds[0])
 
 
 @pytest.mark.asyncio
@@ -295,14 +347,53 @@ async def test_existing_stored_zip_skips_download(monkeypatch):
     )
     db = _make_db(existing_project=project)
 
-    monkeypatch.setattr(init_db_module, "cleanup_legacy_default_projects", AsyncMock())
     monkeypatch.setattr(init_db_module, "has_project_zip", AsyncMock(return_value=True))
     download_mock = AsyncMock()
     monkeypatch.setattr(init_db_module, "download_seed_archive", download_mock)
 
-    await init_db_module.ensure_default_libplist_project(
+    await init_db_module._ensure_default_zip_seed_project(
         db=db,
         user=SimpleNamespace(id="user-1"),
+        seed=_libplist_seed(),
     )
 
     download_mock.assert_not_awaited()
+
+
+def test_init_db_module_no_longer_exports_legacy_demo_helpers():
+    assert not hasattr(init_db_module, "cleanup_legacy_default_projects")
+    assert not hasattr(init_db_module, "ensure_default_libplist_project")
+    assert not hasattr(init_db_module, "ensure_default_test_resource_projects")
+    assert not hasattr(init_db_module, "create_demo_data")
+
+
+@pytest.mark.asyncio
+async def test_init_db_uses_seed_project_initializer(monkeypatch):
+    db = AsyncMock()
+    user = SimpleNamespace(id="user-1")
+    create_demo_user_mock = AsyncMock(return_value=user)
+    ensure_default_seed_projects_mock = AsyncMock()
+    create_internal_rules_mock = AsyncMock()
+    create_patch_rules_mock = AsyncMock()
+    ensure_builtin_gitleaks_rules_mock = AsyncMock()
+    init_templates_mock = AsyncMock()
+
+    monkeypatch.setattr(init_db_module, "create_demo_user", create_demo_user_mock)
+    monkeypatch.setattr(init_db_module, "ensure_default_seed_projects", ensure_default_seed_projects_mock)
+    monkeypatch.setattr(init_db_module, "create_internal_opengrep_rules", create_internal_rules_mock)
+    monkeypatch.setattr(init_db_module, "create_patch_opengrep_rules", create_patch_rules_mock)
+    monkeypatch.setattr(init_db_module, "ensure_builtin_gitleaks_rules", ensure_builtin_gitleaks_rules_mock)
+    monkeypatch.setitem(
+        sys.modules,
+        "app.services.init_templates",
+        SimpleNamespace(init_templates_and_rules=init_templates_mock),
+    )
+
+    await init_db_module.init_db(db)
+
+    create_demo_user_mock.assert_awaited_once_with(db)
+    ensure_default_seed_projects_mock.assert_awaited_once_with(db, user)
+    create_internal_rules_mock.assert_awaited_once_with(db)
+    create_patch_rules_mock.assert_awaited_once_with(db)
+    ensure_builtin_gitleaks_rules_mock.assert_awaited_once_with(db)
+    init_templates_mock.assert_awaited_once_with(db)
