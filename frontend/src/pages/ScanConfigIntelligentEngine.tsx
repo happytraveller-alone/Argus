@@ -43,7 +43,7 @@ export default function ScanConfigIntelligentEngine() {
 		<div className="space-y-6 p-6 bg-background min-h-screen relative">
 			<div className="absolute inset-0 cyber-grid-subtle pointer-events-none" />
 
-			<div className="relative z-10 space-y-4">
+			<div className="relative z-10 space-y-5 max-w-[1680px] mx-auto">
 				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 					<div className="cyber-card p-4">
 						<div className="flex items-center justify-between">
@@ -88,8 +88,7 @@ export default function ScanConfigIntelligentEngine() {
 					</div>
 				</div>
 
-				<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-					<div className="cyber-card p-4 space-y-2">
+				<div className="space-y-4">
 						<div className="section-header mb-0">
 							<KeyRound className="w-4 h-4 text-primary" />
 							<div className="font-mono font-bold uppercase text-sm text-foreground">
@@ -106,9 +105,7 @@ export default function ScanConfigIntelligentEngine() {
 							sharedDraftState={sharedDraftState}
 							onLlmSummaryChange={setSummaryState}
 						/>
-					</div>
 
-					<div className="cyber-card p-4 space-y-2">
 						<div className="section-header mb-0">
 							<Zap className="w-4 h-4 text-primary" />
 							<div className="font-mono font-bold uppercase text-sm text-foreground">
@@ -116,7 +113,6 @@ export default function ScanConfigIntelligentEngine() {
 							</div>
 						</div>
 						<EmbeddingConfig compact />
-					</div>
 				</div>
 			</div>
 		</div>

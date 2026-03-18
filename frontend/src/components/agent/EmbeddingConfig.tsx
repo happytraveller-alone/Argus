@@ -25,7 +25,6 @@ import {
   Cpu,
   Loader2,
   Key,
-  Info,
   CheckCircle2,
   AlertCircle,
   Eye,
@@ -346,7 +345,7 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
           }`}
         >
           <div className="space-y-2 min-w-0">
-            <Label className="text-xs font-bold text-muted-foreground uppercase">
+            <Label className="text-base font-bold text-muted-foreground uppercase">
               模型供应商
             </Label>
             <Select value={selectedProvider} onValueChange={handleProviderChange}>
@@ -368,16 +367,10 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
                 ))}
               </SelectContent>
             </Select>
-            {selectedProviderInfo ? (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Info className="w-3 h-3 text-sky-400" />
-                {selectedProviderInfo.description}
-              </p>
-            ) : null}
           </div>
 
           <div className="space-y-2 min-w-0">
-            <Label className="text-xs font-bold text-muted-foreground uppercase">
+            <Label className="text-base font-bold text-muted-foreground uppercase">
               地址
             </Label>
             <Input
@@ -403,9 +396,23 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
           </div>
 
           <div className="space-y-2 min-w-0">
-            <Label className="text-xs font-bold text-muted-foreground uppercase">
+            <Label className="text-base font-bold text-muted-foreground uppercase">
               密钥
               {requiresApiKey ? <span className="text-rose-400 ml-1">*</span> : null}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowApiKey((prev) => !prev)}
+                className={compact ? "h-5 w-10 cyber-btn-ghost" : "h-6 w-12 cyber-btn-ghost"}
+                disabled={!requiresApiKey}
+                type="button"
+              >
+                {showApiKey ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
             </Label>
             <div className="flex gap-2">
               <Input
@@ -419,25 +426,12 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
                 className={compact ? "h-10 cyber-input" : "h-12 cyber-input"}
                 disabled={!requiresApiKey}
               />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowApiKey((prev) => !prev)}
-                className={compact ? "h-10 w-10 cyber-btn-ghost" : "h-12 w-12 cyber-btn-ghost"}
-                disabled={!requiresApiKey}
-                type="button"
-              >
-                {showApiKey ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </Button>
+              
             </div>
           </div>
 
           <div className="space-y-2 min-w-0">
-            <Label className="text-xs font-bold text-muted-foreground uppercase">模型</Label>
+            <Label className="text-base font-bold text-muted-foreground uppercase">模型</Label>
             {selectedProviderInfo ? (
               (() => {
                 const models = Array.isArray(selectedProviderInfo.models)

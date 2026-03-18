@@ -1384,18 +1384,6 @@ export function SystemConfig({
 		}
 	};
 
-	const testLLMConnection = async (validatedOverride?: StrictLlmInputs) => {
-		if (!config && !validatedOverride) return null;
-		const validated = validatedOverride ?? validateStrictLlmInputs("test");
-		if (!validated.ok) return null;
-
-		setTestingLLM(true);
-		try {
-			return await runLlmConnectionTest(validated);
-		} finally {
-			setTestingLLM(false);
-		}
-	};
 
 	const handleSaveAndTestLLM = async () => {
 		if (!config) return;
@@ -1609,7 +1597,7 @@ export function SystemConfig({
 										)}
 									>
 										<div className="space-y-2 min-w-0">
-											<Label className="text-xs font-bold text-muted-foreground uppercase">
+											<Label className="text-base font-bold text-muted-foreground uppercase">
 												模型供应商
 											</Label>
 											<Select
@@ -1639,7 +1627,7 @@ export function SystemConfig({
 										</div>
 
 										<div className="space-y-2 min-w-0">
-											<Label className="text-xs font-bold text-muted-foreground uppercase">
+											<Label className="text-base font-bold text-muted-foreground uppercase">
 												地址
 												<span className="text-rose-400 ml-1">*</span>
 											</Label>
@@ -1664,12 +1652,30 @@ export function SystemConfig({
 										</div>
 
 										<div className="space-y-2 min-w-0">
-											<Label className="text-xs font-bold text-muted-foreground uppercase">
+											<Label className="text-base font-bold text-muted-foreground uppercase">
 												密钥
 												{shouldRequireApiKey(config.llmProvider) ? (
 													<span className="text-rose-400 ml-1">*</span>
 												) : null}
+												<Button
+													variant="outline"
+													size="icon"
+													onClick={() => setShowApiKey((prev) => !prev)}
+													className={cn(
+														"cyber-btn-ghost shrink-0",
+														compactLayout ? "h-4 w-10" : "h-12 w-12",
+													)}
+													disabled={!shouldRequireApiKey(config.llmProvider)}
+													type="button"
+												>
+													{showApiKey ? (
+														<EyeOff className="h-4 w-4" />
+													) : (
+														<Eye className="h-4 w-4" />
+													)}
+												</Button>
 											</Label>
+											
 											<div className="flex gap-2">
 												<Input
 													type={showApiKey ? "text" : "password"}
@@ -1688,30 +1694,39 @@ export function SystemConfig({
 													)}
 													disabled={!shouldRequireApiKey(config.llmProvider)}
 												/>
-												<Button
-													variant="outline"
-													size="icon"
-													onClick={() => setShowApiKey((prev) => !prev)}
-													className={cn(
-														"cyber-btn-ghost shrink-0",
-														compactLayout ? "h-10 w-10" : "h-12 w-12",
-													)}
-													disabled={!shouldRequireApiKey(config.llmProvider)}
-													type="button"
-												>
-													{showApiKey ? (
-														<EyeOff className="h-4 w-4" />
-													) : (
-														<Eye className="h-4 w-4" />
-													)}
-												</Button>
+												
 											</div>
 										</div>
 
 										<div className="space-y-2 min-w-0">
-											<Label className="text-xs font-bold text-muted-foreground uppercase">
+											<Label className="text-base font-bold text-muted-foreground uppercase">
 												模型
 												<span className="text-rose-400 ml-1">*</span>
+												<Button
+																type="button"
+																variant="outline"
+																className="h-4 cyber-btn-ghost text-xs"
+																onClick={handleFetchModels}
+																disabled={
+																	fetchingModels ||
+																	!config.llmProvider ||
+																	!config.llmBaseUrl.trim() ||
+																	(shouldRequireApiKey(config.llmProvider) &&
+																		!config.llmApiKey.trim())
+																}
+															>
+																{fetchingModels ? (
+																	<>
+																		<Loader2 className="w-3 h-3 mr-1 animate-spin" />
+																		拉取中...
+																	</>
+																) : (
+																	<>
+																		<Zap className="w-3 h-3 mr-1" />
+																		一键获取模型
+																	</>
+																)}
+															</Button>
 											</Label>
 											{(() => {
 												const providerId = config.llmProvider;
@@ -1845,33 +1860,7 @@ export function SystemConfig({
 																</Button>
 															</div>
 														</div>
-														<div className="flex justify-end">
-															<Button
-																type="button"
-																variant="outline"
-																className="h-9 cyber-btn-ghost text-xs"
-																onClick={handleFetchModels}
-																disabled={
-																	fetchingModels ||
-																	!config.llmProvider ||
-																	!config.llmBaseUrl.trim() ||
-																	(shouldRequireApiKey(config.llmProvider) &&
-																		!config.llmApiKey.trim())
-																}
-															>
-																{fetchingModels ? (
-																	<>
-																		<Loader2 className="w-3 h-3 mr-1 animate-spin" />
-																		拉取中...
-																	</>
-																) : (
-																	<>
-																		<Zap className="w-3 h-3 mr-1" />
-																		一键获取模型
-																	</>
-																)}
-															</Button>
-														</div>
+														
 													</div>
 												);
 											})()}
