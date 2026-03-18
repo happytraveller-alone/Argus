@@ -140,6 +140,11 @@ def resolve_yasa_language_with_preference(
     normalized_preference = normalize_yasa_language(preferred_language, allow_auto=True)
     if normalized_preference and normalized_preference != "auto":
         return normalized_preference
+    # YASA auto policy: PHP-like projects should be skipped even if other
+    # supported languages are also detected.
+    project_languages = parse_programming_languages(programming_languages)
+    if any(str(item).strip().lower().startswith("php") for item in project_languages):
+        return None
     return resolve_yasa_language_from_programming_languages(programming_languages)
 
 

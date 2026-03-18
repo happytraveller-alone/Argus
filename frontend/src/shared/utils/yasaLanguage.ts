@@ -76,7 +76,15 @@ export function parseYasaLanguageOption(value: unknown): YasaLanguageOption {
 export function resolveYasaLanguageFromProgrammingLanguages(
   programmingLanguages: unknown,
 ): string | null {
-  const candidates = parseProgrammingLanguages(programmingLanguages)
+  const parsedLanguages = parseProgrammingLanguages(programmingLanguages);
+  // YASA auto policy: PHP-like projects should be skipped even if other
+  // supported languages are also detected.
+  const hasPhpLikeLanguage = parsedLanguages.some((item) =>
+    String(item || "").trim().toLowerCase().startsWith("php"),
+  );
+  if (hasPhpLikeLanguage) return null;
+
+  const candidates = parsedLanguages
     .map((item) => YASA_LANGUAGE_ALIAS[String(item || "").trim().toLowerCase()])
     .filter((item): item is string => Boolean(item));
 
