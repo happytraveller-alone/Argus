@@ -1,14 +1,67 @@
-FROM docker.m.daocloud.io/library/node:20-alpine
+ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:20-alpine
 
 WORKDIR /app
 
-RUN corepack enable
+ARG NEXUS_WEB_REPO_URL=https://github.com/happytraveller-alone/nexus-web.git
+ARG NEXUS_WEB_GIT_MIRROR_PREFIX=https://v6.gh-proxy.org/
+ARG NEXUS_WEB_NPM_REGISTRY=https://registry.npmmirror.com
+ARG NEXUS_WEB_NPM_REGISTRY_FALLBACK=https://registry.npmjs.org
+ARG NEXUS_WEB_PNPM_VERSION=10.32.1
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:${PATH}
 
 RUN apk add --no-cache git
 
-RUN git clone --depth=1 https://v6.gh-proxy.org/https://github.com/happytraveller-alone/nexus-web.git .
+RUN --mount=type=cache,id=nexus-web-corepack,target=/root/.cache/node/corepack \
+    --mount=type=cache,id=nexus-web-npm,target=/root/.npm \
+    set -eux; \
+    corepack enable; \
+    prepare_pnpm() { \
+      reg="$1"; \
+      attempt=1; \
+      npm config set registry "${reg}"; \
+      export COREPACK_NPM_REGISTRY="${reg}"; \
+      while [ "${attempt}" -le 2 ]; do \
+        if corepack prepare "pnpm@${NEXUS_WEB_PNPM_VERSION}" --activate; then \
+          return 0; \
+        fi; \
+        sleep $((attempt + 1)); \
+        attempt=$((attempt + 1)); \
+      done; \
+      return 1; \
+    }; \
+    prepare_pnpm "${NEXUS_WEB_NPM_REGISTRY}" || prepare_pnpm "${NEXUS_WEB_NPM_REGISTRY_FALLBACK}"; \
+    pnpm config set store-dir /pnpm/store
 
-RUN pnpm install
+RUN git clone --depth=1 "${NEXUS_WEB_GIT_MIRROR_PREFIX}${NEXUS_WEB_REPO_URL}" .
+
+RUN --mount=type=cache,id=nexus-web-corepack,target=/root/.cache/node/corepack \
+    --mount=type=cache,id=nexus-web-pnpm,target=/pnpm/store \
+    --mount=type=cache,id=nexus-web-npm,target=/root/.npm \
+    set -eux; \
+    export COREPACK_NPM_REGISTRY="${NEXUS_WEB_NPM_REGISTRY}"; \
+    pnpm config set store-dir /pnpm/store; \
+    pnpm config set network-timeout 120000; \
+    pnpm config set fetch-retries 1; \
+    install_nexus_deps() { \
+      reg="$1"; \
+      attempt=1; \
+      pnpm config set registry "${reg}"; \
+      while [ "${attempt}" -le 2 ]; do \
+        echo "pnpm fetch via ${reg} (attempt ${attempt}/2)"; \
+        if pnpm fetch --frozen-lockfile && \
+           pnpm install --frozen-lockfile --offline --prefer-offline --network-concurrency 1; then \
+          return 0; \
+        fi; \
+        echo "pnpm install failed via ${reg} (attempt ${attempt}/2)." >&2; \
+        sleep $((attempt + 1)); \
+        attempt=$((attempt + 1)); \
+      done; \
+      return 1; \
+    }; \
+    install_nexus_deps "${NEXUS_WEB_NPM_REGISTRY}" || install_nexus_deps "${NEXUS_WEB_NPM_REGISTRY_FALLBACK}"
 
 EXPOSE 5174
 

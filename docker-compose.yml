@@ -205,7 +205,15 @@ services:
       - vulhunter-network
   
   nexus-web:
-    build: ./nexus-web
+    build:
+      context: ./nexus-web
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - NEXUS_WEB_REPO_URL=${NEXUS_WEB_REPO_URL:-https://github.com/happytraveller-alone/nexus-web.git}
+        - NEXUS_WEB_GIT_MIRROR_PREFIX=${NEXUS_WEB_GIT_MIRROR_PREFIX:-https://v6.gh-proxy.org/}
+        - NEXUS_WEB_NPM_REGISTRY=${NEXUS_WEB_NPM_REGISTRY:-https://registry.npmmirror.com}
+        - NEXUS_WEB_NPM_REGISTRY_FALLBACK=${NEXUS_WEB_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}
+        - NEXUS_WEB_PNPM_VERSION=${NEXUS_WEB_PNPM_VERSION:-10.32.1}
     ports:
       - "5174:5174"
 
