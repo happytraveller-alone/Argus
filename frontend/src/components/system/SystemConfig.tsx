@@ -50,7 +50,6 @@ import {
 	Eye,
 	EyeOff,
 	Loader2,
-	PlayCircle,
 	RotateCcw,
 	Save,
 	Settings,
@@ -60,6 +59,7 @@ import { toast } from "sonner";
 import { api } from "@/shared/api/database";
 import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
 import { resolveProviderSwitchFieldValue } from "@/components/system/llmProviderSwitch";
+import { runSaveThenTestAction } from "@/components/scan-config/intelligentEngineActionFlow";
 import {
 	buildLlmProviderOptions,
 	getDefaultBaseUrlForProvider as resolveDefaultBaseUrlForProvider,
@@ -718,6 +718,7 @@ export function SystemConfig({
 	} = sharedDraftState ?? internalDraftState;
 	const [showApiKey, setShowApiKey] = useState(false);
 	const [llmModelPopoverOpen, setLlmModelPopoverOpen] = useState(false);
+	const [savingLLM, setSavingLLM] = useState(false);
 	const [testingLLM, setTestingLLM] = useState(false);
 	const [advancedOpen, setAdvancedOpen] = useState(false);
 	const [selectedAdvancedItemId, setSelectedAdvancedItemId] =
@@ -938,16 +939,19 @@ export function SystemConfig({
 		return resolveShouldRequireApiKey(llmProviderOptions, providerId);
 	};
 
-	const validateStrictLlmInputs = (
-		source: "save" | "test",
-	): {
-		ok: boolean;
+	type StrictLlmInputs = {
 		providerId: string;
 		apiKey: string;
 		model: string;
 		baseUrl: string;
 		customHeaders: string;
-	} => {
+	};
+
+	const validateStrictLlmInputs = (
+		source: "save" | "test",
+	): {
+		ok: boolean;
+	} & StrictLlmInputs => {
 		if (!config) {
 			return {
 				ok: false,
@@ -1053,6 +1057,8 @@ export function SystemConfig({
 					currentValue: prev.llmBaseUrl,
 					wasTouched: llmBaseUrlTouchedRef.current,
 					nextDefaultValue: defaultBaseUrl,
+					preserveExistingNonEmptyValue: true,
+					allowExplicitEmptyOverride: true,
 				}),
 			};
 		});
@@ -1279,11 +1285,8 @@ export function SystemConfig({
 		setLlmModelPopoverOpen(false);
 	};
 
-	const saveConfig = async () => {
-		if (!config) return;
-		const validated = validateStrictLlmInputs("save");
-		if (!validated.ok) return;
-
+	const persistConfig = async (validated: StrictLlmInputs) => {
+		if (!config) return null;
 		try {
 			const savedConfig = await api.updateUserConfig({
 				llmConfig: {
@@ -1319,10 +1322,24 @@ export function SystemConfig({
 
 			setHasChanges(false);
 			toast.success("配置已保存！");
+			return savedConfig;
 		} catch (error) {
 			toast.error(
 				`保存失败: ${error instanceof Error ? error.message : "未知错误"}`,
 			);
+			throw error;
+		}
+	};
+
+	const saveConfig = async () => {
+		if (!config) return null;
+		const validated = validateStrictLlmInputs("save");
+		if (!validated.ok) return null;
+		setSavingLLM(true);
+		try {
+			return await persistConfig(validated);
+		} finally {
+			setSavingLLM(false);
 		}
 	};
 
@@ -1343,12 +1360,7 @@ export function SystemConfig({
 		}
 	};
 
-	const testLLMConnection = async () => {
-		if (!config) return;
-		const validated = validateStrictLlmInputs("test");
-		if (!validated.ok) return;
-
-		setTestingLLM(true);
+	const runLlmConnectionTest = async (validated: StrictLlmInputs) => {
 		setLlmTestResult(null);
 		try {
 			const result = await api.testLLMConnection({
@@ -1368,7 +1380,37 @@ export function SystemConfig({
 			const message = error instanceof Error ? error.message : "未知错误";
 			setLlmTestResult({ success: false, message });
 			toast.error(`测试失败: ${message}`);
+			return { success: false, message };
+		}
+	};
+
+	const testLLMConnection = async (validatedOverride?: StrictLlmInputs) => {
+		if (!config && !validatedOverride) return null;
+		const validated = validatedOverride ?? validateStrictLlmInputs("test");
+		if (!validated.ok) return null;
+
+		setTestingLLM(true);
+		try {
+			return await runLlmConnectionTest(validated);
 		} finally {
+			setTestingLLM(false);
+		}
+	};
+
+	const handleSaveAndTestLLM = async () => {
+		if (!config) return;
+		const validated = validateStrictLlmInputs("save");
+		if (!validated.ok) return;
+
+		setSavingLLM(true);
+		setTestingLLM(true);
+		try {
+			await runSaveThenTestAction({
+				save: () => persistConfig(validated),
+				test: () => runLlmConnectionTest(validated),
+			});
+		} finally {
+			setSavingLLM(false);
 			setTestingLLM(false);
 		}
 	};
@@ -1560,78 +1602,77 @@ export function SystemConfig({
 
 							{!llmSummaryOnly ? (
 								<>
-									<div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-										<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
-											<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
-												提供商
+									<div
+										className={cn(
+											"grid grid-cols-1 md:grid-cols-2 min-[1800px]:grid-cols-4",
+											compactLayout ? "gap-3" : "gap-4",
+										)}
+									>
+										<div className="space-y-2 min-w-0">
+											<Label className="text-xs font-bold text-muted-foreground uppercase">
+												模型供应商
 											</Label>
-											<div className="flex-1 min-w-0 space-y-1">
-													<Select
-														value={config.llmProvider}
-														onValueChange={handleProviderChange}
-													>
-														<SelectTrigger
-															className={cn(
-																"cyber-input",
-																compactLayout ? "h-10" : "h-12",
-															)}
+											<Select
+												value={config.llmProvider}
+												onValueChange={handleProviderChange}
+											>
+												<SelectTrigger
+													className={cn(
+														"cyber-input",
+														compactLayout ? "h-10" : "h-12",
+													)}
+												>
+													<SelectValue placeholder="选择模型供应商" />
+												</SelectTrigger>
+												<SelectContent className="cyber-dialog border-border">
+													{llmProviderOptions.map((provider) => (
+														<SelectItem
+															key={provider.id}
+															value={provider.id}
+															className="font-mono"
 														>
-															<SelectValue placeholder="选择提供商" />
-														</SelectTrigger>
-													<SelectContent className="cyber-dialog border-border">
-														{llmProviderOptions.map((provider) => (
-															<SelectItem
-																key={provider.id}
-																value={provider.id}
-																className="font-mono"
-															>
-																{provider.name}
-															</SelectItem>
-														))}
-													</SelectContent>
-												</Select>
-												</div>
-											</div>
+															{provider.name}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										</div>
 
-										<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
-											<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
-												API 站口
+										<div className="space-y-2 min-w-0">
+											<Label className="text-xs font-bold text-muted-foreground uppercase">
+												地址
 												<span className="text-rose-400 ml-1">*</span>
 											</Label>
-											<div className="flex-1 min-w-0">
-													<Input
-														value={config.llmBaseUrl}
-													onChange={(event) => {
-														llmBaseUrlTouchedRef.current = true;
-														updateConfig("llmBaseUrl", event.target.value);
-													}}
-													placeholder={(() => {
-														const baseUrl = getDefaultBaseUrlForProvider(
-															config.llmProvider,
-														);
-														if (baseUrl) return `必填，例如：${baseUrl}`;
-														return "必填：请输入完整 Base URL";
-													})()}
-														className={cn(
-															"cyber-input",
-															compactLayout ? "h-10" : "h-12",
-														)}
-													/>
-											</div>
+											<Input
+												value={config.llmBaseUrl}
+												onChange={(event) => {
+													llmBaseUrlTouchedRef.current = true;
+													updateConfig("llmBaseUrl", event.target.value);
+												}}
+												placeholder={(() => {
+													const baseUrl = getDefaultBaseUrlForProvider(
+														config.llmProvider,
+													);
+													if (baseUrl) return `必填，例如：${baseUrl}`;
+													return "必填：请输入完整 Base URL";
+												})()}
+												className={cn(
+													"cyber-input",
+													compactLayout ? "h-10" : "h-12",
+												)}
+											/>
 										</div>
-									</div>
 
-									<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
-										<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
-											API Key
-											{shouldRequireApiKey(config.llmProvider) ? (
-												<span className="text-rose-400 ml-1">*</span>
-											) : null}
-										</Label>
-										<div className="flex-1 min-w-0">
+										<div className="space-y-2 min-w-0">
+											<Label className="text-xs font-bold text-muted-foreground uppercase">
+												密钥
+												{shouldRequireApiKey(config.llmProvider) ? (
+													<span className="text-rose-400 ml-1">*</span>
+												) : null}
+											</Label>
 											<div className="flex gap-2">
-													<Input
-														type={showApiKey ? "text" : "password"}
+												<Input
+													type={showApiKey ? "text" : "password"}
 													value={config.llmApiKey}
 													onChange={(event) =>
 														updateConfig("llmApiKey", event.target.value)
@@ -1641,21 +1682,22 @@ export function SystemConfig({
 															? "输入你的 API Key"
 															: "该提供商无需 API Key"
 													}
-														className={cn(
-															"cyber-input",
-															compactLayout ? "h-10" : "h-12",
-														)}
-														disabled={!shouldRequireApiKey(config.llmProvider)}
-													/>
+													className={cn(
+														"cyber-input",
+														compactLayout ? "h-10" : "h-12",
+													)}
+													disabled={!shouldRequireApiKey(config.llmProvider)}
+												/>
 												<Button
 													variant="outline"
 													size="icon"
 													onClick={() => setShowApiKey((prev) => !prev)}
-														className={cn(
-															"w-12 cyber-btn-ghost",
-															compactLayout ? "h-10" : "h-12",
-														)}
+													className={cn(
+														"cyber-btn-ghost shrink-0",
+														compactLayout ? "h-10 w-10" : "h-12 w-12",
+													)}
 													disabled={!shouldRequireApiKey(config.llmProvider)}
+													type="button"
 												>
 													{showApiKey ? (
 														<EyeOff className="h-4 w-4" />
@@ -1665,14 +1707,12 @@ export function SystemConfig({
 												</Button>
 											</div>
 										</div>
-									</div>
 
-									<div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-4">
-										<Label className="text-xs font-bold text-muted-foreground uppercase md:w-24 md:pt-3 md:flex-none">
-											模型选择
-											<span className="text-rose-400 ml-1">*</span>
-										</Label>
-										<div className="flex-1 min-w-0 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-2">
+										<div className="space-y-2 min-w-0">
+											<Label className="text-xs font-bold text-muted-foreground uppercase">
+												模型
+												<span className="text-rose-400 ml-1">*</span>
+											</Label>
 											{(() => {
 												const providerId = config.llmProvider;
 												const models = getModelsForProvider(providerId);
@@ -1701,187 +1741,183 @@ export function SystemConfig({
 													.slice(0, 80);
 
 												return (
-													<>
-															<div className="space-y-2">
-																<div
-																	className="relative"
-																	ref={llmModelDropdownAreaRef}
-																>
-																	<div className="flex gap-2">
-																		<div className="relative flex-1 min-w-0">
-																			<Input
-																				value={currentModel}
-																				onChange={(event) =>
-																					updateConfig("llmModel", event.target.value)
-																				}
-																				onFocus={() => setLlmModelPopoverOpen(true)}
-																				placeholder={`请输入模型名称，例如：${defaultModel}`}
-																				className="h-10 cyber-input font-mono"
-																			/>
-																			{llmModelPopoverOpen ? (
-																				llmDropdownPanelStyle
-																					? createPortal(
-																							<div
-																								ref={llmModelDropdownPanelRef}
-																								style={llmDropdownPanelStyle}
-																								className="border border-border rounded-md p-0 cyber-dialog shadow-lg overflow-hidden"
-																							>
-																								<Command className="bg-background h-full flex flex-col">
-																									<CommandInput
-																										placeholder="搜索模型..."
-																										className="h-10 border-0 border-b border-border/60 rounded-none"
-																									/>
-																									<CommandList className="flex-1 overflow-y-auto custom-scrollbar">
-																										<CommandEmpty>未找到匹配模型</CommandEmpty>
-																										<CommandGroup>
-																											{defaultModel ? (
-																												<CommandItem
-																													value={`默认模型 ${defaultModel}`}
-																													onSelect={() =>
-																														handleLlmModelSelect(
-																															defaultModel,
-																														)
-																													}
-																													className="font-mono"
-																												>
-																													<Check
-																														className={cn(
-																															"mr-2 h-4 w-4",
-																															normalizedCurrentModel ===
-																																defaultModel
-																																? "opacity-100"
-																																: "opacity-0",
-																														)}
-																													/>
-																													默认（{defaultModel}）
-																												</CommandItem>
-																											) : null}
-																											{selectableModels.map((model) => (
-																												<CommandItem
-																													key={model}
-																													value={model}
-																													onSelect={() =>
-																														handleLlmModelSelect(model)
-																													}
-																													className="font-mono"
-																												>
-																													<Check
-																														className={cn(
-																															"mr-2 h-4 w-4",
-																															normalizedCurrentModel === model
-																																? "opacity-100"
-																																: "opacity-0",
-																														)}
-																													/>
-																													<span className="truncate">{model}</span>
-																												</CommandItem>
-																											))}
-																										</CommandGroup>
-																									</CommandList>
-																								</Command>
-																							</div>,
-																							document.body,
-																						)
-																					: null
-																			) : null}
-																		</div>
-																		<Button
-																			variant="outline"
-																			role="combobox"
-																			aria-expanded={llmModelPopoverOpen}
-																			title="打开模型候选列表"
-																			className="h-10 w-10 px-0 cyber-btn-ghost shrink-0"
-																			onClick={() =>
-																				setLlmModelPopoverOpen((prev) => !prev)
-																			}
-																		>
-																			<ChevronsUpDown className="h-4 w-4 opacity-70" />
-																		</Button>
-																	</div>
-																</div>
-														</div>
-														<Button
-															type="button"
-															variant="outline"
-															className="h-10 cyber-btn-ghost text-xs w-full md:w-auto"
-															onClick={handleFetchModels}
-															disabled={
-																fetchingModels ||
-																!config.llmProvider ||
-																!config.llmBaseUrl.trim() ||
-																(shouldRequireApiKey(config.llmProvider) &&
-																	!config.llmApiKey.trim())
-															}
+													<div className="space-y-2">
+														<div
+															className="relative"
+															ref={llmModelDropdownAreaRef}
 														>
-															{fetchingModels ? (
-																<>
-																	<Loader2 className="w-3 h-3 mr-1 animate-spin" />
-																	拉取中...
-																</>
-															) : (
-																<>
-																	<Zap className="w-3 h-3 mr-1" />
-																	一键获取模型
-																</>
-															)}
-														</Button>
-													</>
+															<div className="flex gap-2">
+																<div className="relative flex-1 min-w-0">
+																	<Input
+																		value={currentModel}
+																		onChange={(event) =>
+																			updateConfig("llmModel", event.target.value)
+																		}
+																		onFocus={() => setLlmModelPopoverOpen(true)}
+																		placeholder={`请输入模型名称，例如：${defaultModel}`}
+																		className={cn(
+																			"cyber-input font-mono",
+																			compactLayout ? "h-10" : "h-12",
+																		)}
+																	/>
+																	{llmModelPopoverOpen ? (
+																		llmDropdownPanelStyle
+																			? createPortal(
+																					<div
+																						ref={llmModelDropdownPanelRef}
+																						style={llmDropdownPanelStyle}
+																						className="border border-border rounded-md p-0 cyber-dialog shadow-lg overflow-hidden"
+																					>
+																						<Command className="bg-background h-full flex flex-col">
+																							<CommandInput
+																								placeholder="搜索模型..."
+																								className="h-10 border-0 border-b border-border/60 rounded-none"
+																							/>
+																							<CommandList className="flex-1 overflow-y-auto custom-scrollbar">
+																								<CommandEmpty>未找到匹配模型</CommandEmpty>
+																								<CommandGroup>
+																									{defaultModel ? (
+																										<CommandItem
+																											value={`默认模型 ${defaultModel}`}
+																											onSelect={() =>
+																												handleLlmModelSelect(defaultModel)
+																											}
+																											className="font-mono"
+																										>
+																											<Check
+																												className={cn(
+																													"mr-2 h-4 w-4",
+																													normalizedCurrentModel ===
+																														defaultModel
+																														? "opacity-100"
+																														: "opacity-0",
+																												)}
+																											/>
+																											默认（{defaultModel}）
+																										</CommandItem>
+																									) : null}
+																									{selectableModels.map((model) => (
+																										<CommandItem
+																											key={model}
+																											value={model}
+																											onSelect={() =>
+																												handleLlmModelSelect(model)
+																											}
+																											className="font-mono"
+																										>
+																											<Check
+																												className={cn(
+																													"mr-2 h-4 w-4",
+																													normalizedCurrentModel === model
+																														? "opacity-100"
+																														: "opacity-0",
+																												)}
+																											/>
+																											<span className="truncate">
+																												{model}
+																											</span>
+																										</CommandItem>
+																									))}
+																								</CommandGroup>
+																							</CommandList>
+																						</Command>
+																					</div>,
+																					document.body,
+																				)
+																			: null
+																	) : null}
+																</div>
+																<Button
+																	variant="outline"
+																	role="combobox"
+																	aria-expanded={llmModelPopoverOpen}
+																	title="打开模型候选列表"
+																	className={cn(
+																		"px-0 cyber-btn-ghost shrink-0",
+																		compactLayout ? "h-10 w-10" : "h-12 w-12",
+																	)}
+																	onClick={() =>
+																		setLlmModelPopoverOpen((prev) => !prev)
+																	}
+																	type="button"
+																>
+																	<ChevronsUpDown className="h-4 w-4 opacity-70" />
+																</Button>
+															</div>
+														</div>
+														<div className="flex justify-end">
+															<Button
+																type="button"
+																variant="outline"
+																className="h-9 cyber-btn-ghost text-xs"
+																onClick={handleFetchModels}
+																disabled={
+																	fetchingModels ||
+																	!config.llmProvider ||
+																	!config.llmBaseUrl.trim() ||
+																	(shouldRequireApiKey(config.llmProvider) &&
+																		!config.llmApiKey.trim())
+																}
+															>
+																{fetchingModels ? (
+																	<>
+																		<Loader2 className="w-3 h-3 mr-1 animate-spin" />
+																		拉取中...
+																	</>
+																) : (
+																	<>
+																		<Zap className="w-3 h-3 mr-1" />
+																		一键获取模型
+																	</>
+																)}
+															</Button>
+														</div>
+													</div>
 												);
 											})()}
 										</div>
 									</div>
 
-									<div className="pt-4 border-t border-border border-dashed flex items-center justify-between flex-wrap gap-4">
-										<div className="flex items-center gap-2">
-											<Button
-												onClick={testLLMConnection}
-												disabled={testingLLM || !isConfigured}
-												className="cyber-btn-primary h-10"
-											>
-												{testingLLM ? (
-													<>
-														<div className="loading-spinner w-4 h-4 mr-2" />
-														测试中...
-													</>
-												) : (
-													<>
-														<PlayCircle className="w-4 h-4 mr-2" />
-														测试
-													</>
-												)}
-											</Button>
+									<div className="pt-4 border-t border-border border-dashed flex justify-end flex-wrap gap-2">
+										<Button
+											onClick={handleSaveAndTestLLM}
+											disabled={savingLLM || testingLLM || !isConfigured}
+											className="cyber-btn-primary h-10"
+											type="button"
+										>
+											{savingLLM || testingLLM ? (
+												<>
+													<Loader2 className="w-4 h-4 mr-2 animate-spin" />
+													保存并测试中...
+												</>
+											) : (
+												<>
+													<Save className="w-4 h-4 mr-2" />
+													保存并测试
+												</>
+											)}
+										</Button>
 
-											<Button
-												onClick={saveConfig}
-												disabled={!hasChanges}
-												variant="outline"
-												className="cyber-btn-outline h-10"
-												type="button"
-											>
-												<Save className="w-4 h-4 mr-2" />
-												保存
-											</Button>
-
-											<Button
-												onClick={resetConfig}
-												disabled={testingLLM}
-												variant="ghost"
-												className="cyber-btn-ghost h-10"
-												type="button"
-											>
-												<RotateCcw className="w-4 h-4 mr-2" />
-												重置
-											</Button>
-											<Button
+										<Button
 											variant="outline"
-											className="cyber-btn-ghost h-9"
+											className="cyber-btn-ghost h-10"
 											onClick={() => setAdvancedOpen(true)}
 											type="button"
 										>
 											<Settings className="w-4 h-4 mr-2" />
 											高级配置
 										</Button>
-										</div>
+
+										<Button
+											onClick={resetConfig}
+											disabled={savingLLM || testingLLM}
+											variant="ghost"
+											className="cyber-btn-ghost h-10"
+											type="button"
+										>
+											<RotateCcw className="w-4 h-4 mr-2" />
+											重置
+										</Button>
 									</div>
 
 									{llmTestResult && (

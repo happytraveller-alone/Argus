@@ -6,6 +6,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,7 +28,6 @@ import {
   Info,
   CheckCircle2,
   AlertCircle,
-  PlayCircle,
   Eye,
   EyeOff,
   RotateCcw,
@@ -31,6 +36,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/serverClient";
+import { runSaveThenTestAction } from "@/components/scan-config/intelligentEngineActionFlow";
 
 interface EmbeddingProvider {
   id: string;
@@ -192,67 +198,73 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
     await loadData();
   };
 
-  const handleSave = async () => {
+  const validateEmbeddingInputs = () => {
     if (!selectedProvider) {
       toast.error("请选择提供商");
-      return;
+      return null;
     }
 
     const provider = providers.find((p) => p.id === selectedProvider);
     if (!selectedModel) {
       toast.error("请选择或输入模型");
-      return;
+      return null;
     }
     if (provider?.requires_api_key && !apiKey.trim()) {
       toast.error(`${provider.name} 需要 API Key`);
-      return;
+      return null;
     }
 
+    return {
+      provider: selectedProvider,
+      model: selectedModel,
+      apiKey: apiKey || undefined,
+      baseUrl: baseUrl || undefined,
+      dimension: customDimension || undefined,
+      batchSize,
+    };
+  };
+
+  const saveEmbeddingConfig = async (payload: {
+    provider: string;
+    model: string;
+    apiKey?: string;
+    baseUrl?: string;
+    dimension?: number;
+    batchSize: number;
+  }) => {
     try {
-      setSaving(true);
       await apiClient.put("/embedding/config", {
-        provider: selectedProvider,
-        model: selectedModel,
-        api_key: apiKey || undefined,
-        base_url: baseUrl || undefined,
-        dimensions: customDimension || undefined,
-        batch_size: batchSize,
+        provider: payload.provider,
+        model: payload.model,
+        api_key: payload.apiKey,
+        base_url: payload.baseUrl,
+        dimensions: payload.dimension,
+        batch_size: payload.batchSize,
       });
 
       toast.success("配置已保存");
-      await loadData();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || "保存失败");
-    } finally {
-      setSaving(false);
+      throw error;
     }
   };
 
-  const handleTest = async () => {
-    if (!selectedProvider) {
-      toast.error("请选择提供商");
-      return;
-    }
-    if (!selectedModel) {
-      toast.error("请选择或输入模型");
-      return;
-    }
-    const provider = providers.find((p) => p.id === selectedProvider);
-    if (provider?.requires_api_key && !apiKey.trim()) {
-      toast.error(`${provider.name} 需要 API Key`);
-      return;
-    }
-
+  const testEmbeddingConfig = async (payload: {
+    provider: string;
+    model: string;
+    apiKey?: string;
+    baseUrl?: string;
+    dimension?: number;
+  }) => {
     try {
-      setTesting(true);
       setTestResult(null);
 
       const response = await apiClient.post("/embedding/test", {
-        provider: selectedProvider,
-        model: selectedModel,
-        api_key: apiKey || undefined,
-        base_url: baseUrl || undefined,
-        dimension: customDimension || undefined,
+        provider: payload.provider,
+        model: payload.model,
+        api_key: payload.apiKey,
+        base_url: payload.baseUrl,
+        dimension: payload.dimension,
       });
 
       setTestResult(response.data);
@@ -268,7 +280,42 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
         message: error.response?.data?.detail || "测试失败",
       });
       toast.error("测试失败");
+      return {
+        success: false,
+        message: error.response?.data?.detail || "测试失败",
+      };
+    }
+  };
+
+  const handleSaveAndTest = async () => {
+    const payload = validateEmbeddingInputs();
+    if (!payload) return;
+
+    setSaving(true);
+    setTesting(true);
+    try {
+      await runSaveThenTestAction({
+        save: () => saveEmbeddingConfig(payload),
+        test: () =>
+          testEmbeddingConfig({
+            provider: payload.provider,
+            model: payload.model,
+            apiKey: payload.apiKey,
+            baseUrl: payload.baseUrl,
+            dimension: payload.dimension,
+          }),
+      });
+      setLoadedSnapshot({
+        provider: payload.provider,
+        model: payload.model,
+        apiKey: payload.apiKey || "",
+        baseUrl: payload.baseUrl || "",
+        customDimension: payload.dimension ?? null,
+        batchSize: payload.batchSize,
+      });
+      setHasChanges(false);
     } finally {
+      setSaving(false);
       setTesting(false);
     }
   };
@@ -276,6 +323,8 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
   const selectedProviderInfo = providers.find((p) => p.id === selectedProvider);
   const requiresApiKey = Boolean(selectedProviderInfo?.requires_api_key);
   const isConfigured = !requiresApiKey || apiKey.trim().length > 0;
+  const canSaveAndTest =
+    Boolean(selectedProvider) && Boolean(selectedModel) && isConfigured;
 
   if (loading) {
     return (
@@ -290,78 +339,105 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
 
   return (
     <div className={compact ? "space-y-4" : "space-y-6"}>
-      {/* 配置表单 */}
       <div className={`cyber-card ${compact ? "p-4 space-y-4" : "p-6 space-y-6"}`}>
-        {/* 提供商选择 */}
-        <div className="space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase">提供商</Label>
-          <Select value={selectedProvider} onValueChange={handleProviderChange}>
-            <SelectTrigger className="h-12 cyber-input">
-              <SelectValue placeholder="选择提供商" />
-            </SelectTrigger>
-            <SelectContent className="cyber-dialog border-border">
-              {providers.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id} className="font-mono">
-                  <div className="flex items-center gap-2">
-                    <span>{provider.name}</span>
-                    {provider.requires_api_key ? (
-                      <Key className="w-3 h-3 text-amber-400" />
-                    ) : (
-                      <Cpu className="w-3 h-3 text-emerald-400" />
-                    )}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 min-[1800px]:grid-cols-4 ${
+            compact ? "gap-3" : "gap-4"
+          }`}
+        >
+          <div className="space-y-2 min-w-0">
+            <Label className="text-xs font-bold text-muted-foreground uppercase">
+              模型供应商
+            </Label>
+            <Select value={selectedProvider} onValueChange={handleProviderChange}>
+              <SelectTrigger className={compact ? "h-10 cyber-input" : "h-12 cyber-input"}>
+                <SelectValue placeholder="选择模型供应商" />
+              </SelectTrigger>
+              <SelectContent className="cyber-dialog border-border">
+                {providers.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id} className="font-mono">
+                    <div className="flex items-center gap-2">
+                      <span>{provider.name}</span>
+                      {provider.requires_api_key ? (
+                        <Key className="w-3 h-3 text-amber-400" />
+                      ) : (
+                        <Cpu className="w-3 h-3 text-emerald-400" />
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedProviderInfo ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Info className="w-3 h-3 text-sky-400" />
+                {selectedProviderInfo.description}
+              </p>
+            ) : null}
+          </div>
 
-          {selectedProviderInfo && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Info className="w-3 h-3 text-sky-400" />
-              {selectedProviderInfo.description}
-            </p>
-          )}
-        </div>
-
-        {/* API Key */}
-        <div className="space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase">
-            API Key
-            {requiresApiKey ? <span className="text-rose-400 ml-1">*</span> : null}
-          </Label>
-          <div className="flex gap-2">
+          <div className="space-y-2 min-w-0">
+            <Label className="text-xs font-bold text-muted-foreground uppercase">
+              地址
+            </Label>
             <Input
-              type={showApiKey ? "text" : "password"}
-              value={apiKey}
+              type="url"
+              value={baseUrl}
               onChange={(e) => {
-                setApiKey(e.target.value);
+                setBaseUrl(e.target.value);
                 setHasChanges(true);
               }}
-              placeholder={requiresApiKey ? "输入你的 API Key" : "该提供商无需 API Key"}
-              className="h-12 cyber-input"
-              disabled={!requiresApiKey}
+              placeholder={
+                selectedProvider === "ollama"
+                  ? "http://localhost:11434"
+                  : selectedProvider === "huggingface"
+                  ? "https://router.huggingface.co"
+                  : selectedProvider === "cohere"
+                  ? "https://api.cohere.com/v2"
+                  : selectedProvider === "jina"
+                  ? "https://api.jina.ai/v1"
+                  : "https://api.openai.com/v1"
+              }
+              className={compact ? "h-10 cyber-input" : "h-12 cyber-input"}
             />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowApiKey((prev) => !prev)}
-              className="h-12 w-12 cyber-btn-ghost"
-              disabled={!requiresApiKey}
-              type="button"
-            >
-              {showApiKey ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </Button>
           </div>
-        </div>
 
-        <div className={`grid grid-cols-1 md:grid-cols-2 ${compact ? "gap-3" : "gap-4"}`}>
-          {/* 模型选择/输入 */}
-          <div className="space-y-2">
-            <Label className="text-xs font-bold text-muted-foreground uppercase">模型选择</Label>
+          <div className="space-y-2 min-w-0">
+            <Label className="text-xs font-bold text-muted-foreground uppercase">
+              密钥
+              {requiresApiKey ? <span className="text-rose-400 ml-1">*</span> : null}
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                type={showApiKey ? "text" : "password"}
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  setHasChanges(true);
+                }}
+                placeholder={requiresApiKey ? "输入你的 API Key" : "该提供商无需 API Key"}
+                className={compact ? "h-10 cyber-input" : "h-12 cyber-input"}
+                disabled={!requiresApiKey}
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowApiKey((prev) => !prev)}
+                className={compact ? "h-10 w-10 cyber-btn-ghost" : "h-12 w-12 cyber-btn-ghost"}
+                disabled={!requiresApiKey}
+                type="button"
+              >
+                {showApiKey ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2 min-w-0">
+            <Label className="text-xs font-bold text-muted-foreground uppercase">模型</Label>
             {selectedProviderInfo ? (
               (() => {
                 const models = Array.isArray(selectedProviderInfo.models)
@@ -378,7 +454,7 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
                         setHasChanges(true);
                       }}
                       placeholder={defaultModel ? `默认: ${defaultModel}` : "输入模型名称"}
-                      className="h-10 cyber-input"
+                      className={compact ? "h-10 cyber-input" : "h-12 cyber-input"}
                     />
                   );
                 }
@@ -415,7 +491,7 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
                         setHasChanges(true);
                       }}
                     >
-                      <SelectTrigger className="h-10 cyber-input">
+                      <SelectTrigger className={compact ? "h-10 cyber-input" : "h-12 cyber-input"}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="cyber-dialog border-border">
@@ -445,7 +521,7 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
                           setHasChanges(true);
                         }}
                         placeholder="输入模型名称"
-                        className="h-10 cyber-input"
+                        className={compact ? "h-10 cyber-input" : "h-12 cyber-input"}
                       />
                     ) : null}
                   </div>
@@ -458,99 +534,14 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
                   setSelectedModel(event.target.value);
                   setHasChanges(true);
                 }}
-                placeholder="请先选择提供商"
-                className="h-10 cyber-input"
+                placeholder="请先选择模型供应商"
+                className={compact ? "h-10 cyber-input" : "h-12 cyber-input"}
                 disabled
               />
             )}
           </div>
-
-          {/* API 站口 */}
-          <div className="space-y-2">
-            <Label className="text-xs font-bold text-muted-foreground uppercase">
-              API 站口 <span className="text-muted-foreground">(可选)</span>
-            </Label>
-            <Input
-              type="url"
-              value={baseUrl}
-              onChange={(e) => {
-                setBaseUrl(e.target.value);
-                setHasChanges(true);
-              }}
-              placeholder={
-                selectedProvider === "ollama"
-                  ? "http://localhost:11434"
-                  : selectedProvider === "huggingface"
-                  ? "https://router.huggingface.co"
-                  : selectedProvider === "cohere"
-                  ? "https://api.cohere.com/v2"
-                  : selectedProvider === "jina"
-                  ? "https://api.jina.ai/v1"
-                  : "https://api.openai.com/v1"
-              }
-              className="h-10 cyber-input"
-            />
-          </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            className="cyber-btn-ghost h-9"
-            onClick={() => setAdvancedOpen((prev) => !prev)}
-            type="button"
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            高级配置
-          </Button>
-        </div>
-
-        {advancedOpen ? (
-          <div className={`pt-2 border-t border-border border-dashed ${compact ? "space-y-4" : "space-y-6"}`}>
-            {/* 自定义向量维度 */}
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase">
-                自定义向量维度 <span className="text-muted-foreground">(可选)</span>
-              </Label>
-              <Input
-                type="number"
-                value={customDimension || ""}
-                onChange={(e) => {
-                  setCustomDimension(e.target.value ? parseInt(e.target.value) : null);
-                  setHasChanges(true);
-                }}
-                placeholder="留空使用默认值"
-                min={64}
-                max={8192}
-                className="h-10 cyber-input w-40"
-              />
-              <p className="text-xs text-muted-foreground">
-                适用于 Ollama 等场景：同一模型不同参数规模可能有不同维度
-                <br />
-                例如 qwen3-embedding:0.6b=1024, qwen3-embedding:8b=4096
-              </p>
-            </div>
-
-            {/* 批处理大小 */}
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase">批处理大小</Label>
-              <Input
-                type="number"
-                value={batchSize}
-                onChange={(e) => {
-                  setBatchSize(parseInt(e.target.value) || 100);
-                  setHasChanges(true);
-                }}
-                min={1}
-                max={500}
-                className="h-10 cyber-input w-32"
-              />
-              <p className="text-xs text-muted-foreground">每批嵌入的文本数量，建议 50-100</p>
-            </div>
-          </div>
-        ) : null}
-
-        {/* 测试结果 */}
         {testResult && (
           <div
             className={`p-4 rounded-lg ${
@@ -588,56 +579,106 @@ export default function EmbeddingConfigPanel({ compact = false }: EmbeddingConfi
           </div>
         )}
 
-        {/* 操作按钮（对齐 LLM） */}
-        <div className={`${compact ? "pt-3" : "pt-4"} border-t border-border border-dashed flex items-center justify-between flex-wrap ${compact ? "gap-3" : "gap-4"}`}>
-
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={handleTest}
-              disabled={testing || !selectedProvider || !selectedModel || !isConfigured}
-              className="cyber-btn-primary h-10"
-              type="button"
-            >
-              {testing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  测试中...
-                </>
-              ) : (
-                <>
-                  <PlayCircle className="w-4 h-4 mr-2" />
-                  测试
-                </>
-              )}
-            </Button>
-
-            <Button
-              onClick={handleSave}
-              disabled={saving || !hasChanges}
-              variant="outline"
-              className="cyber-btn-outline h-10"
-              type="button"
-            >
-              {saving ? (
+        <div
+          className={`${
+            compact ? "pt-3" : "pt-4"
+          } border-t border-border border-dashed flex justify-end flex-wrap gap-2`}
+        >
+          <Button
+            onClick={handleSaveAndTest}
+            disabled={saving || testing || !canSaveAndTest}
+            className="cyber-btn-primary h-10"
+            type="button"
+          >
+            {saving || testing ? (
+              <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
+                保存并测试中...
+              </>
+            ) : (
+              <>
                 <Save className="w-4 h-4 mr-2" />
-              )}
-              保存
-            </Button>
+                保存并测试
+              </>
+            )}
+          </Button>
 
-            <Button
-              onClick={resetConfig}
-              disabled={testing || saving}
-              variant="ghost"
-              className="cyber-btn-ghost h-10"
-              type="button"
-            >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              重置
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            className="cyber-btn-ghost h-10"
+            onClick={() => setAdvancedOpen(true)}
+            type="button"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            高级配置
+          </Button>
+
+          <Button
+            onClick={resetConfig}
+            disabled={testing || saving || !hasChanges}
+            variant="ghost"
+            className="cyber-btn-ghost h-10"
+            type="button"
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            重置
+          </Button>
         </div>
+
+        <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <DialogContent className="!w-[min(92vw,720px)] !max-w-none p-0 gap-0 cyber-dialog border border-border rounded-lg">
+            <DialogHeader className="px-5 py-4 border-b border-border bg-muted">
+              <DialogTitle className="font-mono text-base font-bold uppercase tracking-wider text-foreground">
+                搜索增强高级配置
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="px-5 py-5 space-y-5">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">
+                  自定义向量维度 <span className="text-muted-foreground">(可选)</span>
+                </Label>
+                <Input
+                  type="number"
+                  value={customDimension || ""}
+                  onChange={(e) => {
+                    setCustomDimension(e.target.value ? parseInt(e.target.value) : null);
+                    setHasChanges(true);
+                  }}
+                  placeholder="留空使用默认值"
+                  min={64}
+                  max={8192}
+                  className="h-10 cyber-input max-w-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  适用于 Ollama 等场景：同一模型不同参数规模可能有不同维度
+                  <br />
+                  例如 qwen3-embedding:0.6b=1024, qwen3-embedding:8b=4096
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase">
+                  批处理大小
+                </Label>
+                <Input
+                  type="number"
+                  value={batchSize}
+                  onChange={(e) => {
+                    setBatchSize(parseInt(e.target.value) || 100);
+                    setHasChanges(true);
+                  }}
+                  min={1}
+                  max={500}
+                  className="h-10 cyber-input max-w-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  每批嵌入的文本数量，建议 50-100
+                </p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

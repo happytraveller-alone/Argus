@@ -134,6 +134,33 @@ test("system provider switch still applies next defaults when current field is e
 	);
 });
 
+test("system provider switch preserves non-empty base URLs and respects explicit clear", async () => {
+	const systemLlmDraft = await importOrFail<any>(
+		"../src/components/system/llmProviderSwitch.ts",
+	);
+
+	assert.equal(
+		systemLlmDraft.resolveProviderSwitchFieldValue({
+			currentValue: "https://gateway.internal/v1",
+			wasTouched: false,
+			nextDefaultValue: "https://api.openai.com/v1",
+			preserveExistingNonEmptyValue: true,
+		}),
+		"https://gateway.internal/v1",
+	);
+
+	assert.equal(
+		systemLlmDraft.resolveProviderSwitchFieldValue({
+			currentValue: "",
+			wasTouched: true,
+			nextDefaultValue: "https://api.openai.com/v1",
+			preserveExistingNonEmptyValue: true,
+			allowExplicitEmptyOverride: true,
+		}),
+		"",
+	);
+});
+
 test("LLM gate marks only required missing fields and exempts ollama API keys", async () => {
 	const providerCatalog = await importOrFail<any>(
 		"../src/shared/llm/providerCatalog.ts",
