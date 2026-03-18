@@ -471,7 +471,7 @@ async def test_import_projects_bundle_restores_graph_and_rebinds_user(tmp_path: 
 
 
 @pytest.mark.asyncio
-async def test_import_projects_bundle_skips_conflicting_zip_hash(tmp_path: Path, monkeypatch):
+async def test_import_projects_bundle_merges_into_conflicting_project_by_zip_hash(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(settings, "ZIP_STORAGE_PATH", str(tmp_path / "zip-storage"))
     bundle_bytes, _, _ = await _build_full_source_bundle(tmp_path)
 
@@ -496,12 +496,23 @@ async def test_import_projects_bundle_skips_conflicting_zip_hash(tmp_path: Path,
             user,
             UploadFile(filename="bundle.zip", file=io.BytesIO(bundle_bytes)),
         )
-        assert summary.imported_projects == []
+        assert len(summary.imported_projects) == 1
         assert summary.failed_projects == []
-        assert summary.skipped_projects[0]["reason"] == "conflict"
+        assert summary.skipped_projects == []
+        assert summary.imported_projects[0]["project_id"] == existing_project.id
+        assert summary.imported_projects[0]["reason"] == "conflict_merged"
+        assert any("merged incrementally" in warning for warning in summary.warnings)
 
         projects = (await db.execute(select(Project))).scalars().all()
         assert len(projects) == 1
+        merged_audit_tasks = (
+            await db.execute(select(AuditTask).where(AuditTask.project_id == existing_project.id))
+        ).scalars().all()
+        assert len(merged_audit_tasks) == 1
+        merged_yasa_tasks = (
+            await db.execute(select(YasaScanTask).where(YasaScanTask.project_id == existing_project.id))
+        ).scalars().all()
+        assert len(merged_yasa_tasks) == 1
     finally:
         await _close_session(db)
 

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import UniqueConstraint, or_, select
+from sqlalchemy import UniqueConstraint, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -791,6 +791,25 @@ def _is_duplicate_by_unique_columns(
     return False
 
 
+async def _find_existing_row_by_unique_columns(
+    db: AsyncSession,
+    spec: DomainModelSpec,
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    for column_set in spec.unique_columns:
+        if any(column not in payload for column in column_set):
+            continue
+        values = tuple(payload.get(column) for column in column_set)
+        if any(value is None for value in values):
+            continue
+        conditions = [getattr(spec.model, column) == payload[column] for column in column_set]
+        result = await db.execute(select(spec.model).where(and_(*conditions)).limit(1))
+        existing = result.scalar_one_or_none()
+        if existing is not None:
+            return _model_to_dict(existing)
+    return None
+
+
 def _mark_unique_columns_seen(
     table_name: str,
     payload: dict[str, Any],
@@ -888,19 +907,19 @@ async def import_projects_bundle(
                     continue
 
                 existing = await _detect_project_conflict(db=db, current_user=current_user, project_row=project_row)
-                if existing:
-                    skipped_projects.append(
-                        {
-                            "source_project_id": source_project_id,
-                            "name": project_row.get("name"),
-                            "reason": "conflict",
-                            "existing_project_id": existing.id,
-                        }
+                merge_into_existing = existing is not None
+                target_project_id = existing.id if merge_into_existing else str(uuid.uuid4())
+                if merge_into_existing:
+                    warnings.append(
+                        f"project {source_project_id} conflicted with existing project {target_project_id} and was merged incrementally"
                     )
-                    continue
 
                 zip_manifest_entry = zip_entries.get(source_project_id, {})
-                if project_row.get("source_type") == "zip" and zip_blob is None:
+                if (
+                    not merge_into_existing
+                    and project_row.get("source_type") == "zip"
+                    and zip_blob is None
+                ):
                     failed_projects.append(
                         {
                             "source_project_id": source_project_id,
@@ -910,9 +929,11 @@ async def import_projects_bundle(
                     )
                     continue
 
-                new_project_id = str(uuid.uuid4())
+                new_project_id = target_project_id
                 remap_values: dict[str, dict[str, dict[Any, Any]]] = defaultdict(lambda: defaultdict(dict))
                 unique_seen: dict[str, dict[tuple[str, ...], set[tuple[Any, ...]]]] = defaultdict(dict)
+                if merge_into_existing:
+                    remap_values[Project.__table__.name]["id"][source_project_id] = target_project_id
 
                 zip_temp_path: str | None = None
                 try:
@@ -928,6 +949,15 @@ async def import_projects_bundle(
 
                             for source_row in rows:
                                 if not isinstance(source_row, dict):
+                                    continue
+                                if merge_into_existing and table_name == Project.__table__.name:
+                                    _record_column_remaps(
+                                        table_name=table_name,
+                                        source_row=source_row,
+                                        payload={"id": target_project_id},
+                                        tracked_columns=tracked_columns[table_name],
+                                        remap_values=remap_values,
+                                    )
                                     continue
 
                                 payload = _coerce_row_for_model(spec.model, source_row)
@@ -974,6 +1004,40 @@ async def import_projects_bundle(
                                     unique_columns=spec.unique_columns,
                                     unique_seen=unique_seen,
                                 ):
+                                    existing_payload = await _find_existing_row_by_unique_columns(
+                                        db=db,
+                                        spec=spec,
+                                        payload=payload,
+                                    )
+                                    if existing_payload is not None:
+                                        _record_column_remaps(
+                                            table_name=table_name,
+                                            source_row=source_row,
+                                            payload=existing_payload,
+                                            tracked_columns=tracked_columns[table_name],
+                                            remap_values=remap_values,
+                                        )
+                                    continue
+
+                                existing_payload = await _find_existing_row_by_unique_columns(
+                                    db=db,
+                                    spec=spec,
+                                    payload=payload,
+                                )
+                                if existing_payload is not None:
+                                    _mark_unique_columns_seen(
+                                        table_name=table_name,
+                                        payload=existing_payload,
+                                        unique_columns=spec.unique_columns,
+                                        unique_seen=unique_seen,
+                                    )
+                                    _record_column_remaps(
+                                        table_name=table_name,
+                                        source_row=source_row,
+                                        payload=existing_payload,
+                                        tracked_columns=tracked_columns[table_name],
+                                        remap_values=remap_values,
+                                    )
                                     continue
 
                                 db.add(spec.model(**payload))
@@ -993,7 +1057,7 @@ async def import_projects_bundle(
 
                         await db.flush()
 
-                        if zip_blob is not None:
+                        if zip_blob is not None and not merge_into_existing:
                             fd, zip_temp_path = tempfile.mkstemp(prefix="project-transfer-zip-", suffix=".zip")
                             os.close(fd)
                             with open(zip_temp_path, "wb") as handle:
@@ -1016,10 +1080,12 @@ async def import_projects_bundle(
                             "source_project_id": source_project_id,
                             "project_id": new_project_id,
                             "name": project_row.get("name"),
+                            "reason": "conflict_merged" if merge_into_existing else None,
                         }
                     )
                 except Exception as exc:
-                    await delete_project_zip(new_project_id)
+                    if not merge_into_existing:
+                        await delete_project_zip(new_project_id)
                     failed_projects.append(
                         {
                             "source_project_id": source_project_id,

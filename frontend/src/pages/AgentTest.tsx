@@ -442,6 +442,9 @@ function TransferPanel() {
                     <div key={`${item.source_project_id}-${item.project_id}`} className="rounded border border-border/20 px-2 py-1.5">
                       <p className="font-medium text-foreground">{item.name || item.source_project_id}</p>
                       <p className="text-muted-foreground">目标项目 ID: {item.project_id}</p>
+                      {item.reason ? (
+                        <p className="text-muted-foreground">说明: {formatReason(item.reason)}</p>
+                      ) : null}
                     </div>
                   ))
                 )}
