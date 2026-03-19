@@ -155,6 +155,27 @@ test("RealtimeFindingsPanel 仅在列表中显示漏洞类型，不再渲染原�
 	assert.doesNotMatch(markup, />SQL 注入</);
 });
 
+test("RealtimeFindingsPanel 在仅展示已验证但暂无结果时提示切换过滤器", () => {
+	const verifiedFilters: FindingsViewFilters = {
+		...filters,
+		verification: "verified",
+	};
+	const markup = renderToStaticMarkup(
+		createElement(RealtimeFindingsPanel, {
+			taskId: "task-verified-empty",
+			items: [],
+			isRunning: false,
+			currentPhase: null,
+			filters: verifiedFilters,
+			onFiltersChange: () => {},
+			onOpenDetail: () => {},
+		}),
+	);
+
+	assert.match(markup, /暂无已验证漏洞/);
+	assert.match(markup, />查看全部漏洞<\/button>/);
+});
+
 test("RealtimeFindingsPanel 在全部为入库空置信度时隐藏置信度列且不渲染占位横杠", () => {
 	const noConfidenceItems: RealtimeMergedFindingItem[] = [
 		{

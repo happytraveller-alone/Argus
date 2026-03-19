@@ -74,9 +74,14 @@ import {
   normalizeSeverityKey,
   toZhAgentName,
 } from "./localization";
+import {
+  hasAnyVerifiedFinding,
+  shouldAutoApplyVerifiedFilter,
+} from "./findingsFilterUtils";
 import type {
   BootstrapInputsSummary,
   DetailViewState,
+  FindingsFiltersChangeOptions,
   FindingsViewFilters,
   LateToolCallPolicy,
   LogItem,
@@ -161,6 +166,12 @@ type HomeScanCard = {
   accentClassName: string;
   targetRoute: string;
 };
+
+const createDefaultFindingsFilters = (): FindingsViewFilters => ({
+  keyword: "",
+  severity: "all",
+  verification: "all",
+});
 
 type UnifiedAgentEvent = {
   type?: string;
@@ -536,11 +547,13 @@ function AgentAuditPageContent() {
   );
   const [, setIsFindingsLoading] = useState(false);
   const [, setFindingsError] = useState<string | null>(null);
-  const [findingsFilters, setFindingsFilters] = useState<FindingsViewFilters>({
-    keyword: "",
-    severity: "all",
-    verification: "all",
-  });
+  const [findingsFilters, setFindingsFilters] = useState<FindingsViewFilters>(() =>
+    createDefaultFindingsFilters(),
+  );
+  const [hasAutoAppliedVerifiedFilter, setHasAutoAppliedVerifiedFilter] =
+    useState(false);
+  const [userOverrideVerificationFilter, setUserOverrideVerificationFilter] =
+    useState(false);
   // NOTE: bootstrap (opengrep) input UI is currently not shown in the new realtime layout,
   // but we keep the plumbing in place for future toggles.
   const [bootstrapInputsSummary, setBootstrapInputsSummary] =
@@ -561,6 +574,10 @@ function AgentAuditPageContent() {
   const [highlightedLogId, setHighlightedLogId] = useState<string | null>(null);
   const [, setHighlightedFindingId] = useState<string | null>(null);
   const [, setHighlightedAgentId] = useState<string | null>(null);
+  useEffect(() => {
+    setHasAutoAppliedVerifiedFilter(false);
+    setUserOverrideVerificationFilter(false);
+  }, [task?.id, taskId]);
 
   // Realtime panels state
   const [realtimeFindings, setRealtimeFindings] = useState<RealtimeMergedFindingItem[]>([]);
@@ -627,6 +644,18 @@ function AgentAuditPageContent() {
     },
     [detailDialog, findings, realtimeFindings],
   );
+  const handleFindingsFiltersChange = useCallback(
+    (nextFilters: FindingsViewFilters, options?: FindingsFiltersChangeOptions) => {
+      const source = options?.source ?? "user";
+      setFindingsFilters((previous) => {
+        if (source === "user" && previous.verification !== nextFilters.verification) {
+          setUserOverrideVerificationFilter(true);
+        }
+        return nextFilters;
+      });
+    },
+    [setUserOverrideVerificationFilter],
+  );
   const selectedAgentNode = useMemo(
     () =>
       detailDialog?.type === "agent"
@@ -658,6 +687,14 @@ function AgentAuditPageContent() {
       .map(agentFindingToRealtimeItem)
       .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
   }, [findings]);
+  const hasVerifiedFinding = useMemo(
+    () =>
+      hasAnyVerifiedFinding({
+        persisted: persistedDisplayFindings,
+        realtime: realtimeFindings,
+      }),
+    [persistedDisplayFindings, realtimeFindings],
+  );
   const statsSummary = useMemo(
     () =>
       task
@@ -702,6 +739,26 @@ function AgentAuditPageContent() {
   ],
   [],
 );
+  useEffect(() => {
+    const shouldApply = shouldAutoApplyVerifiedFilter({
+      hasVerifiedFinding,
+      userOverride: userOverrideVerificationFilter,
+      alreadyApplied: hasAutoAppliedVerifiedFilter,
+      currentVerificationFilter: findingsFilters.verification,
+    });
+    if (!shouldApply) return;
+    handleFindingsFiltersChange(
+      { ...findingsFilters, verification: "verified" },
+      { source: "system" },
+    );
+    setHasAutoAppliedVerifiedFilter(true);
+  }, [
+    hasVerifiedFinding,
+    userOverrideVerificationFilter,
+    hasAutoAppliedVerifiedFilter,
+    findingsFilters,
+    handleFindingsFiltersChange,
+  ]);
   const currentPhaseLabel = useMemo(() => {
     const phaseKey = String(task?.current_phase || "")
       .trim()
@@ -755,7 +812,7 @@ function AgentAuditPageContent() {
       if (!state) return;
       // Legacy: preserve stored tab state, but current UI is split into realtime+right-panel.
       setActiveMainTab(state.activeTab);
-      setFindingsFilters(state.filters);
+      handleFindingsFiltersChange(state.filters, { source: "user" });
       selectAgent(null);
 
       requestAnimationFrame(() => {
@@ -799,7 +856,7 @@ function AgentAuditPageContent() {
         setTimeout(() => clearHighlights(), 1800);
       });
     },
-    [clearHighlights, selectAgent],
+    [clearHighlights, handleFindingsFiltersChange, selectAgent],
   );
 
   const openDetailDialog = useCallback(
@@ -949,10 +1006,8 @@ function AgentAuditPageContent() {
       setActiveMainTab("logs");
       setFindingsError(null);
       setIsFindingsLoading(false);
-      setFindingsFilters({
-        keyword: "",
-        severity: "all",
-        verification: "all",
+      handleFindingsFiltersChange(createDefaultFindingsFilters(), {
+        source: "system",
       });
       setTokenUsage(createTokenUsageAccumulator());
       setStatsNow(new Date());
@@ -3144,7 +3199,7 @@ function AgentAuditPageContent() {
                 isRunning={isRunning}
                 currentPhase={task?.current_phase ?? null}
                 filters={findingsFilters}
-                onFiltersChange={setFindingsFilters}
+                onFiltersChange={handleFindingsFiltersChange}
                 scrollContainerRef={findingsContainerRef}
                 onOpenDetail={(item) =>
                   openFindingDetailPage(

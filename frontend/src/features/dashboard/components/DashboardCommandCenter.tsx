@@ -675,20 +675,6 @@ export default function DashboardCommandCenter({
 					)}
 				</DashboardSection>
 				<DashboardSection
-					className="lg:col-span-5"
-					panel="funnel"
-					title="验证漏斗"
-					description={`窗口内原始发现、有效风险和已验证结果的收敛情况。`}
-					icon={<Target className="h-5 w-5" />}
-				>
-					<VerificationFunnel
-						raw={snapshot.verification_funnel.raw_findings}
-						effective={snapshot.verification_funnel.effective_findings}
-						verified={snapshot.verification_funnel.verified_findings}
-						falsePositive={snapshot.verification_funnel.false_positive_count}
-					/>
-				</DashboardSection>
-				<DashboardSection
 					className="lg:col-span-7"
 					panel="hotspots"
 					title="风险热点项目"
@@ -811,16 +797,6 @@ export default function DashboardCommandCenter({
 					) : (
 						<p className="text-sm text-slate-400">暂无引擎贡献数据</p>
 					)}
-				</DashboardSection>
-				<DashboardSection
-					className="lg:col-span-5 flex flex-col"
-					panel="cwe"
-					title="CWE 攻击面"
-					description="攻击面聚集视图，面积表示发现规模，颜色区分漏洞类型。"
-					icon={<Target className="h-5 w-5" />}
-					straightEdges
-				>
-					<AttackSurfaceTreemap items={snapshot.cwe_distribution || []} />
 				</DashboardSection>
 			</div>
 

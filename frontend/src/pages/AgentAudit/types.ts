@@ -211,6 +211,10 @@ export interface FindingsViewFilters {
   showFiltered?: boolean;
 }
 
+export interface FindingsFiltersChangeOptions {
+  source?: "user" | "system";
+}
+
 export interface BootstrapInputsSummary {
   taskId: string;
   source: string;

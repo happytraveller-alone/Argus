@@ -185,7 +185,6 @@ test("DashboardCommandCenter renders the control-center sections and hotspot dat
 	assert.match(markup, /累计扫描时长/);
 	assert.match(markup, /累计执行扫描/);
 	assert.match(markup, /可挖掘漏洞类型/);
-	assert.match(markup, /验证漏斗/);
 	assert.match(markup, /任务状态/);
 	assert.match(markup, /风险热点项目/);
 	assert.match(markup, /语言风险热力/);

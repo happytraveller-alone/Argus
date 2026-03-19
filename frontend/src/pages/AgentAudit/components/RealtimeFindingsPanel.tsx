@@ -35,7 +35,10 @@ import {
 	buildFindingTableState,
 	shouldResetFindingPage,
 } from "../detailViewModel";
-import type { FindingsViewFilters } from "../types";
+import type {
+	FindingsFiltersChangeOptions,
+	FindingsViewFilters,
+} from "../types";
 
 export type RealtimeVerificationProgress = "pending" | "verified";
 export type RealtimeDisplaySeverity =
@@ -281,7 +284,10 @@ export default function RealtimeFindingsPanel(props: {
 	isRunning: boolean;
 	currentPhase?: string | null;
 	filters: FindingsViewFilters;
-	onFiltersChange: (next: FindingsViewFilters) => void;
+	onFiltersChange: (
+		next: FindingsViewFilters,
+		options?: FindingsFiltersChangeOptions,
+	) => void;
 	onOpenDetail: (item: RealtimeMergedFindingItem) => void;
 	scrollContainerRef?: RefObject<HTMLDivElement | null>;
 }) {
@@ -318,6 +324,12 @@ export default function RealtimeFindingsPanel(props: {
 			}),
 		[page, pageSize, props.filters, props.items],
 	);
+	const hasNoRows = tableState.rows.length === 0;
+	const emptyStateMessage = props.isRunning
+		? getEmptyStateMessage(props.currentPhase)
+		: "暂无符合条件的漏洞";
+	const showVerifiedOnlyHint =
+		hasNoRows && props.filters.verification === "verified";
 
 	useEffect(() => {
 		if (page !== tableState.page) {
@@ -369,7 +381,7 @@ export default function RealtimeFindingsPanel(props: {
 								props.onFiltersChange({
 									...props.filters,
 									keyword: event.target.value,
-								})
+								}, { source: "user" })
 							}
 							placeholder="搜索漏洞类型 / 危害 / 状态"
 							className="cyber-input h-10 pl-11 pr-3 text-sm"
@@ -381,7 +393,7 @@ export default function RealtimeFindingsPanel(props: {
 							props.onFiltersChange({
 								...props.filters,
 								severity: value,
-							})
+							}, { source: "user" })
 						}
 					>
 						<SelectTrigger className="cyber-input h-10 w-full sm:w-[180px]">
@@ -402,7 +414,7 @@ export default function RealtimeFindingsPanel(props: {
 							props.onFiltersChange({
 								...props.filters,
 								verification: value,
-							})
+							}, { source: "user" })
 						}
 					>
 						<SelectTrigger className="cyber-input h-10 w-full sm:w-[180px]">
@@ -418,15 +430,34 @@ export default function RealtimeFindingsPanel(props: {
 
 				<div className="min-h-0 flex-1 px-4 py-3">
 					<div ref={syncViewportRef} className="h-full">
-						{tableState.rows.length === 0 ? (
+						{hasNoRows ? (
 							<div className="flex h-full items-center justify-center text-muted-foreground">
-								<div className="flex flex-col items-center gap-2 px-6 text-center">
+								<div className="flex flex-col items-center gap-3 px-6 text-center">
 									<AlertTriangle className="h-5 w-5 opacity-60" />
-									<span className="text-sm">
-										{props.isRunning
-											? getEmptyStateMessage(props.currentPhase)
-											: "暂无符合条件的漏洞"}
-									</span>
+									<span className="text-sm">{emptyStateMessage}</span>
+									{showVerifiedOnlyHint ? (
+										<div className="flex flex-col items-center gap-2">
+											<span className="text-xs text-muted-foreground">
+												暂无已验证漏洞，切换为全部验证状态可查看所有发现。
+											</span>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												onClick={() =>
+													props.onFiltersChange(
+														{
+															...props.filters,
+															verification: "all",
+														},
+														{ source: "user" },
+													)
+												}
+											>
+												查看全部漏洞
+											</Button>
+										</div>
+									) : null}
 								</div>
 							</div>
 						) : (
