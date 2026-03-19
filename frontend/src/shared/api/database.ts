@@ -217,6 +217,15 @@ export const api = {
     return res.data;
   },
 
+  async generateStoredProjectDescription(
+    projectId: string,
+  ): Promise<ProjectDescriptionGenerateResponse> {
+    const res = await apiClient.post(
+      `/projects/${projectId}/description/generate`,
+    );
+    return res.data;
+  },
+
   async createProject(project: CreateProjectForm & { owner_id?: string }): Promise<Project> {
     const res = await apiClient.post('/projects/', {
       name: project.name,

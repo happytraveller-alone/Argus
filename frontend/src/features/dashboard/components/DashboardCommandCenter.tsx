@@ -198,7 +198,7 @@ function SummaryStrip({
 			values: computeMiniTrendValues(snapshot.daily_activity, "completed_scans"),
 		},
 		{
-			label: "当前有效风险",
+			label: "当前发现漏洞",
 			value: formatNumber(summary.current_effective_findings),
 			// subtitle: `窗口新增 ${formatNumber(summary.window_new_effective_findings)} 项`,
 			accent: "text-amber-200",
@@ -213,7 +213,7 @@ function SummaryStrip({
 			}),
 		},
 		{
-			label: "已验证风险",
+			label: "已验证漏洞",
 			value: formatNumber(summary.current_verified_findings),
 			// subtitle: `窗口已验证 ${formatNumber(summary.window_verified_findings)} 项`,
 			accent: "text-emerald-200",
@@ -271,9 +271,9 @@ function VerificationFunnel({
 }) {
 	const maxValue = Math.max(raw, effective, verified, 1);
 	const items = [
-		{ label: "原始发现", value: raw, color: "bg-cyan-500/70" },
-		{ label: "有效风险", value: effective, color: "bg-amber-500/80" },
-		{ label: "已验证", value: verified, color: "bg-emerald-500/80" },
+		{ label: "原始发现漏洞", value: raw, color: "bg-cyan-500/70" },
+		// { label: "有效风险", value: effective, color: "bg-amber-500/80" },
+		{ label: "模型已验证漏洞", value: verified, color: "bg-emerald-500/80" },
 	];
 
 	return (
@@ -833,74 +833,6 @@ export default function DashboardCommandCenter({
 				<RiskHeatmap items={snapshot.language_risk || []} />
 			</DashboardSection>
 
-			{/* <DashboardSection
-				panel="actions"
-				title="行动清单"
-				description=""
-				icon={<Clock3 className="h-5 w-5" />}
-			>
-				{(snapshot.project_hotspots || []).length > 0 ? (
-					<div className="grid gap-3 lg:grid-cols-2">
-						{snapshot.project_hotspots.map((item, index) => (
-							<div
-								key={item.project_id}
-								className="rounded-3xl border border-border/60 bg-slate-900/70 p-4"
-							>
-								<div className="flex items-start justify-between gap-3">
-									<div>
-										<p className="text-xs uppercase tracking-[0.28em] text-cyan-300/70">
-											#{index + 1} 风险项目
-										</p>
-										<p className="mt-2 text-xl font-semibold text-slate-50">
-											{item.project_name}
-										</p>
-										<p className="mt-2 text-sm text-slate-400">
-											主语言 {item.dominant_language} · 主引擎{" "}
-											{ENGINE_LABELS[item.top_engine] || item.top_engine}
-										</p>
-									</div>
-									<div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-right">
-										<p className="text-xs uppercase tracking-[0.22em] text-amber-200/70">
-											风险分数
-										</p>
-										<p className="mt-1 text-2xl font-semibold text-amber-100">
-											{item.risk_score.toFixed(1)}
-										</p>
-									</div>
-								</div>
-								<div className="mt-4 grid grid-cols-2 gap-2 text-sm text-slate-300">
-									<div className="rounded-2xl bg-slate-950/70 px-3 py-2">
-										<p className="text-slate-500">有效风险</p>
-										<p className="mt-1 text-lg font-medium text-white">
-											{formatNumber(item.effective_findings)}
-										</p>
-									</div>
-									<div className="rounded-2xl bg-slate-950/70 px-3 py-2">
-										<p className="text-slate-500">已验证</p>
-										<p className="mt-1 text-lg font-medium text-white">
-											{formatNumber(item.verified_findings)}
-										</p>
-									</div>
-									<div className="rounded-2xl bg-slate-950/70 px-3 py-2">
-										<p className="text-slate-500">误报率</p>
-										<p className="mt-1 text-lg font-medium text-white">
-											{formatPercent(item.false_positive_rate)}
-										</p>
-									</div>
-									<div className="rounded-2xl bg-slate-950/70 px-3 py-2">
-										<p className="text-slate-500">最近扫描</p>
-										<p className="mt-1 text-lg font-medium text-white">
-											{formatDateTime(item.last_scan_at)}
-										</p>
-									</div>
-								</div>
-							</div>
-						))}
-					</div>
-				) : (
-					<p className="text-sm text-slate-400">暂无热点项目</p>
-				)}
-			</DashboardSection> */}
 		</div>
 	);
 }

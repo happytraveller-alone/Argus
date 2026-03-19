@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException, UploadFile
 
 from app.api.v1.endpoints.projects import (
+    generate_project_description_for_project,
     generate_project_description_preview,
     get_project_info,
     upload_project_zip,
@@ -148,6 +149,11 @@ async def test_upload_project_zip_generates_and_persists_project_description(mon
         "generate_project_description_from_extracted_dir",
         AsyncMock(return_value={"project_description": "智能简介"}),
     )
+    monkeypatch.setattr(
+        shared_endpoint.ProjectMetricsService,
+        "ensure_base_metrics",
+        AsyncMock(return_value=None),
+    )
 
     response = await upload_project_zip(
         id="project-1",
@@ -171,6 +177,7 @@ async def test_upload_project_zip_generates_and_persists_project_description(mon
 @pytest.mark.asyncio
 async def test_generate_project_description_preview_llm_success(monkeypatch):
     from app.api.v1.endpoints import projects_uploads as uploads_endpoint
+    from app.api.v1.endpoints import projects_shared as shared_endpoint
 
     monkeypatch.setattr(
         uploads_endpoint.CompressionStrategyFactory,
@@ -188,24 +195,24 @@ async def test_generate_project_description_preview_llm_success(monkeypatch):
         AsyncMock(return_value=(True, ["src/main.py"], None)),
     )
     monkeypatch.setattr(
-        uploads_endpoint,
+        shared_endpoint,
         "get_cloc_stats_from_extracted_dir",
         AsyncMock(
             return_value='{"total": 10, "total_files": 1, "languages": {"Python": {"loc_number": 10, "files_count": 1, "proportion": 1.0}}}'
         ),
     )
     monkeypatch.setattr(
-        uploads_endpoint,
+        shared_endpoint,
         "build_static_project_description",
         lambda _language_info, _project_name: "static-desc",
     )
     monkeypatch.setattr(
-        uploads_endpoint,
+        shared_endpoint,
         "_get_user_config",
         AsyncMock(return_value={"llmConfig": {"provider": "mock"}}),
     )
     monkeypatch.setattr(
-        uploads_endpoint,
+        shared_endpoint,
         "generate_project_description_from_extracted_dir",
         AsyncMock(return_value={"project_description": "llm-desc"}),
     )
@@ -225,6 +232,7 @@ async def test_generate_project_description_preview_llm_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_generate_project_description_preview_fallback_static(monkeypatch):
     from app.api.v1.endpoints import projects_uploads as uploads_endpoint
+    from app.api.v1.endpoints import projects_shared as shared_endpoint
 
     monkeypatch.setattr(
         uploads_endpoint.CompressionStrategyFactory,
@@ -242,22 +250,22 @@ async def test_generate_project_description_preview_fallback_static(monkeypatch)
         AsyncMock(return_value=(True, ["src/main.py"], None)),
     )
     monkeypatch.setattr(
-        uploads_endpoint,
+        shared_endpoint,
         "get_cloc_stats_from_extracted_dir",
         AsyncMock(return_value='{"total": 2, "total_files": 1, "languages": {}}'),
     )
     monkeypatch.setattr(
-        uploads_endpoint,
+        shared_endpoint,
         "build_static_project_description",
         lambda _language_info, _project_name: "static-desc",
     )
     monkeypatch.setattr(
-        uploads_endpoint,
+        shared_endpoint,
         "_get_user_config",
         AsyncMock(return_value={"llmConfig": {"provider": "mock"}}),
     )
     monkeypatch.setattr(
-        uploads_endpoint,
+        shared_endpoint,
         "generate_project_description_from_extracted_dir",
         AsyncMock(return_value={"project_description": ""}),
     )
@@ -408,3 +416,94 @@ async def test_get_project_info_pending_returns_pending_payload():
     assert info.status == "pending"
     assert info.language_info == '{"total": 0, "total_files": 0, "languages": {}}'
     assert info.description == ""
+
+
+@pytest.mark.asyncio
+async def test_generate_project_description_for_project_persists_description(monkeypatch, tmp_path):
+    from app.api.v1.endpoints import projects_uploads as uploads_endpoint
+
+    project = SimpleNamespace(
+        id="project-1",
+        name="demo-app",
+        source_type="zip",
+        description="",
+        updated_at=None,
+    )
+    added_objects = []
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=project)
+    db.execute = AsyncMock(return_value=_ScalarFirstResult(None))
+    db.add = Mock(side_effect=lambda obj: added_objects.append(obj))
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+
+    stored_zip = tmp_path / "project-1.zip"
+    stored_zip.write_bytes(b"zip-data")
+
+    monkeypatch.setattr(
+        uploads_endpoint,
+        "load_project_zip",
+        AsyncMock(return_value=str(stored_zip)),
+    )
+    monkeypatch.setattr(
+        uploads_endpoint.UploadManager,
+        "extract_file",
+        AsyncMock(return_value=(True, ["src/main.ts", "package.json"], None)),
+    )
+    monkeypatch.setattr(
+        uploads_endpoint,
+        "_resolve_project_description_bundle",
+        AsyncMock(
+            return_value=(
+                "这是自动生成的项目简介。",
+                '{"total": 2, "total_files": 2, "languages": {}}',
+                "llm",
+            )
+        ),
+    )
+
+    response = await generate_project_description_for_project(
+        id="project-1",
+        db=db,
+        current_user=SimpleNamespace(id="u-1"),
+    )
+
+    assert response.description == "这是自动生成的项目简介。"
+    assert response.source == "llm"
+    assert project.description == "这是自动生成的项目简介。"
+    project_info = next(
+        obj for obj in added_objects if getattr(obj, "project_id", None) == "project-1"
+    )
+    assert project_info.description == "这是自动生成的项目简介。"
+    assert project_info.language_info == '{"total": 2, "total_files": 2, "languages": {}}'
+    assert project_info.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_generate_project_description_for_project_requires_stored_zip(monkeypatch):
+    from app.api.v1.endpoints import projects_uploads as uploads_endpoint
+
+    project = SimpleNamespace(
+        id="project-1",
+        name="demo-app",
+        source_type="zip",
+        description="",
+    )
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=project)
+
+    monkeypatch.setattr(
+        uploads_endpoint,
+        "load_project_zip",
+        AsyncMock(return_value=None),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await generate_project_description_for_project(
+            id="project-1",
+            db=db,
+            current_user=SimpleNamespace(id="u-1"),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "未找到项目压缩包"

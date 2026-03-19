@@ -36,6 +36,7 @@ clear_cache = _files.clear_cache
 invalidate_project_cache = _files.invalidate_project_cache
 
 generate_project_description_preview = _uploads.generate_project_description_preview
+generate_project_description_for_project = _uploads.generate_project_description_for_project
 create_project_with_zip = _uploads.create_project_with_zip
 get_project_zip_info = _uploads.get_project_zip_info
 upload_project_zip = _uploads.upload_project_zip

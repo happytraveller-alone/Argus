@@ -62,6 +62,92 @@ async def generate_project_description_preview(
             raise HTTPException(status_code=500, detail=f"生成项目描述失败: {str(e)}")
 
 
+@router.post(
+    "/{id}/description/generate",
+    response_model=ProjectDescriptionGenerateResponse,
+)
+async def generate_project_description_for_project(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    基于项目已存储的压缩包生成并持久化项目简介。
+    """
+    project = await db.get(Project, id)
+    _raise_if_project_hidden(project)
+
+    zip_path = await load_project_zip(id)
+    if not zip_path or not os.path.exists(zip_path):
+        raise HTTPException(status_code=404, detail="未找到项目压缩包")
+
+    project_info = await _get_or_prepare_project_info(db, id)
+
+    try:
+        project_info.status = "pending"
+        db.add(project_info)
+        await db.commit()
+        await db.refresh(project_info)
+
+        with tempfile.TemporaryDirectory(
+            prefix="VulHunter_",
+            suffix="_stored_desc_generate",
+        ) as temp_dir:
+            extracted_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(extracted_dir, exist_ok=True)
+
+            success, extracted_files, error = await UploadManager.extract_file(
+                zip_path,
+                extracted_dir,
+                max_files=100000,
+            )
+            if not success:
+                raise HTTPException(status_code=400, detail=f"解压失败: {error}")
+
+            description, language_info, source = await _resolve_project_description_bundle(
+                extracted_dir=extracted_dir,
+                extracted_files=extracted_files,
+                project_name=project.name,
+                db=db,
+                user_id=current_user.id,
+            )
+
+            project.description = description
+            project.updated_at = datetime.now(timezone.utc)
+            project_info.language_info = language_info
+            project_info.description = description
+            project_info.status = "completed"
+
+            db.add(project)
+            db.add(project_info)
+            await db.commit()
+            await db.refresh(project)
+            await db.refresh(project_info)
+
+            return ProjectDescriptionGenerateResponse(
+                description=description,
+                language_info=language_info,
+                source=source,
+            )
+    except HTTPException:
+        try:
+            project_info.status = "failed"
+            db.add(project_info)
+            await db.commit()
+        except Exception:
+            logger.exception("保存项目简介失败状态时出错")
+        raise
+    except Exception as e:
+        logger.error(f"生成项目简介失败: {e}", exc_info=True)
+        try:
+            project_info.status = "failed"
+            db.add(project_info)
+            await db.commit()
+        except Exception:
+            logger.exception("保存项目简介失败状态时出错")
+        raise HTTPException(status_code=500, detail=f"生成项目简介失败: {str(e)}")
+
+
 @router.post("/create-with-zip", response_model=ProjectResponse)
 async def create_project_with_zip(
     name: str = Form(...),

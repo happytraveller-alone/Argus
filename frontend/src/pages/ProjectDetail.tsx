@@ -8,6 +8,8 @@ import {
 	AlertTriangle,
 	ArrowLeft,
 	Bug,
+	FileText,
+	Loader2,
 	Search,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -18,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
 	TableBody,
@@ -27,10 +30,15 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import ProjectTaskFindingsDialog from "@/pages/project-detail/components/ProjectTaskFindingsDialog";
+import ProjectPotentialVulnerabilitiesSection from "@/pages/project-detail/components/ProjectPotentialVulnerabilitiesSection";
 import {
-	getProjectCardPotentialVulnerabilities,
+	buildProjectDetailPotentialTree,
+	getProjectDetailPotentialTaskCategoryText,
+	type ProjectDetailPotentialTaskNode,
+} from "@/pages/project-detail/potentialVulnerabilities";
+import {
 	getProjectCardRecentTasks,
-	type ProjectCardPotentialVulnerability,
+	type ProjectCardTaskFindingCategory,
 } from "@/features/projects/services/projectCardPreview";
 import { resolveSourceModeFromTaskMeta } from "@/features/tasks/services/taskActivities";
 import {
@@ -62,11 +70,162 @@ import type { AuditTask, Project } from "@/shared/types";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 
 const DETAIL_RECENT_TASK_LIMIT = 10;
-const DETAIL_POTENTIAL_TOP_LIMIT = 10;
-const DETAIL_POTENTIAL_SOURCE_TASK_LIMIT = 10;
 const DETAIL_POTENTIAL_FINDINGS_FETCH_LIMIT = 200;
 
 type PotentialStatus = "loading" | "ready" | "empty" | "failed";
+type ProjectDescriptionStatus = "idle" | "generating" | "ready" | "failed";
+type ProjectDescriptionSource = "llm" | "static" | null;
+
+async function getAllOpengrepTaskFindings(taskId: string): Promise<OpengrepFinding[]> {
+	const findings: OpengrepFinding[] = [];
+	let skip = 0;
+
+	while (true) {
+		const page = await getOpengrepScanFindings({
+			taskId,
+			skip,
+			limit: DETAIL_POTENTIAL_FINDINGS_FETCH_LIMIT,
+		});
+		if (!Array.isArray(page) || page.length === 0) break;
+		findings.push(...page);
+		if (page.length < DETAIL_POTENTIAL_FINDINGS_FETCH_LIMIT) break;
+		skip += page.length;
+	}
+
+	return findings;
+}
+
+interface ProjectDescriptionSectionProps {
+	description: string;
+	status: ProjectDescriptionStatus;
+	source: ProjectDescriptionSource;
+	unsupported: boolean;
+	onRetry: () => void;
+}
+
+interface ShouldAutoGenerateProjectDescriptionArgs {
+	projectId: string | null;
+	description: string | null | undefined;
+	status: ProjectDescriptionStatus;
+	isPageLoading: boolean;
+	unsupported: boolean;
+	lastRequestedProjectId: string | null;
+}
+
+export function shouldAutoGenerateProjectDescription({
+	projectId,
+	description,
+	status,
+	isPageLoading,
+	unsupported,
+	lastRequestedProjectId,
+}: ShouldAutoGenerateProjectDescriptionArgs) {
+	if (isPageLoading || !projectId || unsupported) return false;
+	if (String(description || "").trim()) return false;
+	if (status !== "idle") return false;
+	if (lastRequestedProjectId === projectId) return false;
+	return true;
+}
+
+function splitProjectDescription(description: string) {
+	return String(description || "")
+		.split(/\n{2,}/)
+		.map((item) => item.trim())
+		.filter(Boolean)
+		.slice(0, 2);
+}
+
+export function ProjectDescriptionSection({
+	description,
+	status,
+	source,
+	unsupported,
+	onRetry,
+}: ProjectDescriptionSectionProps) {
+	const paragraphs = splitProjectDescription(description);
+	const hasDescription = paragraphs.length > 0;
+
+	return (
+		<section className="cyber-card p-5">
+			<div className="flex flex-wrap items-start justify-between gap-3">
+				<div className="flex items-center gap-2">
+					<FileText className="w-4 h-4 text-sky-400" />
+					<h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+						项目简介
+					</h2>
+				</div>
+				{status === "ready" && source ? (
+					<Badge className="cyber-badge-muted">
+						{source === "llm" ? "LLM 生成" : "静态生成"}
+					</Badge>
+				) : null}
+			</div>
+
+			<div className="mt-4 space-y-3">
+				{status === "generating" ? (
+					<div className="space-y-3">
+						<div className="flex items-center gap-2 text-sm text-sky-200">
+							<Loader2 className="w-4 h-4 animate-spin" />
+							<span>正在整理项目简介...</span>
+						</div>
+						<div className="space-y-2">
+							<Skeleton className="h-4 w-full bg-slate-700/60" />
+							<Skeleton className="h-4 w-[92%] bg-slate-700/60" />
+							<Skeleton className="h-4 w-[78%] bg-slate-700/60" />
+						</div>
+					</div>
+				) : null}
+
+				{status === "ready" && hasDescription ? (
+					<div className="space-y-3">
+						{paragraphs.map((paragraph, index) => (
+							<p
+								key={`${index}:${paragraph.slice(0, 24)}`}
+								className="text-sm leading-7 text-slate-200/90"
+							>
+								{paragraph}
+							</p>
+						))}
+					</div>
+				) : null}
+
+				{status === "failed" ? (
+					<div className="space-y-3">
+						<p className="text-sm leading-6 text-rose-200/85">
+							项目简介生成失败，请稍后重试。
+						</p>
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							className="cyber-btn-ghost h-8 px-3"
+							onClick={onRetry}
+						>
+							重新生成
+						</Button>
+					</div>
+				) : null}
+
+				{status === "idle" && !hasDescription ? (
+					<div className="space-y-2">
+						<p className="text-sm leading-6 text-slate-300/80">
+							暂未生成项目简介。
+						</p>
+						<p className="text-xs leading-5 text-muted-foreground">
+							{unsupported
+								? "当前项目暂不支持自动生成简介。"
+								: "系统会根据项目结构自动生成简要介绍。"}
+						</p>
+					</div>
+				) : null}
+			</div>
+
+			<p className="mt-4 text-xs uppercase tracking-[0.22em] text-muted-foreground">
+				内容基于项目结构自动整理
+			</p>
+		</section>
+	);
+}
 
 export default function ProjectDetail() {
 	const { id } = useParams<{ id: string }>();
@@ -79,17 +238,26 @@ export default function ProjectDetail() {
 	const [gitleaksTasks, setGitleaksTasks] = useState<GitleaksScanTask[]>([]);
 	const [banditTasks, setBanditTasks] = useState<BanditScanTask[]>([]);
 	const [phpstanTasks, setPhpstanTasks] = useState<PhpstanScanTask[]>([]);
-	const [potentialVulnerabilities, setPotentialVulnerabilities] = useState<
-		ProjectCardPotentialVulnerability[]
+	const [potentialTree, setPotentialTree] = useState<
+		ProjectDetailPotentialTaskNode[]
 	>([]);
+	const [potentialTotalFindings, setPotentialTotalFindings] = useState(0);
 	const [potentialStatus, setPotentialStatus] =
 		useState<PotentialStatus>("loading");
+	const [projectDescriptionStatus, setProjectDescriptionStatus] =
+		useState<ProjectDescriptionStatus>("idle");
+	const [projectDescriptionSource, setProjectDescriptionSource] =
+		useState<ProjectDescriptionSource>(null);
+	const [projectDescriptionUnsupported, setProjectDescriptionUnsupported] =
+		useState(false);
+	const [lastDescriptionRequestProjectId, setLastDescriptionRequestProjectId] =
+		useState<string | null>(null);
 	const [recentTaskTimeKeyword, setRecentTaskTimeKeyword] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [showCreateScanTaskDialog, setShowCreateScanTaskDialog] = useState(false);
 	const [selectedTaskFindings, setSelectedTaskFindings] = useState<{
 		taskId: string;
-		taskCategory: ProjectCardPotentialVulnerability["taskCategory"];
+		taskCategory: ProjectCardTaskFindingCategory;
 		taskLabel: string;
 	} | null>(null);
 
@@ -121,11 +289,13 @@ export default function ProjectDetail() {
 	const fetchProjectPotentialVulnerabilities = useCallback(
 		async (
 			projectId: string,
+			projectName: string,
 			sourceAgentTaskPool: AgentTask[],
 			sourceOpengrepTaskPool: OpengrepScanTask[],
 		) => {
 			setPotentialStatus("loading");
-			setPotentialVulnerabilities([]);
+			setPotentialTree([]);
+			setPotentialTotalFindings(0);
 
 			try {
 				const sourceOpengrepTasks = sourceOpengrepTaskPool
@@ -134,8 +304,7 @@ export default function ProjectDetail() {
 						(a, b) =>
 							new Date(b.created_at).getTime() -
 							new Date(a.created_at).getTime(),
-					)
-					.slice(0, DETAIL_POTENTIAL_SOURCE_TASK_LIMIT);
+					);
 
 				const sourceAgentTasks = sourceAgentTaskPool
 					.filter((task) => {
@@ -153,8 +322,7 @@ export default function ProjectDetail() {
 						(a, b) =>
 							new Date(b.created_at).getTime() -
 							new Date(a.created_at).getTime(),
-					)
-					.slice(0, DETAIL_POTENTIAL_SOURCE_TASK_LIMIT);
+					);
 
 				if (sourceOpengrepTasks.length === 0 && sourceAgentTasks.length === 0) {
 					setPotentialStatus("empty");
@@ -162,13 +330,7 @@ export default function ProjectDetail() {
 				}
 
 				const staticFindingsResult = await Promise.allSettled(
-					sourceOpengrepTasks.map((task) =>
-						getOpengrepScanFindings({
-							taskId: task.id,
-							limit: DETAIL_POTENTIAL_FINDINGS_FETCH_LIMIT,
-							confidence: "HIGH",
-						}),
-					),
+					sourceOpengrepTasks.map((task) => getAllOpengrepTaskFindings(task.id)),
 				);
 
 				const staticFindings: OpengrepFinding[] = staticFindingsResult.flatMap(
@@ -200,27 +362,18 @@ export default function ProjectDetail() {
 						}
 						return result.value;
 					});
-				const agentTaskCategoryMap: Record<string, "intelligent" | "hybrid"> =
-					{};
-				for (const task of sourceAgentTasks) {
-					const mode = resolveSourceModeFromTaskMeta(
-						"intelligent_audit",
-						task.name,
-						task.description,
-					);
-					agentTaskCategoryMap[task.id] =
-						mode === "hybrid" ? "hybrid" : "intelligent";
-				}
 
-				const topVulnerabilities = getProjectCardPotentialVulnerabilities({
+				const nextTree = buildProjectDetailPotentialTree({
+					projectName,
+					agentTasks: sourceAgentTasks,
+					opengrepTasks: sourceOpengrepTasks,
+					agentFindings: verifiedAgentFindings,
 					opengrepFindings: staticFindings,
-					verifiedAgentFindings,
-					agentTaskCategoryMap,
-					limit: DETAIL_POTENTIAL_TOP_LIMIT,
 				});
 
-				setPotentialVulnerabilities(topVulnerabilities);
-				setPotentialStatus(topVulnerabilities.length > 0 ? "ready" : "empty");
+				setPotentialTree(nextTree.tasks);
+				setPotentialTotalFindings(nextTree.totalFindings);
+				setPotentialStatus(nextTree.totalFindings > 0 ? "ready" : "empty");
 			} catch {
 				setPotentialStatus("failed");
 			}
@@ -234,7 +387,8 @@ export default function ProjectDetail() {
 		try {
 			setLoading(true);
 			setPotentialStatus("loading");
-			setPotentialVulnerabilities([]);
+			setPotentialTree([]);
+			setPotentialTotalFindings(0);
 
 			const [
 				projectRes,
@@ -318,8 +472,13 @@ export default function ProjectDetail() {
 			setBanditTasks(nextBanditTasks);
 			setPhpstanTasks(nextPhpstanTasks);
 
+			const projectName =
+				projectRes.status === "fulfilled"
+					? String(projectRes.value?.name || "")
+					: "";
 			void fetchProjectPotentialVulnerabilities(
 				id,
+				projectName,
 				nextAgentTasks,
 				nextStaticTasks,
 			);
@@ -327,7 +486,8 @@ export default function ProjectDetail() {
 			console.error("Failed to load project data:", error);
 			toast.error("加载项目数据失败");
 			setPotentialStatus("failed");
-			setPotentialVulnerabilities([]);
+			setPotentialTree([]);
+			setPotentialTotalFindings(0);
 		} finally {
 			setLoading(false);
 		}
@@ -337,6 +497,87 @@ export default function ProjectDetail() {
 		if (!id) return;
 		void loadProjectData();
 	}, [id, loadProjectData]);
+
+	useEffect(() => {
+		setProjectDescriptionStatus("idle");
+		setProjectDescriptionSource(null);
+		setProjectDescriptionUnsupported(false);
+		setLastDescriptionRequestProjectId(null);
+	}, [id]);
+
+	useEffect(() => {
+		if (!project) return;
+		if (String(project.description || "").trim()) {
+			setProjectDescriptionStatus("ready");
+			setProjectDescriptionUnsupported(false);
+		}
+	}, [project]);
+
+	const generateProjectDescription = useCallback(async () => {
+		if (!project?.id) return;
+
+		setProjectDescriptionStatus("generating");
+		setProjectDescriptionSource(null);
+		setProjectDescriptionUnsupported(false);
+		setLastDescriptionRequestProjectId(project.id);
+
+		try {
+			const result = await api.generateStoredProjectDescription(project.id);
+			setProject((previous) =>
+				previous && previous.id === project.id
+					? {
+							...previous,
+							description: result.description,
+					  }
+					: previous,
+			);
+			setProjectDescriptionSource(result.source);
+			setProjectDescriptionStatus("ready");
+		} catch (error) {
+			const statusCode =
+				typeof error === "object" &&
+				error !== null &&
+				"response" in error &&
+				typeof (error as { response?: { status?: number } }).response?.status ===
+					"number"
+					? (error as { response?: { status?: number } }).response?.status
+					: null;
+
+			if (statusCode === 400 || statusCode === 404) {
+				setProjectDescriptionUnsupported(true);
+				setProjectDescriptionStatus("idle");
+				return;
+			}
+
+			console.error("Failed to generate project description:", error);
+			setProjectDescriptionStatus("failed");
+		}
+	}, [project]);
+
+	useEffect(() => {
+		if (
+			!shouldAutoGenerateProjectDescription({
+				projectId: project?.id ?? null,
+				description: project?.description,
+				status: projectDescriptionStatus,
+				isPageLoading: loading,
+				unsupported: projectDescriptionUnsupported,
+				lastRequestedProjectId: lastDescriptionRequestProjectId,
+			})
+		) {
+			return;
+		}
+
+		void generateProjectDescription();
+	}, [
+		generateProjectDescription,
+		lastDescriptionRequestProjectId,
+		loading,
+		project?.description,
+		project?.id,
+		projectDescriptionStatus,
+		projectDescriptionUnsupported,
+	]);
 
 	const recentTasks = useMemo(() => {
 		if (!id) return [];
@@ -391,73 +632,10 @@ export default function ProjectDetail() {
 		return "[&>div]:bg-slate-400";
 	};
 
-	const getVulnerabilitySeverityBadgeClassName = (
-		severity: ProjectCardPotentialVulnerability["severity"],
-	) => {
-		if (severity === "CRITICAL") return "cyber-badge-danger";
-		if (severity === "HIGH") return "cyber-badge-warning";
-		if (severity === "MEDIUM") return "cyber-badge-info";
-		if (severity === "LOW") return "cyber-badge-muted";
-		return "cyber-badge-muted";
-	};
-
-	const getVulnerabilitySeverityText = (
-		severity: ProjectCardPotentialVulnerability["severity"],
-	) => {
-		if (severity === "CRITICAL") return "严重";
-		if (severity === "HIGH") return "高危";
-		if (severity === "MEDIUM") return "中危";
-		if (severity === "LOW") return "低危";
-		return "未知";
-	};
-
-	const getVulnerabilityConfidenceText = (
-		confidence: ProjectCardPotentialVulnerability["confidence"],
-	) => {
-		if (confidence === "HIGH") return "高";
-		if (confidence === "MEDIUM") return "中";
-		if (confidence === "LOW") return "低";
-		return "-";
-	};
-
-	const getVulnerabilityConfidenceBadgeClassName = (
-		confidence: ProjectCardPotentialVulnerability["confidence"],
-	) => {
-		if (confidence === "HIGH") {
-			return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
-		}
-		if (confidence === "MEDIUM") {
-			return "bg-amber-500/20 text-amber-300 border-amber-500/30";
-		}
-		if (confidence === "LOW") {
-			return "bg-sky-500/20 text-sky-300 border-sky-500/30";
-		}
-		return "cyber-badge-muted";
-	};
-
-	const getTaskCategoryBadgeClassName = (
-		category: ProjectCardPotentialVulnerability["taskCategory"],
-	) => {
-		if (category === "static")
-			return "bg-sky-500/20 text-sky-300 border-sky-500/30";
-		if (category === "intelligent") {
-			return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
-		}
-		return "bg-amber-500/20 text-amber-300 border-amber-500/30";
-	};
-
-	const getTaskCategoryText = (
-		category: ProjectCardPotentialVulnerability["taskCategory"],
-	) => {
-		if (category === "static") return "静态扫描";
-		if (category === "intelligent") return "智能扫描";
-		return "混合扫描";
-	};
-
 	const openTaskFindingsDialog = useCallback(
 		(
 			taskId: string,
-			taskCategory: ProjectCardPotentialVulnerability["taskCategory"],
+			taskCategory: ProjectCardTaskFindingCategory,
 			taskLabel: string,
 		) => {
 			setSelectedTaskFindings({
@@ -467,113 +645,6 @@ export default function ProjectDetail() {
 			});
 		},
 		[],
-	);
-
-	const toProjectRelativePath = useCallback(
-		(filePath: string) => {
-			const normalizedPath = String(filePath || "")
-				.trim()
-				.replace(/\\/g, "/");
-			if (!normalizedPath) return "-";
-
-			const trimmed = normalizedPath.replace(/^\/+/, "");
-			const projectName = String(project?.name || "")
-				.trim()
-				.replace(/\\/g, "/");
-			if (!projectName) return trimmed || "-";
-
-			const pathLower = normalizedPath.toLowerCase();
-			const projectLower = projectName.toLowerCase();
-			const marker = `/${projectLower}/`;
-			const markerIndex = pathLower.lastIndexOf(marker);
-			if (markerIndex >= 0) {
-				const relative = normalizedPath.slice(markerIndex + marker.length);
-				return relative || "-";
-			}
-
-			if (pathLower.startsWith(`${projectLower}/`)) {
-				return normalizedPath.slice(projectName.length + 1) || "-";
-			}
-
-			if (pathLower === projectLower) return "-";
-
-			return trimmed || "-";
-		},
-		[project?.name],
-	);
-
-	const toStaticRelativePath = useCallback(
-		(filePath: string) => {
-			const normalizedPath = String(filePath || "")
-				.trim()
-				.replace(/\\/g, "/");
-			if (!normalizedPath) return "-";
-
-			const trimmed = normalizedPath.replace(/^\/+/, "");
-			if (!trimmed) return "-";
-
-			const segments = trimmed.split("/").filter(Boolean);
-			if (segments.length === 0) return "-";
-
-			const normalizedProjectName = String(project?.name || "")
-				.trim()
-				.replace(/\\/g, "/")
-				.toLowerCase();
-
-			if (normalizedProjectName) {
-				const projectRootIndex = segments.findIndex((segment) => {
-					const normalizedSegment = segment.toLowerCase();
-					return (
-						normalizedSegment === normalizedProjectName ||
-						normalizedSegment.startsWith(`${normalizedProjectName}-`) ||
-						normalizedSegment.startsWith(`${normalizedProjectName}_`) ||
-						normalizedSegment.startsWith(`${normalizedProjectName}.`)
-					);
-				});
-
-				if (projectRootIndex >= 0) {
-					if (projectRootIndex >= segments.length - 1) return "-";
-					return segments.slice(projectRootIndex + 1).join("/");
-				}
-			}
-
-			const sourceRootSegments = new Set([
-				"src",
-				"include",
-				"lib",
-				"app",
-				"apps",
-				"test",
-				"tests",
-			]);
-			const sourceRootIndex = segments.findIndex((segment) =>
-				sourceRootSegments.has(segment.toLowerCase()),
-			);
-			if (sourceRootIndex >= 0) {
-				return segments.slice(sourceRootIndex).join("/");
-			}
-
-			return trimmed || "-";
-		},
-		[project?.name],
-	);
-
-	const formatPotentialLocation = useCallback(
-		(
-			filePath: string,
-			line: number | null,
-			source: ProjectCardPotentialVulnerability["source"],
-		) => {
-			const relativePath =
-				source === "static"
-					? toStaticRelativePath(filePath)
-					: toProjectRelativePath(filePath);
-			if (typeof line === "number" && Number.isFinite(line) && line > 0) {
-				return `${relativePath}:${line}`;
-			}
-			return relativePath;
-		},
-		[toProjectRelativePath, toStaticRelativePath],
 	);
 
 	const formatDate = useCallback((dateString: string) => {
@@ -612,13 +683,10 @@ export default function ProjectDetail() {
 			);
 		});
 	}, [formatDate, recentTaskTimeKeyword, recentTasks]);
-
-	const potentialStatusMessage = useMemo(() => {
-		if (potentialStatus === "loading") return "加载中...";
-		if (potentialStatus === "failed") return "加载失败";
-		if (potentialStatus === "empty") return "暂无潜在漏洞";
-		return null;
-	}, [potentialStatus]);
+	const defaultExpandedPotentialKeys = useMemo(
+		() => potentialTree.map((task) => task.nodeKey),
+		[potentialTree],
+	);
 
 	if (loading) {
 		return (
@@ -683,6 +751,16 @@ export default function ProjectDetail() {
 			</div>
 
 			<div className="relative z-10 space-y-4 mt-6">
+				<ProjectDescriptionSection
+					description={project.description || ""}
+					status={projectDescriptionStatus}
+					source={projectDescriptionSource}
+					unsupported={projectDescriptionUnsupported}
+					onRetry={() => {
+						void generateProjectDescription();
+					}}
+				/>
+
 				{/* <div className="cyber-card p-5"> */}
 					<div className="flex flex-wrap items-center justify-between gap-3 mb-3">
 						<div className="flex items-center gap-2">
@@ -766,13 +844,13 @@ export default function ProjectDetail() {
 																onClick={() => {
 																	const taskCategory = task.taskCategory;
 																	if (!taskCategory) return;
-																	openTaskFindingsDialog(
-																		task.id,
-																		taskCategory,
-																		getTaskCategoryText(taskCategory),
-																	);
-																}}
-															>
+											openTaskFindingsDialog(
+												task.id,
+												taskCategory,
+												getProjectDetailPotentialTaskCategoryText(taskCategory),
+											);
+										}}
+									>
 																漏洞详情
 															</Button>
 														) : (
@@ -807,119 +885,14 @@ export default function ProjectDetail() {
 					</Table>
 				{/* </div> */}
 
-				{/* <div className="cyber-card p-5"> */}
-					<div className="flex items-center gap-2 mb-3">
-						<Bug className="w-4 h-4 text-amber-400" />
-						<h3 className="text-sm font-semibold uppercase tracking-wider">
-							潜在漏洞
-						</h3>
-					</div>
-
-					<Table className="table-fixed">
-						<TableHeader>
-							<TableRow>
-								<TableHead className="w-[16%] text-left whitespace-nowrap">
-									类型
-								</TableHead>
-								<TableHead className="w-[28%] text-left whitespace-nowrap">
-									位置
-								</TableHead>
-								<TableHead className="w-[16%] px-3 text-center whitespace-nowrap">
-									所属任务
-								</TableHead>
-								<TableHead className="w-[10%] px-3 text-center whitespace-nowrap">
-									危害
-								</TableHead>
-								<TableHead className="w-[10%] px-3 text-center whitespace-nowrap">
-									置信度
-								</TableHead>
-								<TableHead className="w-[12%] text-center whitespace-nowrap">
-									操作
-								</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{potentialStatusMessage ? (
-								<TableRow>
-									<TableCell
-										colSpan={6}
-										className="py-10 text-center text-sm text-muted-foreground"
-									>
-										{potentialStatusMessage}
-									</TableCell>
-								</TableRow>
-							) : (
-								potentialVulnerabilities.map((item) => (
-									<TableRow key={`${item.taskId}:${item.id}`}>
-										<TableCell
-											className="text-left text-sm text-foreground whitespace-nowrap overflow-hidden text-ellipsis"
-											title={[item.cweLabel, item.cweTooltip, item.title]
-												.filter(Boolean)
-												.join("\n")}
-										>
-											{item.cweLabel}
-										</TableCell>
-										<TableCell
-											className="text-left text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis"
-											title={formatPotentialLocation(
-												item.filePath,
-												item.line,
-												item.source,
-											)}
-										>
-											{formatPotentialLocation(
-												item.filePath,
-												item.line,
-												item.source,
-											)}
-										</TableCell>
-										<TableCell className="px-3 text-center whitespace-nowrap">
-											<Badge
-												className={getTaskCategoryBadgeClassName(
-													item.taskCategory,
-												)}
-											>
-												{getTaskCategoryText(item.taskCategory)}
-											</Badge>
-										</TableCell>
-										<TableCell className="px-3 text-center whitespace-nowrap">
-											<Badge
-												className={getVulnerabilitySeverityBadgeClassName(
-													item.severity,
-												)}
-											>
-												{getVulnerabilitySeverityText(item.severity)}
-											</Badge>
-										</TableCell>
-										<TableCell className="px-3 text-center whitespace-nowrap">
-											<Badge
-												className={getVulnerabilityConfidenceBadgeClassName(
-													item.confidence,
-												)}
-											>
-												{getVulnerabilityConfidenceText(item.confidence)}
-											</Badge>
-										</TableCell>
-										<TableCell className="whitespace-nowrap">
-											<div className="flex items-center justify-center">
-												<Button
-													asChild
-													size="sm"
-													variant="outline"
-													className="cyber-btn-ghost h-7 px-3"
-												>
-													<Link to={appendReturnTo(item.route, currentRoute)}>
-														详情
-													</Link>
-												</Button>
-											</div>
-										</TableCell>
-									</TableRow>
-								))
-							)}
-						</TableBody>
-					</Table>
-				{/* </div> */}
+				<ProjectPotentialVulnerabilitiesSection
+					status={potentialStatus}
+					tree={potentialTree}
+					totalFindings={potentialTotalFindings}
+					currentRoute={currentRoute}
+					initialExpandedKeys={defaultExpandedPotentialKeys}
+					formatDate={formatDate}
+				/>
 			</div>
 
 			<CreateScanTaskDialog
