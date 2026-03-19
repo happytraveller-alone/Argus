@@ -31,7 +31,6 @@ test("ProjectDescriptionSection renders ready and failed states with source badg
 	);
 	assert.match(readyMarkup, /项目简介/);
 	assert.match(readyMarkup, /LLM 生成/);
-	assert.match(readyMarkup, /内容基于项目结构自动整理/);
 
 	const failedMarkup = renderToStaticMarkup(
 		createElement(pageModule.ProjectDescriptionSection, {

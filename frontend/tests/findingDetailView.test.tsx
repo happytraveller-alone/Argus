@@ -288,6 +288,31 @@ test("FindingDetailView 渲染可用的代码浏览按钮", () => {
   assert.match(markup, /href="\/projects\/p-demo\/code-browser"/);
 });
 
+test("FindingDetailView 在桌面端保持概要在左代码在右并放大主要字号", () => {
+  const markup = renderMarkup(
+    buildAgentFindingDetailModel({
+      finding: agentFinding,
+      taskId: "task-agent",
+      findingId: "finding-agent",
+      projectId: "project-zip",
+      projectSourceType: "zip",
+      projectName: "demo",
+    }),
+  );
+
+  assert.match(
+    markup,
+    /xl:grid-cols-\[minmax\(0,1\.02fr\)_minmax\(0,0\.98fr\)\]/,
+  );
+  assert.match(markup, /order-1 xl:order-1/);
+  assert.match(markup, /order-2 xl:order-2/);
+  assert.match(markup, /text-\[1\.95rem\] font-bold/);
+  assert.match(
+    markup,
+    /text-\[0\.975rem\] uppercase tracking-\[0\.18em\] text-muted-foreground/,
+  );
+});
+
 test("FindingDetailView 提示代码浏览不可用原因", () => {
   const reason = "仅 ZIP 类型项目支持代码浏览";
   const markup = renderMarkup(

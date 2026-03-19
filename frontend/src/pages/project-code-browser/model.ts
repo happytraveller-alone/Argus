@@ -3,11 +3,13 @@ import type { ProjectFileContentResponse } from "@/shared/api/database";
 export interface ProjectCodeBrowserFileEntry {
 	path: string;
 	size: number;
+	sourcePath?: string;
 }
 
 export interface ProjectCodeBrowserTreeNode {
 	name: string;
 	path: string;
+	sourcePath?: string;
 	kind: "file" | "directory";
 	size?: number;
 	children?: ProjectCodeBrowserTreeNode[];
@@ -139,13 +141,49 @@ function sortTreeNodes(nodes: MutableTreeNode[]): ProjectCodeBrowserTreeNode[] {
 		}));
 }
 
+function stripSharedRootDirectory(
+	files: ProjectCodeBrowserFileEntry[],
+): ProjectCodeBrowserFileEntry[] {
+	if (files.length === 0) return files;
+
+	const segmentsList = files
+		.map((file) => String(file.path || "").trim().split("/").filter(Boolean))
+		.filter((segments) => segments.length > 0);
+
+	if (segmentsList.length !== files.length) {
+		return files;
+	}
+
+	const [firstSegment] = segmentsList[0];
+	if (!firstSegment) return files;
+
+	const hasSharedRoot = segmentsList.every(
+		(segments) => segments.length > 1 && segments[0] === firstSegment,
+	);
+
+	if (!hasSharedRoot) {
+		return files;
+	}
+
+	return files.map((file) => {
+		const normalizedPath = String(file.path || "").trim();
+		const nextPath = normalizedPath.split("/").slice(1).join("/");
+		return {
+			...file,
+			path: nextPath,
+			sourcePath: normalizedPath,
+		};
+	});
+}
+
 export function buildProjectCodeBrowserTree(
 	files: ProjectCodeBrowserFileEntry[],
 ): ProjectCodeBrowserTreeNode[] {
+	const normalizedFiles = stripSharedRootDirectory(files);
 	const root: MutableTreeNode[] = [];
 	const nodeMap = new Map<string, MutableTreeNode>();
 
-	for (const file of files) {
+	for (const file of normalizedFiles) {
 		const normalizedPath = String(file.path || "").trim();
 		if (!normalizedPath) continue;
 
@@ -163,6 +201,7 @@ export function buildProjectCodeBrowserTree(
 				node = {
 					name,
 					path: currentPath,
+					sourcePath: isLeaf ? file.sourcePath ?? currentPath : undefined,
 					kind: isLeaf ? "file" : "directory",
 					size: isLeaf ? file.size : undefined,
 					children: isLeaf ? undefined : [],
@@ -185,6 +224,45 @@ export function buildProjectCodeBrowserTree(
 
 export function normalizeProjectCodeBrowserSearchQuery(input: string): string {
 	return String(input || "").trim().toLowerCase();
+}
+
+export function filterProjectCodeBrowserTreeByQuery(
+	nodes: ProjectCodeBrowserTreeNode[],
+	query: string,
+): ProjectCodeBrowserTreeNode[] {
+	const normalizedQuery = normalizeProjectCodeBrowserSearchQuery(query);
+	if (!normalizedQuery) return nodes;
+
+	function visit(node: ProjectCodeBrowserTreeNode): ProjectCodeBrowserTreeNode | null {
+		const normalizedName = String(node.name || "").trim().toLowerCase();
+		const normalizedPath = String(node.path || "").trim().toLowerCase();
+		const matched =
+			normalizedName.includes(normalizedQuery) ||
+			normalizedPath.includes(normalizedQuery);
+
+		if (node.kind === "file") {
+			return matched ? node : null;
+		}
+
+		const children = Array.isArray(node.children)
+			? node.children
+					.map((child) => visit(child))
+					.filter((child): child is ProjectCodeBrowserTreeNode => Boolean(child))
+			: [];
+
+		if (!matched && children.length === 0) {
+			return null;
+		}
+
+		return {
+			...node,
+			children,
+		};
+	}
+
+	return nodes
+		.map((node) => visit(node))
+		.filter((node): node is ProjectCodeBrowserTreeNode => Boolean(node));
 }
 
 export function parseProjectCodeBrowserFileFilterTokens(input: string): string[] {

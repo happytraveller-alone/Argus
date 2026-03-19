@@ -42,6 +42,30 @@ test("buildProjectCodeBrowserTree sorts directories first and nests children", a
 	assert.equal(tree[0].children[0].children[0].path, "src/lib/a.ts");
 });
 
+test("buildProjectCodeBrowserTree strips a shared project root directory", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const tree = model.buildProjectCodeBrowserTree([
+		{ path: "demo/src/main.ts", size: 120 },
+		{ path: "demo/src/lib/a.ts", size: 80 },
+		{ path: "demo/README.md", size: 40 },
+	]);
+
+	assert.deepEqual(
+		tree.map((node: any) => ({ name: node.name, kind: node.kind })),
+		[
+			{ name: "src", kind: "directory" },
+			{ name: "README.md", kind: "file" },
+		],
+	);
+	assert.equal(tree[0].path, "src");
+	assert.equal(tree[0].children[1].sourcePath, "demo/src/main.ts");
+	assert.equal(tree[0].children[0].children[0].path, "src/lib/a.ts");
+	assert.equal(tree[0].children[0].children[0].sourcePath, "demo/src/lib/a.ts");
+});
+
 test("toggleProjectCodeBrowserFolder returns a new set and toggles folder membership", async () => {
 	const model = await importOrFail<any>(
 		"../src/pages/project-code-browser/model.ts",
@@ -274,5 +298,27 @@ test("parseProjectCodeBrowserFileFilterTokens ignores blanks and supports comma 
 	assert.deepEqual(
 		model.parseProjectCodeBrowserFileFilterTokens("src/, \napi\n，docs"),
 		["src/", "api", "docs"],
+	);
+});
+
+test("filterProjectCodeBrowserTreeByQuery keeps matching ancestors and ignores case", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const tree = model.buildProjectCodeBrowserTree([
+		{ path: "src/auth/LoginController.java", size: 120 },
+		{ path: "src/auth/AuthService.java", size: 80 },
+		{ path: "src/user/ProfileController.java", size: 60 },
+	]);
+
+	const filtered = model.filterProjectCodeBrowserTreeByQuery(tree, " login ");
+
+	assert.equal(filtered.length, 1);
+	assert.equal(filtered[0].path, "auth");
+	assert.equal(filtered[0].children.length, 1);
+	assert.equal(
+		filtered[0].children[0].path,
+		"auth/LoginController.java",
 	);
 });

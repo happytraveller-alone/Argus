@@ -28,6 +28,7 @@ import {
 	buildProjectCodeBrowserContentSearchResults,
 	buildProjectCodeBrowserFileSearchResults,
 	buildProjectCodeBrowserTree,
+	filterProjectCodeBrowserTreeByQuery,
 	filterProjectCodeBrowserFilesByPath,
 	mergeProjectCodeBrowserSearchResults,
 	normalizeProjectCodeBrowserSearchQuery,
@@ -60,8 +61,10 @@ interface ProjectCodeBrowserWorkspaceProps {
 	tree: ProjectCodeBrowserTreeNode[];
 	expandedFolders: Set<string>;
 	selectedFilePath: string | null;
+	displayFilePath?: string | null;
 	selectedFileState: ProjectCodeBrowserFileViewState;
 	browserMode?: ProjectCodeBrowserMode;
+	fileQuickOpenQuery?: string;
 	searchQuery?: string;
 	includeFileQuery?: string;
 	excludeFileQuery?: string;
@@ -70,6 +73,7 @@ interface ProjectCodeBrowserWorkspaceProps {
 	onToggleFolder: (folderPath: string) => void;
 	onSelectFile: (filePath: string) => void;
 	onSelectMode?: (mode: ProjectCodeBrowserMode) => void;
+	onFileQuickOpenQueryChange?: (query: string) => void;
 	onSearchQueryChange?: (query: string) => void;
 	onIncludeFileQueryChange?: (query: string) => void;
 	onExcludeFileQueryChange?: (query: string) => void;
@@ -96,6 +100,7 @@ interface ProjectCodeBrowserTreeProps {
 	onSelectFile: (filePath: string) => void;
 	appearance: FindingCodeWindowAppearance;
 	depth?: number;
+	forceExpandAll?: boolean;
 }
 
 interface ProjectCodeBrowserModeRailProps {
@@ -118,6 +123,17 @@ interface ProjectCodeBrowserSearchPanelProps {
 	inputRef?: RefObject<HTMLInputElement | null>;
 }
 
+interface ProjectCodeBrowserQuickOpenPanelProps {
+	tree: ProjectCodeBrowserTreeNode[];
+	expandedFolders: Set<string>;
+	selectedFilePath: string | null;
+	fileQuickOpenQuery: string;
+	onToggleFolder: (folderPath: string) => void;
+	onSelectFile: (filePath: string) => void;
+	onFileQuickOpenQueryChange: (query: string) => void;
+	appearance: FindingCodeWindowAppearance;
+}
+
 function renderFileSize(size?: number) {
 	if (typeof size !== "number" || !Number.isFinite(size)) return null;
 	return `${size.toLocaleString()} B`;
@@ -125,12 +141,12 @@ function renderFileSize(size?: number) {
 
 function getPaneShellClasses(appearance: FindingCodeWindowAppearance) {
 	if (appearance === "terminal-flat") {
-		return "rounded-md border border-white/8 bg-black";
+		return "rounded-md border border-white/14 bg-black shadow-[0_0_0_1px_rgba(255,255,255,0.04)]";
 	}
 	if (appearance === "dense-ide") {
-		return "rounded-lg border border-white/10 bg-[#030303]";
+		return "rounded-lg border border-white/14 bg-[#030303] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]";
 	}
-	return "rounded-2xl border border-white/10 bg-[#020202]";
+	return "rounded-2xl border border-white/14 bg-[#020202] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]";
 }
 
 function getEmptyStateClasses() {
@@ -156,6 +172,22 @@ function renderHighlightedParts(
 	);
 }
 
+function findProjectCodeBrowserDisplayPath(
+	nodes: ProjectCodeBrowserTreeNode[],
+	sourcePath: string,
+): string | null {
+	for (const node of nodes) {
+		if (node.kind === "file" && (node.sourcePath ?? node.path) === sourcePath) {
+			return node.path;
+		}
+		if (node.children?.length) {
+			const nested = findProjectCodeBrowserDisplayPath(node.children, sourcePath);
+			if (nested) return nested;
+		}
+	}
+	return null;
+}
+
 function ProjectCodeBrowserTree({
 	nodes,
 	expandedFolders,
@@ -164,12 +196,13 @@ function ProjectCodeBrowserTree({
 	onSelectFile,
 	appearance,
 	depth = 0,
+	forceExpandAll = false,
 }: ProjectCodeBrowserTreeProps) {
 	return (
 		<div className={cn("space-y-1.5", depth > 0 && "mt-1.5")}>
 			{nodes.map((node) => {
 				if (node.kind === "directory") {
-					const isExpanded = expandedFolders.has(node.path);
+					const isExpanded = forceExpandAll || expandedFolders.has(node.path);
 					return (
 						<div key={node.path}>
 							<button
@@ -203,22 +236,24 @@ function ProjectCodeBrowserTree({
 									onSelectFile={onSelectFile}
 									appearance={appearance}
 									depth={depth + 1}
+									forceExpandAll={forceExpandAll}
 								/>
 							) : null}
 						</div>
 					);
 				}
 
-				const isSelected = selectedFilePath === node.path;
+				const resolvedFilePath = node.sourcePath ?? node.path;
+				const isResolvedSelected = selectedFilePath === resolvedFilePath;
 				return (
 					<button
 						key={node.path}
 						type="button"
-						onClick={() => onSelectFile(node.path)}
+						onClick={() => onSelectFile(resolvedFilePath)}
 						className={cn(
 							"flex w-full items-center justify-between gap-3 border px-3 py-2 text-left transition-colors cursor-pointer",
 							appearance === "terminal-flat" ? "rounded-sm" : "rounded-md",
-							isSelected
+							isResolvedSelected
 								? "border-white/14 bg-white/[0.08] text-white"
 								: "border-transparent text-white/74 hover:border-white/10 hover:bg-white/[0.04]",
 						)}
@@ -431,18 +466,78 @@ function ProjectCodeBrowserSearchPanel({
 	);
 }
 
+function ProjectCodeBrowserQuickOpenPanel({
+	tree,
+	expandedFolders,
+	selectedFilePath,
+	fileQuickOpenQuery,
+	onToggleFolder,
+	onSelectFile,
+	onFileQuickOpenQueryChange,
+	appearance,
+}: ProjectCodeBrowserQuickOpenPanelProps) {
+	const normalizedQuery = normalizeProjectCodeBrowserSearchQuery(fileQuickOpenQuery);
+
+	return (
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="border-b border-white/8 px-4 py-4">
+				<p className="text-[13px] uppercase tracking-[0.18em] text-white/34">
+					打开文件
+				</p>
+				<label className="mt-3 block space-y-1">
+					<span className="text-[11px] uppercase tracking-[0.18em] text-white/30">
+						快速定位
+					</span>
+					<input
+						type="search"
+						value={fileQuickOpenQuery}
+						onChange={(event) => onFileQuickOpenQueryChange(event.target.value)}
+						placeholder="搜索文件名 / 路径"
+						className="w-full rounded-lg border border-white/14 bg-white/[0.03] px-3 py-2 text-xs text-white outline-none transition-colors placeholder:text-white/28 focus:border-[#c7ff6a]/32 focus:bg-black/55"
+					/>
+				</label>
+			</div>
+
+			<div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 custom-scrollbar-dark">
+				{tree.length > 0 ? (
+					<ProjectCodeBrowserTree
+						nodes={tree}
+						expandedFolders={expandedFolders}
+						selectedFilePath={selectedFilePath}
+						onToggleFolder={onToggleFolder}
+						onSelectFile={onSelectFile}
+						appearance={appearance}
+						forceExpandAll={Boolean(normalizedQuery)}
+					/>
+				) : (
+					<div className="px-3 py-8 text-center text-sm text-white/42">
+						{normalizedQuery ? "未找到匹配文件" : "当前项目没有可浏览的文本文件"}
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
 function ProjectCodeBrowserPreview({
 	selectedFilePath,
+	displayFilePath,
 	selectedFileState,
 	appearance,
 	previewDecorations,
 }: Pick<
 	ProjectCodeBrowserWorkspaceProps,
-	"selectedFilePath" | "selectedFileState" | "appearance" | "previewDecorations"
+	| "selectedFilePath"
+	| "displayFilePath"
+	| "selectedFileState"
+	| "appearance"
+	| "previewDecorations"
 >) {
-	const filePath =
+	const resolvedSourcePath =
 		selectedFileState.status === "ready" ? selectedFileState.filePath : selectedFilePath || "";
-	const previewDecoration = filePath ? previewDecorations?.[filePath] : undefined;
+	const previewDecoration = resolvedSourcePath
+		? previewDecorations?.[resolvedSourcePath]
+		: undefined;
 
 	if (selectedFileState.status === "loading") {
 		return <div className={getEmptyStateClasses()}>正在加载文件内容...</div>;
@@ -460,7 +555,7 @@ function ProjectCodeBrowserPreview({
 		const lineEnd = selectedFileState.content.replace(/\r\n/g, "\n").split("\n").length;
 		return (
 			<FindingCodeWindow
-				filePath={selectedFileState.filePath}
+				filePath={displayFilePath || selectedFileState.filePath}
 				code={selectedFileState.content}
 				lineStart={1}
 				lineEnd={lineEnd}
@@ -486,6 +581,7 @@ function ProjectCodeBrowserSidePanel({
 	expandedFolders,
 	selectedFilePath,
 	browserMode,
+	fileQuickOpenQuery,
 	searchQuery,
 	includeFileQuery,
 	excludeFileQuery,
@@ -493,6 +589,7 @@ function ProjectCodeBrowserSidePanel({
 	searchResults,
 	onToggleFolder,
 	onSelectFile,
+	onFileQuickOpenQueryChange,
 	onSearchQueryChange,
 	onIncludeFileQueryChange,
 	onExcludeFileQueryChange,
@@ -505,6 +602,7 @@ function ProjectCodeBrowserSidePanel({
 	| "expandedFolders"
 	| "selectedFilePath"
 	| "browserMode"
+	| "fileQuickOpenQuery"
 	| "searchQuery"
 	| "includeFileQuery"
 	| "excludeFileQuery"
@@ -512,6 +610,7 @@ function ProjectCodeBrowserSidePanel({
 	| "searchResults"
 	| "onToggleFolder"
 	| "onSelectFile"
+	| "onFileQuickOpenQueryChange"
 	| "onSearchQueryChange"
 	| "onIncludeFileQueryChange"
 	| "onExcludeFileQueryChange"
@@ -544,30 +643,16 @@ function ProjectCodeBrowserSidePanel({
 	}
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			{/* <div className="border-b border-white/8 px-4 py-4">
-				<p className="text-[11px] uppercase tracking-[0.24em] text-white/34">
-					文件浏览
-				</p>
-				<p className="mt-1 text-xs text-white/44">按目录浏览项目文本文件</p>
-			</div> */}
-			<div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 custom-scrollbar-dark">
-				{tree.length > 0 ? (
-					<ProjectCodeBrowserTree
-						nodes={tree}
-						expandedFolders={expandedFolders}
-						selectedFilePath={selectedFilePath}
-						onToggleFolder={onToggleFolder}
-						onSelectFile={onSelectFile}
-						appearance={appearance ?? "native-explorer"}
-					/>
-				) : (
-					<div className="px-3 py-8 text-center text-sm text-white/42">
-						当前项目没有可浏览的文本文件
-					</div>
-				)}
-			</div>
-		</div>
+		<ProjectCodeBrowserQuickOpenPanel
+			tree={tree}
+			expandedFolders={expandedFolders}
+			selectedFilePath={selectedFilePath}
+			fileQuickOpenQuery={fileQuickOpenQuery ?? ""}
+			onToggleFolder={onToggleFolder}
+			onSelectFile={onSelectFile}
+			onFileQuickOpenQueryChange={onFileQuickOpenQueryChange ?? (() => {})}
+			appearance={appearance ?? "native-explorer"}
+		/>
 	);
 }
 
@@ -577,6 +662,7 @@ export function ProjectCodeBrowserWorkspace({
 	selectedFilePath,
 	selectedFileState,
 	browserMode = "files",
+	fileQuickOpenQuery = "",
 	searchQuery = "",
 	includeFileQuery = "",
 	excludeFileQuery = "",
@@ -585,6 +671,7 @@ export function ProjectCodeBrowserWorkspace({
 	onToggleFolder,
 	onSelectFile,
 	onSelectMode = () => {},
+	onFileQuickOpenQueryChange = () => {},
 	onSearchQueryChange = () => {},
 	onIncludeFileQueryChange = () => {},
 	onExcludeFileQueryChange = () => {},
@@ -594,6 +681,11 @@ export function ProjectCodeBrowserWorkspace({
 	searchInputRef,
 	className,
 }: ProjectCodeBrowserWorkspaceProps) {
+	const selectedDisplayPath = useMemo(() => {
+		if (!selectedFilePath) return null;
+		return findProjectCodeBrowserDisplayPath(tree, selectedFilePath) ?? selectedFilePath;
+	}, [selectedFilePath, tree]);
+
 	return (
 		<section
 			className={cn(
@@ -618,6 +710,7 @@ export function ProjectCodeBrowserWorkspace({
 					expandedFolders={expandedFolders}
 					selectedFilePath={selectedFilePath}
 					browserMode={browserMode}
+					fileQuickOpenQuery={fileQuickOpenQuery}
 					searchQuery={searchQuery}
 					includeFileQuery={includeFileQuery}
 					excludeFileQuery={excludeFileQuery}
@@ -625,6 +718,7 @@ export function ProjectCodeBrowserWorkspace({
 					searchResults={searchResults}
 					onToggleFolder={onToggleFolder}
 					onSelectFile={onSelectFile}
+					onFileQuickOpenQueryChange={onFileQuickOpenQueryChange}
 					onSearchQueryChange={onSearchQueryChange}
 					onIncludeFileQueryChange={onIncludeFileQueryChange}
 					onExcludeFileQueryChange={onExcludeFileQueryChange}
@@ -644,6 +738,7 @@ export function ProjectCodeBrowserWorkspace({
 					<div className="flex min-h-0 flex-1 flex-col p-3">
 						<ProjectCodeBrowserPreview
 							selectedFilePath={selectedFilePath}
+							displayFilePath={selectedDisplayPath}
 							selectedFileState={selectedFileState}
 							appearance={appearance}
 							previewDecorations={previewDecorations}
@@ -665,6 +760,7 @@ export function ProjectCodeBrowserContent({
 	selectedFilePath,
 	selectedFileState,
 	browserMode = "files",
+	fileQuickOpenQuery = "",
 	searchQuery = "",
 	includeFileQuery = "",
 	excludeFileQuery = "",
@@ -674,6 +770,7 @@ export function ProjectCodeBrowserContent({
 	onToggleFolder,
 	onSelectFile,
 	onSelectMode = () => {},
+	onFileQuickOpenQueryChange = () => {},
 	onSearchQueryChange = () => {},
 	onIncludeFileQueryChange = () => {},
 	onExcludeFileQueryChange = () => {},
@@ -732,6 +829,7 @@ export function ProjectCodeBrowserContent({
 					selectedFilePath={selectedFilePath}
 					selectedFileState={selectedFileState}
 					browserMode={browserMode}
+					fileQuickOpenQuery={fileQuickOpenQuery}
 					searchQuery={searchQuery}
 					includeFileQuery={includeFileQuery}
 					excludeFileQuery={excludeFileQuery}
@@ -740,6 +838,7 @@ export function ProjectCodeBrowserContent({
 					onToggleFolder={onToggleFolder}
 					onSelectFile={onSelectFile}
 					onSelectMode={onSelectMode}
+					onFileQuickOpenQueryChange={onFileQuickOpenQueryChange}
 					onSearchQueryChange={onSearchQueryChange}
 					onIncludeFileQueryChange={onIncludeFileQueryChange}
 					onExcludeFileQueryChange={onExcludeFileQueryChange}
@@ -772,6 +871,7 @@ export default function ProjectCodeBrowser() {
 		Record<string, ProjectCodeBrowserFileViewState>
 	>({});
 	const [browserMode, setBrowserMode] = useState<ProjectCodeBrowserMode>("files");
+	const [fileQuickOpenQuery, setFileQuickOpenQuery] = useState("");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [includeFileQuery, setIncludeFileQuery] = useState("");
 	const [excludeFileQuery, setExcludeFileQuery] = useState("");
@@ -887,6 +987,7 @@ export default function ProjectCodeBrowser() {
 			fileStatesRef.current = {};
 			pendingFileLoadsRef.current = {};
 			setBrowserMode("files");
+			setFileQuickOpenQuery("");
 			setSearchQuery("");
 			setIncludeFileQuery("");
 			setExcludeFileQuery("");
@@ -947,6 +1048,11 @@ export default function ProjectCodeBrowser() {
 				exclude: excludeFileQuery,
 			}),
 		[excludeFileQuery, includeFileQuery, projectFiles],
+	);
+
+	const filteredFileTree = useMemo(
+		() => filterProjectCodeBrowserTreeByQuery(tree, fileQuickOpenQuery),
+		[fileQuickOpenQuery, tree],
 	);
 
 	useEffect(() => {
@@ -1100,11 +1206,12 @@ export default function ProjectCodeBrowser() {
 			loading={loading}
 			error={error}
 			filesCount={filesCount}
-			tree={tree}
+			tree={filteredFileTree}
 			expandedFolders={expandedFolders}
 			selectedFilePath={selectedFilePath}
 			selectedFileState={selectedFileState}
 			browserMode={browserMode}
+			fileQuickOpenQuery={fileQuickOpenQuery}
 			searchQuery={searchQuery}
 			includeFileQuery={includeFileQuery}
 			excludeFileQuery={excludeFileQuery}
@@ -1114,6 +1221,7 @@ export default function ProjectCodeBrowser() {
 			onToggleFolder={handleToggleFolder}
 			onSelectFile={handleSelectFile}
 			onSelectMode={handleSelectMode}
+			onFileQuickOpenQueryChange={setFileQuickOpenQuery}
 			onSearchQueryChange={setSearchQuery}
 			onIncludeFileQueryChange={setIncludeFileQuery}
 			onExcludeFileQueryChange={setExcludeFileQuery}

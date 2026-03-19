@@ -94,7 +94,7 @@ function renderCodeLine(line: FindingCodeWindowDisplayLine, index: number) {
 		>
 			<div
 				className={cn(
-					"select-none px-2 py-0.5 text-right font-mono text-[10px] text-slate-500 sm:text-[11px]",
+					"select-none px-2 py-0.5 text-right font-mono text-[13px] leading-[1.4] text-slate-500 sm:text-[14px]",
 					isPlaceholder && "text-slate-700",
 					isHighlighted && "text-red-300",
 					isFocus && "text-red-100",
@@ -104,7 +104,7 @@ function renderCodeLine(line: FindingCodeWindowDisplayLine, index: number) {
 			</div>
 			<pre
 				className={cn(
-					"whitespace-pre px-2.5 py-0.5 font-mono text-[11px] leading-5 text-slate-100 sm:text-[11.5px]",
+					"whitespace-pre px-2.5 py-0.5 font-mono text-[14px] leading-[1.7] text-slate-100 sm:text-[15px]",
 					isPlaceholder && "italic text-slate-500",
 					isHighlighted &&
 						"border-l-2 border-red-500 bg-red-950/35 text-red-50",
@@ -237,11 +237,11 @@ export default function FindingDetailCodePanel({
 	return (
 		<section
 			aria-label={title}
-			className="order-2 xl:order-1 cyber-card p-5 min-h-0 flex flex-col gap-4"
+			className="order-2 xl:order-2 cyber-card p-5 min-h-0 flex flex-col gap-4"
 		>
 			<div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar-dark space-y-4 pr-1">
 				{sections.length === 0 ? (
-					<div className="rounded-2xl border border-dashed border-slate-700/80 bg-slate-950/60 p-5 text-sm leading-7 text-slate-400">
+					<div className="rounded-2xl border border-dashed border-slate-700/80 bg-slate-950/60 p-5 text-[1.1375rem] leading-[1.7] text-slate-400">
 						{emptyMessage}
 					</div>
 				) : null}
@@ -263,18 +263,18 @@ export default function FindingDetailCodePanel({
 					return (
 						<article
 							key={section.id}
-							className="rounded-xl border border-border/70 bg-card/35 p-4 space-y-3"
+							className="rounded-xl border border-border/70 bg-card/35 p-5 space-y-4"
 						>
-							<p className="break-all font-mono text-[13px] leading-6 text-foreground">
+							<p className="break-all font-mono text-[1.05625rem] leading-[1.6] text-foreground">
 								{section.displayFilePath || section.filePath || "未定位文件"}
 							</p>
 
 							<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-								<div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-									<span className="inline-flex items-center rounded-full border border-border/70 bg-background/55 px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+								<div className="flex flex-wrap items-center gap-2 text-[0.975rem] text-muted-foreground">
+									<span className="inline-flex items-center rounded-full border border-border/70 bg-background/55 px-3 py-1.5 font-mono text-[0.89375rem] text-muted-foreground">
 										{section.locationLabel || "行号未提供"}
 									</span>
-									<span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-950/45 px-2.5 py-1 font-mono text-[11px] text-red-200">
+									<span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-950/45 px-3 py-1.5 font-mono text-[0.89375rem] text-red-200">
 										核心漏洞代码
 									</span>
 								</div>
@@ -314,7 +314,7 @@ export default function FindingDetailCodePanel({
 							</div>
 
 							{helperMessage ? (
-								<p className="text-xs leading-5 text-muted-foreground">
+								<p className="text-[0.975rem] leading-[1.6] text-muted-foreground">
 									{helperMessage}
 								</p>
 							) : null}

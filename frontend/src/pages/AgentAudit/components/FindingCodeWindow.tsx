@@ -60,12 +60,12 @@ function formatHeader(
 
 function getShellClasses(appearance: FindingCodeWindowAppearance) {
   if (appearance === "terminal-flat") {
-    return "rounded-md border border-white/8 shadow-none";
+    return "rounded-md border border-white/14 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]";
   }
   if (appearance === "dense-ide") {
-    return "rounded-lg border border-white/10 shadow-[0_14px_32px_rgba(0,0,0,0.28)]";
+    return "rounded-lg border border-white/14 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_14px_32px_rgba(0,0,0,0.28)]";
   }
-  return "rounded-2xl border border-white/10 shadow-[0_18px_44px_rgba(0,0,0,0.34)]";
+  return "rounded-2xl border border-white/14 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_18px_44px_rgba(0,0,0,0.34)]";
 }
 
 function getHeaderClasses(appearance: FindingCodeWindowAppearance, isDetail: boolean) {
@@ -84,8 +84,8 @@ function getViewportClasses(
 ) {
   if (displayPreset === "project-browser") {
     return cn(
-      "min-h-0 flex-1 max-h-none overflow-auto overflow-x-auto custom-scrollbar-dark bg-black",
-      appearance === "dense-ide" && "bg-[#040404]",
+      "min-h-0 flex-1 max-h-none overflow-auto overflow-x-auto custom-scrollbar-dark bg-[#0a0d12]",
+      appearance === "dense-ide" && "bg-[#070a10]",
     );
   }
 
@@ -119,7 +119,7 @@ function getHeaderTextClasses(
   displayPreset: FindingCodeWindowDisplayPreset,
 ) {
   if (displayPreset === "project-browser") {
-    return "text-[14px] leading-6";
+    return "text-[15px] leading-6";
   }
   return isDetail ? "text-[13px] leading-5" : "text-[12px] leading-5";
 }
@@ -129,7 +129,7 @@ function getBodyTextClasses(
   displayPreset: FindingCodeWindowDisplayPreset,
 ) {
   if (displayPreset === "project-browser") {
-    return "text-[14px] leading-7";
+    return "text-[15px] leading-7";
   }
   return isDetail ? "text-[12.5px] leading-6" : "text-[11.5px] leading-5";
 }
@@ -292,9 +292,12 @@ export default function FindingCodeWindow({
                     getLineNumberPaddingClasses(isDetail, displayPreset),
                     "select-none text-right font-mono tabular-nums border-r border-white/8",
                     isPlaceholder && "bg-white/[0.02] text-white/20",
-                    !isPlaceholder && !inHighlightRange && !isFocusLine && "bg-white/[0.02] text-white/34",
-                    inHighlightRange && "bg-white/[0.04] text-white/52",
-                    isFocusLine && "bg-white/[0.08] text-white/80",
+                    !isPlaceholder &&
+                      !inHighlightRange &&
+                      !isFocusLine &&
+                      "bg-white/[0.03] text-white/42",
+                    inHighlightRange && "bg-[#131922] text-white/62",
+                    isFocusLine && "bg-[#1a212b] text-white/84",
                   )}
                 >
                   {line.lineNumber ?? ""}
@@ -304,8 +307,8 @@ export default function FindingCodeWindow({
                     getCodePaddingClasses(isDetail, displayPreset),
                     "overflow-visible whitespace-pre bg-transparent",
                     isPlaceholder ? "italic text-white/35" : "text-white/92",
-                    inHighlightRange && "text-white/96",
-                    isFocusLine && "font-medium text-white",
+                    inHighlightRange && "bg-[#101720] text-white/98",
+                    isFocusLine && "bg-[#151d27] font-medium text-white shadow-[inset_3px_0_0_rgba(199,255,106,0.72)]",
                   )}
                 >
                   {line.content || " "}

@@ -115,6 +115,52 @@ test("ProjectCodeBrowserContent renders selected text file in the preview pane",
 	assert.doesNotMatch(markup, /(?:text|bg|border)-(?:sky|cyan|amber|rose|emerald)/);
 });
 
+test("ProjectCodeBrowserContent preview header uses display path instead of source path", async () => {
+	const pageModule = await importOrFail<any>(
+		"../src/pages/ProjectCodeBrowser.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(pageModule.ProjectCodeBrowserContent, {
+			project: createProject(),
+			loading: false,
+			error: null,
+			filesCount: 1,
+			tree: [
+				{
+					name: "src",
+					path: "src",
+					kind: "directory",
+					children: [
+						{
+							name: "main.ts",
+							path: "src/main.ts",
+							sourcePath: "demo/src/main.ts",
+							kind: "file",
+							size: 25,
+						},
+					],
+				},
+			],
+			expandedFolders: new Set<string>(["src"]),
+			selectedFilePath: "demo/src/main.ts",
+			selectedFileState: {
+				status: "ready",
+				filePath: "demo/src/main.ts",
+				content: "export const answer = 42;",
+				size: 25,
+				encoding: "utf-8",
+			},
+			onBack: () => {},
+			onToggleFolder: () => {},
+			onSelectFile: () => {},
+		}),
+	);
+
+	assert.match(markup, /title="src\/main\.ts:1-1"/);
+	assert.doesNotMatch(markup, /title="demo\/src\/main\.ts:1-1"/);
+});
+
 test("ProjectCodeBrowserContent keeps preview pane full height for empty state", async () => {
 	const pageModule = await importOrFail<any>(
 		"../src/pages/ProjectCodeBrowser.tsx",
@@ -176,6 +222,8 @@ test("ProjectCodeBrowserContent renders the file/search mode rail and defaults t
 	assert.match(markup, /aria-label="切换到文件浏览"/);
 	assert.match(markup, /aria-label="切换到搜索"/);
 	assert.match(markup, /aria-pressed="true"/);
+	assert.match(markup, /打开文件/);
+	assert.match(markup, /placeholder="搜索文件名 \/ 路径"/);
 });
 
 test("ProjectCodeBrowserContent renders the search panel empty state", async () => {
@@ -292,4 +340,57 @@ test("ProjectCodeBrowserContent renders highlighted search results and preview f
 	assert.match(markup, /<mark[^>]*>danger<\/mark>/);
 	assert.match(markup, /data-line-number="2"/);
 	assert.match(markup, /bg-white\/\[0\.08\]/);
+});
+
+test("ProjectCodeBrowserContent strengthens pane borders and code browser readability", async () => {
+	const pageModule = await importOrFail<any>(
+		"../src/pages/ProjectCodeBrowser.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(pageModule.ProjectCodeBrowserContent, {
+			project: createProject(),
+			loading: false,
+			error: null,
+			filesCount: 1,
+			tree: [
+				{
+					name: "src",
+					path: "src",
+					kind: "directory",
+					children: [
+						{
+							name: "main.ts",
+							path: "src/main.ts",
+							kind: "file",
+							size: 25,
+						},
+					],
+				},
+			],
+			expandedFolders: new Set<string>(["src"]),
+			selectedFilePath: "src/main.ts",
+			selectedFileState: {
+				status: "ready",
+				filePath: "src/main.ts",
+				content: "export const answer = 42;",
+				size: 25,
+				encoding: "utf-8",
+			},
+			browserMode: "files",
+			fileQuickOpenQuery: "main",
+			onBack: () => {},
+			onToggleFolder: () => {},
+			onSelectFile: () => {},
+			onSelectMode: () => {},
+			onFileQuickOpenQueryChange: () => {},
+		}),
+	);
+
+	assert.match(
+		markup,
+		/border-white\/14[\s\S]*shadow-\[0_0_0_1px_rgba\(255,255,255,0\.04\)\]/,
+	);
+	assert.match(markup, /text-\[15px\] leading-7/);
+	assert.match(markup, /bg-\[\#0a0d12\]/);
 });

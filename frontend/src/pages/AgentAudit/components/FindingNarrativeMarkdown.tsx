@@ -49,7 +49,7 @@ function renderInlineToken(
     return (
       <code
         key={key}
-        className={`font-mono ${isDetail ? "text-[13px]" : "text-[12px]"} px-1.5 py-0.5 rounded bg-muted border border-border`}
+        className={`font-mono ${isDetail ? "text-[1.05625rem]" : "text-[12px]"} px-1.5 py-0.5 rounded bg-muted border border-border`}
       >
         {token.text}
       </code>
@@ -59,7 +59,7 @@ function renderInlineToken(
     return (
       <span
         key={key}
-        className={`font-mono ${isDetail ? "text-[13px]" : "text-[12px]"} px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary`}
+        className={`font-mono ${isDetail ? "text-[1.05625rem]" : "text-[12px]"} px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary`}
       >
         {`$${token.text}$`}
       </span>
@@ -86,14 +86,14 @@ export default function FindingNarrativeMarkdown({
           const headingClass =
             block.level <= 2
               ? isDetail
-                ? "text-lg"
+                ? "text-[1.4625rem]"
                 : "text-base"
               : block.level === 3
                 ? isDetail
-                  ? "text-base"
+                  ? "text-[1.3rem]"
                   : "text-sm"
                 : isDetail
-                  ? "text-sm"
+                  ? "text-[1.1375rem]"
                   : "text-xs";
           return (
             <h4
@@ -109,12 +109,12 @@ export default function FindingNarrativeMarkdown({
           return (
             <div key={key} className="rounded-md border border-border overflow-hidden bg-card/60">
               <div
-                className={`px-3 py-1.5 ${isDetail ? "text-xs" : "text-[11px]"} text-muted-foreground border-b border-border uppercase tracking-wide`}
+                className={`px-3 py-1.5 ${isDetail ? "text-[0.975rem]" : "text-[11px]"} text-muted-foreground border-b border-border uppercase tracking-wide`}
               >
                 {block.language || "text"}
               </div>
               <pre
-                className={`${isDetail ? "text-sm" : "text-xs"} font-mono p-3 whitespace-pre-wrap break-words overflow-auto max-h-[38vh]`}
+                className={`${isDetail ? "text-[1.1375rem]" : "text-xs"} font-mono p-3 whitespace-pre-wrap break-words overflow-auto max-h-[38vh]`}
               >
                 {block.code}
               </pre>
@@ -126,7 +126,7 @@ export default function FindingNarrativeMarkdown({
           return (
             <div
               key={key}
-              className={`rounded-md border border-primary/30 bg-primary/10 px-3 py-2 ${isDetail ? "text-sm" : "text-xs"} font-mono text-primary whitespace-pre-wrap break-words`}
+              className={`rounded-md border border-primary/30 bg-primary/10 px-3 py-2 ${isDetail ? "text-[1.1375rem]" : "text-xs"} font-mono text-primary whitespace-pre-wrap break-words`}
             >
               {`$$${block.formula}$$`}
             </div>
@@ -136,7 +136,7 @@ export default function FindingNarrativeMarkdown({
         return (
           <p
             key={key}
-            className={`${isDetail ? "text-base leading-7" : "text-sm leading-6"} whitespace-pre-wrap break-words text-foreground/95`}
+            className={`${isDetail ? "text-[1.3rem] leading-[1.7]" : "text-sm leading-6"} whitespace-pre-wrap break-words text-foreground/95`}
           >
             {block.inlines.map((token, tokenIndex) =>
               renderInlineToken(token, searchQuery, `${key}-token-${tokenIndex}`, variant),

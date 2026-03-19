@@ -156,10 +156,10 @@ export function ProjectPotentialVulnerabilitiesSection({
 						<Table className="table-fixed">
 							<TableHeader>
 								<TableRow className="border-b border-border/60">
-									<TableHead className="w-[20%] border-r border-border/50 text-center">
+									<TableHead className="w-[24%] border-r border-border/50 text-center">
 										漏洞ID
 									</TableHead>
-									<TableHead className="w-[26%] border-r border-border/50 text-center">
+									<TableHead className="w-[22%] border-r border-border/50 text-center">
 										漏洞
 									</TableHead>
 									<TableHead className="w-[14%] border-r border-border/50 text-center">
@@ -171,7 +171,7 @@ export function ProjectPotentialVulnerabilitiesSection({
 									<TableHead className="w-[10%] border-r border-border/50 text-center">
 										置信度
 									</TableHead>
-									<TableHead className="w-[20%] text-center">操作</TableHead>
+									<TableHead className="w-[16%] text-center">操作</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -184,9 +184,9 @@ export function ProjectPotentialVulnerabilitiesSection({
 											<TableCell className="border-r border-border/30 text-center text-sm text-foreground whitespace-nowrap">
 												#{finding.id}
 											</TableCell>
-											<TableCell className="border-r border-border/30 text-center">
+											<TableCell className="border-r border-border/30 text-left">
 												<div
-													className="space-y-1"
+													className="space-y-1 text-left"
 													title={finding.cweTooltip || undefined}
 												>
 													<div className="text-sm font-semibold text-foreground">

@@ -35,18 +35,18 @@ export function FindingDetailHeaderActions({
             size="sm"
             variant="outline"
             className={cn(
-              "cyber-btn-outline h-10 px-4 text-sm tracking-[0.14em]",
+              "cyber-btn-outline h-12 px-5 text-[1.1375rem] tracking-[0.14em]",
               "border-sky-500/50 text-sky-100 hover:text-white",
               "hover:border-sky-400/80 hover:bg-sky-500/10",
               "shadow-[0_0_12px_rgba(14,165,233,0.35)] transition duration-200",
               "focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2",
             )}
-          >
-            <Link
-              to={codeBrowserAction?.to as string}
-              state={codeBrowserAction?.state}
             >
-              <Code2 className="h-4 w-4" />
+              <Link
+                to={codeBrowserAction?.to as string}
+                state={codeBrowserAction?.state}
+              >
+              <Code2 className="h-5 w-5" />
               <span className="ml-2">{label}</span>
             </Link>
           </Button>
@@ -55,7 +55,7 @@ export function FindingDetailHeaderActions({
             size="sm"
             variant="outline"
             className={cn(
-              "cyber-btn-outline h-10 px-4 text-sm tracking-[0.14em]",
+              "cyber-btn-outline h-12 px-5 text-[1.1375rem] tracking-[0.14em]",
               "border-border/70 text-muted-foreground opacity-70",
               "cursor-not-allowed",
             )}
@@ -63,13 +63,17 @@ export function FindingDetailHeaderActions({
             title={disabledReason || undefined}
             aria-label={disabledReason ? `${label}（${disabledReason}）` : label}
           >
-            <Code2 className="h-4 w-4" />
+            <Code2 className="h-5 w-5" />
             <span className="ml-2">{label}</span>
           </Button>
         )
       ) : null}
-      <Button variant="outline" className="cyber-btn-outline h-10 px-4" onClick={onBack}>
-        <ArrowLeft className="w-4 h-4 mr-2" />
+      <Button
+        variant="outline"
+        className="cyber-btn-outline h-12 px-5 text-[1.1375rem]"
+        onClick={onBack}
+      >
+        <ArrowLeft className="w-5 h-5 mr-2" />
         返回
       </Button>
     </div>

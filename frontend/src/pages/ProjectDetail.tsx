@@ -157,14 +157,6 @@ export function ProjectDescriptionSection({
 						项目简介
 					</h2>
 				</div>
-				<div className="flex items-center gap-2">
-					{sourceLabel ? (
-						<Badge className="cyber-badge-muted">{sourceLabel}</Badge>
-					) : null}
-					<span className="text-xs leading-5 text-muted-foreground">
-						内容基于项目结构自动整理
-					</span>
-				</div>
 			</div>
 
 			<div className="space-y-3">
