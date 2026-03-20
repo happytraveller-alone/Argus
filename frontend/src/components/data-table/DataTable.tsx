@@ -33,13 +33,19 @@ import { DataTableScrollContainer } from "./DataTableScrollContainer";
 import { DataTableSelectionBar } from "./DataTableSelectionBar";
 import { DataTableSummaryBar } from "./DataTableSummaryBar";
 import { DataTableToolbar } from "./DataTableToolbar";
+import { resolveDataTableFilterPlacement } from "./filterPlacement";
 import {
   applyDataTableStateUpdate,
   createDefaultDataTableState,
   resolveDataTableState,
 } from "./queryState";
 import { DATA_TABLE_DENSITY_CELL_CLASS } from "./tableTheme";
-import type { AppColumnDef, DataTableProps, DataTableQueryState } from "./types";
+import type {
+  AppColumnDef,
+  DataTableFilterValue,
+  DataTableProps,
+  DataTableQueryState,
+} from "./types";
 
 function resolveFilterFn(column: ColumnDef<any>) {
   const variant = column.meta?.filterVariant;
@@ -119,6 +125,7 @@ export function DataTable<TData extends RowData>({
   mode = "local",
   state,
   defaultState,
+  resetState,
   onStateChange,
   loading = false,
   error,
@@ -137,6 +144,10 @@ export function DataTable<TData extends RowData>({
     [defaultState],
   );
   const [internalState, setInternalState] = React.useState<DataTableQueryState>(initialState);
+  const resolvedResetState = React.useMemo(
+    () => resolveDataTableState(initialState, resetState),
+    [initialState, resetState],
+  );
 
   const resolvedState = resolveDataTableState(
     internalState,
@@ -236,6 +247,7 @@ export function DataTable<TData extends RowData>({
         table={table}
         toolbar={toolbar}
         state={resolvedState}
+        resetState={resolvedResetState}
         onReset={updateState}
         onDensityChange={(density) =>
           updateState((old) => ({
@@ -256,10 +268,12 @@ export function DataTable<TData extends RowData>({
                     typeof header.column.columnDef.header === "string"
                       ? header.column.columnDef.header
                       : String(meta?.label || header.column.id);
+                  const filterPlacement = resolveDataTableFilterPlacement(meta);
                   const shouldRenderPlainHeader =
                     Boolean(meta?.plainHeader) &&
                     typeof header.column.columnDef.header === "string" &&
-                    header.subHeaders.length === 0;
+                    header.subHeaders.length === 0 &&
+                    filterPlacement !== "header";
                   const shouldRenderPlainSortableHeader =
                     shouldRenderPlainHeader &&
                     header.column.getCanSort();
@@ -301,6 +315,11 @@ export function DataTable<TData extends RowData>({
                                 <DataTableColumnHeader
                                   column={header.column as any}
                                   title={String(fallbackLabel)}
+                                  defaultFilterValue={
+                                    resolvedResetState.columnFilters.find(
+                                      (filter) => filter.id === header.column.id,
+                                    )?.value as DataTableFilterValue
+                                  }
                                 />
                               )
                           : flexRender(header.column.columnDef.header, header.getContext())}

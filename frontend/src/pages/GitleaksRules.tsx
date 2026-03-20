@@ -114,11 +114,6 @@ function createInitialTableState(initialState: DataTableQueryState): DataTableQu
       pageIndex: initialState.pagination.pageIndex,
       pageSize: initialState.pagination.pageSize || DEFAULT_PAGE_SIZE,
     },
-    columnVisibility: {
-      isActiveFilter: false,
-      entropyRange: false,
-      ...initialState.columnVisibility,
-    },
   });
 }
 
@@ -162,8 +157,8 @@ export default function GitleaksRules({
   );
 
   const sourceFilter = getStringColumnFilter(tableState, "source");
-  const activeFilter = getStringColumnFilter(tableState, "isActiveFilter");
-  const entropyFilter = getStringColumnFilter(tableState, "entropyRange");
+  const activeFilter = getStringColumnFilter(tableState, "enabledState");
+  const entropyFilter = getStringColumnFilter(tableState, "entropy");
 
   const loadRules = async () => {
     try {
@@ -280,7 +275,20 @@ export default function GitleaksRules({
         id: "entropy",
         accessorFn: (row) => row.entropy ?? -1,
         header: "熵值",
-        meta: { label: "熵值", align: "center", width: 120 },
+        meta: {
+          label: "熵值",
+          align: "center",
+          width: 136,
+          filterVariant: "select",
+          filterOptions: [
+            { label: "高熵 (≥ 4)", value: "high" },
+            { label: "中熵 (3 - 4)", value: "medium" },
+            { label: "低熵 (0 - 3)", value: "low" },
+            { label: "未设置熵值", value: "none" },
+          ],
+        },
+        filterFn: (row, _columnId, filterValue) =>
+          matchesEntropyRange(row.original, filterValue),
         cell: ({ row }) => (
           <span className="font-mono tabular-nums text-sm text-muted-foreground">
             {row.original.entropy === null || row.original.entropy === undefined
@@ -312,10 +320,18 @@ export default function GitleaksRules({
         ),
       },
       {
-        id: "status",
-        accessorFn: (row) => (row.is_active ? "已启用" : "已禁用"),
+        id: "enabledState",
+        accessorFn: (row) => String(row.is_active),
         header: "启用状态",
-        meta: { label: "启用状态", width: 120 },
+        meta: {
+          label: "启用状态",
+          width: 136,
+          filterVariant: "select",
+          filterOptions: [
+            { label: "已启用", value: "true" },
+            { label: "已禁用", value: "false" },
+          ],
+        },
         cell: ({ row }) => (
           <Badge
             className={
@@ -327,38 +343,6 @@ export default function GitleaksRules({
             {row.original.is_active ? "已启用" : "已禁用"}
           </Badge>
         ),
-      },
-      {
-        id: "isActiveFilter",
-        accessorFn: (row) => String(row.is_active),
-        header: "启用筛选",
-        enableHiding: false,
-        meta: {
-          label: "启用状态",
-          filterVariant: "select",
-          filterOptions: [
-            { label: "已启用", value: "true" },
-            { label: "已禁用", value: "false" },
-          ],
-        },
-      },
-      {
-        id: "entropyRange",
-        accessorFn: (row) => row.entropy ?? null,
-        header: "熵值筛选",
-        enableHiding: false,
-        meta: {
-          label: "熵值区间",
-          filterVariant: "select",
-          filterOptions: [
-            { label: "高熵 (≥ 4)", value: "high" },
-            { label: "中熵 (3 - 4)", value: "medium" },
-            { label: "低熵 (0 - 3)", value: "low" },
-            { label: "未设置熵值", value: "none" },
-          ],
-        },
-        filterFn: (row, _columnId, filterValue) =>
-          matchesEntropyRange(row.original, filterValue),
       },
       {
         id: "createdAt",
@@ -649,34 +633,6 @@ export default function GitleaksRules({
           }}
           toolbar={{
             searchPlaceholder: "搜索名称/ID/正则...",
-            filters: [
-              {
-                columnId: "source",
-                label: "规则来源",
-                variant: "select",
-                options: sourceOptions,
-              },
-              {
-                columnId: "entropyRange",
-                label: "熵值区间",
-                variant: "select",
-                options: [
-                  { label: "高熵 (≥ 4)", value: "high" },
-                  { label: "中熵 (3 - 4)", value: "medium" },
-                  { label: "低熵 (0 - 3)", value: "low" },
-                  { label: "未设置熵值", value: "none" },
-                ],
-              },
-              {
-                columnId: "isActiveFilter",
-                label: "启用状态",
-                variant: "select",
-                options: [
-                  { label: "已启用", value: "true" },
-                  { label: "已禁用", value: "false" },
-                ],
-              },
-            ],
             leadingActions: engineSelector,
             trailingActions: (
               <Button className="cyber-btn-primary h-9" onClick={openCreateDialog}>

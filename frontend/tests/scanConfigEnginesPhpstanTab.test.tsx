@@ -25,5 +25,6 @@ test("ScanConfigEngines renders phpstan rules page when tab=phpstan", () => {
   );
 
   assert.match(markup, /扩展包数量/);
-  assert.match(markup, /搜索规则/);
+  assert.match(markup, /搜索名称\/类名\/包名/);
+  assert.match(markup, /aria-label="筛选删除状态"/);
 });

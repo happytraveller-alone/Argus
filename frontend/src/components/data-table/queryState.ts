@@ -81,7 +81,6 @@ export function setColumnFilterValue(
     value !== undefined &&
     value !== null &&
     value !== "" &&
-    value !== false &&
     !isEmptyArray &&
     !isEmptyObject
   ) {
@@ -101,21 +100,30 @@ export function setColumnFilterValue(
 
 export function resetDataTableFilters(
   state: DataTableQueryState,
+  resetState?: Partial<DataTableQueryState>,
 ): DataTableQueryState {
+  const baseline = createDefaultDataTableState(resetState);
   return {
     ...state,
-    globalFilter: "",
-    columnFilters: [],
-    rowSelection: {},
+    globalFilter: baseline.globalFilter,
+    columnFilters: baseline.columnFilters,
+    sorting: baseline.sorting,
+    rowSelection: baseline.rowSelection,
     pagination: {
       ...state.pagination,
-      pageIndex: 0,
+      pageIndex: baseline.pagination.pageIndex,
     },
   };
 }
 
-export function hasActiveDataTableFilters(state: DataTableQueryState): boolean {
-  return Boolean(state.globalFilter) || state.columnFilters.length > 0;
+export function hasActiveDataTableFilters(
+  state: DataTableQueryState,
+  resetState?: Partial<DataTableQueryState>,
+): boolean {
+  return !areDataTableQueryStatesEqual(
+    state,
+    resetDataTableFilters(state, resetState),
+  );
 }
 
 export function areDataTableQueryStatesEqual(

@@ -151,9 +151,6 @@ export default function TaskManagementIntelligent() {
 							<Plus className="w-3.5 h-3.5 mr-1.5" />
 							新建扫描任务
 						</Button>
-						<span className="text-xs text-muted-foreground">
-							共 {filteredActivities.length} 条
-						</span>
 					</div>
 				</div>
 				<DeferredSection className="-mt-4 min-h-0 flex-1" minHeight={0} priority>

@@ -136,9 +136,6 @@ function createInitialTableState(globalFilter = ""): DataTableQueryState {
 			pageIndex: 0,
 			pageSize: DEFAULT_PAGE_SIZE,
 		},
-		columnVisibility: {
-			isActiveFilter: false,
-		},
 	});
 }
 
@@ -244,7 +241,7 @@ export default function OpengrepRules({
 	const languageFilter = getStringColumnFilter(tableState, "language");
 	const sourceFilter = getStringColumnFilter(tableState, "source");
 	const confidenceFilter = getStringColumnFilter(tableState, "confidence");
-	const activeFilter = getStringColumnFilter(tableState, "isActiveFilter");
+	const activeFilter = getStringColumnFilter(tableState, "status");
 
 	useEffect(() => {
 		if (isGitleaksEngine) {
@@ -1241,9 +1238,16 @@ export default function OpengrepRules({
 			},
 			{
 				id: "status",
-				accessorFn: (row) => (row.is_active ? "已启用" : "已禁用"),
+				accessorFn: (row) => String(row.is_active),
 				header: "启用状态",
-				meta: { label: "启用状态", width: 120 },
+				meta: {
+					label: "启用状态",
+					width: 136,
+					filterVariant: "select",
+					filterOptions: ACTIVE_STATUS.filter(
+						(status) => status.value === "true" || status.value === "false",
+					),
+				},
 				cell: ({ row }) => (
 					<Badge
 						className={
@@ -1255,19 +1259,6 @@ export default function OpengrepRules({
 						{row.original.is_active ? "已启用" : "已禁用"}
 					</Badge>
 				),
-			},
-			{
-				id: "isActiveFilter",
-				accessorFn: (row) => String(row.is_active),
-				header: "启用筛选",
-				enableHiding: false,
-				meta: {
-					label: "启用状态",
-					filterVariant: "select",
-					filterOptions: ACTIVE_STATUS.filter(
-						(status) => status.value === "true" || status.value === "false",
-					),
-				},
 			},
 			{
 				id: "correct",
@@ -1529,35 +1520,6 @@ export default function OpengrepRules({
 									"opengrep.searchPlaceholder",
 									"搜索规则名称或ID...",
 								),
-								filters: [
-									{
-										columnId: "language",
-										label: "编程语言",
-										variant: "select",
-										options: languageOptions,
-									},
-									{
-										columnId: "source",
-										label: "规则来源",
-										variant: "select",
-										options: sourceOptions,
-									},
-									{
-										columnId: "confidence",
-										label: "置信度",
-										variant: "select",
-										options: confidenceOptions,
-									},
-									{
-										columnId: "isActiveFilter",
-										label: "启用状态",
-										variant: "select",
-										options: ACTIVE_STATUS.filter(
-											(status) =>
-												status.value === "true" || status.value === "false",
-										),
-									},
-								],
 								leadingActions: showEngineSelector ? (
 									<div className="min-w-[150px]">
 										<Select

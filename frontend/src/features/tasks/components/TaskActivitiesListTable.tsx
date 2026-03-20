@@ -220,7 +220,11 @@ export default function TaskActivitiesListTable({
             title: emptyText,
           }}
           toolbar={{
-            searchPlaceholder: "搜索项目或任务状态",
+            showGlobalSearch: false,
+            showColumnVisibility: false,
+						showDensityToggle: false,
+						showReset: false,
+            filters: []
           }}
           pagination={{
             enabled: true,

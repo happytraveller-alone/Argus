@@ -711,15 +711,6 @@ export default function ProjectDetail() {
 						width: "10%",
 						headerClassName: "w-[10%] border-r border-border/50 text-center",
 						cellClassName: "border-r border-border/30 text-center",
-						filterVariant: "select",
-						filterOptions: [
-							{ label: "完成", value: "completed" },
-							{ label: "运行中", value: "running" },
-							{ label: "失败", value: "failed" },
-							{ label: "等待中", value: "pending" },
-							{ label: "中断", value: "interrupted" },
-							{ label: "已取消", value: "cancelled" },
-						],
 					},
 					cell: ({ row }) => <div className="flex justify-center">{getStatusBadge(row.original.status)}</div>,
 				},
@@ -894,22 +885,9 @@ export default function ProjectDetail() {
 						}}
 						toolbar={{
 							searchPlaceholder: "搜索任务 ID、类型或创建时间",
-							filters: [
-								{
-									columnId: "status",
-									label: "状态",
-									variant: "select",
-									options: [
-										{ label: "完成", value: "completed" },
-										{ label: "运行中", value: "running" },
-										{ label: "失败", value: "failed" },
-										{ label: "等待中", value: "pending" },
-										{ label: "中断", value: "interrupted" },
-										{ label: "已取消", value: "cancelled" },
-									],
-								},
-							],
 							showColumnVisibility: false,
+							showDensityToggle: false,
+							showReset: false,
 						}}
 						pagination={{
 							enabled: true,

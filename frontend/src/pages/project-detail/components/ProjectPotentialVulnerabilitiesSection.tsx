@@ -158,13 +158,6 @@ export function ProjectPotentialVulnerabilitiesSection({
 						plainHeader: true,
 						headerClassName: "w-[10%] border-r border-border/50 text-center",
 						cellClassName: "border-r border-border/30 text-center",
-						filterVariant: "select",
-						filterOptions: [
-							{ label: "严重", value: "CRITICAL" },
-							{ label: "高危", value: "HIGH" },
-							{ label: "中危", value: "MEDIUM" },
-							{ label: "低危", value: "LOW" },
-						],
 					},
 					cell: ({ row }) => (
 						<Badge className={getSeverityBadgeClassName(row.original.severity)}>
@@ -181,12 +174,6 @@ export function ProjectPotentialVulnerabilitiesSection({
 						plainHeader: true,
 						headerClassName: "w-[10%] border-r border-border/50 text-center",
 						cellClassName: "border-r border-border/30 text-center",
-						filterVariant: "select",
-						filterOptions: [
-							{ label: "高", value: "HIGH" },
-							{ label: "中", value: "MEDIUM" },
-							{ label: "低", value: "LOW" },
-						],
 					},
 					cell: ({ row }) => (
 						<Badge className={getConfidenceBadgeClassName(row.original.confidence)}>
@@ -266,30 +253,9 @@ export function ProjectPotentialVulnerabilitiesSection({
 						}}
 						toolbar={{
 							searchPlaceholder: "搜索漏洞 ID、类型或任务",
-							filters: [
-								{
-									columnId: "severity",
-									label: "严重度",
-									variant: "select",
-									options: [
-										{ label: "严重", value: "CRITICAL" },
-										{ label: "高危", value: "HIGH" },
-										{ label: "中危", value: "MEDIUM" },
-										{ label: "低危", value: "LOW" },
-									],
-								},
-								{
-									columnId: "confidence",
-									label: "置信度",
-									variant: "select",
-									options: [
-										{ label: "高", value: "HIGH" },
-										{ label: "中", value: "MEDIUM" },
-										{ label: "低", value: "LOW" },
-									],
-								},
-							],
 							showColumnVisibility: false,
+							showDensityToggle: false,
+							showReset: false,
 						}}
 						pagination={{
 							enabled: true,

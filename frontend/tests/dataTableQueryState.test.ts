@@ -71,6 +71,38 @@ test("resetDataTableFilters clears filters, selection and resets page index", as
   assert.equal(next.pagination.pageSize, 20);
 });
 
+test("resetDataTableFilters restores reset baseline while preserving page size and density", async () => {
+  const queryStateModule = await importOrFail<any>(
+    "../src/components/data-table/queryState.ts",
+  );
+
+  const state = queryStateModule.createDefaultDataTableState({
+    globalFilter: "bandit",
+    columnFilters: [{ id: "status", value: "false" }],
+    sorting: [{ id: "updatedAt", desc: true }],
+    rowSelection: { "row-1": true },
+    pagination: { pageIndex: 3, pageSize: 50 },
+    density: "compact",
+  });
+
+  const next = queryStateModule.resetDataTableFilters(
+    state,
+    queryStateModule.createDefaultDataTableState({
+      columnFilters: [{ id: "deletedStatus", value: "false" }],
+      sorting: [{ id: "createdAt", desc: false }],
+      pagination: { pageIndex: 0, pageSize: 10 },
+    }),
+  );
+
+  assert.equal(next.globalFilter, "");
+  assert.deepEqual(next.columnFilters, [{ id: "deletedStatus", value: "false" }]);
+  assert.deepEqual(next.sorting, [{ id: "createdAt", desc: false }]);
+  assert.deepEqual(next.rowSelection, {});
+  assert.equal(next.pagination.pageIndex, 0);
+  assert.equal(next.pagination.pageSize, 50);
+  assert.equal(next.density, "compact");
+});
+
 test("areDataTableQueryStatesEqual detects matching and changed table state", async () => {
   const queryStateModule = await importOrFail<any>(
     "../src/components/data-table/queryState.ts",

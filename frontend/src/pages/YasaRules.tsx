@@ -70,6 +70,7 @@ function toViewModel(rule: YasaRule): YasaRuleRowViewModel {
 function buildColumns(
   onOpenDetail: (row: YasaRuleRowViewModel) => void,
   onCopyRule: (row: YasaRuleRowViewModel) => Promise<void>,
+  checkerPackFilterOptions: { label: string; value: string }[],
 ): AppColumnDef<YasaRuleRowViewModel, unknown>[] {
   return [
     {
@@ -181,6 +182,7 @@ function buildColumns(
       meta: {
         label: "CheckerPack",
         filterVariant: "select",
+        filterOptions: checkerPackFilterOptions,
       },
       cell: ({ row }) => (
         <div className="flex flex-wrap gap-1">
@@ -319,6 +321,11 @@ export default function YasaRules({
     };
   }, [rows, checkerPackOptions.length]);
 
+  const checkerPackFilterOptions = useMemo(
+    () => checkerPackOptions.map((option) => ({ label: option, value: option })),
+    [checkerPackOptions],
+  );
+
   const columns = useMemo<ColumnDef<YasaRuleRowViewModel>[]>(
     () => buildColumns(
       (row) => {
@@ -344,13 +351,9 @@ export default function YasaRules({
           toast.error("复制失败，请手动复制");
         }
       },
+      checkerPackFilterOptions,
     ),
-    [],
-  );
-
-  const checkerPackFilterOptions = useMemo(
-    () => checkerPackOptions.map((option) => ({ label: option, value: option })),
-    [checkerPackOptions],
+    [checkerPackFilterOptions],
   );
 
   const engineSelector = showEngineSelector ? (
@@ -447,44 +450,6 @@ export default function YasaRules({
           }}
           toolbar={{
             searchPlaceholder: "搜索规则名称或ID...",
-            filters: [
-              {
-                columnId: "languages",
-                label: "编程语言",
-                variant: "select",
-                options: [
-                  { label: "python", value: "python" },
-                  { label: "javascript", value: "javascript" },
-                  { label: "typescript", value: "typescript" },
-                  { label: "golang", value: "golang" },
-                  { label: "java", value: "java" },
-                ],
-              },
-              {
-                columnId: "source",
-                label: "规则来源",
-                variant: "select",
-                options: [{ label: "内置规则", value: "内置规则" }],
-              },
-              {
-                columnId: "confidence",
-                label: "置信度",
-                variant: "select",
-                options: [{ label: "低", value: "低" }],
-              },
-              {
-                columnId: "activeStatus",
-                label: "启用状态",
-                variant: "select",
-                options: [{ label: "已启用", value: "已启用" }],
-              },
-              {
-                columnId: "checkerPack",
-                label: "CheckerPack",
-                variant: "select",
-                options: checkerPackFilterOptions,
-              },
-            ],
             leadingActions: engineSelector,
           }}
           selection={{

@@ -2,6 +2,7 @@ import type {
   ColumnDef,
   ColumnFiltersState,
   PaginationState,
+  RowData,
   RowSelectionState,
   SortingState,
   Table,
@@ -20,6 +21,7 @@ export type DataTableFilterVariant =
   | "multi-select"
   | "boolean"
   | "number-range";
+export type DataTableFilterPlacement = "auto" | "header" | "toolbar" | "none";
 
 export interface DataTableFilterOption {
   label: string;
@@ -49,6 +51,7 @@ export interface DataTableColumnMeta<TData = unknown, TValue = unknown> {
   sortable?: boolean;
   plainHeader?: boolean;
   filterVariant?: DataTableFilterVariant;
+  filterPlacement?: DataTableFilterPlacement;
   filterOptions?: DataTableFilterOption[];
   densityClassName?: string;
   mobilePriority?: number;
@@ -62,6 +65,11 @@ export interface DataTableColumnMeta<TData = unknown, TValue = unknown> {
 export type AppColumnDef<TData, TValue = unknown> = ColumnDef<TData, TValue> & {
   meta?: DataTableColumnMeta<TData, TValue>;
 };
+
+declare module "@tanstack/react-table" {
+  interface ColumnMeta<TData extends RowData, TValue>
+    extends DataTableColumnMeta<TData, TValue> {}
+}
 
 export interface DataTableQueryState {
   globalFilter: string;
@@ -132,6 +140,7 @@ export interface DataTableProps<TData> {
   mode?: DataTableMode;
   state?: Partial<DataTableQueryState>;
   defaultState?: Partial<DataTableQueryState>;
+  resetState?: Partial<DataTableQueryState>;
   onStateChange?: (state: DataTableQueryState) => void;
   loading?: boolean;
   error?: ReactNode;

@@ -563,31 +563,6 @@ export default function ProjectTaskFindingsDialog({
 							}}
 							toolbar={{
 								searchPlaceholder: "搜索漏洞类型或位置",
-								filters: [
-									{
-										columnId: "severity",
-										label: "危害",
-										variant: "select",
-										options: [
-											{ label: "严重", value: "CRITICAL" },
-											{ label: "高危", value: "HIGH" },
-											{ label: "中危", value: "MEDIUM" },
-											{ label: "低危", value: "LOW" },
-											{ label: "未知", value: "UNKNOWN" },
-										],
-									},
-									{
-										columnId: "confidence",
-										label: "置信度",
-										variant: "select",
-										options: [
-											{ label: "高", value: "HIGH" },
-											{ label: "中", value: "MEDIUM" },
-											{ label: "低", value: "LOW" },
-											{ label: "未知", value: "UNKNOWN" },
-										],
-									},
-								],
 								showColumnVisibility: false,
 								showDensityToggle: false,
 							}}

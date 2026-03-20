@@ -109,11 +109,6 @@ function createInitialTableState(initialState: DataTableQueryState): DataTableQu
       pageIndex: initialState.pagination.pageIndex,
       pageSize: initialState.pagination.pageSize || DEFAULT_PAGE_SIZE,
     },
-    columnVisibility: {
-      isActiveFilter: false,
-      deletedStatus: false,
-      ...initialState.columnVisibility,
-    },
   });
 
   if (!nextState.columnFilters.some((filter) => filter.id === "deletedStatus")) {
@@ -145,6 +140,10 @@ export default function BanditRules({
     checks_text: "",
   });
   const { initialState, syncStateToUrl } = useDataTableUrlState(true);
+  const defaultResetState = useMemo(
+    () => createInitialTableState(createDefaultDataTableState()),
+    [],
+  );
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>
     createInitialTableState(initialState),
   );
@@ -153,7 +152,7 @@ export default function BanditRules({
     [initialState],
   );
   const deletedFilter = resolveDeletedFilterValue(tableState);
-  const activeFilter = getStringColumnFilter(tableState, "isActiveFilter");
+  const activeFilter = getStringColumnFilter(tableState, "status");
 
   const loadRules = async () => {
     try {
@@ -257,56 +256,57 @@ export default function BanditRules({
       },
       {
         id: "status",
-        accessorFn: (row) => (row.is_deleted ? "已删除" : row.is_active ? "已启用" : "已禁用"),
-        header: "启用状态",
-        meta: { label: "状态", width: 120 },
-        cell: ({ row }) =>
-          row.original.is_deleted ? (
-            <Badge className="cyber-badge cyber-badge-muted">已删除</Badge>
-          ) : (
-            <Badge
-              className={
-                row.original.is_active
-                  ? "cyber-badge cyber-badge-success"
-                  : "cyber-badge cyber-badge-muted"
-              }
-            >
-              {row.original.is_active ? "已启用" : "已禁用"}
-            </Badge>
-          ),
-      },
-      {
-        id: "isActiveFilter",
         accessorFn: (row) => String(row.is_active),
-        header: "启用筛选",
-        enableHiding: false,
+        header: "启用状态",
         meta: {
           label: "启用状态",
+          width: 136,
           filterVariant: "select",
           filterOptions: [
             { label: "已启用", value: "true" },
             { label: "已禁用", value: "false" },
           ],
         },
+        cell: ({ row }) => (
+          <Badge
+            className={
+              row.original.is_active
+                ? "cyber-badge cyber-badge-success"
+                : "cyber-badge cyber-badge-muted"
+            }
+          >
+            {row.original.is_active ? "已启用" : "已禁用"}
+          </Badge>
+        ),
       },
       {
         id: "deletedStatus",
-        accessorFn: (row) => (row.is_deleted ? "true" : "false"),
-        header: "删除筛选",
-        enableHiding: false,
+        accessorFn: (row) => String(row.is_deleted),
+        header: "删除状态",
         meta: {
           label: "删除状态",
+          width: 136,
           filterVariant: "select",
           filterOptions: [
             { label: "未删除", value: "false" },
             { label: "已删除", value: "true" },
-            { label: "全部", value: "all" },
           ],
         },
         filterFn: (row, _columnId, filterValue) => {
-          if (!filterValue || filterValue === "all") return true;
+          if (!filterValue) return true;
           return String(row.original.is_deleted) === String(filterValue);
         },
+        cell: ({ row }) => (
+          <Badge
+            className={
+              row.original.is_deleted
+                ? "cyber-badge cyber-badge-warning"
+                : "cyber-badge cyber-badge-info"
+            }
+          >
+            {row.original.is_deleted ? "已删除" : "未删除"}
+          </Badge>
+        ),
       },
       {
         id: "updatedAt",
@@ -478,7 +478,7 @@ export default function BanditRules({
   const handleBatchToggleEnabled = async (selectedRows: BanditRule[], isActive: boolean) => {
     try {
       setBatchOperating(true);
-      const currentActiveFilter = getStringColumnFilter(tableState, "isActiveFilter");
+      const currentActiveFilter = getStringColumnFilter(tableState, "status");
       const payload =
         selectedRows.length > 0
           ? {
@@ -630,6 +630,7 @@ export default function BanditRules({
           data={rules}
           columns={columns}
           state={tableState}
+          resetState={defaultResetState}
           onStateChange={setTableState}
           loading={loading}
           error={loadError || undefined}
@@ -642,33 +643,6 @@ export default function BanditRules({
           }}
           toolbar={{
             searchPlaceholder: "搜索名称/ID/描述...",
-            filters: [
-              {
-                columnId: "sourceLabel",
-                label: "规则来源",
-                variant: "select",
-                options: [{ label: "内置规则", value: "内置规则" }],
-              },
-              {
-                columnId: "isActiveFilter",
-                label: "启用状态",
-                variant: "select",
-                options: [
-                  { label: "已启用", value: "true" },
-                  { label: "已禁用", value: "false" },
-                ],
-              },
-              {
-                columnId: "deletedStatus",
-                label: "删除状态",
-                variant: "select",
-                options: [
-                  { label: "未删除", value: "false" },
-                  { label: "已删除", value: "true" },
-                  { label: "全部", value: "all" },
-                ],
-              },
-            ],
             leadingActions: engineSelector,
           }}
           selection={

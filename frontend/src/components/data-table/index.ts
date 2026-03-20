@@ -16,3 +16,4 @@ export * from "./DataTableColumnHeader";
 export * from "./DataTableColumnVisibility";
 export * from "./DataTableDensityToggle";
 export * from "./DataTableScrollContainer";
+export * from "./filterPlacement";

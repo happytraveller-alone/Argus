@@ -61,14 +61,6 @@ export default function TaskManagementStatic() {
 		() => filterActivitiesByKind(activities, "rule_scan", ""),
 		[activities],
 	);
-	const normalizedKeyword = keyword.trim().toLowerCase();
-	const filteredActivities = useMemo(() => {
-		if (!normalizedKeyword) return staticActivities;
-		return staticActivities.filter((activity) =>
-			activity.projectName.toLowerCase().includes(normalizedKeyword),
-		);
-	}, [normalizedKeyword, staticActivities]);
-
 	const stats = useMemo(() => {
 		return staticActivities.reduce(
 			(acc, activity) => {
@@ -131,8 +123,7 @@ export default function TaskManagementStatic() {
 				</div>
 			</div>
 
-			{/* <div className="cyber-card relative z-10 flex min-h-0 flex-1 flex-col p-4"> */}
-				<div className="flex flex-wrap items-center justify-between gap-3">
+				<div className="flex flex-wrap items-center justify-end gap-3">
 					<div className="flex min-w-0 flex-1 items-center gap-3">
 						<div className="relative w-full max-w-sm">
 							<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -153,15 +144,12 @@ export default function TaskManagementStatic() {
 							<Plus className="w-3.5 h-3.5 mr-1.5" />
 							新建扫描任务
 						</Button>
-						<span className="text-xs text-muted-foreground">
-							共 {filteredActivities.length} 条
-						</span>
 					</div>
 				</div>
 
 				<DeferredSection className="-mt-3 min-h-0 flex-1" minHeight={0} priority>
 					<TaskActivitiesListTable
-						activities={filteredActivities}
+						activities={staticActivities}
 						loading={loading}
 						nowMs={nowMs}
 						emptyText="暂无静态扫描任务"

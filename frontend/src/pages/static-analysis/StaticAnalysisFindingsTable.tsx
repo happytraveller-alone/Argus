@@ -318,52 +318,6 @@ export default function StaticAnalysisFindingsTable({
       }}
       toolbar={{
         searchPlaceholder: "搜索规则、位置或状态",
-        filters: [
-          {
-            columnId: "engine",
-            label: "所属引擎",
-            variant: "select",
-            options: [
-              { label: "Opengrep", value: "opengrep" },
-              { label: "Gitleaks", value: "gitleaks" },
-              { label: "Bandit", value: "bandit" },
-              { label: "PHPStan", value: "phpstan" },
-              { label: "YASA", value: "yasa" },
-            ],
-          },
-          {
-            columnId: "status",
-            label: "状态筛选",
-            variant: "select",
-            options: [
-              { label: "未处理", value: "open" },
-              { label: "已验证", value: "verified" },
-              { label: "误报", value: "false_positive" },
-              { label: "已修复", value: "fixed" },
-            ],
-          },
-          {
-            columnId: "severity",
-            label: "漏洞危害",
-            variant: "select",
-            options: [
-              { label: "严重", value: "CRITICAL" },
-              { label: "高危", value: "HIGH" },
-              { label: "中危", value: "MEDIUM" },
-              { label: "低危", value: "LOW" },
-            ],
-          },
-          {
-            columnId: "confidence",
-            label: "置信度筛选",
-            variant: "select",
-            options: [
-              { label: "高", value: "HIGH" },
-              { label: "中", value: "MEDIUM" },
-              { label: "低", value: "LOW" },
-            ],
-          },
-        ],
         showColumnVisibility: false,
       }}
       pagination={{
