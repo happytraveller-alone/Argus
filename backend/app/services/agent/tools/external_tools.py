@@ -49,7 +49,7 @@ def _smart_resolve_target_path(
         safe_target_path = "."
         host_check_path = project_root
     elif target_path == project_dir_name or target_path == f"./{project_dir_name}":
-        # 🔥 智能修复：Agent 可能把项目名当作子目录传入
+        #  智能修复：Agent 可能把项目名当作子目录传入
         logger.info(f"[{tool_name}] 智能路径修复: '{target_path}' -> '.' (项目根目录名: {project_dir_name})")
         safe_target_path = "."
         host_check_path = project_root
@@ -58,7 +58,7 @@ def _smart_resolve_target_path(
         safe_target_path = target_path.lstrip("/") if target_path.startswith("/") else target_path
         host_check_path = os.path.join(project_root, safe_target_path)
         
-        # 🔥 智能回退：如果路径不存在，尝试扫描整个项目
+        #  智能回退：如果路径不存在，尝试扫描整个项目
         if not os.path.exists(host_check_path):
             logger.warning(
                 f"[{tool_name}] 路径 '{target_path}' 不存在于项目中，自动回退到扫描整个项目 "
@@ -130,9 +130,9 @@ class OpengrepTool(AgentTool):
     
     def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
         super().__init__()
-        # 🔥 将相对路径转换为绝对路径，Docker 需要绝对路径
+        #  将相对路径转换为绝对路径，Docker 需要绝对路径
         self.project_root = os.path.abspath(project_root)
-        # 🔥 使用共享的 SandboxManager 实例，避免重复初始化
+        #  使用共享的 SandboxManager 实例，避免重复初始化
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
     @property
@@ -178,11 +178,11 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
             error_msg = f"Opengrep unavailable: {self.sandbox_manager.get_diagnosis()}"
             return ToolResult(
                 success=False,
-                data=error_msg,  # 🔥 修复：设置 data 字段避免 None
+                data=error_msg,  #  修复：设置 data 字段避免 None
                 error=error_msg
             )
 
-        # 🔥 使用公共函数进行智能路径解析
+        #  使用公共函数进行智能路径解析
         safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
             target_path, self.project_root, "Opengrep"
         )
@@ -192,7 +192,7 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
         cmd = ["opengrep", "--json", "--quiet"]
         
         if rules == "auto":
-            # 🔥 Fallback if user explicitly requests 'auto', but prefer security-audit
+            #  Fallback if user explicitly requests 'auto', but prefer security-audit
             cmd.extend(["--config", "p/security-audit"])
         elif rules.startswith("p/"):
             cmd.extend(["--config", rules])
@@ -212,10 +212,10 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
                 command=cmd_str,
                 host_workdir=self.project_root,
                 timeout=300,
-                network_mode="bridge"  # 🔥 Opengrep 需要网络来下载规则
+                network_mode="bridge"  #  Opengrep 需要网络来下载规则
             )
 
-            # 🔥 添加调试日志
+            #  添加调试日志
             logger.info(f"[Opengrep] 执行结果: success={result['success']}, exit_code={result['exit_code']}, "
                        f"stdout_len={len(result.get('stdout', ''))}, stderr_len={len(result.get('stderr', ''))}")
             if result.get('error'):
@@ -223,7 +223,7 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
             if result.get('stderr'):
                 logger.warning(f"[Opengrep] stderr: {result['stderr'][:500]}")
             if not result["success"] and result["exit_code"] != 1:  # 1 means findings were found
-                # 🔥 增强：优先使用 stderr，其次 stdout，最后用 error 字段
+                #  增强：优先使用 stderr，其次 stdout，最后用 error 字段
                 stdout_preview = result.get('stdout', '')[:500]
                 stderr_preview = result.get('stderr', '')[:500]
                 error_msg = stderr_preview or stdout_preview or result.get('error') or "未知错误"
@@ -256,7 +256,7 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
                 logger.error(f"[Opengrep] 原始输出前500字符: {stdout[:500]}")
                 return ToolResult(
                     success=False,
-                    data=error_msg,  # 🔥 修复：设置 data 字段避免 None
+                    data=error_msg,  #  修复：设置 data 字段避免 None
                     error=error_msg,
                 )
             
@@ -302,7 +302,7 @@ Opengrep 是业界领先的静态分析工具，支持 30+ 种编程语言。
             error_msg = f"Opengrep 执行错误: {str(e)}"
             return ToolResult(
                 success=False,
-                data=error_msg,  # 🔥 修复：设置 data 字段避免 None
+                data=error_msg,  #  修复：设置 data 字段避免 None
                 error=error_msg
             )
 
@@ -335,9 +335,9 @@ class BanditTool(AgentTool):
     
     def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
         super().__init__()
-        # 🔥 将相对路径转换为绝对路径，Docker 需要绝对路径
+        #  将相对路径转换为绝对路径，Docker 需要绝对路径
         self.project_root = os.path.abspath(project_root)
-        # 🔥 使用共享的 SandboxManager 实例，避免重复初始化
+        #  使用共享的 SandboxManager 实例，避免重复初始化
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
     @property
@@ -378,7 +378,7 @@ Bandit 是 Python 专用的安全分析工具。
             error_msg = f"Bandit unavailable: {self.sandbox_manager.get_diagnosis()}"
             return ToolResult(success=False, data=error_msg, error=error_msg)
 
-        # 🔥 使用公共函数进行智能路径解析
+        #  使用公共函数进行智能路径解析
         safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
             target_path, self.project_root, "Bandit"
         )
@@ -506,9 +506,9 @@ class GitleaksTool(AgentTool):
     
     def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
         super().__init__()
-        # 🔥 将相对路径转换为绝对路径，Docker 需要绝对路径
+        #  将相对路径转换为绝对路径，Docker 需要绝对路径
         self.project_root = os.path.abspath(project_root)
-        # 🔥 使用共享的 SandboxManager 实例，避免重复初始化
+        #  使用共享的 SandboxManager 实例，避免重复初始化
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
     @property
@@ -549,21 +549,21 @@ Gitleaks 是专业的密钥检测工具，支持 150+ 种密钥类型。
             error_msg = f"Gitleaks unavailable: {self.sandbox_manager.get_diagnosis()}"
             return ToolResult(success=False, data=error_msg, error=error_msg)
 
-        # 🔥 使用公共函数进行智能路径解析
+        #  使用公共函数进行智能路径解析
         safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
             target_path, self.project_root, "Gitleaks"
         )
         if error_msg:
             return ToolResult(success=False, data=error_msg, error=error_msg)
 
-        # 🔥 修复：新版 gitleaks 需要使用 --report-path 输出到文件
+        #  修复：新版 gitleaks 需要使用 --report-path 输出到文件
         # 使用 /tmp 目录（tmpfs 可写）
         cmd = [
             "gitleaks", "detect",
             "--source", safe_target_path,
             "--report-format", "json",
             "--report-path", "/tmp/gitleaks-report.json",
-            "--exit-code", "0"  # 🔥 不要因为发现密钥而返回非零退出码
+            "--exit-code", "0"  #  不要因为发现密钥而返回非零退出码
         ]
         if no_git:
             cmd.append("--no-git")
@@ -575,11 +575,11 @@ Gitleaks 是专业的密钥检测工具，支持 150+ 种密钥类型。
             result = await self.sandbox_manager.execute_tool_command(
                 command=cmd_str,
                 host_workdir=self.project_root,
-                timeout=180  # 🔥 增加超时时间
+                timeout=180  #  增加超时时间
             )
 
             if result['exit_code'] != 0:
-                # 🔥 修复：错误信息可能在 error 或 stderr 中
+                #  修复：错误信息可能在 error 或 stderr 中
                 error_msg = result.get('error') or result.get('stderr', '')[:300] or '未知错误'
                 return ToolResult(success=False, data=f"Gitleaks 执行失败: {error_msg}", error=f"Gitleaks 执行失败: {error_msg}")
 
@@ -661,9 +661,9 @@ class NpmAuditTool(AgentTool):
     
     def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
         super().__init__()
-        # 🔥 将相对路径转换为绝对路径，Docker 需要绝对路径
+        #  将相对路径转换为绝对路径，Docker 需要绝对路径
         self.project_root = os.path.abspath(project_root)
-        # 🔥 使用共享的 SandboxManager 实例，避免重复初始化
+        #  使用共享的 SandboxManager 实例，避免重复初始化
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
     @property
@@ -810,9 +810,9 @@ class SafetyTool(AgentTool):
     
     def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
         super().__init__()
-        # 🔥 将相对路径转换为绝对路径，Docker 需要绝对路径
+        #  将相对路径转换为绝对路径，Docker 需要绝对路径
         self.project_root = os.path.abspath(project_root)
-        # 🔥 使用共享的 SandboxManager 实例，避免重复初始化
+        #  使用共享的 SandboxManager 实例，避免重复初始化
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
     @property
@@ -941,9 +941,9 @@ class TruffleHogTool(AgentTool):
     
     def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
         super().__init__()
-        # 🔥 将相对路径转换为绝对路径，Docker 需要绝对路径
+        #  将相对路径转换为绝对路径，Docker 需要绝对路径
         self.project_root = os.path.abspath(project_root)
-        # 🔥 使用共享的 SandboxManager 实例，避免重复初始化
+        #  使用共享的 SandboxManager 实例，避免重复初始化
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
     @property
@@ -980,7 +980,7 @@ class TruffleHogTool(AgentTool):
             error_msg = f"TruffleHog unavailable: {self.sandbox_manager.get_diagnosis()}"
             return ToolResult(success=False, data=error_msg, error=error_msg)
 
-        # 🔥 使用公共函数进行智能路径解析
+        #  使用公共函数进行智能路径解析
         safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
             target_path, self.project_root, "TruffleHog"
         )
@@ -1064,9 +1064,9 @@ class OSVScannerTool(AgentTool):
     
     def __init__(self, project_root: str, sandbox_manager: Optional["SandboxManager"] = None):
         super().__init__()
-        # 🔥 将相对路径转换为绝对路径，Docker 需要绝对路径
+        #  将相对路径转换为绝对路径，Docker 需要绝对路径
         self.project_root = os.path.abspath(project_root)
-        # 🔥 使用共享的 SandboxManager 实例，避免重复初始化
+        #  使用共享的 SandboxManager 实例，避免重复初始化
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
     @property
@@ -1104,7 +1104,7 @@ Google 开源的漏洞扫描工具。
             error_msg = f"OSV-Scanner unavailable: {self.sandbox_manager.get_diagnosis()}"
             return ToolResult(success=False, data=error_msg, error=error_msg)
 
-        # 🔥 使用公共函数进行智能路径解析
+        #  使用公共函数进行智能路径解析
         safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
             target_path, self.project_root, "OSV-Scanner"
         )

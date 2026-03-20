@@ -231,7 +231,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
         # 构建消息
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
         
-        # 🔥 Prompt Caching: 为支持的 LLM 添加缓存标记
+        #  Prompt Caching: 为支持的 LLM 添加缓存标记
         cache_enabled = False
         if self.config.provider == LLMProvider.CLAUDE:
             # 估算系统提示词 token 数
@@ -248,7 +248,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
             )
             
             if cache_enabled:
-                logger.debug(f"🔥 Prompt Caching enabled for {self.config.model}")
+                logger.debug(f" Prompt Caching enabled for {self.config.model}")
 
         # 构建请求参数
         kwargs: Dict[str, Any] = {
@@ -323,7 +323,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
                 total_tokens=response.usage.total_tokens or 0,
             )
             
-            # 🔥 更新 Prompt Cache 统计
+            #  更新 Prompt Cache 统计
             if cache_enabled and hasattr(response.usage, "cache_creation_input_tokens"):
                 prompt_cache_manager.update_stats(
                     cache_creation_input_tokens=getattr(response.usage, "cache_creation_input_tokens", 0),
@@ -363,7 +363,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
             "stream": True,  # 启用流式输出
         }
 
-        # 🔥 对于支持的模型，请求在流式输出中包含 usage 信息
+        #  对于支持的模型，请求在流式输出中包含 usage 信息
         # OpenAI API 支持 stream_options
         if self.config.provider in [LLMProvider.OPENAI, LLMProvider.DEEPSEEK]:
             kwargs["stream_options"] = {"include_usage": True}
@@ -377,8 +377,8 @@ class LiteLLMAdapter(BaseLLMAdapter):
         kwargs["timeout"] = self.config.timeout
 
         accumulated_content = ""
-        final_usage = None  # 🔥 存储最终的 usage 信息
-        chunk_count = 0  # 🔥 跟踪 chunk 数量
+        final_usage = None  #  存储最终的 usage 信息
+        chunk_count = 0  #  跟踪 chunk 数量
         terminal_emitted = False  # 防止结束后重复补发 empty_stream
         usage_source = "none"
         token_estimate_ms = 0.0
@@ -389,7 +389,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
             async for chunk in response:
                 chunk_count += 1
 
-                # 🔥 检查是否有 usage 信息（某些 API 会在最后的 chunk 中包含）
+                #  检查是否有 usage 信息（某些 API 会在最后的 chunk 中包含）
                 if hasattr(chunk, "usage") and chunk.usage:
                     final_usage = {
                         "prompt_tokens": chunk.usage.prompt_tokens or 0,
@@ -401,7 +401,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
                     logger.debug(f"Got usage from chunk: {final_usage}")
 
                 if not chunk.choices:
-                    # 🔥 某些模型可能发送没有 choices 的 chunk（如心跳）
+                    #  某些模型可能发送没有 choices 的 chunk（如心跳）
                     continue
 
                 delta = chunk.choices[0].delta
@@ -421,12 +421,12 @@ class LiteLLMAdapter(BaseLLMAdapter):
                         "content": content,
                         "accumulated": accumulated_content,
                     }
-                # 🔥 ENHANCED: 处理没有 content 但也没有 finish_reason 的情况
+                #  ENHANCED: 处理没有 content 但也没有 finish_reason 的情况
                 # 某些模型（如智谱 GLM）可能在某些 chunk 中不返回内容
 
                 if finish_reason:
                     # 流式完成
-                    # 🔥 如果没有从 chunk 获取到 usage，进行估算
+                    #  如果没有从 chunk 获取到 usage，进行估算
                     if not final_usage:
                         final_usage, token_estimate_ms, usage_source = self._build_usage_fallback(
                             messages,
@@ -434,7 +434,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
                         )
                         logger.debug(f"Estimated usage: {final_usage}")
 
-                    # 🔥 ENHANCED: 如果累积内容为空但有 finish_reason，转为空响应错误而不是 done("")
+                    #  ENHANCED: 如果累积内容为空但有 finish_reason，转为空响应错误而不是 done("")
                     if not accumulated_content:
                         logger.warning(
                             "Stream completed with no content after %s chunks, finish_reason=%s",
@@ -468,7 +468,7 @@ class LiteLLMAdapter(BaseLLMAdapter):
                     terminal_emitted = True
                     break
 
-            # 🔥 ENHANCED: 如果循环结束但没有收到 finish_reason，补发 done 或 error，避免静默空串
+            #  ENHANCED: 如果循环结束但没有收到 finish_reason，补发 done 或 error，避免静默空串
             if terminal_emitted:
                 pass
             elif accumulated_content:

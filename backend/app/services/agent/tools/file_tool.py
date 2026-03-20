@@ -1935,7 +1935,7 @@ class ListFilesTool(AgentTool):
     ) -> ToolResult:
         """执行文件列表"""
         try:
-            # 🔥 兼容性处理：支持 path 参数作为 directory 的别名
+            #  兼容性处理：支持 path 参数作为 directory 的别名
             if "path" in kwargs and kwargs["path"]:
                 directory = kwargs["path"]
 
@@ -2017,7 +2017,7 @@ class ListFilesTool(AgentTool):
                     if len(files) >= max_files:
                         break
             else:
-                # 🔥 如果设置了 target_files，只显示目标文件和包含目标文件的目录
+                #  如果设置了 target_files，只显示目标文件和包含目标文件的目录
                 if self.target_files:
                     # 计算哪些目录包含目标文件
                     dirs_with_targets = set()
@@ -2095,7 +2095,7 @@ class ListFilesTool(AgentTool):
             # 格式化输出
             output_parts = [f"📁 目录: {directory}\n"]
             
-            # 🔥 如果设置了 target_files，显示提示信息
+            #  如果设置了 target_files，显示提示信息
             if self.target_files:
                 output_parts.append(f"注意: 审计范围限定为 {len(self.target_files)} 个指定文件\n")
             

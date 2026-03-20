@@ -212,7 +212,7 @@ class AgentResult:
     # 元数据
     metadata: Dict[str, Any] = field(default_factory=dict)
     
-    # 🔥 协作信息 - Agent 传递给下一个 Agent 的结构化信息
+    #  协作信息 - Agent 传递给下一个 Agent 的结构化信息
     handoff: Optional["TaskHandoff"] = None
     
     def to_dict(self) -> Dict[str, Any]:
@@ -405,10 +405,10 @@ class BaseAgent(ABC):
         self.parent_id = parent_id
         self.knowledge_modules = knowledge_modules or []
         
-        # 🔥 生成唯一ID
+        #  生成唯一ID
         self._agent_id = f"agent_{uuid.uuid4().hex[:8]}"
         
-        # 🔥 增强的状态管理
+        #  增强的状态管理
         self._state = AgentState(
             agent_id=self._agent_id,
             agent_name=config.name,
@@ -428,12 +428,12 @@ class BaseAgent(ABC):
         # 获取超时配置
         self._timeout_config = self._get_timeout_config()
         
-        # 🔥 协作状态
+        #  协作状态
         self._incoming_handoff: Optional[TaskHandoff] = None
         self._insights: List[str] = []  # 收集的洞察
         self._work_completed: List[str] = []  # 完成的工作记录
 
-        # 🔥 最近一次工具输出快照（用于避免 llm_observation 复写同一段 tool_result）
+        #  最近一次工具输出快照（用于避免 llm_observation 复写同一段 tool_result）
         self._last_tool_result_snapshot: Optional[Dict[str, Any]] = None
         self._last_llm_stream_meta: Dict[str, Any] = {}
         self._last_llm_thought_digest: Optional[str] = None
@@ -452,7 +452,7 @@ class BaseAgent(ABC):
         self._write_scope_guard: Optional["TaskWriteScopeGuard"] = None
         self._max_history_observation_chars: int = 12000
         
-        # 🔥 兜底机制：追踪关键工具调用（push/save）
+        #  兜底机制：追踪关键工具调用（push/save）
         self._critical_tool_called: bool = False  # 是否调用了关键工具
         self._critical_tool_name: Optional[str] = None  # 调用的关键工具名称
         self._critical_tool_calls: List[Dict[str, Any]] = []  # 所有关键工具调用记录
@@ -465,7 +465,7 @@ class BaseAgent(ABC):
         except Exception:
             self._max_history_observation_chars = 12000
         
-        # 🔥 是否已注册到注册表
+        #  是否已注册到注册表
         self._registered = False
 
         self._trace_logger: Optional[logging.Logger] = None
@@ -478,7 +478,7 @@ class BaseAgent(ABC):
         self.configure_trace_logger(identity=self.name, task_id=None)
         self._trace("agent_initialized", agent_type=self.config.agent_type.value)
         
-        # 🔥 加载知识模块到系统提示词
+        #  加载知识模块到系统提示词
         if self.knowledge_modules:
             self._load_knowledge_modules()
 
@@ -771,7 +771,7 @@ class BaseAgent(ABC):
         self._cancelled = True
         logger.info(f"[{self.name}] Cancel requested")
     
-        # 🔥 外部取消检查回调
+        #  外部取消检查回调
         self._cancel_callback = None
 
     def reset_cancellation_state(self) -> None:
@@ -959,7 +959,7 @@ class BaseAgent(ABC):
 
         normalized_file = getattr(decision, "file_path", None)
         if bool(getattr(decision, "allowed", False)) and isinstance(normalized_file, str) and normalized_file:
-            # 🔥 修复：不修改大模型输出的原始路径，只记录规范化路径到 metadata
+            #  修复：不修改大模型输出的原始路径，只记录规范化路径到 metadata
             metadata["write_scope_normalized_path"] = normalized_file
             return normalized_input, metadata, None
 
@@ -1351,7 +1351,7 @@ class BaseAgent(ABC):
             tool_call_id=tool_call_id,
             result_preview=(str(result or "")[:500]),
         )
-        # 🔥 修复：确保 result 不为 None，避免显示 "None" 字符串
+        #  修复：确保 result 不为 None，避免显示 "None" 字符串
         safe_result = result if result and result != "None" else ""
         stored_result, truncated = _truncate_with_flag(safe_result)
         tool_output_dict = {"result": stored_result if stored_result else "", "truncated": truncated}
@@ -1495,7 +1495,7 @@ class BaseAgent(ABC):
             except Exception:
                 generated_description_markdown = None
 
-        # 🔥 使用 EventManager.emit_finding 发送正确的事件类型
+        #  使用 EventManager.emit_finding 发送正确的事件类型
         if self.event_emitter and hasattr(self.event_emitter, 'emit_finding'):
             await self.event_emitter.emit_finding(
                 finding_id=finding_id,
@@ -1624,7 +1624,7 @@ class BaseAgent(ABC):
         self._iteration += 1
 
         try:
-            # 🔥 不传递 temperature 和 max_tokens，让 LLMService 使用用户配置
+            #  不传递 temperature 和 max_tokens，让 LLMService 使用用户配置
             response = await self.llm_service.chat_completion(
                 messages=messages,
                 tools=tools,
@@ -1763,7 +1763,7 @@ class BaseAgent(ABC):
         Returns:
             (完整响应内容, token数量)
         """
-        # 🔥 自动压缩过长的消息历史
+        #  自动压缩过长的消息历史
         if auto_compress:
             messages = self.compress_messages_if_needed(messages)
 
@@ -1785,7 +1785,7 @@ class BaseAgent(ABC):
         }
         self._trace("llm_stream_started", message_count=len(messages or []))
 
-        # 🔥 在开始 LLM 调用前检查取消
+        #  在开始 LLM 调用前检查取消
         if self.is_cancelled:
             logger.info(f"[{self.name}] Cancelled before LLM call")
             return "", 0
@@ -1826,7 +1826,7 @@ class BaseAgent(ABC):
                     break
                 
                 try:
-                    # 🔥 使用用户配置的超时时间
+                    #  使用用户配置的超时时间
                     # 第一个 token 使用首Token超时，后续 token 使用流式超时
                     first_token_timeout = float(self._timeout_config.get('llm_first_token_timeout', 90))
                     stream_timeout = float(self._timeout_config.get('llm_stream_timeout', 60))
@@ -1853,7 +1853,7 @@ class BaseAgent(ABC):
                             )
                         first_token_received = True
                         token = chunk["content"]
-                        # 🔥 累积 content，确保 accumulated 变量更新
+                        #  累积 content，确保 accumulated 变量更新
                         # 注意：某些 adapter 返回的 chunk["accumulated"] 可能已经包含了累积值，
                         # 但为了安全起见，如果不一致，我们自己累积
                         if "accumulated" in chunk:
@@ -1871,7 +1871,7 @@ class BaseAgent(ABC):
                             accumulated += token # Fallback
 
                         await self.emit_thinking_token(token, accumulated)
-                        # 🔥 CRITICAL: 让出控制权给事件循环，让 SSE 有机会发送事件
+                        #  CRITICAL: 让出控制权给事件循环，让 SSE 有机会发送事件
                         await asyncio.sleep(0)
 
                     elif chunk["type"] == "done":
@@ -1953,7 +1953,7 @@ class BaseAgent(ABC):
             logger.info(f"[{self.name}] LLM call cancelled")
             raise
         except Exception as e:
-            # 🔥 增强异常处理，避免吞掉错误
+            #  增强异常处理，避免吞掉错误
             logger.error(f"[{self.name}] Unexpected error in stream_llm_call: {e}", exc_info=True)
             await self.emit_event("error", f"LLM 调用错误: {str(e)}")
             self._last_llm_stream_meta.update(
@@ -1976,7 +1976,7 @@ class BaseAgent(ABC):
                 empty_reason=self._last_llm_stream_meta.get("empty_reason"),
             )
         
-        # 🔥 记录空响应警告，帮助调试
+        #  记录空响应警告，帮助调试
         if not accumulated or not accumulated.strip():
             finish_reason = self._last_llm_stream_meta.get("finish_reason")
             empty_reason = self._last_llm_stream_meta.get("empty_reason")
@@ -3751,7 +3751,7 @@ class BaseAgent(ABC):
                         "start_line": explicit_hint.get("start_line"),
                         "end_line": explicit_hint.get("end_line"),
                     }
-                    # 🔥 修复：不修改大模型输出的原始路径，只用于提取行号信息
+                    #  修复：不修改大模型输出的原始路径，只用于提取行号信息
                     # 原来的逻辑：if sanitized_path != file_path: repaired["file_path"] = sanitized_path
                 else:
                     file_hint = {"file_path": file_path}
@@ -3849,7 +3849,7 @@ class BaseAgent(ABC):
                 normalized_file_path = str(controlflow_hint.get("file_path") or "").strip()
                 if not normalized_file_path:
                     normalized_file_path = self._sanitize_file_path_text(file_path_candidate)
-                # 🔥 修复：不修改大模型输出的原始路径
+                #  修复：不修改大模型输出的原始路径
                 # 原来的逻辑：if normalized_file_path and repaired.get("file_path") != normalized_file_path: 
                 #           repaired["file_path"] = normalized_file_path
                 if "line_start" in schema_fields and repaired.get("line_start") in (None, "") and controlflow_hint.get("start_line") is not None:
@@ -3899,7 +3899,7 @@ class BaseAgent(ABC):
                 if hinted_path:
                     repaired["file_path"] = hinted_path
                     repaired_changes["__context_or_raw.file_path"] = "file_path"
-            # 🔥 修复：不清理大模型已经提供的路径
+            #  修复：不清理大模型已经提供的路径
             # 原来的逻辑：else: sanitized_path = self._sanitize_file_path_text(file_path)
             #           if sanitized_path and sanitized_path != file_path: repaired["file_path"] = sanitized_path
 
@@ -4217,7 +4217,7 @@ class BaseAgent(ABC):
         Returns:
             工具执行结果字符串
         """
-        # 🔥 在执行工具前检查取消
+        #  在执行工具前检查取消
         if self.is_cancelled:
             return "任务已取消"
 
@@ -4496,7 +4496,7 @@ class BaseAgent(ABC):
                     validation_error=validation_error,
                     extra_metadata=validation_metadata or None,
                 )
-                # 🔥 为缺失字段生成更详细的示例
+                #  为缺失字段生成更详细的示例
                 example_dict: Dict[str, Any] = {}
                 
                 # 特殊处理 save_verification_result 工具
@@ -4743,7 +4743,7 @@ class BaseAgent(ABC):
                     )
                     # 直接返回错误信息给模型，而不是封装成"阻断"消息
                     failure_output = mcp_output or strict_error
-                    # 🔥 修复：移除自动重试提示，因为不再自动修复路径
+                    #  修复：移除自动重试提示，因为不再自动修复路径
                     if strict_failure_metadata.get("auto_suggested_path"):
                         failure_output += f"\n\n提示：在 {strict_failure_metadata['auto_suggested_path']} 找到相似文件，请检查路径是否正确。"
                     return failure_output
@@ -4848,7 +4848,7 @@ class BaseAgent(ABC):
                             tool_metadata=mcp_result_meta,
                         )
                         
-                        # 🔥 MCP 工具成功执行后追踪关键工具调用
+                        #  MCP 工具成功执行后追踪关键工具调用
                         critical_tools = {"push_finding_to_queue", "save_verification_result", "update_vulnerability_finding"}
                         if resolved_tool_name in critical_tools:
                             self._critical_tool_called = True
@@ -4897,7 +4897,7 @@ class BaseAgent(ABC):
                             extra_metadata=merged_fallback_metadata or None,
                         )
                         
-                        # 🔥 MCP fallback 成功执行后追踪关键工具调用
+                        #  MCP fallback 成功执行后追踪关键工具调用
                         critical_tools = {"push_finding_to_queue", "save_verification_result", "update_vulnerability_finding"}
                         if resolved_tool_name in critical_tools:
                             self._critical_tool_called = True
@@ -4976,10 +4976,10 @@ class BaseAgent(ABC):
             import time
             start = time.time()
 
-            # 🔥 根据工具类型设置不同的超时时间
+            #  根据工具类型设置不同的超时时间
             timeout = self._resolve_tool_timeout(resolved_tool_name)
 
-            # 🔥 使用 asyncio.wait_for 添加超时控制，同时支持取消
+            #  使用 asyncio.wait_for 添加超时控制，同时支持取消
             async def execute_with_cancel_check():
                 """包装工具执行，定期检查取消状态"""
                 if hasattr(tool, "set_runtime_context"):
@@ -5078,7 +5078,7 @@ class BaseAgent(ABC):
                 return "任务已取消"
 
             duration_ms = int((time.time() - start) * 1000)
-            # 🔥 修复：确保传递有意义的结果字符串，避免 "None"
+            #  修复：确保传递有意义的结果字符串，避免 "None"
             result_preview = str(result.data) if result.data is not None else (result.error if result.error else "")
             await self.emit_tool_result(
                 resolved_tool_name,
@@ -5105,7 +5105,7 @@ class BaseAgent(ABC):
                     )
                     self._deterministic_failure_last_error[retry_guard_key] = str(result.error or "")
 
-            # 🔥 工具执行后再次检查取消
+            #  工具执行后再次检查取消
             if self.is_cancelled:
                 return "任务已取消"
 
@@ -5117,7 +5117,7 @@ class BaseAgent(ABC):
                     tool_metadata=metadata_dict,
                 )
                 
-                # 🔥 仅在工具成功执行后才追踪关键工具调用（push/save）
+                #  仅在工具成功执行后才追踪关键工具调用（push/save）
                 critical_tools = {"push_finding_to_queue", "save_verification_result", "update_vulnerability_finding"}
                 if resolved_tool_name in critical_tools:
                     self._critical_tool_called = True
@@ -5169,7 +5169,7 @@ class BaseAgent(ABC):
                         )
                     except Exception:
                         pass
-                # 🔥 输出详细的错误信息，包括原始错误和完整输出
+                #  输出详细的错误信息，包括原始错误和完整输出
                 guard_hint = ""
                 if retry_guard_key and self._deterministic_failure_counts.get(retry_guard_key, 0) >= 2:
                     guard_hint = (
@@ -5221,7 +5221,7 @@ class BaseAgent(ABC):
                         else None
                     ),
                 )
-            # 🔥 输出完整的原始错误信息，包括堆栈跟踪
+            #  输出完整的原始错误信息，包括堆栈跟踪
             error_msg = f"""工具执行异常
 
 **请求工具**: {requested_tool_name}

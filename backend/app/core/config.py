@@ -153,7 +153,7 @@ class Settings(BaseSettings):
     SANDBOX_NETWORK_MODE: str = "none"  # 沙箱网络模式 (none, bridge)
     
     # RAG 配置
-    # 🔥 默认禁用 RAG（Embedding/向量索引）初始化：智能审计任务不应依赖 embedding 配置
+    #  默认禁用 RAG（Embedding/向量索引）初始化：智能审计任务不应依赖 embedding 配置
     # 如需启用，可通过环境变量显式开启（例如：RAG_ENABLED=true）
     RAG_ENABLED: bool = False
     RAG_CHUNK_SIZE: int = 1500  # 代码块大小（Token）

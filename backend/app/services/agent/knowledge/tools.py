@@ -195,7 +195,7 @@ class GetVulnerabilityKnowledgeTool(AgentTool):
             if knowledge.get("owasp_ids"):
                 output_parts.append(f"OWASP: {', '.join(knowledge['owasp_ids'])}")
 
-            # 🔥 v2.2: 添加语言不匹配警告
+            #  v2.2: 添加语言不匹配警告
             content = knowledge.get("content", "")
             knowledge_lang = self._detect_code_language(content)
 
@@ -213,7 +213,7 @@ class GetVulnerabilityKnowledgeTool(AgentTool):
             output_parts.append("")
             output_parts.append(content)
 
-            # 🔥 v2.2: 添加使用指南
+            #  v2.2: 添加使用指南
             output_parts.append("")
             output_parts.append("---")
             output_parts.append("📌 **使用指南**:")

@@ -41,7 +41,7 @@ ORCHESTRATOR_SYSTEM_PROMPT = """你是安全审计编排 Agent，负责**自主*
 2. **analysis**: 分析 Agent - 深度代码审计、漏洞检测。**  
 3. **verification**: 验证 Agent - 验证发现的漏洞、生成 PoC。
 
-## 🔥 全局漏洞队列机制（逐个验证模式）
+##  全局漏洞队列机制（逐个验证模式）
 
 你现在必须使用全局漏洞队列来逐个验证漏洞：
 
@@ -157,7 +157,7 @@ Action: finish
 Action Input: {...}
 ```
 
-**🔥 关键要点**：
+** 关键要点**：
 - `dequeue_finding` 返回的 `finding` 对象需要**转换为 JSON 字符串**后放入 `context` 字段，以便 verification Agent 解析。
 - `task` 字段只需提供简洁的人类可读描述，详细数据由 `context` 承载。
 - Verification Agent 应能解析 `context` 中的 JSON 字符串，获取漏洞信息进行验证。
@@ -300,19 +300,19 @@ class OrchestratorAgent(BaseAgent):
         self._steps: List[AgentStep] = []
         self._all_findings: List[Dict] = []
         
-        # 🔥 Tracer 遥测支持
+        #  Tracer 遥测支持
         self.tracer = tracer
 
-        # 🔥 存储运行时上下文，用于传递给子 Agent
+        #  存储运行时上下文，用于传递给子 Agent
         self._runtime_context: Dict[str, Any] = {}
 
-        # 🔥 跟踪已调度的 Agent 任务，避免重复调度
+        #  跟踪已调度的 Agent 任务，避免重复调度
         self._dispatched_tasks: Dict[str, int] = {}  # agent_name -> dispatch_count
 
-        # 🔥 保存各个 Agent 的完整结果，用于传递给后续 Agent
+        #  保存各个 Agent 的完整结果，用于传递给后续 Agent
         self._agent_results: Dict[str, Dict[str, Any]] = {}  # agent_name -> full result data
 
-        # 🔥 保存各个 Agent 返回的 TaskHandoff，用于 Agent 间通信
+        #  保存各个 Agent 返回的 TaskHandoff，用于 Agent 间通信
         self._agent_handoffs: Dict[str, TaskHandoff] = {}  # agent_name -> TaskHandoff
         self._phase_planning_applied: Dict[str, bool] = {}
         self._verified_queue_fingerprints: set[str] = set()
@@ -495,7 +495,7 @@ class OrchestratorAgent(BaseAgent):
         self._cancelled = True
         logger.info(f"[{self.name}] Cancel requested, propagating to {len(self.sub_agents)} sub-agents")
         
-        # 🔥 传播取消信号到所有子 Agent
+        #  传播取消信号到所有子 Agent
         for name, agent in self.sub_agents.items():
             if hasattr(agent, 'cancel'):
                 agent.cancel()
@@ -765,7 +765,7 @@ Action Input: {{}}
 
                     await self.emit_llm_observation(observation)
 
-                    # 🔥 v2.2: 验证 Agent 完成后自动检查队列 - 队列为空则立即终止
+                    #  v2.2: 验证 Agent 完成后自动检查队列 - 队列为空则立即终止
                     if str(agent_name).lower() == "verification":
                         try:
                             queue_status_result = await self.execute_tool("get_queue_status", {})
@@ -988,7 +988,7 @@ Action Input: {{}}
         """构建初始消息"""
         structure = project_info.get('structure', {})
         
-        # 🔥 检查是否是限定范围的审计
+        #  检查是否是限定范围的审计
         scope_limited = structure.get('scope_limited', False)
         scope_message = structure.get('scope_message', '')
         
@@ -1000,7 +1000,7 @@ Action Input: {{}}
 - 文件数量: {project_info.get('file_count', 0)}
 """
 
-        # 🔥 项目级 Markdown 长期记忆（无需 RAG/Embedding）
+        #  项目级 Markdown 长期记忆（无需 RAG/Embedding）
         markdown_memory = config.get("markdown_memory") if isinstance(config, dict) else None
         if isinstance(markdown_memory, dict):
             shared_mem = str(markdown_memory.get("shared") or "").strip()
@@ -1019,7 +1019,7 @@ Action Input: {{}}
 {skills_mem or "(空)"}
 """
         
-        # 🔥 根据是否限定范围显示不同的结构信息
+        #  根据是否限定范围显示不同的结构信息
         if scope_limited:
             msg += f"""
 ## 审计范围限定
@@ -1041,7 +1041,7 @@ Action Input: {{}}
 {json.dumps(structure, ensure_ascii=False, indent=2)}
 """
         
-        # 🔥 如果配置了 target_files，也明确显示
+        #  如果配置了 target_files，也明确显示
         target_files = config.get('target_files', [])
         if target_files:
             msg += f"""
@@ -1055,7 +1055,7 @@ Action Input: {{}}
         bootstrap_task_id = config.get("bootstrap_task_id")
         if bootstrap_findings:
             msg += f"""
-## 🔥 候选种子（bootstrap_findings，高优先级）
+##  候选种子（bootstrap_findings，高优先级）
 - 来源: {bootstrap_source}
 - 任务ID: {bootstrap_task_id or "N/A"}
 - 候选数量: {len(bootstrap_findings)}
@@ -1236,7 +1236,7 @@ Action Input: {{}}
         
         logger.debug(f"[Orchestrator] _dispatch_agent 被调用: agent_name='{agent_name}', task='{task[:50]}...'")
         
-        # 🔥 尝试大小写不敏感匹配
+        #  尝试大小写不敏感匹配
         agent = self.sub_agents.get(agent_name)
         if not agent:
             # 尝试小写匹配
@@ -1257,7 +1257,7 @@ Action Input: {{}}
         self._dispatched_tasks[agent_name] = dispatch_count + 1
         is_phase_first_dispatch = dispatch_count == 0
         
-        # 🔥 设置父 Agent ID 并注册到注册表（动态 Agent 树）
+        #  设置父 Agent ID 并注册到注册表（动态 Agent 树）
         logger.debug(f"[Orchestrator] 准备调度 {agent_name} Agent, agent._registered={agent._registered}")
         agent.set_parent_id(self._agent_id)
         if hasattr(agent, "configure_trace_logger"):
@@ -1283,13 +1283,13 @@ Action Input: {{}}
         self._tool_calls += 1
         
         try:
-            # 🔥 构建子 Agent 输入 - 传递完整的运行时上下文
+            #  构建子 Agent 输入 - 传递完整的运行时上下文
             project_info = self._runtime_context.get("project_info", {}).copy()
             # 确保 project_info 包含 root 路径
             if "root" not in project_info:
                 project_info["root"] = self._runtime_context.get("project_root", ".")
 
-            # 🔥 FIX: 构建完整的 previous_results，包含所有已执行 Agent 的结果
+            #  FIX: 构建完整的 previous_results，包含所有已执行 Agent 的结果
             previous_results = {
                 "findings": self._all_findings,  # 传递已收集的发现
             }
@@ -1306,11 +1306,11 @@ Action Input: {{}}
                     self._runtime_context.get("config", {}).get("bootstrap_task_id")
                 )
 
-            # 🔥 将之前 Agent 的完整结果传递给后续 Agent
+            #  将之前 Agent 的完整结果传递给后续 Agent
             for prev_agent, prev_data in self._agent_results.items():
                 previous_results[prev_agent] = {"data": prev_data}
 
-            # 🔥 构建 TaskHandoff - Agent 间的结构化通信协议
+            #  构建 TaskHandoff - Agent 间的结构化通信协议
             handoff = self._build_handoff_for_agent(agent_name, task, context)
 
             runtime_config = (
@@ -1344,7 +1344,7 @@ Action Input: {{}}
                 else:
                     logger.warning("[Orchestrator] Analysis 单风险点注入失败：未解析到有效风险点")
             
-            # 🔥 支持从队列传递单个漏洞（方案A）
+            #  支持从队列传递单个漏洞（方案A）
             # 如果 params 包含 finding 或 queue_finding，将其添加到 runtime_config
             queue_finding = params.get("finding") or params.get("queue_finding")
             if queue_finding and isinstance(queue_finding, dict):
@@ -1382,7 +1382,7 @@ Action Input: {{}}
                 "project_root": self._runtime_context.get("project_root", "."),
                 "task_id": self._runtime_context.get("task_id"),
                 "previous_results": previous_results,
-                "handoff": handoff.to_dict() if handoff else None,  # 🔥 传递 TaskHandoff
+                "handoff": handoff.to_dict() if handoff else None,  #  传递 TaskHandoff
                 "file_planning": file_planning_payload,
             }
 
@@ -1396,7 +1396,7 @@ Action Input: {{}}
                     },
                 )
 
-            # 🔥 执行子 Agent 前检查取消状态
+            #  执行子 Agent 前检查取消状态
             if self.is_cancelled:
                 self._agent_results[agent_name] = {
                     "_run_success": False,
@@ -1404,7 +1404,7 @@ Action Input: {{}}
                 }
                 return f"## {agent_name} Agent 执行取消\n\n任务已被用户取消"
 
-            # 🔥 重试隔离：同一实例在新 attempt 前重置取消状态，避免取消标志粘连。
+            #  重试隔离：同一实例在新 attempt 前重置取消状态，避免取消标志粘连。
             if hasattr(agent, "reset_cancellation_state"):
                 try:
                     agent.reset_cancellation_state()
@@ -1416,7 +1416,7 @@ Action Input: {{}}
                         exc,
                     )
 
-            # 🔥 执行子 Agent - 支持取消和超时
+            #  执行子 Agent - 支持取消和超时
             # 使用用户配置的子Agent超时时间
             default_sub_agent_timeout = self._timeout_config.get('sub_agent_timeout', 3000)
             # 设置子 Agent 超时（根据 Agent 类型，recon稍短）
@@ -1433,7 +1433,7 @@ Action Input: {{}}
                 try:
                     while not run_task.done():
                         if self.is_cancelled:
-                            # 🔥 传播取消到子 Agent
+                            #  传播取消到子 Agent
                             logger.info(f"[{self.name}] Cancelling sub-agent {agent_name} due to parent cancel")
                             if hasattr(agent, 'cancel'):
                                 agent.cancel()
@@ -1457,7 +1457,7 @@ Action Input: {{}}
 
                     return await run_task
                 except asyncio.CancelledError:
-                    # 🔥 确保子任务被取消
+                    #  确保子任务被取消
                     if not run_task.done():
                         if hasattr(agent, 'cancel'):
                             agent.cancel()
@@ -1488,7 +1488,7 @@ Action Input: {{}}
                 }
                 return f"## {agent_name} Agent 执行取消\n\n任务已被用户取消"
 
-            # 🔥 执行后再次检查取消状态
+            #  执行后再次检查取消状态
             if self.is_cancelled:
                 self._agent_results[agent_name] = {
                     "_run_success": False,
@@ -1496,8 +1496,8 @@ Action Input: {{}}
                 }
                 return f"## {agent_name} Agent 执行中断\n\n任务已被用户取消"
 
-            # 🔥 处理子 Agent 结果 - 不同 Agent 返回不同的数据结构
-            # 🔥 DEBUG: 添加诊断日志
+            #  处理子 Agent 结果 - 不同 Agent 返回不同的数据结构
+            #  DEBUG: 添加诊断日志
             logger.info(
                 f"[Orchestrator] Processing {agent_name} result: success={result.success}, "
                 f"data_type={type(result.data).__name__}, "
@@ -1521,7 +1521,7 @@ Action Input: {{}}
             if result.success and isinstance(result.data, dict):
                 data = result_payload
 
-                # 🔥 保存 Agent 返回的 handoff，用于传递给后续 Agent
+                #  保存 Agent 返回的 handoff，用于传递给后续 Agent
                 if result.handoff:
                     if not hasattr(self, '_agent_handoffs'):
                         self._agent_handoffs = {}
@@ -1531,26 +1531,26 @@ Action Input: {{}}
                         f"summary={result.handoff.summary[:50]}..."
                     )
 
-                # 🔥 CRITICAL FIX: 收集发现 - 支持多种字段名
+                #  CRITICAL FIX: 收集发现 - 支持多种字段名
                 # findings 字段通常来自 Analysis/Verification Agent
                 # initial_findings 来自 Recon Agent
                 raw_findings = data.get("findings", [])
                 logger.info(f"[Orchestrator] {agent_name} returned data with {len(raw_findings)} findings in 'findings' field")
 
-                # 🔥 ENHANCED: Also check for initial_findings (from Recon) - 改进逻辑
+                #  ENHANCED: Also check for initial_findings (from Recon) - 改进逻辑
                 # 即使 findings 为空列表，也检查 initial_findings
                 if "initial_findings" in data:
                     initial = data.get("initial_findings", [])
                     logger.info(f"[Orchestrator] {agent_name} has {len(initial)} initial_findings, types: {[type(f).__name__ for f in initial[:3]]}")
                     for f in initial:
                         if isinstance(f, dict):
-                            # 🔥 Normalize finding format - 处理 Recon 返回的格式
+                            #  Normalize finding format - 处理 Recon 返回的格式
                             normalized = self._normalize_finding(f)
                             if normalized not in raw_findings:
                                 raw_findings.append(normalized)
                                 logger.info(f"[Orchestrator] Added dict finding from initial_findings")
                         elif isinstance(f, str) and f.strip():
-                            # 🔥 FIX: Convert string finding to dict format instead of skipping
+                            #  FIX: Convert string finding to dict format instead of skipping
                             # Recon Agent 有时候会返回字符串格式的发现
                             # 尝试从字符串中提取文件路径（格式如 "app.py:36 - 描述"）
                             file_path = ""
@@ -1584,11 +1584,11 @@ Action Input: {{}}
                 else:
                     logger.info(f"[Orchestrator] {agent_name} has no 'initial_findings' key in data")
 
-                # 🔥 Also check high_risk_areas from Recon for potential findings
+                #  Also check high_risk_areas from Recon for potential findings
                 if agent_name == "recon" and "high_risk_areas" in data:
                     high_risk = data.get("high_risk_areas", [])
                     logger.info(f"[Orchestrator] {agent_name} identified {len(high_risk)} high risk areas")
-                    # 🔥 FIX: 将 high_risk_areas 也转换为发现
+                    #  FIX: 将 high_risk_areas 也转换为发现
                     for area in high_risk:
                         if isinstance(area, str) and area.strip():
                             # 尝试从描述中提取文件路径和漏洞类型
@@ -1596,7 +1596,7 @@ Action Input: {{}}
                             line_start = 0
                             vuln_type = "potential_issue"
 
-                            # 🔥 FIX: 改进文件路径提取逻辑
+                            #  FIX: 改进文件路径提取逻辑
                             # 格式1: "file.py:36 - 描述" -> 提取 file.py 和 36
                             # 格式2: "描述性文本" -> 不提取文件路径
                             if ":" in area:
@@ -1645,7 +1645,7 @@ Action Input: {{}}
                             raw_findings.append(high_risk_finding)
                             logger.info(f"[Orchestrator] Converted high_risk_area to finding: {area[:60]}... (file={file_path}, type={vuln_type})")
 
-                # 🔥 初始化 valid_findings，确保后续代码可以访问
+                #  初始化 valid_findings，确保后续代码可以访问
                 valid_findings = []
 
                 if raw_findings:
@@ -1654,7 +1654,7 @@ Action Input: {{}}
 
                     logger.info(f"[Orchestrator] {agent_name} returned {len(valid_findings)} valid findings")
 
-                    # 🔥 ENHANCED: Merge findings with better deduplication
+                    #  ENHANCED: Merge findings with better deduplication
                     for new_f in valid_findings:
                         # Normalize the finding first
                         normalized_new = self._normalize_finding(new_f)
@@ -1706,7 +1706,7 @@ Action Input: {{}}
 
                             if same_file and (same_line or similar_desc or same_type):
                                 # Update existing with new info (e.g. verification results)
-                                # 🔥 FIX: Smart merge - don't overwrite good data with empty values
+                                #  FIX: Smart merge - don't overwrite good data with empty values
                                 merged = dict(existing_f)  # Start with existing data
                                 for key, value in normalized_new.items():
                                     # Only overwrite if new value is meaningful
@@ -1722,10 +1722,10 @@ Action Input: {{}}
                                 # Keep verified status if either is verified
                                 if existing_f.get("is_verified") or normalized_new.get("is_verified"):
                                     merged["is_verified"] = True
-                                # 🔥 FIX: Preserve non-zero line numbers
+                                #  FIX: Preserve non-zero line numbers
                                 if existing_f.get("line_start") and not normalized_new.get("line_start"):
                                     merged["line_start"] = existing_f["line_start"]
-                                # 🔥 FIX: Preserve vulnerability_type
+                                #  FIX: Preserve vulnerability_type
                                 if existing_f.get("vulnerability_type") and not normalized_new.get("vulnerability_type"):
                                     merged["vulnerability_type"] = existing_f["vulnerability_type"]
 
@@ -1746,10 +1746,10 @@ Action Input: {{}}
                     "dispatch_complete",
                     f"{agent_name} Agent 完成",
                     agent=agent_name,
-                    findings_count=len(self._all_findings),  # 🔥 Use total findings count
+                    findings_count=len(self._all_findings),  #  Use total findings count
                 )
                 
-                # 🔥 根据 Agent 类型构建不同的观察结果
+                #  根据 Agent 类型构建不同的观察结果
                 if agent_name == "recon":
                     # Recon Agent 返回项目信息
                     observation = f"""## Recon Agent 执行结果
@@ -1841,7 +1841,7 @@ Action Input: {{}}
 
     def _validate_file_path(self, file_path: str) -> bool:
         """
-        🔥 v2.1: 验证文件路径是否真实存在
+         v2.1: 验证文件路径是否真实存在
 
         Args:
             file_path: 相对或绝对文件路径（可能包含行号，如 "app.py:36"）
@@ -1892,11 +1892,11 @@ Action Input: {{}}
 
         不同 Agent 可能返回不同格式的发现，这个方法将它们标准化为统一格式
 
-        🔥 v2.1: 添加文件路径验证，返回 None 表示发现无效（幻觉）
+         v2.1: 添加文件路径验证，返回 None 表示发现无效（幻觉）
         """
         normalized = dict(finding)  # 复制原始数据
 
-        # 🔥 处理 location 字段 -> file_path + line_start
+        #  处理 location 字段 -> file_path + line_start
         if "location" in normalized and "file_path" not in normalized:
             location = normalized["location"]
             if isinstance(location, str) and ":" in location:
@@ -1909,15 +1909,15 @@ Action Input: {{}}
             elif isinstance(location, str):
                 normalized["file_path"] = location
 
-        # 🔥 处理 file 字段 -> file_path
+        #  处理 file 字段 -> file_path
         if "file" in normalized and "file_path" not in normalized:
             normalized["file_path"] = normalized["file"]
 
-        # 🔥 处理 line 字段 -> line_start
+        #  处理 line 字段 -> line_start
         if "line" in normalized and "line_start" not in normalized:
             normalized["line_start"] = normalized["line"]
 
-        # 🔥 处理 type 字段 -> vulnerability_type
+        #  处理 type 字段 -> vulnerability_type
         if "type" in normalized and "vulnerability_type" not in normalized:
             # 不是所有 type 都是漏洞类型，比如 "Vulnerability" 只是标记
             type_val = normalized["type"]
@@ -1941,13 +1941,13 @@ Action Input: {{}}
                 else:
                     normalized["vulnerability_type"] = "other"
 
-        # 🔥 确保 severity 字段存在且为小写
+        #  确保 severity 字段存在且为小写
         if "severity" in normalized:
             normalized["severity"] = str(normalized["severity"]).lower()
         else:
             normalized["severity"] = "medium"
 
-        # 🔥 处理 risk 字段 -> severity
+        #  处理 risk 字段 -> severity
         if "risk" in normalized and "severity" not in normalized:
             normalized["severity"] = str(normalized["risk"]).lower()
 
@@ -1966,20 +1966,20 @@ Action Input: {{}}
         )
         normalized["vulnerability_type"] = profile.get("key", "other")
 
-        # 🔥 处理 code 字段 -> code_snippet
+        #  处理 code 字段 -> code_snippet
         if "code" in normalized and "code_snippet" not in normalized:
             normalized["code_snippet"] = normalized["code"]
 
-        # 🔥 处理 recommendation -> suggestion
+        #  处理 recommendation -> suggestion
         if "recommendation" in normalized and "suggestion" not in normalized:
             normalized["suggestion"] = normalized["recommendation"]
 
-        # 🔥 处理 impact -> 添加到 description
+        #  处理 impact -> 添加到 description
         if "impact" in normalized and normalized.get("description"):
             if "impact" not in normalized["description"].lower():
                 normalized["description"] += f"\n\nImpact: {normalized['impact']}"
 
-        # 🔥 v2.1: 验证文件路径存在性
+        #  v2.1: 验证文件路径存在性
         file_path = normalized.get("file_path", "")
         if file_path and not self._validate_file_path(file_path):
             logger.warning(
@@ -2076,11 +2076,11 @@ Action Input: {{}}
         Returns:
             TaskHandoff 对象，如果没有前序信息则返回 None
         """
-        # 🔥 如果是第一个 Agent (recon)，没有前序信息
+        #  如果是第一个 Agent (recon)，没有前序信息
         if target_agent == "recon" and not self._agent_results:
             return None
 
-        # 🔥 优先使用前序 Agent 返回的 handoff
+        #  优先使用前序 Agent 返回的 handoff
         # Analysis Agent 需要 Recon 的 handoff
         if target_agent == "analysis" and "recon" in self._agent_handoffs:
             recon_handoff = self._agent_handoffs["recon"]
@@ -2181,10 +2181,10 @@ Action Input: {{}}
                 confidence=analysis_handoff.confidence,
             )
 
-        # 🔥 如果没有前序 Agent 的 handoff，从 _agent_results 构建（回退逻辑）
+        #  如果没有前序 Agent 的 handoff，从 _agent_results 构建（回退逻辑）
         logger.info(f"[Orchestrator] Building handoff from _agent_results for {target_agent}")
 
-        # 🔥 收集工作摘要和关键发现
+        #  收集工作摘要和关键发现
         work_completed = []
         key_findings = []
         insights = []

@@ -100,7 +100,7 @@ class CodeRetriever:
     代码检索器
     支持语义检索、关键字检索和混合检索
 
-    🔥 自动兼容不同维度的向量：
+     自动兼容不同维度的向量：
     - 查询时自动检测 collection 的 embedding 配置
     - 动态创建对应的 embedding 服务
     """
@@ -111,7 +111,7 @@ class CodeRetriever:
         embedding_service: EmbeddingService | None = None,
         vector_store: VectorStore | None = None,
         persist_directory: str | None = None,
-        api_key: str | None = None,  # 🔥 新增：用于动态创建 embedding 服务
+        api_key: str | None = None,  #  新增：用于动态创建 embedding 服务
     ):
         """
         初始化检索器
@@ -150,7 +150,7 @@ class CodeRetriever:
 
         await self.vector_store.initialize()
 
-        # 🔥 自动检测 collection 的 embedding 配置
+        #  自动检测 collection 的 embedding 配置
         if hasattr(self.vector_store, "get_embedding_config"):
             stored_config = self.vector_store.get_embedding_config()
             stored_provider = stored_config.get("provider")
@@ -158,7 +158,7 @@ class CodeRetriever:
             stored_dimension = stored_config.get("dimension")
             stored_base_url = stored_config.get("base_url")
 
-            # 🔥 如果没有存储的配置（旧的 collection），尝试通过维度推断
+            #  如果没有存储的配置（旧的 collection），尝试通过维度推断
             if not stored_provider or not stored_model:
                 inferred = await self._infer_embedding_config_from_dimension()
                 if inferred:
@@ -211,7 +211,7 @@ class CodeRetriever:
 
     async def _infer_embedding_config_from_dimension(self) -> dict[str, Any] | None:
         """
-        🔥 从向量维度推断 embedding 配置（用于处理旧的 collection）
+         从向量维度推断 embedding 配置（用于处理旧的 collection）
 
         Returns:
             推断的 embedding 配置，如果无法推断则返回 None
@@ -226,7 +226,7 @@ class CodeRetriever:
                     if embeddings is not None and len(embeddings) > 0:
                         dim = len(embeddings[0])
 
-                        # 🔥 根据维度推断模型（优先选择常用模型）
+                        #  根据维度推断模型（优先选择常用模型）
                         dimension_mapping = {
                             # OpenAI 系列
                             1536: {

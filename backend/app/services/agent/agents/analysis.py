@@ -60,7 +60,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 
 ═══════════════════════════════════════════════════════════════
 
-## 🔥 漏洞推送机制（强制要求）
+##  漏洞推送机制（强制要求）
 
 ### 推送时机
 - **每确认一个漏洞，必须立即推送**，禁止批量延迟
@@ -668,7 +668,7 @@ class AnalysisAgent(BaseAgent):
         task = input_data.get("task", "")
         task_context = input_data.get("task_context", "")
         
-        # 🔥 处理交接信息
+        #  处理交接信息
         handoff = input_data.get("handoff")
         if handoff:
             from .base import TaskHandoff
@@ -700,10 +700,10 @@ class AnalysisAgent(BaseAgent):
         else:
             bootstrap_findings = []
         
-        # 🔥 构建包含交接上下文的初始消息
+        #  构建包含交接上下文的初始消息
         handoff_context = self.get_handoff_context()
         
-        # 🔥 获取目标文件列表
+        #  获取目标文件列表
         target_files = config.get("target_files", [])
         
         initial_message = f"""请开始对项目进行安全漏洞分析。
@@ -715,7 +715,7 @@ class AnalysisAgent(BaseAgent):
 
 """
 
-        # 🔥 项目级 Markdown 长期记忆（无需 RAG/Embedding）
+        #  项目级 Markdown 长期记忆（无需 RAG/Embedding）
         markdown_memory = config.get("markdown_memory") if isinstance(config, dict) else None
         if isinstance(markdown_memory, dict):
             shared_mem = str(markdown_memory.get("shared") or "").strip()
@@ -733,7 +733,7 @@ class AnalysisAgent(BaseAgent):
 {skills_mem or "(空)"}
 
 """
-        # 🔥 如果指定了目标文件，明确告知 Agent
+        #  如果指定了目标文件，明确告知 Agent
         if target_files:
             initial_message += f"""## 审计范围
 用户指定了 {len(target_files)} 个目标文件进行审计：
@@ -854,7 +854,7 @@ class AnalysisAgent(BaseAgent):
                 duration_ms=duration_ms,
             )
         
-        # 🔥 记录工作开始
+        #  记录工作开始
         self.record_work("开始安全漏洞分析")
 
         # 初始化对话历史
@@ -865,8 +865,8 @@ class AnalysisAgent(BaseAgent):
         
         self._steps = []
         all_findings = []
-        error_message = None  # 🔥 跟踪错误信息
-        forced_min_tool_done = False  # 🔥 防死循环：首次“无工具直接 Final Answer”时由系统自动执行一次最小工具调用
+        error_message = None  #  跟踪错误信息
+        forced_min_tool_done = False  #  防死循环：首次“无工具直接 Final Answer”时由系统自动执行一次最小工具调用
         no_action_streak = 0
         degraded_reason: Optional[str] = None
         self._empty_retry_count = 0
@@ -936,17 +936,17 @@ class AnalysisAgent(BaseAgent):
                 
                 self._iteration = iteration + 1
                 
-                # 🔥 再次检查取消标志（在LLM调用之前）
+                #  再次检查取消标志（在LLM调用之前）
                 if self.is_cancelled:
                     await self.emit_thinking("🛑 任务已取消，停止执行")
                     break
                 
                 # 调用 LLM 进行思考和决策（流式输出）
-                # 🔥 使用用户配置的 temperature 和 max_tokens
+                #  使用用户配置的 temperature 和 max_tokens
                 try:
                     llm_output, tokens_this_round = await self.stream_llm_call(
                         self._conversation_history,
-                        # 🔥 不传递 temperature 和 max_tokens，使用用户配置
+                        #  不传递 temperature 和 max_tokens，使用用户配置
                     )
                 except asyncio.CancelledError:
                     logger.info(f"[{self.name}] LLM call cancelled")
@@ -954,7 +954,7 @@ class AnalysisAgent(BaseAgent):
                 
                 self._total_tokens += tokens_this_round
 
-                # 🔥 Enhanced: Handle empty LLM response with better diagnostics
+                #  Enhanced: Handle empty LLM response with better diagnostics
                 if not llm_output or not llm_output.strip():
                     empty_retry_count = getattr(self, '_empty_retry_count', 0) + 1
                     self._empty_retry_count = empty_retry_count
@@ -965,7 +965,7 @@ class AnalysisAgent(BaseAgent):
                     empty_from_stream = empty_reason in {"empty_response", "empty_stream", "empty_done"}
                     conversation_tokens_estimate = self._estimate_conversation_tokens(self._conversation_history)
                     
-                    # 🔥 记录更详细的诊断信息
+                    #  记录更详细的诊断信息
                     logger.warning(
                         f"[{self.name}] Empty LLM response in iteration {self._iteration} "
                         f"(retry {empty_retry_count}/3, tokens_this_round={tokens_this_round}, "
@@ -1001,7 +1001,7 @@ class AnalysisAgent(BaseAgent):
                                 "conversation_tokens_estimate": conversation_tokens_estimate,
                             },
                         )
-                        # 🔥 不是直接 break，而是尝试生成一个回退结果
+                        #  不是直接 break，而是尝试生成一个回退结果
                         break
                     
                     if empty_from_stream:
@@ -1013,7 +1013,7 @@ class AnalysisAgent(BaseAgent):
                             "禁止仅输出空白或无结构文本。"
                         )
                     else:
-                        # 🔥 更有针对性的重试提示
+                        #  更有针对性的重试提示
                         retry_prompt = f"""收到空响应。请根据以下格式输出你的思考和行动：
 
 Thought: [你对当前安全分析情况的思考]
@@ -1039,7 +1039,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                 step = self._parse_llm_response(llm_output)
                 self._steps.append(step)
                 
-                # 🔥 发射 LLM 思考内容事件 - 展示安全分析的思考过程
+                #  发射 LLM 思考内容事件 - 展示安全分析的思考过程
                 if step.thought:
                     await self.emit_llm_thought(step.thought, iteration + 1)
                 
@@ -1053,7 +1053,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                 
                 # 检查是否完成
                 if step.is_final:
-                    # 🔥 工具优先门禁：禁止在 0 tool_calls 的情况下直接 Final Answer
+                    #  工具优先门禁：禁止在 0 tool_calls 的情况下直接 Final Answer
                     if self._tool_calls == 0:
                         logger.warning(
                             f"[{self.name}] LLM tried to finish without any tool calls! Forcing tool usage."
@@ -1093,7 +1093,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                     if step.final_answer and "findings" in step.final_answer:
                         all_findings = step.final_answer["findings"]
                         logger.info(f"[{self.name}] Final Answer contains {len(all_findings)} findings")
-                        # 🔥 发射每个发现的事件（用于前端实时未验证列表）
+                        #  发射每个发现的事件（用于前端实时未验证列表）
                         # 限制数量避免日志风暴，但需要足够覆盖面来体现“实时发现”。
                         for finding in all_findings[:50]:
                             title_value = str(finding.get("title") or "Unknown")
@@ -1150,14 +1150,14 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                                     else None
                                 ),
                             )
-                            # 🔥 记录洞察
+                            #  记录洞察
                             self.add_insight(
                                 f"发现 {finding.get('severity', 'medium')} 级别漏洞: {finding.get('title', 'Unknown')}"
                             )
                     else:
                         logger.warning(f"[{self.name}] Final Answer has no 'findings' key or is None: {step.final_answer}")
                     
-                    # 🔥 记录工作完成
+                    #  记录工作完成
                     self.record_work(f"完成安全分析，发现 {len(all_findings)} 个潜在漏洞")
                     
                     # await self.emit_llm_complete(
@@ -1172,7 +1172,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                 
                 # 执行工具
                 if step.action:
-                    # 🔥 发射 LLM 动作决策事件
+                    #  发射 LLM 动作决策事件
                     await self.emit_llm_action(step.action, step.action_input or {})
                     
                     action_input = dict(step.action_input or {})
@@ -1194,7 +1194,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                             })
                             continue
 
-                    # 🔥 循环检测：追踪工具调用失败历史
+                    #  循环检测：追踪工具调用失败历史
                     tool_call_key = f"{step.action}:{json.dumps(action_input or {}, sort_keys=True)}"
                     if not hasattr(self, '_failed_tool_calls'):
                         self._failed_tool_calls = {}
@@ -1204,7 +1204,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                         action_input
                     )
                     
-                    # 🔥 检测工具调用失败并追踪
+                    #  检测工具调用失败并追踪
                     is_tool_error = (
                         "失败" in observation or 
                         "错误" in observation or 
@@ -1217,7 +1217,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                         self._failed_tool_calls[tool_call_key] = self._failed_tool_calls.get(tool_call_key, 0) + 1
                         fail_count = self._failed_tool_calls[tool_call_key]
                         
-                        # 🔥 如果同一调用连续失败3次，添加强制跳过提示
+                        #  如果同一调用连续失败3次，添加强制跳过提示
                         if fail_count >= 3:
                             logger.warning(f"[{self.name}] Tool call failed {fail_count} times: {tool_call_key}")
                             observation += f"\n\n**系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
@@ -1233,14 +1233,14 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                         if tool_call_key in self._failed_tool_calls:
                             del self._failed_tool_calls[tool_call_key]
                     
-                    # 🔥 工具执行后检查取消状态
+                    #  工具执行后检查取消状态
                     if self.is_cancelled:
                         logger.info(f"[{self.name}] Cancelled after tool execution")
                         break
                     
                     step.observation = observation
                     
-                    # 🔥 发射 LLM 观察事件
+                    #  发射 LLM 观察事件
                     await self.emit_llm_observation(observation)
                     
                     # 添加观察结果到历史
@@ -1292,7 +1292,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                             "content": "请继续分析。你输出了 Thought 但没有输出 Action。请**立即**选择一个工具执行，或者如果分析完成，输出 Final Answer 汇总所有发现。",
                         })
             
-            # 🔥 如果循环结束但没有发现，强制 LLM 总结
+            #  如果循环结束但没有发现，强制 LLM 总结
             if not all_findings and not self.is_cancelled and not error_message and not degraded_reason:
                 await self.emit_thinking("分析阶段结束，正在生成漏洞总结...")
                 
@@ -1328,7 +1328,7 @@ Final Answer:""",
                 try:
                     summary_output, _ = await self.stream_llm_call(
                         self._conversation_history,
-                        # 🔥 不传递 temperature 和 max_tokens，使用用户配置
+                        #  不传递 temperature 和 max_tokens，使用用户配置
                     )
                     
                     if summary_output and summary_output.strip():
@@ -1349,7 +1349,7 @@ Final Answer:""",
             # 处理结果
             duration_ms = int((time.time() - start_time) * 1000)
             
-            # 🔥 如果被取消，返回取消结果
+            #  如果被取消，返回取消结果
             if self.is_cancelled:
                 await self.emit_event(
                     "info",
@@ -1368,7 +1368,7 @@ Final Answer:""",
                     duration_ms=duration_ms,
                 )
             
-            # 🔥 如果有错误，返回失败结果
+            #  如果有错误，返回失败结果
             if error_message:
                 await self.emit_event(
                     "error",
@@ -1417,10 +1417,10 @@ Final Answer:""",
                 f"Analysis Agent 完成: {len(standardized_findings)} 个发现, {self._iteration} 轮迭代, {self._tool_calls} 次工具调用"
             )
 
-            # 🔥 CRITICAL: Log final findings count before returning
+            #  CRITICAL: Log final findings count before returning
             logger.info(f"[{self.name}] Returning {len(standardized_findings)} standardized findings")
 
-            # 🔥 兜底机制：检查是否遗漏了 push_finding_to_queue 调用
+            #  兜底机制：检查是否遗漏了 push_finding_to_queue 调用
             fallback_result = await self._fallback_check_and_save(
                 conversation_history=self._conversation_history,
                 expected_tool="push_finding_to_queue",
@@ -1438,7 +1438,7 @@ Final Answer:""",
                     metadata=fallback_result,
                 )
 
-            # 🔥 创建 TaskHandoff - 传递给 Verification Agent
+            #  创建 TaskHandoff - 传递给 Verification Agent
             handoff = self._create_analysis_handoff(standardized_findings)
 
             return AgentResult(
@@ -1460,7 +1460,7 @@ Final Answer:""",
                 tool_calls=self._tool_calls,
                 tokens_used=self._total_tokens,
                 duration_ms=duration_ms,
-                handoff=handoff,  # 🔥 添加 handoff
+                handoff=handoff,  #  添加 handoff
             )
             
         except Exception as e:

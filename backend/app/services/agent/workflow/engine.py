@@ -72,11 +72,11 @@ class AuditWorkflowEngine:
         inherited_workflow_config = getattr(orchestrator, "_workflow_config", None)
         self.workflow_config = workflow_config or inherited_workflow_config or WorkflowConfig()
 
-        # 🔥 内存监控
+        #  内存监控
         self.memory_monitor = MemoryMonitor()
         self.enable_memory_monitoring = True  # 可配置的监控开关
 
-        # 🔥 初始化并行执行器
+        #  初始化并行执行器
         self.analysis_executor = ParallelPhaseExecutor(
             orchestrator=orchestrator,
             agent_type="analysis",
@@ -98,7 +98,7 @@ class AuditWorkflowEngine:
             enable_parallel=self.workflow_config.should_parallelize_report,
         )
 
-        # 🔥 业务逻辑分析并行执行器（仅在 bl_queue 存在时使用）
+        #  业务逻辑分析并行执行器（仅在 bl_queue 存在时使用）
         self.bl_analysis_executor = ParallelPhaseExecutor(
             orchestrator=orchestrator,
             agent_type="business_logic_analysis",
@@ -157,7 +157,7 @@ class AuditWorkflowEngine:
             and static_bootstrap_candidate_count > 0
         )
         
-        # 🔥 记录起始内存
+        #  记录起始内存
         if self.enable_memory_monitoring:
             self.memory_monitor.take_snapshot(phase="init", agent_name="orchestrator")
 
@@ -191,7 +191,7 @@ class AuditWorkflowEngine:
                 await orc.emit_event(
                     "info",
                     (
-                        "⏭️ [Workflow] 混合扫描检测到静态预扫结果，跳过 Recon 阶段，"
+                        " [Workflow] 混合扫描检测到静态预扫结果，跳过 Recon 阶段，"
                         f"并注入 {seeded_count} 条候选进入 Analysis 队列"
                     ),
                 )
@@ -205,7 +205,7 @@ class AuditWorkflowEngine:
                 await orc.emit_event("info", "🔎 [Workflow] 开始 Recon 阶段")
                 await self._run_recon_phase(state)
             
-            # 🔥 业务逻辑侦察阶段（与 Recon 相互独立，可并行；这里在 Recon 完成后启动）
+            #  业务逻辑侦察阶段（与 Recon 相互独立，可并行；这里在 Recon 完成后启动）
             # 注意：由于 bootstrap 模式下 Recon 可能被跳过，BL Recon 不受影响，始终运行
             if self.bl_queue is not None and not orc.is_cancelled:
                 has_bl_recon_agent = orc.sub_agents.get("business_logic_recon") is not None
@@ -214,17 +214,17 @@ class AuditWorkflowEngine:
                     await self._run_business_logic_recon_phase(state, task_id)
                 else:
                     logger.info("[WorkflowEngine] No business_logic_recon agent registered, skipping BL Recon phase")
-                    await orc.emit_event("info", "⏭️ [Workflow] 未配置 BusinessLogicReconAgent，跳过 BL Recon 阶段")
+                    await orc.emit_event("info", " [Workflow] 未配置 BusinessLogicReconAgent，跳过 BL Recon 阶段")
             
-            # 🔥 Recon 结束后调用 LLM 对风险点进行去重
+            #  Recon 结束后调用 LLM 对风险点进行去重
             if state.recon_done and not orc.is_cancelled:
                 await self._dedup_recon_risk_queue(self.task_id)
 
-            # 🔥 BL Recon 结束后对业务逻辑风险点去重
+            #  BL Recon 结束后对业务逻辑风险点去重
             if state.bl_recon_done and not orc.is_cancelled and self.bl_queue is not None:
                 await self._dedup_bl_risk_queue(self.task_id)
             
-            # 🔥 记录 Recon 完成后的内存
+            #  记录 Recon 完成后的内存
             if self.enable_memory_monitoring:
                 self.memory_monitor.take_snapshot(phase="recon_done", agent_name="recon")
 
@@ -269,11 +269,11 @@ class AuditWorkflowEngine:
                 )
                 await self._run_analysis_phase(state, task_id)
             
-            # 🔥 Analysis 阶段结束后调用 LLM 对漏洞进行去重
+            #  Analysis 阶段结束后调用 LLM 对漏洞进行去重
             if not orc.is_cancelled:
                 await self._dedup_vuln_queue(self.task_id)
             
-            # 🔥 记录 Analysis 完成后的内存
+            #  记录 Analysis 完成后的内存
             if self.enable_memory_monitoring:
                 self.memory_monitor.take_snapshot(phase="analysis_done", agent_name="analysis")
 
@@ -324,7 +324,7 @@ class AuditWorkflowEngine:
             )
             await self._run_verification_phase(state, task_id)
             
-            # 🔥 记录 Verification 完成后的内存
+            #  记录 Verification 完成后的内存
             if self.enable_memory_monitoring:
                 self.memory_monitor.take_snapshot(phase="verification_done", agent_name="verification")
 
@@ -340,7 +340,7 @@ class AuditWorkflowEngine:
             await orc.emit_event("info", "[Workflow] 开始 Report 阶段，生成漏洞详情报告")
             await self._run_report_phase(state, project_info, config)
 
-            # 🔥 记录 Report 完成后的内存
+            #  记录 Report 完成后的内存
             if self.enable_memory_monitoring:
                 self.memory_monitor.take_snapshot(phase="report_done", agent_name="report")
 
@@ -356,7 +356,7 @@ class AuditWorkflowEngine:
                 f"[Workflow] 所有阶段完成，共收集 {len(state.all_findings)} 个发现",
             )
             
-            # 🔥 记录最终内存
+            #  记录最终内存
             if self.enable_memory_monitoring:
                 self.memory_monitor.take_snapshot(phase="complete", agent_name="orchestrator")
                 self.memory_monitor.log_summary()
@@ -785,7 +785,7 @@ class AuditWorkflowEngine:
             len(orc._all_findings),
         )
         
-        # 🔥 清理 Recon Agent 的会话内存
+        #  清理 Recon Agent 的会话内存
         recon_agent = orc.sub_agents.get("recon")
         if recon_agent:
             recon_agent.reset_session_memory()
@@ -1036,7 +1036,7 @@ class AuditWorkflowEngine:
 
         if report_agent is None:
             logger.info("[WorkflowEngine] No report agent registered, skipping Report phase")
-            await orc.emit_event("info", "⏭️ [Workflow] 未配置 Report Agent，跳过报告生成阶段")
+            await orc.emit_event("info", " [Workflow] 未配置 Report Agent，跳过报告生成阶段")
             return
 
         # 只为 confirmed 或 likely 的 findings 生成报告
@@ -1049,7 +1049,7 @@ class AuditWorkflowEngine:
         if not reportable:
             await orc.emit_event(
                 "info",
-                "⏭️ [Workflow] 无 confirmed/likely 漏洞，跳过报告生成阶段",
+                " [Workflow] 无 confirmed/likely 漏洞，跳过报告生成阶段",
             )
             logger.info("[WorkflowEngine] Report phase skipped: no reportable findings")
         else:
@@ -1116,7 +1116,7 @@ class AuditWorkflowEngine:
         if not candidate_findings:
             await orc.emit_event(
                 "info",
-                "⏭️ [Workflow] 项目级风险评估报告跳过：无可用漏洞数据",
+                " [Workflow] 项目级风险评估报告跳过：无可用漏洞数据",
             )
             return
 

@@ -117,7 +117,7 @@ class LLMService:
                 # 兼容基类 validate_config（仍要求存在 api_key 字段）
                 api_key = "ollama"
             
-            # 🔥 Timeout 优先级：用户配置（毫秒） > 环境变量（秒）
+            #  Timeout 优先级：用户配置（毫秒） > 环境变量（秒）
             timeout_ms = user_llm_config.get('llmTimeout')
             if timeout_ms:
                 # 用户配置是毫秒，转换为秒
@@ -126,10 +126,10 @@ class LLMService:
                 # 环境变量是秒
                 timeout = int(getattr(settings, 'LLM_TIMEOUT', 150))
             
-            # 🔥 Temperature 优先级：用户配置 > 环境变量
+            #  Temperature 优先级：用户配置 > 环境变量
             temperature = user_llm_config.get('llmTemperature') if user_llm_config.get('llmTemperature') is not None else float(getattr(settings, 'LLM_TEMPERATURE', 0.1))
             
-            # 🔥 Max Tokens 优先级：用户配置 > 环境变量
+            #  Max Tokens 优先级：用户配置 > 环境变量
             max_tokens = user_llm_config.get('llmMaxTokens') or int(getattr(settings, 'LLM_MAX_TOKENS', 4096))
             
             self._config = LLMConfig(
@@ -435,7 +435,7 @@ Please analyze the following code:
         tools: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
-        🔥 Agent 使用的聊天完成接口（支持工具调用）
+         Agent 使用的聊天完成接口（支持工具调用）
 
         Args:
             messages: 消息列表，格式为 [{"role": "user", "content": "..."}]
@@ -488,7 +488,7 @@ Please analyze the following code:
         max_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        🔥 Agent 使用的原始聊天完成接口（兼容旧接口）
+         Agent 使用的原始聊天完成接口（兼容旧接口）
 
         Args:
             messages: 消息列表，格式为 [{"role": "user", "content": "..."}]

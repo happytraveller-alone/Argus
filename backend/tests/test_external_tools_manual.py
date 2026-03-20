@@ -431,7 +431,7 @@ async def main():
     
     for tool_name, result in results.items():
         if result is None:
-            status = "⏭️  跳过 (不适用)"
+            status = "  跳过 (不适用)"
         elif result is True:
             status = "成功"
         else:

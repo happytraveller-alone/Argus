@@ -785,7 +785,7 @@ class SandboxTool(AgentTool):
         if result.get("error"):
             output_parts.append(f"\n错误: {result['error']}")
         
-        # 🔥 修复：当命令执行失败时，确保 error 字段包含有意义的错误信息
+        #  修复：当命令执行失败时，确保 error 字段包含有意义的错误信息
         # 如果 result['error'] 为空但执行失败，从 stderr 中提取错误
         error_message = result.get("error")
         if not error_message and not result.get("success", False):

@@ -13,7 +13,7 @@ from app.models.project_info import ProjectInfo
 from app.services.upload.project_stats import generate_project_description
 from app.services.zip_storage import get_project_zip_path
 
-# 🔥 导入所有模型以确保 SQLAlchemy 注册表完整
+#  导入所有模型以确保 SQLAlchemy 注册表完整
 from app.models import agent_task, opengrep, project  # noqa: F401
 
 

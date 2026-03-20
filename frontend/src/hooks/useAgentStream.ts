@@ -73,7 +73,7 @@ export function useAgentStream(
     ...callbackOptions
   } = options;
 
-  // 🔥 使用 ref 存储 callback options，避免 connect 函数依赖变化导致重连
+  //  使用 ref 存储 callback options，避免 connect 函数依赖变化导致重连
   const callbackOptionsRef = useRef(callbackOptions);
   callbackOptionsRef.current = callbackOptions;
 
@@ -93,7 +93,7 @@ export function useAgentStream(
   const handlerRef = useRef<AgentStreamHandler | null>(null);
   const thinkingBufferRef = useRef<string[]>([]);
 
-  // 🔥 使用 ref 存储 afterSequence，避免 connect 函数依赖变化导致重连
+  //  使用 ref 存储 afterSequence，避免 connect 函数依赖变化导致重连
   const afterSequenceRef = useRef(afterSequence);
   afterSequenceRef.current = afterSequence;
 
@@ -118,7 +118,7 @@ export function useAgentStream(
     setError(null);
     thinkingBufferRef.current = [];
 
-    // 🔥 使用 ref 获取最新的 afterSequence 值
+    //  使用 ref 获取最新的 afterSequence 值
     const currentAfterSequence = afterSequenceRef.current;
     console.log(`[useAgentStream] Creating handler with afterSequence=${currentAfterSequence}`);
 
@@ -227,7 +227,7 @@ export function useAgentStream(
 
     handlerRef.current.connect();
     setIsConnected(true);
-  }, [taskId, includeThinking, includeToolCalls, maxEvents]); // 🔥 移除 afterSequence 依赖，使用 ref 代替
+  }, [taskId, includeThinking, includeToolCalls, maxEvents]); //  移除 afterSequence 依赖，使用 ref 代替
 
   // 断开连接
   const disconnect = useCallback(() => {

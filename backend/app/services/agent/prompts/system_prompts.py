@@ -36,7 +36,7 @@ CORE_SECURITY_PRINCIPLES = """
 </core_security_principles>
 """
 
-# 🔥 v2.1: 文件路径验证规则 - 防止幻觉
+#  v2.1: 文件路径验证规则 - 防止幻觉
 FILE_VALIDATION_RULES = """
 <file_validation_rules>
 ## 文件路径验证规则（强制执行）
@@ -234,7 +234,7 @@ def build_enhanced_prompt(
     include_principles: bool = True,
     include_priorities: bool = True,
     include_tools: bool = True,
-    include_validation: bool = True,  # 🔥 v2.1: 默认包含文件验证规则
+    include_validation: bool = True,  #  v2.1: 默认包含文件验证规则
 ) -> str:
     """
     构建增强的提示词
@@ -254,7 +254,7 @@ def build_enhanced_prompt(
     if include_principles:
         parts.append(CORE_SECURITY_PRINCIPLES)
 
-    # 🔥 v2.1: 添加文件验证规则
+    #  v2.1: 添加文件验证规则
     if include_validation:
         parts.append(FILE_VALIDATION_RULES)
 
@@ -269,7 +269,7 @@ def build_enhanced_prompt(
 
 __all__ = [
     "CORE_SECURITY_PRINCIPLES",
-    "FILE_VALIDATION_RULES",  # 🔥 v2.1
+    "FILE_VALIDATION_RULES",  #  v2.1
     "VULNERABILITY_PRIORITIES",
     "TOOL_USAGE_GUIDE",
     "MULTI_AGENT_RULES",

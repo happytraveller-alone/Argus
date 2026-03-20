@@ -2,7 +2,7 @@
 代码索引器
 将代码分块并索引到向量数据库
 
-🔥 v2.0 改进：
+ v2.0 改进：
 - 支持嵌入模型变更检测和自动重建
 - 支持增量索引更新（基于文件 hash）
 - 支持索引版本控制和状态查询
@@ -98,13 +98,13 @@ class IndexingProgress:
     indexed_chunks: int = 0
     current_file: str = ""
     errors: List[str] = None
-    # 🔥 新增：增量更新统计
+    #  新增：增量更新统计
     added_files: int = 0
     updated_files: int = 0
     deleted_files: int = 0
     skipped_files: int = 0
     update_mode: str = "full"
-    # 🔥 新增：状态消息（用于前端显示）
+    #  新增：状态消息（用于前端显示）
     status_message: str = ""
 
     def __post_init__(self):
@@ -198,7 +198,7 @@ class ChromaVectorStore(VectorStore):
     """
     Chroma 向量存储
 
-    🔥 v2.0 改进：
+     v2.0 改进：
     - 支持 embedding 配置变更检测
     - 支持增量更新（upsert、delete）
     - 支持文件级别的索引管理
@@ -681,7 +681,7 @@ class CodeIndexer:
     代码索引器
     将代码文件分块、嵌入并索引到向量数据库
 
-    🔥 v2.0 改进：
+     v2.0 改进：
     - 自动检测 embedding 模型变更并重建索引
     - 支持增量索引更新（基于文件 hash）
     - 支持索引状态查询
@@ -863,7 +863,7 @@ class CodeIndexer:
         Args:
             directory: 目录路径
             exclude_patterns: 排除模式
-            include_patterns: 包含模式（🔥 用于限制只索引指定文件）
+            include_patterns: 包含模式（ 用于限制只索引指定文件）
             update_mode: 更新模式
             progress_callback: 进度回调
             embedding_progress_callback: 嵌入进度回调，接收 (processed, total) 参数
@@ -974,7 +974,7 @@ class CodeIndexer:
 
         # 批量嵌入和索引
         if all_chunks:
-            # 🔥 发送嵌入向量生成状态
+            #  发送嵌入向量生成状态
             progress.status_message = f"🔢 生成 {len(all_chunks)} 个代码块的嵌入向量..."
             yield progress
 
@@ -1122,7 +1122,7 @@ class CodeIndexer:
 
         # 批量嵌入和索引新的代码块
         if all_chunks:
-            # 🔥 发送嵌入向量生成状态
+            #  发送嵌入向量生成状态
             progress.status_message = f"🔢 生成 {len(all_chunks)} 个代码块的嵌入向量..."
             yield progress
 

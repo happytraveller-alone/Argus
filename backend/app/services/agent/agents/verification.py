@@ -95,7 +95,7 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 
 ═══════════════════════════════════════════════════════════════
 
-## 🔥 降低误报的黄金准则
+##  降低误报的黄金准则
 
 1. **输入可控且无过滤**：证明用户输入能到达危险函数，且没有有效防御（参数化查询、转义、白名单）
 2. **代码路径可达**：确认函数被外部调用（路由、API、公开方法），否则 confidence ≤ 0.5
@@ -2146,7 +2146,7 @@ class VerificationAgent(BaseAgent):
 
         findings_to_verify = []
         
-        # 🔥 优先支持：从队列取出的单个漏洞（方案A支持）
+        #  优先支持：从队列取出的单个漏洞（方案A支持）
         # Orchestrator 在调用 dequeue_finding 后，会将单个漏洞通过 context 传递
         queue_finding_from_context = None
         if task_context and isinstance(task_context, str):
@@ -2306,7 +2306,7 @@ class VerificationAgent(BaseAgent):
 
         handoff_context = self.get_handoff_context()
         
-        # 🔥 支持单个漏洞验证（方案A：队列集成）
+        #  支持单个漏洞验证（方案A：队列集成）
         is_single_finding = len(findings_to_verify) == 1
         
         if is_single_finding:
@@ -2956,7 +2956,7 @@ class VerificationAgent(BaseAgent):
 
             logger.info(f"[{self.name}] Returning {len(verified_findings)} verified findings")
 
-            # 🔥 验证结果持久化：通过工具将 findings 保存到数据库
+            #  验证结果持久化：通过工具将 findings 保存到数据库
             # LLM 处理层已在验证过程中逐个调用 save_verification_result；
             # 这里作为监控点，记录验证结果统计。
             if "save_verification_result" in self.tools and verified_findings:
@@ -2970,7 +2970,7 @@ class VerificationAgent(BaseAgent):
                     false_positive_count,
                 )
             
-            # 🔥 兜底机制：检查是否遗漏了 save_verification_result 调用
+            #  兜底机制：检查是否遗漏了 save_verification_result 调用
             fallback_result = await self._fallback_check_and_save(
                 conversation_history=self._conversation_history,
                 expected_tool="save_verification_result",

@@ -392,7 +392,7 @@ class ReconAgent(BaseAgent):
             name="Recon",
             agent_type=AgentType.RECON,
             pattern=AgentPattern.REACT,
-            max_iterations=25,  # 🔥 增加迭代次数以支持全面侦查
+            max_iterations=25,  #  增加迭代次数以支持全面侦查
             system_prompt=full_system_prompt,
         )
         super().__init__(config, llm_service, tools, event_emitter)
@@ -608,7 +608,7 @@ class ReconAgent(BaseAgent):
         task = input_data.get("task", "")
         task_context = input_data.get("task_context", "")
         
-        # 🔥 获取目标文件列表
+        #  获取目标文件列表
         target_files = config.get("target_files", [])
         exclude_patterns = config.get("exclude_patterns", [])
         self._empty_retry_count = 0
@@ -624,7 +624,7 @@ class ReconAgent(BaseAgent):
 
 """
 
-        # 🔥 项目级 Markdown 长期记忆（无需 RAG/Embedding）
+        #  项目级 Markdown 长期记忆（无需 RAG/Embedding）
         markdown_memory = config.get("markdown_memory") if isinstance(config, dict) else None
         if isinstance(markdown_memory, dict):
             shared_mem = str(markdown_memory.get("shared") or "").strip()
@@ -644,7 +644,7 @@ class ReconAgent(BaseAgent):
 """
 
         initial_message += "## 审计范围\n"
-        # 🔥 如果指定了目标文件，明确告知 Agent
+        #  如果指定了目标文件，明确告知 Agent
         if target_files:
             initial_message += f"""**部分文件审计模式**: 用户指定了 {len(target_files)} 个目标文件进行审计：
 """
@@ -686,7 +686,7 @@ class ReconAgent(BaseAgent):
         self._risk_points_pushed = []
         self._history_compressed_at = []
         final_result = None
-        error_message = None  # 🔥 跟踪错误信息
+        error_message = None  #  跟踪错误信息
         last_action_signature: Optional[str] = None
         repeated_action_streak = 0
         llm_timeout_streak = 0
@@ -701,7 +701,7 @@ class ReconAgent(BaseAgent):
                 
                 self._iteration = iteration + 1
                 
-                # 🔥 再次检查取消标志（在LLM调用之前）
+                #  再次检查取消标志（在LLM调用之前）
                 if self.is_cancelled:
                     await self.emit_thinking("🛑 任务已取消，停止执行")
                     break
@@ -720,7 +720,7 @@ class ReconAgent(BaseAgent):
                 try:
                     llm_output, tokens_this_round = await self.stream_llm_call(
                         self._conversation_history,
-                        # 🔥 不传递 temperature 和 max_tokens，使用用户配置
+                        #  不传递 temperature 和 max_tokens，使用用户配置
                     )
                 except asyncio.CancelledError:
                     logger.info(f"[{self.name}] LLM call cancelled")
@@ -743,7 +743,7 @@ class ReconAgent(BaseAgent):
                     final_result = self._summarize_from_steps()
                     break
                 
-                # 🔥 Enhanced: Handle empty LLM response with better diagnostics
+                #  Enhanced: Handle empty LLM response with better diagnostics
                 if not llm_output or not llm_output.strip():
                     empty_retry_count = getattr(self, '_empty_retry_count', 0) + 1
                     self._empty_retry_count = empty_retry_count
@@ -754,7 +754,7 @@ class ReconAgent(BaseAgent):
                     empty_from_stream = empty_reason in {"empty_response", "empty_stream", "empty_done"}
                     conversation_tokens_estimate = self._estimate_conversation_tokens(self._conversation_history)
                     
-                    # 🔥 记录更详细的诊断信息
+                    #  记录更详细的诊断信息
                     logger.warning(
                         f"[{self.name}] Empty LLM response in iteration {self._iteration} "
                         f"(retry {empty_retry_count}/3, tokens_this_round={tokens_this_round}, "
@@ -790,7 +790,7 @@ class ReconAgent(BaseAgent):
                                 "conversation_tokens_estimate": conversation_tokens_estimate,
                             },
                         )
-                        # 🔥 不是直接 break，而是尝试生成一个回退结果
+                        #  不是直接 break，而是尝试生成一个回退结果
                         break
                     
                     if empty_from_stream:
@@ -802,7 +802,7 @@ class ReconAgent(BaseAgent):
                             "禁止仅输出空白或无结构文本。"
                         )
                     else:
-                        # 🔥 更有针对性的重试提示
+                        #  更有针对性的重试提示
                         retry_prompt = f"""收到空响应。请根据以下格式输出你的思考和行动：
 
 Thought: [你对当前情况的分析]
@@ -828,7 +828,7 @@ Final Answer: [JSON格式的结果]"""
                 step = self._parse_llm_response(llm_output)
                 self._steps.append(step)
                 
-                # 🔥 发射 LLM 思考内容事件 - 展示 LLM 在想什么
+                #  发射 LLM 思考内容事件 - 展示 LLM 在想什么
                 if step.thought:
                     await self.emit_llm_thought(step.thought, iteration + 1)
                 
@@ -852,7 +852,7 @@ Final Answer: [JSON格式的结果]"""
                 # 执行工具
                 if step.action:
                     no_action_streak = 0
-                    # 🔥 发射 LLM 动作决策事件
+                    #  发射 LLM 动作决策事件
                     await self.emit_llm_action(step.action, step.action_input or {})
 
                     action_signature = (
@@ -879,7 +879,7 @@ Final Answer: [JSON格式的结果]"""
                         )
                         continue
                     
-                    # 🔥 循环检测：追踪工具调用失败历史
+                    #  循环检测：追踪工具调用失败历史
                     tool_call_key = f"{step.action}:{json.dumps(step.action_input or {}, sort_keys=True)}"
                     if not hasattr(self, '_failed_tool_calls'):
                         self._failed_tool_calls = {}
@@ -889,7 +889,7 @@ Final Answer: [JSON格式的结果]"""
                         step.action_input or {}
                     )
                     
-                    # 🔥 检测工具调用失败并追踪
+                    #  检测工具调用失败并追踪
                     is_tool_error = (
                         "失败" in observation or 
                         "错误" in observation or 
@@ -902,7 +902,7 @@ Final Answer: [JSON格式的结果]"""
                         self._failed_tool_calls[tool_call_key] = self._failed_tool_calls.get(tool_call_key, 0) + 1
                         fail_count = self._failed_tool_calls[tool_call_key]
                         
-                        # 🔥 如果同一调用连续失败3次，添加强制跳过提示
+                        #  如果同一调用连续失败3次，添加强制跳过提示
                         if fail_count >= 3:
                             logger.warning(f"[{self.name}] Tool call failed {fail_count} times: {tool_call_key}")
                             observation += f"\n\n**系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
@@ -942,14 +942,14 @@ Final Answer: [JSON格式的结果]"""
                                         "vulnerability_type": str(rp.get("vulnerability_type", "unknown")),
                                     })
                     
-                    # 🔥 工具执行后检查取消状态
+                    #  工具执行后检查取消状态
                     if self.is_cancelled:
                         logger.info(f"[{self.name}] Cancelled after tool execution")
                         break
                     
                     step.observation = observation
                     
-                    # 🔥 发射 LLM 观察事件
+                    #  发射 LLM 观察事件
                     await self.emit_llm_observation(observation)
                     
                     # 添加观察结果到历史
@@ -977,7 +977,7 @@ Final Answer: [JSON格式的结果]"""
                         "content": "请继续。你输出了 Thought 但没有输出 Action。请**立即**选择一个工具执行（Action: ...），或者如果信息收集完成，输出 Final Answer。",
                     })
             
-            # 🔥 如果循环结束但没有 final_result，强制 LLM 总结
+            #  如果循环结束但没有 final_result，强制 LLM 总结
             if not final_result and not self.is_cancelled and not error_message:
                 await self.emit_thinking("信息收集阶段结束，正在生成总结...")
                 
@@ -1010,7 +1010,7 @@ Final Answer:""",
                 try:
                     summary_output, _ = await self.stream_llm_call(
                         self._conversation_history,
-                        # 🔥 不传递 temperature 和 max_tokens，使用用户配置
+                        #  不传递 temperature 和 max_tokens，使用用户配置
                     )
                     
                     if summary_output and summary_output.strip():
@@ -1028,7 +1028,7 @@ Final Answer:""",
             # 处理结果
             duration_ms = int((time.time() - start_time) * 1000)
             
-            # 🔥 如果被取消，返回取消结果
+            #  如果被取消，返回取消结果
             if self.is_cancelled:
                 await self.emit_event(
                     "info",
@@ -1044,7 +1044,7 @@ Final Answer:""",
                     duration_ms=duration_ms,
                 )
             
-            # 🔥 如果有错误，返回失败结果
+            #  如果有错误，返回失败结果
             if error_message:
                 await self.emit_event(
                     "error",
@@ -1067,7 +1067,7 @@ Final Answer:""",
                 final_result = self._ensure_project_profile(final_result)
                 await self._sync_recon_queue(final_result)
             
-            # 🔥 记录工作和洞察
+            #  记录工作和洞察
             self.record_work(f"完成项目信息收集，发现 {len(final_result.get('entry_points', []))} 个入口点")
             self.record_work(f"识别技术栈: {final_result.get('tech_stack', {})}")
 
@@ -1081,7 +1081,7 @@ Final Answer:""",
                 f"Recon Agent 完成: {self._iteration} 轮迭代, {self._tool_calls} 次工具调用"
             )
 
-            # 🔥 创建 TaskHandoff - 传递给下游 Agent
+            #  创建 TaskHandoff - 传递给下游 Agent
             handoff = self._create_recon_handoff(final_result)
 
             return AgentResult(
@@ -1091,7 +1091,7 @@ Final Answer:""",
                 tool_calls=self._tool_calls,
                 tokens_used=self._total_tokens,
                 duration_ms=duration_ms,
-                handoff=handoff,  # 🔥 添加 handoff
+                handoff=handoff,  #  添加 handoff
             )
             
         except Exception as e:
@@ -1288,10 +1288,10 @@ Final Answer:""",
             "high_risk_areas": [],
             "dependencies": {},
             "initial_findings": [],
-            "summary": "",  # 🔥 新增：汇总 LLM 的思考
+            "summary": "",  #  新增：汇总 LLM 的思考
         }
         
-        # 🔥 收集所有 LLM 的思考内容
+        #  收集所有 LLM 的思考内容
         thoughts = []
         
         # 从步骤的观察结果和思考中提取信息
@@ -1350,7 +1350,7 @@ Final Answer:""",
                 if "sqlite" in obs_lower:
                     result["tech_stack"]["databases"].append("SQLite")
                 
-                # 🔥 识别高风险区域（从观察中提取）
+                #  识别高风险区域（从观察中提取）
                 risk_keywords = ["api", "auth", "login", "password", "secret", "key", "token", 
                                "admin", "upload", "download", "exec", "eval", "sql", "query"]
                 for keyword in risk_keywords:
@@ -1370,7 +1370,7 @@ Final Answer:""",
         result["risk_points"] = self._extract_risk_points(result)
         result = self._ensure_project_profile(result)
         
-        # 🔥 汇总 LLM 的思考作为 summary
+        #  汇总 LLM 的思考作为 summary
         if thoughts:
             # 取最后几个思考作为总结
             result["summary"] = "\n".join(thoughts[-3:])
@@ -1425,7 +1425,7 @@ Final Answer:""",
             "project_profile": final_result.get("project_profile", {}),
             "project_structure": final_result.get("project_structure", {}),
             # "recommended_tools": final_result.get("recommended_tools", {}),
-            "recommended_tools": {},  # 🔥 目前不传递工具推荐
+            "recommended_tools": {},  #  目前不传递工具推荐
             "dependencies": final_result.get("dependencies", {}),
         }
 

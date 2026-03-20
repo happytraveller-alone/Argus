@@ -202,7 +202,7 @@ class AgentEventEmitter:
             finding_id = str(uuid.uuid4())
         event_type = "finding_verified" if is_verified else "finding_new"
         metadata = {
-            "id": finding_id,  # 🔥 添加 id 字段供前端使用
+            "id": finding_id,  #  添加 id 字段供前端使用
             "title": title,
             "display_title": display_title,
             "severity": severity,
@@ -588,7 +588,7 @@ class EventManager:
         """保存事件到数据库"""
         from app.models.agent_task import AgentEvent
 
-        # 🔥 清理无效的 UTF-8 字符（如二进制内容）
+        #  清理无效的 UTF-8 字符（如二进制内容）
         def sanitize_string(s):
             """清理字符串中的无效 UTF-8 字符"""
             if s is None:
@@ -620,14 +620,14 @@ class EventManager:
                 event_type=event_data["event_type"],
                 sequence=event_data["sequence"],
                 phase=event_data["phase"],
-                message=sanitize_string(event_data["message"]),  # 🔥 清理消息
+                message=sanitize_string(event_data["message"]),  #  清理消息
                 tool_name=event_data["tool_name"],
-                tool_input=sanitize_dict(event_data["tool_input"]),  # 🔥 清理工具输入
-                tool_output=sanitize_dict(event_data["tool_output"]),  # 🔥 清理工具输出
+                tool_input=sanitize_dict(event_data["tool_input"]),  #  清理工具输入
+                tool_output=sanitize_dict(event_data["tool_output"]),  #  清理工具输出
                 tool_duration_ms=event_data["tool_duration_ms"],
                 finding_id=event_data["finding_id"],
                 tokens_used=event_data["tokens_used"],
-                event_metadata=sanitize_dict(event_data["metadata"]),  # 🔥 清理元数据
+                event_metadata=sanitize_dict(event_data["metadata"]),  #  清理元数据
             )
             db.add(event)
             await db.commit()
@@ -635,7 +635,7 @@ class EventManager:
     def create_queue(self, task_id: str) -> asyncio.Queue:
         """创建或获取事件队列"""
         if task_id not in self._event_queues:
-            # 🔥 使用较大的队列容量，缓存更多 token 事件
+            #  使用较大的队列容量，缓存更多 token 事件
             self._event_queues[task_id] = asyncio.Queue(maxsize=5000)
         return self._event_queues[task_id]
     
@@ -692,7 +692,7 @@ class EventManager:
     ) -> AsyncGenerator[Dict, None]:
         """流式获取事件
 
-        🔥 重要: 此方法会先排空队列中已缓存的事件（在 SSE 连接前产生的），
+         重要: 此方法会先排空队列中已缓存的事件（在 SSE 连接前产生的），
         然后继续实时推送新事件。
         只返回序列号 > after_sequence 的事件。
         """
@@ -705,12 +705,12 @@ class EventManager:
             queue = self.create_queue(task_id)
             logger.warning(f"Queue not found for task {task_id}, created new one")
 
-        # 🔥 CRITICAL FIX: 记录当前队列大小，只消耗这些已存在的事件
+        #  CRITICAL FIX: 记录当前队列大小，只消耗这些已存在的事件
         # 之前的 bug: while not queue.empty() 会永远循环，因为 LLM 持续添加事件
         initial_queue_size = queue.qsize()
         logger.info(f"[StreamEvents] Task {task_id}: Draining {initial_queue_size} buffered events...")
 
-        # 🔥 先排空队列中已缓存的事件（只消耗连接时已存在的事件数量）
+        #  先排空队列中已缓存的事件（只消耗连接时已存在的事件数量）
         buffered_count = 0
         skipped_count = 0
         max_drain = initial_queue_size  # 只消耗这么多事件，避免无限循环
@@ -719,7 +719,7 @@ class EventManager:
             try:
                 buffered_event = queue.get_nowait()
 
-                # 🔥 过滤掉序列号 <= after_sequence 的事件
+                #  过滤掉序列号 <= after_sequence 的事件
                 event_sequence = buffered_event.get("sequence", 0)
                 if event_sequence <= after_sequence:
                     skipped_count += 1
@@ -728,7 +728,7 @@ class EventManager:
                 buffered_count += 1
                 yield buffered_event
 
-                # 🔥 取消人为延迟，防止队列堆积
+                #  取消人为延迟，防止队列堆积
                 event_type = buffered_event.get("event_type")
                 # if event_type == "thinking_token":
                 #     await asyncio.sleep(0.005)
@@ -744,7 +744,7 @@ class EventManager:
         if buffered_count > 0 or skipped_count > 0:
             logger.info(f"[StreamEvents] Task {task_id}: Drained {buffered_count} buffered events, skipped {skipped_count}")
 
-        # 🔥 DEBUG: 记录进入实时循环
+        #  DEBUG: 记录进入实时循环
         logger.info(f"[StreamEvents] Task {task_id}: Entering real-time loop, queue size: {queue.qsize()}")
 
         # 然后实时推送新事件
@@ -755,20 +755,20 @@ class EventManager:
                     event = await asyncio.wait_for(queue.get(), timeout=30)
                     logger.debug(f"[StreamEvents] Task {task_id}: Got event from queue: {event.get('event_type')}")
 
-                    # 🔥 过滤掉序列号 <= after_sequence 的事件
+                    #  过滤掉序列号 <= after_sequence 的事件
                     event_sequence = event.get("sequence", 0)
                     if event_sequence <= after_sequence:
                         logger.debug(f"[StreamEvents] Task {task_id}: Skipping event seq={event_sequence} (after_sequence={after_sequence})")
                         continue
 
-                    # 🔥 DEBUG: 记录重要事件被发送
+                    #  DEBUG: 记录重要事件被发送
                     event_type = event.get("event_type")
                     if event_type in ["thinking_start", "thinking_end", "dispatch", "task_complete", "task_error", "tool_call", "tool_result", "llm_action"]:
                         logger.info(f"[StreamEvents] Yielding {event_type} (seq={event_sequence}) for task {task_id}")
 
                     yield event
 
-                    # 🔥 取消人为延迟，防止队列堆积
+                    #  取消人为延迟，防止队列堆积
                     # if event_type == "thinking_token":
                     #     await asyncio.sleep(0.01)
 
@@ -783,7 +783,7 @@ class EventManager:
         except GeneratorExit:
             # SSE 连接断开
             logger.debug(f"SSE stream closed for task {task_id}")
-        # 🔥 不要移除队列，让 AgentRunner 管理队列的生命周期
+        #  不要移除队列，让 AgentRunner 管理队列的生命周期
     
     def create_emitter(self, task_id: str) -> AgentEventEmitter:
         """创建事件发射器"""

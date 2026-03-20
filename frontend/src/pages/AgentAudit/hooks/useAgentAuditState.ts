@@ -68,7 +68,7 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
       return { ...state, findings: action.payload };
 
     case 'ADD_FINDING': {
-      // 🔥 添加单个 finding，避免重复
+      //  添加单个 finding，避免重复
       const newFinding = action.payload;
       const existingIds = new Set(state.findings.map(f => f.id));
       if (newFinding.id && existingIds.has(newFinding.id)) {
@@ -272,9 +272,9 @@ export function useAgentAuditState() {
 
   const addLog = useCallback(
     (log: Omit<LogItem, "id" | "time"> & { time?: string; eventTimestamp?: string | null }): string => {
-    const newLog = createLogItem(log);
-    dispatch({ type: 'SET_LOGS', payload: [...state.logs, newLog] });
-    return newLog.id;
+      const newLog = createLogItem(log);
+      dispatch({ type: 'SET_LOGS', payload: [...state.logs, newLog] });
+      return newLog.id;
     },
     [state.logs],
   );

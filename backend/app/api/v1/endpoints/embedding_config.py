@@ -238,7 +238,7 @@ async def save_embedding_config_to_db(db: AsyncSession, user_id: str, config: Em
 
         other_config[EMBEDDING_CONFIG_KEY] = embedding_data
         user_config.other_config = json.dumps(other_config)
-        # 🔥 显式标记 other_config 字段已修改，确保 SQLAlchemy 检测到变化
+        #  显式标记 other_config 字段已修改，确保 SQLAlchemy 检测到变化
         flag_modified(user_config, "other_config")
     else:
         # 创建新配置

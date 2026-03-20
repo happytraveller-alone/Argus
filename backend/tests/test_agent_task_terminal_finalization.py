@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.api.v1.endpoints import agent_tasks as agent_tasks_module
+from app.api.v1.endpoints import agent_tasks_runtime as runtime_module
 from app.models.agent_task import AgentTaskStatus
 
 
@@ -60,6 +61,11 @@ async def test_finalize_terminal_state_commits_completed_only_after_tool_drain(m
         "_wait_for_terminal_tool_drain",
         _fake_wait_for_terminal_tool_drain,
     )
+    monkeypatch.setattr(
+        runtime_module,
+        "_wait_for_terminal_tool_drain",
+        _fake_wait_for_terminal_tool_drain,
+    )
 
     await agent_tasks_module._finalize_task_terminal_state(
         db=_FakeDB(tracker),
@@ -102,6 +108,11 @@ async def test_finalize_terminal_state_fails_when_tool_drain_times_out(monkeypat
         "_wait_for_terminal_tool_drain",
         _fake_wait_for_terminal_tool_drain,
     )
+    monkeypatch.setattr(
+        runtime_module,
+        "_wait_for_terminal_tool_drain",
+        _fake_wait_for_terminal_tool_drain,
+    )
 
     result = await agent_tasks_module._finalize_task_terminal_state(
         db=_FakeDB(tracker),
@@ -141,6 +152,11 @@ async def test_finalize_terminal_state_fails_when_verification_gate_is_triggered
         "_wait_for_terminal_tool_drain",
         _fake_wait_for_terminal_tool_drain,
     )
+    monkeypatch.setattr(
+        runtime_module,
+        "_wait_for_terminal_tool_drain",
+        _fake_wait_for_terminal_tool_drain,
+    )
 
     result = await agent_tasks_module._finalize_task_terminal_state(
         db=_FakeDB(tracker),
@@ -177,6 +193,11 @@ async def test_finalize_terminal_state_emits_cancel_event_without_completion(mon
         "_wait_for_terminal_tool_drain",
         _fake_wait_for_terminal_tool_drain,
     )
+    monkeypatch.setattr(
+        runtime_module,
+        "_wait_for_terminal_tool_drain",
+        _fake_wait_for_terminal_tool_drain,
+    )
 
     result = await agent_tasks_module._finalize_task_terminal_state(
         db=_FakeDB(tracker),
@@ -192,4 +213,3 @@ async def test_finalize_terminal_state_emits_cancel_event_without_completion(mon
     assert result["status"] == AgentTaskStatus.CANCELLED
     assert task.status == AgentTaskStatus.CANCELLED
     assert [name for name, _ in tracker] == ["commit", "task_cancel"]
-

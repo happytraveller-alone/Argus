@@ -29,17 +29,17 @@ class PatternMatch:
     context: str
     severity: str
     description: str
-    cwe_id: str = ""  # 🔥 添加 CWE ID 引用
+    cwe_id: str = ""  #  添加 CWE ID 引用
 
 
 class PatternMatchInput(BaseModel):
     """模式匹配输入 - 支持两种模式"""
-    # 🔥 模式1: 传入代码内容
+    #  模式1: 传入代码内容
     code: Optional[str] = Field(
         default=None, 
         description="要扫描的代码内容（与 scan_file 二选一）"
     )
-    # 🔥 模式2: 直接扫描文件
+    #  模式2: 直接扫描文件
     scan_file: Optional[str] = Field(
         default=None,
         description="要扫描的文件路径（相对于项目根目录，与 code 二选一）"
@@ -360,7 +360,7 @@ class PatternMatchTool(AgentTool):
         """执行模式匹配 - 支持直接文件扫描或代码内容扫描"""
         normalized_pattern_types = self._normalize_pattern_types(pattern_types)
 
-        # 🔥 模式1: 直接扫描文件 / 目录
+        #  模式1: 直接扫描文件 / 目录
         if scan_file:
             if not self.project_root:
                 return ToolResult(
@@ -401,7 +401,7 @@ class PatternMatchTool(AgentTool):
                     error=f"读取文件失败: {str(e)}"
                 )
         
-        # 🔥 检查是否有代码可以扫描
+        #  检查是否有代码可以扫描
         if not code:
             return ToolResult(
                 success=False,

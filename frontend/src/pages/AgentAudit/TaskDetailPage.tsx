@@ -603,8 +603,8 @@ function AgentAuditPageContent() {
   const lastEventSequenceRef = useRef<number>(0);
   const seenEventKeysRef = useRef<Set<string>>(new Set());
   const seenEventOrderRef = useRef<string[]>([]);
-  const hasConnectedRef = useRef<boolean>(false); // 🔥 追踪是否已连接 SSE
-  const hasLoadedHistoricalEventsRef = useRef<boolean>(false); // 🔥 追踪是否已加载历史事件
+  const hasConnectedRef = useRef<boolean>(false); //  追踪是否已连接 SSE
+  const hasLoadedHistoricalEventsRef = useRef<boolean>(false); //  追踪是否已加载历史事件
   const isBackfillingRef = useRef(false);
   const previousTaskStatusRef = useRef<string | undefined>(undefined);
   const taskStatusRef = useRef<string | undefined>(undefined);
@@ -622,7 +622,7 @@ function AgentAuditPageContent() {
   const runTerminalRecoveryRef = useRef<
     ((triggerReason: string, metadata?: Record<string, unknown>) => void) | null
   >(null);
-  // 🔥 使用 state 来标记历史事件加载状态和触发 streamOptions 重新计算
+  //  使用 state 来标记历史事件加载状态和触发 streamOptions 重新计算
   const [afterSequence, setAfterSequence] = useState<number>(0);
   const [historicalEventsLoaded, setHistoricalEventsLoaded] =
     useState<boolean>(false);
@@ -699,46 +699,46 @@ function AgentAuditPageContent() {
     () =>
       task
         ? buildStatsSummary({
-            task,
-            displayFindings: persistedDisplayFindings,
-            tokenUsage,
-            now: statsNow,
-          })
+          task,
+          displayFindings: persistedDisplayFindings,
+          tokenUsage,
+          now: statsNow,
+        })
         : null,
     [persistedDisplayFindings, statsNow, task, tokenUsage],
   );
   const homeScanCards: HomeScanCard[] = useMemo(
-  () => [
-    {
-      key: "static",
-      title: "静态扫描",
-      intro: "通过严重规则快速、准确定位漏洞",
-      icon: Zap,
-      accentClassName:
-        "from-sky-500/25 via-cyan-500/10 to-transparent border-sky-400/40",
-      targetRoute: "/tasks/static?openCreate=1&source=home-card",
-    },
-    {
-      key: "agent",
-      title: "智能扫描",
-      intro: "智能体上下文推理扫描",
-      icon: Bot,
-      accentClassName:
-        "from-violet-500/25 via-indigo-500/10 to-transparent border-violet-400/40",
-      targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",
-    },
-    {
-      key: "hybrid",
-      title: "混合扫描",
-      intro: "静态 + 智能双阶段链路",
-      icon: Layers,
-      accentClassName:
-        "from-emerald-500/25 via-cyan-500/10 to-transparent border-emerald-400/40",
-      targetRoute: "/tasks/hybrid?openCreate=1&source=home-card",
-    },
-  ],
-  [],
-);
+    () => [
+      {
+        key: "static",
+        title: "静态扫描",
+        intro: "通过严重规则快速、准确定位漏洞",
+        icon: Zap,
+        accentClassName:
+          "from-sky-500/25 via-cyan-500/10 to-transparent border-sky-400/40",
+        targetRoute: "/tasks/static?openCreate=1&source=home-card",
+      },
+      {
+        key: "agent",
+        title: "智能扫描",
+        intro: "智能体上下文推理扫描",
+        icon: Bot,
+        accentClassName:
+          "from-violet-500/25 via-indigo-500/10 to-transparent border-violet-400/40",
+        targetRoute: "/tasks/intelligent?openCreate=1&source=home-card",
+      },
+      {
+        key: "hybrid",
+        title: "混合扫描",
+        intro: "静态 + 智能双阶段链路",
+        icon: Layers,
+        accentClassName:
+          "from-emerald-500/25 via-cyan-500/10 to-transparent border-emerald-400/40",
+        targetRoute: "/tasks/hybrid?openCreate=1&source=home-card",
+      },
+    ],
+    [],
+  );
   useEffect(() => {
     const shouldApply = shouldAutoApplyVerifiedFilter({
       hasVerifiedFinding,
@@ -978,7 +978,7 @@ function AgentAuditPageContent() {
     }
   }, [dispatch, task?.started_at]);
 
-  // 🔥 当 taskId 变化时立即重置状态（新建任务时清理旧日志）
+  //  当 taskId 变化时立即重置状态（新建任务时清理旧日志）
   useEffect(() => {
     // 如果 taskId 发生变化，立即重置
     if (taskId !== previousTaskIdRef.current) {
@@ -997,12 +997,12 @@ function AgentAuditPageContent() {
       verifiedFindingsManuallyClearedRef.current = false;
       // 3. 重置事件序列号和加载状态
       lastEventSequenceRef.current = 0;
-      hasConnectedRef.current = false; // 🔥 重置 SSE 连接标志
-      hasLoadedHistoricalEventsRef.current = false; // 🔥 重置历史事件加载标志
+      hasConnectedRef.current = false; //  重置 SSE 连接标志
+      hasLoadedHistoricalEventsRef.current = false; //  重置历史事件加载标志
       isBackfillingRef.current = false;
       previousTaskStatusRef.current = undefined;
-      setHistoricalEventsLoaded(false); // 🔥 重置历史事件加载状态
-      setAfterSequence(0); // 🔥 重置 afterSequence state
+      setHistoricalEventsLoaded(false); //  重置历史事件加载状态
+      setAfterSequence(0); //  重置 afterSequence state
       setActiveMainTab("logs");
       setFindingsError(null);
       setIsFindingsLoading(false);
@@ -1603,15 +1603,15 @@ function AgentAuditPageContent() {
         const bucketKey = buildToolBucketKey(agentRawName, agentName, toolName);
         const existingLogId = toolCallId
           ? toolLogIdByCallIdRef.current.get(toolCallId) ||
-            logsRef.current.find((item) => item.id === `tool-${toolCallId}`)?.id ||
-            logsRef.current.find((item) => {
-              if (item.type !== "tool") return false;
-              const metadataCallId = toNonEmptyId(
-                (item.detail?.metadata as Record<string, unknown> | undefined)?.tool_call_id,
-              );
-              return metadataCallId === toolCallId;
-            })?.id ||
-            null
+          logsRef.current.find((item) => item.id === `tool-${toolCallId}`)?.id ||
+          logsRef.current.find((item) => {
+            if (item.type !== "tool") return false;
+            const metadataCallId = toNonEmptyId(
+              (item.detail?.metadata as Record<string, unknown> | undefined)?.tool_call_id,
+            );
+            return metadataCallId === toolCallId;
+          })?.id ||
+          null
           : null;
         if (existingLogId) {
           const existing = logsRef.current.find((item) => item.id === existingLogId);
@@ -1731,8 +1731,8 @@ function AgentAuditPageContent() {
         const writeScopeHint =
           writeScopeAllowed === false
             ? `写入已拒绝（${writeScopeReason || "write_scope_not_allowed"}）` +
-              (writeScopeFile ? ` 文件: ${writeScopeFile}` : "") +
-              (writeScopeTotal !== null ? `，当前可写文件数: ${writeScopeTotal}` : "")
+            (writeScopeFile ? ` 文件: ${writeScopeFile}` : "") +
+            (writeScopeTotal !== null ? `，当前可写文件数: ${writeScopeTotal}` : "")
             : "";
 
         const bucketKey = buildToolBucketKey(agentRawName, agentName, toolName);
@@ -2414,7 +2414,7 @@ function AgentAuditPageContent() {
     };
   }, [runTerminalRecovery]);
 
-  // 🔥 NEW: 加载历史事件并转换为日志项
+  //  NEW: 加载历史事件并转换为日志项
   const loadHistoricalEvents = useCallback(async () => {
     if (!taskId) return 0;
 
@@ -2652,7 +2652,7 @@ function AgentAuditPageContent() {
 
   // ============ Effects ============
 
-  // Initial load - 🔥 加载任务数据和历史事件
+  // Initial load -  加载任务数据和历史事件
   useEffect(() => {
     if (!taskId) {
       setShowSplash(true);
@@ -2671,7 +2671,7 @@ function AgentAuditPageContent() {
           loadAgentTree(),
         ]);
 
-        // 🔥 加载历史事件 - 无论任务是否运行都需要加载
+        //  加载历史事件 - 无论任务是否运行都需要加载
         const eventsLoaded = await loadHistoricalEvents();
         console.log(
           `[AgentAudit] Loaded ${eventsLoaded} historical events for task ${taskId}`,
@@ -2697,15 +2697,15 @@ function AgentAuditPageContent() {
     setLoading,
   ]);
 
-  // Stream connection - 🔥 在历史事件加载完成后连接
+  // Stream connection -  在历史事件加载完成后连接
   useEffect(() => {
     // 等待历史事件加载完成，且任务正在运行
     if (!taskId || !task?.status || task.status !== "running") return;
 
-    // 🔥 使用 state 变量确保在历史事件加载完成后才连接
+    //  使用 state 变量确保在历史事件加载完成后才连接
     if (!historicalEventsLoaded) return;
 
-    // 🔥 避免重复连接 - 只连接一次
+    //  避免重复连接 - 只连接一次
     if (hasConnectedRef.current) return;
 
     hasConnectedRef.current = true;
@@ -2723,7 +2723,7 @@ function AgentAuditPageContent() {
       console.log("[AgentAudit] Cleanup: disconnecting stream");
       disconnectStream();
     };
-    // 🔥 CRITICAL FIX: 移除 afterSequence 依赖！
+    //  CRITICAL FIX: 移除 afterSequence 依赖！
     // afterSequence 通过 streamOptions 传递，不需要在这里触发重连
     // 如果包含它，当 loadHistoricalEvents 更新 afterSequence 时会触发断开重连
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3047,7 +3047,7 @@ function AgentAuditPageContent() {
             <h1 className="text-6xl md:text-7xl font-mono font-bold tracking-wider text-foreground">
               VulHunter
             </h1>
-            
+
             <p className="mt-[2vh] text-lg md:text-xl text-muted-foreground leading-relaxed">
               VulHunter 让你以静态、智能或混合方式快速发起代码安全扫描。
             </p>

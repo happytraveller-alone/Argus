@@ -73,7 +73,7 @@ class RunCodeTool(AgentTool):
 
     @property
     def description(self) -> str:
-        return """🔥 通用代码执行工具 - 在沙箱中运行你编写的测试代码
+        return """ 通用代码执行工具 - 在沙箱中运行你编写的测试代码
 
 这是你进行漏洞验证的核心工具。你可以：
 1. 编写 Fuzzing Harness 隔离测试单个函数
@@ -230,7 +230,7 @@ for payload in payloads:
         output_parts.append("\n---")
         output_parts.append("请根据上述输出分析漏洞是否存在。")
 
-        # 🔥 修复：当工具执行失败时，确保 error 字段包含有意义的错误信息
+        #  修复：当工具执行失败时，确保 error 字段包含有意义的错误信息
         # 如果 result['error'] 为空但执行失败，从 stderr 中提取错误
         error_message = result.get("error")
         if not error_message and not result.get("success", False):

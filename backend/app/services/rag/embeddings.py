@@ -492,7 +492,7 @@ class QwenEmbedding(EmbeddingProvider):
             or getattr(settings, "QWEN_API_KEY", None)
             or settings.LLM_API_KEY
         )
-        # 🔥 API 密钥验证
+        #  API 密钥验证
         if not self.api_key:
             raise ValueError(
                 "Qwen embedding requires API key. "
@@ -738,7 +738,7 @@ class EmbeddingService:
             processed_batches = 0
 
             for i in range(0, len(uncached_texts), batch_size):
-                # 🔥 检查是否应该取消
+                #  检查是否应该取消
                 if cancel_check and cancel_check():
                     logger.info(f"[Embedding] Cancelled at batch {processed_batches + 1}/{total_batches}")
                     raise asyncio.CancelledError("嵌入操作已取消")
@@ -758,7 +758,7 @@ class EmbeddingService:
                             self._cache[cache_key] = result.embedding
 
                 except asyncio.CancelledError:
-                    # 🔥 重新抛出取消异常
+                    #  重新抛出取消异常
                     raise
                 except Exception as e:
                     logger.error(f"Batch embedding error: {e}")
@@ -769,7 +769,7 @@ class EmbeddingService:
 
                 processed_batches += 1
 
-                # 🔥 调用进度回调
+                #  调用进度回调
                 if progress_callback:
                     processed_count = min(i + batch_size, len(uncached_texts))
                     try:

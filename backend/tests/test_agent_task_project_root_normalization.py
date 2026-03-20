@@ -4,6 +4,9 @@ from types import SimpleNamespace
 import pytest
 
 from app.api.v1.endpoints import agent_tasks as agent_tasks_module
+from app.api.v1.endpoints import agent_tasks_execution as execution_module
+from app.api.v1.endpoints import agent_tasks_mcp as mcp_module
+from app.api.v1.endpoints import agent_tasks_runtime as runtime_module
 
 
 class _FakeSandboxManager:
@@ -101,7 +104,7 @@ async def test_execute_agent_task_normalizes_project_root_before_building_mcp_ru
     )
     captured = {}
 
-    monkeypatch.setattr(agent_tasks_module, "async_session_factory", lambda: _FakeSession(task))
+    monkeypatch.setattr(execution_module, "async_session_factory", lambda: _FakeSession(task))
 
     async def _fake_get_user_config(*args, **kwargs):
         return {"otherConfig": {}}
@@ -124,20 +127,24 @@ async def test_execute_agent_task_normalizes_project_root_before_building_mcp_ru
         captured["project_root"] = project_root
         raise _StopAfterMCPRuntime("stop after capturing runtime input")
 
-    monkeypatch.setattr(agent_tasks_module, "_get_user_config", _fake_get_user_config)
-    monkeypatch.setattr(agent_tasks_module, "_get_project_root", _fake_get_project_root)
-    monkeypatch.setattr(agent_tasks_module, "_run_with_retries", _passthrough_run_with_retries)
-    monkeypatch.setattr(agent_tasks_module, "_initialize_tools", _fake_initialize_tools)
-    monkeypatch.setattr(agent_tasks_module, "_build_task_mcp_runtime", _fake_build_task_mcp_runtime)
-    monkeypatch.setattr(agent_tasks_module, "_wait_for_terminal_tool_drain", _fake_wait_for_terminal_tool_drain)
-    monkeypatch.setattr(agent_tasks_module, "_build_tool_drain_metadata", lambda result: dict(result or {}))
+    monkeypatch.setattr(execution_module, "_get_user_config", _fake_get_user_config)
+    monkeypatch.setattr(execution_module, "_get_project_root", _fake_get_project_root)
+    monkeypatch.setattr(execution_module, "_run_with_retries", _passthrough_run_with_retries)
+    monkeypatch.setattr(execution_module, "_initialize_tools", _fake_initialize_tools)
+    monkeypatch.setattr(mcp_module, "_build_task_mcp_runtime", _fake_build_task_mcp_runtime)
+    monkeypatch.setattr(execution_module, "_build_task_mcp_runtime", _fake_build_task_mcp_runtime)
+    monkeypatch.setattr(runtime_module, "_wait_for_terminal_tool_drain", _fake_wait_for_terminal_tool_drain)
+    monkeypatch.setattr(runtime_module, "_build_tool_drain_metadata", lambda result: dict(result or {}))
 
     async def _fake_save_agent_tree(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(agent_tasks_module, "_save_agent_tree", _fake_save_agent_tree)
-    monkeypatch.setattr(agent_tasks_module, "_snapshot_runtime_stats_to_task", lambda *args, **kwargs: {})
-    monkeypatch.setattr(agent_tasks_module, "is_task_cancelled", lambda *args, **kwargs: False)
+    monkeypatch.setattr(runtime_module, "_save_agent_tree", _fake_save_agent_tree)
+    monkeypatch.setattr(execution_module, "_save_agent_tree", _fake_save_agent_tree)
+    monkeypatch.setattr(runtime_module, "_snapshot_runtime_stats_to_task", lambda *args, **kwargs: {})
+    monkeypatch.setattr(execution_module, "_snapshot_runtime_stats_to_task", lambda *args, **kwargs: {})
+    monkeypatch.setattr(runtime_module, "is_task_cancelled", lambda *args, **kwargs: False)
+    monkeypatch.setattr(execution_module, "is_task_cancelled", lambda *args, **kwargs: False)
 
     monkeypatch.setattr(tools_module, "SandboxManager", _FakeSandboxManager)
     monkeypatch.setattr(event_manager_module, "EventManager", _FakeEventManager)
@@ -160,7 +167,8 @@ async def test_get_project_root_rejects_non_zip_projects(monkeypatch):
         default_branch="main",
     )
 
-    monkeypatch.setattr(agent_tasks_module, "is_task_cancelled", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(runtime_module, "is_task_cancelled", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(execution_module, "is_task_cancelled", lambda *_args, **_kwargs: False)
 
     with pytest.raises(RuntimeError) as exc_info:
         await agent_tasks_module._get_project_root(

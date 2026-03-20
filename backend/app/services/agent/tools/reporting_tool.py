@@ -53,7 +53,7 @@ class CreateVulnerabilityReportTool(AgentTool):
     通常只有专门的报告Agent或验证Agent才会调用这个工具，
     确保漏洞在被正式报告之前已经经过了充分的验证。
 
-    🔥 v2.1: 添加文件路径验证，拒绝报告不存在的文件
+     v2.1: 添加文件路径验证，拒绝报告不存在的文件
     """
 
     # 存储所有报告的漏洞
@@ -62,7 +62,7 @@ class CreateVulnerabilityReportTool(AgentTool):
     def __init__(self, project_root: Optional[str] = None):
         super().__init__()
         self._reports: List[Dict[str, Any]] = []
-        self.project_root = project_root  # 🔥 v2.1: 用于文件验证
+        self.project_root = project_root  #  v2.1: 用于文件验证
     
     @property
     def name(self) -> str:
@@ -169,7 +169,7 @@ class CreateVulnerabilityReportTool(AgentTool):
         if not file_path or not file_path.strip():
             return ToolResult(success=False, error="文件路径不能为空")
 
-        # 🔥 v2.1: 验证文件路径存在性 - 防止幻觉
+        #  v2.1: 验证文件路径存在性 - 防止幻觉
         if self.project_root:
             # 清理路径（移除可能的行号，如 "app.py:36"）
             clean_path = file_path.split(":")[0].strip() if ":" in file_path else file_path.strip()

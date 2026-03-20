@@ -775,7 +775,7 @@ class ParallelPhaseExecutor:
                 if skip_duplicate:
                     await self.orchestrator.emit_event(
                         "info",
-                        f"⏭️ [Worker-{worker_id}] Verification 跳过重复指纹: {fingerprint[:60]}",
+                        f" [Worker-{worker_id}] Verification 跳过重复指纹: {fingerprint[:60]}",
                     )
                     async with self.lock:
                         state.step_records.append(
@@ -974,7 +974,7 @@ class ParallelPhaseExecutor:
             # 指纹去重
             fingerprint = orc._build_queue_fingerprint(finding)
             if fingerprint and fingerprint in orc._verified_queue_fingerprints:
-                await orc.emit_event("info", f"⏭️ [Workflow] Verification 跳过重复指纹: {fingerprint[:60]}")
+                await orc.emit_event("info", f" [Workflow] Verification 跳过重复指纹: {fingerprint[:60]}")
                 state.step_records.append(
                     WorkflowStepRecord(
                         phase=WorkflowPhase.VERIFICATION,

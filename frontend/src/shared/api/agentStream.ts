@@ -124,9 +124,9 @@ export class AgentStreamHandler {
   private reconnectDelay = 1000;
   private isConnected = false;
   private thinkingBuffer: string[] = [];
-  private reader: ReadableStreamDefaultReader<Uint8Array> | null = null; // 🔥 保存 reader 引用
-  private abortController: AbortController | null = null; // 🔥 用于取消请求
-  private isDisconnecting = false; // 🔥 标记是否正在断开
+  private reader: ReadableStreamDefaultReader<Uint8Array> | null = null; //  保存 reader 引用
+  private abortController: AbortController | null = null; //  用于取消请求
+  private isDisconnecting = false; //  标记是否正在断开
   private terminalEventReceived = false;
 
   constructor(taskId: string, options: StreamOptions = {}) {
@@ -143,11 +143,11 @@ export class AgentStreamHandler {
    * 开始监听事件流
    */
   connect(): void {
-    // 🔥 重置断开标志，允许新的连接
+    //  重置断开标志，允许新的连接
     this.isDisconnecting = false;
     this.terminalEventReceived = false;
 
-    // 🔥 如果已经连接，不重复连接
+    //  如果已经连接，不重复连接
     if (this.isConnected) {
       return;
     }
@@ -228,14 +228,14 @@ export class AgentStreamHandler {
    * 使用 fetch 连接（支持自定义 headers）
    */
   private async connectWithFetch(params: URLSearchParams): Promise<void> {
-    // 🔥 如果正在断开，不连接
+    //  如果正在断开，不连接
     if (this.isDisconnecting) {
       return;
     }
 
     const url = `/api/v1/agent-tasks/${this.taskId}/stream?${params}`;
 
-    // 🔥 创建 AbortController 用于取消请求
+    //  创建 AbortController 用于取消请求
     this.abortController = new AbortController();
 
     try {
@@ -243,7 +243,7 @@ export class AgentStreamHandler {
         headers: {
           'Accept': 'text/event-stream',
         },
-        signal: this.abortController.signal, // 🔥 支持取消
+        signal: this.abortController.signal, //  支持取消
       });
 
       if (!response.ok) {
@@ -262,7 +262,7 @@ export class AgentStreamHandler {
       let buffer = '';
 
       while (true) {
-        // 🔥 检查是否正在断开
+        //  检查是否正在断开
         if (this.isDisconnecting) {
           console.log('[AgentStream] Disconnecting, breaking loop');
           break;
@@ -286,13 +286,13 @@ export class AgentStreamHandler {
         const events = this.parseSSE(buffer);
         buffer = events.remaining;
 
-        // 🔥 DEBUG: 记录接收到的事件
+        //  DEBUG: 记录接收到的事件
         if (events.parsed.length > 0) {
           const eventTypes = events.parsed.map(e => e.type);
           console.log(`[AgentStream] Received ${events.parsed.length} events:`, eventTypes);
         }
 
-        // 🔥 逐个处理事件，添加微延迟确保 React 能逐个渲染
+        //  逐个处理事件，添加微延迟确保 React 能逐个渲染
         for (const event of events.parsed) {
           this.bumpAfterSequence(event.sequence);
           this.handleEvent(event);
@@ -303,13 +303,13 @@ export class AgentStreamHandler {
         }
       }
 
-      // 🔥 正常结束，清理 reader
+      //  正常结束，清理 reader
       if (this.reader) {
         this.reader.releaseLock();
         this.reader = null;
       }
     } catch (error: any) {
-      // 🔥 如果是取消错误，不处理
+      //  如果是取消错误，不处理
       if (error.name === 'AbortError') {
         return;
       }
@@ -319,7 +319,7 @@ export class AgentStreamHandler {
       const message = error instanceof Error ? error.message : String(error);
       this.scheduleReconnect('transport', `连接失败: ${message}`);
     } finally {
-      // 🔥 清理 reader
+      //  清理 reader
       if (this.reader) {
         try {
           this.reader.releaseLock();
@@ -468,7 +468,7 @@ export class AgentStreamHandler {
         break;
 
       // 发现
-      case 'finding':  // 🔥 向后兼容旧的事件类型
+      case 'finding':  //  向后兼容旧的事件类型
       case 'finding_new':
       case 'finding_update':
       case 'finding_verified':
@@ -564,11 +564,11 @@ export class AgentStreamHandler {
    * 断开连接
    */
   disconnect(): void {
-    // 🔥 标记正在断开，防止重连
+    //  标记正在断开，防止重连
     this.isDisconnecting = true;
     this.isConnected = false;
 
-    // 🔥 取消 fetch 请求 (wrap in try-catch to handle AbortError)
+    //  取消 fetch 请求 (wrap in try-catch to handle AbortError)
     if (this.abortController) {
       try {
         this.abortController.abort();
@@ -578,7 +578,7 @@ export class AgentStreamHandler {
       this.abortController = null;
     }
 
-    // 🔥 清理 reader (handle promise rejection from cancel())
+    //  清理 reader (handle promise rejection from cancel())
     if (this.reader) {
       const reader = this.reader;
       this.reader = null;

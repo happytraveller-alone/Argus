@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class StreamEventType(str, Enum):
     """流式事件类型"""
-    # 🔥 LLM 思考相关 - 这些是最重要的！展示 LLM 的大脑活动
+    #  LLM 思考相关 - 这些是最重要的！展示 LLM 的大脑活动
     LLM_START = "llm_start"                # LLM 开始思考
     LLM_THOUGHT = "llm_thought"            # LLM 思考内容 ⭐ 核心
     LLM_DECISION = "llm_decision"          # LLM 决策 ⭐ 核心

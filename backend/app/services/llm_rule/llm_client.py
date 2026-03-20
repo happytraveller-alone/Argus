@@ -140,7 +140,7 @@ class LLMClient:
         """Generate a Semgrep rule using the LLM with improved validation."""
         prompt = self._build_prompt(patch_info, error_feedback)
 
-        # 🔥 记录LLM配置信息
+        #  记录LLM配置信息
         config = self.client.config
         logger.info(f"调用LLM生成规则 - Provider: {config.provider.value}, Model: {config.model}")
 
