@@ -3,7 +3,7 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -31,32 +31,28 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
 	Trash2,
-	Search,
 	Copy,
 	PencilLine,
 	Save,
 	Code,
 	AlertCircle,
-	ChevronLeft,
-	ChevronRight,
 	AlertTriangle,
 	ArrowLeft,
 	Database,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import {
+	type AppColumnDef,
+	createDefaultDataTableState,
+	DataTable,
+	type DataTableQueryState,
+	type DataTableSelectionContext,
+} from "@/components/data-table";
 import {
 	getOpengrepRules,
 	getOpengrepRule,
@@ -100,6 +96,52 @@ interface OpengrepRulesProps {
 	onEngineChange?: (value: "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa") => void;
 }
 
+const DEFAULT_PAGE_SIZE = 10;
+
+function getColumnFilterValue(state: DataTableQueryState, columnId: string) {
+	return state.columnFilters.find((filter) => filter.id === columnId)?.value;
+}
+
+function getStringColumnFilter(
+	state: DataTableQueryState,
+	columnId: string,
+	fallback = "",
+) {
+	const value = getColumnFilterValue(state, columnId);
+	return typeof value === "string" ? value : fallback;
+}
+
+function buildSelectionSummary({
+	selectedCount,
+	filteredCount,
+}: DataTableSelectionContext<OpengrepRule>) {
+	if (selectedCount > 0) {
+		return (
+			<>
+				已选择 <span className="font-bold text-primary">{selectedCount}</span> 条规则
+			</>
+		);
+	}
+	return (
+		<>
+			将对全部 <span className="font-bold text-primary">{filteredCount}</span> 条规则进行操作
+		</>
+	);
+}
+
+function createInitialTableState(globalFilter = ""): DataTableQueryState {
+	return createDefaultDataTableState({
+		globalFilter,
+		pagination: {
+			pageIndex: 0,
+			pageSize: DEFAULT_PAGE_SIZE,
+		},
+		columnVisibility: {
+			isActiveFilter: false,
+		},
+	});
+}
+
 export default function OpengrepRules({
 	embedded = false,
 	showEngineSelector = false,
@@ -124,11 +166,7 @@ export default function OpengrepRules({
 		vulnerabilityTypeCount: 0,
 	});
 	const [loading, setLoading] = useState(true);
-	const [searchTerm, setSearchTerm] = useState("");
-	const [selectedLanguage, setSelectedLanguage] = useState<string>("");
-	const [selectedSource, setSelectedSource] = useState<string>("");
-	const [selectedConfidence, setSelectedConfidence] = useState<string>("");
-	const [selectedActiveStatus, setSelectedActiveStatus] = useState<string>("");
+	const [loadError, setLoadError] = useState<string | null>(null);
 	const [showRuleDetail, setShowRuleDetail] = useState(false);
 	const [selectedRule, setSelectedRule] = useState<OpengrepRuleDetail | null>(
 		null,
@@ -147,11 +185,6 @@ export default function OpengrepRules({
 	const [showGenericDialog, setShowGenericDialog] = useState(false);
 	const [showEventDialog, setShowEventDialog] = useState(false);
 	const [generatingRule, setGeneratingRule] = useState(false);
-	const [currentPage, setCurrentPage] = useState(1);
-	const [pageSize, setPageSize] = useState(10);
-	const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(
-		new Set(),
-	);
 	const [batchOperating, setBatchOperating] = useState(false);
 	const [pendingDeleteRule, setPendingDeleteRule] = useState<{
 		id: string;
@@ -205,10 +238,15 @@ export default function OpengrepRules({
 		queryParams.get("highlightRule"),
 	);
 	const returnTo = queryParams.get("returnTo") || "";
+	const [tableState, setTableState] = useState<DataTableQueryState>(() =>
+		createInitialTableState(highlightRuleKeyword),
+	);
+	const languageFilter = getStringColumnFilter(tableState, "language");
+	const sourceFilter = getStringColumnFilter(tableState, "source");
+	const confidenceFilter = getStringColumnFilter(tableState, "confidence");
+	const activeFilter = getStringColumnFilter(tableState, "isActiveFilter");
 
 	useEffect(() => {
-		setCurrentPage(1);
-		setSelectedRuleIds(new Set());
 		if (isGitleaksEngine) {
 			setGeneratingRules(new Map());
 			setShowGeneratingQueue(false);
@@ -222,22 +260,15 @@ export default function OpengrepRules({
 
 	useEffect(() => {
 		if (!highlightRuleKeyword) return;
-		setSearchTerm(highlightRuleKeyword);
-		setCurrentPage(1);
+		setTableState((current) => ({
+			...current,
+			globalFilter: highlightRuleKeyword,
+			pagination: {
+				...current.pagination,
+				pageIndex: 0,
+			},
+		}));
 	}, [highlightRuleKeyword]);
-
-	// 当筛选条件改变时，重新加载规则
-	useEffect(() => {
-		if (!loading) {
-			setCurrentPage(1);
-			loadRules();
-		}
-	}, [
-		selectedLanguage,
-		selectedSource,
-		selectedConfidence,
-		selectedActiveStatus,
-	]);
 
 	const loadGeneratingRules = async () => {
 		try {
@@ -333,6 +364,7 @@ export default function OpengrepRules({
 			if (!silent) {
 				setLoading(true);
 			}
+			setLoadError(null);
 
 			if (isGitleaksEngine) {
 				setRules([]);
@@ -341,28 +373,21 @@ export default function OpengrepRules({
 				return;
 			}
 
-			const data = await getOpengrepRules({
-				language: selectedLanguage || undefined,
-				source: (selectedSource as "internal" | "patch") || undefined,
-			});
+			const data = await getOpengrepRules();
 			const severeRules = data.filter(
 				(rule) => String(rule.severity || "").toUpperCase() === "ERROR",
 			);
 			setRules(severeRules);
 
-			// 如果是首次加载或没有筛选条件，保存所有规则用于提取语言列表
-			if (!selectedLanguage && !selectedSource) {
-				// 提取所有唯一的编程语言
-				const languages = Array.from(
-					new Set(severeRules.map((rule) => rule.language)),
-				).sort();
-				setAvailableLanguages(languages);
-			}
+			const languages = Array.from(
+				new Set(severeRules.map((rule) => rule.language)),
+			).sort();
+			setAvailableLanguages(languages);
 
-			// 同步启用规则到全局缓存
 			setOpengrepActiveRules(severeRules.filter((rule) => rule.is_active));
 		} catch (error) {
 			console.error("Failed to load rules:", error);
+			setLoadError("加载规则失败");
 			toast.error("加载规则失败");
 		} finally {
 			if (!silent) {
@@ -1011,77 +1036,29 @@ export default function OpengrepRules({
 		await loadGeneratingRules();
 	};
 
-	const handleResetFilters = () => {
-		setSearchTerm("");
-		setSelectedLanguage("");
-		setSelectedSource("");
-		setSelectedConfidence("");
-		setSelectedActiveStatus("");
-		setCurrentPage(1);
-		setSelectedRuleIds(new Set());
-	};
-
-	const handleToggleRuleSelection = (ruleId: string) => {
-		const newSet = new Set(selectedRuleIds);
-		if (newSet.has(ruleId)) {
-			newSet.delete(ruleId);
-		} else {
-			newSet.add(ruleId);
-		}
-		setSelectedRuleIds(newSet);
-	};
-
-	const handleToggleAllSelection = () => {
-		if (selectedRuleIds.size === paginatedRules.length) {
-			setSelectedRuleIds(new Set());
-		} else {
-			setSelectedRuleIds(new Set(paginatedRules.map((r) => r.id)));
-		}
-	};
-
-	const handleBatchUpdateRules = async (isActive: boolean) => {
+	const handleBatchUpdateRules = async (
+		selectedRows: OpengrepRule[],
+		filteredRows: OpengrepRule[],
+		isActive: boolean,
+	) => {
 		if (isGitleaksEngine) {
 			showGitleaksNotReady();
 			return;
 		}
-		// 如果有直接选中的规则 ID，使用 rule_ids 方式
-		if (selectedRuleIds.size > 0) {
-			try {
-				setBatchOperating(true);
-				const result = await batchUpdateOpengrepRules({
-					rule_ids: Array.from(selectedRuleIds),
-					is_active: isActive,
-				});
-				toast.success(result.message);
-				setSelectedRuleIds(new Set());
-				await loadRules({ silent: true });
-				await loadRuleStats();
-			} catch (error) {
-				console.error("Batch operation failed:", error);
-				toast.error("批量操作失败");
-			} finally {
-				setBatchOperating(false);
-			}
+		const targetRows = selectedRows.length > 0 ? selectedRows : filteredRows;
+		if (targetRows.length === 0) {
+			toast.error("当前没有可操作的规则");
 			return;
 		}
 
 		try {
 			setBatchOperating(true);
-			const keyword = searchTerm.trim() || undefined;
-			const currentIsActive =
-				selectedActiveStatus === ""
-					? undefined
-					: selectedActiveStatus === "true";
 			const result = await batchUpdateOpengrepRules({
-				keyword,
-				language: selectedLanguage || undefined,
-				source: (selectedSource as "internal" | "patch") || undefined,
-				severity: "ERROR",
-				confidence: selectedConfidence || undefined,
-				current_is_active: currentIsActive,
+				rule_ids: targetRows.map((row) => row.id),
 				is_active: isActive,
 			});
 			toast.success(result.message);
+			setTableState((current) => ({ ...current, rowSelection: {} }));
 			await loadRules({ silent: true });
 			await loadRuleStats();
 		} catch (error) {
@@ -1092,32 +1069,6 @@ export default function OpengrepRules({
 		}
 	};
 
-	const filteredRules = rules.filter((rule) => {
-		const matchSearch =
-			rule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-			rule.id.toLowerCase().includes(searchTerm.toLowerCase());
-
-		const matchLanguage =
-			!selectedLanguage || rule.language === selectedLanguage;
-		const matchConfidence =
-			!selectedConfidence ||
-			normalizeConfidence(rule.confidence) === selectedConfidence;
-		const matchActiveStatus =
-			!selectedActiveStatus ||
-			(selectedActiveStatus === "true" && rule.is_active) ||
-			(selectedActiveStatus === "false" && !rule.is_active);
-
-		return matchSearch && matchLanguage && matchConfidence && matchActiveStatus;
-	});
-
-	const hasAnyFilter = Boolean(
-		searchTerm.trim() ||
-			selectedLanguage ||
-			selectedSource ||
-			selectedConfidence ||
-			selectedActiveStatus,
-	);
-
 	const isHighlightedRule = (rule: OpengrepRule) => {
 		if (!highlightRuleKeyword) return false;
 		const keyword = highlightRuleKeyword.toLowerCase();
@@ -1127,12 +1078,6 @@ export default function OpengrepRules({
 		);
 	};
 
-	// 分页逻辑
-	const totalPages = Math.ceil(filteredRules.length / pageSize);
-	const paginatedRules = filteredRules.slice(
-		(currentPage - 1) * pageSize,
-		currentPage * pageSize,
-	);
 	function normalizeConfidence(confidence?: string | null) {
 		const normalized = confidence?.trim().toUpperCase();
 		if (!normalized) return "";
@@ -1172,20 +1117,241 @@ export default function OpengrepRules({
 		return source === "patch" ? "补丁生成" : "内置规则";
 	};
 
-	if (loading) {
-		return (
-			<div
-				className={`flex items-center justify-center ${embedded ? "min-h-[360px]" : "min-h-screen"}`}
-			>
-				<div className="text-center space-y-4">
-					<div className="loading-spinner mx-auto" />
-					<p className="text-muted-foreground font-mono text-sm uppercase tracking-wider">
-						加载规则数据...
-					</p>
-				</div>
-			</div>
-		);
-	}
+	const languageOptions = useMemo(
+		() =>
+			availableLanguages.map((language) => ({
+				label: language,
+				value: language,
+			})),
+		[availableLanguages],
+	);
+
+	const sourceOptions = useMemo(
+		() =>
+			RULE_SOURCES.map((source) => ({
+				label: source.label,
+				value: source.value,
+			})),
+		[],
+	);
+
+	const confidenceOptions = useMemo(
+		() => [
+			{ label: getConfidenceLabel("HIGH"), value: "HIGH" },
+			{ label: getConfidenceLabel("MEDIUM"), value: "MEDIUM" },
+			{ label: getConfidenceLabel("LOW"), value: "LOW" },
+		],
+		[isEnglish],
+	);
+
+	const columns = useMemo<AppColumnDef<OpengrepRule, unknown>[]>(
+		() => [
+			{
+				id: "rowNumber",
+				header: "序号",
+				enableSorting: false,
+				enableHiding: false,
+				meta: { label: "序号", align: "center", width: 72 },
+				cell: ({ row, table }) =>
+					table.getState().pagination.pageIndex *
+						table.getState().pagination.pageSize +
+					row.index +
+					1,
+			},
+			{
+				id: "ruleName",
+				accessorFn: (row) => [row.name, row.id].filter(Boolean).join(" "),
+				header: "规则名称",
+				meta: { label: "规则名称", minWidth: 280, filterVariant: "text" },
+				cell: ({ row }) => (
+					<div
+						className={
+							isHighlightedRule(row.original)
+								? "rounded-sm border border-primary/40 bg-primary/10 p-2"
+								: "space-y-0.5"
+						}
+					>
+						<div className="font-semibold text-foreground break-all">
+							{row.original.name}
+						</div>
+						<div className="font-mono text-xs text-muted-foreground break-all">
+							{row.original.id}
+						</div>
+					</div>
+				),
+			},
+			{
+				id: "language",
+				accessorFn: (row) => row.language || "",
+				header: "编程语言",
+				meta: {
+					label: "编程语言",
+					width: 120,
+					filterVariant: "select",
+					filterOptions: languageOptions,
+				},
+				cell: ({ row }) => (
+					<span className="font-mono text-sm text-muted-foreground">
+						{row.original.language}
+					</span>
+				),
+			},
+			{
+				id: "source",
+				accessorFn: (row) => row.source || "",
+				header: "规则来源",
+				meta: {
+					label: "规则来源",
+					width: 120,
+					filterVariant: "select",
+					filterOptions: sourceOptions,
+				},
+				cell: ({ row }) => (
+					<Badge
+						className={`cyber-badge ${
+							row.original.source === "patch"
+								? "cyber-badge-warning"
+								: "cyber-badge-info"
+						}`}
+					>
+						{getSourceBadge(row.original.source)}
+					</Badge>
+				),
+			},
+			{
+				id: "confidence",
+				accessorFn: (row) => normalizeConfidence(row.confidence),
+				header: "置信度",
+				meta: {
+					label: "置信度",
+					width: 120,
+					filterVariant: "select",
+					filterOptions: confidenceOptions,
+				},
+				cell: ({ row }) =>
+					row.original.confidence ? (
+						<Badge
+							className={`cyber-badge ${getConfidenceColor(row.original.confidence)}`}
+						>
+							{getConfidenceLabel(row.original.confidence)}
+						</Badge>
+					) : (
+						<span className="text-sm text-muted-foreground">-</span>
+					),
+			},
+			{
+				id: "status",
+				accessorFn: (row) => (row.is_active ? "已启用" : "已禁用"),
+				header: "启用状态",
+				meta: { label: "启用状态", width: 120 },
+				cell: ({ row }) => (
+					<Badge
+						className={
+							row.original.is_active
+								? "cyber-badge cyber-badge-success"
+								: "cyber-badge cyber-badge-muted"
+						}
+					>
+						{row.original.is_active ? "已启用" : "已禁用"}
+					</Badge>
+				),
+			},
+			{
+				id: "isActiveFilter",
+				accessorFn: (row) => String(row.is_active),
+				header: "启用筛选",
+				enableHiding: false,
+				meta: {
+					label: "启用状态",
+					filterVariant: "select",
+					filterOptions: ACTIVE_STATUS.filter(
+						(status) => status.value === "true" || status.value === "false",
+					),
+				},
+			},
+			{
+				id: "correct",
+				accessorFn: (row) => (row.correct ? "correct" : "uncertain"),
+				header: "验证状态",
+				meta: { label: "验证状态", width: 120 },
+				cell: ({ row }) => (
+					<span
+						className={
+							row.original.correct
+								? "text-sm text-emerald-400"
+								: "text-sm text-amber-400"
+						}
+					>
+						{row.original.correct ? "✓ 正确" : "⚠ 未验证"}
+					</span>
+				),
+			},
+			{
+				id: "createdAt",
+				accessorFn: (row) => row.created_at || "",
+				header: "创建时间",
+				meta: { label: "创建时间", width: 150 },
+				cell: ({ row }) => (
+					<span className="text-sm text-muted-foreground">
+						{new Date(row.original.created_at).toLocaleDateString("zh-CN")}
+					</span>
+				),
+			},
+			{
+				id: "actions",
+				header: "操作",
+				enableSorting: false,
+				enableHiding: false,
+				meta: { label: "操作", minWidth: 320 },
+				cell: ({ row }) => (
+					<div className="flex flex-wrap items-center gap-2">
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={() => void handleViewRule(row.original)}
+							className="cyber-btn-outline h-8 text-xs"
+						>
+							详情
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={() => void handleViewRule(row.original, { edit: true })}
+							className="cyber-btn-outline h-8 text-xs"
+						>
+							编辑
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={() => void handleToggleRule(row.original)}
+							className={
+								row.original.is_active
+									? "cyber-btn-outline h-8 text-xs"
+									: "cyber-btn-primary h-8 text-xs"
+							}
+						>
+							{row.original.is_active ? "禁用" : "启用"}
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={() =>
+								setPendingDeleteRule({
+									id: row.original.id,
+									name: row.original.name,
+								})
+							}
+							className="cyber-btn-outline h-8 text-xs"
+						>
+							删除
+						</Button>
+					</div>
+				),
+			},
+		],
+		[availableLanguages, confidenceOptions, highlightRuleKeyword, isEnglish],
+	);
 
 	return (
 		<div
@@ -1266,269 +1432,24 @@ export default function OpengrepRules({
 					</div>
 
 					<div className="cyber-card relative z-10 overflow-hidden">
-						<div className="p-4">
-							<div className="flex flex-wrap items-end gap-3">
-								<div className="relative w-full max-w-sm shrink-0">
-									<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-									<Input
-										placeholder={t(
-											"opengrep.searchPlaceholder",
-											"搜索规则名称或ID...",
-										)}
-										value={searchTerm}
-										onChange={(e) => setSearchTerm(e.target.value)}
-										className="cyber-input !pl-10 h-10"
-									/>
-								</div>
-
-								<div className="flex flex-1 flex-wrap items-end gap-3">
-									{showEngineSelector ? (
-										<div className="min-w-[150px] flex-1">
-											<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-												扫描引擎
-											</Label>
-											<Select
-												value={engineValue}
-											onValueChange={(val) => {
-												if (
-													val === "opengrep" ||
-													val === "gitleaks" ||
-													val === "bandit" ||
-													val === "phpstan" ||
-											val === "yasa"
-												) {
-													onEngineChange?.(val);
-												}
-											}}
-											>
-												<SelectTrigger className="cyber-input mt-1.5 h-10">
-													<SelectValue placeholder="选择引擎" />
-												</SelectTrigger>
-												<SelectContent className="cyber-dialog border-border">
-												<SelectItem value="opengrep">opengrep</SelectItem>
-												<SelectItem value="gitleaks">gitleaks</SelectItem>
-												<SelectItem value="bandit">bandit</SelectItem>
-												<SelectItem value="phpstan">phpstan</SelectItem>
-											<SelectItem value="yasa">yasa</SelectItem>
-											</SelectContent>
-										</Select>
-									</div>
-									) : null}
-
-									<div className="min-w-[150px] flex-1">
-										<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-											编程语言
-										</Label>
-										<Select
-											value={selectedLanguage || "all"}
-											onValueChange={(val) =>
-												setSelectedLanguage(val === "all" ? "" : val)
-											}
-										>
-											<SelectTrigger className="cyber-input mt-1.5 h-10">
-												<SelectValue placeholder="所有语言" />
-											</SelectTrigger>
-											<SelectContent className="cyber-dialog border-border">
-												<SelectItem value="all">所有语言</SelectItem>
-												{availableLanguages.map((lang) => (
-													<SelectItem key={lang} value={lang}>
-														{lang}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-
-									<div className="min-w-[150px] flex-1">
-										<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-											规则来源
-										</Label>
-										<Select
-											value={selectedSource || "all"}
-											onValueChange={(val) =>
-												setSelectedSource(val === "all" ? "" : val)
-											}
-										>
-											<SelectTrigger className="cyber-input mt-1.5 h-10">
-												<SelectValue placeholder="所有来源" />
-											</SelectTrigger>
-											<SelectContent className="cyber-dialog border-border">
-												<SelectItem value="all">所有来源</SelectItem>
-												{RULE_SOURCES.map((source) => (
-													<SelectItem key={source.value} value={source.value}>
-														{source.label}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-
-									<div className="min-w-[150px] flex-1">
-										<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-											置信度
-										</Label>
-										<Select
-											value={selectedConfidence || "all"}
-											onValueChange={(val) =>
-												setSelectedConfidence(val === "all" ? "" : val)
-											}
-										>
-											<SelectTrigger className="cyber-input mt-1.5 h-10">
-												<SelectValue placeholder="所有等级" />
-											</SelectTrigger>
-											<SelectContent className="cyber-dialog border-border">
-												<SelectItem value="all">所有等级</SelectItem>
-												<SelectItem value="HIGH">
-													{getConfidenceLabel("HIGH")}
-												</SelectItem>
-												<SelectItem value="MEDIUM">
-													{getConfidenceLabel("MEDIUM")}
-												</SelectItem>
-												<SelectItem value="LOW">
-													{getConfidenceLabel("LOW")}
-												</SelectItem>
-											</SelectContent>
-										</Select>
-									</div>
-
-									<div className="min-w-[150px] flex-1">
-										<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-											启用状态
-										</Label>
-										<Select
-											value={selectedActiveStatus || "all"}
-											onValueChange={(val) =>
-												setSelectedActiveStatus(val === "all" ? "" : val)
-											}
-										>
-											<SelectTrigger className="cyber-input mt-1.5 h-10">
-												<SelectValue placeholder="所有状态" />
-											</SelectTrigger>
-											<SelectContent className="cyber-dialog border-border">
-												<SelectItem value="all">所有状态</SelectItem>
-												{ACTIVE_STATUS.map((status) => (
-													<SelectItem key={status.value} value={status.value}>
-														{status.label}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-
-									<div className="ml-auto flex items-end gap-2">
-										<Button
-											variant="outline"
-											onClick={handleResetFilters}
-											className="cyber-btn-outline h-10 min-w-[96px]"
-										>
-											重置
-										</Button>
-										{generatingRules.size > 0 && (
-											<Button
-												onClick={() => setShowGeneratingQueue(!showGeneratingQueue)}
-												className="cyber-btn-primary h-10 min-w-[132px] bg-cyan-950 border-cyan-500 hover:bg-cyan-900"
-											>
-												<div className="relative w-3 h-3 mr-2">
-													<div className="absolute inset-0 bg-cyan-400 rounded-full animate-pulse opacity-50" />
-												</div>
-												生成队列 ({generatingRules.size})
-											</Button>
-										)}
-										<Button
-											onClick={() => {
-												if (isGitleaksEngine) {
-													showGitleaksNotReady();
-													return;
-												}
-												setShowRuleTypeDialog(true);
-											}}
-											className="cyber-btn-primary h-10 min-w-[116px]"
-										>
-											新建规则
-										</Button>
-									</div>
-								</div>
-							</div>
-						</div>
-
-						{filteredRules.length > 0 && (
-							<div className="border-t border-primary/20 bg-primary/5 px-4 py-4">
-								<div className="flex flex-wrap items-center justify-between gap-4">
-									<p className="font-mono text-sm">
-										{selectedRuleIds.size > 0 ? (
-											<>
-												已选择{" "}
-												<span className="font-bold text-primary">
-													{selectedRuleIds.size}
-												</span>{" "}
-												条规则
-											</>
-										) : hasAnyFilter ? (
-											<>
-												将对{" "}
-												<span className="font-bold text-primary">
-													{filteredRules.length}
-												</span>{" "}
-												条符合条件的规则进行操作
-											</>
-										) : (
-											<>
-												将对全部{" "}
-												<span className="font-bold text-primary">
-													{filteredRules.length}
-												</span>{" "}
-												条规则进行操作
-											</>
-										)}
-									</p>
-									<div className="flex flex-wrap gap-2">
-										<Button
-											onClick={() => handleBatchUpdateRules(true)}
-											disabled={batchOperating}
-											className="cyber-btn-primary h-9 text-sm"
-										>
-											{batchOperating ? "处理中..." : "批量启用"}
-										</Button>
-										<Button
-											onClick={() => handleBatchUpdateRules(false)}
-											disabled={batchOperating}
-											className="cyber-btn-outline h-9 text-sm"
-										>
-											{batchOperating ? "处理中..." : "批量禁用"}
-										</Button>
-										<Button
-											onClick={() => {
-												setSelectedRuleIds(new Set());
-												handleResetFilters();
-											}}
-											disabled={batchOperating}
-											className="cyber-btn-ghost h-9 text-sm"
-										>
-											取消操作
-										</Button>
-									</div>
-								</div>
-							</div>
-						)}
-
 						{generatingRules.size > 0 && (
-							<div className="border-t border-cyan-500/30 bg-gradient-to-r from-blue-950/40 to-cyan-950/40">
-								<div className="p-4 space-y-4">
+							<div className="border-b border-cyan-500/30 bg-gradient-to-r from-blue-950/40 to-cyan-950/40">
+								<div className="space-y-4 p-4">
 									<div className="flex items-center justify-between">
 										<div className="flex items-center gap-3">
-											<div className="relative w-5 h-5">
-												<div className="absolute inset-0 bg-cyan-500 rounded-full animate-pulse opacity-50" />
+											<div className="relative h-5 w-5">
+												<div className="absolute inset-0 rounded-full bg-cyan-500 opacity-50 animate-pulse" />
 												<div
-													className="absolute inset-1 border border-cyan-400 rounded-full animate-spin"
+													className="absolute inset-1 rounded-full border border-cyan-400 animate-spin"
 													style={{ animationDuration: "2s" }}
 												/>
 											</div>
-											<h3 className="text-lg font-bold text-cyan-400 font-mono">
+											<h3 className="font-mono text-lg font-bold text-cyan-400">
 												补丁规则生成队列
 											</h3>
 											<Badge
 												variant="outline"
-												className="text-cyan-400 border-cyan-500"
+												className="border-cyan-500 text-cyan-400"
 											>
 												{generatingRules.size} 个
 											</Badge>
@@ -1543,313 +1464,204 @@ export default function OpengrepRules({
 										</Button>
 									</div>
 
-									{showGeneratingQueue && (
-										<div className="space-y-3 max-h-96 overflow-y-auto">
+									{showGeneratingQueue ? (
+										<div className="max-h-96 space-y-3 overflow-y-auto">
 											{Array.from(generatingRules.entries()).map(
-												([ruleId, { name, status }]) => {
-													return (
-														<div
-															key={ruleId}
-															className="space-y-2 p-3 bg-black/30 rounded border border-cyan-500/30"
-														>
-															<div className="flex items-center justify-between">
-																<div className="flex-1">
-																	<p className="text-sm font-mono text-cyan-300 truncate">
-																		{name}
-																	</p>
-																</div>
-																<span className="text-xs font-mono text-muted-foreground ml-2 whitespace-nowrap">
-																	{status}
-																</span>
+												([ruleId, { name, status }]) => (
+													<div
+														key={ruleId}
+														className="space-y-2 rounded border border-cyan-500/30 bg-black/30 p-3"
+													>
+														<div className="flex items-center justify-between">
+															<div className="flex-1">
+																<p className="truncate font-mono text-sm text-cyan-300">
+																	{name}
+																</p>
 															</div>
-															<div className="flex items-center justify-between">
-																<span className="text-xs text-muted-foreground font-mono">
-																	状态
-																</span>
-																<Button
-																	variant="ghost"
-																	size="sm"
-																	onClick={() => {
-																		handleViewRuleById(ruleId);
-																	}}
-																	className="text-xs h-auto py-1 px-2 text-cyan-400 hover:text-cyan-300"
-																>
-																	查看详情
-																</Button>
-															</div>
+															<span className="ml-2 whitespace-nowrap font-mono text-xs text-muted-foreground">
+																{status}
+															</span>
 														</div>
-													);
-												},
+														<div className="flex items-center justify-between">
+															<span className="font-mono text-xs text-muted-foreground">
+																状态
+															</span>
+															<Button
+																variant="ghost"
+																size="sm"
+																onClick={() => {
+																	void handleViewRuleById(ruleId);
+																}}
+																className="h-auto px-2 py-1 text-xs text-cyan-400 hover:text-cyan-300"
+															>
+																查看详情
+															</Button>
+														</div>
+													</div>
+												),
 											)}
 										</div>
-									)}
+									) : null}
 								</div>
 							</div>
 						)}
 
-						<div className="border-t border-border/60">
-						{filteredRules.length === 0 ? (
-							<div className="p-16 text-center">
-								<AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-								<h3 className="text-lg font-bold text-foreground mb-2">
-									未找到规则
-								</h3>
-								<p className="text-muted-foreground font-mono text-sm">
-									{searchTerm ||
-									selectedLanguage ||
-									selectedSource ||
-									selectedConfidence ||
-									selectedActiveStatus
+						<DataTable
+							data={rules}
+							columns={columns}
+							state={tableState}
+							onStateChange={setTableState}
+							loading={loading}
+							error={loadError || undefined}
+							emptyState={{
+								title: "未找到规则",
+								description:
+									tableState.globalFilter ||
+									languageFilter ||
+									sourceFilter ||
+									confidenceFilter ||
+									activeFilter
 										? "调整筛选条件尝试"
-										: "暂无规则数据"}
-								</p>
-							</div>
-						) : (
-							<>
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead className="w-[52px]">
-												<Checkbox
-													checked={
-														selectedRuleIds.size === paginatedRules.length &&
-														paginatedRules.length > 0
-													}
-													onCheckedChange={handleToggleAllSelection}
-													className="w-4 h-4"
-												/>
-											</TableHead>
-											<TableHead className="w-[80px] text-center">序号</TableHead>
-											<TableHead className="min-w-[220px]">规则名称</TableHead>
-											<TableHead className="w-[120px]">编程语言</TableHead>
-											<TableHead className="w-[120px]">规则来源</TableHead>
-											<TableHead className="w-[120px]">置信度</TableHead>
-											<TableHead className="w-[120px]">启用状态</TableHead>
-											<TableHead className="w-[120px]">验证状态</TableHead>
-											<TableHead className="w-[140px]">创建时间</TableHead>
-											<TableHead className="min-w-[320px]">操作</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{paginatedRules.map((rule, rowIndex) => {
-											const rowNumber =
-												(currentPage - 1) * pageSize + rowIndex + 1;
-											return (
-												<TableRow
-													key={rule.id}
-													className={
-														isHighlightedRule(rule) ? "bg-primary/10" : undefined
-													}
-												>
-													<TableCell>
-														<Checkbox
-															checked={selectedRuleIds.has(rule.id)}
-															onCheckedChange={() =>
-																handleToggleRuleSelection(rule.id)
-															}
-															className="w-4 h-4"
-														/>
-													</TableCell>
-													<TableCell className="text-center text-muted-foreground">
-														{rowNumber}
-													</TableCell>
-													<TableCell>
-														<div className="max-w-[260px]">
-															<div
-																className="font-semibold text-foreground truncate"
-																title={rule.name}
-															>
-																{rule.name}
-															</div>
-														</div>
-													</TableCell>
-													<TableCell className="font-mono text-sm">
-														{rule.language}
-													</TableCell>
-													<TableCell>
-														<Badge
-															className={`cyber-badge ${
-																rule.source === "patch"
-																	? "cyber-badge-warning"
-																	: "cyber-badge-info"
-															}`}
-														>
-															{getSourceBadge(rule.source)}
-														</Badge>
-													</TableCell>
-													<TableCell>
-														{rule.confidence ? (
-															<Badge
-																className={`cyber-badge ${getConfidenceColor(rule.confidence)}`}
-															>
-																{getConfidenceLabel(rule.confidence)}
-															</Badge>
-														) : (
-															<span className="text-muted-foreground text-sm">-</span>
-														)}
-													</TableCell>
-													<TableCell>
-														<Badge
-															className={
-																rule.is_active
-																	? "cyber-badge cyber-badge-success"
-																	: "cyber-badge cyber-badge-muted"
-															}
-														>
-															{rule.is_active ? "已启用" : "已禁用"}
-														</Badge>
-													</TableCell>
-													<TableCell>
-														<span
-															className={
-																rule.correct
-																	? "text-emerald-400 text-sm"
-																	: "text-amber-400 text-sm"
-															}
-														>
-															{rule.correct ? "✓ 正确" : "⚠ 未验证"}
-														</span>
-													</TableCell>
-													<TableCell className="text-sm text-muted-foreground">
-														{new Date(rule.created_at).toLocaleDateString("zh-CN")}
-													</TableCell>
-													<TableCell>
-														<div className="flex items-center gap-2 whitespace-nowrap">
-															<Button
-																size="sm"
-																variant="outline"
-																onClick={() => handleViewRule(rule)}
-																className="cyber-btn-ghost h-8 px-3"
-															>
-																详情
-															</Button>
-															<Button
-																size="sm"
-																variant="outline"
-																onClick={() =>
-																	handleViewRule(rule, {
-																		edit: true,
-																	})
-																}
-																className="cyber-btn-ghost h-8 px-3"
-															>
-																编辑
-															</Button>
-															<Button
-																size="sm"
-																variant="outline"
-																onClick={() => handleToggleRule(rule)}
-																className={`cyber-btn-ghost h-8 px-3 ${
-																	rule.is_active
-																		? "hover:bg-rose-500/10"
-																		: "hover:bg-emerald-500/10"
-																}`}
-															>
-																{rule.is_active ? "禁用" : "启用"}
-															</Button>
-															<Button
-																size="sm"
-																variant="outline"
-																onClick={() =>
-																	setPendingDeleteRule({
-																		id: rule.id,
-																		name: rule.name,
-																	})
-																}
-																className="cyber-btn-ghost h-8 px-3 hover:bg-rose-500/10 hover:text-rose-400"
-															>
-																删除
-															</Button>
-														</div>
-													</TableCell>
-												</TableRow>
-											);
-										})}
-									</TableBody>
-								</Table>
-
-								{/* Pagination */}
-								<div className="flex items-center justify-between p-4 border-t border-border bg-muted/20">
-									<div className="flex items-center gap-2">
-										<Label className="text-xs font-mono text-muted-foreground">
-											每页显示:
-										</Label>
+										: "暂无规则数据",
+							}}
+							toolbar={{
+								searchPlaceholder: t(
+									"opengrep.searchPlaceholder",
+									"搜索规则名称或ID...",
+								),
+								filters: [
+									{
+										columnId: "language",
+										label: "编程语言",
+										variant: "select",
+										options: languageOptions,
+									},
+									{
+										columnId: "source",
+										label: "规则来源",
+										variant: "select",
+										options: sourceOptions,
+									},
+									{
+										columnId: "confidence",
+										label: "置信度",
+										variant: "select",
+										options: confidenceOptions,
+									},
+									{
+										columnId: "isActiveFilter",
+										label: "启用状态",
+										variant: "select",
+										options: ACTIVE_STATUS.filter(
+											(status) =>
+												status.value === "true" || status.value === "false",
+										),
+									},
+								],
+								leadingActions: showEngineSelector ? (
+									<div className="min-w-[150px]">
 										<Select
-											value={pageSize.toString()}
-											onValueChange={(val) => {
-												setPageSize(Number(val));
-												setCurrentPage(1);
+											value={engineValue}
+											onValueChange={(value) => {
+												if (
+													value === "opengrep" ||
+													value === "gitleaks" ||
+													value === "bandit" ||
+													value === "phpstan" ||
+													value === "yasa"
+												) {
+													onEngineChange?.(value);
+												}
 											}}
 										>
-											<SelectTrigger className="cyber-input w-[80px] h-8">
-												<SelectValue />
+											<SelectTrigger className="cyber-input h-9 min-w-[150px]">
+												<SelectValue placeholder="选择引擎" />
 											</SelectTrigger>
 											<SelectContent className="cyber-dialog border-border">
-												<SelectItem value="10">10</SelectItem>
-												<SelectItem value="20">20</SelectItem>
-												<SelectItem value="50">50</SelectItem>
-												<SelectItem value="100">100</SelectItem>
+												<SelectItem value="opengrep">opengrep</SelectItem>
+												<SelectItem value="gitleaks">gitleaks</SelectItem>
+												<SelectItem value="bandit">bandit</SelectItem>
+												<SelectItem value="phpstan">phpstan</SelectItem>
+												<SelectItem value="yasa">yasa</SelectItem>
 											</SelectContent>
 										</Select>
 									</div>
-
-									<div className="text-xs font-mono text-muted-foreground">
-										第 {currentPage} / {totalPages} 页 (共{" "}
-										{filteredRules.length} 条)
-									</div>
-
-									<div className="flex items-center gap-2">
+								) : undefined,
+								trailingActions: (
+									<>
+										{generatingRules.size > 0 ? (
+											<Button
+												onClick={() => setShowGeneratingQueue(!showGeneratingQueue)}
+												className="cyber-btn-primary h-9 bg-cyan-950 border-cyan-500 hover:bg-cyan-900"
+											>
+												<div className="relative mr-2 h-3 w-3">
+													<div className="absolute inset-0 rounded-full bg-cyan-400 opacity-50 animate-pulse" />
+												</div>
+												生成队列 ({generatingRules.size})
+											</Button>
+										) : null}
 										<Button
-											size="sm"
-											variant="outline"
-											onClick={() =>
-												setCurrentPage(Math.max(1, currentPage - 1))
-											}
-											disabled={currentPage === 1}
-											className="cyber-btn-ghost h-8 px-2 w-8"
+											onClick={() => {
+												if (isGitleaksEngine) {
+													showGitleaksNotReady();
+													return;
+												}
+												setShowRuleTypeDialog(true);
+											}}
+											className="cyber-btn-primary h-9"
 										>
-											<ChevronLeft className="w-4 h-4" />
+											新建规则
 										</Button>
-										<div className="flex items-center gap-1">
-											{Array.from(
-												{
-													length: Math.min(5, totalPages),
-												},
-												(_, i) => {
-													const page = Math.max(1, currentPage - 2) + i;
-													if (page > totalPages) return null;
-													return (
+									</>
+								),
+							}}
+							selection={
+								!loading && rules.length > 0
+									? {
+											enableRowSelection: true,
+											summary: buildSelectionSummary,
+											actions: ({ selectedRows, table }) => {
+												const filteredRows = table
+													.getFilteredRowModel()
+													.rows.map((row) => row.original);
+												return (
+													<>
 														<Button
-															key={page}
-															size="sm"
-															variant={
-																page === currentPage ? "default" : "outline"
+															onClick={() =>
+																void handleBatchUpdateRules(
+																	selectedRows,
+																	filteredRows,
+																	true,
+																)
 															}
-															onClick={() => setCurrentPage(page)}
-															className={`cyber-btn-${page === currentPage ? "primary" : "ghost"} h-8 px-2 min-w-8`}
+															disabled={batchOperating}
+															className="cyber-btn-primary h-8 text-sm"
 														>
-															{page}
+															{batchOperating ? "处理中..." : "批量启用"}
 														</Button>
-													);
-												},
-											)}
-										</div>
-										<Button
-											size="sm"
-											variant="outline"
-											onClick={() =>
-												setCurrentPage(Math.min(totalPages, currentPage + 1))
-											}
-											disabled={currentPage === totalPages}
-											className="cyber-btn-ghost h-8 px-2 w-8"
-										>
-											<ChevronRight className="w-4 h-4" />
-										</Button>
-									</div>
-								</div>
-							</>
-						)}
-						</div>
+														<Button
+															onClick={() =>
+																void handleBatchUpdateRules(
+																	selectedRows,
+																	filteredRows,
+																	false,
+																)
+															}
+															disabled={batchOperating}
+															className="cyber-btn-outline h-8 text-sm"
+														>
+															{batchOperating ? "处理中..." : "批量禁用"}
+														</Button>
+													</>
+												);
+											},
+										}
+									: undefined
+							}
+							pagination={{ enabled: true, pageSizeOptions: [10, 20, 50, 100] }}
+							tableClassName="min-w-[1380px]"
+							getRowId={(row) => row.id}
+						/>
 					</div>
 
 					{/* Rule Detail Dialog */}

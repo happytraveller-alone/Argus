@@ -1,15 +1,13 @@
 import { Link } from "react-router-dom";
 import { AlertCircle, Loader2 } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTable,
+  type AppColumnDef,
+  type DataTableQueryState,
+} from "@/components/data-table";
 import {
   appendReturnTo,
   buildFindingDetailPath,
@@ -25,242 +23,359 @@ import {
 const YES_BADGE_CLASS = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
 const NO_BADGE_CLASS = "bg-muted text-muted-foreground border-border";
 
+function getEngineLabel(engine: UnifiedFindingRow["engine"]) {
+  if (engine === "opengrep") return "Opengrep";
+  if (engine === "gitleaks") return "Gitleaks";
+  if (engine === "bandit") return "Bandit";
+  if (engine === "phpstan") return "PHPStan";
+  return "YASA";
+}
+
+function getEngineBadgeClass(engine: UnifiedFindingRow["engine"]) {
+  if (engine === "opengrep") {
+    return "bg-sky-500/20 text-sky-300 border-sky-500/30";
+  }
+  if (engine === "gitleaks") {
+    return "bg-amber-500/20 text-amber-300 border-amber-500/30";
+  }
+  if (engine === "bandit") {
+    return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+  }
+  if (engine === "phpstan") {
+    return "bg-violet-500/20 text-violet-300 border-violet-500/30";
+  }
+  return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
+}
+
+function getColumns(input: {
+  currentRoute: string;
+  updatingKey: string | null;
+  onToggleStatus: (row: UnifiedFindingRow, target: FindingStatus) => void;
+}): AppColumnDef<UnifiedFindingRow, unknown>[] {
+  return [
+    {
+      id: "rowNumber",
+      header: "序号",
+      enableSorting: false,
+      meta: {
+        label: "序号",
+        align: "center",
+        width: 72,
+      },
+      cell: ({ row, table }) =>
+        table.getState().pagination.pageIndex * table.getState().pagination.pageSize +
+        row.index +
+        1,
+    },
+    {
+      id: "engine",
+      accessorFn: (row) => row.engine,
+      header: "所属引擎",
+      meta: {
+        label: "所属引擎",
+        width: 110,
+        filterVariant: "select",
+        filterOptions: [
+          { label: "Opengrep", value: "opengrep" },
+          { label: "Gitleaks", value: "gitleaks" },
+          { label: "Bandit", value: "bandit" },
+          { label: "PHPStan", value: "phpstan" },
+          { label: "YASA", value: "yasa" },
+        ],
+      },
+      cell: ({ row }) => (
+        <Badge className={getEngineBadgeClass(row.original.engine)}>
+          {getEngineLabel(row.original.engine)}
+        </Badge>
+      ),
+    },
+    {
+      id: "rule",
+      accessorFn: (row) => row.rule,
+      header: "命中规则",
+      meta: {
+        label: "命中规则",
+        minWidth: 220,
+        filterVariant: "text",
+      },
+      cell: ({ row }) => <span className="text-sm break-all">{row.original.rule || "-"}</span>,
+    },
+    {
+      id: "location",
+      accessorFn: (row) => `${row.filePath}${row.line ? `:${row.line}` : ""}`,
+      header: "命中位置",
+      meta: {
+        label: "命中位置",
+        minWidth: 240,
+      },
+      cell: ({ row }) => (
+        <span className="font-mono text-xs break-all">
+          {row.original.filePath}
+          {row.original.line ? `:${row.original.line}` : ""}
+        </span>
+      ),
+    },
+    {
+      id: "severity",
+      accessorFn: (row) => row.severity,
+      header: "漏洞危害",
+      sortingFn: (left, right) => right.original.severityScore - left.original.severityScore,
+      meta: {
+        label: "漏洞危害",
+        width: 120,
+        filterVariant: "select",
+        filterOptions: [
+          { label: "严重", value: "CRITICAL" },
+          { label: "高危", value: "HIGH" },
+          { label: "中危", value: "MEDIUM" },
+          { label: "低危", value: "LOW" },
+        ],
+      },
+      cell: ({ row }) => (
+        <Badge className={getStaticAnalysisSeverityBadgeClass(row.original.severity)}>
+          {getStaticAnalysisSeverityLabel(row.original.severity)}
+        </Badge>
+      ),
+    },
+    {
+      id: "confidence",
+      accessorFn: (row) => row.confidence,
+      header: "置信度",
+      sortingFn: (left, right) => right.original.confidenceScore - left.original.confidenceScore,
+      meta: {
+        label: "置信度",
+        width: 110,
+        filterVariant: "select",
+        filterOptions: [
+          { label: "高", value: "HIGH" },
+          { label: "中", value: "MEDIUM" },
+          { label: "低", value: "LOW" },
+        ],
+      },
+      cell: ({ row }) => (
+        <Badge className={getStaticAnalysisConfidenceBadgeClass(row.original.confidence)}>
+          {getStaticAnalysisConfidenceLabel(row.original.confidence)}
+        </Badge>
+      ),
+    },
+    {
+      id: "status",
+      accessorFn: (row) => row.status,
+      header: "处理状态",
+      meta: {
+        label: "处理状态",
+        minWidth: 220,
+        filterVariant: "select",
+        filterOptions: [
+          { label: "未处理", value: "open" },
+          { label: "已验证", value: "verified" },
+          { label: "误报", value: "false_positive" },
+          { label: "已修复", value: "fixed" },
+        ],
+      },
+      cell: ({ row }) => {
+        const rowStatus = String(row.original.status || "open").toLowerCase();
+        const processed = rowStatus !== "open";
+        const verified = rowStatus === "verified";
+        const falsePositive = rowStatus === "false_positive";
+        return (
+          <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
+            <Badge className={processed ? YES_BADGE_CLASS : NO_BADGE_CLASS}>
+              处理：{processed ? "是" : "否"}
+            </Badge>
+            <Badge className={verified ? YES_BADGE_CLASS : NO_BADGE_CLASS}>
+              验证：{verified ? "是" : "否"}
+            </Badge>
+            <Badge className={falsePositive ? YES_BADGE_CLASS : NO_BADGE_CLASS}>
+              误报：{falsePositive ? "是" : "否"}
+            </Badge>
+          </div>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "操作",
+      enableSorting: false,
+      meta: {
+        label: "操作",
+        minWidth: 280,
+      },
+      cell: ({ row }) => {
+        const rowStatus = String(row.original.status || "open").toLowerCase();
+        const isOpengrep = row.original.engine === "opengrep";
+        const verifyUpdating = input.updatingKey === `${row.original.engine}:${row.original.id}:verified`;
+        const falsePositiveUpdating =
+          input.updatingKey === `${row.original.engine}:${row.original.id}:false_positive`;
+        const fixedUpdating = input.updatingKey === `${row.original.engine}:${row.original.id}:fixed`;
+        const detailRoute = appendReturnTo(
+          buildFindingDetailPath({
+            source: "static",
+            taskId: row.original.taskId,
+            findingId: row.original.id,
+            engine: row.original.engine,
+          }),
+          input.currentRoute,
+        );
+
+        return (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="cyber-btn-outline h-7 px-2.5"
+            >
+              <Link to={detailRoute}>详情</Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cyber-btn-outline h-7 px-2.5 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10"
+              disabled={Boolean(input.updatingKey)}
+              onClick={() => input.onToggleStatus(row.original, "verified")}
+            >
+              {verifyUpdating ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : rowStatus === "verified" ? (
+                "取消验证"
+              ) : (
+                "验证"
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cyber-btn-outline h-7 px-2.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10"
+              disabled={Boolean(input.updatingKey)}
+              onClick={() => input.onToggleStatus(row.original, "false_positive")}
+            >
+              {falsePositiveUpdating ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : rowStatus === "false_positive" ? (
+                "取消误报"
+              ) : (
+                "误报"
+              )}
+            </Button>
+            {isOpengrep ? null : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cyber-btn-outline h-7 px-2.5 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10"
+                disabled={Boolean(input.updatingKey)}
+                onClick={() => input.onToggleStatus(row.original, "fixed")}
+              >
+                {fixedUpdating ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : rowStatus === "fixed" ? (
+                  "取消修复"
+                ) : (
+                  "修复"
+                )}
+              </Button>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+}
+
 export default function StaticAnalysisFindingsTable({
   currentRoute,
   loadingInitial,
-  pagedRows,
-  pageStart,
-  totalRows,
-  totalPages,
-  clampedPage,
+  rows,
+  state,
+  onStateChange,
   updatingKey,
   onToggleStatus,
-  onPageChange,
 }: {
   currentRoute: string;
   loadingInitial: boolean;
-  pagedRows: UnifiedFindingRow[];
-  pageStart: number;
-  totalRows: number;
-  totalPages: number;
-  clampedPage: number;
+  rows: UnifiedFindingRow[];
+  state: DataTableQueryState;
+  onStateChange: (state: DataTableQueryState) => void;
   updatingKey: string | null;
   onToggleStatus: (row: UnifiedFindingRow, target: FindingStatus) => void;
-  onPageChange: (page: number) => void;
 }) {
+  const columns = getColumns({
+    currentRoute,
+    updatingKey,
+    onToggleStatus,
+  }) as ColumnDef<UnifiedFindingRow>[];
+
   return (
-    <>
-      <div className="border border-border rounded-md overflow-x-auto">
-        <Table className="min-w-[1400px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[72px]">序号</TableHead>
-              <TableHead className="w-[110px]">所属引擎</TableHead>
-              <TableHead className="min-w-[220px]">命中规则</TableHead>
-              <TableHead className="min-w-[240px]">命中位置</TableHead>
-              <TableHead className="w-[120px]">漏洞危害</TableHead>
-              <TableHead className="w-[110px]">置信度</TableHead>
-              <TableHead className="w-[220px]">处理状态</TableHead>
-              <TableHead className="min-w-[280px]">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loadingInitial ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-12 text-center">
-                  <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    加载扫描数据中...
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : pagedRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-12 text-center">
-                  <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                    <AlertCircle className="w-4 h-4" />
-                    暂无符合条件的漏洞
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              pagedRows.map((row, index) => {
-                const rowStatus = String(row.status || "open").toLowerCase();
-                const processed = rowStatus !== "open";
-                const verified = rowStatus === "verified";
-                const falsePositive = rowStatus === "false_positive";
-                const isOpengrep = row.engine === "opengrep";
-                const verifyUpdating = updatingKey === `${row.engine}:${row.id}:verified`;
-                const falsePositiveUpdating =
-                  updatingKey === `${row.engine}:${row.id}:false_positive`;
-                const fixedUpdating = updatingKey === `${row.engine}:${row.id}:fixed`;
-
-                const detailRoute = appendReturnTo(
-                  buildFindingDetailPath({
-                    source: "static",
-                    taskId: row.taskId,
-                    findingId: row.id,
-                    engine: row.engine,
-                  }),
-                  currentRoute,
-                );
-
-                return (
-                  <TableRow key={row.key}>
-                    <TableCell className="font-mono text-xs">
-                      {(pageStart + index + 1).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={
-                          row.engine === "opengrep"
-                            ? "bg-sky-500/20 text-sky-300 border-sky-500/30"
-                            : row.engine === "gitleaks"
-                              ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                              : row.engine === "bandit"
-                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                                : "bg-violet-500/20 text-violet-300 border-violet-500/30"
-                        }
-                      >
-                        {row.engine === "opengrep"
-                          ? "Opengrep"
-                          : row.engine === "gitleaks"
-                            ? "Gitleaks"
-                            : row.engine === "bandit"
-                              ? "Bandit"
-                              : row.engine === "phpstan"
-                                ? "PHPStan"
-                                : "YASA"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm break-all">
-                      {row.rule || "-"}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs break-all">
-                      {row.filePath}
-                      {row.line ? `:${row.line}` : ""}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={getStaticAnalysisSeverityBadgeClass(row.severity)}
-                      >
-                        {getStaticAnalysisSeverityLabel(row.severity)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={getStaticAnalysisConfidenceBadgeClass(row.confidence)}
-                      >
-                        {getStaticAnalysisConfidenceLabel(row.confidence)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
-                        <Badge className={processed ? YES_BADGE_CLASS : NO_BADGE_CLASS}>
-                          处理：{processed ? "是" : "否"}
-                        </Badge>
-                        <Badge className={verified ? YES_BADGE_CLASS : NO_BADGE_CLASS}>
-                          验证：{verified ? "是" : "否"}
-                        </Badge>
-                        <Badge
-                          className={falsePositive ? YES_BADGE_CLASS : NO_BADGE_CLASS}
-                        >
-                          误报：{falsePositive ? "是" : "否"}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Button
-                          asChild
-                          size="sm"
-                          variant="outline"
-                          className="cyber-btn-outline h-7 px-2.5"
-                        >
-                          <Link to={detailRoute}>详情</Link>
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="cyber-btn-outline h-7 px-2.5 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10"
-                          disabled={Boolean(updatingKey)}
-                          onClick={() => onToggleStatus(row, "verified")}
-                        >
-                          {verifyUpdating ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : rowStatus === "verified" ? (
-                            "取消验证"
-                          ) : (
-                            "验证"
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="cyber-btn-outline h-7 px-2.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10"
-                          disabled={Boolean(updatingKey)}
-                          onClick={() => onToggleStatus(row, "false_positive")}
-                        >
-                          {falsePositiveUpdating ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : rowStatus === "false_positive" ? (
-                            "取消误报"
-                          ) : (
-                            "误报"
-                          )}
-                        </Button>
-                        {isOpengrep ? null : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="cyber-btn-outline h-7 px-2.5 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10"
-                            disabled={Boolean(updatingKey)}
-                            onClick={() => onToggleStatus(row, "fixed")}
-                          >
-                            {fixedUpdating ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : rowStatus === "fixed" ? (
-                              "取消修复"
-                            ) : (
-                              "修复"
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="text-xs text-muted-foreground">
-          共 {totalRows.toLocaleString()} 条，当前显示 {pagedRows.length.toLocaleString()} 条
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="cyber-btn-outline h-8"
-            onClick={() => onPageChange(Math.max(1, clampedPage - 1))}
-            disabled={clampedPage <= 1}
-          >
-            上一页
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="cyber-btn-outline h-8"
-            onClick={() => onPageChange(Math.min(totalPages, clampedPage + 1))}
-            disabled={clampedPage >= totalPages}
-          >
-            下一页
-          </Button>
-        </div>
-      </div>
-    </>
+    <DataTable
+      data={rows}
+      columns={columns}
+      state={state}
+      onStateChange={onStateChange}
+      loading={loadingInitial}
+      emptyState={{
+        title: "暂无符合条件的漏洞",
+        description: loadingInitial ? undefined : "可尝试调整筛选条件或稍后刷新",
+      }}
+      toolbar={{
+        searchPlaceholder: "搜索规则、位置或状态",
+        filters: [
+          {
+            columnId: "engine",
+            label: "所属引擎",
+            variant: "select",
+            options: [
+              { label: "Opengrep", value: "opengrep" },
+              { label: "Gitleaks", value: "gitleaks" },
+              { label: "Bandit", value: "bandit" },
+              { label: "PHPStan", value: "phpstan" },
+              { label: "YASA", value: "yasa" },
+            ],
+          },
+          {
+            columnId: "status",
+            label: "状态筛选",
+            variant: "select",
+            options: [
+              { label: "未处理", value: "open" },
+              { label: "已验证", value: "verified" },
+              { label: "误报", value: "false_positive" },
+              { label: "已修复", value: "fixed" },
+            ],
+          },
+          {
+            columnId: "severity",
+            label: "漏洞危害",
+            variant: "select",
+            options: [
+              { label: "严重", value: "CRITICAL" },
+              { label: "高危", value: "HIGH" },
+              { label: "中危", value: "MEDIUM" },
+              { label: "低危", value: "LOW" },
+            ],
+          },
+          {
+            columnId: "confidence",
+            label: "置信度筛选",
+            variant: "select",
+            options: [
+              { label: "高", value: "HIGH" },
+              { label: "中", value: "MEDIUM" },
+              { label: "低", value: "LOW" },
+            ],
+          },
+        ],
+        showColumnVisibility: false,
+      }}
+      pagination={{
+        enabled: true,
+        pageSizeOptions: [10, 20, 50],
+        infoLabel: ({ table, filteredCount }) =>
+          `共 ${filteredCount.toLocaleString()} 条，第 ${
+            table.getState().pagination.pageIndex + 1
+          } / ${Math.max(1, table.getPageCount())} 页`,
+      }}
+      className="border border-border rounded-md"
+      tableClassName="min-w-[1400px]"
+    />
   );
 }

@@ -30,10 +30,12 @@ function decodeToolId(rawToolId?: string) {
 
 function buildSkillExamplePrompts(skillId: string): string[] {
   const catalogPrompts: Record<string, string[]> = {
-    read_file: ["读取 plist 解析入口", "请读取 src/main.c 的关键入口代码窗口"],
+    get_code_window: ["读取 plist 解析入口附近的最小代码窗口", "请围绕 src/main.c 第 12 行取证"],
     search_code: ["搜索 plist_from_memory 的调用位置", "帮我定位 XML 解析相关函数"],
     list_files: ["列出和 plist 解析最相关的源文件", "列出 src 目录下的核心 C 文件"],
-    extract_function: ["提取 plist_from_memory 函数", "提取主解析入口函数代码"],
+    get_file_outline: ["概览 src/main.c 的整体职责", "这个文件在 plist 解析流程里扮演什么角色？"],
+    get_function_summary: ["总结 plist_from_memory 函数做什么", "帮我理解主解析入口函数的风险点"],
+    get_symbol_body: ["提取 plist_from_memory 函数源码", "提取主解析入口函数代码"],
     pattern_match: ["搜索是否存在 XML_PARSE_NOENT 风险模式", "帮我匹配危险解析选项"],
     smart_scan: ["请快速扫描 libplist 的高风险区域", "用 smart_scan 看看哪些文件值得优先阅读"],
     quick_audit: ["对 libplist 做一次快速审计", "请总结 libplist 的优先检查点"],

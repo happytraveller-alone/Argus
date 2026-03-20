@@ -379,7 +379,7 @@ async def test_execute_tool_strict_anchor_bootstraps_read_file_via_search_code()
 async def test_execute_tool_smart_audit_allows_read_file_without_strict_anchor():
     agent, emitter = _make_agent(
         tools={"read_file": _ReadTool()},
-        metadata={"smart_audit_mode": True, "mcp_only_enforced": False},
+        metadata={"smart_audit_mode": True},
     )
 
     output = await agent.execute_tool("read_file", {"file_path": "src/sql_vuln.py"})

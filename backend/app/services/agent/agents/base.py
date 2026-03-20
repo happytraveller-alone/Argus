@@ -50,12 +50,15 @@ MAX_EVENT_PAYLOAD_CHARS = 120000
 
 TOOL_ALIAS_CANDIDATES: Dict[str, List[str]] = {
     "list": ["list_files"],
-    "smart_scan": ["smart_scan", "quick_audit", "pattern_match", "search_code", "read_file"],
-    "quick_audit": ["quick_audit", "smart_scan", "pattern_match", "search_code", "read_file"],
+    "smart_scan": ["smart_scan", "quick_audit", "pattern_match", "search_code", "get_code_window"],
+    "quick_audit": ["quick_audit", "smart_scan", "pattern_match", "search_code", "get_code_window"],
 }
 VIRTUAL_TOOL_NAMES: Set[str] = set()
 
-DOWNLINED_TOOL_MESSAGES: Dict[str, str] = {}
+DOWNLINED_TOOL_MESSAGES: Dict[str, str] = {
+    "read_file": "工具 `read_file` 已下线。请改用 `get_code_window` 获取代码窗口，`get_file_outline` 获取文件概览，或 `get_function_summary` 获取函数语义总结。",
+    "extract_function": "工具 `extract_function` 已下线。请改用 `get_symbol_body` 提取函数/符号主体源码。",
+}
 
 TOOL_INPUT_REPAIR_MAP: Dict[str, str] = {
     "query": "keyword",
@@ -68,7 +71,7 @@ TOOL_INPUT_REPAIR_MAP: Dict[str, str] = {
 }
 
 RETRY_GUARD_TOOLS: Set[str] = {
-    "read_file",
+    "get_code_window",
     "search_code",
     "pattern_match",
     "get_recon_risk_queue_status",
@@ -442,7 +445,6 @@ class BaseAgent(ABC):
         self._deterministic_failure_last_error: Dict[str, str] = {}
         self._recent_thought_texts: deque[str] = deque(maxlen=6)
         self._tool_success_cache: Dict[str, str] = {}
-        self._recent_read_file_paths: deque[str] = deque(maxlen=12)
         self._recent_reason_dirs: deque[str] = deque(maxlen=16)
         self._recent_search_directories: deque[str] = deque(maxlen=12)
         self._mcp_runtime: Optional["MCPRuntime"] = None
@@ -848,14 +850,6 @@ class BaseAgent(ABC):
         return self._metadata_bool(
             metadata,
             "disable_virtual_routing",
-            default=self._is_smart_audit_mode(),
-        )
-
-    def _enforce_mcp_only(self) -> bool:
-        metadata = self._runtime_metadata()
-        return self._metadata_bool(
-            metadata,
-            "mcp_only_enforced",
             default=self._is_smart_audit_mode(),
         )
 
@@ -2080,7 +2074,7 @@ class BaseAgent(ABC):
         if not fallback_names:
             fallback_map: Dict[str, List[str]] = {
                 "query_security_knowledge": ["search_code"],
-                "get_vulnerability_knowledge": ["search_code", "read_file"],
+                "get_vulnerability_knowledge": ["search_code", "get_code_window"],
             }
             fallback_names.extend(fallback_map.get(normalized_tool, []))
 
@@ -2103,7 +2097,7 @@ class BaseAgent(ABC):
                 ).strip()
                 if directory:
                     payload["directory"] = directory
-            elif candidate == "read_file":
+            elif candidate == "get_code_window":
                 file_path = str(
                     source_input.get("file_path")
                     or source_input.get("path")
@@ -2111,11 +2105,15 @@ class BaseAgent(ABC):
                 ).strip()
                 if not file_path:
                     continue
-                payload = {"file_path": file_path}
-                if source_input.get("line_start") is not None:
-                    payload["start_line"] = source_input.get("line_start")
-                if source_input.get("line_end") is not None:
-                    payload["end_line"] = source_input.get("line_end")
+                anchor_line = source_input.get("line_start") or source_input.get("line") or 1
+                payload = {
+                    "file_path": file_path,
+                    "anchor_line": anchor_line,
+                }
+                if source_input.get("before_lines") is not None:
+                    payload["before_lines"] = source_input.get("before_lines")
+                if source_input.get("after_lines") is not None:
+                    payload["after_lines"] = source_input.get("after_lines")
             elif candidate == "locate_enclosing_function":
                 file_path = str(
                     source_input.get("file_path")
@@ -2130,7 +2128,7 @@ class BaseAgent(ABC):
                 line_start = source_input.get("line_start") or source_input.get("line")
                 if line_start is not None:
                     payload["line_start"] = line_start
-            elif candidate == "extract_function":
+            elif candidate == "get_symbol_body":
                 file_path = str(
                     source_input.get("path")
                     or source_input.get("file_path")
@@ -2143,7 +2141,7 @@ class BaseAgent(ABC):
                 ).strip()
                 if not file_path or not symbol_name:
                     continue
-                payload = {"path": file_path, "symbol_name": symbol_name}
+                payload = {"file_path": file_path, "symbol_name": symbol_name}
             fallback_requests.append((candidate, payload))
         return fallback_requests
 
@@ -2276,7 +2274,6 @@ class BaseAgent(ABC):
 
         basename = os.path.basename(value)
         if "." in basename:
-            self._append_recent_unique(self._recent_read_file_paths, value)
             dir_part = os.path.dirname(value)
             self._append_recent_unique(self._recent_reason_dirs, dir_part or ".")
             return
@@ -2299,7 +2296,6 @@ class BaseAgent(ABC):
             self._remember_reason_path(hinted_path)
             candidates.append(hinted_path)
 
-        candidates.extend(list(self._recent_read_file_paths))
         candidates.extend(list(self._recent_reason_dirs))
         candidates.extend(list(self._recent_search_directories))
 
@@ -2322,8 +2318,8 @@ class BaseAgent(ABC):
         tool_metadata: Dict[str, Any],
     ) -> None:
         self._record_evidence_paths_from_tool_context(tool_name, tool_input, tool_metadata)
-        if tool_name == "read_file":
-            for value in (tool_metadata.get("file_path"), tool_input.get("file_path")):
+        if tool_name in {"get_code_window", "get_file_outline", "get_function_summary", "get_symbol_body"}:
+            for value in (tool_metadata.get("file_path"), tool_input.get("file_path"), tool_input.get("path")):
                 self._remember_reason_path(value)
             return
         if tool_name == "search_code":
@@ -2358,8 +2354,10 @@ class BaseAgent(ABC):
         candidates: List[Any] = []
 
         if normalized_tool in {
-            "read_file",
-            "extract_function",
+            "get_code_window",
+            "get_file_outline",
+            "get_function_summary",
+            "get_symbol_body",
             "controlflow_analysis_light",
             "locate_enclosing_function",
             "verify_reachability",
@@ -2995,15 +2993,16 @@ class BaseAgent(ABC):
                 }
             )
 
+            anchor_line = max(read_start, min(line_start, read_end))
             read_input = {
                 "file_path": file_path,
-                "start_line": read_start,
-                "end_line": read_end,
-                "max_lines": bounded_span,
+                "anchor_line": int(anchor_line),
+                "before_lines": int(max(0, anchor_line - read_start)),
+                "after_lines": int(max(0, read_end - anchor_line)),
             }
-            pipeline_steps.append("read_file")
+            pipeline_steps.append("get_code_window")
             read_output = await self.execute_tool(
-                "read_file",
+                "get_code_window",
                 read_input,
                 _fallback_depth=fallback_depth + 1,
             )
@@ -3011,9 +3010,9 @@ class BaseAgent(ABC):
                 blocked_reason = self._classify_verify_blocked_reason(read_output)
                 if blocked_reason is None:
                     blocked_reason = "missing_location"
-                blocked_stage = "read_file"
+                blocked_stage = "get_code_window"
                 if blocked_reason == "mcp_unavailable":
-                    _record_mcp_failure("read_file", read_output)
+                    _record_mcp_failure("get_code_window", read_output)
                 break
 
             locate_input = {
@@ -3048,12 +3047,12 @@ class BaseAgent(ABC):
                 ) or function_end_line
                 if function_name:
                     extract_input = {
-                        "path": file_path,
+                        "file_path": file_path,
                         "symbol_name": function_name,
                     }
-                    pipeline_steps.append("extract_function")
+                    pipeline_steps.append("get_symbol_body")
                     extract_output = await self.execute_tool(
-                        "extract_function",
+                        "get_symbol_body",
                         extract_input,
                         _fallback_depth=fallback_depth + 1,
                     )
@@ -3061,8 +3060,8 @@ class BaseAgent(ABC):
                         extract_blocked = self._classify_verify_blocked_reason(extract_output)
                         if extract_blocked == "mcp_unavailable":
                             blocked_reason = extract_blocked
-                            blocked_stage = "extract_function"
-                            _record_mcp_failure("extract_function", extract_output)
+                            blocked_stage = "get_symbol_body"
+                            _record_mcp_failure("get_symbol_body", extract_output)
                             break
 
             analysis_start_line = (
@@ -3270,7 +3269,7 @@ class BaseAgent(ABC):
 
             target_name = "list_files"
             if any(key in input_dict for key in read_keys):
-                target_name = "read_file"
+                target_name = "get_code_window"
             elif any(key in input_dict for key in search_keys):
                 target_name = "search_code"
 
@@ -3359,27 +3358,20 @@ class BaseAgent(ABC):
         if tool_name not in RETRY_GUARD_TOOLS:
             return None
 
-        if tool_name == "read_file":
+        if tool_name == "get_code_window":
             file_path = self._normalize_path_key(tool_input.get("file_path"))
             if not file_path:
                 return None
-            start_line = self._coerce_positive_int(
-                tool_input.get("start_line") or tool_input.get("line_start")
+            anchor_line = self._coerce_positive_int(
+                tool_input.get("anchor_line") or tool_input.get("line") or tool_input.get("line_start")
             ) or 0
-            end_line = self._coerce_positive_int(
-                tool_input.get("end_line") or tool_input.get("line_end")
-            ) or 0
-            anchor_keyword = str(
-                tool_input.get("keyword")
-                or tool_input.get("pattern")
-                or tool_input.get("query")
-                or ""
-            ).strip()
+            before_lines = self._coerce_positive_int(tool_input.get("before_lines")) or 0
+            after_lines = self._coerce_positive_int(tool_input.get("after_lines")) or 0
             fingerprint_payload = {
                 "file": file_path,
-                "start_line": int(start_line),
-                "end_line": int(end_line),
-                "anchor_keyword": anchor_keyword[:120],
+                "anchor_line": int(anchor_line),
+                "before_lines": int(before_lines),
+                "after_lines": int(after_lines),
             }
             fingerprint = hashlib.sha1(
                 json.dumps(
@@ -3388,7 +3380,7 @@ class BaseAgent(ABC):
                     sort_keys=True,
                 ).encode("utf-8", errors="ignore")
             ).hexdigest()[:12]
-            return f"{tool_name}|{file_path}|{start_line}|{end_line}|{fingerprint}"
+            return f"{tool_name}|{file_path}|{anchor_line}|{before_lines}|{after_lines}|{fingerprint}"
 
         if tool_name == "search_code":
             keyword = str(tool_input.get("keyword") or "").strip()
@@ -4225,10 +4217,7 @@ class BaseAgent(ABC):
         raw_input_text = self._extract_raw_input_text(raw_tool_input, raw_tool_input)
 
         disable_virtual_routing = self._disable_virtual_routing()
-        mcp_only_enforced = self._enforce_mcp_only()
         runtime_policy_metadata: Dict[str, Any] = {}
-        if mcp_only_enforced:
-            runtime_policy_metadata["mcp_only_enforced"] = True
 
         if str(requested_tool_name).strip().lower() == "verify_reachability":
             return await self._execute_verify_reachability_pipeline(
@@ -4252,7 +4241,7 @@ class BaseAgent(ABC):
         local_tool_available = bool(tool and hasattr(tool, "execute"))
 
         mcp_runtime = self._mcp_runtime
-        mcp_strict_mode = self._is_mcp_strict_mode(mcp_runtime) or mcp_only_enforced
+        mcp_strict_mode = self._is_mcp_strict_mode(mcp_runtime)
         mcp_route_registered = bool(
             mcp_runtime
             and hasattr(mcp_runtime, "router")
@@ -4283,7 +4272,7 @@ class BaseAgent(ABC):
             blocked_message = (
                 "工具名不可用（需标准名）\n\n"
                 f"**请求工具**: {requested_tool_name}\n"
-                "请改用当前支持的标准工具名（如 search_code、read_file、locate_enclosing_function）。"
+                "请改用当前支持的标准工具名（如 search_code、get_code_window、locate_enclosing_function）。"
             )
             await self.emit_tool_call(
                 requested_tool_name,
@@ -4323,24 +4312,6 @@ class BaseAgent(ABC):
             repaired_changes = {}
             missing_required = []
             schema_fields = []
-
-        strict_read_error: Optional[str] = None
-        strict_read_metadata: Dict[str, Any] = {}
-        if str(resolved_tool_name or "").strip().lower() == "read_file":
-            (
-                repaired_input,
-                repaired_changes,
-                strict_read_error,
-                strict_read_metadata,
-            ) = await self._apply_strict_read_scope_policy(
-                requested_tool_name=resolved_tool_name,
-                repaired_input=repaired_input,
-                repaired_changes=repaired_changes,
-                raw_input_text=raw_input_text,
-                fallback_depth=_fallback_depth,
-            )
-            if strict_read_metadata:
-                runtime_policy_metadata.update(strict_read_metadata)
 
         auto_retry_once = bool(repaired_input.pop("__auto_retry_once", False))
         auto_repaired_file_path = str(repaired_input.pop("__auto_repaired_file_path", "") or "").strip()
@@ -4384,8 +4355,8 @@ class BaseAgent(ABC):
             else 0
         )
 
-        validation_error: Optional[str] = strict_read_error
-        if not validation_error and missing_required:
+        validation_error: Optional[str] = None
+        if missing_required:
             validation_error = (
                 f"工具参数缺失，必填字段: {', '.join(missing_required)}。"
                 f" schema字段: {', '.join(schema_fields) if schema_fields else '未知'}"
@@ -4428,7 +4399,7 @@ class BaseAgent(ABC):
             normalized_resolved_tool_name = str(resolved_tool_name or "").strip().lower()
             cached_output = self._tool_success_cache.get(tool_call_key)
             runtime_cache_priority = normalized_resolved_tool_name in {
-                "read_file",
+                "get_code_window",
                 "search_code",
             }
             cache_bypass = normalized_resolved_tool_name in NON_CACHEABLE_TOOL_NAMES
@@ -4514,16 +4485,6 @@ class BaseAgent(ABC):
                     validation_error=validation_error,
                     extra_metadata=validation_metadata or None,
                 )
-                if strict_read_error and not missing_required:
-                    failure_output = (
-                        "工具参数校验失败\n\n"
-                        f"**请求工具**: {requested_tool_name}\n"
-                        f"**实际执行工具**: {resolved_tool_name}\n"
-                        f"**错误**: {validation_error}\n"
-                        "请先通过 search_code 获取定位锚点后再重试 read_file。"
-                    )
-                    return failure_output
-                
                 # 🔥 为缺失字段生成更详细的示例
                 example_dict: Dict[str, Any] = {}
                 
@@ -4759,44 +4720,6 @@ class BaseAgent(ABC):
                         strict_error=strict_error,
                         base_metadata=merged_meta,
                     )
-                    normalized_resolved_tool = str(resolved_tool_name or "").strip().lower()
-                    # 🔥 修复：移除 auto_retry_used 变量，不再自动修复路径
-                    if (
-                        normalized_resolved_tool == "read_file"
-                        and not bool(strict_metadata.get("auto_retry_once"))
-                        and self._is_read_file_path_not_found_error(strict_error)
-                    ):
-                        failed_path = str(
-                            repaired_input.get("file_path")
-                            or self._extract_path_from_error_text(strict_error)
-                            or ""
-                        ).strip()
-                        if failed_path:
-                            failed_basename = os.path.basename(failed_path)
-                            failed_stem = os.path.splitext(failed_basename)[0]
-                            search_payload: Dict[str, Any] = {
-                                "keyword": failed_stem or failed_basename,
-                                "max_results": 8,
-                            }
-                            failed_dir = os.path.dirname(failed_path).strip()
-                            if failed_dir:
-                                search_payload["directory"] = failed_dir
-                            if failed_basename:
-                                search_payload["file_pattern"] = failed_basename
-                            search_output = await self.execute_tool(
-                                "search_code",
-                                search_payload,
-                                _fallback_depth=_fallback_depth + 1,
-                            )
-                            if not self._looks_like_tool_failure_output(search_output):
-                                repaired_path, repaired_line = self._extract_location_from_search_output(search_output)
-                                repaired_path = str(repaired_path or "").strip()
-                                if repaired_path and repaired_path != failed_path:
-                                    # 🔥 修复：不自动使用修复后的路径，只记录到 metadata 供用户参考
-                                    strict_failure_metadata["auto_suggested_path"] = repaired_path
-                                    if repaired_line:
-                                        strict_failure_metadata["auto_suggested_line"] = repaired_line
-
                     await self.emit_tool_result(
                         resolved_tool_name,
                         mcp_output or strict_error,

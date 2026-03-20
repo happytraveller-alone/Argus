@@ -10,24 +10,20 @@ import {
 	Bug,
 	FileText,
 	Loader2,
-	Search,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import CreateScanTaskDialog from "@/components/scan/CreateScanTaskDialog";
+import {
+	DataTable,
+	type AppColumnDef,
+	type DataTableQueryState,
+} from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import ProjectTaskFindingsDialog from "@/pages/project-detail/components/ProjectTaskFindingsDialog";
 import ProjectPotentialVulnerabilitiesSection from "@/pages/project-detail/components/ProjectPotentialVulnerabilitiesSection";
 import {
@@ -246,7 +242,6 @@ export default function ProjectDetail() {
 		useState(false);
 	const [lastDescriptionRequestProjectId, setLastDescriptionRequestProjectId] =
 		useState<string | null>(null);
-	const [recentTaskTimeKeyword, setRecentTaskTimeKeyword] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [showCreateScanTaskDialog, setShowCreateScanTaskDialog] = useState(false);
 	const [selectedTaskFindings, setSelectedTaskFindings] = useState<{
@@ -254,6 +249,19 @@ export default function ProjectDetail() {
 		taskCategory: ProjectCardTaskFindingCategory;
 		taskLabel: string;
 	} | null>(null);
+	const [recentTasksTableState, setRecentTasksTableState] =
+		useState<DataTableQueryState>({
+			globalFilter: "",
+			columnFilters: [],
+			sorting: [],
+			pagination: {
+				pageIndex: 0,
+				pageSize: 10,
+			},
+			columnVisibility: {},
+			rowSelection: {},
+			density: "comfortable",
+		});
 
 	const fallbackBackPath = "/projects#project-browser";
 	const sourceFromState =
@@ -650,28 +658,150 @@ export default function ProjectDetail() {
 		if (value === null || !Number.isFinite(value)) return "--";
 		return value.toLocaleString();
 	};
-
-	const filteredRecentTasks = useMemo(() => {
-		const keyword = recentTaskTimeKeyword.trim().toLowerCase();
-		if (!keyword) return recentTasks;
-
-		const normalizeForFuzzyMatch = (value: string) =>
-			value.toLowerCase().replace(/[\s/:\-._年月日时分秒]+/g, "");
-
-		const normalizedKeyword = normalizeForFuzzyMatch(keyword);
-
-		return recentTasks.filter((task) => {
-			const raw = String(task.createdAt || "");
-			const formatted = formatDate(task.createdAt);
-			const searchable = `${raw} ${formatted}`.toLowerCase();
-			const normalizedSearchable = normalizeForFuzzyMatch(searchable);
-			return (
-				searchable.includes(keyword) ||
-				(!!normalizedKeyword &&
-					normalizedSearchable.includes(normalizedKeyword))
-			);
-		});
-	}, [formatDate, recentTaskTimeKeyword, recentTasks]);
+	const recentTaskColumns = useMemo<ColumnDef<(typeof recentTasks)[number]>[]>(
+		() =>
+			[
+				{
+					id: "taskId",
+					accessorFn: (row) => row.id,
+					header: "任务ID",
+					meta: {
+						label: "任务ID",
+						plainHeader: true,
+						minWidth: "28%",
+						headerClassName: "w-[28%] border-r border-border/50 text-center",
+						cellClassName:
+							"border-r border-border/30 text-center text-sm text-foreground whitespace-nowrap",
+					},
+					cell: ({ row }) => `#${row.original.id}`,
+				},
+				{
+					id: "scanTypeLabel",
+					accessorFn: (row) => row.scanTypeLabel,
+					header: "类型",
+					meta: {
+						label: "类型",
+						plainHeader: true,
+						width: "14%",
+						headerClassName: "w-[14%] border-r border-border/50 text-center",
+						cellClassName: "border-r border-border/30 text-center text-sm text-foreground",
+					},
+				},
+				{
+					id: "createdAt",
+					accessorFn: (row) => `${row.createdAt} ${formatDate(row.createdAt)}`,
+					header: "创建时间",
+					meta: {
+						label: "创建时间",
+						plainHeader: true,
+						width: "18%",
+						headerClassName: "w-[18%] border-r border-border/50 text-center",
+						cellClassName:
+							"border-r border-border/30 text-center text-sm text-muted-foreground",
+					},
+					cell: ({ row }) => formatDate(row.original.createdAt),
+				},
+				{
+					id: "status",
+					accessorFn: (row) => row.status,
+					header: "状态",
+					meta: {
+						label: "状态",
+						plainHeader: true,
+						width: "10%",
+						headerClassName: "w-[10%] border-r border-border/50 text-center",
+						cellClassName: "border-r border-border/30 text-center",
+						filterVariant: "select",
+						filterOptions: [
+							{ label: "完成", value: "completed" },
+							{ label: "运行中", value: "running" },
+							{ label: "失败", value: "failed" },
+							{ label: "等待中", value: "pending" },
+							{ label: "中断", value: "interrupted" },
+							{ label: "已取消", value: "cancelled" },
+						],
+					},
+					cell: ({ row }) => <div className="flex justify-center">{getStatusBadge(row.original.status)}</div>,
+				},
+				{
+					id: "vulnerabilities",
+					accessorFn: (row) => formatRecentTaskMetricValue(row.vulnerabilities),
+					header: "漏洞",
+					meta: {
+						label: "漏洞",
+						plainHeader: true,
+						width: "8%",
+						headerClassName: "w-[8%] border-r border-border/50 text-center",
+						cellClassName:
+							"border-r border-border/30 text-center text-sm text-muted-foreground",
+					},
+				},
+				{
+					id: "actions",
+					header: "操作",
+					enableSorting: false,
+					meta: {
+						label: "操作",
+						plainHeader: true,
+						width: "22%",
+						headerClassName: "w-[22%] text-center",
+						cellClassName: "text-center",
+					},
+					cell: ({ row }) => (
+						<div className="flex items-center justify-center gap-2 whitespace-nowrap">
+							<Button
+								asChild
+								size="sm"
+								variant="outline"
+								className="cyber-btn-ghost h-7 px-3"
+							>
+								<Link to={withStaticReturnTo(row.original.route, row.original.kind)}>
+									任务详情
+								</Link>
+							</Button>
+							{row.original.supportsFindingsDetail && row.original.taskCategory ? (
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="cyber-btn-ghost h-7 px-3"
+									onClick={() => {
+										const taskCategory = row.original.taskCategory;
+										if (!taskCategory) return;
+										openTaskFindingsDialog(
+											row.original.id,
+											taskCategory,
+											getProjectDetailPotentialTaskCategoryText(taskCategory),
+										);
+									}}
+								>
+									漏洞详情
+								</Button>
+							) : (
+								<span title={row.original.findingsButtonDisabledReason || undefined}>
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="cyber-btn-ghost h-7 px-3"
+										disabled
+									>
+										漏洞详情
+									</Button>
+								</span>
+							)}
+						</div>
+					),
+				},
+			] satisfies AppColumnDef<(typeof recentTasks)[number], unknown>[],
+		[
+			formatDate,
+			getStatusBadge,
+			openTaskFindingsDialog,
+			withStaticReturnTo,
+			recentTasks,
+		],
+	);
 	if (loading) {
 		return (
 			<div className="flex items-center justify-center min-h-[60vh]">
@@ -745,7 +875,6 @@ export default function ProjectDetail() {
 					}}
 				/>
 
-
 					<div className="flex flex-wrap items-center justify-between gap-3 mb-3">
 						<div className="flex items-center gap-2">
 							<Activity className="w-4 h-4 text-sky-400" />
@@ -753,125 +882,45 @@ export default function ProjectDetail() {
 								最近任务
 							</h3>
 						</div>
-						<div className="relative w-full sm:w-[320px]">
-							<Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-							<Input
-								value={recentTaskTimeKeyword}
-								onChange={(event) =>
-									setRecentTaskTimeKeyword(event.target.value)
-								}
-								placeholder="按时间搜索"
-								className="h-8 pl-8 text-xs"
-							/>
-						</div>
 					</div>
 
-					<Table className="table-fixed">
-						<TableHeader>
-							<TableRow className="border-b border-border/60">
-								<TableHead className="w-[28%] border-r border-border/50 text-center">
-									任务ID
-								</TableHead>
-								<TableHead className="w-[14%] border-r border-border/50 text-center">
-									类型
-								</TableHead>
-								<TableHead className="w-[18%] border-r border-border/50 text-center">
-									创建时间
-								</TableHead>
-								<TableHead className="w-[10%] border-r border-border/50 text-center">
-									状态
-								</TableHead>
-								<TableHead className="w-[8%] border-r border-border/50 text-center">
-									漏洞
-								</TableHead>
-								<TableHead className="w-[22%] text-center">操作</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{filteredRecentTasks.length > 0 ? (
-								filteredRecentTasks.map((task) => {
-									return (
-										<TableRow
-											key={`${task.kind}:${task.id}`}
-											className="border-b border-border/40"
-										>
-											<TableCell className="border-r border-border/30 text-center text-sm text-foreground whitespace-nowrap">
-												#{task.id}
-											</TableCell>
-											<TableCell className="border-r border-border/30 text-center text-sm text-foreground">
-												{task.scanTypeLabel}
-											</TableCell>
-											<TableCell className="border-r border-border/30 text-center text-sm text-muted-foreground">
-												{formatDate(task.createdAt)}
-											</TableCell>
-											<TableCell className="border-r border-border/30 text-center">
-												<div className="flex justify-center">
-													{getStatusBadge(task.status)}
-												</div>
-											</TableCell>
-											<TableCell className="border-r border-border/30 text-center text-sm text-muted-foreground">
-												{formatRecentTaskMetricValue(task.vulnerabilities)}
-											</TableCell>
-											<TableCell className="text-center">
-													<div className="flex items-center justify-center gap-2 whitespace-nowrap">
-														<Button
-															asChild
-															size="sm"
-															variant="outline"
-															className="cyber-btn-ghost h-7 px-3"
-														>
-															<Link to={withStaticReturnTo(task.route, task.kind)}>
-																任务详情
-															</Link>
-														</Button>
-								{task.supportsFindingsDetail && task.taskCategory ? (
-															<Button
-																type="button"
-																size="sm"
-																variant="outline"
-																className="cyber-btn-ghost h-7 px-3"
-																onClick={() => {
-																	const taskCategory = task.taskCategory;
-																	if (!taskCategory) return;
-											openTaskFindingsDialog(
-												task.id,
-												taskCategory,
-												getProjectDetailPotentialTaskCategoryText(taskCategory),
-											);
-										}}
-									>
-																漏洞详情
-															</Button>
-														) : (
-															<span title={task.findingsButtonDisabledReason || undefined}>
-																<Button
-																	type="button"
-																	size="sm"
-																	variant="outline"
-																	className="cyber-btn-ghost h-7 px-3"
-																	disabled
-																>
-																	漏洞详情
-																</Button>
-															</span>
-														)}
-													</div>
-												</TableCell>
-										</TableRow>
-									);
-								})
-							) : (
-								<TableRow>
-									<TableCell
-										colSpan={6}
-										className="py-10 text-center text-sm text-muted-foreground"
-									>
-										{recentTaskTimeKeyword.trim() ? "未匹配到任务" : "暂无任务"}
-									</TableCell>
-								</TableRow>
-							)}
-						</TableBody>
-					</Table>
+					<DataTable
+						data={recentTasks}
+						columns={recentTaskColumns}
+						state={recentTasksTableState}
+						onStateChange={setRecentTasksTableState}
+						emptyState={{
+							title: "暂无任务",
+						}}
+						toolbar={{
+							searchPlaceholder: "搜索任务 ID、类型或创建时间",
+							filters: [
+								{
+									columnId: "status",
+									label: "状态",
+									variant: "select",
+									options: [
+										{ label: "完成", value: "completed" },
+										{ label: "运行中", value: "running" },
+										{ label: "失败", value: "failed" },
+										{ label: "等待中", value: "pending" },
+										{ label: "中断", value: "interrupted" },
+										{ label: "已取消", value: "cancelled" },
+									],
+								},
+							],
+							showColumnVisibility: false,
+						}}
+						pagination={{
+							enabled: true,
+							pageSizeOptions: [10, 20, 50],
+							infoLabel: ({ table, filteredCount }) =>
+								`共 ${filteredCount.toLocaleString()} 条，第 ${
+									table.getState().pagination.pageIndex + 1
+								} / ${Math.max(1, table.getPageCount())} 页`,
+						}}
+						tableClassName="table-fixed"
+					/>
 
 				<ProjectPotentialVulnerabilitiesSection
 					status={potentialStatus}

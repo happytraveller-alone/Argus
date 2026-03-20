@@ -1,4 +1,10 @@
-export type ToolEvidenceRenderType = "code_window" | "search_hits" | "execution_result";
+export type ToolEvidenceRenderType =
+  | "code_window"
+  | "search_hits"
+  | "execution_result"
+  | "outline_summary"
+  | "function_summary"
+  | "symbol_body";
 export type ToolEvidenceLineKind = "context" | "focus" | "match";
 
 export interface ToolEvidenceLine {
@@ -23,10 +29,35 @@ export interface ToolEvidenceSearchHitEntry {
   filePath: string;
   matchLine: number;
   matchText: string;
-  windowStartLine: number;
-  windowEndLine: number;
-  language: string;
-  lines: ToolEvidenceLine[];
+  column?: number | null;
+  symbolName?: string;
+  matchKind?: string;
+}
+
+export interface ToolEvidenceOutlineSummaryEntry {
+  filePath: string;
+  fileRole: string;
+  keySymbols: string[];
+  imports: string[];
+  entrypoints: string[];
+  riskMarkers: string[];
+  frameworkHints: string[];
+}
+
+export interface ToolEvidenceFunctionSummaryEntry {
+  filePath: string;
+  resolvedFunction: string;
+  signature: string;
+  purpose: string;
+  inputs: string[];
+  outputs: string[];
+  keyCalls: string[];
+  riskPoints: string[];
+  relatedSymbols: string[];
+}
+
+export interface ToolEvidenceSymbolBodyEntry extends ToolEvidenceCodeWindowEntry {
+  body: string;
 }
 
 export interface ToolEvidenceArtifact {
@@ -67,6 +98,24 @@ export type ToolEvidencePayload =
       entries: ToolEvidenceSearchHitEntry[];
     }
   | {
+      renderType: "outline_summary";
+      commandChain: string[];
+      displayCommand: string;
+      entries: ToolEvidenceOutlineSummaryEntry[];
+    }
+  | {
+      renderType: "function_summary";
+      commandChain: string[];
+      displayCommand: string;
+      entries: ToolEvidenceFunctionSummaryEntry[];
+    }
+  | {
+      renderType: "symbol_body";
+      commandChain: string[];
+      displayCommand: string;
+      entries: ToolEvidenceSymbolBodyEntry[];
+    }
+  | {
       renderType: "execution_result";
       commandChain: string[];
       displayCommand: string;
@@ -75,7 +124,11 @@ export type ToolEvidencePayload =
 
 const TOOL_EVIDENCE_TOOLS = new Set([
   "read_file",
+  "get_code_window",
   "search_code",
+  "get_file_outline",
+  "get_function_summary",
+  "get_symbol_body",
   "extract_function",
   "run_code",
   "sandbox_exec",
@@ -162,26 +215,90 @@ function parseSearchHitEntries(value: unknown): ToolEvidenceSearchHitEntry[] | n
     const record = asRecord(item);
     if (!record) return null;
     const filePath = toStringValue(record.file_path).trim();
-    const matchLine = toInt(record.match_line);
-    const windowStartLine = toInt(record.window_start_line);
-    const windowEndLine = toInt(record.window_end_line);
-    const lines = parseLines(record.lines);
-    if (
-      !filePath ||
-      matchLine === null ||
-      windowStartLine === null ||
-      windowEndLine === null ||
-      !lines
-    ) {
-      return null;
-    }
+    const matchLine = toInt(record.match_line ?? record.line);
+    if (!filePath || matchLine === null) return null;
     parsed.push({
       filePath,
       matchLine,
       matchText: toStringValue(record.match_text),
-      windowStartLine,
-      windowEndLine,
+      column: toInt(record.column),
+      symbolName: toStringValue(record.symbol_name) || undefined,
+      matchKind: toStringValue(record.match_kind) || undefined,
+    });
+  }
+  return parsed;
+}
+
+function parseOutlineSummaryEntries(value: unknown): ToolEvidenceOutlineSummaryEntry[] | null {
+  if (!Array.isArray(value)) return null;
+  const parsed: ToolEvidenceOutlineSummaryEntry[] = [];
+  for (const item of value) {
+    const record = asRecord(item);
+    if (!record) return null;
+    const filePath = toStringValue(record.file_path).trim();
+    if (!filePath) return null;
+    parsed.push({
+      filePath,
+      fileRole: toStringValue(record.file_role) || "unknown",
+      keySymbols: Array.isArray(record.key_symbols) ? record.key_symbols.map(String) : [],
+      imports: Array.isArray(record.imports) ? record.imports.map(String) : [],
+      entrypoints: Array.isArray(record.entrypoints) ? record.entrypoints.map(String) : [],
+      riskMarkers: Array.isArray(record.risk_markers) ? record.risk_markers.map(String) : [],
+      frameworkHints: Array.isArray(record.framework_hints) ? record.framework_hints.map(String) : [],
+    });
+  }
+  return parsed;
+}
+
+function parseFunctionSummaryEntries(value: unknown): ToolEvidenceFunctionSummaryEntry[] | null {
+  if (!Array.isArray(value)) return null;
+  const parsed: ToolEvidenceFunctionSummaryEntry[] = [];
+  for (const item of value) {
+    const record = asRecord(item);
+    if (!record) return null;
+    const filePath = toStringValue(record.file_path).trim();
+    const resolvedFunction = toStringValue(record.resolved_function).trim();
+    if (!filePath || !resolvedFunction) return null;
+    parsed.push({
+      filePath,
+      resolvedFunction,
+      signature: toStringValue(record.signature),
+      purpose: toStringValue(record.purpose),
+      inputs: Array.isArray(record.inputs) ? record.inputs.map(String) : [],
+      outputs: Array.isArray(record.outputs) ? record.outputs.map(String) : [],
+      keyCalls: Array.isArray(record.key_calls) ? record.key_calls.map(String) : [],
+      riskPoints: Array.isArray(record.risk_points) ? record.risk_points.map(String) : [],
+      relatedSymbols: Array.isArray(record.related_symbols)
+        ? record.related_symbols.map(String)
+        : [],
+    });
+  }
+  return parsed;
+}
+
+function parseSymbolBodyEntries(value: unknown): ToolEvidenceSymbolBodyEntry[] | null {
+  if (!Array.isArray(value)) return null;
+  const parsed: ToolEvidenceSymbolBodyEntry[] = [];
+  for (const item of value) {
+    const record = asRecord(item);
+    if (!record) return null;
+    const filePath = toStringValue(record.file_path).trim();
+    const startLine = toInt(record.start_line);
+    const endLine = toInt(record.end_line);
+    const lines = parseLines(record.lines);
+    if (!filePath || startLine === null || endLine === null || !lines) {
+      return null;
+    }
+    parsed.push({
+      filePath,
+      startLine,
+      endLine,
+      focusLine: startLine,
       language: toStringValue(record.language) || "text",
+      symbolName: toStringValue(record.symbol_name) || undefined,
+      symbolKind: "symbol",
+      title: "符号源码",
+      body: toStringValue(record.body),
       lines,
     });
   }
@@ -286,6 +403,21 @@ export function parseToolEvidence(value: unknown): ToolEvidencePayload | null {
           entries,
         }
       : null;
+  }
+
+  if (renderType === "outline_summary") {
+    const entries = parseOutlineSummaryEntries(metadata.entries);
+    return entries ? { renderType, commandChain, displayCommand, entries } : null;
+  }
+
+  if (renderType === "function_summary") {
+    const entries = parseFunctionSummaryEntries(metadata.entries);
+    return entries ? { renderType, commandChain, displayCommand, entries } : null;
+  }
+
+  if (renderType === "symbol_body") {
+    const entries = parseSymbolBodyEntries(metadata.entries);
+    return entries ? { renderType, commandChain, displayCommand, entries } : null;
   }
 
   if (renderType === "execution_result") {
@@ -581,16 +713,6 @@ function synthesizeSearchCodeEvidence(
       filePath,
       matchLine,
       matchText,
-      windowStartLine: matchLine,
-      windowEndLine: matchLine,
-      language: detectLanguageFromPath(filePath),
-      lines: [
-        {
-          lineNumber: matchLine,
-          text: matchText,
-          kind: "match",
-        },
-      ],
     });
   }
 
@@ -744,7 +866,7 @@ export function parseToolEvidenceFromLog(args: {
   if (metadataPayload) return metadataPayload;
 
   const normalizedTool = String(args.toolName || "").trim().toLowerCase();
-  if (normalizedTool === "read_file") {
+  if (normalizedTool === "read_file" || normalizedTool === "get_code_window") {
     return synthesizeReadFileEvidence(args.toolOutput, args.toolInput, args.toolMetadata, args.logContent);
   }
 
@@ -752,7 +874,7 @@ export function parseToolEvidenceFromLog(args: {
     return synthesizeSearchCodeEvidence(args.toolOutput, args.toolMetadata, args.logContent);
   }
 
-  if (normalizedTool === "extract_function") {
+  if (normalizedTool === "extract_function" || normalizedTool === "get_symbol_body") {
     return synthesizeExtractFunctionEvidence(
       args.toolOutput,
       args.toolInput,

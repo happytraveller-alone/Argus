@@ -74,7 +74,8 @@ def test_business_logic_prompts_require_tool_usage_and_failure_handling():
     assert "工具使用方法（必须遵循）" in BL_ANALYSIS_SYSTEM_PROMPT
     assert "工具调用失败处理（关键）" in BL_ANALYSIS_SYSTEM_PROMPT
     assert "Action Input" in BL_ANALYSIS_SYSTEM_PROMPT
-    assert "read_file" in BL_ANALYSIS_SYSTEM_PROMPT
+    assert "get_code_window" in BL_ANALYSIS_SYSTEM_PROMPT
+    assert "get_function_summary" in BL_ANALYSIS_SYSTEM_PROMPT
     assert "push_finding_to_queue" in BL_ANALYSIS_SYSTEM_PROMPT
 
 
@@ -99,6 +100,11 @@ def test_shared_tool_usage_prompt_only_mentions_core_scan_tools():
     assert "run_code" in TOOL_USAGE_GUIDE
     assert "verify_vulnerability" in TOOL_USAGE_GUIDE
     assert "先用 `search_code` 定位到 `file_path:line`" in TOOL_USAGE_GUIDE
+    assert "get_code_window" in TOOL_USAGE_GUIDE
+    assert "get_function_summary" in TOOL_USAGE_GUIDE
+    assert "get_symbol_body" in TOOL_USAGE_GUIDE
     assert "code_search" not in TOOL_USAGE_GUIDE
+    assert "read_file" not in TOOL_USAGE_GUIDE
+    assert "extract_function" not in TOOL_USAGE_GUIDE
     for token in REMOVED_PROMPT_TOKENS:
         assert token not in TOOL_USAGE_GUIDE

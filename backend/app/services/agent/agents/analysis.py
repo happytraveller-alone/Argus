@@ -99,10 +99,11 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 
 | 工具 | 用途 | 调用时机 |
 |------|------|---------|
-| `read_file` | 读取风险点上下文 | **第一步必做** |
+| `get_code_window` | 读取风险点上下文窗口 | **第一步必做** |
 | `search_code` | 查找相关函数定义、调用链 | 需要追踪变量/函数时 |
 | `pattern_match` | 模式匹配工具 | 使用正则表达式快速扫描代码中的危险模式 |
-| `extract_function` | 提取目标函数代码 | 需要分析特定函数时 |
+| `get_function_summary` | 总结目标函数职责 | 需要理解函数语义时 |
+| `get_symbol_body` | 提取目标函数代码 | 需要分析特定函数时 |
 | `dataflow_analysis` | 追踪污点从 source 到 sink 的流向 | 确认数据流漏洞时 |
 | `controlflow_analysis_light` | 分析条件分支、循环控制流 | 检查权限绕过、条件竞争时 |
 
@@ -125,7 +126,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 ## 🔄 推荐分析流程
 
 ### 阶段一：聚焦验证（必做）
-1. **读取上下文**：`read_file` 读取风险点所在文件，覆盖该行前后至少 30 行
+1. **读取上下文**：`get_code_window` 读取风险点所在文件附近的极小窗口
 2. **初步判断**：验证风险点描述是否准确，是否构成真实漏洞
 3. **即时推送**：若确认漏洞 → **立即推送**，再进入扩展阶段
 
@@ -151,12 +152,12 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 
 | 约束项 | 要求 |
 |--------|------|
-| **代码真实性** | 所有判断必须基于 `read_file` 或工具返回的实际代码，**禁止幻觉** |
+| **代码真实性** | 所有判断必须基于 `get_code_window` / `get_symbol_body` 或工具返回的实际代码，**禁止幻觉** |
 | **推送优先** | 发现漏洞 → **立即推送** → 继续分析，禁止最后批量推送 |
 | **标题格式** | 必须中文三段式：`路径`+`函数`+`漏洞名` |
 | **语言要求** | `title`、`description`、`suggestion` 必须使用**简体中文** |
 | **证据要求** | `critical`/`high` 漏洞需 ≥2 类证据，`evidence_chain` 字段必填 |
-| **首轮行动** | **第一轮必须输出 Action**（read_file 或 search_code），禁止直接 Final Answer |
+| **首轮行动** | **第一轮必须输出 Action**（get_code_window 或 search_code），禁止直接 Final Answer |
 
 ### 置信度评估标准
 - `0.9-1.0`: 代码直接证明，可稳定复现（如明显的 SQL 拼接）
@@ -200,9 +201,9 @@ Final Answer: 分析完成，所有确认的漏洞已推送至队列。
 **分析执行：**
 
 ```
-Thought: 收到风险点：app/api/upload.py:35 存在文件上传风险。首先读取文件验证漏洞。
-Action: read_file
-Action Input: { "file_path": "app/api/upload.py", "max_lines": 50 }
+Thought: 收到风险点：app/api/upload.py:35 存在文件上传风险。首先读取锚点附近的代码窗口验证漏洞。
+Action: get_code_window
+Action Input: { "file_path": "app/api/upload.py", "anchor_line": 35, "before_lines": 12, "after_lines": 12 }
 
 Observation: 
 ```python
@@ -244,9 +245,9 @@ Observation: 发现其他文件上传点：
 - app/api/user.py:42: 用户头像上传
 - app/api/order.py:28: 订单附件上传
 
-Thought: 发现两个新的上传点，需要逐一验证。先读取user.py的头像上传逻辑。
-Action: read_file
-Action Input: { "file_path": "app/api/user.py", "max_lines": 60 }
+Thought: 发现两个新的上传点，需要逐一验证。先读取 user.py 的头像上传逻辑窗口。
+Action: get_code_window
+Action Input: { "file_path": "app/api/user.py", "anchor_line": 42, "before_lines": 12, "after_lines": 18 }
 
 Observation:
 ```python
@@ -281,9 +282,9 @@ Action Input: {
 
 Observation: 推送成功。
 
-Thought: 继续检查order.py的附件上传，寻找业务逻辑漏洞。
-Action: read_file
-Action Input: { "file_path": "app/api/order.py", "max_lines": 80 }
+Thought: 继续检查 order.py 的附件上传，寻找业务逻辑漏洞。
+Action: get_code_window
+Action Input: { "file_path": "app/api/order.py", "anchor_line": 28, "before_lines": 12, "after_lines": 20 }
 
 Observation:
 ```python
@@ -301,9 +302,9 @@ def attach_file():
     return 'OK'
 ```
 
-Thought: order.py的上传有权限检查，相对安全。但发现业务逻辑入口：order_id处理。检查是否有其他order相关接口存在逻辑漏洞。
-Action: read_file
-Action Input: { "file_path": "app/api/order.py", "offset": 80, "max_lines": 50 }
+Thought: order.py 的上传有权限检查，相对安全。但发现业务逻辑入口：order_id 处理。继续读取 update_order 附近窗口。
+Action: get_code_window
+Action Input: { "file_path": "app/api/order.py", "anchor_line": 95, "before_lines": 10, "after_lines": 16 }
 
 Observation:
 ```python
@@ -800,7 +801,7 @@ class AnalysisAgent(BaseAgent):
 以下是 Recon Agent 识别的高风险区域，请**务必优先**读取和分析这些文件：
 {json.dumps(high_risk_areas[:20], ensure_ascii=False)}
 
-**重要**: 请使用 read_file 工具读取上述高风险文件，不要假设文件路径或使用其他路径。
+**重要**: 请使用 get_code_window / get_file_outline 工具读取上述高风险文件，不要假设文件路径或使用其他路径。
 
 ### 入口点 (前10个)
 {json.dumps(entry_points[:10], ensure_ascii=False, indent=2)}
@@ -909,22 +910,19 @@ class AnalysisAgent(BaseAgent):
             except Exception:
                 line_start_int = 1
 
-            start_line = max(1, line_start_int - 20)
-            end_line = line_start_int + 80
-
-            if "read_file" in self.tools and file_path:
+            if "get_code_window" in self.tools and file_path:
                 return await self.execute_tool(
-                    "read_file",
+                    "get_code_window",
                     {
                         "file_path": file_path,
-                        "start_line": start_line,
-                        "end_line": end_line,
-                        "max_lines": 200,
+                        "anchor_line": line_start_int,
+                        "before_lines": 20,
+                        "after_lines": 80,
                     },
                 )
             return (
-                "系统无法自动执行最小工具调用（缺少 read_file 或目标文件未知）。"
-                "请改用 read_file/search_code 获取证据后再总结。"
+                "系统无法自动执行最小工具调用（缺少 get_code_window 或目标文件未知）。"
+                "请改用 get_code_window/search_code 获取证据后再总结。"
             )
 
         await self.emit_thinking("🔬 Analysis Agent 启动，LLM 开始自主安全分析...")
@@ -1017,7 +1015,7 @@ class AnalysisAgent(BaseAgent):
                         retry_prompt = f"""收到空响应。请根据以下格式输出你的思考和行动：
 
 Thought: [你对当前安全分析情况的思考]
-Action: [工具名称，如 read_file, search_code, pattern_match, opengrep_scan]
+Action: [工具名称，如 get_code_window, search_code, pattern_match, dataflow_analysis]
 Action Input: {{}}
 
 可用工具: {', '.join(self.tools.keys())}
@@ -1184,7 +1182,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                         if out_of_scope_reason:
                             scoped_observation = (
                                 f"单风险点模式工具限制：{out_of_scope_reason}。\n"
-                                "请改用 read_file/search_code/dataflow_analysis 等非全局扫描工具继续分析。"
+                                "请改用 get_code_window/search_code/dataflow_analysis 等非全局扫描工具继续分析。"
                             )
                             step.observation = scoped_observation
                             await self.emit_llm_observation(scoped_observation)

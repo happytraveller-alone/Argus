@@ -193,7 +193,13 @@ def _validate_evidence_metadata(
     display_command: str,
     entries: List[Dict[str, Any]],
 ) -> None:
-    if render_type not in {"code_window", "search_hits"}:
+    if render_type not in {
+        "code_window",
+        "search_hits",
+        "outline_summary",
+        "function_summary",
+        "symbol_body",
+    }:
         raise ValueError(f"unsupported render_type: {render_type}")
     if not isinstance(command_chain, list) or not command_chain:
         raise ValueError("command_chain is required")
@@ -205,6 +211,20 @@ def _validate_evidence_metadata(
     for entry in entries:
         if not isinstance(entry, dict):
             raise ValueError("entry must be an object")
+        if render_type == "search_hits":
+            if not str(entry.get("file_path") or "").strip():
+                raise ValueError("entry.file_path is required")
+            if not isinstance(entry.get("match_line"), int):
+                raise ValueError("entry.match_line is required")
+            if "match_text" not in entry:
+                raise ValueError("entry.match_text is required")
+            continue
+
+        if render_type in {"outline_summary", "function_summary"}:
+            if not str(entry.get("file_path") or "").strip():
+                raise ValueError("entry.file_path is required")
+            continue
+
         if not str(entry.get("file_path") or "").strip():
             raise ValueError("entry.file_path is required")
         if not isinstance(entry.get("lines"), list):
@@ -254,6 +274,164 @@ def _normalize_display_path(path_value: str, project_root: str) -> str:
             pass
         return os.path.basename(text)
     return _normalize_rel_path(text)
+
+
+def _is_path_within_root(candidate_path: str, root_path: str) -> bool:
+    try:
+        return os.path.commonpath(
+            [os.path.normpath(candidate_path), os.path.normpath(root_path)]
+        ) == os.path.normpath(root_path)
+    except Exception:
+        return False
+
+
+def _resolve_project_file(
+    *,
+    project_root: str,
+    file_path: str,
+    target_files: Optional[set[str]] = None,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    requested = str(file_path or "").strip()
+    parsed_path, _start, _end = _parse_file_path_with_line_range(requested)
+    candidate = parsed_path or requested
+    if not candidate:
+        return None, None, "必须提供 file_path"
+
+    if os.path.isabs(candidate):
+        full_path = os.path.normpath(candidate)
+        if not _is_path_within_root(full_path, project_root):
+            return None, None, "安全错误：不允许访问项目目录外的文件"
+        relative_path = _normalize_rel_path(
+            os.path.relpath(full_path, project_root).replace("\\", "/")
+        )
+    else:
+        relative_path = _normalize_rel_path(candidate)
+        full_path = os.path.normpath(os.path.join(project_root, relative_path))
+        if not _is_path_within_root(full_path, project_root):
+            return None, None, "安全错误：不允许访问项目目录外的文件"
+
+    if not relative_path:
+        return None, None, "必须提供 file_path"
+    if target_files and relative_path not in target_files:
+        return None, None, f"文件不在目标范围内: {relative_path}"
+    if not os.path.exists(full_path):
+        return None, None, f"文件不存在: {relative_path}"
+    if not os.path.isfile(full_path):
+        return None, None, f"不是文件: {relative_path}"
+    return relative_path, full_path, None
+
+
+def _read_text_sync(file_path: str) -> str:
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        return f.read()
+
+
+def _read_lines_sync(file_path: str) -> List[str]:
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        return f.readlines()
+
+
+def _infer_framework_hints(text: str, file_path: str = "") -> List[str]:
+    lowered = str(text or "").lower()
+    language = _detect_language(file_path)
+    hints: List[str] = []
+
+    if language == "java":
+        spring_tokens = (
+            "org.springframework",
+            "@springbootapplication",
+            "@restcontroller",
+            "@controller",
+            "@requestmapping",
+            "@getmapping",
+            "@postmapping",
+            "springapplication.run",
+        )
+        if any(token in lowered for token in spring_tokens):
+            hints.append("spring")
+        return hints
+
+    if language in {"javascript", "typescript"}:
+        if any(token in lowered for token in ("from 'express'", 'from "express"', "require('express')", 'require("express")', "express()")):
+            hints.append("express")
+        if any(token in lowered for token in ("from 'react'", 'from "react"', "react.", "jsx", "tsx")):
+            hints.append("react")
+        if any(token in lowered for token in ("from 'vue'", 'from "vue"', "createapp(", "definecomponent(")):
+            hints.append("vue")
+        return hints
+
+    if language == "python":
+        for label, tokens in {
+            "django": ("import django", "from django", "django.", "django.apps"),
+            "flask": ("from flask", "import flask", "flask(", "blueprint("),
+            "fastapi": ("from fastapi", "import fastapi", "fastapi(", "apirouter("),
+        }.items():
+            if any(token in lowered for token in tokens):
+                hints.append(label)
+        return hints
+
+    return hints
+
+
+def _extract_risk_markers(text: str) -> List[str]:
+    patterns = {
+        "command_execution": r"\b(os\.system|subprocess|exec|eval|Runtime\.getRuntime|system\()",
+        "sql_execution": r"\b(cursor\.execute|executeQuery|raw\(|sequelize\.query|SELECT\s)",
+        "deserialization": r"\b(pickle\.loads|yaml\.load|ObjectInputStream|unserialize\()",
+        "file_access": r"\b(open\(|FileInputStream|fs\.readFile|send_file\()",
+        "network_access": r"\b(requests\.|fetch\(|axios\.|http\.|urllib\.)",
+    }
+    markers: List[str] = []
+    for label, pattern in patterns.items():
+        if re.search(pattern, str(text or ""), re.IGNORECASE):
+            markers.append(label)
+    return markers
+
+
+def _extract_key_calls(text: str, limit: int = 8) -> List[str]:
+    stopwords = {
+        "if",
+        "for",
+        "while",
+        "switch",
+        "catch",
+        "return",
+        "print",
+        "len",
+        "range",
+        "str",
+        "int",
+        "list",
+        "dict",
+    }
+    calls: List[str] = []
+    for match in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_\.]*)\s*\(", str(text or "")):
+        candidate = str(match.group(1) or "").strip()
+        if not candidate:
+            continue
+        base = candidate.split(".")[-1].lower()
+        if base in stopwords or candidate in calls:
+            continue
+        calls.append(candidate)
+        if len(calls) >= limit:
+            break
+    return calls
+
+
+def _extract_related_symbols(text: str, limit: int = 8) -> List[str]:
+    symbols: List[str] = []
+    for pattern in (
+        r"^\s*(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)",
+        r"^\s*(?:function\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\(",
+    ):
+        for match in re.finditer(pattern, str(text or ""), re.MULTILINE):
+            candidate = str(match.group(1) or "").strip()
+            if not candidate or candidate in symbols:
+                continue
+            symbols.append(candidate)
+            if len(symbols) >= limit:
+                return symbols
+    return symbols
 
 
 class FileReadInput(BaseModel):
@@ -534,7 +712,7 @@ class FileSearchInput(BaseModel):
     file_pattern: Optional[str] = Field(default=None, description="文件名模式，如 *.py, *.js")
     directory: Optional[str] = Field(default=None, description="搜索目录（相对路径）")
     case_sensitive: bool = Field(default=False, description="是否区分大小写")
-    max_results: int = Field(default=50, description="最大结果数")
+    max_results: int = Field(default=10, description="最大结果数，默认不超过 10 条")
     is_regex: bool = Field(default=False, description="是否使用正则表达式")
 
     @model_validator(mode="after")
@@ -585,35 +763,7 @@ class FileSearchTool(AgentTool):
 
     @staticmethod
     def _read_file_lines_sync(file_path: str) -> List[str]:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.readlines()
-
-    @staticmethod
-    def _read_window_with_sed_sync(
-        file_path: str,
-        start_line: int,
-        end_line: int,
-    ) -> Optional[List[str]]:
-        if not shutil.which("sed"):
-            return None
-        proc = subprocess.run(
-            ["sed", "-n", f"{start_line},{end_line}p", file_path],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            return None
-        return [line.rstrip("\n") for line in str(proc.stdout or "").splitlines()]
-
-    @staticmethod
-    def _is_path_within_root(candidate_path: str, root_path: str) -> bool:
-        try:
-            return os.path.commonpath(
-                [os.path.normpath(candidate_path), os.path.normpath(root_path)]
-            ) == os.path.normpath(root_path)
-        except Exception:
-            return False
+        return _read_lines_sync(file_path)
 
     def _normalize_directory(self, directory: Optional[str]) -> tuple[Optional[str], Optional[str], Optional[str]]:
         root_norm = os.path.normpath(self.project_root)
@@ -623,14 +773,14 @@ class FileSearchTool(AgentTool):
 
         if os.path.isabs(raw):
             search_dir = os.path.normpath(raw)
-            if not self._is_path_within_root(search_dir, root_norm):
+            if not _is_path_within_root(search_dir, root_norm):
                 return None, None, "安全错误：不允许搜索项目目录外的内容"
             rel = os.path.relpath(search_dir, self.project_root).replace("\\", "/")
             rel = "." if rel == "." else _normalize_rel_path(rel)
         else:
             rel = _normalize_rel_path(raw)
             search_dir = os.path.normpath(os.path.join(self.project_root, rel))
-            if not self._is_path_within_root(search_dir, root_norm):
+            if not _is_path_within_root(search_dir, root_norm):
                 return None, None, "安全错误：不允许搜索项目目录外的内容"
 
         if not os.path.exists(search_dir):
@@ -654,54 +804,6 @@ class FileSearchTool(AgentTool):
                 return True
         return False
 
-    def _build_context_block(
-        self,
-        full_path: str,
-        line_number: int,
-        cache: Dict[str, List[str]],
-    ) -> Dict[str, Any]:
-        lines = cache.get(full_path)
-        if lines is None:
-            try:
-                lines = self._read_file_lines_sync(full_path)
-            except Exception:
-                return {
-                    "window_start_line": line_number,
-                    "window_end_line": line_number,
-                    "lines": [
-                        {
-                            "line_number": line_number,
-                            "text": "<无法读取上下文>",
-                            "kind": "match",
-                        }
-                    ],
-                    "command_chain": [],
-                }
-            cache[full_path] = lines
-
-        start = max(1, line_number - 1)
-        end = min(len(lines), line_number + 1)
-        window_lines = self._read_window_with_sed_sync(full_path, start, end)
-        command_chain: List[str] = []
-        if window_lines is not None and len(window_lines) == (end - start + 1):
-            command_chain.append("sed")
-        else:
-            window_lines = [lines[cursor - 1].rstrip("\n") for cursor in range(start, end + 1)]
-
-        structured_lines = _build_structured_lines(
-            selected_lines=window_lines,
-            start_line=start,
-            focus_start_line=line_number,
-            focus_end_line=line_number,
-            focus_kind="match",
-        )
-        return {
-            "window_start_line": start,
-            "window_end_line": end,
-            "lines": structured_lines,
-            "command_chain": command_chain,
-        }
-
     def _resolve_single_file_target(self, raw_path: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
         requested = str(raw_path or "").strip()
         parsed_path, _start, _end = _parse_file_path_with_line_range(requested)
@@ -711,7 +813,7 @@ class FileSearchTool(AgentTool):
 
         if os.path.isabs(candidate):
             full_path = os.path.normpath(candidate)
-            if not self._is_path_within_root(full_path, self.project_root):
+            if not _is_path_within_root(full_path, self.project_root):
                 return None, None, "安全错误：不允许搜索项目目录外的内容"
             relative_path = _normalize_rel_path(
                 os.path.relpath(full_path, self.project_root).replace("\\", "/")
@@ -719,7 +821,7 @@ class FileSearchTool(AgentTool):
         else:
             relative_path = _normalize_rel_path(candidate)
             full_path = os.path.normpath(os.path.join(self.project_root, relative_path))
-            if not self._is_path_within_root(full_path, self.project_root):
+            if not _is_path_within_root(full_path, self.project_root):
                 return None, None, "安全错误：不允许搜索项目目录外的内容"
 
         if not relative_path:
@@ -761,7 +863,7 @@ class FileSearchTool(AgentTool):
         case_sensitive: bool,
         is_regex: bool,
     ) -> List[str]:
-        cmd = ["rg", "--line-number", "--no-heading", "--color", "never", "--max-columns", "300"]
+        cmd = ["rg", "--line-number", "--column", "--no-heading", "--color", "never", "--max-columns", "300"]
         if not case_sensitive:
             cmd.append("-i")
         if not is_regex:
@@ -804,22 +906,25 @@ class FileSearchTool(AgentTool):
             raise RuntimeError(stderr or "rg 执行失败")
 
         results: List[Dict[str, Any]] = []
-        file_context_cache: Dict[str, List[str]] = {}
-        matched_files: set[str] = set()
         seen_key: set[tuple[str, int]] = set()
+        raw_match_count = 0
         stdout_text = str(proc.stdout or "")
         for raw_line in stdout_text.splitlines():
-            parts = raw_line.split(":", 2)
-            if len(parts) < 3:
+            parts = raw_line.split(":", 3)
+            if len(parts) < 4:
                 continue
-            path_part, line_part, match_part = parts[0], parts[1], parts[2]
+            path_part, line_part, column_part, match_part = parts[0], parts[1], parts[2], parts[3]
             try:
                 line_number = int(line_part)
             except Exception:
                 continue
+            try:
+                column_number = int(column_part)
+            except Exception:
+                column_number = None
 
             full_path = os.path.normpath(path_part)
-            if not self._is_path_within_root(full_path, self.project_root):
+            if not _is_path_within_root(full_path, self.project_root):
                 continue
             relative_path = _normalize_rel_path(
                 os.path.relpath(full_path, self.project_root).replace("\\", "/")
@@ -832,24 +937,20 @@ class FileSearchTool(AgentTool):
             if dedup_key in seen_key:
                 continue
             seen_key.add(dedup_key)
-            matched_files.add(relative_path)
+            raw_match_count += 1
+            if len(results) < max_results:
+                results.append(
+                    {
+                        "file": relative_path,
+                        "line": line_number,
+                        "column": column_number,
+                        "match": str(match_part or "").strip()[:240],
+                        "symbol_name": None,
+                        "match_kind": "text",
+                    }
+                )
 
-            context_window = self._build_context_block(full_path, line_number, file_context_cache)
-            results.append(
-                {
-                    "file": relative_path,
-                    "line": line_number,
-                    "match": str(match_part or "").strip()[:200],
-                    "window_start_line": context_window["window_start_line"],
-                    "window_end_line": context_window["window_end_line"],
-                    "lines": context_window["lines"],
-                    "command_chain": context_window["command_chain"],
-                }
-            )
-            if len(results) >= max_results:
-                break
-
-        return results, len(matched_files)
+        return results, raw_match_count
 
     def _build_grep_command(
         self,
@@ -901,9 +1002,8 @@ class FileSearchTool(AgentTool):
             raise RuntimeError(stderr or "grep 执行失败")
 
         results: List[Dict[str, Any]] = []
-        file_context_cache: Dict[str, List[str]] = {}
-        matched_files: set[str] = set()
         seen_key: set[tuple[str, int]] = set()
+        raw_match_count = 0
         for raw_line in str(proc.stdout or "").splitlines():
             parts = raw_line.split(":", 2)
             if len(parts) < 3:
@@ -914,7 +1014,7 @@ class FileSearchTool(AgentTool):
             except Exception:
                 continue
             full_path = os.path.normpath(path_part)
-            if not self._is_path_within_root(full_path, self.project_root):
+            if not _is_path_within_root(full_path, self.project_root):
                 continue
             relative_path = _normalize_rel_path(
                 os.path.relpath(full_path, self.project_root).replace("\\", "/")
@@ -926,24 +1026,20 @@ class FileSearchTool(AgentTool):
             if dedup_key in seen_key:
                 continue
             seen_key.add(dedup_key)
-            matched_files.add(relative_path)
+            raw_match_count += 1
+            if len(results) < max_results:
+                results.append(
+                    {
+                        "file": relative_path,
+                        "line": line_number,
+                        "column": None,
+                        "match": str(match_part or "").strip()[:240],
+                        "symbol_name": None,
+                        "match_kind": "text",
+                    }
+                )
 
-            context_window = self._build_context_block(full_path, line_number, file_context_cache)
-            results.append(
-                {
-                    "file": relative_path,
-                    "line": line_number,
-                    "match": str(match_part or "").strip()[:200],
-                    "window_start_line": context_window["window_start_line"],
-                    "window_end_line": context_window["window_end_line"],
-                    "lines": context_window["lines"],
-                    "command_chain": context_window["command_chain"],
-                }
-            )
-            if len(results) >= max_results:
-                break
-
-        return results, len(matched_files)
+        return results, raw_match_count
 
     def _search_with_python_sync(
         self,
@@ -957,7 +1053,7 @@ class FileSearchTool(AgentTool):
         flags = 0 if case_sensitive else re.IGNORECASE
         pattern = re.compile(keyword if is_regex else re.escape(keyword), flags)
         results: List[Dict[str, Any]] = []
-        files_searched = 0
+        raw_match_count = 0
 
         for root, dirs, files in os.walk(search_dir):
             rel_dir = os.path.relpath(root, self.project_root).replace("\\", "/")
@@ -985,38 +1081,22 @@ class FileSearchTool(AgentTool):
                     lines = self._read_file_lines_sync(file_path)
                 except Exception:
                     continue
-                files_searched += 1
                 for idx, line in enumerate(lines, start=1):
                     if not pattern.search(line):
                         continue
-                    start = max(1, idx - 1)
-                    end = min(len(lines), idx + 1)
-                    window_lines = self._read_window_with_sed_sync(file_path, start, end)
-                    command_chain: List[str] = []
-                    if window_lines is not None and len(window_lines) == (end - start + 1):
-                        command_chain.append("sed")
-                    else:
-                        window_lines = [lines[cursor - 1].rstrip("\n") for cursor in range(start, end + 1)]
-                    results.append(
-                        {
-                            "file": relative_path,
-                            "line": idx,
-                            "match": line.strip()[:200],
-                            "window_start_line": start,
-                            "window_end_line": end,
-                            "lines": _build_structured_lines(
-                                selected_lines=window_lines,
-                                start_line=start,
-                                focus_start_line=idx,
-                                focus_end_line=idx,
-                                focus_kind="match",
-                            ),
-                            "command_chain": command_chain,
-                        }
-                    )
-                    if len(results) >= max_results:
-                        return results, files_searched
-        return results, files_searched
+                    raw_match_count += 1
+                    if len(results) < max_results:
+                        results.append(
+                            {
+                                "file": relative_path,
+                                "line": idx,
+                                "column": None,
+                                "match": line.strip()[:240],
+                                "symbol_name": None,
+                                "match_kind": "text",
+                            }
+                        )
+        return results, raw_match_count
 
     def _run_search_engines_sync(
         self,
@@ -1084,13 +1164,13 @@ class FileSearchTool(AgentTool):
 - directory: 可选，搜索目录 (相对于项目根目录)
 - case_sensitive: 是否区分大小写（默认 false）
 - is_regex: 是否使用正则表达式（默认 false）
-- max_results: 最大返回结果数（默认50，最大200）
+- max_results: 最大返回结果数（默认10，最多10）
 
 注意:
 - test / tests 目录默认被排除在搜索范围之外
 - 若指定的 directory 中无结果，会自动回退到整个项目根目录重新搜索
 
-这是一个快速搜索工具，结果包含匹配行和上下文。"""
+这是一个纯定位工具，只返回命中位置和摘要，不返回上下文窗口。"""
     
     @property
     def args_schema(self):
@@ -1153,8 +1233,8 @@ class FileSearchTool(AgentTool):
                 except re.error as exc:
                     return ToolResult(success=False, error=f"无效的搜索模式: {exc}")
 
-            safe_max_results = max(1, min(int(max_results or 50), 200))
-            results, files_searched, engine = await asyncio.to_thread(
+            safe_max_results = max(1, min(int(max_results or 10), 10))
+            results, raw_match_count, engine = await asyncio.to_thread(
                 self._run_search_engines_sync,
                 keyword,
                 search_dir_abs,
@@ -1164,13 +1244,10 @@ class FileSearchTool(AgentTool):
                 safe_max_results,
             )
 
-            if single_file_mode and single_file_abs is not None:
-                files_searched = 1
-
             scope_fallback_applied = False
             effective_directory = search_dir_rel
             if not single_file_mode and not results and search_dir_rel not in {"", "."}:
-                fallback_results, fallback_files_searched, fallback_engine = await asyncio.to_thread(
+                fallback_results, fallback_raw_match_count, fallback_engine = await asyncio.to_thread(
                     self._run_search_engines_sync,
                     keyword,
                     self.project_root,
@@ -1183,7 +1260,7 @@ class FileSearchTool(AgentTool):
                     scope_fallback_applied = True
                     effective_directory = "."
                     results = fallback_results
-                    files_searched = fallback_files_searched
+                    raw_match_count = fallback_raw_match_count
                     engine = fallback_engine
 
             if not results:
@@ -1202,18 +1279,20 @@ class FileSearchTool(AgentTool):
                         f"没有找到匹配 '{keyword}' 的内容\n"
                         f"搜索目录: {effective_directory}\n"
                         f"执行引擎: {engine}\n"
-                        f"搜索文件数: {files_searched}"
+                        f"原始命中数: 0"
                     ),
                     metadata={
                         "keyword": keyword,
-                        "files_searched": files_searched,
-                        "matches": 0,
+                        "match_count_raw": 0,
+                        "match_count_returned": 0,
+                        "overflow_count": 0,
                         "normalized_file_patterns": normalized_patterns,
                         "engine": engine,
                         "render_type": "search_hits",
                         "command_chain": command_chain,
                         "display_command": display_command,
                         "entries": entries,
+                        "recommended_followup_tool": "list_files",
                         "scope_fallback_applied": scope_fallback_applied,
                         "original_directory": search_dir_rel,
                         "effective_directory": effective_directory,
@@ -1225,19 +1304,15 @@ class FileSearchTool(AgentTool):
             entries: List[Dict[str, Any]] = []
             aggregate_command_chain: List[str] = [engine]
             for item in results:
-                entry_command_chain = _unique_command_chain(
-                    [engine, *list(item.get("command_chain") or [])]
-                )
-                aggregate_command_chain.extend(entry_command_chain)
                 entries.append(
                     {
                         "file_path": item["file"],
+                        "line": int(item["line"]),
                         "match_line": int(item["line"]),
+                        "column": item.get("column"),
                         "match_text": str(item["match"]),
-                        "window_start_line": int(item["window_start_line"]),
-                        "window_end_line": int(item["window_end_line"]),
-                        "language": _detect_language(item["file"]),
-                        "lines": list(item["lines"]),
+                        "symbol_name": item.get("symbol_name"),
+                        "match_kind": item.get("match_kind") or "text",
                     }
                 )
 
@@ -1252,30 +1327,35 @@ class FileSearchTool(AgentTool):
 
             output_parts = [
                 f"搜索关键字: '{keyword}'",
-                f"匹配数: {len(results)}（搜索文件数: {files_searched}）",
+                f"原始命中数: {raw_match_count}",
+                f"返回结果数: {len(entries)}",
                 f"执行链路: {display_command}",
             ]
             for entry in entries:
-                context = _format_structured_lines_for_search(entry["lines"])
-                output_parts.append(f"\n{entry['file_path']}:{entry['match_line']}")
-                output_parts.append(f"```\n{context}\n```")
-            if len(results) >= safe_max_results:
-                output_parts.append(f"\n结果已截断（最大 {safe_max_results} 条）")
+                location = f"{entry['file_path']}:{entry['match_line']}"
+                if entry.get("column"):
+                    location += f":{entry['column']}"
+                output_parts.append(f"- {location} {entry['match_text']}")
+            if raw_match_count > safe_max_results:
+                output_parts.append(
+                    "\n命中过多，请继续通过 directory、file_pattern 或更精确的 regex 收敛搜索。"
+                )
 
             return ToolResult(
                 success=True,
                 data="\n".join(output_parts),
                 metadata={
                     "keyword": keyword,
-                    "files_searched": files_searched,
-                    "matches": len(results),
+                    "match_count_raw": raw_match_count,
+                    "match_count_returned": len(entries),
+                    "overflow_count": max(0, raw_match_count - len(entries)),
                     "normalized_file_patterns": normalized_patterns,
                     "results": [
                         {
                             "file": entry["file_path"],
                             "line": entry["match_line"],
                             "match": entry["match_text"],
-                            "context": _format_structured_lines_for_search(entry["lines"]),
+                            "column": entry.get("column"),
                         }
                         for entry in entries[:10]
                     ],
@@ -1284,6 +1364,9 @@ class FileSearchTool(AgentTool):
                     "command_chain": aggregate_command_chain,
                     "display_command": display_command,
                     "entries": entries,
+                    "recommended_followup_tool": (
+                        "search_code" if raw_match_count > safe_max_results else "get_code_window"
+                    ),
                     "scope_fallback_applied": scope_fallback_applied,
                     "original_directory": search_dir_rel,
                     "effective_directory": effective_directory,
@@ -1295,12 +1378,473 @@ class FileSearchTool(AgentTool):
             return ToolResult(success=False, error=f"搜索失败: {str(e)}")
 
 
+class CodeWindowInput(BaseModel):
+    file_path: str = Field(description="文件路径（相对于项目根目录）")
+    anchor_line: int = Field(description="锚点行号（从1开始）")
+    before_lines: int = Field(default=2, description="向前读取的行数")
+    after_lines: int = Field(default=2, description="向后读取的行数")
+
+
+class CodeWindowTool(AgentTool):
+    def __init__(
+        self,
+        project_root: str,
+        exclude_patterns: Optional[List[str]] = None,
+        target_files: Optional[List[str]] = None,
+    ):
+        super().__init__()
+        self.project_root = project_root
+        self.exclude_patterns = exclude_patterns or []
+        self.target_files = (
+            {_normalize_rel_path(path) for path in target_files if isinstance(path, str)}
+            if target_files
+            else None
+        )
+
+    @property
+    def name(self) -> str:
+        return "get_code_window"
+
+    @property
+    def description(self) -> str:
+        return "围绕 file_path + anchor_line 返回极小代码窗口，用于取证和前端代码展示。"
+
+    @property
+    def args_schema(self):
+        return CodeWindowInput
+
+    async def _execute(
+        self,
+        file_path: str,
+        anchor_line: int,
+        before_lines: int = 2,
+        after_lines: int = 2,
+        **kwargs,
+    ) -> ToolResult:
+        try:
+            relative_path, full_path, error = _resolve_project_file(
+                project_root=self.project_root,
+                file_path=file_path,
+                target_files=self.target_files,
+            )
+            if error or not relative_path or not full_path:
+                return ToolResult(success=False, error=error or "文件定位失败")
+
+            focus_line = max(1, int(anchor_line or 1))
+            before = max(0, min(int(before_lines or 0), 20))
+            after = max(0, min(int(after_lines or 0), 20))
+            if before + after > 40:
+                return ToolResult(success=False, error="代码窗口跨度过大，请缩小 before_lines/after_lines")
+
+            lines = await asyncio.to_thread(_read_lines_sync, full_path)
+            if not lines:
+                return ToolResult(success=False, error=f"文件为空: {relative_path}")
+            if focus_line > len(lines):
+                return ToolResult(success=False, error=f"锚点行超出文件范围: {relative_path}:{focus_line}")
+
+            start_line = max(1, focus_line - before)
+            end_line = min(len(lines), focus_line + after)
+            selected = [lines[index - 1].rstrip("\n") for index in range(start_line, end_line + 1)]
+            language = _detect_language(relative_path)
+            structured_lines = _build_structured_lines(
+                selected_lines=selected,
+                start_line=start_line,
+                focus_start_line=focus_line,
+                focus_end_line=focus_line,
+                focus_kind="focus",
+            )
+            command_chain = ["get_code_window"]
+            display_command = _build_display_command(command_chain)
+            entries = [
+                {
+                    "file_path": relative_path,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "focus_line": focus_line,
+                    "language": language,
+                    "lines": structured_lines,
+                }
+            ]
+            _validate_evidence_metadata(
+                render_type="code_window",
+                command_chain=command_chain,
+                display_command=display_command,
+                entries=entries,
+            )
+            return ToolResult(
+                success=True,
+                data=(
+                    f"文件: {relative_path}\n"
+                    f"窗口: {start_line}-{end_line}\n\n"
+                    f"```{language}\n{_format_structured_lines_for_code_block(structured_lines)}\n```"
+                ),
+                metadata={
+                    "file_path": relative_path,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "focus_line": focus_line,
+                    "language": language,
+                    "render_type": "code_window",
+                    "command_chain": command_chain,
+                    "display_command": display_command,
+                    "entries": entries,
+                },
+            )
+        except Exception as exc:
+            return ToolResult(success=False, error=f"获取代码窗口失败: {exc}")
+
+
+class FileOutlineInput(BaseModel):
+    file_path: str = Field(description="文件路径（相对于项目根目录）")
+
+
+class FileOutlineTool(AgentTool):
+    def __init__(
+        self,
+        project_root: str,
+        exclude_patterns: Optional[List[str]] = None,
+        target_files: Optional[List[str]] = None,
+    ):
+        super().__init__()
+        self.project_root = project_root
+        self.exclude_patterns = exclude_patterns or []
+        self.target_files = (
+            {_normalize_rel_path(path) for path in target_files if isinstance(path, str)}
+            if target_files
+            else None
+        )
+
+    @property
+    def name(self) -> str:
+        return "get_file_outline"
+
+    @property
+    def description(self) -> str:
+        return "返回文件职责、关键符号、imports、入口点和风险提示，不输出大段源码。"
+
+    @property
+    def args_schema(self):
+        return FileOutlineInput
+
+    async def _execute(self, file_path: str, **kwargs) -> ToolResult:
+        try:
+            relative_path, full_path, error = _resolve_project_file(
+                project_root=self.project_root,
+                file_path=file_path,
+                target_files=self.target_files,
+            )
+            if error or not relative_path or not full_path:
+                return ToolResult(success=False, error=error or "文件定位失败")
+
+            content = await asyncio.to_thread(_read_text_sync, full_path)
+            imports = []
+            for pattern in (
+                r"^\s*(?:from\s+\S+\s+import\s+.+|import\s+.+)$",
+                r"^\s*(?:#include\s+[<\"].+[>\"]|use\s+.+;|import\s+.+;)$",
+            ):
+                for match in re.finditer(pattern, content, re.MULTILINE):
+                    candidate = str(match.group(0) or "").strip()
+                    if candidate and candidate not in imports:
+                        imports.append(candidate)
+                    if len(imports) >= 12:
+                        break
+                if len(imports) >= 12:
+                    break
+
+            key_symbols = _extract_related_symbols(content, limit=12)
+            framework_hints = _infer_framework_hints(content, relative_path)
+            risk_markers = _extract_risk_markers(content)
+            entrypoints = [
+                symbol
+                for symbol in key_symbols
+                if any(token in symbol.lower() for token in ("main", "handler", "route", "index", "app", "run"))
+            ][:6]
+            file_role = "implementation"
+            lowered_path = relative_path.lower()
+            if any(token in lowered_path for token in ("route", "controller", "handler", "api")):
+                file_role = "entrypoint"
+            elif any(token in lowered_path for token in ("util", "helper", "service")):
+                file_role = "supporting_module"
+            elif lowered_path.endswith((".yml", ".yaml", ".json", ".toml", ".ini")):
+                file_role = "configuration"
+
+            entry = {
+                "file_path": relative_path,
+                "file_role": file_role,
+                "key_symbols": key_symbols,
+                "imports": imports,
+                "entrypoints": entrypoints,
+                "risk_markers": risk_markers,
+                "framework_hints": framework_hints,
+            }
+            command_chain = ["get_file_outline"]
+            display_command = _build_display_command(command_chain)
+            _validate_evidence_metadata(
+                render_type="outline_summary",
+                command_chain=command_chain,
+                display_command=display_command,
+                entries=[entry],
+            )
+            return ToolResult(
+                success=True,
+                data="\n".join(
+                    [
+                        f"文件: {relative_path}",
+                        f"角色: {file_role}",
+                        f"关键符号: {', '.join(key_symbols) if key_symbols else '无'}",
+                        f"入口点: {', '.join(entrypoints) if entrypoints else '无'}",
+                        f"风险标记: {', '.join(risk_markers) if risk_markers else '无'}",
+                        f"框架提示: {', '.join(framework_hints) if framework_hints else '无'}",
+                    ]
+                ),
+                metadata={
+                    "render_type": "outline_summary",
+                    "command_chain": command_chain,
+                    "display_command": display_command,
+                    "entries": [entry],
+                },
+            )
+        except Exception as exc:
+            return ToolResult(success=False, error=f"获取文件概览失败: {exc}")
+
+
+class FunctionSummaryInput(BaseModel):
+    file_path: str = Field(description="文件路径（相对于项目根目录）")
+    function_name: Optional[str] = Field(default=None, description="目标函数名")
+    line: Optional[int] = Field(default=None, description="函数内任意锚点行")
+
+
+class FunctionSummaryTool(AgentTool):
+    def __init__(
+        self,
+        project_root: str,
+        exclude_patterns: Optional[List[str]] = None,
+        target_files: Optional[List[str]] = None,
+    ):
+        super().__init__()
+        self.project_root = project_root
+        self.exclude_patterns = exclude_patterns or []
+        self.target_files = (
+            {_normalize_rel_path(path) for path in target_files if isinstance(path, str)}
+            if target_files
+            else None
+        )
+        self.locator = EnclosingFunctionLocator(project_root=project_root)
+
+    @property
+    def name(self) -> str:
+        return "get_function_summary"
+
+    @property
+    def description(self) -> str:
+        return "解释单个函数的职责、输入输出、关键调用与风险点，不返回大段源码。"
+
+    @property
+    def args_schema(self):
+        return FunctionSummaryInput
+
+    async def _execute(
+        self,
+        file_path: str,
+        function_name: Optional[str] = None,
+        line: Optional[int] = None,
+        **kwargs,
+    ) -> ToolResult:
+        try:
+            relative_path, full_path, error = _resolve_project_file(
+                project_root=self.project_root,
+                file_path=file_path,
+                target_files=self.target_files,
+            )
+            if error or not relative_path or not full_path:
+                return ToolResult(success=False, error=error or "文件定位失败")
+
+            resolved_function = str(function_name or "").strip()
+            if not resolved_function and line is not None:
+                located = self.locator.locate(
+                    full_file_path=full_path,
+                    line_start=max(1, int(line)),
+                    relative_file_path=relative_path,
+                )
+                resolved_function = str(located.get("function") or "").strip()
+
+            if not resolved_function:
+                return ToolResult(success=False, error="必须提供 function_name 或有效 line 来定位函数")
+
+            from .run_code import ExtractFunctionTool
+
+            extractor = ExtractFunctionTool(project_root=self.project_root)
+            extracted = await extractor.execute(path=relative_path, symbol_name=resolved_function)
+            if not extracted.success:
+                return ToolResult(success=False, error=extracted.error or f"无法定位函数: {resolved_function}")
+
+            metadata = extracted.metadata or {}
+            code = str(metadata.get("code") or "")
+            signature = code.splitlines()[0].strip() if code else resolved_function
+            inputs = list(metadata.get("parameters") or [])
+            key_calls = _extract_key_calls(code)
+            risk_points = _extract_risk_markers(code)
+            outputs = []
+            if re.search(r"\breturn\b", code):
+                outputs.append("returns_value")
+            if risk_points:
+                outputs.append("side_effects")
+            if not outputs:
+                outputs.append("unknown")
+            purpose = f"处理 `{resolved_function}` 的核心逻辑"
+            if key_calls:
+                purpose += f"，重点依赖 {', '.join(key_calls[:3])}"
+
+            entry = {
+                "file_path": relative_path,
+                "resolved_function": resolved_function,
+                "signature": signature,
+                "purpose": purpose,
+                "inputs": inputs,
+                "outputs": outputs,
+                "key_calls": key_calls,
+                "risk_points": risk_points,
+                "related_symbols": _extract_related_symbols(code),
+            }
+            command_chain = ["get_function_summary"]
+            display_command = _build_display_command(command_chain)
+            _validate_evidence_metadata(
+                render_type="function_summary",
+                command_chain=command_chain,
+                display_command=display_command,
+                entries=[entry],
+            )
+            return ToolResult(
+                success=True,
+                data="\n".join(
+                    [
+                        f"文件: {relative_path}",
+                        f"函数: {resolved_function}",
+                        f"签名: {signature}",
+                        f"职责: {purpose}",
+                        f"输入: {', '.join(inputs) if inputs else '未识别'}",
+                        f"输出: {', '.join(outputs) if outputs else '未识别'}",
+                        f"关键调用: {', '.join(key_calls) if key_calls else '无'}",
+                        f"风险点: {', '.join(risk_points) if risk_points else '无'}",
+                    ]
+                ),
+                metadata={
+                    "render_type": "function_summary",
+                    "command_chain": command_chain,
+                    "display_command": display_command,
+                    "entries": [entry],
+                },
+            )
+        except Exception as exc:
+            return ToolResult(success=False, error=f"获取函数摘要失败: {exc}")
+
+
+class SymbolBodyInput(BaseModel):
+    file_path: str = Field(description="文件路径（相对于项目根目录）")
+    symbol_name: str = Field(description="目标符号名")
+
+
+class SymbolBodyTool(AgentTool):
+    def __init__(
+        self,
+        project_root: str,
+        exclude_patterns: Optional[List[str]] = None,
+        target_files: Optional[List[str]] = None,
+    ):
+        super().__init__()
+        self.project_root = project_root
+        self.exclude_patterns = exclude_patterns or []
+        self.target_files = (
+            {_normalize_rel_path(path) for path in target_files if isinstance(path, str)}
+            if target_files
+            else None
+        )
+
+    @property
+    def name(self) -> str:
+        return "get_symbol_body"
+
+    @property
+    def description(self) -> str:
+        return "提取函数/方法主体源码，只负责源码提取，不负责语义解释。"
+
+    @property
+    def args_schema(self):
+        return SymbolBodyInput
+
+    async def _execute(self, file_path: str, symbol_name: str, **kwargs) -> ToolResult:
+        try:
+            relative_path, full_path, error = _resolve_project_file(
+                project_root=self.project_root,
+                file_path=file_path,
+                target_files=self.target_files,
+            )
+            if error or not relative_path or not full_path:
+                return ToolResult(success=False, error=error or "文件定位失败")
+
+            from .run_code import ExtractFunctionTool
+
+            extractor = ExtractFunctionTool(project_root=self.project_root)
+            extracted = await extractor.execute(path=relative_path, symbol_name=symbol_name)
+            if not extracted.success:
+                return ToolResult(success=False, error=extracted.error or f"无法提取符号: {symbol_name}")
+
+            payload = extracted.metadata or {}
+            body = str(payload.get("code") or "")
+            start_line = int(payload.get("line_start") or 1)
+            end_line = int(payload.get("line_end") or start_line)
+            language = _detect_language(relative_path)
+            structured_lines = _build_structured_lines(
+                body.splitlines(),
+                start_line,
+                start_line,
+                start_line,
+                "focus",
+            )
+            entry = {
+                "file_path": relative_path,
+                "symbol_name": symbol_name,
+                "start_line": start_line,
+                "end_line": end_line,
+                "body": body,
+                "language": language,
+                "lines": structured_lines,
+            }
+            command_chain = ["get_symbol_body"]
+            display_command = _build_display_command(command_chain)
+            _validate_evidence_metadata(
+                render_type="symbol_body",
+                command_chain=command_chain,
+                display_command=display_command,
+                entries=[entry],
+            )
+            return ToolResult(
+                success=True,
+                data=(
+                    f"符号: {symbol_name}\n"
+                    f"文件: {relative_path}\n"
+                    f"范围: {start_line}-{end_line}\n\n"
+                    f"```{language}\n{body}\n```"
+                ),
+                metadata={
+                    "render_type": "symbol_body",
+                    "command_chain": command_chain,
+                    "display_command": display_command,
+                    "entries": [entry],
+                },
+            )
+        except Exception as exc:
+            return ToolResult(success=False, error=f"提取符号源码失败: {exc}")
+
+
 class ListFilesInput(BaseModel):
     """列出文件输入"""
     directory: str = Field(default=".", description="目录路径（相对于项目根目录）")
     pattern: Optional[str] = Field(default=None, description="文件名模式，如 *.py")
     recursive: bool = Field(default=False, description="是否递归列出子目录")
     max_files: int = Field(default=100, description="最大文件数")
+    recursive_mode: Optional[str] = Field(default=None, description="shallow/deep，兼容更明确的递归模式")
+    max_entries: Optional[int] = Field(default=None, description="最大返回条目数")
 
 
 class ListFilesTool(AgentTool):
@@ -1360,13 +1904,33 @@ class ListFilesTool(AgentTool):
     @property
     def args_schema(self):
         return ListFilesInput
-    
+
+    def _repair_directory_hint(self, directory: str) -> Optional[str]:
+        wanted = _normalize_rel_path(directory)
+        if not wanted or wanted == ".":
+            return None
+        basename = os.path.basename(wanted)
+        matches: List[str] = []
+        for root, dirnames, _files in os.walk(self.project_root):
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            for dirname in dirnames:
+                candidate = _normalize_rel_path(
+                    os.path.relpath(os.path.join(root, dirname), self.project_root).replace("\\", "/")
+                )
+                if candidate == wanted or os.path.basename(candidate) == basename:
+                    matches.append(candidate)
+                    if len(matches) > 1:
+                        return None
+        return matches[0] if len(matches) == 1 else None
+
     async def _execute(
         self,
         directory: str = ".",
         pattern: Optional[str] = None,
         recursive: bool = False,
         max_files: int = 100,
+        recursive_mode: Optional[str] = None,
+        max_entries: Optional[int] = None,
         **kwargs
     ) -> ToolResult:
         """执行文件列表"""
@@ -1375,13 +1939,30 @@ class ListFilesTool(AgentTool):
             if "path" in kwargs and kwargs["path"]:
                 directory = kwargs["path"]
 
+            if recursive_mode:
+                recursive = str(recursive_mode).strip().lower() in {"deep", "recursive", "true", "1"}
+            if max_entries is not None:
+                max_files = int(max_entries)
+            max_files = max(1, min(int(max_files or 100), 200))
+
             target_dir = os.path.normpath(os.path.join(self.project_root, directory))
             if not target_dir.startswith(os.path.normpath(self.project_root)):
                 return ToolResult(
                     success=False,
                     error="安全错误：不允许访问项目目录外的目录",
                 )
-            
+
+            if not os.path.exists(target_dir):
+                repaired = self._repair_directory_hint(directory)
+                if repaired:
+                    directory = repaired
+                    target_dir = os.path.normpath(os.path.join(self.project_root, repaired))
+                else:
+                    return ToolResult(
+                        success=False,
+                        error=f"目录不存在: {directory}",
+                    )
+
             if not os.path.exists(target_dir):
                 return ToolResult(
                     success=False,
@@ -1540,13 +2121,20 @@ class ListFilesTool(AgentTool):
             if len(files) >= max_files:
                 output_parts.append(f"\n... 结果已截断（最大 {max_files} 个文件）")
             
+            recommended_next_directories = sorted(dirs)[:5]
+            truncated = len(files) >= max_files
+
             return ToolResult(
                 success=True,
                 data="\n".join(output_parts),
                 metadata={
                     "directory": directory,
+                    "directories": sorted(dirs),
+                    "files": sorted(files),
                     "file_count": len(files),
                     "dir_count": len(dirs),
+                    "truncated": truncated,
+                    "recommended_next_directories": recommended_next_directories,
                 }
             )
             

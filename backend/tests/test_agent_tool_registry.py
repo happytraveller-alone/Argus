@@ -34,10 +34,12 @@ REMOVED_TOOL_NAMES = {
 }
 
 PUBLIC_CORE_SKILLS = {
-    "read_file",
     "search_code",
     "list_files",
-    "extract_function",
+    "get_code_window",
+    "get_file_outline",
+    "get_function_summary",
+    "get_symbol_body",
     "smart_scan",
     "quick_audit",
     "pattern_match",
@@ -71,12 +73,13 @@ async def test_smart_audit_tool_registry_contains_only_core_scan_surface(tmp_pat
     orchestrator_names = set(tools["orchestrator"].keys())
     recon_names = set(tools["recon"].keys())
 
-    assert {"read_file", "search_code", "list_files", "think", "reflect"}.issubset(recon_names)
+    assert {"search_code", "list_files", "get_file_outline", "get_code_window", "think", "reflect"}.issubset(recon_names)
     assert {
-        "read_file",
         "search_code",
         "list_files",
-        "extract_function",
+        "get_code_window",
+        "get_function_summary",
+        "get_symbol_body",
         "smart_scan",
         "quick_audit",
         "pattern_match",
@@ -87,10 +90,11 @@ async def test_smart_audit_tool_registry_contains_only_core_scan_surface(tmp_pat
         "reflect",
     }.issubset(analysis_names)
     assert {
-        "read_file",
         "search_code",
         "list_files",
-        "extract_function",
+        "get_code_window",
+        "get_function_summary",
+        "get_symbol_body",
         "run_code",
         "sandbox_exec",
         "verify_vulnerability",
@@ -98,11 +102,13 @@ async def test_smart_audit_tool_registry_contains_only_core_scan_surface(tmp_pat
         "think",
         "reflect",
     }.issubset(verification_names)
-    assert {"think", "reflect", "read_file", "search_code", "list_files"}.issubset(
+    assert {"think", "reflect", "search_code", "list_files", "get_code_window", "get_file_outline"}.issubset(
         orchestrator_names
     )
 
     for tool_set in (analysis_names, verification_names, orchestrator_names, recon_names):
         assert not (REMOVED_TOOL_NAMES & tool_set)
+        assert "read_file" not in tool_set
+        assert "extract_function" not in tool_set
 
     assert PUBLIC_CORE_SKILLS - {"sandbox_exec", "verify_vulnerability", "run_code", "create_vulnerability_report", "smart_scan", "quick_audit", "pattern_match", "dataflow_analysis", "controlflow_analysis_light", "logic_authz_analysis"}

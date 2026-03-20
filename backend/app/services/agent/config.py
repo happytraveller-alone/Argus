@@ -474,7 +474,7 @@ def get_agent_type_config(agent_type: str) -> AgentTypeConfig:
             agent_type="recon",
             max_iterations=config.recon_max_iterations,
             timeout_seconds=config.sub_agent_timeout_seconds,
-            tools=["list_files", "read_file", "search_code"],
+            tools=["list_files", "search_code", "get_file_outline", "get_code_window"],
             knowledge_modules=["project_analysis"],
         ),
         "analysis": AgentTypeConfig(
@@ -483,7 +483,8 @@ def get_agent_type_config(agent_type: str) -> AgentTypeConfig:
             timeout_seconds=config.sub_agent_timeout_seconds,
             tools=[
                 "smart_scan", "pattern_match", "dataflow_analysis",
-                "read_file", "search_code", "opengrep_scan", "bandit_scan"
+                "search_code", "get_code_window", "get_function_summary", "get_symbol_body",
+                "opengrep_scan", "bandit_scan"
             ],
             knowledge_modules=["sql_injection", "xss", "command_injection"],
         ),

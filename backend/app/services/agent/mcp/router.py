@@ -20,10 +20,12 @@ class MCPToolRouter:
 
     def __init__(self) -> None:
         self._route_map = {
-            "read_file": (self._LOCAL_ROUTE_ADAPTER, "read_file", False),
             "list_files": (self._LOCAL_ROUTE_ADAPTER, "list_files", False),
             "search_code": (self._LOCAL_ROUTE_ADAPTER, "search_code", False),
-            "extract_function": (self._LOCAL_ROUTE_ADAPTER, "extract_function", False),
+            "get_code_window": (self._LOCAL_ROUTE_ADAPTER, "get_code_window", False),
+            "get_file_outline": (self._LOCAL_ROUTE_ADAPTER, "get_file_outline", False),
+            "get_function_summary": (self._LOCAL_ROUTE_ADAPTER, "get_function_summary", False),
+            "get_symbol_body": (self._LOCAL_ROUTE_ADAPTER, "get_symbol_body", False),
             "locate_enclosing_function": (
                 self._LOCAL_ROUTE_ADAPTER,
                 "locate_enclosing_function",
@@ -284,39 +286,48 @@ class MCPToolRouter:
                     normalized_payload[key] = payload.get(key)
             payload = normalized_payload
 
-        elif tool_name == "read_file":
+        elif tool_name == "get_code_window":
             path_value = _sanitize_path(payload.get("file_path") or payload.get("path"))
             if path_value:
-                payload["path"] = path_value
-
-        elif tool_name == "extract_function":
-            path_value = _sanitize_path(
-                payload.get("file_path") or payload.get("path") or payload.get("file_name")
-            )
+                payload["file_path"] = path_value
+            raw_line = payload.get("anchor_line") if payload.get("anchor_line") is not None else payload.get("line")
+            if raw_line is not None:
+                try:
+                    payload["anchor_line"] = max(1, int(raw_line))
+                except Exception:
+                    pass
+        elif tool_name == "get_file_outline":
+            path_value = _sanitize_path(payload.get("file_path") or payload.get("path"))
             if path_value:
-                payload["path"] = path_value
+                payload["file_path"] = path_value
+        elif tool_name == "get_function_summary":
+            path_value = _sanitize_path(payload.get("file_path") or payload.get("path"))
+            if path_value:
+                payload["file_path"] = path_value
+            symbol = (
+                _non_empty_string(payload.get("function_name"))
+                or _non_empty_string(payload.get("symbol_name"))
+                or _non_empty_string(payload.get("symbol"))
+            )
+            if symbol:
+                payload["function_name"] = symbol
+            raw_line = payload.get("line")
+            if raw_line is not None:
+                try:
+                    payload["line"] = max(1, int(raw_line))
+                except Exception:
+                    pass
+        elif tool_name == "get_symbol_body":
+            path_value = _sanitize_path(payload.get("file_path") or payload.get("path"))
+            if path_value:
+                payload["file_path"] = path_value
             symbol = (
                 _non_empty_string(payload.get("symbol_name"))
-                or _non_empty_string(payload.get("symbol"))
                 or _non_empty_string(payload.get("function_name"))
-                or MCPToolRouter._infer_function_name_from_code(payload.get("code"))
+                or _non_empty_string(payload.get("symbol"))
             )
             if symbol:
                 payload["symbol_name"] = symbol
-                payload["symbol"] = symbol
-            raw_line = payload.get("line") if payload.get("line") is not None else payload.get("line_start")
-            if raw_line is not None:
-                try:
-                    normalized_line = max(1, int(raw_line))
-                except Exception:
-                    normalized_line = None
-                if normalized_line is not None:
-                    payload["line"] = normalized_line
-                    payload["line_start"] = normalized_line
-            payload.pop("code", None)
-            payload.pop("file_name", None)
-            payload.pop("file_path", None)
-            payload.pop("function_name", None)
 
         elif tool_name == "locate_enclosing_function":
             raw_path_value = _sanitize_path(payload.get("file_path") or payload.get("path"))

@@ -4,10 +4,12 @@ from typing import Any, Dict, List, Optional
 
 
 _SCAN_CORE_SKILLS: List[Dict[str, Any]] = [
-    {"skill_id": "read_file", "name": "read_file", "summary": "读取项目文件内容并返回证据上下文。"},
     {"skill_id": "search_code", "name": "search_code", "summary": "在项目中检索代码片段、关键字与命中位置。"},
     {"skill_id": "list_files", "name": "list_files", "summary": "按目录或模式列出候选文件，快速缩小分析范围。"},
-    {"skill_id": "extract_function", "name": "extract_function", "summary": "提取目标函数/符号主体，辅助漏洞分析与验证。"},
+    {"skill_id": "get_code_window", "name": "get_code_window", "summary": "围绕锚点返回极小代码窗口，作为唯一代码取证来源。"},
+    {"skill_id": "get_file_outline", "name": "get_file_outline", "summary": "返回文件整体职责、关键符号与入口点概览。"},
+    {"skill_id": "get_function_summary", "name": "get_function_summary", "summary": "解释单个函数的职责、输入输出、关键调用与风险点。"},
+    {"skill_id": "get_symbol_body", "name": "get_symbol_body", "summary": "提取目标函数/符号主体源码，不承担语义解释。"},
     {"skill_id": "locate_enclosing_function", "name": "locate_enclosing_function", "summary": "根据文件与行号定位所属函数及其范围，辅助补全函数级证据。"},
     {"skill_id": "smart_scan", "name": "smart_scan", "summary": "执行智能扫描，快速定位高风险区域。"},
     {"skill_id": "quick_audit", "name": "quick_audit", "summary": "执行轻量快速审计，输出优先检查点。"},
@@ -36,10 +38,12 @@ SCAN_CORE_LOCAL_SKILL_IDS = frozenset(
 SCAN_CORE_DEFAULT_TEST_PROJECT_NAME = "libplist"
 SCAN_CORE_SKILL_TEST_SUPPORTED_IDS = frozenset(
     {
-        "read_file",
         "list_files",
         "search_code",
-        "extract_function",
+        "get_code_window",
+        "get_file_outline",
+        "get_function_summary",
+        "get_symbol_body",
         "pattern_match",
         "smart_scan",
         "quick_audit",

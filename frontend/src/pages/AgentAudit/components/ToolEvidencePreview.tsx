@@ -19,17 +19,67 @@ export default function ToolEvidencePreview({
 
     return (
       <FindingCodeWindow
-        code={toolEvidenceLinesToCode(first.lines)}
+        code={first.matchText || "命中代码"}
         filePath={first.filePath}
-        lineStart={first.windowStartLine}
-        lineEnd={first.windowEndLine}
+        lineStart={first.matchLine}
+        lineEnd={first.matchLine}
         highlightStartLine={first.matchLine}
         highlightEndLine={first.matchLine}
         focusLine={first.matchLine}
-        title="命中窗口"
+        title="命中定位"
         density="compact"
         badges={[evidence.displayCommand, "命中"]}
-        meta={[`${first.filePath}:${first.matchLine}`, `${evidence.entries.length} 条命中`, first.language]}
+        meta={[
+          `${first.filePath}:${first.matchLine}${first.column ? `:${first.column}` : ""}`,
+          `${evidence.entries.length} 条命中`,
+          first.symbolName || "",
+        ]}
+      />
+    );
+  }
+
+  if (evidence.renderType === "outline_summary") {
+    const first = evidence.entries[0];
+    if (!first) return null;
+
+    return (
+      <FindingCodeWindow
+        code={[
+          `角色: ${first.fileRole || "unknown"}`,
+          `关键符号: ${first.keySymbols.join(", ") || "无"}`,
+          `入口点: ${first.entrypoints.join(", ") || "无"}`,
+          `风险标记: ${first.riskMarkers.join(", ") || "无"}`,
+        ].join("\n")}
+        filePath={first.filePath}
+        lineStart={1}
+        lineEnd={4}
+        focusLine={1}
+        title="文件概览"
+        density="compact"
+        badges={[evidence.displayCommand, "outline"]}
+      />
+    );
+  }
+
+  if (evidence.renderType === "function_summary") {
+    const first = evidence.entries[0];
+    if (!first) return null;
+
+    return (
+      <FindingCodeWindow
+        code={[
+          `签名: ${first.signature || "未知"}`,
+          `职责: ${first.purpose || "未提供"}`,
+          `关键调用: ${first.keyCalls.join(", ") || "无"}`,
+          `风险点: ${first.riskPoints.join(", ") || "无"}`,
+        ].join("\n")}
+        filePath={first.filePath}
+        lineStart={1}
+        lineEnd={4}
+        focusLine={1}
+        title={first.resolvedFunction || "函数摘要"}
+        density="compact"
+        badges={[evidence.displayCommand, "summary"]}
       />
     );
   }

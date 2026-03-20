@@ -1,16 +1,14 @@
 import { AlertTriangle, Bug } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
+	DataTable,
+	type AppColumnDef,
+	type DataTableQueryState,
+} from "@/components/data-table";
 import type { ProjectDetailPotentialListItem } from "@/pages/project-detail/potentialVulnerabilities";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 
@@ -95,34 +93,140 @@ export function ProjectPotentialVulnerabilitiesSection({
 	currentRoute,
 	pageSize = DEFAULT_PAGE_SIZE,
 }: ProjectPotentialVulnerabilitiesSectionProps) {
-	const [page, setPage] = useState(1);
-
-	useEffect(() => {
-		setPage(1);
-	}, [findings.length, status, pageSize]);
-
 	const statusMessage = useMemo(() => getStatusMessage(status), [status]);
-
-	const totalPages = Math.max(
-		1,
-		Math.ceil(Math.max(totalFindings, findings.length) / Math.max(1, pageSize)),
+	const columns = useMemo<ColumnDef<ProjectDetailPotentialListItem>[]>(
+		() =>
+			[
+				{
+					id: "findingId",
+					accessorFn: (row) => row.id,
+					header: "漏洞ID",
+					meta: {
+						label: "漏洞ID",
+						plainHeader: true,
+						headerClassName: "w-[24%] border-r border-border/50 text-center",
+						cellClassName:
+							"border-r border-border/30 text-center text-sm text-foreground whitespace-nowrap",
+					},
+					cell: ({ row }) => `#${row.original.id}`,
+				},
+				{
+					id: "findingTitle",
+					accessorFn: (row) => row.cweLabel,
+					header: "漏洞",
+					meta: {
+						label: "漏洞",
+						plainHeader: true,
+						headerClassName: "w-[22%] border-r border-border/50 text-center",
+						cellClassName: "border-r border-border/30 text-left",
+					},
+					cell: ({ row }) => (
+						<div
+							className="space-y-1 text-left"
+							title={row.original.cweTooltip || undefined}
+						>
+							<div className="text-sm font-semibold text-foreground">
+								{row.original.cweLabel}
+							</div>
+						</div>
+					),
+				},
+				{
+					id: "taskCategory",
+					accessorFn: (row) => row.taskCategory,
+					header: "任务",
+					meta: {
+						label: "任务",
+						plainHeader: true,
+						headerClassName: "w-[14%] border-r border-border/50 text-center",
+						cellClassName: "border-r border-border/30 text-center",
+					},
+					cell: ({ row }) => (
+						<div className="flex flex-col items-center gap-2">
+							<Badge className={getTaskCategoryBadgeClassName(row.original.taskCategory)}>
+								{row.original.taskLabel}
+							</Badge>
+						</div>
+					),
+				},
+				{
+					id: "severity",
+					accessorFn: (row) => row.severity,
+					header: "严重度",
+					meta: {
+						label: "严重度",
+						plainHeader: true,
+						headerClassName: "w-[10%] border-r border-border/50 text-center",
+						cellClassName: "border-r border-border/30 text-center",
+						filterVariant: "select",
+						filterOptions: [
+							{ label: "严重", value: "CRITICAL" },
+							{ label: "高危", value: "HIGH" },
+							{ label: "中危", value: "MEDIUM" },
+							{ label: "低危", value: "LOW" },
+						],
+					},
+					cell: ({ row }) => (
+						<Badge className={getSeverityBadgeClassName(row.original.severity)}>
+							{getSeverityText(row.original.severity)}
+						</Badge>
+					),
+				},
+				{
+					id: "confidence",
+					accessorFn: (row) => row.confidence,
+					header: "置信度",
+					meta: {
+						label: "置信度",
+						plainHeader: true,
+						headerClassName: "w-[10%] border-r border-border/50 text-center",
+						cellClassName: "border-r border-border/30 text-center",
+						filterVariant: "select",
+						filterOptions: [
+							{ label: "高", value: "HIGH" },
+							{ label: "中", value: "MEDIUM" },
+							{ label: "低", value: "LOW" },
+						],
+					},
+					cell: ({ row }) => (
+						<Badge className={getConfidenceBadgeClassName(row.original.confidence)}>
+							{getConfidenceText(row.original.confidence)}
+						</Badge>
+					),
+				},
+				{
+					id: "actions",
+					header: "操作",
+					enableSorting: false,
+					meta: {
+						label: "操作",
+						plainHeader: true,
+						headerClassName: "w-[16%] text-center",
+						cellClassName: "text-center",
+					},
+					cell: ({ row }) => (
+						<Button
+							asChild
+							size="sm"
+							variant="outline"
+							className="cyber-btn-ghost h-7 px-3"
+						>
+							<Link to={appendReturnTo(row.original.route, currentRoute)}>详情</Link>
+						</Button>
+					),
+				},
+			] satisfies AppColumnDef<ProjectDetailPotentialListItem, unknown>[],
+		[currentRoute],
 	);
-	const safePage = Math.min(page, totalPages);
-	const pageSizeToUse = Math.max(1, pageSize);
-
-	const pagedFindings = useMemo(() => {
-		if (findings.length === 0) return [];
-		const start = (safePage - 1) * pageSizeToUse;
-		return findings.slice(start, start + pageSizeToUse);
-	}, [findings, safePage, pageSizeToUse]);
-
-	const handlePrev = () => {
-		setPage((previous) => Math.max(1, previous - 1));
-	};
-
-	const handleNext = () => {
-		setPage((previous) => Math.min(totalPages, previous + 1));
-	};
+	const defaultState = useMemo<Partial<DataTableQueryState>>(
+		() => ({
+			pagination: {
+				pageIndex: 0,
+				pageSize: Math.max(1, pageSize),
+			},
+		}),
+		[pageSize],
+	);
 
 	return (
 		<section className="space-y-3">
@@ -152,120 +256,53 @@ export function ProjectPotentialVulnerabilitiesSection({
 				</div>
 			) : (
 				<div className="space-y-3">
-					<div className="rounded-sm border border-border/60 bg-slate-950/20">
-						<Table className="table-fixed">
-							<TableHeader>
-								<TableRow className="border-b border-border/60">
-									<TableHead className="w-[24%] border-r border-border/50 text-center">
-										漏洞ID
-									</TableHead>
-									<TableHead className="w-[22%] border-r border-border/50 text-center">
-										漏洞
-									</TableHead>
-									<TableHead className="w-[14%] border-r border-border/50 text-center">
-										任务
-									</TableHead>
-									<TableHead className="w-[10%] border-r border-border/50 text-center">
-										严重度
-									</TableHead>
-									<TableHead className="w-[10%] border-r border-border/50 text-center">
-										置信度
-									</TableHead>
-									<TableHead className="w-[16%] text-center">操作</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{pagedFindings.length > 0 ? (
-									pagedFindings.map((finding) => (
-										<TableRow
-											key={`${finding.taskId}:${finding.id}`}
-											className="border-b border-border/40"
-										>
-											<TableCell className="border-r border-border/30 text-center text-sm text-foreground whitespace-nowrap">
-												#{finding.id}
-											</TableCell>
-											<TableCell className="border-r border-border/30 text-left">
-												<div
-													className="space-y-1 text-left"
-													title={finding.cweTooltip || undefined}
-												>
-													<div className="text-sm font-semibold text-foreground">
-														{finding.cweLabel}
-													</div>
-												</div>
-											</TableCell>
-											<TableCell className="border-r border-border/30 text-center">
-												<div className="flex flex-col items-center gap-2">
-													<Badge className={getTaskCategoryBadgeClassName(finding.taskCategory)}>
-														{finding.taskLabel}
-													</Badge>
-													{/* <div className="text-xs text-muted-foreground" title={finding.taskName || finding.taskId}>
-														{finding.taskName || `#${finding.taskId}`}
-													</div> */}
-												</div>
-											</TableCell>
-											<TableCell className="border-r border-border/30 text-center">
-												<Badge className={getSeverityBadgeClassName(finding.severity)}>
-													{getSeverityText(finding.severity)}
-												</Badge>
-											</TableCell>
-											<TableCell className="border-r border-border/30 text-center">
-												<Badge className={getConfidenceBadgeClassName(finding.confidence)}>
-													{getConfidenceText(finding.confidence)}
-												</Badge>
-											</TableCell>
-											<TableCell className="text-center">
-												<Button
-													asChild
-													size="sm"
-													variant="outline"
-													className="cyber-btn-ghost h-7 px-3"
-												>
-													<Link to={appendReturnTo(finding.route, currentRoute)}>详情</Link>
-												</Button>
-											</TableCell>
-										</TableRow>
-									))
-								) : (
-									<TableRow>
-										<TableCell
-											colSpan={6}
-											className="py-10 text-center text-sm text-muted-foreground"
-										>
-											暂无潜在漏洞
-										</TableCell>
-									</TableRow>
-								)}
-							</TableBody>
-						</Table>
-					</div>
-					<div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-						<span>
-							第 {safePage} / {totalPages} 页
-						</span>
-						<div className="flex items-center gap-2">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="cyber-btn-ghost h-7 px-3"
-								onClick={handlePrev}
-								disabled={safePage === 1}
-							>
-								上一页
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="cyber-btn-ghost h-7 px-3"
-								onClick={handleNext}
-								disabled={safePage >= totalPages}
-							>
-								下一页
-							</Button>
-						</div>
-					</div>
+					<DataTable
+						key={`${status}:${findings.length}:${pageSize}`}
+						data={findings}
+						columns={columns}
+						defaultState={defaultState}
+						emptyState={{
+							title: "暂无潜在漏洞",
+						}}
+						toolbar={{
+							searchPlaceholder: "搜索漏洞 ID、类型或任务",
+							filters: [
+								{
+									columnId: "severity",
+									label: "严重度",
+									variant: "select",
+									options: [
+										{ label: "严重", value: "CRITICAL" },
+										{ label: "高危", value: "HIGH" },
+										{ label: "中危", value: "MEDIUM" },
+										{ label: "低危", value: "LOW" },
+									],
+								},
+								{
+									columnId: "confidence",
+									label: "置信度",
+									variant: "select",
+									options: [
+										{ label: "高", value: "HIGH" },
+										{ label: "中", value: "MEDIUM" },
+										{ label: "低", value: "LOW" },
+									],
+								},
+							],
+							showColumnVisibility: false,
+						}}
+						pagination={{
+							enabled: true,
+							pageSizeOptions: [10, 20, 50],
+							infoLabel: ({ table }) => {
+								const pageIndex = table.getState().pagination.pageIndex;
+								const pageCount = Math.max(1, table.getPageCount());
+								return `第 ${pageIndex + 1} / ${pageCount} 页`;
+							},
+						}}
+						className="border-border/60 bg-slate-950/20"
+						tableClassName="table-fixed"
+					/>
 				</div>
 			)}
 		</section>

@@ -3,7 +3,15 @@
 from .base import AgentTool, ToolResult
 from .pattern_tool import PatternMatchTool
 from .code_analysis_tool import CodeAnalysisTool, DataFlowAnalysisTool, VulnerabilityValidationTool
-from .file_tool import FileReadTool, FileSearchTool, ListFilesTool, LocateEnclosingFunctionTool
+from .file_tool import (
+    CodeWindowTool,
+    FileOutlineTool,
+    FileSearchTool,
+    FunctionSummaryTool,
+    ListFilesTool,
+    LocateEnclosingFunctionTool,
+    SymbolBodyTool,
+)
 from .sandbox_tool import SandboxTool, VulnerabilityVerifyTool, SandboxManager
 from .thinking_tool import ThinkTool, ReflectTool
 from .reporting_tool import CreateVulnerabilityReportTool
@@ -19,7 +27,7 @@ from .agent_tools import (
 )
 from .smart_scan_tool import SmartScanTool, QuickAuditTool
 from .business_logic_scan_tool import BusinessLogicScanTool
-from .run_code import RunCodeTool, ExtractFunctionTool
+from .run_code import RunCodeTool
 from .control_flow_tool import ControlFlowAnalysisLightTool
 from .logic_authz_tool import LogicAuthzAnalysisTool
 from .verification_result_tools import SaveVerificationResultTool, UpdateVulnerabilityFindingTool
@@ -31,10 +39,13 @@ __all__ = [
     "CodeAnalysisTool",
     "DataFlowAnalysisTool",
     "VulnerabilityValidationTool",
-    "FileReadTool",
+    "CodeWindowTool",
+    "FileOutlineTool",
     "FileSearchTool",
+    "FunctionSummaryTool",
     "ListFilesTool",
     "LocateEnclosingFunctionTool",
+    "SymbolBodyTool",
     "SandboxTool",
     "VulnerabilityVerifyTool",
     "SandboxManager",
@@ -53,7 +64,6 @@ __all__ = [
     "QuickAuditTool",
     "BusinessLogicScanTool",
     "RunCodeTool",
-    "ExtractFunctionTool",
     "ControlFlowAnalysisLightTool",
     "LogicAuthzAnalysisTool",
     "SaveVerificationResultTool",

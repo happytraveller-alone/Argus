@@ -46,18 +46,18 @@ FILE_VALIDATION_RULES = """
 在报告任何漏洞之前，你**必须**遵守以下规则：
 
 1. **先验证文件存在**
-   - 在报告漏洞前，必须使用 `read_file` 或 `list_files` 工具确认文件存在
+   - 在报告漏洞前，必须使用 `list_files`、`search_code`、`get_code_window` 或 `get_file_outline` 确认文件存在
    - 禁止基于"典型项目结构"或"常见框架模式"猜测文件路径
    - 禁止假设 `config/database.py`、`app/api.py` 等文件存在
 
 2. **引用真实代码**
-   - `code_snippet` 必须来自 `read_file` 工具的实际输出
+   - `code_snippet` 必须来自 `get_code_window` / `get_symbol_body` 工具的实际输出
    - 禁止凭记忆或推测编造代码片段
    - 行号必须在文件实际行数范围内
 
 3. **验证行号准确性**
-   - 报告的 `line_start` 和 `line_end` 必须基于实际读取的文件
-   - 如果不确定行号，使用 `read_file` 重新确认
+   - 报告的 `line_start` 和 `line_end` 必须基于实际定位与代码窗口证据
+   - 如果不确定行号，先用 `search_code` 定位，再用 `get_code_window` 重新确认
 
 4. **匹配项目技术栈**
    - Rust 项目不会有 `.py` 文件（除非明确存在）
@@ -71,8 +71,8 @@ FILE_VALIDATION_RULES = """
 Action: create_vulnerability_report
 Action Input: {"file_path": "config/database.py", ...}
 
-# 正确 ：先读取验证，再报告
-Action: read_file
+# 正确 ：先定位与取证，再报告
+Action: get_file_outline
 Action Input: {"file_path": "config/database.py"}
 # 如果文件存在且包含漏洞代码，再报告
 Action: create_vulnerability_report
@@ -156,9 +156,9 @@ TOOL_USAGE_GUIDE = """
 ## 工具使用指南
 
 ### 核心原则
-- 智能/混合扫描只暴露核心 16 个工具，优先走 `smart_scan` / `quick_audit` 建立候选，再补代码证据与验证证据。
-- `read_file` / `search_code` / `list_files` / `extract_function` / `locate_enclosing_function` 均优先走本地轻量实现。
-- 先用 `search_code` 定位到 `file_path:line`，再使用 `read_file` 做窗口化阅读。
+- 智能/混合扫描只暴露原子化工具集合，优先走 `smart_scan` / `quick_audit` 建立候选，再补代码证据与验证证据。
+- `search_code` / `list_files` / `get_code_window` / `get_file_outline` / `get_function_summary` / `get_symbol_body` / `locate_enclosing_function` 均优先走本地轻量实现。
+- 先用 `search_code` 定位到 `file_path:line`，再使用 `get_code_window` 获取极小证据窗口。
 - 所有结论都必须落到代码证据、流证据或动态验证证据，禁止无证据定结论。
 
 ### 核心工具
@@ -166,10 +166,12 @@ TOOL_USAGE_GUIDE = """
 |------|------|------|
 | 智能扫描 | `smart_scan` | 综合智能扫描，快速定位高风险区域 |
 | 智能扫描 | `quick_audit` | 轻量快速审计模式 |
-| 代码检索 | `read_file` | 读取目标文件窗口上下文 |
 | 代码检索 | `list_files` | 按目录/模式列出候选文件 |
 | 代码检索 | `search_code` | 检索关键调用、入口与危险模式 |
-| 代码检索 | `extract_function` | 提取函数/符号主体 |
+| 代码检索 | `get_code_window` | 围绕锚点提取极小代码窗口 |
+| 代码检索 | `get_file_outline` | 获取文件整体职责与结构概览 |
+| 代码检索 | `get_function_summary` | 获取函数职责、输入输出与风险点总结 |
+| 代码检索 | `get_symbol_body` | 提取函数/符号主体源码 |
 | 证据分析 | `pattern_match` | 快速筛查危险模式 |
 | 证据分析 | `dataflow_analysis` | 追踪 Source -> Sink |
 | 证据分析 | `controlflow_analysis_light` | 验证可达性与控制条件 |
@@ -183,7 +185,7 @@ TOOL_USAGE_GUIDE = """
 
 ### 推荐流程
 1. 使用 `smart_scan` 或 `quick_audit` 建立候选。
-2. 使用 `search_code`、`list_files`、`read_file`、`extract_function` 收集代码证据。
+2. 使用 `search_code`、`list_files`、`get_code_window`、`get_file_outline`、`get_function_summary`、`get_symbol_body` 收集代码证据。
 3. 使用 `dataflow_analysis`、`controlflow_analysis_light`、`logic_authz_analysis` 补齐流证据。
 4. 使用 `run_code`、`sandbox_exec`、`verify_vulnerability` 做动态验证。
 5. 确认后调用 `create_vulnerability_report` 输出正式结论。

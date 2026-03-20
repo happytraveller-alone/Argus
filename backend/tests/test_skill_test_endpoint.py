@@ -46,7 +46,7 @@ async def _collect_sse_events(response) -> list[dict]:
 def test_build_skill_test_tool_allowlist_only_allows_selected_skill_and_reasoning_helpers():
     from app.services.agent.skill_test_runner import build_skill_test_tool_allowlist
 
-    assert build_skill_test_tool_allowlist("read_file") == ("read_file", "think", "reflect")
+    assert build_skill_test_tool_allowlist("get_code_window") == ("get_code_window", "think", "reflect")
     assert build_skill_test_tool_allowlist("think") == ("think", "reflect")
 
 
@@ -63,31 +63,32 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
                 "默认测试项目命中 libplist",
                 {
                     "project_name": "libplist",
-                    "temp_dir": "/tmp/skill-test-read_file-1234",
+                    "temp_dir": "/tmp/skill-test-get_code_window-1234",
                 },
             )
             await self.event_emitter.emit(
                 _build_agent_event(
                     "llm_action",
-                    message="Action: read_file",
+                    message="Action: get_code_window",
                     metadata={"selected_skill": self.skill_id},
                 )
             )
             await self.event_emitter.emit(
                 _build_agent_event(
                     "tool_call",
-                    tool_name="read_file",
-                    tool_input={"file_path": "src/main.c"},
+                    tool_name="get_code_window",
+                    tool_input={"file_path": "src/main.c", "anchor_line": 2},
                 )
             )
             await self.event_emitter.emit(
                 _build_agent_event(
                     "tool_result",
-                    tool_name="read_file",
+                    tool_name="get_code_window",
                     tool_output="文件: src/main.c",
                     metadata={
-                        "display_command": "read_file -> sed",
-                        "command_chain": ["read_file", "sed"],
+                        "render_type": "code_window",
+                        "display_command": "get_code_window",
+                        "command_chain": ["get_code_window"],
                         "entries": [
                             {
                                 "file_path": "src/main.c",
@@ -106,10 +107,10 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
                 )
             )
             await self.event_emitter.emit_event(
-                "project_cleanup",
-                "临时目录清理完成",
-                {
-                    "temp_dir": "/tmp/skill-test-read_file-1234",
+                    "project_cleanup",
+                    "临时目录清理完成",
+                    {
+                    "temp_dir": "/tmp/skill-test-get_code_window-1234",
                     "cleanup_success": True,
                 },
             )
@@ -119,7 +120,7 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
                 "project_name": "libplist",
                 "cleanup": {
                     "success": True,
-                    "temp_dir": "/tmp/skill-test-read_file-1234",
+                    "temp_dir": "/tmp/skill-test-get_code_window-1234",
                 },
             }
 
@@ -128,7 +129,7 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
     monkeypatch.setattr(skills_module, "SkillTestRunner", _FakeRunner, raising=False)
 
     response = await skills_module.run_skill_test(
-        skill_id="read_file",
+        skill_id="get_code_window",
         request=skills_module.SkillTestRequest(prompt="读取 plist 解析入口", max_iterations=3),
         db=AsyncMock(),
         current_user=SimpleNamespace(id="user-1"),
@@ -146,7 +147,7 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
     assert event_types[-1] == "done"
 
     tool_result_event = next(event for event in events if event["type"] == "tool_result")
-    assert tool_result_event["metadata"]["display_command"] == "read_file -> sed"
+    assert tool_result_event["metadata"]["display_command"] == "get_code_window"
     assert tool_result_event["metadata"]["entries"][0]["file_path"] == "src/main.c"
 
     result_event = next(event for event in events if event["type"] == "result")

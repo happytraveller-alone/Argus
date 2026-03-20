@@ -19,24 +19,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  areDataTableQueryStatesEqual,
+  type DataTableQueryState,
+  useDataTableUrlState,
+} from "@/components/data-table";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import StaticAnalysisSummaryCards from "./static-analysis/StaticAnalysisSummaryCards";
 import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
 import {
-  buildStaticAnalysisListState,
   buildUnifiedFindingRows,
   decodeStaticAnalysisPathParam,
-  type ConfidenceFilter,
   type Engine,
-  type EngineFilter,
-  type SeverityFilter,
-  type StatusFilter,
 } from "./static-analysis/viewModel";
 
 export default function StaticAnalysis() {
@@ -60,6 +53,7 @@ export default function StaticAnalysis() {
       ? returnToParam
       : "";
   const currentRoute = `${location.pathname}${location.search}`;
+  const { initialState, syncStateToUrl } = useDataTableUrlState(true);
 
   const opengrepTaskId = useMemo(() => {
     const explicit = searchParams.get("opengrepTaskId");
@@ -120,12 +114,31 @@ export default function StaticAnalysis() {
   const hasEnabledEngine = Boolean(
     opengrepTaskId || gitleaksTaskId || banditTaskId || phpstanTaskId || yasaTaskId,
   );
-  const [engineFilter, setEngineFilter] = useState<EngineFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
-  const [confidenceFilter, setConfidenceFilter] =
-    useState<ConfidenceFilter>("all");
-  const [page, setPage] = useState(1);
+  const [tableState, setTableState] = useState<DataTableQueryState>(() => ({
+    ...initialState,
+    sorting:
+      initialState.sorting.length > 0
+        ? initialState.sorting
+        : [{ id: "severity", desc: true }],
+    pagination: {
+      pageIndex: initialState.pagination.pageIndex,
+      pageSize: initialState.pagination.pageSize || 10,
+    },
+  }));
+  const resolvedUrlState = useMemo<DataTableQueryState>(
+    () => ({
+      ...initialState,
+      sorting:
+        initialState.sorting.length > 0
+          ? initialState.sorting
+          : [{ id: "severity", desc: true }],
+      pagination: {
+        pageIndex: initialState.pagination.pageIndex,
+        pageSize: initialState.pagination.pageSize || 10,
+      },
+    }),
+    [initialState],
+  );
 
   const {
     opengrepTask,
@@ -189,19 +202,6 @@ export default function StaticAnalysis() {
     ],
   );
 
-  const listState = useMemo(
-    () =>
-      buildStaticAnalysisListState({
-        rows: unifiedRows,
-        engineFilter,
-        statusFilter,
-        severityFilter,
-        confidenceFilter,
-        page,
-      }),
-    [confidenceFilter, engineFilter, page, severityFilter, statusFilter, unifiedRows],
-  );
-
   const enabledEngines = useMemo(() => {
     const engines: Engine[] = [];
     if (opengrepTaskId) engines.push("opengrep");
@@ -211,18 +211,16 @@ export default function StaticAnalysis() {
     if (yasaTaskId) engines.push("yasa");
     return engines;
   }, [banditTaskId, gitleaksTaskId, opengrepTaskId, phpstanTaskId, yasaTaskId]);
-  const pageResetKey = `${engineFilter}:${statusFilter}:${severityFilter}:${confidenceFilter}`;
 
   useEffect(() => {
-    if (!pageResetKey) return;
-    setPage(1);
-  }, [pageResetKey]);
+    syncStateToUrl(tableState);
+  }, [syncStateToUrl, tableState]);
 
   useEffect(() => {
-    if (page !== listState.clampedPage) {
-      setPage(listState.clampedPage);
-    }
-  }, [listState.clampedPage, page]);
+    setTableState((current) =>
+      areDataTableQueryStatesEqual(current, resolvedUrlState) ? current : resolvedUrlState,
+    );
+  }, [resolvedUrlState]);
 
   useEffect(() => {
     if (!usesPathTaskIdFallback) return;
@@ -343,103 +341,15 @@ export default function StaticAnalysis() {
         enabledEngines={enabledEngines}
       />
 
-      {/* <div className="cyber-card p-4 space-y-3"> */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div>
-            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
-              引擎筛选
-            </div>
-            <Select
-              value={engineFilter}
-              onValueChange={(value) => setEngineFilter(value as EngineFilter)}
-            >
-              <SelectTrigger className="cyber-input">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="cyber-dialog border-border">
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="opengrep">Opengrep</SelectItem>
-                <SelectItem value="gitleaks">Gitleaks</SelectItem>
-                <SelectItem value="bandit">Bandit</SelectItem>
-                <SelectItem value="phpstan">PHPStan</SelectItem>
-                <SelectItem value="yasa">YASA</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
-              状态筛选
-            </div>
-            <Select
-              value={statusFilter}
-              onValueChange={(value) => setStatusFilter(value as StatusFilter)}
-            >
-              <SelectTrigger className="cyber-input">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="cyber-dialog border-border">
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="open">未处理</SelectItem>
-                <SelectItem value="verified">已验证</SelectItem>
-                <SelectItem value="false_positive">误报</SelectItem>
-                <SelectItem value="fixed">已修复</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
-              漏洞危害
-            </div>
-            <Select
-              value={severityFilter}
-              onValueChange={(value) => setSeverityFilter(value as SeverityFilter)}
-            >
-              <SelectTrigger className="cyber-input">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="cyber-dialog border-border">
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="CRITICAL">严重</SelectItem>
-                <SelectItem value="HIGH">高危</SelectItem>
-                <SelectItem value="MEDIUM">中危</SelectItem>
-                <SelectItem value="LOW">低危</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <div className="mb-1 block text-xs font-semibold uppercase text-muted-foreground">
-              置信度筛选
-            </div>
-            <Select
-              value={confidenceFilter}
-              onValueChange={(value) => setConfidenceFilter(value as ConfidenceFilter)}
-            >
-              <SelectTrigger className="cyber-input">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="cyber-dialog border-border">
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="HIGH">高</SelectItem>
-                <SelectItem value="MEDIUM">中</SelectItem>
-                <SelectItem value="LOW">低</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
         <StaticAnalysisFindingsTable
           currentRoute={currentRoute}
           loadingInitial={loadingInitial}
-          pagedRows={listState.pagedRows}
-          pageStart={listState.pageStart}
-          totalRows={listState.totalRows}
-          totalPages={listState.totalPages}
-          clampedPage={listState.clampedPage}
+          rows={unifiedRows}
+          state={tableState}
+          onStateChange={setTableState}
           updatingKey={updatingKey}
           onToggleStatus={handleToggleStatus}
-          onPageChange={setPage}
         />
-      {/* </div> */}
 
       <AlertDialog
         open={Boolean(interruptTarget)}

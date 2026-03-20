@@ -49,10 +49,12 @@ def test_sanitize_mcp_config_skill_availability_only_contains_scan_core(monkeypa
     skill_availability = sanitized["skillAvailability"]
 
     expected_public_ids = {
-        "read_file",
         "search_code",
         "list_files",
-        "extract_function",
+        "get_code_window",
+        "get_file_outline",
+        "get_function_summary",
+        "get_symbol_body",
         "locate_enclosing_function",
         "smart_scan",
         "quick_audit",
@@ -71,10 +73,11 @@ def test_sanitize_mcp_config_skill_availability_only_contains_scan_core(monkeypa
     assert "qmd_query" not in skill_availability
     assert "sequential_thinking" not in skill_availability
     assert "skill_lookup" not in skill_availability
-    assert skill_availability["read_file"]["source"] == "local"
-    assert skill_availability["read_file"]["reason"] == "ready"
     assert skill_availability["search_code"]["source"] == "local"
     assert skill_availability["search_code"]["reason"] == "ready"
     assert skill_availability["list_files"]["source"] == "local"
-    assert skill_availability["extract_function"]["source"] == "local"
+    assert skill_availability["get_code_window"]["source"] == "local"
+    assert skill_availability["get_file_outline"]["source"] == "local"
+    assert skill_availability["get_function_summary"]["source"] == "local"
+    assert skill_availability["get_symbol_body"]["source"] == "local"
     assert skill_availability["locate_enclosing_function"]["source"] == "local"

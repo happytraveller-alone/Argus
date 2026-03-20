@@ -31,7 +31,7 @@ test("buildExternalToolListState 支持动态 pageSize 切片", () => {
 test("buildExternalToolListState 会在过滤后重新计算总数和总页数", () => {
   const listState = buildExternalToolListState({
     rows,
-    searchQuery: "read",
+    searchQuery: "window",
     page: 1,
     pageSize: 3,
   });
@@ -39,7 +39,7 @@ test("buildExternalToolListState 会在过滤后重新计算总数和总页数",
   assert.equal(listState.totalRows, 1);
   assert.equal(listState.totalPages, 1);
   assert.equal(listState.pageRows.length, 1);
-  assert.equal(listState.pageRows[0]?.id, "read_file");
+  assert.equal(listState.pageRows[0]?.id, "get_code_window");
 });
 
 test("buildExternalToolListState 会把超出范围的页码钳制到最后一页", () => {

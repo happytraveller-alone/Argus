@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
+import { Copy, Database, Info, Shield, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -19,23 +18,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Database,
-  Info,
-  Search,
-  Shield,
-  Tag,
-} from "lucide-react";
+  areDataTableQueryStatesEqual,
+  DataTable,
+  type AppColumnDef,
+  type DataTableQueryState,
+  type DataTableSelectionContext,
+  useDataTableUrlState,
+} from "@/components/data-table";
 import { getYasaRules, type YasaRule } from "@/shared/api/yasa";
 
 type EngineTab = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa";
@@ -45,26 +34,6 @@ interface YasaRulesProps {
   engineValue?: EngineTab;
   onEngineChange?: (value: EngineTab) => void;
 }
-
-const LANGUAGE_OPTIONS = [
-  { value: "all", label: "所有语言" },
-  { value: "python", label: "python" },
-  { value: "javascript", label: "javascript" },
-  { value: "typescript", label: "typescript" },
-  { value: "golang", label: "golang" },
-  { value: "java", label: "java" },
-];
-
-const SOURCE_OPTIONS = [{ value: "all", label: "所有来源" }];
-const CONFIDENCE_OPTIONS = [
-  { value: "all", label: "所有等级" },
-  { value: "low", label: "低" },
-];
-const ACTIVE_STATUS_OPTIONS = [
-  { value: "all", label: "所有状态" },
-  { value: "enabled", label: "已启用" },
-];
-const PAGE_SIZE_OPTIONS = ["10", "20", "50"];
 
 interface YasaRuleRowViewModel {
   id: string;
@@ -98,6 +67,187 @@ function toViewModel(rule: YasaRule): YasaRuleRowViewModel {
   };
 }
 
+function buildColumns(
+  onOpenDetail: (row: YasaRuleRowViewModel) => void,
+  onCopyRule: (row: YasaRuleRowViewModel) => Promise<void>,
+): AppColumnDef<YasaRuleRowViewModel, unknown>[] {
+  return [
+    {
+      id: "rowNumber",
+      header: "序号",
+      enableSorting: false,
+      meta: {
+        label: "序号",
+        align: "center",
+        width: 64,
+      },
+      cell: ({ row, table }) =>
+        table.getState().pagination.pageIndex * table.getState().pagination.pageSize +
+        row.index +
+        1,
+    },
+    {
+      accessorKey: "ruleName",
+      header: "规则名称",
+      meta: {
+        label: "规则名称",
+        filterVariant: "text",
+      },
+      cell: ({ row }) => <span className="font-mono text-xs">{row.original.ruleName}</span>,
+    },
+    {
+      id: "languages",
+      accessorFn: (row) => row.languages.join(","),
+      header: "编程语言",
+      meta: {
+        label: "编程语言",
+        filterVariant: "select",
+        filterOptions: [
+          { label: "python", value: "python" },
+          { label: "javascript", value: "javascript" },
+          { label: "typescript", value: "typescript" },
+          { label: "golang", value: "golang" },
+          { label: "java", value: "java" },
+        ],
+      },
+      filterFn: (row, columnId, filterValue) => {
+        if (!filterValue) return true;
+        const languages = row.original.languages || [];
+        return languages.includes(String(filterValue));
+      },
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          {row.original.languages.length > 0 ? (
+            row.original.languages.map((language) => (
+              <Badge key={`${row.original.id}-${language}`} className="cyber-badge-info">
+                {language}
+              </Badge>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">未标注</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "source",
+      header: "规则来源",
+      meta: {
+        label: "规则来源",
+        filterVariant: "select",
+        filterOptions: [{ label: "内置规则", value: "内置规则" }],
+      },
+      cell: ({ row }) => <Badge className="cyber-badge-info">{row.original.source}</Badge>,
+    },
+    {
+      accessorKey: "confidence",
+      header: "置信度",
+      meta: {
+        label: "置信度",
+        filterVariant: "select",
+        filterOptions: [{ label: "低", value: "低" }],
+      },
+      cell: ({ row }) => <Badge className="cyber-badge-info">{row.original.confidence}</Badge>,
+    },
+    {
+      accessorKey: "activeStatus",
+      header: "启用状态",
+      meta: {
+        label: "启用状态",
+        filterVariant: "select",
+        filterOptions: [{ label: "已启用", value: "已启用" }],
+      },
+      cell: ({ row }) => <Badge className="cyber-badge-success">{row.original.activeStatus}</Badge>,
+    },
+    {
+      accessorKey: "verifyStatus",
+      header: "验证状态",
+      meta: {
+        label: "验证状态",
+      },
+      cell: ({ row }) => <span className="text-emerald-400">{row.original.verifyStatus}</span>,
+    },
+    {
+      accessorKey: "createdAt",
+      header: "创建时间",
+      meta: {
+        label: "创建时间",
+      },
+    },
+    {
+      id: "checkerPack",
+      accessorFn: (row) => row.checkerPacks.join(","),
+      header: "CheckerPack",
+      meta: {
+        label: "CheckerPack",
+        filterVariant: "select",
+      },
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          {row.original.checkerPacks.length > 0 ? (
+            row.original.checkerPacks.map((pack) => (
+              <Badge key={`${row.original.id}-${pack}`} className="cyber-badge-muted">
+                {pack}
+              </Badge>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      header: "操作",
+      enableSorting: false,
+      meta: {
+        label: "操作",
+        minWidth: 220,
+      },
+      cell: ({ row }) => (
+        <div className="flex items-center gap-3 text-sm">
+          <button
+            type="button"
+            className="text-primary hover:text-primary/80"
+            onClick={() => onOpenDetail(row.original)}
+          >
+            详情
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-primary hover:text-primary/80"
+            onClick={() => void onCopyRule(row.original)}
+          >
+            <Copy className="h-3 w-3" />
+            复制
+          </button>
+          <span className="cursor-not-allowed text-muted-foreground/50">编辑</span>
+          <span className="cursor-not-allowed text-muted-foreground/50">禁用</span>
+          <span className="cursor-not-allowed text-muted-foreground/50">删除</span>
+        </div>
+      ),
+    },
+  ];
+}
+
+function buildSelectionSummary({
+  selectedCount,
+  filteredCount,
+}: DataTableSelectionContext<YasaRuleRowViewModel>) {
+  if (selectedCount > 0) {
+    return (
+      <>
+        已选择 <span className="font-bold text-primary">{selectedCount}</span> 条规则
+      </>
+    );
+  }
+  return (
+    <>
+      将对全部 <span className="font-bold text-primary">{filteredCount}</span> 条规则进行操作
+    </>
+  );
+}
+
 export default function YasaRules({
   showEngineSelector = false,
   engineValue = "yasa",
@@ -106,16 +256,16 @@ export default function YasaRules({
   const [rules, setRules] = useState<YasaRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedLanguage, setSelectedLanguage] = useState("all");
-  const [selectedSource, setSelectedSource] = useState("all");
-  const [selectedConfidence, setSelectedConfidence] = useState("all");
-  const [selectedActiveStatus, setSelectedActiveStatus] = useState("all");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const [detailRule, setDetailRule] = useState<YasaRuleRowViewModel | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const { initialState, syncStateToUrl } = useDataTableUrlState(true);
+  const [tableState, setTableState] = useState<DataTableQueryState>(() =>
+    createInitialTableState(initialState),
+  );
+  const resolvedUrlState = useMemo(
+    () => createInitialTableState(initialState),
+    [initialState],
+  );
 
   const loadRules = async () => {
     try {
@@ -125,7 +275,6 @@ export default function YasaRules({
       setRules(data);
     } catch (error: any) {
       setLoadFailed(true);
-      console.error("Failed to load yasa rules:", error);
       const detail =
         error?.response?.data?.detail ||
         "未找到 YASA 资源目录，请检查 YASA_RESOURCE_DIR 或本机安装";
@@ -139,8 +288,17 @@ export default function YasaRules({
     void loadRules();
   }, []);
 
-  const rows = useMemo(() => rules.map(toViewModel), [rules]);
+  useEffect(() => {
+    setTableState((current) =>
+      areDataTableQueryStatesEqual(current, resolvedUrlState) ? current : resolvedUrlState,
+    );
+  }, [resolvedUrlState]);
 
+  useEffect(() => {
+    syncStateToUrl(tableState);
+  }, [syncStateToUrl, tableState]);
+
+  const rows = useMemo(() => rules.map(toViewModel), [rules]);
   const checkerPackOptions = useMemo(
     () =>
       Array.from(
@@ -150,7 +308,6 @@ export default function YasaRules({
       ).sort(),
     [rows],
   );
-  const [selectedCheckerPack, setSelectedCheckerPack] = useState("all");
 
   const stats = useMemo(() => {
     const languageCount = new Set(rows.flatMap((item) => item.languages)).size;
@@ -162,136 +319,89 @@ export default function YasaRules({
     };
   }, [rows, checkerPackOptions.length]);
 
-  const filteredRows = useMemo(
-    () =>
-      rows.filter((item) => {
-        const keyword = searchTerm.trim().toLowerCase();
-        const matchKeyword =
-          !keyword ||
-          item.ruleName.toLowerCase().includes(keyword) ||
-          item.description.toLowerCase().includes(keyword) ||
-          item.id.toLowerCase().includes(keyword) ||
-          item.checkerPath.toLowerCase().includes(keyword);
-
-        const matchLanguage =
-          selectedLanguage === "all" || item.languages.includes(selectedLanguage);
-        const matchSource =
-          selectedSource === "all" || item.source === "内置规则";
-        const matchConfidence =
-          selectedConfidence === "all" || item.confidence === "低";
-        const matchStatus =
-          selectedActiveStatus === "all" || item.activeStatus === "已启用";
-        const matchCheckerPack =
-          selectedCheckerPack === "all" || item.checkerPacks.includes(selectedCheckerPack);
-
-        return (
-          matchKeyword &&
-          matchLanguage &&
-          matchSource &&
-          matchConfidence &&
-          matchStatus &&
-          matchCheckerPack
-        );
-      }),
-    [
-      rows,
-      searchTerm,
-      selectedLanguage,
-      selectedSource,
-      selectedConfidence,
-      selectedActiveStatus,
-      selectedCheckerPack,
-    ],
+  const columns = useMemo<ColumnDef<YasaRuleRowViewModel>[]>(
+    () => buildColumns(
+      (row) => {
+        setDetailRule(row);
+        setShowDetail(true);
+      },
+      async (row) => {
+        try {
+          const text = JSON.stringify(
+            {
+              checker_id: row.id,
+              checker_packs: row.checkerPacks,
+              languages: row.languages,
+              checker_path: row.checkerPath,
+              demo_rule_config_path: row.demoRuleConfigPath,
+            },
+            null,
+            2,
+          );
+          await navigator.clipboard.writeText(text);
+          toast.success(`已复制规则: ${row.id}`);
+        } catch {
+          toast.error("复制失败，请手动复制");
+        }
+      },
+    ),
+    [],
   );
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
-  const page = Math.min(currentPage, totalPages);
-  const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+  const checkerPackFilterOptions = useMemo(
+    () => checkerPackOptions.map((option) => ({ label: option, value: option })),
+    [checkerPackOptions],
+  );
 
-  useEffect(() => {
-    setCurrentPage(1);
-    setSelectedRuleIds(new Set());
-  }, [
-    searchTerm,
-    selectedLanguage,
-    selectedSource,
-    selectedConfidence,
-    selectedActiveStatus,
-    selectedCheckerPack,
-    pageSize,
-  ]);
-
-  const allPageSelected =
-    paginatedRows.length > 0 &&
-    paginatedRows.every((row) => selectedRuleIds.has(row.id));
-
-  const handleToggleAllSelection = () => {
-    if (allPageSelected) {
-      const next = new Set(selectedRuleIds);
-      for (const row of paginatedRows) next.delete(row.id);
-      setSelectedRuleIds(next);
-      return;
-    }
-    const next = new Set(selectedRuleIds);
-    for (const row of paginatedRows) next.add(row.id);
-    setSelectedRuleIds(next);
-  };
-
-  const handleToggleRuleSelection = (ruleId: string) => {
-    const next = new Set(selectedRuleIds);
-    if (next.has(ruleId)) next.delete(ruleId);
-    else next.add(ruleId);
-    setSelectedRuleIds(next);
-  };
-
-  const resetFilters = () => {
-    setSearchTerm("");
-    setSelectedLanguage("all");
-    setSelectedSource("all");
-    setSelectedConfidence("all");
-    setSelectedActiveStatus("all");
-    setSelectedCheckerPack("all");
-  };
-
-  const handleCopyRule = async (row: YasaRuleRowViewModel) => {
-    try {
-      const text = JSON.stringify(
-        {
-          checker_id: row.id,
-          checker_packs: row.checkerPacks,
-          languages: row.languages,
-          checker_path: row.checkerPath,
-          demo_rule_config_path: row.demoRuleConfigPath,
-        },
-        null,
-        2,
-      );
-      await navigator.clipboard.writeText(text);
-      toast.success(`已复制规则: ${row.id}`);
-    } catch {
-      toast.error("复制失败，请手动复制");
-    }
-  };
+  const engineSelector = showEngineSelector ? (
+    <div className="min-w-[150px]">
+      <Select
+        value={engineValue}
+        onValueChange={(val) => {
+          if (
+            val === "opengrep" ||
+            val === "gitleaks" ||
+            val === "bandit" ||
+            val === "phpstan" ||
+            val === "yasa"
+          ) {
+            onEngineChange?.(val);
+          }
+        }}
+      >
+        <SelectTrigger className="cyber-input h-10 min-w-[150px]">
+          <SelectValue placeholder="选择引擎" />
+        </SelectTrigger>
+        <SelectContent className="cyber-dialog border-border">
+          <SelectItem value="opengrep">opengrep</SelectItem>
+          <SelectItem value="gitleaks">gitleaks</SelectItem>
+          <SelectItem value="bandit">bandit</SelectItem>
+          <SelectItem value="phpstan">phpstan</SelectItem>
+          <SelectItem value="yasa">yasa</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  ) : null;
 
   return (
     <div className="space-y-6 p-4 md:p-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
+      <div className="relative z-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="cyber-card p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="stat-label">有效规则总数</p>
               <div className="flex items-end gap-3">
                 <p className="stat-value">{stats.total}</p>
-                <p className="text-sm mb-1 flex items-center gap-3">
+                <p className="mb-1 flex items-center gap-3 text-sm">
                   <span className="inline-flex items-center gap-1 text-emerald-400">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
                     已启用 {stats.active}
                   </span>
                 </p>
               </div>
             </div>
             <div className="stat-icon text-primary">
-              <Database className="w-6 h-6" />
+              <Database className="h-6 w-6" />
             </div>
           </div>
         </div>
@@ -302,7 +412,7 @@ export default function YasaRules({
               <p className="stat-value">{stats.checkerPackCount}</p>
             </div>
             <div className="stat-icon text-indigo-400">
-              <Tag className="w-6 h-6" />
+              <Tag className="h-6 w-6" />
             </div>
           </div>
         </div>
@@ -313,7 +423,7 @@ export default function YasaRules({
               <p className="stat-value">{stats.languageCount}</p>
             </div>
             <div className="stat-icon text-cyan-400">
-              <Shield className="w-6 h-6" />
+              <Shield className="h-6 w-6" />
             </div>
           </div>
         </div>
@@ -326,333 +436,102 @@ export default function YasaRules({
       </div>
 
       <div className="cyber-card relative z-10 overflow-hidden">
-        <div className="p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="relative w-full max-w-sm shrink-0">
-              <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                搜索规则
-              </Label>
-              <div className="relative mt-1.5">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="搜索规则名称或ID..."
-                  className="cyber-input !pl-10 h-10"
-                />
-              </div>
+        <DataTable
+          data={rows}
+          columns={columns}
+          state={tableState}
+          onStateChange={setTableState}
+          loading={loading}
+          emptyState={{
+            title: loadFailed ? "加载失败，请检查 YASA 资源目录配置" : "暂无符合条件的规则",
+          }}
+          toolbar={{
+            searchPlaceholder: "搜索规则名称或ID...",
+            filters: [
+              {
+                columnId: "languages",
+                label: "编程语言",
+                variant: "select",
+                options: [
+                  { label: "python", value: "python" },
+                  { label: "javascript", value: "javascript" },
+                  { label: "typescript", value: "typescript" },
+                  { label: "golang", value: "golang" },
+                  { label: "java", value: "java" },
+                ],
+              },
+              {
+                columnId: "source",
+                label: "规则来源",
+                variant: "select",
+                options: [{ label: "内置规则", value: "内置规则" }],
+              },
+              {
+                columnId: "confidence",
+                label: "置信度",
+                variant: "select",
+                options: [{ label: "低", value: "低" }],
+              },
+              {
+                columnId: "activeStatus",
+                label: "启用状态",
+                variant: "select",
+                options: [{ label: "已启用", value: "已启用" }],
+              },
+              {
+                columnId: "checkerPack",
+                label: "CheckerPack",
+                variant: "select",
+                options: checkerPackFilterOptions,
+              },
+            ],
+            leadingActions: engineSelector,
+          }}
+          selection={{
+            enableRowSelection: true,
+            summary: buildSelectionSummary,
+            actions: () => (
+              <>
+                <Button type="button" size="sm" className="cyber-btn-primary h-8" disabled>
+                  批量启用
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="cyber-btn-outline h-8"
+                  disabled
+                >
+                  批量禁用
+                </Button>
+                <Button type="button" size="sm" variant="ghost" className="h-8 text-muted-foreground" disabled>
+                  取消操作
+                </Button>
+              </>
+            ),
+          }}
+          summary={
+            <div className="flex items-center gap-1 text-xs text-amber-300">
+              <Info className="h-3 w-3" />
+              YASA 规则当前只读，暂不支持启停写回
             </div>
-
-            <div className="flex flex-1 flex-wrap items-end gap-3">
-              {showEngineSelector ? (
-                <div className="min-w-[150px] flex-1">
-                  <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                    扫描引擎
-                  </Label>
-                  <Select
-                    value={engineValue}
-                    onValueChange={(val) => {
-                      if (
-                        val === "opengrep" ||
-                        val === "gitleaks" ||
-                        val === "bandit" ||
-                        val === "phpstan" ||
-                        val === "yasa"
-                      ) {
-                        onEngineChange?.(val);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="cyber-input h-10 mt-1.5">
-                      <SelectValue placeholder="选择引擎" />
-                    </SelectTrigger>
-                    <SelectContent className="cyber-dialog border-border">
-                      <SelectItem value="opengrep">opengrep</SelectItem>
-                      <SelectItem value="gitleaks">gitleaks</SelectItem>
-                      <SelectItem value="bandit">bandit</SelectItem>
-                      <SelectItem value="phpstan">phpstan</SelectItem>
-                      <SelectItem value="yasa">yasa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-
-              <div className="min-w-[140px] flex-1">
-                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  编程语言
-                </Label>
-                <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-                  <SelectTrigger className="cyber-input h-10 mt-1.5">
-                    <SelectValue placeholder="所有语言" />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    {LANGUAGE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-[140px] flex-1">
-                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  规则来源
-                </Label>
-                <Select value={selectedSource} onValueChange={setSelectedSource}>
-                  <SelectTrigger className="cyber-input h-10 mt-1.5">
-                    <SelectValue placeholder="所有来源" />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    {SOURCE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-[120px] flex-1">
-                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  置信度
-                </Label>
-                <Select value={selectedConfidence} onValueChange={setSelectedConfidence}>
-                  <SelectTrigger className="cyber-input h-10 mt-1.5">
-                    <SelectValue placeholder="所有等级" />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    {CONFIDENCE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-[120px] flex-1">
-                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  启用状态
-                </Label>
-                <Select value={selectedActiveStatus} onValueChange={setSelectedActiveStatus}>
-                  <SelectTrigger className="cyber-input h-10 mt-1.5">
-                    <SelectValue placeholder="所有状态" />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    {ACTIVE_STATUS_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-[180px] flex-1">
-                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  CheckerPack
-                </Label>
-                <Select value={selectedCheckerPack} onValueChange={setSelectedCheckerPack}>
-                  <SelectTrigger className="cyber-input h-10 mt-1.5">
-                    <SelectValue placeholder="所有来源" />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    <SelectItem value="all">所有 CheckerPack</SelectItem>
-                    {checkerPackOptions.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="cyber-btn-outline h-10 mt-1.5"
-                onClick={resetFilters}
-              >
-                重置
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-border px-4 py-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              将对全部 {filteredRows.length} 条规则进行操作
-            </span>
-            <div className="flex items-center gap-2">
-              <Button type="button" size="sm" className="cyber-btn-primary h-8" disabled>
-                批量启用
-              </Button>
-              <Button type="button" size="sm" variant="outline" className="cyber-btn-outline h-8" disabled>
-                批量禁用
-              </Button>
-              <Button type="button" size="sm" variant="ghost" className="h-8 text-muted-foreground" disabled>
-                取消操作
-              </Button>
-            </div>
-          </div>
-          <div className="text-xs text-amber-300 flex items-center gap-1">
-            <Info className="w-3 h-3" />
-            YASA 规则当前只读，暂不支持启停写回
-          </div>
-        </div>
-
-        <div className="border-t border-border">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="w-[48px]">
-                  <Checkbox checked={allPageSelected} onCheckedChange={handleToggleAllSelection} />
-                </TableHead>
-                <TableHead className="w-[64px]">序号</TableHead>
-                <TableHead>规则名称</TableHead>
-                <TableHead>编程语言</TableHead>
-                <TableHead>规则来源</TableHead>
-                <TableHead>置信度</TableHead>
-                <TableHead>启用状态</TableHead>
-                <TableHead>验证状态</TableHead>
-                <TableHead>创建时间</TableHead>
-                <TableHead className="min-w-[220px]">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="h-28 text-center text-muted-foreground">
-                    加载中...
-                  </TableCell>
-                </TableRow>
-              ) : paginatedRows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="h-28 text-center text-muted-foreground">
-                    {loadFailed ? "加载失败，请检查 YASA 资源目录配置" : "暂无符合条件的规则"}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedRows.map((row, index) => (
-                  <TableRow key={row.id} className="hover:bg-muted/20">
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedRuleIds.has(row.id)}
-                        onCheckedChange={() => handleToggleRuleSelection(row.id)}
-                      />
-                    </TableCell>
-                    <TableCell>{(page - 1) * pageSize + index + 1}</TableCell>
-                    <TableCell className="font-mono text-xs">{row.ruleName}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {row.languages.length > 0 ? (
-                          row.languages.map((language) => (
-                            <Badge key={`${row.id}-${language}`} className="cyber-badge-info">
-                              {language}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-xs text-muted-foreground">未标注</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className="cyber-badge-info">{row.source}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className="cyber-badge-info">{row.confidence}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className="cyber-badge-success">{row.activeStatus}</Badge>
-                    </TableCell>
-                    <TableCell className="text-emerald-400">{row.verifyStatus}</TableCell>
-                    <TableCell>{row.createdAt}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3 text-sm">
-                        <button
-                          type="button"
-                          className="text-primary hover:text-primary/80"
-                          onClick={() => {
-                            setDetailRule(row);
-                            setShowDetail(true);
-                          }}
-                        >
-                          详情
-                        </button>
-                        <button
-                          type="button"
-                          className="text-primary hover:text-primary/80 inline-flex items-center gap-1"
-                          onClick={() => void handleCopyRule(row)}
-                        >
-                          <Copy className="w-3 h-3" />
-                          复制
-                        </button>
-                        <span className="text-muted-foreground/50 cursor-not-allowed">编辑</span>
-                        <span className="text-muted-foreground/50 cursor-not-allowed">禁用</span>
-                        <span className="text-muted-foreground/50 cursor-not-allowed">删除</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>每页显示:</span>
-            <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-              <SelectTrigger className="w-[84px] h-8 cyber-input">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="cyber-dialog border-border">
-                {PAGE_SIZE_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="text-sm text-muted-foreground">
-            第 {page}/{totalPages} 页 共 {filteredRows.length} 条
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="cyber-btn-outline h-8"
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={page <= 1}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="cyber-btn-outline h-8"
-              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={page >= totalPages}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
+          }
+          pagination={{
+            enabled: true,
+            pageSizeOptions: [10, 20, 50],
+          }}
+          tableClassName="min-w-[1240px]"
+        />
       </div>
 
       <Dialog open={showDetail} onOpenChange={setShowDetail}>
-        <DialogContent className="cyber-dialog border border-border max-w-3xl">
+        <DialogContent className="cyber-dialog max-w-3xl border border-border">
           <DialogHeader>
             <DialogTitle>YASA 规则详情</DialogTitle>
           </DialogHeader>
           {detailRule ? (
             <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
                   <p className="text-muted-foreground">规则名称</p>
                   <p className="font-mono break-all">{detailRule.ruleName}</p>
@@ -664,7 +543,7 @@ export default function YasaRules({
               </div>
               <div>
                 <p className="text-muted-foreground">语言映射</p>
-                <div className="flex flex-wrap gap-2 mt-1">
+                <div className="mt-1 flex flex-wrap gap-2">
                   {detailRule.languages.length > 0 ? (
                     detailRule.languages.map((language) => (
                       <Badge key={`detail-${detailRule.id}-${language}`} className="cyber-badge-info">
@@ -678,7 +557,7 @@ export default function YasaRules({
               </div>
               <div>
                 <p className="text-muted-foreground">CheckerPack</p>
-                <div className="flex flex-wrap gap-2 mt-1">
+                <div className="mt-1 flex flex-wrap gap-2">
                   {detailRule.checkerPacks.length > 0 ? (
                     detailRule.checkerPacks.map((pack) => (
                       <Badge key={`detail-${detailRule.id}-${pack}`} className="cyber-badge-muted">
@@ -708,4 +587,14 @@ export default function YasaRules({
       </Dialog>
     </div>
   );
+}
+
+function createInitialTableState(initialState: DataTableQueryState): DataTableQueryState {
+  return {
+    ...initialState,
+    pagination: {
+      pageIndex: initialState.pagination.pageIndex,
+      pageSize: initialState.pagination.pageSize || 10,
+    },
+  };
 }

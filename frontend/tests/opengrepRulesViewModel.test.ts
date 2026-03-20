@@ -1,0 +1,30 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import React, { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
+
+import OpengrepRules from "../src/pages/OpengrepRules.tsx";
+import { LanguageProvider } from "../src/shared/i18n/LanguageProvider.tsx";
+
+globalThis.React = React;
+globalThis.document = { body: {} } as Document;
+
+test("OpengrepRules renders unified table layout shell", () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      MemoryRouter,
+      {},
+      createElement(LanguageProvider, {}, createElement(OpengrepRules)),
+    ),
+  );
+
+  assert.match(markup, /有效规则总数/);
+  assert.match(markup, /支持编程语言个数/);
+  assert.match(markup, /搜索规则名称或ID/);
+  assert.match(markup, /规则来源/);
+  assert.match(markup, /重置/);
+  assert.match(markup, />列</);
+  assert.match(markup, /上一页/);
+  assert.match(markup, /下一页/);
+});

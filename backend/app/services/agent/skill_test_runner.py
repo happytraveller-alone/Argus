@@ -17,23 +17,27 @@ from app.services.agent.skills.scan_core import (
     get_scan_core_skill_test_policy,
 )
 from app.services.agent.tools import (
-    ExtractFunctionTool,
-    FileReadTool,
+    CodeWindowTool,
+    FileOutlineTool,
     FileSearchTool,
+    FunctionSummaryTool,
     ListFilesTool,
     PatternMatchTool,
     QuickAuditTool,
     ReflectTool,
     SmartScanTool,
+    SymbolBodyTool,
     ThinkTool,
 )
 
 
 _SUPPORTED_TOOL_BUILDERS = {
-    "read_file": lambda project_root, llm_service: FileReadTool(project_root),
+    "get_code_window": lambda project_root, llm_service: CodeWindowTool(project_root),
+    "get_file_outline": lambda project_root, llm_service: FileOutlineTool(project_root),
+    "get_function_summary": lambda project_root, llm_service: FunctionSummaryTool(project_root),
+    "get_symbol_body": lambda project_root, llm_service: SymbolBodyTool(project_root),
     "list_files": lambda project_root, llm_service: ListFilesTool(project_root),
     "search_code": lambda project_root, llm_service: FileSearchTool(project_root),
-    "extract_function": lambda project_root, llm_service: ExtractFunctionTool(project_root),
     "pattern_match": lambda project_root, llm_service: PatternMatchTool(project_root),
     "smart_scan": lambda project_root, llm_service: SmartScanTool(project_root),
     "quick_audit": lambda project_root, llm_service: QuickAuditTool(project_root),

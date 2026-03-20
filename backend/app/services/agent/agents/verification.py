@@ -112,9 +112,9 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 
 | 优先级 | 工具 | 用途 | 调用时机 |
 |--------|------|------|---------|
-| 1 | `extract_function` | 提取目标函数代码 | 开始验证时，获取完整函数体 |
+| 1 | `get_symbol_body` | 提取目标函数代码 | 开始验证时，获取完整函数体 |
 | 2 | `run_code` | 执行 Fuzzing Harness/PoC | **核心验证手段**，执行测试脚本 |
-| 3 | `read_file` | 读取代码上下文 | 需要 surrounding code 时 |
+| 3 | `get_code_window` | 读取代码上下文 | 需要 surrounding code 时 |
 | 4 | `search_code` | 查找调用链、依赖关系 | 验证可达性时 |
 | 5 | `save_verification_result` | **持久化单个验证结果** | **每验证完一个漏洞就调用** |
 
@@ -286,12 +286,12 @@ if ({}.polluted === true) {
 
 ```
 步骤1: 提取目标
-    └─> extract_function 获取函数代码
-    └─> 若失败则用 read_file 读取行范围
+    └─> get_symbol_body 获取函数代码
+    └─> 若失败则用 get_code_window 读取行范围
 
 步骤2: 分析上下文  
     └─> search_code 查找调用链（验证可达性）
-    └─> read_file 读取配置文件（检查防御机制）
+    └─> get_code_window 读取配置文件附近窗口（检查防御机制）
 
 步骤3: 构建 Harness
     └─> 根据漏洞类型选择模板
@@ -352,7 +352,7 @@ if ({}.polluted === true) {
 ```
 
 `function_name` 为必填：
-- 优先使用定位结果（TreeSitter/regex/extract_function）
+- 优先使用定位结果（TreeSitter/regex/get_symbol_body）
 - 若定位失败，尝试从标题中提取函数名
 - 若仍失败，使用语义化占位符（如 `<function_at_line_45>`），禁止留空
 
@@ -380,8 +380,8 @@ if ({}.polluted === true) {
 
 ```
 Thought: 收到 SQL 注入漏洞，位于 app/api/search.py:28。首先提取目标函数进行动态验证。
-Action: extract_function
-Action Input: {"file_path": "app/api/search.py", "function_name": "search", "include_imports": true}
+Action: get_symbol_body
+Action Input: {"file_path": "app/api/search.py", "symbol_name": "search"}
 
 Observation: 
 ```python
@@ -2345,7 +2345,7 @@ class VerificationAgent(BaseAgent):
 
 ## 验证指南
 1. **直接使用上述文件路径** - 使用精确路径: `{file_path}`
-2. **先读取完整文件内容** - 使用 `read_file` 工具了解上下文
+2. **先读取完整文件内容** - 使用 `get_code_window` 工具了解上下文
 3. **深入分析代码逻辑** - 确认漏洞是否真实存在
 4. **编写验证代码** - 如可能，使用 `run_code` 编写 Fuzzing Harness 验证
 
@@ -2359,9 +2359,9 @@ class VerificationAgent(BaseAgent):
 {self.get_tools_description()}
 
 请立即开始验证这个发现：
-1. 使用 read_file 读取 `{file_path}` (关注第 {line_start} 行附近)
+1. 使用 get_code_window 读取 `{file_path}` (关注第 {line_start} 行附近)
 2. 分析代码上下文，确认漏洞是否存在
-3. 如需要，使用其他工具 (run_code, search_code, extract_function) 深入验证
+3. 如需要，使用其他工具 (run_code, search_code, get_symbol_body) 深入验证
 4. 给出最终验证结论
 
 {f'💡 参考 Analysis Agent 的分析要点。' if handoff_context else ''}"""
@@ -2402,7 +2402,7 @@ class VerificationAgent(BaseAgent):
 
 ## 重要验证指南
 1. **直接使用上面列出的文件路径** - 不要猜测或搜索其他路径
-2. **如果文件路径包含冒号和行号** (如 "app.py:36"), 请提取文件名 "app.py" 并使用 read_file 读取
+2. **如果文件路径包含冒号和行号** (如 "app.py:36"), 请提取文件名 "app.py" 并使用 get_code_window 读取
 3. **先读取文件内容，再判断漏洞是否存在**
 4. **不要假设文件在子目录中** - 使用发现中提供的精确路径
 
@@ -2413,7 +2413,7 @@ class VerificationAgent(BaseAgent):
 {self.get_tools_description()}
 
 请开始验证。对于每个发现：
-1. 首先使用 read_file 读取发现中指定的文件（使用精确路径）
+1. 首先使用 get_code_window 读取发现中指定的文件（使用精确路径）
 2. 分析代码上下文
 3. 判断是否为真实漏洞
 {f'特别注意 Analysis Agent 提到的关注点。' if handoff_context else ''}"""
@@ -2497,10 +2497,11 @@ class VerificationAgent(BaseAgent):
                             if forced_file:
                                 forced_input = {
                                     "file_path": forced_file,
-                                    "start_line": max(1, forced_line - 8),
-                                    "end_line": max(forced_line + 20, forced_line),
+                                    "anchor_line": forced_line,
+                                    "before_lines": 8,
+                                    "after_lines": 20,
                                 }
-                                forced_observation = await self.execute_tool("read_file", forced_input)
+                                forced_observation = await self.execute_tool("get_code_window", forced_input)
                                 self._conversation_history.append(
                                     {
                                         "role": "user",
@@ -2514,9 +2515,9 @@ class VerificationAgent(BaseAgent):
                                     "**系统拒绝**: 你必须先使用工具验证漏洞！\n\n"
                                     "不允许在没有调用任何工具的情况下直接输出 Final Answer。\n\n"
                                     "请立即使用以下工具之一进行验证：\n"
-                                    "1. `read_file` - 读取漏洞所在文件的代码\n"
+                                    "1. `get_code_window` - 读取漏洞所在位置的极小代码窗口\n"
                                     "2. `run_code` - 编写并执行 Fuzzing Harness 验证漏洞\n"
-                                    "3. `extract_function` - 提取目标函数进行分析\n\n"
+                                    "3. `get_symbol_body` - 提取目标函数进行分析\n\n"
                                     "现在请输出 Thought 和 Action，开始验证第一个漏洞。"
                                 ),
                             }
@@ -2564,7 +2565,7 @@ class VerificationAgent(BaseAgent):
                             "请不要重复相同调用。你必须根据错误信息调整参数或更换验证路径，然后继续验证。\n"
                             "请优先执行：\n"
                             "1. 基于最近一次错误信息，修改 Action Input 后重试同一工具\n"
-                            "2. 若路径/行号相关错误，先用 search_code/read_file 定位后再调用\n"
+                            "2. 若路径/行号相关错误，先用 search_code/get_code_window 定位后再调用\n"
                             "3. 若工具不可用或超时，切换到替代工具并说明原因"
                         )
                         if last_error_excerpt:
@@ -2605,7 +2606,7 @@ class VerificationAgent(BaseAgent):
                             f"- 当前失败工具: {step.action}\n"
                             f"- 当前失败次数: {fail_count}\n"
                             "- 下一步请直接基于上面的错误信息修改 Action Input，再次调用工具\n"
-                            "- 若报错为路径/定位问题，先执行 search_code 或 read_file 缩小范围\n"
+                            "- 若报错为路径/定位问题，先执行 search_code 或 get_code_window 缩小范围\n"
                             "- 若报错为权限/环境/工具不可用，改用替代工具并继续验证\n"
                             "- 禁止在未尝试参数修复前直接结束验证\n"
                             f"\n失败片段:\n{failure_excerpt}"
@@ -2615,7 +2616,7 @@ class VerificationAgent(BaseAgent):
                             observation += f"\n\n**系统提示**: 此工具调用已连续失败 {fail_count} 次。请：\n"
                             observation += "1. 尝试使用不同的参数（如指定较小的行范围）\n"
                             observation += "2. 使用 search_code 工具定位关键代码片段\n"
-                            observation += "3. 切换其他可用工具进行等价验证（例如 extract_function/run_code/read_file）\n"
+                            observation += "3. 切换其他可用工具进行等价验证（例如 get_symbol_body/run_code/get_code_window）\n"
                             observation += "4. 继续当前漏洞验证，不要直接结束整个验证流程"
                             self._failed_tool_calls[tool_call_key] = 0
                     else:

@@ -68,9 +68,9 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 ## 关键约束（必须严格遵守）
 
 1. **禁止自行分析可行性** —— 只需标记"可疑区域"，准确描述风险即可（如"此处使用了 eval，可能导致代码注入"），具体验证由后续 Agent 完成
-2. **必须基于实际代码** —— 只推送通过 `read_file` 成功读取并确认存在的行，**杜绝幻觉**
+2. **必须基于实际代码** —— 只推送通过 `get_code_window` 或 `get_file_outline` 确认存在的代码位置，**杜绝幻觉**
 3. **必须覆盖关键目录** —— 至少遍历 `src/`, `app/`, `lib/`, `api/`, `utils/`, `config/`, `handlers/`, `controllers/`, `routes/`, `middleware/`, `services/`, `models/`
-4. **必须使用工具** —— 推送前必须通过 `list_files`, `read_file`, `search_code` 等工具获取真实项目信息，在指定文件或者目录时，需要使用相对路径（如 `src/auth/login.py`），禁止使用绝对路径或者假设路径
+4. **必须使用工具** —— 推送前必须通过 `list_files`, `search_code`, `get_code_window`, `get_file_outline` 等工具获取真实项目信息，在指定文件或者目录时，需要使用相对路径（如 `src/auth/login.py`），禁止使用绝对路径或者假设路径
 
 ═══════════════════════════════════════════════════════════════
 
@@ -133,17 +133,17 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 ### 阶段一：项目概览（建立地图）
 1. 使用 `list_files` 查看根目录，识别主要目录和关键文件（`package.json`, `requirements.txt`, `go.mod`, `pom.xml` 等）
 2. 读取包管理文件，确定技术栈（语言、框架、依赖库）
-3. 使用 `search_code` 和 `read_file` 进一步了解项目架构
+3. 使用 `search_code` 和 `get_file_outline` / `get_code_window` 进一步了解项目架构
 
 ### 阶段二：深度遍历与风险挖掘（地毯式搜索）
-4. **代码搜索先行**：使用 `search_code` 和 `read_file` 搜索高风险关键词，快速定位可疑区域：
+4. **代码搜索先行**：使用 `search_code` 和 `get_code_window` 搜索高风险关键词，快速定位可疑区域：
    - "哪里使用了 eval 或 exec 执行动态代码？"
    - "哪里拼接 SQL 查询字符串？"
    - "哪里处理文件上传和路径拼接？"
    - "哪里进行密码验证和 session 管理？"
    - "哪里调用了系统命令或 subprocess？"
 5. 依次遍历所有关键代码目录，使用 `list_files` 获取文件列表
-6. 对重点文件（路由、控制器、工具类、中间件），使用 `read_file` 读取内容（可限制行数，必要时分段读取）
+6. 对重点文件（路由、控制器、工具类、中间件），使用 `get_file_outline` 获取结构，再用 `get_code_window` 读取关键位置
 7. **全局模式搜索**：使用 `search_code` 对特定危险函数进行项目级搜索（`eval`, `exec`, `subprocess`, `execute`, `raw`, `pickle.loads` 等）
 8. **即时推送**：每当发现符合高风险模式的具体代码行，立即构造风险点并调用 `push_risk_point_to_queue`；若读取同一文件后发现多个风险点，可改用 `push_risk_points_to_queue` 批量入队，减少调用轮次
 
@@ -242,7 +242,7 @@ Final Answer: 侦察任务完成，已将所有识别的风险点推入队列。
 | 错误行为 | 正确做法 |
 |---------|---------|
 | 假设某文件存在（如 `routes.py`） | 先用 `list_files` 确认 |
-| 仅凭 `search_code` 匹配就推送 | 用 `read_file` 确认上下文，避免误报 |
+| 仅凭 `search_code` 匹配就推送 | 用 `get_code_window` 确认上下文，避免误报 |
 | 捏造行号或代码内容 | 必须基于实际读取的代码行 |
 | 根据框架类型假设存在典型漏洞 | 一切以实际文件内容为准 |
 | 推送模糊的风险描述 | 必须具体到某行代码的具体问题 |
@@ -258,8 +258,8 @@ Action Input: { "directory": "." }
 
 Observation: ["src/", "tests/", "config/", "requirements.txt", "README.md"]
 
-Thought: 发现 requirements.txt，读取它确定依赖，确认技术栈
-Action: read_file
+Thought: 发现 requirements.txt，先读取文件概览与关键窗口，确认依赖与技术栈
+Action: get_file_outline
 Action Input: { "file_path": "requirements.txt" }
 
 Observation: Flask==2.0.1, SQLAlchemy==1.4.27, PyJWT==2.3.0, redis==4.0.0
@@ -276,9 +276,9 @@ Action Input: { "keyword": "execute|cursor.execute|raw SQL", "file_pattern": "*.
 
 Observation: auth.py 第 40 行和 user_service.py 第 25 行有可疑的数据库操作
 
-Thought: 读取 auth.py 验证 SQL 注入风险
-Action: read_file
-Action Input: { "file_path": "src/auth.py", "max_lines": 60 }
+Thought: 读取 auth.py 锚点附近窗口，验证 SQL 注入风险
+Action: get_code_window
+Action Input: { "file_path": "src/auth.py", "anchor_line": 40, "before_lines": 8, "after_lines": 8 }
 
 Observation: ... 
 第 38 行: def login():
@@ -299,9 +299,9 @@ Action Input: {
     "code_snippet": "cursor.execute(f\"SELECT * FROM users WHERE username = '{username}'\")"
 }
 
-Thought: 继续读取 user_service.py 检查另一个可疑点，同时搜索其他风险模式
-Action: read_file
-Action Input: { "file_path": "src/user_service.py", "max_lines": 50 }
+Thought: 继续读取 user_service.py 锚点附近窗口，检查另一个可疑点，同时搜索其他风险模式
+Action: get_code_window
+Action Input: { "file_path": "src/user_service.py", "anchor_line": 25, "before_lines": 8, "after_lines": 8 }
 
 Observation: ... 第 25 行使用 ORM，无注入风险 ...
 
@@ -311,9 +311,9 @@ Action Input: { "keyword": "eval|exec", "file_pattern": "*.py", "is_regex": true
 
 Observation: 在 src/utils.py 第 15 行发现 eval 使用
 
-Thought: 读取 utils.py 确认 eval 的使用场景
-Action: read_file
-Action Input: { "file_path": "src/utils.py", "max_lines": 30 }
+Thought: 读取 utils.py 锚点附近窗口，确认 eval 的使用场景
+Action: get_code_window
+Action Input: { "file_path": "src/utils.py", "anchor_line": 15, "before_lines": 6, "after_lines": 6 }
 
 Observation: ...
 第 14 行: def calculate(expression):
@@ -806,7 +806,7 @@ class ReconAgent(BaseAgent):
                         retry_prompt = f"""收到空响应。请根据以下格式输出你的思考和行动：
 
 Thought: [你对当前情况的分析]
-Action: [工具名称，如 list_files, read_file, search_code]
+Action: [工具名称，如 list_files, get_code_window, get_file_outline, search_code]
 Action Input: {{}}
 
 可用工具: {', '.join(self.tools.keys())}

@@ -9,7 +9,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +19,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  type AppColumnDef,
+  areDataTableQueryStatesEqual,
+  createDefaultDataTableState,
+  DataTable,
+  type DataTableQueryState,
+  type DataTableSelectionContext,
+  useDataTableUrlState,
+} from "@/components/data-table";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -27,22 +35,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  AlertCircle,
   AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
   Code,
   Database,
   Save,
-  Search,
   Shield,
 } from "lucide-react";
 import {
@@ -57,8 +53,10 @@ import {
   updatePhpstanRuleEnabled,
   type PhpstanRule,
 } from "@/shared/api/phpstan";
+import { resolveDeletedFilterValue } from "@/pages/rulesTableState";
 
 type EngineTab = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa";
+type DeletedFilterValue = "false" | "true" | "all";
 
 interface PhpstanRulesProps {
   showEngineSelector?: boolean;
@@ -75,6 +73,63 @@ const getSourceLabel = (source?: string) => {
   if (!source) return "未知来源";
   return SOURCE_LABEL_MAP[source] ?? source;
 };
+const DEFAULT_PAGE_SIZE = 10;
+
+function formatDate(value?: string | null) {
+  return value ? new Date(value).toLocaleString("zh-CN") : "-";
+}
+
+function getColumnFilterValue(state: DataTableQueryState, columnId: string) {
+  return state.columnFilters.find((filter) => filter.id === columnId)?.value;
+}
+
+function getStringColumnFilter(
+  state: DataTableQueryState,
+  columnId: string,
+  fallback = "",
+) {
+  const value = getColumnFilterValue(state, columnId);
+  return typeof value === "string" ? value : fallback;
+}
+
+function buildSelectionSummary({
+  selectedCount,
+  filteredCount,
+}: DataTableSelectionContext<PhpstanRule>) {
+  if (selectedCount > 0) {
+    return (
+      <>
+        已选择 <span className="font-bold text-primary">{selectedCount}</span> 条规则
+      </>
+    );
+  }
+  return (
+    <>
+      将对全部 <span className="font-bold text-primary">{filteredCount}</span> 条规则进行操作
+    </>
+  );
+}
+
+function createInitialTableState(initialState: DataTableQueryState): DataTableQueryState {
+  const nextState = createDefaultDataTableState({
+    ...initialState,
+    pagination: {
+      pageIndex: initialState.pagination.pageIndex,
+      pageSize: initialState.pagination.pageSize || DEFAULT_PAGE_SIZE,
+    },
+    columnVisibility: {
+      isActiveFilter: false,
+      deletedStatus: false,
+      ...initialState.columnVisibility,
+    },
+  });
+
+  if (!nextState.columnFilters.some((filter) => filter.id === "deletedStatus")) {
+    nextState.columnFilters.push({ id: "deletedStatus", value: "false" });
+  }
+
+  return nextState;
+}
 
 export default function PhpstanRules({
   showEngineSelector = false,
@@ -83,11 +138,7 @@ export default function PhpstanRules({
 }: PhpstanRulesProps) {
   const [rules, setRules] = useState<PhpstanRule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSource, setSelectedSource] = useState("");
-  const [selectedActiveStatus, setSelectedActiveStatus] = useState("");
-  const [selectedDeletedStatus, setSelectedDeletedStatus] = useState<"false" | "true" | "all">("false");
-  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [batchOperating, setBatchOperating] = useState(false);
   const [showRuleDetail, setShowRuleDetail] = useState(false);
   const [selectedRule, setSelectedRule] = useState<PhpstanRule | null>(null);
@@ -99,23 +150,33 @@ export default function PhpstanRules({
     package: "",
     repo: "",
     name: "",
-    description_summary: "",
-    source_file: "",
-    source: "",
+      description_summary: "",
+      source_file: "",
+      source: "",
   });
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const { initialState, syncStateToUrl } = useDataTableUrlState(true);
+  const [tableState, setTableState] = useState<DataTableQueryState>(() =>
+    createInitialTableState(initialState),
+  );
+  const resolvedUrlState = useMemo(
+    () => createInitialTableState(initialState),
+    [initialState],
+  );
+  const deletedFilter = resolveDeletedFilterValue(tableState);
+  const activeFilter = getStringColumnFilter(tableState, "isActiveFilter");
 
   const loadRules = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const data = await getPhpstanRules({
-        deleted: selectedDeletedStatus,
+        deleted: deletedFilter,
         limit: 2000,
       });
       setRules(data);
     } catch (error) {
       console.error("Failed to load phpstan rules:", error);
+      setLoadError("加载 PHPStan 规则失败");
       toast.error("加载 PHPStan 规则失败");
     } finally {
       setLoading(false);
@@ -124,7 +185,17 @@ export default function PhpstanRules({
 
   useEffect(() => {
     void loadRules();
-  }, [selectedDeletedStatus]);
+  }, [deletedFilter]);
+
+  useEffect(() => {
+    setTableState((current) =>
+      areDataTableQueryStatesEqual(current, resolvedUrlState) ? current : resolvedUrlState,
+    );
+  }, [resolvedUrlState]);
+
+  useEffect(() => {
+    syncStateToUrl(tableState);
+  }, [syncStateToUrl, tableState]);
 
   const stats = useMemo(() => {
     const active = rules.filter((rule) => rule.is_active).length;
@@ -142,37 +213,197 @@ export default function PhpstanRules({
   }, [rules]);
 
   const sourceOptions = useMemo(
-    () => Array.from(new Set(rules.map((rule) => rule.source).filter(Boolean))).sort(),
+    () =>
+      Array.from(new Set(rules.map((rule) => rule.source).filter(Boolean)))
+        .sort()
+        .map((source) => ({ label: getSourceLabel(source), value: source })),
     [rules],
   );
 
-  const filteredRules = useMemo(
-    () =>
-      rules.filter((rule) => {
-        const keyword = searchTerm.trim().toLowerCase();
-        const matchSearch =
-          !keyword ||
-          rule.name.toLowerCase().includes(keyword) ||
-          rule.rule_class.toLowerCase().includes(keyword) ||
-          rule.description_summary.toLowerCase().includes(keyword) ||
-          rule.package.toLowerCase().includes(keyword) ||
-          rule.id.toLowerCase().includes(keyword);
-
-        const matchSource = !selectedSource || rule.source === selectedSource;
-        const matchStatus =
-          !selectedActiveStatus ||
-          (selectedActiveStatus === "true" && rule.is_active) ||
-          (selectedActiveStatus === "false" && !rule.is_active);
-
-        return matchSearch && matchSource && matchStatus;
-      }),
-    [rules, searchTerm, selectedSource, selectedActiveStatus],
-  );
-
-  const totalPages = Math.max(1, Math.ceil(filteredRules.length / pageSize));
-  const paginatedRules = filteredRules.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
+  const columns = useMemo<AppColumnDef<PhpstanRule, unknown>[]>(
+    () => [
+      {
+        id: "rowNumber",
+        header: "序号",
+        enableSorting: false,
+        enableHiding: false,
+        meta: { label: "序号", align: "center", width: 72 },
+        cell: ({ row, table }) =>
+          table.getState().pagination.pageIndex * table.getState().pagination.pageSize +
+          row.index +
+          1,
+      },
+      {
+        id: "ruleInfo",
+        accessorFn: (row) =>
+          [
+            row.name,
+            row.rule_class,
+            row.description_summary,
+            row.package,
+            row.repo,
+            row.id,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        header: "规则",
+        meta: { label: "规则", minWidth: 340, filterVariant: "text" },
+        cell: ({ row }) => (
+          <div className="space-y-0.5">
+            <div className="font-semibold text-foreground break-all">{row.original.name}</div>
+            <div className="font-mono text-xs text-muted-foreground break-all">
+              {row.original.rule_class}
+            </div>
+            {row.original.description_summary ? (
+              <div className="text-xs text-muted-foreground break-all line-clamp-2">
+                {row.original.description_summary}
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        id: "package",
+        accessorFn: (row) => row.package || "",
+        header: "扩展包",
+        meta: { label: "扩展包", minWidth: 220 },
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground break-all">
+            {row.original.package || "-"}
+          </span>
+        ),
+      },
+      {
+        id: "source",
+        accessorFn: (row) => row.source || "",
+        header: "来源",
+        meta: {
+          label: "规则来源",
+          width: 120,
+          filterVariant: "select",
+          filterOptions: sourceOptions,
+        },
+        cell: ({ row }) => (
+          <Badge className="cyber-badge cyber-badge-info">
+            {getSourceLabel(row.original.source)}
+          </Badge>
+        ),
+      },
+      {
+        id: "status",
+        accessorFn: (row) => (row.is_deleted ? "已删除" : row.is_active ? "已启用" : "已禁用"),
+        header: "启用状态",
+        meta: { label: "状态", width: 120 },
+        cell: ({ row }) =>
+          row.original.is_deleted ? (
+            <Badge className="cyber-badge cyber-badge-muted">已删除</Badge>
+          ) : (
+            <Badge
+              className={
+                row.original.is_active
+                  ? "cyber-badge cyber-badge-success"
+                  : "cyber-badge cyber-badge-muted"
+              }
+            >
+              {row.original.is_active ? "已启用" : "已禁用"}
+            </Badge>
+          ),
+      },
+      {
+        id: "isActiveFilter",
+        accessorFn: (row) => String(row.is_active),
+        header: "启用筛选",
+        enableHiding: false,
+        meta: {
+          label: "启用状态",
+          filterVariant: "select",
+          filterOptions: [
+            { label: "已启用", value: "true" },
+            { label: "已禁用", value: "false" },
+          ],
+        },
+      },
+      {
+        id: "deletedStatus",
+        accessorFn: (row) => (row.is_deleted ? "true" : "false"),
+        header: "删除筛选",
+        enableHiding: false,
+        meta: {
+          label: "删除状态",
+          filterVariant: "select",
+          filterOptions: [
+            { label: "未删除", value: "false" },
+            { label: "已删除", value: "true" },
+            { label: "全部", value: "all" },
+          ],
+        },
+        filterFn: (row, _columnId, filterValue) => {
+          if (!filterValue || filterValue === "all") return true;
+          return String(row.original.is_deleted) === String(filterValue);
+        },
+      },
+      {
+        id: "updatedAt",
+        accessorFn: (row) => row.updated_at || "",
+        header: "更新时间",
+        meta: { label: "更新时间", width: 180 },
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground">
+            {formatDate(row.original.updated_at)}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        header: "操作",
+        enableSorting: false,
+        enableHiding: false,
+        meta: { label: "操作", minWidth: 320 },
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => handleViewRuleDetail(row.original)}
+              className="cyber-btn-outline h-8 text-xs"
+            >
+              详情
+            </Button>
+            <Button
+              onClick={() => handleViewRuleDetail(row.original, "edit")}
+              className="cyber-btn-outline h-8 text-xs"
+            >
+              编辑
+            </Button>
+            <Button
+              onClick={() => void handleToggleRule(row.original)}
+              disabled={row.original.is_deleted}
+              className={
+                row.original.is_active
+                  ? "cyber-btn-outline h-8 text-xs"
+                  : "cyber-btn-primary h-8 text-xs"
+              }
+            >
+              {row.original.is_active ? "禁用" : "启用"}
+            </Button>
+            {!row.original.is_deleted ? (
+              <Button
+                onClick={() => void handleDeleteRule(row.original)}
+                className="cyber-btn-outline h-8 text-xs"
+              >
+                删除
+              </Button>
+            ) : (
+              <Button
+                onClick={() => void handleRestoreRule(row.original)}
+                className="cyber-btn-primary h-8 text-xs"
+              >
+                恢复
+              </Button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    [sourceOptions],
   );
 
   const handleStartEditRule = (rule: PhpstanRule) => {
@@ -279,42 +510,28 @@ export default function PhpstanRules({
     }
   };
 
-  const handleToggleRuleSelection = (ruleId: string) => {
-    const next = new Set(selectedRuleIds);
-    if (next.has(ruleId)) next.delete(ruleId);
-    else next.add(ruleId);
-    setSelectedRuleIds(next);
-  };
-
-  const handleToggleAllSelection = () => {
-    if (selectedRuleIds.size === paginatedRules.length) {
-      setSelectedRuleIds(new Set());
-    } else {
-      setSelectedRuleIds(new Set(paginatedRules.map((rule) => rule.id)));
-    }
-  };
-
-  const handleBatchToggleEnabled = async (isActive: boolean) => {
+  const handleBatchToggleEnabled = async (selectedRows: PhpstanRule[], isActive: boolean) => {
     try {
       setBatchOperating(true);
+      const currentActiveFilter = getStringColumnFilter(tableState, "isActiveFilter");
       const payload =
-        selectedRuleIds.size > 0
+        selectedRows.length > 0
           ? {
-              rule_ids: Array.from(selectedRuleIds),
+              rule_ids: selectedRows.map((row) => row.id),
               is_active: isActive,
             }
           : {
-              source: selectedSource || undefined,
-              keyword: searchTerm.trim() || undefined,
+              source: getStringColumnFilter(tableState, "source") || undefined,
+              keyword: tableState.globalFilter.trim() || undefined,
               current_is_active:
-                selectedActiveStatus === ""
+                currentActiveFilter === ""
                   ? undefined
-                  : selectedActiveStatus === "true",
+                  : currentActiveFilter === "true",
               is_active: isActive,
             };
       const result = await batchUpdatePhpstanRulesEnabled(payload);
       toast.success(result.message);
-      setSelectedRuleIds(new Set());
+      setTableState((current) => ({ ...current, rowSelection: {} }));
       await loadRules();
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || "批量启停失败");
@@ -323,20 +540,20 @@ export default function PhpstanRules({
     }
   };
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = async (selectedRows: PhpstanRule[]) => {
     try {
       setBatchOperating(true);
       const payload =
-        selectedRuleIds.size > 0
-          ? { rule_ids: Array.from(selectedRuleIds) }
+        selectedRows.length > 0
+          ? { rule_ids: selectedRows.map((row) => row.id) }
           : {
-              source: selectedSource || undefined,
-              keyword: searchTerm.trim() || undefined,
+              source: getStringColumnFilter(tableState, "source") || undefined,
+              keyword: tableState.globalFilter.trim() || undefined,
               current_is_deleted: false,
             };
       const result = await batchDeletePhpstanRules(payload);
       toast.success(result.message);
-      setSelectedRuleIds(new Set());
+      setTableState((current) => ({ ...current, rowSelection: {} }));
       await loadRules();
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || "批量删除失败");
@@ -345,20 +562,20 @@ export default function PhpstanRules({
     }
   };
 
-  const handleBatchRestore = async () => {
+  const handleBatchRestore = async (selectedRows: PhpstanRule[]) => {
     try {
       setBatchOperating(true);
       const payload =
-        selectedRuleIds.size > 0
-          ? { rule_ids: Array.from(selectedRuleIds) }
+        selectedRows.length > 0
+          ? { rule_ids: selectedRows.map((row) => row.id) }
           : {
-              source: selectedSource || undefined,
-              keyword: searchTerm.trim() || undefined,
+              source: getStringColumnFilter(tableState, "source") || undefined,
+              keyword: tableState.globalFilter.trim() || undefined,
               current_is_deleted: true,
             };
       const result = await batchRestorePhpstanRules(payload);
       toast.success(result.message);
-      setSelectedRuleIds(new Set());
+      setTableState((current) => ({ ...current, rowSelection: {} }));
       await loadRules();
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || "批量恢复失败");
@@ -366,6 +583,36 @@ export default function PhpstanRules({
       setBatchOperating(false);
     }
   };
+
+  const engineSelector = showEngineSelector ? (
+    <div className="min-w-[150px]">
+      <Select
+        value={engineValue}
+        onValueChange={(val) => {
+          if (
+            val === "opengrep" ||
+            val === "gitleaks" ||
+            val === "bandit" ||
+            val === "phpstan" ||
+            val === "yasa"
+          ) {
+            onEngineChange?.(val);
+          }
+        }}
+      >
+        <SelectTrigger className="cyber-input h-10 min-w-[150px]">
+          <SelectValue placeholder="选择引擎" />
+        </SelectTrigger>
+        <SelectContent className="cyber-dialog border-border">
+          <SelectItem value="opengrep">opengrep</SelectItem>
+          <SelectItem value="gitleaks">gitleaks</SelectItem>
+          <SelectItem value="bandit">bandit</SelectItem>
+          <SelectItem value="phpstan">phpstan</SelectItem>
+          <SelectItem value="yasa">yasa</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  ) : null;
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -414,350 +661,95 @@ export default function PhpstanRules({
       </div>
 
       <div className="cyber-card relative z-10 overflow-hidden">
-        <div className="p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="relative w-full max-w-sm shrink-0">
-              <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                搜索规则
-              </Label>
-              <div className="relative mt-1.5">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="搜索名称/类名/包名..."
-                  className="cyber-input !pl-10 h-10"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-1 flex-wrap items-end gap-3">
-              {showEngineSelector ? (
-                <div className="min-w-[150px] flex-1">
-                  <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                    扫描引擎
-                  </Label>
-                  <Select
-                    value={engineValue}
-                    onValueChange={(val) => {
-                      if (
-                        val === "opengrep" ||
-                        val === "gitleaks" ||
-                        val === "bandit" ||
-                        val === "phpstan" ||
-											val === "yasa"
-                      ) {
-                        onEngineChange?.(val);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="cyber-input h-10 mt-1.5">
-                      <SelectValue placeholder="选择引擎" />
-                    </SelectTrigger>
-                    <SelectContent className="cyber-dialog border-border">
-                      <SelectItem value="opengrep">opengrep</SelectItem>
-                      <SelectItem value="gitleaks">gitleaks</SelectItem>
-                      <SelectItem value="bandit">bandit</SelectItem>
-                      <SelectItem value="phpstan">phpstan</SelectItem>
-											<SelectItem value="yasa">yasa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-
-              <div className="min-w-[150px] flex-1">
-                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  规则来源
-                </Label>
-                <Select
-                  value={selectedSource || "all"}
-                  onValueChange={(val) => setSelectedSource(val === "all" ? "" : val)}
-                >
-                  <SelectTrigger className="cyber-input h-10 mt-1.5">
-                    <SelectValue placeholder="所有来源" />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    <SelectItem value="all">所有来源</SelectItem>
-                    {sourceOptions.map((source) => (
-                      <SelectItem key={source} value={source}>
-                        {getSourceLabel(source)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-[150px] flex-1">
-                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  启用状态
-                </Label>
-                <Select
-                  value={selectedActiveStatus || "all"}
-                  onValueChange={(val) => setSelectedActiveStatus(val === "all" ? "" : val)}
-                >
-                  <SelectTrigger className="cyber-input h-10 mt-1.5">
-                    <SelectValue placeholder="所有状态" />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    <SelectItem value="all">所有状态</SelectItem>
-                    <SelectItem value="true">已启用</SelectItem>
-                    <SelectItem value="false">已禁用</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-[150px] flex-1">
-                <Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-                  删除状态
-                </Label>
-                <Select
-                  value={selectedDeletedStatus}
-                  onValueChange={(val: "false" | "true" | "all") => {
-                    setSelectedDeletedStatus(val);
-                    setCurrentPage(1);
-                    setSelectedRuleIds(new Set());
-                  }}
-                >
-                  <SelectTrigger className="cyber-input h-10 mt-1.5">
-                    <SelectValue placeholder="删除状态" />
-                  </SelectTrigger>
-                  <SelectContent className="cyber-dialog border-border">
-                    <SelectItem value="false">未删除</SelectItem>
-                    <SelectItem value="true">已删除</SelectItem>
-                    <SelectItem value="all">全部</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="ml-auto flex items-end gap-2">
-                <Button
-                  className="cyber-btn-outline h-10 min-w-[96px]"
-                  onClick={() => {
-                    setSearchTerm("");
-                    setSelectedSource("");
-                    setSelectedActiveStatus("");
-                    setSelectedDeletedStatus("false");
-                    setCurrentPage(1);
-                    setSelectedRuleIds(new Set());
-                  }}
-                >
-                  重置
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {filteredRules.length > 0 ? (
-          <div className="border-t border-primary/20 bg-primary/5 px-4 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <p className="font-mono text-sm">
-                {selectedRuleIds.size > 0 ? (
-                  <>
-                    已选择 <span className="font-bold text-primary">{selectedRuleIds.size}</span> 条规则
-                  </>
-                ) : (
-                  <>
-                    将对 <span className="font-bold text-primary">{filteredRules.length}</span> 条规则进行操作
-                  </>
-                )}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={() => void handleBatchToggleEnabled(true)}
-                  disabled={batchOperating}
-                  className="cyber-btn-primary h-9 text-sm"
-                >
-                  {batchOperating ? "处理中..." : "批量启用"}
-                </Button>
-                <Button
-                  onClick={() => void handleBatchToggleEnabled(false)}
-                  disabled={batchOperating}
-                  className="cyber-btn-outline h-9 text-sm"
-                >
-                  {batchOperating ? "处理中..." : "批量禁用"}
-                </Button>
-                <Button
-                  onClick={() => void handleBatchDelete()}
-                  disabled={batchOperating}
-                  className="cyber-btn-outline h-9 text-sm"
-                >
-                  {batchOperating ? "处理中..." : "批量删除"}
-                </Button>
-                <Button
-                  onClick={() => void handleBatchRestore()}
-                  disabled={batchOperating}
-                  className="cyber-btn-outline h-9 text-sm"
-                >
-                  {batchOperating ? "处理中..." : "批量恢复"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="border-t border-border/60">
-          {loading ? (
-            <div className="p-16 text-center text-muted-foreground">加载中...</div>
-          ) : filteredRules.length === 0 ? (
-            <div className="p-16 text-center">
-              <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-foreground mb-2">未找到规则</h3>
-              <p className="text-muted-foreground font-mono text-sm">
-                {searchTerm || selectedSource || selectedActiveStatus
-                  ? "调整筛选条件尝试"
-                  : "暂无规则数据（请先生成并导入 phpstan 规则快照）"}
-              </p>
-            </div>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[52px]">
-                      <Checkbox
-                        checked={selectedRuleIds.size === paginatedRules.length && paginatedRules.length > 0}
-                        onCheckedChange={handleToggleAllSelection}
-                        className="w-4 h-4"
-                      />
-                    </TableHead>
-                    <TableHead className="w-[72px] text-center">序号</TableHead>
-                    <TableHead className="min-w-[320px]">规则</TableHead>
-                    <TableHead className="min-w-[180px]">扩展包</TableHead>
-                    <TableHead className="w-[120px]">来源</TableHead>
-                    <TableHead className="w-[110px]">启用状态</TableHead>
-                    <TableHead className="w-[160px]">更新时间</TableHead>
-                    <TableHead className="min-w-[320px]">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedRules.map((rule, index) => (
-                    <TableRow key={rule.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedRuleIds.has(rule.id)}
-                          onCheckedChange={() => handleToggleRuleSelection(rule.id)}
-                          className="w-4 h-4"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center text-muted-foreground">
-                        {(currentPage - 1) * pageSize + index + 1}
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <div className="font-semibold text-foreground break-all">{rule.name}</div>
-                          <div className="font-mono text-xs text-muted-foreground break-all">{rule.rule_class}</div>
-                          {rule.description_summary ? (
-                            <div className="text-xs text-muted-foreground break-all line-clamp-2">
-                              {rule.description_summary}
-                            </div>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground break-all">
-                        {rule.package || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className="cyber-badge cyber-badge-info">
-                          {getSourceLabel(rule.source)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {rule.is_deleted ? (
-                          <Badge className="cyber-badge cyber-badge-muted">已删除</Badge>
-                        ) : (
-                          <Badge className={rule.is_active ? "cyber-badge cyber-badge-success" : "cyber-badge cyber-badge-muted"}>
-                            {rule.is_active ? "已启用" : "已禁用"}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {rule.updated_at ? new Date(rule.updated_at).toLocaleString() : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            onClick={() => handleViewRuleDetail(rule)}
-                            className="cyber-btn-outline h-8 text-xs"
-                          >
-                            详情
-                          </Button>
-                          <Button
-                            onClick={() => handleViewRuleDetail(rule, "edit")}
-                            className="cyber-btn-outline h-8 text-xs"
-                          >
-                            编辑
-                          </Button>
-                          <Button
-                            onClick={() => void handleToggleRule(rule)}
-                            disabled={rule.is_deleted}
-                            className={rule.is_active ? "cyber-btn-outline h-8 text-xs" : "cyber-btn-primary h-8 text-xs"}
-                          >
-                            {rule.is_active ? "禁用" : "启用"}
-                          </Button>
-                          {!rule.is_deleted ? (
-                            <Button
-                              onClick={() => void handleDeleteRule(rule)}
-                              className="cyber-btn-outline h-8 text-xs"
-                            >
-                              删除
-                            </Button>
-                          ) : (
-                            <Button
-                              onClick={() => void handleRestoreRule(rule)}
-                              className="cyber-btn-primary h-8 text-xs"
-                            >
-                              恢复
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-t border-border/60">
-                <div className="text-sm text-muted-foreground">
-                  共 {filteredRules.length} 条，当前第 {currentPage} / {totalPages} 页
-                </div>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={String(pageSize)}
-                    onValueChange={(value) => {
-                      setPageSize(Number(value));
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="cyber-input h-9 w-[110px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="cyber-dialog border-border">
-                      <SelectItem value="10">10 / 页</SelectItem>
-                      <SelectItem value="20">20 / 页</SelectItem>
-                      <SelectItem value="50">50 / 页</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Button
-                    className="cyber-btn-outline h-9 px-3"
-                    disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    className="cyber-btn-outline h-9 px-3"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+        <DataTable
+          data={rules}
+          columns={columns}
+          state={tableState}
+          onStateChange={setTableState}
+          loading={loading}
+          error={loadError || undefined}
+          emptyState={{
+            title: "未找到规则",
+            description:
+              tableState.globalFilter || activeFilter || deletedFilter !== "false"
+                ? "调整筛选条件尝试"
+                : "暂无规则数据（请先生成并导入 phpstan 规则快照）",
+          }}
+          toolbar={{
+            searchPlaceholder: "搜索名称/类名/包名...",
+            filters: [
+              {
+                columnId: "source",
+                label: "规则来源",
+                variant: "select",
+                options: sourceOptions,
+              },
+              {
+                columnId: "isActiveFilter",
+                label: "启用状态",
+                variant: "select",
+                options: [
+                  { label: "已启用", value: "true" },
+                  { label: "已禁用", value: "false" },
+                ],
+              },
+              {
+                columnId: "deletedStatus",
+                label: "删除状态",
+                variant: "select",
+                options: [
+                  { label: "未删除", value: "false" },
+                  { label: "已删除", value: "true" },
+                  { label: "全部", value: "all" },
+                ],
+              },
+            ],
+            leadingActions: engineSelector,
+          }}
+          selection={
+            loading
+              ? undefined
+              : {
+                  enableRowSelection: true,
+                  summary: buildSelectionSummary,
+                  actions: ({ selectedRows }) => (
+                    <>
+                      <Button
+                        onClick={() => void handleBatchToggleEnabled(selectedRows, true)}
+                        disabled={batchOperating}
+                        className="cyber-btn-primary h-8 text-sm"
+                      >
+                        {batchOperating ? "处理中..." : "批量启用"}
+                      </Button>
+                      <Button
+                        onClick={() => void handleBatchToggleEnabled(selectedRows, false)}
+                        disabled={batchOperating}
+                        className="cyber-btn-outline h-8 text-sm"
+                      >
+                        {batchOperating ? "处理中..." : "批量禁用"}
+                      </Button>
+                      <Button
+                        onClick={() => void handleBatchDelete(selectedRows)}
+                        disabled={batchOperating}
+                        className="cyber-btn-outline h-8 text-sm"
+                      >
+                        {batchOperating ? "处理中..." : "批量删除"}
+                      </Button>
+                      <Button
+                        onClick={() => void handleBatchRestore(selectedRows)}
+                        disabled={batchOperating}
+                        className="cyber-btn-outline h-8 text-sm"
+                      >
+                        {batchOperating ? "处理中..." : "批量恢复"}
+                      </Button>
+                    </>
+                  ),
+                }
+          }
+          pagination={{ enabled: true, pageSizeOptions: [10, 20, 50] }}
+          tableClassName="min-w-[1400px]"
+          getRowId={(row) => row.id}
+        />
       </div>
 
       <Dialog

@@ -1,29 +1,20 @@
 import { AlertTriangle, ArrowLeft, Bug, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	DataTable,
+	type AppColumnDef,
+	type DataTableQueryState,
+} from "@/components/data-table";
 import {
 	Dialog,
 	DialogContent,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { type AgentFinding, getAgentFindings } from "@/shared/api/agentTasks";
 import {
 	getOpengrepScanFindings,
@@ -35,17 +26,13 @@ import {
 	buildFindingDetailPath,
 } from "@/shared/utils/findingRoute";
 import {
-	filterTaskFindings,
 	normalizeTaskFindingConfidence,
 	normalizeTaskFindingSeverity,
-	paginateTaskFindings,
 	sortTaskFindings,
 	type TaskFindingCategory,
 	type TaskFindingConfidence,
-	type TaskFindingConfidenceFilter,
 	type TaskFindingRow,
 	type TaskFindingSeverity,
-	type TaskFindingSeverityFilter,
 } from "./projectTaskFindingsDialog.utils";
 
 const DIALOG_PAGE_SIZE = 10;
@@ -307,11 +294,18 @@ export default function ProjectTaskFindingsDialog({
 	const [status, setStatus] = useState<LoadStatus>("idle");
 	const [errorMessage, setErrorMessage] = useState("");
 	const [allRows, setAllRows] = useState<TaskFindingRow[]>([]);
-	const [severityFilter, setSeverityFilter] =
-		useState<TaskFindingSeverityFilter>("ALL");
-	const [confidenceFilter, setConfidenceFilter] =
-		useState<TaskFindingConfidenceFilter>("ALL");
-	const [page, setPage] = useState(1);
+	const [tableState, setTableState] = useState<DataTableQueryState>({
+		globalFilter: "",
+		columnFilters: [],
+		sorting: [],
+		pagination: {
+			pageIndex: 0,
+			pageSize: DIALOG_PAGE_SIZE,
+		},
+		columnVisibility: {},
+		rowSelection: {},
+		density: "comfortable",
+	});
 	const cacheRef = useRef(new Map<string, TaskFindingRow[]>());
 	const cacheKey = `${taskCategory}:${taskId}`;
 
@@ -332,10 +326,19 @@ export default function ProjectTaskFindingsDialog({
 	useEffect(() => {
 		if (!open || !taskId) return;
 
-		setSeverityFilter("ALL");
-		setConfidenceFilter("ALL");
-		setPage(1);
 		setErrorMessage("");
+		setTableState({
+			globalFilter: "",
+			columnFilters: [],
+			sorting: [],
+			pagination: {
+				pageIndex: 0,
+				pageSize: DIALOG_PAGE_SIZE,
+			},
+			columnVisibility: {},
+			rowSelection: {},
+			density: "comfortable",
+		});
 
 		const cachedRows = cacheRef.current.get(cacheKey);
 		if (cachedRows) {
@@ -385,116 +388,129 @@ export default function ProjectTaskFindingsDialog({
 		};
 	}, [cacheKey, open, taskCategory, taskId]);
 
-	const filteredRows = useMemo(
-		() => filterTaskFindings(allRows, severityFilter, confidenceFilter),
-		[allRows, confidenceFilter, severityFilter],
-	);
-
-	const pagination = useMemo(
-		() => paginateTaskFindings(filteredRows, page, DIALOG_PAGE_SIZE),
-		[filteredRows, page],
-	);
-
-	const paginationPage =
-		filteredRows.length === 0 ? 1 : Math.min(page, pagination.totalPages);
-
-	const renderBody = () => {
-		if (status === "loading") {
-			return (
-				<TableRow>
-					<TableCell colSpan={6} className="py-12 text-center">
-						<div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-							<Loader2 className="h-4 w-4 animate-spin" />
-							加载漏洞中...
+	const columns = useMemo<ColumnDef<TaskFindingRow>[]>(
+		() =>
+			[
+				{
+					id: "rowNumber",
+					header: "序号",
+					enableSorting: false,
+					meta: {
+						label: "序号",
+						align: "center",
+						width: 72,
+					},
+					cell: ({ row, table }) =>
+						table.getState().pagination.pageIndex * table.getState().pagination.pageSize +
+						row.index +
+						1,
+				},
+				{
+					id: "typeLabel",
+					accessorFn: (row) => row.typeLabel,
+					header: "漏洞类型",
+					meta: {
+						label: "漏洞类型",
+						minWidth: 280,
+						filterVariant: "text",
+					},
+					cell: ({ row }) => (
+						<div
+							className="text-sm text-foreground break-words"
+							title={row.original.typeTooltip || row.original.title}
+						>
+							{row.original.typeLabel}
 						</div>
-					</TableCell>
-				</TableRow>
-			);
-		}
-
-		if (status === "failed") {
-			return (
-				<TableRow>
-					<TableCell colSpan={6} className="py-12 text-center">
-						<div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-							<AlertTriangle className="h-4 w-4 text-rose-400" />
-							{errorMessage || "加载漏洞失败"}
-						</div>
-					</TableCell>
-				</TableRow>
-			);
-		}
-
-		if (allRows.length === 0) {
-			return (
-				<TableRow>
-					<TableCell
-						colSpan={6}
-						className="py-12 text-center text-sm text-muted-foreground"
-					>
-						暂无漏洞
-					</TableCell>
-				</TableRow>
-			);
-		}
-
-		if (filteredRows.length === 0) {
-			return (
-				<TableRow>
-					<TableCell
-						colSpan={6}
-						className="py-12 text-center text-sm text-muted-foreground"
-					>
-						暂无符合条件的漏洞
-					</TableCell>
-				</TableRow>
-			);
-		}
-
-		return pagination.items.map((item, index) => {
-			const order = pagination.startIndex + index + 1;
-			const location = formatLocation(item.filePath, item.line);
-			return (
-				<TableRow key={item.id}>
-					<TableCell className="w-[72px] text-sm text-muted-foreground">
-						{order}
-					</TableCell>
-					<TableCell
-						className="min-w-[280px] text-sm text-foreground break-words"
-						title={item.typeTooltip || item.title}
-					>
-						{item.typeLabel}
-					</TableCell>
-					<TableCell
-						className="min-w-[260px] text-xs text-muted-foreground break-all"
-						title={location}
-					>
-						{location}
-					</TableCell>
-					<TableCell className="w-[120px] whitespace-nowrap text-center">
-						<Badge className={getSeverityBadgeClassName(item.severity)}>
-							{getSeverityText(item.severity)}
+					),
+				},
+				{
+					id: "location",
+					accessorFn: (row) => formatLocation(row.filePath, row.line),
+					header: "位置",
+					meta: {
+						label: "位置",
+						minWidth: 260,
+					},
+					cell: ({ row }) => {
+						const location = formatLocation(row.original.filePath, row.original.line);
+						return (
+							<div
+								className="text-xs text-muted-foreground break-all"
+								title={location}
+							>
+								{location}
+							</div>
+						);
+					},
+				},
+				{
+					id: "severity",
+					accessorFn: (row) => row.severity,
+					header: "危害",
+					meta: {
+						label: "危害",
+						align: "center",
+						width: 120,
+						filterVariant: "select",
+						filterOptions: [
+							{ label: "严重", value: "CRITICAL" },
+							{ label: "高危", value: "HIGH" },
+							{ label: "中危", value: "MEDIUM" },
+							{ label: "低危", value: "LOW" },
+							{ label: "未知", value: "UNKNOWN" },
+						],
+					},
+					cell: ({ row }) => (
+						<Badge className={getSeverityBadgeClassName(row.original.severity)}>
+							{getSeverityText(row.original.severity)}
 						</Badge>
-					</TableCell>
-					<TableCell className="w-[110px] whitespace-nowrap text-center">
-						<Badge className={getConfidenceBadgeClassName(item.confidence)}>
-							{getConfidenceText(item.confidence)}
+					),
+				},
+				{
+					id: "confidence",
+					accessorFn: (row) => row.confidence,
+					header: "置信度",
+					meta: {
+						label: "置信度",
+						align: "center",
+						width: 110,
+						filterVariant: "select",
+						filterOptions: [
+							{ label: "高", value: "HIGH" },
+							{ label: "中", value: "MEDIUM" },
+							{ label: "低", value: "LOW" },
+							{ label: "未知", value: "UNKNOWN" },
+						],
+					},
+					cell: ({ row }) => (
+						<Badge className={getConfidenceBadgeClassName(row.original.confidence)}>
+							{getConfidenceText(row.original.confidence)}
 						</Badge>
-					</TableCell>
-					<TableCell className="w-[120px] whitespace-nowrap text-center">
+					),
+				},
+				{
+					id: "actions",
+					header: "操作",
+					enableSorting: false,
+					meta: {
+						label: "操作",
+						align: "center",
+						width: 120,
+					},
+					cell: ({ row }) => (
 						<Button
 							asChild
 							size="sm"
 							variant="outline"
 							className="cyber-btn-ghost h-8 px-3"
 						>
-							<Link to={appendReturnTo(item.route, returnTo)}>详情</Link>
+							<Link to={appendReturnTo(row.original.route, returnTo)}>详情</Link>
 						</Button>
-					</TableCell>
-				</TableRow>
-			);
-		});
-	};
+					),
+				},
+			] satisfies AppColumnDef<TaskFindingRow, unknown>[],
+		[formatLocation, returnTo],
+	);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -515,7 +531,7 @@ export default function ProjectTaskFindingsDialog({
 						      任务 ID：{taskId}
 						    </span>
 						    <span className="inline-flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-200">
-						      漏洞共 {filteredRows.length.toLocaleString()} 条
+						      漏洞共 {allRows.length.toLocaleString()} 条
 						    </span>
 						  </div>
 						</div>
@@ -533,112 +549,60 @@ export default function ProjectTaskFindingsDialog({
 				</DialogHeader>
 
 				<div className="flex-1 min-h-0 overflow-hidden px-6 py-4 space-y-4">
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-						<div>
-							<p className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
-								危害
-							</p>
-							<Select
-								value={severityFilter}
-								onValueChange={(value) => {
-									setSeverityFilter(value as TaskFindingSeverityFilter);
-									setPage(1);
-								}}
-							>
-								<SelectTrigger className="h-9 text-sm">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent className="cyber-dialog border-border">
-									<SelectItem value="ALL">全部</SelectItem>
-									<SelectItem value="CRITICAL">严重</SelectItem>
-									<SelectItem value="HIGH">高危</SelectItem>
-									<SelectItem value="MEDIUM">中危</SelectItem>
-									<SelectItem value="LOW">低危</SelectItem>
-									<SelectItem value="UNKNOWN">未知</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
-						<div>
-							<p className="block text-xs font-semibold uppercase text-muted-foreground mb-1">
-								置信度
-							</p>
-							<Select
-								value={confidenceFilter}
-								onValueChange={(value) => {
-									setConfidenceFilter(value as TaskFindingConfidenceFilter);
-									setPage(1);
-								}}
-							>
-								<SelectTrigger className="h-9 text-sm">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent className="cyber-dialog border-border">
-									<SelectItem value="ALL">全部</SelectItem>
-									<SelectItem value="HIGH">高</SelectItem>
-									<SelectItem value="MEDIUM">中</SelectItem>
-									<SelectItem value="LOW">低</SelectItem>
-									<SelectItem value="UNKNOWN">未知</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
-						
-					</div>
-
-					
-
-					<div className="flex-1 min-h-0 border border-border rounded-md overflow-auto">
-						<Table className="min-w-[980px] table-fixed">
-							<TableHeader>
-								<TableRow>
-									<TableHead className="w-[72px]">序号</TableHead>
-									<TableHead className="min-w-[280px]">漏洞类型</TableHead>
-									<TableHead className="min-w-[260px]">位置</TableHead>
-									<TableHead className="w-[120px] text-center">危害</TableHead>
-									<TableHead className="w-[110px] text-center">
-										置信度
-									</TableHead>
-									<TableHead className="w-[120px] text-center">操作</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>{renderBody()}</TableBody>
-						</Table>
-					</div>
-
-					<div className="flex items-center justify-between gap-3 flex-wrap">
-						<span className="text-xs text-muted-foreground">
-							共 {filteredRows.length.toLocaleString()} 条
-						</span>
-						<div className="flex items-center gap-2">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="cyber-btn-ghost h-8 px-3"
-								onClick={() => setPage((current) => Math.max(1, current - 1))}
-								disabled={page <= 1 || filteredRows.length === 0}
-							>
-								上一页
-							</Button>
-							<span className="text-xs text-muted-foreground min-w-[90px] text-center">
-								第 {paginationPage} / {pagination.totalPages} 页
-							</span>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="cyber-btn-ghost h-8 px-3"
-								onClick={() =>
-									setPage((current) =>
-										Math.min(pagination.totalPages, current + 1),
-									)
-								}
-								disabled={
-									page >= pagination.totalPages || filteredRows.length === 0
-								}
-							>
-								下一页
-							</Button>
-						</div>
+					<div className="flex-1 min-h-0 overflow-hidden [&_[data-slot=table-container]]:overflow-auto">
+						<DataTable
+							key={`${cacheKey}:${open ? "open" : "closed"}`}
+							data={allRows}
+							columns={columns}
+							state={tableState}
+							onStateChange={setTableState}
+							loading={status === "loading"}
+							error={status === "failed" ? errorMessage || "加载漏洞失败" : undefined}
+							emptyState={{
+								title: allRows.length === 0 ? "暂无漏洞" : "暂无符合条件的漏洞",
+							}}
+							toolbar={{
+								searchPlaceholder: "搜索漏洞类型或位置",
+								filters: [
+									{
+										columnId: "severity",
+										label: "危害",
+										variant: "select",
+										options: [
+											{ label: "严重", value: "CRITICAL" },
+											{ label: "高危", value: "HIGH" },
+											{ label: "中危", value: "MEDIUM" },
+											{ label: "低危", value: "LOW" },
+											{ label: "未知", value: "UNKNOWN" },
+										],
+									},
+									{
+										columnId: "confidence",
+										label: "置信度",
+										variant: "select",
+										options: [
+											{ label: "高", value: "HIGH" },
+											{ label: "中", value: "MEDIUM" },
+											{ label: "低", value: "LOW" },
+											{ label: "未知", value: "UNKNOWN" },
+										],
+									},
+								],
+								showColumnVisibility: false,
+								showDensityToggle: false,
+							}}
+							pagination={{
+								enabled: true,
+								pageSizeOptions: [10, 20, 50],
+								infoLabel: ({ table, filteredCount }) => {
+									const pageIndex = table.getState().pagination.pageIndex;
+									const pageCount = Math.max(1, table.getPageCount());
+									return `共 ${filteredCount.toLocaleString()} 条，第 ${pageIndex + 1} / ${pageCount} 页`;
+								},
+							}}
+							className="border border-border rounded-md"
+							tableClassName="min-w-[980px] table-fixed"
+						/>
 					</div>
 				</div>
 			</DialogContent>

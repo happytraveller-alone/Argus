@@ -272,13 +272,21 @@ async def _init_llm_service(user_config: Optional[Dict]) -> Any:
 
 def _build_base_tools(project_root: str) -> Dict[str, Any]:
     from app.services.agent.tools import (
-        FileReadTool, FileSearchTool, ListFilesTool,
+        CodeWindowTool,
+        FileOutlineTool,
+        FileSearchTool,
+        FunctionSummaryTool,
+        ListFilesTool,
         LocateEnclosingFunctionTool, ThinkTool, ReflectTool,
+        SymbolBodyTool,
     )
     return {
-        "read_file": FileReadTool(project_root),
         "list_files": ListFilesTool(project_root),
         "search_code": FileSearchTool(project_root),
+        "get_code_window": CodeWindowTool(project_root),
+        "get_file_outline": FileOutlineTool(project_root),
+        "get_function_summary": FunctionSummaryTool(project_root),
+        "get_symbol_body": SymbolBodyTool(project_root),
         "locate_enclosing_function": LocateEnclosingFunctionTool(project_root),
         "think": ThinkTool(),
         "reflect": ReflectTool(),
@@ -313,7 +321,7 @@ def _build_analysis_tools(
     vuln_queue: Any = None,
 ) -> Dict[str, Any]:
     from app.services.agent.tools import (
-        PatternMatchTool, ExtractFunctionTool, DataFlowAnalysisTool,
+        PatternMatchTool, DataFlowAnalysisTool,
         ControlFlowAnalysisLightTool, LogicAuthzAnalysisTool,
         SmartScanTool, QuickAuditTool,
     )
@@ -322,7 +330,6 @@ def _build_analysis_tools(
         "smart_scan": SmartScanTool(project_root),
         "quick_audit": QuickAuditTool(project_root),
         "pattern_match": PatternMatchTool(project_root),
-        "extract_function": ExtractFunctionTool(project_root=project_root),
         "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
         "controlflow_analysis_light": ControlFlowAnalysisLightTool(project_root=project_root),
         "logic_authz_analysis": LogicAuthzAnalysisTool(project_root=project_root),
@@ -336,12 +343,11 @@ def _build_analysis_tools(
 
 def _build_verification_tools(project_root: str) -> Dict[str, Any]:
     from app.services.agent.tools import (
-        ExtractFunctionTool, CreateVulnerabilityReportTool,
+        CreateVulnerabilityReportTool,
     )
     # 验证测试不启用沙箱工具，避免环境依赖
     return {
         **_build_base_tools(project_root),
-        "extract_function": ExtractFunctionTool(project_root),
         "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
     }
 
@@ -384,13 +390,12 @@ def _build_bl_analysis_tools(
     vuln_queue: Any = None,
 ) -> Dict[str, Any]:
     from app.services.agent.tools import (
-        PatternMatchTool, ExtractFunctionTool, DataFlowAnalysisTool,
+        PatternMatchTool, DataFlowAnalysisTool,
         ControlFlowAnalysisLightTool,
     )
     tools = {
         **_build_base_tools(project_root),
         "pattern_match": PatternMatchTool(project_root),
-        "extract_function": ExtractFunctionTool(project_root=project_root),
         "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
         "controlflow_analysis_light": ControlFlowAnalysisLightTool(project_root=project_root),
     }

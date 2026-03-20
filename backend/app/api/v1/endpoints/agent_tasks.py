@@ -3066,7 +3066,6 @@ async def _execute_agent_task(task_id: str):
                 "smart_audit_mode": True,
                 "audit_mode": "smart_audit",
                 "disable_virtual_routing": True,
-                "mcp_only_enforced": True,
                 "read_scope_policy": "project_scope",
             }
 
@@ -4310,10 +4309,12 @@ def _build_tool_skills_snapshot(*, max_chars: int) -> str:
         "mcp_reliability_workflow.skill.md",
         "push_finding_to_queue.skill.md",
         "get_recon_risk_queue_status.skill.md",
-        "read_file.skill.md",
         "search_code.skill.md",
         "list_files.skill.md",
-        "extract_function.skill.md",
+        "get_code_window.skill.md",
+        "get_file_outline.skill.md",
+        "get_function_summary.skill.md",
+        "get_symbol_body.skill.md",
         "locate_enclosing_function.skill.md",
         "function_context.skill.md",
     ]
@@ -4403,8 +4404,10 @@ async def _initialize_tools(
 ) -> Dict[str, Dict[str, Any]]:
     """初始化工具集。"""
     from app.services.agent.tools import (
-        FileReadTool,
+        CodeWindowTool,
+        FileOutlineTool,
         FileSearchTool,
+        FunctionSummaryTool,
         ListFilesTool,
         LocateEnclosingFunctionTool,
         PatternMatchTool,
@@ -4414,12 +4417,12 @@ async def _initialize_tools(
         CreateVulnerabilityReportTool,
         ControlFlowAnalysisLightTool,
         LogicAuthzAnalysisTool,
-        ExtractFunctionTool,
         SandboxTool,
         VulnerabilityVerifyTool,
         RunCodeTool,
         SmartScanTool,
         QuickAuditTool,
+        SymbolBodyTool,
     )
     from app.services.agent.tools.queue_tools import (
         GetQueueStatusTool, DequeueFindingTool, PushFindingToQueueTool, IsFindingInQueueTool
@@ -4463,9 +4466,12 @@ async def _initialize_tools(
     # await emit("⏭️ RAG 模块已禁用，跳过向量索引初始化")
 
     base_tools = {
-        "read_file": FileReadTool(project_root, exclude_patterns, target_files),
         "list_files": ListFilesTool(project_root, exclude_patterns, target_files),
         "search_code": FileSearchTool(project_root, exclude_patterns, target_files),
+        "get_code_window": CodeWindowTool(project_root, exclude_patterns, target_files),
+        "get_file_outline": FileOutlineTool(project_root, exclude_patterns, target_files),
+        "get_function_summary": FunctionSummaryTool(project_root, exclude_patterns, target_files),
+        "get_symbol_body": SymbolBodyTool(project_root, exclude_patterns, target_files),
         "locate_enclosing_function": LocateEnclosingFunctionTool(
             project_root,
             exclude_patterns,
@@ -4496,7 +4502,6 @@ async def _initialize_tools(
         "smart_scan": SmartScanTool(project_root, exclude_patterns=exclude_patterns or []),
         "quick_audit": QuickAuditTool(project_root),
         "pattern_match": PatternMatchTool(project_root),
-        "extract_function": ExtractFunctionTool(project_root=project_root),
         "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
         "controlflow_analysis_light": ControlFlowAnalysisLightTool(
             project_root=project_root,
@@ -4513,7 +4518,6 @@ async def _initialize_tools(
         "sandbox_exec": SandboxTool(sandbox_manager),
         "verify_vulnerability": VulnerabilityVerifyTool(sandbox_manager),
         "run_code": RunCodeTool(sandbox_manager, project_root),
-        "extract_function": ExtractFunctionTool(project_root),
         "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
     }
 
@@ -4621,10 +4625,12 @@ async def _initialize_tools(
         "business_logic_recon": bl_recon_tools,
         "business_logic_analysis": bl_analysis_tools,
         "report": {
-            "read_file": FileReadTool(project_root, exclude_patterns, target_files),
             "list_files": ListFilesTool(project_root, exclude_patterns, target_files),
             "search_code": FileSearchTool(project_root, exclude_patterns, target_files),
-            "extract_function": ExtractFunctionTool(project_root=project_root),
+            "get_code_window": CodeWindowTool(project_root, exclude_patterns, target_files),
+            "get_file_outline": FileOutlineTool(project_root, exclude_patterns, target_files),
+            "get_function_summary": FunctionSummaryTool(project_root, exclude_patterns, target_files),
+            "get_symbol_body": SymbolBodyTool(project_root, exclude_patterns, target_files),
             "dataflow_analysis": DataFlowAnalysisTool(llm_service, project_root=project_root),
             **(
                 {"update_vulnerability_finding": report_update_tool}

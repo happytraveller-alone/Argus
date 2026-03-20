@@ -12,21 +12,16 @@ globalThis.React = React;
 
 const searchEvidence: ToolEvidencePayload = {
   renderType: "search_hits",
-  commandChain: ["rg", "sed"],
-  displayCommand: "rg -> sed",
+  commandChain: ["rg"],
+  displayCommand: "rg",
   entries: [
     {
       filePath: "src/auth.ts",
       matchLine: 88,
       matchText: "if (!is_admin(user)) return",
-      windowStartLine: 87,
-      windowEndLine: 89,
-      language: "typescript",
-      lines: [
-        { lineNumber: 87, text: "function guard(user) {", kind: "context" },
-        { lineNumber: 88, text: "if (!is_admin(user)) return", kind: "match" },
-        { lineNumber: 89, text: "}", kind: "context" },
-      ],
+      column: 5,
+      symbolName: "guard",
+      matchKind: "text",
     },
   ],
 };
@@ -85,7 +80,7 @@ test("ToolEvidencePreview 渲染搜索命中卡片摘要", () => {
     createElement(ToolEvidencePreview, { evidence: searchEvidence }),
   );
 
-  assert.match(markup, /src\/auth\.ts:87-89/);
+  assert.match(markup, /src\/auth\.ts:88-88/);
   assert.match(markup, /is_admin/);
   assert.match(markup, /data-appearance="native-explorer"/);
   assert.doesNotMatch(markup, /rg -&gt; sed/);
@@ -176,8 +171,8 @@ test("FindingCodeWindow 为代码浏览页提供 project-browser 满高预设", 
   assert.match(markup, /flex h-full min-h-0 flex-col/);
   assert.match(markup, /min-h-0 flex-1 max-h-none overflow-auto overflow-x-auto/);
   assert.match(markup, /title="src\/auth\.ts:80-81"/);
-  assert.match(markup, /text-\[14px\] leading-6/);
-  assert.match(markup, /text-\[14px\] leading-7/);
+  assert.match(markup, /text-\[15px\] leading-6/);
+  assert.match(markup, /text-\[15px\] leading-7/);
   assert.match(markup, /grid-cols-\[minmax\(56px,max-content\)_minmax\(0,1fr\)\]/);
 });
 

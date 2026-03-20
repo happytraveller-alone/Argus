@@ -4,6 +4,8 @@ import FindingCodeWindow from "./FindingCodeWindow";
 import type {
   ToolEvidenceCodeWindowEntry,
   ToolEvidenceExecutionResultEntry,
+  ToolEvidenceFunctionSummaryEntry,
+  ToolEvidenceOutlineSummaryEntry,
   ToolEvidencePayload,
   ToolEvidenceSearchHitEntry,
 } from "../toolEvidence";
@@ -37,19 +39,19 @@ function statusLabel(status: ToolEvidenceExecutionResultEntry["status"]) {
 
 function SearchHitDetail({ entry, command }: { entry: ToolEvidenceSearchHitEntry; command: string }) {
   return (
-    <FindingCodeWindow
-      code={toolEvidenceLinesToCode(entry.lines)}
-      filePath={entry.filePath}
-      lineStart={entry.windowStartLine}
-      lineEnd={entry.windowEndLine}
-      highlightStartLine={entry.matchLine}
-      highlightEndLine={entry.matchLine}
-      focusLine={entry.matchLine}
-      title="命中窗口"
-      density="detail"
-      badges={[command, "命中"]}
-      meta={[entry.language, `命中行 ${entry.matchLine}`]}
-    />
+    <section className="rounded-xl border border-border/60 bg-card/60 p-4">
+      <div className="mb-3 text-xs uppercase tracking-[0.24em] text-muted-foreground">命中定位</div>
+      <div className="font-mono text-sm text-foreground">
+        {entry.filePath}:{entry.matchLine}
+        {entry.column ? `:${entry.column}` : ""}
+      </div>
+      <div className="mt-2 text-sm text-foreground">{entry.matchText || "命中代码"}</div>
+      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+        <span>{command}</span>
+        {entry.symbolName ? <span>symbol {entry.symbolName}</span> : null}
+        {entry.matchKind ? <span>{entry.matchKind}</span> : null}
+      </div>
+    </section>
   );
 }
 
@@ -74,6 +76,41 @@ function CodeWindowDetail({ entry, command }: { entry: ToolEvidenceCodeWindowEnt
         entry.focusLine ? `焦点行 ${entry.focusLine}` : "",
       ]}
     />
+  );
+}
+
+function OutlineSummaryDetail({ entry }: { entry: ToolEvidenceOutlineSummaryEntry }) {
+  return (
+    <section className="rounded-xl border border-border/60 bg-card/60 p-4">
+      <div className="mb-3 text-xs uppercase tracking-[0.24em] text-muted-foreground">文件概览</div>
+      <div className="space-y-2 text-sm text-foreground">
+        <div className="font-mono">{entry.filePath}</div>
+        <div>角色: {entry.fileRole || "unknown"}</div>
+        <div>关键符号: {entry.keySymbols.join(", ") || "无"}</div>
+        <div>入口点: {entry.entrypoints.join(", ") || "无"}</div>
+        <div>风险标记: {entry.riskMarkers.join(", ") || "无"}</div>
+        <div>框架提示: {entry.frameworkHints.join(", ") || "无"}</div>
+      </div>
+    </section>
+  );
+}
+
+function FunctionSummaryDetail({ entry }: { entry: ToolEvidenceFunctionSummaryEntry }) {
+  return (
+    <section className="rounded-xl border border-border/60 bg-card/60 p-4">
+      <div className="mb-3 text-xs uppercase tracking-[0.24em] text-muted-foreground">函数摘要</div>
+      <div className="space-y-2 text-sm text-foreground">
+        <div className="font-mono">
+          {entry.filePath} :: {entry.resolvedFunction}
+        </div>
+        <div>签名: {entry.signature || "未知"}</div>
+        <div>职责: {entry.purpose || "未提供"}</div>
+        <div>输入: {entry.inputs.join(", ") || "未识别"}</div>
+        <div>输出: {entry.outputs.join(", ") || "未识别"}</div>
+        <div>关键调用: {entry.keyCalls.join(", ") || "无"}</div>
+        <div>风险点: {entry.riskPoints.join(", ") || "无"}</div>
+      </div>
+    </section>
   );
 }
 
@@ -229,6 +266,10 @@ export default function ToolEvidenceDetail({
         <span className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
           {evidence.renderType === "search_hits"
             ? `${evidence.entries.length} 条命中`
+            : evidence.renderType === "outline_summary"
+              ? `${evidence.entries.length} 份文件概览`
+              : evidence.renderType === "function_summary"
+                ? `${evidence.entries.length} 份函数摘要`
             : evidence.renderType === "execution_result"
               ? `${evidence.entries.length} 次执行`
               : `${evidence.entries.length} 个窗口`}
@@ -258,6 +299,21 @@ export default function ToolEvidenceDetail({
             <SearchHitDetail entry={activeSearchEntry} command={evidence.displayCommand} />
           ) : null}
         </>
+      ) : evidence.renderType === "outline_summary" ? (
+        <div className="space-y-3">
+          {evidence.entries.map((entry) => (
+            <OutlineSummaryDetail key={entry.filePath} entry={entry} />
+          ))}
+        </div>
+      ) : evidence.renderType === "function_summary" ? (
+        <div className="space-y-3">
+          {evidence.entries.map((entry) => (
+            <FunctionSummaryDetail
+              key={`${entry.filePath}-${entry.resolvedFunction}`}
+              entry={entry}
+            />
+          ))}
+        </div>
       ) : evidence.renderType === "execution_result" ? (
         <div className="space-y-4">
           {evidence.entries.map((entry, index) => (

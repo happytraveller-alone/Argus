@@ -16,17 +16,18 @@ class _DummyAgent(BaseAgent):
         return AgentResult(success=True, data=input_data)
 
 
-class _ReadSchema(BaseModel):
+class _CodeWindowSchema(BaseModel):
     file_path: str
+    anchor_line: int
 
 
 class _SearchSchema(BaseModel):
     keyword: str
 
 
-class _LocalReadTool:
-    args_schema = _ReadSchema
-    name = "read_file"
+class _LocalCodeWindowTool:
+    args_schema = _CodeWindowSchema
+    name = "get_code_window"
 
     def __init__(self):
         self.execute_calls = 0
@@ -35,9 +36,9 @@ class _LocalReadTool:
         self.execute_calls += 1
         return SimpleNamespace(
             success=True,
-            data=f"local-read:{kwargs.get('file_path')}",
+            data=f"local-code-window:{kwargs.get('file_path')}:{kwargs.get('anchor_line')}",
             error=None,
-            metadata={"file_path": kwargs.get("file_path")},
+            metadata={"file_path": kwargs.get("file_path"), "anchor_line": kwargs.get("anchor_line")},
         )
 
 
@@ -133,11 +134,7 @@ async def test_task_mcp_runtime_keeps_project_root_without_filesystem_stdio_args
 def test_mcp_router_exposes_local_scan_core_routes():
     router = MCPToolRouter()
 
-    read_route = router.route("read_file", {"file_path": "src/main.py"})
-    assert read_route is not None
-    assert read_route.adapter_name == "__local__"
-    assert read_route.mcp_tool_name == "read_file"
-    assert read_route.arguments["path"] == "src/main.py"
+    assert router.route("read_file", {"file_path": "src/main.py"}) is None
 
     search_route = router.route("search_code", {"keyword": "dangerous_call"})
     assert search_route is not None
@@ -179,13 +176,15 @@ def test_mcp_router_exposes_local_scan_core_routes():
     assert directory_only_search_route.arguments["file_pattern"] == "src/**"
     assert "directory" not in directory_only_search_route.arguments
 
-    extract_route = router.route(
-        "extract_function",
-        {"path": "src/time64.c", "symbol_name": "asctime64_r"},
+    code_window_route = router.route(
+        "get_code_window",
+        {"file_path": "src/time64.c", "anchor_line": 22, "before_lines": 2, "after_lines": 3},
     )
-    assert extract_route is not None
-    assert extract_route.adapter_name == "__local__"
-    assert extract_route.mcp_tool_name == "extract_function"
+    assert code_window_route is not None
+    assert code_window_route.adapter_name == "__local__"
+    assert code_window_route.mcp_tool_name == "get_code_window"
+    assert code_window_route.arguments["file_path"] == "src/time64.c"
+    assert code_window_route.arguments["anchor_line"] == 22
 
     locate_route = router.route(
         "locate_enclosing_function",
@@ -233,17 +232,17 @@ async def test_agent_ignores_unavailable_filesystem_adapter_for_local_read_tool(
         project_root=str(tmp_path),
         strict_mode=True,
     )
-    local_tool = _LocalReadTool()
-    agent = _make_agent(tools={"read_file": local_tool}, runtime=runtime)
+    local_tool = _LocalCodeWindowTool()
+    agent = _make_agent(tools={"get_code_window": local_tool}, runtime=runtime)
 
-    output = await agent.execute_tool("read_file", {"file_path": "src/main.py"})
+    output = await agent.execute_tool("get_code_window", {"file_path": "src/main.py", "anchor_line": 8})
 
-    assert "local-read:src/main.py" in output
+    assert "local-code-window:src/main.py:8" in output
     assert local_tool.execute_calls == 1
 
 
 @pytest.mark.asyncio
-async def test_agent_runs_local_read_file_when_strict_mode_route_is_local_only(tmp_path):
+async def test_agent_rejects_legacy_read_file_when_strict_mode_route_is_missing(tmp_path):
     runtime = MCPRuntime(
         enabled=True,
         prefer_mcp=True,
@@ -253,13 +252,13 @@ async def test_agent_runs_local_read_file_when_strict_mode_route_is_local_only(t
         project_root=str(tmp_path),
         strict_mode=True,
     )
-    local_tool = _LocalReadTool()
-    agent = _make_agent(tools={"read_file": local_tool}, runtime=runtime)
+    local_tool = _LocalCodeWindowTool()
+    agent = _make_agent(tools={"get_code_window": local_tool}, runtime=runtime)
 
     output = await agent.execute_tool("read_file", {"file_path": "src/main.py"})
 
-    assert "local-read:src/main.py" in output
-    assert local_tool.execute_calls == 1
+    assert "工具 'read_file' 不存在" in output or "已下线" in output
+    assert local_tool.execute_calls == 0
 
 
 @pytest.mark.asyncio
@@ -275,7 +274,7 @@ async def test_agent_runs_local_search_code_when_strict_mode_route_is_local_only
     )
     local_tool = _LocalSearchTool()
     agent = _make_agent(tools={"search_code": local_tool}, runtime=runtime)
-    agent.config.metadata.update({"smart_audit_mode": True, "mcp_only_enforced": True})
+    agent.config.metadata.update({"smart_audit_mode": True})
 
     output = await agent.execute_tool("search_code", {"keyword": "dangerous_call"})
 

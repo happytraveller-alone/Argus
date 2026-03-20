@@ -23,6 +23,7 @@ class _DummyAgent(BaseAgent):
 
 class _ReadSchema(BaseModel):
     file_path: str
+    anchor_line: int = 1
 
 
 class _DeterministicFailReadTool:
@@ -175,11 +176,11 @@ def _events_by_type(emitter, event_type: str):
 @pytest.mark.asyncio
 async def test_execute_tool_short_circuits_after_deterministic_failures():
     read_tool = _DeterministicFailReadTool()
-    agent, _emitter = _make_agent({"read_file": read_tool})
+    agent, _emitter = _make_agent({"get_code_window": read_tool})
 
-    first = await agent.execute_tool("read_file", {"file_path": "src/not_found.py"})
-    second = await agent.execute_tool("read_file", {"file_path": "src/not_found.py"})
-    third = await agent.execute_tool("read_file", {"file_path": "src/not_found.py"})
+    first = await agent.execute_tool("get_code_window", {"file_path": "src/not_found.py", "anchor_line": 12})
+    second = await agent.execute_tool("get_code_window", {"file_path": "src/not_found.py", "anchor_line": 12})
+    third = await agent.execute_tool("get_code_window", {"file_path": "src/not_found.py", "anchor_line": 12})
 
     assert ("工具执行失败" in first) or ("工具调用已短路" in first)
     assert ("工具执行失败" in second) or ("工具调用已短路" in second)
@@ -244,9 +245,9 @@ async def test_strict_mcp_deterministic_failure_suppresses_retry_and_short_circu
 
 
 @pytest.mark.asyncio
-async def test_strict_mcp_read_file_path_auto_repair_retries_once_and_succeeds():
+async def test_legacy_read_file_is_downlined_before_runtime_dispatch():
     runtime = _StrictReadFileAutoRepairRuntime()
-    agent, _emitter = _make_agent(tools={"read_file": object(), "search_code": object()})
+    agent, _emitter = _make_agent(tools={})
     agent.set_mcp_runtime(runtime)
 
     output = await agent.execute_tool(
@@ -254,12 +255,9 @@ async def test_strict_mcp_read_file_path_auto_repair_retries_once_and_succeeds()
         {"file_path": "src/main/java/top/whgojp/modules/rce/command/CeshiController.java"},
     )
 
-    assert "CommandController" in output
-    assert len(runtime.calls) >= 3
-    assert runtime.calls[0][0] == "read_file"
-    assert runtime.calls[1][0] == "search_code"
-    assert runtime.calls[2][0] == "read_file"
-    assert runtime.calls[2][1].get("file_path", "").endswith("CommandController.java")
+    assert "已下线" in output
+    assert "get_code_window" in output
+    assert runtime.calls == []
 
 
 class _StrictNoRouteRuntime:
@@ -327,7 +325,7 @@ def _public_local_scan_core_skill_ids() -> set[str]:
 async def test_strict_mcp_allows_local_recon_queue_tool_without_mcp_route():
     runtime = _StrictNoRouteRuntime()
     agent, _emitter = _make_agent({"get_recon_risk_queue_status": _LocalQueueStatusTool()})
-    agent.config.metadata.update({"smart_audit_mode": True, "mcp_only_enforced": True})
+    agent.config.metadata.update({"smart_audit_mode": True})
     agent.set_mcp_runtime(runtime)
 
     output = await agent.execute_tool("get_recon_risk_queue_status", {})
@@ -340,7 +338,7 @@ async def test_strict_mcp_allows_local_recon_queue_tool_without_mcp_route():
 async def test_strict_mcp_still_blocks_non_whitelisted_local_tool_without_route():
     runtime = _StrictNoRouteRuntime()
     agent, _emitter = _make_agent({"custom_local_tool": _LocalCustomTool()})
-    agent.config.metadata.update({"smart_audit_mode": True, "mcp_only_enforced": True})
+    agent.config.metadata.update({"smart_audit_mode": True})
     agent.set_mcp_runtime(runtime)
 
     output = await agent.execute_tool("custom_local_tool", {})
@@ -354,7 +352,7 @@ async def test_strict_mcp_still_blocks_non_whitelisted_local_tool_without_route(
 async def test_strict_mcp_allows_public_local_scan_core_tools_without_mcp_route(tool_name: str):
     runtime = _StrictNoRouteRuntime()
     agent, _emitter = _make_agent({tool_name: _LocalEchoTool(tool_name)})
-    agent.config.metadata.update({"smart_audit_mode": True, "mcp_only_enforced": True})
+    agent.config.metadata.update({"smart_audit_mode": True})
     agent.set_mcp_runtime(runtime)
 
     output = await agent.execute_tool(tool_name, {})
