@@ -13,7 +13,6 @@ from .file_tool import (
     SymbolBodyTool,
 )
 from .sandbox_tool import SandboxTool, VulnerabilityVerifyTool, SandboxManager
-from .thinking_tool import ThinkTool, ReflectTool
 from .reporting_tool import CreateVulnerabilityReportTool
 from .finish_tool import FinishScanTool
 from .agent_tools import (
@@ -49,8 +48,6 @@ __all__ = [
     "SandboxTool",
     "VulnerabilityVerifyTool",
     "SandboxManager",
-    "ThinkTool",
-    "ReflectTool",
     "CreateVulnerabilityReportTool",
     "FinishScanTool",
     "CreateSubAgentTool",

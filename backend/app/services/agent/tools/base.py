@@ -19,16 +19,20 @@ class ToolResult:
     success: bool
     data: Any = None
     error: Optional[str] = None
+    error_code: Optional[str] = None
     duration_ms: int = 0
     metadata: Dict[str, Any] = field(default_factory=dict)
+    diagnostics: list[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
             "success": self.success,
             "data": self.data,
             "error": self.error,
+            "error_code": self.error_code,
             "duration_ms": self.duration_ms,
             "metadata": self.metadata,
+            "diagnostics": self.diagnostics,
         }
     
     def to_string(self, max_length: int = 5000) -> str:
@@ -59,6 +63,7 @@ class AgentTool(ABC):
     def __init__(self):
         self._call_count = 0
         self._total_duration_ms = 0
+        self._runtime_context: Dict[str, Any] = {}
     
     @property
     @abstractmethod
@@ -113,76 +118,23 @@ class AgentTool(ABC):
         return filtered, dropped
     
     async def execute(self, **kwargs) -> ToolResult:
-        """执行工具（带计时和日志）"""
-        start_time = time.time()
-        payload = dict(kwargs or {})
-        filtered_kwargs, dropped_kwargs = self._filter_execute_kwargs(payload)
-        
-        try:
-            logger.debug(f"Tool '{self.name}' executing with args: {filtered_kwargs}")
-            
-            # 🔥 修复：如果定义了 args_schema，先通过 Pydantic 验证输入
-            # 这样可以触发 field_validator，将字典转换为 Pydantic 模型对象
-            if self.args_schema:
-                try:
-                    validated_input = self.args_schema(**filtered_kwargs)
-                    # 从验证后的模型提取字段值，保持 Pydantic 对象不变
-                    # 这样嵌套的模型对象（如 AgentFindingModel）不会被转换回字典
-                    filtered_kwargs = {
-                        field_name: getattr(validated_input, field_name)
-                        for field_name in validated_input.model_fields.keys()
-                    }
-                except ValidationError as ve:
-                    logger.warning(f"Tool '{self.name}' input validation failed: {ve}")
-                    expected = self._build_expected_args()
-                    result = ToolResult(
-                        success=False,
-                        error="参数校验失败",
-                        data={
-                            "message": str(ve),
-                            "expected_args": expected,
-                        },
-                    )
-                    duration_ms = int((time.time() - start_time) * 1000)
-                    result.duration_ms = duration_ms
-                    return result
-            
-            result = await self._execute(**filtered_kwargs)
-            
-        except ValidationError as e:
-            logger.warning(f"Tool '{self.name}' validation error: {e}")
-            expected = self._build_expected_args()
-            result = ToolResult(
-                success=False,
-                error="参数校验失败",
-                data={
-                    "message": str(e),
-                    "expected_args": expected,
-                },
-            )
-        except Exception as e:
-            logger.error(f"Tool '{self.name}' error: {e}", exc_info=True)
-            error_msg = str(e)
-            result = ToolResult(
-                success=False,
-                data=f"工具执行异常: {error_msg}",  # 🔥 修复：设置 data 字段避免 None
-                error=error_msg,
-            )
+        """执行工具（统一交给运行时协调器处理）"""
+        from .runtime import ToolExecutionCoordinator
 
-        if dropped_kwargs:
-            metadata = dict(result.metadata or {})
-            metadata["dropped_kwargs"] = sorted(dropped_kwargs.keys())
-            result.metadata = metadata
-        
-        duration_ms = int((time.time() - start_time) * 1000)
-        result.duration_ms = duration_ms
-        
+        payload = dict(kwargs or {})
+        logger.debug("Tool '%s' executing with args: %s", self.name, payload)
+        coordinator = ToolExecutionCoordinator()
+        result = await coordinator.execute(self, payload)
         self._call_count += 1
-        self._total_duration_ms += duration_ms
-        
-        logger.debug(f"Tool '{self.name}' completed in {duration_ms}ms, success={result.success}")
-        
+        self._total_duration_ms += int(result.duration_ms or 0)
+        logger.debug("Tool '%s' completed in %sms, success=%s", self.name, result.duration_ms, result.success)
         return result
+
+    def set_runtime_context(self, **kwargs) -> None:
+        self._runtime_context = dict(kwargs or {})
+
+    def clear_runtime_context(self) -> None:
+        self._runtime_context = {}
 
     def _build_expected_args(self) -> Optional[Dict[str, Any]]:
         """构建预期参数字典，兼容 Pydantic v1 和 v2"""

@@ -468,7 +468,7 @@ def get_agent_type_config(agent_type: str) -> AgentTypeConfig:
             agent_type="orchestrator",
             max_iterations=config.orchestrator_max_iterations,
             timeout_seconds=config.orchestrator_timeout_seconds,
-            tools=["think", "reflect", "dispatch_agent", "finish"],
+            tools=["dispatch_agent", "finish"],
         ),
         "recon": AgentTypeConfig(
             agent_type="recon",

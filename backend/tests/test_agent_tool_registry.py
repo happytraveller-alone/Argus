@@ -50,8 +50,6 @@ PUBLIC_CORE_SKILLS = {
     "sandbox_exec",
     "verify_vulnerability",
     "create_vulnerability_report",
-    "think",
-    "reflect",
 }
 
 
@@ -73,7 +71,7 @@ async def test_smart_audit_tool_registry_contains_only_core_scan_surface(tmp_pat
     orchestrator_names = set(tools["orchestrator"].keys())
     recon_names = set(tools["recon"].keys())
 
-    assert {"search_code", "list_files", "get_file_outline", "get_code_window", "think", "reflect"}.issubset(recon_names)
+    assert {"search_code", "list_files", "get_file_outline", "get_code_window"}.issubset(recon_names)
     assert {
         "search_code",
         "list_files",
@@ -86,8 +84,6 @@ async def test_smart_audit_tool_registry_contains_only_core_scan_surface(tmp_pat
         "dataflow_analysis",
         "controlflow_analysis_light",
         "logic_authz_analysis",
-        "think",
-        "reflect",
     }.issubset(analysis_names)
     assert {
         "search_code",
@@ -99,10 +95,8 @@ async def test_smart_audit_tool_registry_contains_only_core_scan_surface(tmp_pat
         "sandbox_exec",
         "verify_vulnerability",
         "create_vulnerability_report",
-        "think",
-        "reflect",
     }.issubset(verification_names)
-    assert {"think", "reflect", "search_code", "list_files", "get_code_window", "get_file_outline"}.issubset(
+    assert {"search_code", "list_files", "get_code_window", "get_file_outline"}.issubset(
         orchestrator_names
     )
 

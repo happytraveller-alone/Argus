@@ -40,7 +40,6 @@ from .knowledge import (
 
 # 协作工具
 from .tools import (
-    ThinkTool, ReflectTool,
     CreateVulnerabilityReportTool,
     FinishScanTool,
     CreateSubAgentTool, SendMessageTool, ViewAgentGraphTool,
@@ -86,8 +85,6 @@ __all__ = [
     "GetVulnerabilityKnowledgeTool",
 
     # 协作工具
-    "ThinkTool",
-    "ReflectTool",
     "CreateVulnerabilityReportTool",
     "FinishScanTool",
     "CreateSubAgentTool",

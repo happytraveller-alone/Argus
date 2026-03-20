@@ -43,11 +43,10 @@ async def _collect_sse_events(response) -> list[dict]:
     return events
 
 
-def test_build_skill_test_tool_allowlist_only_allows_selected_skill_and_reasoning_helpers():
+def test_build_skill_test_tool_allowlist_only_allows_selected_skill():
     from app.services.agent.skill_test_runner import build_skill_test_tool_allowlist
 
-    assert build_skill_test_tool_allowlist("get_code_window") == ("get_code_window", "think", "reflect")
-    assert build_skill_test_tool_allowlist("think") == ("think", "reflect")
+    assert build_skill_test_tool_allowlist("get_code_window") == ("get_code_window",)
 
 
 @pytest.mark.asyncio

@@ -277,7 +277,7 @@ def _build_base_tools(project_root: str) -> Dict[str, Any]:
         FileSearchTool,
         FunctionSummaryTool,
         ListFilesTool,
-        LocateEnclosingFunctionTool, ThinkTool, ReflectTool,
+        LocateEnclosingFunctionTool,
         SymbolBodyTool,
     )
     return {
@@ -288,8 +288,6 @@ def _build_base_tools(project_root: str) -> Dict[str, Any]:
         "get_function_summary": FunctionSummaryTool(project_root),
         "get_symbol_body": SymbolBodyTool(project_root),
         "locate_enclosing_function": LocateEnclosingFunctionTool(project_root),
-        "think": ThinkTool(),
-        "reflect": ReflectTool(),
     }
 
 

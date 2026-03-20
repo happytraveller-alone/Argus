@@ -59,7 +59,7 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
         """
         Args:
             llm_service:                  LLM 服务实例（与 OrchestratorAgent 相同）。
-            tools:                        Orchestrator 工具集（think/reflect/queue tools 等）。
+            tools:                        Orchestrator 工具集（代码检索、队列与验证工具等）。
             event_emitter:                事件发射器（用于前端实时推送）。
             sub_agents:                   子 Agent 字典 {"recon": ..., "analysis": ..., "verification": ...,
                                           "business_logic_recon": ..., "business_logic_analysis": ...}。

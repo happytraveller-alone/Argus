@@ -21,8 +21,6 @@ _SCAN_CORE_SKILLS: List[Dict[str, Any]] = [
     {"skill_id": "sandbox_exec", "name": "sandbox_exec", "summary": "在隔离沙箱中执行命令，验证运行时行为。"},
     {"skill_id": "verify_vulnerability", "name": "verify_vulnerability", "summary": "编排漏洞验证步骤并收敛最终验证结论。"},
     {"skill_id": "create_vulnerability_report", "name": "create_vulnerability_report", "summary": "生成正式漏洞报告并沉淀证据。"},
-    {"skill_id": "think", "name": "think", "summary": "用于分析、规划和决策的思考工具。"},
-    {"skill_id": "reflect", "name": "reflect", "summary": "用于复盘、校验和调整策略的反思工具。"},
 ]
 
 SCAN_CORE_SKILL_IDS = tuple(item["skill_id"] for item in _SCAN_CORE_SKILLS)
@@ -47,8 +45,6 @@ SCAN_CORE_SKILL_TEST_SUPPORTED_IDS = frozenset(
         "pattern_match",
         "smart_scan",
         "quick_audit",
-        "think",
-        "reflect",
     }
 )
 SCAN_CORE_SKILL_TEST_DISABLED_REASONS: Dict[str, str] = {

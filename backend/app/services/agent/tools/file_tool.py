@@ -2146,16 +2146,176 @@ class ListFilesTool(AgentTool):
 
 
 class LocateEnclosingFunctionInput(BaseModel):
-    file_path: Optional[str] = Field(default=None, description="文件路径（相对于项目根目录）")
-    path: Optional[str] = Field(default=None, description="兼容字段：文件路径（相对于项目根目录）")
-    line_start: Optional[int] = Field(default=None, description="目标行号（从1开始）")
-    line: Optional[int] = Field(default=None, description="兼容字段：目标行号（从1开始）")
+    file_path: str = Field(description="文件路径（相对于项目根目录）")
+    line: int = Field(description="目标行号（从1开始）")
 
     @model_validator(mode="after")
     def validate_path_fields(self) -> "LocateEnclosingFunctionInput":
-        if str(self.file_path or self.path or "").strip():
-            return self
-        raise ValueError("必须提供 file_path 或 path")
+        if not str(self.file_path or "").strip():
+            raise ValueError("必须提供 file_path")
+        if int(self.line) <= 0:
+            raise ValueError("line 必须为正整数")
+        return self
+
+
+def _extract_signature_lines(
+    file_lines: List[str],
+    *,
+    start_line: Optional[int],
+    language: Optional[str],
+) -> str:
+    if not start_line or start_line <= 0:
+        return ""
+    start_index = max(0, int(start_line) - 1)
+    collected: List[str] = []
+    max_lines = min(len(file_lines), start_index + 8)
+    normalized_language = str(language or "").strip().lower()
+    for idx in range(start_index, max_lines):
+        line = file_lines[idx].strip()
+        if not line:
+            if collected:
+                break
+            continue
+        collected.append(line)
+        joined = " ".join(collected).strip()
+        if normalized_language == "python" and joined.endswith(":"):
+            return joined
+        if normalized_language in {"c", "cpp", "javascript", "typescript", "tsx", "java", "kotlin"} and "{" in joined:
+            return joined.split("{", 1)[0].strip()
+    return " ".join(collected).strip()
+
+
+def _split_signature_parameters(signature: str) -> str:
+    match = re.search(r"\((.*)\)", str(signature or "").strip())
+    return str(match.group(1) or "").strip() if match else ""
+
+
+def _split_top_level_commas(raw: str) -> List[str]:
+    if not raw:
+        return []
+    parts: List[str] = []
+    current: List[str] = []
+    depth = 0
+    for char in raw:
+        if char in "(<[":
+            depth += 1
+        elif char in ")>]":
+            depth = max(0, depth - 1)
+        if char == "," and depth == 0:
+            segment = "".join(current).strip()
+            if segment:
+                parts.append(segment)
+            current = []
+            continue
+        current.append(char)
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _parse_python_parameters(signature: str) -> List[Dict[str, Any]]:
+    raw_params = _split_top_level_commas(_split_signature_parameters(signature))
+    parameters: List[Dict[str, Any]] = []
+    for position, raw_param in enumerate(raw_params):
+        cleaned = str(raw_param or "").strip()
+        if not cleaned or cleaned in {"/", "*"}:
+            continue
+        default = None
+        required = True
+        if "=" in cleaned:
+            left, right = cleaned.split("=", 1)
+            cleaned = left.strip()
+            default = right.strip() or None
+            required = False
+        param_type = None
+        if ":" in cleaned:
+            name_part, type_part = cleaned.split(":", 1)
+            name = name_part.strip()
+            param_type = type_part.strip() or None
+        else:
+            name = cleaned
+        parameters.append(
+            {
+                "name": name,
+                "type": param_type,
+                "default": default,
+                "required": required,
+                "position": position,
+            }
+        )
+    return parameters
+
+
+def _parse_c_like_parameter(raw_param: str, position: int) -> Dict[str, Any]:
+    cleaned = str(raw_param or "").strip()
+    if not cleaned:
+        return {
+            "name": "",
+            "type": None,
+            "default": None,
+            "required": True,
+            "position": position,
+        }
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    if cleaned == "void":
+        return {
+            "name": "void",
+            "type": None,
+            "default": None,
+            "required": False,
+            "position": position,
+        }
+    match = re.match(r"^(?P<type>.+?[\s\*&])(?P<name>[A-Za-z_][A-Za-z0-9_]*)$", cleaned)
+    if match:
+        param_type = str(match.group("type") or "").strip()
+        name = str(match.group("name") or "").strip()
+    else:
+        parts = cleaned.rsplit(" ", 1)
+        if len(parts) == 2:
+            param_type, name = parts[0].strip(), parts[1].strip()
+            while name.startswith(("*", "&")):
+                param_type = f"{param_type} {name[0]}".strip()
+                name = name[1:].strip()
+        else:
+            param_type, name = None, cleaned
+    return {
+        "name": name,
+        "type": param_type or None,
+        "default": None,
+        "required": True,
+        "position": position,
+    }
+
+
+def _extract_symbol_signature(
+    *,
+    signature: str,
+    function_name: str,
+    language: Optional[str],
+) -> tuple[List[Dict[str, Any]], Optional[str]]:
+    normalized_language = str(language or "").strip().lower()
+    if normalized_language == "python":
+        return_type = None
+        match = re.search(r"\)\s*->\s*([^:]+):?$", signature)
+        if match:
+            return_type = str(match.group(1) or "").strip() or None
+        return _parse_python_parameters(signature), return_type
+
+    raw_params = _split_top_level_commas(_split_signature_parameters(signature))
+    parameters = []
+    for position, raw_param in enumerate(raw_params):
+        parsed = _parse_c_like_parameter(raw_param, position)
+        if parsed["name"] == "void" and len(raw_params) == 1:
+            return [], None
+        parameters.append(parsed)
+
+    prefix_match = re.match(
+        rf"^(?P<prefix>.+?)\b{re.escape(function_name)}\s*\(",
+        signature,
+    )
+    return_type = str(prefix_match.group("prefix") or "").strip() or None if prefix_match else None
+    return parameters, return_type
 
 
 class LocateEnclosingFunctionTool(AgentTool):
@@ -2177,7 +2337,7 @@ class LocateEnclosingFunctionTool(AgentTool):
 
     @property
     def description(self) -> str:
-        return "根据 file_path + line_start 定位包含该行的函数/方法，用于提取函数级上下文。"
+        return "根据 file_path + line 定位包含该行的函数/方法，并返回符号范围与签名事实。"
 
     @property
     def args_schema(self):
@@ -2189,7 +2349,7 @@ class LocateEnclosingFunctionTool(AgentTool):
             return None, "必须提供 file_path"
         full_path = os.path.normpath(os.path.join(self.project_root, normalized))
         root_path = os.path.normpath(self.project_root)
-        if not FileSearchTool._is_path_within_root(full_path, root_path):
+        if not _is_path_within_root(full_path, root_path):
             return None, "安全错误：不允许读取项目目录外的内容"
         if self.target_files and normalized not in self.target_files:
             return None, f"文件不在审计范围内: {normalized}"
@@ -2201,62 +2361,91 @@ class LocateEnclosingFunctionTool(AgentTool):
 
     async def _execute(
         self,
-        file_path: Optional[str] = None,
-        path: Optional[str] = None,
-        line_start: Optional[int] = None,
-        line: Optional[int] = None,
+        file_path: str,
+        line: int,
     ) -> ToolResult:
-        requested_path = str(file_path or path or "").strip()
-        parsed_path, parsed_start_line, _parsed_end_line = _parse_file_path_with_line_range(requested_path)
-        effective_path = parsed_path or requested_path
-
-        target_line = (
-            line_start
-            if line_start is not None
-            else line
-            if line is not None
-            else parsed_start_line
-        )
-        try:
-            normalized_line = max(1, int(target_line or 1))
-        except Exception:
-            normalized_line = 1
+        effective_path = str(file_path or "").strip()
+        normalized_line = max(1, int(line))
 
         full_path, error = self._resolve_full_path(effective_path)
         if full_path is None:
-            return ToolResult(success=False, error=error or "文件定位失败")
+            error_text = error or "文件定位失败"
+            error_code = "path_out_of_scope" if "项目目录外" in error_text or "审计范围" in error_text else "not_found"
+            return ToolResult(success=False, error=error_text, error_code=error_code)
 
         relative_path = _normalize_rel_path(effective_path)
+        file_lines = await asyncio.to_thread(_read_lines_sync, full_path)
+        total_lines = len(file_lines)
+        if total_lines <= 0:
+            return ToolResult(success=False, error=f"文件为空: {relative_path}", error_code="not_found")
+        if normalized_line > total_lines:
+            return ToolResult(
+                success=False,
+                error=f"目标行号超出文件范围: {relative_path}:{normalized_line}",
+                error_code="invalid_input",
+            )
+
         located = self.locator.locate(
             full_file_path=full_path,
             line_start=normalized_line,
             relative_file_path=relative_path,
+            file_lines=file_lines,
         )
+        resolution_engine = str(located.get("resolution_engine") or "missing_enclosing_function")
+        resolution_method = str(located.get("resolution_method") or "missing_enclosing_function")
+        language = located.get("language")
+        diagnostics = list(located.get("diagnostics") or [])
+        if resolution_engine in {"unsupported_language", "language_disabled"}:
+            return ToolResult(
+                success=False,
+                error=f"暂不支持定位该语言的包围函数: {relative_path}",
+                error_code="unsupported_language",
+                diagnostics=diagnostics,
+            )
+
+        function_name = str(located.get("function") or "").strip()
+        if not function_name:
+            return ToolResult(
+                success=False,
+                error=f"未找到包围当前行的函数: {relative_path}:{normalized_line}",
+                error_code="not_found",
+                diagnostics=diagnostics,
+            )
+
+        signature = _extract_signature_lines(
+            file_lines,
+            start_line=located.get("start_line"),
+            language=language,
+        )
+        parameters, return_type = _extract_symbol_signature(
+            signature=signature,
+            function_name=function_name,
+            language=language,
+        )
+
+        degraded = any(token in resolution_method for token in ("regex", "fallback", "missing"))
+        confidence = 0.55 if "regex" in resolution_method else 0.35 if "missing" in resolution_method else 0.95
 
         payload = {
             "file_path": relative_path,
-            "line_start": normalized_line,
-            "enclosing_function": {
-                "name": located.get("function"),
+            "line": normalized_line,
+            "language": language,
+            "symbol": {
+                "kind": "function",
+                "name": function_name,
                 "start_line": located.get("start_line"),
                 "end_line": located.get("end_line"),
-                "language": located.get("language"),
+                "signature": signature or None,
+                "parameters": parameters,
+                "return_type": return_type,
             },
-            "symbols": [],
-            "resolution_method": located.get("resolution_method"),
-            "resolution_engine": located.get("resolution_engine"),
-            "diagnostics": located.get("diagnostics") or [],
+            "resolution": {
+                "method": resolution_method,
+                "engine": resolution_engine,
+                "confidence": confidence,
+                "degraded": degraded,
+            },
+            "diagnostics": diagnostics,
         }
-        function_name = str(located.get("function") or "").strip()
-        if function_name:
-            payload["symbols"].append(
-                {
-                    "name": function_name,
-                    "kind": "function",
-                    "start_line": located.get("start_line"),
-                    "end_line": located.get("end_line"),
-                    "language": located.get("language"),
-                }
-            )
 
-        return ToolResult(success=True, data=payload, metadata=payload)
+        return ToolResult(success=True, data=payload, metadata={"file_path": relative_path, **payload})

@@ -24,10 +24,8 @@ from app.services.agent.tools import (
     ListFilesTool,
     PatternMatchTool,
     QuickAuditTool,
-    ReflectTool,
     SmartScanTool,
     SymbolBodyTool,
-    ThinkTool,
 )
 
 
@@ -41,8 +39,6 @@ _SUPPORTED_TOOL_BUILDERS = {
     "pattern_match": lambda project_root, llm_service: PatternMatchTool(project_root),
     "smart_scan": lambda project_root, llm_service: SmartScanTool(project_root),
     "quick_audit": lambda project_root, llm_service: QuickAuditTool(project_root),
-    "think": lambda project_root, llm_service: ThinkTool(),
-    "reflect": lambda project_root, llm_service: ReflectTool(),
 }
 
 
@@ -53,7 +49,7 @@ def build_skill_test_tool_allowlist(skill_id: str) -> Tuple[str, ...]:
             status_code=400,
             detail=str(policy.get("test_reason") or "当前 skill 暂不支持测试"),
         )
-    ordered = list(dict.fromkeys([str(skill_id or "").strip(), "think", "reflect"]))
+    ordered = [str(skill_id or "").strip()]
     return tuple(item for item in ordered if item)
 
 

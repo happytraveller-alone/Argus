@@ -31,10 +31,6 @@ class MCPToolRouter:
                 "locate_enclosing_function",
                 False,
             ),
-            # Local-registered routes: these tools are valid Agent tools but are currently
-            # executed via local tool implementations (strict-mode fallback allowlist).
-            "think": (self._LOCAL_ROUTE_ADAPTER, "think", False),
-            "reflect": (self._LOCAL_ROUTE_ADAPTER, "reflect", False),
             "smart_scan": (self._LOCAL_ROUTE_ADAPTER, "smart_scan", False),
             "quick_audit": (self._LOCAL_ROUTE_ADAPTER, "quick_audit", False),
             "pattern_match": (self._LOCAL_ROUTE_ADAPTER, "pattern_match", False),
@@ -333,7 +329,7 @@ class MCPToolRouter:
             raw_path_value = _sanitize_path(payload.get("file_path") or payload.get("path"))
             parsed_path, parsed_line = MCPToolRouter._split_path_and_line(raw_path_value)
             if parsed_path:
-                payload["path"] = parsed_path
+                payload["file_path"] = parsed_path
             raw_line = (
                 payload.get("line_start")
                 if payload.get("line_start") is not None
@@ -345,10 +341,13 @@ class MCPToolRouter:
                 try:
                     normalized_line = max(1, int(raw_line))
                     payload["line"] = normalized_line
-                    payload["line_start"] = normalized_line
                 except Exception:
                     pass
-            payload.setdefault("include_symbols", True)
+            payload = {
+                key: value
+                for key, value in payload.items()
+                if key in {"file_path", "line"}
+            }
 
         return payload
 

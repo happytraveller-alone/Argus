@@ -25,7 +25,6 @@ class SkillTestAgent(BaseAgent):
             "- 回答用户的自然语言问题。\n"
             f"- 当前测试 skill: {self.selected_skill_id}\n"
             "- 在给出 Final Answer 前，必须至少调用一次当前测试 skill。\n"
-            "- 如需辅助推理，只允许使用 think / reflect。\n"
             "- 严禁切换到其他业务 skill。\n\n"
             "## 工具白名单\n"
             f"{tool_whitelist}\n\n"

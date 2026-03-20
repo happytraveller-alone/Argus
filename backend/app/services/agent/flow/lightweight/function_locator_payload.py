@@ -126,6 +126,21 @@ def select_locator_function(
             source_priority=1,
         )
 
+    symbol_target = payload.get("symbol")
+    if isinstance(symbol_target, dict):
+        _append_candidate(
+            symbol_target.get("name")
+            or symbol_target.get("function")
+            or symbol_target.get("symbol"),
+            start_value=symbol_target.get("start_line")
+            or symbol_target.get("startLine")
+            or symbol_target.get("line"),
+            end_value=symbol_target.get("end_line") or symbol_target.get("endLine"),
+            language=symbol_target.get("language") or payload_language,
+            kind=symbol_target.get("kind") or "function",
+            source_priority=1,
+        )
+
     for key in ("symbols", "functions", "definitions", "items", "members"):
         values = payload.get(key)
         if not isinstance(values, list):

@@ -180,8 +180,6 @@ TOOL_USAGE_GUIDE = """
 | 动态验证 | `run_code` | 运行 Harness/PoC 验证漏洞 |
 | 动态验证 | `verify_vulnerability` | 编排验证流程并沉淀结论 |
 | 报告输出 | `create_vulnerability_report` | 创建正式漏洞报告 |
-| 思考编排 | `think` | 分析、规划与决策 |
-| 思考编排 | `reflect` | 复盘、校验与调整策略 |
 
 ### 推荐流程
 1. 使用 `smart_scan` 或 `quick_audit` 建立候选。

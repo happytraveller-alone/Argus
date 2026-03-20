@@ -4412,8 +4412,6 @@ async def _initialize_tools(
         LocateEnclosingFunctionTool,
         PatternMatchTool,
         DataFlowAnalysisTool,
-        ThinkTool,
-        ReflectTool,
         CreateVulnerabilityReportTool,
         ControlFlowAnalysisLightTool,
         LogicAuthzAnalysisTool,
@@ -4477,8 +4475,6 @@ async def _initialize_tools(
             exclude_patterns,
             target_files,
         ),
-        "think": ThinkTool(),
-        "reflect": ReflectTool(),
     }
 
     recon_tools = {**base_tools}

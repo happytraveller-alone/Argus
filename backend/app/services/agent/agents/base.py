@@ -4971,6 +4971,22 @@ class BaseAgent(ABC):
             # 🔥 使用 asyncio.wait_for 添加超时控制，同时支持取消
             async def execute_with_cancel_check():
                 """包装工具执行，定期检查取消状态"""
+                if hasattr(tool, "set_runtime_context"):
+                    try:
+                        tool.set_runtime_context(
+                            requested_tool_name=requested_tool_name,
+                            phase=str(getattr(self.config.agent_type, "value", "") or ""),
+                            agent_type=str(getattr(self.config.agent_type, "value", "") or ""),
+                            caller=self.name,
+                            attempt=int(_fallback_depth or 0) + 1,
+                            trace_id=tool_call_id,
+                            runtime_policy={
+                                "route_metadata": dict(route_metadata or {}),
+                                "write_scope_metadata": dict(write_scope_metadata or {}),
+                            },
+                        )
+                    except Exception:
+                        pass
                 # 创建工具执行任务
                 execute_task = asyncio.create_task(tool.execute(**repaired_input))
 
@@ -4999,6 +5015,12 @@ class BaseAgent(ABC):
                     if not execute_task.done():
                         execute_task.cancel()
                     raise
+                finally:
+                    if hasattr(tool, "clear_runtime_context"):
+                        try:
+                            tool.clear_runtime_context()
+                        except Exception:
+                            pass
 
             try:
                 result = await asyncio.wait_for(
@@ -5097,7 +5119,10 @@ class BaseAgent(ABC):
                     })
                     logger.info(f"[{self.name}] 关键工具成功执行: {resolved_tool_name}")
                 
-                output = str(result.data)
+                if hasattr(result, "to_string") and callable(getattr(result, "to_string")):
+                    output = result.to_string(max_length=MAX_EVENT_PAYLOAD_CHARS)
+                else:
+                    output = str(result.data)
 
                 # 包含 metadata 中的额外信息
                 if result.metadata:
@@ -5119,6 +5144,20 @@ class BaseAgent(ABC):
                         self._tool_success_cache.pop(oldest_key, None)
                 return output
             else:
+                reflection = (
+                    dict(result.metadata.get("reflection"))
+                    if isinstance(result.metadata, dict) and isinstance(result.metadata.get("reflection"), dict)
+                    else {}
+                )
+                if reflection:
+                    try:
+                        await self.emit_thinking(
+                            "工具失败反思: "
+                            f"{reflection.get('failure_class') or 'tool_execution_failure'} / "
+                            f"{reflection.get('stop_reason') or result.error_code or 'unknown'}"
+                        )
+                    except Exception:
+                        pass
                 # 🔥 输出详细的错误信息，包括原始错误和完整输出
                 guard_hint = ""
                 if retry_guard_key and self._deterministic_failure_counts.get(retry_guard_key, 0) >= 2:

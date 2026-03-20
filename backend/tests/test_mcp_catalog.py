@@ -66,8 +66,6 @@ def test_sanitize_mcp_config_skill_availability_only_contains_scan_core(monkeypa
         "sandbox_exec",
         "verify_vulnerability",
         "create_vulnerability_report",
-        "think",
-        "reflect",
     }
     assert expected_public_ids.issubset(skill_availability.keys())
     assert "qmd_query" not in skill_availability

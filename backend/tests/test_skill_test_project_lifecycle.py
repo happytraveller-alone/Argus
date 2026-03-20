@@ -58,7 +58,7 @@ async def test_skill_test_runner_extracts_nested_project_and_cleans_temp_dir(mon
 
     def _fake_build_tools(skill_id: str, project_root: str, llm_service):
         captured_project_root["value"] = project_root
-        return {"read_file": object(), "think": object(), "reflect": object()}
+        return {"get_code_window": object()}
 
     class _FakeAgent:
         def __init__(self, **kwargs):
@@ -72,7 +72,7 @@ async def test_skill_test_runner_extracts_nested_project_and_cleans_temp_dir(mon
     monkeypatch.setattr(runner_module, "SkillTestAgent", _FakeAgent)
 
     runner = runner_module.SkillTestRunner(
-        skill_id="read_file",
+        skill_id="get_code_window",
         prompt="读取入口函数",
         max_iterations=3,
         llm_service=object(),
@@ -119,12 +119,12 @@ async def test_skill_test_runner_cleans_temp_dir_when_agent_fails(monkeypatch, t
     monkeypatch.setattr(
         runner_module,
         "build_skill_test_tools",
-        lambda skill_id, project_root, llm_service: {"read_file": object(), "think": object(), "reflect": object()},
+        lambda skill_id, project_root, llm_service: {"get_code_window": object()},
     )
     monkeypatch.setattr(runner_module, "SkillTestAgent", _FailingAgent)
 
     runner = runner_module.SkillTestRunner(
-        skill_id="read_file",
+        skill_id="get_code_window",
         prompt="读取入口函数",
         max_iterations=3,
         llm_service=object(),
