@@ -5425,6 +5425,26 @@ async def _save_findings(
             return f"<function_at_line_{normalized_line_start}>"
         return "<function_not_localized>"
 
+    def _merge_finding_metadata_payload(
+        existing_payload: Optional[Dict[str, Any]],
+        incoming_payload: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        merged = dict(existing_payload or {})
+        incoming = dict(incoming_payload or {})
+        if not incoming:
+            return merged or None
+
+        for key, value in incoming.items():
+            if key == "extra_tool_input":
+                merged_extra = dict(merged.get("extra_tool_input") or {})
+                incoming_extra = dict(value or {}) if isinstance(value, dict) else {}
+                merged_extra.update(incoming_extra)
+                if merged_extra:
+                    merged["extra_tool_input"] = merged_extra
+                continue
+            merged[key] = value
+        return merged or None
+
     for finding in findings:
         if not isinstance(finding, dict):
             logger.debug(f"[SaveFindings] Skipping non-dict finding: {type(finding)}")
@@ -5847,7 +5867,10 @@ async def _save_findings(
             dataflow_path = function_trigger_flow if function_trigger_flow else dataflow_path
             source_text = _normalize_optional_text(finding.get("source"))
             sink_text = _normalize_optional_text(finding.get("sink"))
-            finding_metadata_payload: Dict[str, Any] = {}
+            raw_finding_metadata = finding.get("finding_metadata")
+            finding_metadata_payload: Dict[str, Any] = (
+                dict(raw_finding_metadata) if isinstance(raw_finding_metadata, dict) else {}
+            )
             if verification_todo_id:
                 finding_metadata_payload["verification_todo_id"] = verification_todo_id
             if verification_fingerprint:
@@ -5863,6 +5886,19 @@ async def _save_findings(
                 finding_metadata_payload["raw_line_start"] = line_start
             if line_end is not None:
                 finding_metadata_payload["raw_line_end"] = line_end
+            attacker_flow_text = _normalize_optional_text(finding.get("attacker_flow"))
+            if attacker_flow_text:
+                finding_metadata_payload["attacker_flow"] = attacker_flow_text
+            for list_key in ("evidence_chain", "missing_checks", "taint_flow"):
+                raw_list = finding.get(list_key)
+                if isinstance(raw_list, list):
+                    normalized_list = [
+                        str(item).strip()
+                        for item in raw_list
+                        if str(item).strip()
+                    ]
+                    if normalized_list:
+                        finding_metadata_payload[list_key] = normalized_list
 
             # 10) PoC info
             poc_data = finding.get("poc", {})
@@ -5965,7 +6001,10 @@ async def _save_findings(
                 db_finding.poc_steps = poc_steps
                 db_finding.verification_method = verification_method_text
                 db_finding.verification_result = verification_result_payload
-                db_finding.finding_metadata = finding_metadata_payload or None
+                db_finding.finding_metadata = _merge_finding_metadata_payload(
+                    db_finding.finding_metadata if isinstance(db_finding.finding_metadata, dict) else None,
+                    finding_metadata_payload or None,
+                )
                 db_finding.finding_identity = finding_identity
                 db_finding.cvss_score = cvss_score
                 db_finding.cvss_vector = cvss_vector

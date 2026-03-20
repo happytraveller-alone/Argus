@@ -176,3 +176,75 @@ async def test_save_findings_synthesizes_false_positive_fingerprint_without_loca
         == saved_finding.verification_result["verification_fingerprint"]
     )
     assert saved_finding.fingerprint == saved_finding.verification_result["verification_fingerprint"]
+
+
+@pytest.mark.asyncio
+async def test_save_findings_preserves_rich_analysis_metadata(tmp_path):
+    target_file = tmp_path / "src" / "auth" / "login.py"
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    target_file.write_text(
+        "\n".join(
+            [
+                "def login(user_input):",
+                "    query = 'SELECT * FROM users WHERE name=' + user_input",
+                "    return query",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.execute = AsyncMock(return_value=_ScalarOneOrNoneResult(None))
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+
+    findings = [
+        {
+            "title": "src/auth/login.py中login函数SQL注入漏洞",
+            "severity": "high",
+            "vulnerability_type": "sql_injection",
+            "description": "拼接 SQL。",
+            "file_path": "src/auth/login.py",
+            "line_start": 2,
+            "line_end": 2,
+            "function_name": "login",
+            "code_snippet": "query = 'SELECT * FROM users WHERE name=' + user_input",
+            "source": "user_input",
+            "sink": "cursor.execute",
+            "suggestion": "使用参数化查询",
+            "attacker_flow": "POST /login -> login -> cursor.execute",
+            "evidence_chain": ["代码片段", "数据流分析"],
+            "missing_checks": ["输入校验"],
+            "taint_flow": ["request", "login", "cursor.execute"],
+            "finding_metadata": {
+                "finding_identity": "fid-existing",
+                "extra_tool_input": {"custom_extra": "custom-value"},
+            },
+            "verdict": "confirmed",
+            "reachability": "reachable",
+            "verification_details": "verified by unit harness",
+            "verification_result": {},
+        }
+    ]
+
+    saved_count = await _save_findings(
+        db,
+        task_id="task-rich-save",
+        findings=findings,
+        project_root=str(tmp_path),
+    )
+
+    assert saved_count == 1
+    saved_finding = db.add.call_args.args[0]
+    assert saved_finding.function_name == "login"
+    assert "query = 'SELECT * FROM users WHERE name=' + user_input" in (saved_finding.code_snippet or "")
+    assert saved_finding.source == "user_input"
+    assert saved_finding.sink == "cursor.execute"
+    assert saved_finding.suggestion == "使用参数化查询"
+    assert saved_finding.finding_metadata["finding_identity"] == "fid-existing"
+    assert saved_finding.finding_metadata["attacker_flow"] == "POST /login -> login -> cursor.execute"
+    assert saved_finding.finding_metadata["evidence_chain"] == ["代码片段", "数据流分析"]
+    assert saved_finding.finding_metadata["missing_checks"] == ["输入校验"]
+    assert saved_finding.finding_metadata["taint_flow"] == ["request", "login", "cursor.execute"]
+    assert saved_finding.finding_metadata["extra_tool_input"]["custom_extra"] == "custom-value"

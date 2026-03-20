@@ -204,6 +204,41 @@ def test_mcp_router_exposes_local_scan_core_routes():
     assert locate_embedded_line_route.arguments["file_path"] == "src/time64.c"
     assert locate_embedded_line_route.arguments["line"] == 22
 
+    push_route = router.route(
+        "push_finding_to_queue",
+        {
+            "finding": {
+                "file_path": "src/auth.py",
+                "line": 18,
+                "end_line": 21,
+                "title": "src/auth.py中login函数SQL注入漏洞",
+                "description": "拼接 SQL。",
+                "type": "sql_injection",
+                "code": "cursor.execute(query + user_input)",
+                "recommendation": "使用参数化查询",
+                "function_name": "login",
+                "attacker_flow": "POST /login -> login -> cursor.execute",
+                "evidence_chain": ["代码片段", "数据流分析"],
+                "custom_extra": "custom-value",
+            }
+        },
+    )
+    assert push_route is not None
+    assert push_route.adapter_name == "__local__"
+    assert push_route.arguments["file_path"] == "src/auth.py"
+    assert push_route.arguments["line_start"] == 18
+    assert push_route.arguments["line_end"] == 21
+    assert push_route.arguments["vulnerability_type"] == "sql_injection"
+    assert push_route.arguments["code_snippet"] == "cursor.execute(query + user_input)"
+    assert push_route.arguments["suggestion"] == "使用参数化查询"
+    assert push_route.arguments["function_name"] == "login"
+    assert push_route.arguments["attacker_flow"] == "POST /login -> login -> cursor.execute"
+    assert push_route.arguments["evidence_chain"] == ["代码片段", "数据流分析"]
+    assert push_route.arguments["finding_metadata"]["extra_tool_input"]["custom_extra"] == "custom-value"
+    assert "code" not in push_route.arguments
+    assert "recommendation" not in push_route.arguments
+    assert "type" not in push_route.arguments
+
     assert router.route("edit_file", {"file_path": "src/main.py"}) is None
     assert router.route("qmd_query", {"query": "auth"}) is None
     assert router.route("sequential_thinking", {"goal": "plan"}) is None

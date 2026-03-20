@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 from pydantic import BaseModel
 import pytest
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from app.services.agent.agents.base import AgentConfig, AgentResult, AgentType, BaseAgent
 from app.services.agent.agents.analysis import AnalysisAgent
@@ -113,9 +113,22 @@ class _ListTool:
 class _PushFindingSchema(BaseModel):
     file_path: str
     line_start: int
+    line_end: Optional[int] = None
     title: str
     description: str
     vulnerability_type: str
+    severity: Optional[str] = "medium"
+    confidence: Optional[float] = 0.8
+    function_name: Optional[str] = None
+    code_snippet: Optional[str] = None
+    source: Optional[str] = None
+    sink: Optional[str] = None
+    suggestion: Optional[str] = None
+    attacker_flow: Optional[str] = None
+    evidence_chain: Optional[List[str]] = None
+    missing_checks: Optional[List[str]] = None
+    taint_flow: Optional[List[str]] = None
+    finding_metadata: Optional[Dict[str, Any]] = None
 
 
 class _PushFindingTool:
@@ -497,6 +510,45 @@ async def test_execute_tool_repairs_push_finding_nested_envelope():
     repaired = metadata.get("input_repaired") or {}
     assert repaired.get("__envelope.finding.file_path") == "file_path"
     assert repaired.get("__envelope.finding.line_start") == "line_start"
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_repairs_push_finding_aliases_and_preserves_extra_metadata():
+    agent, emitter = _make_agent(tools={"push_finding_to_queue": _PushFindingTool()})
+
+    output = await agent.execute_tool(
+        "push_finding_to_queue",
+        {
+            "finding": {
+                "file_path": "src/auth/login.py",
+                "line": 88,
+                "end_line": 92,
+                "title": "src/auth/login.py中login函数SQL注入漏洞",
+                "description": "用户输入拼接 SQL 且未参数化。",
+                "type": "sql_injection",
+                "code": "cursor.execute(query + user_input)",
+                "recommendation": "改用参数化查询",
+                "attacker_flow": "POST /login -> login -> cursor.execute",
+                "evidence_chain": ["代码片段", "数据流分析"],
+                "function_name": "login",
+                "custom_extra": "custom-value",
+            }
+        },
+    )
+
+    assert "src/auth/login.py" in output
+    assert "cursor.execute(query + user_input)" in output
+    assert "custom-value" in output
+    tool_call_events = _events_by_type(emitter, "tool_call")
+    assert len(tool_call_events) == 1
+    metadata = tool_call_events[0].metadata or {}
+    repaired = metadata.get("input_repaired") or {}
+    assert repaired.get("line") == "line_start"
+    assert repaired.get("end_line") == "line_end"
+    assert repaired.get("type") == "vulnerability_type"
+    assert repaired.get("code") == "code_snippet"
+    assert repaired.get("recommendation") == "suggestion"
+    assert repaired.get("__extra.custom_extra") == "finding_metadata.extra_tool_input.custom_extra"
 
 
 @pytest.mark.asyncio

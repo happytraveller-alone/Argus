@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import re
 from typing import Any, Dict, Optional
 
+from ..push_finding_payload import normalize_push_finding_payload
+
 
 @dataclass(frozen=True)
 class MCPToolRoute:
@@ -348,6 +350,8 @@ class MCPToolRouter:
                 for key, value in payload.items()
                 if key in {"file_path", "line"}
             }
+        elif tool_name == "push_finding_to_queue":
+            payload, _repair_map = normalize_push_finding_payload(payload)
 
         return payload
 

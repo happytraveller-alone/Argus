@@ -16,6 +16,7 @@ from .hooks import (
     LocatorConfidenceHook,
     LocatorInputCanonicalizationHook,
     LocatorOutputContractHook,
+    PushFindingInputCanonicalizationHook,
     ProjectPathNormalizeHook,
     ProjectScopeGuardHook,
     ReasoningPreflightHook,
@@ -53,7 +54,10 @@ class ToolExecutionCoordinator:
                 LocatorInputCanonicalizationHook(),
                 LocatorOutputContractHook(),
                 LocatorConfidenceHook(),
-            ]
+            ],
+            "push_finding_to_queue": [
+                PushFindingInputCanonicalizationHook(),
+            ],
         }
 
     def _tool_family(self, tool_name: str) -> str:

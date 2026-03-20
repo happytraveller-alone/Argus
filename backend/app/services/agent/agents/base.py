@@ -41,6 +41,7 @@ from ..utils.vulnerability_naming import (
     normalize_cwe_id,
 )
 from ..skills.scan_core import SCAN_CORE_LOCAL_SKILL_IDS
+from ..push_finding_payload import normalize_push_finding_payload
 
 logger = logging.getLogger(__name__)
 
@@ -3873,6 +3874,11 @@ class BaseAgent(ABC):
                         repaired["is_regex"] = True
                         regex_label = "__context.regex_hint" if source_label == "__context.keyword" else "__raw_input.regex_hint"
                         repaired_changes[regex_label] = "is_regex"
+
+        if tool_name == "push_finding_to_queue":
+            normalized_push_payload, push_repair_map = normalize_push_finding_payload(repaired)
+            repaired = normalized_push_payload
+            repaired_changes.update(push_repair_map)
 
         if tool_name == "push_risk_point_to_queue":
             def _safe_positive_int(value: Any) -> Optional[int]:

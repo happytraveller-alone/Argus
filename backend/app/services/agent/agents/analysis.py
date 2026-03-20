@@ -67,7 +67,7 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 - 扩展发现的新漏洞也需独立推送
 - 推送前可通过 `get_analysis_queue_status` 检查避免重复
 
-### Finding 对象格式（必须完整）
+### Finding 对象格式（核心字段必填，可选证据字段建议补齐）
 ```json
 {
     "file_path": "src/auth.py", # 相对于项目根目录的路径
@@ -88,6 +88,8 @@ ANALYSIS_SYSTEM_PROMPT = """你是 VulHunter 的漏洞分析 Agent，负责对**
 ```
 
 **字段规范：**
+- 核心必填字段：`file_path`、`line_start`、`title`、`description`、`vulnerability_type`
+- 可选证据字段：`line_end`、`severity`、`confidence`、`function_name`、`code_snippet`、`source`、`sink`、`suggestion`、`evidence_chain`
 - `title`: **中文三段式** → `路径` + `函数名` + `漏洞名`
 - `severity`: 基于实际危害调整（可高于原始风险点）
 - `confidence`: 综合证据质量评分（见下方评估标准）

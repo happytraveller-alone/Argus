@@ -3,9 +3,10 @@ Orchestrator 漏洞队列管理工具
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 
+from ..push_finding_payload import normalize_push_finding_payload
 from .base import AgentTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -258,6 +259,16 @@ class PushFindingToQueueInput(BaseModel):
         default=0.8,
         description="置信度 0.0-1.0"
     )
+    function_name: Optional[str] = Field(default=None, description="函数名")
+    code_snippet: Optional[str] = Field(default=None, description="漏洞代码片段")
+    source: Optional[str] = Field(default=None, description="污点源或攻击入口")
+    sink: Optional[str] = Field(default=None, description="危险点或敏感操作")
+    suggestion: Optional[str] = Field(default=None, description="修复建议")
+    evidence_chain: Optional[List[str]] = Field(default=None, description="证据链列表")
+    attacker_flow: Optional[str] = Field(default=None, description="攻击路径描述")
+    missing_checks: Optional[List[str]] = Field(default=None, description="缺失校验列表")
+    taint_flow: Optional[List[str]] = Field(default=None, description="污点传播链路")
+    finding_metadata: Optional[Dict[str, Any]] = Field(default=None, description="附加元数据")
 
 
 class PushFindingToQueueTool(AgentTool):
@@ -294,6 +305,9 @@ class PushFindingToQueueTool(AgentTool):
 - line_end: 结束行号
 - severity: 严重程度 (默认: medium)
 - confidence: 置信度 (默认: 0.8)
+- function_name/code_snippet/source/sink/suggestion: 富证据字段
+- evidence_chain/attacker_flow/missing_checks/taint_flow: 证据与路径字段
+- finding_metadata: 额外元数据
 
 返回队列当前大小。"""
 
@@ -321,10 +335,42 @@ class PushFindingToQueueTool(AgentTool):
         line_end: Optional[int] = None,
         severity: str = "medium",
         confidence: float = 0.8,
+        function_name: Optional[str] = None,
+        code_snippet: Optional[str] = None,
+        source: Optional[str] = None,
+        sink: Optional[str] = None,
+        suggestion: Optional[str] = None,
+        evidence_chain: Optional[List[str]] = None,
+        attacker_flow: Optional[str] = None,
+        missing_checks: Optional[List[str]] = None,
+        taint_flow: Optional[List[str]] = None,
+        finding_metadata: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> ToolResult:
         """执行工具"""
-        normalized_kwargs = self._flatten_finding_payload(kwargs)
+        normalized_kwargs, _ = normalize_push_finding_payload(
+            {
+                "file_path": file_path,
+                "line_start": line_start,
+                "line_end": line_end,
+                "title": title,
+                "description": description,
+                "vulnerability_type": vulnerability_type,
+                "severity": severity,
+                "confidence": confidence,
+                "function_name": function_name,
+                "code_snippet": code_snippet,
+                "source": source,
+                "sink": sink,
+                "suggestion": suggestion,
+                "evidence_chain": evidence_chain,
+                "attacker_flow": attacker_flow,
+                "missing_checks": missing_checks,
+                "taint_flow": taint_flow,
+                "finding_metadata": finding_metadata,
+                **self._flatten_finding_payload(kwargs),
+            }
+        )
         if file_path in (None, ""):
             file_path = normalized_kwargs.get("file_path")
         if line_start in (None, ""):
@@ -341,6 +387,17 @@ class PushFindingToQueueTool(AgentTool):
             severity = str(normalized_kwargs.get("severity") or severity or "medium")
         if "confidence" in normalized_kwargs:
             confidence = normalized_kwargs.get("confidence")
+        function_name = str(normalized_kwargs.get("function_name") or function_name or "").strip() or None
+        code_snippet = str(normalized_kwargs.get("code_snippet") or code_snippet or "").strip() or None
+        source = str(normalized_kwargs.get("source") or source or "").strip() or None
+        sink = str(normalized_kwargs.get("sink") or sink or "").strip() or None
+        suggestion = str(normalized_kwargs.get("suggestion") or suggestion or "").strip() or None
+        attacker_flow = str(normalized_kwargs.get("attacker_flow") or attacker_flow or "").strip() or None
+        evidence_chain = list(normalized_kwargs.get("evidence_chain") or evidence_chain or [])
+        missing_checks = list(normalized_kwargs.get("missing_checks") or missing_checks or [])
+        taint_flow = list(normalized_kwargs.get("taint_flow") or taint_flow or [])
+        metadata_payload = normalized_kwargs.get("finding_metadata")
+        finding_metadata = dict(metadata_payload) if isinstance(metadata_payload, dict) else None
 
         file_path = str(file_path or "").strip()
         title = str(title or "").strip()
@@ -389,6 +446,13 @@ class PushFindingToQueueTool(AgentTool):
                 "vulnerability_type": "sql_injection",
                 "severity": "high",
                 "confidence": 0.85,
+                "function_name": "foo",
+                "code_snippet": "dangerous_call(user_input)",
+                "source": "request.form['id']",
+                "sink": "cursor.execute",
+                "suggestion": "改用参数化查询",
+                "evidence_chain": ["代码片段", "数据流分析"],
+                "attacker_flow": "HTTP 请求 -> login -> cursor.execute",
             }
             error_msg = "; ".join(errors)
             logger.warning(f"[Queue] 参数校验失败: {error_msg}")
@@ -413,6 +477,26 @@ class PushFindingToQueueTool(AgentTool):
                 "severity": severity,
                 "confidence": confidence,
             }
+            if function_name:
+                finding["function_name"] = function_name
+            if code_snippet:
+                finding["code_snippet"] = code_snippet
+            if source:
+                finding["source"] = source
+            if sink:
+                finding["sink"] = sink
+            if suggestion:
+                finding["suggestion"] = suggestion
+            if attacker_flow:
+                finding["attacker_flow"] = attacker_flow
+            if evidence_chain:
+                finding["evidence_chain"] = evidence_chain
+            if missing_checks:
+                finding["missing_checks"] = missing_checks
+            if taint_flow:
+                finding["taint_flow"] = taint_flow
+            if finding_metadata:
+                finding["finding_metadata"] = finding_metadata
 
             success = self.queue_service.enqueue_finding(self.task_id, finding)
 

@@ -611,31 +611,6 @@ export default function DashboardCommandCenter({
 
 	return (
 		<div className="space-y-6">
-			<header className="rounded-[2rem] border border-border/70 bg-slate-950/85 px-6 py-6 shadow-2xl shadow-cyan-950/20">
-				<div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-					<div>
-						<h1 className="mt-3 text-3xl font-semibold text-slate-50">
-							漏洞扫描统计
-						</h1>
-					</div>
-					<div className="flex flex-wrap items-center gap-2">
-						{RANGE_OPTIONS.map((option) => (
-							<button
-								key={option}
-								type="button"
-								onClick={() => onRangeDaysChange(option)}
-								className={
-									rangeDays === option
-										? "rounded-full border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-100"
-										: "rounded-full border border-border/70 bg-slate-900/80 px-4 py-2 text-sm text-slate-300 transition-colors hover:border-cyan-400/40 hover:text-cyan-100"
-								}
-							>
-								{option} 天
-							</button>
-						))}
-					</div>
-				</div>
-			</header>
 
 			<SummaryStrip snapshot={snapshot} />
 

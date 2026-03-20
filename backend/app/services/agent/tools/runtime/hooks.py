@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import os
 from typing import Any, Dict
 
+from ...push_finding_payload import normalize_push_finding_payload
 from .context import ToolCallContext, ToolFailureState
 from .contracts import ToolContractViolation
 
@@ -229,6 +230,13 @@ class LocatorInputCanonicalizationHook(ToolHook):
         payload.pop("path", None)
         payload.pop("line_start", None)
         return ToolHookResult(normalized_input=payload)
+
+
+class PushFindingInputCanonicalizationHook(ToolHook):
+    async def pre_normalize(self, *, tool: Any, context: ToolCallContext) -> ToolHookResult:
+        payload = dict(context.normalized_input or context.raw_input or {})
+        normalized, _repair_map = normalize_push_finding_payload(payload)
+        return ToolHookResult(normalized_input=normalized)
 
 
 class LocatorOutputContractHook(ToolHook):

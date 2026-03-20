@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import subprocess
 import warnings
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
@@ -78,6 +79,35 @@ async def check_agent_services():
     return issues
 
 
+async def run_pending_database_migrations() -> None:
+    """Run Alembic migrations for startup paths that skipped the entrypoint."""
+    backend_root = Path(__file__).resolve().parents[1]
+
+    def _run_upgrade() -> None:
+        subprocess.run(
+            ["alembic", "upgrade", "heads"],
+            cwd=str(backend_root),
+            check=True,
+        )
+
+    try:
+        await asyncio.to_thread(_run_upgrade)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("自动执行 alembic upgrade heads 失败") from exc
+
+
+async def _read_current_database_versions() -> set[str]:
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(text("SELECT version_num FROM alembic_version"))
+        except Exception as exc:
+            raise RuntimeError(
+                "数据库缺少迁移版本元数据（alembic_version），请先运行 alembic upgrade heads"
+            ) from exc
+
+        return {str(item).strip() for item in result.scalars().all() if str(item).strip()}
+
+
 
 
 async def assert_database_schema_is_latest() -> None:
@@ -86,20 +116,19 @@ async def assert_database_schema_is_latest() -> None:
     alembic_cfg = AlembicConfig(str(backend_root / "alembic.ini"))
     script = ScriptDirectory.from_config(alembic_cfg)
     expected_heads = {str(item) for item in script.get_heads() if str(item).strip()}
-
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await db.execute(text("SELECT version_num FROM alembic_version"))
-            current_versions = {
-                str(item).strip() for item in result.scalars().all() if str(item).strip()
-            }
-        except Exception as exc:
-            raise RuntimeError(
-                "数据库缺少迁移版本元数据（alembic_version），请先运行 alembic upgrade heads"
-            ) from exc
+    current_versions = await _read_current_database_versions()
 
     if not current_versions:
         raise RuntimeError("数据库未记录迁移版本，请先运行 alembic upgrade heads")
+
+    if expected_heads and current_versions != expected_heads:
+        logger.warning(
+            "检测到数据库迁移版本落后，尝试自动升级：current=%s heads=%s",
+            sorted(current_versions),
+            sorted(expected_heads),
+        )
+        await run_pending_database_migrations()
+        current_versions = await _read_current_database_versions()
 
     if expected_heads and current_versions != expected_heads:
         raise RuntimeError(

@@ -3272,10 +3272,10 @@ function AgentAuditPageContent() {
                   className="grid items-center gap-3 text-[11px] font-mono uppercase tracking-[0.24em] text-muted-foreground/80"
                   style={{ gridTemplateColumns: EVENT_LOG_GRID_TEMPLATE }}
                 >
-                  <span>距开始时间</span>
+                  <span>时间戳</span>
                   <span>类型标签</span>
                   <span>事件概况</span>
-                  <span>归属智能体</span>
+                  <span>阶段</span>
                   <span>完成状态</span>
                   <span>操作</span>
                 </div>
