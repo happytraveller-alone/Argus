@@ -4,12 +4,7 @@ import type {
   Profile,
   Project,
   ProjectMember,
-  AuditTask,
-  AuditIssue,
-  InstantAnalysis,
   CreateProjectForm,
-  CreateAuditTaskForm,
-  InstantAnalysisForm,
   StaticScanOverviewResponse,
   ProjectDescriptionGenerateResponse,
   DashboardSnapshotResponse,
@@ -349,110 +344,6 @@ export const api = {
 
   async removeProjectMember(projectId: string, memberId: string): Promise<void> {
     await apiClient.delete(`/projects/${projectId}/members/${memberId}`);
-  },
-
-  // ==================== AuditTask 相关方法 ====================
-
-  async getAuditTasks(projectId?: string): Promise<AuditTask[]> {
-    const params = projectId ? { project_id: projectId } : {};
-    const res = await apiClient.get('/tasks/', { params });
-    return res.data;
-  },
-
-  async getAuditTaskById(id: string): Promise<AuditTask | null> {
-    try {
-      const res = await apiClient.get(`/tasks/${id}`);
-      return res.data;
-    } catch (_error) {
-      return null;
-    }
-  },
-
-  async createAuditTask(task: CreateAuditTaskForm & { created_by?: string }): Promise<AuditTask> {
-    // Trigger scan on the project
-    const scanRequest = {
-      file_paths: task.scan_config?.file_paths,
-      full_scan: !task.scan_config?.file_paths || task.scan_config.file_paths.length === 0,
-      exclude_patterns: task.exclude_patterns || [],
-    };
-    const res = await apiClient.post(`/projects/${task.project_id}/scan`, scanRequest);
-    // Fetch the created task
-    const taskRes = await apiClient.get(`/tasks/${res.data.task_id}`);
-    return taskRes.data;
-  },
-
-  async updateAuditTask(id: string, _updates: Partial<AuditTask>): Promise<AuditTask> {
-    // Tasks are updated by backend workers, not frontend
-    const current = await this.getAuditTaskById(id);
-    return current || ({} as AuditTask);
-  },
-
-  async cancelAuditTask(id: string): Promise<void> {
-    await apiClient.post(`/tasks/${id}/cancel`);
-  },
-
-  // ==================== AuditIssue 相关方法 ====================
-
-  async getAuditIssues(taskId: string): Promise<AuditIssue[]> {
-    const res = await apiClient.get(`/tasks/${taskId}/issues`);
-    return res.data;
-  },
-
-  async createAuditIssue(_issue: Omit<AuditIssue, 'id' | 'created_at' | 'task' | 'resolver'>): Promise<AuditIssue> {
-    // Issues are created by backend workers during scan
-    return {} as AuditIssue;
-  },
-
-  async updateAuditIssue(taskId: string, issueId: string, updates: Partial<AuditIssue>): Promise<AuditIssue> {
-    const res = await apiClient.patch(`/tasks/${taskId}/issues/${issueId}`, updates);
-    return res.data;
-  },
-
-  // ==================== InstantAnalysis 相关方法 ====================
-
-  async getInstantAnalyses(_userId?: string): Promise<InstantAnalysis[]> {
-    try {
-      const res = await apiClient.get('/scan/instant/history');
-      return res.data;
-    } catch (_error) {
-      return [];
-    }
-  },
-
-  async createInstantAnalysis(_analysis: InstantAnalysisForm & {
-    user_id: string;
-    analysis_result?: string;
-    issues_count?: number;
-    quality_score?: number;
-    analysis_time?: number;
-  }): Promise<InstantAnalysis> {
-    // Instant analysis is handled via /scan/instant endpoint
-    // This method is kept for compatibility
-    return {} as InstantAnalysis;
-  },
-
-  async deleteInstantAnalysis(analysisId: string): Promise<void> {
-    await apiClient.delete(`/scan/instant/history/${analysisId}`);
-  },
-
-  async deleteAllInstantAnalyses(): Promise<void> {
-    await apiClient.delete('/scan/instant/history');
-  },
-
-  // ==================== 报告导出方法 ====================
-
-  async exportTaskReportPDF(taskId: string): Promise<Blob> {
-    const res = await apiClient.get(`/tasks/${taskId}/report/pdf`, {
-      responseType: 'blob'
-    });
-    return res.data;
-  },
-
-  async exportInstantReportPDF(analysisId: string): Promise<Blob> {
-    const res = await apiClient.get(`/scan/instant/history/${analysisId}/report/pdf`, {
-      responseType: 'blob'
-    });
-    return res.data;
   },
 
   // ==================== 统计相关方法 ====================

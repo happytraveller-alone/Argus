@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import async_session_factory
 from app.models import (
     AgentTask,
-    AuditTask,
     BanditScanTask,
     GitleaksScanTask,
     OpengrepScanTask,
@@ -33,7 +32,6 @@ class ProjectMetricsService:
         "total_tasks",
         "completed_tasks",
         "running_tasks",
-        "audit_tasks",
         "agent_tasks",
         "opengrep_tasks",
         "gitleaks_tasks",
@@ -125,7 +123,6 @@ class ProjectMetricsService:
         project_id: str,
     ) -> bool:
         task_models = (
-            AuditTask,
             AgentTask,
             OpengrepScanTask,
             GitleaksScanTask,
@@ -170,7 +167,6 @@ class ProjectMetricsService:
         project_id: str,
     ) -> Dict[str, Optional[int]]:
         payload = await cls._build_base_payload(project_id)
-        await cls._apply_audit_tasks(db, payload, project_id)
         await cls._apply_agent_tasks(db, payload, project_id)
         await cls._apply_opengrep_tasks(db, payload, project_id)
         await cls._apply_gitleaks_tasks(db, payload, project_id)
@@ -194,19 +190,6 @@ class ProjectMetricsService:
                 payload["archive_uploaded_at"] = None
         else:
             payload["archive_uploaded_at"] = uploaded_at
-
-    @classmethod
-    async def _apply_audit_tasks(
-        cls,
-        db: AsyncSession,
-        payload: Dict[str, Optional[object]],
-        project_id: str,
-    ) -> None:
-        stmt = select(AuditTask.status, AuditTask.completed_at).where(
-            AuditTask.project_id == project_id
-        )
-        rows = (await db.execute(stmt)).all()
-        cls._apply_task_rollup(payload, rows, bucket_key="audit_tasks")
 
     @classmethod
     async def _apply_agent_tasks(

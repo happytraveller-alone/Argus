@@ -71,20 +71,5 @@ def test_settings_import_has_no_pydantic_deprecation_warnings():
     assert result.returncode == 0, combined_output
 
 
-def test_scan_endpoint_compiles_without_syntax_warnings():
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-W",
-            "error::SyntaxWarning",
-            "-m",
-            "py_compile",
-            str(BACKEND_ROOT / "app/api/v1/endpoints/scan.py"),
-        ],
-        cwd=BACKEND_ROOT,
-        capture_output=True,
-        text=True,
-    )
-
-    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
-    assert result.returncode == 0, combined_output
+def test_legacy_scan_endpoint_file_is_removed():
+    assert (BACKEND_ROOT / "app/api/v1/endpoints/scan.py").exists() is False

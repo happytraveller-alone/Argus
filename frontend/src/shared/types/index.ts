@@ -34,7 +34,6 @@ export interface ProjectManagementMetrics {
   total_tasks: number;
   completed_tasks: number;
   running_tasks: number;
-  audit_tasks: number;
   agent_tasks: number;
   opengrep_tasks: number;
   gitleaks_tasks: number;
@@ -80,101 +79,6 @@ export interface ProjectMember {
   project?: Project;
 }
 
-// 扫描相关类型
-export interface AuditTask {
-  id: string;
-  project_id: string;
-  task_type: 'repository' | 'instant';
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-  exclude_patterns: string;
-  scan_config: string;
-  total_files: number;
-  scanned_files: number;
-  total_lines: number;
-  issues_count: number;
-  quality_score: number;
-  started_at?: string;
-  completed_at?: string;
-  created_by: string;
-  created_at: string;
-  project?: Project;
-  creator?: Profile;
-}
-
-export interface AuditIssue {
-  id: string;
-  task_id: string;
-  file_path: string;
-  line_number?: number;
-  column_number?: number;
-  issue_type: 'bug' | 'security' | 'performance' | 'style' | 'maintainability';
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  title: string;
-  description?: string;
-  suggestion?: string;
-  code_snippet?: string;
-  ai_explanation?: string;
-  status: 'open' | 'resolved' | 'false_positive';
-  resolved_by?: string;
-  resolved_at?: string;
-  created_at: string;
-  task?: AuditTask;
-  resolver?: Profile;
-}
-
-export interface InstantAnalysis {
-  id: string;
-  user_id: string;
-  language: string;
-  code_content: string;
-  analysis_result: string;
-  issues_count: number;
-  quality_score: number;
-  analysis_time: number;
-  created_at: string;
-  user?: Profile;
-}
-
-// ProjectDetail 页面：前端聚合层类型（用于把 AuditTask / AgentTask 的结果统一展示）
-export type AggregatedAuditIssue = AuditIssue & {
-  task_created_at?: string;
-  task_completed_at?: string | null;
-};
-
-export type AggregatedAgentFinding = import("@/shared/api/agentTasks").AgentFinding & {
-  task_created_at?: string;
-  task_completed_at?: string | null;
-};
-
-export type IssuesSummary = {
-  completedAuditTasksCount: number;
-  completedAgentTasksCount: number;
-  fetchedAuditTasksCount: number;
-  fetchedAgentTasksCount: number;
-  isLimited: boolean;
-  maxTasks: number;
-};
-
-export type LatestProblem = {
-  kind: "audit" | "agent";
-  id: string;
-  task_id: string;
-  task_created_at?: string;
-  created_at: string;
-  severity: "critical" | "high" | "medium" | "low";
-  title: string;
-  description?: string | null;
-  file_path?: string | null;
-  line_number?: number | null;
-  line_end?: number | null;
-  category?: string | null;
-};
-
-export type UnifiedTask =
-  | { kind: "audit"; task: AuditTask }
-  | { kind: "agent"; task: import("@/shared/api/agentTasks").AgentTask }
-  | { kind: "static"; task: import("@/shared/api/opengrep").OpengrepScanTask };
-
 // 表单相关类型
 export interface CreateProjectForm {
   name: string;
@@ -184,26 +88,6 @@ export interface CreateProjectForm {
   repository_type?: RepositoryPlatform;  // 仓库平台
   default_branch?: string;
   programming_languages: string[];
-}
-
-export interface CreateAuditTaskForm {
-  project_id: string;
-  task_type: 'repository' | 'instant';
-  exclude_patterns: string[];
-  rule_set_id?: string;
-  prompt_template_id?: string;
-  scan_config: {
-    include_tests?: boolean;
-    include_docs?: boolean;
-    max_file_size?: number;
-    analysis_depth?: 'basic' | 'standard' | 'deep';
-    file_paths?: string[];
-  };
-}
-
-export interface InstantAnalysisForm {
-  language: string;
-  code_content: string;
 }
 
 // 统计相关类型

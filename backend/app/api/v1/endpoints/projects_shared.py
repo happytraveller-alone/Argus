@@ -185,7 +185,6 @@ from app.api import deps
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.project import Project
 from app.models.user import User
-from app.models.audit import AuditTask, AuditIssue
 from app.models.agent_task import AgentTask, AgentFinding
 from app.models.opengrep import OpengrepScanTask, OpengrepFinding, OpengrepRule
 from app.models.gitleaks import GitleaksScanTask, GitleaksFinding
@@ -196,7 +195,6 @@ from app.models.project_info import ProjectInfo
 import zipfile
 from app.services.zip_cache_manager import get_zip_cache_manager
 from app.services.scanner import (
-    scan_repo_task,
     should_exclude,
     is_text_file,
 )
@@ -839,7 +837,6 @@ class ProjectManagementMetricsResponse(BaseModel):
     total_tasks: int
     completed_tasks: int
     running_tasks: int
-    audit_tasks: int
     agent_tasks: int
     opengrep_tasks: int
     gitleaks_tasks: int

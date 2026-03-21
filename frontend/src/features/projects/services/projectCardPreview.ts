@@ -5,7 +5,6 @@ import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { PhpstanScanTask } from "@/shared/api/phpstan";
 import type { OpengrepFinding, OpengrepScanTask } from "@/shared/api/opengrep";
 import type { YasaScanTask } from "@/shared/api/yasa";
-import type { AuditTask } from "@/shared/types";
 import {
   buildBanditSeverityCounts,
   buildGitleaksSeverityCounts,
@@ -24,7 +23,7 @@ import {
 import { resolveCweDisplay } from "@/shared/security/cweCatalog";
 import { buildFindingDetailPath } from "@/shared/utils/findingRoute";
 
-export type ProjectCardTaskKind = "static" | "intelligent" | "audit";
+export type ProjectCardTaskKind = "static" | "intelligent";
 export type ProjectCardTaskFindingCategory = "static" | "intelligent" | "hybrid";
 
 export interface ProjectCardRecentTask {
@@ -264,23 +263,8 @@ function getStatusProgressBaseline(status: string | undefined | null): number {
   return 0;
 }
 
-function computeAuditProgressPercent(task: AuditTask): number {
-  const totalFiles = Number(task.total_files);
-  const scannedFiles = Number(task.scanned_files);
-  if (
-    Number.isFinite(totalFiles) &&
-    totalFiles > 0 &&
-    Number.isFinite(scannedFiles) &&
-    scannedFiles >= 0
-  ) {
-    return clampPercent((scannedFiles / totalFiles) * 100);
-  }
-  return getStatusProgressBaseline(task.status);
-}
-
 export function getProjectCardSummaryStats(params: {
   projectId: string;
-  auditTasks: AuditTask[];
   agentTasks: AgentTask[];
   opengrepTasks: OpengrepScanTask[];
   gitleaksTasks?: GitleaksScanTask[];
@@ -288,13 +272,12 @@ export function getProjectCardSummaryStats(params: {
   phpstanTasks?: PhpstanScanTask[];
   yasaTasks?: YasaScanTask[];
 }): ProjectCardSummaryStats {
-  const { projectId, auditTasks, agentTasks, opengrepTasks } = params;
+  const { projectId, agentTasks, opengrepTasks } = params;
   const gitleaksTasks = params.gitleaksTasks || [];
   const banditTasks = params.banditTasks || [];
   const phpstanTasks = params.phpstanTasks || [];
   const yasaTasks = params.yasaTasks || [];
 
-  const projectAuditTasks = auditTasks.filter((task) => task.project_id === projectId);
   const projectAgentTasks = agentTasks.filter((task) => task.project_id === projectId);
   const projectOpengrepTasks = opengrepTasks.filter((task) => task.project_id === projectId);
   const projectGitleaksTasks = gitleaksTasks.filter((task) => task.project_id === projectId);
@@ -303,7 +286,6 @@ export function getProjectCardSummaryStats(params: {
   const projectYasaTasks = yasaTasks.filter((task) => task.project_id === projectId);
 
   const totalTasks =
-    projectAuditTasks.length +
     projectAgentTasks.length +
     projectOpengrepTasks.length +
     projectGitleaksTasks.length +
@@ -312,7 +294,6 @@ export function getProjectCardSummaryStats(params: {
     projectYasaTasks.length;
 
   const completedTasks =
-    projectAuditTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectAgentTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectOpengrepTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectGitleaksTasks.filter((task) => isCompletedStatus(task.status)).length +
@@ -320,7 +301,6 @@ export function getProjectCardSummaryStats(params: {
     projectPhpstanTasks.filter((task) => isCompletedStatus(task.status)).length +
     projectYasaTasks.filter((task) => isCompletedStatus(task.status)).length;
   const runningTasks =
-    projectAuditTasks.filter((task) => isRunningStatus(task.status)).length +
     projectAgentTasks.filter((task) => isRunningStatus(task.status)).length +
     projectOpengrepTasks.filter((task) => isRunningStatus(task.status)).length +
     projectGitleaksTasks.filter((task) => isRunningStatus(task.status)).length +
@@ -473,7 +453,6 @@ export function getProjectFoundIssuesBreakdown(params: {
 
 export function getProjectCardRecentTasks(params: {
   projectId: string;
-  auditTasks: AuditTask[];
   agentTasks: AgentTask[];
   opengrepTasks: OpengrepScanTask[];
   gitleaksTasks: GitleaksScanTask[];
@@ -482,8 +461,7 @@ export function getProjectCardRecentTasks(params: {
   yasaTasks?: YasaScanTask[];
   limit?: number;
 }): ProjectCardRecentTask[] {
-  const { projectId, auditTasks, agentTasks, opengrepTasks, gitleaksTasks } =
-    params;
+  const { projectId, agentTasks, opengrepTasks, gitleaksTasks } = params;
   const banditTasks = params.banditTasks || [];
   const phpstanTasks = params.phpstanTasks || [];
   const yasaTasks = params.yasaTasks || [];
@@ -661,30 +639,7 @@ export function getProjectCardRecentTasks(params: {
       };
     });
 
-  const auditItems: ProjectCardRecentTask[] = auditTasks
-    .filter((task) => task.project_id === projectId)
-    .map((task) => ({
-      id: task.id,
-      projectId: task.project_id,
-      kind: "audit",
-      status: task.status,
-      progressPercent: computeAuditProgressPercent(task),
-      createdAt: task.created_at,
-      startedAt: task.started_at ?? null,
-      completedAt: task.completed_at ?? null,
-      durationMs: computeDurationMs(task.started_at, task.completed_at),
-      route: `/tasks/${task.id}`,
-      label: task.task_type === "instant" ? "即时分析" : "扫描任务",
-      scanTypeLabel: "扫描任务",
-      scannedFiles: toNullableNonNegativeNumber(task.scanned_files ?? task.total_files),
-      scannedLines: toNullableNonNegativeNumber(task.total_lines),
-      vulnerabilities: toNullableNonNegativeNumber(task.issues_count),
-      taskCategory: null,
-      supportsFindingsDetail: false,
-      findingsButtonDisabledReason: "当前任务类型暂不支持漏洞详情",
-    }));
-
-  return [...staticItems, ...intelligentItems, ...auditItems]
+  return [...staticItems, ...intelligentItems]
     .sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )

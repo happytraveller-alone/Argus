@@ -24,14 +24,6 @@ async def get_stats(
     active_projects = total_projects
 
     # 任务统计（统一从数据库聚合，不再前端拼接）
-    audit_total = await _count(AuditTask)
-    audit_completed = await _count(AuditTask, func.lower(AuditTask.status) == "completed")
-    audit_running = await _count(AuditTask, func.lower(AuditTask.status) == "running")
-    audit_failed = await _count(AuditTask, func.lower(AuditTask.status) == "failed")
-    audit_interrupted = await _count(
-        AuditTask, func.lower(AuditTask.status).in_(interrupted_statuses)
-    )
-
     agent_total = await _count(AgentTask)
     agent_completed = await _count(AgentTask, func.lower(AgentTask.status) == "completed")
     agent_running = await _count(AgentTask, func.lower(AgentTask.status) == "running")
@@ -97,40 +89,27 @@ async def get_stats(
     )
 
     total_tasks = (
-        audit_total
-        + agent_total
-        + opengrep_total
-        + gitleaks_total
-        + bandit_total
-        + phpstan_total
+        agent_total + opengrep_total + gitleaks_total + bandit_total + phpstan_total
     )
     completed_tasks = (
-        audit_completed
-        + agent_completed
+        agent_completed
         + opengrep_completed
         + gitleaks_completed
         + bandit_completed
         + phpstan_completed
     )
     running_tasks = (
-        audit_running
-        + agent_running
+        agent_running
         + opengrep_running
         + gitleaks_running
         + bandit_running
         + phpstan_running
     )
     failed_tasks = (
-        audit_failed
-        + agent_failed
-        + opengrep_failed
-        + gitleaks_failed
-        + bandit_failed
-        + phpstan_failed
+        agent_failed + opengrep_failed + gitleaks_failed + bandit_failed + phpstan_failed
     )
     interrupted_tasks = (
-        audit_interrupted
-        + agent_interrupted
+        agent_interrupted
         + opengrep_interrupted
         + gitleaks_interrupted
         + bandit_interrupted
@@ -139,16 +118,14 @@ async def get_stats(
 
     # 问题统计（统一聚合）
     total_issues = (
-        await _count(AuditIssue)
-        + await _count(AgentFinding)
+        await _count(AgentFinding)
         + await _count(OpengrepFinding)
         + await _count(GitleaksFinding)
         + await _count(BanditFinding)
         + await _count(PhpstanFinding)
     )
     resolved_issues = (
-        await _count(AuditIssue, func.lower(AuditIssue.status) == "resolved")
-        + await _count(
+        await _count(
             AgentFinding,
             func.lower(AgentFinding.status).in_(("resolved", "verified", "fixed")),
         )

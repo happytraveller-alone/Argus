@@ -2,21 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { CreateProjectForm, Project } from "@/shared/types";
 import type { ProjectsPageDataSource } from "../data/projectsPageDataSource";
 
-function createEmptyTaskPoolState(
-	status: ProjectTaskPoolState["status"] = "idle",
-): ProjectTaskPoolState {
-	return {
-		status,
-		auditTasks: [],
-		agentTasks: [],
-		opengrepTasks: [],
-		gitleaksTasks: [],
-		banditTasks: [],
-		phpstanTasks: [],
-		yasaTasks: [],
-	};
-}
-
 export function useProjectsPageData(dataSource: ProjectsPageDataSource) {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [loading, setLoading] = useState(true);

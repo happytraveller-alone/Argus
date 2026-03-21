@@ -7,17 +7,12 @@ import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { OpengrepScanTask } from "@/shared/api/opengrep";
 import type { PhpstanScanTask } from "@/shared/api/phpstan";
 import type { YasaScanTask } from "@/shared/api/yasa";
-import type {
-	AuditTask,
-	Project,
-	ProjectManagementMetrics,
-} from "@/shared/types";
+import type { Project, ProjectManagementMetrics } from "@/shared/types";
 import type { ProjectsPageDataSource } from "./data/projectsPageDataSource";
 
 export type ProjectTaskPoolStatus = "idle" | "loading" | "ready" | "failed";
 
 export interface ProjectTaskPool {
-	auditTasks: AuditTask[];
 	agentTasks: AgentTask[];
 	opengrepTasks: OpengrepScanTask[];
 	gitleaksTasks: GitleaksScanTask[];

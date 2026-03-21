@@ -7,7 +7,6 @@ import {
 	Activity,
 	AlertTriangle,
 	ArrowLeft,
-	Bug,
 	FileText,
 	Loader2,
 } from "lucide-react";
@@ -62,7 +61,7 @@ import {
 	type OpengrepScanTask,
 } from "@/shared/api/opengrep";
 import { api } from "@/shared/api/database";
-import type { AuditTask, Project } from "@/shared/types";
+import type { Project } from "@/shared/types";
 import { appendReturnTo } from "@/shared/utils/findingRoute";
 
 const DETAIL_RECENT_TASK_LIMIT = 10;
@@ -135,14 +134,11 @@ function splitProjectDescription(description: string) {
 export function ProjectDescriptionSection({
 	description,
 	status,
-	source,
 	unsupported,
 	onRetry,
 }: ProjectDescriptionSectionProps) {
 	const paragraphs = splitProjectDescription(description);
 	const hasDescription = paragraphs.length > 0;
-	const sourceLabel =
-		source === "llm" ? "LLM 生成" : source === "fallback" ? "规则生成" : null;
 
 	return (
 		<section className="mb-3 space-y-4">
@@ -222,7 +218,6 @@ export default function ProjectDetail() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const [project, setProject] = useState<Project | null>(null);
-	const [auditTasks, setAuditTasks] = useState<AuditTask[]>([]);
 	const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
 	const [staticTasks, setStaticTasks] = useState<OpengrepScanTask[]>([]);
 	const [gitleaksTasks, setGitleaksTasks] = useState<GitleaksScanTask[]>([]);
@@ -398,7 +393,6 @@ export default function ProjectDetail() {
 
 			const [
 				projectRes,
-				auditTasksRes,
 				agentTasksRes,
 				staticTasksRes,
 				gitleaksTasksRes,
@@ -406,7 +400,6 @@ export default function ProjectDetail() {
 				phpstanTasksRes,
 			] = await Promise.allSettled([
 				api.getProjectById(id),
-				api.getAuditTasks(id),
 				getAgentTasks({ project_id: id }),
 				getOpengrepScanTasks({ projectId: id }),
 				getGitleaksScanTasks({ projectId: id }),
@@ -414,11 +407,6 @@ export default function ProjectDetail() {
 				getPhpstanScanTasks({ projectId: id }),
 			]);
 
-			const nextAuditTasks =
-				auditTasksRes.status === "fulfilled" &&
-				Array.isArray(auditTasksRes.value)
-					? auditTasksRes.value
-					: [];
 			const nextAgentTasks =
 				agentTasksRes.status === "fulfilled" &&
 				Array.isArray(agentTasksRes.value)
@@ -452,9 +440,6 @@ export default function ProjectDetail() {
 				setProject(null);
 			}
 
-			if (auditTasksRes.status !== "fulfilled") {
-				console.error("Failed to load scan tasks:", auditTasksRes.reason);
-			}
 			if (agentTasksRes.status !== "fulfilled") {
 				console.warn("Failed to load agent tasks:", agentTasksRes.reason);
 			}
@@ -471,7 +456,6 @@ export default function ProjectDetail() {
 				console.warn("Failed to load phpstan tasks:", phpstanTasksRes.reason);
 			}
 
-			setAuditTasks(nextAuditTasks);
 			setAgentTasks(nextAgentTasks);
 			setStaticTasks(nextStaticTasks);
 			setGitleaksTasks(nextGitleaksTasks);
@@ -589,7 +573,6 @@ export default function ProjectDetail() {
 		if (!id) return [];
 		return getProjectCardRecentTasks({
 			projectId: id,
-			auditTasks,
 			agentTasks,
 			opengrepTasks: staticTasks,
 			gitleaksTasks,
@@ -597,7 +580,7 @@ export default function ProjectDetail() {
 			phpstanTasks,
 			limit: DETAIL_RECENT_TASK_LIMIT,
 		});
-	}, [id, auditTasks, agentTasks, staticTasks, gitleaksTasks, banditTasks, phpstanTasks]);
+	}, [id, agentTasks, staticTasks, gitleaksTasks, banditTasks, phpstanTasks]);
 
 	const handleTaskCreated = () => {
 		toast.success("扫描任务已创建", {

@@ -29,7 +29,6 @@ class ProjectManagementMetrics(Base):
     completed_tasks = Column(Integer, default=0)
     running_tasks = Column(Integer, default=0)
 
-    audit_tasks = Column(Integer, default=0)
     agent_tasks = Column(Integer, default=0)
     opengrep_tasks = Column(Integer, default=0)
     gitleaks_tasks = Column(Integer, default=0)

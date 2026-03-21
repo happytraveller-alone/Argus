@@ -19,7 +19,6 @@ read_projects = _crud.read_projects
 read_project = _crud.read_project
 get_project_info = _crud.get_project_info
 update_project = _crud.update_project
-scan_project = _crud.scan_project
 
 export_project_bundle = _transfer.export_project_bundle
 import_project_bundle = _transfer.import_project_bundle

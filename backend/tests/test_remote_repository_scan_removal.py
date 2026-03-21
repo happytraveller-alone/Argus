@@ -1,18 +1,38 @@
 from types import SimpleNamespace
+import sys
+import types
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException
 
+fastmcp_stub = types.ModuleType("fastmcp")
+fastmcp_stub.Client = object
+fastmcp_stub.FastMCP = object
+fastmcp_client_stub = types.ModuleType("fastmcp.client")
+fastmcp_transports_stub = types.ModuleType("fastmcp.client.transports")
+fastmcp_transports_stub.StdioTransport = object
+fastmcp_transports_stub.StreamableHttpTransport = object
+git_stub = types.ModuleType("git")
+git_stub.Repo = object
+weasyprint_stub = types.ModuleType("weasyprint")
+weasyprint_stub.HTML = object
+weasyprint_stub.CSS = object
+weasyprint_text_stub = types.ModuleType("weasyprint.text")
+weasyprint_fonts_stub = types.ModuleType("weasyprint.text.fonts")
+weasyprint_fonts_stub.FontConfiguration = object
+sys.modules.setdefault("fastmcp", fastmcp_stub)
+sys.modules.setdefault("fastmcp.client", fastmcp_client_stub)
+sys.modules.setdefault("fastmcp.client.transports", fastmcp_transports_stub)
+sys.modules.setdefault("git", git_stub)
+sys.modules.setdefault("weasyprint", weasyprint_stub)
+sys.modules.setdefault("weasyprint.text", weasyprint_text_stub)
+sys.modules.setdefault("weasyprint.text.fonts", weasyprint_fonts_stub)
+
 from app.api.v1.endpoints.agent_tasks import AgentTaskCreate, create_agent_task
 from app.api.v1.endpoints.config import get_default_config
-from app.api.v1.endpoints.projects import ScanRequest, scan_project
+from app.api.v1.endpoints import projects as projects_module
 from app.services.report_generator import ReportGenerator
-
-
-class _ExecuteResult:
-    def scalar_one_or_none(self):
-        return None
 
 
 @pytest.mark.asyncio
@@ -39,27 +59,11 @@ async def test_create_agent_task_rejects_repository_project():
     db.add.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_scan_project_does_not_store_branch_name_for_zip_projects():
-    project = SimpleNamespace(id="project-1", source_type="zip")
-    db = AsyncMock()
-    db.get = AsyncMock(return_value=project)
-    db.execute = AsyncMock(return_value=_ExecuteResult())
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-    db.refresh = AsyncMock()
+def test_projects_router_no_longer_exposes_legacy_scan_route():
+    route_paths = {route.path for route in projects_module.router.routes}
 
-    response = await scan_project(
-        id="project-1",
-        background_tasks=BackgroundTasks(),
-        scan_request=ScanRequest(file_paths=["src/app.py"], exclude_patterns=["node_modules"]),
-        db=db,
-        current_user=SimpleNamespace(id="user-1"),
-    )
-
-    created_task = db.add.call_args.args[0]
-    assert response["status"] == "started"
-    assert created_task.branch_name is None
+    assert "/{id}/scan" not in route_paths
+    assert hasattr(projects_module, "scan_project") is False
 
 
 def test_get_default_config_omits_git_tokens():

@@ -15,7 +15,6 @@ from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
 from app.services.llm_rule.repo_cache_manager import GlobalRepoCacheManager
 from app.models.agent_task import AgentTask, AgentTaskStatus
-from app.models.audit import AuditTask
 from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
 from app.models.bandit import BanditScanTask
@@ -167,7 +166,6 @@ RECOVERABLE_AGENT_TASK_STATUSES = {
     AgentTaskStatus.VERIFYING,
     AgentTaskStatus.REPORTING,
 }
-RECOVERABLE_AUDIT_TASK_STATUSES = {"pending", "running"}
 RECOVERABLE_OPENGREP_TASK_STATUSES = {"pending", "running"}
 RECOVERABLE_GITLEAKS_TASK_STATUSES = {"pending", "running"}
 # Bandit interrupted recovery support
@@ -203,7 +201,6 @@ async def recover_interrupted_tasks() -> dict[str, int]:
     async with AsyncSessionLocal() as db:
         counts = {
             "agent": 0,
-            "audit": 0,
             "opengrep": 0,
             "gitleaks": 0,
             "bandit": 0,
@@ -213,7 +210,6 @@ async def recover_interrupted_tasks() -> dict[str, int]:
 
         recovery_specs = [
             (AgentTask, RECOVERABLE_AGENT_TASK_STATUSES, "agent"),
-            (AuditTask, RECOVERABLE_AUDIT_TASK_STATUSES, "audit"),
             (OpengrepScanTask, RECOVERABLE_OPENGREP_TASK_STATUSES, "opengrep"),
             (GitleaksScanTask, RECOVERABLE_GITLEAKS_TASK_STATUSES, "gitleaks"),
             # Bandit interrupted recovery support
@@ -235,9 +231,8 @@ async def recover_interrupted_tasks() -> dict[str, int]:
         if any(counts.values()):
             await db.commit()
             logger.warning(
-                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, audit=%s, opengrep=%s, gitleaks=%s, bandit=%s, phpstan=%s, yasa=%s",
+                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, opengrep=%s, gitleaks=%s, bandit=%s, phpstan=%s, yasa=%s",
                 counts["agent"],
-                counts["audit"],
                 counts["opengrep"],
                 counts["gitleaks"],
                 counts["bandit"],

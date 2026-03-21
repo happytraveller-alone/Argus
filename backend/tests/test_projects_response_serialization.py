@@ -16,7 +16,7 @@ from app.api.v1.endpoints import projects, projects_crud, projects_uploads
 from app.core.security import get_password_hash
 from app.db.base import Base
 from app.db.session import get_db
-from app.models.audit import AuditTask
+from app.models.agent_task import AgentTask
 from app.models.project import Project
 from app.models.project_management_metrics import ProjectManagementMetrics
 from app.models.user import User
@@ -82,7 +82,6 @@ async def _create_ready_metrics(
             total_tasks=8,
             completed_tasks=5,
             running_tasks=1,
-            audit_tasks=2,
             agent_tasks=3,
             opengrep_tasks=1,
             gitleaks_tasks=1,
@@ -100,18 +99,21 @@ async def _create_ready_metrics(
         return metrics
 
 
-async def _create_completed_audit_task(
+async def _create_completed_agent_task(
     session_factory: async_sessionmaker[AsyncSession],
     *,
     project_id: str,
     created_by: str,
-) -> AuditTask:
+) -> AgentTask:
     async with session_factory() as session:
-        task = AuditTask(
+        task = AgentTask(
             project_id=project_id,
             created_by=created_by,
-            task_type="repository",
+            name="Completed Agent Task",
             status="completed",
+            high_count=1,
+            medium_count=2,
+            low_count=3,
         )
         session.add(task)
         await session.commit()
@@ -225,6 +227,7 @@ async def test_read_projects_with_metrics_includes_loaded_metrics(project_api_en
     payload = response.json()
     assert payload[0]["management_metrics"]["status"] == "ready"
     assert payload[0]["management_metrics"]["total_tasks"] == 8
+    assert "audit_tasks" not in payload[0]["management_metrics"]
 
 
 @pytest.mark.asyncio
@@ -265,7 +268,7 @@ async def test_read_projects_with_metrics_builds_pending_fallback_for_legacy_pro
 
 
 @pytest.mark.asyncio
-async def test_read_projects_with_metrics_recalculates_legacy_metrics_when_tasks_exist(
+async def test_read_projects_with_metrics_recalculates_metrics_from_task_history(
     monkeypatch,
     project_api_env,
 ):
@@ -274,7 +277,7 @@ async def test_read_projects_with_metrics_recalculates_legacy_metrics_when_tasks
         owner_id=project_api_env.user.id,
         name="Legacy Project With Tasks",
     )
-    await _create_completed_audit_task(
+    await _create_completed_agent_task(
         project_api_env.session_factory,
         project_id=project.id,
         created_by=project_api_env.user.id,
@@ -303,6 +306,10 @@ async def test_read_projects_with_metrics_recalculates_legacy_metrics_when_tasks
     assert payload[0]["management_metrics"]["total_tasks"] == 1
     assert payload[0]["management_metrics"]["completed_tasks"] == 1
     assert payload[0]["management_metrics"]["running_tasks"] == 0
+    assert payload[0]["management_metrics"]["agent_tasks"] == 1
+    assert payload[0]["management_metrics"]["high"] == 1
+    assert payload[0]["management_metrics"]["medium"] == 2
+    assert payload[0]["management_metrics"]["low"] == 3
 
 
 @pytest.mark.asyncio
@@ -357,7 +364,7 @@ async def test_read_project_detail_builds_pending_fallback_when_metrics_missing(
 
 
 @pytest.mark.asyncio
-async def test_read_project_detail_recalculates_legacy_metrics_when_tasks_exist(
+async def test_read_project_detail_recalculates_metrics_from_task_history(
     monkeypatch,
     project_api_env,
 ):
@@ -366,7 +373,7 @@ async def test_read_project_detail_recalculates_legacy_metrics_when_tasks_exist(
         owner_id=project_api_env.user.id,
         name="Detail Legacy Project With Tasks",
     )
-    await _create_completed_audit_task(
+    await _create_completed_agent_task(
         project_api_env.session_factory,
         project_id=project.id,
         created_by=project_api_env.user.id,
@@ -391,6 +398,10 @@ async def test_read_project_detail_recalculates_legacy_metrics_when_tasks_exist(
     assert payload["management_metrics"]["total_tasks"] == 1
     assert payload["management_metrics"]["completed_tasks"] == 1
     assert payload["management_metrics"]["running_tasks"] == 0
+    assert payload["management_metrics"]["agent_tasks"] == 1
+    assert payload["management_metrics"]["high"] == 1
+    assert payload["management_metrics"]["medium"] == 2
+    assert payload["management_metrics"]["low"] == 3
 
 
 @pytest.mark.asyncio

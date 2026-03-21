@@ -21,7 +21,6 @@ from app.core.security import get_password_hash
 from app.db.base import Base
 from app.db.init_db import DEFAULT_DEMO_EMAIL, _build_default_seed_projects
 from app.models.agent_task import AgentCheckpoint, AgentEvent, AgentFinding, AgentTask, AgentTreeNode
-from app.models.audit import AuditIssue, AuditTask
 from app.models.bandit import BanditFinding, BanditScanTask
 from app.models.gitleaks import GitleaksFinding, GitleaksScanTask
 from app.models.opengrep import OpengrepFinding, OpengrepScanTask
@@ -203,28 +202,6 @@ async def _build_full_source_bundle(tmp_path: Path) -> tuple[bytes, str, str]:
             )
         )
         await source_db.commit()
-
-        audit_task = AuditTask(
-            project_id=project.id,
-            created_by=source_user.id,
-            task_type="full_scan",
-            status="completed",
-            branch_name="main",
-        )
-        source_db.add(audit_task)
-        await source_db.commit()
-        await source_db.refresh(audit_task)
-
-        source_db.add(
-            AuditIssue(
-                task_id=audit_task.id,
-                file_path="src/main.py",
-                issue_type="command_injection",
-                severity="high",
-                title="Dangerous call",
-                resolved_by=source_user.id,
-            )
-        )
 
         agent_task = AgentTask(
             project_id=project.id,
@@ -414,16 +391,6 @@ async def test_import_projects_bundle_restores_graph_and_rebinds_user(tmp_path: 
         ).scalar_one()
         assert member.user_id == target_user.id
 
-        audit_task = (
-            await target_db.execute(select(AuditTask).where(AuditTask.project_id == imported_project_id))
-        ).scalar_one()
-        assert audit_task.created_by == target_user.id
-
-        audit_issue = (
-            await target_db.execute(select(AuditIssue).where(AuditIssue.task_id == audit_task.id))
-        ).scalar_one()
-        assert audit_issue.resolved_by == target_user.id
-
         agent_task = (
             await target_db.execute(select(AgentTask).where(AgentTask.project_id == imported_project_id))
         ).scalar_one()
@@ -505,10 +472,6 @@ async def test_import_projects_bundle_merges_into_conflicting_project_by_zip_has
 
         projects = (await db.execute(select(Project))).scalars().all()
         assert len(projects) == 1
-        merged_audit_tasks = (
-            await db.execute(select(AuditTask).where(AuditTask.project_id == existing_project.id))
-        ).scalars().all()
-        assert len(merged_audit_tasks) == 1
         merged_yasa_tasks = (
             await db.execute(select(YasaScanTask).where(YasaScanTask.project_id == existing_project.id))
         ).scalars().all()

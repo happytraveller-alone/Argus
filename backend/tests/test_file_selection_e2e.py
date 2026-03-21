@@ -5,7 +5,7 @@
 1. 创建测试项目
 2. 上传 ZIP 文件
 3. 获取文件列表（带/不带排除模式）
-4. 启动扫描任务（带排除模式和文件选择）
+4. 启动智能扫描任务（带排除模式和文件选择）
 
 使用方法：
     python tests/test_file_selection_e2e.py
@@ -344,23 +344,23 @@ class FileSelectionE2ETest:
             return False
 
     def test_scan_with_file_selection(self) -> bool:
-        """测试带文件选择的扫描"""
+        """测试带文件选择的智能扫描任务创建"""
         if not self.project_id:
             print("跳过：没有项目 ID")
             return False
 
-        print("\n[测试] 启动扫描（带文件选择和排除模式）...")
+        print("\n[测试] 启动智能扫描任务（带文件选择和排除模式）...")
 
         scan_request = {
-            "file_paths": ["src/main.py"],  # 只扫描一个文件
+            "project_id": self.project_id,
+            "target_files": ["src/main.py"],  # 只扫描一个文件
             "exclude_patterns": [".log", "tests/"],  # 使用路径片段匹配
-            "full_scan": False,
+            "name": "E2E File Selection Task",
         }
 
         try:
             response = self.client.post(
-                f"{BASE_URL}/scan/scan-stored-zip",
-                params={"project_id": self.project_id},
+                f"{BASE_URL}/agent-tasks/",
                 json=scan_request,
                 # headers=get_headers(self.token),
                 headers=get_headers(),
@@ -368,14 +368,14 @@ class FileSelectionE2ETest:
 
             if response.status_code == 200:
                 data = response.json()
-                task_id = data.get("task_id")
-                print(f"扫描任务已创建: {task_id}")
+                task_id = data.get("id")
+                print(f"智能扫描任务已创建: {task_id}")
                 return True
             elif response.status_code == 400:
-                print(f"扫描请求被拒绝（可能没有存储的 ZIP）: {response.text}")
+                print(f"智能扫描请求被拒绝（可能没有存储的 ZIP）: {response.text}")
                 return False
             else:
-                print(f"扫描失败: {response.status_code} - {response.text}")
+                print(f"智能扫描任务创建失败: {response.status_code} - {response.text}")
                 return False
         except Exception as e:
             print(f"请求失败: {e}")
@@ -399,16 +399,15 @@ def run_mock_tests():
     # 测试 2: 扫描请求格式
     print("\n[模拟测试 2] 扫描请求格式...")
     scan_request = {
-        "file_paths": ["src/main.py", "src/utils.py"],
+        "project_id": "demo-project",
+        "target_files": ["src/main.py", "src/utils.py"],
         "exclude_patterns": ["*.test.js", "coverage/**"],
-        "full_scan": False,
-        "rule_set_id": None,
-        "prompt_template_id": None,
+        "name": "Mock Agent Task",
     }
     json_str = json.dumps(scan_request)
     parsed = json.loads(json_str)
     assert "exclude_patterns" in parsed
-    assert parsed["full_scan"] is False
+    assert parsed["target_files"] == ["src/main.py", "src/utils.py"]
     print(f"扫描请求格式正确")
 
     # 测试 3: ZIP 文件创建和读取

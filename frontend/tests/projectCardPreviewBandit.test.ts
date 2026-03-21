@@ -29,7 +29,6 @@ test("project issue breakdown adds bandit findings", () => {
 test("project recent tasks includes bandit route when only bandit is enabled", () => {
   const tasks = getProjectCardRecentTasks({
     projectId: "p1",
-    auditTasks: [] as any,
     agentTasks: [] as any,
     opengrepTasks: [] as any,
     gitleaksTasks: [] as any,
@@ -55,7 +54,6 @@ test("project recent tasks includes bandit route when only bandit is enabled", (
 test("project recent tasks groups gitleaks and bandit into one static item", () => {
   const tasks = getProjectCardRecentTasks({
     projectId: "p1",
-    auditTasks: [] as any,
     agentTasks: [] as any,
     opengrepTasks: [] as any,
     gitleaksTasks: [

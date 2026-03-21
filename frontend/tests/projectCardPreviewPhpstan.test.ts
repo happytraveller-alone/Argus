@@ -28,7 +28,6 @@ test("project issue breakdown adds phpstan findings", () => {
 test("project recent tasks includes phpstan route when only phpstan is enabled", () => {
   const tasks = getProjectCardRecentTasks({
     projectId: "p1",
-    auditTasks: [] as any,
     agentTasks: [] as any,
     opengrepTasks: [] as any,
     gitleaksTasks: [] as any,
