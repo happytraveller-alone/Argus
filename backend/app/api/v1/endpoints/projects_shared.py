@@ -1473,7 +1473,7 @@ SEVERITY_RISK_WEIGHTS: Dict[str, int] = {
 }
 
 TERMINAL_FAILURE_STATUSES = {"failed", "interrupted", "cancelled"}
-EXCLUDED_CURRENT_RISK_STATUSES = {"false_positive", "fixed", "resolved"}
+EXCLUDED_CURRENT_RISK_STATUSES = {"false_positive", "resolved"}
 
 
 def _normalize_status_token(value: Any) -> str:

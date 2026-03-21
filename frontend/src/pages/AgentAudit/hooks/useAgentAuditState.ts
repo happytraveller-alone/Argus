@@ -163,7 +163,15 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
     }
 
     case 'UPDATE_OR_ADD_PROGRESS_LOG': {
-      const { progressKey, title, agentName, progressStatus, time, eventTimestamp } = action.payload;
+      const {
+        progressKey,
+        title,
+        agentName,
+        phaseLabel,
+        progressStatus,
+        time,
+        eventTimestamp,
+      } = action.payload;
       const nextStatus = progressStatus || inferProgressStatus(progressKey, title);
       // 查找是否已存在相同 progressKey 的进度日志
       const existingIndex = state.logs.findIndex(
@@ -176,6 +184,7 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
         updatedLogs[existingIndex] = {
           ...updatedLogs[existingIndex],
           title,
+          phaseLabel: phaseLabel ?? updatedLogs[existingIndex].phaseLabel ?? null,
           time:
             typeof time === "string" && time.trim()
               ? time
@@ -197,6 +206,7 @@ function agentAuditReducer(state: AgentAuditState, action: AgentAuditAction): Ag
           title,
           progressKey,
           agentName,
+          phaseLabel,
           progressStatus: nextStatus,
           time,
           eventTimestamp,

@@ -77,7 +77,7 @@ class GitleaksFinding(Base):
     email = Column(String, nullable=True, comment="邮箱 (如果有)")
     date = Column(String, nullable=True, comment="日期 (如果有)")
     fingerprint = Column(String, nullable=True, comment="Gitleaks 指纹")
-    status = Column(String, default="open", comment="open, verified, false_positive, fixed")
+    status = Column(String, default="open", comment="open, verified, false_positive")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

@@ -52,6 +52,7 @@ export interface LogItem {
   time: string;
   eventTimestamp?: string | null;
   type: LogType;
+  phaseLabel?: string | null;
   title: string;
   content?: string;
   isStreaming?: boolean;
@@ -124,6 +125,7 @@ export type AgentAuditAction =
         progressKey: string;
         title: string;
         agentName?: string;
+        phaseLabel?: string | null;
         progressStatus?: ProgressStatus;
         time?: string;
         eventTimestamp?: string | null;

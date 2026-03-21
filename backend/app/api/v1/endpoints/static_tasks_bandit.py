@@ -1117,14 +1117,14 @@ async def get_bandit_finding(
 @router.post("/bandit/findings/{finding_id}/status")
 async def update_bandit_finding_status(
     finding_id: str,
-    status: str = Query(..., description="状态: open, verified, false_positive, fixed"),
+    status: str = Query(..., description="状态: open, verified, false_positive"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
     """更新 Bandit 扫描发现状态。"""
     normalized_status = str(status or "").strip().lower()
-    if normalized_status not in {"open", "verified", "false_positive", "fixed"}:
-        raise HTTPException(status_code=400, detail="status 必须为 open/verified/false_positive/fixed")
+    if normalized_status not in {"open", "verified", "false_positive"}:
+        raise HTTPException(status_code=400, detail="status 必须为 open/verified/false_positive")
 
     result = await db.execute(select(BanditFinding).where(BanditFinding.id == finding_id))
     finding = result.scalar_one_or_none()

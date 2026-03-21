@@ -82,6 +82,15 @@ async def test_update_bandit_finding_status_validation_and_success():
         )
     assert exc_info.value.status_code == 400
 
+    with pytest.raises(HTTPException) as fixed_exc_info:
+        await static_tasks.update_bandit_finding_status(
+            finding_id="finding-1",
+            status="fixed",
+            db=db,
+            current_user=SimpleNamespace(id="user-1"),
+        )
+    assert fixed_exc_info.value.status_code == 400
+
     result = await static_tasks.update_bandit_finding_status(
         finding_id="finding-1",
         status="verified",

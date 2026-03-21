@@ -67,7 +67,7 @@ class YasaFinding(Base):
     file_path = Column(String, nullable=False)
     start_line = Column(Integer, nullable=True)
     end_line = Column(Integer, nullable=True)
-    status = Column(String, default="open", comment="open, verified, false_positive, fixed")
+    status = Column(String, default="open", comment="open, verified, false_positive")
     raw_payload = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -130,15 +130,9 @@ async def get_stats(
             func.lower(AgentFinding.status).in_(("resolved", "verified", "fixed")),
         )
         + await _count(OpengrepFinding, func.lower(OpengrepFinding.status) == "verified")
-        + await _count(
-            GitleaksFinding, func.lower(GitleaksFinding.status).in_(("verified", "fixed"))
-        )
-        + await _count(
-            BanditFinding, func.lower(BanditFinding.status).in_(("verified", "fixed"))
-        )
-        + await _count(
-            PhpstanFinding, func.lower(PhpstanFinding.status).in_(("verified", "fixed"))
-        )
+        + await _count(GitleaksFinding, func.lower(GitleaksFinding.status) == "verified")
+        + await _count(BanditFinding, func.lower(BanditFinding.status) == "verified")
+        + await _count(PhpstanFinding, func.lower(PhpstanFinding.status) == "verified")
     )
 
     return {

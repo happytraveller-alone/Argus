@@ -124,3 +124,94 @@ export function toZhStatus(raw: string): string {
   if (!key) return "";
   return STATUS_LABELS[key] || raw;
 }
+
+type EventLogPhaseLabel =
+  | "初始化"
+  | "编排"
+  | "侦查"
+  | "分析"
+  | "完成";
+
+const PHASE_LABEL_SET = new Set<EventLogPhaseLabel>([
+  "初始化",
+  "编排",
+  "侦查",
+  "分析",
+  "完成",
+]);
+
+function toPhaseKey(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function toAllowedPhaseLabel(raw: unknown): EventLogPhaseLabel | null {
+  const label = String(raw ?? "").trim();
+  if (!label) return null;
+  return PHASE_LABEL_SET.has(label as EventLogPhaseLabel)
+    ? (label as EventLogPhaseLabel)
+    : null;
+}
+
+export function normalizeEventLogPhaseLabel(input: {
+  rawPhase?: unknown;
+  eventType?: unknown;
+  taskStatus?: unknown;
+  message?: unknown;
+  fallbackPhaseLabel?: string | null;
+}): EventLogPhaseLabel | null {
+  const taskStatus = toPhaseKey(input.taskStatus);
+  const eventType = toPhaseKey(input.eventType);
+  const rawPhase = toPhaseKey(input.rawPhase);
+  const message = String(input.message ?? "").trim();
+
+  if (
+    taskStatus === "completed" &&
+    (eventType === "task_complete" || eventType === "complete")
+  ) {
+    return "完成";
+  }
+
+  if (
+    rawPhase === "preparation" ||
+    rawPhase === "planning" ||
+    rawPhase === "indexing" ||
+    rawPhase === "init" ||
+    rawPhase === "initialization"
+  ) {
+    return "初始化";
+  }
+
+  if (rawPhase === "orchestration" || rawPhase === "orchestrator") {
+    return "编排";
+  }
+
+  if (
+    rawPhase === "recon" ||
+    rawPhase === "reconnaissance" ||
+    rawPhase === "business_logic_recon"
+  ) {
+    return "侦查";
+  }
+
+  if (
+    rawPhase === "analysis" ||
+    rawPhase === "business_logic_analysis" ||
+    rawPhase === "verification" ||
+    rawPhase === "report" ||
+    rawPhase === "reporting"
+  ) {
+    return "分析";
+  }
+
+  if (
+    (eventType === "info" || eventType === "progress") &&
+    /任务开始执行|开始执行|执行准备|准备阶段|索引/.test(message)
+  ) {
+    return "初始化";
+  }
+
+  return toAllowedPhaseLabel(input.fallbackPhaseLabel);
+}

@@ -129,6 +129,7 @@ YasaFindingResponse = _yasa.YasaFindingResponse
 _parse_opengrep_output = _opengrep._parse_opengrep_output
 _parse_bandit_output_payload = _bandit._parse_bandit_output_payload
 _parse_phpstan_output_payload = _phpstan._parse_phpstan_output_payload
+_filter_phpstan_security_messages = _phpstan._filter_phpstan_security_messages
 _parse_yasa_sarif_output = _yasa._parse_yasa_sarif_output
 _build_effective_gitleaks_config_toml = _gitleaks._build_effective_gitleaks_config_toml
 

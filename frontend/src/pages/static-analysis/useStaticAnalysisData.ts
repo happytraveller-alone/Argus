@@ -479,7 +479,6 @@ export function useStaticAnalysisData({
     row: UnifiedFindingRow,
     target: FindingStatus,
   ) => {
-    if (row.engine === "opengrep" && target === "fixed") return;
     const currentStatus = String(row.status || "open").toLowerCase();
     const nextStatus: FindingStatus = currentStatus === target ? "open" : target;
     const updateKey = `${row.engine}:${row.id}:${target}`;
@@ -488,7 +487,7 @@ export function useStaticAnalysisData({
       if (row.engine === "opengrep") {
         await updateOpengrepFindingStatus({
           findingId: row.id,
-          status: nextStatus === "fixed" ? "open" : nextStatus,
+          status: nextStatus,
         });
         setOpengrepFindings((prev) =>
           prev.map((finding) =>

@@ -119,7 +119,7 @@ export async function getYasaFinding(params: {
 
 export async function updateYasaFindingStatus(params: {
   findingId: string;
-  status: "open" | "verified" | "false_positive" | "fixed";
+  status: "open" | "verified" | "false_positive";
 }): Promise<{ message: string; finding_id: string; status: string }> {
   const response = await apiClient.post(
     `/static-tasks/yasa/findings/${params.findingId}/status`,

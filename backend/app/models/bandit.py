@@ -75,7 +75,7 @@ class BanditFinding(Base):
     code_snippet = Column(Text, nullable=True)
     issue_text = Column(Text, nullable=True)
     more_info = Column(String, nullable=True)
-    status = Column(String, default="open", comment="open, verified, false_positive, fixed")
+    status = Column(String, default="open", comment="open, verified, false_positive")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

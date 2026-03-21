@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api.v1.endpoints import projects
+from app.api.v1.endpoints import projects, projects_insights
 
 
 class _RowsResult:
@@ -163,7 +163,7 @@ def _build_execute_side_effect(now: datetime):
     phpstan_finding_rows = [
         ("ps1", "open", "src/index.php", now - timedelta(days=1)),
         ("ps1", "verified", "src/risk.php", now - timedelta(days=1)),
-        ("ps2", "fixed", "legacy.php", now - timedelta(days=40)),
+        ("ps2", "verified", "legacy.php", now - timedelta(days=40)),
     ]
     agent_finding_rows = [
         (
@@ -222,7 +222,7 @@ async def test_dashboard_snapshot_v2_exposes_summary_and_windowed_panels(monkeyp
     now = datetime.now(timezone.utc)
     db = SimpleNamespace(execute=AsyncMock(side_effect=_build_execute_side_effect(now)))
     monkeypatch.setattr(
-        projects,
+        projects_insights,
         "count_high_confidence_findings_by_task_ids",
         AsyncMock(return_value={"og1": 1, "og2": 1}),
     )
@@ -235,8 +235,8 @@ async def test_dashboard_snapshot_v2_exposes_summary_and_windowed_panels(monkeyp
     )
 
     assert snapshot.summary.total_projects == 2
-    assert snapshot.summary.current_effective_findings == 9
-    assert snapshot.summary.current_verified_findings == 5
+    assert snapshot.summary.current_effective_findings == 10
+    assert snapshot.summary.current_verified_findings == 6
     assert snapshot.summary.window_scanned_projects == 2
     assert snapshot.summary.window_new_effective_findings == 8
     assert snapshot.summary.window_verified_findings == 5
@@ -262,7 +262,7 @@ async def test_dashboard_snapshot_v2_builds_weighted_hotspots_and_language_risk(
     now = datetime.now(timezone.utc)
     db = SimpleNamespace(execute=AsyncMock(side_effect=_build_execute_side_effect(now)))
     monkeypatch.setattr(
-        projects,
+        projects_insights,
         "count_high_confidence_findings_by_task_ids",
         AsyncMock(return_value={"og1": 1, "og2": 1}),
     )
@@ -276,9 +276,9 @@ async def test_dashboard_snapshot_v2_builds_weighted_hotspots_and_language_risk(
 
     assert [item.project_name for item in snapshot.project_hotspots] == ["Alpha", "Beta"]
     assert snapshot.project_hotspots[0].risk_score == pytest.approx(32.0)
-    assert snapshot.project_hotspots[1].risk_score == pytest.approx(12.5)
+    assert snapshot.project_hotspots[1].risk_score == pytest.approx(14.0)
     assert snapshot.project_hotspots[0].verified_findings == 4
-    assert snapshot.project_hotspots[1].effective_findings == 2
+    assert snapshot.project_hotspots[1].effective_findings == 3
     assert [item.language for item in snapshot.language_risk] == [
         "TypeScript",
         "PHP",

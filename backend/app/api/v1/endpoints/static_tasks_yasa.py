@@ -811,11 +811,11 @@ async def get_yasa_finding(
 @router.post("/yasa/findings/{finding_id}/status")
 async def update_yasa_finding_status(
     finding_id: str,
-    status: str = Query(..., description="open, verified, false_positive, fixed"),
+    status: str = Query(..., description="open, verified, false_positive"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    allowed_status = {"open", "verified", "false_positive", "fixed"}
+    allowed_status = {"open", "verified", "false_positive"}
     normalized_status = str(status or "").strip().lower()
     if normalized_status not in allowed_status:
         raise HTTPException(status_code=400, detail="无效状态")

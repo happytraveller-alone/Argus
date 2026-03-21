@@ -11,7 +11,7 @@ import {
 
 export type Engine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa";
 export type EngineFilter = "all" | Engine;
-export type FindingStatus = "open" | "verified" | "false_positive" | "fixed";
+export type FindingStatus = "open" | "verified" | "false_positive";
 export type StatusFilter = "all" | FindingStatus;
 export type ConfidenceFilter = "all" | "HIGH" | "MEDIUM" | "LOW";
 export type SeverityFilter = "all" | NormalizedSeverity;
@@ -232,6 +232,24 @@ export function getStaticAnalysisConfidenceBadgeClass(
     return "bg-sky-500/20 text-sky-300 border-sky-500/30";
   }
   return "bg-amber-500/20 text-amber-300 border-amber-500/30";
+}
+
+export function getStaticAnalysisFindingStatusLabel(status?: string | null): string {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "verified") return "确报";
+  if (normalized === "false_positive") return "误报";
+  return "待验证";
+}
+
+export function getStaticAnalysisFindingStatusBadgeClass(status?: string | null): string {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "verified") {
+    return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+  }
+  if (normalized === "false_positive") {
+    return "bg-rose-500/20 text-rose-300 border-rose-500/30";
+  }
+  return "bg-muted text-muted-foreground border-border";
 }
 
 export function formatStaticAnalysisDuration(ms: number): string {

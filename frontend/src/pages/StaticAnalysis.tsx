@@ -25,6 +25,10 @@ import {
 } from "@/components/data-table";
 import StaticAnalysisFindingsTable from "./static-analysis/StaticAnalysisFindingsTable";
 import StaticAnalysisSummaryCards from "./static-analysis/StaticAnalysisSummaryCards";
+import {
+  createStaticAnalysisInitialTableState,
+  resolveStaticAnalysisTableState,
+} from "./static-analysis/tableState";
 import { useStaticAnalysisData } from "./static-analysis/useStaticAnalysisData";
 import {
   buildUnifiedFindingRows,
@@ -114,29 +118,11 @@ export default function StaticAnalysis() {
   const hasEnabledEngine = Boolean(
     opengrepTaskId || gitleaksTaskId || banditTaskId || phpstanTaskId || yasaTaskId,
   );
-  const [tableState, setTableState] = useState<DataTableQueryState>(() => ({
-    ...initialState,
-    sorting:
-      initialState.sorting.length > 0
-        ? initialState.sorting
-        : [{ id: "severity", desc: true }],
-    pagination: {
-      pageIndex: initialState.pagination.pageIndex,
-      pageSize: initialState.pagination.pageSize || 10,
-    },
-  }));
+  const [tableState, setTableState] = useState<DataTableQueryState>(() =>
+    createStaticAnalysisInitialTableState(initialState),
+  );
   const resolvedUrlState = useMemo<DataTableQueryState>(
-    () => ({
-      ...initialState,
-      sorting:
-        initialState.sorting.length > 0
-          ? initialState.sorting
-          : [{ id: "severity", desc: true }],
-      pagination: {
-        pageIndex: initialState.pagination.pageIndex,
-        pageSize: initialState.pagination.pageSize || 10,
-      },
-    }),
+    () => resolveStaticAnalysisTableState(initialState),
     [initialState],
   );
 
@@ -260,7 +246,7 @@ export default function StaticAnalysis() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-wider uppercase text-foreground">
-            静态分析详情
+            静态扫描详情
           </h1>
         </div>
         <div className="flex items-center gap-2">

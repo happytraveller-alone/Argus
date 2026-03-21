@@ -105,6 +105,15 @@ async def test_update_phpstan_finding_status_validation_and_success():
         )
     assert exc_info.value.status_code == 400
 
+    with pytest.raises(HTTPException) as fixed_exc_info:
+        await static_tasks.update_phpstan_finding_status(
+            finding_id="finding-1",
+            status="fixed",
+            db=db,
+            current_user=SimpleNamespace(id="user-1"),
+        )
+    assert fixed_exc_info.value.status_code == 400
+
     result = await static_tasks.update_phpstan_finding_status(
         finding_id="finding-1",
         status="verified",
@@ -203,7 +212,7 @@ async def test_execute_phpstan_scan_completes_when_all_findings_filtered(monkeyp
     monkeypatch.setattr(static_tasks, "_is_scan_task_cancelled", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(static_tasks, "_clear_scan_task_cancel", lambda *_args, **_kwargs: None)
 
-    def _fake_run_subprocess_with_tracking(_scan_type, _task_id, _cmd, _timeout):
+    def _fake_run_subprocess_with_tracking(_scan_type, _task_id, _cmd, timeout=None):
         payload = {
             "totals": {"errors": 0, "file_errors": 1},
             "files": {

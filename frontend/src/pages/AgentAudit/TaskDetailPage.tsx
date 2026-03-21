@@ -71,6 +71,7 @@ import {
 import { mergeRealtimeFindingsBatch } from "./realtimeFindingMerge";
 import {
   localizeAuditText,
+  normalizeEventLogPhaseLabel,
   normalizeSeverityKey,
   toZhAgentName,
 } from "./localization";
@@ -610,6 +611,7 @@ function AgentAuditPageContent() {
   const taskStatusRef = useRef<string | undefined>(undefined);
   const terminalBoundarySequenceRef = useRef<number | null>(null);
   const taskStartedAtRef = useRef<string | null>(null);
+  const currentLogPhaseLabelRef = useRef<string | null>(null);
   const userCancelSeenRef = useRef(false);
   const ignoreScrollUntilRef = useRef(0);
   const lastStreamSelfHealAttemptRef = useRef(0);
@@ -923,6 +925,13 @@ function AgentAuditPageContent() {
     taskStatusRef.current = task?.status;
   }, [task?.status]);
 
+  useEffect(() => {
+    currentLogPhaseLabelRef.current = normalizeEventLogPhaseLabel({
+      rawPhase: task?.current_phase,
+      taskStatus: task?.status,
+    });
+  }, [task?.current_phase, task?.status]);
+
   const markTerminalBoundary = useCallback(
     (status: string, sequence?: number) => {
       const normalizedStatus = String(status || "").trim().toLowerCase();
@@ -936,6 +945,29 @@ function AgentAuditPageContent() {
     },
     [],
   );
+
+  const resolveLogPhaseLabel = useCallback((input: {
+    rawPhase?: unknown;
+    eventType?: unknown;
+    taskStatus?: unknown;
+    message?: unknown;
+    fallbackPhaseLabel?: string | null;
+    useCurrentSnapshot?: boolean;
+  }): string | null => {
+    const phaseLabel = normalizeEventLogPhaseLabel({
+      rawPhase: input.rawPhase,
+      eventType: input.eventType,
+      taskStatus: input.taskStatus ?? taskStatusRef.current,
+      message: input.message,
+      fallbackPhaseLabel:
+        input.fallbackPhaseLabel ??
+        (input.useCurrentSnapshot === false ? null : currentLogPhaseLabelRef.current),
+    });
+    if (phaseLabel) {
+      currentLogPhaseLabelRef.current = phaseLabel;
+    }
+    return phaseLabel;
+  }, []);
 
   useEffect(() => {
     const startedAt = typeof task?.started_at === "string" ? task.started_at.trim() : "";
@@ -1436,12 +1468,22 @@ function AgentAuditPageContent() {
 
   const appendLogFromEvent = useCallback(
     (event: UnifiedAgentEvent) => {
+      const eventRecord = event as Record<string, unknown>;
       const eventType = String(
         event.event_type ?? event.type ?? "",
       ).toLowerCase();
       const rawMessage = eventToString(event.message).trim();
       const message = sanitizeAuditText(rawMessage);
       const metadata = (event.metadata ?? undefined) as Record<string, unknown> | undefined;
+      const rawPhase =
+        (typeof eventRecord.phase === "string" && eventRecord.phase) ||
+        (typeof metadata?.phase === "string" && metadata.phase) ||
+        undefined;
+      const eventPhaseLabel = resolveLogPhaseLabel({
+        rawPhase,
+        eventType,
+        message,
+      });
       const eventKey = buildEventDedupKey(
         eventType,
         event.sequence,
@@ -1551,6 +1593,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: "thinking",
+            phaseLabel: eventPhaseLabel,
             title:
               content.length > 100 ? `${content.slice(0, 100)}...` : content,
             content,
@@ -1580,6 +1623,7 @@ function AgentAuditPageContent() {
               time: displayTime,
               eventTimestamp,
               type: "info",
+              phaseLabel: eventPhaseLabel,
               title:
                 latePolicy === "ignore"
                   ? `终态后忽略迟到工具调用：${toolName}`
@@ -1629,6 +1673,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: "tool",
+            phaseLabel: eventPhaseLabel ?? existing?.phaseLabel ?? null,
             title: runningTitle,
             content: runningContent,
             tool: {
@@ -1662,6 +1707,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: "tool",
+            phaseLabel: eventPhaseLabel,
             title: runningTitle,
             content: runningContent,
             tool: { name: toolName, status: "running", callId: toolCallId || undefined },
@@ -1701,6 +1747,7 @@ function AgentAuditPageContent() {
               time: displayTime,
               eventTimestamp,
               type: "info",
+              phaseLabel: eventPhaseLabel,
               title: `终态后收到迟到工具结果，触发恢复重试：${toolName}`,
               content: message || "",
               agentName,
@@ -1814,6 +1861,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: "tool",
+            phaseLabel: eventPhaseLabel ?? existing?.phaseLabel ?? null,
             title: resolvedToolTitle,
             content: outputBlock
               ? `${previousContent}${outputBlock}`.trim()
@@ -1852,6 +1900,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: "tool",
+            phaseLabel: eventPhaseLabel,
             title: resolvedToolTitle,
             content: outputText
               ? `${routePrefix ? `${routePrefix}\n\n` : ""}输出：\n${outputText}${writeScopeHint ? `\n\n${writeScopeHint}` : ""}`
@@ -1943,6 +1992,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: "finding",
+            phaseLabel: eventPhaseLabel,
             title: findingTitle,
             severity: findingSeverity,
             agentName,
@@ -1978,6 +2028,7 @@ function AgentAuditPageContent() {
               time: displayTime,
               eventTimestamp,
               type: "progress",
+              phaseLabel: eventPhaseLabel,
               title: compactProgress,
               content: `${message || ""}${statusPreview ? `\n状态样例：${statusPreview}` : ""}`,
               agentName,
@@ -2006,6 +2057,7 @@ function AgentAuditPageContent() {
               time: displayTime,
               eventTimestamp,
               type: "progress",
+              phaseLabel: eventPhaseLabel,
               title: compactProgress,
               content: message || "",
               agentName,
@@ -2033,6 +2085,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: "dispatch",
+            phaseLabel: eventPhaseLabel,
             title: message || `事件：${eventType}`,
             agentName,
             agentRawName: agentRawName || undefined,
@@ -2047,12 +2100,20 @@ function AgentAuditPageContent() {
         markTerminalBoundary("completed", event.sequence);
         reconcileTerminalLogs("completed", event.sequence);
         compactToolLogsAfterReplay();
+        const completedPhaseLabel = resolveLogPhaseLabel({
+          rawPhase,
+          eventType,
+          taskStatus: "completed",
+          message,
+          useCurrentSnapshot: false,
+        });
         dispatch({
           type: "ADD_LOG",
           payload: {
             time: displayTime,
             eventTimestamp,
             type: "info",
+            phaseLabel: completedPhaseLabel,
             title: message || "任务已完成",
             agentName,
             agentRawName: agentRawName || undefined,
@@ -2073,12 +2134,20 @@ function AgentAuditPageContent() {
         if (taskErrorMessage) {
           setTerminalFailureReason(taskErrorMessage);
         }
+        const taskErrorPhaseLabel = resolveLogPhaseLabel({
+          rawPhase,
+          eventType,
+          taskStatus: event.status ?? taskStatusRef.current,
+          message: taskErrorMessage,
+          useCurrentSnapshot: false,
+        });
         dispatch({
           type: "ADD_LOG",
           payload: {
             time: displayTime,
             eventTimestamp,
             type: "error",
+            phaseLabel: taskErrorPhaseLabel,
             title: taskErrorMessage,
             agentName,
             agentRawName: agentRawName || undefined,
@@ -2089,12 +2158,20 @@ function AgentAuditPageContent() {
       }
       if (eventType === "task_cancel") {
         userCancelSeenRef.current = true;
+        const cancelledPhaseLabel = resolveLogPhaseLabel({
+          rawPhase,
+          eventType,
+          taskStatus: "cancelled",
+          message,
+          useCurrentSnapshot: false,
+        });
         dispatch({
           type: "ADD_LOG",
           payload: {
             time: displayTime,
             eventTimestamp,
             type: "info",
+            phaseLabel: cancelledPhaseLabel,
             title: message || "任务已取消",
             agentName,
             agentRawName: agentRawName || undefined,
@@ -2111,12 +2188,20 @@ function AgentAuditPageContent() {
           compactToolLogsAfterReplay();
         }
         const status = event.status ? `（${event.status}）` : "";
+        const taskEndPhaseLabel = resolveLogPhaseLabel({
+          rawPhase,
+          eventType,
+          taskStatus: terminalStatus || taskStatusRef.current,
+          message,
+          useCurrentSnapshot: false,
+        });
         dispatch({
           type: "ADD_LOG",
           payload: {
             time: displayTime,
             eventTimestamp,
             type: "info",
+            phaseLabel: taskEndPhaseLabel,
             title: message || `任务流已结束${status}`,
             agentName,
             agentRawName: agentRawName || undefined,
@@ -2141,6 +2226,7 @@ function AgentAuditPageContent() {
               progressKey,
               title: fallback,
               agentName,
+              phaseLabel: eventPhaseLabel,
               time: displayTime,
               eventTimestamp,
             },
@@ -2155,6 +2241,7 @@ function AgentAuditPageContent() {
               progressKey: "index_progress",
               title: fallback,
               agentName,
+              phaseLabel: eventPhaseLabel,
               progressStatus: "completed",
               time: displayTime,
               eventTimestamp,
@@ -2169,6 +2256,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: eventType === "error" ? "error" : "info",
+            phaseLabel: eventPhaseLabel,
             title: fallback,
             agentName,
             agentRawName: agentRawName || undefined,
@@ -2192,6 +2280,7 @@ function AgentAuditPageContent() {
             time: displayTime,
             eventTimestamp,
             type: "info",
+            phaseLabel: eventPhaseLabel,
             title: message,
             agentName,
             agentRawName: agentRawName || undefined,
@@ -2206,6 +2295,7 @@ function AgentAuditPageContent() {
       dispatch,
       markTerminalBoundary,
       reconcileTerminalLogs,
+      resolveLogPhaseLabel,
       updateLog,
     ],
   );
@@ -2532,12 +2622,14 @@ function AgentAuditPageContent() {
           // 预生成 ID，这样我们可以跟踪这个日志
           const newLogId = `thinking-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           const nowTime = buildNowRelativeLogTime();
+          const thinkingPhaseLabel = resolveLogPhaseLabel({});
           dispatch({
             type: "ADD_LOG",
             payload: {
               id: newLogId,
               ...nowTime,
               type: "thinking",
+              phaseLabel: thinkingPhaseLabel,
               title: "思考中...",
               content: cleanContent,
               isStreaming: true,
@@ -2608,6 +2700,7 @@ function AgentAuditPageContent() {
             payload: {
               ...nowTime,
               type: "error",
+              phaseLabel: resolveLogPhaseLabel({ useCurrentSnapshot: false }),
               title: buildAgentAuditStreamDisconnectTitle(source, err),
             },
           });
@@ -2624,18 +2717,19 @@ function AgentAuditPageContent() {
       afterSequence,
       appendLogFromEvent,
       backfillEventsSince,
+      buildNowRelativeLogTime,
       dispatch,
+      getCurrentAgentName,
+      getCurrentThinkingId,
+      ingestTokenEvents,
       loadTask,
       loadFindings,
       loadAgentTree,
-      updateLog,
       removeLog,
-      getCurrentAgentName,
-      getCurrentThinkingId,
+      resolveLogPhaseLabel,
       setCurrentAgentName,
       setCurrentThinkingId,
-      buildNowRelativeLogTime,
-      ingestTokenEvents,
+      updateLog,
     ],
   );
 
@@ -3276,7 +3370,6 @@ function AgentAuditPageContent() {
                   <span>类型标签</span>
                   <span>事件概况</span>
                   <span>阶段</span>
-                  <span>完成状态</span>
                   <span>操作</span>
                 </div>
               </div>

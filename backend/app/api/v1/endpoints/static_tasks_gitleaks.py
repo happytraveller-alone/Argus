@@ -1077,7 +1077,7 @@ async def delete_gitleaks_task(
 async def get_gitleaks_findings(
     task_id: str,
     status: Optional[str] = Query(
-        None, description="按状态过滤: open, verified, false_positive, fixed"
+        None, description="按状态过滤: open, verified, false_positive"
     ),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -1139,8 +1139,8 @@ async def update_gitleaks_finding_status(
     finding_id: str,
     status: str = Query(
         ...,
-        pattern="^(open|verified|false_positive|fixed)$",
-        description="新状态: open, verified, false_positive, fixed",
+        pattern="^(open|verified|false_positive)$",
+        description="新状态: open, verified, false_positive",
     ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -1152,16 +1152,18 @@ async def update_gitleaks_finding_status(
     - open: 开放
     - verified: 已验证为真实泄露
     - false_positive: 误报
-    - fixed: 已修复
     """
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in {"open", "verified", "false_positive"}:
+        raise HTTPException(status_code=400, detail="status 必须为 open/verified/false_positive")
+
     result = await db.execute(
         select(GitleaksFinding).where(GitleaksFinding.id == finding_id)
     )
     finding = result.scalar_one_or_none()
     if not finding:
         raise HTTPException(status_code=404, detail="密钥泄露记录不存在")
-
-    finding.status = status
+    finding.status = normalized_status
     await db.commit()
 
-    return {"message": "状态已更新", "finding_id": finding_id, "status": status}
+    return {"message": "状态已更新", "finding_id": finding_id, "status": normalized_status}

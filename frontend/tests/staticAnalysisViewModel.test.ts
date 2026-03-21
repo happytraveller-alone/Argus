@@ -69,6 +69,25 @@ test("buildUnifiedFindingRows normalizes opengrep and gitleaks rows", () => {
   assert.equal(rows[2]?.rule, "B602 · subprocess_shell_true");
 });
 
+test("static analysis finding status helpers expose tri-state labels and tones", () => {
+  assert.equal(viewModel.getStaticAnalysisFindingStatusLabel("open"), "待验证");
+  assert.equal(viewModel.getStaticAnalysisFindingStatusLabel("verified"), "确报");
+  assert.equal(viewModel.getStaticAnalysisFindingStatusLabel("false_positive"), "误报");
+
+  assert.match(
+    viewModel.getStaticAnalysisFindingStatusBadgeClass("open"),
+    /bg-muted/,
+  );
+  assert.match(
+    viewModel.getStaticAnalysisFindingStatusBadgeClass("verified"),
+    /emerald/,
+  );
+  assert.match(
+    viewModel.getStaticAnalysisFindingStatusBadgeClass("false_positive"),
+    /rose/,
+  );
+});
+
 test("buildStaticAnalysisListState filters, sorts and paginates rows", () => {
   const rows = [
     {

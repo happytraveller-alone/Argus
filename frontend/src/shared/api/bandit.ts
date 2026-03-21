@@ -128,7 +128,7 @@ export async function getBanditFinding(params: {
 
 export async function updateBanditFindingStatus(params: {
   findingId: string;
-  status: "open" | "verified" | "false_positive" | "fixed";
+  status: "open" | "verified" | "false_positive";
 }): Promise<{ message: string; finding_id: string; status: string }> {
   const response = await apiClient.post(
     `/static-tasks/bandit/findings/${params.findingId}/status`,

@@ -157,15 +157,16 @@ test("LogEntry 工具行在缺少结构化证据时显示兜底摘要", () => {
   assert.doesNotMatch(markup, /MCP/);
 });
 
-test("LogEntry 以六列表格化布局展示并保留查看详情操作", () => {
+test("LogEntry 以五列表格化布局展示阶段列并保留查看详情操作", () => {
   const markup = renderLogEntry(
     createToolLog({
       agentName: "验证智能体",
+      phaseLabel: "分析",
     }),
   );
 
-  assert.match(markup, /grid-template-columns:72px 84px minmax\(0,1fr\) 120px 110px 104px/);
-  assert.match(markup, /验证智能体/);
-  assert.match(markup, /已完成/);
+  assert.match(markup, /grid-template-columns:72px 84px minmax\(0,1fr\) 120px 104px/);
+  assert.match(markup, /分析/);
+  assert.doesNotMatch(markup, /验证智能体/);
   assert.match(markup, /查看详情/);
 });

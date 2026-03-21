@@ -255,10 +255,16 @@ function buildStatusLabel(value: unknown): string {
   if (normalized === "open") return "待处理";
   if (normalized === "false_positive") return "误报";
   if (normalized === "closed") return "已关闭";
-  if (normalized === "fixed") return "已修复";
   if (normalized === "resolved") return "已处理";
   if (normalized === "confirmed") return "已确认";
   return raw;
+}
+
+function buildStaticFindingStatusLabel(value: unknown): string {
+  const normalized = normalizeToken(String(value || "").trim()).replace(/[\s-]+/g, "_");
+  if (normalized === "verified") return "确报";
+  if (normalized === "false_positive") return "误报";
+  return "待验证";
 }
 
 function buildOverviewItems(params: {
@@ -758,7 +764,7 @@ export function buildOpengrepFindingDetailModel(params: {
   const { finding } = params;
   const severity = resolveSeverityDisplay(finding.severity);
   const confidence = resolveTextConfidenceDisplay(finding.confidence);
-  const statusLabel = buildStatusLabel(finding.status);
+  const statusLabel = buildStaticFindingStatusLabel(finding.status);
   const location = formatLocation({
     filePath: finding.file_path,
     lineStart: finding.start_line,
@@ -824,7 +830,7 @@ export function buildGitleaksFindingDetailModel(params: {
     lineStart: finding.start_line,
     lineEnd: finding.end_line,
   });
-  const statusLabel = buildStatusLabel(finding.status);
+  const statusLabel = buildStaticFindingStatusLabel(finding.status);
   const summaryStats: FindingDetailSummaryStat[] = [
     { label: "漏洞危害", value: MISSING_SEVERITY, tone: "muted" },
     { label: "漏洞置信度", value: MISSING_VALUE, tone: "muted" },
@@ -871,7 +877,7 @@ export function buildBanditFindingDetailModel(params: {
   const { finding } = params;
   const severity = resolveSeverityDisplay(finding.issue_severity);
   const confidence = resolveTextConfidenceDisplay(finding.issue_confidence);
-  const statusLabel = buildStatusLabel(finding.status);
+  const statusLabel = buildStaticFindingStatusLabel(finding.status);
   const location = formatLocation({
     filePath: finding.file_path,
     lineStart: finding.line_number,
@@ -929,7 +935,7 @@ export function buildPhpstanFindingDetailModel(params: {
   projectName?: string | null;
 }): FindingDetailPageModel {
   const { finding } = params;
-  const statusLabel = buildStatusLabel(finding.status);
+  const statusLabel = buildStaticFindingStatusLabel(finding.status);
   const location = formatLocation({
     filePath: finding.file_path,
     lineStart: finding.line ?? null,

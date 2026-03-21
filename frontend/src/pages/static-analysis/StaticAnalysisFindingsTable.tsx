@@ -16,12 +16,20 @@ import type { FindingStatus, UnifiedFindingRow } from "./viewModel";
 import {
   getStaticAnalysisConfidenceBadgeClass,
   getStaticAnalysisConfidenceLabel,
+  getStaticAnalysisFindingStatusBadgeClass,
+  getStaticAnalysisFindingStatusLabel,
   getStaticAnalysisSeverityBadgeClass,
   getStaticAnalysisSeverityLabel,
 } from "./viewModel";
 
-const YES_BADGE_CLASS = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
-const NO_BADGE_CLASS = "bg-muted text-muted-foreground border-border";
+const ACTIVE_TRUE_BUTTON_CLASS =
+  "cyber-btn-outline h-7 px-2.5 border-emerald-500/70 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/20";
+const IDLE_TRUE_BUTTON_CLASS =
+  "cyber-btn-outline h-7 px-2.5 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10";
+const ACTIVE_FALSE_BUTTON_CLASS =
+  "cyber-btn-outline h-7 px-2.5 border-rose-500/70 bg-rose-500/15 text-rose-200 hover:bg-rose-500/20";
+const IDLE_FALSE_BUTTON_CLASS =
+  "cyber-btn-outline h-7 px-2.5 border-rose-500/40 text-rose-400 hover:bg-rose-500/10";
 
 function getEngineLabel(engine: UnifiedFindingRow["engine"]) {
   if (engine === "opengrep") return "Opengrep";
@@ -70,9 +78,11 @@ function getColumns(input: {
     {
       id: "engine",
       accessorFn: (row) => row.engine,
-      header: "所属引擎",
+      header: "引擎",
+      enableSorting: false,
+      enableHiding: false,
       meta: {
-        label: "所属引擎",
+        label: "引擎",
         width: 110,
         filterVariant: "select",
         filterOptions: [
@@ -93,9 +103,11 @@ function getColumns(input: {
       id: "rule",
       accessorFn: (row) => row.rule,
       header: "命中规则",
+      enableSorting: false,
+      enableHiding: false,
       meta: {
         label: "命中规则",
-        minWidth: 220,
+        minWidth: 320,
         filterVariant: "text",
       },
       cell: ({ row }) => <span className="text-sm break-all">{row.original.rule || "-"}</span>,
@@ -104,12 +116,14 @@ function getColumns(input: {
       id: "location",
       accessorFn: (row) => `${row.filePath}${row.line ? `:${row.line}` : ""}`,
       header: "命中位置",
+      enableSorting: false,
+      enableHiding: false,
       meta: {
         label: "命中位置",
-        minWidth: 240,
+        minWidth: 350,
       },
       cell: ({ row }) => (
-        <span className="font-mono text-xs break-all">
+        <span className="font-mono text-sm break-all">
           {row.original.filePath}
           {row.original.line ? `:${row.original.line}` : ""}
         </span>
@@ -118,11 +132,13 @@ function getColumns(input: {
     {
       id: "severity",
       accessorFn: (row) => row.severity,
-      header: "漏洞危害",
+      header: "危害",
+      enableSorting: false,
+      enableHiding: false,
       sortingFn: (left, right) => right.original.severityScore - left.original.severityScore,
       meta: {
         label: "漏洞危害",
-        width: 120,
+        width: 100,
         filterVariant: "select",
         filterOptions: [
           { label: "严重", value: "CRITICAL" },
@@ -141,10 +157,12 @@ function getColumns(input: {
       id: "confidence",
       accessorFn: (row) => row.confidence,
       header: "置信度",
+      enableSorting: false,
+      enableHiding: false,
       sortingFn: (left, right) => right.original.confidenceScore - left.original.confidenceScore,
       meta: {
         label: "置信度",
-        width: 110,
+        width: 150,
         filterVariant: "select",
         filterOptions: [
           { label: "高", value: "HIGH" },
@@ -161,35 +179,25 @@ function getColumns(input: {
     {
       id: "status",
       accessorFn: (row) => row.status,
-      header: "处理状态",
+      header: "漏洞状态",
+      enableSorting: false,
+      enableHiding: false,
       meta: {
-        label: "处理状态",
-        minWidth: 220,
+        label: "漏洞状态",
+        minWidth: 120,
         filterVariant: "select",
         filterOptions: [
-          { label: "未处理", value: "open" },
-          { label: "已验证", value: "verified" },
+          { label: "待验证", value: "open" },
+          { label: "确报", value: "verified" },
           { label: "误报", value: "false_positive" },
-          { label: "已修复", value: "fixed" },
         ],
       },
       cell: ({ row }) => {
         const rowStatus = String(row.original.status || "open").toLowerCase();
-        const processed = rowStatus !== "open";
-        const verified = rowStatus === "verified";
-        const falsePositive = rowStatus === "false_positive";
         return (
-          <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
-            <Badge className={processed ? YES_BADGE_CLASS : NO_BADGE_CLASS}>
-              处理：{processed ? "是" : "否"}
-            </Badge>
-            <Badge className={verified ? YES_BADGE_CLASS : NO_BADGE_CLASS}>
-              验证：{verified ? "是" : "否"}
-            </Badge>
-            <Badge className={falsePositive ? YES_BADGE_CLASS : NO_BADGE_CLASS}>
-              误报：{falsePositive ? "是" : "否"}
-            </Badge>
-          </div>
+          <Badge className={getStaticAnalysisFindingStatusBadgeClass(rowStatus)}>
+            {getStaticAnalysisFindingStatusLabel(rowStatus)}
+          </Badge>
         );
       },
     },
@@ -203,11 +211,11 @@ function getColumns(input: {
       },
       cell: ({ row }) => {
         const rowStatus = String(row.original.status || "open").toLowerCase();
-        const isOpengrep = row.original.engine === "opengrep";
+        const rowUpdatePrefix = `${row.original.engine}:${row.original.id}:`;
+        const rowStatusUpdating = Boolean(input.updatingKey?.startsWith(rowUpdatePrefix));
         const verifyUpdating = input.updatingKey === `${row.original.engine}:${row.original.id}:verified`;
         const falsePositiveUpdating =
           input.updatingKey === `${row.original.engine}:${row.original.id}:false_positive`;
-        const fixedUpdating = input.updatingKey === `${row.original.engine}:${row.original.id}:fixed`;
         const detailRoute = appendReturnTo(
           buildFindingDetailPath({
             source: "static",
@@ -231,50 +239,37 @@ function getColumns(input: {
             <Button
               size="sm"
               variant="outline"
-              className="cyber-btn-outline h-7 px-2.5 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10"
-              disabled={Boolean(input.updatingKey)}
+              className={
+                rowStatus === "verified" ? ACTIVE_TRUE_BUTTON_CLASS : IDLE_TRUE_BUTTON_CLASS
+              }
+              disabled={rowStatusUpdating}
+              aria-pressed={rowStatus === "verified"}
               onClick={() => input.onToggleStatus(row.original, "verified")}
             >
               {verifyUpdating ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
-              ) : rowStatus === "verified" ? (
-                "取消验证"
               ) : (
-                "验证"
+                "判真"
               )}
             </Button>
             <Button
               size="sm"
               variant="outline"
-              className="cyber-btn-outline h-7 px-2.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10"
-              disabled={Boolean(input.updatingKey)}
+              className={
+                rowStatus === "false_positive"
+                  ? ACTIVE_FALSE_BUTTON_CLASS
+                  : IDLE_FALSE_BUTTON_CLASS
+              }
+              disabled={rowStatusUpdating}
+              aria-pressed={rowStatus === "false_positive"}
               onClick={() => input.onToggleStatus(row.original, "false_positive")}
             >
               {falsePositiveUpdating ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
-              ) : rowStatus === "false_positive" ? (
-                "取消误报"
               ) : (
-                "误报"
+                "判假"
               )}
             </Button>
-            {isOpengrep ? null : (
-              <Button
-                size="sm"
-                variant="outline"
-                className="cyber-btn-outline h-7 px-2.5 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10"
-                disabled={Boolean(input.updatingKey)}
-                onClick={() => input.onToggleStatus(row.original, "fixed")}
-              >
-                {fixedUpdating ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : rowStatus === "fixed" ? (
-                  "取消修复"
-                ) : (
-                  "修复"
-                )}
-              </Button>
-            )}
           </div>
         );
       },
@@ -318,7 +313,11 @@ export default function StaticAnalysisFindingsTable({
       }}
       toolbar={{
         searchPlaceholder: "搜索规则、位置或状态",
-        showColumnVisibility: false,
+        showGlobalSearch: false,
+        // showColumnVisibility: false,
+        showDensityToggle: false,
+				showReset: false,
+        // filters: [],
       }}
       pagination={{
         enabled: true,

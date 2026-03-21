@@ -67,7 +67,7 @@ class PhpstanFinding(Base):
     message = Column(Text, nullable=False)
     identifier = Column(String, nullable=True)
     tip = Column(Text, nullable=True)
-    status = Column(String, default="open", comment="open, verified, false_positive, fixed")
+    status = Column(String, default="open", comment="open, verified, false_positive")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

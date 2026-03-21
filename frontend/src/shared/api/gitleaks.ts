@@ -127,7 +127,7 @@ export async function getGitleaksFinding(params: {
 
 export async function updateGitleaksFindingStatus(params: {
     findingId: string;
-    status: "open" | "verified" | "false_positive" | "fixed";
+    status: "open" | "verified" | "false_positive";
 }): Promise<{ message: string; finding_id: string; status: string }> {
     const response = await apiClient.post(
         `/static-tasks/gitleaks/findings/${params.findingId}/status`,

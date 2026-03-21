@@ -4,14 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import {
   EVENT_LOG_GRID_TEMPLATE,
   LOG_TYPE_CONFIG,
-  SEVERITY_COLORS,
 } from "../constants";
-import type { LogEntryProps, ToolStatus } from "../types";
+import type { LogEntryProps } from "../types";
 import { sanitizeAuditText } from "../utils";
 import {
   localizeAuditText,
-  normalizeSeverityKey,
-  toZhSeverityLabel,
 } from "../localization";
 import { isToolEvidenceCapableTool } from "../toolEvidence";
 import type { LogItem } from "../types";
@@ -26,20 +23,6 @@ const LOG_TYPE_LABELS: Record<string, string> = {
   error: "错误",
   user: "用户",
   progress: "进度",
-};
-
-const TOOL_STATUS_LABELS: Record<ToolStatus, string> = {
-  running: "运行中",
-  completed: "已完成",
-  failed: "失败",
-  cancelled: "已取消",
-};
-
-const TOOL_STATUS_CLASS: Record<ToolStatus, string> = {
-  running: "border-amber-500/40 text-amber-600 dark:text-amber-300 bg-amber-500/10",
-  completed: "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10",
-  failed: "border-rose-500/40 text-rose-600 dark:text-rose-300 bg-rose-500/10",
-  cancelled: "border-zinc-500/40 text-zinc-600 dark:text-zinc-300 bg-zinc-500/10",
 };
 
 function formatTitle(title: string): string {
@@ -103,7 +86,6 @@ export const LogEntry = memo(function LogEntry({
 }: LogEntryProps) {
   const config = LOG_TYPE_CONFIG[item.type] || LOG_TYPE_CONFIG.info;
   const typeLabel = LOG_TYPE_LABELS[item.type] || "日志";
-  const toolStatus = item.tool?.status;
   const isProgressCompleted =
     item.type === "progress" && item.progressStatus === "completed";
   const typeIcon =
@@ -121,7 +103,6 @@ export const LogEntry = memo(function LogEntry({
   const sanitizedContent = item.content
     ? sanitizeAuditText(localizeAuditText(item.content))
     : "";
-  const severityKey = item.severity ? normalizeSeverityKey(item.severity) : null;
   const contentPreview = sanitizedContent
     ? sanitizedContent.slice(0, 220) + (sanitizedContent.length > 220 ? "..." : "")
     : "";
@@ -196,43 +177,10 @@ export const LogEntry = memo(function LogEntry({
           </div>
 
           <div className="min-w-0">
-            {item.agentName ? (
-              <span className="block truncate text-xs text-primary" title={item.agentName}>
-                {item.agentName}
+            {item.phaseLabel ? (
+              <span className="block truncate text-xs text-primary" title={item.phaseLabel}>
+                {item.phaseLabel}
               </span>
-            ) : (
-              <span className="text-xs text-muted-foreground">-</span>
-            )}
-          </div>
-
-          <div className="min-w-0">
-            {toolStatus ? (
-              <Badge
-                variant="outline"
-                className={`h-6 px-2 text-[11px] font-medium ${TOOL_STATUS_CLASS[toolStatus]}`}
-              >
-                {toolStatus === "running" && (
-                  <Loader2 className="mr-1 w-3 h-3 animate-spin" />
-                )}
-                {TOOL_STATUS_LABELS[toolStatus]}
-              </Badge>
-            ) : item.type === "progress" ? (
-              <Badge
-                variant="outline"
-                className={`h-6 px-2 text-[11px] font-medium ${
-                  isProgressCompleted
-                    ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                    : "border-cyan-500/40 text-cyan-600 dark:text-cyan-300 bg-cyan-500/10"
-                }`}
-              >
-                {isProgressCompleted ? "已完成" : "进行中"}
-              </Badge>
-            ) : item.severity ? (
-              <Badge
-                className={`h-6 px-2 text-[11px] ${SEVERITY_COLORS[severityKey || "medium"] || SEVERITY_COLORS.info}`}
-              >
-                {toZhSeverityLabel(severityKey)}
-              </Badge>
             ) : (
               <span className="text-xs text-muted-foreground">-</span>
             )}
