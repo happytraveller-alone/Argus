@@ -6,6 +6,7 @@ import type { SidebarNavGroupId } from "@/app/sidebarNavGroups";
 import { buildOpengrepRulesRedirectPath } from "@/shared/utils/legacyRouteRedirect";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const DashboardMockPreview = lazy(() => import("@/pages/DashboardMockPreview"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const ProjectCodeBrowser = lazy(() => import("@/pages/ProjectCodeBrowser"));
 const AgentAuditHome = lazy(() => import("@/pages/AgentAudit"));
@@ -80,6 +81,13 @@ const routes: RouteConfig[] = [
 		navVisible: true,
 		navGroup: "main",
 		navOrder: 20,
+	},
+	{
+		name: "仪表盘预览",
+		path: "/dashboard/mock-preview",
+		element: <DashboardMockPreview />,
+		visible: false,
+		navVisible: false,
 	},
 	{
 		name: "项目管理",

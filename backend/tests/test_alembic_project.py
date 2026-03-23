@@ -76,7 +76,7 @@ def test_alembic_revisions_form_a_single_head_graph():
     heads = sorted(all_revisions - referenced_revisions)
 
     assert len(heads) == 1, f"Expected a single Alembic head, got {heads}"
-    assert heads == ["b9d8e7f6a5b4"], heads
+    assert heads == ["f6a7b8c9d0e1"], heads
     assert len(revisions) == len(down_revisions)
 
 
@@ -103,11 +103,13 @@ def test_alembic_versions_directory_keeps_expected_base_revisions_and_merge_file
     assert file_names["90a71996ac03"] == "90a71996ac03_add_project_management_metrics_table.py"
     assert file_names["a8f1c2d3e4b5"] == "a8f1c2d3e4b5_add_agent_tasks_report_column.py"
     assert file_names["b9d8e7f6a5b4"] == "b9d8e7f6a5b4_drop_legacy_audit_tables.py"
+    assert file_names["f6a7b8c9d0e1"] == "f6a7b8c9d0e1_remove_fixed_static_finding_status.py"
     assert "048836873140" not in file_names
     assert down_revisions["5f6a7b8c9d0e"] == ("b7e8f9a0b1c2", "e5f6a7b8c9d0")
     assert down_revisions["90a71996ac03"] == ("5f6a7b8c9d0e",)
     assert down_revisions["a8f1c2d3e4b5"] == ("90a71996ac03",)
     assert down_revisions["b9d8e7f6a5b4"] == ("a8f1c2d3e4b5",)
+    assert down_revisions["f6a7b8c9d0e1"] == ("b9d8e7f6a5b4",)
 
 
 def test_project_management_metrics_bridge_revision_is_a_no_op():
