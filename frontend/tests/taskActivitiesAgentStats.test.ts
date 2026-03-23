@@ -8,7 +8,7 @@ import {
   filterIntelligentActivities,
 } from "../src/features/tasks/services/taskActivities.ts";
 
-test("fetchTaskActivities maps agent severity stats for intelligent and hybrid tasks", async () => {
+test("fetchTaskActivities maps verified severity stats for intelligent and hybrid task summaries", async () => {
   const originalGet = apiClient.get;
 
   apiClient.get = (async (url: string) => {
@@ -31,6 +31,10 @@ test("fetchTaskActivities maps agent severity stats for intelligent and hybrid t
             total_chunks: 30,
             findings_count: 7,
             verified_count: 4,
+            verified_critical_count: 1,
+            verified_high_count: 1,
+            verified_medium_count: 1,
+            verified_low_count: 1,
             false_positive_count: 1,
             total_iterations: 5,
             tool_calls_count: 12,
@@ -68,6 +72,10 @@ test("fetchTaskActivities maps agent severity stats for intelligent and hybrid t
             total_chunks: 30,
             findings_count: 4,
             verified_count: 1,
+            verified_critical_count: 0,
+            verified_high_count: 0,
+            verified_medium_count: 1,
+            verified_low_count: 0,
             false_positive_count: 0,
             total_iterations: 3,
             tool_calls_count: 7,
@@ -116,20 +124,20 @@ test("fetchTaskActivities maps agent severity stats for intelligent and hybrid t
     assert.equal(intelligent.length, 1);
     assert.deepEqual(intelligent[0]?.agentFindingStats, {
       critical: 1,
-      high: 2,
-      medium: 3,
+      high: 1,
+      medium: 1,
       low: 1,
-      total: 7,
+      total: 4,
     });
 
     assert.equal(hybrid.length, 1);
     assert.equal(hybrid[0]?.status, "running");
     assert.deepEqual(hybrid[0]?.agentFindingStats, {
       critical: 0,
-      high: 1,
-      medium: 2,
-      low: 1,
-      total: 4,
+      high: 0,
+      medium: 1,
+      low: 0,
+      total: 1,
     });
   } finally {
     apiClient.get = originalGet;

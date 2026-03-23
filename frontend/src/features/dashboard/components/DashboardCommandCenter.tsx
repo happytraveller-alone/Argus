@@ -572,9 +572,6 @@ function TaskStatusPanel({
 		>
 			<div className="flex items-start justify-between gap-4">
 				<div>
-					<p className="text-[11px] uppercase tracking-[0.32em] text-slate-500">
-						任务状态
-					</p>
 					<h2 className="mt-3 text-2xl font-semibold text-white">任务状态</h2>
 				</div>
 			</div>

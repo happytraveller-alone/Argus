@@ -96,67 +96,12 @@ async def get_project_info(
 
     # 2. 检查权限
 
-    empty_language_info = '{"total": 0, "total_files": 0, "languages": {}}'
-
-    # 3. 获取/创建 ProjectInfo（纯静态统计）
-    existing_info_result = await db.execute(
-        select(ProjectInfo).where(ProjectInfo.project_id == id)
+    return await ensure_project_info_language_stats(
+        db,
+        id,
+        raise_on_error=True,
+        cloc_loader=get_cloc_stats,
     )
-    existing_info = existing_info_result.scalars().first()
-
-    if existing_info and existing_info.status == "completed" and existing_info.language_info:
-        existing_info.description = existing_info.description or ""
-        return existing_info
-
-    if existing_info and existing_info.status == "pending":
-        existing_info.language_info = existing_info.language_info or empty_language_info
-        existing_info.description = existing_info.description or ""
-        return existing_info
-
-    if not existing_info:
-        # 创建新的 ProjectInfo 记录并持久化为 pending 状态
-        project_info = ProjectInfo(
-            project_id=id,
-            status="pending",
-            created_at=datetime.now(timezone.utc),
-            language_info=empty_language_info,
-        )
-        db.add(project_info)
-        await db.commit()
-        await db.refresh(project_info)
-    else:
-        project_info = existing_info
-
-    try:
-        project_info.status = "pending"
-        db.add(project_info)
-        await db.commit()
-        await db.refresh(project_info)
-
-        # 生成语言统计（纯静态）
-        cloc_result = await get_cloc_stats(project_info)
-        project_info.language_info = cloc_result or empty_language_info
-
-        # 兼容字段：不在该接口生成描述，仅保证响应字段非空
-        project_info.description = project_info.description or ""
-
-        project_info.status = "completed"
-        db.add(project_info)
-        await db.commit()
-        await db.refresh(project_info)
-        return project_info
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取项目信息失败: {e}", exc_info=True)
-        # 标记为 failed 并持久化
-        try:
-            project_info.status = "failed"
-            db.add(project_info)
-            await db.commit()
-        except Exception:
-            logger.exception("保存失败状态时出错")
-        raise HTTPException(status_code=500, detail=f"获取项目信息失败: {str(e)}")
 
 
 @router.put("/{id}", response_model=ProjectResponse)

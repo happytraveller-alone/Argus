@@ -70,6 +70,8 @@ const METRIC_GROUP_ITEM_CLASSNAME =
   "inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/40 px-2 py-1";
 const METRIC_GROUP_LABEL_CLASSNAME =
   "text-[14px] font-medium tracking-[0.08em] text-muted-foreground";
+const METRIC_EMPTY_TEXT_CLASSNAME =
+  "text-[14px] font-medium tracking-[0.08em] text-muted-foreground";
 
 function renderMetricChip(value: number, tone: string, chipClassName: string) {
   return (
@@ -171,32 +173,42 @@ function buildColumns(
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
       },
-      cell: ({ row }) => (
-        <div
-          data-project-metric-group="vulnerabilities"
-          className={METRIC_GROUP_CLASSNAME}
-          title={
-            row.original.metricsStatus !== "ready"
-              ? row.original.metricsStatusMessage ?? undefined
-              : undefined
-          }
-        >
-          {VULNERABILITY_COLUMNS.map((column) => (
-            <span
-              key={column.key}
-              data-project-metric-item={column.key}
-              className={METRIC_GROUP_ITEM_CLASSNAME}
-            >
-              <span className={METRIC_GROUP_LABEL_CLASSNAME}>{column.label}</span>
-              {renderMetricChip(
-                row.original.vulnerabilityStats[column.key],
-                column.key,
-                VULNERABILITY_METRIC_CHIP_CLASSNAMES[column.key],
-              )}
-            </span>
-          ))}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const visibleColumns = VULNERABILITY_COLUMNS.filter(
+          (column) => row.original.vulnerabilityStats[column.key] > 0,
+        );
+
+        return (
+          <div
+            data-project-metric-group="vulnerabilities"
+            className={METRIC_GROUP_CLASSNAME}
+            title={
+              row.original.metricsStatus !== "ready"
+                ? row.original.metricsStatusMessage ?? undefined
+                : undefined
+            }
+          >
+            {visibleColumns.length > 0 ? (
+              visibleColumns.map((column) => (
+                <span
+                  key={column.key}
+                  data-project-metric-item={column.key}
+                  className={METRIC_GROUP_ITEM_CLASSNAME}
+                >
+                  <span className={METRIC_GROUP_LABEL_CLASSNAME}>{column.label}</span>
+                  {renderMetricChip(
+                    row.original.vulnerabilityStats[column.key],
+                    column.key,
+                    VULNERABILITY_METRIC_CHIP_CLASSNAMES[column.key],
+                  )}
+                </span>
+              ))
+            ) : (
+              <span className={METRIC_EMPTY_TEXT_CLASSNAME}>暂未发现漏洞</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "actions",

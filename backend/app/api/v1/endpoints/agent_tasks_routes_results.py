@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case
+from sqlalchemy import case, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -67,7 +67,12 @@ async def list_agent_findings(
             query = query.where(AgentFinding.severity == normalized_severity)
     
     if verified_only:
-        query = query.where(AgentFinding.is_verified == True)
+        query = query.where(
+            or_(
+                AgentFinding.is_verified == True,
+                AgentFinding.status == FindingStatus.VERIFIED,
+            )
+        )
     
     # 按严重程度排序
     severity_order = {
@@ -93,10 +98,21 @@ async def list_agent_findings(
     
     result = await db.execute(query)
     findings = result.scalars().all()
-    return _serialize_agent_findings(
+    serialized_findings = _serialize_agent_findings(
         findings,
         include_false_positive=include_false_positive,
     )
+    if verified_only:
+        serialized_findings = [
+            item
+            for item in serialized_findings
+            if (
+                getattr(item, "is_verified", False)
+                or str(getattr(item, "status", "") or "").strip().lower()
+                == FindingStatus.VERIFIED
+            )
+        ]
+    return serialized_findings
 
 @router.get("/{task_id}/findings/{finding_id}", response_model=AgentFindingResponse)
 async def get_agent_finding(
@@ -352,6 +368,7 @@ class AgentTreeNodeResponse(BaseModel):
     status: str = "created"
     result_summary: Optional[str] = None
     findings_count: int = 0
+    verified_findings_count: int = 0
     iterations: int = 0
     tokens_used: int = 0
     tool_calls: int = 0
@@ -370,7 +387,106 @@ class AgentTreeResponse(BaseModel):
     completed_agents: int = 0
     failed_agents: int = 0
     total_findings: int = 0
+    verified_total_findings: int = 0
     nodes: List[AgentTreeNodeResponse] = []
+
+
+def _normalize_finding_token(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _is_live_verified_finding(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+
+    status = _normalize_finding_token(item.get("status"))
+    authenticity = _normalize_finding_token(
+        item.get("authenticity") or item.get("verification_status")
+    )
+    verdict = _normalize_finding_token(item.get("verdict"))
+
+    if (
+        status == FindingStatus.FALSE_POSITIVE
+        or authenticity == FindingStatus.FALSE_POSITIVE
+        or verdict == FindingStatus.FALSE_POSITIVE
+    ):
+        return False
+
+    if bool(item.get("is_verified")):
+        return True
+
+    return (
+        status == FindingStatus.VERIFIED
+        or authenticity in {"confirmed", "likely"}
+        or verdict in {"confirmed", "likely"}
+    )
+
+
+def _resolve_live_finding_identity(item: Any) -> Optional[str]:
+    if not isinstance(item, dict):
+        return None
+
+    for key in (
+        "id",
+        "finding_id",
+        "verification_fingerprint",
+        "verification_todo_id",
+        "fingerprint",
+        "merge_key",
+    ):
+        value = str(item.get(key) or "").strip()
+        if value:
+            return f"{key}:{value}"
+
+    vulnerability_type = str(item.get("vulnerability_type") or "").strip()
+    file_path = str(item.get("file_path") or "").strip()
+    line_start = str(item.get("line_start") or item.get("line") or "").strip()
+    if vulnerability_type or file_path or line_start:
+        return f"fallback:{vulnerability_type}|{file_path}|{line_start}"
+    return None
+
+
+def _count_live_verified_findings(items: Any, *, dedupe: bool = False) -> int:
+    if not isinstance(items, list):
+        return 0
+
+    count = 0
+    seen: set[str] = set()
+    for item in items:
+        if not _is_live_verified_finding(item):
+            continue
+        if dedupe:
+            identity = _resolve_live_finding_identity(item)
+            if identity and identity in seen:
+                continue
+            if identity:
+                seen.add(identity)
+        count += 1
+    return count
+
+
+def _resolve_live_verified_counts(tree: Dict[str, Any]) -> Dict[str, int]:
+    nodes = tree.get("nodes", {})
+    if not isinstance(nodes, dict):
+        return {"__total__": 0}
+
+    counts: Dict[str, int] = {}
+    combined_findings: List[Dict[str, Any]] = []
+
+    for agent_id, node_data in nodes.items():
+        if not isinstance(node_data, dict):
+            counts[agent_id] = 0
+            continue
+        result = node_data.get("result")
+        findings = result.get("findings", []) if isinstance(result, dict) else []
+        counts[agent_id] = _count_live_verified_findings(findings, dedupe=False)
+        if isinstance(findings, list):
+            combined_findings.extend(
+                item for item in findings if isinstance(item, dict)
+            )
+
+    counts["__total__"] = _count_live_verified_findings(combined_findings, dedupe=True)
+    return counts
 
 
 @router.get("/{task_id}/agent-tree", response_model=AgentTreeResponse)
@@ -410,6 +526,8 @@ async def get_agent_tree(
         
         #  获取 root agent ID，用于判断是否是 Orchestrator
         root_agent_id = tree.get("root_agent_id")
+        live_verified_counts = _resolve_live_verified_counts(tree)
+        verified_total_findings = live_verified_counts.get("__total__", 0)
         
         # 构建节点列表
         nodes = []
@@ -431,8 +549,10 @@ async def get_agent_tree(
             # 这确保了正确显示聚合的 findings 总数
             if agent_id == root_agent_id:
                 findings_count = task.findings_count or 0
+                verified_findings_count = verified_total_findings
             else:
                 # 从结果中获取发现数量（对于子 agent）
+                verified_findings_count = live_verified_counts.get(agent_id, 0)
                 if node_data.get("result"):
                     result = node_data.get("result", {})
                     findings_count = len(result.get("findings", []))
@@ -447,6 +567,7 @@ async def get_agent_tree(
                 knowledge_modules=node_data.get("knowledge_modules", []),
                 status=node_data.get("status", "unknown"),
                 findings_count=findings_count,
+                verified_findings_count=verified_findings_count,
                 iterations=iterations,
                 tool_calls=tool_calls,
                 tokens_used=tokens_used,
@@ -462,6 +583,7 @@ async def get_agent_tree(
             completed_agents=stats.get("completed", 0),
             failed_agents=stats.get("failed", 0),
             total_findings=task.findings_count or 0,
+            verified_total_findings=verified_total_findings,
             nodes=nodes,
         )
     
@@ -478,6 +600,8 @@ async def get_agent_tree(
     if not db_nodes:
         return AgentTreeResponse(
             task_id=task_id,
+            total_findings=task.findings_count or 0,
+            verified_total_findings=task.verified_count or 0,
             nodes=[],
         )
     
@@ -487,6 +611,7 @@ async def get_agent_tree(
     running = 0
     completed = 0
     failed = 0
+    verified_total_findings = task.verified_count or 0
     
     for node in db_nodes:
         if node.parent_agent_id is None:
@@ -504,8 +629,10 @@ async def get_agent_tree(
         if node.parent_agent_id is None:
             # Root agent uses task's total findings
             node_findings_count = task.findings_count or 0
+            node_verified_findings_count = verified_total_findings
         else:
             node_findings_count = node.findings_count or 0
+            node_verified_findings_count = 0
         
         nodes.append(AgentTreeNodeResponse(
             id=node.id,
@@ -519,6 +646,7 @@ async def get_agent_tree(
             status=node.status,
             result_summary=node.result_summary,
             findings_count=node_findings_count,
+            verified_findings_count=node_verified_findings_count,
             iterations=node.iterations or 0,
             tokens_used=node.tokens_used or 0,
             tool_calls=node.tool_calls or 0,
@@ -535,6 +663,7 @@ async def get_agent_tree(
         completed_agents=completed,
         failed_agents=failed,
         total_findings=task.findings_count or 0,
+        verified_total_findings=verified_total_findings,
         nodes=nodes,
     )
 

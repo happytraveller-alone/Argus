@@ -405,18 +405,48 @@ async def get_dashboard_snapshot(
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(days=int(range_days))
 
-    projects_result = await db.execute(select(Project.id, Project.name))
+    projects_result = await db.execute(select(Project.id, Project.name, Project.source_type))
     project_rows = projects_result.all()
     project_name_map: Dict[str, str] = {
         str(project_id): str(project_name or "未知项目")
-        for project_id, project_name in project_rows
+        for project_id, project_name, _source_type in project_rows
+        if project_id
+    }
+    project_source_type_map: Dict[str, str] = {
+        str(project_id): str(source_type or "")
+        for project_id, _project_name, source_type in project_rows
         if project_id
     }
 
     project_info_result = await db.execute(
         select(ProjectInfo.project_id, ProjectInfo.language_info, ProjectInfo.status)
     )
-    project_info_rows = project_info_result.all()
+    project_info_rows = list(project_info_result.all())
+    project_info_project_ids = {
+        str(project_id or "")
+        for project_id, _language_info, _status in project_info_rows
+        if project_id
+    }
+    missing_project_info_ids = [
+        project_id
+        for project_id, source_type in project_source_type_map.items()
+        if project_id
+        and source_type == "zip"
+        and project_id not in project_info_project_ids
+    ]
+    for project_id in missing_project_info_ids:
+        project_info = await ensure_project_info_language_stats(
+            db,
+            project_id,
+            raise_on_error=False,
+        )
+        project_info_rows.append(
+            (
+                project_info.project_id,
+                project_info.language_info,
+                project_info.status,
+            )
+        )
 
     project_dominant_language_map: Dict[str, str] = {}
     project_language_loc_map: Dict[str, Dict[str, int]] = {}

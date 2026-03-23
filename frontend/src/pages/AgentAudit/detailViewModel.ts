@@ -1,12 +1,10 @@
 import { normalizeReturnToPath } from "../../shared/utils/findingRoute";
 import { getEstimatedTaskProgressPercent } from "../../features/tasks/services/taskProgress";
 import { resolveCweDisplay } from "../../shared/security/cweCatalog";
-export type FindingVerificationFilter = "all" | "verified" | "pending";
 
 export interface AgentAuditFindingFilters {
   keyword: string;
   severity: string;
-  verification: FindingVerificationFilter | string;
 }
 
 export interface TokenUsageAccumulator {
@@ -125,8 +123,6 @@ export interface FindingTableRow {
   confidence: number | null;
   confidenceLabel: string | null;
   confidenceScore: number;
-  verification: "verified" | "pending";
-  verificationLabel: string;
   filePath: string;
   line: number | null;
   location: string;
@@ -169,13 +165,11 @@ function toPositiveNumberOrNull(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function normalizeVerification(item: RealtimeFindingLike): "verified" | "pending" {
-  const progress = String(item.verification_progress || "").trim().toLowerCase();
-  if (progress === "verified") return "verified";
-  return item.is_verified ? "verified" : "pending";
+function hasDisplayableConfidence(item: RealtimeFindingLike): boolean {
+  return typeof item.confidence === "number" && Number.isFinite(item.confidence);
 }
 
-function isFalsePositiveFinding(item: RealtimeFindingLike): boolean {
+export function isFalsePositiveFinding(item: RealtimeFindingLike): boolean {
   const status = String(item.status || "").trim().toLowerCase();
   const authenticity = String(item.authenticity || "").trim().toLowerCase();
   const detailMode = String(item.detailMode || "").trim().toLowerCase();
@@ -186,6 +180,19 @@ function isFalsePositiveFinding(item: RealtimeFindingLike): boolean {
     authenticity === "false_positive" ||
     detailMode === "false_positive_reason" ||
     displaySeverity === "invalid"
+  );
+}
+
+export function isVerifiedFinding(item: RealtimeFindingLike): boolean {
+  if (item.is_verified) return true;
+  return String(item.verification_progress || "").trim().toLowerCase() === "verified";
+}
+
+export function isVisibleVerifiedVulnerability(item: RealtimeFindingLike): boolean {
+  return (
+    isVerifiedFinding(item) &&
+    !isFalsePositiveFinding(item) &&
+    hasDisplayableConfidence(item)
   );
 }
 
@@ -243,24 +250,6 @@ export function accumulateTokenUsage(
   };
 }
 
-export function countDisplayFindings(items: RealtimeFindingLike[]): {
-  total: number;
-  effective: number;
-  falsePositive: number;
-} {
-  let falsePositive = 0;
-  for (const item of items) {
-    if (isFalsePositiveFinding(item)) {
-      falsePositive += 1;
-    }
-  }
-  return {
-    total: items.length,
-    effective: Math.max(items.length - falsePositive, 0),
-    falsePositive,
-  };
-}
-
 export function buildStatsSummary(input: {
   task: TaskStatsLike | null;
   displayFindings: RealtimeFindingLike[];
@@ -268,17 +257,9 @@ export function buildStatsSummary(input: {
   now: Date;
 }): AgentAuditStatsSummary {
   const { task, displayFindings, tokenUsage, now } = input;
-  const counts = displayFindings.length
-    ? countDisplayFindings(displayFindings)
-    : {
-        effective: Math.max(toFiniteNumber(task?.findings_count), 0),
-        falsePositive: Math.max(toFiniteNumber(task?.false_positive_count), 0),
-        total: 0,
-      };
-
-  if (!displayFindings.length) {
-    counts.total = counts.effective + counts.falsePositive;
-  }
+  const verifiedTotal = displayFindings.length
+    ? displayFindings.filter((item) => isVisibleVerifiedVulnerability(item)).length
+    : Math.max(toFiniteNumber(task?.verified_count), 0);
 
   const startedAt = task?.started_at ? new Date(task.started_at).getTime() : Number.NaN;
   const completedAt = task?.completed_at ? new Date(task.completed_at).getTime() : Number.NaN;
@@ -307,9 +288,9 @@ export function buildStatsSummary(input: {
       now.getTime(),
     ),
     durationMs,
-    totalFindings: counts.total,
-    effectiveFindings: counts.effective,
-    falsePositiveFindings: counts.falsePositive,
+    totalFindings: verifiedTotal,
+    effectiveFindings: verifiedTotal,
+    falsePositiveFindings: 0,
     iterations: Math.max(toFiniteNumber(task?.total_iterations), 0),
     toolCalls: Math.max(toFiniteNumber(task?.tool_calls_count), 0),
     tokensTotal,
@@ -322,11 +303,7 @@ export function shouldResetFindingPage(
   previous: AgentAuditFindingFilters,
   next: AgentAuditFindingFilters,
 ): boolean {
-  return (
-    previous.keyword !== next.keyword ||
-    previous.severity !== next.severity ||
-    previous.verification !== next.verification
-  );
+  return previous.keyword !== next.keyword || previous.severity !== next.severity;
 }
 
 function getSeverityLabel(key: string): string {
@@ -394,7 +371,6 @@ function buildFindingRow(item: RealtimeFindingLike): FindingTableRow {
     typeof item.confidence === "number" && Number.isFinite(item.confidence)
       ? item.confidence
       : null;
-  const verification = normalizeVerification(item);
   const filePath = String(item.file_path || "").trim() || "-";
   const line = toPositiveNumberOrNull(item.line_start);
   const title = String(item.display_title || item.title || "未命名漏洞").trim() || "未命名漏洞";
@@ -410,8 +386,6 @@ function buildFindingRow(item: RealtimeFindingLike): FindingTableRow {
     confidence,
     confidenceLabel: getConfidenceLabel(confidence),
     confidenceScore: getConfidenceScore(confidence),
-    verification,
-    verificationLabel: verification === "verified" ? "已验证" : "待验证",
     filePath,
     line,
     location: getLocation(item),
@@ -429,7 +403,6 @@ export function buildFindingTableState(input: {
   const pageSize = Math.max(toFiniteNumber(input.pageSize) || 10, 1);
   const keyword = input.filters.keyword.trim().toLowerCase();
   const severityFilter = String(input.filters.severity || "all").trim().toLowerCase();
-  const verificationFilter = String(input.filters.verification || "all").trim().toLowerCase();
 
   const filteredRows = input.items
     .map((item) => buildFindingRow(item))
@@ -441,12 +414,9 @@ export function buildFindingTableState(input: {
         String(row.raw.cwe_id || "").toLowerCase().includes(keyword) ||
         String(row.raw.vulnerability_type || "").toLowerCase().includes(keyword) ||
         row.severityLabel.toLowerCase().includes(keyword) ||
-        row.verificationLabel.toLowerCase().includes(keyword) ||
         String(row.confidenceLabel || "").toLowerCase().includes(keyword);
       const matchedSeverity = severityFilter === "all" || row.severity === severityFilter;
-      const matchedVerification =
-        verificationFilter === "all" || row.verification === verificationFilter;
-      return matchedKeyword && matchedSeverity && matchedVerification;
+      return matchedKeyword && matchedSeverity;
     })
     .sort((left, right) => {
       if (left.severityScore !== right.severityScore) {

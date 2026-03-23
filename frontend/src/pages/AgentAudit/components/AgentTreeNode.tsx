@@ -42,6 +42,8 @@ export const AgentTreeNodeItem = memo(function AgentTreeNodeItem({
 
   const typeIcon = AGENT_TYPE_ICONS[node.agent_type] || <Bot className="w-3.5 h-3.5 text-muted-foreground" />;
   const typeBg = AGENT_TYPE_BG[node.agent_type] || 'bg-muted border-border';
+  const verifiedFindingsCount =
+    node.verified_findings_count ?? node.findings_count ?? 0;
 
   const indent = depth * 24;
 
@@ -146,9 +148,9 @@ export const AgentTreeNodeItem = memo(function AgentTreeNodeItem({
             </div>
           )}
 
-          {!node.parent_agent_id && node.findings_count > 0 && (
+          {!node.parent_agent_id && verifiedFindingsCount > 0 && (
             <Badge className="h-5 px-2 text-xs bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono font-bold">
-              {node.findings_count}
+              {verifiedFindingsCount}
             </Badge>
           )}
         </div>

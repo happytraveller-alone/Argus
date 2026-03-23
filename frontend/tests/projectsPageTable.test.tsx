@@ -85,9 +85,7 @@ test("ProjectsTable renders compact grouped headers and browse-state actions", a
 	assert.match(markup, /大小/);
 	assert.match(markup, /操作/);
 	// assert.match(markup, /执行任务/);
-	assert.match(markup, /发现漏洞/);
-	assert.match(markup, /已完成/);
-	assert.match(markup, /进行中/);
+	assert.match(markup, /发现潜在漏洞/);
 	assert.match(markup, /严重/);
 	assert.match(markup, /高危/);
 	assert.match(markup, /中危/);
@@ -107,30 +105,24 @@ test("ProjectsTable renders compact grouped headers and browse-state actions", a
 	assert.doesNotMatch(markup, /全选当前页/);
 	assert.doesNotMatch(markup, /选择项目/);
 	assert.match(markup, /<thead[\s\S]*?<\/thead>/);
-	assert.match(markup, /<th[^>]*>项目<\/th>/);
-	assert.match(markup, /<th[^>]*>大小<\/th>/);
+	assert.match(markup, /<th[^>]*>项目名称<\/th>/);
+	assert.match(markup, /<th[^>]*>项目大小<\/th>/);
 	// assert.match(markup, /<th[^>]*>执行任务<\/th>/);
-	assert.match(markup, /<th[^>]*>发现漏洞<\/th>/);
+	assert.match(markup, /<th[^>]*>发现潜在漏洞<\/th>/);
 	assert.match(markup, /<th[^>]*>操作<\/th>/);
 	assert.doesNotMatch(markup, /项目概览|体量概览|快捷操作|任务概览|风险概览/);
 	assert.doesNotMatch(markup, /名称与入口|规模与体量|详情 \/ 浏览 \/ 扫描|完成 \/ 运行中|按风险等级分布/);
-	assert.doesNotMatch(markup, /<th[^>]*>已完成<\/th>/);
-	assert.doesNotMatch(markup, /<th[^>]*>进行中<\/th>/);
 	assert.doesNotMatch(markup, /<th[^>]*>严重<\/th>/);
 	assert.doesNotMatch(markup, /<th[^>]*>高危<\/th>/);
 	assert.doesNotMatch(markup, /<th[^>]*>中危<\/th>/);
 	assert.doesNotMatch(markup, /<th[^>]*>低危<\/th>/);
 	assert.doesNotMatch(markup, /data-project-group-header=/);
 	assert.doesNotMatch(markup, /data-project-group-label=/);
-	assert.match(markup, /data-project-metric-group="execution"/);
 	assert.match(markup, /data-project-metric-group="vulnerabilities"/);
-	assert.match(markup, /data-project-metric-item="completed"/);
-	assert.match(markup, /data-project-metric-item="running"/);
 	assert.match(markup, /data-project-metric-item="critical"/);
 	assert.match(markup, /data-project-metric-item="high"/);
 	assert.match(markup, /data-project-metric-item="medium"/);
 	assert.match(markup, /data-project-metric-item="low"/);
-	assert.match(markup, /data-project-metric-tone="execution"/);
 	assert.match(markup, /data-project-metric-tone="critical"/);
 	assert.match(markup, /data-project-metric-tone="high"/);
 	assert.match(markup, /data-project-metric-tone="medium"/);
@@ -151,4 +143,76 @@ test("ProjectsTable renders compact grouped headers and browse-state actions", a
 	assert.ok(markup.indexOf("代码浏览") < markup.indexOf("创建扫描"));
 	assert.ok(!markup.includes(">状态<"));
 	assert.match(markup, /disabled/);
+});
+
+test("ProjectsTable hides zero-count vulnerability severities and shows empty placeholder", async () => {
+	const tableModule = await importOrFail<any>(
+		"../src/pages/projects/components/ProjectsTable.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(MemoryRouter, {}, createElement(tableModule.default, {
+			rows: [
+				{
+					id: "p1",
+					name: "Mixed Risk Project",
+					detailPath: "/projects/p1",
+					detailState: { from: "/projects" },
+					sizeText: "1.00 Mb",
+					vulnerabilityStats: {
+						critical: 0,
+						high: 2,
+						medium: 0,
+						low: 1,
+						total: 3,
+					},
+					executionStats: { completed: 0, running: 0 },
+					metricsStatus: "ready",
+					metricsStatusMessage: null,
+					actions: {
+						canCreateScan: true,
+						canBrowseCode: true,
+						browseCodePath: "/projects/p1/code-browser",
+						browseCodeState: { from: "/projects" },
+						browseCodeDisabledReason: null,
+					},
+				},
+				{
+					id: "p2",
+					name: "Empty Risk Project",
+					detailPath: "/projects/p2",
+					detailState: { from: "/projects" },
+					sizeText: "2.00 Mb",
+					vulnerabilityStats: {
+						critical: 0,
+						high: 0,
+						medium: 0,
+						low: 0,
+						total: 0,
+					},
+					executionStats: { completed: 0, running: 0 },
+					metricsStatus: "ready",
+					metricsStatusMessage: null,
+					actions: {
+						canCreateScan: true,
+						canBrowseCode: true,
+						browseCodePath: "/projects/p2/code-browser",
+						browseCodeState: { from: "/projects" },
+						browseCodeDisabledReason: null,
+					},
+				},
+			],
+			onCreateScan: () => {},
+		})),
+	);
+
+	assert.match(markup, /Mixed Risk Project[\s\S]*?高危[\s\S]*?>2</);
+	assert.match(markup, /Mixed Risk Project[\s\S]*?低危[\s\S]*?>1</);
+	assert.doesNotMatch(markup, /Mixed Risk Project[\s\S]*?严重[\s\S]*?>0</);
+	assert.doesNotMatch(markup, /Mixed Risk Project[\s\S]*?中危[\s\S]*?>0</);
+	assert.match(markup, /Empty Risk Project[\s\S]*?暂未发现漏洞/);
+	assert.doesNotMatch(markup, /Empty Risk Project[\s\S]*?严重/);
+	assert.doesNotMatch(markup, /Empty Risk Project[\s\S]*?高危/);
+	assert.doesNotMatch(markup, /Empty Risk Project[\s\S]*?中危/);
+	assert.doesNotMatch(markup, /Empty Risk Project[\s\S]*?低危/);
 });

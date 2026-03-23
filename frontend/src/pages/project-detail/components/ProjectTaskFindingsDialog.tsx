@@ -360,7 +360,10 @@ export default function ProjectTaskFindingsDialog({
 							)
 						: normalizeAgentFindings(
 								taskId,
-								await getAgentFindings(taskId),
+								await getAgentFindings(taskId, {
+									is_verified: true,
+									include_false_positive: false,
+								}),
 							).map((item) => ({
 								...item,
 								taskCategory,
@@ -531,7 +534,7 @@ export default function ProjectTaskFindingsDialog({
 						      任务 ID：{taskId}
 						    </span>
 						    <span className="inline-flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-200">
-						      漏洞共 {allRows.length.toLocaleString()} 条
+						      已验证漏洞共 {allRows.length.toLocaleString()} 条
 						    </span>
 						  </div>
 						</div>
@@ -559,7 +562,7 @@ export default function ProjectTaskFindingsDialog({
 							loading={status === "loading"}
 							error={status === "failed" ? errorMessage || "加载漏洞失败" : undefined}
 							emptyState={{
-								title: allRows.length === 0 ? "暂无漏洞" : "暂无符合条件的漏洞",
+								title: allRows.length === 0 ? "暂无已验证漏洞" : "暂无符合条件的漏洞",
 							}}
 							toolbar={{
 								searchPlaceholder: "搜索漏洞类型或位置",

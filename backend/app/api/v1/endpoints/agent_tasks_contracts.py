@@ -107,6 +107,10 @@ class AgentTaskResponse(BaseModel):
     high_count: int = 0
     medium_count: int = 0
     low_count: int = 0
+    verified_critical_count: int = 0
+    verified_high_count: int = 0
+    verified_medium_count: int = 0
+    verified_low_count: int = 0
     
     # 评分
     quality_score: float = 0.0

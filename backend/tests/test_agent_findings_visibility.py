@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api.v1.endpoints.agent_tasks import list_agent_findings
+from app.api.v1.endpoints.agent_tasks_routes_results import list_agent_findings
 from app.models.agent_task import AgentTask
 from app.models.project import Project
 import app.models.opengrep  # noqa: F401
@@ -144,3 +144,186 @@ async def test_list_agent_findings_hides_false_positive_by_default():
     assert false_positive.verification_evidence == "cannot reproduce"
     assert false_positive.verification_todo_id == "todo-fp-1"
     assert false_positive.verification_fingerprint == "fp-fp-1"
+
+
+@pytest.mark.asyncio
+async def test_list_agent_findings_verified_only_excludes_pending_and_false_positive():
+    task_id = "task-verified"
+    now = datetime(2026, 2, 12, 9, 0, 0, tzinfo=timezone.utc)
+
+    verified_finding = SimpleNamespace(
+        id="finding-verified",
+        task_id=task_id,
+        vulnerability_type="xss",
+        severity="high",
+        title="verified issue",
+        description="verified",
+        file_path="/tmp/audit-workspace/app.py",
+        line_start=10,
+        line_end=11,
+        code_snippet="dangerous()",
+        code_context="line9\nline10\nline11",
+        is_verified=True,
+        ai_confidence=0.92,
+        status="verified",
+        suggestion="fix",
+        has_poc=False,
+        poc_code=None,
+        poc_description=None,
+        poc_steps=None,
+        verification_result={"authenticity": "confirmed"},
+        created_at=now,
+    )
+    pending_finding = SimpleNamespace(
+        id="finding-pending",
+        task_id=task_id,
+        vulnerability_type="idor",
+        severity="medium",
+        title="pending issue",
+        description="pending",
+        file_path="/tmp/audit-workspace/app.py",
+        line_start=20,
+        line_end=20,
+        code_snippet="pending()",
+        code_context="line19\nline20\nline21",
+        is_verified=False,
+        ai_confidence=0.72,
+        status="pending",
+        suggestion=None,
+        has_poc=False,
+        poc_code=None,
+        poc_description=None,
+        poc_steps=None,
+        verification_result={"authenticity": "likely"},
+        created_at=now,
+    )
+    false_positive_finding = SimpleNamespace(
+        id="finding-fp",
+        task_id=task_id,
+        vulnerability_type="xss",
+        severity="low",
+        title="false positive issue",
+        description="false positive",
+        file_path="/tmp/audit-workspace/app.py",
+        line_start=30,
+        line_end=30,
+        code_snippet="safe()",
+        code_context="line29\nline30\nline31",
+        is_verified=False,
+        ai_confidence=0.1,
+        status="false_positive",
+        suggestion=None,
+        has_poc=False,
+        poc_code=None,
+        poc_description=None,
+        poc_steps=None,
+        verification_result={"authenticity": "false_positive"},
+        created_at=now,
+    )
+
+    db = AsyncMock()
+
+    async def get_side_effect(model, _id):
+        if model is AgentTask:
+            return SimpleNamespace(id=task_id, project_id="project-1")
+        if model is Project:
+            return SimpleNamespace(id="project-1")
+        return None
+
+    db.get = AsyncMock(side_effect=get_side_effect)
+    db.execute = AsyncMock(
+        return_value=_ScalarListResult(
+            [verified_finding, pending_finding, false_positive_finding]
+        )
+    )
+
+    results = await list_agent_findings(
+        task_id=task_id,
+        verified_only=True,
+        include_false_positive=False,
+        skip=0,
+        limit=50,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert [item.id for item in results] == ["finding-verified"]
+
+
+@pytest.mark.asyncio
+async def test_list_agent_findings_verified_only_keeps_status_verified_items():
+    task_id = "task-status-verified"
+    now = datetime(2026, 2, 12, 9, 0, 0, tzinfo=timezone.utc)
+
+    likely_verified_finding = SimpleNamespace(
+        id="finding-likely",
+        task_id=task_id,
+        vulnerability_type="ssrf",
+        severity="medium",
+        title="likely issue",
+        description="likely",
+        file_path="/tmp/audit-workspace/app.py",
+        line_start=40,
+        line_end=41,
+        code_snippet="fetch_remote()",
+        code_context="line39\nline40\nline41",
+        is_verified=False,
+        ai_confidence=0.61,
+        status="verified",
+        suggestion="fix",
+        has_poc=False,
+        poc_code=None,
+        poc_description=None,
+        poc_steps=None,
+        verification_result={"authenticity": "likely"},
+        created_at=now,
+    )
+    pending_finding = SimpleNamespace(
+        id="finding-pending",
+        task_id=task_id,
+        vulnerability_type="idor",
+        severity="medium",
+        title="pending issue",
+        description="pending",
+        file_path="/tmp/audit-workspace/app.py",
+        line_start=20,
+        line_end=20,
+        code_snippet="pending()",
+        code_context="line19\nline20\nline21",
+        is_verified=False,
+        ai_confidence=0.72,
+        status="pending",
+        suggestion=None,
+        has_poc=False,
+        poc_code=None,
+        poc_description=None,
+        poc_steps=None,
+        verification_result={"authenticity": "likely"},
+        created_at=now,
+    )
+
+    db = AsyncMock()
+
+    async def get_side_effect(model, _id):
+        if model is AgentTask:
+            return SimpleNamespace(id=task_id, project_id="project-1")
+        if model is Project:
+            return SimpleNamespace(id="project-1")
+        return None
+
+    db.get = AsyncMock(side_effect=get_side_effect)
+    db.execute = AsyncMock(
+        return_value=_ScalarListResult([likely_verified_finding, pending_finding])
+    )
+
+    results = await list_agent_findings(
+        task_id=task_id,
+        verified_only=True,
+        include_false_positive=False,
+        skip=0,
+        limit=50,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert [item.id for item in results] == ["finding-likely"]

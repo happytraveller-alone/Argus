@@ -1,7 +1,7 @@
 """Shared access and response helpers for agent task routes."""
 
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 from fastapi import HTTPException
 
@@ -17,11 +17,15 @@ def ensure_project_access(task: AgentTask, project: Project | None) -> Project:
     return project
 
 
-def build_agent_task_response(task: AgentTask) -> AgentTaskResponse:
+def build_agent_task_response(
+    task: AgentTask,
+    verified_severity_counts: Mapping[str, int] | None = None,
+) -> AgentTaskResponse:
     progress = float(task.progress_percentage) if hasattr(task, "progress_percentage") else 0.0
     total_iterations = int(task.total_iterations or 0)
     tool_calls_count = int(task.tool_calls_count or 0)
     tokens_used = int(task.tokens_used or 0)
+    verified_counts = dict(verified_severity_counts or {})
 
     orchestrator = _running_orchestrators.get(task.id)
     if orchestrator and task.status in (
@@ -59,6 +63,10 @@ def build_agent_task_response(task: AgentTask) -> AgentTaskResponse:
         high_count=task.high_count or 0,
         medium_count=task.medium_count or 0,
         low_count=task.low_count or 0,
+        verified_critical_count=int(verified_counts.get("critical", 0) or 0),
+        verified_high_count=int(verified_counts.get("high", 0) or 0),
+        verified_medium_count=int(verified_counts.get("medium", 0) or 0),
+        verified_low_count=int(verified_counts.get("low", 0) or 0),
         quality_score=float(task.quality_score or 0.0),
         security_score=float(task.security_score) if task.security_score is not None else None,
         progress_percentage=progress,

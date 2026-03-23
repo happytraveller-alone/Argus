@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Literal, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Literal, cast
 from fastapi import (
     APIRouter,
     Depends,
@@ -597,6 +597,76 @@ async def _get_or_prepare_project_info(db: AsyncSession, project_id: str) -> Pro
         project_id=project_id,
         created_at=datetime.now(timezone.utc),
     )
+
+
+def _empty_language_info_json() -> str:
+    return '{"total": 0, "total_files": 0, "languages": {}}'
+
+
+async def ensure_project_info_language_stats(
+    db: AsyncSession,
+    project_id: str,
+    *,
+    raise_on_error: bool = True,
+    cloc_loader: Optional[Callable[[ProjectInfo], Awaitable[str]]] = None,
+) -> ProjectInfo:
+    project_info_result = await db.execute(
+        select(ProjectInfo).where(ProjectInfo.project_id == project_id)
+    )
+    project_info = project_info_result.scalars().first()
+    empty_language_info = _empty_language_info_json()
+
+    if project_info and project_info.status == "completed" and project_info.language_info:
+        project_info.description = project_info.description or ""
+        return project_info
+
+    if project_info and project_info.status == "pending":
+        project_info.language_info = project_info.language_info or empty_language_info
+        project_info.description = project_info.description or ""
+        return project_info
+
+    if not project_info:
+        project_info = ProjectInfo(
+            project_id=project_id,
+            status="pending",
+            created_at=datetime.now(timezone.utc),
+            language_info=empty_language_info,
+        )
+        db.add(project_info)
+        await db.commit()
+        await db.refresh(project_info)
+
+    try:
+        project_info.status = "pending"
+        db.add(project_info)
+        await db.commit()
+        await db.refresh(project_info)
+
+        cloc_result = await (cloc_loader or get_cloc_stats)(project_info)
+        project_info.language_info = cloc_result or empty_language_info
+        project_info.description = project_info.description or ""
+        project_info.status = "completed"
+        db.add(project_info)
+        await db.commit()
+        await db.refresh(project_info)
+        return project_info
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取项目信息失败: {e}", exc_info=True)
+        try:
+            project_info.status = "failed"
+            project_info.language_info = project_info.language_info or empty_language_info
+            project_info.description = project_info.description or ""
+            db.add(project_info)
+            await db.commit()
+            await db.refresh(project_info)
+        except Exception:
+            logger.exception("保存失败状态时出错")
+
+        if raise_on_error:
+            raise HTTPException(status_code=500, detail=f"获取项目信息失败: {str(e)}")
+        return project_info
 
 
 def _serialize_programming_languages(
@@ -1627,16 +1697,28 @@ def _parse_dashboard_language_info(payload: Any) -> Dict[str, Dict[str, int]]:
 
     languages = parsed.get("languages")
     if not isinstance(languages, dict):
-        return {}
+        languages = parsed
 
     normalized: Dict[str, Dict[str, int]] = {}
     for raw_language, stats in languages.items():
         language = str(raw_language or "").strip() or "unknown"
+        if raw_language in {"total", "total_files", "status", "description"}:
+            continue
+        if isinstance(stats, (int, float)):
+            normalized[language] = {
+                "loc_number": _to_non_negative_int(stats),
+                "files_count": 0,
+            }
+            continue
         if not isinstance(stats, dict):
             continue
         normalized[language] = {
-            "loc_number": _to_non_negative_int(stats.get("loc_number")),
-            "files_count": _to_non_negative_int(stats.get("files_count")),
+            "loc_number": _to_non_negative_int(
+                stats.get("loc_number", stats.get("code", stats.get("lines")))
+            ),
+            "files_count": _to_non_negative_int(
+                stats.get("files_count", stats.get("file_count", stats.get("files")))
+            ),
         }
     return normalized
 

@@ -99,6 +99,7 @@ export interface AgentTreeResponse {
   completed_agents: number;
   failed_agents: number;
   total_findings: number;
+  verified_total_findings: number;
   nodes: AgentTreeNode[];
 }
 
@@ -209,7 +210,6 @@ export interface AgentTreePanelProps {
 export interface FindingsViewFilters {
   keyword: string;
   severity: string;
-  verification: string;
   showFiltered?: boolean;
 }
 

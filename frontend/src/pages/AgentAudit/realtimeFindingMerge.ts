@@ -82,6 +82,8 @@ export function mergeRealtimeFindingsBatch(
 
     const preferIncoming = options.source === "db";
     const verificationProgress =
+      existing.is_verified === true ||
+      item.is_verified === true ||
       existing.verification_progress === "verified" ||
       item.verification_progress === "verified"
         ? "verified"

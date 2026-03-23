@@ -10,13 +10,14 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import case, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.api import deps
 from app.db.session import async_session_factory, get_db
 from app.api.v1.endpoints.static_tasks_shared import _release_request_db_session
-from app.models.agent_task import AgentEvent, AgentTask, AgentTaskPhase, AgentTaskStatus
+from app.models.agent_task import AgentEvent, AgentFinding, AgentTask, AgentTaskPhase, AgentTaskStatus
 from app.models.project import Project
 from app.models.user import User
 from app.services.project_metrics import project_metrics_refresher
@@ -29,6 +30,43 @@ from .agent_tasks_runtime import *
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _load_verified_severity_counts(
+    db: AsyncSession,
+    task_ids: List[str],
+) -> Dict[str, Dict[str, int]]:
+    if not task_ids:
+        return {}
+
+    normalized_status = func.lower(func.coalesce(AgentFinding.status, ""))
+    normalized_verdict = func.lower(func.coalesce(AgentFinding.verdict, ""))
+    rows = await db.execute(
+        select(
+            AgentFinding.task_id,
+            func.sum(case((func.lower(AgentFinding.severity) == "critical", 1), else_=0)).label("critical"),
+            func.sum(case((func.lower(AgentFinding.severity) == "high", 1), else_=0)).label("high"),
+            func.sum(case((func.lower(AgentFinding.severity) == "medium", 1), else_=0)).label("medium"),
+            func.sum(case((func.lower(AgentFinding.severity) == "low", 1), else_=0)).label("low"),
+        )
+        .where(
+            AgentFinding.task_id.in_(task_ids),
+            AgentFinding.is_verified.is_(True),
+            normalized_status != "false_positive",
+            normalized_verdict != "false_positive",
+        )
+        .group_by(AgentFinding.task_id)
+    )
+
+    counts_by_task: Dict[str, Dict[str, int]] = {}
+    for task_id, critical, high, medium, low in rows.fetchall():
+        counts_by_task[str(task_id)] = {
+            "critical": int(critical or 0),
+            "high": int(high or 0),
+            "medium": int(medium or 0),
+            "low": int(low or 0),
+        }
+    return counts_by_task
 
 @router.post("/", response_model=AgentTaskResponse)
 async def create_agent_task(
@@ -143,7 +181,17 @@ async def list_agent_tasks(
     for task in tasks:
         task.verification_level = _normalize_verification_level(task.verification_level)
 
-    return tasks
+    verified_severity_counts = await _load_verified_severity_counts(
+        db,
+        [task.id for task in tasks],
+    )
+    return [
+        build_agent_task_response(
+            task,
+            verified_severity_counts=verified_severity_counts.get(task.id),
+        )
+        for task in tasks
+    ]
 
 
 @router.get("/{task_id}", response_model=AgentTaskResponse)
@@ -186,6 +234,7 @@ async def get_agent_task(
             tokens_used = max(tokens_used, int(runtime_stats["tokens_used"]))
         
         # 手动构建响应数据
+        verified_severity_counts = await _load_verified_severity_counts(db, [task.id])
         response_data = {
             "id": task.id,
             "project_id": task.project_id,
@@ -211,6 +260,10 @@ async def get_agent_task(
             "high_count": task.high_count or 0,
             "medium_count": task.medium_count or 0,
             "low_count": task.low_count or 0,
+            "verified_critical_count": verified_severity_counts.get(task.id, {}).get("critical", 0),
+            "verified_high_count": verified_severity_counts.get(task.id, {}).get("high", 0),
+            "verified_medium_count": verified_severity_counts.get(task.id, {}).get("medium", 0),
+            "verified_low_count": verified_severity_counts.get(task.id, {}).get("low", 0),
             "quality_score": float(task.quality_score or 0.0),
             "security_score": float(task.security_score) if task.security_score is not None else None,
             "progress_percentage": progress,

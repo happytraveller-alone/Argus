@@ -5,8 +5,6 @@ import {
   Bug,
   Clock3,
   FolderOpen,
-  Repeat,
-  Wrench,
   TrendingUp,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -74,7 +72,7 @@ export const StatsPanel = memo(function StatsPanel({ summary, projectName }: Sta
         />
         <MetricCard
           icon={<Bug className="h-4 w-4" />}
-          label="漏洞数量"
+          label="已验证漏洞"
           value={summary.totalFindings.toLocaleString()}
           subtext=""
         />

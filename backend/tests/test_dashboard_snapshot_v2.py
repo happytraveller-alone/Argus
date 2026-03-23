@@ -15,10 +15,53 @@ class _RowsResult:
         return list(self._rows)
 
 
+def test_parse_dashboard_language_info_accepts_legacy_language_maps():
+    parsed = projects_insights._parse_dashboard_language_info(
+        {
+            "Python": 10,
+            "TypeScript": {"loc_number": 25, "file_count": 2},
+            "Shell": {"code": 7, "files": 1},
+        }
+    )
+
+    assert parsed == {
+        "Python": {"loc_number": 10, "files_count": 0},
+        "TypeScript": {"loc_number": 25, "files_count": 2},
+        "Shell": {"loc_number": 7, "files_count": 1},
+    }
+
+
+def _build_empty_project_info_side_effect():
+    project_rows = [("p1", "Alpha", "zip")]
+    project_info_rows = []
+    empty_rows = _RowsResult([])
+
+    return [
+        _RowsResult(project_rows),
+        _RowsResult(project_info_rows),
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+    ]
+
+
 def _build_execute_side_effect(now: datetime):
     project_rows = [
-        ("p1", "Alpha"),
-        ("p2", "Beta"),
+        ("p1", "Alpha", "zip"),
+        ("p2", "Beta", "zip"),
     ]
 
     project_info_rows = [
@@ -238,7 +281,7 @@ def _build_execute_side_effect(now: datetime):
 
 def _build_grouped_static_recent_tasks_side_effect(now: datetime):
     project_rows = [
-        ("p1", "Alpha"),
+        ("p1", "Alpha", "zip"),
     ]
 
     project_info_rows = [
@@ -481,3 +524,57 @@ async def test_dashboard_snapshot_v2_groups_multi_engine_static_recent_tasks(mon
     assert "gitleaksTaskId=gl-batch" in recent_task.detail_path
     assert "banditTaskId=ba-batch" in recent_task.detail_path
     assert recent_task.detail_path != "/tasks/static"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_snapshot_v2_backfills_missing_project_info_for_language_loc(
+    monkeypatch,
+):
+    db = SimpleNamespace(
+        execute=AsyncMock(side_effect=_build_empty_project_info_side_effect())
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "count_high_confidence_findings_by_task_ids",
+        AsyncMock(return_value={}),
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_get_yasa_rule_total",
+        AsyncMock(return_value=0),
+    )
+    backfill_mock = AsyncMock(
+        return_value=SimpleNamespace(
+            project_id="p1",
+            status="completed",
+            language_info={
+                "total": 42,
+                "total_files": 2,
+                "languages": {
+                    "Python": {"loc_number": 42, "files_count": 2, "proportion": 1.0},
+                },
+            },
+        )
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "ensure_project_info_language_stats",
+        backfill_mock,
+        raising=False,
+    )
+
+    snapshot = await projects.get_dashboard_snapshot(
+        top_n=10,
+        range_days=14,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    backfill_mock.assert_awaited_once()
+    assert snapshot.language_loc_distribution == [
+        projects_insights.DashboardLanguageLocItem(
+            language="Python",
+            loc_number=42,
+            project_count=1,
+        )
+    ]

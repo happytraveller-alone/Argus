@@ -75,10 +75,6 @@ import {
   normalizeSeverityKey,
   toZhAgentName,
 } from "./localization";
-import {
-  hasAnyVerifiedFinding,
-  shouldAutoApplyVerifiedFilter,
-} from "./findingsFilterUtils";
 import type {
   BootstrapInputsSummary,
   DetailViewState,
@@ -95,6 +91,7 @@ import {
   resolveAgentAuditDetailTitle,
   buildStatsSummary,
   createTokenUsageAccumulator,
+  isVisibleVerifiedVulnerability,
 } from "./detailViewModel";
 import { getTerminalStatusTransitionPolicy } from "./terminalStatePolicy";
 import {
@@ -171,7 +168,6 @@ type HomeScanCard = {
 const createDefaultFindingsFilters = (): FindingsViewFilters => ({
   keyword: "",
   severity: "all",
-  verification: "all",
 });
 
 type UnifiedAgentEvent = {
@@ -551,10 +547,6 @@ function AgentAuditPageContent() {
   const [findingsFilters, setFindingsFilters] = useState<FindingsViewFilters>(() =>
     createDefaultFindingsFilters(),
   );
-  const [hasAutoAppliedVerifiedFilter, setHasAutoAppliedVerifiedFilter] =
-    useState(false);
-  const [userOverrideVerificationFilter, setUserOverrideVerificationFilter] =
-    useState(false);
   // NOTE: bootstrap (opengrep) input UI is currently not shown in the new realtime layout,
   // but we keep the plumbing in place for future toggles.
   const [bootstrapInputsSummary, setBootstrapInputsSummary] =
@@ -575,10 +567,6 @@ function AgentAuditPageContent() {
   const [highlightedLogId, setHighlightedLogId] = useState<string | null>(null);
   const [, setHighlightedFindingId] = useState<string | null>(null);
   const [, setHighlightedAgentId] = useState<string | null>(null);
-  useEffect(() => {
-    setHasAutoAppliedVerifiedFilter(false);
-    setUserOverrideVerificationFilter(false);
-  }, [task?.id, taskId]);
 
   // Realtime panels state
   const [realtimeFindings, setRealtimeFindings] = useState<RealtimeMergedFindingItem[]>([]);
@@ -629,6 +617,39 @@ function AgentAuditPageContent() {
   const [historicalEventsLoaded, setHistoricalEventsLoaded] =
     useState<boolean>(false);
   const { logoSrc, cycleLogoVariant } = useLogoVariant();
+  const persistedDisplayFindings = useMemo(() => {
+    return findings
+      .map(agentFindingToRealtimeItem)
+      .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
+  }, [findings]);
+  const verifiedPersistedDisplayFindings = useMemo(
+    () =>
+      persistedDisplayFindings.filter((item) => isVisibleVerifiedVulnerability(item)),
+    [persistedDisplayFindings],
+  );
+  const verifiedRealtimeFindings = useMemo(
+    () => realtimeFindings.filter((item) => isVisibleVerifiedVulnerability(item)),
+    [realtimeFindings],
+  );
+  const visibleVerifiedFindings = useMemo(
+    () =>
+      mergeRealtimeFindingsBatch(verifiedRealtimeFindings, verifiedPersistedDisplayFindings, {
+        source: "db",
+      }),
+    [verifiedPersistedDisplayFindings, verifiedRealtimeFindings],
+  );
+  const statsSummary = useMemo(
+    () =>
+      task
+        ? buildStatsSummary({
+          task,
+          displayFindings: visibleVerifiedFindings,
+          tokenUsage,
+          now: statsNow,
+        })
+        : null,
+    [statsNow, task, tokenUsage, visibleVerifiedFindings],
+  );
   const selectedLogItem = useMemo(
     () =>
       detailDialog?.type === "log"
@@ -641,22 +662,16 @@ function AgentAuditPageContent() {
       if (detailDialog?.type !== "finding") return null;
       const persistedFinding = findings.find((item) => item.id === detailDialog.id);
       if (persistedFinding) return persistedFinding;
-      const realtimeFinding = realtimeFindings.find((item) => item.id === detailDialog.id);
+      const realtimeFinding = visibleVerifiedFindings.find((item) => item.id === detailDialog.id);
       return realtimeFinding ? toDialogFinding(realtimeFinding) : null;
     },
-    [detailDialog, findings, realtimeFindings],
+    [detailDialog, findings, visibleVerifiedFindings],
   );
   const handleFindingsFiltersChange = useCallback(
-    (nextFilters: FindingsViewFilters, options?: FindingsFiltersChangeOptions) => {
-      const source = options?.source ?? "user";
-      setFindingsFilters((previous) => {
-        if (source === "user" && previous.verification !== nextFilters.verification) {
-          setUserOverrideVerificationFilter(true);
-        }
-        return nextFilters;
-      });
+    (nextFilters: FindingsViewFilters, _options?: FindingsFiltersChangeOptions) => {
+      setFindingsFilters(nextFilters);
     },
-    [setUserOverrideVerificationFilter],
+    [],
   );
   const selectedAgentNode = useMemo(
     () =>
@@ -684,31 +699,6 @@ function AgentAuditPageContent() {
     });
   }, [location.search, task?.description, task?.name]);
   const currentRoute = `${location.pathname}${location.search}`;
-  const persistedDisplayFindings = useMemo(() => {
-    return findings
-      .map(agentFindingToRealtimeItem)
-      .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
-  }, [findings]);
-  const hasVerifiedFinding = useMemo(
-    () =>
-      hasAnyVerifiedFinding({
-        persisted: persistedDisplayFindings,
-        realtime: realtimeFindings,
-      }),
-    [persistedDisplayFindings, realtimeFindings],
-  );
-  const statsSummary = useMemo(
-    () =>
-      task
-        ? buildStatsSummary({
-          task,
-          displayFindings: persistedDisplayFindings,
-          tokenUsage,
-          now: statsNow,
-        })
-        : null,
-    [persistedDisplayFindings, statsNow, task, tokenUsage],
-  );
   const homeScanCards: HomeScanCard[] = useMemo(
     () => [
       {
@@ -741,26 +731,6 @@ function AgentAuditPageContent() {
     ],
     [],
   );
-  useEffect(() => {
-    const shouldApply = shouldAutoApplyVerifiedFilter({
-      hasVerifiedFinding,
-      userOverride: userOverrideVerificationFilter,
-      alreadyApplied: hasAutoAppliedVerifiedFilter,
-      currentVerificationFilter: findingsFilters.verification,
-    });
-    if (!shouldApply) return;
-    handleFindingsFiltersChange(
-      { ...findingsFilters, verification: "verified" },
-      { source: "system" },
-    );
-    setHasAutoAppliedVerifiedFilter(true);
-  }, [
-    hasVerifiedFinding,
-    userOverrideVerificationFilter,
-    hasAutoAppliedVerifiedFilter,
-    findingsFilters,
-    handleFindingsFiltersChange,
-  ]);
   const currentPhaseLabel = useMemo(() => {
     const phaseKey = String(task?.current_phase || "")
       .trim()
@@ -1080,7 +1050,7 @@ function AgentAuditPageContent() {
       if (!taskId) return;
       if (
         findings.some((item) => item.id === detailId) ||
-        realtimeFindings.some((item) => item.id === detailId)
+        visibleVerifiedFindings.some((item) => item.id === detailId)
       ) {
         navigate(
           buildAgentFindingDetailRoute({
@@ -1113,9 +1083,9 @@ function AgentAuditPageContent() {
     location.search,
     logs,
     navigate,
-    realtimeFindings,
     taskId,
     treeNodes,
+    visibleVerifiedFindings,
   ]);
 
   // ============ Data Loading ============
@@ -1173,7 +1143,8 @@ function AgentAuditPageContent() {
       setFindingsError(null);
       try {
         const data = await getAgentFindings(taskId, {
-          include_false_positive: true,
+          is_verified: true,
+          include_false_positive: false,
         });
         setFindings(data);
       } catch (err) {
@@ -3289,7 +3260,7 @@ function AgentAuditPageContent() {
             <div className="h-full">
               <RealtimeFindingsPanel
                 taskId={task?.id || ""}
-                items={persistedDisplayFindings}
+                items={visibleVerifiedFindings}
                 isRunning={isRunning}
                 currentPhase={task?.current_phase ?? null}
                 filters={findingsFilters}

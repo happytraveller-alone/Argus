@@ -37,6 +37,10 @@ export interface AgentTask {
   high_count: number;
   medium_count: number;
   low_count: number;
+  verified_critical_count?: number;
+  verified_high_count?: number;
+  verified_medium_count?: number;
+  verified_low_count?: number;
 
   // 评分
   quality_score: number;
@@ -434,6 +438,7 @@ export interface AgentTreeNode {
   status: "created" | "running" | "completed" | "failed" | "waiting";
   result_summary: string | null;
   findings_count: number;
+  verified_findings_count: number;
   iterations: number;
   tokens_used: number;
   tool_calls: number;
@@ -449,6 +454,7 @@ export interface AgentTreeResponse {
   completed_agents: number;
   failed_agents: number;
   total_findings: number;
+  verified_total_findings: number;
   nodes: AgentTreeNode[];
 }
 

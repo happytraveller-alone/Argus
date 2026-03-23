@@ -125,148 +125,6 @@ function getConfidenceBadgeClass(confidenceLabel: string): string {
 	return "border-border bg-muted text-muted-foreground";
 }
 
-type ProcessingStatusKey =
-	| "false_positive"
-	| "verified"
-	| "verification"
-	| "analysis"
-	| "unscouted";
-
-function getProcessingStatusClassName(status: ProcessingStatusKey): string {
-	if (status === "false_positive") {
-		return "border-zinc-500/30 bg-zinc-500/15 text-zinc-300";
-	}
-	if (status === "verified") {
-		return "border-emerald-500/30 bg-emerald-500/15 text-emerald-300";
-	}
-	if (status === "verification") {
-		return "border-sky-500/30 bg-sky-500/15 text-sky-300";
-	}
-	if (status === "analysis") {
-		return "border-amber-500/30 bg-amber-500/15 text-amber-300";
-	}
-	return "border-border bg-muted text-muted-foreground";
-}
-
-function normalizeProcessingToken(value: unknown): string {
-	return String(value || "").trim().toLowerCase().replace(/[-\s]+/g, "_");
-}
-
-function resolveStatusKeyFromBackendToken(token: string): ProcessingStatusKey | null {
-	if (
-		token === "false_positive" ||
-		token === "invalid" ||
-		token === "误报"
-	) {
-		return "false_positive";
-	}
-	if (
-		token === "verified" ||
-		token === "confirmed" ||
-		token === "likely" ||
-		token === "fixed" ||
-		token === "wont_fix" ||
-		token === "duplicate" ||
-		token === "resolved" ||
-		token === "closed" ||
-		token === "已验证"
-	) {
-		return "verified";
-	}
-	if (
-		token === "new" ||
-		token === "running" ||
-		token === "pending" ||
-		token === "pending_verification" ||
-		token === "verifying" ||
-		token === "verification" ||
-		token === "uncertain" ||
-		token === "needs_review"
-	) {
-		return "verification";
-	}
-	if (token === "analyzing" || token === "analysis") {
-		return "analysis";
-	}
-	if (token === "unscouted" || token === "not_started") {
-		return "unscouted";
-	}
-	return null;
-}
-
-function defaultStatusLabel(status: ProcessingStatusKey): string {
-	if (status === "false_positive") return "误报";
-	if (status === "verified") return "已验证";
-	if (status === "verification") return "验证";
-	if (status === "analysis") return "分析";
-	return "未侦察";
-}
-
-function resolveBackendProcessingStatus(
-	item: RealtimeMergedFindingItem,
-): { label: string; className: string } | null {
-	const statusToken = normalizeProcessingToken(item.status);
-	const verificationStatusToken = normalizeProcessingToken(item.verification_status);
-	const statusKey =
-		resolveStatusKeyFromBackendToken(statusToken) ||
-		resolveStatusKeyFromBackendToken(verificationStatusToken);
-
-	if (!statusToken && !verificationStatusToken) {
-		return null;
-	}
-	if (!statusKey) {
-		return {
-			label: "验证",
-			className: getProcessingStatusClassName("verification"),
-		};
-	}
-	return {
-		label: defaultStatusLabel(statusKey),
-		className: getProcessingStatusClassName(statusKey),
-	};
-}
-
-function getProcessingStatus(input: {
-	item: RealtimeMergedFindingItem;
-	currentPhase?: string | null;
-	isRunning: boolean;
-}): { label: string; className: string } {
-	const backendStatus = resolveBackendProcessingStatus(input.item);
-	if (backendStatus) {
-		return backendStatus;
-	}
-
-	const phase = String(input.currentPhase || "").trim().toLowerCase();
-	if (isFalsePositiveFinding(input.item)) {
-		return {
-			label: "误报",
-			className: getProcessingStatusClassName("false_positive"),
-		};
-	}
-	if (input.item.verification_progress === "verified" || input.item.is_verified) {
-		return {
-			label: "已验证",
-			className: getProcessingStatusClassName("verified"),
-		};
-	}
-	if (phase === "verification" || !input.isRunning) {
-		return {
-			label: "验证",
-			className: getProcessingStatusClassName("verification"),
-		};
-	}
-	if (phase === "analysis") {
-		return {
-			label: "分析",
-			className: getProcessingStatusClassName("analysis"),
-		};
-	}
-	return {
-		label: "未侦察",
-		className: getProcessingStatusClassName("unscouted"),
-	};
-}
-
 function getEmptyStateMessage(currentPhase?: string | null): string {
 	const phase = String(currentPhase || "").trim().toLowerCase();
 	if (phase === "verification") {
@@ -327,9 +185,9 @@ export default function RealtimeFindingsPanel(props: {
 	const hasNoRows = tableState.rows.length === 0;
 	const emptyStateMessage = props.isRunning
 		? getEmptyStateMessage(props.currentPhase)
-		: "暂无符合条件的漏洞";
-	const showVerifiedOnlyHint =
-		hasNoRows && props.filters.verification === "verified";
+		: props.items.length === 0
+			? "暂无已验证漏洞"
+			: "暂无符合条件的漏洞";
 
 	useEffect(() => {
 		if (page !== tableState.page) {
@@ -383,7 +241,7 @@ export default function RealtimeFindingsPanel(props: {
 									keyword: event.target.value,
 								}, { source: "user" })
 							}
-							placeholder="搜索漏洞类型 / 危害 / 状态"
+							placeholder="搜索漏洞类型 / 危害"
 							className="cyber-input h-10 pl-11 pr-3 text-sm"
 						/>
 					</div>
@@ -408,24 +266,6 @@ export default function RealtimeFindingsPanel(props: {
 							<SelectItem value="invalid">无效</SelectItem>
 						</SelectContent>
 					</Select>
-					<Select
-						value={props.filters.verification}
-						onValueChange={(value) =>
-							props.onFiltersChange({
-								...props.filters,
-								verification: value,
-							}, { source: "user" })
-						}
-					>
-						<SelectTrigger className="cyber-input h-10 w-full sm:w-[180px]">
-							<SelectValue placeholder="验证状态" />
-						</SelectTrigger>
-						<SelectContent className="cyber-dialog border-border">
-							<SelectItem value="all">全部验证状态</SelectItem>
-							<SelectItem value="pending">待验证</SelectItem>
-							<SelectItem value="verified">已验证</SelectItem>
-						</SelectContent>
-					</Select>
 				</div>
 
 				<div className="min-h-0 flex-1 px-4 py-3">
@@ -435,29 +275,6 @@ export default function RealtimeFindingsPanel(props: {
 								<div className="flex flex-col items-center gap-3 px-6 text-center">
 									<AlertTriangle className="h-5 w-5 opacity-60" />
 									<span className="text-sm">{emptyStateMessage}</span>
-									{showVerifiedOnlyHint ? (
-										<div className="flex flex-col items-center gap-2">
-											<span className="text-xs text-muted-foreground">
-												暂无已验证漏洞，切换为全部验证状态可查看所有发现。
-											</span>
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												onClick={() =>
-													props.onFiltersChange(
-														{
-															...props.filters,
-															verification: "all",
-														},
-														{ source: "user" },
-													)
-												}
-											>
-												查看全部漏洞
-											</Button>
-										</div>
-									) : null}
 								</div>
 							</div>
 						) : (
@@ -472,18 +289,12 @@ export default function RealtimeFindingsPanel(props: {
 										{tableState.hasVisibleConfidence ? (
 											<TableHead className="w-[110px]">置信度</TableHead>
 										) : null}
-										<TableHead className="w-[120px]">处理状态</TableHead>
 										<TableHead className="w-[160px] text-center">操作</TableHead>
 									</TableRow>
 								</TableHeader>
 								<TableBody>
 									{tableState.rows.map((row, index) => {
 										const findingItem = row.raw as RealtimeMergedFindingItem;
-										const processingStatus = getProcessingStatus({
-											item: findingItem,
-											currentPhase: props.currentPhase,
-											isRunning: props.isRunning,
-										});
 
 										return (
 											<TableRow
@@ -522,14 +333,6 @@ export default function RealtimeFindingsPanel(props: {
 														) : null}
 													</TableCell>
 												) : null}
-												<TableCell className="py-3">
-													<Badge
-														variant="outline"
-														className={`text-[11px] ${processingStatus.className}`}
-													>
-														{processingStatus.label}
-													</Badge>
-												</TableCell>
 												<TableCell className="py-3 text-center">
 													<Button
 														type="button"

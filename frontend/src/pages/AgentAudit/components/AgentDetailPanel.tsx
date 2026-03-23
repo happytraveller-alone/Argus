@@ -67,6 +67,8 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
 	};
 
 	const isRunning = agent.status === "running";
+	const verifiedFindingsCount =
+		agent.verified_findings_count ?? agent.findings_count ?? 0;
 
 	return (
 		<div className="relative rounded border border-primary/30 bg-gradient-to-br from-primary/5 to-transparent overflow-hidden">
@@ -159,16 +161,16 @@ export const AgentDetailPanel = memo(function AgentDetailPanel({
 				{!agent.parent_agent_id && (
 					<div className="flex items-center gap-2 p-2 rounded bg-muted/50 border border-border">
 						<Bug
-							className={`w-3.5 h-3.5 ${agent.findings_count > 0 ? "text-red-400/70" : "text-muted-foreground/70"}`}
+							className={`w-3.5 h-3.5 ${verifiedFindingsCount > 0 ? "text-red-400/70" : "text-muted-foreground/70"}`}
 						/>
 						<div>
 							<div className="text-xs text-muted-foreground uppercase">
-								漏洞数
+								已验证漏洞
 							</div>
 							<div
-								className={`text-sm font-mono ${agent.findings_count > 0 ? "text-red-400" : "text-foreground"}`}
+								className={`text-sm font-mono ${verifiedFindingsCount > 0 ? "text-red-400" : "text-foreground"}`}
 							>
-								{agent.findings_count}
+								{verifiedFindingsCount}
 							</div>
 						</div>
 					</div>

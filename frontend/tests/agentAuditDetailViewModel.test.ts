@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   buildStatsSummary,
   createTokenUsageAccumulator,
+  isVerifiedFinding,
+  isVisibleVerifiedVulnerability,
 } from "../src/pages/AgentAudit/detailViewModel.ts";
 import * as detailViewModel from "../src/pages/AgentAudit/detailViewModel.ts";
 
@@ -83,7 +85,6 @@ test("buildFindingTableState 仅按可见字段筛选，不再命中文件路径
     filters: {
       keyword: "user.ts",
       severity: "all",
-      verification: "all",
     },
     page: 1,
     pageSize: 10,
@@ -108,7 +109,6 @@ test("buildFindingTableState 仅按可见字段筛选，不再命中文件路径
     filters: {
       keyword: "SQL 注入",
       severity: "all",
-      verification: "all",
     },
     page: 1,
     pageSize: 10,
@@ -130,4 +130,144 @@ test("calculateResponsiveFindingsPageSize 会随着可用高度增加而返回�
     detailViewModel.calculateResponsiveFindingsPageSize?.(520),
     7,
   );
+});
+
+test("isVerifiedFinding 识别 is_verified 和 verification_progress", () => {
+  assert.equal(isVerifiedFinding({ id: "pending-1" }), false);
+  assert.equal(isVerifiedFinding({ id: "verified-1", is_verified: true }), true);
+  assert.equal(
+    isVerifiedFinding({
+      id: "verified-2",
+      is_verified: false,
+      verification_progress: "verified",
+    }),
+    true,
+  );
+});
+
+test("isVisibleVerifiedVulnerability 会过滤各类误报信号", () => {
+  const base = {
+    id: "finding-1",
+    is_verified: true,
+    verification_progress: "verified",
+  };
+
+  assert.equal(
+    isVisibleVerifiedVulnerability({
+      ...base,
+      authenticity: "false_positive",
+    }),
+    false,
+  );
+  assert.equal(
+    isVisibleVerifiedVulnerability({
+      ...base,
+      status: "false_positive",
+    }),
+    false,
+  );
+  assert.equal(
+    isVisibleVerifiedVulnerability({
+      ...base,
+      detailMode: "false_positive_reason",
+    }),
+    false,
+  );
+  assert.equal(
+    isVisibleVerifiedVulnerability({
+      ...base,
+      display_severity: "invalid",
+    }),
+    false,
+  );
+  assert.equal(
+    isVisibleVerifiedVulnerability({
+      ...base,
+      display_severity: "high",
+      confidence: 0.92,
+    }),
+    true,
+  );
+  assert.equal(
+    isVisibleVerifiedVulnerability({
+      ...base,
+      display_severity: "high",
+      confidence: null,
+    }),
+    false,
+  );
+});
+
+test("buildStatsSummary 仅统计 verified 且非误报的漏洞", () => {
+  const summary = buildStatsSummary({
+    task: {
+      status: "completed",
+      created_at: "2026-03-12T07:00:00.000Z",
+      started_at: "2026-03-12T07:10:00.000Z",
+      completed_at: "2026-03-12T07:50:00.000Z",
+      findings_count: 99,
+      verified_count: 4,
+      false_positive_count: 10,
+    },
+    displayFindings: [
+      {
+        id: "verified-1",
+        is_verified: true,
+        display_severity: "high",
+        confidence: 0.92,
+      },
+      {
+        id: "verified-2",
+        verification_progress: "verified",
+        display_severity: "medium",
+        confidence: 0.67,
+      },
+      {
+        id: "pending-1",
+        verification_progress: "pending",
+        display_severity: "critical",
+        confidence: 0.88,
+      },
+      {
+        id: "false-positive-1",
+        is_verified: true,
+        authenticity: "false_positive",
+        display_severity: "low",
+        confidence: 0.42,
+      },
+      {
+        id: "false-positive-2",
+        verification_progress: "verified",
+        display_severity: "invalid",
+        confidence: 0.31,
+      },
+    ],
+    tokenUsage: createTokenUsageAccumulator(),
+    now: new Date("2026-03-12T08:00:00.000Z"),
+  });
+
+  assert.equal(summary.totalFindings, 2);
+  assert.equal(summary.effectiveFindings, 2);
+  assert.equal(summary.falsePositiveFindings, 0);
+});
+
+test("buildStatsSummary 在无展示数据时回退到 task.verified_count", () => {
+  const summary = buildStatsSummary({
+    task: {
+      status: "completed",
+      created_at: "2026-03-12T07:00:00.000Z",
+      started_at: "2026-03-12T07:10:00.000Z",
+      completed_at: "2026-03-12T07:50:00.000Z",
+      findings_count: 12,
+      verified_count: 3,
+      false_positive_count: 9,
+    },
+    displayFindings: [],
+    tokenUsage: createTokenUsageAccumulator(),
+    now: new Date("2026-03-12T08:00:00.000Z"),
+  });
+
+  assert.equal(summary.totalFindings, 3);
+  assert.equal(summary.effectiveFindings, 3);
+  assert.equal(summary.falsePositiveFindings, 0);
 });
