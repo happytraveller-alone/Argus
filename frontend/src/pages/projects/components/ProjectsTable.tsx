@@ -11,18 +11,18 @@ interface ProjectsTableProps {
   onCreateScan: (projectId: string) => void;
 }
 
-const EXECUTION_COLUMNS = [
-  {
-    key: "completed",
-    label: "已完成",
-    cellClassName: "text-center",
-  },
-  {
-    key: "running",
-    label: "进行中",
-    cellClassName: "text-center",
-  },
-] as const;
+// const EXECUTION_COLUMNS = [
+//   {
+//     key: "completed",
+//     label: "已完成",
+//     cellClassName: "text-center",
+//   },
+//   {
+//     key: "running",
+//     label: "进行中",
+//     cellClassName: "text-center",
+//   },
+// ] as const;
 
 const VULNERABILITY_COLUMNS = [
   {
@@ -49,8 +49,8 @@ const VULNERABILITY_COLUMNS = [
 
 const METRIC_CHIP_CLASSNAME =
   "inline-flex min-w-[3.25rem] items-center justify-center rounded-full border px-3 py-1 text-center leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]";
-const EXECUTION_METRIC_CHIP_CLASSNAME =
-  "border-sky-500/20 bg-sky-500/8 text-foreground";
+// const EXECUTION_METRIC_CHIP_CLASSNAME =
+//   "border-sky-500/20 bg-sky-500/8 text-foreground";
 const VULNERABILITY_METRIC_CHIP_CLASSNAMES = {
   critical: "border-rose-500/30 bg-rose-500/12 text-rose-100",
   high: "border-orange-500/28 bg-orange-500/12 text-orange-100",
@@ -69,7 +69,7 @@ const METRIC_GROUP_CLASSNAME =
 const METRIC_GROUP_ITEM_CLASSNAME =
   "inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/40 px-2 py-1";
 const METRIC_GROUP_LABEL_CLASSNAME =
-  "text-[12px] font-medium tracking-[0.08em] text-muted-foreground";
+  "text-[14px] font-medium tracking-[0.08em] text-muted-foreground";
 
 function renderMetricChip(value: number, tone: string, chipClassName: string) {
   return (
@@ -88,7 +88,7 @@ function buildColumns(
   return [
     {
       accessorKey: "name",
-      header: "项目",
+      header: "项目名称",
       meta: {
         label: "项目",
         plainHeader: true,
@@ -110,7 +110,7 @@ function buildColumns(
     {
       id: "sizeText",
       accessorFn: (row) => row.sizeText,
-      header: "大小",
+      header: "项目大小",
       meta: {
         label: "大小",
         plainHeader: true,
@@ -124,46 +124,46 @@ function buildColumns(
         </span>
       ),
     },
-    {
-      id: "execution",
-      header: "执行任务",
-      meta: {
-        label: "执行任务",
-        plainHeader: true,
-        minWidth: 228,
-        headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
-        cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
-      },
-      cell: ({ row }) => (
-        <div
-          data-project-metric-group="execution"
-          className={METRIC_GROUP_CLASSNAME}
-          title={
-            row.original.metricsStatus !== "ready"
-              ? row.original.metricsStatusMessage ?? undefined
-              : undefined
-          }
-        >
-          {EXECUTION_COLUMNS.map((column) => (
-            <span
-              key={column.key}
-              data-project-metric-item={column.key}
-              className={METRIC_GROUP_ITEM_CLASSNAME}
-            >
-              <span className={METRIC_GROUP_LABEL_CLASSNAME}>{column.label}</span>
-              {renderMetricChip(
-                row.original.executionStats[column.key],
-                "execution",
-                EXECUTION_METRIC_CHIP_CLASSNAME,
-              )}
-            </span>
-          ))}
-        </div>
-      ),
-    },
+    // {
+    //   id: "execution",
+    //   header: "执行任务",
+    //   meta: {
+    //     label: "执行任务",
+    //     plainHeader: true,
+    //     minWidth: 228,
+    //     headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
+    //     cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
+    //   },
+    //   cell: ({ row }) => (
+    //     <div
+    //       data-project-metric-group="execution"
+    //       className={METRIC_GROUP_CLASSNAME}
+    //       title={
+    //         row.original.metricsStatus !== "ready"
+    //           ? row.original.metricsStatusMessage ?? undefined
+    //           : undefined
+    //       }
+    //     >
+    //       {EXECUTION_COLUMNS.map((column) => (
+    //         <span
+    //           key={column.key}
+    //           data-project-metric-item={column.key}
+    //           className={METRIC_GROUP_ITEM_CLASSNAME}
+    //         >
+    //           <span className={METRIC_GROUP_LABEL_CLASSNAME}>{column.label}</span>
+    //           {renderMetricChip(
+    //             row.original.executionStats[column.key],
+    //             "execution",
+    //             EXECUTION_METRIC_CHIP_CLASSNAME,
+    //           )}
+    //         </span>
+    //       ))}
+    //     </div>
+    //   ),
+    // },
     {
       id: "vulnerabilities",
-      header: "发现漏洞",
+      header: "发现潜在漏洞",
       meta: {
         label: "发现漏洞",
         plainHeader: true,

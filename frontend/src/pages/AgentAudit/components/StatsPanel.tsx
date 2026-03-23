@@ -78,7 +78,7 @@ export const StatsPanel = memo(function StatsPanel({ summary, projectName }: Sta
           value={summary.totalFindings.toLocaleString()}
           subtext=""
         />
-        <MetricCard
+        {/* <MetricCard
           icon={<Repeat className="h-4 w-4" />}
           label="迭代次数"
           value={summary.iterations.toLocaleString()}
@@ -89,7 +89,7 @@ export const StatsPanel = memo(function StatsPanel({ summary, projectName }: Sta
           label="工具扫描"
           value={summary.toolCalls.toLocaleString()}
           subtext=""
-        />
+        /> */}
         <MetricCard
           icon={<TrendingUp className="h-4 w-4" />}
           label="Token 消耗"

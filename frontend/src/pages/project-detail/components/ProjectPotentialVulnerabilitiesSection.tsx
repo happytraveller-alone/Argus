@@ -226,9 +226,6 @@ export function ProjectPotentialVulnerabilitiesSection({
 						</h3>
 						<Badge className="cyber-badge-muted">{totalFindings}</Badge>
 					</div>
-					<p className="text-xs text-muted-foreground">
-						仅显示中/高置信度且中危及以上漏洞
-					</p>
 				</div>
 			</div>
 

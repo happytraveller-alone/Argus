@@ -84,7 +84,7 @@ test("ProjectsTable renders compact grouped headers and browse-state actions", a
 	assert.match(markup, /项目/);
 	assert.match(markup, /大小/);
 	assert.match(markup, /操作/);
-	assert.match(markup, /执行任务/);
+	// assert.match(markup, /执行任务/);
 	assert.match(markup, /发现漏洞/);
 	assert.match(markup, /已完成/);
 	assert.match(markup, /进行中/);
@@ -109,7 +109,7 @@ test("ProjectsTable renders compact grouped headers and browse-state actions", a
 	assert.match(markup, /<thead[\s\S]*?<\/thead>/);
 	assert.match(markup, /<th[^>]*>项目<\/th>/);
 	assert.match(markup, /<th[^>]*>大小<\/th>/);
-	assert.match(markup, /<th[^>]*>执行任务<\/th>/);
+	// assert.match(markup, /<th[^>]*>执行任务<\/th>/);
 	assert.match(markup, /<th[^>]*>发现漏洞<\/th>/);
 	assert.match(markup, /<th[^>]*>操作<\/th>/);
 	assert.doesNotMatch(markup, /项目概览|体量概览|快捷操作|任务概览|风险概览/);

@@ -212,18 +212,18 @@ function SummaryStrip({
 			}),
 		},
 		{
-			label: "已验证漏洞",
+			label: "大模型已验证漏洞",
 			value: formatNumber(summary.current_verified_findings),
 			// subtitle: `窗口已验证 ${formatNumber(summary.window_verified_findings)} 项`,
 			accent: "text-emerald-200",
 			values: computeMiniTrendValues(snapshot.daily_activity, "agent_findings"),
 		},
-		{
-			label: "累计扫描时长",
-			value: formatCumulativeDuration(snapshot.total_scan_duration_ms),
-			accent: "text-violet-200",
-			values: computeMiniTrendValues(snapshot.daily_activity, "phpstan_findings"),
-		},
+		// {
+		// 	label: "累计扫描时长",
+		// 	value: formatCumulativeDuration(snapshot.total_scan_duration_ms),
+		// 	accent: "text-violet-200",
+		// 	values: computeMiniTrendValues(snapshot.daily_activity, "phpstan_findings"),
+		// },
 		{
 			label: "累计执行扫描",
 			value: formatNumber(snapshot.task_status_breakdown.completed),
@@ -774,14 +774,14 @@ export default function DashboardCommandCenter({
 				</DashboardSection>
 			</div>
 
-			<DashboardSection
+			{/* <DashboardSection
 				panel="language-risk"
 				title="语言风险热力"
 				description="按语言聚合有效风险密度、已验证结果和误报质量。"
 				icon={<ShieldAlert className="h-5 w-5" />}
 			>
 				<RiskHeatmap items={snapshot.language_risk || []} />
-			</DashboardSection>
+			</DashboardSection> */}
 
 		</div>
 	);

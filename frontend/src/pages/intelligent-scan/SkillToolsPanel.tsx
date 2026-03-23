@@ -191,9 +191,6 @@ export default function SkillToolsPanel({
                           <div className="text-sm font-semibold text-foreground">
                             {row.name}
                           </div>
-                          <div className="text-xs text-muted-foreground break-all">
-                            {row.id}
-                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-4">
@@ -204,9 +201,9 @@ export default function SkillToolsPanel({
                       <td className="px-4 py-4">
                         <div
                           className="text-sm leading-6 text-foreground/90 whitespace-nowrap overflow-hidden text-ellipsis"
-                          title={row.capabilities.join("；")}
+                          title={row.capabilities.join("; ")}
                         >
-                          {row.capabilities.join("；")}
+                          {row.capabilities.join("; ")}
                         </div>
                       </td>
                       <td className="px-4 py-4 text-right">

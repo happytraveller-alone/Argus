@@ -117,6 +117,10 @@ function createInitialTableState(initialState: DataTableQueryState): DataTableQu
       pageIndex: initialState.pagination.pageIndex,
       pageSize: initialState.pagination.pageSize || DEFAULT_PAGE_SIZE,
     },
+    columnVisibility: {
+      ...initialState.columnVisibility,
+      package: false,
+    },
   });
 
   if (!nextState.columnFilters.some((filter) => filter.id === "deletedStatus")) {
@@ -246,7 +250,9 @@ export default function PhpstanRules({
             .filter(Boolean)
             .join(" "),
         header: "规则",
-        meta: { label: "规则", minWidth: 300, filterVariant: "text" },
+        enableSorting: false,
+        enableHiding: false,
+        meta: { label: "规则", minWidth: 200, filterVariant: "text" },
         cell: ({ row }) => (
           <div className="space-y-0.5">
             <div className="font-semibold text-foreground break-all">{row.original.name}</div>
@@ -362,7 +368,7 @@ export default function PhpstanRules({
         header: "操作",
         enableSorting: false,
         enableHiding: false,
-        meta: { label: "操作", minWidth: 320 },
+        meta: { label: "操作", minWidth: 280 },
         cell: ({ row }) => (
           <div className="flex flex-wrap gap-2">
             <Button
