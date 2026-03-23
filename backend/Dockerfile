@@ -13,6 +13,7 @@ ARG BACKEND_PYPI_INDEX_CANDIDATES=https://mirrors.aliyun.com/pypi/simple/,https:
 ARG BACKEND_INSTALL_CJK_FONTS=0
 ARG BACKEND_INSTALL_YASA=1
 ARG YASA_VERSION=v0.2.33
+ARG YASA_UAST_VERSION=v0.2.8
 ARG YASA_BUILD_FROM_SOURCE=1
 FROM ${UV_IMAGE} AS uvbin
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim AS builder
@@ -282,6 +283,7 @@ FROM runtime-base AS scanner-tools-base
 ARG OPENGREP_VERSION=v1.15.1
 ARG BACKEND_INSTALL_YASA
 ARG YASA_VERSION
+ARG YASA_UAST_VERSION
 ARG YASA_BUILD_FROM_SOURCE
 
 COPY docker/yasa-engine-overrides /tmp/yasa-engine-overrides
@@ -300,13 +302,19 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
         YASA_RELEASE_ASSET="yasa-linux-x64.zip"; \
         YASA_RELEASE_BIN="yasa-engine-linux-x64"; \
         UAST_PLATFORM="linux-amd64"; \
-        YASA_PKG_TARGET="node18-linux-x64" ;; \
+        YASA_PKG_TARGET="node18-linux-x64"; \
+        YASA_GO_ARCH="amd64"; \
+        YASA_UAST_BUILD_MODE="prebuilt"; \
+        YASA_SOURCE_BUILD_REQUIRED="0" ;; \
       aarch64|arm64) \
         OG_DIST="opengrep_manylinux_aarch64"; \
         YASA_RELEASE_ASSET=""; \
         YASA_RELEASE_BIN=""; \
-        UAST_PLATFORM=""; \
-        YASA_PKG_TARGET="node18-linux-arm64" ;; \
+        UAST_PLATFORM="linux-arm64"; \
+        YASA_PKG_TARGET="node18-linux-arm64"; \
+        YASA_GO_ARCH="arm64"; \
+        YASA_UAST_BUILD_MODE="source"; \
+        YASA_SOURCE_BUILD_REQUIRED="1" ;; \
       *) echo "unsupported arch: ${ARCH}" >&2; exit 1 ;; \
     esac; \
     download_with_fallback() { \
@@ -378,8 +386,8 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
       echo "BACKEND_INSTALL_YASA=${BACKEND_INSTALL_YASA}, skip built-in YASA install."; \
       exit 0; \
     fi; \
-    if [ -z "${UAST_PLATFORM}" ]; then \
-      echo "YASA UAST binaries are unavailable for ${ARCH}; set BACKEND_INSTALL_YASA=0 or provide host override." >&2; \
+    if [ "${YASA_BUILD_FROM_SOURCE}" != "1" ] && [ "${YASA_SOURCE_BUILD_REQUIRED}" = "1" ]; then \
+      echo "YASA source build is required for ${ARCH}; set YASA_BUILD_FROM_SOURCE=1, BACKEND_INSTALL_YASA=0, or provide host override." >&2; \
       exit 1; \
     fi; \
     if [ "${YASA_BUILD_FROM_SOURCE}" != "1" ] && { [ -z "${YASA_RELEASE_ASSET}" ] || [ -z "${YASA_RELEASE_BIN}" ]; }; then \
@@ -399,8 +407,12 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
     rm -rf "${YASA_ENGINE_DIR}"; \
     mv "/tmp/YASA-Engine-${YASA_VERSION#v}" "${YASA_ENGINE_DIR}"; \
     if [ "${YASA_BUILD_FROM_SOURCE}" = "1" ]; then \
+      build_deps="nodejs npm"; \
+      if [ "${YASA_UAST_BUILD_MODE}" = "source" ]; then \
+        build_deps="${build_deps} golang-go"; \
+      fi; \
       apt-get update; \
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs npm; \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ${build_deps}; \
       rm -rf /var/lib/apt/lists/*; \
       if [ -f /tmp/yasa-engine-overrides/src/config.ts ]; then \
         cp /tmp/yasa-engine-overrides/src/config.ts "${YASA_ENGINE_DIR}/src/config.ts"; \
@@ -438,6 +450,12 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
     fi; \
     chmod +x "${YASA_REAL_BIN}"; \
     mkdir -p "${YASA_ENGINE_DIR}/deps/uast4go" "${YASA_ENGINE_DIR}/deps/uast4py"; \
+    build_uast4go_with_proxy() { \
+      proxy="$1"; \
+      sumdb="$2"; \
+      GOPROXY="${proxy}" GOSUMDB="${sumdb}" CGO_ENABLED=0 GOOS=linux GOARCH="${YASA_GO_ARCH}" \
+        go build -o "${YASA_ENGINE_DIR}/deps/uast4go/uast4go" .; \
+    }; \
     download_uast_bin() { \
       bin_name="$1"; \
       target="$2"; \
@@ -453,8 +471,67 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
       cp "${cache_file}" "${target}"; \
       chmod +x "${target}"; \
     }; \
-    download_uast_bin "uast4go-${UAST_PLATFORM}" "${YASA_ENGINE_DIR}/deps/uast4go/uast4go"; \
-    download_uast_bin "uast4py-${UAST_PLATFORM}" "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
+    if [ "${YASA_UAST_BUILD_MODE}" = "source" ]; then \
+      YASA_UAST_TARBALL="/var/cache/vulhunter-tools/yasa-uast-${YASA_UAST_VERSION}.tar.gz"; \
+      if [ ! -s "${YASA_UAST_TARBALL}" ]; then \
+        download_with_fallback \
+          "${YASA_UAST_TARBALL}" \
+          "https://gh-proxy.com/https://github.com/antgroup/YASA-UAST/archive/refs/tags/${YASA_UAST_VERSION}.tar.gz" \
+          "https://v6.gh-proxy.org/https://github.com/antgroup/YASA-UAST/archive/refs/tags/${YASA_UAST_VERSION}.tar.gz" \
+          "https://gh-proxy.org/https://github.com/antgroup/YASA-UAST/archive/refs/tags/${YASA_UAST_VERSION}.tar.gz" \
+          "https://github.com/antgroup/YASA-UAST/archive/refs/tags/${YASA_UAST_VERSION}.tar.gz"; \
+      fi; \
+      rm -rf /tmp/yasa-uast-src; \
+      mkdir -p /tmp/yasa-uast-src; \
+      tar -xzf "${YASA_UAST_TARBALL}" -C /tmp/yasa-uast-src; \
+      YASA_UAST_SRC_DIR="$(find /tmp/yasa-uast-src -maxdepth 1 -type d -name 'YASA-UAST-*' | head -n1)"; \
+      if [ -z "${YASA_UAST_SRC_DIR}" ]; then \
+        echo "failed to locate extracted YASA-UAST source tree" >&2; \
+        exit 1; \
+      fi; \
+      export GOCACHE="/var/cache/vulhunter-tools/go-build-cache"; \
+      export GOMODCACHE="/var/cache/vulhunter-tools/go-mod-cache"; \
+      mkdir -p "${GOCACHE}" "${GOMODCACHE}"; \
+      (cd "${YASA_UAST_SRC_DIR}/parser-Go" && mkdir -p dist && \
+        build_uast4go_with_proxy "https://goproxy.cn,direct" "sum.golang.google.cn" || \
+        build_uast4go_with_proxy "https://proxy.golang.org,direct" "sum.golang.org"); \
+      chmod +x "${YASA_ENGINE_DIR}/deps/uast4go/uast4go"; \
+      rm -rf "${YASA_ENGINE_DIR}/deps/uast4py-src" "${YASA_HOME}/uast4py-venv"; \
+      cp -R "${YASA_UAST_SRC_DIR}/parser-Python" "${YASA_ENGINE_DIR}/deps/uast4py-src"; \
+      python3 -m venv "${YASA_HOME}/uast4py-venv"; \
+      order_pypi_indexes() { \
+        raw_candidates="${PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \
+        python3 /usr/local/bin/package_source_selector.py --candidates "${raw_candidates}" --kind pypi --timeout-seconds 2 || printf '%s\n' "${raw_candidates}" | tr ',' '\n'; \
+      }; \
+      install_uast4py_deps() { \
+        idx="$1"; \
+        PIP_CACHE_DIR="/var/cache/vulhunter-tools/pip-cache" \
+        "${YASA_HOME}/uast4py-venv/bin/pip" install --disable-pip-version-check -i "${idx}" \
+          -r "${YASA_ENGINE_DIR}/deps/uast4py-src/requirements.txt"; \
+      }; \
+      ordered_pypi_indexes="$(order_pypi_indexes)"; \
+      installed_uast4py=0; \
+      for idx in $(printf '%s\n' "${ordered_pypi_indexes}"); do \
+        [ -n "${idx}" ] || continue; \
+        if install_uast4py_deps "${idx}"; then \
+          installed_uast4py=1; \
+          break; \
+        fi; \
+      done; \
+      if [ "${installed_uast4py}" != "1" ]; then \
+        echo "failed to install YASA Python parser dependencies" >&2; \
+        exit 1; \
+      fi; \
+      printf '%s\n' '#!/usr/bin/env bash' \
+        'set -euo pipefail' \
+        'export PYTHONPATH="/opt/yasa/engine/deps/uast4py-src${PYTHONPATH:+:$PYTHONPATH}"' \
+        'exec "${YASA_HOME}/uast4py-venv/bin/python" -m uast.builder "$@"' \
+        > "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
+      chmod +x "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
+    else \
+      download_uast_bin "uast4go-${UAST_PLATFORM}" "${YASA_ENGINE_DIR}/deps/uast4go/uast4go"; \
+      download_uast_bin "uast4py-${UAST_PLATFORM}" "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
+    fi; \
     ln -sfn "${YASA_ENGINE_DIR}/resource" "${YASA_HOME}/resource"; \
     printf '%s\n' '#!/usr/bin/env bash' \
       'set -euo pipefail' \

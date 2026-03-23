@@ -126,6 +126,20 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "\n  frontend-dev:" not in full_overlay_text
 
 
+def test_backend_dockerfile_builds_linux_arm64_yasa_from_source() -> None:
+    backend_text = (REPO_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert 'ARG YASA_UAST_VERSION=v0.2.8' in backend_text
+    assert 'UAST_PLATFORM="linux-arm64"; \\' in backend_text
+    assert 'YASA_UAST_BUILD_MODE="source"; \\' in backend_text
+    assert 'CGO_ENABLED=0 GOOS=linux GOARCH="${YASA_GO_ARCH}"' in backend_text
+    assert 'go build -o "${YASA_ENGINE_DIR}/deps/uast4go/uast4go" .' in backend_text
+    assert 'python3 -m venv "${YASA_HOME}/uast4py-venv"; \\' in backend_text
+    assert (
+        'exec "${YASA_HOME}/uast4py-venv/bin/python" -m uast.builder "$@"'
+    ) in backend_text
+
+
 def test_frontend_dev_entrypoint_prints_ready_banner() -> None:
     frontend_entrypoint = (
         REPO_ROOT / "frontend" / "scripts" / "dev-entrypoint.sh"
