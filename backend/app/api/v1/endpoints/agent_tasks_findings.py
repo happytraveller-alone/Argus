@@ -270,8 +270,14 @@ def _normalize_authenticity_verdict(
     if verdict in allowed:
         return verdict
 
-    if finding.get("is_verified") is True:
-        return "confirmed"
+    status_hint = str(finding.get("status") or "").strip().lower()
+    if status_hint in {"false_positive", "false-positive", "not_vulnerable", "not_exists", "non_vuln"}:
+        return "false_positive"
+    if status_hint in {"uncertain", "unknown", "needs_review", "needs-review"}:
+        return "uncertain"
+    if status_hint in {"verified", "true_positive", "exists", "vulnerable", "confirmed", "likely"}:
+        return "likely"
+
     source_value = str(finding.get("source") or "").lower()
     if source_value in {"verification", "verification_agent", "agent_verification"}:
         return "confirmed"
@@ -282,6 +288,28 @@ def _normalize_authenticity_verdict(
     if confidence <= 0.2:
         return "false_positive"
     return "uncertain"
+
+
+def _normalize_verification_status(
+    status_value: Any,
+    verdict: Optional[str],
+) -> str:
+    text = str(status_value or "").strip().lower()
+    if text in {"verified", "true_positive", "exists", "vulnerable"}:
+        return FindingStatus.VERIFIED
+    if text in {"false_positive", "false-positive", "not_vulnerable", "not_exists", "non_vuln"}:
+        return FindingStatus.FALSE_POSITIVE
+    if text in {"uncertain", "unknown", "needs_review", "needs-review"}:
+        return FindingStatus.UNCERTAIN
+    if text in {"confirmed", "likely"}:
+        return FindingStatus.VERIFIED
+
+    normalized_verdict = str(verdict or "").strip().lower()
+    if normalized_verdict in {"confirmed", "likely"}:
+        return FindingStatus.VERIFIED
+    if normalized_verdict == "false_positive":
+        return FindingStatus.FALSE_POSITIVE
+    return FindingStatus.UNCERTAIN
 
 
 def _normalize_reachability(
@@ -778,10 +806,45 @@ async def _save_findings(
             authenticity = _normalize_optional_text(authenticity_raw)
             authenticity = authenticity.lower() if authenticity else None
             if authenticity not in {"confirmed", "likely", "uncertain", "false_positive"}:
+                status_hint_raw = (
+                    finding.get("status")
+                    or verification_result_payload_input.get("status")
+                )
+                status_hint = str(status_hint_raw or "").strip().lower()
+                if status_hint in {"verified", "true_positive", "exists", "vulnerable", "confirmed", "likely"}:
+                    authenticity = "likely"
+                elif status_hint in {"false_positive", "false-positive", "not_vulnerable", "not_exists", "non_vuln"}:
+                    authenticity = "false_positive"
+                elif status_hint in {"uncertain", "unknown", "needs_review", "needs-review"}:
+                    authenticity = "uncertain"
+            if authenticity not in {"confirmed", "likely", "uncertain", "false_positive"}:
                 authenticity = _normalize_authenticity_verdict(finding, confidence)
             if authenticity not in {"confirmed", "likely", "uncertain", "false_positive"}:
                 mark_filtered("missing_verification_result", finding)
                 continue
+
+            status_raw = (
+                finding.get("status")
+                or verification_result_payload_input.get("status")
+            )
+            normalized_status = _normalize_verification_status(status_raw, authenticity)
+            if normalized_status == FindingStatus.FALSE_POSITIVE and authenticity in {"confirmed", "likely"}:
+                authenticity = "false_positive"
+            elif normalized_status == FindingStatus.VERIFIED and authenticity == "false_positive":
+                authenticity = "likely"
+            elif normalized_status == FindingStatus.UNCERTAIN and authenticity in {"confirmed", "likely", "false_positive"}:
+                authenticity = "uncertain"
+
+            verification_stage_completed = bool(
+                finding.get("verification_stage_completed")
+                or verification_result_payload_input.get("verification_stage_completed")
+            )
+            if not verification_stage_completed and isinstance(status_raw, str) and status_raw.strip():
+                verification_stage_completed = True
+            if not verification_stage_completed:
+                source_value = str(finding.get("source") or "").strip().lower()
+                if source_value in {"verification", "verification_agent", "agent_verification"}:
+                    verification_stage_completed = True
 
             reachability_raw = (
                 finding.get("reachability")
@@ -820,8 +883,10 @@ async def _save_findings(
                 **verification_result_payload_input,
                 "authenticity": authenticity,
                 "verdict": authenticity,
+                "status": normalized_status,
                 "confidence": confidence,
                 "reachability": reachability,
+                "verification_stage_completed": verification_stage_completed,
                 "verification_evidence": verification_details_text,
             }
             verification_todo_id = _normalize_optional_text(
@@ -1048,9 +1113,7 @@ async def _save_findings(
                     fix_description_text = "基于漏洞类型自动补全修复建议，请结合业务逻辑复核。"
 
             # 9) verification metadata
-            is_verified = authenticity == "confirmed" or (
-                authenticity == "likely" and confidence >= 0.7
-            )
+            is_verified = verification_stage_completed
             verification_method_text = _normalize_optional_text(finding.get("verification_method"))
             if not verification_method_text:
                 verification_method_text = "agent_verification"
@@ -1063,6 +1126,8 @@ async def _save_findings(
             verification_result_payload = dict(verification_result_payload_input)
             if finding_identity:
                 verification_result_payload["finding_identity"] = finding_identity
+            verification_result_payload["status"] = normalized_status
+            verification_result_payload["verification_stage_completed"] = verification_stage_completed
             existing_reachability_target = (
                 verification_result_payload_input.get("reachability_target")
                 if isinstance(verification_result_payload_input, dict)
@@ -1070,10 +1135,10 @@ async def _save_findings(
             )
             if not isinstance(existing_reachability_target, dict):
                 existing_reachability_target = {}
-            # 更新状态映射以支持 uncertain 和 localization_status
-            if authenticity == "false_positive":
+            # status 映射：由 LLM/status 输入表达漏洞是否存在，程序只负责规范化
+            if normalized_status == FindingStatus.FALSE_POSITIVE:
                 db_status = FindingStatus.FALSE_POSITIVE
-            elif authenticity == "uncertain":
+            elif normalized_status == FindingStatus.UNCERTAIN:
                 db_status = FindingStatus.UNCERTAIN
             else:
                 db_status = FindingStatus.VERIFIED
@@ -1123,6 +1188,7 @@ async def _save_findings(
                 finding_metadata_payload["verification_fingerprint"] = verification_fingerprint
             if finding_identity:
                 finding_metadata_payload["finding_identity"] = finding_identity
+            finding_metadata_payload["verification_stage_completed"] = verification_stage_completed
             if raw_file_path:
                 finding_metadata_payload["raw_file_path"] = _normalize_relative_file_path(
                     str(raw_file_path),
@@ -1411,7 +1477,7 @@ def _serialize_agent_findings(
                 if str(item.status) == FindingStatus.FALSE_POSITIVE
                 else (
                     str(getattr(item, "verdict", "") or "").strip().lower()
-                    or ("confirmed" if item.is_verified else "likely")
+                    or "uncertain"
                 )
             )
         authenticity = str(authenticity).lower()

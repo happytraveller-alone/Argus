@@ -324,33 +324,6 @@ if ({}.polluted === true) {
 7. **禁止交互**：不允许"请选择/请确认后继续"等语句
 8. **结果保存**：**每验证完一个漏洞就调用 save_verification_result**
 
-═══════════════════════════════════════════════════════════════
-
-## 💾 结果持久化（强制）
-
-**`save_verification_result` 调用时机**：
-- **每验证完一个漏洞后立即调用**
-- **必须执行，不可跳过**
-
-**参数格式**：
-```json
-{
-    "file_path": "src/auth.py", # 相对于项目根目录的路径
-    "line_start": 45,
-    "line_end": 47,
-    "function_name": "login",
-    "title": "src/auth.py中login函数SQL注入漏洞",
-    "vulnerability_type": "sql_injection",
-    "severity": "high",
-    "cwe_id": "CWE-89",
-    "verdict": "confirmed",
-    "confidence": 0.9,
-    "reachability": "reachable",
-    "verification_evidence": "通过fuzzing验证：payload '1 OR 1=1' 成功注入，返回所有用户数据",
-    "suggestion": "使用参数化查询替代字符串拼接"
-}
-```
-
 `function_name` 为必填：
 - 优先使用定位结果（TreeSitter/regex/get_symbol_body）
 - 若定位失败，尝试从标题中提取函数名
@@ -360,88 +333,6 @@ if ({}.polluted === true) {
 - **仅返回高层摘要**（统计、分布、状态）
 - **不包含详细 findings**（已在数据库中）
 - **格式**：纯文本，非 JSON
-
-═══════════════════════════════════════════════════════════════
-
-## 完整示例交互
-
-**输入**：
-```json
-{
-    "file_path": "app/api/search.py",
-    "line_start": 28,
-    "vulnerability_type": "sql_injection",
-    "title": "app/api/search.py中search函数SQL注入漏洞",
-    "code_snippet": "cursor.execute(f\"SELECT * FROM products WHERE name LIKE '%{keyword}%'\")"
-}
-```
-
-**验证过程**：
-
-```
-Thought: 收到 SQL 注入漏洞，位于 app/api/search.py:28。首先提取目标函数进行动态验证。
-Action: get_symbol_body
-Action Input: {"file_path": "app/api/search.py", "symbol_name": "search"}
-
-Observation: 
-```python
-def search(keyword):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM products WHERE name LIKE '%{keyword}%'")
-    return cursor.fetchall()
-```
-
-Thought: 已提取函数，确认使用 f-string 拼接 SQL。现在编写 Fuzzing Harness 进行动态验证。
-Action: run_code
-Action Input: {
-    "language": "python",
-    "code": "import sys\nsys.path.insert(0, '/tmp')\n\nclass MockCursor:\n    def __init__(self): self.queries = []\n    def execute(self, query, params=None):\n        self.queries.append(query)\n        print(f'[EXECUTED] {query}')\n        # 检测注入特征\n        if params is None and (\"'\" in query or \"OR\" in query.upper()):\n            print('[ALERT] Potential SQL injection detected!')\n\nclass MockConn:\n    def cursor(self): return MockCursor()\n\ndef get_db(): return MockConn()\n\n# 目标函数\ndef search(keyword):\n    conn = get_db()\n    cursor = conn.cursor()\n    cursor.execute(f\"SELECT * FROM products WHERE name LIKE '%{keyword}%'\")\n    return cursor.fetchall()\n\n# Fuzzing\npayloads = ['apple', \"apple' OR '1'='1\", 'apple\"; DROP TABLE products--', 'apple UNION SELECT * FROM admin']\nfor p in payloads:\n    print(f'\\n=== Testing: {p} ===')\n    search(p)",
-    "description": "SQL Injection Fuzzing Harness"
-}
-
-Observation: 
-=== Testing: apple ===
-[EXECUTED] SELECT * FROM products WHERE name LIKE '%apple%'
-=== Testing: apple' OR '1'='1 ===
-[EXECUTED] SELECT * FROM products WHERE name LIKE '%apple' OR '1'='1%'
-[ALERT] Potential SQL injection detected!
-=== Testing: apple"; DROP TABLE products-- ===
-[EXECUTED] SELECT * FROM products WHERE name LIKE '%apple"; DROP TABLE products--%'
-[ALERT] Potential SQL injection detected!
-...
-
-Thought: Fuzzing 成功触发 SQL 注入，payload 中的单引号破坏了查询结构。检查调用链确认可达性。
-Action: search_code
-Action Input: {"keyword": "def search|@app.route.*search", "file_pattern": "*.py", "is_regex": true}
-
-Observation: 发现 @app.route('/api/search') 装饰器，函数可通过 HTTP POST 访问。
-
-Thought: 动态验证通过 + 路径可达。判定为 confirmed，confidence 计算：fuzzing(0.35) + 可达(0.2) + 静态确认(0.15) + 证据明确(0.15) = 0.85。构造 finding 并保存。
-Action: save_verification_result
-Action Input: {
-    "file_path": "app/api/search.py",
-    "line_start": 28,
-    "line_end": 28,
-    "function_name": "search",
-    "title": "app/api/search.py中search函数SQL注入漏洞",
-    "vulnerability_type": "sql_injection",
-    "severity": "high",
-    "cwe_id": "CWE-89",
-    "verdict": "confirmed",
-    "confidence": 0.85,
-    "reachability": "reachable",
-    "verification_evidence": "通过fuzzing动态验证：payload \"apple' OR '1'='1\" 成功注入，单引号破坏SQL结构，查询逻辑被改变。函数通过@app.route对外暴露，路径可达。",
-    "suggestion": "使用参数化查询：cursor.execute(\"SELECT * FROM products WHERE name LIKE ?\", (f\"%{keyword}%\",))"
-}
-
-Observation: 保存成功，已持久化，累计 1 条。
-
-Thought: 验证完成，结果已保存。输出 Final Answer。
-Final Answer: 验证任务完成。已确认 1 个漏洞：app/api/search.py SQL 注入漏洞，判定为 confirmed，confidence 0.85，路径可达。结果已持久化至数据库。
-```
-
-═══════════════════════════════════════════════════════════════
 
 现在开始验证漏洞发现。记住：**动态验证优先，证据支撑判定，结果必须保存**。
 """
@@ -687,7 +578,7 @@ class VerificationAgent(BaseAgent):
         
         规则：
         1. 如果有明确的verdict字段，直接返回（confirmed/likely/false_positive）
-        2. 如果is_verified=True，返回confirmed
+        2. 如果有明确的status字段，按 status 推断
         3. 如果有有效的confidence值，按阈值判定
         4. 如果confidence缺失，保留原始LLM的verdict而非强制降级
         """
@@ -698,6 +589,14 @@ class VerificationAgent(BaseAgent):
             verdict = None
         if verdict in {"confirmed", "likely", "false_positive"}:
             return verdict
+
+        status_value = str(finding.get("status") or "").strip().lower()
+        if status_value in {"verified", "true_positive", "exists", "vulnerable", "confirmed", "likely"}:
+            return "likely"
+        if status_value in {"false_positive", "false-positive", "not_vulnerable", "not_exists", "non_vuln"}:
+            return "false_positive"
+        if status_value in {"uncertain", "unknown", "needs_review", "needs-review"}:
+            return "likely"
         
         # === 改进：缺失confidence时保留LLM原始verdict ===
         confidence_raw = finding.get("confidence")
@@ -712,10 +611,6 @@ class VerificationAgent(BaseAgent):
                 logger.warning(
                     f"[Verification] confidence 类型转换失败: {confidence_raw} (type: {type(confidence_raw).__name__})"
                 )
-        
-        # 规则1: is_verified=True 优先级最高
-        if finding.get("is_verified") is True:
-            return "confirmed"
         
         # 规则2: 有有效的confidence值时按阈值判定
         if confidence is not None:
@@ -2126,6 +2021,10 @@ class VerificationAgent(BaseAgent):
         import time
         start_time = time.time()
         self._trace("run_started", has_input=bool(input_data))
+        # 关键工具调用追踪按 run 维度重置，避免跨轮次污染判定
+        self._critical_tool_called = False
+        self._critical_tool_name = None
+        self._critical_tool_calls = []
 
         previous_results = input_data.get("previous_results", {})
         config = input_data.get("config", {})
@@ -2390,9 +2289,9 @@ class VerificationAgent(BaseAgent):
 - 文件: {file_path} (行 {line_start})
 - 代码:
 ```
-{finding.get('code_snippet', 'N/A')[:500]}
+{finding.get('code_snippet', 'N/A')}
 ```
-- 描述: {finding.get('description', 'N/A')[:300]}
+- 描述: {finding.get('description', 'N/A')}
 """)
 
             initial_message = f"""请验证以下 {len(findings_to_verify)} 个安全发现。
@@ -2961,6 +2860,7 @@ class VerificationAgent(BaseAgent):
             #  验证结果持久化：通过工具将 findings 保存到数据库
             # LLM 处理层已在验证过程中逐个调用 save_verification_result；
             # 这里作为监控点，记录验证结果统计。
+            rescue_save_result: Optional[Dict[str, Any]] = None
             if "save_verification_result" in self.tools and verified_findings:
                 logger.info(
                     "[%s] save_verification_result 工具可用，验证过程中应已逐个保存 %d 条结果 "
@@ -2971,6 +2871,24 @@ class VerificationAgent(BaseAgent):
                     likely_count,
                     false_positive_count,
                 )
+                if not self._has_successful_save_verification_call():
+                    logger.warning(
+                        "[%s] Verification 已结束但未检测到 save_verification_result 成功调用，启动确定性补救保存",
+                        self.name,
+                    )
+                    rescue_save_result = await self._rescue_save_missing_verification_results(
+                        verified_findings=verified_findings,
+                        task_id=task_id,
+                    )
+                    await self.emit_event(
+                        "warning" if rescue_save_result.get("saved_count", 0) > 0 else "error",
+                        (
+                            "Verification 终止前未调用 save_verification_result，"
+                            f"已自动补救保存 {rescue_save_result.get('saved_count', 0)}/"
+                            f"{rescue_save_result.get('attempted_count', 0)} 条"
+                        ),
+                        metadata=rescue_save_result,
+                    )
             
             #  兜底机制：检查是否遗漏了 save_verification_result 调用
             fallback_result = await self._fallback_check_and_save(
@@ -3006,6 +2924,7 @@ class VerificationAgent(BaseAgent):
                     "false_positive_count": false_positive_count,
                     "candidate_count": len(findings_to_verify),
                     "verification_todo_summary": todo_summary,
+                    "rescue_save_result": rescue_save_result,
                 },
                 iterations=self._iteration,
                 tool_calls=self._tool_calls,
@@ -3018,6 +2937,198 @@ class VerificationAgent(BaseAgent):
             self._trace("run_failed", error=str(e))
             logger.error(f"Verification Agent failed: {e}", exc_info=True)
             return AgentResult(success=False, error=str(e))
+
+    def _has_successful_save_verification_call(self) -> bool:
+        """检查当前 run 是否成功调用过 save_verification_result。"""
+        for item in getattr(self, "_critical_tool_calls", []):
+            if not isinstance(item, dict):
+                continue
+            tool_name = str(item.get("tool_name") or "").strip().lower()
+            if tool_name != "save_verification_result":
+                continue
+            if bool(item.get("success")):
+                return True
+        return False
+
+    @staticmethod
+    def _is_save_verification_observation_success(observation: Any) -> bool:
+        text = str(observation or "").strip()
+        if not text:
+            return False
+        lowered = text.lower()
+        if "error:" in lowered or "持久化失败" in text or "工具执行失败" in text:
+            return False
+        if re.search(r"""['"]saved['"]\s*:\s*(true|True|1)""", text):
+            return True
+        if "验证结果已保存" in text or "累计" in text and "条" in text:
+            return True
+        return False
+
+    def _build_save_verification_params(
+        self,
+        finding: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        verification_payload = finding.get("verification_result")
+        if not isinstance(verification_payload, dict):
+            verification_payload = {}
+
+        raw_line_start = finding.get("line_start") or 1
+        try:
+            line_start = max(1, int(raw_line_start))
+        except Exception:
+            line_start = 1
+
+        raw_line_end = finding.get("line_end")
+        try:
+            line_end = int(raw_line_end) if raw_line_end is not None else line_start
+        except Exception:
+            line_end = line_start
+        line_end = max(line_start, line_end)
+
+        function_name = str(finding.get("function_name") or "").strip()
+        if not function_name:
+            function_name = f"<function_at_line_{line_start}>"
+
+        verdict = str(
+            verification_payload.get("verdict")
+            or finding.get("verdict")
+            or finding.get("authenticity")
+            or "uncertain"
+        ).strip().lower()
+        if verdict not in {"confirmed", "likely", "uncertain", "false_positive"}:
+            verdict = "uncertain"
+
+        raw_confidence = verification_payload.get("confidence", finding.get("confidence", 0.5))
+        try:
+            confidence = max(0.0, min(float(raw_confidence), 1.0))
+        except Exception:
+            confidence = CONFIDENCE_DEFAULT_FALLBACK
+
+        reachability = str(
+            verification_payload.get("reachability")
+            or finding.get("reachability")
+            or ""
+        ).strip().lower()
+        if reachability not in {"reachable", "likely_reachable", "unknown", "unreachable"}:
+            if verdict == "confirmed":
+                reachability = "reachable"
+            elif verdict == "likely":
+                reachability = "likely_reachable"
+            elif verdict == "false_positive":
+                reachability = "unreachable"
+            else:
+                reachability = "unknown"
+
+        verification_evidence = str(
+            verification_payload.get("verification_evidence")
+            or finding.get("verification_evidence")
+            or finding.get("description")
+            or ""
+        ).strip()
+        if len(verification_evidence) < 10:
+            verification_evidence = (
+                f"auto_rescue_save_evidence: verdict={verdict}; "
+                f"confidence={confidence:.2f}; file={finding.get('file_path') or 'unknown'}"
+            )
+
+        if verdict in {"confirmed", "likely"}:
+            normalized_status = "verified"
+        elif verdict == "false_positive":
+            normalized_status = "false_positive"
+        else:
+            normalized_status = "uncertain"
+
+        return {
+            "finding_identity": finding.get("finding_identity"),
+            "file_path": finding.get("file_path") or "unknown",
+            "line_start": line_start,
+            "line_end": line_end,
+            "function_name": function_name,
+            "title": finding.get("title") or f"Verification finding at line {line_start}",
+            "vulnerability_type": finding.get("vulnerability_type") or "unknown",
+            "severity": str(finding.get("severity") or "medium").strip().lower(),
+            "description": finding.get("description"),
+            "source": finding.get("source"),
+            "sink": finding.get("sink"),
+            "dataflow_path": finding.get("dataflow_path"),
+            "status": normalized_status,
+            "is_verified": True,
+            "poc_code": finding.get("poc_code"),
+            "cvss_score": finding.get("cvss_score"),
+            "cvss_vector": finding.get("cvss_vector"),
+            "verdict": verdict,
+            "confidence": confidence,
+            "reachability": reachability,
+            "verification_evidence": verification_evidence,
+            "cwe_id": finding.get("cwe_id"),
+            "suggestion": finding.get("suggestion"),
+        }
+
+    async def _rescue_save_missing_verification_results(
+        self,
+        verified_findings: List[Dict[str, Any]],
+        task_id: str,
+    ) -> Dict[str, Any]:
+        """
+        当 Verification 提前结束且未调用 save_verification_result 时，进行确定性补救保存。
+        """
+        attempted_count = 0
+        saved_count = 0
+        failed_count = 0
+        seen_keys: set[str] = set()
+
+        for finding in verified_findings:
+            if not isinstance(finding, dict):
+                continue
+
+            finding_payload = dict(finding)
+            if task_id:
+                ensure_finding_identity(task_id, finding_payload)
+
+            dedup_key = str(finding_payload.get("finding_identity") or "").strip()
+            if not dedup_key:
+                dedup_key = (
+                    f"{finding_payload.get('file_path', '')}:"
+                    f"{finding_payload.get('line_start', '')}:"
+                    f"{finding_payload.get('vulnerability_type', '')}:"
+                    f"{finding_payload.get('title', '')}"
+                )
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
+
+            params = self._build_save_verification_params(finding_payload)
+            attempted_count += 1
+
+            try:
+                observation = await self.execute_tool("save_verification_result", params)
+            except Exception as exc:
+                failed_count += 1
+                logger.error(
+                    "[%s] 补救保存失败（exception）: %s",
+                    self.name,
+                    exc,
+                )
+                continue
+
+            if self._is_save_verification_observation_success(observation):
+                saved_count += 1
+            else:
+                failed_count += 1
+                logger.warning(
+                    "[%s] 补救保存未确认成功: %s",
+                    self.name,
+                    str(observation or "")[:200],
+                )
+
+        return {
+            "fallback_executed": True,
+            "tool": "save_verification_result",
+            "reason": "verification_ended_without_save_verification_result",
+            "attempted_count": attempted_count,
+            "saved_count": saved_count,
+            "failed_count": failed_count,
+        }
     
     def _get_recommendation(self, vuln_type: str) -> str:
         """获取修复建议"""

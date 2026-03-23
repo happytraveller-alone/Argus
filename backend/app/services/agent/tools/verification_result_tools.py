@@ -632,13 +632,13 @@ class SaveVerificationResultTool(AgentTool):
 - source: Source 描述
 - sink: Sink 描述
 - dataflow_path: 数据流路径（数组）
-- is_verified: 是否确认漏洞存在（bool）
+- status: 漏洞存在性状态（verified|uncertain|false_positive）
 - poc_code: Fuzzing Harness / PoC 代码
 - suggestion: 修复建议
 - confidence: 置信度 [0.0, 1.0]
 
 【由 Python 程序补全】
-- task_id, status, code_snippet, report
+- task_id, is_verified, code_snippet, report
 
 兼容字段（旧链路可继续传）：
 - verdict, reachability, verification_evidence, cwe_id, poc_plan, code_context, localization_status
@@ -692,6 +692,7 @@ class SaveVerificationResultTool(AgentTool):
         vulnerability_type: str,
         severity: str,
         confidence: float,
+        status: Optional[str] = None,
         description: Optional[str] = None,
         finding_identity: Optional[str] = None,
         line_end: Optional[int] = None,
@@ -724,6 +725,7 @@ class SaveVerificationResultTool(AgentTool):
             title: 漏洞标题
             vulnerability_type: 漏洞类型
             severity: 严重程度
+            status: 漏洞存在性状态（verified|uncertain|false_positive）
             verdict: 真实性判定
             confidence: 置信度
             reachability: 可达性
@@ -746,11 +748,28 @@ class SaveVerificationResultTool(AgentTool):
 
         normalized_verdict = str(verdict or "").strip().lower()
         if normalized_verdict not in {"confirmed", "likely", "uncertain", "false_positive"}:
-            normalized_verdict = "confirmed" if bool(is_verified) else "uncertain"
+            normalized_verdict = "uncertain"
 
-        normalized_is_verified = bool(is_verified)
-        if not normalized_is_verified and normalized_verdict in {"confirmed", "likely"} and normalized_confidence >= 0.7:
-            normalized_is_verified = True
+        normalized_status_raw = str(status or "").strip().lower()
+        if normalized_status_raw in {"verified", "true_positive", "exists", "vulnerable"}:
+            normalized_status = "verified"
+        elif normalized_status_raw in {"false_positive", "not_vulnerable", "not_exists", "non_vuln"}:
+            normalized_status = "false_positive"
+        elif normalized_status_raw in {"uncertain", "unknown", "needs_review", "needs-review"}:
+            normalized_status = "uncertain"
+        elif normalized_status_raw in {"confirmed", "likely"}:
+            normalized_status = "verified"
+        else:
+            if normalized_verdict in {"confirmed", "likely"}:
+                normalized_status = "verified"
+            elif normalized_verdict == "false_positive":
+                normalized_status = "false_positive"
+            else:
+                normalized_status = "uncertain"
+
+        # is_verified 由程序设置：仅表示“已经过 verification 阶段”
+        # SaveVerificationResultTool 只在 verification 阶段调用，因此固定为 True。
+        normalized_is_verified = True
 
         normalized_reachability = str(reachability or "").strip().lower()
         if normalized_reachability not in {"reachable", "likely_reachable", "unknown", "unreachable"}:
@@ -801,7 +820,9 @@ class SaveVerificationResultTool(AgentTool):
             "source": source,
             "sink": sink,
             "dataflow_path": normalized_dataflow_path,
+            "status": normalized_status,
             "is_verified": normalized_is_verified,
+            "verification_stage_completed": True,
             "poc_code": poc_code,
             "suggestion": suggestion,
             "confidence": normalized_confidence,
@@ -811,6 +832,8 @@ class SaveVerificationResultTool(AgentTool):
                 "verdict": normalized_verdict,
                 "confidence": normalized_confidence,
                 "reachability": normalized_reachability,
+                "status": normalized_status,
+                "verification_stage_completed": True,
                 "verification_evidence": evidence_text,
                 "poc_plan": poc_plan,
                 "code_snippet": code_snippet,
@@ -825,7 +848,7 @@ class SaveVerificationResultTool(AgentTool):
         # 生成指纹用于去重
         fingerprint_data = (
             f"{finding.get('finding_identity')}:{file_path}:{line_start}:"
-            f"{function_name}:{vulnerability_type}:{verdict}"
+            f"{function_name}:{vulnerability_type}:{normalized_verdict}:{normalized_status}"
         )
         fingerprint = hashlib.sha1(fingerprint_data.encode("utf-8")).hexdigest()[:12]
 
@@ -850,10 +873,11 @@ class SaveVerificationResultTool(AgentTool):
         self._buffered_findings.append(finding)
 
         logger.info(
-            "[SaveVerificationResult][%s] 保存验证结果：%s (%s) - verdict=%s, confidence=%.2f",
+            "[SaveVerificationResult][%s] 保存验证结果：%s (%s) - status=%s, verdict=%s, confidence=%.2f",
             task_id,
             title,
             file_path,
+            normalized_status,
             normalized_verdict,
             normalized_confidence,
         )
@@ -894,7 +918,7 @@ class SaveVerificationResultTool(AgentTool):
                     "saved": saved > 0,
                     "total_saved": self._saved_count,
                     "message": (
-                        f"验证结果已保存：{title}（verdict={normalized_verdict}, "
+                        f"验证结果已保存：{title}（status={normalized_status}, verdict={normalized_verdict}, "
                         f"confidence={normalized_confidence:.2f}），累计 {self._saved_count} 条"
                     ),
                 },

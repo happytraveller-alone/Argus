@@ -720,7 +720,6 @@ async def _execute_agent_task(task_id: str):
                 fields_to_update: Dict[str, Any],
                 update_reason: str,
             ) -> Dict[str, Any]:
-                verified_confidence_threshold = 0.7
                 async with async_session_factory() as update_db:
                     finding_stmt = select(AgentFinding).where(
                         AgentFinding.task_id == task_id,
@@ -782,25 +781,52 @@ async def _execute_agent_task(task_id: str):
                             finding_row.verification_evidence = str(normalized_evidence)
                             verification_result["verification_evidence"] = str(normalized_evidence)
 
+                        status_for_state = str(
+                            verification_result.get("status")
+                            or finding_row.status
+                            or ""
+                        ).strip().lower()
                         verdict_for_state = str(finding_row.verdict or "").strip().lower()
-                        confidence_for_state = finding_row.confidence
-                        try:
-                            confidence_for_state = float(confidence_for_state)
-                        except Exception:
-                            confidence_for_state = 0.0
-                        finding_row.is_verified = (
-                            verdict_for_state == "confirmed"
-                            or (
-                                verdict_for_state == "likely"
-                                and confidence_for_state >= verified_confidence_threshold
-                            )
-                        )
-                        if verdict_for_state == "false_positive":
+                        if status_for_state in {"false_positive", "false-positive", "not_vulnerable", "not_exists"}:
+                            finding_row.status = FindingStatus.FALSE_POSITIVE
+                        elif status_for_state in {"uncertain", "unknown", "needs_review", "needs-review"}:
+                            finding_row.status = FindingStatus.UNCERTAIN
+                        elif status_for_state in {"verified", "true_positive", "exists", "vulnerable", "confirmed", "likely"}:
+                            finding_row.status = FindingStatus.VERIFIED
+                        elif verdict_for_state == "false_positive":
                             finding_row.status = FindingStatus.FALSE_POSITIVE
                         elif verdict_for_state == "uncertain":
                             finding_row.status = FindingStatus.UNCERTAIN
                         elif verdict_for_state in {"confirmed", "likely"}:
                             finding_row.status = FindingStatus.VERIFIED
+
+                        # status 与 verdict 冲突时，以 status 语义为准
+                        if finding_row.status == FindingStatus.FALSE_POSITIVE and finding_row.verdict in {"confirmed", "likely"}:
+                            finding_row.verdict = "false_positive"
+                            verification_result["verdict"] = "false_positive"
+                            verification_result["authenticity"] = "false_positive"
+                        elif finding_row.status == FindingStatus.UNCERTAIN and finding_row.verdict in {"confirmed", "likely", "false_positive"}:
+                            finding_row.verdict = "uncertain"
+                            verification_result["verdict"] = "uncertain"
+                            verification_result["authenticity"] = "uncertain"
+                        elif finding_row.status == FindingStatus.VERIFIED and str(finding_row.verdict or "").strip().lower() == "false_positive":
+                            finding_row.verdict = "likely"
+                            verification_result["verdict"] = "likely"
+                            verification_result["authenticity"] = "likely"
+
+                        # is_verified 语义：是否已经过 verification 阶段（程序设置）
+                        verification_stage_completed = bool(
+                            verification_result.get("verification_stage_completed")
+                            or finding_row.is_verified
+                            or finding_row.status in {
+                                FindingStatus.VERIFIED,
+                                FindingStatus.UNCERTAIN,
+                                FindingStatus.FALSE_POSITIVE,
+                            }
+                        )
+                        finding_row.is_verified = verification_stage_completed
+                        verification_result["verification_stage_completed"] = verification_stage_completed
+                        verification_result["status"] = finding_row.status
 
                         finding_row.verification_result = verification_result
 
@@ -1886,7 +1912,7 @@ async def _initialize_tools(
         "sandbox_exec": SandboxTool(sandbox_manager),
         "verify_vulnerability": VulnerabilityVerifyTool(sandbox_manager),
         "run_code": RunCodeTool(sandbox_manager, project_root),
-        "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
+        # "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
     }
 
     if task_id:

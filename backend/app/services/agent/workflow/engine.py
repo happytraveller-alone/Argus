@@ -323,6 +323,7 @@ class AuditWorkflowEngine:
                 f"🛡️ [Workflow] 开始 Verification 阶段，漏洞队列共 {vuln_queue_size} 条",
             )
             await self._run_verification_phase(state, task_id)
+            await self._sync_verification_tool_buffer_to_db(task_id)
             
             #  记录 Verification 完成后的内存
             if self.enable_memory_monitoring:
@@ -906,6 +907,88 @@ class AuditWorkflowEngine:
             state.vuln_queue_findings_processed,
             len(self.orchestrator._all_findings),
         )
+
+    async def _sync_verification_tool_buffer_to_db(self, task_id: str) -> None:
+        """
+        Verification 阶段结束后的最终同步：
+        - 将 save_verification_result 工具缓冲中的结果去重后再触发一次持久化回调，
+          防止 Agent 结束时出现“已保存但未入库”的尾部丢失。
+        """
+        orc = self.orchestrator
+        verification_agent = orc.sub_agents.get("verification")
+        if verification_agent is None:
+            return
+
+        tools = getattr(verification_agent, "tools", {})
+        save_tool = tools.get("save_verification_result") if isinstance(tools, dict) else None
+        if save_tool is None:
+            return
+
+        buffered_findings = getattr(save_tool, "buffered_findings", None)
+        if not isinstance(buffered_findings, list) or not buffered_findings:
+            return
+
+        save_callback = getattr(save_tool, "_save_callback", None)
+        if save_callback is None:
+            logger.warning(
+                "[WorkflowEngine] save_verification_result buffer has %s items but _save_callback is missing",
+                len(buffered_findings),
+            )
+            await orc.emit_event(
+                "warning",
+                (
+                    "[Workflow] Verification 结果已缓冲但未注入持久化回调，"
+                    f"当前缓冲 {len(buffered_findings)} 条"
+                ),
+            )
+            return
+
+        deduped_findings: List[Dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        for item in buffered_findings:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("finding_identity") or "").strip()
+            if not key:
+                key = (
+                    f"{item.get('file_path', '')}:{item.get('line_start', '')}:"
+                    f"{item.get('vulnerability_type', '')}:{item.get('title', '')}"
+                )
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            deduped_findings.append(dict(item))
+
+        if not deduped_findings:
+            return
+
+        try:
+            persisted_count = int(await save_callback(deduped_findings) or 0)
+            logger.info(
+                "[WorkflowEngine] Verification buffer sync done: task_id=%s buffered=%s deduped=%s persisted=%s",
+                task_id,
+                len(buffered_findings),
+                len(deduped_findings),
+                persisted_count,
+            )
+            await orc.emit_event(
+                "info",
+                (
+                    "[Workflow] Verification 结果入库同步完成："
+                    f"补写 {persisted_count}/{len(deduped_findings)} 条"
+                ),
+            )
+        except Exception as exc:
+            logger.error(
+                "[WorkflowEngine] Verification buffer sync failed: task_id=%s error=%s",
+                task_id,
+                exc,
+                exc_info=True,
+            )
+            await orc.emit_event(
+                "warning",
+                f"[Workflow] Verification 结果入库同步失败：{str(exc)[:120]}",
+            )
 
     def _ensure_verification_reports(self) -> None:
         """
