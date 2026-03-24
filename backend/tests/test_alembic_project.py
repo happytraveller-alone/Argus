@@ -90,40 +90,39 @@ def test_project_management_metrics_table_is_created_by_a_single_migration():
     assert matching_files == ["e5f6a7b8c9d0_add_project_management_metrics.py"]
 
 
-def test_alembic_versions_directory_keeps_expected_base_revisions_and_merge_files():
+def test_alembic_versions_directory_keeps_expected_linearized_revisions():
     _, down_revisions, file_names = _load_revision_graph()
     base_revisions = sorted(
         revision for revision, parents in down_revisions.items() if len(parents) == 0
     )
 
-    assert base_revisions == ["5b0f3c9a6d7e", "c4b1a7e8d9f0"]
+    assert base_revisions == ["5b0f3c9a6d7e"]
     assert file_names["6c8d9e0f1a2b"] == "6c8d9e0f1a2b_finalize_projects_zip_file_hash.py"
-    assert file_names["d4e5f6a7b8c9"] == "d4e5f6a7b8c9_merge_phpstan_and_agent_heads.py"
-    assert file_names["5f6a7b8c9d0e"] == "5f6a7b8c9d0e_merge_project_metrics_and_yasa_phpstan_heads.py"
-    assert file_names["90a71996ac03"] == "90a71996ac03_add_project_management_metrics_table.py"
+    assert file_names["1f2e3d4c5b6a"] == "1f2e3d4c5b6a_add_verified_project_management_metrics.py"
     assert file_names["a8f1c2d3e4b5"] == "a8f1c2d3e4b5_add_agent_tasks_report_column.py"
     assert file_names["b9d8e7f6a5b4"] == "b9d8e7f6a5b4_drop_legacy_audit_tables.py"
     assert file_names["c9d0e1f2a3b4"] == "c9d0e1f2a3b4_add_yasa_rule_configs_and_task_binding.py"
     assert "048836873140" not in file_names
-    assert down_revisions["5f6a7b8c9d0e"] == ("b7e8f9a0b1c2", "e5f6a7b8c9d0")
-    assert down_revisions["90a71996ac03"] == ("5f6a7b8c9d0e",)
-    assert down_revisions["a8f1c2d3e4b5"] == ("90a71996ac03",)
+    assert "c4b1a7e8d9f0" not in file_names
+    assert "d4e5f6a7b8c9" not in file_names
+    assert "5f6a7b8c9d0e" not in file_names
+    assert "90a71996ac03" not in file_names
+    assert down_revisions["a8f1c2d3e4b5"] == ("b7e8f9a0b1c2",)
     assert down_revisions["b9d8e7f6a5b4"] == ("a8f1c2d3e4b5",)
-    assert down_revisions["c9d0e1f2a3b4"] == ("b9d8e7f6a5b4",)
+    assert down_revisions["1f2e3d4c5b6a"] == ("f6a7b8c9d0e1",)
+    assert down_revisions["c9d0e1f2a3b4"] == ("1f2e3d4c5b6a",)
 
 
-def test_project_management_metrics_bridge_revision_is_a_no_op():
-    bridge_file = (
-        BACKEND_ROOT
-        / "alembic"
-        / "versions"
-        / "90a71996ac03_add_project_management_metrics_table.py"
-    )
-    bridge_source = bridge_file.read_text(encoding="utf-8")
+def test_removed_bridge_revisions_stay_deleted_after_linearization():
+    removed_files = [
+        "c4b1a7e8d9f0_legacy_agent_findings_report_bridge.py",
+        "d4e5f6a7b8c9_merge_phpstan_and_agent_heads.py",
+        "5f6a7b8c9d0e_merge_project_metrics_and_yasa_phpstan_heads.py",
+        "90a71996ac03_add_project_management_metrics_table.py",
+    ]
 
-    assert "Compatibility no-op" in bridge_source
-    assert "create_table('project_management_metrics'" not in bridge_source
-    assert 'create_table("project_management_metrics"' not in bridge_source
+    for file_name in removed_files:
+        assert not (VERSIONS_DIR / file_name).exists()
 
 
 def test_bridge_downgrade_keeps_zip_file_hash_baseline_contract():

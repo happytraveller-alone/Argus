@@ -38,10 +38,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
       - name: Install backend dependencies
+        working-directory: backend
         run: |
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          uv sync --frozen --no-dev
 
       - name: Run Alembic upgrade head
         working-directory: backend
@@ -51,7 +54,7 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: vulhunter
         run: |
-          alembic upgrade head
+          uv run alembic upgrade head
 
       - name: Verify Alembic current equals single head
         working-directory: backend
@@ -61,7 +64,7 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: vulhunter
         run: |
-          python - <<'PY'
+          uv run python - <<'PY'
           import subprocess
 
           current = subprocess.check_output(["alembic", "current"], text=True)
