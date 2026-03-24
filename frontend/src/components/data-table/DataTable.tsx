@@ -137,6 +137,7 @@ export function DataTable<TData extends RowData>({
   className,
   tableClassName,
   containerClassName,
+  tableContainerClassName,
   getRowId,
 }: DataTableProps<TData>) {
   const initialState = React.useMemo(
@@ -258,7 +259,7 @@ export function DataTable<TData extends RowData>({
       />
       <DataTableSelectionBar table={table} selection={selection} />
       <DataTableScrollContainer className={containerClassName}>
-        <Table className={tableClassName}>
+        <Table className={tableClassName} containerClassName={tableContainerClassName}>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>

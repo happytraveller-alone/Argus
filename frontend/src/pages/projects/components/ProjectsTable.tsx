@@ -69,7 +69,7 @@ const SECTION_DIVIDER_CLASSNAME = "border-l-2 border-border/95";
 const METRIC_GROUP_CLASSNAME =
   "flex items-center justify-center";
 const METRIC_TRIGGER_CLASSNAME =
-  "group relative inline-flex min-w-[4.5rem] items-center justify-center rounded-full border border-border/60 bg-background/40 p-1 text-center transition-all duration-200 hover:border-primary/40 hover:bg-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default disabled:hover:border-border/60 disabled:hover:bg-background/40";
+  "inline-flex items-center justify-center rounded-full bg-transparent p-0 text-center transition-transform duration-150 hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-default disabled:opacity-100";
 const METRIC_POPOVER_CLASSNAME =
   "absolute left-1/2 top-[calc(100%+0.75rem)] z-30 w-[19rem] -translate-x-1/2 rounded-2xl border border-border/80 bg-background/95 p-4 text-left shadow-[0_24px_80px_rgba(15,23,42,0.42)] backdrop-blur-sm transition-all duration-150";
 const METRIC_POPOVER_HIDDEN_CLASSNAME =
@@ -249,7 +249,7 @@ function buildColumns(
       meta: {
         label: "项目",
         plainHeader: true,
-        minWidth: 176,
+        minWidth: 148,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
       },
@@ -271,7 +271,7 @@ function buildColumns(
       meta: {
         label: "大小",
         plainHeader: true,
-        minWidth: 132,
+        minWidth: 110,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME}`,
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center text-[17px] text-muted-foreground`,
       },
@@ -324,7 +324,7 @@ function buildColumns(
       meta: {
         label: "发现漏洞",
         plainHeader: true,
-        minWidth: 186,
+        minWidth: 142,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
       },
@@ -345,7 +345,7 @@ function buildColumns(
       meta: {
         label: "AI验证",
         plainHeader: true,
-        minWidth: 186,
+        minWidth: 142,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
       },
@@ -367,17 +367,17 @@ function buildColumns(
       meta: {
         label: "操作",
         plainHeader: true,
-        minWidth: 320,
+        minWidth: 244,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${SECTION_DIVIDER_CLASSNAME}`,
         cellClassName: `${BODY_CELL_CLASSNAME} ${SECTION_DIVIDER_CLASSNAME} text-center`,
       },
       cell: ({ row }) => (
-        <div className="flex items-center justify-center gap-2 whitespace-nowrap text-[16px]">
+        <div className="flex flex-wrap items-center justify-center gap-2 text-[16px]">
           <Button
             asChild
             size="sm"
             variant="outline"
-            className="cyber-btn-ghost h-8 px-3"
+            className="cyber-btn-ghost h-8 px-2.5"
           >
             <Link to={row.original.detailPath} state={row.original.detailState}>
               查看详情
@@ -388,7 +388,7 @@ function buildColumns(
               asChild
               size="sm"
               variant="outline"
-              className="cyber-btn-ghost h-8 px-3 hover:bg-sky-500/10 hover:text-sky-200 hover:border-sky-500/30"
+              className="cyber-btn-ghost h-8 px-2.5 hover:bg-sky-500/10 hover:text-sky-200 hover:border-sky-500/30"
             >
               <Link
                 to={row.original.actions.browseCodePath}
@@ -401,7 +401,7 @@ function buildColumns(
             <Button
               size="sm"
               variant="outline"
-              className="cyber-btn-ghost h-8 px-3"
+              className="cyber-btn-ghost h-8 px-2.5"
               disabled
               title={row.original.actions.browseCodeDisabledReason ?? undefined}
               aria-label={`代码浏览 ${row.original.name}（${row.original.actions.browseCodeDisabledReason ?? "暂不可用"}）`}
@@ -411,7 +411,7 @@ function buildColumns(
           )}
           <Button
             size="sm"
-            className={`${PROJECT_ACTION_BTN_SUBTLE} h-8 px-3`}
+            className={`${PROJECT_ACTION_BTN_SUBTLE} h-8 px-2.5`}
             onClick={() => onCreateScan(row.original.id)}
             disabled={!row.original.actions.canCreateScan}
           >
@@ -436,7 +436,8 @@ export default function ProjectsTable({
       toolbar={false}
       pagination={false}
       className="overflow-visible"
-      tableClassName="min-w-[1360px]"
+      containerClassName="overflow-visible"
+      tableContainerClassName="overflow-visible border-0 rounded-none"
       emptyState={{
         title: "暂无项目",
       }}

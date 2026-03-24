@@ -44,13 +44,20 @@ test("projects selectors filter by name and description only", async () => {
 	assert.equal(selectors.filterProjects(projects, "").length, 2);
 });
 
-test("projects selectors build compact pagination items with ellipsis", async () => {
+test("projects selectors build adaptive pagination items with ellipsis", async () => {
 	const selectors = await importOrFail<any>(
 		"../src/pages/projects/lib/projectsPageSelectors.ts",
 	);
 
 	assert.deepEqual(selectors.buildPaginationItems(3, 5), [1, 2, 3, 4, 5]);
-	assert.deepEqual(selectors.buildPaginationItems(5, 10), [1, "ellipsis", 4, 5, 6, "ellipsis", 10]);
+	assert.deepEqual(
+		selectors.buildPaginationItems(5, 10),
+		[1, "ellipsis", 3, 4, 5, 6, 7, "ellipsis", 10],
+	);
+	assert.deepEqual(
+		selectors.buildPaginationItems(9, 12),
+		[1, "ellipsis", 7, 8, 9, 10, 11, 12],
+	);
 });
 
 test("projects selectors calculate responsive project page size from container metrics", async () => {
@@ -84,6 +91,36 @@ test("projects selectors calculate responsive project page size from container m
 			rowHeight: 84,
 		}),
 		1,
+	);
+});
+
+test("projects selectors keep the current visible anchor after page size changes", async () => {
+	const selectors = await importOrFail<any>(
+		"../src/pages/projects/lib/projectsPageSelectors.ts",
+	);
+
+	assert.equal(
+		selectors.resolveProjectsFirstVisibleIndex({
+			page: 3,
+			pageSize: 6,
+		}),
+		12,
+	);
+	assert.equal(
+		selectors.resolveAnchoredProjectsPage({
+			firstVisibleIndex: 12,
+			nextPageSize: 4,
+			totalRows: 20,
+		}),
+		4,
+	);
+	assert.equal(
+		selectors.resolveAnchoredProjectsPage({
+			firstVisibleIndex: 18,
+			nextPageSize: 10,
+			totalRows: 19,
+		}),
+		2,
 	);
 });
 

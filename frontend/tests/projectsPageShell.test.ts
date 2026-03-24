@@ -28,8 +28,22 @@ test("ProjectsPage 使用响应式分页容量而不是固定项目数量", () =
 
 	assert.match(source, /ResizeObserver/);
 	assert.match(source, /calculateResponsiveProjectsPageSize/);
+	assert.match(source, /resolveAnchoredProjectsPage/);
+	assert.match(source, /resolveProjectsFirstVisibleIndex/);
 	assert.doesNotMatch(
 		source,
 		/paginateItems\(filteredProjects,\s*browser\.projectPage,\s*PROJECT_PAGE_SIZE\)/,
 	);
+});
+
+test("ProjectsTable 为项目页传入专用表格容器样式以移除内层滑框", () => {
+	const projectsTablePath = path.join(
+		frontendDir,
+		"src/pages/projects/components/ProjectsTable.tsx",
+	);
+	const source = readFileSync(projectsTablePath, "utf8");
+
+	assert.match(source, /containerClassName="overflow-visible"/);
+	assert.match(source, /tableContainerClassName="overflow-visible border-0 rounded-none"/);
+	assert.doesNotMatch(source, /tableClassName="min-w-\[1360px\]"/);
 });

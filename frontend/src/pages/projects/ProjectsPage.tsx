@@ -21,6 +21,8 @@ import {
 	calculateResponsiveProjectsPageSize,
 	filterProjects,
 	paginateItems,
+	resolveAnchoredProjectsPage,
+	resolveProjectsFirstVisibleIndex,
 } from "./lib/projectsPageSelectors";
 import ProjectsToolbar from "./components/ProjectsToolbar";
 import ProjectsTable from "./components/ProjectsTable";
@@ -122,6 +124,7 @@ export default function ProjectsPage({
 	const tableViewportRef = useRef<HTMLDivElement | null>(null);
 	const paginationRef = useRef<HTMLDivElement | null>(null);
 	const [projectPageSize, setProjectPageSize] = useState(PROJECT_PAGE_SIZE);
+	const projectPageSizeRef = useRef(projectPageSize);
 
 	const filteredProjects = useMemo(
 		() => filterProjects(data.projects, browser.searchTerm),
@@ -143,6 +146,22 @@ export default function ProjectsPage({
 			browser.setProjectPage(totalProjectPages);
 		}
 	}, [browser, totalProjectPages]);
+
+	useEffect(() => {
+		browser.setProjectPage((currentPage) => {
+			const firstVisibleIndex = resolveProjectsFirstVisibleIndex({
+				page: currentPage,
+				pageSize: projectPageSizeRef.current,
+			});
+			const nextPage = resolveAnchoredProjectsPage({
+				firstVisibleIndex,
+				nextPageSize: projectPageSize,
+				totalRows: filteredProjects.length,
+			});
+			return currentPage === nextPage ? currentPage : nextPage;
+		});
+		projectPageSizeRef.current = projectPageSize;
+	}, [browser, filteredProjects.length, projectPageSize]);
 
 	useEffect(() => {
 		if (typeof ResizeObserver === "undefined" || !tableViewportRef.current) {
@@ -168,8 +187,14 @@ export default function ProjectsPage({
 		if (paginationRef.current) {
 			observer.observe(paginationRef.current);
 		}
-		return () => observer.disconnect();
-	}, [filteredProjects.length, totalProjectPages]);
+		window.addEventListener("resize", updatePageSize);
+		window.visualViewport?.addEventListener("resize", updatePageSize);
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", updatePageSize);
+			window.visualViewport?.removeEventListener("resize", updatePageSize);
+		};
+	}, [browser.projectPage, filteredProjects.length, totalProjectPages]);
 
 	useEffect(() => {
 		const hash = window.location.hash;

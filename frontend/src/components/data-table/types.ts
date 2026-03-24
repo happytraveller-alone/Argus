@@ -152,5 +152,6 @@ export interface DataTableProps<TData> {
   className?: string;
   tableClassName?: string;
   containerClassName?: string;
+  tableContainerClassName?: string;
   getRowId?: (originalRow: TData, index: number) => string;
 }

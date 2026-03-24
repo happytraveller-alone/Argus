@@ -18,7 +18,7 @@ async function importOrFail<TModule = Record<string, unknown>>(
 	}
 }
 
-test("ProjectsTable renders compact grouped headers and browse-state actions", async () => {
+test("ProjectsTable renders hover metric popovers without nested trigger frames", async () => {
 	const tableModule = await importOrFail<any>(
 		"../src/pages/projects/components/ProjectsTable.tsx",
 	);
@@ -122,10 +122,6 @@ test("ProjectsTable renders compact grouped headers and browse-state actions", a
 	assert.match(markup, /<th[^>]*>操作<\/th>/);
 	assert.doesNotMatch(markup, /项目概览|体量概览|快捷操作|任务概览|风险概览/);
 	assert.doesNotMatch(markup, /名称与入口|规模与体量|详情 \/ 浏览 \/ 扫描|完成 \/ 运行中|按风险等级分布/);
-	assert.doesNotMatch(markup, /<th[^>]*>严重<\/th>/);
-	assert.doesNotMatch(markup, /<th[^>]*>高危<\/th>/);
-	assert.doesNotMatch(markup, /<th[^>]*>中危<\/th>/);
-	assert.doesNotMatch(markup, /<th[^>]*>低危<\/th>/);
 	assert.doesNotMatch(markup, /data-project-group-header=/);
 	assert.doesNotMatch(markup, /data-project-group-label=/);
 	assert.match(markup, /data-project-metric-group="vulnerabilities"/);
@@ -134,18 +130,27 @@ test("ProjectsTable renders compact grouped headers and browse-state actions", a
 	assert.match(markup, /data-project-metric-trigger="ai-verified"/);
 	assert.match(markup, /data-project-metric-popover="vulnerabilities"/);
 	assert.match(markup, /data-project-metric-popover="ai-verified"/);
+	assert.match(markup, /data-project-metric-item="critical"/);
+	assert.match(markup, /data-project-metric-item="high"/);
+	assert.match(markup, /data-project-metric-item="medium"/);
+	assert.match(markup, /data-project-metric-item="low"/);
 	assert.match(markup, /inline-flex min-w-\[3\.25rem\] items-center justify-center rounded-full border px-3 py-1/);
-	assert.match(markup, /flex items-center justify-center/);
+	assert.match(markup, /flex items-center justify-center relative/);
 	assert.match(markup, /font-semibold tabular-nums text-\[18px\]/);
 	assert.doesNotMatch(markup, /inline-flex min-w-\[5\.5rem\] items-center justify-center rounded-md border px-3 py-1\.5/);
+	assert.match(markup, /aria-haspopup="dialog"/);
+	assert.doesNotMatch(markup, /data-project-metric-grid=/);
+	assert.doesNotMatch(markup, /group relative inline-flex min-w-\[4\.5rem\] items-center justify-center rounded-full border border-border\/60 bg-background\/40 p-1/);
 	assert.doesNotMatch(markup, /暂未发现漏洞/);
+	assert.doesNotMatch(markup, /min-w-\[1360px\]/);
+	assert.doesNotMatch(markup, /whitespace-nowrap text-\[16px\]/);
 	assert.match(markup, /border-b-2/);
 	assert.match(markup, /border-r-2 border-border\/90/);
 	assert.match(markup, /border-l-2 border-border\/95/);
 	assert.match(markup, /text-\[15px\] font-semibold uppercase/);
 	assert.match(markup, /mx-auto block max-w-\[180px\] truncate text-center text-\[18px\] font-semibold/);
 	assert.match(markup, /text-center text-\[17px\] text-muted-foreground/);
-	assert.match(markup, /justify-center gap-2 whitespace-nowrap text-\[16px\]/);
+	assert.match(markup, /justify-center gap-2 text-\[16px\]/);
 	assert.ok(markup.indexOf("查看详情") < markup.indexOf("代码浏览"));
 	assert.ok(markup.indexOf("代码浏览") < markup.indexOf("创建扫描"));
 	assert.ok(!markup.includes(">状态<"));
@@ -234,7 +239,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 	assert.doesNotMatch(markup, /暂未发现漏洞/);
 });
 
-test("ProjectsTable lets metric popovers escape the table frame", async () => {
+test("ProjectsTable keeps metric popovers but removes the old outer trigger frame", async () => {
 	const tableModule = await importOrFail<any>(
 		"../src/pages/projects/components/ProjectsTable.tsx",
 	);
@@ -279,4 +284,8 @@ test("ProjectsTable lets metric popovers escape the table frame", async () => {
 	);
 
 	assert.match(markup, /class="[^"]*overflow-visible[^"]*"/);
+	assert.match(markup, /data-project-metric-trigger="vulnerabilities"/);
+	assert.match(markup, /data-project-metric-popover="vulnerabilities"/);
+	assert.doesNotMatch(markup, /group relative inline-flex min-w-\[4\.5rem\] items-center justify-center rounded-full border border-border\/60 bg-background\/40 p-1/);
+	assert.doesNotMatch(markup, /data-slot="table-container" class="[^"]*overflow-x-auto[^"]*rounded-sm border border-border/);
 });

@@ -7,6 +7,9 @@ interface ResponsiveProjectsPageSizeInput {
 	rowHeight: number;
 }
 
+const MIN_PROJECT_PAGE_SIZE = 1;
+const PROJECT_PAGINATION_WINDOW = 7;
+
 function toFiniteNumber(value: unknown): number {
 	const parsed = Number(value);
 	return Number.isFinite(parsed) ? parsed : 0;
@@ -50,33 +53,86 @@ export function calculateResponsiveProjectsPageSize(
 	return Math.max(1, Math.floor(availableRowsHeight / rowHeight));
 }
 
+export function resolveProjectsFirstVisibleIndex({
+	page,
+	pageSize,
+}: {
+	page: number;
+	pageSize: number;
+}) {
+	const safePage = Math.max(1, Math.floor(page) || 1);
+	const safePageSize = Math.max(
+		MIN_PROJECT_PAGE_SIZE,
+		Math.floor(pageSize) || MIN_PROJECT_PAGE_SIZE,
+	);
+	return (safePage - 1) * safePageSize;
+}
+
+export function resolveAnchoredProjectsPage({
+	firstVisibleIndex,
+	nextPageSize,
+	totalRows,
+}: {
+	firstVisibleIndex: number;
+	nextPageSize: number;
+	totalRows: number;
+}) {
+	const safePageSize = Math.max(
+		MIN_PROJECT_PAGE_SIZE,
+		Math.floor(nextPageSize) || MIN_PROJECT_PAGE_SIZE,
+	);
+	const safeTotalRows = Math.max(0, Math.floor(totalRows) || 0);
+	const lastIndex = Math.max(0, safeTotalRows - 1);
+	const clampedIndex = Math.max(
+		0,
+		Math.min(Math.floor(firstVisibleIndex) || 0, lastIndex),
+	);
+	const totalPages = Math.max(1, Math.ceil(safeTotalRows / safePageSize));
+	const nextPage = Math.floor(clampedIndex / safePageSize) + 1;
+
+	return Math.min(totalPages, Math.max(1, nextPage));
+}
+
 export function buildPaginationItems(
 	currentPage: number,
 	totalPages: number,
+	maxVisiblePages = PROJECT_PAGINATION_WINDOW,
 ): Array<number | "ellipsis"> {
-	if (totalPages <= 7) {
-		return Array.from({ length: totalPages }, (_, index) => index + 1);
+	const safeTotalPages = Math.max(1, Math.floor(totalPages) || 1);
+	const safeCurrentPage = Math.min(
+		safeTotalPages,
+		Math.max(1, Math.floor(currentPage) || 1),
+	);
+	const safeMaxVisiblePages = Math.max(5, Math.floor(maxVisiblePages) || 5);
+
+	if (safeTotalPages <= safeMaxVisiblePages) {
+		return Array.from({ length: safeTotalPages }, (_, index) => index + 1);
 	}
 
-	const pages = new Set<number>([
-		1,
-		totalPages,
-		currentPage - 1,
-		currentPage,
-		currentPage + 1,
-	]);
-	const sortedPages = Array.from(pages)
-		.filter((page) => page >= 1 && page <= totalPages)
-		.sort((a, b) => a - b);
+	const windowSize = Math.max(1, safeMaxVisiblePages - 2);
+	const halfWindow = Math.floor(windowSize / 2);
+	let start = Math.max(2, safeCurrentPage - halfWindow);
+	let end = start + windowSize - 1;
+	const maxEnd = safeTotalPages - 1;
+
+	if (end > maxEnd) {
+		end = maxEnd;
+		start = Math.max(2, end - windowSize + 1);
+	}
 
 	const items: Array<number | "ellipsis"> = [];
-	let previousPage = 0;
-	for (const page of sortedPages) {
-		if (previousPage > 0 && page - previousPage > 1) {
-			items.push("ellipsis");
-		}
-		items.push(page);
-		previousPage = page;
+
+	items.push(1);
+	if (start > 2) {
+		items.push("ellipsis");
 	}
+	for (let page = start; page <= end; page += 1) {
+		items.push(page);
+	}
+	if (end < safeTotalPages - 1) {
+		items.push("ellipsis");
+	}
+	items.push(safeTotalPages);
+
 	return items;
 }
