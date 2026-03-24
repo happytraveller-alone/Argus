@@ -135,6 +135,60 @@ def test_run_scanner_container_failure_keeps_truncated_error_logs(tmp_path, monk
     assert '"stderr_path":' in runner_meta
 
 
+def test_run_scanner_container_expected_nonzero_exit_keeps_logs(tmp_path, monkeypatch):
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+
+    class _FakeContainer:
+        id = "container-expected-nonzero"
+
+        def wait(self, timeout=None):
+            return {"StatusCode": 1}
+
+        def logs(self, stdout=True, stderr=False):
+            if stdout and not stderr:
+                return b"runner stdout"
+            if stderr and not stdout:
+                return b"runner stderr"
+            return b""
+
+        def remove(self, force=False):
+            return None
+
+    class _FakeContainers:
+        def run(self, image, command, detach, auto_remove, volumes, environment, working_dir):
+            return _FakeContainer()
+
+    monkeypatch.setattr(
+        scanner_runner.docker,
+        "from_env",
+        lambda: SimpleNamespace(containers=_FakeContainers()),
+        raising=False,
+    )
+
+    spec = scanner_runner.ScannerRunSpec(
+        scanner_type="phpstan",
+        image="vulhunter/phpstan-runner:latest",
+        workspace_dir=str(workspace_dir),
+        command=["phpstan", "analyse", "/scan/project"],
+        timeout_seconds=90,
+        env={},
+        expected_exit_codes=[0, 1],
+    )
+
+    result = scanner_runner.run_scanner_container_sync(spec)
+
+    assert result.success is True
+    assert result.exit_code == 1
+    assert result.stdout_path is not None
+    assert result.stderr_path is not None
+    assert Path(result.stdout_path).read_text(encoding="utf-8") == "runner stdout"
+    assert Path(result.stderr_path).read_text(encoding="utf-8") == "runner stderr"
+    runner_meta = (workspace_dir / "meta" / "runner.json").read_text(encoding="utf-8")
+    assert '"success": true' in runner_meta
+    assert '"log_retention": "nonzero_exit"' in runner_meta
+
+
 def test_stop_scan_container_handles_missing_container_gracefully(monkeypatch):
     class _FakeContainers:
         def get(self, _container_id):

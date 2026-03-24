@@ -94,11 +94,13 @@ def run_scanner_container_sync(
         exit_code = int((wait_result or {}).get("StatusCode", 1))
         retained_stdout_path: str | None = None
         retained_stderr_path: str | None = None
-        if exit_code not in expected_exit_codes:
+        keep_logs = exit_code != 0
+        if keep_logs:
             stdout_text = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
             stderr_text = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
             retained_stdout_path = _write_retained_log(stdout_log_path, stdout_text)
             retained_stderr_path = _write_retained_log(stderr_log_path, stderr_text)
+        log_retention = "nonzero_exit" if keep_logs else "dropped"
         runner_meta_path.write_text(
             json.dumps(
                 {
@@ -108,7 +110,7 @@ def run_scanner_container_sync(
                     "success": exit_code in expected_exit_codes,
                     "stdout_path": retained_stdout_path,
                     "stderr_path": retained_stderr_path,
-                    "log_retention": "dropped" if exit_code in expected_exit_codes else "failure_only",
+                    "log_retention": log_retention,
                 },
                 ensure_ascii=False,
                 indent=2,
