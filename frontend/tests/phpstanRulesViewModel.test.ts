@@ -2,15 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
 
 import PhpstanRules from "../src/pages/PhpstanRules.tsx";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
 test("PhpstanRules renders expected layout blocks", () => {
   const markup = renderToStaticMarkup(
-    createElement(MemoryRouter, {}, createElement(PhpstanRules)),
+    createElement(SsrRouter, {}, createElement(PhpstanRules)),
   );
 
   assert.match(markup, /有效规则总数/);

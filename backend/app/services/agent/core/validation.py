@@ -256,7 +256,7 @@ class CodeAnalysisInput(ToolInput):
 
 class PatternMatchInput(ToolInput):
     """Validated input for pattern matching operations"""
-    patterns: List[str] = Field(..., min_items=1, max_items=50)
+    patterns: List[str] = Field(..., min_length=1, max_length=50)
     target_path: str = Field(default=".", max_length=500)
     file_extensions: List[str] = Field(default_factory=list)
     max_files: int = Field(default=500, ge=1, le=2000)

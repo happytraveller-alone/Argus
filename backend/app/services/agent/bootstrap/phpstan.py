@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import json
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -98,14 +97,15 @@ def _parse_output(output_text: str) -> Dict[str, Any]:
         return {}
 
     parse_targets = [text]
-    first_json_match = re.search(r"[{\[]", text)
-    if first_json_match and first_json_match.start() > 0:
-        parse_targets.append(text[first_json_match.start() :])
+    first_object_index = text.find("{")
+    if first_object_index > 0:
+        parse_targets.append(text[first_object_index:])
 
+    decoder = json.JSONDecoder()
     last_error: Optional[Exception] = None
     for candidate in parse_targets:
         try:
-            output = json.loads(candidate)
+            output, _ = decoder.raw_decode(candidate)
         except Exception as exc:  # noqa: BLE001
             last_error = exc
             continue

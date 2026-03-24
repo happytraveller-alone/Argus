@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
@@ -13,7 +13,7 @@ test("TaskActivitiesListTable renders severity summaries for agent tasks and kee
 
   const markup = renderToStaticMarkup(
     createElement(
-      MemoryRouter,
+      SsrRouter,
       {},
       createElement(tableModule.default, {
         activities: [

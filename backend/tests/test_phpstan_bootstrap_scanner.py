@@ -245,6 +245,15 @@ async def test_phpstan_bootstrap_scanner_raises_on_invalid_json(monkeypatch, tmp
         await scanner.scan(str(tmp_path))
 
 
+def test_phpstan_bootstrap_parse_output_supports_bracket_noise_before_json():
+    parsed = phpstan_bootstrap._parse_output(
+        "[warning] bootstrap log\n{\"files\":{},\"totals\":{}}"
+    )
+
+    assert isinstance(parsed, dict)
+    assert parsed.get("files") == {}
+
+
 @pytest.mark.asyncio
 async def test_phpstan_bootstrap_scanner_raises_when_failed_without_results(monkeypatch, tmp_path):
     _workspace_dir, _project_dir, _output_dir, logs_dir = _prepare_phpstan_workspace(

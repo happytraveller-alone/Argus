@@ -388,7 +388,7 @@ class SaveVerificationResultsInput(BaseModel):
 
     findings: List[AgentFindingModel] = Field(
         ...,
-        min_items=1,
+        min_length=1,
         description=(
             "已验证的 findings 列表（至少 1 条）。每条 finding 必须是有效的 AgentFindingModel，\n"
             "包含以下必填字段：\n"

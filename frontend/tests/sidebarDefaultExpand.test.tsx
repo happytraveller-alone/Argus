@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
@@ -15,7 +15,7 @@ async function renderSidebar(collapsed: boolean) {
 	return renderToStaticMarkup(
 		createElement(LanguageProvider, {
 			children: createElement(
-				MemoryRouter,
+				SsrRouter,
 				{},
 				createElement(Sidebar, {
 					collapsed,

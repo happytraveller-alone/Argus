@@ -2,15 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
 
 import GitleaksRules from "../src/pages/GitleaksRules.tsx";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
 test("GitleaksRules renders expected unified table layout", () => {
   const markup = renderToStaticMarkup(
-    createElement(MemoryRouter, {}, createElement(GitleaksRules)),
+    createElement(SsrRouter, {}, createElement(GitleaksRules)),
   );
 
   assert.match(markup, /有效规则总数/);

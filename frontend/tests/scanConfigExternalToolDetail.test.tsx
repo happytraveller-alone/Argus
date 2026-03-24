@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
 
 import {
   ScanConfigExternalToolDetailContent,
@@ -14,6 +13,7 @@ import type {
   SkillTestResult,
 } from "../src/pages/skill-test/types.ts";
 import type { SkillToolCatalogItem } from "../src/pages/intelligent-scan/skillToolsCatalog.ts";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
@@ -139,7 +139,7 @@ const finalResult: SkillTestResult = {
 
 function renderContent(props: Partial<ExternalToolDetailContentProps>) {
   return renderToStaticMarkup(
-    createElement(MemoryRouter, {}, createElement(ScanConfigExternalToolDetailContent, {
+    createElement(SsrRouter, {}, createElement(ScanConfigExternalToolDetailContent, {
       toolType: "skill",
       toolId: "get_code_window",
       toolName: "get_code_window",

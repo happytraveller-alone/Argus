@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
 
 import type { AgentFinding } from "../src/shared/api/agentTasks.ts";
 import type { BanditFinding } from "../src/shared/api/bandit.ts";
@@ -16,6 +15,7 @@ import {
 } from "../src/pages/finding-detail/viewModel.ts";
 import FindingDetailView from "../src/pages/finding-detail/FindingDetailView.tsx";
 import type { FindingDetailCodeBrowserAction } from "../src/pages/finding-detail/FindingDetailHeaderActions.tsx";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
@@ -132,7 +132,7 @@ function renderMarkup(
 ) {
   return renderToStaticMarkup(
     createElement(
-      MemoryRouter,
+      SsrRouter,
       null,
       createElement(FindingDetailView, {
         model: markupModel,

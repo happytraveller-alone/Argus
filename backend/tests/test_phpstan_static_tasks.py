@@ -68,10 +68,14 @@ class _SessionFactory:
 def test_parse_phpstan_output_payload_supports_empty_noise_and_json():
     parsed_empty = static_tasks._parse_phpstan_output_payload("")
     parsed_noise = static_tasks._parse_phpstan_output_payload("NOTICE...\n{\"files\":{}}")
+    parsed_bracket_noise = static_tasks._parse_phpstan_output_payload(
+        "[warning] bootstrap log\n{\"files\":{},\"totals\":{}}"
+    )
     parsed_json = static_tasks._parse_phpstan_output_payload("{\"files\":{},\"totals\":{}}")
 
     assert parsed_empty == {}
     assert isinstance(parsed_noise, dict)
+    assert isinstance(parsed_bracket_noise, dict)
     assert isinstance(parsed_json, dict)
 
     with pytest.raises(ValueError):

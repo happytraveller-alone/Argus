@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
@@ -24,7 +24,7 @@ test("ProjectsTable renders compact grouped headers and browse-state actions", a
 	);
 
 	const markup = renderToStaticMarkup(
-		createElement(MemoryRouter, {}, createElement(tableModule.default, {
+		createElement(SsrRouter, {}, createElement(tableModule.default, {
 			rows: [
 				{
 					id: "p1",
@@ -158,7 +158,7 @@ test("ProjectsTable hides zero-count vulnerability severities and shows empty pl
 	);
 
 	const markup = renderToStaticMarkup(
-		createElement(MemoryRouter, {}, createElement(tableModule.default, {
+		createElement(SsrRouter, {}, createElement(tableModule.default, {
 			rows: [
 				{
 					id: "p1",
@@ -240,7 +240,7 @@ test("ProjectsTable lets metric popovers escape the table frame", async () => {
 	);
 
 	const markup = renderToStaticMarkup(
-		createElement(MemoryRouter, {}, createElement(tableModule.default, {
+		createElement(SsrRouter, {}, createElement(tableModule.default, {
 			rows: [
 				{
 					id: "p1",

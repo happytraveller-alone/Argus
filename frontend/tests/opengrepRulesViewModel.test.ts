@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
 
 import OpengrepRules from "../src/pages/OpengrepRules.tsx";
 import { LanguageProvider } from "../src/shared/i18n/LanguageProvider.tsx";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 globalThis.document = { body: {} } as Document;
@@ -13,7 +13,7 @@ globalThis.document = { body: {} } as Document;
 test("OpengrepRules renders unified table layout shell", () => {
   const markup = renderToStaticMarkup(
     createElement(
-      MemoryRouter,
+      SsrRouter,
       {},
       createElement(LanguageProvider, null, createElement(OpengrepRules)),
     ),

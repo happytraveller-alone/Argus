@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
@@ -13,7 +13,7 @@ test("StaticAnalysisFindingsTable renders tri-state status copy and truthiness a
 
   const markup = renderToStaticMarkup(
     createElement(
-      MemoryRouter,
+      SsrRouter,
       {},
       createElement(tableModule.default, {
         currentRoute: "/static-analysis/task-1",
@@ -70,7 +70,7 @@ test("StaticAnalysisFindingsTable only disables status actions for the updating 
 
   const markup = renderToStaticMarkup(
     createElement(
-      MemoryRouter,
+      SsrRouter,
       {},
       createElement(tableModule.default, {
         currentRoute: "/static-analysis/task-1",

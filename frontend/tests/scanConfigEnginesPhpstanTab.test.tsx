@@ -2,17 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
 import ScanConfigEngines from "../src/pages/ScanConfigEngines.tsx";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
 test("ScanConfigEngines renders phpstan rules page when tab=phpstan", () => {
   const markup = renderToStaticMarkup(
     createElement(
-      MemoryRouter,
-      { initialEntries: ["/scan-config/engines?tab=phpstan"] },
+      SsrRouter,
+      { location: "/scan-config/engines?tab=phpstan" },
       createElement(
         Routes,
         null,

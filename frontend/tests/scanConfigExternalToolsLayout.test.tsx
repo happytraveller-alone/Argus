@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
 
 import SkillToolsPanel from "../src/pages/intelligent-scan/SkillToolsPanel.tsx";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
@@ -36,7 +36,7 @@ const initialSkillCatalog = [
 test("SkillToolsPanel 渲染为表格列表并保留详情入口", () => {
   const markup = renderToStaticMarkup(
     createElement(
-      MemoryRouter,
+      SsrRouter,
       null,
       createElement(SkillToolsPanel, { initialSkillCatalog }),
     ),
@@ -49,7 +49,7 @@ test("SkillToolsPanel 渲染为表格列表并保留详情入口", () => {
   assert.match(markup, /执行功能/);
   assert.match(markup, /PROMPT/);
   assert.match(markup, /CLI/);
-  assert.match(markup, /检索关键字；返回 file_path:line 定位摘要；提示继续收敛或取证/);
+  assert.match(markup, /检索关键字; 返回 file_path:line 定位摘要; 提示继续收敛或取证/);
   assert.match(markup, />详情</);
   assert.doesNotMatch(markup, /repeat\(auto-fit,\s*minmax\(/);
 });
@@ -57,7 +57,7 @@ test("SkillToolsPanel 渲染为表格列表并保留详情入口", () => {
 test("SkillToolsPanel 小屏通过表格容器提供横向滚动", () => {
   const markup = renderToStaticMarkup(
     createElement(
-      MemoryRouter,
+      SsrRouter,
       null,
       createElement(SkillToolsPanel, { initialSkillCatalog }),
     ),

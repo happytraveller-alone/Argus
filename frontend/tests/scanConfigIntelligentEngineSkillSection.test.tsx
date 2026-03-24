@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
 
 import ScanConfigIntelligentEngine from "../src/pages/ScanConfigIntelligentEngine.tsx";
+import { SsrRouter } from "./ssrTestRouter.tsx";
 
 globalThis.React = React;
 
 test("ScanConfigIntelligentEngine 展示 Skill 管理区与外部工具入口", () => {
 	const markup = renderToStaticMarkup(
 		createElement(
-			MemoryRouter,
+			SsrRouter,
 			null,
 			createElement(ScanConfigIntelligentEngine),
 		),
