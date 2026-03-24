@@ -1,8 +1,17 @@
-import { useState } from "react";
 import { Brain, KeyRound, Settings, Zap } from "lucide-react";
-import { SystemConfig, useSystemConfigDraftState } from "@/components/system/SystemConfig";
-import type { LlmModelStatsSource, LlmModelStatsStatus } from "@/components/system/llmModelStatsSummary";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import EmbeddingConfig from "@/components/agent/EmbeddingConfig";
+import type {
+	LlmModelStatsSource,
+	LlmModelStatsStatus,
+} from "@/components/system/llmModelStatsSummary";
+import {
+	SystemConfig,
+	useSystemConfigDraftState,
+} from "@/components/system/SystemConfig";
+import { Button } from "@/components/ui/button";
+import PromptSkillsPanel from "@/pages/intelligent-scan/PromptSkillsPanel";
 
 type LlmSummaryState = {
 	providerLabel: string;
@@ -18,14 +27,16 @@ type LlmSummaryState = {
 export default function ScanConfigIntelligentEngine() {
 	const sharedDraftState = useSystemConfigDraftState();
 	const summaryConfig = sharedDraftState.config;
-	const [summaryState, setSummaryState] = useState<LlmSummaryState | null>(null);
+	const [summaryState, setSummaryState] = useState<LlmSummaryState | null>(
+		null,
+	);
 	const summary: LlmSummaryState = {
-		providerLabel: summaryState?.providerLabel || summaryConfig?.llmProvider || "--",
+		providerLabel:
+			summaryState?.providerLabel || summaryConfig?.llmProvider || "--",
 		currentModelName:
 			summaryState?.currentModelName || summaryConfig?.llmModel || "--",
 		availableModelCount: summaryState?.availableModelCount ?? 0,
-		availableModelMetadataCount:
-			summaryState?.availableModelMetadataCount ?? 0,
+		availableModelMetadataCount: summaryState?.availableModelMetadataCount ?? 0,
 		supportsModelFetch: summaryState?.supportsModelFetch || false,
 		modelStatsStatus: summaryState?.modelStatsStatus || "static",
 		modelStatsSource: summaryState?.modelStatsSource || "static",
@@ -89,30 +100,54 @@ export default function ScanConfigIntelligentEngine() {
 				</div>
 
 				<div className="space-y-4">
-						<div className="section-header mb-0">
-							<KeyRound className="w-4 h-4 text-primary" />
-							<div className="font-mono font-bold uppercase text-sm text-foreground">
-								推理模块
-							</div>
+					<div className="section-header mb-0">
+						<KeyRound className="w-4 h-4 text-primary" />
+						<div className="font-mono font-bold uppercase text-sm text-foreground">
+							推理模块
 						</div>
-						<SystemConfig
-							visibleSections={["llm"]}
-							defaultSection="llm"
-							mergedView={false}
-							showLlmSummaryCards={false}
-							showFloatingSaveButton={false}
-							compactLayout
-							sharedDraftState={sharedDraftState}
-							onLlmSummaryChange={setSummaryState}
-						/>
+					</div>
+					<SystemConfig
+						visibleSections={["llm"]}
+						defaultSection="llm"
+						mergedView={false}
+						showLlmSummaryCards={false}
+						showFloatingSaveButton={false}
+						compactLayout
+						sharedDraftState={sharedDraftState}
+						onLlmSummaryChange={setSummaryState}
+					/>
 
-						<div className="section-header mb-0">
-							<Zap className="w-4 h-4 text-primary" />
-							<div className="font-mono font-bold uppercase text-sm text-foreground">
-								搜索增强模块
-							</div>
+					<div className="section-header mb-0">
+						<Zap className="w-4 h-4 text-primary" />
+						<div className="font-mono font-bold uppercase text-sm text-foreground">
+							搜索增强模块
 						</div>
-						<EmbeddingConfig compact />
+					</div>
+					<EmbeddingConfig compact />
+
+					<div className="section-header mb-0">
+						<KeyRound className="w-4 h-4 text-primary" />
+						<div className="font-mono font-bold uppercase text-sm text-foreground">
+							Skill 管理
+						</div>
+					</div>
+					<div className="cyber-card p-4 space-y-4">
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<p className="text-sm text-muted-foreground">
+								管理智能扫描流程的内置 Prompt Skill，按不同 Agent
+								角色查看默认策略。
+							</p>
+							<Button
+								asChild
+								type="button"
+								variant="outline"
+								className="cyber-btn-ghost"
+							>
+								<Link to="/scan-config/external-tools">前往外部工具详情</Link>
+							</Button>
+						</div>
+						<PromptSkillsPanel />
+					</div>
 				</div>
 			</div>
 		</div>
