@@ -26,6 +26,10 @@ from app.models.agent_task import (
 from app.models.project import Project
 from app.services.project_metrics import project_metrics_refresher
 from app.services.agent.mcp import MCPRuntime
+from app.services.agent.skills.prompt_skills import (
+    PROMPT_SKILL_AGENT_KEYS,
+    build_effective_prompt_skills,
+)
 
 from .agent_tasks_bootstrap import *
 from .agent_tasks_contracts import *
@@ -632,6 +636,26 @@ async def _execute_agent_task(task_id: str):
             # 更新任务文件统计
             task.total_files = project_info.get("file_count", 0)
             await db.commit()
+
+            task_agent_config = task.agent_config if isinstance(task.agent_config, dict) else {}
+            use_prompt_skills = bool(task_agent_config.get("use_prompt_skills", False))
+            prompt_skills = build_effective_prompt_skills(use_prompt_skills)
+
+            if use_prompt_skills:
+                await event_emitter.emit_info(
+                    "Prompt Skills enabled",
+                    metadata={
+                        "prompt_skills_enabled": True,
+                        "prompt_skill_agent_keys": PROMPT_SKILL_AGENT_KEYS,
+                    },
+                )
+            else:
+                await event_emitter.emit_info(
+                    "Prompt Skills disabled",
+                    metadata={
+                        "prompt_skills_enabled": False,
+                    },
+                )
             
             # 构建输入数据
             input_data = {
@@ -655,6 +679,8 @@ async def _execute_agent_task(task_id: str):
                     "entry_function_names": entry_function_names,
                     # 项目级 Markdown 记忆（shared + per-agent + skills 规范）
                     "markdown_memory": markdown_memory,
+                    "use_prompt_skills": use_prompt_skills,
+                    "prompt_skills": prompt_skills,
                 },
                 "project_root": project_root,
                 "task_id": task_id,

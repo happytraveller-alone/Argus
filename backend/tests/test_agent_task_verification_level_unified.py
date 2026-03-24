@@ -104,3 +104,27 @@ async def test_create_agent_task_merges_system_core_exclude_patterns(monkeypatch
     assert created_tasks
     for _name, coro in created_tasks:
         coro.close()
+
+
+@pytest.mark.asyncio
+async def test_create_agent_task_persists_use_prompt_skills_in_agent_config(monkeypatch):
+    db = _mock_db_with_project()
+    created_tasks = _stub_background_launch(monkeypatch)
+    request = AgentTaskCreate(
+        project_id="project-1",
+        use_prompt_skills=True,
+    )
+
+    await create_agent_task(
+        request=request,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    added_task = db.add.call_args.args[0]
+    assert isinstance(added_task.agent_config, dict)
+    assert added_task.agent_config.get("use_prompt_skills") is True
+
+    assert created_tasks
+    for _name, coro in created_tasks:
+        coro.close()

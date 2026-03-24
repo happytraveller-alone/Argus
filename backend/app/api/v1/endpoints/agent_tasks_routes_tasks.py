@@ -116,6 +116,7 @@ async def create_agent_task(
         target_files=normalized_target_files or None,
         agent_config={
             "authorization_confirmed": bool(request.authorization_confirmed),
+            "use_prompt_skills": bool(request.use_prompt_skills),
         },
         max_iterations=request.max_iterations or 50,
         timeout_seconds=request.timeout_seconds or 1800,

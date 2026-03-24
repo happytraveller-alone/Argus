@@ -605,6 +605,18 @@ class AnalysisAgent(BaseAgent):
 
 请开始你的安全分析。首先读取高风险区域的文件，然后**立即**分析其中的安全问题（输出 Action）。"""
 
+        use_prompt_skills = bool(config.get("use_prompt_skills", False))
+        prompt_skills = config.get("prompt_skills") if isinstance(config, dict) else {}
+        analysis_prompt_skill = ""
+        if use_prompt_skills and isinstance(prompt_skills, dict):
+            analysis_prompt_skill = str(prompt_skills.get("analysis") or "").strip()
+        if analysis_prompt_skill:
+            initial_message += f"""
+
+## Prompt Skill（analysis）
+{analysis_prompt_skill}
+"""
+
         if single_risk_mode and not single_risk_point:
             logger.warning("[%s] single_risk_mode enabled but no risk point provided", self.name)
             await self.emit_event(

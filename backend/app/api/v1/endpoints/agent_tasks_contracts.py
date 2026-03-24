@@ -71,6 +71,7 @@ class AgentTaskCreate(BaseModel):
     # Agent 配置
     max_iterations: int = Field(50, ge=1, le=200, description="最大迭代次数")
     timeout_seconds: int = Field(1800, ge=60, le=7200, description="超时时间（秒）")
+    use_prompt_skills: bool = Field(False, description="是否启用 Prompt Skills")
 
 
 class AgentTaskResponse(BaseModel):
