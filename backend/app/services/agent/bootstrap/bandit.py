@@ -178,6 +178,8 @@ class BanditBootstrapScanner(StaticBootstrapScanner):
                     command=cmd,
                     timeout_seconds=self.timeout_seconds,
                     env={},
+                    expected_exit_codes=[0, 1],
+                    artifact_paths=["output/report.json"],
                 )
             )
 

@@ -224,15 +224,15 @@ async def test_execute_phpstan_scan_transitions_to_completed(monkeypatch, tmp_pa
                 },
             },
         }
-        stdout_path = tmp_path / "scans" / "phpstan" / task.id / "logs" / "stdout.log"
-        stdout_path.parent.mkdir(parents=True, exist_ok=True)
-        stdout_path.write_text(json.dumps(payload), encoding="utf-8")
+        report_path = tmp_path / "scans" / "phpstan" / task.id / "output" / "report.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(payload), encoding="utf-8")
         return SimpleNamespace(
             success=False,
             container_id="phpstan-container-1",
             exit_code=1,
-            stdout_path=str(stdout_path),
-            stderr_path=str(tmp_path / "scans" / "phpstan" / task.id / "logs" / "stderr.log"),
+            stdout_path=None,
+            stderr_path=None,
             error="scanner container exited with code 1",
         )
 
@@ -252,7 +252,8 @@ async def test_execute_phpstan_scan_transitions_to_completed(monkeypatch, tmp_pa
     assert session_factory.calls >= 2
     assert len(persist_session.findings) == 1
     assert seen["spec"].image == "vulhunter/phpstan-runner:test"
-    assert seen["spec"].command[:2] == ["phpstan", "analyse"]
+    assert seen["spec"].command[:2] == ["/bin/sh", "-lc"]
+    assert "/scan/output/report.json" in seen["spec"].command[2]
 
 
 @pytest.mark.asyncio
@@ -324,15 +325,15 @@ async def test_execute_phpstan_scan_completes_when_all_findings_filtered(monkeyp
                 },
             },
         }
-        stdout_path = tmp_path / "scans" / "phpstan" / task.id / "logs" / "stdout.log"
-        stdout_path.parent.mkdir(parents=True, exist_ok=True)
-        stdout_path.write_text(json.dumps(payload), encoding="utf-8")
+        report_path = tmp_path / "scans" / "phpstan" / task.id / "output" / "report.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(payload), encoding="utf-8")
         return SimpleNamespace(
             success=False,
             container_id="phpstan-container-2",
             exit_code=1,
-            stdout_path=str(stdout_path),
-            stderr_path=str(tmp_path / "scans" / "phpstan" / task.id / "logs" / "stderr.log"),
+            stdout_path=None,
+            stderr_path=None,
             error="scanner container exited with code 1",
         )
 

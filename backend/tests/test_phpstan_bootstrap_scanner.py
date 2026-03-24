@@ -63,7 +63,7 @@ def _prepare_phpstan_workspace(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_phpstan_bootstrap_scanner_parses_and_filters_security_findings(monkeypatch, tmp_path):
-    workspace_dir, _project_dir, _output_dir, logs_dir = _prepare_phpstan_workspace(
+    workspace_dir, _project_dir, output_dir, _logs_dir = _prepare_phpstan_workspace(
         monkeypatch,
         tmp_path,
     )
@@ -71,8 +71,8 @@ async def test_phpstan_bootstrap_scanner_parses_and_filters_security_findings(mo
 
     async def _fake_run_scanner_container(spec, **_kwargs):
         seen["spec"] = spec
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        Path(logs_dir / "stdout.log").write_text(
+        output_dir.mkdir(parents=True, exist_ok=True)
+        Path(output_dir / "report.json").write_text(
             """{
               "files": {
                 "/scan/project/src/a.php": {
@@ -94,13 +94,12 @@ async def test_phpstan_bootstrap_scanner_parses_and_filters_security_findings(mo
             }""",
             encoding="utf-8",
         )
-        Path(logs_dir / "stderr.log").write_text("", encoding="utf-8")
         return SimpleNamespace(
             success=False,
             container_id="phpstan-bootstrap-1",
             exit_code=1,
-            stdout_path=str(logs_dir / "stdout.log"),
-            stderr_path=str(logs_dir / "stderr.log"),
+            stdout_path=None,
+            stderr_path=None,
             error="scanner container exited with code 1",
         )
 
@@ -127,31 +126,30 @@ async def test_phpstan_bootstrap_scanner_parses_and_filters_security_findings(mo
     assert finding.extra.get("phpstan_identifier") == "security.eval"
     assert seen["spec"].image == "vulhunter/phpstan-runner:test"
     assert seen["spec"].workspace_dir == str(workspace_dir)
-    assert seen["spec"].command[:2] == ["phpstan", "analyse"]
-    assert seen["spec"].command[2] == "/scan/project"
+    assert seen["spec"].command[:2] == ["/bin/sh", "-lc"]
+    assert "/scan/output/report.json" in seen["spec"].command[2]
 
 
 @pytest.mark.asyncio
 async def test_phpstan_bootstrap_scanner_supports_stdout_noise(monkeypatch, tmp_path):
-    _workspace_dir, _project_dir, _output_dir, logs_dir = _prepare_phpstan_workspace(
+    _workspace_dir, _project_dir, output_dir, _logs_dir = _prepare_phpstan_workspace(
         monkeypatch,
         tmp_path,
     )
 
     async def _fake_run_scanner_container(_spec, **_kwargs):
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        Path(logs_dir / "stdout.log").write_text(
+        output_dir.mkdir(parents=True, exist_ok=True)
+        Path(output_dir / "report.json").write_text(
             """NOTICE...
             {"files":{"src/a.php":{"messages":[{"message":"Potential XSS injection sink.","line":3}]}}}""",
             encoding="utf-8",
         )
-        Path(logs_dir / "stderr.log").write_text("", encoding="utf-8")
         return SimpleNamespace(
             success=False,
             container_id="phpstan-bootstrap-2",
             exit_code=1,
-            stdout_path=str(logs_dir / "stdout.log"),
-            stderr_path=str(logs_dir / "stderr.log"),
+            stdout_path=None,
+            stderr_path=None,
             error="scanner container exited with code 1",
         )
 
@@ -215,21 +213,20 @@ async def test_phpstan_bootstrap_scanner_supports_stderr_payload_fallback(monkey
 
 @pytest.mark.asyncio
 async def test_phpstan_bootstrap_scanner_raises_on_invalid_json(monkeypatch, tmp_path):
-    _workspace_dir, _project_dir, _output_dir, logs_dir = _prepare_phpstan_workspace(
+    _workspace_dir, _project_dir, output_dir, _logs_dir = _prepare_phpstan_workspace(
         monkeypatch,
         tmp_path,
     )
 
     async def _fake_run_scanner_container(_spec, **_kwargs):
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        Path(logs_dir / "stdout.log").write_text("{invalid", encoding="utf-8")
-        Path(logs_dir / "stderr.log").write_text("", encoding="utf-8")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        Path(output_dir / "report.json").write_text("{invalid", encoding="utf-8")
         return SimpleNamespace(
             success=False,
             container_id="phpstan-bootstrap-4",
             exit_code=1,
-            stdout_path=str(logs_dir / "stdout.log"),
-            stderr_path=str(logs_dir / "stderr.log"),
+            stdout_path=None,
+            stderr_path=None,
             error="scanner container exited with code 1",
         )
 

@@ -476,6 +476,8 @@ async def _execute_bandit_scan(
                     command=cmd,
                     timeout_seconds=600,
                     env={},
+                    expected_exit_codes=[0, 1],
+                    artifact_paths=["output/report.json"],
                 ),
                 on_container_started=_on_container_started,
             )

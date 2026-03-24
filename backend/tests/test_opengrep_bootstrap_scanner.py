@@ -61,7 +61,7 @@ def _prepare_opengrep_workspace(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_opengrep_bootstrap_scanner_uses_runner_and_normalizes_findings(monkeypatch, tmp_path):
-    workspace_dir, _project_dir, _output_dir, logs_dir, _meta_dir = _prepare_opengrep_workspace(
+    workspace_dir, _project_dir, output_dir, _logs_dir, _meta_dir = _prepare_opengrep_workspace(
         monkeypatch,
         tmp_path,
     )
@@ -77,8 +77,8 @@ async def test_opengrep_bootstrap_scanner_uses_runner_and_normalizes_findings(mo
 
     async def _fake_run_scanner_container(spec, **_kwargs):
         seen["spec"] = spec
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        Path(logs_dir / "stdout.log").write_text(
+        output_dir.mkdir(parents=True, exist_ok=True)
+        Path(output_dir / "report.json").write_text(
             """{
               "results": [
                 {
@@ -96,13 +96,12 @@ async def test_opengrep_bootstrap_scanner_uses_runner_and_normalizes_findings(mo
             }""",
             encoding="utf-8",
         )
-        Path(logs_dir / "stderr.log").write_text("", encoding="utf-8")
         return SimpleNamespace(
             success=True,
             container_id="opengrep-bootstrap-1",
             exit_code=0,
-            stdout_path=str(logs_dir / "stdout.log"),
-            stderr_path=str(logs_dir / "stderr.log"),
+            stdout_path=None,
+            stderr_path=None,
             error=None,
         )
 
@@ -126,9 +125,9 @@ async def test_opengrep_bootstrap_scanner_uses_runner_and_normalizes_findings(mo
     assert finding.severity == "ERROR"
     assert seen["spec"].image == "vulhunter/opengrep-runner:test"
     assert seen["spec"].workspace_dir == str(workspace_dir)
-    assert seen["spec"].command[0] == "opengrep"
-    assert seen["spec"].command[-1] == "/scan/project"
-    assert seen["spec"].command[seen["spec"].command.index("--config") + 1].startswith("/scan/meta/")
+    assert seen["spec"].command[:2] == ["/bin/sh", "-lc"]
+    assert "/scan/output/report.json" in seen["spec"].command[2]
+    assert "/scan/meta/" in seen["spec"].command[2]
 
 
 @pytest.mark.asyncio

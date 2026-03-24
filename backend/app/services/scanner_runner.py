@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
@@ -10,6 +10,7 @@ import docker
 
 
 SCANNER_MOUNT_PATH = "/scan"
+MAX_RETAINED_LOG_CHARS = 12000
 
 
 @dataclass
@@ -20,6 +21,8 @@ class ScannerRunSpec:
     command: list[str]
     timeout_seconds: int
     env: Dict[str, str]
+    expected_exit_codes: list[int] = field(default_factory=lambda: [0])
+    artifact_paths: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -30,6 +33,25 @@ class ScannerRunResult:
     stdout_path: str | None
     stderr_path: str | None
     error: str | None
+
+
+def _truncate_log_text(text: str, *, max_chars: int = MAX_RETAINED_LOG_CHARS) -> str:
+    normalized = str(text or "")
+    if len(normalized) <= max_chars:
+        return normalized
+
+    tail_chars = max(0, max_chars - 64)
+    omitted_chars = len(normalized) - tail_chars
+    return f"[truncated {omitted_chars} chars]\n{normalized[-tail_chars:]}"
+
+
+def _write_retained_log(path: Path, text: str) -> str | None:
+    content = _truncate_log_text(text)
+    if not content.strip():
+        return None
+
+    path.write_text(content, encoding="utf-8")
+    return str(path)
 
 
 def _ensure_workspace_artifacts(workspace_dir: str) -> tuple[Path, Path, Path]:
@@ -47,11 +69,12 @@ def run_scanner_container_sync(
     on_container_started: Callable[[str], None] | None = None,
 ) -> ScannerRunResult:
     workspace, logs_dir, meta_dir = _ensure_workspace_artifacts(spec.workspace_dir)
-    stdout_path = logs_dir / "stdout.log"
-    stderr_path = logs_dir / "stderr.log"
+    stdout_log_path = logs_dir / "stdout.log"
+    stderr_log_path = logs_dir / "stderr.log"
     runner_meta_path = meta_dir / "runner.json"
     container = None
     container_id: Optional[str] = None
+    expected_exit_codes = {int(code) for code in (spec.expected_exit_codes or [0])}
 
     try:
         client = docker.from_env()
@@ -69,16 +92,23 @@ def run_scanner_container_sync(
             on_container_started(container_id)
         wait_result = container.wait(timeout=max(1, int(spec.timeout_seconds)))
         exit_code = int((wait_result or {}).get("StatusCode", 1))
-        stdout_text = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
-        stderr_text = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
-        stdout_path.write_text(stdout_text, encoding="utf-8")
-        stderr_path.write_text(stderr_text, encoding="utf-8")
+        retained_stdout_path: str | None = None
+        retained_stderr_path: str | None = None
+        if exit_code not in expected_exit_codes:
+            stdout_text = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")
+            stderr_text = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")
+            retained_stdout_path = _write_retained_log(stdout_log_path, stdout_text)
+            retained_stderr_path = _write_retained_log(stderr_log_path, stderr_text)
         runner_meta_path.write_text(
             json.dumps(
                 {
                     "spec": asdict(spec),
                     "container_id": container_id,
                     "exit_code": exit_code,
+                    "success": exit_code in expected_exit_codes,
+                    "stdout_path": retained_stdout_path,
+                    "stderr_path": retained_stderr_path,
+                    "log_retention": "dropped" if exit_code in expected_exit_codes else "failure_only",
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -86,21 +116,25 @@ def run_scanner_container_sync(
             encoding="utf-8",
         )
         return ScannerRunResult(
-            success=exit_code == 0,
+            success=exit_code in expected_exit_codes,
             container_id=container_id,
             exit_code=exit_code,
-            stdout_path=str(stdout_path),
-            stderr_path=str(stderr_path),
-            error=None if exit_code == 0 else f"scanner container exited with code {exit_code}",
+            stdout_path=retained_stdout_path,
+            stderr_path=retained_stderr_path,
+            error=None if exit_code in expected_exit_codes else f"scanner container exited with code {exit_code}",
         )
     except docker.errors.DockerException as exc:
-        stderr_path.write_text(str(exc), encoding="utf-8")
+        retained_stderr_path = _write_retained_log(stderr_log_path, str(exc))
         runner_meta_path.write_text(
             json.dumps(
                 {
                     "spec": asdict(spec),
                     "container_id": container_id,
                     "error": str(exc),
+                    "success": False,
+                    "stdout_path": None,
+                    "stderr_path": retained_stderr_path,
+                    "log_retention": "failure_only",
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -111,8 +145,8 @@ def run_scanner_container_sync(
             success=False,
             container_id=container_id,
             exit_code=1,
-            stdout_path=str(stdout_path),
-            stderr_path=str(stderr_path),
+            stdout_path=None,
+            stderr_path=retained_stderr_path,
             error=str(exc),
         )
     finally:

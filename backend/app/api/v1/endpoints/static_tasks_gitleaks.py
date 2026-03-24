@@ -830,6 +830,7 @@ async def _execute_gitleaks_scan(
                 command=cmd,
                 timeout_seconds=600,
                 env={},
+                artifact_paths=[f"output/{report_file.name}"],
             ),
             on_container_started=_on_container_started,
         )

@@ -978,6 +978,7 @@ async def _execute_yasa_scan(
                     command=cmd,
                     timeout_seconds=timeout_seconds,
                     env={"YASA_RESOURCE_DIR": YASA_RUNNER_RESOURCE_DIR},
+                    artifact_paths=["output/report.sarif"],
                 ),
                 on_container_started=_on_container_started,
             )

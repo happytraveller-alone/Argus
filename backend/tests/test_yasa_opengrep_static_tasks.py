@@ -479,15 +479,14 @@ async def test_execute_opengrep_scan_uses_short_lived_sessions_and_persists_find
 
     async def _fake_run_scanner_container(spec, **_kwargs):
         seen["spec"] = spec
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        Path(logs_dir / "stdout.log").write_text("{}", encoding="utf-8")
-        Path(logs_dir / "stderr.log").write_text("", encoding="utf-8")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "report.json").write_text("{}", encoding="utf-8")
         return SimpleNamespace(
             success=True,
             container_id="opengrep-container-1",
             exit_code=0,
-            stdout_path=str(logs_dir / "stdout.log"),
-            stderr_path=str(logs_dir / "stderr.log"),
+            stdout_path=None,
+            stderr_path=None,
             error=None,
         )
 
@@ -514,5 +513,5 @@ async def test_execute_opengrep_scan_uses_short_lived_sessions_and_persists_find
     assert persist_session.findings[0].file_path == "src/app.py"
     assert metric_enqueues == ["project-1"]
     assert seen["spec"].image == "vulhunter/opengrep-runner:test"
-    assert seen["spec"].command[0] == "opengrep"
-    assert seen["spec"].command[-1] == "/scan/project"
+    assert seen["spec"].command[:2] == ["/bin/sh", "-lc"]
+    assert "/scan/output/report.json" in seen["spec"].command[2]

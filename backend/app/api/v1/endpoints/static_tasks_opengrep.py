@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -658,6 +659,7 @@ async def _execute_opengrep_scan(
         ) -> Dict[str, Any]:
             nonlocal use_jobs_option
             rule_file = None
+            report_file = output_dir / "report.json"
             try:
                 with tempfile.NamedTemporaryFile(
                     mode="w",
@@ -678,6 +680,9 @@ async def _execute_opengrep_scan(
                 if use_jobs_option:
                     cmd.extend(["--jobs", str(jobs)])
                 cmd.append(str(runner_target_path))
+                shell_cmd = f"{shlex.join(cmd)} > /scan/output/report.json"
+                if report_file.exists():
+                    report_file.unlink()
 
                 def _on_container_started(container_id: str) -> None:
                     nonlocal active_container_id
@@ -691,17 +696,18 @@ async def _execute_opengrep_scan(
                             getattr(settings, "SCANNER_OPENGREP_IMAGE", "vulhunter/opengrep-runner:latest")
                         ),
                         workspace_dir=str(workspace_dir),
-                        command=cmd,
+                        command=["/bin/sh", "-lc", shell_cmd],
                         timeout_seconds=timeout_seconds,
                         env=scan_env,
+                        artifact_paths=["output/report.json"],
                     ),
                     on_container_started=_on_container_started,
                 )
 
                 stdout_text = ""
                 stderr_text = ""
-                if result.stdout_path:
-                    stdout_text = Path(result.stdout_path).read_text(
+                if report_file.exists():
+                    stdout_text = report_file.read_text(
                         encoding="utf-8",
                         errors="ignore",
                     )
@@ -720,6 +726,9 @@ async def _execute_opengrep_scan(
                     )
                     use_jobs_option = False
                     cmd = ["opengrep", "--config", runner_rule_file, "--json", str(runner_target_path)]
+                    shell_cmd = f"{shlex.join(cmd)} > /scan/output/report.json"
+                    if report_file.exists():
+                        report_file.unlink()
                     result = await run_scanner_container(
                         ScannerRunSpec(
                             scanner_type="opengrep",
@@ -727,16 +736,17 @@ async def _execute_opengrep_scan(
                                 getattr(settings, "SCANNER_OPENGREP_IMAGE", "vulhunter/opengrep-runner:latest")
                             ),
                             workspace_dir=str(workspace_dir),
-                            command=cmd,
+                            command=["/bin/sh", "-lc", shell_cmd],
                             timeout_seconds=timeout_seconds,
                             env=scan_env,
+                            artifact_paths=["output/report.json"],
                         ),
                         on_container_started=_on_container_started,
                     )
                     stdout_text = ""
                     stderr_text = ""
-                    if result.stdout_path:
-                        stdout_text = Path(result.stdout_path).read_text(
+                    if report_file.exists():
+                        stdout_text = report_file.read_text(
                             encoding="utf-8",
                             errors="ignore",
                         )

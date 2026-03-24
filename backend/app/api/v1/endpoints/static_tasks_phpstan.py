@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import shlex
 import uuid
 import shutil
 import subprocess
@@ -583,16 +584,15 @@ async def _execute_phpstan_scan(
         if normalized_target_path not in {"", "."}:
             runner_target_path = runner_target_path / normalized_target_path
 
-        cmd = [
-            "phpstan",
-            "analyse",
-            str(runner_target_path),
-            "--error-format=json",
-            "--no-progress",
-            "--no-interaction",
-            f"--level={normalized_level}",
-        ]
-        logger.info(f"Executing phpstan for task {task_id}: {' '.join(cmd)}")
+        report_file = output_dir / "report.json"
+        if report_file.exists():
+            report_file.unlink()
+        shell_cmd = (
+            f"phpstan analyse {shlex.quote(str(runner_target_path))} "
+            f"--error-format=json --no-progress --no-interaction "
+            f"--level={normalized_level} > /scan/output/report.json"
+        )
+        logger.info(f"Executing phpstan for task {task_id}: {shell_cmd}")
 
         def _on_container_started(container_id: str) -> None:
             nonlocal active_container_id
@@ -606,9 +606,11 @@ async def _execute_phpstan_scan(
                     getattr(settings, "SCANNER_PHPSTAN_IMAGE", "vulhunter/phpstan-runner:latest")
                 ),
                 workspace_dir=str(workspace_dir),
-                command=cmd,
+                command=["/bin/sh", "-lc", shell_cmd],
                 timeout_seconds=600,
                 env={},
+                expected_exit_codes=[0, 1],
+                artifact_paths=["output/report.json"],
             ),
             on_container_started=_on_container_started,
         )
@@ -617,15 +619,12 @@ async def _execute_phpstan_scan(
             await _update_task_state("interrupted", error_message="扫描任务已中止（用户操作）")
             return
 
-        stdout_text = ""
         stderr_text = ""
-        if process_result.stdout_path and Path(process_result.stdout_path).exists():
-            stdout_text = Path(process_result.stdout_path).read_text(encoding="utf-8", errors="ignore")
         if process_result.stderr_path and Path(process_result.stderr_path).exists():
             stderr_text = Path(process_result.stderr_path).read_text(encoding="utf-8", errors="ignore")
 
         if process_result.exit_code > 1:
-            error_message = (stderr_text or stdout_text or process_result.error or "Unknown error")[:500]
+            error_message = (stderr_text or process_result.error or "Unknown error")[:500]
             await _update_task_state("failed", error_message=error_message)
             logger.error(f"PHPStan task {task_id} failed: {error_message}")
             return
@@ -633,7 +632,12 @@ async def _execute_phpstan_scan(
         payload: Dict[str, Any] = {}
         parse_error: Optional[Exception] = None
         try:
-            payload = _parse_phpstan_output_payload(stdout_text)
+            payload_text = (
+                report_file.read_text(encoding="utf-8", errors="ignore")
+                if report_file.exists()
+                else ""
+            )
+            payload = _parse_phpstan_output_payload(payload_text)
         except Exception as exc:  # noqa: BLE001
             parse_error = exc
             try:
@@ -642,7 +646,15 @@ async def _execute_phpstan_scan(
             except Exception:  # noqa: BLE001
                 payload = {}
 
-        if parse_error is not None and process_result.returncode in {0, 1}:
+        if not report_file.exists() and process_result.exit_code in {0, 1} and not payload:
+            await _update_task_state(
+                "failed",
+                error_message="PHPStan report output missing",
+            )
+            logger.error("PHPStan task %s failed: report output missing", task_id)
+            return
+
+        if parse_error is not None and process_result.exit_code in {0, 1}:
             await _update_task_state(
                 "failed",
                 error_message=f"Failed to parse PHPStan JSON output: {parse_error}",

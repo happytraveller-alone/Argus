@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -216,6 +217,7 @@ class OpenGrepBootstrapScanner(StaticBootstrapScanner):
         logs_dir.mkdir(parents=True, exist_ok=True)
         meta_dir.mkdir(parents=True, exist_ok=True)
         merged_rule_path: Optional[str] = None
+        report_file = output_dir / "report.json"
 
         try:
             shutil.rmtree(project_dir, ignore_errors=True)
@@ -237,6 +239,9 @@ class OpenGrepBootstrapScanner(StaticBootstrapScanner):
 
             runner_rule_path = str(Path("/scan/meta") / Path(merged_rule_path).name)
             cmd = ["opengrep", "--config", runner_rule_path, "--json", "/scan/project"]
+            shell_cmd = f"{shlex.join(cmd)} > /scan/output/report.json"
+            if report_file.exists():
+                report_file.unlink()
             process_result = await run_scanner_container(
                 ScannerRunSpec(
                     scanner_type="opengrep-bootstrap",
@@ -244,22 +249,18 @@ class OpenGrepBootstrapScanner(StaticBootstrapScanner):
                         getattr(settings, "SCANNER_OPENGREP_IMAGE", "vulhunter/opengrep-runner:latest")
                     ),
                     workspace_dir=str(workspace_dir),
-                    command=cmd,
+                    command=["/bin/sh", "-lc", shell_cmd],
                     timeout_seconds=self.timeout_seconds,
                     env={
                         "NO_PROXY": "*",
                         "no_proxy": "*",
                     },
+                    artifact_paths=["output/report.json"],
                 )
             )
 
-            stdout_text = ""
             stderr_text = ""
-            if process_result.stdout_path and Path(process_result.stdout_path).exists():
-                stdout_text = Path(process_result.stdout_path).read_text(
-                    encoding="utf-8",
-                    errors="ignore",
-                )
+            stdout_text = report_file.read_text(encoding="utf-8", errors="ignore") if report_file.exists() else ""
             if process_result.stderr_path and Path(process_result.stderr_path).exists():
                 stderr_text = Path(process_result.stderr_path).read_text(
                     encoding="utf-8",
