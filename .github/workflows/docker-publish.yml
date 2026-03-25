@@ -44,6 +44,11 @@ on:
         required: false
         type: boolean
         default: true
+      build_pmd_runner:
+        description: '构建 PMD runner 镜像'
+        required: false
+        type: boolean
+        default: true
       build_sandbox:
         description: '构建沙箱镜像'
         required: false
@@ -191,6 +196,19 @@ jobs:
           cache-from: type=gha,scope=phpstan-runner
           cache-to: type=gha,mode=max,scope=phpstan-runner
 
+      - name: 构建并推送 PMD runner Docker 镜像
+        if: ${{ github.event.inputs.build_pmd_runner == 'true' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/docker/pmd-runner.Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ github.event.inputs.tag }}
+          cache-from: type=gha,scope=pmd-runner
+          cache-to: type=gha,mode=max,scope=pmd-runner
+
       - name: 构建并推送沙箱 Docker 镜像
         if: ${{ github.event.inputs.build_sandbox == 'true' }}
         uses: docker/build-push-action@v5
@@ -228,6 +246,9 @@ jobs:
           fi
           if [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
             echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
             echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY

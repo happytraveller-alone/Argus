@@ -74,3 +74,12 @@ def test_external_tools_manual_pmd_section_documents_runner_requirements() -> No
     assert "runner 容器" in manual_text
     assert "手工 smoke test" in manual_text
     assert "默认自动验收" in manual_text
+
+
+def test_docker_publish_workflow_builds_pmd_runner() -> None:
+    workflow_path = _repo_root() / ".github" / "workflows" / "docker-publish.yml"
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+
+    assert "build_pmd_runner" in workflow_text
+    assert "./backend/docker/pmd-runner.Dockerfile" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ github.event.inputs.tag }}" in workflow_text
