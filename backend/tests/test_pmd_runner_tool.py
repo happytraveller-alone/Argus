@@ -542,6 +542,59 @@ async def test_pmd_tool_rejects_missing_project_subpath(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_pmd_tool_rejects_file_target_path(monkeypatch, tmp_path):
+    project_root = tmp_path / "project"
+    project_root.mkdir(parents=True, exist_ok=True)
+    _create_project(project_root)
+    monkeypatch.setattr(
+        external_tools,
+        "settings",
+        SimpleNamespace(
+            SCAN_WORKSPACE_ROOT=str(tmp_path / "scan-root"),
+            SCANNER_PMD_IMAGE="vulhunter/pmd-runner:test",
+        ),
+        raising=False,
+    )
+
+    called = {"runner": False}
+
+    async def _fake_run_scanner_container(_spec, **_kwargs):
+        called["runner"] = True
+        raise AssertionError("runner should not be called for file target path")
+
+    monkeypatch.setattr(
+        external_tools,
+        "run_scanner_container",
+        _fake_run_scanner_container,
+        raising=False,
+    )
+
+    tool = PMDTool(str(project_root), sandbox_manager=_SandboxProbe())
+    result = await tool._execute(target_path="src/main/java/App.java")
+
+    assert result.success is False
+    assert "必须是目录" in str(result.error or result.data)
+    assert called["runner"] is False
+
+
+def test_resolve_pmd_ruleset_rejects_relative_symlink_outside_project(tmp_path):
+    project_root = tmp_path / "project"
+    project_root.mkdir(parents=True, exist_ok=True)
+    _create_project(project_root)
+    meta_dir = tmp_path / "workspace" / "meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+
+    external_ruleset = tmp_path / "outside.xml"
+    external_ruleset.write_text("<ruleset name='outside'/>\n", encoding="utf-8")
+    escaping_link = project_root / "config" / "pmd" / "escape.xml"
+    escaping_link.parent.mkdir(parents=True, exist_ok=True)
+    escaping_link.symlink_to(external_ruleset)
+
+    with pytest.raises(ValueError, match="项目目录内"):
+        external_tools._resolve_pmd_ruleset("config/pmd/escape.xml", str(project_root), meta_dir)
+
+
+@pytest.mark.asyncio
 async def test_pmd_tool_accepts_exit_code_4_and_parses_report(monkeypatch, tmp_path):
     result, spec, _project_root = await _run_pmd_tool(monkeypatch, tmp_path, exit_code=4)
 

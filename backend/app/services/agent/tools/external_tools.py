@@ -1206,6 +1206,8 @@ def _normalize_pmd_target_path(target_path: str, project_root: str) -> str:
     host_path = Path(project_root) / relative_path
     if not host_path.exists():
         raise FileNotFoundError(f"PMD 目标路径不存在: {relative_path}")
+    if not host_path.is_dir():
+        raise ValueError(f"PMD target_path 必须是目录: {relative_path}")
 
     return relative_path
 
@@ -1285,20 +1287,27 @@ def _resolve_pmd_ruleset(ruleset: str, project_root: str, meta_dir: Path) -> str
     candidate_path = Path(normalized_ruleset)
     if candidate_path.is_absolute():
         host_ruleset_path = candidate_path
+        ruleset_is_relative = False
     else:
         host_ruleset_path = project_root_path / normalized_ruleset
+        ruleset_is_relative = True
 
     if not host_ruleset_path.exists():
         raise FileNotFoundError(f"PMD ruleset 文件不存在: {normalized_ruleset}")
 
+    resolved_ruleset_path = host_ruleset_path.resolve()
+    resolved_project_root = project_root_path.resolve()
     try:
-        if os.path.commonpath([str(host_ruleset_path.resolve()), str(project_root_path.resolve())]) == str(project_root_path.resolve()):
-            relative_ruleset = os.path.relpath(host_ruleset_path.resolve(), project_root_path.resolve()).replace(os.sep, "/")
+        if os.path.commonpath([str(resolved_ruleset_path), str(resolved_project_root)]) == str(resolved_project_root):
+            relative_ruleset = os.path.relpath(resolved_ruleset_path, resolved_project_root).replace(os.sep, "/")
             return f"/scan/project/{relative_ruleset}"
     except ValueError:
         pass
 
-    return _stage_pmd_ruleset(host_ruleset_path.resolve(), meta_dir)
+    if ruleset_is_relative:
+        raise ValueError(f"PMD ruleset 相对路径必须位于项目目录内: {normalized_ruleset}")
+
+    return _stage_pmd_ruleset(resolved_ruleset_path, meta_dir)
 
 
 def _build_pmd_runner_command(runner_target_path: str, selected_ruleset: str) -> list[str]:
@@ -1317,7 +1326,7 @@ def _build_pmd_runner_command(runner_target_path: str, selected_ruleset: str) ->
     ]
 
 
-def _read_pmd_report(workspace_dir: Path, process_result: Any) -> dict[str, Any]:
+def _read_pmd_report(workspace_dir: Path) -> dict[str, Any]:
     report_path = workspace_dir / "output" / "report.json"
     if not report_path.exists():
         logger.warning("[PMD] report.json 缺失: %s", report_path)
@@ -1396,6 +1405,14 @@ def _build_pmd_failure_summary(process_result: Any) -> str:
         details.append("PMD runner 执行未成功")
 
     return f"{summary}: {'；'.join(details)}"
+
+
+def _build_pmd_report_failure_summary(process_result: Any, exc: Exception) -> str:
+    base_summary = _build_pmd_failure_summary(process_result)
+    detail = _sanitize_pmd_failure_detail(str(exc))
+    if not detail:
+        return base_summary
+    return f"{base_summary}；{detail}"
 
 
 def _cleanup_pmd_workspace(workspace_dir: Optional[Path]) -> None:
@@ -1515,7 +1532,12 @@ PMD 直接分析源代码，无需编译！
                 error_msg = _build_pmd_failure_summary(process_result)
                 return ToolResult(success=False, data=error_msg, error=error_msg)
 
-            pmd_result = _read_pmd_report(workspace_dir, process_result)
+            try:
+                pmd_result = _read_pmd_report(workspace_dir)
+            except (RuntimeError, ValueError) as exc:
+                error_msg = _build_pmd_report_failure_summary(process_result, exc)
+                logger.warning("[PMD] %s", error_msg)
+                return ToolResult(success=False, data=error_msg, error=error_msg)
             
             # 提取 violations
             violations = []
