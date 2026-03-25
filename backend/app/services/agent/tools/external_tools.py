@@ -7,13 +7,18 @@ import asyncio
 import json
 import logging
 import os
+import re
 import tempfile
 import shutil
 import shlex
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from dataclasses import dataclass
+from uuid import uuid4
 
+from app.core.config import settings
+from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 from .base import AgentTool, ToolResult
 from .sandbox_tool import SandboxManager
 
@@ -1166,6 +1171,171 @@ Google 开源的漏洞扫描工具。
 
 # ============ PMD 工具 (Java 源码分析) ============
 
+PMD_RULESET_ALIASES = {
+    "security": "category/java/security.xml,category/java/errorprone.xml,category/apex/security.xml",
+    "quickstart": "category/java/security.xml,category/jsp/security.xml,category/javascript/security.xml",
+    "all": (
+        "category/java/security.xml,"
+        "category/jsp/security.xml,"
+        "category/javascript/security.xml,"
+        "category/html/security.xml,"
+        "category/xml/security.xml,"
+        "category/plsql/security.xml,"
+        "category/apex/security.xml,"
+        "category/visualforce/security.xml"
+    ),
+}
+
+
+def _normalize_pmd_target_path(target_path: str, project_root: str) -> str:
+    normalized = str(target_path or "").replace("\\", "/").strip()
+    if normalized in {"", ".", "./"}:
+        return "."
+
+    if os.path.isabs(normalized) or re.match(r"^[A-Za-z]:/", normalized):
+        raise ValueError(f"PMD target_path 不支持绝对路径: {normalized}")
+
+    parts = [part for part in normalized.split("/") if part not in {"", "."}]
+    if any(part == ".." for part in parts):
+        raise ValueError(f"PMD target_path 不支持包含 .. 的路径: {normalized}")
+
+    relative_path = "/".join(parts)
+    if not relative_path:
+        return "."
+
+    host_path = Path(project_root) / relative_path
+    if not host_path.exists():
+        raise FileNotFoundError(f"PMD 目标路径不存在: {relative_path}")
+
+    return relative_path
+
+
+def _prepare_pmd_workspace(project_root: str) -> tuple[Path, Path, Path, Path, Path]:
+    workspace_dir = Path(settings.SCAN_WORKSPACE_ROOT) / "pmd-tool" / uuid4().hex
+    project_dir = workspace_dir / "project"
+    output_dir = workspace_dir / "output"
+    logs_dir = workspace_dir / "logs"
+    meta_dir = workspace_dir / "meta"
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    meta_dir.mkdir(parents=True, exist_ok=True)
+
+    project_root_path = Path(project_root)
+    ignore_names: set[str] = set()
+    try:
+        rel_workspace = os.path.relpath(workspace_dir.resolve(), project_root_path.resolve())
+        if rel_workspace != "." and not rel_workspace.startswith(".."):
+            top_level_name = rel_workspace.split(os.sep, 1)[0]
+            if top_level_name and top_level_name != ".":
+                ignore_names.add(top_level_name)
+    except ValueError:
+        ignore_names.clear()
+
+    ignore = None
+    if ignore_names:
+        def _ignore_workspace_prefix(_src: str, names: list[str]) -> set[str]:
+            return {name for name in names if name in ignore_names}
+
+        ignore = _ignore_workspace_prefix
+
+    shutil.copytree(
+        project_root_path,
+        project_dir,
+        dirs_exist_ok=True,
+        symlinks=True,
+        ignore=ignore,
+    )
+
+    return workspace_dir, project_dir, output_dir, logs_dir, meta_dir
+
+
+def _stage_pmd_ruleset(host_ruleset_path: Path, meta_dir: Path) -> str:
+    rules_dir = meta_dir / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    staged_path = rules_dir / host_ruleset_path.name
+    shutil.copy2(host_ruleset_path, staged_path)
+    return f"/scan/meta/rules/{staged_path.name}"
+
+
+def _resolve_pmd_ruleset(ruleset: str, project_root: str, meta_dir: Path) -> str:
+    if ruleset in PMD_RULESET_ALIASES:
+        return PMD_RULESET_ALIASES[ruleset]
+
+    normalized_ruleset = str(ruleset or "").replace("\\", "/").strip()
+    if not normalized_ruleset.endswith(".xml"):
+        raise ValueError(f"PMD ruleset 不支持: {ruleset}")
+
+    project_root_path = Path(project_root)
+    module_dir = Path(__file__).resolve().parent
+    repo_root = module_dir.parents[4]
+
+    candidate_paths: list[Path] = []
+    candidate_path = Path(normalized_ruleset)
+    if candidate_path.is_absolute():
+        candidate_paths.append(candidate_path)
+    else:
+        candidate_paths.append(project_root_path / normalized_ruleset)
+        candidate_paths.append(repo_root / normalized_ruleset)
+        candidate_paths.append(Path(normalized_ruleset).resolve())
+
+    host_ruleset_path = next((path for path in candidate_paths if path.exists()), None)
+    if host_ruleset_path is None:
+        raise FileNotFoundError(f"PMD ruleset 文件不存在: {normalized_ruleset}")
+
+    try:
+        if os.path.commonpath([str(host_ruleset_path.resolve()), str(project_root_path.resolve())]) == str(project_root_path.resolve()):
+            relative_ruleset = os.path.relpath(host_ruleset_path.resolve(), project_root_path.resolve()).replace(os.sep, "/")
+            return f"/scan/project/{relative_ruleset}"
+    except ValueError:
+        pass
+
+    return _stage_pmd_ruleset(host_ruleset_path.resolve(), meta_dir)
+
+
+def _build_pmd_runner_command(runner_target_path: str, selected_ruleset: str) -> list[str]:
+    return [
+        "pmd",
+        "check",
+        "--dir",
+        runner_target_path,
+        "--rulesets",
+        selected_ruleset,
+        "--format",
+        "json",
+        "--report-file",
+        "/scan/output/report.json",
+        "--no-cache",
+    ]
+
+
+def _read_pmd_report(workspace_dir: Path, process_result: Any) -> dict[str, Any]:
+    report_path = workspace_dir / "output" / "report.json"
+    if not report_path.exists():
+        if getattr(process_result, "success", False):
+            return {}
+        error_detail = getattr(process_result, "error", None) or "PMD runner 未生成报告"
+        raise RuntimeError(error_detail)
+
+    raw_output = report_path.read_text(encoding="utf-8")
+    json_start = raw_output.find("{")
+    if json_start < 0:
+        return {}
+    return json.loads(raw_output[json_start:])
+
+
+def _normalize_pmd_violation_path(file_path: str) -> str:
+    normalized = str(file_path or "").replace("\\", "/")
+    if normalized == "/scan/project":
+        return "."
+    if normalized.startswith("/scan/project/"):
+        return normalized[len("/scan/project/"):]
+    if normalized.startswith("/workspace/"):
+        return normalized[len("/workspace/"):]
+    return normalized
+
+
 class PMDInput(BaseModel):
     """PMD 扫描输入"""
     target_path: str = Field(
@@ -1235,162 +1405,34 @@ PMD 直接分析源代码，无需编译！
         **kwargs
     ) -> ToolResult:
         """执行 PMD 扫描"""
-        # 确保 Docker 可用
-        await self.sandbox_manager.initialize()
-        if not self.sandbox_manager.is_available:
-            error_msg = f"PMD unavailable: {self.sandbox_manager.get_diagnosis()}"
-            return ToolResult(success=False, data=error_msg, error=error_msg)
-
-        # 智能路径解析
-        safe_target_path, host_check_path, error_msg = _smart_resolve_target_path(
-            target_path, self.project_root, "PMD"
-        )
-        if error_msg:
-            return ToolResult(success=False, data=error_msg, error=error_msg)
-
-        # # 检查是否有 Java 源文件
-        # has_java_files = False
-        # for root, dirs, files in os.walk(host_check_path):
-        #     dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules', 'target', 'build', '.idea', '.gradle'}]
-        #     for f in files:
-        #         if f.endswith('.java') or f.endswith('.jsp'):
-        #             has_java_files = True
-        #             break
-        #     if has_java_files:
-        #         break
-        
-        # if not has_java_files:
-        #     return ToolResult(
-        #         success=False,
-        #         data="未找到 Java 源文件 (.java 或 .jsp)。请确认这是一个 Java 项目。",
-        #         error="no_java_source"
-        #     )
-
-        # 选择规则集
-        ruleset_map = {
-            "security": "category/java/security.xml,category/java/errorprone.xml,category/apex/security.xml",
-            # 快速启动（包含最常用的 Java 和 JavaScript 安全规则）
-            "quickstart": "category/java/security.xml,category/jsp/security.xml,category/javascript/security.xml",
-            # 全语言安全扫描策略 (包含所有官方支持 security 分类的语言)
-            "all": (
-                "category/java/security.xml,"          # Java
-                "category/jsp/security.xml,"           # JSP
-                "category/javascript/security.xml,"    # JavaScript
-                "category/html/security.xml,"          # HTML
-                "category/xml/security.xml,"           # XML
-                "category/plsql/security.xml,"         # PL/SQL
-                "category/apex/security.xml,"          # Apex (Salesforce)
-                "category/visualforce/security.xml"    # Visualforce
-            )
-        }
-
-        # 允许传入本地 ruleset 文件路径（例如 backend/app/db/rules_pmd/security.xml）
-        # 支持以下几种情况：
-        # 1) 传入绝对主机路径
-        # 2) 传入相对于 `project_root` 的路径
-        # 3) 传入相对于仓库根（本文件上溯）的路径，例如在测试脚本中使用 backend/app/db/...
-        # 如果找到了本地规则文件，会把主机路径转换为容器内 /workspace/<relpath> 引用；否则回退到内置 ruleset_map
-        selected_ruleset = None
         try:
-            host_rules_path = None
+            normalized_target_path = _normalize_pmd_target_path(target_path, self.project_root)
+            workspace_dir, _project_dir, _output_dir, _logs_dir, meta_dir = _prepare_pmd_workspace(self.project_root)
+            selected_ruleset = _resolve_pmd_ruleset(ruleset, self.project_root, meta_dir)
+            runner_target_path = "/scan/project"
+            if normalized_target_path != ".":
+                runner_target_path = f"/scan/project/{normalized_target_path}"
 
-            # 计算仓库根（基于本模块位置，向上多级到达仓库根）
-            module_dir = os.path.dirname(__file__)
-            repo_root = os.path.abspath(os.path.join(module_dir, "../../../../.."))
-
-            if ruleset.endswith('.xml'):
-                # 优先当作绝对路径或相对于 project_root 的路径
-                candidate = ruleset if os.path.isabs(ruleset) else os.path.join(self.project_root, ruleset)
-                if os.path.exists(candidate):
-                    host_rules_path = candidate
-                else:
-                    # 回退：尝试仓库根下的同一路径（适配测试脚本以仓库相对路径传入的场景）
-                    candidate_repo = os.path.join(repo_root, ruleset)
-                    if os.path.exists(candidate_repo):
-                        host_rules_path = candidate_repo
-                    else:
-                        # 最后尝试相对于当前工作目录或直接作为绝对路径
-                        candidate_cwd = os.path.abspath(ruleset)
-                        if os.path.exists(candidate_cwd):
-                            host_rules_path = candidate_cwd
-
-            # 如果找到了本地规则文件，则转换为容器内 /workspace 路径
-            if host_rules_path:
-                try:
-                    # 优先基于 project_root 计算相对路径，使得映射到容器的路径尽量与工作目录对齐
-                    if os.path.commonpath([host_rules_path, self.project_root]) == self.project_root:
-                        rel = os.path.relpath(host_rules_path, self.project_root)
-                    else:
-                        rel = os.path.relpath(host_rules_path, repo_root)
-                except Exception:
-                    rel = os.path.basename(host_rules_path)
-
-                # 在容器内，工作目录映射到 /workspace
-                selected_ruleset = os.path.join('/workspace', rel).replace('\\', '/')
-            else:
-                # 回退到预定义规则集
-                selected_ruleset = ruleset_map.get(ruleset, ruleset_map['security'])
-        except Exception:
-            selected_ruleset = ruleset_map.get(ruleset, ruleset_map['security'])
-
-        # 构建 PMD 命令
-        cmd = [
-            "pmd", "check",
-            "-d", safe_target_path,
-            "-R", selected_ruleset,
-            "-f", "json",
-            "--no-cache"
-        ]
-        
-        cmd_str = " ".join(cmd)
-        
-        try:
-            result = await self.sandbox_manager.execute_tool_command(
-                command=cmd_str,
-                host_workdir=self.project_root,
-                timeout=180
+            process_result = await run_scanner_container(
+                ScannerRunSpec(
+                    scanner_type="pmd-tool",
+                    image=settings.SCANNER_PMD_IMAGE,
+                    workspace_dir=str(workspace_dir),
+                    command=_build_pmd_runner_command(runner_target_path, selected_ruleset),
+                    timeout_seconds=180,
+                    env={},
+                    expected_exit_codes=[0, 4],
+                    artifact_paths=["output/report.json"],
+                )
             )
-            
-            stdout = result.get('stdout', '')
-            stderr = result.get('stderr', '')
-            
-            # PMD 返回非零退出码表示发现问题，这是正常的
-            if not stdout.strip():
-                if "No such file" in stderr or "Error" in stderr:
-                    return ToolResult(
-                        success=False,
-                        data=f"PMD 执行错误: {stderr[:500]}",
-                        error="pmd_error"
-                    )
-                return ToolResult(
-                    success=True,
-                    data=" PMD 扫描完成，未发现问题",
-                    metadata={"findings_count": 0}
-                )
-            
-            # 与 Opengrep 保持一致：从输出中定位 JSON 起始位置再解析
-            try:
-                json_start = stdout.find('{')
-                if json_start >= 0:
-                    pmd_result = json.loads(stdout[json_start:])
-                else:
-                    return ToolResult(
-                        success=True,
-                        data=f" PMD 扫描结果:\n{stdout[:3000]}",
-                        metadata={"raw_output": True}
-                    )
-            except json.JSONDecodeError:
-                return ToolResult(
-                    success=True,
-                    data=f" PMD 扫描结果:\n{stdout[:3000]}",
-                    metadata={"raw_output": True}
-                )
+
+            pmd_result = _read_pmd_report(workspace_dir, process_result)
             
             # 提取 violations
             violations = []
             files = pmd_result.get('files', [])
             for file_info in files:
-                filename = file_info.get('filename', '')
+                filename = _normalize_pmd_violation_path(file_info.get('filename', ''))
                 for v in file_info.get('violations', []):
                     violations.append({
                         'file': filename,
@@ -1428,9 +1470,7 @@ PMD 直接分析源代码，无需编译！
                 icon = "🔴" if priority <= 2 else ("🟡" if priority == 3 else "🟢")
                 
                 # 简化文件路径
-                filepath = v.get('file', '')
-                if '/workspace/' in filepath:
-                    filepath = filepath.split('/workspace/')[-1]
+                filepath = _normalize_pmd_violation_path(v.get('file', ''))
                 
                 output_parts.append(f"\n{icon} [{i+1}] {v.get('rule', 'Unknown')}")
                 output_parts.append(f"   文件: {filepath}")
@@ -1740,4 +1780,3 @@ __all__ = [
     "PMDTool",
     "PHPStanTool",
 ]
-
