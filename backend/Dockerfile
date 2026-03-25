@@ -244,9 +244,6 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
         libpq5 \
         curl \
         git \
-        unzip \
-        php-cli \
-        openjdk-21-jre-headless \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
         libpangocairo-1.0-0 \
@@ -285,6 +282,11 @@ ARG YASA_UAST_VERSION
 ARG YASA_BUILD_FROM_SOURCE
 
 COPY docker/yasa-engine-overrides /tmp/yasa-engine-overrides
+
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unzip; \
+    rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhunter-tools \
     set -eux; \
@@ -557,63 +559,7 @@ FROM runtime-base AS runtime
 COPY --from=builder /opt/backend-venv /opt/backend-venv
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
-# 复制共享扫描工具并安装 PMD
-RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhunter-tools \
-    set -eux; \
-    unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; \
-    cmd_timeout=420; \
-    download_step_timeout=90; \
-    if [ "${cmd_timeout}" -lt "${download_step_timeout}" ]; then download_step_timeout="${cmd_timeout}"; fi; \
-    mkdir -p /var/cache/vulhunter-tools; \
-    download_with_fallback() { \
-      output="$1"; \
-      shift; \
-      for url in "$@"; do \
-        if ! curl -fsSI --connect-timeout 5 --max-time 12 "${url}" >/dev/null 2>&1 && \
-           ! curl -fsS --connect-timeout 5 --max-time 12 --range 0-0 "${url}" -o /dev/null >/dev/null 2>&1; then \
-          echo "download source probe failed for ${url}, continue with direct download attempts." >&2; \
-        fi; \
-        attempt=1; \
-        while [ "${attempt}" -le 2 ]; do \
-          echo "download ${output} via ${url} (attempt ${attempt}/2, timeout ${download_step_timeout}s)"; \
-          if timeout "${download_step_timeout}" curl -fL \
-            --connect-timeout 8 \
-            --max-time 60 \
-            --speed-time 15 \
-            --speed-limit 2048 \
-            "${url}" \
-            -o "${output}.tmp"; then \
-            mv "${output}.tmp" "${output}"; \
-            return 0; \
-          else \
-            status="$?"; \
-          fi; \
-          if [ "${status}" -eq 124 ]; then \
-            echo "download timed out: ${url} (attempt ${attempt}/2)." >&2; \
-          else \
-            echo "download failed: ${url} (attempt ${attempt}/2, exit ${status})." >&2; \
-          fi; \
-          rm -f "${output}.tmp"; \
-          sleep $((attempt + 1)); \
-          attempt=$((attempt + 1)); \
-        done; \
-      done; \
-      return 1; \
-    }; \
-    PMD_CACHE="/var/cache/vulhunter-tools/pmd-dist-7.0.0-bin.zip"; \
-    if [ ! -s "${PMD_CACHE}" ]; then \
-      download_with_fallback \
-        "${PMD_CACHE}" \
-        "https://gh-proxy.com/https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.0.0/pmd-dist-7.0.0-bin.zip" \
-        "https://v6.gh-proxy.org/https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.0.0/pmd-dist-7.0.0-bin.zip" \
-        "https://gh-proxy.org/https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.0.0/pmd-dist-7.0.0-bin.zip" \
-        "https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.0.0/pmd-dist-7.0.0-bin.zip"; \
-    fi; \
-    cp "${PMD_CACHE}" /tmp/pmd.zip; \
-    unzip -q /tmp/pmd.zip -d /opt; \
-    ln -s /opt/pmd-bin-7.0.0/bin/pmd /usr/local/bin/pmd; \
-    rm /tmp/pmd.zip; \
-    pmd --version; \
+RUN set -eux; \
     for site_packages_dir in $(python3 -c 'import site; [print(path) for path in site.getsitepackages() if "site-packages" in path]'); do \
       find "${site_packages_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; \
     done; \
