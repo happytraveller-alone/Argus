@@ -78,6 +78,7 @@ services:
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}
       SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}
       SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-vulhunter/phpstan-runner-local:latest}
+      SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}
       YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}
       MCP_ENABLED: "true"
       MCP_REQUIRE_ALL_READY_ON_STARTUP: "false"

@@ -117,6 +117,7 @@ class Settings(BaseSettings):
     SCANNER_BANDIT_IMAGE: str = "vulhunter/bandit-runner:latest"
     SCANNER_GITLEAKS_IMAGE: str = "vulhunter/gitleaks-runner:latest"
     SCANNER_PHPSTAN_IMAGE: str = "vulhunter/phpstan-runner:latest"
+    SCANNER_PMD_IMAGE: str = "vulhunter/pmd-runner:latest"
     BACKEND_VENV_PATH: str = "/opt/backend-venv"
     SEED_ARCHIVE_PROBE_ATTEMPTS: int = 2
     SEED_ARCHIVE_PROBE_TIMEOUT_SECONDS: int = 5
