@@ -276,6 +276,10 @@ COPY scripts/package_source_selector.py /usr/local/bin/package_source_selector.p
 # ============================================
 FROM runtime-base AS scanner-tools-base
 
+ARG BACKEND_APT_MIRROR_PRIMARY
+ARG BACKEND_APT_SECURITY_PRIMARY
+ARG BACKEND_APT_MIRROR_FALLBACK
+ARG BACKEND_APT_SECURITY_FALLBACK
 ARG BACKEND_INSTALL_YASA
 ARG YASA_VERSION
 ARG YASA_UAST_VERSION
@@ -283,9 +287,36 @@ ARG YASA_BUILD_FROM_SOURCE
 
 COPY docker/yasa-engine-overrides /tmp/yasa-engine-overrides
 
-RUN set -eux; \
-    apt-get update; \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unzip; \
+RUN --mount=type=cache,id=vulhunter-backend-scanner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,id=vulhunter-backend-scanner-apt-cache,target=/var/cache/apt,sharing=locked \
+    set -eux; \
+    rm -f /etc/apt/apt.conf.d/proxy.conf 2>/dev/null || true; \
+    { \
+      echo 'Acquire::http::Proxy "false";'; \
+      echo 'Acquire::https::Proxy "false";'; \
+      echo 'Acquire::Retries "5";'; \
+      echo 'Acquire::http::Timeout "60";'; \
+    } > /etc/apt/apt.conf.d/99-no-proxy; \
+    . /etc/os-release; \
+    CODENAME="${VERSION_CODENAME:-bookworm}"; \
+    write_sources() { \
+      main_host="$1"; \
+      security_host="$2"; \
+      rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+      printf 'deb https://%s/debian %s main\n' "${main_host}" "${CODENAME}" > /etc/apt/sources.list; \
+      printf 'deb https://%s/debian %s-updates main\n' "${main_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+      printf 'deb https://%s/debian-security %s-security main\n' "${security_host}" "${CODENAME}" >> /etc/apt/sources.list; \
+    }; \
+    install_unzip() { \
+      apt-get update && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unzip; \
+    }; \
+    write_sources "${BACKEND_APT_MIRROR_PRIMARY}" "${BACKEND_APT_SECURITY_PRIMARY}"; \
+    if ! install_unzip; then \
+      rm -rf /var/lib/apt/lists/*; \
+      write_sources "${BACKEND_APT_MIRROR_FALLBACK}" "${BACKEND_APT_SECURITY_FALLBACK}"; \
+      install_unzip; \
+    fi; \
     rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhunter-tools \
