@@ -255,7 +255,7 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1 || true"]
+    command: ["/bin/sh", "-lc", "(python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1 && command -v code2flow >/dev/null 2>&1 && code2flow --help >/dev/null 2>&1) || true"]
     networks:
       - vulhunter-network
 

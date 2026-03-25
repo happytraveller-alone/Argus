@@ -114,6 +114,29 @@ class Code2FlowCallGraph:
             edges.setdefault(src, set()).add(dst)
         return edges
 
+    @staticmethod
+    def _normalize_runner_blocked_reasons(
+        blocked_reasons: object,
+        diagnostics: Dict[str, str],
+    ) -> List[str]:
+        raw_reasons = [
+            str(item).strip()
+            for item in (blocked_reasons or [])
+            if str(item).strip()
+        ]
+        if any(reason in {"code2flow_not_installed", "code2flow_binary_not_found"} for reason in raw_reasons):
+            return ["code2flow_not_installed"]
+
+        error_text = str(diagnostics.get("error") or "").strip()
+        if error_text == "code2flow_binary_not_found":
+            return ["code2flow_not_installed"]
+
+        if raw_reasons:
+            return raw_reasons
+        if error_text:
+            return ["code2flow_exec_failed"]
+        return []
+
     def generate(self) -> Code2FlowGraphResult:
         result = Code2FlowGraphResult()
 
@@ -149,14 +172,28 @@ class Code2FlowCallGraph:
             result.diagnostics["error"] = f"{type(exc).__name__}: {exc}"
             return result
 
+        if not isinstance(payload, dict):
+            result.blocked_reasons.append("code2flow_exec_failed")
+            result.diagnostics["error"] = "invalid_runner_response"
+            return result
+
+        result.used_engine = str(payload.get("used_engine") or "fallback")
         result.diagnostics.update(
             payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
         )
 
-        if not payload or payload.get("ok") is False:
-            result.blocked_reasons.append("code2flow_not_installed")
-            if payload.get("error"):
-                result.diagnostics["error"] = str(payload["error"])
+        if payload.get("error"):
+            result.diagnostics["error"] = str(payload["error"])
+
+        if payload.get("ok") is False:
+            result.blocked_reasons.extend(
+                self._normalize_runner_blocked_reasons(
+                    payload.get("blocked_reasons"),
+                    result.diagnostics,
+                )
+            )
+            if not result.blocked_reasons:
+                result.blocked_reasons.append("code2flow_exec_failed")
             return result
 
         raw_edges = payload.get("edges")

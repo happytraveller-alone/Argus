@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -184,6 +185,25 @@ def _parse_dot_edges(dot_text: str) -> Dict[str, List[str]]:
     return edges
 
 
+def _build_code2flow_diagnostics(
+    *,
+    binary_path: str | None,
+    probe_command: List[str] | None = None,
+    stderr_text: str = "",
+    error: str = "",
+    used_engine: str = "fallback",
+) -> Dict[str, str]:
+    diagnostics: Dict[str, str] = {
+        "binary_path": str(binary_path or ""),
+        "probe_command": " ".join(shlex.quote(part) for part in (probe_command or ["code2flow", "--help"])),
+        "stderr_excerpt": str(stderr_text or "").strip()[:400],
+        "used_engine": used_engine,
+    }
+    if error:
+        diagnostics["error"] = str(error)
+    return diagnostics
+
+
 def _code2flow_callgraph(payload: Dict[str, Any]) -> Dict[str, Any]:
     files = payload.get("files") if isinstance(payload, dict) else []
     if not isinstance(files, list) or not files:
@@ -202,7 +222,12 @@ def _code2flow_callgraph(payload: Dict[str, Any]) -> Dict[str, Any]:
             "edges": {},
             "blocked_reasons": ["code2flow_not_installed"],
             "used_engine": "fallback",
-            "diagnostics": {"error": "code2flow_binary_not_found"},
+            "diagnostics": _build_code2flow_diagnostics(
+                binary_path="",
+                probe_command=["code2flow", "--help"],
+                error="code2flow_binary_not_found",
+                used_engine="fallback",
+            ),
         }
 
     with tempfile.TemporaryDirectory(prefix="flow-parser-code2flow-") as temp_dir:
@@ -235,7 +260,10 @@ def _code2flow_callgraph(payload: Dict[str, Any]) -> Dict[str, Any]:
         ]
 
         last_error = ""
+        last_probe_command: List[str] = [code2flow_bin, "--help"]
+        last_stderr = ""
         for cmd in commands:
+            last_probe_command = list(cmd)
             try:
                 proc = subprocess.run(
                     cmd,
@@ -246,6 +274,7 @@ def _code2flow_callgraph(payload: Dict[str, Any]) -> Dict[str, Any]:
                 )
             except Exception as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
+                last_stderr = last_error
                 continue
 
             if proc.returncode == 0 and output_dot.exists():
@@ -257,24 +286,41 @@ def _code2flow_callgraph(payload: Dict[str, Any]) -> Dict[str, Any]:
                         "edges": {},
                         "blocked_reasons": ["code2flow_no_edges"],
                         "used_engine": "fallback",
-                        "diagnostics": {"stderr": (proc.stderr or "").strip()[:400]},
+                        "diagnostics": _build_code2flow_diagnostics(
+                            binary_path=code2flow_bin,
+                            probe_command=cmd,
+                            stderr_text=proc.stderr or proc.stdout or "",
+                            used_engine="fallback",
+                        ),
                     }
                 return {
                     "ok": True,
                     "edges": edges,
                     "blocked_reasons": [],
                     "used_engine": "code2flow",
-                    "diagnostics": {"stderr": (proc.stderr or "").strip()[:400]},
+                    "diagnostics": _build_code2flow_diagnostics(
+                        binary_path=code2flow_bin,
+                        probe_command=cmd,
+                        stderr_text=proc.stderr or proc.stdout or "",
+                        used_engine="code2flow",
+                    ),
                 }
 
             last_error = (proc.stderr or proc.stdout or "").strip()[:400]
+            last_stderr = proc.stderr or proc.stdout or ""
 
         return {
             "ok": False,
             "edges": {},
             "blocked_reasons": ["code2flow_exec_failed"],
             "used_engine": "fallback",
-            "diagnostics": {"error": last_error or "code2flow_failed"},
+            "diagnostics": _build_code2flow_diagnostics(
+                binary_path=code2flow_bin,
+                probe_command=last_probe_command,
+                stderr_text=last_stderr,
+                error=last_error or "code2flow_failed",
+                used_engine="fallback",
+            ),
         }
 
 

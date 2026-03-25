@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from app.services.agent.agents.base import AgentConfig, AgentResult, AgentType, BaseAgent
 from app.services.agent.agents.analysis import AnalysisAgent
+from app.services.agent.tools.base import AgentTool, ToolResult
 import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 
@@ -194,6 +195,24 @@ class _ControlFlowTool:
     async def execute(self, **kwargs):
         validated = _ControlFlowSchema(**kwargs)
         return SimpleNamespace(success=True, data=validated.model_dump(), error=None, metadata={})
+
+
+class _StrictControlFlowTool(AgentTool):
+    @property
+    def name(self) -> str:
+        return "controlflow_analysis_light"
+
+    @property
+    def description(self) -> str:
+        return "strict controlflow tool for input-contract testing"
+
+    @property
+    def args_schema(self):
+        return _ControlFlowSchema
+
+    async def _execute(self, **kwargs) -> ToolResult:
+        validated = _ControlFlowSchema(**kwargs)
+        return ToolResult(success=True, data=validated.model_dump(), metadata={})
 
 
 class _DataFlowSchema(BaseModel):
@@ -790,6 +809,34 @@ async def test_execute_tool_repairs_controlflow_legacy_alias_fields():
     assert repaired.get("path") == "file_path"
     assert repaired.get("entry_point") == "entry_points"
     assert repaired.get("condition_hint") == "control_conditions_hint"
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_repairs_controlflow_single_item_envelope():
+    agent, emitter = _make_agent(tools={"controlflow_analysis_light": _StrictControlFlowTool()})
+
+    output = await agent.execute_tool(
+        "controlflow_analysis_light",
+        {
+            "items": [
+                {
+                    "file_path": "src/login.py:123",
+                    "entry_points_hint": "main",
+                }
+            ]
+        },
+    )
+
+    assert "src/login.py" in output
+    assert "123" in output
+    assert "main" in output
+    assert "参数校验失败" not in output
+    tool_call_events = _events_by_type(emitter, "tool_call")
+    assert len(tool_call_events) == 1
+    metadata = tool_call_events[0].metadata or {}
+    repaired = metadata.get("input_repaired") or {}
+    assert repaired.get("__envelope.items.file_path") == "file_path"
+    assert repaired.get("__envelope.items.entry_points_hint") == "entry_points_hint"
 
 
 @pytest.mark.asyncio

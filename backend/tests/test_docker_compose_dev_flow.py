@@ -293,6 +293,7 @@ def test_backend_dev_entrypoint_runs_single_alembic_head() -> None:
 
 
 def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
+    compose_text = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     backend_text = (REPO_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     pyproject_text = (REPO_ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
     entrypoint_text = (REPO_ROOT / "backend" / "docker-entrypoint.sh").read_text(encoding="utf-8")
@@ -342,6 +343,11 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert "WORKDIR /scan" in yasa_runner_text
     assert "tree-sitter-language-pack" in flow_parser_runner_text
     assert "code2flow" in flow_parser_runner_text
+    assert 'command -v code2flow >/dev/null 2>&1' in flow_parser_runner_text
+    assert 'code2flow --help >/dev/null 2>&1' in flow_parser_runner_text
+    assert "python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1" in compose_text
+    assert "command -v code2flow >/dev/null 2>&1" in compose_text
+    assert "code2flow --help >/dev/null 2>&1" in compose_text
 
 
 def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:

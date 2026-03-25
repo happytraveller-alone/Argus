@@ -3673,6 +3673,11 @@ class BaseAgent(ABC):
                 repaired[source_key] = source_value
                 repaired_changes[f"__envelope.{source_name}.{source_key}"] = source_key
 
+        for envelope_key in ("arguments", "finding", "risk_point", "items"):
+            if envelope_key in repaired and envelope_key not in schema_fields:
+                repaired.pop(envelope_key, None)
+                repaired_changes[f"__envelope.{envelope_key}"] = "removed"
+
         if self._is_placeholder_payload(repaired):
             keys_to_remove = [key for key in list(repaired.keys()) if not str(key).startswith("__")]
             for key in keys_to_remove:

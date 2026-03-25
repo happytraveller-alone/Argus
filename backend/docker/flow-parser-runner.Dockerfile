@@ -62,7 +62,12 @@ WORKDIR /opt/flow-parser
 COPY app /opt/flow-parser/app
 COPY scripts/flow_parser_runner.py /opt/flow-parser/flow_parser_runner.py
 
-RUN mkdir -p /scan && python3 /opt/flow-parser/flow_parser_runner.py definitions-batch --request /tmp/nonexistent.json --response /tmp/nonexistent.out >/dev/null 2>&1 || true
+RUN set -eux; \
+    mkdir -p /scan; \
+    command -v code2flow >/dev/null 2>&1; \
+    code2flow --help >/dev/null 2>&1; \
+    python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1; \
+    python3 /opt/flow-parser/flow_parser_runner.py definitions-batch --request /tmp/nonexistent.json --response /tmp/nonexistent.out >/dev/null 2>&1 || true
 
 WORKDIR /scan
 
