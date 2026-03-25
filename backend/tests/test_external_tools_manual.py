@@ -60,6 +60,12 @@ def check_dependencies():
 
 check_dependencies()
 
+
+@pytest.fixture
+def project_root() -> str:
+    """Provide a stable repo root when this manual script is executed via pytest."""
+    return str(Path(__file__).resolve().parents[2])
+
 # 现在安全地导入
 try:
     from app.services.agent.tools.external_tools import (
