@@ -169,6 +169,11 @@ class Settings(BaseSettings):
     FLOW_LIGHTWEIGHT_ENABLED: bool = True
     LOGIC_AUTHZ_ENABLED: bool = True
     FLOW_UNREACHABLE_POLICY: str = "degrade_likely"
+    FLOW_PARSER_RUNNER_IMAGE: str = "vulhunter/flow-parser-runner:latest"
+    FLOW_PARSER_RUNNER_ENABLED: bool = True
+    FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: int = 120
+    FLOW_PARSER_RUNNER_BATCH_MAX_FILES: int = 100
+    FLOW_PARSER_RUNNER_BATCH_MAX_BYTES: int = 8 * 1024 * 1024
 
     # 命中代码归属函数定位配置
     FUNCTION_LOCATOR_LANGUAGES: List[str] = [

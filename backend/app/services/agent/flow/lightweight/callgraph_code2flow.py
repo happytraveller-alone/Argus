@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
-import subprocess
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from app.services.backend_venv import build_backend_venv_env, resolve_backend_venv_executable
+from app.services.flow_parser_runner import get_flow_parser_runner_client
 
 logger = logging.getLogger(__name__)
 
@@ -117,76 +114,6 @@ class Code2FlowCallGraph:
             edges.setdefault(src, set()).add(dst)
         return edges
 
-    def _run_code2flow(self, file_paths: List[Path], output_dot: str) -> Dict[str, str]:
-        commands: List[List[str]] = []
-        path_args = [str(item) for item in file_paths]
-
-        binary = resolve_backend_venv_executable("code2flow", required=False)
-        if binary:
-            commands.extend(
-                [
-                    [binary, *path_args, "-o", output_dot],
-                    [binary, "-o", output_dot, *path_args],
-                    [binary, *path_args, "--output", output_dot],
-                ]
-            )
-
-        python_bin = resolve_backend_venv_executable("python", required=False)
-        if python_bin:
-            commands.append([python_bin, "-m", "code2flow", *path_args, "-o", output_dot])
-
-        if not commands:
-            return {
-                "error": "code2flow_binary_not_found",
-            }
-
-        last_error = ""
-        for cmd in commands:
-            try:
-                proc = subprocess.run(
-                    cmd,
-                    cwd=str(self.project_root),
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout_sec,
-                    env=build_backend_venv_env(),
-                )
-            except Exception as exc:
-                last_error = f"{type(exc).__name__}: {exc}"
-                continue
-
-            if proc.returncode == 0 and Path(output_dot).exists():
-                return {
-                    "command": " ".join(cmd),
-                    "stderr": (proc.stderr or "").strip()[:400],
-                }
-
-            stderr = (proc.stderr or proc.stdout or "").strip()
-            last_error = f"returncode={proc.returncode}; {stderr[:300]}"
-
-        return {
-            "error": last_error or "code2flow_failed",
-        }
-
-    def _has_code2flow_runtime(self) -> bool:
-        if resolve_backend_venv_executable("code2flow", required=False):
-            return True
-        python_bin = resolve_backend_venv_executable("python", required=False)
-        if not python_bin:
-            return False
-        try:
-            probe = subprocess.run(
-                [python_bin, "-c", "import code2flow"],
-                cwd=str(self.project_root),
-                capture_output=True,
-                text=True,
-                timeout=5,
-                env=build_backend_venv_env(),
-            )
-        except Exception:
-            return False
-        return probe.returncode == 0
-
     def generate(self) -> Code2FlowGraphResult:
         result = Code2FlowGraphResult()
 
@@ -195,45 +122,66 @@ class Code2FlowCallGraph:
             result.blocked_reasons.append("code2flow_no_candidate_files")
             return result
 
-        if not self._has_code2flow_runtime():
-            result.blocked_reasons.append("code2flow_not_installed")
-            if str(os.environ.get("CODE2FLOW_AUTO_INSTALL_FAILED") or "0").strip() == "1":
-                result.blocked_reasons.append("auto_install_failed")
-            return result
+        files_payload: List[Dict[str, str]] = []
+        for file_path in file_paths:
+            try:
+                files_payload.append(
+                    {
+                        "file_path": str(file_path.relative_to(self.project_root)).replace("\\", "/"),
+                        "content": file_path.read_text(encoding="utf-8", errors="replace"),
+                    }
+                )
+            except Exception:
+                continue
 
-        with tempfile.NamedTemporaryFile(suffix=".dot", delete=False) as temp_file:
-            dot_path = temp_file.name
+        if not files_payload:
+            result.blocked_reasons.append("code2flow_no_candidate_files")
+            return result
 
         try:
-            exec_info = self._run_code2flow(file_paths, dot_path)
-            result.diagnostics.update(exec_info)
-
-            if "error" in exec_info:
-                result.blocked_reasons.append("code2flow_exec_failed")
-                return result
-
-            try:
-                dot_text = Path(dot_path).read_text(encoding="utf-8", errors="replace")
-            except Exception as exc:
-                result.blocked_reasons.append("code2flow_dot_read_failed")
-                result.diagnostics["error"] = f"{type(exc).__name__}: {exc}"
-                return result
-
-            edges = self._parse_dot_edges(dot_text)
-            if not edges:
-                result.blocked_reasons.append("code2flow_no_edges")
-                return result
-
-            result.edges = edges
-            result.used_engine = "code2flow"
-            result.diagnostics["edge_count"] = str(sum(len(v) for v in edges.values()))
-            result.diagnostics["node_count"] = str(len(edges))
+            runner = get_flow_parser_runner_client()
+            payload = runner.generate_code2flow_callgraph(
+                files_payload,
+                timeout_seconds=self.timeout_sec,
+            )
+        except Exception as exc:
+            result.blocked_reasons.append("code2flow_not_installed")
+            result.diagnostics["error"] = f"{type(exc).__name__}: {exc}"
             return result
-        finally:
-            try:
-                os.unlink(dot_path)
-            except Exception:
-                pass
+
+        result.diagnostics.update(
+            payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
+        )
+
+        if not payload or payload.get("ok") is False:
+            result.blocked_reasons.append("code2flow_not_installed")
+            if payload.get("error"):
+                result.diagnostics["error"] = str(payload["error"])
+            return result
+
+        raw_edges = payload.get("edges")
+        if not isinstance(raw_edges, dict):
+            result.blocked_reasons.append("code2flow_no_edges")
+            return result
+
+        parsed_edges: Dict[str, Set[str]] = {}
+        for src, targets in raw_edges.items():
+            src_name = str(src or "").strip()
+            if not src_name:
+                continue
+            if isinstance(targets, list):
+                parsed_edges[src_name] = {str(item).strip() for item in targets if str(item).strip()}
+            elif isinstance(targets, set):
+                parsed_edges[src_name] = {str(item).strip() for item in targets if str(item).strip()}
+        if not parsed_edges:
+            result.blocked_reasons.append("code2flow_no_edges")
+            return result
+
+        result.edges = parsed_edges
+        result.used_engine = str(payload.get("used_engine") or "code2flow")
+        result.diagnostics["edge_count"] = str(sum(len(v) for v in parsed_edges.values()))
+        result.diagnostics["node_count"] = str(len(parsed_edges))
+        return result
 
 
 __all__ = ["Code2FlowCallGraph", "Code2FlowGraphResult"]

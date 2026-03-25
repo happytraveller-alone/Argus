@@ -160,6 +160,10 @@ class _ControlFlowSchema(BaseModel):
     file_path: str
     line_start: int
     line_end: Optional[int] = None
+    call_chain_hint: Optional[List[str]] = None
+    control_conditions_hint: Optional[List[str]] = None
+    entry_points: Optional[List[str]] = None
+    entry_points_hint: Optional[List[str]] = None
 
 
 class _ControlFlowTool:
@@ -167,7 +171,8 @@ class _ControlFlowTool:
     name = "controlflow_analysis_light"
 
     async def execute(self, **kwargs):
-        return SimpleNamespace(success=True, data=kwargs, error=None, metadata={})
+        validated = _ControlFlowSchema(**kwargs)
+        return SimpleNamespace(success=True, data=validated.model_dump(), error=None, metadata={})
 
 
 def _make_agent(tools=None, metadata=None):
@@ -654,6 +659,32 @@ async def test_execute_tool_repairs_controlflow_line_start_from_file_path_suffix
     metadata = tool_call_events[0].metadata or {}
     repaired = metadata.get("input_repaired") or {}
     assert repaired.get("__sanitize.file_path_line") in {"line_start", "line_end"}
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_repairs_controlflow_string_hints_to_lists():
+    agent, emitter = _make_agent(tools={"controlflow_analysis_light": _ControlFlowTool()})
+
+    output = await agent.execute_tool(
+        "controlflow_analysis_light",
+        {
+            "file_path": "src/login.py:123",
+            "call_chain_hint": "ServiceLoader.load(Class serviceName line=42)",
+            "control_conditions_hint": "requires authenticated user",
+            "entry_points_hint": "main",
+        },
+    )
+
+    assert "ServiceLoader.load(Class serviceName line=42)" in output
+    assert "requires authenticated user" in output
+    assert "main" in output
+    tool_call_events = _events_by_type(emitter, "tool_call")
+    assert len(tool_call_events) == 1
+    metadata = tool_call_events[0].metadata or {}
+    repaired = metadata.get("input_repaired") or {}
+    assert repaired.get("__normalize.call_chain_hint") == "call_chain_hint"
+    assert repaired.get("__normalize.control_conditions_hint") == "control_conditions_hint"
+    assert repaired.get("__normalize.entry_points_hint") == "entry_points_hint"
 
 
 @pytest.mark.asyncio

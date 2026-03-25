@@ -44,6 +44,11 @@ on:
         required: false
         type: boolean
         default: true
+      build_flow_parser_runner:
+        description: '构建 flow/parser runner 镜像'
+        required: false
+        type: boolean
+        default: true
       build_pmd_runner:
         description: '构建 PMD runner 镜像'
         required: false
@@ -196,6 +201,19 @@ jobs:
           cache-from: type=gha,scope=phpstan-runner
           cache-to: type=gha,mode=max,scope=phpstan-runner
 
+      - name: 构建并推送 flow/parser runner Docker 镜像
+        if: ${{ github.event.inputs.build_flow_parser_runner == 'true' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/docker/flow-parser-runner.Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ github.event.inputs.tag }}
+          cache-from: type=gha,scope=flow-parser-runner
+          cache-to: type=gha,mode=max,scope=flow-parser-runner
+
       - name: 构建并推送 PMD runner Docker 镜像
         if: ${{ github.event.inputs.build_pmd_runner == 'true' }}
         uses: docker/build-push-action@v5
@@ -246,6 +264,9 @@ jobs:
           fi
           if [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
             echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
             echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY

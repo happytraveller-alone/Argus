@@ -19,6 +19,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 import json
 
+from app.core.config import settings
+from app.services.flow_parser_runtime import get_default_definition_provider
+
 from .splitter import CodeSplitter, CodeChunk
 from .embeddings import EmbeddingService
 
@@ -708,6 +711,11 @@ class CodeIndexer:
         self.collection_name = collection_name
         self.embedding_service = embedding_service or EmbeddingService()
         self.splitter = splitter or CodeSplitter()
+        self.definition_provider = get_default_definition_provider()
+        self.definition_batch_max_files = int(getattr(settings, "FLOW_PARSER_RUNNER_BATCH_MAX_FILES", 100))
+        self.definition_batch_max_bytes = int(
+            getattr(settings, "FLOW_PARSER_RUNNER_BATCH_MAX_BYTES", 8 * 1024 * 1024)
+        )
         self.persist_directory = persist_directory
 
         # 从 embedding_service 获取配置
@@ -752,6 +760,28 @@ class CodeIndexer:
         """
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
+
+    def _iter_definition_batches(self, records: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+        batches: List[List[Dict[str, Any]]] = []
+        current_batch: List[Dict[str, Any]] = []
+        current_bytes = 0
+
+        for record in records:
+            content_bytes = len(str(record.get("content") or "").encode("utf-8", errors="ignore"))
+            if current_batch and (
+                len(current_batch) >= self.definition_batch_max_files
+                or current_bytes + content_bytes > self.definition_batch_max_bytes
+            ):
+                batches.append(current_batch)
+                current_batch = []
+                current_bytes = 0
+
+            current_batch.append(record)
+            current_bytes += content_bytes
+
+        if current_batch:
+            batches.append(current_batch)
+        return batches
 
     async def initialize(self, force_rebuild: bool = False) -> Tuple[bool, str]:
         """
@@ -922,8 +952,9 @@ class CodeIndexer:
 
         all_chunks: List[CodeChunk] = []
         file_hashes: Dict[str, str] = {}
+        process_records: List[Dict[str, Any]] = []
 
-        # 分块处理文件
+        # 预读取文件，随后按批提取 definitions
         for file_path in files:
             progress.current_file = file_path
 
@@ -948,15 +979,45 @@ class CodeIndexer:
                 if len(content) > 500000:
                     content = content[:500000]
 
-                # 异步分块，避免 Tree-sitter 解析阻塞事件循环
-                chunks = await self.splitter.split_file_async(content, relative_path)
+                process_records.append(
+                    {
+                        "relative_path": relative_path,
+                        "content": content,
+                        "file_hash": file_hash,
+                        "language": self.splitter.detect_language(relative_path),
+                    }
+                )
 
-                # 为每个 chunk 添加 file_hash
+            except Exception as e:
+                logger.warning(f"处理文件失败 {file_path}: {e}")
+                progress.errors.append(f"{file_path}: {str(e)}")
+                progress.processed_files += 1
+
+        for batch in self._iter_definition_batches(process_records):
+            definition_results = self.definition_provider.extract_definitions_batch(
+                [
+                    {
+                        "file_path": record["relative_path"],
+                        "language": record["language"],
+                        "content": record["content"],
+                    }
+                    for record in batch
+                ]
+            )
+
+            for record in batch:
+                payload = definition_results.get(record["relative_path"]) or {}
+                definitions = payload.get("definitions") if isinstance(payload.get("definitions"), list) else None
+                chunks = await self.splitter.split_file_async(
+                    record["content"],
+                    record["relative_path"],
+                    definitions=definitions,
+                )
+
                 for chunk in chunks:
-                    chunk.metadata["file_hash"] = file_hash
+                    chunk.metadata["file_hash"] = record["file_hash"]
 
                 all_chunks.extend(chunks)
-
                 progress.processed_files += 1
                 progress.added_files += 1
                 progress.total_chunks = len(all_chunks)
@@ -964,11 +1025,6 @@ class CodeIndexer:
                 if progress_callback:
                     progress_callback(progress)
                 yield progress
-
-            except Exception as e:
-                logger.warning(f"处理文件失败 {file_path}: {e}")
-                progress.errors.append(f"{file_path}: {str(e)}")
-                progress.processed_files += 1
 
         logger.info(f"创建了 {len(all_chunks)} 个代码块")
 
@@ -1066,6 +1122,7 @@ class CodeIndexer:
         files_to_process = files_to_add | files_to_update
         all_chunks: List[CodeChunk] = []
         file_hashes: Dict[str, str] = dict(indexed_file_hashes)
+        process_records: List[Dict[str, Any]] = []
 
         for relative_path in files_to_process:
             file_path = current_file_map[relative_path]
@@ -1095,17 +1152,48 @@ class CodeIndexer:
                 if len(content) > 500000:
                     content = content[:500000]
 
-                # 异步分块，避免 Tree-sitter 解析阻塞事件循环
-                chunks = await self.splitter.split_file_async(content, relative_path)
+                process_records.append(
+                    {
+                        "relative_path": relative_path,
+                        "content": content,
+                        "file_hash": file_hash,
+                        "language": self.splitter.detect_language(relative_path),
+                        "is_update": is_update,
+                    }
+                )
 
-                # 为每个 chunk 添加 file_hash
+            except Exception as e:
+                logger.warning(f"处理文件失败 {file_path}: {e}")
+                progress.errors.append(f"{file_path}: {str(e)}")
+                progress.processed_files += 1
+
+        for batch in self._iter_definition_batches(process_records):
+            definition_results = self.definition_provider.extract_definitions_batch(
+                [
+                    {
+                        "file_path": record["relative_path"],
+                        "language": record["language"],
+                        "content": record["content"],
+                    }
+                    for record in batch
+                ]
+            )
+
+            for record in batch:
+                payload = definition_results.get(record["relative_path"]) or {}
+                definitions = payload.get("definitions") if isinstance(payload.get("definitions"), list) else None
+                chunks = await self.splitter.split_file_async(
+                    record["content"],
+                    record["relative_path"],
+                    definitions=definitions,
+                )
+
                 for chunk in chunks:
-                    chunk.metadata["file_hash"] = file_hash
+                    chunk.metadata["file_hash"] = record["file_hash"]
 
                 all_chunks.extend(chunks)
-
                 progress.processed_files += 1
-                if is_update:
+                if record["is_update"]:
                     progress.updated_files += 1
                 else:
                     progress.added_files += 1
@@ -1114,11 +1202,6 @@ class CodeIndexer:
                 if progress_callback:
                     progress_callback(progress)
                 yield progress
-
-            except Exception as e:
-                logger.warning(f"处理文件失败 {file_path}: {e}")
-                progress.errors.append(f"{file_path}: {str(e)}")
-                progress.processed_files += 1
 
         # 批量嵌入和索引新的代码块
         if all_chunks:
@@ -1417,5 +1500,3 @@ class CodeIndexer:
             **kwargs,
         ):
             yield progress
-
-

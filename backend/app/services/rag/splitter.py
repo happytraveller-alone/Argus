@@ -513,7 +513,11 @@ class CodeSplitter:
         return TreeSitterParser.LANGUAGE_MAP.get(ext, "text")
 
     def split_file(
-        self, content: str, file_path: str, language: str | None = None
+        self,
+        content: str,
+        file_path: str,
+        language: str | None = None,
+        definitions: list[dict[str, Any]] | None = None,
     ) -> list[CodeChunk]:
         """
         分割单个文件
@@ -536,7 +540,9 @@ class CodeSplitter:
 
         try:
             # 尝试使用 Tree-sitter 解析
-            if self.use_tree_sitter and self._ts_parser:
+            if definitions:
+                chunks = self._split_by_definitions(content, file_path, language, definitions)
+            elif self.use_tree_sitter and self._ts_parser:
                 tree = self._ts_parser.parse(content, language)
                 if tree:
                     chunks = self._split_by_ast(content, file_path, language, tree)
@@ -571,7 +577,11 @@ class CodeSplitter:
         return chunks
 
     async def split_file_async(
-        self, content: str, file_path: str, language: str | None = None
+        self,
+        content: str,
+        file_path: str,
+        language: str | None = None,
+        definitions: list[dict[str, Any]] | None = None,
     ) -> list[CodeChunk]:
         """
         异步分割单个文件
@@ -587,7 +597,7 @@ class CodeSplitter:
         Returns:
             代码块列表
         """
-        return await asyncio.to_thread(self.split_file, content, file_path, language)
+        return await asyncio.to_thread(self.split_file, content, file_path, language, definitions)
 
     def _build_chunk_links(self, chunks: list[CodeChunk], total_lines: int) -> None:
         """
@@ -676,6 +686,69 @@ class CodeSplitter:
             if chunk.estimated_tokens > self.max_chunk_size:
                 sub_chunks = self._split_large_chunk(chunk)
                 chunks.extend(sub_chunks)
+            else:
+                chunks.append(chunk)
+
+        return chunks
+
+    def _split_by_definitions(
+        self,
+        content: str,
+        file_path: str,
+        language: str,
+        definitions: list[dict[str, Any]],
+    ) -> list[CodeChunk]:
+        lines = content.split("\n")
+        chunks: list[CodeChunk] = []
+
+        for defn in definitions:
+            start_point = defn.get("start_point") or [0, 0]
+            end_point = defn.get("end_point") or start_point
+            start_line = int(start_point[0])
+            end_line = int(end_point[0])
+            if end_line < start_line:
+                end_line = start_line
+
+            chunk_lines = lines[start_line : end_line + 1]
+            chunk_content = "\n".join(chunk_lines)
+            if len(chunk_content.strip()) < self.min_chunk_size // 4:
+                continue
+
+            defn_type = str(defn.get("type") or "")
+            chunk_type = (
+                ChunkType.CLASS
+                if defn_type == "class"
+                else (
+                    ChunkType.FUNCTION
+                    if defn_type in ["function", "method"]
+                    else (
+                        ChunkType.INTERFACE
+                        if defn_type == "interface"
+                        else (
+                            ChunkType.STRUCT
+                            if defn_type == "struct"
+                            else ChunkType.IMPORT if defn_type == "import" else ChunkType.MODULE
+                        )
+                    )
+                )
+            )
+
+            chunk = CodeChunk(
+                id="",
+                content=chunk_content,
+                file_path=file_path,
+                language=language,
+                chunk_type=chunk_type,
+                line_start=start_line + 1,
+                line_end=end_line + 1,
+                byte_start=int(defn.get("start_byte") or 0),
+                byte_end=int(defn.get("end_byte") or 0),
+                name=defn.get("name"),
+                parent_name=defn.get("parent_name"),
+                ast_type=defn.get("node_type"),
+            )
+            if chunk.estimated_tokens > self.max_chunk_size:
+                chunks.extend(self._split_large_chunk(chunk))
             else:
                 chunks.append(chunk)
 

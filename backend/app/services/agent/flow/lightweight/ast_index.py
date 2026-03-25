@@ -3,8 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
+from app.services.flow_parser_runtime import get_default_definition_provider
 from app.services.rag.splitter import TreeSitterParser
 
 
@@ -60,11 +61,13 @@ class ASTCallIndex:
         project_root: str,
         target_files: Optional[List[str]] = None,
         max_files: int = 2000,
+        definition_provider: Any = None,
     ):
         self.project_root = Path(project_root).resolve()
         self.target_files = {self._normalize_path(p) for p in (target_files or []) if p}
         self.max_files = max_files
         self.parser = TreeSitterParser()
+        self.definition_provider = definition_provider or get_default_definition_provider()
 
         self.symbols_by_id: Dict[str, FunctionSymbol] = {}
         self.symbols_by_name: Dict[str, List[FunctionSymbol]] = {}
@@ -235,16 +238,32 @@ class ASTCallIndex:
         if self._built:
             return
 
+        file_entries: List[Tuple[Path, str, str, str]] = []
         for file_path in self._iter_source_files():
             try:
                 rel = self._normalize_path(str(file_path.relative_to(self.project_root)))
                 code = file_path.read_text(encoding="utf-8", errors="replace")
                 language = self._detect_language(file_path)
+                file_entries.append((file_path, rel, code, language))
+            except Exception:
+                continue
 
+        definition_results: Dict[str, Dict[str, Any]] = {}
+        if self.definition_provider is not None and file_entries:
+            definition_results = self.definition_provider.extract_definitions_batch(
+                [
+                    {"file_path": rel, "language": language, "content": code}
+                    for _file_path, rel, code, language in file_entries
+                ]
+            )
+
+        for file_path, rel, code, language in file_entries:
+            try:
                 definitions: List[Tuple[str, int, int, str]] = []
-                tree = self.parser.parse(code, language)
-                if tree is not None:
-                    for item in self.parser.extract_definitions(tree, code, language):
+                runner_payload = definition_results.get(rel) or {}
+                runner_definitions = runner_payload.get("definitions")
+                if isinstance(runner_definitions, list):
+                    for item in runner_definitions:
                         name = item.get("name")
                         if not name:
                             continue
@@ -254,6 +273,19 @@ class ASTCallIndex:
                             end = start
                         body = "\n".join(code.splitlines()[start - 1 : end])
                         definitions.append((str(name), start, end, body))
+                else:
+                    tree = self.parser.parse(code, language)
+                    if tree is not None:
+                        for item in self.parser.extract_definitions(tree, code, language):
+                            name = item.get("name")
+                            if not name:
+                                continue
+                            start = int(item.get("start_point", (0, 0))[0]) + 1
+                            end = int(item.get("end_point", (start, 0))[0]) + 1
+                            if end < start:
+                                end = start
+                            body = "\n".join(code.splitlines()[start - 1 : end])
+                            definitions.append((str(name), start, end, body))
 
                 if not definitions:
                     definitions = self._regex_extract_definitions(code, language)

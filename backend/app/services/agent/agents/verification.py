@@ -17,6 +17,7 @@ import os
 import re
 import hashlib
 import threading
+import tempfile
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -464,6 +465,14 @@ class VerificationAgent(BaseAgent):
         log_dir.mkdir(parents=True, exist_ok=True)
         return str(log_dir / f"{safe}.log")
 
+    @staticmethod
+    def _resolve_fallback_trace_log_path(agent_name: str, task_id: Optional[str] = None) -> str:
+        safe = VerificationAgent._sanitize_logger_identity(agent_name)
+        safe_task = VerificationAgent._sanitize_logger_identity(task_id or "no_task")
+        log_dir = Path(tempfile.gettempdir()) / "vulhunter" / "verification" / safe_task
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return str(log_dir / f"{safe}.log")
+
     @classmethod
     def _build_trace_logger(cls, agent_name: str, task_id: Optional[str] = None) -> tuple[logging.Logger, str]:
         safe = cls._sanitize_logger_identity(agent_name)
@@ -473,7 +482,10 @@ class VerificationAgent(BaseAgent):
         trace_logger.setLevel(logging.INFO)
         trace_logger.propagate = False
 
-        target_file = cls._resolve_trace_log_path(agent_name, task_id)
+        try:
+            target_file = cls._resolve_trace_log_path(agent_name, task_id)
+        except PermissionError:
+            target_file = cls._resolve_fallback_trace_log_path(agent_name, task_id)
         with _TRACE_HANDLER_LOCK:
             has_handler = False
             for handler in trace_logger.handlers:
@@ -481,7 +493,11 @@ class VerificationAgent(BaseAgent):
                     has_handler = True
                     break
             if not has_handler:
-                file_handler = logging.FileHandler(target_file, encoding="utf-8")
+                try:
+                    file_handler = logging.FileHandler(target_file, encoding="utf-8")
+                except PermissionError:
+                    target_file = cls._resolve_fallback_trace_log_path(agent_name, task_id)
+                    file_handler = logging.FileHandler(target_file, encoding="utf-8")
                 file_handler.setLevel(logging.INFO)
                 file_handler.setFormatter(
                     logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")

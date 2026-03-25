@@ -73,3 +73,45 @@ def test_function_locator_supports_java_kotlin_and_filters_c_attribute(tmp_path:
     assert c_result["function"] == "parse_node"
     assert c_result["function"] != "__attribute__"
     assert c_result["language"] == "c"
+
+
+def test_function_locator_tries_runner_before_local_tree_sitter(monkeypatch, tmp_path: Path):
+    python_file = tmp_path / "demo.py"
+    python_file.write_text(
+        "def target(value):\n"
+        "    return value + 1\n",
+        encoding="utf-8",
+    )
+
+    class _FakeRunnerClient:
+        def locate_enclosing_function(self, **kwargs):
+            return {
+                "function": "target",
+                "start_line": 1,
+                "end_line": 2,
+                "language": "python",
+                "resolution_method": "python_tree_sitter",
+                "resolution_engine": "python_tree_sitter",
+                "diagnostics": ["flow_parser_runner"],
+            }
+
+    monkeypatch.setattr(
+        "app.services.agent.flow.lightweight.function_locator.get_flow_parser_runner_client",
+        lambda: _FakeRunnerClient(),
+    )
+
+    locator = EnclosingFunctionLocator(project_root=str(tmp_path))
+
+    def _fail_extract(**kwargs):
+        raise AssertionError("local tree-sitter should not run when runner succeeds")
+
+    monkeypatch.setattr(locator, "_extract_definitions", _fail_extract)
+
+    result = locator.locate(
+        full_file_path=str(python_file),
+        line_start=2,
+        relative_file_path="demo.py",
+    )
+
+    assert result["function"] == "target"
+    assert "flow_parser_runner" in result["diagnostics"]

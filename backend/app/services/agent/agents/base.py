@@ -3841,6 +3841,23 @@ class BaseAgent(ABC):
                 repaired["max_lines"] = int(max_lines_value)
 
         if tool_name == "controlflow_analysis_light":
+            for hint_field in (
+                "call_chain_hint",
+                "control_conditions_hint",
+                "entry_points",
+                "entry_points_hint",
+            ):
+                if hint_field not in schema_fields or hint_field not in repaired:
+                    continue
+                raw_hint_value = repaired.get(hint_field)
+                if isinstance(raw_hint_value, list):
+                    continue
+                if raw_hint_value in (None, ""):
+                    repaired[hint_field] = []
+                else:
+                    repaired[hint_field] = self._normalize_hint_list(raw_hint_value)
+                repaired_changes[f"__normalize.{hint_field}"] = hint_field
+
             if "line_start" in schema_fields and repaired.get("line_start") in (None, ""):
                 line_value = repaired.get("line")
                 if line_value in (None, ""):
@@ -3880,6 +3897,19 @@ class BaseAgent(ABC):
                 if "line_end" in schema_fields and repaired.get("line_end") in (None, "") and controlflow_hint.get("end_line") is not None:
                     repaired["line_end"] = int(controlflow_hint["end_line"])
                     repaired_changes["__sanitize.file_path_line"] = "line_end"
+
+        if tool_name == "dataflow_analysis":
+            for hint_field in ("source_hints", "sink_hints"):
+                if hint_field not in schema_fields or hint_field not in repaired:
+                    continue
+                raw_hint_value = repaired.get(hint_field)
+                if isinstance(raw_hint_value, list):
+                    continue
+                if raw_hint_value in (None, ""):
+                    repaired[hint_field] = []
+                else:
+                    repaired[hint_field] = self._normalize_hint_list(raw_hint_value)
+                repaired_changes[f"__normalize.{hint_field}"] = hint_field
 
         if tool_name == "search_code" and "keyword" in schema_fields:
             keyword = str(repaired.get("keyword") or "").strip()

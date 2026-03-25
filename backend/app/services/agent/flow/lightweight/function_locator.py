@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 from app.core.config import settings
+from app.services.flow_parser_runner import get_flow_parser_runner_client
 from app.services.rag.splitter import TreeSitterParser
 
 from .function_locator_cli import locate_with_tree_sitter_cli
@@ -289,6 +290,37 @@ class EnclosingFunctionLocator:
                 "language": language,
                 "diagnostics": diagnostics,
             }
+
+        try:
+            runner_client = get_flow_parser_runner_client()
+            runner_result = runner_client.locate_enclosing_function(
+                file_path=relative_file_path or self._resolve_relative_path(file_path),
+                line_start=int(max(1, line_start)),
+                language=language,
+                content=code,
+            )
+        except Exception as exc:
+            diagnostics.append(f"flow_parser_runner_error:{type(exc).__name__}")
+            runner_result = None
+
+        if isinstance(runner_result, dict):
+            runner_function = str(runner_result.get("function") or "").strip()
+            if runner_function and not _is_pseudo_function_name(runner_function):
+                runner_diagnostics = runner_result.get("diagnostics")
+                merged_diagnostics = list(diagnostics)
+                merged_diagnostics.append("flow_parser_runner")
+                if isinstance(runner_diagnostics, list):
+                    merged_diagnostics.extend(str(item) for item in runner_diagnostics if str(item))
+                return {
+                    "file_path": relative_file_path or self._resolve_relative_path(file_path),
+                    "function": runner_function,
+                    "start_line": runner_result.get("start_line"),
+                    "end_line": runner_result.get("end_line"),
+                    "resolution_method": str(runner_result.get("resolution_method") or "python_tree_sitter"),
+                    "resolution_engine": str(runner_result.get("resolution_engine") or "python_tree_sitter"),
+                    "language": runner_result.get("language") or language,
+                    "diagnostics": merged_diagnostics,
+                }
 
         try:
             definitions = self._extract_definitions(

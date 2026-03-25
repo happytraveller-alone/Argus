@@ -16,23 +16,6 @@ is_true() {
     esac
 }
 
-ensure_code2flow() {
-    export CODE2FLOW_AUTO_INSTALL_FAILED=0
-    if [ -x "${BACKEND_VENV_DIR}/bin/code2flow" ]; then
-        echo "code2flow 已可用"
-        return 0
-    fi
-
-    if [ -x "${BACKEND_VENV_DIR}/bin/python" ] && "${BACKEND_VENV_DIR}/bin/python" -c "import code2flow" >/dev/null 2>&1; then
-        echo "code2flow 已通过 ${BACKEND_VENV_DIR}/bin/python 就绪"
-        return 0
-    fi
-
-    echo "code2flow 在 ${BACKEND_VENV_DIR} 中不可用，控制流分析将退化为无 code2flow 模式"
-    export CODE2FLOW_AUTO_INSTALL_FAILED=1
-    return 0
-}
-
 # 启动前安装 Codex Skills（持久化到 mcp_data 卷）
 if [ -x "/app/scripts/install_codex_skills.sh" ]; then
     /app/scripts/install_codex_skills.sh
@@ -44,8 +27,6 @@ if [ -f "/app/scripts/build_skill_registry.py" ] && \
     "${BACKEND_VENV_DIR}/bin/python" /app/scripts/build_skill_registry.py --print-json || \
         echo "[SkillRegistry] build failed, continue startup"
 fi
-
-ensure_code2flow
 
 # 等待 PostgreSQL 就绪
 echo "⏳ 等待数据库连接..."

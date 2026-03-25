@@ -55,6 +55,9 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}" in compose_text
     assert "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}" in compose_text
     assert "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-vulhunter/phpstan-runner-local:latest}" in compose_text
+    assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}" in compose_text
+    assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
+    assert 'FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"' in compose_text
     assert "YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}" in compose_text
     assert "/tmp/vulhunter/scans:/tmp/vulhunter/scans" in compose_text
     assert "/var/run/docker.sock:/var/run/docker.sock" in compose_text
@@ -74,6 +77,9 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert "\n  phpstan-runner:" in compose_text
     assert "image: vulhunter/phpstan-runner-local:latest" in compose_text
     assert "dockerfile: ./docker/phpstan-runner.Dockerfile" in compose_text
+    assert "\n  flow-parser-runner:" in compose_text
+    assert "image: vulhunter/flow-parser-runner-local:latest" in compose_text
+    assert "dockerfile: ./docker/flow-parser-runner.Dockerfile" in compose_text
     assert 'condition: service_completed_successfully' in compose_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in compose_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in compose_text
@@ -151,6 +157,7 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}" in full_overlay_text
     assert "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}" in full_overlay_text
     assert "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-vulhunter/phpstan-runner-local:latest}" in full_overlay_text
+    assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}" in full_overlay_text
     assert "\n  opengrep-runner:" in full_overlay_text
     assert "dockerfile: ./docker/opengrep-runner.Dockerfile" in full_overlay_text
     assert "\n  bandit-runner:" in full_overlay_text
@@ -159,6 +166,8 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "dockerfile: ./docker/gitleaks-runner.Dockerfile" in full_overlay_text
     assert "\n  phpstan-runner:" in full_overlay_text
     assert "dockerfile: ./docker/phpstan-runner.Dockerfile" in full_overlay_text
+    assert "\n  flow-parser-runner:" in full_overlay_text
+    assert "dockerfile: ./docker/flow-parser-runner.Dockerfile" in full_overlay_text
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in full_overlay_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in full_overlay_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in full_overlay_text
@@ -290,9 +299,14 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     yasa_runner_text = (REPO_ROOT / "backend" / "docker" / "yasa-runner.Dockerfile").read_text(
         encoding="utf-8"
     )
+    flow_parser_runner_text = (
+        REPO_ROOT / "backend" / "docker" / "flow-parser-runner.Dockerfile"
+    ).read_text(encoding="utf-8")
 
-    assert '"code2flow>=' in pyproject_text
+    assert '"code2flow>=' not in pyproject_text
     assert '"bandit>=' in pyproject_text
+    assert '"tree-sitter>=' not in pyproject_text
+    assert '"tree-sitter-language-pack>=' not in pyproject_text
     assert "pip install --retries 5 --timeout 60 --disable-pip-version-check code2flow bandit" not in backend_text
     assert "install_python_helpers()" not in backend_text
     assert "gitleaks; \\" not in backend_text
@@ -316,7 +330,7 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11' in backend_text
     assert "python3 -m pip install" not in entrypoint_text
     assert 'BACKEND_VENV_DIR="${BACKEND_VENV_PATH:-/opt/backend-venv}"' in entrypoint_text
-    assert '"${BACKEND_VENV_DIR}/bin/code2flow"' in entrypoint_text
+    assert '"${BACKEND_VENV_DIR}/bin/code2flow"' not in entrypoint_text
     assert "FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim" in yasa_runner_text
     assert "AS yasa-builder" in yasa_runner_text
     assert "AS yasa-runner" in yasa_runner_text
@@ -326,6 +340,8 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert "YASA runner placeholder" not in yasa_runner_text
     assert "node_modules" not in yasa_runner_text
     assert "WORKDIR /scan" in yasa_runner_text
+    assert "tree-sitter-language-pack" in flow_parser_runner_text
+    assert "code2flow" in flow_parser_runner_text
 
 
 def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:
@@ -364,13 +380,16 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "build_bandit_runner" in workflow_text
     assert "build_gitleaks_runner" in workflow_text
     assert "build_phpstan_runner" in workflow_text
+    assert "build_flow_parser_runner" in workflow_text
     assert "./backend/docker/yasa-runner.Dockerfile" in workflow_text
     assert "./backend/docker/opengrep-runner.Dockerfile" in workflow_text
     assert "./backend/docker/bandit-runner.Dockerfile" in workflow_text
     assert "./backend/docker/gitleaks-runner.Dockerfile" in workflow_text
     assert "./backend/docker/phpstan-runner.Dockerfile" in workflow_text
+    assert "./backend/docker/flow-parser-runner.Dockerfile" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ github.event.inputs.tag }}" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ github.event.inputs.tag }}" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ github.event.inputs.tag }}" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ github.event.inputs.tag }}" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ github.event.inputs.tag }}" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ github.event.inputs.tag }}" in workflow_text

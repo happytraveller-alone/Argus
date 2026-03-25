@@ -18,7 +18,7 @@ def parse_locator_payload(raw_output: Any) -> Optional[Dict[str, Any]]:
     text = str(raw_output or "").strip()
     if not text:
         return None
-    if text.startswith("") or text.startswith(""):
+    if text.lower() in {"none", "null"}:
         return None
 
     candidates: List[str] = [text]

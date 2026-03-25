@@ -571,12 +571,6 @@ tqdm==4.67.1
     #   huggingface-hub
     #   nltk
     #   openai
-tree-sitter==0.25.2
-    # via
-    #   VulHunter-backend (pyproject.toml)
-    #   tree-sitter-languages
-tree-sitter-languages==1.10.2
-    # via VulHunter-backend (pyproject.toml)
 typer==0.20.0
     # via
     #   chromadb
