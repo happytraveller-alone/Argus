@@ -288,7 +288,7 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /混合扫描 · Alpha Gateway/);
 	assert.match(markup, /智能扫描 · Beta API/);
 	assert.match(markup, /静态扫描 · Gamma Portal/);
-	assert.doesNotMatch(markup, /静态扫描 · Delta PHP/);
+	assert.match(markup, /静态扫描 · Delta PHP/);
 	assert.doesNotMatch(markup, /静态扫描 · Echo Console/);
 	assert.match(markup, /查看详情/);
 	assert.match(markup, /上一页/);
@@ -474,13 +474,13 @@ test("formatCumulativeDuration formats scan durations with zh units", async () =
 	assert.equal(module.formatCumulativeDuration(90061000), "1天 1时 1分 1秒");
 });
 
-test("recent task pagination uses three items per page and clamps invalid pages", async () => {
+test("recent task pagination uses four items per page and clamps invalid pages", async () => {
 	const module = await importOrFail<any>(
 		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
 	);
 	const tasks = createSnapshotFixture().recent_tasks;
 
-	assert.equal(module.DASHBOARD_RECENT_TASKS_PAGE_SIZE, 3);
+	assert.equal(module.DASHBOARD_RECENT_TASKS_PAGE_SIZE, 4);
 
 	assert.deepEqual(module.paginateRecentTasks([], 1), {
 		items: [],
@@ -498,27 +498,27 @@ test("recent task pagination uses three items per page and clamps invalid pages"
 		},
 	);
 	assert.deepEqual(
-		module.paginateRecentTasks(tasks.slice(0, 3), 0),
+		module.paginateRecentTasks(tasks.slice(0, 4), 0),
 		{
-			items: tasks.slice(0, 3),
+			items: tasks.slice(0, 4),
 			currentPage: 1,
 			totalPages: 1,
-			totalCount: 3,
+			totalCount: 4,
 		},
 	);
 	assert.deepEqual(
-		module.paginateRecentTasks(tasks.slice(0, 4), 2),
+		module.paginateRecentTasks(tasks.slice(0, 5), 2),
 		{
-			items: tasks.slice(3, 4),
+			items: tasks.slice(4, 5),
 			currentPage: 2,
 			totalPages: 2,
-			totalCount: 4,
+			totalCount: 5,
 		},
 	);
 	assert.deepEqual(
 		module.paginateRecentTasks(tasks, 999),
 		{
-			items: tasks.slice(3, 5),
+			items: tasks.slice(4, 5),
 			currentPage: 2,
 			totalPages: 2,
 			totalCount: 5,

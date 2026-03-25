@@ -15,6 +15,14 @@ class _RowsResult:
         return list(self._rows)
 
 
+class _ScalarResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar(self):
+        return self._value
+
+
 def test_parse_dashboard_language_info_accepts_legacy_language_maps():
     parsed = projects_insights._parse_dashboard_language_info(
         {
@@ -286,6 +294,14 @@ def _build_execute_side_effect(now: datetime):
     ]
 
 
+def _build_static_engine_rule_total_mismatch_side_effect(now: datetime):
+    rows = _build_execute_side_effect(now)
+    rows[11] = _RowsResult([("bandit.state.1",), ("bandit.state.2",)])
+    rows[12] = _RowsResult([("phpstan.state.1",)])
+    rows.append(_ScalarResult(2))
+    return rows
+
+
 def _build_grouped_static_recent_tasks_side_effect(now: datetime):
     project_rows = [
         ("p1", "Alpha", "zip"),
@@ -436,6 +452,18 @@ async def test_dashboard_snapshot_v2_exposes_summary_and_windowed_panels(monkeyp
         "_get_yasa_rule_total",
         AsyncMock(return_value=7),
     )
+    monkeypatch.setattr(
+        projects_insights,
+        "_extract_bandit_snapshot_rules",
+        lambda: [{"test_id": "B101"}, {"test_id": "B102"}, {"test_id": "B103"}],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_extract_phpstan_snapshot_rules",
+        lambda: [{"id": "phpstan.rule.1"}, {"id": "phpstan.rule.2"}],
+        raising=False,
+    )
 
     snapshot = await projects.get_dashboard_snapshot(
         top_n=10,
@@ -489,6 +517,18 @@ async def test_dashboard_snapshot_v2_builds_weighted_hotspots_and_language_risk(
         projects_insights,
         "_get_yasa_rule_total",
         AsyncMock(return_value=7),
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_extract_bandit_snapshot_rules",
+        lambda: [{"test_id": "B101"}, {"test_id": "B102"}, {"test_id": "B103"}],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_extract_phpstan_snapshot_rules",
+        lambda: [{"id": "phpstan.rule.1"}, {"id": "phpstan.rule.2"}],
+        raising=False,
     )
 
     snapshot = await projects.get_dashboard_snapshot(
@@ -544,6 +584,66 @@ async def test_dashboard_snapshot_v2_builds_weighted_hotspots_and_language_risk(
         "Shell",
     ]
     assert snapshot.language_loc_distribution[0].loc_number == 700
+
+
+@pytest.mark.asyncio
+async def test_dashboard_snapshot_v2_static_engine_rule_totals_follow_engine_page_counts(
+    monkeypatch,
+):
+    now = datetime.now(timezone.utc)
+    db = SimpleNamespace(
+        execute=AsyncMock(side_effect=_build_static_engine_rule_total_mismatch_side_effect(now))
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "count_high_confidence_findings_by_task_ids",
+        AsyncMock(return_value={"og1": 1, "og2": 1}),
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_extract_bandit_snapshot_rules",
+        lambda: [
+            {"test_id": "B101"},
+            {"test_id": "B102"},
+            {"test_id": "B103"},
+            {"test_id": "B104"},
+            {"test_id": "B105"},
+        ],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_extract_phpstan_snapshot_rules",
+        lambda: [
+            {"id": "phpstan.rule.1"},
+            {"id": "phpstan.rule.2"},
+            {"id": "phpstan.rule.3"},
+            {"id": "phpstan.rule.4"},
+        ],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "extract_yasa_snapshot_rules",
+        lambda: [
+            {"checker_id": "yasa-1"},
+            {"checker_id": "yasa-2"},
+            {"checker_id": "yasa-3"},
+        ],
+    )
+
+    snapshot = await projects.get_dashboard_snapshot(
+        top_n=10,
+        range_days=7,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    totals = {item.engine: item.total_rules for item in snapshot.static_engine_rule_totals}
+
+    assert totals["bandit"] == 5
+    assert totals["phpstan"] == 4
+    assert totals["yasa"] == 5
 
 
 @pytest.mark.asyncio

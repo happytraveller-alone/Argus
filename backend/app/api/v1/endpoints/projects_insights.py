@@ -1,4 +1,7 @@
 from app.api.v1.endpoints.projects_shared import *
+from app.api.v1.endpoints.static_tasks_bandit import _extract_bandit_snapshot_rules
+from app.api.v1.endpoints.static_tasks_phpstan import _extract_phpstan_snapshot_rules
+from app.models.yasa import YasaRuleConfig
 from app.services.yasa_rules_snapshot import extract_yasa_snapshot_rules
 from app.models.project_management_metrics import ProjectManagementMetrics
 from urllib.parse import urlencode
@@ -236,11 +239,55 @@ def _build_dashboard_static_recent_tasks(
     return grouped_recent_tasks
 
 
-async def _get_yasa_rule_total() -> int:
+def _count_snapshot_rules_with_deleted_states(
+    snapshot_rules: List[Dict[str, Any]],
+    state_rows: List[Any],
+    *,
+    rule_id_key: str,
+    normalize_rule_id: Optional[Callable[[Any], str]] = None,
+) -> int:
+    deleted_rule_ids: set[str] = set()
+    normalize = normalize_rule_id or (lambda value: str(value or "").strip())
+
+    for row in state_rows:
+        if isinstance(row, (list, tuple)):
+            raw_rule_id = row[0] if len(row) > 0 else None
+            is_deleted = bool(row[1]) if len(row) > 1 else False
+        else:
+            raw_rule_id = getattr(row, rule_id_key, None)
+            is_deleted = bool(getattr(row, "is_deleted", False))
+        normalized_rule_id = normalize(raw_rule_id)
+        if normalized_rule_id and is_deleted:
+            deleted_rule_ids.add(normalized_rule_id)
+
+    total = 0
+    for item in snapshot_rules:
+        normalized_rule_id = normalize(item.get(rule_id_key))
+        if normalized_rule_id and normalized_rule_id not in deleted_rule_ids:
+            total += 1
+    return total
+
+
+async def _get_yasa_rule_total(db: Optional[AsyncSession] = None) -> int:
     try:
-        return len(extract_yasa_snapshot_rules())
+        builtin_total = len(extract_yasa_snapshot_rules())
     except Exception:
-        return 0
+        builtin_total = 0
+
+    if db is None:
+        return builtin_total
+
+    try:
+        custom_rule_total_result = await db.execute(
+            select(func.count())
+            .select_from(YasaRuleConfig)
+            .where(YasaRuleConfig.source == "custom")
+        )
+        custom_rule_total = int(custom_rule_total_result.scalar() or 0)
+    except Exception:
+        custom_rule_total = 0
+
+    return max(builtin_total, 0) + max(custom_rule_total, 0)
 
 
 @router.get("/stats", response_model=StatsResponse)
@@ -598,13 +645,11 @@ async def get_dashboard_snapshot(
     gitleaks_rule_result = await db.execute(select(GitleaksRule.id))
     gitleaks_rule_rows = gitleaks_rule_result.all()
 
-    bandit_rule_result = await db.execute(
-        select(BanditRuleState.id).where(BanditRuleState.is_deleted.is_(False))
-    )
+    bandit_rule_result = await db.execute(select(BanditRuleState.test_id, BanditRuleState.is_deleted))
     bandit_rule_rows = bandit_rule_result.all()
 
     phpstan_rule_result = await db.execute(
-        select(PhpstanRuleState.id).where(PhpstanRuleState.is_deleted.is_(False))
+        select(PhpstanRuleState.rule_id, PhpstanRuleState.is_deleted)
     )
     phpstan_rule_rows = phpstan_rule_result.all()
 
@@ -1806,12 +1851,23 @@ async def get_dashboard_snapshot(
         )[:top_n]
     ]
 
-    yasa_rule_total = await _get_yasa_rule_total()
+    bandit_rule_total = _count_snapshot_rules_with_deleted_states(
+        _extract_bandit_snapshot_rules(),
+        bandit_rule_rows,
+        rule_id_key="test_id",
+        normalize_rule_id=lambda value: str(value or "").strip().upper(),
+    )
+    phpstan_rule_total = _count_snapshot_rules_with_deleted_states(
+        _extract_phpstan_snapshot_rules(),
+        phpstan_rule_rows,
+        rule_id_key="id",
+    )
+    yasa_rule_total = await _get_yasa_rule_total(db)
     static_engine_rule_totals = [
         DashboardStaticEngineRuleTotalItem(engine="opengrep", total_rules=len(severe_rule_rows)),
         DashboardStaticEngineRuleTotalItem(engine="gitleaks", total_rules=len(gitleaks_rule_rows)),
-        DashboardStaticEngineRuleTotalItem(engine="bandit", total_rules=len(bandit_rule_rows)),
-        DashboardStaticEngineRuleTotalItem(engine="phpstan", total_rules=len(phpstan_rule_rows)),
+        DashboardStaticEngineRuleTotalItem(engine="bandit", total_rules=bandit_rule_total),
+        DashboardStaticEngineRuleTotalItem(engine="phpstan", total_rules=phpstan_rule_total),
         DashboardStaticEngineRuleTotalItem(engine="yasa", total_rules=_to_non_negative_int(yasa_rule_total)),
     ]
 

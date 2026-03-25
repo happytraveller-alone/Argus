@@ -171,7 +171,7 @@ export const HORIZONTAL_STATS_META_ROW_CLASSNAME =
 export const HORIZONTAL_STATS_META_LEGEND_CLASSNAME =
 	"flex flex-wrap justify-start gap-2 sm:justify-end";
 export const TOP_STATS_GRID_CLASSNAME = "grid grid-cols-2 gap-3 xl:grid-cols-5";
-export const DASHBOARD_RECENT_TASKS_PAGE_SIZE = 3;
+export const DASHBOARD_RECENT_TASKS_PAGE_SIZE = 4;
 
 function estimateAxisLabelUnits(label: string) {
 	return Array.from(label).reduce((total, char) => {
