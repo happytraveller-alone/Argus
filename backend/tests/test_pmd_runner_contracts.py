@@ -21,11 +21,14 @@ def test_backend_dockerfile_no_longer_installs_local_pmd_runtime() -> None:
     dockerfile_text = dockerfile_path.read_text(encoding="utf-8")
 
     runtime_base_block = _stage_block(dockerfile_text, "FROM python-base AS runtime-base")
+    scanner_tools_base_block = _stage_block(dockerfile_text, "FROM runtime-base AS scanner-tools-base")
     runtime_block = _stage_block(dockerfile_text, "FROM runtime-base AS runtime")
 
     assert "openjdk-21-jre-headless" not in runtime_base_block
     assert "php-cli" not in runtime_base_block
     assert "unzip" not in runtime_base_block
+
+    assert "apt-get install -y --no-install-recommends unzip" in scanner_tools_base_block
 
     assert "PMD_CACHE" not in runtime_block
     assert "pmd-dist-7.0.0-bin.zip" not in runtime_block
