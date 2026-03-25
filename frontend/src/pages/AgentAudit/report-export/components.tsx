@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { getReportExportScoreColor } from "./utils";
 
-export type ReportFormat = "markdown" | "json" | "html";
+export type ReportFormat = "markdown" | "json" | "pdf";
 
 export interface ExportOptions {
   includeCodeSnippets: boolean;

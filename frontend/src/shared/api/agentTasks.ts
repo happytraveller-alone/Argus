@@ -516,7 +516,7 @@ export async function getCheckpointDetail(
 /**
  * 下载 Agent 任务报告
  */
-export async function downloadAgentReport(taskId: string, format: "markdown" | "json" = "markdown"): Promise<void> {
+export async function downloadAgentReport(taskId: string, format: "markdown" | "json" | "pdf" = "markdown"): Promise<void> {
   const response = await apiClient.get(`/agent-tasks/${taskId}/report`, {
     params: { format },
     responseType: 'blob',
@@ -531,6 +531,8 @@ export async function downloadAgentReport(taskId: string, format: "markdown" | "
   let filename = `audit-report-${taskId.slice(0, 8)}.md`;
   if (format === 'json') {
     filename = `audit-report-${taskId.slice(0, 8)}.json`;
+  } else if (format === 'pdf') {
+    filename = `audit-report-${taskId.slice(0, 8)}.pdf`;
   }
 
   // Try to get filename from header

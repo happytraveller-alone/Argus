@@ -37,6 +37,11 @@ logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 logging.getLogger("litellm").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+# Reduce noisy PDF/font subsetting logs in report export paths.
+logging.getLogger("weasyprint").setLevel(logging.WARNING)
+logging.getLogger("fontTools").setLevel(logging.WARNING)
+logging.getLogger("fontTools.subset").setLevel(logging.WARNING)
+logging.getLogger("fontTools.ttLib").setLevel(logging.WARNING)
 
 warnings.filterwarnings(
     "ignore",

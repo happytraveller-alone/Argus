@@ -24,7 +24,6 @@ import {
   Copy,
   Download,
   Eye,
-  FileCode,
   FileDown,
   FileJson,
   FileText,
@@ -39,7 +38,6 @@ import {
   EnhancedStatsPanel,
   ExportOptionsPanel,
   FormatSelector,
-  HtmlPreview,
   JsonPreview,
   MarkdownPreview,
   PreviewSearchBar,
@@ -47,7 +45,6 @@ import {
   type ExportOptions,
   type ReportFormat,
 } from "../report-export/components";
-import { generateReportExportHtml } from "../report-export/htmlReport";
 import { formatReportExportBytes } from "../report-export/utils";
 
 interface ReportExportDialogProps {
@@ -94,12 +91,12 @@ const FORMAT_CONFIG: Record<
     color: "text-amber-400",
     bgColor: "bg-amber-500/10 border-amber-500/30",
   },
-  html: {
-    label: "HTML",
-    description: "网页展示格式",
-    icon: <FileCode className="w-5 h-5" />,
-    extension: ".html",
-    mime: "text/html",
+  pdf: {
+    label: "PDF",
+    description: "便携文档格式",
+    icon: <FileDown className="w-5 h-5" />,
+    extension: ".pdf",
+    mime: "application/pdf",
     color: "text-emerald-400",
     bgColor: "bg-emerald-500/10 border-emerald-500/30",
   },
@@ -165,12 +162,6 @@ export const ReportExportDialog = memo(function ReportExportDialog({
             params: { format: "json" },
           });
           content = JSON.stringify(response.data, null, 2);
-        } else if (format === "html") {
-          const mdResponse = await apiClient.get(`/agent-tasks/${task.id}/report`, {
-            params: { format: "markdown" },
-            responseType: "text",
-          });
-          content = await generateReportExportHtml(mdResponse.data, task);
         } else {
           const response = await apiClient.get(`/agent-tasks/${task.id}/report`, {
             params: { format: "markdown" },
@@ -220,46 +211,79 @@ export const ReportExportDialog = memo(function ReportExportDialog({
     }
   }, [preview.content]);
 
+  const resolveFilenameFromDisposition = useCallback(
+    (contentDisposition: string | undefined, fallback: string) => {
+      if (!contentDisposition) return fallback;
+      const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+      if (filenameStarMatch?.[1]) {
+        try {
+          return decodeURIComponent(filenameStarMatch[1]);
+        } catch {
+          return filenameStarMatch[1];
+        }
+      }
+      const filenameMatch = contentDisposition.match(/filename=([^;]+)/i);
+      if (!filenameMatch?.[1]) return fallback;
+      return filenameMatch[1].trim().replace(/['"]/g, "") || fallback;
+    },
+    [],
+  );
+
+  const triggerBrowserDownload = useCallback((blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, []);
+
   const handleDownload = useCallback(async () => {
     if (!task) return;
 
     setDownloading(true);
     try {
-      let content = preview.content;
-      let filename = `audit_report_${task.name || task.id.substring(0, 8)}_${new Date().toISOString().slice(0, 10)}`;
       const config = FORMAT_CONFIG[activeFormat];
+      const datePart = new Date().toISOString().slice(0, 10);
+      const baseName = `audit_report_${task.name || task.id.substring(0, 8)}_${datePart}`;
 
-      if (!content) {
-        if (activeFormat === "json") {
-          const response = await apiClient.get(`/agent-tasks/${task.id}/report`, {
-            params: { format: "json" },
-          });
-          content = JSON.stringify(response.data, null, 2);
-        } else if (activeFormat === "html") {
-          const mdResponse = await apiClient.get(`/agent-tasks/${task.id}/report`, {
-            params: { format: "markdown" },
-            responseType: "text",
-          });
-          content = await generateReportExportHtml(mdResponse.data, task);
-        } else {
-          const response = await apiClient.get(`/agent-tasks/${task.id}/report`, {
-            params: { format: "markdown" },
-            responseType: "text",
-          });
-          content = response.data;
+      if (activeFormat === "pdf") {
+        const response = await apiClient.get(`/agent-tasks/${task.id}/report`, {
+          params: { format: "pdf" },
+          responseType: "blob",
+        });
+        const fallbackFilename = `${baseName}${config.extension}`;
+        const filename = resolveFilenameFromDisposition(
+          response.headers?.["content-disposition"],
+          fallbackFilename,
+        );
+        const blob =
+          response.data instanceof Blob
+            ? response.data
+            : new Blob([response.data], { type: config.mime });
+        triggerBrowserDownload(blob, filename);
+      } else {
+        let content = preview.content;
+        if (!content) {
+          if (activeFormat === "json") {
+            const response = await apiClient.get(`/agent-tasks/${task.id}/report`, {
+              params: { format: "json" },
+            });
+            content = JSON.stringify(response.data, null, 2);
+          } else {
+            const response = await apiClient.get(`/agent-tasks/${task.id}/report`, {
+              params: { format: "markdown" },
+              responseType: "text",
+            });
+            content = response.data;
+          }
         }
+        const filename = `${baseName}${config.extension}`;
+        const blob = new Blob([content], { type: config.mime });
+        triggerBrowserDownload(blob, filename);
       }
-
-      filename += config.extension;
-      const blob = new Blob([content], { type: config.mime });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
 
       setDownloadSuccess(true);
       toast.success(`报告已导出为 ${config.label} 格式`);
@@ -272,7 +296,14 @@ export const ReportExportDialog = memo(function ReportExportDialog({
     } finally {
       setDownloading(false);
     }
-  }, [activeFormat, onOpenChange, preview.content, task]);
+  }, [
+    activeFormat,
+    onOpenChange,
+    preview.content,
+    resolveFilenameFromDisposition,
+    task,
+    triggerBrowserDownload,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -291,7 +322,7 @@ export const ReportExportDialog = memo(function ReportExportDialog({
       }
       if (event.key === "1") setActiveFormat("markdown");
       if (event.key === "2") setActiveFormat("json");
-      if (event.key === "3") setActiveFormat("html");
+      if (event.key === "3") setActiveFormat("pdf");
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -379,8 +410,8 @@ export const ReportExportDialog = memo(function ReportExportDialog({
                     "Markdown格式便于编辑和版本控制，可用任何文本编辑器打开。"}
                   {activeFormat === "json" &&
                     "JSON格式包含完整的结构化数据，适合程序处理和数据分析。"}
-                  {activeFormat === "html" &&
-                    "HTML格式可直接在浏览器中查看，包含完整样式和布局。"}
+                  {activeFormat === "pdf" &&
+                    "PDF格式适合正式归档和分享，下载时将直接使用后端导出的 PDF 文件。"}
                 </p>
               </div>
             </div>
@@ -469,7 +500,7 @@ export const ReportExportDialog = memo(function ReportExportDialog({
                     ) : (
                       <div className="rounded-xl border border-border overflow-hidden bg-card">
                         <div className="p-5 min-h-[300px]">
-                          {activeFormat === "markdown" && (
+                          {(activeFormat === "markdown" || activeFormat === "pdf") && (
                             <MarkdownPreview
                               content={preview.content}
                               searchQuery={searchQuery}
@@ -477,12 +508,6 @@ export const ReportExportDialog = memo(function ReportExportDialog({
                           )}
                           {activeFormat === "json" && (
                             <JsonPreview
-                              content={preview.content}
-                              searchQuery={searchQuery}
-                            />
-                          )}
-                          {activeFormat === "html" && (
-                            <HtmlPreview
                               content={preview.content}
                               searchQuery={searchQuery}
                             />
