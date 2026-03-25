@@ -69,6 +69,56 @@ interface SkillCatalogResponsePayload {
   error?: string | null;
 }
 
+export type PromptSkillScopePayload = "global" | "agent_specific";
+
+export interface PromptSkillItemPayload {
+  id: string;
+  name: string;
+  content: string;
+  scope: PromptSkillScopePayload;
+  agent_key: string | null;
+  is_active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PromptSkillBuiltinItemPayload {
+  agent_key: string;
+  content: string;
+  is_active: boolean;
+}
+
+interface PromptSkillListResponsePayload {
+  enabled: boolean;
+  total: number;
+  limit: number;
+  offset: number;
+  supported_agent_keys: string[];
+  builtin_items: PromptSkillBuiltinItemPayload[];
+  items: PromptSkillItemPayload[];
+}
+
+export interface PromptSkillListPayload {
+  builtinItems: PromptSkillBuiltinItemPayload[];
+  items: PromptSkillItemPayload[];
+}
+
+export interface PromptSkillCreatePayload {
+  name: string;
+  content: string;
+  scope: PromptSkillScopePayload;
+  agent_key?: string | null;
+  is_active?: boolean;
+}
+
+export interface PromptSkillUpdatePayload {
+  name?: string;
+  content?: string;
+  scope?: PromptSkillScopePayload;
+  agent_key?: string | null;
+  is_active?: boolean;
+}
+
 export interface ProjectTransferItem {
   source_project_id: string;
   name?: string | null;
@@ -467,6 +517,59 @@ export const api = {
       console.error("[API] getSkillCatalog 失败:", error);
       return [];
     }
+  },
+
+  async getPromptSkills(params?: {
+    scope?: PromptSkillScopePayload;
+    agent_key?: string;
+    is_active?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<PromptSkillListPayload> {
+    const res = await apiClient.get<PromptSkillListResponsePayload>("/skills/prompt-skills", {
+      params: {
+        scope: params?.scope,
+        agent_key: params?.agent_key,
+        is_active: params?.is_active,
+        limit: params?.limit ?? 500,
+        offset: params?.offset ?? 0,
+      },
+    });
+    return {
+      builtinItems: Array.isArray(res.data?.builtin_items) ? res.data.builtin_items : [],
+      items: Array.isArray(res.data?.items) ? res.data.items : [],
+    };
+  },
+
+  async createPromptSkill(payload: PromptSkillCreatePayload): Promise<PromptSkillItemPayload> {
+    const res = await apiClient.post<PromptSkillItemPayload>("/skills/prompt-skills", payload);
+    return res.data;
+  },
+
+  async updatePromptSkill(
+    promptSkillId: string,
+    payload: PromptSkillUpdatePayload,
+  ): Promise<PromptSkillItemPayload> {
+    const res = await apiClient.put<PromptSkillItemPayload>(
+      `/skills/prompt-skills/${encodeURIComponent(promptSkillId)}`,
+      payload,
+    );
+    return res.data;
+  },
+
+  async updateBuiltinPromptSkill(
+    agentKey: string,
+    payload: { is_active: boolean },
+  ): Promise<PromptSkillBuiltinItemPayload> {
+    const res = await apiClient.put<PromptSkillBuiltinItemPayload>(
+      `/skills/prompt-skills/builtin/${encodeURIComponent(agentKey)}`,
+      payload,
+    );
+    return res.data;
+  },
+
+  async deletePromptSkill(promptSkillId: string): Promise<void> {
+    await apiClient.delete(`/skills/prompt-skills/${encodeURIComponent(promptSkillId)}`);
   },
 
   async updateUserConfig(config: {

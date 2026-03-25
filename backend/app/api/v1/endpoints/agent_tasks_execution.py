@@ -24,11 +24,16 @@ from app.models.agent_task import (
     FindingStatus,
 )
 from app.models.project import Project
+from app.models.prompt_skill import PromptSkill
 from app.services.project_metrics import project_metrics_refresher
 from app.services.agent.mcp import MCPRuntime
 from app.services.agent.skills.prompt_skills import (
     PROMPT_SKILL_AGENT_KEYS,
+    PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY,
+    apply_prompt_skill_builtin_state,
     build_effective_prompt_skills,
+    build_prompt_skill_builtin_state,
+    merge_prompt_skills_with_custom,
 )
 
 from .agent_tasks_bootstrap import *
@@ -639,14 +644,51 @@ async def _execute_agent_task(task_id: str):
 
             task_agent_config = task.agent_config if isinstance(task.agent_config, dict) else {}
             use_prompt_skills = bool(task_agent_config.get("use_prompt_skills", False))
-            prompt_skills = build_effective_prompt_skills(use_prompt_skills)
+            other_config = user_config.get("otherConfig") if isinstance(user_config, dict) else {}
+            builtin_prompt_skill_state = build_prompt_skill_builtin_state(
+                other_config.get(PROMPT_SKILL_BUILTIN_STATE_CONFIG_KEY)
+                if isinstance(other_config, dict)
+                else None
+            )
+            prompt_skills = apply_prompt_skill_builtin_state(
+                base_prompt_skills=build_effective_prompt_skills(use_prompt_skills),
+                builtin_state=builtin_prompt_skill_state,
+            )
+            builtin_prompt_skill_enabled_keys = [
+                key for key in PROMPT_SKILL_AGENT_KEYS if builtin_prompt_skill_state.get(key, True)
+            ]
+            custom_prompt_skill_count = 0
 
             if use_prompt_skills:
+                try:
+                    custom_prompt_skill_result = await db.execute(
+                        select(PromptSkill)
+                        .where(
+                            PromptSkill.user_id == str(task.created_by),
+                            PromptSkill.is_active.is_(True),
+                        )
+                        .order_by(PromptSkill.created_at.asc())
+                    )
+                    custom_prompt_skill_rows = custom_prompt_skill_result.scalars().all()
+                    custom_prompt_skill_count = len(custom_prompt_skill_rows)
+                    if custom_prompt_skill_rows:
+                        prompt_skills = merge_prompt_skills_with_custom(
+                            base_prompt_skills=prompt_skills,
+                            custom_prompt_skills=custom_prompt_skill_rows,
+                        )
+                except Exception as exc:
+                    logger.warning("[PromptSkills] load custom prompt skills failed: %s", exc)
+
                 await event_emitter.emit_info(
                     "Prompt Skills enabled",
                     metadata={
                         "prompt_skills_enabled": True,
                         "prompt_skill_agent_keys": PROMPT_SKILL_AGENT_KEYS,
+                        "builtin_prompt_skill_enabled_keys": builtin_prompt_skill_enabled_keys,
+                        "builtin_prompt_skill_disabled_keys": [
+                            key for key in PROMPT_SKILL_AGENT_KEYS if key not in builtin_prompt_skill_enabled_keys
+                        ],
+                        "custom_prompt_skill_count": custom_prompt_skill_count,
                     },
                 )
             else:
@@ -654,6 +696,11 @@ async def _execute_agent_task(task_id: str):
                     "Prompt Skills disabled",
                     metadata={
                         "prompt_skills_enabled": False,
+                        "builtin_prompt_skill_enabled_keys": builtin_prompt_skill_enabled_keys,
+                        "builtin_prompt_skill_disabled_keys": [
+                            key for key in PROMPT_SKILL_AGENT_KEYS if key not in builtin_prompt_skill_enabled_keys
+                        ],
+                        "custom_prompt_skill_count": 0,
                     },
                 )
             

@@ -689,6 +689,7 @@ export default function CreateProjectScanDialog({
 								yasa_language: "auto" as const,
 							},
 			},
+		use_prompt_skills: true,
 		verification_level: "analysis_with_poc_plan" as const,
 	});
 

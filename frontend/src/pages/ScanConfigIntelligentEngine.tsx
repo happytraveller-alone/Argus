@@ -134,8 +134,7 @@ export default function ScanConfigIntelligentEngine() {
 					<div className="cyber-card p-4 space-y-4">
 						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<p className="text-sm text-muted-foreground">
-								管理智能扫描流程的内置 Prompt Skill，按不同 Agent
-								角色查看默认策略。
+								管理智能扫描流程的 Prompt Skill（内置 + 自定义），支持配置通用与智能体专属策略。
 							</p>
 							<Button
 								asChild

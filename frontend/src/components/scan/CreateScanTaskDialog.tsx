@@ -547,6 +547,7 @@ export default function CreateScanTaskDialog({
 								effectiveTargetFiles.length > 0
 									? effectiveTargetFiles
 									: undefined,
+							use_prompt_skills: true,
 							verification_level: "analysis_with_poc_plan",
 						});
 
@@ -608,6 +609,7 @@ export default function CreateScanTaskDialog({
 					exclude_patterns: excludePatterns,
 					target_files:
 						effectiveTargetFiles.length > 0 ? effectiveTargetFiles : undefined,
+					use_prompt_skills: true,
 					verification_level: "analysis_with_poc_plan",
 				});
 

@@ -196,6 +196,7 @@ export interface CreateAgentTaskRequest {
   max_iterations?: number;
   token_budget?: number;
   timeout_seconds?: number;
+  use_prompt_skills?: boolean;
 }
 
 export interface AgentStaticBootstrapScope {
