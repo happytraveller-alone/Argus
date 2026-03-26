@@ -44,32 +44,24 @@ At minimum, set your model-related configuration such as `LLM_API_KEY`, `LLM_PRO
 
 ### 3. Start the services
 
-Recommended on Linux / macOS / WSL:
+The default recommended entrypoint is plain Docker Compose:
 
 ```bash
-./scripts/compose-up-with-fallback.sh
+docker compose up --build
 ```
 
-Windows PowerShell:
+On Windows, use Docker Desktop with Linux containers.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
-```
-
-Windows batch:
-
-```cmd
-scripts\compose-up-with-fallback.bat
-```
-
-If you prefer plain Docker Compose:
+For the full local build path, add the `docker-compose.full.yml` overlay:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
-This command also builds and runs a set of runner preflight / warmup containers so local scanner images are verified before backend starts.
+The default `docker compose up --build` path also builds and runs a set of runner preflight / warmup containers so local scanner images and commands are verified before backend starts.
 Those runner preflight / warmup containers are expected to stop after the check; exiting after the check is expected, and actual scan execution still happens in temporary runner containers started on demand by backend.
+
+For optional legacy wrapper helpers, see [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md).
 
 ### 4. Open the application
 

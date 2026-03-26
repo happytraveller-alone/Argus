@@ -5,8 +5,9 @@ from app.services import scanner_runner
 
 
 def test_run_scanner_container_passes_mounts_env_and_command(tmp_path, monkeypatch):
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
+    workspace_root = tmp_path / "scan-root"
+    workspace_dir = workspace_root / "yasa" / "task-1"
+    workspace_dir.mkdir(parents=True)
     seen = {}
 
     class _FakeContainer:
@@ -43,14 +44,16 @@ def test_run_scanner_container_passes_mounts_env_and_command(tmp_path, monkeypat
         lambda: SimpleNamespace(containers=_FakeContainers()),
         raising=False,
     )
+    monkeypatch.setattr(scanner_runner.settings, "SCAN_WORKSPACE_ROOT", str(workspace_root))
+    monkeypatch.setattr(scanner_runner.settings, "SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace")
 
     spec = scanner_runner.ScannerRunSpec(
         scanner_type="yasa",
         image="vulhunter/yasa-runner:latest",
         workspace_dir=str(workspace_dir),
-        command=["/opt/yasa/bin/yasa", "--help"],
+        command=["/opt/yasa/bin/yasa", "--project", "/scan/project", "--help"],
         timeout_seconds=123,
-        env={"YASA_RESOURCE_DIR": "/opt/yasa/resource"},
+        env={"YASA_RESOURCE_DIR": "/scan/resource"},
     )
 
     result = scanner_runner.run_scanner_container_sync(spec)
@@ -59,13 +62,18 @@ def test_run_scanner_container_passes_mounts_env_and_command(tmp_path, monkeypat
     assert result.container_id == "container-xyz"
     assert result.exit_code == 0
     assert seen["image"] == "vulhunter/yasa-runner:latest"
-    assert seen["command"] == ["/opt/yasa/bin/yasa", "--help"]
+    assert seen["command"] == [
+        "/opt/yasa/bin/yasa",
+        "--project",
+        f"{workspace_dir}/project",
+        "--help",
+    ]
     assert seen["detach"] is True
     assert seen["auto_remove"] is False
-    assert seen["working_dir"] == "/scan"
-    assert seen["environment"] == {"YASA_RESOURCE_DIR": "/opt/yasa/resource"}
+    assert seen["working_dir"] == str(workspace_dir)
+    assert seen["environment"] == {"YASA_RESOURCE_DIR": f"{workspace_dir}/resource"}
     assert seen["volumes"] == {
-        str(workspace_dir): {"bind": "/scan", "mode": "rw"},
+        "vulhunter_scan_workspace": {"bind": str(workspace_root), "mode": "rw"},
     }
     assert seen["wait_timeout"] == 123
     assert result.stdout_path is None
@@ -79,8 +87,9 @@ def test_run_scanner_container_passes_mounts_env_and_command(tmp_path, monkeypat
 
 
 def test_run_scanner_container_failure_keeps_truncated_error_logs(tmp_path, monkeypatch):
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
+    workspace_root = tmp_path / "scan-root"
+    workspace_dir = workspace_root / "phpstan" / "task-1"
+    workspace_dir.mkdir(parents=True)
 
     long_stderr = "fatal stderr line " * 1200
 
@@ -110,6 +119,8 @@ def test_run_scanner_container_failure_keeps_truncated_error_logs(tmp_path, monk
         lambda: SimpleNamespace(containers=_FakeContainers()),
         raising=False,
     )
+    monkeypatch.setattr(scanner_runner.settings, "SCAN_WORKSPACE_ROOT", str(workspace_root))
+    monkeypatch.setattr(scanner_runner.settings, "SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace")
 
     spec = scanner_runner.ScannerRunSpec(
         scanner_type="phpstan",
@@ -136,8 +147,9 @@ def test_run_scanner_container_failure_keeps_truncated_error_logs(tmp_path, monk
 
 
 def test_run_scanner_container_expected_nonzero_exit_keeps_logs(tmp_path, monkeypatch):
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
+    workspace_root = tmp_path / "scan-root"
+    workspace_dir = workspace_root / "phpstan" / "task-1"
+    workspace_dir.mkdir(parents=True)
 
     class _FakeContainer:
         id = "container-expected-nonzero"
@@ -165,6 +177,8 @@ def test_run_scanner_container_expected_nonzero_exit_keeps_logs(tmp_path, monkey
         lambda: SimpleNamespace(containers=_FakeContainers()),
         raising=False,
     )
+    monkeypatch.setattr(scanner_runner.settings, "SCAN_WORKSPACE_ROOT", str(workspace_root))
+    monkeypatch.setattr(scanner_runner.settings, "SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace")
 
     spec = scanner_runner.ScannerRunSpec(
         scanner_type="phpstan",
@@ -187,6 +201,29 @@ def test_run_scanner_container_expected_nonzero_exit_keeps_logs(tmp_path, monkey
     runner_meta = (workspace_dir / "meta" / "runner.json").read_text(encoding="utf-8")
     assert '"success": true' in runner_meta
     assert '"log_retention": "nonzero_exit"' in runner_meta
+
+
+def test_run_scanner_container_rejects_workspace_outside_shared_root(tmp_path, monkeypatch):
+    workspace_root = tmp_path / "scan-root"
+    workspace_root.mkdir()
+
+    monkeypatch.setattr(scanner_runner.settings, "SCAN_WORKSPACE_ROOT", str(workspace_root))
+    monkeypatch.setattr(scanner_runner.settings, "SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace")
+
+    spec = scanner_runner.ScannerRunSpec(
+        scanner_type="phpstan",
+        image="vulhunter/phpstan-runner:latest",
+        workspace_dir=str(tmp_path / "elsewhere" / "task-1"),
+        command=["phpstan", "analyse", "/scan/project"],
+        timeout_seconds=90,
+        env={},
+    )
+
+    result = scanner_runner.run_scanner_container_sync(spec)
+
+    assert result.success is False
+    assert result.error is not None
+    assert "shared workspace root" in result.error
 
 
 def test_stop_scan_container_handles_missing_container_gracefully(monkeypatch):

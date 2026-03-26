@@ -112,6 +112,7 @@ class Settings(BaseSettings):
     # ZIP文件存储配置
     ZIP_STORAGE_PATH: str = "./uploads/zip_files"  # ZIP文件存储目录
     SCAN_WORKSPACE_ROOT: str = "/tmp/vulhunter/scans"
+    SCAN_WORKSPACE_VOLUME: str = "vulhunter_scan_workspace"
     SCANNER_YASA_IMAGE: str = "vulhunter/yasa-runner:latest"
     SCANNER_OPENGREP_IMAGE: str = "vulhunter/opengrep-runner:latest"
     SCANNER_BANDIT_IMAGE: str = "vulhunter/bandit-runner:latest"

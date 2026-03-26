@@ -2,7 +2,7 @@
 # VulHunter v3.0.4 Docker Compose 全量本地构建覆盖层
 # =============================================
 # 用法:
-# docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build
+# docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 # 注意: backend 依赖下方 runner services 进行启动期 runner preflight / warmup。
 # 这些 runner 是一次性预热/自检容器，不是常驻服务；执行完检查后按预期退出。
 # `restart: "no"` 与 `condition: service_completed_successfully` 共同构成本地默认可用性的启动门禁。
@@ -38,7 +38,7 @@ services:
     volumes: !override
       - backend_uploads:/app/uploads
       - mcp_data:/app/data/mcp
-      - /tmp/vulhunter/scans:/tmp/vulhunter/scans
+      - scan_workspace:/tmp/vulhunter/scans
       - /var/run/docker.sock:/var/run/docker.sock
     environment: !override
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
@@ -50,6 +50,7 @@ services:
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox:latest}
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
+      SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
       SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}
@@ -116,7 +117,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "/opt/yasa/bin/yasa --version >/dev/null 2>&1 || true"]
 
   opengrep-runner:
     image: vulhunter/opengrep-runner-local:latest
@@ -136,7 +136,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "opengrep --version >/dev/null 2>&1 || true"]
 
   bandit-runner:
     image: vulhunter/bandit-runner-local:latest
@@ -157,7 +156,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "bandit --version >/dev/null 2>&1 || true"]
 
   gitleaks-runner:
     image: vulhunter/gitleaks-runner-local:latest
@@ -177,7 +175,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "gitleaks version >/dev/null 2>&1 || true"]
 
   phpstan-runner:
     image: vulhunter/phpstan-runner-local:latest
@@ -197,7 +194,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "phpstan --version >/dev/null 2>&1 || true"]
 
   pmd-runner:
     image: vulhunter/pmd-runner-local:latest
@@ -213,7 +209,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "pmd --version >/dev/null 2>&1 || true"]
 
   flow-parser-runner:
     image: vulhunter/flow-parser-runner-local:latest
@@ -235,7 +230,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "(python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1 && command -v code2flow >/dev/null 2>&1 && code2flow --help >/dev/null 2>&1) || true"]
 
   frontend:
     image: vulhunter/frontend-local:latest

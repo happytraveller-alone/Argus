@@ -50,7 +50,7 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert 'FRONTEND_PUBLIC_URL: http://localhost:${VULHUNTER_FRONTEND_PORT:-3000}' in compose_text
     assert 'BACKEND_PUBLIC_URL: http://localhost:${VULHUNTER_BACKEND_PORT:-8000}' in compose_text
     assert "command: /app/scripts/dev-entrypoint.sh" not in compose_text
-    assert "command:\n      - sh\n      - /app/scripts/dev-entrypoint.sh" in compose_text
+    assert "command:\n      - sh\n      - /app/scripts/dev-entrypoint.sh" not in compose_text
     assert "- BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
     assert "- BACKEND_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
     assert "- BACKEND_INSTALL_YASA=${BACKEND_INSTALL_YASA:-1}" in compose_text
@@ -61,6 +61,7 @@ def test_default_compose_uses_local_images_by_default() -> None:
     ) in compose_text
     assert "YASA_ENABLED: ${YASA_ENABLED:-true}" in compose_text
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in compose_text
+    assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in compose_text
     assert "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}" in compose_text
     assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}" in compose_text
     assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}" in compose_text
@@ -70,12 +71,14 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
     assert 'FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"' in compose_text
     assert "YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}" in compose_text
-    assert "/tmp/vulhunter/scans:/tmp/vulhunter/scans" in compose_text
+    assert "/tmp/vulhunter/scans:/tmp/vulhunter/scans" not in compose_text
+    assert "scan_workspace:/tmp/vulhunter/scans" in compose_text
     assert "/var/run/docker.sock:/var/run/docker.sock" in compose_text
     assert 'MCP_REQUIRE_ALL_READY_ON_STARTUP: "false"' in compose_text
     assert "\n  yasa-runner:" in compose_text
     assert "image: vulhunter/yasa-runner-local:latest" in compose_text
     assert "dockerfile: ./docker/yasa-runner.Dockerfile" in compose_text
+    assert '/bin/sh", "-lc"' not in compose_text
     assert "\n  opengrep-runner:" in compose_text
     assert "image: vulhunter/opengrep-runner-local:latest" in compose_text
     assert "dockerfile: ./docker/opengrep-runner.Dockerfile" in compose_text
@@ -121,6 +124,7 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert 'COPY scripts/package_source_selector.py /usr/local/bin/package_source_selector.py' in backend_text
     assert "ARG BACKEND_INSTALL_YASA=1" in backend_text
     assert "ARG YASA_VERSION=v0.2.33" in backend_text
+    assert 'CMD ["/bin/sh", "/usr/local/bin/backend-dev-entrypoint.sh"]' in backend_text
     assert "https://github.com/antgroup/YASA-Engine/archive/refs/tags/${YASA_VERSION}.tar.gz" in backend_text
     assert 'ordered_indexes="$(order_indexes "${pypi_index_candidates}")"' in backend_text
     assert 'while IFS= read -r index_url; do' in backend_text
@@ -140,6 +144,8 @@ def test_default_compose_uses_local_images_by_default() -> None:
 
     frontend_text = frontend_dockerfile.read_text(encoding="utf-8")
     assert " AS dev" in frontend_text
+    assert 'CMD ["/bin/sh", "/usr/local/bin/frontend-dev-entrypoint.sh"]' in frontend_text
+    assert 'ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]' in frontend_text
 
     entrypoint_text = backend_entrypoint.read_text(encoding="utf-8")
     assert 'VENV_DIR="${BACKEND_VENV_PATH:-/opt/backend-venv}"' in entrypoint_text
@@ -203,6 +209,7 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
         "https://pypi.org/simple}"
     ) in flow_parser_full_overlay_block
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in full_overlay_text
+    assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in full_overlay_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in full_overlay_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in full_overlay_text
     assert "BACKEND_NPM_REGISTRY_CANDIDATES" not in full_overlay_text
@@ -241,7 +248,7 @@ def test_frontend_dev_entrypoint_prints_ready_banner() -> None:
     assert 'backend docs: ${BACKEND_PUBLIC_URL}/docs' in frontend_entrypoint
 
 
-def test_nexus_web_dockerfile_persists_runtime_pnpm() -> None:
+def test_nexus_web_dockerfile_pins_pnpm_before_nginx_runtime() -> None:
     nexus_dockerfile = (REPO_ROOT / "nexus-web" / "dockerfile").read_text(
         encoding="utf-8"
     )
@@ -249,7 +256,8 @@ def test_nexus_web_dockerfile_persists_runtime_pnpm() -> None:
     assert 'npm install -g "pnpm@${NEXUS_WEB_PNPM_VERSION}"' in nexus_dockerfile
     assert 'if (pkg.packageManager) process.exit(0);' in nexus_dockerfile
     assert 'pkg.packageManager = `pnpm@${process.env.NEXUS_WEB_PNPM_VERSION}`;' in nexus_dockerfile
-    assert 'CMD ["pnpm", "dev", "--host", "0.0.0.0"]' in nexus_dockerfile
+    assert "FROM ${DOCKERHUB_LIBRARY_MIRROR}/nginx:1.27-alpine AS runtime" in nexus_dockerfile
+    assert 'CMD ["nginx", "-g", "daemon off;"]' in nexus_dockerfile
 
 
 def test_scripts_and_packaging_use_new_compose_layout() -> None:
@@ -299,8 +307,10 @@ def test_scripts_and_packaging_use_new_compose_layout() -> None:
         assert (REPO_ROOT / "deploy" / "compose" / "docker-compose.prod.cn.yml").exists()
         assert 'cp "$ROOT_DIR/deploy/compose/docker-compose.prod.yml"' in deb_build_script
         assert 'cp "$ROOT_DIR/deploy/compose/docker-compose.prod.cn.yml"' in deb_build_script
-    assert "https://pypi.tuna.tsinghua.edu.cn/simple" in compose_wrapper_script
-    assert "https://pypi.tuna.tsinghua.edu.cn/simple" in compose_wrapper_ps1
+    assert "detect_compose_cmd() {" in compose_wrapper_script
+    assert 'COMPOSE_ARGS=("$@")' in compose_wrapper_script
+    assert "function Detect-ComposeCommand" in compose_wrapper_ps1
+    assert "Usage: powershell -ExecutionPolicy Bypass -File scripts\\compose-up-with-fallback.ps1 [compose-args]" in compose_wrapper_ps1
 
 
 def test_readmes_document_runner_preflight_behavior() -> None:
@@ -310,8 +320,14 @@ def test_readmes_document_runner_preflight_behavior() -> None:
 
     assert "runner 预热 / 自检容器" in root_readme
     assert "启动后退出属于预期行为" in root_readme
+    assert "docker compose up --build" in root_readme
+    assert "默认推荐直接使用 Docker Compose" in root_readme
+    assert "scripts/README-COMPOSE.md" in root_readme
     assert "runner preflight / warmup containers" in root_readme_en
     assert "exiting after the check is expected" in root_readme_en
+    assert "docker compose up --build" in root_readme_en
+    assert "The default recommended entrypoint is plain Docker Compose" in root_readme_en
+    assert "scripts/README-COMPOSE.md" in root_readme_en
     assert "one-shot runner preflight / warmup containers" in backend_readme
     assert "Docker SDK" in backend_readme
     assert "SCANNER_*_IMAGE" in backend_readme
@@ -341,7 +357,6 @@ def test_backend_dev_entrypoint_runs_single_alembic_head() -> None:
 
 
 def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
-    compose_text = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     backend_text = (REPO_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     pyproject_text = (REPO_ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
     entrypoint_text = (REPO_ROOT / "backend" / "docker-entrypoint.sh").read_text(encoding="utf-8")
@@ -410,9 +425,8 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'PIP_DEFAULT_TIMEOUT=60 /opt/flow-parser-venv/bin/pip install --disable-pip-version-check --no-cache-dir -i "${idx}" -r /tmp/flow-parser-runner.requirements.txt' in flow_parser_runner_text
     assert 'command -v code2flow >/dev/null 2>&1' in flow_parser_runner_text
     assert 'code2flow --help >/dev/null 2>&1' in flow_parser_runner_text
-    assert "python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1" in compose_text
-    assert "command -v code2flow >/dev/null 2>&1" in compose_text
-    assert "code2flow --help >/dev/null 2>&1" in compose_text
+    assert "python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1" in flow_parser_runner_text
+    assert 'CMD ["python3", "/opt/flow-parser/flow_parser_runner.py", "--help"]' in flow_parser_runner_text
 
 
 def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:

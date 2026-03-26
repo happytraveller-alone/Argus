@@ -581,7 +581,7 @@ RUN mkdir -p /app /opt/backend-venv /root/.cache/uv /app/uploads/zip_files /app/
 
 EXPOSE 8000
 
-CMD ["/usr/local/bin/backend-dev-entrypoint.sh"]
+CMD ["/bin/sh", "/usr/local/bin/backend-dev-entrypoint.sh"]
 
 FROM runtime-base AS runtime
 
@@ -624,4 +624,4 @@ RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/xdg-config
 EXPOSE 8000
 
 # 启动命令 - 使用启动脚本自动执行数据库迁移
-CMD ["/app/docker-entrypoint.sh"]
+CMD ["/bin/sh", "/app/docker-entrypoint.sh"]

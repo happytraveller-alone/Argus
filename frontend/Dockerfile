@@ -54,9 +54,11 @@ FROM pnpm-base AS dev
 
 WORKDIR /app
 
+COPY --chmod=755 scripts/dev-entrypoint.sh /usr/local/bin/frontend-dev-entrypoint.sh
+
 EXPOSE 5173
 
-CMD ["node", "--version"]
+CMD ["/bin/sh", "/usr/local/bin/frontend-dev-entrypoint.sh"]
 
 FROM pnpm-base AS builder
 
@@ -137,5 +139,5 @@ COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
 
 EXPOSE 80
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

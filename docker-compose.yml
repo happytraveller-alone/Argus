@@ -1,13 +1,13 @@
 # =============================================
 # VulHunter v3.0.4 Docker Compose 日常开发默认配置
 # =============================================
-# 默认入口: docker compose up -d --build
+# 默认入口: docker compose up --build
 # 注意: backend 依赖下方 runner services 进行启动期 runner preflight / warmup。
 # 这些 runner 是一次性预热/自检容器，不是常驻服务；执行完检查后按预期退出。
 # `restart: "no"` 与 `condition: service_completed_successfully` 共同构成本地默认可用性的启动门禁。
 # 真正执行扫描时，backend 会通过 Docker SDK 按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`
 # 动态拉起临时 runner 容器；下方 compose services 仅负责本地镜像预热与可执行性校验。
-# 全量本地构建: docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build
+# 全量本地构建: docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 # 预构建镜像部署模板: deploy/compose/docker-compose.prod.yml / docker-compose.prod.cn.yml
 
 services:
@@ -62,7 +62,7 @@ services:
       - backend_uv_cache:/root/.cache/uv
       - backend_uploads:/app/uploads
       - mcp_data:/app/data/mcp
-      - /tmp/vulhunter/scans:/tmp/vulhunter/scans
+      - scan_workspace:/tmp/vulhunter/scans
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "${VULHUNTER_BACKEND_PORT:-8000}:8000"
@@ -78,6 +78,7 @@ services:
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox:latest}
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
+      SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
       SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}
@@ -153,7 +154,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "/opt/yasa/bin/yasa --version >/dev/null 2>&1 || true"]
     networks:
       - vulhunter-network
 
@@ -175,7 +175,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "opengrep --version >/dev/null 2>&1 || true"]
     networks:
       - vulhunter-network
 
@@ -198,7 +197,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "bandit --version >/dev/null 2>&1 || true"]
     networks:
       - vulhunter-network
 
@@ -220,7 +218,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "gitleaks version >/dev/null 2>&1 || true"]
     networks:
       - vulhunter-network
 
@@ -242,7 +239,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "phpstan --version >/dev/null 2>&1 || true"]
     networks:
       - vulhunter-network
 
@@ -260,7 +256,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "pmd --version >/dev/null 2>&1 || true"]
     networks:
       - vulhunter-network
 
@@ -284,7 +279,6 @@ services:
         - all_proxy=
         - ALL_PROXY=
     restart: "no"
-    command: ["/bin/sh", "-lc", "(python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1 && command -v code2flow >/dev/null 2>&1 && code2flow --help >/dev/null 2>&1) || true"]
     networks:
       - vulhunter-network
 
@@ -309,9 +303,6 @@ services:
     image: vulhunter/frontend-local:latest
     restart: unless-stopped
     working_dir: /app
-    command:
-      - sh
-      - /app/scripts/dev-entrypoint.sh
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
@@ -373,7 +364,7 @@ services:
     image: vulhunter/sandbox:latest
     profiles: ["build"]
     restart: "no"
-    command: echo "Sandbox image built successfully"
+    command: ["echo", "Sandbox image built successfully"]
 
   adminer:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
@@ -412,6 +403,8 @@ volumes:
   backend_uv_cache:
   backend_uploads:
   mcp_data:
+  scan_workspace:
+    name: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
   redis_data:
   frontend_node_modules:
   frontend_pnpm_store:

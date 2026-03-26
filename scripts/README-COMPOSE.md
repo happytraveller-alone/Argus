@@ -1,45 +1,75 @@
-# Docker Compose 构建脚本使用指南
+# Docker Compose 本地启动指南
 
-本项目提供了跨平台的 Docker Compose 构建脚本，支持自动镜像源选择和故障转移。
-默认启动除了常驻服务外，还会运行一组 runner 预热 / 自检容器，用于提前验证本地扫描镜像可用性。
+本项目默认推荐直接使用 Docker Compose，而不是包装脚本。
+默认启动除了常驻服务外，还会运行一组 runner 预热 / 自检容器，用于启动期 preflight / warmup，提前验证本地扫描镜像和命令可用性。
 这些 runner 容器检查完成后退出属于预期行为；真正执行扫描时仍由 backend 按镜像名动态拉起临时 runner 容器。
+
+## 默认启动方式
+
+### 日常本地开发默认入口
+
+```bash
+docker compose up --build
+```
+
+该默认链路会把 `backend` / `frontend` 切到源码挂载 + 热重载，并默认关闭 `MCP_REQUIRE_ALL_READY_ON_STARTUP`、`SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP` 等重型启动项。
+
+### 全量本地构建入口
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+```
+
+该覆盖层会把 `backend` / `frontend` 切回完整本地镜像构建，并恢复更严格的启动期 ready 门禁，适合需要验证全量本地镜像构建的场景。
 
 ## 平台支持
 
 ### Linux / macOS / WSL
-使用 Bash 脚本（推荐）：
+
+默认直接使用上面的 `docker compose` 命令即可。
+
+### Windows
+
+仅支持 Docker Desktop + Linux containers 场景，默认同样直接使用上面的 `docker compose` 命令即可。
+
+## 可选 legacy 包装脚本
+
+以下脚本不再是默认或必需启动方式，只是保留给需要镜像源探测、故障转移、统一 ready 提示等能力的用户使用。
+
+### Bash helper（Linux / macOS / WSL）
+
 ```bash
 ./scripts/compose-up-with-fallback.sh
 ```
 
-### Windows
+### PowerShell helper（Windows）
 
-#### 方式 1：PowerShell（推荐，支持自动镜像选择）
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
 ```
 
-#### 方式 2：批处理文件（简单快速）
+### Batch helper（Windows）
+
 ```cmd
 scripts\compose-up-with-fallback.bat
 ```
 
 ## 功能对比
 
-| 功能 | Bash (Linux/Mac/WSL) | PowerShell (Windows) | Batch (Windows) |
-|------|---------------------|---------------------|-----------------|
-| 自动检测 docker compose | | | |
-| 镜像源延迟测试 | | | |
-| 自动选择最快镜像 | | | |
-| 多阶段故障转移 | | 简化版 | |
-| 并行探测 | | | |
-| 自定义重试次数 | | | |
-| 启动完成 ready 提示 | | | |
-| 可选自动打开浏览器 | | | |
+| 项目 | 直接 `docker compose` | Legacy Bash | Legacy PowerShell | Legacy Batch |
+|------|---------------------|-------------|-------------------|--------------|
+| 默认定位 | 默认推荐 | 可选 legacy helper | 可选 legacy helper | 可选 legacy helper |
+| 适用平台 | Linux / macOS / WSL / Windows（Docker Desktop + Linux containers） | Linux / macOS / WSL | Windows | Windows |
+| 镜像源探测与排序 | 否 | 是 | 是 | 否 |
+| 多阶段故障转移 | 否 | 是 | 简化版 | 否 |
+| 并行探测 | 否 | 是 | 否 | 否 |
+| 自定义重试次数 | 否 | 是 | 否 | 否 |
+| 统一 `services ready` 提示 | 否 | 是 | 否 | 否 |
+| 可选自动打开浏览器 | 否 | 是 | 否 | 否 |
 
 ## 环境变量配置
 
-所有脚本都支持通过环境变量自定义镜像源：
+直接 `docker compose` 与可选 legacy 包装脚本都可以配合以下环境变量使用：
 
 ### Docker 镜像源
 ```bash
@@ -78,26 +108,37 @@ $env:SANDBOX_PYPI_INDEX_PRIMARY="https://mirrors.aliyun.com/pypi/simple/"
 
 ## 高级用法
 
-### 传递自定义 compose 参数
+### 直接传递 compose 参数
 
-所有脚本都支持传递自定义参数给 docker compose：
+直接使用 `docker compose` 时，按 Compose 原生方式传参：
+
+```bash
+docker compose up --build
+docker compose down
+docker compose logs -f backend
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+```
+
+### 通过 legacy 包装脚本传递 compose 参数
+
+legacy 包装脚本会把自定义参数透传给 `docker compose`：
 
 ```bash
 # Linux/Mac/WSL
-./scripts/compose-up-with-fallback.sh up -d
+./scripts/compose-up-with-fallback.sh up
 ./scripts/compose-up-with-fallback.sh down
 ./scripts/compose-up-with-fallback.sh logs -f backend
 
 # Windows PowerShell
-powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1 up -d
+powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1 up
 powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1 down
 
 # Windows Batch
-scripts\compose-up-with-fallback.bat up -d
+scripts\compose-up-with-fallback.bat up
 scripts\compose-up-with-fallback.bat down
 ```
 
-### Bash 脚本高级配置
+### Legacy Bash helper 高级配置
 
 ```bash
 # 设置重试次数
@@ -127,7 +168,7 @@ export VULHUNTER_OPEN_BROWSER=1
 
 ### Windows PowerShell 执行策略错误
 
-如果遇到 "无法加载文件，因为在此系统上禁止运行脚本" 错误：
+如果使用可选 legacy PowerShell helper 时遇到 "无法加载文件，因为在此系统上禁止运行脚本" 错误：
 
 ```powershell
 # 临时允许执行（推荐）
@@ -140,10 +181,10 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 ### Docker 连接失败
 
 确保 Docker Desktop 正在运行：
-- Windows: 检查系统托盘中的 Docker 图标
+- Windows（Docker Desktop + Linux containers）: 检查系统托盘中的 Docker 图标，并确认已切换到 Linux containers
 - Linux/Mac: 运行 `docker ps` 验证
 
-### 镜���拉取失败
+### 镜像拉取失败
 
 1. 检查网络连接
 2. 尝试手动指定镜像源（见环境变量配置）
@@ -185,40 +226,42 @@ $env:BACKEND_PYPI_INDEX_PRIMARY="https://pypi.org/simple"
 
 ### Linux / macOS / WSL
 ```bash
-# 克隆仓库后直接运行
-./scripts/compose-up-with-fallback.sh
-
-# 服务 ready 后自动打开浏览器（可选）
-VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh
-
-# 或直接使用默认日常增量开发链路（前后端容器内热重载）
-docker compose up -d --build
+# 默认日常增量开发链路（前后端容器内热重载）
+docker compose up --build
 
 # 显式执行全量本地构建
-docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 
-# 通过脚本执行全量本地构建
-./scripts/compose-up-with-fallback.sh -f docker-compose.yml -f docker-compose.full.yml up -d --build
+# 可选：使用 legacy Bash helper
+./scripts/compose-up-with-fallback.sh
+
+# 可选：服务 ready 后自动打开浏览器（仅 legacy Bash helper）
+VULHUNTER_OPEN_BROWSER=1 ./scripts/compose-up-with-fallback.sh
 ```
 
 ### Windows
 ```powershell
-# PowerShell（推荐）
+# Docker Desktop + Linux containers 默认入口
+docker compose up --build
+
+# 显式执行全量本地构建
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+
+# 可选：legacy PowerShell helper
 powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
 
-# 或批处理文件
+# 可选：legacy Batch helper
 scripts\compose-up-with-fallback.bat
-
-# 或直接使用 docker compose
-docker compose up -d --build
 ```
 
 ## 当前构建边界
 
 - 默认 `docker compose up --build` 已切到日常增量开发链路。
 - 该默认链路会把 `backend`/`frontend` 切到源码挂载 + 热重载，并默认关闭 `MCP_REQUIRE_ALL_READY_ON_STARTUP`、`SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP` 等重型启动项。
-- `./scripts/compose-up-with-fallback.sh` 在 `up` / `up -d` 时会等待前端首页和 backend `/health` 都可访问，再打印统一的 `services ready` 提示。
-- `VULHUNTER_OPEN_BROWSER=1` 仅在 Bash/WSL/Linux 包装脚本中生效；裸 `docker compose up --build` 只打印 ready 提示，不会自动打开浏览器。
+- 默认 `docker compose up --build` 会把 runner 预热 / 自检容器作为启动期 preflight / warmup 跑完；这些一次性容器退出属于预期行为，不代表失败。
+- 真正执行扫描时，backend 会通过 Docker SDK 按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` 动态拉起临时 runner 容器；compose 里的 runner services 只负责本地镜像预热与可执行性校验。
+- 可选 legacy Bash helper `./scripts/compose-up-with-fallback.sh` 在 `up` 时会等待前端首页和 backend `/health` 都可访问，再打印统一的 `services ready` 提示。
+- `VULHUNTER_OPEN_BROWSER=1` 仅在 legacy Bash helper 中生效；直接使用 `docker compose up --build` 不会自动打开浏览器。
 - 显式全量本地构建请叠加 `docker-compose.full.yml`。
 - Adminer 已并入 `tools` profile：`docker compose --profile tools up -d adminer`。
 - 预构建镜像部署模板已迁移到 `deploy/compose/docker-compose.prod.yml` 与 `deploy/compose/docker-compose.prod.cn.yml`。

@@ -44,32 +44,24 @@ cp backend/env.example backend/.env
 
 ### 3. 启动服务
 
-Linux / macOS / WSL 推荐：
+默认推荐直接使用 Docker Compose：
 
 ```bash
-./scripts/compose-up-with-fallback.sh
+docker compose up --build
 ```
 
-Windows PowerShell：
+Windows 请使用 Docker Desktop + Linux containers。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
-```
-
-Windows 批处理：
-
-```cmd
-scripts\compose-up-with-fallback.bat
-```
-
-如需直接使用 Docker Compose：
+如需显式执行全量本地构建，请叠加 `docker-compose.full.yml`：
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
-该命令会同时预构建并运行一组 runner 预热 / 自检容器，用来确认本地扫描镜像已经可用。
+默认 `docker compose up --build` 会同时构建并运行一组 runner 预热 / 自检容器，作为启动期 preflight / warmup，用来确认本地扫描镜像和命令已经可用。
 这些容器启动后退出属于预期行为，并非故障；真正执行扫描时，backend 会再按镜像名动态拉起临时 runner 容器。
+
+如需查看可选的 legacy 包装脚本说明，请参考 [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md)。
 
 ### 4. 访问服务
 

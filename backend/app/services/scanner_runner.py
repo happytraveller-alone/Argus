@@ -8,9 +8,13 @@ from typing import Callable, Dict, Optional
 
 import docker
 
+from app.core.config import settings
+
 
 SCANNER_MOUNT_PATH = "/scan"
 MAX_RETAINED_LOG_CHARS = 12000
+DOCKER_EXCEPTION = getattr(getattr(docker, "errors", None), "DockerException", Exception)
+DOCKER_NOT_FOUND = getattr(getattr(docker, "errors", None), "NotFound", Exception)
 
 
 @dataclass
@@ -63,6 +67,45 @@ def _ensure_workspace_artifacts(workspace_dir: str) -> tuple[Path, Path, Path]:
     return workspace, logs_dir, meta_dir
 
 
+def _scan_workspace_root() -> Path:
+    configured = str(getattr(settings, "SCAN_WORKSPACE_ROOT", "/tmp/vulhunter/scans") or "").strip()
+    return Path(configured or "/tmp/vulhunter/scans")
+
+
+def _scan_workspace_volume() -> str:
+    configured = str(getattr(settings, "SCAN_WORKSPACE_VOLUME", "vulhunter_scan_workspace") or "").strip()
+    return configured or "vulhunter_scan_workspace"
+
+
+def _resolve_shared_workspace(workspace: Path) -> tuple[Path, Path]:
+    workspace_root = _scan_workspace_root()
+    resolved_workspace = workspace.resolve()
+    resolved_root = workspace_root.resolve()
+    try:
+        resolved_workspace.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"workspace_dir must stay inside shared workspace root: workspace={resolved_workspace} root={resolved_root}"
+        ) from exc
+    return resolved_root, resolved_workspace
+
+
+def _rewrite_mount_path(value: str, workspace: Path) -> str:
+    if value == SCANNER_MOUNT_PATH:
+        return str(workspace)
+    if value.startswith(f"{SCANNER_MOUNT_PATH}/"):
+        return str(workspace / value[len(f'{SCANNER_MOUNT_PATH}/'):])
+    return value
+
+
+def _rewrite_runner_command(command: list[str], workspace: Path) -> list[str]:
+    return [_rewrite_mount_path(part, workspace) for part in command]
+
+
+def _rewrite_runner_env(env: Dict[str, str], workspace: Path) -> Dict[str, str]:
+    return {key: _rewrite_mount_path(str(value), workspace) for key, value in dict(env).items()}
+
+
 def run_scanner_container_sync(
     spec: ScannerRunSpec,
     *,
@@ -77,15 +120,19 @@ def run_scanner_container_sync(
     expected_exit_codes = {int(code) for code in (spec.expected_exit_codes or [0])}
 
     try:
+        workspace_root, runner_workspace = _resolve_shared_workspace(workspace)
+        rewritten_command = _rewrite_runner_command(spec.command, runner_workspace)
+        rewritten_env = _rewrite_runner_env(spec.env, runner_workspace)
+        workspace_volume = _scan_workspace_volume()
         client = docker.from_env()
         container = client.containers.run(
             spec.image,
-            spec.command,
+            rewritten_command,
             detach=True,
             auto_remove=False,
-            volumes={str(workspace): {"bind": SCANNER_MOUNT_PATH, "mode": "rw"}},
-            environment=dict(spec.env),
-            working_dir=SCANNER_MOUNT_PATH,
+            volumes={workspace_volume: {"bind": str(workspace_root), "mode": "rw"}},
+            environment=rewritten_env,
+            working_dir=str(runner_workspace),
         )
         container_id = getattr(container, "id", None)
         if container_id and on_container_started is not None:
@@ -105,6 +152,10 @@ def run_scanner_container_sync(
             json.dumps(
                 {
                     "spec": asdict(spec),
+                    "runner_command": rewritten_command,
+                    "runner_environment": rewritten_env,
+                    "workspace_volume": workspace_volume,
+                    "workspace_root": str(workspace_root),
                     "container_id": container_id,
                     "exit_code": exit_code,
                     "success": exit_code in expected_exit_codes,
@@ -125,12 +176,13 @@ def run_scanner_container_sync(
             stderr_path=retained_stderr_path,
             error=None if exit_code in expected_exit_codes else f"scanner container exited with code {exit_code}",
         )
-    except docker.errors.DockerException as exc:
+    except DOCKER_EXCEPTION as exc:
         retained_stderr_path = _write_retained_log(stderr_log_path, str(exc))
         runner_meta_path.write_text(
             json.dumps(
                 {
                     "spec": asdict(spec),
+                    "workspace_volume": _scan_workspace_volume(),
                     "container_id": container_id,
                     "error": str(exc),
                     "success": False,
@@ -151,11 +203,37 @@ def run_scanner_container_sync(
             stderr_path=retained_stderr_path,
             error=str(exc),
         )
+    except ValueError as exc:
+        retained_stderr_path = _write_retained_log(stderr_log_path, str(exc))
+        runner_meta_path.write_text(
+            json.dumps(
+                {
+                    "spec": asdict(spec),
+                    "workspace_volume": _scan_workspace_volume(),
+                    "error": str(exc),
+                    "success": False,
+                    "stdout_path": None,
+                    "stderr_path": retained_stderr_path,
+                    "log_retention": "failure_only",
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return ScannerRunResult(
+            success=False,
+            container_id=None,
+            exit_code=1,
+            stdout_path=None,
+            stderr_path=retained_stderr_path,
+            error=str(exc),
+        )
     finally:
         if container is not None:
             try:
                 container.remove(force=True)
-            except docker.errors.DockerException:
+            except DOCKER_EXCEPTION:
                 pass
 
 
@@ -175,7 +253,7 @@ def stop_scanner_container_sync(container_id: str) -> bool:
     try:
         client = docker.from_env()
         container = client.containers.get(container_id)
-    except docker.errors.NotFound:
+    except DOCKER_NOT_FOUND:
         return False
 
     container.stop(timeout=2)
