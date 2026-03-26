@@ -48,7 +48,7 @@ services:
         - HTTPS_PROXY=
         - all_proxy=
         - ALL_PROXY=
-    image: vulhunter/backend-local:latest
+    image: vulhunter/backend-dev-local:latest
     restart: unless-stopped
     working_dir: /app
     volumes:

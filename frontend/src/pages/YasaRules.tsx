@@ -53,6 +53,21 @@ interface YasaRulesProps {
   onEngineChange?: (value: ScanEngineTab) => void;
 }
 
+export interface YasaRuntimeConfigDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  runtimeConfigContent: YasaRuntimeConfigContentProps;
+}
+
+export interface YasaRuntimeConfigContentProps {
+  runtimeConfigForm: YasaRuntimeConfig | null;
+  runtimeConfigLoadError: string | null;
+  savingRuntimeConfig: boolean;
+  isRuntimeConfigDirty: boolean;
+  onSave: () => void | Promise<void>;
+  onUpdateRuntimeField: (key: keyof YasaRuntimeConfig, value: string) => void;
+}
+
 export interface YasaRuleRowViewModel {
   id: string;
   ruleName: string;
@@ -477,6 +492,133 @@ function buildSelectionSummary({
   );
 }
 
+export function YasaRuntimeConfigDialog({
+  open,
+  onOpenChange,
+  runtimeConfigContent,
+}: YasaRuntimeConfigDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="!w-[min(92vw,760px)] !max-w-none p-0 gap-0 cyber-dialog border border-border rounded-lg">
+        <YasaRuntimeConfigContent {...runtimeConfigContent} onRequestClose={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function YasaRuntimeConfigContent({
+  runtimeConfigForm,
+  runtimeConfigLoadError,
+  savingRuntimeConfig,
+  isRuntimeConfigDirty,
+  onSave,
+  onUpdateRuntimeField,
+  onRequestClose,
+}: YasaRuntimeConfigContentProps & { onRequestClose?: () => void }) {
+  const saveDisabled =
+    !runtimeConfigForm ||
+    Boolean(runtimeConfigLoadError) ||
+    savingRuntimeConfig ||
+    !isRuntimeConfigDirty;
+
+  return (
+    <>
+      <div className="px-5 py-4 border-b border-border bg-muted">
+        <h2 className="font-mono text-base font-bold uppercase tracking-wider text-foreground">
+          YASA 运行配置
+        </h2>
+        <p className="text-xs text-muted-foreground">修改后对后续新建任务全局生效</p>
+      </div>
+      <div className="space-y-4 px-5 py-4">
+        {runtimeConfigLoadError ? (
+          <div
+            role="status"
+            className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200"
+          >
+            {runtimeConfigLoadError}
+          </div>
+        ) : runtimeConfigForm ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">YASA超时(秒)</Label>
+              <Input
+                type="number"
+                min={30}
+                max={86400}
+                value={runtimeConfigForm.yasa_timeout_seconds}
+                onChange={(event) =>
+                  onUpdateRuntimeField("yasa_timeout_seconds", event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Orphan判定阈值(秒)</Label>
+              <Input
+                type="number"
+                min={30}
+                max={86400}
+                value={runtimeConfigForm.yasa_orphan_stale_seconds}
+                onChange={(event) =>
+                  onUpdateRuntimeField("yasa_orphan_stale_seconds", event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">心跳间隔(秒)</Label>
+              <Input
+                type="number"
+                min={1}
+                max={3600}
+                value={runtimeConfigForm.yasa_exec_heartbeat_seconds}
+                onChange={(event) =>
+                  onUpdateRuntimeField("yasa_exec_heartbeat_seconds", event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">进程回收宽限(秒)</Label>
+              <Input
+                type="number"
+                min={1}
+                max={60}
+                value={runtimeConfigForm.yasa_process_kill_grace_seconds}
+                onChange={(event) =>
+                  onUpdateRuntimeField(
+                    "yasa_process_kill_grace_seconds",
+                    event.target.value,
+                  )
+                }
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">正在加载运行配置...</p>
+        )}
+      </div>
+      <div className="flex justify-end gap-3 px-5 py-4 border-t border-border bg-muted">
+        {onRequestClose ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="cyber-btn-outline"
+            onClick={onRequestClose}
+          >
+            关闭
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          className="cyber-btn-primary"
+          onClick={() => void onSave()}
+          disabled={saveDisabled}
+        >
+          {savingRuntimeConfig ? "保存中..." : "保存配置"}
+        </Button>
+      </div>
+    </>
+  );
+}
+
 export default function YasaRules({
   showEngineSelector = false,
   engineValue = "yasa",
@@ -491,6 +633,7 @@ export default function YasaRules({
   const [detailRule, setDetailRule] = useState<YasaRuleRowViewModel | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showAdvancedConfigDialog, setShowAdvancedConfigDialog] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importName, setImportName] = useState("");
   const [importLanguage, setImportLanguage] = useState("golang");
@@ -754,90 +897,6 @@ export default function YasaRules({
         </div>
       </div>
 
-      <div className="cyber-card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-foreground">YASA 运行配置</p>
-            <p className="text-xs text-muted-foreground">修改后对后续新建任务全局生效</p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            className="cyber-btn-primary h-8"
-            onClick={() => void handleSaveRuntimeConfig()}
-            disabled={
-              !runtimeConfigForm ||
-              Boolean(runtimeConfigLoadError) ||
-              savingRuntimeConfig ||
-              !isRuntimeConfigDirty
-            }
-          >
-            {savingRuntimeConfig ? "保存中..." : "保存配置"}
-          </Button>
-        </div>
-        {runtimeConfigLoadError ? (
-          <div
-            role="status"
-            className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200"
-          >
-            {runtimeConfigLoadError}
-          </div>
-        ) : runtimeConfigForm ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="space-y-1">
-              <Label className="text-xs">YASA超时(秒)</Label>
-              <Input
-                type="number"
-                min={30}
-                max={86400}
-                value={runtimeConfigForm.yasa_timeout_seconds}
-                onChange={(event) =>
-                  updateRuntimeField("yasa_timeout_seconds", event.target.value)
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Orphan判定阈值(秒)</Label>
-              <Input
-                type="number"
-                min={30}
-                max={86400}
-                value={runtimeConfigForm.yasa_orphan_stale_seconds}
-                onChange={(event) =>
-                  updateRuntimeField("yasa_orphan_stale_seconds", event.target.value)
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">心跳间隔(秒)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={3600}
-                value={runtimeConfigForm.yasa_exec_heartbeat_seconds}
-                onChange={(event) =>
-                  updateRuntimeField("yasa_exec_heartbeat_seconds", event.target.value)
-                }
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">进程回收宽限(秒)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={60}
-                value={runtimeConfigForm.yasa_process_kill_grace_seconds}
-                onChange={(event) =>
-                  updateRuntimeField("yasa_process_kill_grace_seconds", event.target.value)
-                }
-              />
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">正在加载运行配置...</p>
-        )}
-      </div>
-
       {customConfigsLoadError ? (
         <div
           role="status"
@@ -897,6 +956,14 @@ export default function YasaRules({
                   onClick={() => setShowImportDialog(true)}
                 >
                   导入自定义规则
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="cyber-btn-primary h-9"
+                  onClick={() => setShowAdvancedConfigDialog(true)}
+                >
+                  高级配置
                 </Button>
               </>
             ),
@@ -1008,6 +1075,18 @@ export default function YasaRules({
           </div>
         </DialogContent>
       </Dialog>
+      <YasaRuntimeConfigDialog
+        open={showAdvancedConfigDialog}
+        onOpenChange={setShowAdvancedConfigDialog}
+        runtimeConfigContent={{
+          runtimeConfigForm,
+          runtimeConfigLoadError,
+          savingRuntimeConfig,
+          isRuntimeConfigDirty,
+          onSave: handleSaveRuntimeConfig,
+          onUpdateRuntimeField: updateRuntimeField,
+        }}
+      />
     </div>
   );
 }

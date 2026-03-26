@@ -25,7 +25,8 @@ test("ScanConfigEngines renders yasa rules page when tab=yasa", () => {
     ),
   );
 
-  assert.match(markup, /YASA 运行配置/);
   assert.match(markup, /导入自定义规则/);
+  assert.match(markup, /高级配置/);
   assert.match(markup, /有效规则总数/);
+  assert.doesNotMatch(markup, /YASA 运行配置/);
 });

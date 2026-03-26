@@ -563,7 +563,6 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
 # ============================================
 FROM runtime-base AS dev-runtime
 
-COPY --from=builder /opt/backend-venv /opt/backend-venv
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 COPY --chmod=755 scripts/dev-entrypoint.sh /usr/local/bin/backend-dev-entrypoint.sh
 
@@ -578,7 +577,7 @@ ENV VIRTUAL_ENV=/opt/backend-venv
 ENV PATH=/opt/backend-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
 
-RUN mkdir -p /app /root/.cache/uv /app/uploads/zip_files /app/data/mcp
+RUN mkdir -p /app /opt/backend-venv /root/.cache/uv /app/uploads/zip_files /app/data/mcp
 
 EXPOSE 8000
 
@@ -588,7 +587,6 @@ FROM runtime-base AS runtime
 
 # 提前复制 builder 产物，避免 runtime 与 builder 并行下载导致网络争抢
 COPY --from=builder /opt/backend-venv /opt/backend-venv
-COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 RUN set -eux; \
     for site_packages_dir in $(python3 -c 'import site; [print(path) for path in site.getsitepackages() if "site-packages" in path]'); do \

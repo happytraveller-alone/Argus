@@ -16,6 +16,7 @@ import {
   DataTable,
   type AppColumnDef,
   type DataTableQueryState,
+  type DataTableSelectionContext,
   useDataTableUrlState,
 } from "@/components/data-table";
 import {
@@ -51,6 +52,16 @@ interface PmdRulesProps {
 }
 
 type PmdRulesRow = PmdRulesetSummary | PmdRuleConfig;
+
+export interface PmdImportDialogContentProps {
+  importName: string;
+  importDescription: string;
+  importing: boolean;
+  onImportNameChange: (value: string) => void;
+  onImportDescriptionChange: (value: string) => void;
+  onImportFileChange: (file: File | null) => void;
+  onImport: () => void | Promise<void>;
+}
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -104,6 +115,76 @@ function formatPriorityBadgeItems(priorities: number[]) {
   return priorities.filter((priority) => Number.isFinite(priority));
 }
 
+function buildSelectionSummary({
+  selectedCount,
+  filteredCount,
+}: DataTableSelectionContext<PmdRulesRow>) {
+  if (selectedCount > 0) {
+    return (
+      <>
+        已选择 <span className="font-bold text-primary">{selectedCount}</span> 个 ruleset
+      </>
+    );
+  }
+
+  return (
+    <>
+      将对全部 <span className="font-bold text-primary">{filteredCount}</span> 个 ruleset 进行操作
+    </>
+  );
+}
+
+export function PmdImportDialogContent({
+  importName,
+  importDescription,
+  importing,
+  onImportNameChange,
+  onImportDescriptionChange,
+  onImportFileChange,
+  onImport,
+}: PmdImportDialogContentProps) {
+  return (
+    <div className="space-y-4 text-sm">
+      <div>
+        <h2 className="text-lg font-semibold">导入自定义规则</h2>
+        <p className="text-sm text-muted-foreground">
+          上传自定义 PMD XML ruleset，并复用后端共享解析结果。
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr]">
+        <Input
+          value={importName}
+          onChange={(event) => onImportNameChange(event.target.value)}
+          placeholder="输入 ruleset 名称"
+          className="cyber-input"
+        />
+        <Input
+          type="file"
+          accept=".xml,text/xml,application/xml"
+          className="cyber-input"
+          onChange={(event) => onImportFileChange(event.target.files?.[0] || null)}
+        />
+      </div>
+      <Textarea
+        value={importDescription}
+        onChange={(event) => onImportDescriptionChange(event.target.value)}
+        placeholder="可选：填写 ruleset 描述"
+        className="cyber-input min-h-[96px]"
+      />
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          className="cyber-btn-primary h-9"
+          onClick={() => void onImport()}
+          disabled={importing}
+        >
+          {importing ? "导入中..." : "导入 XML ruleset"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function PmdRulesetDetailPanel({
   ruleset,
   onCopyRawXml,
@@ -149,9 +230,6 @@ export function PmdRulesetDetailPanel({
               >
                 {ruleset.is_active ? "启用" : "禁用"}
               </Badge>
-              <Badge className="cyber-badge cyber-badge-muted">
-                规则数 {ruleset.rule_count}
-              </Badge>
             </div>
           </div>
         </div>
@@ -166,7 +244,6 @@ export function PmdRulesetDetailPanel({
               value={ruleset.ruleset_name?.trim() || "未标注 ruleset 标识"}
               mono
             />
-            <DetailInfoCard label="规则数" value={String(ruleset.rule_count ?? 0)} mono />
             <div className="rounded-md border border-border/60 bg-muted/30 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
                 编程语言
@@ -183,57 +260,10 @@ export function PmdRulesetDetailPanel({
                 )}
               </div>
             </div>
-            <div className="rounded-md border border-border/60 bg-muted/30 p-3">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                优先级
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {priorities.length > 0 ? (
-                  priorities.map((priority) => (
-                    <Badge
-                      key={`${ruleset.id}-priority-${priority}`}
-                      className="cyber-badge cyber-badge-muted"
-                    >
-                      P{priority}
-                    </Badge>
-                  ))
-                ) : (
-                  <span className="text-sm text-muted-foreground">未标注</span>
-                )}
-              </div>
-            </div>
+
           </div>
         </div>
 
-        <div className="space-y-3">
-          <DetailSectionTitle>说明信息</DetailSectionTitle>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-            <div className="rounded-md border border-border/60 bg-muted/20 p-4">
-              <p className="whitespace-pre-wrap break-words text-sm leading-7 text-foreground">
-                {description}
-              </p>
-            </div>
-            <div className="rounded-md border border-border/60 bg-muted/30 p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                外部信息链接
-              </p>
-              {externalInfoUrls.length > 0 ? (
-                <div className="mt-3 space-y-2">
-                  {externalInfoUrls.map((url) => (
-                    <p
-                      key={`${ruleset.id}-${url}`}
-                      className="font-mono text-xs break-all text-foreground"
-                    >
-                      {url}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-muted-foreground">暂无外部信息链接</p>
-              )}
-            </div>
-          </div>
-        </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -273,6 +303,7 @@ export default function PmdRules({
   const [customConfigsLoadError, setCustomConfigsLoadError] = useState<string | null>(null);
   const [selectedRuleset, setSelectedRuleset] = useState<PmdRulesRow | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [importName, setImportName] = useState("");
   const [importDescription, setImportDescription] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -402,9 +433,6 @@ export default function PmdRules({
         cell: ({ row }) => (
           <div className="space-y-1">
             <div className="font-semibold text-foreground break-all">{row.original.name}</div>
-            <div className="font-mono text-xs text-muted-foreground break-all">
-              {row.original.filename}
-            </div>
           </div>
         ),
       },
@@ -447,20 +475,6 @@ export default function PmdRules({
               <span className="text-xs text-muted-foreground">未标注</span>
             )}
           </div>
-        ),
-      },
-      {
-        accessorKey: "rule_count",
-        header: "规则数",
-        meta: { label: "规则数" },
-      },
-      {
-        id: "priorities",
-        accessorFn: (row) => formatPriorityList(row.priorities),
-        header: "优先级",
-        meta: { label: "优先级" },
-        cell: ({ row }) => (
-          <span className="font-mono text-xs">{formatPriorityList(row.original.priorities)}</span>
         ),
       },
       {
@@ -523,6 +537,7 @@ export default function PmdRules({
         xmlFile: importFile,
       });
       toast.success("PMD 自定义 ruleset 导入成功");
+      setShowImportDialog(false);
       setImportName("");
       setImportDescription("");
       setImportFile(null);
@@ -592,45 +607,6 @@ export default function PmdRules({
         </div>
       ) : null}
 
-      <div className="cyber-card space-y-4 p-4">
-        <div>
-          <h2 className="text-lg font-semibold">导入 XML ruleset</h2>
-          <p className="text-sm text-muted-foreground">
-            上传自定义 PMD XML ruleset，并复用后端共享解析结果。
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr]">
-          <Input
-            value={importName}
-            onChange={(event) => setImportName(event.target.value)}
-            placeholder="输入 ruleset 名称"
-            className="cyber-input"
-          />
-          <Input
-            type="file"
-            accept=".xml,text/xml,application/xml"
-            className="cyber-input"
-            onChange={(event) => setImportFile(event.target.files?.[0] || null)}
-          />
-        </div>
-        <Textarea
-          value={importDescription}
-          onChange={(event) => setImportDescription(event.target.value)}
-          placeholder="可选：填写 ruleset 描述"
-          className="cyber-input min-h-[96px]"
-        />
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            className="cyber-btn-primary h-9"
-            onClick={() => void handleImport()}
-            disabled={importing}
-          >
-            {importing ? "导入中..." : "导入 XML ruleset"}
-          </Button>
-        </div>
-      </div>
-
       {customConfigsLoadError ? (
         <div
           role="status"
@@ -662,6 +638,43 @@ export default function PmdRules({
             showColumnVisibility: false,
             showDensityToggle: false,
             showReset: false,
+          }}
+          selection={{
+            enableRowSelection: true,
+            summary: buildSelectionSummary,
+            actions: () => (
+              <>
+                <Button type="button" size="sm" className="cyber-btn-primary h-8" disabled>
+                  批量启用
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="cyber-btn-outline h-8"
+                  disabled
+                >
+                  批量禁用
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-muted-foreground"
+                  disabled
+                >
+                  取消操作
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="cyber-btn-primary h-9"
+                  onClick={() => setShowImportDialog(true)}
+                >
+                  导入自定义规则
+                </Button>
+              </>
+            ),
           }}
           pagination={{ enabled: true, pageSizeOptions: [10, 20, 50] }}
           tableClassName="min-w-[1180px]"
@@ -700,6 +713,22 @@ export default function PmdRules({
               关闭
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="cyber-dialog max-w-3xl border border-border">
+          <DialogHeader>
+            <DialogTitle>导入自定义规则</DialogTitle>
+          </DialogHeader>
+          <PmdImportDialogContent
+            importName={importName}
+            importDescription={importDescription}
+            importing={importing}
+            onImportNameChange={setImportName}
+            onImportDescriptionChange={setImportDescription}
+            onImportFileChange={setImportFile}
+            onImport={handleImport}
+          />
         </DialogContent>
       </Dialog>
     </div>

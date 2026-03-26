@@ -117,13 +117,13 @@ export default function ScanConfigIntelligentEngine() {
 						onLlmSummaryChange={setSummaryState}
 					/>
 
-					<div className="section-header mb-0">
+					{/* <div className="section-header mb-0">
 						<Zap className="w-4 h-4 text-primary" />
 						<div className="font-mono font-bold uppercase text-sm text-foreground">
 							搜索增强模块
 						</div>
 					</div>
-					<EmbeddingConfig compact />
+					<EmbeddingConfig compact /> */}
 
 					<div className="section-header mb-0">
 						<KeyRound className="w-4 h-4 text-primary" />

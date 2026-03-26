@@ -22,8 +22,9 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert not (REPO_ROOT / "docker-compose.prod.cn.yml").exists()
 
     compose_text = compose_path.read_text(encoding="utf-8")
-    assert "image: vulhunter/backend-local:latest" in compose_text
+    assert "image: vulhunter/backend-dev-local:latest" in compose_text
     assert "image: vulhunter/frontend-local:latest" in compose_text
+    assert "vulhunter/backend-local:latest" not in compose_text
     assert "vulhunter/backend-dev:latest" not in compose_text
     assert "vulhunter/frontend-dev:latest" not in compose_text
     assert "target: dev-runtime" in compose_text
@@ -140,6 +141,7 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     full_overlay_text = (REPO_ROOT / "docker-compose.full.yml").read_text(encoding="utf-8")
 
     assert "vulhunter/backend-local:latest" in full_overlay_text
+    assert "vulhunter/backend-dev-local:latest" not in full_overlay_text
     assert "vulhunter/frontend-local:latest" in full_overlay_text
     assert "working_dir: !reset null" in full_overlay_text
     assert "command: !reset null" in full_overlay_text
@@ -303,6 +305,11 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     flow_parser_runner_text = (
         REPO_ROOT / "backend" / "docker" / "flow-parser-runner.Dockerfile"
     ).read_text(encoding="utf-8")
+    dev_runtime_text = backend_text.split("FROM runtime-base AS dev-runtime", maxsplit=1)[1].split(
+        "FROM runtime-base AS runtime",
+        maxsplit=1,
+    )[0]
+    runtime_text = backend_text.split("FROM runtime-base AS runtime", maxsplit=1)[1]
 
     assert '"code2flow>=' not in pyproject_text
     assert '"bandit>=' in pyproject_text
@@ -315,7 +322,11 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'uv venv "${BACKEND_VENV_PATH}"' in backend_text
     assert 'uv sync --active --frozen --no-dev' in backend_text
     assert "COPY --from=builder /app/.venv /opt/backend-venv" not in backend_text
-    assert "COPY --from=builder /opt/backend-venv /opt/backend-venv" in backend_text
+    assert "COPY --from=builder /opt/backend-venv /opt/backend-venv" not in dev_runtime_text
+    assert "COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv" in dev_runtime_text
+    assert "mkdir -p /app /opt/backend-venv /root/.cache/uv /app/uploads/zip_files /app/data/mcp" in dev_runtime_text
+    assert "COPY --from=builder /opt/backend-venv /opt/backend-venv" in runtime_text
+    assert "COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv" not in runtime_text
     assert "COPY --from=builder /usr/bin/gitleaks /usr/local/bin/gitleaks" not in backend_text
     assert "COPY --from=scanner-tools-base /opt/opengrep /opt/opengrep" not in backend_text
     assert "COPY --from=scanner-tools-base /opt/phpstan /opt/phpstan" not in backend_text
@@ -331,6 +342,8 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11' in backend_text
     assert "python3 -m pip install" not in entrypoint_text
     assert 'BACKEND_VENV_DIR="${BACKEND_VENV_PATH:-/opt/backend-venv}"' in entrypoint_text
+    assert '"${BACKEND_VENV_DIR}/bin/alembic" upgrade head' in entrypoint_text
+    assert ".venv/bin/alembic upgrade head" not in entrypoint_text
     assert '"${BACKEND_VENV_DIR}/bin/code2flow"' not in entrypoint_text
     assert "FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim" in yasa_runner_text
     assert "AS yasa-builder" in yasa_runner_text
