@@ -25,7 +25,6 @@
     "analyze": "vite build --mode analyze"
   },
   "dependencies": {
-    "@tanstack/react-table": "^8.21.3",
     "@google/generative-ai": "^0.24.1",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -54,6 +53,7 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-visually-hidden": "^1.2.4",
+    "@tanstack/react-table": "^8.21.3",
     "axios": "^1.13.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -62,8 +62,10 @@
     "embla-carousel-react": "^8.6.0",
     "eventsource-parser": "^3.0.6",
     "fflate": "^0.8.2",
+    "highlight.js": "^11.11.1",
     "input-otp": "^1.4.2",
     "ky": "^1.14.1",
+    "lowlight": "^3.3.0",
     "lucide-react": "^0.525.0",
     "marked": "^17.0.1",
     "miaoda-sc-plugin": "^1.0.39",
@@ -83,8 +85,8 @@
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.183.2",
-    "vaul": "^1.1.2",
     "vanta": "^0.5.24",
+    "vaul": "^1.1.2",
     "video-react": "^0.16.0",
     "zod": "^3.25.76"
   },

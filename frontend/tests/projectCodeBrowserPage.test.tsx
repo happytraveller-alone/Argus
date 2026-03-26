@@ -35,6 +35,35 @@ function createProject(overrides: Record<string, unknown> = {}) {
 	};
 }
 
+function createReadyState(overrides: Record<string, unknown> = {}) {
+	return {
+		status: "ready",
+		requestedFilePath: "src/main.ts",
+		resolvedFilePath: "src/main.ts",
+		content: "export const answer = 42;",
+		size: 25,
+		encoding: "utf-8",
+		displayLines: [
+			{
+				lineNumber: 1,
+				content: "export const answer = 42;",
+				kind: "code",
+				segments: [
+					{ text: "export", tokenClasses: ["keyword"] },
+					{ text: " const answer = " },
+					{ text: "42", tokenClasses: ["number"] },
+					{ text: ";" },
+				],
+			},
+		],
+		syntaxLanguageKey: "typescript",
+		syntaxLanguageLabel: "TypeScript",
+		syntaxStatus: "highlighted",
+		syntaxFallbackReason: null,
+		...overrides,
+	};
+}
+
 test("ProjectCodeBrowserContent renders repository unsupported state", async () => {
 	const pageModule = await importOrFail<any>(
 		"../src/pages/ProjectCodeBrowser.tsx",
@@ -89,13 +118,7 @@ test("ProjectCodeBrowserContent renders selected text file in the preview pane",
 			],
 			expandedFolders: new Set<string>(["src"]),
 			selectedFilePath: "src/main.ts",
-			selectedFileState: {
-				status: "ready",
-				filePath: "src/main.ts",
-				content: "export const answer = 42;",
-				size: 25,
-				encoding: "utf-8",
-			},
+			selectedFileState: createReadyState(),
 			onBack: () => {},
 			onToggleFolder: () => {},
 			onSelectFile: () => {},
@@ -104,7 +127,7 @@ test("ProjectCodeBrowserContent renders selected text file in the preview pane",
 
 	assert.match(markup, /Audit Demo/);
 	assert.match(markup, /src\/main\.ts/);
-	assert.match(markup, /export const answer = 42;/);
+	assert.match(markup, /const answer =/);
 	assert.match(markup, /custom-scrollbar-dark/);
 	assert.match(markup, /data-appearance="native-explorer"/);
 	assert.match(markup, /data-display-preset="project-browser"/);
@@ -112,7 +135,51 @@ test("ProjectCodeBrowserContent renders selected text file in the preview pane",
 	assert.match(markup, /flex min-h-0 flex-1 flex-col p-3/);
 	assert.match(markup, /flex-1 min-h-0 overflow-hidden/);
 	assert.match(markup, /max-h-none/);
-	assert.doesNotMatch(markup, /(?:text|bg|border)-(?:sky|cyan|amber|rose|emerald)/);
+	assert.match(markup, /text-sky-300/);
+	assert.match(markup, /text-amber-300/);
+	assert.match(markup, /TypeScript/);
+});
+
+test("ProjectCodeBrowserContent keeps plain-text fallback readable for unsupported language files", async () => {
+	const pageModule = await importOrFail<any>(
+		"../src/pages/ProjectCodeBrowser.tsx",
+	);
+
+	const fallbackContent = "plain text fallback line";
+	const markup = renderToStaticMarkup(
+		createElement(pageModule.ProjectCodeBrowserContent, {
+			project: createProject(),
+			loading: false,
+			error: null,
+			filesCount: 1,
+			tree: [],
+			expandedFolders: new Set<string>(),
+			selectedFilePath: "notes/custom.unknown",
+			selectedFileState: createReadyState({
+				requestedFilePath: "notes/custom.unknown",
+				resolvedFilePath: "notes/custom.unknown",
+				content: fallbackContent,
+				displayLines: [
+					{
+						lineNumber: 1,
+						content: fallbackContent,
+						kind: "code",
+					},
+				],
+				syntaxLanguageKey: null,
+				syntaxLanguageLabel: null,
+				syntaxStatus: "plain-text",
+				syntaxFallbackReason: "path-not-supported",
+			}),
+			onBack: () => {},
+			onToggleFolder: () => {},
+			onSelectFile: () => {},
+		}),
+	);
+
+	assert.match(markup, /plain text fallback line/);
+	assert.match(markup, /纯文本/);
+	assert.doesNotMatch(markup, /纯文本回退/);
 });
 
 test("ProjectCodeBrowserContent preview header uses display path instead of source path", async () => {
@@ -144,13 +211,10 @@ test("ProjectCodeBrowserContent preview header uses display path instead of sour
 			],
 			expandedFolders: new Set<string>(["src"]),
 			selectedFilePath: "demo/src/main.ts",
-			selectedFileState: {
-				status: "ready",
-				filePath: "demo/src/main.ts",
-				content: "export const answer = 42;",
-				size: 25,
-				encoding: "utf-8",
-			},
+			selectedFileState: createReadyState({
+				requestedFilePath: "demo/src/main.ts",
+				resolvedFilePath: "demo/src/main.ts",
+			}),
 			onBack: () => {},
 			onToggleFolder: () => {},
 			onSelectFile: () => {},
@@ -283,13 +347,15 @@ test("ProjectCodeBrowserContent renders highlighted search results and preview f
 			tree: [],
 			expandedFolders: new Set<string>(),
 			selectedFilePath: "src/main.ts",
-			selectedFileState: {
-				status: "ready",
-				filePath: "src/main.ts",
+			selectedFileState: createReadyState({
 				content: ["alpha", "const danger = true;", "omega"].join("\n"),
 				size: 40,
-				encoding: "utf-8",
-			},
+				displayLines: [
+					{ lineNumber: 1, content: "alpha", kind: "code" },
+					{ lineNumber: 2, content: "const danger = true;", kind: "code" },
+					{ lineNumber: 3, content: "omega", kind: "code" },
+				],
+			}),
 			browserMode: "search",
 			searchQuery: "danger",
 			includeFileQuery: "src/",
@@ -370,13 +436,7 @@ test("ProjectCodeBrowserContent strengthens pane borders and code browser readab
 			],
 			expandedFolders: new Set<string>(["src"]),
 			selectedFilePath: "src/main.ts",
-			selectedFileState: {
-				status: "ready",
-				filePath: "src/main.ts",
-				content: "export const answer = 42;",
-				size: 25,
-				encoding: "utf-8",
-			},
+			selectedFileState: createReadyState(),
 			browserMode: "files",
 			fileQuickOpenQuery: "main",
 			onBack: () => {},

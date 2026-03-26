@@ -37,9 +37,9 @@ import {
 	PROJECT_CODE_BROWSER_SEARCH_EMPTY_MESSAGE,
 	PROJECT_CODE_BROWSER_SEARCH_LOADING_MESSAGE,
 	PROJECT_CODE_BROWSER_SEARCH_NO_RESULTS_MESSAGE,
+	buildProjectCodeBrowserFileSuccessState,
 	resolveProjectCodeBrowserBackTarget,
 	resolveProjectCodeBrowserFileFailure,
-	resolveProjectCodeBrowserFileSuccess,
 	resolveProjectCodeBrowserPreviewDecorationForSearchResult,
 	shouldProjectCodeBrowserSearchContent,
 	toggleProjectCodeBrowserFolder,
@@ -56,6 +56,10 @@ import {
 const SEARCH_CONTENT_CONCURRENCY = 4;
 const MAX_CONTENT_MATCHES_PER_FILE = 3;
 const MAX_TOTAL_SEARCH_RESULTS = 50;
+
+type ProjectCodeBrowserSearchFileLoadState =
+	| { status: "ready"; content: string }
+	| { status: "unavailable" | "failed" };
 
 interface ProjectCodeBrowserWorkspaceProps {
 	tree: ProjectCodeBrowserTreeNode[];
@@ -533,10 +537,12 @@ function ProjectCodeBrowserPreview({
 	| "appearance"
 	| "previewDecorations"
 >) {
-	const resolvedSourcePath =
-		selectedFileState.status === "ready" ? selectedFileState.filePath : selectedFilePath || "";
-	const previewDecoration = resolvedSourcePath
-		? previewDecorations?.[resolvedSourcePath]
+	const requestedPathForDecoration =
+		selectedFileState.status === "ready"
+			? selectedFileState.requestedFilePath
+			: selectedFilePath || "";
+	const previewDecoration = requestedPathForDecoration
+		? previewDecorations?.[requestedPathForDecoration]
 		: undefined;
 
 	if (selectedFileState.status === "loading") {
@@ -552,16 +558,26 @@ function ProjectCodeBrowserPreview({
 	}
 
 	if (selectedFileState.status === "ready") {
-		const lineEnd = selectedFileState.content.replace(/\r\n/g, "\n").split("\n").length;
+		const lineEnd = selectedFileState.displayLines.length;
+		const meta =
+			selectedFileState.syntaxLanguageLabel &&
+			selectedFileState.syntaxStatus === "highlighted"
+				? [selectedFileState.syntaxLanguageLabel]
+				: selectedFileState.syntaxLanguageLabel &&
+					  selectedFileState.syntaxStatus === "plain-text"
+					? [selectedFileState.syntaxLanguageLabel, "纯文本回退"]
+					: ["纯文本"];
 		return (
 			<FindingCodeWindow
-				filePath={displayFilePath || selectedFileState.filePath}
+				filePath={displayFilePath || selectedFileState.requestedFilePath}
 				code={selectedFileState.content}
+				displayLines={selectedFileState.displayLines}
 				lineStart={1}
 				lineEnd={lineEnd}
 				highlightStartLine={previewDecoration?.highlightStartLine ?? undefined}
 				highlightEndLine={previewDecoration?.highlightEndLine ?? undefined}
 				focusLine={previewDecoration?.focusLine ?? undefined}
+				meta={meta}
 				variant="detail"
 				appearance={appearance}
 				displayPreset="project-browser"
@@ -889,6 +905,12 @@ export default function ProjectCodeBrowser() {
 	const pendingFileLoadsRef = useRef<
 		Record<string, Promise<ProjectCodeBrowserFileViewState>>
 	>({});
+	const searchFileStatesRef = useRef<
+		Record<string, ProjectCodeBrowserSearchFileLoadState>
+	>({});
+	const pendingSearchFileLoadsRef = useRef<
+		Record<string, Promise<ProjectCodeBrowserSearchFileLoadState>>
+	>({});
 	const searchSessionRef = useRef(0);
 
 	const from =
@@ -951,8 +973,11 @@ export default function ProjectCodeBrowser() {
 			updateFileState(filePath, { status: "loading" });
 			const request = api
 				.getProjectFileContent(id, filePath)
-				.then((response) => {
-					const nextState = resolveProjectCodeBrowserFileSuccess(response);
+				.then(async (response) => {
+					const nextState = await buildProjectCodeBrowserFileSuccessState(
+						filePath,
+						response,
+					);
 					updateFileState(filePath, nextState);
 					return nextState;
 				})
@@ -971,6 +996,62 @@ export default function ProjectCodeBrowser() {
 		[id, project?.source_type, updateFileState],
 	);
 
+	const loadSearchFileState = useCallback(
+		async (filePath: string): Promise<ProjectCodeBrowserSearchFileLoadState> => {
+			const previewState = fileStatesRef.current[filePath];
+			if (previewState?.status === "ready") {
+				return {
+					status: "ready",
+					content: previewState.content,
+				};
+			}
+			if (previewState?.status === "unavailable") {
+				return { status: "unavailable" };
+			}
+			if (previewState?.status === "failed") {
+				return { status: "failed" };
+			}
+
+			const cachedSearchState = searchFileStatesRef.current[filePath];
+			if (cachedSearchState) {
+				return cachedSearchState;
+			}
+
+			const pendingSearchLoad = pendingSearchFileLoadsRef.current[filePath];
+			if (pendingSearchLoad) {
+				return pendingSearchLoad;
+			}
+
+			if (!id || project?.source_type !== "zip") {
+				return { status: "failed" };
+			}
+
+			const request = api
+				.getProjectFileContent(id, filePath)
+				.then((response) => {
+					const nextState: ProjectCodeBrowserSearchFileLoadState = response.is_text
+						? { status: "ready", content: response.content }
+						: { status: "unavailable" };
+					searchFileStatesRef.current[filePath] = nextState;
+					return nextState;
+				})
+				.catch(() => {
+					const nextState: ProjectCodeBrowserSearchFileLoadState = {
+						status: "failed",
+					};
+					searchFileStatesRef.current[filePath] = nextState;
+					return nextState;
+				})
+				.finally(() => {
+					delete pendingSearchFileLoadsRef.current[filePath];
+				});
+
+			pendingSearchFileLoadsRef.current[filePath] = request;
+			return request;
+		},
+		[id, project?.source_type],
+	);
+
 	useEffect(() => {
 		let cancelled = false;
 
@@ -986,6 +1067,8 @@ export default function ProjectCodeBrowser() {
 			setFileStates({});
 			fileStatesRef.current = {};
 			pendingFileLoadsRef.current = {};
+			searchFileStatesRef.current = {};
+			pendingSearchFileLoadsRef.current = {};
 			setBrowserMode("files");
 			setFileQuickOpenQuery("");
 			setSearchQuery("");
@@ -1098,7 +1181,7 @@ export default function ProjectCodeBrowser() {
 		};
 
 		const scanFile = async (file: ProjectCodeBrowserFileEntry) => {
-			const state = await loadFileState(file.path);
+			const state = await loadSearchFileState(file.path);
 			if (cancelled || searchSessionRef.current !== sessionId) return;
 
 			if (state.status === "ready") {
@@ -1151,7 +1234,7 @@ export default function ProjectCodeBrowser() {
 			return () => {
 				cancelled = true;
 			};
-	}, [excludeFileQuery, filteredProjectFiles, includeFileQuery, loadFileState, searchQuery]);
+	}, [filteredProjectFiles, loadSearchFileState, searchQuery]);
 
 	const selectedFileState = useMemo<ProjectCodeBrowserFileViewState>(() => {
 		if (!selectedFilePath) {

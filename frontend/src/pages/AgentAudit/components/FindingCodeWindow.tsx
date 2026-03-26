@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { cn } from "@/shared/utils/utils";
+import type {
+	FindingCodeTokenSegment,
+	FindingCodeWindowDisplayLine,
+} from "@/shared/code-highlighting/types";
 
-export interface FindingCodeWindowDisplayLine {
-  lineNumber: number | null;
-  content: string;
-  kind?: "code" | "placeholder";
-  isHighlighted?: boolean;
-  isFocus?: boolean;
-}
+export type { FindingCodeWindowDisplayLine } from "@/shared/code-highlighting/types";
 
 export type FindingCodeWindowAppearance =
   | "native-explorer"
@@ -35,6 +33,174 @@ interface FindingCodeWindowProps {
   variant?: "default" | "detail";
   appearance?: FindingCodeWindowAppearance;
   displayPreset?: FindingCodeWindowDisplayPreset;
+}
+
+const TOKEN_CLASS_COLOR_GROUPS: Array<{ names: string[]; className: string }> = [
+	{
+		names: ["comment", "quote", "meta"],
+		className: "text-slate-400",
+	},
+	{
+		names: ["keyword", "selector-tag", "doctag"],
+		className: "text-sky-300",
+	},
+	{
+		names: ["string", "regexp", "template-variable"],
+		className: "text-emerald-300",
+	},
+	{
+		names: ["number", "literal", "symbol", "bullet"],
+		className: "text-amber-300",
+	},
+	{
+		names: ["title", "function", "section", "type", "class"],
+		className: "text-cyan-300",
+	},
+	{
+		names: ["attr", "attribute", "property", "variable"],
+		className: "text-blue-300",
+	},
+];
+
+const CODE_FONT_FAMILY =
+	'Consolas, "Liberation Mono", Menlo, Monaco, "Courier New", monospace';
+
+function getCodeTypographyStyle(
+	isDetail: boolean,
+	displayPreset: FindingCodeWindowDisplayPreset,
+): CSSProperties {
+	if (displayPreset === "project-browser") {
+		return {
+			fontFamily: CODE_FONT_FAMILY,
+			lineHeight: 1.52,
+			letterSpacing: "0.012em",
+		};
+	}
+	if (isDetail) {
+		return {
+			fontFamily: CODE_FONT_FAMILY,
+			lineHeight: 1.45,
+			letterSpacing: "0.01em",
+		};
+	}
+	return {
+		fontFamily: CODE_FONT_FAMILY,
+		lineHeight: 1.38,
+		letterSpacing: "0.01em",
+	};
+}
+
+function getLineNumberTypographyStyle(
+	isDetail: boolean,
+	displayPreset: FindingCodeWindowDisplayPreset,
+): CSSProperties {
+	if (displayPreset === "project-browser") {
+		return {
+			fontFamily: CODE_FONT_FAMILY,
+			lineHeight: 1.52,
+			letterSpacing: "0.01em",
+		};
+	}
+	if (isDetail) {
+		return {
+			fontFamily: CODE_FONT_FAMILY,
+			lineHeight: 1.45,
+			letterSpacing: "0.008em",
+		};
+	}
+	return {
+		fontFamily: CODE_FONT_FAMILY,
+		lineHeight: 1.38,
+		letterSpacing: "0.008em",
+	};
+}
+
+function normalizeTokenClassName(tokenClass: string): string {
+	return String(tokenClass || "")
+		.trim()
+		.replace(/^hljs-/, "");
+}
+
+function resolveTokenColorClass(tokenClasses?: string[]): string {
+	if (!Array.isArray(tokenClasses) || tokenClasses.length === 0) {
+		return "";
+	}
+	const normalizedClasses = tokenClasses
+		.map((tokenClass) => normalizeTokenClassName(tokenClass))
+		.filter(Boolean);
+	for (const group of TOKEN_CLASS_COLOR_GROUPS) {
+		if (
+			group.names.some((groupClassName) => normalizedClasses.includes(groupClassName))
+		) {
+			return group.className;
+		}
+	}
+	return "";
+}
+
+function applyLineDecorations(
+	lines: FindingCodeWindowDisplayLine[],
+	options: {
+		focusLine: number | null;
+		highlightStartLine: number | null;
+		highlightEndLine: number | null;
+	},
+): FindingCodeWindowDisplayLine[] {
+	const normalizedHighlightStart =
+		typeof options.highlightStartLine === "number" &&
+		Number.isFinite(options.highlightStartLine)
+			? options.highlightStartLine
+			: null;
+	const normalizedHighlightEnd =
+		typeof options.highlightEndLine === "number" &&
+		Number.isFinite(options.highlightEndLine)
+			? options.highlightEndLine
+			: normalizedHighlightStart;
+	const normalizedFocusLine =
+		typeof options.focusLine === "number" && Number.isFinite(options.focusLine)
+			? options.focusLine
+			: null;
+
+	return lines.map((line) => {
+		if (line.lineNumber === null) {
+			return line;
+		}
+
+		const inHighlightRange =
+			normalizedHighlightStart !== null &&
+			normalizedHighlightEnd !== null &&
+			line.lineNumber >= normalizedHighlightStart &&
+			line.lineNumber <= normalizedHighlightEnd;
+		const isFocusLine =
+			normalizedFocusLine !== null && line.lineNumber === normalizedFocusLine;
+		const nextIsHighlighted = Boolean(line.isHighlighted) || inHighlightRange;
+		const nextIsFocus = Boolean(line.isFocus) || isFocusLine;
+
+		if (nextIsHighlighted === Boolean(line.isHighlighted) && nextIsFocus === Boolean(line.isFocus)) {
+			return line;
+		}
+
+		return {
+			...line,
+			isHighlighted: nextIsHighlighted || undefined,
+			isFocus: nextIsFocus || undefined,
+		};
+	});
+}
+
+function renderTokenizedLine(segments: FindingCodeTokenSegment[]) {
+	if (!segments.length) return " ";
+	return segments.map((segment, index) => {
+		const tokenColorClass = resolveTokenColorClass(segment.tokenClasses);
+		return (
+			<span
+				key={`${index}-${segment.text.slice(0, 16)}`}
+				className={tokenColorClass || undefined}
+			>
+				{segment.text}
+			</span>
+		);
+	});
 }
 
 function formatHeader(
@@ -175,7 +341,6 @@ export default function FindingCodeWindow({
   void title;
   void chrome;
   void badges;
-  void meta;
   const rawLines = useMemo(
     () => String(code || "").replace(/\r\n/g, "\n").split("\n"),
     [code],
@@ -200,26 +365,28 @@ export default function FindingCodeWindow({
   const resolvedDensity = density ?? (variant === "detail" ? "detail" : "compact");
   const isDetail = resolvedDensity === "detail";
   const gridColumns = getGridColumns(appearance, isDetail, displayPreset);
+  const codeTypographyStyle = getCodeTypographyStyle(isDetail, displayPreset);
+  const lineNumberTypographyStyle = getLineNumberTypographyStyle(
+    isDetail,
+    displayPreset,
+  );
   const renderedLines = useMemo(() => {
-    if (Array.isArray(displayLines) && displayLines.length > 0) {
-      return displayLines;
-    }
+    const baseLines = (() => {
+      if (Array.isArray(displayLines) && displayLines.length > 0) {
+        return displayLines;
+      }
 
-    return rawLines.map((line, index) => {
-      const lineNumber = firstLine + index;
-      const isHighlighted =
-        normalizedHighlightStart !== null &&
-        normalizedHighlightEnd !== null &&
-        lineNumber >= normalizedHighlightStart &&
-        lineNumber <= normalizedHighlightEnd;
-      const isFocus = normalizedFocusLine !== null && lineNumber === normalizedFocusLine;
-      return {
-        lineNumber,
+      return rawLines.map((line, index) => ({
+        lineNumber: firstLine + index,
         content: line,
         kind: "code" as const,
-        isHighlighted,
-        isFocus,
-      };
+      }));
+    })();
+
+    return applyLineDecorations(baseLines, {
+      focusLine: normalizedFocusLine,
+      highlightStartLine: normalizedHighlightStart,
+      highlightEndLine: normalizedHighlightEnd,
     });
   }, [
     displayLines,
@@ -249,14 +416,28 @@ export default function FindingCodeWindow({
       )}
     >
       <div className={getHeaderClasses(appearance, isDetail)}>
-        <div
-          title={header}
-          className={cn(
-            "truncate font-mono text-white/78",
-            getHeaderTextClasses(isDetail, displayPreset),
-          )}
-        >
-          {header}
+        <div className="flex items-start justify-between gap-3">
+          <div
+            title={header}
+            className={cn(
+              "min-w-0 truncate font-mono text-white/78",
+              getHeaderTextClasses(isDetail, displayPreset),
+            )}
+          >
+            {header}
+          </div>
+          {meta.length > 0 ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {meta.map((metaItem, index) => (
+                <span
+                  key={`${metaItem}-${index}`}
+                  className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[10px] tracking-[0.08em] text-white/62"
+                >
+                  {metaItem}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -274,6 +455,7 @@ export default function FindingCodeWindow({
             const inHighlightRange = Boolean(line.isHighlighted);
             const isFocusLine = Boolean(line.isFocus);
             const isPlaceholder = line.kind === "placeholder" || line.lineNumber === null;
+            const hasTokenSegments = Array.isArray(line.segments) && line.segments.length > 0;
 
             return (
               <div
@@ -299,6 +481,7 @@ export default function FindingCodeWindow({
                     inHighlightRange && "bg-[#131922] text-white/62",
                     isFocusLine && "bg-[#1a212b] text-white/84",
                   )}
+                  style={lineNumberTypographyStyle}
                 >
                   {line.lineNumber ?? ""}
                 </div>
@@ -310,8 +493,11 @@ export default function FindingCodeWindow({
                     inHighlightRange && "bg-[#101720] text-white/98",
                     isFocusLine && "bg-[#151d27] font-medium text-white shadow-[inset_3px_0_0_rgba(199,255,106,0.72)]",
                   )}
+                  style={codeTypographyStyle}
                 >
-                  {line.content || " "}
+                  {hasTokenSegments
+                    ? renderTokenizedLine(line.segments ?? [])
+                    : line.content || " "}
                 </pre>
               </div>
             );

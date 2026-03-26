@@ -144,6 +144,100 @@ export interface ProjectFileContentResponse {
   created_at?: string;
 }
 
+type ProjectFileContentResponseNormalizationOptions = {
+  requestedFilePath?: string;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readString(
+  value: unknown,
+): string | null {
+  if (typeof value !== "string") return null;
+  return value;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function readBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (value === "true") return true;
+    if (value === "false") return false;
+  }
+  return null;
+}
+
+export function normalizeProjectFileContentResponse(
+  payload: unknown,
+  options?: ProjectFileContentResponseNormalizationOptions,
+): ProjectFileContentResponse | null {
+  const record = asRecord(payload);
+  if (!record) return null;
+
+  const requestedFilePath = String(options?.requestedFilePath || "").trim();
+  const filePath =
+    readString(record.file_path) ??
+    readString(record.filePath) ??
+    requestedFilePath;
+  const content =
+    readString(record.content) ??
+    readString(record.text) ??
+    null;
+  const encoding =
+    readString(record.encoding) ??
+    readString(record.charset) ??
+    "utf-8";
+  const isText = readBoolean(record.is_text ?? record.isText);
+  const size =
+    readFiniteNumber(record.size) ??
+    readFiniteNumber(record.file_size) ??
+    readFiniteNumber(record.byte_length) ??
+    (typeof content === "string" ? content.length : null);
+
+  if (!filePath || typeof content !== "string" || !encoding || size === null) {
+    return null;
+  }
+  if (typeof isText !== "boolean") {
+    return null;
+  }
+
+  const normalized: ProjectFileContentResponse = {
+    file_path: filePath,
+    content,
+    size,
+    encoding,
+    is_text: isText,
+  };
+
+  const isCached = readBoolean(record.is_cached);
+  if (isCached !== null) {
+    normalized.is_cached = isCached;
+  }
+  const createdAt = readString(record.created_at);
+  if (createdAt) {
+    normalized.created_at = createdAt;
+  }
+
+  return normalized;
+}
+
 function encodeProjectFilePath(filePath: string): string {
   return String(filePath || "")
     .split("/")
@@ -252,7 +346,19 @@ export const api = {
         },
       }),
     );
-    return res.data;
+    const normalized = normalizeProjectFileContentResponse(res.data, {
+      requestedFilePath: filePath,
+    });
+    if (normalized) {
+      return normalized;
+    }
+    return {
+      file_path: filePath,
+      content: "",
+      size: 0,
+      encoding: "utf-8",
+      is_text: false,
+    };
   },
 
   async uploadProjectZip(id: string, file: File): Promise<{ message: string; original_filename: string; file_size: number }> {

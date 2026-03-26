@@ -110,19 +110,38 @@ test("resolveProjectCodeBrowserBackTarget prefers history and falls back to proj
 	);
 });
 
-test("resolveProjectCodeBrowserFileSuccess maps text and non-text payloads", async () => {
+test("buildProjectCodeBrowserFileSuccessState preserves requested/resolved paths for highlighted files", async () => {
 	const model = await importOrFail<any>(
 		"../src/pages/project-code-browser/model.ts",
 	);
 
-	const ready = model.resolveProjectCodeBrowserFileSuccess({
-		file_path: "src/main.ts",
+	const ready = await model.buildProjectCodeBrowserFileSuccessState(
+		"src/main.ts",
+		{
+		file_path: "demo/src/main.ts",
 		content: "export const answer = 42;",
 		size: 25,
 		encoding: "utf-8",
 		is_text: true,
-	});
-	const unavailable = model.resolveProjectCodeBrowserFileSuccess({
+	},
+	);
+
+	assert.equal(ready.status, "ready");
+	assert.equal(ready.requestedFilePath, "src/main.ts");
+	assert.equal(ready.resolvedFilePath, "demo/src/main.ts");
+	assert.equal(ready.syntaxStatus, "highlighted");
+	assert.equal(ready.syntaxLanguageKey, "typescript");
+	assert.equal(ready.syntaxLanguageLabel, "TypeScript");
+	assert.equal(ready.displayLines.length, 1);
+	assert.equal(ready.displayLines[0].content, "export const answer = 42;");
+});
+
+test("buildProjectCodeBrowserFileSuccessState returns unavailable for non-text payloads", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const unavailable = await model.buildProjectCodeBrowserFileSuccessState("assets/logo.png", {
 		file_path: "assets/logo.png",
 		content: "",
 		size: 1024,
@@ -130,11 +149,31 @@ test("resolveProjectCodeBrowserFileSuccess maps text and non-text payloads", asy
 		is_text: false,
 	});
 
-	assert.equal(ready.status, "ready");
-	assert.equal(ready.filePath, "src/main.ts");
-	assert.equal(ready.content, "export const answer = 42;");
 	assert.equal(unavailable.status, "unavailable");
 	assert.equal(unavailable.message, "当前文件不是文本文件，暂不支持预览");
+});
+
+test("buildProjectCodeBrowserFileSuccessState keeps displayLines for plain-text fallback", async () => {
+	const model = await importOrFail<any>(
+		"../src/pages/project-code-browser/model.ts",
+	);
+
+	const ready = await model.buildProjectCodeBrowserFileSuccessState(
+		"notes/custom.unknown",
+		{
+			file_path: "notes/custom.unknown",
+			content: "first line\nsecond line\n",
+			size: 22,
+			encoding: "utf-8",
+			is_text: true,
+		},
+	);
+
+	assert.equal(ready.status, "ready");
+	assert.equal(ready.syntaxStatus, "plain-text");
+	assert.equal(ready.syntaxFallbackReason, "path-not-supported");
+	assert.equal(ready.displayLines.length, 3);
+	assert.equal(ready.displayLines[2].content, "");
 });
 
 test("resolveProjectCodeBrowserFileFailure returns the fixed fallback message", async () => {

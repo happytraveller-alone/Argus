@@ -1,4 +1,9 @@
 import type { ProjectFileContentResponse } from "@/shared/api/database";
+import { buildCodeHighlightResult } from "@/shared/code-highlighting";
+import type {
+	CodeHighlightFallbackReason,
+	FindingCodeWindowDisplayLine,
+} from "@/shared/code-highlighting/types";
 
 export interface ProjectCodeBrowserFileEntry {
 	path: string;
@@ -22,10 +27,16 @@ export type ProjectCodeBrowserFileViewState =
 	| { status: "loading" }
 	| {
 			status: "ready";
-			filePath: string;
+			requestedFilePath: string;
+			resolvedFilePath: string;
 			content: string;
 			size: number;
 			encoding: string;
+			displayLines: FindingCodeWindowDisplayLine[];
+			syntaxLanguageKey: string | null;
+			syntaxLanguageLabel: string | null;
+			syntaxStatus: "highlighted" | "plain-text";
+			syntaxFallbackReason: CodeHighlightFallbackReason | null;
 	  }
 	| { status: "unavailable"; message: string }
 	| { status: "failed"; message: string };
@@ -521,9 +532,10 @@ export function resolveProjectCodeBrowserBackTarget(input: {
 	return normalizedFrom || PROJECT_CODE_BROWSER_FALLBACK_PATH;
 }
 
-export function resolveProjectCodeBrowserFileSuccess(
+export async function buildProjectCodeBrowserFileSuccessState(
+	requestedFilePath: string,
 	response: ProjectFileContentResponse,
-): ProjectCodeBrowserFileViewState {
+): Promise<ProjectCodeBrowserFileViewState> {
 	if (!response.is_text) {
 		return {
 			status: "unavailable",
@@ -531,12 +543,36 @@ export function resolveProjectCodeBrowserFileSuccess(
 		};
 	}
 
+	const normalizedRequestedPath = String(requestedFilePath || response.file_path || "").trim();
+	const normalizedResolvedPath = String(response.file_path || normalizedRequestedPath).trim();
+	const initialHighlightResult = await buildCodeHighlightResult({
+		filePath: normalizedRequestedPath,
+		content: response.content,
+		lineStart: 1,
+	});
+	const highlightResult =
+		initialHighlightResult.fallbackReason === "path-not-supported" &&
+		normalizedResolvedPath &&
+		normalizedResolvedPath !== normalizedRequestedPath
+			? await buildCodeHighlightResult({
+					filePath: normalizedResolvedPath,
+					content: response.content,
+					lineStart: 1,
+			  })
+			: initialHighlightResult;
+
 	return {
 		status: "ready",
-		filePath: response.file_path,
+		requestedFilePath: normalizedRequestedPath,
+		resolvedFilePath: normalizedResolvedPath,
 		content: response.content,
 		size: response.size,
 		encoding: response.encoding,
+		displayLines: highlightResult.lines,
+		syntaxLanguageKey: highlightResult.languageKey,
+		syntaxLanguageLabel: highlightResult.languageLabel,
+		syntaxStatus: highlightResult.status,
+		syntaxFallbackReason: highlightResult.fallbackReason,
 	};
 }
 
