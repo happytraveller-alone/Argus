@@ -58,8 +58,8 @@ Windows 请使用 Docker Desktop + Linux containers。
 docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
-默认 `docker compose up --build` 会同时构建并运行一组 runner 预热 / 自检容器，作为启动期 preflight / warmup，用来确认本地扫描镜像和命令已经可用。
-这些容器启动后退出属于预期行为，并非故障；真正执行扫描时，backend 会再按镜像名动态拉起临时 runner 容器。
+默认 `docker compose up --build` 的 compose 层只拉起常驻服务，compose 不再声明一次性 runner 预热 / 自检服务。
+backend 启动时会自行执行 runner preflight，校验 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` 指向的镜像和命令是否可用；真正执行扫描时，backend 仍会通过 Docker SDK 按镜像名动态拉起临时 runner 容器。
 
 如需查看可选的 legacy 包装脚本说明，请参考 [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md)。
 

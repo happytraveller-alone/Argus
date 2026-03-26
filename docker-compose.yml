@@ -2,11 +2,10 @@
 # VulHunter v3.0.4 Docker Compose 日常开发默认配置
 # =============================================
 # 默认入口: docker compose up --build
-# 注意: backend 依赖下方 runner services 进行启动期 runner preflight / warmup。
-# 这些 runner 是一次性预热/自检容器，不是常驻服务；执行完检查后按预期退出。
-# `restart: "no"` 与 `condition: service_completed_successfully` 共同构成本地默认可用性的启动门禁。
-# 真正执行扫描时，backend 会通过 Docker SDK 按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`
-# 动态拉起临时 runner 容器；下方 compose services 仅负责本地镜像预热与可执行性校验。
+# 注意: backend 会在启动期通过 Docker SDK 执行 runner preflight。
+# 这些自检容器是一次性容器，成功或失败后都会立即删除，不作为 compose service 常驻。
+# 真正执行扫描时，backend 会继续按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`
+# 动态拉起临时 runner 容器。
 # 全量本地构建: docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 # 预构建镜像部署模板: deploy/compose/docker-compose.prod.yml / docker-compose.prod.cn.yml
 
@@ -79,6 +78,21 @@ services:
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
+      RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
+      RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-false}"
+      RUNNER_PREFLIGHT_TIMEOUT_SECONDS: "${RUNNER_PREFLIGHT_TIMEOUT_SECONDS:-30}"
+      RUNNER_PREFLIGHT_MAX_CONCURRENCY: "${RUNNER_PREFLIGHT_MAX_CONCURRENCY:-2}"
+      RUNNER_PREFLIGHT_BUILD_CONTEXT: /app
+      DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+      BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+      BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+      BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
+      BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+      BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
+      BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
+      BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
+      BACKEND_INSTALL_YASA: ${BACKEND_INSTALL_YASA:-1}
+      YASA_VERSION: ${YASA_VERSION:-v0.2.33}
       SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}
@@ -118,167 +132,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      yasa-runner:
-        condition: service_completed_successfully
-      opengrep-runner:
-        condition: service_completed_successfully
-      bandit-runner:
-        condition: service_completed_successfully
-      gitleaks-runner:
-        condition: service_completed_successfully
-      phpstan-runner:
-        condition: service_completed_successfully
-      pmd-runner:
-        condition: service_completed_successfully
-      flow-parser-runner:
-        condition: service_completed_successfully
-    networks:
-      - vulhunter-network
-
-  # One-shot runner preflight / warmup services for local development.
-  # They build local scanner images and verify the command is runnable.
-  # `restart: "no"` is intentional because these checks are expected to exit after completion.
-  yasa-runner:
-    image: vulhunter/yasa-runner-local:latest
-    build:
-      context: ./backend
-      dockerfile: ./docker/yasa-runner.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - BACKEND_INSTALL_YASA=${BACKEND_INSTALL_YASA:-1}
-        - YASA_VERSION=${YASA_VERSION:-v0.2.33}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    restart: "no"
-    networks:
-      - vulhunter-network
-
-  opengrep-runner:
-    image: vulhunter/opengrep-runner-local:latest
-    build:
-      context: ./backend
-      dockerfile: ./docker/opengrep-runner.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
-        - BACKEND_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    restart: "no"
-    networks:
-      - vulhunter-network
-
-  bandit-runner:
-    image: vulhunter/bandit-runner-local:latest
-    build:
-      context: ./backend
-      dockerfile: ./docker/bandit-runner.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
-        - BACKEND_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-        - BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    restart: "no"
-    networks:
-      - vulhunter-network
-
-  gitleaks-runner:
-    image: vulhunter/gitleaks-runner-local:latest
-    build:
-      context: ./backend
-      dockerfile: ./docker/gitleaks-runner.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
-        - BACKEND_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    restart: "no"
-    networks:
-      - vulhunter-network
-
-  phpstan-runner:
-    image: vulhunter/phpstan-runner-local:latest
-    build:
-      context: ./backend
-      dockerfile: ./docker/phpstan-runner.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
-        - BACKEND_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    restart: "no"
-    networks:
-      - vulhunter-network
-
-  pmd-runner:
-    image: vulhunter/pmd-runner-local:latest
-    build:
-      context: ./backend
-      dockerfile: ./docker/pmd-runner.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    restart: "no"
-    networks:
-      - vulhunter-network
-
-  flow-parser-runner:
-    image: vulhunter/flow-parser-runner-local:latest
-    build:
-      context: ./backend
-      dockerfile: ./docker/flow-parser-runner.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
-        - BACKEND_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-        - BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
-        - BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    restart: "no"
     networks:
       - vulhunter-network
 

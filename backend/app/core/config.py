@@ -119,6 +119,10 @@ class Settings(BaseSettings):
     SCANNER_GITLEAKS_IMAGE: str = "vulhunter/gitleaks-runner:latest"
     SCANNER_PHPSTAN_IMAGE: str = "vulhunter/phpstan-runner:latest"
     SCANNER_PMD_IMAGE: str = "vulhunter/pmd-runner:latest"
+    RUNNER_PREFLIGHT_ENABLED: bool = True
+    RUNNER_PREFLIGHT_STRICT: bool = False
+    RUNNER_PREFLIGHT_TIMEOUT_SECONDS: int = 30
+    RUNNER_PREFLIGHT_MAX_CONCURRENCY: int = 2
     BACKEND_VENV_PATH: str = "/opt/backend-venv"
     SEED_ARCHIVE_PROBE_ATTEMPTS: int = 2
     SEED_ARCHIVE_PROBE_TIMEOUT_SECONDS: int = 5

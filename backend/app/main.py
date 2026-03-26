@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
 from app.services.llm_rule.repo_cache_manager import GlobalRepoCacheManager
+from app.services.runner_preflight import run_configured_runner_preflights
 from app.models.agent_task import AgentTask, AgentTaskStatus
 from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
@@ -403,6 +404,12 @@ async def lifespan(app: FastAPI):
         await recover_interrupted_tasks()
     except Exception as e:
         logger.warning(f"恢复中断任务失败: {e}")
+
+    try:
+        await run_configured_runner_preflights()
+    except Exception as e:
+        logger.error(f"runner preflight 失败: {e}")
+        raise
 
     # 检查 Agent 服务
     logger.info("检查 Agent 核心服务...")

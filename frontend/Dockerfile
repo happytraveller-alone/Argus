@@ -54,11 +54,12 @@ FROM pnpm-base AS dev
 
 WORKDIR /app
 
-COPY --chmod=755 scripts/dev-entrypoint.sh /usr/local/bin/frontend-dev-entrypoint.sh
+COPY scripts/dev-launcher.mjs /usr/local/bin/frontend-dev-launcher.mjs
 
 EXPOSE 5173
 
-CMD ["/bin/sh", "/usr/local/bin/frontend-dev-entrypoint.sh"]
+ENTRYPOINT ["node"]
+CMD ["/usr/local/bin/frontend-dev-launcher.mjs"]
 
 FROM pnpm-base AS builder
 
@@ -128,16 +129,18 @@ RUN pnpm build
 # =============================================
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/nginx:alpine
 
+RUN apk add --no-cache nodejs
+
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # 复制 Nginx 配置 (包含 SSE 反向代理配置)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 复制启动脚本
-COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
+# 复制运行时注入程序
+COPY scripts/prod-runtime.mjs /usr/local/bin/frontend-runtime.mjs
 
 EXPOSE 80
 
-ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
+ENTRYPOINT ["node", "/usr/local/bin/frontend-runtime.mjs"]
 CMD ["nginx", "-g", "daemon off;"]

@@ -58,8 +58,8 @@ For the full local build path, add the `docker-compose.full.yml` overlay:
 docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
-The default `docker compose up --build` path also builds and runs a set of runner preflight / warmup containers so local scanner images and commands are verified before backend starts.
-Those runner preflight / warmup containers are expected to stop after the check; exiting after the check is expected, and actual scan execution still happens in temporary runner containers started on demand by backend.
+The default `docker compose up --build` path now only brings up the long-lived compose services and no longer declares one-shot compose runner warmup services.
+Instead, backend runs runner preflight during startup to verify the images and commands behind `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`, and actual scan execution still happens in temporary runner containers started on demand by backend through the Docker SDK.
 
 For optional legacy wrapper helpers, see [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md).
 

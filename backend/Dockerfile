@@ -218,6 +218,10 @@ ENV YASA_REAL_BIN=/opt/yasa/bin/yasa-engine.real
 ENV YASA_ENGINE_WRAPPER_BIN=/opt/yasa/bin/yasa-engine
 ENV YASA_WRAPPER_BIN=/opt/yasa/bin/yasa
 
+COPY --chmod=755 app/runtime/launchers/yasa_engine_launcher.py /tmp/yasa-launchers/yasa-engine
+COPY --chmod=755 app/runtime/launchers/yasa_launcher.py /tmp/yasa-launchers/yasa
+COPY --chmod=755 app/runtime/launchers/yasa_uast4py_launcher.py /tmp/yasa-launchers/uast4py
+
 # 只安装运行时依赖（不需要 gcc）；CJK 字体可通过 BACKEND_INSTALL_CJK_FONTS 控制
 ARG BACKEND_INSTALL_CJK_FONTS
 RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
@@ -521,37 +525,16 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
         echo "failed to install YASA Python parser dependencies" >&2; \
         exit 1; \
       fi; \
-      printf '%s\n' '#!/usr/bin/env bash' \
-        'set -euo pipefail' \
-        'export PYTHONPATH="/opt/yasa/engine/deps/uast4py-src${PYTHONPATH:+:$PYTHONPATH}"' \
-        'exec "${YASA_HOME}/uast4py-venv/bin/python" -m uast.builder "$@"' \
-        > "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
+      cp /tmp/yasa-launchers/uast4py "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
       chmod +x "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
     else \
       download_uast_bin "uast4go-${UAST_PLATFORM}" "${YASA_ENGINE_DIR}/deps/uast4go/uast4go"; \
       download_uast_bin "uast4py-${UAST_PLATFORM}" "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
     fi; \
     ln -sfn "${YASA_ENGINE_DIR}/resource" "${YASA_HOME}/resource"; \
-    printf '%s\n' '#!/usr/bin/env bash' \
-      'set -euo pipefail' \
-      'ENGINE_BIN="/opt/yasa/bin/yasa-engine.real"' \
-      'if [[ ! -x "$ENGINE_BIN" ]]; then' \
-      '  echo "yasa-engine binary not found: $ENGINE_BIN" >&2' \
-      '  exit 127' \
-      'fi' \
-      'exec "$ENGINE_BIN" "$@"' \
-      > "${YASA_ENGINE_WRAPPER_BIN}"; \
+    cp /tmp/yasa-launchers/yasa-engine "${YASA_ENGINE_WRAPPER_BIN}"; \
     chmod +x "${YASA_ENGINE_WRAPPER_BIN}"; \
-    printf '%s\n' '#!/usr/bin/env bash' \
-      'set -euo pipefail' \
-      'ENGINE_ROOT="/opt/yasa/engine"' \
-      'ENGINE="/opt/yasa/bin/yasa-engine"' \
-      'if [[ ! -x "$ENGINE" ]]; then' \
-      '  echo "YASA engine wrapper not found: $ENGINE" >&2' \
-      '  exit 127' \
-      'fi' \
-      '(cd "$ENGINE_ROOT" && "$ENGINE" "$@")' \
-      > "${YASA_WRAPPER_BIN}"; \
+    cp /tmp/yasa-launchers/yasa "${YASA_WRAPPER_BIN}"; \
     chmod +x "${YASA_WRAPPER_BIN}"; \
     ln -sf "${YASA_WRAPPER_BIN}" /usr/local/bin/yasa; \
     ln -sf "${YASA_ENGINE_WRAPPER_BIN}" /usr/local/bin/yasa-engine; \
@@ -564,7 +547,6 @@ RUN --mount=type=cache,id=vulhunter-backend-tool-archive,target=/var/cache/vulhu
 FROM runtime-base AS dev-runtime
 
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
-COPY --chmod=755 scripts/dev-entrypoint.sh /usr/local/bin/backend-dev-entrypoint.sh
 
 RUN set -eux; \
     for site_packages_dir in $(python3 -c 'import site; [print(path) for path in site.getsitepackages() if "site-packages" in path]'); do \
@@ -576,12 +558,13 @@ RUN set -eux; \
 ENV VIRTUAL_ENV=/opt/backend-venv
 ENV PATH=/opt/backend-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
+ENV RUNNER_PREFLIGHT_BUILD_CONTEXT=/app
 
 RUN mkdir -p /app /opt/backend-venv /root/.cache/uv /app/uploads/zip_files /app/data/mcp
 
 EXPOSE 8000
 
-CMD ["/bin/sh", "/usr/local/bin/backend-dev-entrypoint.sh"]
+CMD ["python3", "-m", "app.runtime.container_startup", "dev"]
 
 FROM runtime-base AS runtime
 
@@ -598,6 +581,7 @@ RUN set -eux; \
 ENV VIRTUAL_ENV=/opt/backend-venv
 ENV PATH=/opt/backend-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
+ENV RUNNER_PREFLIGHT_BUILD_CONTEXT=/opt/backend-build-context
 
 # MCP / QMD 持久化目录
 ENV XDG_DATA_HOME=/app/data/mcp/xdg-data
@@ -612,16 +596,17 @@ COPY app /app/app
 COPY static /app/static
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
-COPY --chmod=755 docker-entrypoint.sh /app/docker-entrypoint.sh
-COPY --chmod=755 scripts/install_codex_skills.sh /app/scripts/install_codex_skills.sh
 COPY scripts/build_skill_registry.py /app/scripts/build_skill_registry.py
 COPY scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
+COPY docker /opt/backend-build-context/docker
+COPY app /opt/backend-build-context/app
+COPY scripts/package_source_selector.py /opt/backend-build-context/scripts/package_source_selector.py
+COPY scripts/flow_parser_runner.py /opt/backend-build-context/scripts/flow_parser_runner.py
 
 # 创建运行时持久化目录
-RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/xdg-config
+RUN mkdir -p /app/uploads/zip_files /app/data/mcp /app/data/mcp/xdg-config /opt/backend-build-context/scripts
 
 # 暴露端口
 EXPOSE 8000
 
-# 启动命令 - 使用启动脚本自动执行数据库迁移
-CMD ["/bin/sh", "/app/docker-entrypoint.sh"]
+CMD ["python3", "-m", "app.runtime.container_startup", "prod"]

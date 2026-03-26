@@ -22,6 +22,8 @@ ENV XDG_CONFIG_HOME=/opt/opengrep/xdg-config
 ENV XDG_DATA_HOME=/opt/opengrep/xdg-data
 ENV XDG_CACHE_HOME=/opt/opengrep/xdg-cache
 
+COPY --chmod=755 app/runtime/launchers/opengrep_launcher.py ${OPENGREP_WRAPPER_BIN}
+
 RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-opengrep-runner-apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=vulhunter-opengrep-runner-tool-archive,target=/var/cache/vulhunter-tools \
@@ -79,8 +81,6 @@ RUN --mount=type=cache,id=vulhunter-opengrep-runner-apt-lists,target=/var/lib/ap
     fi; \
     cp "${OG_CACHE}" "${OPENGREP_REAL_BIN}"; \
     chmod +x "${OPENGREP_REAL_BIN}"; \
-    printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY="*"\nexport no_proxy="*"\nexec /usr/local/bin/opengrep.real "$@"\n' > "${OPENGREP_WRAPPER_BIN}"; \
-    chmod +x "${OPENGREP_WRAPPER_BIN}"; \
     ln -sf "${OPENGREP_REAL_BIN}" /usr/local/bin/opengrep.real; \
     ln -sf "${OPENGREP_WRAPPER_BIN}" /usr/local/bin/opengrep; \
     opengrep --version >/dev/null

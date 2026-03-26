@@ -29,6 +29,10 @@ ENV YASA_ENGINE_DIR=/opt/yasa/engine
 ENV YASA_REAL_BIN=/opt/yasa/bin/yasa-engine.real
 ENV YASA_ENGINE_WRAPPER_BIN=/opt/yasa/bin/yasa-engine
 ENV YASA_WRAPPER_BIN=/opt/yasa/bin/yasa
+
+COPY --chmod=755 app/runtime/launchers/yasa_engine_launcher.py /tmp/yasa-launchers/yasa-engine
+COPY --chmod=755 app/runtime/launchers/yasa_launcher.py /tmp/yasa-launchers/yasa
+COPY --chmod=755 app/runtime/launchers/yasa_uast4py_launcher.py /tmp/yasa-launchers/uast4py
 ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}
 
 COPY scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
@@ -210,33 +214,12 @@ RUN --mount=type=cache,id=vulhunter-yasa-runner-apt-lists,target=/var/lib/apt/li
       echo "failed to install YASA Python parser dependencies" >&2; \
       exit 1; \
     fi; \
-    printf '%s\n' '#!/usr/bin/env bash' \
-      'set -euo pipefail' \
-      'export PYTHONPATH="/opt/yasa/engine/deps/uast4py-src${PYTHONPATH:+:$PYTHONPATH}"' \
-      'exec "/opt/yasa/uast4py-venv/bin/python" -m uast.builder "$@"' \
-      > "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
+    cp /tmp/yasa-launchers/uast4py "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
     chmod +x "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \
     ln -sfn "${YASA_ENGINE_DIR}/resource" "${YASA_HOME}/resource"; \
-    printf '%s\n' '#!/usr/bin/env bash' \
-      'set -euo pipefail' \
-      'ENGINE_BIN="/opt/yasa/bin/yasa-engine.real"' \
-      'if [[ ! -x "$ENGINE_BIN" ]]; then' \
-      '  echo "yasa-engine binary not found: $ENGINE_BIN" >&2' \
-      '  exit 127' \
-      'fi' \
-      'exec "$ENGINE_BIN" "$@"' \
-      > "${YASA_ENGINE_WRAPPER_BIN}"; \
+    cp /tmp/yasa-launchers/yasa-engine "${YASA_ENGINE_WRAPPER_BIN}"; \
     chmod +x "${YASA_ENGINE_WRAPPER_BIN}"; \
-    printf '%s\n' '#!/usr/bin/env bash' \
-      'set -euo pipefail' \
-      'ENGINE_ROOT="/opt/yasa/engine"' \
-      'ENGINE="/opt/yasa/bin/yasa-engine"' \
-      'if [[ ! -x "$ENGINE" ]]; then' \
-      '  echo "YASA engine wrapper not found: $ENGINE" >&2' \
-      '  exit 127' \
-      'fi' \
-      '(cd "$ENGINE_ROOT" && "$ENGINE" "$@")' \
-      > "${YASA_WRAPPER_BIN}"; \
+    cp /tmp/yasa-launchers/yasa "${YASA_WRAPPER_BIN}"; \
     chmod +x "${YASA_WRAPPER_BIN}"; \
     mkdir -p /opt/yasa-runtime/bin /opt/yasa-runtime/engine/deps/uast4go /opt/yasa-runtime/engine/deps/uast4py; \
     cp "${YASA_REAL_BIN}" /opt/yasa-runtime/bin/yasa-engine.real; \
@@ -268,6 +251,10 @@ ENV YASA_BIN_DIR=/opt/yasa/bin
 ENV YASA_RESOURCE_DIR=/opt/yasa/resource
 ENV PATH=/opt/yasa/bin:${PATH}
 
+COPY --chmod=755 app/runtime/launchers/yasa_engine_launcher.py /tmp/yasa-launchers/yasa-engine
+COPY --chmod=755 app/runtime/launchers/yasa_launcher.py /tmp/yasa-launchers/yasa
+COPY --chmod=755 app/runtime/launchers/yasa_uast4py_launcher.py /tmp/yasa-launchers/uast4py
+
 RUN --mount=type=cache,id=vulhunter-yasa-runner-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-yasa-runner-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
@@ -290,7 +277,7 @@ RUN --mount=type=cache,id=vulhunter-yasa-runner-runtime-apt-lists,target=/var/li
     }; \
     install_runtime_packages() { \
       apt-get update && \
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates; \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates; \
     }; \
     write_sources "${BACKEND_APT_MIRROR_PRIMARY}" "${BACKEND_APT_SECURITY_PRIMARY}"; \
     if ! install_runtime_packages; then \
@@ -312,4 +299,4 @@ RUN set -eux; \
 
 WORKDIR /scan
 
-CMD ["/bin/sh"]
+CMD ["/opt/yasa/bin/yasa", "--version"]

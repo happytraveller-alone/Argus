@@ -2,15 +2,23 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+RUNNER_SERVICE_NAMES = (
+    "yasa-runner",
+    "opengrep-runner",
+    "bandit-runner",
+    "gitleaks-runner",
+    "phpstan-runner",
+    "pmd-runner",
+    "flow-parser-runner",
+)
 
 
-def test_default_compose_uses_local_images_by_default() -> None:
+def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     compose_path = REPO_ROOT / "docker-compose.yml"
     full_overlay_path = REPO_ROOT / "docker-compose.full.yml"
     yasa_host_overlay_path = REPO_ROOT / "docker-compose.yasa-host.yml"
     backend_dockerfile = REPO_ROOT / "backend" / "Dockerfile"
     frontend_dockerfile = REPO_ROOT / "frontend" / "Dockerfile"
-    backend_entrypoint = REPO_ROOT / "backend" / "scripts" / "dev-entrypoint.sh"
 
     assert compose_path.exists()
     assert full_overlay_path.exists()
@@ -22,16 +30,12 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert not (REPO_ROOT / "docker-compose.prod.cn.yml").exists()
 
     compose_text = compose_path.read_text(encoding="utf-8")
-    flow_parser_compose_block = compose_text.split("\n  flow-parser-runner:\n", maxsplit=1)[1].split(
-        "\n  frontend:\n",
-        maxsplit=1,
-    )[0]
-    assert "runner preflight / warmup" in compose_text
-    assert "一次性预热/自检容器" in compose_text
-    assert 'restart: "no"' in compose_text
-    assert "执行完检查后按预期退出" in compose_text
-    assert "Docker SDK" in compose_text
-    assert "动态拉起临时 runner 容器" in compose_text
+    assert "runner preflight / warmup" not in compose_text
+    assert "一次性预热/自检容器" not in compose_text
+    assert "执行完检查后按预期退出" not in compose_text
+    assert 'condition: service_completed_successfully' not in compose_text
+    for runner_service in RUNNER_SERVICE_NAMES:
+        assert f"\n  {runner_service}:" not in compose_text
     assert "image: vulhunter/backend-dev-local:latest" in compose_text
     assert "image: vulhunter/frontend-local:latest" in compose_text
     assert "vulhunter/backend-local:latest" not in compose_text
@@ -67,6 +71,7 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}" in compose_text
     assert "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}" in compose_text
     assert "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-vulhunter/phpstan-runner-local:latest}" in compose_text
+    assert "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}" in compose_text
     assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}" in compose_text
     assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
     assert 'FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"' in compose_text
@@ -75,31 +80,12 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert "scan_workspace:/tmp/vulhunter/scans" in compose_text
     assert "/var/run/docker.sock:/var/run/docker.sock" in compose_text
     assert 'MCP_REQUIRE_ALL_READY_ON_STARTUP: "false"' in compose_text
-    assert "\n  yasa-runner:" in compose_text
-    assert "image: vulhunter/yasa-runner-local:latest" in compose_text
-    assert "dockerfile: ./docker/yasa-runner.Dockerfile" in compose_text
     assert '/bin/sh", "-lc"' not in compose_text
-    assert "\n  opengrep-runner:" in compose_text
-    assert "image: vulhunter/opengrep-runner-local:latest" in compose_text
-    assert "dockerfile: ./docker/opengrep-runner.Dockerfile" in compose_text
-    assert "\n  bandit-runner:" in compose_text
-    assert "image: vulhunter/bandit-runner-local:latest" in compose_text
-    assert "dockerfile: ./docker/bandit-runner.Dockerfile" in compose_text
-    assert "\n  gitleaks-runner:" in compose_text
-    assert "image: vulhunter/gitleaks-runner-local:latest" in compose_text
-    assert "dockerfile: ./docker/gitleaks-runner.Dockerfile" in compose_text
-    assert "\n  phpstan-runner:" in compose_text
-    assert "image: vulhunter/phpstan-runner-local:latest" in compose_text
-    assert "dockerfile: ./docker/phpstan-runner.Dockerfile" in compose_text
-    assert "\n  flow-parser-runner:" in compose_text
-    assert "image: vulhunter/flow-parser-runner-local:latest" in compose_text
-    assert "dockerfile: ./docker/flow-parser-runner.Dockerfile" in compose_text
     assert (
         "- BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-"
         "https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,"
         "https://pypi.org/simple}"
-    ) in flow_parser_compose_block
-    assert 'condition: service_completed_successfully' in compose_text
+    ) in compose_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in compose_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in compose_text
     assert "BACKEND_NPM_REGISTRY_CANDIDATES" not in compose_text
@@ -120,11 +106,12 @@ def test_default_compose_uses_local_images_by_default() -> None:
 
     backend_text = backend_dockerfile.read_text(encoding="utf-8")
     assert "FROM runtime-base AS dev-runtime" in backend_text
-    assert "dev-entrypoint.sh" in backend_text
     assert 'COPY scripts/package_source_selector.py /usr/local/bin/package_source_selector.py' in backend_text
     assert "ARG BACKEND_INSTALL_YASA=1" in backend_text
     assert "ARG YASA_VERSION=v0.2.33" in backend_text
-    assert 'CMD ["/bin/sh", "/usr/local/bin/backend-dev-entrypoint.sh"]' in backend_text
+    assert "backend-dev-entrypoint.sh" not in backend_text
+    assert 'CMD ["/bin/sh", "/usr/local/bin/backend-dev-entrypoint.sh"]' not in backend_text
+    assert 'CMD ["/bin/sh", "/app/docker-entrypoint.sh"]' not in backend_text
     assert "https://github.com/antgroup/YASA-Engine/archive/refs/tags/${YASA_VERSION}.tar.gz" in backend_text
     assert 'ordered_indexes="$(order_indexes "${pypi_index_candidates}")"' in backend_text
     assert 'while IFS= read -r index_url; do' in backend_text
@@ -144,35 +131,20 @@ def test_default_compose_uses_local_images_by_default() -> None:
 
     frontend_text = frontend_dockerfile.read_text(encoding="utf-8")
     assert " AS dev" in frontend_text
-    assert 'CMD ["/bin/sh", "/usr/local/bin/frontend-dev-entrypoint.sh"]' in frontend_text
-    assert 'ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]' in frontend_text
-
-    entrypoint_text = backend_entrypoint.read_text(encoding="utf-8")
-    assert 'VENV_DIR="${BACKEND_VENV_PATH:-/opt/backend-venv}"' in entrypoint_text
-    assert "uv sync --active --frozen --no-dev" in entrypoint_text
-    assert 'uv venv --clear "${VENV_DIR}"' in entrypoint_text
-    assert "app.main:app --reload" in entrypoint_text
-    assert 'rm -rf "${VENV_DIR}"' not in entrypoint_text
-    assert "select_pypi_index()" in entrypoint_text
-    assert 'export UV_INDEX_URL="${selected_pypi_index}"' in entrypoint_text
-    assert 'export PIP_INDEX_URL="${selected_pypi_index}"' in entrypoint_text
+    assert "frontend-dev-entrypoint.sh" not in frontend_text
+    assert 'CMD ["/bin/sh", "/usr/local/bin/frontend-dev-entrypoint.sh"]' not in frontend_text
+    assert 'ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]' not in frontend_text
 
 
 def test_full_overlay_restores_full_local_build_defaults() -> None:
     full_overlay_text = (REPO_ROOT / "docker-compose.full.yml").read_text(encoding="utf-8")
-    flow_parser_full_overlay_block = full_overlay_text.split(
-        "\n  flow-parser-runner:\n",
-        maxsplit=1,
-    )[1].split(
-        "\n  frontend:\n",
-        maxsplit=1,
-    )[0]
 
-    assert "runner preflight / warmup" in full_overlay_text
-    assert "一次性预热/自检容器" in full_overlay_text
-    assert "执行完检查后按预期退出" in full_overlay_text
-    assert "Docker SDK" in full_overlay_text
-    assert "动态拉起临时 runner 容器" in full_overlay_text
+    assert "runner preflight / warmup" not in full_overlay_text
+    assert "一次性预热/自检容器" not in full_overlay_text
+    assert "执行完检查后按预期退出" not in full_overlay_text
+    assert 'condition: service_completed_successfully' not in full_overlay_text
+    for runner_service in RUNNER_SERVICE_NAMES:
+        assert f"\n  {runner_service}:" not in full_overlay_text
     assert "vulhunter/backend-local:latest" in full_overlay_text
     assert "vulhunter/backend-dev-local:latest" not in full_overlay_text
     assert "vulhunter/frontend-local:latest" in full_overlay_text
@@ -184,30 +156,18 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert 'CODEX_SKILLS_AUTO_INSTALL: "false"' in full_overlay_text
     assert "- BACKEND_INSTALL_YASA=${BACKEND_INSTALL_YASA:-1}" in full_overlay_text
     assert "- YASA_VERSION=${YASA_VERSION:-v0.2.33}" in full_overlay_text
-    assert "\n  yasa-runner:" in full_overlay_text
-    assert "image: vulhunter/yasa-runner-local:latest" in full_overlay_text
-    assert "dockerfile: ./docker/yasa-runner.Dockerfile" in full_overlay_text
     assert "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}" in full_overlay_text
     assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}" in full_overlay_text
     assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}" in full_overlay_text
     assert "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}" in full_overlay_text
     assert "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-vulhunter/phpstan-runner-local:latest}" in full_overlay_text
+    assert "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}" in full_overlay_text
     assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}" in full_overlay_text
-    assert "\n  opengrep-runner:" in full_overlay_text
-    assert "dockerfile: ./docker/opengrep-runner.Dockerfile" in full_overlay_text
-    assert "\n  bandit-runner:" in full_overlay_text
-    assert "dockerfile: ./docker/bandit-runner.Dockerfile" in full_overlay_text
-    assert "\n  gitleaks-runner:" in full_overlay_text
-    assert "dockerfile: ./docker/gitleaks-runner.Dockerfile" in full_overlay_text
-    assert "\n  phpstan-runner:" in full_overlay_text
-    assert "dockerfile: ./docker/phpstan-runner.Dockerfile" in full_overlay_text
-    assert "\n  flow-parser-runner:" in full_overlay_text
-    assert "dockerfile: ./docker/flow-parser-runner.Dockerfile" in full_overlay_text
     assert (
         "- BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-"
         "https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,"
         "https://pypi.org/simple}"
-    ) in flow_parser_full_overlay_block
+    ) in full_overlay_text
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in full_overlay_text
     assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in full_overlay_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in full_overlay_text
@@ -229,23 +189,8 @@ def test_backend_dockerfile_builds_linux_arm64_yasa_from_source() -> None:
     assert 'CGO_ENABLED=0 GOOS=linux GOARCH="${YASA_GO_ARCH}"' in backend_text
     assert 'go build -o "${YASA_ENGINE_DIR}/deps/uast4go/uast4go" .' in backend_text
     assert 'python3 -m venv "${YASA_HOME}/uast4py-venv"; \\' in backend_text
-    assert (
-        'exec "${YASA_HOME}/uast4py-venv/bin/python" -m uast.builder "$@"'
-    ) in backend_text
-
-
-def test_frontend_dev_entrypoint_prints_ready_banner() -> None:
-    frontend_entrypoint = (
-        REPO_ROOT / "frontend" / "scripts" / "dev-entrypoint.sh"
-    ).read_text(encoding="utf-8")
-
-    assert 'export BROWSER="${BROWSER:-none}"' in frontend_entrypoint
-    assert 'FRONTEND_PUBLIC_URL="${FRONTEND_PUBLIC_URL:-http://localhost:3000}"' in frontend_entrypoint
-    assert 'BACKEND_PUBLIC_URL="${BACKEND_PUBLIC_URL:-http://localhost:8000}"' in frontend_entrypoint
-    assert 'VITE_READY_URL="http://127.0.0.1:${FRONTEND_DEV_PORT:-5173}/"' in frontend_entrypoint
-    assert 'curl -fsS "${VITE_READY_URL}"' in frontend_entrypoint
-    assert 'frontend ready: ${FRONTEND_PUBLIC_URL}' in frontend_entrypoint
-    assert 'backend docs: ${BACKEND_PUBLIC_URL}/docs' in frontend_entrypoint
+    assert 'COPY --chmod=755 app/runtime/launchers/yasa_uast4py_launcher.py /tmp/yasa-launchers/uast4py' in backend_text
+    assert 'cp /tmp/yasa-launchers/uast4py "${YASA_ENGINE_DIR}/deps/uast4py/uast4py"; \\' in backend_text
 
 
 def test_nexus_web_dockerfile_pins_pnpm_before_nginx_runtime() -> None:
@@ -313,53 +258,38 @@ def test_scripts_and_packaging_use_new_compose_layout() -> None:
     assert "Usage: powershell -ExecutionPolicy Bypass -File scripts\\compose-up-with-fallback.ps1 [compose-args]" in compose_wrapper_ps1
 
 
-def test_readmes_document_runner_preflight_behavior() -> None:
+def test_readmes_document_backend_managed_preflight_behavior() -> None:
     root_readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     root_readme_en = (REPO_ROOT / "README_EN.md").read_text(encoding="utf-8")
     backend_readme = (REPO_ROOT / "backend" / "README.md").read_text(encoding="utf-8")
+    compose_readme = (REPO_ROOT / "scripts" / "README-COMPOSE.md").read_text(encoding="utf-8")
 
-    assert "runner 预热 / 自检容器" in root_readme
-    assert "启动后退出属于预期行为" in root_readme
+    assert "backend 启动时会自行执行 runner preflight" in root_readme
+    assert "compose 不再声明一次性 runner 预热 / 自检服务" in root_readme
     assert "docker compose up --build" in root_readme
     assert "默认推荐直接使用 Docker Compose" in root_readme
     assert "scripts/README-COMPOSE.md" in root_readme
-    assert "runner preflight / warmup containers" in root_readme_en
-    assert "exiting after the check is expected" in root_readme_en
+    assert "backend runs runner preflight during startup" in root_readme_en
+    assert "no longer declares one-shot compose runner warmup services" in root_readme_en
     assert "docker compose up --build" in root_readme_en
     assert "The default recommended entrypoint is plain Docker Compose" in root_readme_en
     assert "scripts/README-COMPOSE.md" in root_readme_en
-    assert "one-shot runner preflight / warmup containers" in backend_readme
+    assert "backend runs the configured runner preflight during startup" in backend_readme
+    assert "default compose startup now only brings up the long-lived services" in backend_readme
     assert "Docker SDK" in backend_readme
     assert "SCANNER_*_IMAGE" in backend_readme
-
-
-def test_backend_dev_entrypoint_validates_seeded_venv_before_skipping_sync() -> None:
-    entrypoint_text = (
-        REPO_ROOT / "backend" / "scripts" / "dev-entrypoint.sh"
-    ).read_text(encoding="utf-8")
-
-    assert 'read_venv_version()' in entrypoint_text
-    assert 'venv_can_run_backend()' in entrypoint_text
-    assert 'ensure_backend_venv()' in entrypoint_text
-    assert 'current_version="$(read_venv_version "${VENV_DIR}"' in entrypoint_text
-    assert 'expected_version="$(python3 - <<' in entrypoint_text
-    assert 'import sqlalchemy, alembic, uvicorn' in entrypoint_text
-    assert 'uv venv --clear "${VENV_DIR}"' in entrypoint_text
-
-
-def test_backend_dev_entrypoint_runs_single_alembic_head() -> None:
-    entrypoint_text = (
-        REPO_ROOT / "backend" / "scripts" / "dev-entrypoint.sh"
-    ).read_text(encoding="utf-8")
-
-    assert '"${VENV_DIR}/bin/alembic" upgrade heads' not in entrypoint_text
-    assert '"${VENV_DIR}/bin/alembic" upgrade head\n' in entrypoint_text
+    assert "backend 启动时托管执行 runner preflight" in compose_readme
+    assert "默认启动只拉起常驻 compose 服务" in compose_readme
+    assert "docker compose up --build" in compose_readme
+    assert "docker-compose.full.yml" in compose_readme
+    assert "Docker Desktop + Linux containers" in compose_readme
+    assert "runner 预热 / 自检容器" not in compose_readme
+    assert "runner preflight / warmup" not in root_readme_en
 
 
 def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     backend_text = (REPO_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     pyproject_text = (REPO_ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
-    entrypoint_text = (REPO_ROOT / "backend" / "docker-entrypoint.sh").read_text(encoding="utf-8")
     yasa_runner_text = (REPO_ROOT / "backend" / "docker" / "yasa-runner.Dockerfile").read_text(
         encoding="utf-8"
     )
@@ -401,11 +331,6 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'ln -sfn /opt/backend-venv /app/.venv' not in backend_text
     assert 'rm -rf /root/.cache/pip' in backend_text
     assert 'rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11' in backend_text
-    assert "python3 -m pip install" not in entrypoint_text
-    assert 'BACKEND_VENV_DIR="${BACKEND_VENV_PATH:-/opt/backend-venv}"' in entrypoint_text
-    assert '"${BACKEND_VENV_DIR}/bin/alembic" upgrade head' in entrypoint_text
-    assert ".venv/bin/alembic upgrade head" not in entrypoint_text
-    assert '"${BACKEND_VENV_DIR}/bin/code2flow"' not in entrypoint_text
     assert "FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim" in yasa_runner_text
     assert "AS yasa-builder" in yasa_runner_text
     assert "AS yasa-runner" in yasa_runner_text

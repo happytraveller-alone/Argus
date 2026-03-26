@@ -26,6 +26,8 @@ ARG PMD_VERSION=7.22.0
 LABEL maintainer="XCodeReviewer Team"
 LABEL description="Secure sandbox environment for vulnerability verification and security scanning"
 
+COPY --chmod=755 runtime/opengrep_launcher.py /usr/local/bin/opengrep
+
 ENV UV_INDEX_URL=${SANDBOX_PYPI_INDEX_PRIMARY}
 ENV PIP_INDEX_URL=${SANDBOX_PYPI_INDEX_PRIMARY}
 ENV PNPM_HOME=/pnpm
@@ -223,8 +225,6 @@ RUN set -eux; \
   "https://v6.gh-proxy.org/https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}" \
   "https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OG_DIST}"; \
   chmod +x /usr/local/bin/opengrep.real; \
-  printf '#!/bin/sh\nunset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\nexport NO_PROXY="*"\nexport no_proxy="*"\nexec /usr/local/bin/opengrep.real "$@"\n' > /usr/local/bin/opengrep; \
-  chmod +x /usr/local/bin/opengrep; \
   GITLEAKS_TARBALL="gitleaks_${GITLEAKS_VERSION}_linux_${GITLEAKS_ARCH}.tar.gz"; \
   download_with_fallback \
   /tmp/gitleaks.tar.gz \

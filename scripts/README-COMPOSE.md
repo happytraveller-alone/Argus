@@ -1,8 +1,8 @@
 # Docker Compose 本地启动指南
 
 本项目默认推荐直接使用 Docker Compose，而不是包装脚本。
-默认启动除了常驻服务外，还会运行一组 runner 预热 / 自检容器，用于启动期 preflight / warmup，提前验证本地扫描镜像和命令可用性。
-这些 runner 容器检查完成后退出属于预期行为；真正执行扫描时仍由 backend 按镜像名动态拉起临时 runner 容器。
+默认启动只拉起常驻 compose 服务。
+runner preflight 改由 backend 启动时托管执行 runner preflight，统一校验 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` 指向的镜像和命令；真正执行扫描时仍由 backend 按镜像名动态拉起临时 runner 容器。
 
 ## 默认启动方式
 
@@ -258,8 +258,8 @@ scripts\compose-up-with-fallback.bat
 
 - 默认 `docker compose up --build` 已切到日常增量开发链路。
 - 该默认链路会把 `backend`/`frontend` 切到源码挂载 + 热重载，并默认关闭 `MCP_REQUIRE_ALL_READY_ON_STARTUP`、`SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP` 等重型启动项。
-- 默认 `docker compose up --build` 会把 runner 预热 / 自检容器作为启动期 preflight / warmup 跑完；这些一次性容器退出属于预期行为，不代表失败。
-- 真正执行扫描时，backend 会通过 Docker SDK 按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` 动态拉起临时 runner 容器；compose 里的 runner services 只负责本地镜像预热与可执行性校验。
+- 默认 `docker compose up --build` 的 compose 层只拉起常驻服务，backend 启动时托管执行 runner preflight。
+- 真正执行扫描时，backend 会通过 Docker SDK 按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` 动态拉起临时 runner 容器，而不是依赖 compose 里的 runner services。
 - 可选 legacy Bash helper `./scripts/compose-up-with-fallback.sh` 在 `up` 时会等待前端首页和 backend `/health` 都可访问，再打印统一的 `services ready` 提示。
 - `VULHUNTER_OPEN_BROWSER=1` 仅在 legacy Bash helper 中生效；直接使用 `docker compose up --build` 不会自动打开浏览器。
 - 显式全量本地构建请叠加 `docker-compose.full.yml`。
