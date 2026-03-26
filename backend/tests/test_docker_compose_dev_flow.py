@@ -22,6 +22,10 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert not (REPO_ROOT / "docker-compose.prod.cn.yml").exists()
 
     compose_text = compose_path.read_text(encoding="utf-8")
+    flow_parser_compose_block = compose_text.split("\n  flow-parser-runner:\n", maxsplit=1)[1].split(
+        "\n  frontend:\n",
+        maxsplit=1,
+    )[0]
     assert "runner preflight / warmup" in compose_text
     assert "一次性预热/自检容器" in compose_text
     assert 'restart: "no"' in compose_text
@@ -87,6 +91,11 @@ def test_default_compose_uses_local_images_by_default() -> None:
     assert "\n  flow-parser-runner:" in compose_text
     assert "image: vulhunter/flow-parser-runner-local:latest" in compose_text
     assert "dockerfile: ./docker/flow-parser-runner.Dockerfile" in compose_text
+    assert (
+        "- BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-"
+        "https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,"
+        "https://pypi.org/simple}"
+    ) in flow_parser_compose_block
     assert 'condition: service_completed_successfully' in compose_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in compose_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in compose_text
@@ -145,6 +154,13 @@ def test_default_compose_uses_local_images_by_default() -> None:
 
 def test_full_overlay_restores_full_local_build_defaults() -> None:
     full_overlay_text = (REPO_ROOT / "docker-compose.full.yml").read_text(encoding="utf-8")
+    flow_parser_full_overlay_block = full_overlay_text.split(
+        "\n  flow-parser-runner:\n",
+        maxsplit=1,
+    )[1].split(
+        "\n  frontend:\n",
+        maxsplit=1,
+    )[0]
 
     assert "runner preflight / warmup" in full_overlay_text
     assert "一次性预热/自检容器" in full_overlay_text
@@ -181,6 +197,11 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "dockerfile: ./docker/phpstan-runner.Dockerfile" in full_overlay_text
     assert "\n  flow-parser-runner:" in full_overlay_text
     assert "dockerfile: ./docker/flow-parser-runner.Dockerfile" in full_overlay_text
+    assert (
+        "- BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-"
+        "https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,"
+        "https://pypi.org/simple}"
+    ) in flow_parser_full_overlay_block
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in full_overlay_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in full_overlay_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in full_overlay_text
@@ -381,6 +402,12 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert "WORKDIR /scan" in yasa_runner_text
     assert "tree-sitter-language-pack" in flow_parser_runner_text
     assert "code2flow" in flow_parser_runner_text
+    assert "ARG BACKEND_PYPI_INDEX_CANDIDATES=" in flow_parser_runner_text
+    assert 'ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}' in flow_parser_runner_text
+    assert "COPY scripts/package_source_selector.py /usr/local/bin/package_source_selector.py" in flow_parser_runner_text
+    assert 'python3 /usr/local/bin/package_source_selector.py --candidates "${raw_candidates}" --kind pypi --timeout-seconds 2' in flow_parser_runner_text
+    assert 'for idx in $(printf \'%s\\n\' "${ordered_pypi_indexes}"); do \\' in flow_parser_runner_text
+    assert 'PIP_DEFAULT_TIMEOUT=60 /opt/flow-parser-venv/bin/pip install --disable-pip-version-check --no-cache-dir -i "${idx}" -r /tmp/flow-parser-runner.requirements.txt' in flow_parser_runner_text
     assert 'command -v code2flow >/dev/null 2>&1' in flow_parser_runner_text
     assert 'code2flow --help >/dev/null 2>&1' in flow_parser_runner_text
     assert "python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1" in compose_text

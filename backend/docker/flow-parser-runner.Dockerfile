@@ -4,6 +4,7 @@ ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 ARG BACKEND_PYPI_INDEX_PRIMARY=https://mirrors.aliyun.com/pypi/simple/
+ARG BACKEND_PYPI_INDEX_CANDIDATES=https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim-trixie AS flow-parser-runner
 
@@ -12,6 +13,7 @@ ARG BACKEND_APT_SECURITY_PRIMARY
 ARG BACKEND_APT_MIRROR_FALLBACK
 ARG BACKEND_APT_SECURITY_FALLBACK
 ARG BACKEND_PYPI_INDEX_PRIMARY
+ARG BACKEND_PYPI_INDEX_CANDIDATES
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -19,6 +21,9 @@ ENV VIRTUAL_ENV=/opt/flow-parser-venv
 ENV PATH=/opt/flow-parser-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
 ENV PYTHONPATH=/opt/flow-parser
+ENV PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES}
+
+COPY scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
 
 RUN --mount=type=cache,id=vulhunter-flow-parser-runner-apt-lists,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,id=vulhunter-flow-parser-runner-apt-cache,target=/var/cache/apt,sharing=locked \
@@ -52,10 +57,29 @@ COPY docker/flow-parser-runner.requirements.txt /tmp/flow-parser-runner.requirem
 
 # Runtime deps pinned in requirements: tree-sitter, tree-sitter-language-pack, code2flow
 RUN set -eux; \
-    if [ -n "${BACKEND_PYPI_INDEX_PRIMARY}" ]; then \
-      /opt/flow-parser-venv/bin/pip install --disable-pip-version-check --no-cache-dir -i "${BACKEND_PYPI_INDEX_PRIMARY}" -r /tmp/flow-parser-runner.requirements.txt; \
-    else \
-      /opt/flow-parser-venv/bin/pip install --disable-pip-version-check --no-cache-dir -r /tmp/flow-parser-runner.requirements.txt; \
+    order_pypi_indexes() { \
+      raw_candidates="${PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \
+      if [ -n "${BACKEND_PYPI_INDEX_PRIMARY}" ]; then \
+        raw_candidates="${BACKEND_PYPI_INDEX_PRIMARY},${raw_candidates}"; \
+      fi; \
+      python3 /usr/local/bin/package_source_selector.py --candidates "${raw_candidates}" --kind pypi --timeout-seconds 2 || printf '%s\n' "${raw_candidates}" | tr ',' '\n'; \
+    }; \
+    install_runtime_deps() { \
+      idx="$1"; \
+      PIP_DEFAULT_TIMEOUT=60 /opt/flow-parser-venv/bin/pip install --disable-pip-version-check --no-cache-dir -i "${idx}" -r /tmp/flow-parser-runner.requirements.txt; \
+    }; \
+    ordered_pypi_indexes="$(order_pypi_indexes)"; \
+    installed_runtime_deps=0; \
+    for idx in $(printf '%s\n' "${ordered_pypi_indexes}"); do \
+      [ -n "${idx}" ] || continue; \
+      if install_runtime_deps "${idx}"; then \
+        installed_runtime_deps=1; \
+        break; \
+      fi; \
+    done; \
+    if [ "${installed_runtime_deps}" != "1" ]; then \
+      echo "failed to install flow-parser runner runtime dependencies" >&2; \
+      exit 1; \
     fi
 
 WORKDIR /opt/flow-parser
