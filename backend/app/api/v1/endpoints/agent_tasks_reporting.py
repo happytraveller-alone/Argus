@@ -251,8 +251,8 @@ def _markdown_to_html(markdown_text: str) -> str:
     paragraph_lines: List[str] = []
     code_lines: List[str] = []
     in_code_block = False
-    in_ul = False
-    in_ol = False
+    # list_stack: list of (indent_level, list_type) where list_type is "ul" or "ol"
+    list_stack: List[tuple] = []
 
     def _flush_paragraph() -> None:
         if not paragraph_lines:
@@ -261,44 +261,61 @@ def _markdown_to_html(markdown_text: str) -> str:
         html_parts.append(f"<p>{rendered}</p>")
         paragraph_lines.clear()
 
-    def _close_lists() -> None:
-        nonlocal in_ul, in_ol
-        if in_ul:
-            html_parts.append("</ul>")
-            in_ul = False
-        if in_ol:
-            html_parts.append("</ol>")
-            in_ol = False
+    def _close_all_lists() -> None:
+        while list_stack:
+            _, ltype = list_stack.pop()
+            html_parts.append(f"</{ltype}>")
+
+    def _adjust_list_stack(indent: int, list_type: str) -> None:
+        """打开/关闭嵌套列表，使栈顶与当前缩进匹配。"""
+        if list_stack and list_stack[-1][0] == indent and list_stack[-1][1] != list_type:
+            # 同级但类型切换
+            _, ltype = list_stack.pop()
+            html_parts.append(f"</{ltype}>")
+
+        if not list_stack or indent > list_stack[-1][0]:
+            # 更深缩进：开新列表
+            html_parts.append(f"<{list_type}>")
+            list_stack.append((indent, list_type))
+        elif indent < list_stack[-1][0]:
+            # 缩进减少：弹出直到匹配或为空
+            while list_stack and list_stack[-1][0] > indent:
+                _, ltype = list_stack.pop()
+                html_parts.append(f"</{ltype}>")
+            if not list_stack or list_stack[-1][0] < indent:
+                html_parts.append(f"<{list_type}>")
+                list_stack.append((indent, list_type))
+        # else: 同级同类型，无需操作
 
     for raw_line in lines:
         line = raw_line.rstrip("\n")
         stripped = line.strip()
 
-        if line.startswith("```"):
+        if line.lstrip().startswith("```") and not in_code_block:
             _flush_paragraph()
-            _close_lists()
-            if in_code_block:
+            _close_all_lists()
+            in_code_block = True
+            continue
+
+        if in_code_block:
+            if line.strip().startswith("```"):
                 code_html = html.escape("\n".join(code_lines))
                 html_parts.append(f"<pre><code>{code_html}</code></pre>")
                 code_lines.clear()
                 in_code_block = False
             else:
-                in_code_block = True
-            continue
-
-        if in_code_block:
-            code_lines.append(line)
+                code_lines.append(line)
             continue
 
         if not stripped:
             _flush_paragraph()
-            _close_lists()
+            _close_all_lists()
             continue
 
         heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
         if heading_match:
             _flush_paragraph()
-            _close_lists()
+            _close_all_lists()
             level = len(heading_match.group(1))
             title = _render_inline_markdown(heading_match.group(2))
             html_parts.append(f"<h{level}>{title}</h{level}>")
@@ -306,39 +323,33 @@ def _markdown_to_html(markdown_text: str) -> str:
 
         if stripped in {"---", "***", "___"}:
             _flush_paragraph()
-            _close_lists()
+            _close_all_lists()
             html_parts.append("<hr/>")
             continue
 
-        ul_match = re.match(r"^[-*]\s+(.+)$", stripped)
+        # 计算缩进级别（以2空格为1级，tab=4空格）
+        indent_spaces = len(line) - len(line.lstrip(" \t"))
+        indent_level = indent_spaces // 2
+
+        ul_match = re.match(r"^[-*+]\s+(.+)$", stripped)
         if ul_match:
             _flush_paragraph()
-            if in_ol:
-                html_parts.append("</ol>")
-                in_ol = False
-            if not in_ul:
-                html_parts.append("<ul>")
-                in_ul = True
+            _adjust_list_stack(indent_level, "ul")
             html_parts.append(f"<li>{_render_inline_markdown(ul_match.group(1))}</li>")
             continue
 
         ol_match = re.match(r"^\d+\.\s+(.+)$", stripped)
         if ol_match:
             _flush_paragraph()
-            if in_ul:
-                html_parts.append("</ul>")
-                in_ul = False
-            if not in_ol:
-                html_parts.append("<ol>")
-                in_ol = True
+            _adjust_list_stack(indent_level, "ol")
             html_parts.append(f"<li>{_render_inline_markdown(ol_match.group(1))}</li>")
             continue
 
-        _close_lists()
+        _close_all_lists()
         paragraph_lines.append(line)
 
     _flush_paragraph()
-    _close_lists()
+    _close_all_lists()
     if in_code_block:
         code_html = html.escape("\n".join(code_lines))
         html_parts.append(f"<pre><code>{code_html}</code></pre>")
@@ -453,10 +464,10 @@ async def generate_audit_report(
     if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
-    # 获取此任务的所有发现
+    # 获取此任务已验证的发现（仅导出 is_verified=True 的条目）
     findings = await db.execute(
         select(AgentFinding)
-        .where(AgentFinding.task_id == task_id)
+        .where(AgentFinding.task_id == task_id, AgentFinding.is_verified == True)
         .order_by(
             case(
                 (AgentFinding.severity == 'critical', 1),
@@ -854,7 +865,7 @@ async def generate_audit_report(
                     md_lines.append("**漏洞代码:**")
                     md_lines.append("")
                     md_lines.append(f"```{lang}")
-                    md_lines.append(f.code_snippet.strip())
+                    md_lines.append(f.code_snippet.strip().replace('\\n', '\n').replace('\r\n', '\n'))
                     md_lines.append("```")
                     md_lines.append("")
 
@@ -868,7 +879,7 @@ async def generate_audit_report(
                     md_lines.append("**参考修复代码:**")
                     md_lines.append("")
                     md_lines.append(f"```{lang if f.file_path else 'text'}")
-                    md_lines.append(f.fix_code.strip())
+                    md_lines.append(f.fix_code.strip().replace('\\n', '\n').replace('\r\n', '\n'))
                     md_lines.append("```")
                     md_lines.append("")
 
@@ -892,7 +903,7 @@ async def generate_audit_report(
                         md_lines.append("**PoC 代码:**")
                         md_lines.append("")
                         md_lines.append("```")
-                        md_lines.append(f.poc_code.strip())
+                        md_lines.append(f.poc_code.strip().replace('\\n', '\n').replace('\r\n', '\n'))
                         md_lines.append("```")
                         md_lines.append("")
 

@@ -1226,6 +1226,12 @@ async def _save_findings(
             elif isinstance(poc_data, str):
                 poc_description = poc_data
 
+            # 兼容 SaveVerificationResultTool 使用 poc_code 平铺字段的情况
+            if not poc_code:
+                poc_code = _normalize_optional_text(finding.get("poc_code"))
+            if poc_code and not has_poc:
+                has_poc = True
+
             allow_poc = authenticity == "confirmed" and str(severity_enum).lower() in {"critical", "high"}
             if not allow_poc:
                 has_poc = False
@@ -1285,15 +1291,20 @@ async def _save_findings(
                 # Update fields
                 db_finding.severity = severity_enum
                 db_finding.title = title_text
-                db_finding.description = description_text
+                # 仅在新值非空时更新 description，避免 LLM 未提供时覆盖已有描述
+                if description_text:
+                    db_finding.description = description_text
                 db_finding.file_path = stored_file_path
                 db_finding.line_start = line_start
                 db_finding.line_end = line_end
                 db_finding.code_snippet = snippet_text
                 db_finding.code_context = context_text
                 db_finding.function_name = reachability_target_function
-                db_finding.source = source_text
-                db_finding.sink = sink_text
+                # 仅在新值非 None 时更新 source/sink，避免 LLM 未提供时覆盖已有值
+                if source_text is not None:
+                    db_finding.source = source_text
+                if sink_text is not None:
+                    db_finding.sink = sink_text
                 db_finding.dataflow_path = dataflow_path
                 db_finding.suggestion = suggestion_text
                 db_finding.fix_code = fix_code_text
@@ -1303,12 +1314,14 @@ async def _save_findings(
                 db_finding.is_verified = is_verified
                 db_finding.ai_confidence = confidence
                 db_finding.status = db_status
-                db_finding.verdict = verdict_value  # 新增：确实的 verdict
-                db_finding.confidence = confidence_value  # 新增：规范化的置信度
-                db_finding.reachability = reachability_value  # 新增：规范化的可达性
-                db_finding.verification_evidence = verification_details_text  # 新增：验证证据
+                db_finding.verdict = verdict_value
+                db_finding.confidence = confidence_value
+                db_finding.reachability = reachability_value
+                db_finding.verification_evidence = verification_details_text
                 db_finding.has_poc = has_poc
-                db_finding.poc_code = poc_code
+                # 仅在新值非 None 时更新 poc_code，避免覆盖已有 PoC
+                if poc_code is not None:
+                    db_finding.poc_code = poc_code
                 db_finding.poc_description = poc_description
                 db_finding.poc_steps = poc_steps
                 db_finding.verification_method = verification_method_text
@@ -1318,8 +1331,11 @@ async def _save_findings(
                     finding_metadata_payload or None,
                 )
                 db_finding.finding_identity = finding_identity
-                db_finding.cvss_score = cvss_score
-                db_finding.cvss_vector = cvss_vector
+                # 仅在新值非 None 时更新 cvss，避免覆盖已有评分
+                if cvss_score is not None:
+                    db_finding.cvss_score = cvss_score
+                if cvss_vector is not None:
+                    db_finding.cvss_vector = cvss_vector
                 db_finding.references = [{"cwe": cwe_id}] if cwe_id else None
                 db_finding.fingerprint = fingerprint
                 db_finding.updated_at = func.now()

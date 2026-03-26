@@ -828,6 +828,9 @@ class SaveVerificationResultTool(AgentTool):
             "confidence": normalized_confidence,
             "cvss_score": normalized_cvss_score,
             "cvss_vector": cvss_vector,
+            # code_snippet 同时放到顶层，供 _save_findings 作为初始候选值
+            # （_save_findings 仍会用文件实际内容覆盖）
+            "code_snippet": code_snippet,
             "verification_result": {
                 "verdict": normalized_verdict,
                 "confidence": normalized_confidence,
