@@ -1,6 +1,8 @@
 import { Zap, Bot, Layers, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useLogoVariant } from "@/shared/branding/useLogoVariant";
+import { useTheme } from "next-themes";
+import { useEffect, useRef } from "react";
 
 type HomeScanCard = {
   key: "static" | "agent" | "hybrid";
@@ -37,18 +39,41 @@ const homeScanCards: HomeScanCard[] = [
 export function HomeScanCards() {
   const navigate = useNavigate();
   const { logoSrc, cycleLogoVariant } = useLogoVariant();
+  const { resolvedTheme } = useTheme();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // 主题变化时通知 iframe
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const sendTheme = () => {
+      iframe.contentWindow?.postMessage(
+        { type: "THEME_CHANGE", theme: resolvedTheme },
+        "http://localhost:5174"
+      );
+    };
+
+    // iframe 加载完成后立即同步当前主题
+    iframe.addEventListener("load", sendTheme);
+    // 主题变化时也发送
+    sendTheme();
+
+    return () => iframe.removeEventListener("load", sendTheme);
+  }, [resolvedTheme]);
 
   return (
     <div className="min-h-[100dvh] flex items-center justify-center relative overflow-hidden">
       <div className="absolute inset-0 z-10">
         <iframe
+          ref={iframeRef}
           src="http://localhost:5174"
           title="GitNexus"
           className="w-full h-full border-0 pointer-events-auto"
         />
       </div>
 
-      <div className="relative z-20 w-full max-w-[1200px] mx-auto px-6 text-center pointer-events-none -mt-80">
+      <div className="relative z-20 w-full max-w-[1200px] mx-auto px-6 text-center pointer-events-none">
         <div className="mb-12 flex items-center justify-center gap-5">
           <button
             onClick={cycleLogoVariant}
@@ -93,14 +118,14 @@ export function HomeScanCards() {
           </button>
         </div>
 
-        <div className="flex items-center justify-center gap-3 mb-14 flex-wrap">
+        {/* <div className="flex items-center justify-center gap-3 mb-14 flex-wrap">
           <span className="text-sm text-foreground/60">
             1000+ 漏洞规则 · AI Agent 推理
           </span>
           <span className="text-foreground/20 text-sm">|</span>
-        </div>
+        </div> */}
 
-        <div className="mt-40 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <div className="mt-auto pt-40 pb-20 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
           {homeScanCards.map((card) => {
             const Icon = card.icon;
 
@@ -111,7 +136,7 @@ export function HomeScanCards() {
                 className="
                   pointer-events-auto
                   group relative backdrop-blur-sm
-                  border border-white/10 bg-white/5
+                  border bg-card/60 border-border hover:bg-card
                   rounded-xl p-6 text-left transition
                   hover:border-primary/50 hover:bg-white/10 hover:-translate-y-1
                 "
