@@ -16,14 +16,14 @@ def _stage_block(dockerfile_text: str, stage_header: str) -> str:
     return dockerfile_text[start:] if next_stage == -1 else dockerfile_text[start:next_stage]
 
 
-def _assert_backend_depends_on_has_no_pmd_runner(compose_text: str, next_service: str) -> None:
+def _assert_backend_depends_on_has_pmd_runner(compose_text: str, next_service: str) -> None:
     backend_block = compose_text.split("\n  backend:\n", 1)[1].split(f"\n  {next_service}:\n", 1)[0]
     if "\n    depends_on:\n" not in backend_block:
-        return
+        raise AssertionError("backend service is expected to declare depends_on")
     depends_on_block = backend_block.split("\n    depends_on:\n", 1)[1]
     if "\n    networks:\n" in depends_on_block:
         depends_on_block = depends_on_block.split("\n    networks:\n", 1)[0]
-    assert "\n      pmd-runner:\n" not in depends_on_block
+    assert "\n      pmd-runner:\n" in depends_on_block
 
 
 def test_backend_dockerfile_no_longer_installs_local_pmd_runtime() -> None:
@@ -45,24 +45,24 @@ def test_backend_dockerfile_no_longer_installs_local_pmd_runtime() -> None:
     assert "/usr/local/bin/pmd" not in runtime_block
 
 
-def test_compose_exposes_scanner_pmd_image_without_pmd_runner_service() -> None:
+def test_compose_exposes_scanner_pmd_image_with_pmd_runner_service() -> None:
     compose_path = _repo_root() / "docker-compose.yml"
     compose_text = compose_path.read_text(encoding="utf-8")
 
     assert "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}" in compose_text
-    assert "\n  pmd-runner:\n" not in compose_text
+    assert "\n  pmd-runner:\n" in compose_text
 
-    _assert_backend_depends_on_has_no_pmd_runner(compose_text, "yasa-runner")
+    _assert_backend_depends_on_has_pmd_runner(compose_text, "yasa-runner")
 
 
-def test_full_overlay_exposes_scanner_pmd_image_without_pmd_runner_service() -> None:
+def test_full_overlay_exposes_scanner_pmd_image_with_pmd_runner_service() -> None:
     compose_path = _repo_root() / "docker-compose.full.yml"
     compose_text = compose_path.read_text(encoding="utf-8")
 
     assert "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}" in compose_text
-    assert "\n  pmd-runner:\n" not in compose_text
+    assert "\n  pmd-runner:\n" in compose_text
 
-    _assert_backend_depends_on_has_no_pmd_runner(compose_text, "yasa-runner")
+    _assert_backend_depends_on_has_pmd_runner(compose_text, "yasa-runner")
 
 
 def test_external_tools_manual_pmd_section_documents_runner_requirements() -> None:
@@ -74,6 +74,7 @@ def test_external_tools_manual_pmd_section_documents_runner_requirements() -> No
     assert "runner 容器" in manual_text
     assert "手工 smoke test" in manual_text
     assert "默认自动验收" in manual_text
+    assert "docker compose up --build" in manual_text
 
 
 def test_docker_publish_workflow_builds_pmd_runner() -> None:

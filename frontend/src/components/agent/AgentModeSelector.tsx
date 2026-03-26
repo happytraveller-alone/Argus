@@ -9,7 +9,7 @@ import { cn } from "@/shared/utils/utils";
 
 export type ScanMode = "static" | "agent";
 
-export type StaticTool = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa";
+export type StaticTool = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa" | "pmd";
 
 export interface StaticToolSelection {
   opengrep: boolean;
@@ -17,6 +17,7 @@ export interface StaticToolSelection {
   bandit: boolean;
   phpstan: boolean;
   yasa: boolean;
+  pmd: boolean;
 }
 
 interface AgentModeSelectorProps {
@@ -26,6 +27,7 @@ interface AgentModeSelectorProps {
   staticTools?: StaticToolSelection;
   onStaticToolsChange?: (next: StaticToolSelection) => void;
   disabledStaticTools?: Partial<Record<StaticTool, boolean>>;
+  blockedStaticToolMessages?: Partial<Record<StaticTool, string>>;
 }
 
 export default function AgentModeSelector({
@@ -35,6 +37,7 @@ export default function AgentModeSelector({
   staticTools,
   onStaticToolsChange,
   disabledStaticTools,
+  blockedStaticToolMessages,
 }: AgentModeSelectorProps) {
   const isStaticSelected = value === "static";
   const isAgentSelected = value === "agent";
@@ -44,6 +47,7 @@ export default function AgentModeSelector({
     bandit: false,
     phpstan: false,
     yasa: false,
+    pmd: false,
   };
 
   const updateStaticTool = (tool: StaticTool, checked: boolean) => {
@@ -193,6 +197,27 @@ export default function AgentModeSelector({
                 />
                 <span className="tracking-wider">YASA 扫描</span>
               </label>
+              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
+                <Checkbox
+                  checked={resolvedTools.pmd}
+                  onCheckedChange={(checked) =>
+                    updateStaticTool("pmd", Boolean(checked))
+                  }
+                  disabled={disabled || Boolean(disabledStaticTools?.pmd)}
+                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
+                />
+                <span className="tracking-wider">PMD Java 扫描</span>
+              </label>
+              {blockedStaticToolMessages?.yasa ? (
+                <p className="text-[10px] text-amber-300">
+                  {blockedStaticToolMessages.yasa}
+                </p>
+              ) : null}
+              {blockedStaticToolMessages?.pmd ? (
+                <p className="text-[10px] text-amber-300">
+                  {blockedStaticToolMessages.pmd}
+                </p>
+              ) : null}
             </div>
           )}
 

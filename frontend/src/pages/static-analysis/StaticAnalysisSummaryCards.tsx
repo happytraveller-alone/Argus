@@ -9,6 +9,7 @@ import type { GitleaksScanTask } from "@/shared/api/gitleaks";
 import type { OpengrepScanTask } from "@/shared/api/opengrep";
 import type { BanditScanTask } from "@/shared/api/bandit";
 import type { PhpstanScanTask } from "@/shared/api/phpstan";
+import type { PmdScanTask } from "@/shared/api/pmd";
 import type { YasaScanTask } from "@/shared/api/yasa";
 
 import type { Engine } from "./viewModel";
@@ -28,6 +29,7 @@ interface StaticAnalysisSummaryCardsProps {
   gitleaksTask: GitleaksScanTask | null;
   banditTask: BanditScanTask | null;
   phpstanTask: PhpstanScanTask | null;
+  pmdTask: PmdScanTask | null;
   yasaTask: YasaScanTask | null;
   enabledEngines: Engine[];
   loadingInitial?: boolean;
@@ -38,6 +40,7 @@ function getEngineDisplayLabel(engine: Engine): string {
   if (engine === "gitleaks") return "Gitleaks";
   if (engine === "bandit") return "Bandit";
   if (engine === "phpstan") return "PHPStan";
+  if (engine === "pmd") return "PMD";
   return "YASA";
 }
 
@@ -46,12 +49,13 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
   gitleaksTask,
   banditTask,
   phpstanTask,
+  pmdTask,
   yasaTask,
   enabledEngines,
   loadingInitial = false,
 }: StaticAnalysisSummaryCardsProps) {
   const hasAnyLoadedTask = Boolean(
-    opengrepTask || gitleaksTask || banditTask || phpstanTask || yasaTask,
+    opengrepTask || gitleaksTask || banditTask || phpstanTask || pmdTask || yasaTask,
   );
   const loadedEnabledEngineCount = useMemo(
     () =>
@@ -60,6 +64,7 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
         if (engine === "gitleaks") return Boolean(gitleaksTask);
         if (engine === "bandit") return Boolean(banditTask);
         if (engine === "phpstan") return Boolean(phpstanTask);
+        if (engine === "pmd") return Boolean(pmdTask);
         return Boolean(yasaTask);
       }).length,
     [
@@ -68,6 +73,7 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
       gitleaksTask,
       opengrepTask,
       phpstanTask,
+      pmdTask,
       yasaTask,
     ],
   );
@@ -77,10 +83,10 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
     (!hasAnyLoadedTask || loadedEnabledEngineCount < enabledEngines.length);
   const shouldTickClock = useMemo(
     () =>
-      [opengrepTask, gitleaksTask, banditTask, phpstanTask, yasaTask].some((task) =>
+      [opengrepTask, gitleaksTask, banditTask, phpstanTask, pmdTask, yasaTask].some((task) =>
         isStaticAnalysisPollableStatus(task?.status),
       ),
-    [banditTask, gitleaksTask, opengrepTask, phpstanTask, yasaTask],
+    [banditTask, gitleaksTask, opengrepTask, phpstanTask, pmdTask, yasaTask],
   );
   const nowMs = useTaskClock({ enabled: shouldTickClock, intervalMs: 1000 });
 
@@ -95,11 +101,12 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
         gitleaksTask,
         banditTask,
         phpstanTask,
+        pmdTask,
         yasaTask,
         nowMs,
       }).progressPercent;
     },
-    [banditTask, gitleaksTask, isBootstrapping, nowMs, opengrepTask, phpstanTask, yasaTask],
+    [banditTask, gitleaksTask, isBootstrapping, nowMs, opengrepTask, phpstanTask, pmdTask, yasaTask],
   );
 
   const statusSummary = useMemo(
@@ -125,6 +132,7 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
         gitleaksTask,
         banditTask,
         phpstanTask,
+        pmdTask,
         yasaTask,
       });
     },
@@ -135,6 +143,7 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
       isBootstrapping,
       opengrepTask,
       phpstanTask,
+      pmdTask,
       yasaTask,
     ],
   );
@@ -146,10 +155,11 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
         gitleaksTask,
         banditTask,
         phpstanTask,
+        pmdTask,
         yasaTask,
         nowMs,
       }),
-    [banditTask, gitleaksTask, nowMs, opengrepTask, phpstanTask, yasaTask],
+    [banditTask, gitleaksTask, nowMs, opengrepTask, phpstanTask, pmdTask, yasaTask],
   );
 
   const totalFindings = useMemo(
@@ -158,12 +168,14 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
       toStaticAnalysisSafeMetric(gitleaksTask?.total_findings) +
       toStaticAnalysisSafeMetric(banditTask?.total_findings) +
       toStaticAnalysisSafeMetric(phpstanTask?.total_findings) +
+      toStaticAnalysisSafeMetric(pmdTask?.total_findings) +
       toStaticAnalysisSafeMetric(yasaTask?.total_findings),
     [
       banditTask?.total_findings,
       gitleaksTask?.total_findings,
       opengrepTask?.total_findings,
       phpstanTask?.total_findings,
+      pmdTask?.total_findings,
       yasaTask?.total_findings,
     ],
   );
@@ -174,12 +186,14 @@ export const StaticAnalysisSummaryCards = memo(function StaticAnalysisSummaryCar
       toStaticAnalysisSafeMetric(gitleaksTask?.files_scanned) +
       toStaticAnalysisSafeMetric(banditTask?.files_scanned) +
       toStaticAnalysisSafeMetric(phpstanTask?.files_scanned) +
+      toStaticAnalysisSafeMetric(pmdTask?.files_scanned) +
       toStaticAnalysisSafeMetric(yasaTask?.files_scanned),
     [
       banditTask?.files_scanned,
       gitleaksTask?.files_scanned,
       opengrepTask?.files_scanned,
       phpstanTask?.files_scanned,
+      pmdTask?.files_scanned,
       yasaTask?.files_scanned,
     ],
   );

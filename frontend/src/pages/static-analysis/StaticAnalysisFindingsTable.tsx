@@ -36,6 +36,7 @@ function getEngineLabel(engine: UnifiedFindingRow["engine"]) {
   if (engine === "gitleaks") return "Gitleaks";
   if (engine === "bandit") return "Bandit";
   if (engine === "phpstan") return "PHPStan";
+  if (engine === "pmd") return "PMD";
   return "YASA";
 }
 
@@ -51,6 +52,9 @@ function getEngineBadgeClass(engine: UnifiedFindingRow["engine"]) {
   }
   if (engine === "phpstan") {
     return "bg-violet-500/20 text-violet-300 border-violet-500/30";
+  }
+  if (engine === "pmd") {
+    return "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30";
   }
   return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
 }
@@ -90,6 +94,7 @@ export function getColumns(input: {
           { label: "Gitleaks", value: "gitleaks" },
           { label: "Bandit", value: "bandit" },
           { label: "PHPStan", value: "phpstan" },
+          { label: "PMD", value: "pmd" },
           { label: "YASA", value: "yasa" },
         ],
       },

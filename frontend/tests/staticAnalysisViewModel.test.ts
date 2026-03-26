@@ -67,6 +67,7 @@ test("buildUnifiedFindingRows normalizes opengrep and gitleaks rows", () => {
   assert.equal(rows[2]?.severity, "MEDIUM");
   assert.equal(rows[2]?.confidence, "HIGH");
   assert.equal(rows[2]?.rule, "B602 · subprocess_shell_true");
+
 });
 
 test("static analysis finding status helpers expose tri-state labels and tones", () => {

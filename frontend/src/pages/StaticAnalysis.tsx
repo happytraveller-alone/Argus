@@ -65,11 +65,12 @@ export default function StaticAnalysis() {
       searchParams.get("gitleaksTaskId") ||
         searchParams.get("banditTaskId") ||
         searchParams.get("phpstanTaskId") ||
-        searchParams.get("yasaTaskId"),
+        searchParams.get("yasaTaskId") ||
+        searchParams.get("pmdTaskId"),
     );
     if (explicit) return explicit;
     if (hasOtherExplicitEngineTaskId) return "";
-    if (toolParam === "gitleaks" || toolParam === "bandit" || toolParam === "phpstan" || toolParam === "yasa") {
+    if (toolParam === "gitleaks" || toolParam === "bandit" || toolParam === "phpstan" || toolParam === "yasa" || toolParam === "pmd") {
       return "";
     }
     return taskId;
@@ -81,7 +82,8 @@ export default function StaticAnalysis() {
         searchParams.get("gitleaksTaskId") ||
         searchParams.get("banditTaskId") ||
         searchParams.get("phpstanTaskId") ||
-        searchParams.get("yasaTaskId"),
+        searchParams.get("yasaTaskId") ||
+        searchParams.get("pmdTaskId"),
     );
     return !hasExplicitEngineTaskId && Boolean(taskId);
   }, [searchParams, taskId]);
@@ -115,8 +117,15 @@ export default function StaticAnalysis() {
     return "";
   }, [searchParams, taskId, toolParam]);
 
+  const pmdTaskId = useMemo(() => {
+    const explicit = searchParams.get("pmdTaskId");
+    if (explicit) return explicit;
+    if (toolParam === "pmd") return taskId;
+    return "";
+  }, [searchParams, taskId, toolParam]);
+
   const hasEnabledEngine = Boolean(
-    opengrepTaskId || gitleaksTaskId || banditTaskId || phpstanTaskId || yasaTaskId,
+    opengrepTaskId || gitleaksTaskId || banditTaskId || phpstanTaskId || yasaTaskId || pmdTaskId,
   );
   const [tableState, setTableState] = useState<DataTableQueryState>(() =>
     createStaticAnalysisInitialTableState(initialState),
@@ -131,11 +140,13 @@ export default function StaticAnalysis() {
     gitleaksTask,
     banditTask,
     phpstanTask,
+    pmdTask,
     yasaTask,
     opengrepFindings,
     gitleaksFindings,
     banditFindings,
     phpstanFindings,
+    pmdFindings,
     yasaFindings,
     loadingInitial,
     loadingTask,
@@ -151,6 +162,7 @@ export default function StaticAnalysis() {
     canInterruptGitleaks,
     canInterruptBandit,
     canInterruptPhpstan,
+    canInterruptPmd,
     canInterruptYasa,
   } = useStaticAnalysisData({
     hasEnabledEngine,
@@ -159,6 +171,7 @@ export default function StaticAnalysis() {
     banditTaskId,
     phpstanTaskId,
     yasaTaskId,
+    pmdTaskId,
   });
 
   const unifiedRows = useMemo(
@@ -168,12 +181,14 @@ export default function StaticAnalysis() {
         gitleaksFindings,
         banditFindings,
         phpstanFindings,
+        pmdFindings,
         yasaFindings,
         opengrepTaskId,
         gitleaksTaskId,
         banditTaskId,
         phpstanTaskId,
         yasaTaskId,
+        pmdTaskId,
       }),
     [
       banditFindings,
@@ -182,6 +197,8 @@ export default function StaticAnalysis() {
       gitleaksTaskId,
       opengrepFindings,
       opengrepTaskId,
+      pmdFindings,
+      pmdTaskId,
       phpstanFindings,
       yasaFindings,
       phpstanTaskId,
@@ -195,8 +212,9 @@ export default function StaticAnalysis() {
     if (banditTaskId) engines.push("bandit");
     if (phpstanTaskId) engines.push("phpstan");
     if (yasaTaskId) engines.push("yasa");
+    if (pmdTaskId) engines.push("pmd");
     return engines;
-  }, [banditTaskId, gitleaksTaskId, opengrepTaskId, phpstanTaskId, yasaTaskId]);
+  }, [banditTaskId, gitleaksTaskId, opengrepTaskId, phpstanTaskId, pmdTaskId, yasaTaskId]);
 
   useEffect(() => {
     syncStateToUrl(tableState);
@@ -290,6 +308,16 @@ export default function StaticAnalysis() {
               中止 PHPStan
             </Button>
           ) : null}
+          {canInterruptPmd ? (
+            <Button
+              variant="outline"
+              className="cyber-btn-outline h-8"
+              onClick={() => setInterruptTarget("pmd")}
+            >
+              <Ban className="w-3.5 h-3.5 mr-1.5" />
+              中止 PMD
+            </Button>
+          ) : null}
           {canInterruptYasa ? (
             <Button
               variant="outline"
@@ -323,6 +351,7 @@ export default function StaticAnalysis() {
         gitleaksTask={gitleaksTask}
         banditTask={banditTask}
         phpstanTask={phpstanTask}
+        pmdTask={pmdTask}
         yasaTask={yasaTask}
         enabledEngines={enabledEngines}
         loadingInitial={loadingInitial}

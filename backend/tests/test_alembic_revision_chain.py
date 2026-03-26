@@ -60,10 +60,16 @@ def test_alembic_revisions_are_unique_and_single_head():
             parents.add(str(down_revision))
 
     heads = [revision for revision in revisions if revision not in parents]
-    assert heads == ["da4e5f6a7b8c"]
+    assert heads == ["e1f2a3b4c5d6"]
 
 
 def test_pmd_migration_follows_prompt_skills_migration():
     rows = _load_revision_metadata()
     pmd_row = next(row for row in rows if row["revision"] == "da4e5f6a7b8c")
     assert pmd_row["down_revision"] == "d4e5f6a7b8c9"
+
+
+def test_pmd_scan_tables_migration_follows_pmd_rule_configs():
+    rows = _load_revision_metadata()
+    pmd_scan_row = next(row for row in rows if row["revision"] == "e1f2a3b4c5d6")
+    assert pmd_scan_row["down_revision"] == "da4e5f6a7b8c"

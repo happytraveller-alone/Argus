@@ -10,6 +10,7 @@ import {
   buildBanditFindingDetailModel,
   buildGitleaksFindingDetailModel,
   buildOpengrepFindingDetailModel,
+  buildPmdFindingDetailModel,
   buildPhpstanFindingDetailModel,
   buildYasaFindingDetailModel,
   getAgentFalsePositiveEvidence,
@@ -39,6 +40,12 @@ import {
   type PhpstanScanTask,
 } from "@/shared/api/phpstan";
 import {
+  getPmdFinding,
+  getPmdScanTask,
+  type PmdFinding,
+  type PmdScanTask,
+} from "@/shared/api/pmd";
+import {
   getYasaFinding,
   getYasaScanTask,
   type YasaFinding,
@@ -61,7 +68,7 @@ import {
 } from "@/shared/utils/findingRoute";
 
 type FindingSource = "static" | "agent";
-type StaticEngine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa";
+type StaticEngine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa" | "pmd";
 
 function decodePathParam(raw: string | undefined): string {
   try {
@@ -82,6 +89,7 @@ function resolveStaticEngine(raw: string | null): StaticEngine {
   if (value === "gitleaks") return "gitleaks";
   if (value === "bandit") return "bandit";
   if (value === "phpstan") return "phpstan";
+  if (value === "pmd") return "pmd";
   if (value === "yasa") return "yasa";
   return "opengrep";
 }
@@ -169,6 +177,8 @@ export default function FindingDetail() {
   const [banditFinding, setBanditFinding] = useState<BanditFinding | null>(null);
   const [phpstanTask, setPhpstanTask] = useState<PhpstanScanTask | null>(null);
   const [phpstanFinding, setPhpstanFinding] = useState<PhpstanFinding | null>(null);
+  const [pmdTask, setPmdTask] = useState<PmdScanTask | null>(null);
+  const [pmdFinding, setPmdFinding] = useState<PmdFinding | null>(null);
   const [yasaTask, setYasaTask] = useState<YasaScanTask | null>(null);
   const [yasaFinding, setYasaFinding] = useState<YasaFinding | null>(null);
   const [agentFinding, setAgentFinding] = useState<AgentFinding | null>(null);
@@ -218,6 +228,8 @@ export default function FindingDetail() {
       setBanditFinding(null);
       setPhpstanTask(null);
       setPhpstanFinding(null);
+      setPmdTask(null);
+      setPmdFinding(null);
       setYasaTask(null);
       setYasaFinding(null);
       setAgentFinding(null);
@@ -256,6 +268,17 @@ export default function FindingDetail() {
             if (cancelled) return;
             setPhpstanTask(task);
             setPhpstanFinding(finding);
+            const nextProject = await databaseApi.getProjectById(task.project_id);
+            if (cancelled) return;
+            setProject(nextProject);
+          } else if (staticEngine === "pmd") {
+            const [task, finding] = await Promise.all([
+              getPmdScanTask(taskId),
+              getPmdFinding({ taskId, findingId }),
+            ]);
+            if (cancelled) return;
+            setPmdTask(task);
+            setPmdFinding(finding);
             const nextProject = await databaseApi.getProjectById(task.project_id);
             if (cancelled) return;
             setProject(nextProject);
@@ -418,6 +441,18 @@ export default function FindingDetail() {
       });
     }
 
+    if (source === "static" && staticEngine === "pmd" && pmdFinding) {
+      return buildPmdFindingDetailModel({
+        finding: pmdFinding,
+        taskId,
+        findingId,
+        taskName: pmdTask?.name,
+        projectId: project?.id,
+        projectSourceType: project?.source_type,
+        projectName: project?.name,
+      });
+    }
+
     if (source === "static" && staticEngine === "yasa" && yasaFinding) {
       return buildYasaFindingDetailModel({
         finding: yasaFinding,
@@ -438,6 +473,8 @@ export default function FindingDetail() {
     findingId,
     gitleaksFinding,
     gitleaksTask?.name,
+    pmdFinding,
+    pmdTask?.name,
     phpstanFinding,
     phpstanTask?.name,
     yasaFinding,

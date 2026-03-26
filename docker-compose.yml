@@ -122,6 +122,8 @@ services:
         condition: service_completed_successfully
       phpstan-runner:
         condition: service_completed_successfully
+      pmd-runner:
+        condition: service_completed_successfully
       flow-parser-runner:
         condition: service_completed_successfully
     networks:
@@ -233,6 +235,24 @@ services:
         - ALL_PROXY=
     restart: "no"
     command: ["/bin/sh", "-lc", "phpstan --version >/dev/null 2>&1 || true"]
+    networks:
+      - vulhunter-network
+
+  pmd-runner:
+    image: vulhunter/pmd-runner-local:latest
+    build:
+      context: ./backend
+      dockerfile: ./docker/pmd-runner.Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - http_proxy=
+        - https_proxy=
+        - HTTP_PROXY=
+        - HTTPS_PROXY=
+        - all_proxy=
+        - ALL_PROXY=
+    restart: "no"
+    command: ["/bin/sh", "-lc", "pmd --version >/dev/null 2>&1 || true"]
     networks:
       - vulhunter-network
 

@@ -60,6 +60,16 @@ def _bind_phpstan_runtime() -> None:
     _phpstan._sync_task_scan_duration = _sync_task_scan_duration
 
 
+def _bind_pmd_runtime() -> None:
+    _pmd.asyncio = asyncio
+    _pmd.async_session_factory = async_session_factory
+    _pmd._clear_scan_task_cancel = _clear_scan_task_cancel
+    _pmd._get_project_root = _get_project_root
+    _pmd._is_scan_task_cancelled = _is_scan_task_cancelled
+    _pmd._request_scan_task_cancel = _request_scan_task_cancel
+    _pmd._sync_task_scan_duration = _sync_task_scan_duration
+
+
 def _bind_yasa_runtime() -> None:
     _yasa.asyncio = asyncio
     _yasa._clear_scan_task_cancel = _clear_scan_task_cancel
@@ -88,6 +98,11 @@ async def _execute_bandit_scan(*args, **kwargs):
 async def _execute_phpstan_scan(*args, **kwargs):
     _bind_phpstan_runtime()
     return await _phpstan._execute_phpstan_scan(*args, **kwargs)
+
+
+async def _execute_pmd_scan(*args, **kwargs):
+    _bind_pmd_runtime()
+    return await _pmd._execute_pmd_scan(*args, **kwargs)
 
 
 async def _execute_gitleaks_scan(*args, **kwargs):
@@ -121,6 +136,10 @@ BanditFindingResponse = _bandit.BanditFindingResponse
 PhpstanScanTaskCreate = _phpstan.PhpstanScanTaskCreate
 PhpstanScanTaskResponse = _phpstan.PhpstanScanTaskResponse
 PhpstanFindingResponse = _phpstan.PhpstanFindingResponse
+
+PmdScanTaskCreate = _pmd.PmdScanTaskCreate
+PmdScanTaskResponse = _pmd.PmdScanTaskResponse
+PmdFindingResponse = _pmd.PmdFindingResponse
 
 GitleaksScanTaskCreate = _gitleaks.GitleaksScanTaskCreate
 GitleaksScanTaskResponse = _gitleaks.GitleaksScanTaskResponse
@@ -197,6 +216,15 @@ delete_phpstan_rule = _phpstan.delete_phpstan_rule
 restore_phpstan_rule = _phpstan.restore_phpstan_rule
 batch_delete_phpstan_rules = _phpstan.batch_delete_phpstan_rules
 batch_restore_phpstan_rules = _phpstan.batch_restore_phpstan_rules
+
+create_pmd_scan = _pmd.create_pmd_scan
+list_pmd_tasks = _pmd.list_pmd_tasks
+get_pmd_task = _pmd.get_pmd_task
+interrupt_pmd_task = _pmd.interrupt_pmd_task
+delete_pmd_task = _pmd.delete_pmd_task
+get_pmd_findings = _pmd.get_pmd_findings
+get_pmd_finding = _pmd.get_pmd_finding
+update_pmd_finding_status = _pmd.update_pmd_finding_status
 
 list_gitleaks_rules = _gitleaks.list_gitleaks_rules
 get_gitleaks_rule = _gitleaks.get_gitleaks_rule

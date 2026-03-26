@@ -9,7 +9,7 @@ import {
 	type NormalizedSeverity,
 } from "@/shared/utils/staticAnalysisSeverity";
 
-export type Engine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa";
+export type Engine = "opengrep" | "gitleaks" | "bandit" | "phpstan" | "yasa" | "pmd";
 export type EngineFilter = "all" | Engine;
 export type FindingStatus = "open" | "verified" | "false_positive";
 export type StatusFilter = "all" | FindingStatus;
@@ -138,6 +138,19 @@ type MinimalYasaFinding = {
   status?: string | null;
 };
 
+type MinimalPmdFinding = {
+  id: string;
+  scan_task_id?: string | null;
+  file_path?: string | null;
+  begin_line?: unknown;
+  end_line?: unknown;
+  rule?: string | null;
+  ruleset?: string | null;
+  priority?: unknown;
+  message?: string | null;
+  status?: string | null;
+};
+
 const SEVERITY_SCORE: Record<NormalizedSeverity, number> = {
   CRITICAL: 4,
   HIGH: 3,
@@ -171,6 +184,9 @@ export function normalizeStaticAnalysisPath(path?: string | null): string {
   const raw = String(path || "").trim();
   if (!raw) return "-";
   const unified = raw.replace(/\\/g, "/");
+  if (unified.startsWith("/scan/project/")) {
+    return unified.slice("/scan/project/".length) || "-";
+  }
   const tmpIndex = unified.indexOf("/tmp/");
   if (tmpIndex >= 0) {
     const trimmed = unified.slice(tmpIndex + 5);
@@ -288,6 +304,7 @@ function getEngineLabel(engine: Engine): string {
   if (engine === "gitleaks") return "Gitleaks";
   if (engine === "bandit") return "Bandit";
   if (engine === "phpstan") return "PHPStan";
+  if (engine === "pmd") return "PMD";
   return "YASA";
 }
 
@@ -400,15 +417,18 @@ export function getStaticAnalysisTotalDisplayDurationMs(input: {
   banditTask: StaticAnalysisSummaryTaskLike | null;
   phpstanTask: StaticAnalysisSummaryTaskLike | null;
   yasaTask?: StaticAnalysisSummaryTaskLike | null;
+  pmdTask?: StaticAnalysisSummaryTaskLike | null;
   nowMs?: number;
 }): number {
   const yasaTask = input.yasaTask ?? null;
+  const pmdTask = input.pmdTask ?? null;
   return (
     getStaticAnalysisTaskDisplayDurationMs(input.opengrepTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.gitleaksTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.banditTask, input.nowMs) +
     getStaticAnalysisTaskDisplayDurationMs(input.phpstanTask, input.nowMs) +
-    getStaticAnalysisTaskDisplayDurationMs(yasaTask, input.nowMs)
+    getStaticAnalysisTaskDisplayDurationMs(yasaTask, input.nowMs) +
+    getStaticAnalysisTaskDisplayDurationMs(pmdTask, input.nowMs)
   );
 }
 
@@ -418,14 +438,17 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
   banditTask: StaticAnalysisSummaryTaskLike | null;
   phpstanTask: StaticAnalysisSummaryTaskLike | null;
   yasaTask?: StaticAnalysisSummaryTaskLike | null;
+  pmdTask?: StaticAnalysisSummaryTaskLike | null;
 }): StaticAnalysisTaskStatusSummary {
   const yasaTask = input.yasaTask ?? null;
+  const pmdTask = input.pmdTask ?? null;
   const engineEntries = [
     { engine: "opengrep" as const, task: input.opengrepTask },
     { engine: "gitleaks" as const, task: input.gitleaksTask },
     { engine: "bandit" as const, task: input.banditTask },
     { engine: "phpstan" as const, task: input.phpstanTask },
     { engine: "yasa" as const, task: yasaTask },
+    { engine: "pmd" as const, task: pmdTask },
   ].filter(
     (entry): entry is { engine: Engine; task: StaticAnalysisSummaryTaskLike } =>
       Boolean(entry.task),
@@ -439,6 +462,7 @@ export function buildStaticAnalysisTaskStatusSummary(input: {
           banditTask: input.banditTask ?? undefined,
           phpstanTask: input.phpstanTask ?? undefined,
           yasaTask: yasaTask ?? undefined,
+          pmdTask: pmdTask ?? undefined,
         })
       : "failed";
 
@@ -508,15 +532,18 @@ export function buildStaticAnalysisProgressSummary(input: {
   banditTask: StaticAnalysisProgressTaskLike | null;
   phpstanTask: StaticAnalysisProgressTaskLike | null;
   yasaTask?: StaticAnalysisProgressTaskLike | null;
+  pmdTask?: StaticAnalysisProgressTaskLike | null;
   nowMs?: number;
 }): StaticAnalysisProgressSummary {
   const yasaTask = input.yasaTask ?? null;
+  const pmdTask = input.pmdTask ?? null;
   const tasks = [
     input.opengrepTask,
     input.gitleaksTask,
     input.banditTask,
     input.phpstanTask,
     yasaTask,
+    pmdTask,
   ].filter(Boolean) as StaticAnalysisProgressTaskLike[];
   if (tasks.length === 0) {
     return { progressPercent: 0 };
@@ -535,6 +562,7 @@ export function buildStaticAnalysisProgressSummary(input: {
     banditTask: input.banditTask,
     phpstanTask: input.phpstanTask,
     yasaTask,
+    pmdTask,
   });
 
   return {
@@ -566,14 +594,18 @@ export function buildUnifiedFindingRows(input: {
   banditFindings: MinimalBanditFinding[];
   phpstanFindings: MinimalPhpstanFinding[];
   yasaFindings?: MinimalYasaFinding[];
+  pmdFindings?: MinimalPmdFinding[];
   opengrepTaskId: string;
   gitleaksTaskId: string;
   banditTaskId: string;
   phpstanTaskId: string;
   yasaTaskId?: string;
+  pmdTaskId?: string;
 }): UnifiedFindingRow[] {
   const yasaFindings = input.yasaFindings || [];
   const yasaTaskId = input.yasaTaskId || "";
+  const pmdFindings = input.pmdFindings || [];
+  const pmdTaskId = input.pmdTaskId || "";
   const opengrepRows = input.opengrepFindings.map((finding) => {
     const severity = normalizeStaticAnalysisSeverity(finding.severity);
     const confidence = normalizeStaticAnalysisConfidence(finding.confidence);
@@ -672,7 +704,37 @@ export function buildUnifiedFindingRows(input: {
     };
   });
 
-  return [...opengrepRows, ...gitleaksRows, ...banditRows, ...phpstanRows, ...yasaRows];
+  const pmdRows = pmdFindings.map((finding) => {
+    const priority = Number(finding.priority);
+    const severity =
+      Number.isFinite(priority) && priority > 0 && priority <= 2
+        ? ("HIGH" as const)
+        : Number.isFinite(priority) && priority === 3
+          ? ("MEDIUM" as const)
+          : ("LOW" as const);
+    const rule = [
+      String(finding.rule || "").trim(),
+      String(finding.ruleset || "").trim(),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return {
+      key: `pmd:${finding.id}`,
+      id: finding.id,
+      taskId: finding.scan_task_id || pmdTaskId,
+      engine: "pmd" as const,
+      rule: rule || String(finding.message || "").trim() || "-",
+      filePath: normalizeStaticAnalysisPath(finding.file_path),
+      line: toStaticAnalysisPositiveLine(finding.begin_line),
+      severity,
+      severityScore: SEVERITY_SCORE[severity],
+      confidence: "MEDIUM" as const,
+      confidenceScore: CONFIDENCE_SCORE.MEDIUM,
+      status: String(finding.status || "open").trim().toLowerCase(),
+    };
+  });
+
+  return [...opengrepRows, ...gitleaksRows, ...banditRows, ...phpstanRows, ...yasaRows, ...pmdRows];
 }
 
 export function buildStaticAnalysisListState(input: {

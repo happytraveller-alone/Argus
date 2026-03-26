@@ -21,6 +21,7 @@ from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
 from app.models.bandit import BanditScanTask
 from app.models.phpstan import PhpstanScanTask
+from app.models.pmd_scan import PmdScanTask
 from app.models.yasa import YasaScanTask
 from sqlalchemy.future import select
 from sqlalchemy import text
@@ -186,6 +187,8 @@ RECOVERABLE_BANDIT_TASK_STATUSES = {"pending", "running"}
 RECOVERABLE_PHPSTAN_TASK_STATUSES = {"pending", "running"}
 # YASA interrupted recovery support
 RECOVERABLE_YASA_TASK_STATUSES = {"pending", "running"}
+# PMD interrupted recovery support
+RECOVERABLE_PMD_TASK_STATUSES = {"pending", "running"}
 
 
 def _mark_task_interrupted(task) -> bool:
@@ -218,6 +221,7 @@ async def recover_interrupted_tasks() -> dict[str, int]:
             "bandit": 0,
             "phpstan": 0,
             "yasa": 0,
+            "pmd": 0,
         }
 
         recovery_specs = [
@@ -230,6 +234,8 @@ async def recover_interrupted_tasks() -> dict[str, int]:
             (PhpstanScanTask, RECOVERABLE_PHPSTAN_TASK_STATUSES, "phpstan"),
             # YASA interrupted recovery support
             (YasaScanTask, RECOVERABLE_YASA_TASK_STATUSES, "yasa"),
+            # PMD interrupted recovery support
+            (PmdScanTask, RECOVERABLE_PMD_TASK_STATUSES, "pmd"),
         ]
 
         for model, recoverable_statuses, counter_key in recovery_specs:
@@ -243,13 +249,14 @@ async def recover_interrupted_tasks() -> dict[str, int]:
         if any(counts.values()):
             await db.commit()
             logger.warning(
-                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, opengrep=%s, gitleaks=%s, bandit=%s, phpstan=%s, yasa=%s",
+                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, opengrep=%s, gitleaks=%s, bandit=%s, phpstan=%s, yasa=%s, pmd=%s",
                 counts["agent"],
                 counts["opengrep"],
                 counts["gitleaks"],
                 counts["bandit"],
                 counts["phpstan"],
                 counts["yasa"],
+                counts["pmd"],
             )
         else:
             await db.rollback()

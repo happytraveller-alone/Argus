@@ -24,6 +24,7 @@ import app.models.gitleaks  # noqa: F401
 import app.models.opengrep  # noqa: F401
 import app.models.bandit  # noqa: F401
 import app.models.phpstan  # noqa: F401
+import app.models.pmd_scan  # noqa: F401
 import app.models.yasa  # noqa: F401
 from app.main import (
     INTERRUPTED_ERROR_MESSAGE,
@@ -32,6 +33,7 @@ from app.main import (
     RECOVERABLE_GITLEAKS_TASK_STATUSES,
     RECOVERABLE_OPENGREP_TASK_STATUSES,
     RECOVERABLE_PHPSTAN_TASK_STATUSES,
+    RECOVERABLE_PMD_TASK_STATUSES,
     RECOVERABLE_YASA_TASK_STATUSES,
     _collect_stale_yasa_pids,
     cleanup_stale_yasa_processes,
@@ -42,6 +44,7 @@ from app.models.gitleaks import GitleaksScanTask
 from app.models.opengrep import OpengrepScanTask
 from app.models.bandit import BanditScanTask
 from app.models.phpstan import PhpstanScanTask
+from app.models.pmd_scan import PmdScanTask
 from app.models.yasa import YasaScanTask
 
 
@@ -77,6 +80,7 @@ class _FakeSession:
             GitleaksScanTask: RECOVERABLE_GITLEAKS_TASK_STATUSES,
             BanditScanTask: RECOVERABLE_BANDIT_TASK_STATUSES,
             PhpstanScanTask: RECOVERABLE_PHPSTAN_TASK_STATUSES,
+            PmdScanTask: RECOVERABLE_PMD_TASK_STATUSES,
             YasaScanTask: RECOVERABLE_YASA_TASK_STATUSES,
         }[entity]
         filtered = [item for item in items if str(item.status).lower() in recoverable_statuses]
@@ -131,6 +135,14 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
         status="pending",
         error_message=None,
     )
+    pmd_task = PmdScanTask(
+        id="pmd-running",
+        project_id="project-1",
+        name="pmd",
+        target_path="/tmp/project",
+        status="running",
+        error_message=None,
+    )
     yasa_task = YasaScanTask(
         id="yasa-running",
         project_id="project-1",
@@ -147,6 +159,7 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
             GitleaksScanTask: [gitleaks_task],
             BanditScanTask: [bandit_task],
             PhpstanScanTask: [phpstan_task],
+            PmdScanTask: [pmd_task],
             YasaScanTask: [yasa_task],
         }
     )
@@ -160,6 +173,7 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
         "gitleaks": 1,
         "bandit": 1,
         "phpstan": 1,
+        "pmd": 1,
         "yasa": 1,
     }
     assert fake_session.commit_calls == 1
@@ -179,6 +193,8 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
     assert bandit_task.error_message == INTERRUPTED_ERROR_MESSAGE
     assert phpstan_task.status == "interrupted"
     assert phpstan_task.error_message == INTERRUPTED_ERROR_MESSAGE
+    assert pmd_task.status == "interrupted"
+    assert pmd_task.error_message == INTERRUPTED_ERROR_MESSAGE
     assert yasa_task.status == "interrupted"
     assert yasa_task.error_message == INTERRUPTED_ERROR_MESSAGE
 
@@ -220,6 +236,7 @@ async def test_recover_interrupted_tasks_preserves_terminal_statuses_and_existin
             GitleaksScanTask: [gitleaks_failed],
             BanditScanTask: [],
             PhpstanScanTask: [],
+            PmdScanTask: [],
             YasaScanTask: [],
         }
     )
@@ -233,6 +250,7 @@ async def test_recover_interrupted_tasks_preserves_terminal_statuses_and_existin
         "gitleaks": 0,
         "bandit": 0,
         "phpstan": 0,
+        "pmd": 0,
         "yasa": 0,
     }
     assert fake_session.commit_calls == 0

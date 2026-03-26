@@ -285,6 +285,7 @@ async def test_pmd(project_root: str):
 
     说明:
     - PMD 现在依赖 SCANNER_PMD_IMAGE 提供扫描镜像
+    - 本地 `docker compose up --build` 会先构建并一次性运行 pmd-runner 进行镜像预热
     - 执行方式是按需启动的一次性 runner 容器，不是 backend 常驻服务
     - 这里只是可选的手工 smoke test，不属于默认自动验收
     """

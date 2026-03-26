@@ -3,17 +3,24 @@ import assert from "node:assert/strict";
 
 import { apiClient } from "../src/shared/api/serverClient.ts";
 import {
+  createPmdScanTask,
   deletePmdRuleConfig,
+  getPmdFinding,
+  getPmdFindings,
   getPmdBuiltinRuleset,
   getPmdBuiltinRulesets,
   getPmdPresets,
   getPmdRuleConfig,
   getPmdRuleConfigs,
+  getPmdScanTask,
+  getPmdScanTasks,
+  interruptPmdScanTask,
   importPmdRuleConfig,
   updatePmdRuleConfig,
+  updatePmdFindingStatus,
 } from "../src/shared/api/pmd.ts";
 
-test("pmd api client maps preset, ruleset, and config endpoints", async () => {
+test("pmd api client maps preset, ruleset, config, and scan endpoints", async () => {
   const originalGet = apiClient.get;
   const originalPost = apiClient.post;
   const originalPatch = apiClient.patch;
@@ -56,6 +63,18 @@ test("pmd api client maps preset, ruleset, and config endpoints", async () => {
       description: "updated desc",
       is_active: false,
     });
+    await createPmdScanTask({
+      project_id: "project-1",
+      name: "PMD Scan",
+      target_path: ".",
+      ruleset: "security",
+    });
+    await getPmdScanTasks({ project_id: "project-1", skip: 2, limit: 20 });
+    await getPmdScanTask("task-1");
+    await getPmdFindings({ taskId: "task-1", status: "open", skip: 3, limit: 40 });
+    await getPmdFinding({ taskId: "task-1", findingId: "finding-1" });
+    await updatePmdFindingStatus("finding-1", "verified");
+    await interruptPmdScanTask("task-1");
     await deletePmdRuleConfig("cfg/1");
   } finally {
     apiClient.get = originalGet;
@@ -75,6 +94,13 @@ test("pmd api client maps preset, ruleset, and config endpoints", async () => {
       "get:/static-tasks/pmd/rule-configs?is_active=true&keyword=custom&skip=1&limit=5",
       "get:/static-tasks/pmd/rule-configs/cfg%2F1",
       "patch:/static-tasks/pmd/rule-configs/cfg%2F1",
+      "post:/static-tasks/pmd/scan",
+      "get:/static-tasks/pmd/tasks?project_id=project-1&skip=2&limit=20",
+      "get:/static-tasks/pmd/tasks/task-1",
+      "get:/static-tasks/pmd/tasks/task-1/findings?status=open&skip=3&limit=40",
+      "get:/static-tasks/pmd/tasks/task-1/findings/finding-1",
+      "post:/static-tasks/pmd/findings/finding-1/status?status=verified",
+      "post:/static-tasks/pmd/tasks/task-1/interrupt",
       "delete:/static-tasks/pmd/rule-configs/cfg%2F1",
     ],
   );

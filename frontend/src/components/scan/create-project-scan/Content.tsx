@@ -90,6 +90,8 @@ export default function CreateProjectScanDialogContent({
   setPhpstanEnabled,
   yasaEnabled,
   setYasaEnabled,
+  pmdEnabled,
+  setPmdEnabled,
   yasaLanguage,
   setYasaLanguage,
   yasaRuleConfigs,
@@ -97,6 +99,8 @@ export default function CreateProjectScanDialogContent({
   setSelectedYasaRuleConfigId,
   isYasaBlockedProject,
   yasaBlockedMessage,
+  isPmdBlockedProject,
+  pmdBlockedMessage,
   showYasaAutoSkipHint,
   showLlmQuickFixPanel,
   openLlmQuickFixPanelManual,
@@ -160,6 +164,8 @@ export default function CreateProjectScanDialogContent({
   setPhpstanEnabled: (enabled: boolean) => void;
   yasaEnabled: boolean;
   setYasaEnabled: (enabled: boolean) => void;
+  pmdEnabled: boolean;
+  setPmdEnabled: (enabled: boolean) => void;
   yasaLanguage: "auto" | "python" | "javascript" | "typescript" | "golang" | "java";
   setYasaLanguage: (language: string) => void;
   yasaRuleConfigs: YasaRuleConfigItem[];
@@ -167,6 +173,8 @@ export default function CreateProjectScanDialogContent({
   setSelectedYasaRuleConfigId: (id: string) => void;
   isYasaBlockedProject: boolean;
   yasaBlockedMessage: string;
+  isPmdBlockedProject: boolean;
+  pmdBlockedMessage: string;
   showYasaAutoSkipHint: boolean;
   showLlmQuickFixPanel: boolean;
   openLlmQuickFixPanelManual: () => void | Promise<void>;
@@ -542,6 +550,20 @@ export default function CreateProjectScanDialogContent({
                     <p className="text-xs text-muted-foreground">多语言静态分析</p>
                   </div>
                 </label>
+                {mode === "static" ? (
+                  <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
+                    <Checkbox
+                      checked={pmdEnabled}
+                      onCheckedChange={(checked) => setPmdEnabled(Boolean(checked))}
+                      disabled={creating || isPmdBlockedProject}
+                      className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
+                    />
+                    <div>
+                      <p className="text-sm text-foreground font-semibold">PMD</p>
+                      <p className="text-xs text-muted-foreground">Java 规则扫描</p>
+                    </div>
+                  </label>
+                ) : null}
               </div>
               {yasaEnabled && (
                 <div className="space-y-2">
@@ -594,6 +616,9 @@ export default function CreateProjectScanDialogContent({
               {isYasaBlockedProject && (
                 <p className="text-xs text-amber-300">{yasaBlockedMessage}</p>
               )}
+              {mode === "static" && isPmdBlockedProject ? (
+                <p className="text-xs text-amber-300">{pmdBlockedMessage}</p>
+              ) : null}
               {mode === "hybrid" && selectedProject && !isZipProject(selectedProject) && (
                 <p className="text-xs text-rose-300">
                   混合扫描当前仅支持源码压缩包项目（静态 + 智能）。
