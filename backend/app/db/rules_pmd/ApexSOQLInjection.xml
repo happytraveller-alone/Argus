@@ -6,25 +6,22 @@
 
     <description>Independent ruleset for ApexSOQLInjection</description>
 
-    <rule name="ApexSOQLInjection"
-          language="apex"
-          since="5.5.3"
-          message="Avoid untrusted/unescaped variables in DML query"
-          class="net.sourceforge.pmd.lang.apex.rule.security.ApexSOQLInjectionRule"
-          externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexsoqlinjection">
-        <description>
-Detects the usage of untrusted / unescaped variables in DML queries.
-        </description>
-        <priority>3</priority>
-        <example>
-<![CDATA[
-public class Foo {
-    public void test1(String t1) {
-        Database.query('SELECT Id FROM Account' + t1);
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ApexSOQLInjection" language="apex" since="5.5.3" message="Avoid untrusted/unescaped variables in DML query" class="net.sourceforge.pmd.lang.apex.rule.security.ApexSOQLInjectionRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexsoqlinjection">
+            <description>
+    Detects the usage of untrusted / unescaped variables in DML queries.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public class Foo {
+        public void test1(String t1) {
+            Database.query('SELECT Id FROM Account' + t1);
+        }
     }
-}
-]]>
-        </example>
-    </rule>
+
+            </example>
+        </rule>
+
+        
 
 </ruleset>

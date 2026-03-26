@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="UselessOperationOnImmutable Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for UselessOperationOnImmutable</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="UselessOperationOnImmutable" language="java" since="3.5" message="The result of an operation on an immutable object is ignored" class="net.sourceforge.pmd.lang.java.rule.errorprone.UselessOperationOnImmutableRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#uselessoperationonimmutable" deprecated="true">
+            <description>
+    An operation on an immutable object will not change the object itself since the result of the operation is a new object.
+    Therefore, ignoring the result of such an operation is likely a mistake. The operation can probably be removed.
+
+    This rule recognizes the types `String`, `BigDecimal`, `BigInteger` or any type from `java.time.*` as immutable.
+
+    **Deprecated:** This rule is deprecated since PMD 7.17.0 and will be removed with PMD 8.0.0.
+    This rule has been replaced by {% rule UselessPureMethodCall %}.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    import java.math.*;
+
+    class Test {
+        void method1() {
+            BigDecimal bd=new BigDecimal(10);
+            bd.add(new BigDecimal(5));      // this will trigger the rule
+        }
+        void method2() {
+            BigDecimal bd=new BigDecimal(10);
+            bd = bd.add(new BigDecimal(5)); // this won't trigger the rule
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

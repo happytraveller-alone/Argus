@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidCatchingNPE Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidCatchingNPE</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidCatchingNPE" language="java" since="1.8" deprecated="true" message="Avoid catching NullPointerException; consider removing the cause of the NPE." class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidcatchingnpe">
+            <description>
+    Code should never throw NullPointerExceptions under normal circumstances.  A catch block may hide the
+    original error, causing other, more subtle problems later on.
+
+    **Deprecated:** This rule is deprecated since PMD 7.18.0 and will be removed with PMD 8.0.0.
+    This rule has been subsumed by {% rule AvoidCatchingGenericException %},
+    which is now configurable as to which exceptions cause a violation.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //CatchClause/CatchParameter/ClassType[pmd-java:typeIsExactly('java.lang.NullPointerException')]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo {
+        void bar() {
+            try {
+                // do something
+            } catch (NullPointerException npe) {
+            }
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

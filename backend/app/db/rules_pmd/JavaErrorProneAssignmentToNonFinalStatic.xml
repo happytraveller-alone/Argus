@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AssignmentToNonFinalStatic Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AssignmentToNonFinalStatic</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AssignmentToNonFinalStatic" language="java" since="2.2" message="Possible unsafe assignment to non-final static field ''{0}'' in a constructor." class="net.sourceforge.pmd.lang.java.rule.errorprone.AssignmentToNonFinalStaticRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#assignmenttononfinalstatic">
+            <description>
+    Identifies a possible unsafe usage of a static field.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public class StaticField {
+       static int x;
+       public FinalFields(int y) {
+        x = y; // unsafe
+       }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

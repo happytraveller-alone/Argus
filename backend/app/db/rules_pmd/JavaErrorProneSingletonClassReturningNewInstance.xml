@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="SingletonClassReturningNewInstance Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for SingletonClassReturningNewInstance</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="SingletonClassReturningNewInstance" language="java" since="5.4" message="getInstance method always creates a new object and hence does not comply to Singleton Design Pattern behaviour. Please review" class="net.sourceforge.pmd.lang.java.rule.errorprone.SingletonClassReturningNewInstanceRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#singletonclassreturningnewinstance">
+            <description>
+                A singleton class should only ever have one instance. Failure to check
+                whether an instance has already been created may result in multiple
+                instances being created.
+            </description>
+            <priority>2</priority>
+            <example>
+
+    class Singleton {
+        private static Singleton instance = null;
+        public static Singleton getInstance() {
+            synchronized(Singleton.class) {
+                return new Singleton(); // this should be assigned to the field
+            }
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

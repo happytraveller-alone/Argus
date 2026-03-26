@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="InvalidDependencyTypes Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for InvalidDependencyTypes</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="InvalidDependencyTypes" language="pom" since="5.4" message="By default, Maven only recognizes the following types: pom, jar, maven-plugin, ejb, war, ear, rar, par." class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_pom_errorprone.html#invaliddependencytypes">
+            <description>
+    If you use an invalid dependency type in the dependency management section, Maven doesn't fail. Instead,
+    the entry is just ignored, which might have the effect, that the wrong version of the dependency is used.
+
+    The following types are considered valid: pom, jar, maven-plugin, ejb, war, ear, rar, par.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //dependencyManagement/dependencies/dependency/type/text[not(@Text = $validTypes)]
+
+                    </value>
+                </property>
+                <property name="validTypes" value="pom,jar,maven-plugin,ejb,war,ear,rar,par" type="List[String]" description="Set of valid types." />
+            </properties>
+            <example>
+
+    &lt;project...&gt;
+      ...
+      &lt;dependencyManagement&gt;
+          ...
+        &lt;dependency&gt;
+          &lt;groupId&gt;org.jboss.arquillian&lt;/groupId&gt;
+          &lt;artifactId&gt;arquillian-bom&lt;/artifactId&gt;
+          &lt;version&gt;${arquillian.version}&lt;/version&gt;
+          &lt;type&gt;bom&lt;/type&gt; &lt;!-- not a valid type ! 'pom' is ! --&gt;
+          &lt;scope&gt;import&lt;/scope&gt;
+        &lt;/dependency&gt;
+        ...
+      &lt;/dependencyManagement&gt;
+    &lt;/project&gt;
+     
+            </example>
+        </rule>
+
+        
+
+</ruleset>

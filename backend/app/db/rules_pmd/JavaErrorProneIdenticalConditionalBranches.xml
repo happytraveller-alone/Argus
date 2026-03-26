@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="IdenticalConditionalBranches Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for IdenticalConditionalBranches</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="IdenticalConditionalBranches" language="java" since="7.18.0" message="Conditional statement ignores the condition" class="net.sourceforge.pmd.lang.java.rule.errorprone.IdenticalConditionalBranchesRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#identicalconditionalbranches">
+            <description>
+                Conditional statement that does the same thing when the condition is true and false
+                is either incorrect (one of the branches should be changed) or redundant
+                (can be replaced by one of its branches).
+            </description>
+            <priority>3</priority>
+            <example>
+                
+    class Test {
+        int method1() {
+            if (Math.random() &gt; 0.5) {
+                return 1;
+            } else {
+                return 1;
+            }
+        }
+        int method2() {
+            return Math.random() &gt; 0.5 ? 1 : 1;
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

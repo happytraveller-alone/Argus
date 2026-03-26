@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="SuspiciousOctalEscape Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for SuspiciousOctalEscape</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="SuspiciousOctalEscape" language="java" since="1.5" message="Suspicious decimal characters following octal escape in string literal: {0}" class="net.sourceforge.pmd.lang.java.rule.errorprone.SuspiciousOctalEscapeRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#suspiciousoctalescape">
+            <description>
+    A suspicious octal escape sequence was found inside a String literal.
+    The Java language specification (section 3.10.6) says an octal
+    escape sequence inside a literal String shall consist of a backslash
+    followed by:
+
+        OctalDigit | OctalDigit OctalDigit | ZeroToThree OctalDigit OctalDigit
+
+    Any octal escape sequence followed by non-octal digits can be confusing,
+    e.g. "\038" is interpreted as the octal escape sequence "\03" followed by
+    the literal character "8".
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public void foo() {
+      // interpreted as octal 12, followed by character '8'
+      System.out.println("suspicious: \128");
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

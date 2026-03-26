@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidTrailingComma Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidTrailingComma</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidTrailingComma" message="Avoid trailing commas in object or array literals" language="ecmascript" since="5.1" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_ecmascript_errorprone.html#avoidtrailingcomma">
+            <description>
+    This rule helps improve code portability due to differences in browser treatment of trailing commas in object or array literals.
+            </description>
+            <priority>1</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ObjectLiteral[$allowObjectLiteral = false() and @TrailingComma = true()]
+    |
+    //ArrayLiteral[$allowArrayLiteral = false() and @TrailingComma = true()]
+
+                    </value>
+                </property>
+                <property name="allowObjectLiteral" type="Boolean" value="false" description="Allow a trailing comma within an object literal" />
+                <property name="allowArrayLiteral" type="Boolean" value="false" description="Allow a trailing comma within an array literal" />
+            </properties>
+            <example>
+
+    function(arg) {
+        var obj1 = { a : 1 };   // Ok
+        var arr1 = [ 1, 2 ];    // Ok
+
+        var obj2 = { a : 1, };  // Syntax error in some browsers!
+        var arr2 = [ 1, 2, ];   // Length 2 or 3 depending on the browser!
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

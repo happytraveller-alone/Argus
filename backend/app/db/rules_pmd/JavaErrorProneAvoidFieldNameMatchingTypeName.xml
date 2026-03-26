@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidFieldNameMatchingTypeName Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidFieldNameMatchingTypeName</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidFieldNameMatchingTypeName" language="java" since="3.0" message="It is somewhat confusing to have a field name matching the declaring class name" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidfieldnamematchingtypename">
+            <description>
+    It is somewhat confusing to have a field name matching the declaring type name.
+    This probably means that type and/or field names should be chosen more carefully.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //FieldDeclaration/VariableDeclarator/VariableId
+        [lower-case(@Name) = lower-case(ancestor::ClassDeclaration[1]/@SimpleName)]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo extends Bar {
+        int foo;    // There is probably a better name that can be used
+    }
+    public interface Operation {
+        int OPERATION = 1; // There is probably a better name that can be used
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

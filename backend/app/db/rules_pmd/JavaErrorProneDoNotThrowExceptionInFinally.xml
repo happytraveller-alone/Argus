@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="DoNotThrowExceptionInFinally Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for DoNotThrowExceptionInFinally</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="DoNotThrowExceptionInFinally" language="java" since="4.2" message="A throw statement in a finally block makes the control flow hard to understand." class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#donotthrowexceptioninfinally">
+            <description>
+    Throwing exceptions within a 'finally' block is confusing since they may mask other exceptions
+    or code defects.
+    Note: This is a PMD implementation of the Lint4j rule "A throw in a finally block"
+            </description>
+            <priority>4</priority>
+            <properties>
+                <property name="xpath">
+                    <value>//FinallyClause[descendant::ThrowStatement]</value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo {
+        public void bar() {
+            try {
+                // Here do some stuff
+            } catch( Exception e) {
+                // Handling the issue
+            } finally {
+                // is this really a good idea ?
+                throw new Exception();
+            }
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

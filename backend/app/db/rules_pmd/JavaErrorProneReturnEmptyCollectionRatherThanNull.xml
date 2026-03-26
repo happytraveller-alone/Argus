@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ReturnEmptyCollectionRatherThanNull Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for ReturnEmptyCollectionRatherThanNull</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ReturnEmptyCollectionRatherThanNull" language="java" since="6.37.0" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" message="Return an empty collection rather than 'null'." externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#returnemptycollectionratherthannull">
+            <description>
+    For any method that returns an collection (such as an array, Collection or Map), it is better to return
+    an empty one rather than a null reference. This removes the need for null checking all results and avoids
+    inadvertent NullPointerExceptions.
+
+    See Effective Java, 3rd Edition, Item 54: Return empty collections or arrays instead of null
+            </description>
+            <priority>1</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ReturnStatement/NullLiteral
+    [ancestor::MethodDeclaration[1]
+        [ArrayType
+         or ClassType[pmd-java:typeIs('java.util.Collection')
+            or pmd-java:typeIs('java.util.Map')]]
+    ]
+    [not(./ancestor::LambdaExpression)]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Example {
+        // Not a good idea...
+        public int[] badBehavior() {
+            // ...
+            return null;
+        }
+
+        // Good behavior
+        public String[] bonnePratique() {
+            //...
+            return new String[0];
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

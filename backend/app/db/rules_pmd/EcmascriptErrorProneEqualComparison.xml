@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="EqualComparison Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for EqualComparison</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="EqualComparison" language="ecmascript" since="5.0" message="Use '==='/'!==' to compare with true/false or Numbers" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_ecmascript_errorprone.html#equalcomparison">
+            <description>
+    Using == in condition may lead to unexpected results, as the variables are automatically casted to be of the
+    same type. The === operator avoids the casting.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //InfixExpression[
+      (@Operator = '==' or @Operator = '!=')
+      and
+      (KeywordLiteral[@Literal = 'true' or @Literal = 'false'] or NumberLiteral)
+    ]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    // Ok
+    if (someVar === true) {
+      ...
+    }
+    // Ok
+    if (someVar !== 3) {
+      ...
+    }
+    // Bad
+    if (someVar == true) {
+      ...
+    }
+    // Bad
+    if (someVar != 3) {
+      ...
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

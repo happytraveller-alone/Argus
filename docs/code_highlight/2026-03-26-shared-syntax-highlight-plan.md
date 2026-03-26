@@ -17,6 +17,11 @@ These points are already true in the current codebase and must shape the impleme
 5. `frontend/src/pages/project-code-browser/model.ts` currently returns a synchronous `"ready"` state containing `content`, `size`, and `encoding`, but no preview-line model or syntax metadata.
 6. Existing tests for this area use `renderToStaticMarkup` in Node, especially `frontend/tests/projectCodeBrowserPage.test.tsx`. That means the highlighting path cannot rely on a browser-only `useEffect` enhancement if we want deterministic markup-level tests.
 7. `frontend/src/pages/finding-detail/FindingDetailCodePanel.tsx` has its own separate line renderer and is not a `FindingCodeWindow` consumer. It is out of scope for v1 highlighting.
+8. `ProjectCodeBrowser` is currently a ZIP-only surface. The backend file-list and file-content APIs both reject non-ZIP projects.
+9. The backend file list is narrower than the desired highlighter capability set because `GET /projects/{id}/files` filters entries through `backend/app/services/scanner.py:is_text_file` before the frontend sees them.
+10. The backend file-content route auto-switches to a streaming branch above 1 MB, so the frontend cannot assume every successful transport already matches the exact `ProjectFileContentResponse` shape.
+11. Content search currently reuses the same `loadFileState` path as preview loads, so any highlight work added there will also run during search unless those flows are explicitly split.
+12. `ProjectCodeBrowser` is already route-lazy-loaded via `frontend/src/app/routes.tsx`; extra lazy loading inside the highlighting module is still useful, but mainly to keep the code-browser route chunk and preview interactions lean.
 
 ## Scope Locked For V1
 
@@ -25,7 +30,7 @@ These points are already true in the current codebase and must shape the impleme
 - Add a shared syntax-highlighting module.
 - Extend the shared code line contract to support token segments.
 - Update `FindingCodeWindow` to render token spans while preserving the existing line grid and anchors.
-- Enable real syntax highlighting only in `ProjectCodeBrowser`.
+- Enable real syntax highlighting only in ZIP-backed `ProjectCodeBrowser` previews.
 - Add lightweight syntax metadata to the project-browser preview header.
 - Add tests for language resolution, fallback rules, token segmentation, viewer rendering, and project-browser integration.
 
@@ -78,6 +83,51 @@ Final rule:
 - in both cases, overlay `focusLine` and `highlightStartLine` / `highlightEndLine` from props onto the final rendered lines
 - line-level flags already present on a provided line are preserved and OR-ed with prop-derived flags
 
+### 4. File-Content Responses Must Be Normalized Before Highlighting
+
+Do not let `ProjectCodeBrowser` or the shared highlight module consume raw backend payloads directly.
+
+Reason:
+
+- the backend auto-streams files above 1 MB
+- the streamed binary branch does not guarantee the same fields as the non-streamed branch
+- the frontend API type currently assumes a stable shape even though transport behavior is looser than that
+
+Implementation consequence:
+
+- normalize `/projects/{id}/files/{file_path}` responses into a stable frontend shape before any highlight logic runs
+- if the current transport branch cannot be normalized into `{ file_path, content, size, encoding, is_text }`, treat that load as `"unavailable"` in v1
+
+### 5. Preview Loading And Search Loading Must Diverge
+
+Do not run syntax tokenization in the same loading path used for content search scanning.
+
+Reason:
+
+- search currently calls the same file loader for many files
+- the preview pipeline can afford highlight work; the search pipeline cannot
+- large-file transport edge cases should not be multiplied across background search scans
+
+Implementation consequence:
+
+- keep a preview-oriented load path that may build highlighted `displayLines`
+- keep a search-oriented load path that returns raw text only and never tokenizes
+
+### 6. Requested And Resolved File Paths Must Be Stored Separately
+
+Do not keep a single ambiguous `filePath` field in the new ready state.
+
+Reason:
+
+- the frontend selects files using tree/search paths
+- the backend may rewrite those paths to resolved ZIP member paths
+- cache keys, preview decorations, display headers, and follow-up API work do not all want the same path identity
+
+Implementation consequence:
+
+- the ready state must carry both `requestedFilePath` and `resolvedFilePath`
+- the plan must define which one is used for each downstream concern
+
 ## Exact File-Level Ownership
 
 ### New Files
@@ -91,6 +141,8 @@ Create a new shared folder:
 ### Existing Files To Update
 
 - `frontend/package.json`
+- `frontend/pnpm-lock.yaml`
+- `frontend/src/shared/api/database.ts`
 - `frontend/src/pages/AgentAudit/components/FindingCodeWindow.tsx`
 - `frontend/src/pages/ProjectCodeBrowser.tsx`
 - `frontend/src/pages/project-code-browser/model.ts`
@@ -101,6 +153,7 @@ Create a new shared folder:
 
 - `frontend/tests/codeHighlight.test.ts`
 - `frontend/tests/findingCodeWindow.test.tsx`
+- `frontend/tests/projectFileContentApiContract.test.ts`
 
 ### Files That Should Not Change In V1 Unless Type Imports Force It
 
@@ -228,6 +281,8 @@ Do not use content-based auto-detection.
 
 Implement these mappings in `frontend/src/shared/code-highlighting/languageMap.ts`.
 
+This mapping table only controls client-side highlighting after a file path is already returned by `/projects/{id}/files`; v1 does not widen the backend `is_text_file` gate.
+
 #### Special Filenames
 
 - `Dockerfile` -> `dockerfile` / label `Dockerfile`
@@ -289,6 +344,7 @@ Notes:
 - `.jsonc` intentionally reuses the JSON highlighter in v1.
 - generic `.conf` intentionally falls back to `ini`; only `nginx.conf` receives the Nginx mapping.
 - `.env` and `.env.*` files are intentionally plain text in v1 and must not receive a language mapping.
+- For `ProjectCodeBrowser` specifically, v1 visible coverage is limited by the current backend file-list allowlist in `backend/app/services/scanner.py`, even if the shared highlighter module supports more path patterns for future surfaces.
 
 ## Highlight Engine Loading
 
@@ -302,6 +358,8 @@ Required behavior:
 2. The module caches the in-flight promise and the resolved engine instance.
 3. If loading fails, clear the cached promise so a later call can retry.
 4. Do not import every language eagerly in the initial route bundle.
+
+Because this module is exercised by `pnpm test:node` under plain `node --test --import tsx`, the lazy loader must use standard ESM `import()` and must not depend on Vite-only helpers such as `import.meta.glob` or query-suffixed imports.
 
 ### Engine Shape
 
@@ -344,7 +402,7 @@ Apply these checks in `buildCodeHighlightResult` in this exact order:
 9. Tokenize
 10. If tokenization or line segmentation throws, return plain text with `fallbackReason = "tokenize-failed"`
 
-For the project-browser flow, non-text file handling remains outside this module. `ProjectCodeBrowser` should continue mapping `response.is_text === false` to the existing `"unavailable"` state before any highlight work begins.
+For the project-browser flow, non-text and streamed file handling remains outside this module: normalize `/projects/{id}/files/{file_path}` responses to a stable `{ content, size, encoding, is_text }` object before highlighting, and if the current >1 MB streaming branch cannot guarantee that shape, treat those responses as `"unavailable"` in v1.
 
 ## Token Segmentation Rules
 
@@ -363,6 +421,34 @@ Required rules:
 9. Every output line must still include the original plain `content`.
 
 Do not let token segmentation alter the source text, trim whitespace, or collapse indentation.
+
+## File Content Transport Normalization
+
+Before calling `buildCodeHighlightResult`, normalize backend file-content responses in `frontend/src/shared/api/database.ts`.
+
+Required behavior:
+
+1. The frontend API layer validates that a successful response can be interpreted as:
+
+```ts
+{
+  file_path: string;
+  content: string;
+  size: number;
+  encoding: string;
+  is_text: boolean;
+}
+```
+
+2. If the streamed or non-streamed branch omits `is_text` or cannot be normalized safely, the frontend must treat the response as non-highlightable in v1.
+3. The shared highlight module must never receive raw transport variants directly.
+4. The normalization rule applies before any `"ready"` state is built.
+
+V1 policy:
+
+- non-text handling stays outside the highlight module
+- transport-normalization failures are treated as `"unavailable"` rather than “best effort highlight”
+- files returned by the current >1 MB streaming branch are only eligible for highlighting if they can be normalized to the stable shape above
 
 ## `FindingCodeWindow` Rendering Contract
 
@@ -451,7 +537,8 @@ Target shape:
 ```ts
 | {
     status: "ready";
-    filePath: string;
+    requestedFilePath: string;
+    resolvedFilePath: string;
     content: string;
     size: number;
     encoding: string;
@@ -468,6 +555,10 @@ Rules:
 - `displayLines` is always present for `"ready"` text files
 - plain-text preview also uses `displayLines`; it is not a separate render path anymore
 - `content` stays present for search and any future copy/export behavior
+- `requestedFilePath` is the caller-selected path and remains the key for preview decorations, selected-file state, and search-result navigation
+- `resolvedFilePath` is the backend-confirmed ZIP member path and remains available for debugging and any future follow-up API work
+- display headers continue to prefer the display-tree path derived from the requested path
+- language resolution should use `requestedFilePath` first and fall back to `resolvedFilePath` only if needed
 
 ## `ProjectCodeBrowser` Ready-State Builder
 
@@ -477,6 +568,7 @@ Implement one exported helper in `frontend/src/pages/project-code-browser/model.
 
 ```ts
 export async function buildProjectCodeBrowserFileSuccessState(
+  requestedFilePath: string,
   response: ProjectFileContentResponse,
 ): Promise<ProjectCodeBrowserFileViewState>
 ```
@@ -493,14 +585,23 @@ Rules:
 
 ### `loadFileState`
 
-Update `loadFileState` so that the request pipeline is:
+Update the preview-oriented loading path so that the request pipeline is:
 
 1. fetch file content
-2. await `buildProjectCodeBrowserFileSuccessState(response)`
-3. cache the returned state
-4. return the cached state
+2. normalize the transport payload into the stable file-content shape
+3. await `buildProjectCodeBrowserFileSuccessState(requestedFilePath, response)`
+4. cache the returned state
+5. return the cached state
 
 Do not cache an intermediate raw-text `"ready"` state first and then patch in highlighting later. The preview should enter `"ready"` only once for a single file load.
+
+Add a separate search-oriented load path with these rules:
+
+1. fetch file content
+2. normalize the transport payload
+3. return raw text only
+4. never build syntax segments
+5. never populate preview `displayLines` state as part of background content scanning
 
 ### Preview Rendering
 
@@ -510,6 +611,7 @@ Update `ProjectCodeBrowserPreview`:
 - pass `displayLines={selectedFileState.displayLines}` into `FindingCodeWindow`
 - continue passing `focusLine` and highlight props from `previewDecorations`
 - pass `meta` based on syntax fields
+- use `selectedFileState.requestedFilePath` for preview-decoration lookup, not the resolved backend path
 
 ### Header Metadata Rules
 
@@ -554,12 +656,21 @@ Add direct viewer tests for `FindingCodeWindow`:
 
 Update or extend model tests for:
 
+- `buildProjectCodeBrowserFileSuccessState` preserves both `requestedFilePath` and `resolvedFilePath`
 - `buildProjectCodeBrowserFileSuccessState` returns `"unavailable"` for non-text files
 - `buildProjectCodeBrowserFileSuccessState` returns highlighted `"ready"` state for a supported file
 - highlighted `"ready"` state includes `displayLines`
 - plain-text fallback `"ready"` state still includes `displayLines`
 
-### 4. Update `frontend/tests/projectCodeBrowserPage.test.tsx`
+### 4. New `frontend/tests/projectFileContentApiContract.test.ts`
+
+Add direct tests for the frontend-side file-content normalization logic:
+
+- streamed or variant payloads normalize to a stable `{ file_path, content, size, encoding, is_text }` object when possible
+- missing or invalid `is_text` payloads fall back to the v1 `"unavailable"` path
+- binary-style streamed payloads are not sent into the highlight builder
+
+### 5. Update `frontend/tests/projectCodeBrowserPage.test.tsx`
 
 Update or add page-level tests for:
 
@@ -568,8 +679,11 @@ Update or add page-level tests for:
 - unsupported language fallback still renders readable plain text
 - search-result focus decoration still lands on the correct line when `displayLines` is supplied
 - `data-line-number` anchors are preserved in highlighted mode
+- remove the existing no-accent-color assertion and replace it with a positive assertion for highlighted token color classes; keep plain-text fallback coverage in a separate assertion or test
+- replace contiguous source-text assertions that assume raw text is rendered without nested spans
+- rewrite every existing `"ready"` fixture to include `requestedFilePath`, `resolvedFilePath`, `displayLines`, `syntaxLanguageKey`, `syntaxLanguageLabel`, `syntaxStatus`, and `syntaxFallbackReason`, or introduce a shared ready-state fixture helper
 
-### 5. No V1 Test Work Required Here
+### 6. No V1 Test Work Required Here
 
 Do not add highlight-specific tests to:
 
@@ -604,10 +718,12 @@ Done when:
 
 Done when:
 
-- `"ready"` state carries `displayLines` and syntax metadata
-- file loading awaits highlight result creation
+- `"ready"` state carries `requestedFilePath`, `resolvedFilePath`, `displayLines`, and syntax metadata
+- file-content responses are normalized before ready-state construction
+- preview loading and search loading are split
+- preview file loading awaits highlight result creation
 - preview uses highlighted lines
-- `projectCodeBrowserModel.test.ts` and `projectCodeBrowserPage.test.tsx` pass
+- `projectFileContentApiContract.test.ts`, `projectCodeBrowserModel.test.ts`, and `projectCodeBrowserPage.test.tsx` pass
 
 ### Step 4. Final regression pass
 
@@ -615,21 +731,26 @@ Run at least:
 
 - `cd frontend && pnpm test:node tests/codeHighlight.test.ts`
 - `cd frontend && pnpm test:node tests/findingCodeWindow.test.tsx`
+- `cd frontend && pnpm test:node tests/projectFileContentApiContract.test.ts`
 - `cd frontend && pnpm test:node tests/projectCodeBrowserModel.test.ts`
 - `cd frontend && pnpm test:node tests/projectCodeBrowserPage.test.tsx`
-
-If time permits, run the full frontend Node test suite as a final regression check.
+- `cd frontend && pnpm test:node tests/frontendTypecheck.test.ts`
+- `cd frontend && pnpm type-check`
+- `cd frontend && pnpm build`
+- `cd frontend && pnpm test:node`
 
 ## Acceptance Criteria
 
 The feature is complete only when all of the following are true:
 
-- `ProjectCodeBrowser` preview renders syntax-highlighted token spans for supported text files
+- for ZIP-backed projects only, `ProjectCodeBrowser` preview renders syntax-highlighted token spans for supported text files returned by the existing `/projects/{id}/files` API
 - unsupported-language, `.env` / `.env.*`, and oversized-file cases render plain-text preview through the same `displayLines` path
 - search-hit and focus-line decorations still work after `displayLines` is introduced
 - `data-line-number` anchors are preserved
 - existing non-browser `FindingCodeWindow` consumers remain backward compatible
 - the syntax engine is lazy-loaded and memoized
+- frontend app source type-checks cleanly
+- frontend production build succeeds with the new highlighting module and dependencies
 - new tests pass and existing project-browser tests remain green
 
 ## Confirmed Product Decisions
@@ -652,6 +773,8 @@ Use this section as the actual implementation runbook. Each item should be compl
   - `frontend/src/pages/ProjectCodeBrowser.tsx`
   - `frontend/src/pages/project-code-browser/model.ts`
 - [ ] Confirm `frontend/package.json` does not already contain `lowlight` or `highlight.js`.
+- [ ] Confirm frontend app type-check still passes before starting:
+  - `cd frontend && pnpm type-check`
 - [ ] Confirm current project-browser tests still pass before starting:
   - `cd frontend && pnpm test:node tests/projectCodeBrowserModel.test.ts`
   - `cd frontend && pnpm test:node tests/projectCodeBrowserPage.test.tsx`
@@ -664,6 +787,7 @@ Use this section as the actual implementation runbook. Each item should be compl
 - Create: `frontend/src/shared/code-highlighting/languageMap.ts`
 - Create: `frontend/src/shared/code-highlighting/index.ts`
 - Modify: `frontend/package.json`
+- Modify: `frontend/pnpm-lock.yaml`
 
 - [ ] Add `lowlight` and `highlight.js` to `frontend/package.json`.
 - [ ] Move the shared line type out of `FindingCodeWindow.tsx` into `types.ts`.
@@ -725,12 +849,17 @@ Use this section as the actual implementation runbook. Each item should be compl
 
 **Files**
 
+- Modify: `frontend/src/shared/api/database.ts`
 - Modify: `frontend/src/pages/project-code-browser/model.ts`
 - Modify: `frontend/src/pages/ProjectCodeBrowser.tsx`
+- Create: `frontend/tests/projectFileContentApiContract.test.ts`
 - Modify: `frontend/tests/projectCodeBrowserModel.test.ts`
 - Modify: `frontend/tests/projectCodeBrowserPage.test.tsx`
 
+- [ ] Add frontend-side normalization for `/projects/{id}/files/{file_path}` responses before any ready-state or highlight work runs.
 - [ ] Extend the `"ready"` branch of `ProjectCodeBrowserFileViewState` to carry:
+  - `requestedFilePath`
+  - `resolvedFilePath`
   - `displayLines`
   - `syntaxLanguageKey`
   - `syntaxLanguageLabel`
@@ -738,6 +867,7 @@ Use this section as the actual implementation runbook. Each item should be compl
   - `syntaxFallbackReason`
 - [ ] Replace the synchronous text-file success helper with `buildProjectCodeBrowserFileSuccessState`.
 - [ ] Keep the non-text `"unavailable"` path unchanged.
+- [ ] Split preview loading from search-content loading so background search does not invoke syntax tokenization.
 - [ ] Update `loadFileState` in `ProjectCodeBrowser.tsx` to await the new async success builder before caching the ready state.
 - [ ] Update preview rendering to use `selectedFileState.displayLines`.
 - [ ] Compute preview `lineEnd` from `displayLines.length`.
@@ -746,10 +876,13 @@ Use this section as the actual implementation runbook. Each item should be compl
   - plain fallback with language: `语言名 + 纯文本回退`
   - plain fallback without language: `纯文本`
 - [ ] Keep preview decorations flowing through `focusLine` and highlight props.
+- [ ] Rewrite every existing `"ready"` fixture in `projectCodeBrowserPage.test.tsx` to match the new ready-state contract, or introduce a shared fixture helper.
 - [ ] Confirm search-result navigation still lands on the correct line after `displayLines` is introduced.
 
 **Verification**
 
+- [ ] Add `frontend/tests/projectFileContentApiContract.test.ts`, then run:
+  - `cd frontend && pnpm test:node tests/projectFileContentApiContract.test.ts`
 - [ ] Extend `frontend/tests/projectCodeBrowserModel.test.ts` first, then run:
   - `cd frontend && pnpm test:node tests/projectCodeBrowserModel.test.ts`
 - [ ] Extend `frontend/tests/projectCodeBrowserPage.test.tsx` first, then run:
@@ -759,18 +892,25 @@ Use this section as the actual implementation runbook. Each item should be compl
   - language metadata
   - preserved `data-line-number`
   - preserved focus/highlight classes
+  - positive token-color assertions instead of the current no-accent-color assertion
 
 ### Phase 4. Regression sweep
 
 - [ ] Re-run the focused suite:
   - `cd frontend && pnpm test:node tests/codeHighlight.test.ts`
   - `cd frontend && pnpm test:node tests/findingCodeWindow.test.tsx`
+  - `cd frontend && pnpm test:node tests/projectFileContentApiContract.test.ts`
   - `cd frontend && pnpm test:node tests/projectCodeBrowserModel.test.ts`
   - `cd frontend && pnpm test:node tests/projectCodeBrowserPage.test.tsx`
+- [ ] Run type and build verification:
+  - `cd frontend && pnpm test:node tests/frontendTypecheck.test.ts`
+  - `cd frontend && pnpm type-check`
+  - `cd frontend && pnpm build`
 - [ ] Spot-check that these existing tests still pass if they are sensitive to shared viewer behavior:
   - `cd frontend && pnpm test:node tests/toolEvidenceRendering.test.tsx`
   - `cd frontend && pnpm test:node tests/findingDetailCodePanel.test.tsx`
-- [ ] If time allows, run: `cd frontend && pnpm test:node`
+- [ ] Run the full frontend Node test suite as a required final regression check:
+  - `cd frontend && pnpm test:node`
 - [ ] Do not merge if any failure is “explained away” by the new behavior without either updating the plan or explicitly confirming the change.
 
 ## Suggested Commit Order
@@ -786,6 +926,7 @@ Use small commits that each leave the branch in a testable state. The sequence b
 **Include**
 
 - `frontend/package.json`
+- `frontend/pnpm-lock.yaml`
 - `frontend/src/shared/code-highlighting/types.ts`
 - `frontend/src/shared/code-highlighting/languageMap.ts`
 - `frontend/src/shared/code-highlighting/index.ts`
@@ -819,13 +960,16 @@ Use small commits that each leave the branch in a testable state. The sequence b
 
 **Include**
 
+- `frontend/src/shared/api/database.ts`
 - `frontend/src/pages/project-code-browser/model.ts`
 - `frontend/src/pages/ProjectCodeBrowser.tsx`
+- `frontend/tests/projectFileContentApiContract.test.ts`
 - `frontend/tests/projectCodeBrowserModel.test.ts`
 - `frontend/tests/projectCodeBrowserPage.test.tsx`
 
 **Must pass before commit**
 
+- `cd frontend && pnpm test:node tests/projectFileContentApiContract.test.ts`
 - `cd frontend && pnpm test:node tests/projectCodeBrowserModel.test.ts`
 - `cd frontend && pnpm test:node tests/projectCodeBrowserPage.test.tsx`
 - rerun `tests/findingCodeWindow.test.tsx`

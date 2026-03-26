@@ -6,32 +6,29 @@
 
     <description>Independent ruleset for ApexDangerousMethods</description>
 
-    <rule name="ApexDangerousMethods"
-          language="apex"
-          since="5.5.3"
-          message="Calling potentially dangerous method"
-          class="net.sourceforge.pmd.lang.apex.rule.security.ApexDangerousMethodsRule"
-          externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexdangerousmethods">
-        <description>
-Checks against calling dangerous methods.
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ApexDangerousMethods" language="apex" since="5.5.3" message="Calling potentially dangerous method" class="net.sourceforge.pmd.lang.apex.rule.security.ApexDangerousMethodsRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexdangerousmethods">
+            <description>
+    Checks against calling dangerous methods.
 
-For the time being, it reports:
+    For the time being, it reports:
 
-* Against `FinancialForce`'s `Configuration.disableTriggerCRUDSecurity()`. Disabling CRUD security
-opens the door to several attacks and requires manual validation, which is unreliable.
-* Calling `System.debug` passing sensitive data as parameter, which could lead to exposure
-of private data.
-        </description>
-        <priority>3</priority>
-        <example>
-<![CDATA[
-public class Foo {
-    public Foo() {
-        Configuration.disableTriggerCRUDSecurity();
+    * Against `FinancialForce`'s `Configuration.disableTriggerCRUDSecurity()`. Disabling CRUD security
+    opens the door to several attacks and requires manual validation, which is unreliable.
+    * Calling `System.debug` passing sensitive data as parameter, which could lead to exposure
+    of private data.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public class Foo {
+        public Foo() {
+            Configuration.disableTriggerCRUDSecurity();
+        }
     }
-}
-]]>
-        </example>
-    </rule>
+
+            </example>
+        </rule>
+
+        
 
 </ruleset>

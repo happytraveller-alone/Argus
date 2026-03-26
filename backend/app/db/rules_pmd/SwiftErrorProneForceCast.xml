@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ForceCast Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for ForceCast</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ForceCast" language="swift" since="7.0.0" message="Force casts should be avoided." class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_swift_errorprone.html#forcecast">
+            <description>
+                Force casts should be avoided. This may lead to a crash if it's not used carefully.
+                For example assuming a JSON property has a given type, or your reused Cell has a certain contract.
+                Consider using conditional casting and handling the resulting optional.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+                        
+    //TypeCastingOperator[T-as and T-bang]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+                
+    NSNumber() as! Int // violation, force casting
+
+    NSNumber() as? Int // no violation
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

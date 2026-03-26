@@ -6,27 +6,24 @@
 
     <description>Independent ruleset for ApexBadCrypto</description>
 
-    <rule name="ApexBadCrypto"
-          language="apex"
-          since="5.5.3"
-          message="Apex classes should use random IV/key"
-          class="net.sourceforge.pmd.lang.apex.rule.security.ApexBadCryptoRule"
-          externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexbadcrypto">
-        <description>
-The rule makes sure you are using randomly generated IVs and keys for `Crypto` calls.
-Hard-wiring these values greatly compromises the security of encrypted data.
-        </description>
-        <priority>3</priority>
-        <example>
-<![CDATA[
-public without sharing class Foo {
-    Blob hardCodedIV = Blob.valueOf('Hardcoded IV 123');
-    Blob hardCodedKey = Blob.valueOf('0000000000000000');
-    Blob data = Blob.valueOf('Data to be encrypted');
-    Blob encrypted = Crypto.encrypt('AES128', hardCodedKey, hardCodedIV, data);
-}
-]]>
-        </example>
-    </rule>
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ApexBadCrypto" language="apex" since="5.5.3" message="Apex classes should use random IV/key" class="net.sourceforge.pmd.lang.apex.rule.security.ApexBadCryptoRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexbadcrypto">
+            <description>
+    The rule makes sure you are using randomly generated IVs and keys for `Crypto` calls.
+    Hard-wiring these values greatly compromises the security of encrypted data.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public without sharing class Foo {
+        Blob hardCodedIV = Blob.valueOf('Hardcoded IV 123');
+        Blob hardCodedKey = Blob.valueOf('0000000000000000');
+        Blob data = Blob.valueOf('Data to be encrypted');
+        Blob encrypted = Crypto.encrypt('AES128', hardCodedKey, hardCodedIV, data);
+    }
+
+            </example>
+        </rule>
+
+        
 
 </ruleset>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidDecimalLiteralsInBigDecimalConstructor Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidDecimalLiteralsInBigDecimalConstructor</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidDecimalLiteralsInBigDecimalConstructor" language="java" since="3.4" message="Avoid creating BigDecimal with a decimal (float/double) literal. Use a String literal" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoiddecimalliteralsinbigdecimalconstructor">
+            <description>
+    One might assume that the result of "new BigDecimal(0.1)" is exactly equal to 0.1, but it is actually
+    equal to .1000000000000000055511151231257827021181583404541015625.
+    This is because 0.1 cannot be represented exactly as a double (or as a binary fraction of any finite
+    length). Thus, the long value that is being passed in to the constructor is not exactly equal to 0.1,
+    appearances notwithstanding.
+
+    The (String) constructor, on the other hand, is perfectly predictable: 'new BigDecimal("0.1")' is
+    exactly equal to 0.1, as one would expect.  Therefore, it is generally recommended that the
+    (String) constructor be used in preference to this one.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ConstructorCall[pmd-java:matchesSig('java.math.BigDecimal#new(double)')]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    BigDecimal bd = new BigDecimal(1.123);       // loss of precision, this would trigger the rule
+
+    BigDecimal bd = new BigDecimal("1.123");     // preferred approach
+
+    BigDecimal bd = new BigDecimal(12);          // preferred approach, ok for integer values
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

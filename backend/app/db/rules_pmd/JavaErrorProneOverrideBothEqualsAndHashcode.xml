@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="OverrideBothEqualsAndHashcode Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for OverrideBothEqualsAndHashcode</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="OverrideBothEqualsAndHashcode" language="java" since="0.4" message="Ensure you override both equals() and hashCode()" class="net.sourceforge.pmd.lang.java.rule.errorprone.OverrideBothEqualsAndHashcodeRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#overridebothequalsandhashcode">
+            <description>
+    Override both `public boolean Object.equals(Object other)` and `public int Object.hashCode()` or override neither.
+    Even if you are inheriting a `hashCode()` from a parent class, consider implementing `hashCode()` and explicitly
+    delegating to your superclass.
+
+    Not overriding both methods could violate the contract between `equals()` and `hashCode()`. Most importantly,
+    if two instances are equal, then they must have the same hash code. Using such invalid instances in hash-based
+    collections like `HashSet` or `HashMap` could lead to duplicated or missing entries.
+
+    This rule does not consider types that implement `Comparable`. There is a separate rule
+    {% rule OverrideBothEqualsAndHashCodeOnComparable %} for this.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public class Bar {        // poor, missing a hashcode() method
+        public boolean equals(Object o) {
+          // do some comparison
+        }
+    }
+
+    public class Baz {        // poor, missing an equals() method
+        public int hashCode() {
+          // return some hash value
+        }
+    }
+
+    public class Foo {        // perfect, both methods provided
+        public boolean equals(Object other) {
+          // do some comparison
+        }
+        public int hashCode() {
+          // return some hash value
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

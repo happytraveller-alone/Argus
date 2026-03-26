@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="FinalizeDoesNotCallSuperFinalize Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for FinalizeDoesNotCallSuperFinalize</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="FinalizeDoesNotCallSuperFinalize" language="java" since="1.5" message="Last statement in finalize method should be a call to super.finalize()" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#finalizedoesnotcallsuperfinalize">
+            <description>
+    If the finalize() is implemented, its last action should be to call super.finalize. Note that Oracle has declared Object.finalize() as deprecated since JDK 9.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+
+    //MethodDeclaration[@Name = "finalize"][@Arity = 0]
+       /Block/*[last()]
+          [not(MethodCall[@MethodName = "finalize"]/SuperExpression)]
+          [not(FinallyClause/Block/ExpressionStatement/
+              MethodCall[@MethodName = "finalize"]/SuperExpression)]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    protected void finalize() {
+        something();
+        // neglected to call super.finalize()
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

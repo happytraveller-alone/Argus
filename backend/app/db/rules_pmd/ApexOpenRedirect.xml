@@ -6,27 +6,24 @@
 
     <description>Independent ruleset for ApexOpenRedirect</description>
 
-    <rule name="ApexOpenRedirect"
-          language="apex"
-          since="5.5.3"
-          message="Apex classes should safely redirect to a known location"
-          class="net.sourceforge.pmd.lang.apex.rule.security.ApexOpenRedirectRule"
-          externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexopenredirect">
-        <description>
-Checks against redirects to user-controlled locations. This prevents attackers from
-redirecting users to phishing sites.
-        </description>
-        <priority>3</priority>
-        <example>
-<![CDATA[
-public without sharing class Foo {
-    String unsafeLocation = ApexPage.getCurrentPage().getParameters.get('url_param');
-    PageReference page() {
-       return new PageReference(unsafeLocation);
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ApexOpenRedirect" language="apex" since="5.5.3" message="Apex classes should safely redirect to a known location" class="net.sourceforge.pmd.lang.apex.rule.security.ApexOpenRedirectRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexopenredirect">
+            <description>
+    Checks against redirects to user-controlled locations. This prevents attackers from
+    redirecting users to phishing sites.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public without sharing class Foo {
+        String unsafeLocation = ApexPage.getCurrentPage().getParameters.get('url_param');
+        PageReference page() {
+           return new PageReference(unsafeLocation);
+        }
     }
-}
-]]>
-        </example>
-    </rule>
+
+            </example>
+        </rule>
+
+        
 
 </ruleset>

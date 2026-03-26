@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="EmptyTryOrFinallyBlock Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for EmptyTryOrFinallyBlock</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="EmptyTryOrFinallyBlock" language="apex" since="6.0.0" message="Avoid empty try or finally blocks" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_errorprone.html#emptytryorfinallyblock">
+        <description>
+          Avoid empty try or finally blocks - what's the point?
+        </description>
+        <priority>3</priority>
+        <properties>
+          <property name="xpath">
+            <value>
+              
+              //TryCatchFinallyBlockStatement[./BlockStatement[count(*) = 0]]
+              
+            </value>
+          </property>
+        </properties>
+        <example>
+          
+    public class Foo {
+        public void bar() {
+            try {
+              // empty !
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public class Foo {
+        public void bar() {
+            try {
+                Integer x=2;
+            } finally {
+                // empty!
+            }
+        }
+    }
+
+        </example>
+      </rule>
+      
+      
+
+</ruleset>

@@ -6,24 +6,21 @@
 
     <description>Independent ruleset for ApexSharingViolations</description>
 
-    <rule name="ApexSharingViolations"
-          language="apex"
-          since="5.5.3"
-          message="Apex classes should declare a sharing model if DML or SOQL/SOSL is used"
-          class="net.sourceforge.pmd.lang.apex.rule.security.ApexSharingViolationsRule"
-          externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexsharingviolations">
-        <description>
-Detect classes declared without explicit sharing mode if DML methods are used. This
-forces the developer to take access restrictions into account before modifying objects.
-        </description>
-        <priority>3</priority>
-        <example>
-<![CDATA[
-public without sharing class Foo {
-    // DML operation here
-}
-]]>
-        </example>
-    </rule>
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="ApexSharingViolations" language="apex" since="5.5.3" message="Apex classes should declare a sharing model if DML or SOQL/SOSL is used" class="net.sourceforge.pmd.lang.apex.rule.security.ApexSharingViolationsRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_security.html#apexsharingviolations">
+            <description>
+    Detect classes declared without explicit sharing mode if DML methods are used. This
+    forces the developer to take access restrictions into account before modifying objects.
+            </description>
+            <priority>3</priority>
+            <example>
+
+    public without sharing class Foo {
+        // DML operation here
+    }
+
+            </example>
+        </rule>
+
+        
 
 </ruleset>

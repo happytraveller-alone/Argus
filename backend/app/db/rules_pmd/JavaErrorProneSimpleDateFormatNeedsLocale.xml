@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="SimpleDateFormatNeedsLocale Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for SimpleDateFormatNeedsLocale</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="SimpleDateFormatNeedsLocale" language="java" since="2.0" message="When instantiating a SimpleDateFormat object, specify a Locale" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#simpledateformatneedslocale">
+            <description>
+    Be sure to specify a Locale when creating SimpleDateFormat instances to ensure that locale-appropriate
+    formatting is used.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ConstructorCall
+        [pmd-java:typeIs('java.text.SimpleDateFormat')]
+        [ArgumentList/@Size = 1]
+
+                        </value>
+                    </property>
+                </properties>
+            <example>
+
+    public class Foo {
+      // Should specify Locale.US (or whatever)
+      private SimpleDateFormat sdf = new SimpleDateFormat("pattern");
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

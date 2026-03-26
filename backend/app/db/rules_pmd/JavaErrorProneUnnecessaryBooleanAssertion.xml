@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="UnnecessaryBooleanAssertion Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for UnnecessaryBooleanAssertion</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="UnnecessaryBooleanAssertion" language="java" since="3.0" message="assertTrue(true) or similar statements are unnecessary" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#unnecessarybooleanassertion">
+            <description>
+    A JUnit test assertion with a boolean literal is unnecessary since it always will evaluate to the same thing.
+    Consider using flow control (in case of `assertTrue(false)` or similar) or simply removing
+    statements like `assertTrue(true)` and `assertFalse(false)`. If you just want a test to halt after finding
+    an error, use the `fail()` method and provide an indication message of why it did.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ClassDeclaration
+        [pmd-java:typeIs('junit.framework.TestCase')
+         or .//Annotation[pmd-java:typeIs('org.junit.Test')
+                       or pmd-java:typeIs('org.junit.jupiter.api.Test')
+                       or pmd-java:typeIs('org.junit.jupiter.api.RepeatedTest')
+                       or pmd-java:typeIs('org.junit.jupiter.api.TestFactory')
+                       or pmd-java:typeIs('org.junit.jupiter.api.TestTemplate')
+                       or pmd-java:typeIs('org.junit.jupiter.params.ParameterizedTest')
+         ]
+        ]
+        //MethodCall[@MethodName = ('assertTrue', 'assertFalse')]
+            [ArgumentList
+                [
+                    BooleanLiteral or
+                    UnaryExpression[@Operator = '!'][BooleanLiteral]
+                ]
+            ]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class SimpleTest extends TestCase {
+        public void testX() {
+            assertTrue(true);            // serves no real purpose - remove it
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

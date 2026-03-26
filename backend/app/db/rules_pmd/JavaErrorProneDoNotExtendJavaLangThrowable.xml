@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="DoNotExtendJavaLangThrowable Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for DoNotExtendJavaLangThrowable</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="DoNotExtendJavaLangThrowable" language="java" since="6.0.0" message="Exceptions should not extend java.lang.Throwable" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#donotextendjavalangthrowable">
+            <description>
+    Extend Exception or RuntimeException instead of Throwable.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //ClassDeclaration/ExtendsList/ClassType
+      [pmd-java:typeIsExactly('java.lang.Throwable')]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo extends Throwable { }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

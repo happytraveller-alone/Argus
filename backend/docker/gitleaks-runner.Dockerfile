@@ -5,7 +5,7 @@ ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 ARG GITLEAKS_VERSION=8.24.2
 
-FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim AS gitleaks-runner
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim-trixie AS gitleaks-runner
 
 ARG BACKEND_APT_MIRROR_PRIMARY
 ARG BACKEND_APT_SECURITY_PRIMARY
@@ -25,6 +25,7 @@ RUN --mount=type=cache,id=vulhunter-gitleaks-runner-apt-lists,target=/var/lib/ap
     write_sources() { \
       main_host="$1"; \
       security_host="$2"; \
+      rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
       printf 'deb https://%s/debian %s main\n' "${main_host}" "${CODENAME}" > /etc/apt/sources.list; \
       printf 'deb https://%s/debian %s-updates main\n' "${main_host}" "${CODENAME}" >> /etc/apt/sources.list; \
       printf 'deb https://%s/debian-security %s-security main\n' "${security_host}" "${CODENAME}" >> /etc/apt/sources.list; \

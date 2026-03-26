@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidFieldNameMatchingMethodName Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidFieldNameMatchingMethodName</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidFieldNameMatchingMethodName" language="java" since="3.0" message="Field {0} has the same name as a method" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidfieldnamematchingmethodname">
+            <description>
+    It can be confusing to have a field name with the same name as a method. While this is permitted,
+    having information (field) and actions (method) is not clear naming. Developers versed in
+    Smalltalk often prefer this approach as the methods denote accessor methods.
+            </description>
+            <priority>3</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //FieldDeclaration/VariableDeclarator/VariableId
+        [some $method in ../../..[self::ClassBody or self::EnumBody]/MethodDeclaration
+         satisfies lower-case(@Name) = lower-case($method/@Name)]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public class Foo {
+        Object bar;
+        // bar is data or an action or both?
+        void bar() {
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

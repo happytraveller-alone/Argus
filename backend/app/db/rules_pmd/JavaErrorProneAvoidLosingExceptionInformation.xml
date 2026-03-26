@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="AvoidLosingExceptionInformation Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for AvoidLosingExceptionInformation</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="AvoidLosingExceptionInformation" since="4.2.6" language="java" message="Avoid statements in a catch block that invoke accessors on the exception without using the information" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#avoidlosingexceptioninformation" deprecated="true">
+            <description>
+    Statements in a catch block that invoke accessors on the exception without using the information
+    only add to code size.  Either remove the invocation, or use the return result.
+
+    **Deprecated:** This rule is deprecated since PMD 7.17.0 and will be removed with PMD 8.0.0.
+    This rule has been replaced by {% rule UselessPureMethodCall %}.
+            </description>
+            <priority>2</priority>
+            <properties>
+                <property name="xpath">
+                    <value>
+
+    //CatchClause/Block//ExpressionStatement/MethodCall[
+        pmd-java:matchesSig("java.lang.Throwable#getMessage()")
+        or pmd-java:matchesSig("java.lang.Throwable#getLocalizedMessage()")
+        or pmd-java:matchesSig("java.lang.Throwable#getCause()")
+        or pmd-java:matchesSig("java.lang.Throwable#getStackTrace()")
+        or pmd-java:matchesSig("java.lang.Object#toString()")
+    ]
+
+                    </value>
+                </property>
+            </properties>
+            <example>
+
+    public void bar() {
+        try {
+            // do something
+        } catch (SomeException se) {
+            se.getMessage();
+        }
+    }
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

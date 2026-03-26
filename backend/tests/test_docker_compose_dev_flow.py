@@ -401,6 +401,21 @@ def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:
     phpstan_runner_text = (
         REPO_ROOT / "backend" / "docker" / "phpstan-runner.Dockerfile"
     ).read_text(encoding="utf-8")
+    pmd_runner_text = (REPO_ROOT / "backend" / "docker" / "pmd-runner.Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    flow_parser_runner_text = (
+        REPO_ROOT / "backend" / "docker" / "flow-parser-runner.Dockerfile"
+    ).read_text(encoding="utf-8")
+
+    runner_texts = [
+        opengrep_runner_text,
+        bandit_runner_text,
+        gitleaks_runner_text,
+        phpstan_runner_text,
+        pmd_runner_text,
+        flow_parser_runner_text,
+    ]
 
     assert "WORKDIR /scan" in opengrep_runner_text
     assert "opengrep" in opengrep_runner_text
@@ -412,6 +427,14 @@ def test_runner_dockerfiles_exist_for_all_migrated_scanners() -> None:
     assert "gitleaks" in gitleaks_runner_text
     assert "WORKDIR /scan" in phpstan_runner_text
     assert "phpstan" in phpstan_runner_text
+    assert "WORKDIR /scan" in pmd_runner_text
+    assert "pmd" in pmd_runner_text
+    assert "WORKDIR /scan" in flow_parser_runner_text
+    assert "flow_parser_runner.py" in flow_parser_runner_text
+
+    for runner_text in runner_texts:
+        assert "FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim-trixie" in runner_text
+        assert 'rm -f /etc/apt/sources.list.d/debian.sources 2>/dev/null || true;' in runner_text
 
 
 def test_docker_publish_pushes_all_runner_images() -> None:

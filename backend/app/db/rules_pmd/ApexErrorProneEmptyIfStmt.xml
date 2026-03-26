@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="EmptyIfStmt Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for EmptyIfStmt</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="EmptyIfStmt" language="apex" since="6.0.0" message="Avoid empty 'if' statements" class="net.sourceforge.pmd.lang.rule.xpath.XPathRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_errorprone.html#emptyifstmt">
+        <description>
+          Empty If Statement finds instances where a condition is checked but nothing is done about it.
+        </description>
+        <priority>3</priority>
+        <properties>
+          <property name="xpath">
+            <value>
+              
+              //IfBlockStatement
+              [BlockStatement[count(*) = 0]]
+              
+            </value>
+          </property>
+        </properties>
+        <example>
+          
+    public class Foo {
+        public void bar(Integer x) {
+            if (x == 0) {
+                // empty!
+            }
+        }
+    }
+
+        </example>
+      </rule>
+      
+      
+
+</ruleset>

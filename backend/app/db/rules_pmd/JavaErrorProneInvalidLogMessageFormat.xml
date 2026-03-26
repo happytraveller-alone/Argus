@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="InvalidLogMessageFormat Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for InvalidLogMessageFormat</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="InvalidLogMessageFormat" language="java" since="5.5.0" message="Invalid message format" class="net.sourceforge.pmd.lang.java.rule.errorprone.InvalidLogMessageFormatRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_java_errorprone.html#invalidlogmessageformat">
+            <description>
+    Check for messages in slf4j and log4j2 (since 6.19.0) loggers with non matching number of arguments and placeholders.
+
+    Since 6.32.0 in addition to parameterized message placeholders (`{}`) also format specifiers of string formatted
+    messages are supported (`%s`).
+
+    This rule has been renamed from "InvalidSlf4jMessageFormat" in PMD 6.19.0.
+            </description>
+            <priority>5</priority>
+            <example>
+
+    LOGGER.error("forget the arg {}");
+    LOGGER.error("forget the arg %s");
+    LOGGER.error("too many args {}", "arg1", "arg2");
+    LOGGER.error("param {}", "arg1", new IllegalStateException("arg")); //The exception is shown separately, so is correct.
+
+            </example>
+        </rule>
+
+        
+
+</ruleset>

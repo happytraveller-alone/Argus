@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="OverrideBothEqualsAndHashcode Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Independent ruleset for OverrideBothEqualsAndHashcode</description>
+
+    <rule xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" name="OverrideBothEqualsAndHashcode" language="apex" since="6.31.0" message="Ensure you override both equals() and hashCode()" class="net.sourceforge.pmd.lang.apex.rule.errorprone.OverrideBothEqualsAndHashcodeRule" externalInfoUrl="${pmd.website.baseurl}/pmd_rules_apex_errorprone.html#overridebothequalsandhashcode">
+        <description>
+          Override both `public Boolean equals(Object obj)`, and `public Integer hashCode()`, or override neither.
+          Even if you are inheriting a hashCode() from a parent class, consider implementing hashCode and explicitly
+          delegating to your superclass.
+          
+          This is especially important when [Using Custom Types in Map Keys and Sets](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/langCon_apex_collections_maps_keys_userdefined.htm).
+        </description>
+        <priority>3</priority>
+        <example>
+          
+    public class Bar {        // poor, missing a hashCode() method
+        public Boolean equals(Object o) {
+          // do some comparison
+        }
+    }
+    public class Baz {        // poor, missing an equals() method
+        public Integer hashCode() {
+          // return some hash value
+        }
+    }
+    public class Foo {        // perfect, both methods provided
+        public Boolean equals(Object other) {
+          // do some comparison
+        }
+        public Integer hashCode() {
+          // return some hash value
+        }
+    }
+
+        </example>
+      </rule>
+      
+      
+
+</ruleset>
