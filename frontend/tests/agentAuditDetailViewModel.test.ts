@@ -5,6 +5,9 @@ import {
   buildStatsSummary,
   createTokenUsageAccumulator,
   isVerifiedFinding,
+  readAgentAuditFindingsPagination,
+  shouldSyncFindingPageFromTableState,
+  writeAgentAuditFindingsPagination,
   isVisibleVerifiedVulnerability,
 } from "../src/pages/AgentAudit/detailViewModel.ts";
 import * as detailViewModel from "../src/pages/AgentAudit/detailViewModel.ts";
@@ -129,6 +132,77 @@ test("calculateResponsiveFindingsPageSize 会随着可用高度增加而返回�
   assert.equal(
     detailViewModel.calculateResponsiveFindingsPageSize?.(520),
     7,
+  );
+});
+
+test("agent audit findings pagination helpers preserve page state in route search", () => {
+  const parsed = readAgentAuditFindingsPagination(
+    new URLSearchParams("returnTo=%2Ftasks%2Fintelligent&findingsPage=3&findingsPageSize=7"),
+  );
+
+  assert.deepEqual(parsed, {
+    page: 3,
+    pageSize: 7,
+  });
+
+  const next = writeAgentAuditFindingsPagination(
+    new URLSearchParams("returnTo=%2Ftasks%2Fintelligent&detailType=finding&detailId=finding-1"),
+    {
+      page: 4,
+      pageSize: 9,
+    },
+  );
+
+  assert.equal(next.get("returnTo"), "/tasks/intelligent");
+  assert.equal(next.get("detailType"), "finding");
+  assert.equal(next.get("detailId"), "finding-1");
+  assert.equal(next.get("findingsPage"), "4");
+  assert.equal(next.get("findingsPageSize"), "9");
+});
+
+test("agent audit findings pagination helpers fall back for invalid values and clear defaults", () => {
+  const parsed = readAgentAuditFindingsPagination(
+    new URLSearchParams("findingsPage=0&findingsPageSize=NaN"),
+  );
+
+  assert.deepEqual(parsed, {
+    page: 1,
+    pageSize: detailViewModel.AGENT_AUDIT_FINDINGS_PAGE_SIZE,
+  });
+
+  const next = writeAgentAuditFindingsPagination(
+    new URLSearchParams("findingsPage=6&findingsPageSize=11"),
+    {
+      page: 1,
+      pageSize: detailViewModel.AGENT_AUDIT_FINDINGS_PAGE_SIZE,
+    },
+  );
+
+  assert.equal(next.has("findingsPage"), false);
+  assert.equal(next.has("findingsPageSize"), false);
+});
+
+test("loading state should not eagerly reset agent audit finding page from URL", () => {
+  assert.equal(
+    shouldSyncFindingPageFromTableState({
+      requestedPage: 3,
+      resolvedPage: 1,
+      totalRows: 0,
+      isLoading: true,
+    }),
+    false,
+  );
+});
+
+test("loaded finding table may clamp invalid page after data is ready", () => {
+  assert.equal(
+    shouldSyncFindingPageFromTableState({
+      requestedPage: 3,
+      resolvedPage: 1,
+      totalRows: 1,
+      isLoading: false,
+    }),
+    true,
   );
 });
 

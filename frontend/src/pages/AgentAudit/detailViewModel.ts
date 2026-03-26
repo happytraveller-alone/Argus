@@ -64,6 +64,8 @@ export interface AgentAuditStatsSummary {
 export const AGENT_AUDIT_FINDINGS_PAGE_SIZE = 3;
 export const AGENT_AUDIT_FINDINGS_TABLE_HEADER_HEIGHT = 88;
 export const AGENT_AUDIT_FINDINGS_TABLE_ROW_HEIGHT = 56;
+export const AGENT_AUDIT_FINDINGS_PAGE_PARAM = "findingsPage";
+export const AGENT_AUDIT_FINDINGS_PAGE_SIZE_PARAM = "findingsPageSize";
 
 function normalizeReturnToMode(returnTo: string | null | undefined): "intelligent" | "hybrid" | null {
   const normalized = String(returnTo || "").trim().toLowerCase();
@@ -163,6 +165,50 @@ function toFiniteNumber(value: unknown): number {
 function toPositiveNumberOrNull(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function toPositiveIntegerOrNull(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.floor(parsed);
+}
+
+export function readAgentAuditFindingsPagination(
+  params: URLSearchParams,
+): { page: number; pageSize: number } {
+  return {
+    page:
+      toPositiveIntegerOrNull(params.get(AGENT_AUDIT_FINDINGS_PAGE_PARAM)) ?? 1,
+    pageSize:
+      toPositiveIntegerOrNull(
+        params.get(AGENT_AUDIT_FINDINGS_PAGE_SIZE_PARAM),
+      ) ?? AGENT_AUDIT_FINDINGS_PAGE_SIZE,
+  };
+}
+
+export function writeAgentAuditFindingsPagination(
+  params: URLSearchParams,
+  pagination: { page: number; pageSize: number },
+): URLSearchParams {
+  const next = new URLSearchParams(params);
+  const page = toPositiveIntegerOrNull(pagination.page) ?? 1;
+  const pageSize =
+    toPositiveIntegerOrNull(pagination.pageSize) ??
+    AGENT_AUDIT_FINDINGS_PAGE_SIZE;
+
+  if (page === 1) {
+    next.delete(AGENT_AUDIT_FINDINGS_PAGE_PARAM);
+  } else {
+    next.set(AGENT_AUDIT_FINDINGS_PAGE_PARAM, String(page));
+  }
+
+  if (pageSize === AGENT_AUDIT_FINDINGS_PAGE_SIZE) {
+    next.delete(AGENT_AUDIT_FINDINGS_PAGE_SIZE_PARAM);
+  } else {
+    next.set(AGENT_AUDIT_FINDINGS_PAGE_SIZE_PARAM, String(pageSize));
+  }
+
+  return next;
 }
 
 function hasDisplayableConfidence(item: RealtimeFindingLike): boolean {
@@ -304,6 +350,21 @@ export function shouldResetFindingPage(
   next: AgentAuditFindingFilters,
 ): boolean {
   return previous.keyword !== next.keyword || previous.severity !== next.severity;
+}
+
+export function shouldSyncFindingPageFromTableState(input: {
+  requestedPage: number;
+  resolvedPage: number;
+  totalRows: number;
+  isLoading: boolean;
+}): boolean {
+  const requestedPage = Math.max(Math.floor(toFiniteNumber(input.requestedPage) || 1), 1);
+  const resolvedPage = Math.max(Math.floor(toFiniteNumber(input.resolvedPage) || 1), 1);
+  if (requestedPage === resolvedPage) return false;
+  if (input.isLoading && Math.max(toFiniteNumber(input.totalRows), 0) === 0) {
+    return false;
+  }
+  return true;
 }
 
 function getSeverityLabel(key: string): string {

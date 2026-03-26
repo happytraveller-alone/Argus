@@ -33,6 +33,7 @@ import {
 	AGENT_AUDIT_FINDINGS_PAGE_SIZE,
 	calculateResponsiveFindingsPageSize,
 	buildFindingTableState,
+	shouldSyncFindingPageFromTableState,
 	shouldResetFindingPage,
 } from "../detailViewModel";
 import type {
@@ -140,6 +141,7 @@ export default function RealtimeFindingsPanel(props: {
 	taskId: string;
 	items: RealtimeMergedFindingItem[];
 	isRunning: boolean;
+	isLoading?: boolean;
 	currentPhase?: string | null;
 	filters: FindingsViewFilters;
 	onFiltersChange: (
@@ -148,11 +150,51 @@ export default function RealtimeFindingsPanel(props: {
 	) => void;
 	onOpenDetail: (item: RealtimeMergedFindingItem) => void;
 	scrollContainerRef?: RefObject<HTMLDivElement | null>;
+	page?: number;
+	pageSize?: number;
+	onPaginationChange?: (next: { page: number; pageSize: number }) => void;
 }) {
-	const [page, setPage] = useState(1);
-	const [pageSize, setPageSize] = useState(AGENT_AUDIT_FINDINGS_PAGE_SIZE);
+	const [internalPage, setInternalPage] = useState(1);
+	const [internalPageSize, setInternalPageSize] = useState(
+		AGENT_AUDIT_FINDINGS_PAGE_SIZE,
+	);
 	const previousFiltersRef = useRef<FindingsViewFilters>(props.filters);
 	const viewportRef = useRef<HTMLDivElement | null>(null);
+	const page =
+		typeof props.page === "number" && Number.isFinite(props.page) && props.page > 0
+			? Math.floor(props.page)
+			: internalPage;
+	const pageSize =
+		typeof props.pageSize === "number" &&
+		Number.isFinite(props.pageSize) &&
+		props.pageSize > 0
+			? Math.floor(props.pageSize)
+			: internalPageSize;
+
+	const updatePagination = useCallback(
+		(next: { page?: number; pageSize?: number }) => {
+			const resolved = {
+				page:
+					typeof next.page === "number" && Number.isFinite(next.page) && next.page > 0
+						? Math.floor(next.page)
+						: page,
+				pageSize:
+					typeof next.pageSize === "number" &&
+					Number.isFinite(next.pageSize) &&
+					next.pageSize > 0
+						? Math.floor(next.pageSize)
+						: pageSize,
+			};
+			props.onPaginationChange?.(resolved);
+			if (typeof props.page !== "number") {
+				setInternalPage(resolved.page);
+			}
+			if (typeof props.pageSize !== "number") {
+				setInternalPageSize(resolved.pageSize);
+			}
+		},
+		[page, pageSize, props.onPaginationChange, props.page, props.pageSize],
+	);
 
 	const syncViewportRef = useCallback(
 		(node: HTMLDivElement | null) => {
@@ -167,10 +209,10 @@ export default function RealtimeFindingsPanel(props: {
 
 	useEffect(() => {
 		if (shouldResetFindingPage(previousFiltersRef.current, props.filters)) {
-			setPage(1);
+			updatePagination({ page: 1 });
 		}
 		previousFiltersRef.current = props.filters;
-	}, [props.filters]);
+	}, [props.filters, updatePagination]);
 
 	const tableState = useMemo(
 		() =>
@@ -190,10 +232,17 @@ export default function RealtimeFindingsPanel(props: {
 			: "暂无符合条件的漏洞";
 
 	useEffect(() => {
-		if (page !== tableState.page) {
-			setPage(tableState.page);
+		if (
+			shouldSyncFindingPageFromTableState({
+				requestedPage: page,
+				resolvedPage: tableState.page,
+				totalRows: tableState.totalRows,
+				isLoading: props.isLoading === true,
+			})
+		) {
+			updatePagination({ page: tableState.page });
 		}
-	}, [page, tableState.page]);
+	}, [page, props.isLoading, tableState.page, tableState.totalRows, updatePagination]);
 
 	useEffect(() => {
 		if (typeof ResizeObserver === "undefined" || !viewportRef.current) {
@@ -202,10 +251,10 @@ export default function RealtimeFindingsPanel(props: {
 
 		const node = viewportRef.current;
 		const updatePageSize = (height: number) => {
-			setPageSize((current) => {
-				const next = calculateResponsiveFindingsPageSize(height);
-				return current === next ? current : next;
-			});
+			const next = calculateResponsiveFindingsPageSize(height);
+			if (pageSize !== next) {
+				updatePagination({ pageSize: next });
+			}
 		};
 
 		updatePageSize(node.clientHeight);
@@ -216,7 +265,7 @@ export default function RealtimeFindingsPanel(props: {
 		});
 		observer.observe(node);
 		return () => observer.disconnect();
-	}, []);
+	}, [pageSize, updatePagination]);
 
 	function getActionLabel(item: RealtimeMergedFindingItem): string {
 		if (!props.isRunning && isFalsePositiveFinding(item)) {
@@ -366,7 +415,9 @@ export default function RealtimeFindingsPanel(props: {
 							variant="outline"
 							className="cyber-btn-outline h-8"
 							disabled={tableState.page <= 1}
-							onClick={() => setPage((value) => Math.max(value - 1, 1))}
+							onClick={() =>
+								updatePagination({ page: Math.max(tableState.page - 1, 1) })
+							}
 						>
 							<ChevronLeft className="h-3.5 w-3.5" />
 							上一页
@@ -381,7 +432,9 @@ export default function RealtimeFindingsPanel(props: {
 							className="cyber-btn-outline h-8"
 							disabled={tableState.page >= tableState.totalPages}
 							onClick={() =>
-								setPage((value) => Math.min(value + 1, tableState.totalPages))
+								updatePagination({
+									page: Math.min(tableState.page + 1, tableState.totalPages),
+								})
 							}
 						>
 							下一页

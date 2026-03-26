@@ -92,6 +92,8 @@ import {
   buildStatsSummary,
   createTokenUsageAccumulator,
   isVisibleVerifiedVulnerability,
+  readAgentAuditFindingsPagination,
+  writeAgentAuditFindingsPagination,
 } from "./detailViewModel";
 import { getTerminalStatusTransitionPolicy } from "./terminalStatePolicy";
 import {
@@ -542,7 +544,7 @@ function AgentAuditPageContent() {
   const [activeMainTab, setActiveMainTab] = useState<"logs" | "findings">(
     "logs",
   );
-  const [, setIsFindingsLoading] = useState(false);
+  const [isFindingsLoading, setIsFindingsLoading] = useState(Boolean(taskId));
   const [, setFindingsError] = useState<string | null>(null);
   const [findingsFilters, setFindingsFilters] = useState<FindingsViewFilters>(() =>
     createDefaultFindingsFilters(),
@@ -699,6 +701,10 @@ function AgentAuditPageContent() {
     });
   }, [location.search, task?.description, task?.name]);
   const currentRoute = `${location.pathname}${location.search}`;
+  const findingsPagination = useMemo(
+    () => readAgentAuditFindingsPagination(new URLSearchParams(location.search)),
+    [location.search],
+  );
   const homeScanCards: HomeScanCard[] = useMemo(
     () => [
       {
@@ -761,6 +767,24 @@ function AgentAuditPageContent() {
         params.delete("detailType");
         params.delete("detailId");
       }
+      const search = params.toString();
+      navigate(
+        {
+          pathname: location.pathname,
+          search: search ? `?${search}` : "",
+        },
+        { replace: true },
+      );
+    },
+    [location.pathname, location.search, navigate],
+  );
+
+  const handleFindingsPaginationChange = useCallback(
+    (next: { page: number; pageSize: number }) => {
+      const params = writeAgentAuditFindingsPagination(
+        new URLSearchParams(location.search),
+        next,
+      );
       const search = params.toString();
       navigate(
         {
@@ -1007,7 +1031,7 @@ function AgentAuditPageContent() {
       setAfterSequence(0); //  重置 afterSequence state
       setActiveMainTab("logs");
       setFindingsError(null);
-      setIsFindingsLoading(false);
+      setIsFindingsLoading(Boolean(taskId));
       handleFindingsFiltersChange(createDefaultFindingsFilters(), {
         source: "system",
       });
@@ -2732,7 +2756,7 @@ function AgentAuditPageContent() {
         // 先加载任务基本信息
         await Promise.all([
           loadTask(),
-          loadFindings({ silent: true }),
+          loadFindings(),
           loadAgentTree(),
         ]);
 
@@ -3262,10 +3286,14 @@ function AgentAuditPageContent() {
                 taskId={task?.id || ""}
                 items={visibleVerifiedFindings}
                 isRunning={isRunning}
+                isLoading={isFindingsLoading}
                 currentPhase={task?.current_phase ?? null}
                 filters={findingsFilters}
                 onFiltersChange={handleFindingsFiltersChange}
                 scrollContainerRef={findingsContainerRef}
+                page={findingsPagination.page}
+                pageSize={findingsPagination.pageSize}
+                onPaginationChange={handleFindingsPaginationChange}
                 onOpenDetail={(item) =>
                   openFindingDetailPage(
                     item.id,

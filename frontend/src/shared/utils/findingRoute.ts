@@ -125,13 +125,12 @@ export function resolveFindingDetailBackTarget(params: {
 	hasHistory: boolean;
 	state: unknown;
 }): string | -1 {
-	if (params.hasHistory && isFindingDetailLocationState(params.state)) {
-		return -1;
-	}
-
 	const normalizedReturnTo = normalizeReturnToPath(params.returnTo);
 	if (normalizedReturnTo) {
 		return normalizedReturnTo;
+	}
+	if (params.hasHistory && isFindingDetailLocationState(params.state)) {
+		return -1;
 	}
 	if (params.hasHistory) {
 		return -1;
