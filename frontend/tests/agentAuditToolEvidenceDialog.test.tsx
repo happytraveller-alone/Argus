@@ -52,17 +52,14 @@ test("AuditDetailContent 渲染 search_code 结构化证据详情", () => {
     }),
   );
 
-  const evidenceSectionIndex = markup.indexOf("结构化证据");
   const firstLocationIndex = markup.indexOf("src/auth.ts:88");
   const firstHitCountIndex = markup.indexOf("1 条命中");
 
-  assert.match(markup, /结构化证据/);
   assert.match(markup, /rg -&gt; sed/);
   assert.match(markup, /src\/auth\.ts:88/);
   assert.match(markup, /1 条命中/);
-  assert.ok(evidenceSectionIndex >= 0);
-  assert.ok(firstLocationIndex > evidenceSectionIndex);
-  assert.ok(firstHitCountIndex > evidenceSectionIndex);
+  assert.ok(firstLocationIndex >= 0);
+  assert.ok(firstHitCountIndex >= 0);
   assert.doesNotMatch(markup, /已完成：search_code/);
   assert.doesNotMatch(markup, /命中窗口/);
   assert.doesNotMatch(markup, /<summary[^>]*>原始事件元数据<\/summary>/);
@@ -105,14 +102,12 @@ test("AuditDetailContent 渲染 read_file 结构化代码窗口详情", () => {
     }),
   );
 
-  const evidenceSectionIndex = markup.indexOf("结构化证据");
   const firstLocationIndex = markup.indexOf("src/auth.ts:80-92");
 
-  assert.match(markup, /结构化证据/);
   assert.match(markup, /read_file -&gt; sed/);
   assert.match(markup, /src\/auth\.ts:80-92/);
   assert.match(markup, /工具状态/);
-  assert.ok(firstLocationIndex > evidenceSectionIndex);
+  assert.ok(firstLocationIndex >= 0);
   assert.doesNotMatch(markup, /代码窗口/);
 });
 
@@ -280,4 +275,73 @@ test("AuditDetailContent 将原始事件元数据默认折叠", () => {
   assert.match(markup, /原始事件元数据/);
   assert.match(markup, /查看原始事件元数据/);
   assert.doesNotMatch(markup, /<details[^>]*open/);
+});
+
+test("AuditDetailContent 对失败但无 native evidence 的工具显示失败详情", () => {
+  const logItem: LogItem = {
+    ...createBaseLogItem(),
+    title: "失败：search_code",
+    tool: {
+      name: "search_code",
+      status: "failed",
+      duration: 120,
+    },
+    toolEvidence: null,
+    toolEvidenceMissingState: "missing_failed",
+    detail: {
+      tool_output: {
+        result: "strict failure",
+        truncated: false,
+        error_code: "validation_failed",
+      },
+      metadata: {
+        tool_status: "failed",
+        validation_error: "keyword is required",
+        input_repaired: {
+          keyword: "from fallback",
+        },
+      },
+    },
+  };
+
+  const markup = renderToStaticMarkup(
+    createElement(AuditDetailContent, {
+      detailType: "log",
+      logItem,
+    }),
+  );
+
+  assert.match(markup, /该工具执行失败，且当前事件未记录结构化证据/);
+  assert.match(markup, /tool_status/);
+  assert.match(markup, /validation_error/);
+  assert.match(markup, /input_repaired/);
+  assert.match(markup, /validation_failed/);
+  assert.match(markup, /strict failure/);
+});
+
+test("AuditDetailContent 对历史任务缺少 native evidence 显示重跑提示", () => {
+  const logItem: LogItem = {
+    ...createBaseLogItem(),
+    toolEvidence: null,
+    toolEvidenceMissingState: "historical_rerun_required",
+    detail: {
+      tool_output: {
+        result: "legacy-only",
+        truncated: false,
+      },
+      metadata: {
+        tool_status: "completed",
+      },
+    },
+  };
+
+  const markup = renderToStaticMarkup(
+    createElement(AuditDetailContent, {
+      detailType: "log",
+      logItem,
+    }),
+  );
+
+  assert.match(markup, /历史任务未保存结构化证据，需要重跑任务才能查看结构化详情/);
+  assert.match(markup, /查看原始数据/);
 });

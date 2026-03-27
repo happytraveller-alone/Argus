@@ -111,12 +111,7 @@ function nonEmpty(items: Array<string | null | undefined>): string[] {
 function buildHeaderBadges(parsed: ParsedToolEvidence): ToolEvidenceHeaderBadge[] {
   const payload = parsed.payload;
   if (!payload) return [];
-  const stateTone: ToolEvidenceHeaderBadgeTone =
-    parsed.state === "raw-only"
-      ? "warning"
-      : parsed.state === "legacy-derived"
-        ? "default"
-        : "success";
+  const stateTone: ToolEvidenceHeaderBadgeTone = parsed.state === "raw-only" ? "warning" : "success";
 
   return [
     {

@@ -12,11 +12,7 @@ export type ToolEvidenceRenderType =
   | "verification_summary"
   | "report_summary";
 export type ToolEvidenceLineKind = "context" | "focus" | "match";
-export type ToolEvidenceCompatibilityState =
-  | "native"
-  | "legacy-derived"
-  | "partial"
-  | "raw-only";
+export type ToolEvidenceCompatibilityState = "native";
 
 export interface ToolEvidenceLine {
   lineNumber: number;
@@ -259,6 +255,26 @@ const TOOL_EVIDENCE_TOOLS = new Set([
   "get_function_summary",
   "get_symbol_body",
   "extract_function",
+  "run_code",
+  "sandbox_exec",
+  "list_files",
+  "locate_enclosing_function",
+  "smart_scan",
+  "quick_audit",
+  "pattern_match",
+  "dataflow_analysis",
+  "controlflow_analysis_light",
+  "logic_authz_analysis",
+  "verify_vulnerability",
+  "create_vulnerability_report",
+]);
+
+const NATIVE_EVIDENCE_TOOLS = new Set([
+  "get_code_window",
+  "search_code",
+  "get_file_outline",
+  "get_function_summary",
+  "get_symbol_body",
   "run_code",
   "sandbox_exec",
   "list_files",
@@ -721,9 +737,11 @@ export function isToolEvidenceCapableTool(toolName: string | null | undefined): 
   return TOOL_EVIDENCE_TOOLS.has(String(toolName || "").trim().toLowerCase());
 }
 
-export function parseToolEvidence(value: unknown): ToolEvidencePayload | null {
-  const container = asRecord(value);
-  const metadata = asRecord(container?.metadata) || container;
+export function expectsNativeToolEvidence(toolName: string | null | undefined): boolean {
+  return NATIVE_EVIDENCE_TOOLS.has(String(toolName || "").trim().toLowerCase());
+}
+
+function parseToolEvidenceCandidate(metadata: Record<string, unknown> | null): ToolEvidencePayload | null {
   if (!metadata) return null;
 
   const renderType = toStringValue(metadata.render_type) as ToolEvidenceRenderType;
@@ -815,6 +833,11 @@ export function parseToolEvidence(value: unknown): ToolEvidencePayload | null {
   }
 
   return null;
+}
+
+export function parseToolEvidence(value: unknown): ToolEvidencePayload | null {
+  const container = asRecord(value);
+  return parseToolEvidenceCandidate(asRecord(container?.metadata) || container);
 }
 
 function extractToolInputRecord(value: unknown): Record<string, unknown> | null {
@@ -1505,69 +1528,21 @@ export function parseToolEvidenceFromLog(args: {
   toolInput?: unknown;
   logContent?: unknown;
 }): ParsedToolEvidence | null {
-  const direct = parseToolEvidence(args.toolOutput);
-  if (direct) return wrapParsedEvidence("native", direct, args.toolOutput);
+  const toolOutputRecord = asRecord(args.toolOutput);
 
-  const metadataPayload = parseToolEvidence({ metadata: args.toolMetadata });
-  if (metadataPayload) return wrapParsedEvidence("native", metadataPayload, args.toolOutput);
-
-  const normalizedTool = String(args.toolName || "").trim().toLowerCase();
-  const synthesized = (() => {
-    if (normalizedTool === "read_file" || normalizedTool === "get_code_window") {
-      return synthesizeReadFileEvidence(args.toolOutput, args.toolInput, args.toolMetadata, args.logContent);
-    }
-    if (normalizedTool === "search_code") {
-      return synthesizeSearchCodeEvidence(args.toolOutput, args.toolMetadata, args.logContent);
-    }
-    if (normalizedTool === "extract_function" || normalizedTool === "get_symbol_body") {
-      return synthesizeExtractFunctionEvidence(
-        args.toolOutput,
-        args.toolInput,
-        args.toolMetadata,
-        args.logContent,
-      );
-    }
-    if (normalizedTool === "run_code" || normalizedTool === "sandbox_exec") {
-      return synthesizeExecutionFallback(
-        normalizedTool,
-        args.toolOutput,
-        args.toolInput,
-        args.toolMetadata,
-        args.logContent,
-      );
-    }
-    if (normalizedTool === "list_files") {
-      return synthesizeFileListEvidence(args.toolOutput, args.toolMetadata);
-    }
-    if (normalizedTool === "locate_enclosing_function") {
-      return synthesizeLocatorEvidence(args.toolOutput, args.toolMetadata);
-    }
-    if (["smart_scan", "quick_audit", "pattern_match"].includes(normalizedTool)) {
-      return synthesizeAnalysisSummaryEvidence(normalizedTool, args.toolOutput, args.toolMetadata);
-    }
-    if (["dataflow_analysis", "controlflow_analysis_light", "logic_authz_analysis"].includes(normalizedTool)) {
-      return synthesizeFlowAnalysisEvidence(normalizedTool, args.toolOutput, args.toolMetadata);
-    }
-    if (normalizedTool === "verify_vulnerability") {
-      return synthesizeVerificationSummaryEvidence(args.toolOutput, args.toolMetadata, args.toolInput);
-    }
-    if (normalizedTool === "create_vulnerability_report") {
-      return synthesizeReportSummaryEvidence(args.toolOutput, args.toolMetadata);
-    }
-    return null;
-  })();
-
-  if (synthesized) {
-    return wrapParsedEvidence(
-      "legacy-derived",
-      synthesized,
-      args.toolOutput,
-      ["结构化时间线基于历史旧协议提炼生成。"],
-    );
+  const outputMetadataPayload = parseToolEvidenceCandidate(asRecord(toolOutputRecord?.metadata));
+  if (outputMetadataPayload) {
+    return wrapParsedEvidence("native", outputMetadataPayload, args.toolOutput);
   }
 
-  if (isToolEvidenceCapableTool(normalizedTool)) {
-    return wrapParsedEvidence("raw-only", null, args.toolOutput, ["无法安全提炼结构化证据，已回退原始 JSON。"]);
+  const directOutputPayload = parseToolEvidenceCandidate(toolOutputRecord);
+  if (directOutputPayload) {
+    return wrapParsedEvidence("native", directOutputPayload, args.toolOutput);
+  }
+
+  const metadataPayload = parseToolEvidenceCandidate(asRecord(args.toolMetadata));
+  if (metadataPayload) {
+    return wrapParsedEvidence("native", metadataPayload, args.toolOutput);
   }
 
   return null;

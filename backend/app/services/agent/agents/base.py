@@ -437,6 +437,7 @@ class BaseAgent(ABC):
 
         #  最近一次工具输出快照（用于避免 llm_observation 复写同一段 tool_result）
         self._last_tool_result_snapshot: Optional[Dict[str, Any]] = None
+        self._last_tool_result_payload: Optional[Dict[str, Any]] = None
         self._last_llm_stream_meta: Dict[str, Any] = {}
         self._thinking_push_mode: str = "stream"
         self._last_llm_thought_digest: Optional[str] = None
@@ -1343,6 +1344,9 @@ class BaseAgent(ABC):
         cache_hit: Optional[bool] = None,
         cache_key: Optional[str] = None,
         cache_policy: Optional[str] = None,
+        evidence_metadata: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+        error_code: Optional[str] = None,
         extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射工具结果事件"""
@@ -1358,6 +1362,12 @@ class BaseAgent(ABC):
         safe_result = result if result and result != "None" else ""
         stored_result, truncated = _truncate_with_flag(safe_result)
         tool_output_dict = {"result": stored_result if stored_result else "", "truncated": truncated}
+        if isinstance(evidence_metadata, dict) and evidence_metadata:
+            tool_output_dict["metadata"] = dict(evidence_metadata)
+        if error:
+            tool_output_dict["error"] = str(error)
+        if error_code:
+            tool_output_dict["error_code"] = str(error_code)
 
         # Snapshot the latest tool output so llm_observation can avoid duplicating it.
         try:
@@ -1369,6 +1379,10 @@ class BaseAgent(ABC):
             "tool_name": tool_name,
             "digest": digest,
             "prefix": stored_result[:256] if isinstance(stored_result, str) else "",
+        }
+        self._last_tool_result_payload = {
+            "tool_name": tool_name,
+            "tool_output": dict(tool_output_dict),
         }
 
         metadata: Dict[str, Any] = {
@@ -2182,7 +2196,7 @@ class BaseAgent(ABC):
         tool_input: Dict[str, Any],
         tool_obj: Optional[Any],
         fallback_depth: int,
-    ) -> Optional[Tuple[str, str]]:
+    ) -> Optional[Tuple[str, str, Optional[Dict[str, Any]]]]:
         if fallback_depth >= 2:
             return None
 
@@ -2206,7 +2220,13 @@ class BaseAgent(ABC):
             except Exception:
                 continue
             if not self._looks_like_tool_failure_output(fallback_output):
-                return fallback_tool_name, fallback_output
+                fallback_evidence_metadata: Optional[Dict[str, Any]] = None
+                payload = self._last_tool_result_payload if isinstance(self._last_tool_result_payload, dict) else None
+                if payload and payload.get("tool_name") == fallback_tool_name:
+                    tool_output_payload = payload.get("tool_output")
+                    if isinstance(tool_output_payload, dict) and isinstance(tool_output_payload.get("metadata"), dict):
+                        fallback_evidence_metadata = dict(tool_output_payload["metadata"])
+                return fallback_tool_name, fallback_output, fallback_evidence_metadata
         return None
 
     @staticmethod
@@ -4818,7 +4838,7 @@ class BaseAgent(ABC):
                         if isinstance(mcp_result.metadata, dict)
                         else {}
                     )
-                    merged_meta = {**strict_metadata, **mcp_result_meta}
+                    runtime_meta = {**strict_metadata, "mcp_used": True}
                     mcp_output = str(mcp_result.data or mcp_result.error or "")
 
                     if mcp_result.handled and mcp_result.success:
@@ -4830,7 +4850,8 @@ class BaseAgent(ABC):
                             tool_status="completed",
                             alias_used=alias_used,
                             input_repaired=repaired_changes or None,
-                            extra_metadata=merged_meta or None,
+                            evidence_metadata=mcp_result_meta or None,
+                            extra_metadata=runtime_meta or None,
                         )
                         if retry_guard_key:
                             self._deterministic_failure_counts.pop(retry_guard_key, None)
@@ -4850,7 +4871,7 @@ class BaseAgent(ABC):
                     strict_error = mcp_result.error or "mcp_unhandled_in_strict_mode"
                     strict_failure_metadata = _build_strict_failure_metadata(
                         strict_error=strict_error,
-                        base_metadata=merged_meta,
+                        base_metadata=runtime_meta,
                     )
                     await self.emit_tool_result(
                         resolved_tool_name,
@@ -4860,6 +4881,9 @@ class BaseAgent(ABC):
                         tool_status="failed",
                         alias_used=alias_used,
                         input_repaired=repaired_changes or None,
+                        evidence_metadata=mcp_result_meta or None,
+                        error=strict_error,
+                        error_code="mcp_strict_failure",
                         extra_metadata=strict_failure_metadata or None,
                     )
                     # 直接返回错误信息给模型，而不是封装成"阻断"消息
@@ -4878,12 +4902,13 @@ class BaseAgent(ABC):
                     fallback_depth=_fallback_depth,
                 )
                 if fallback_hit:
-                    fallback_tool_name, fallback_output = fallback_hit
+                    fallback_tool_name, fallback_output, fallback_evidence_metadata = fallback_hit
                     proxy_metadata = {
                         **write_scope_metadata,
                         "mcp_soft_fallback": True,
                         "mcp_soft_fallback_target": fallback_tool_name,
                         "skill_not_ready": True,
+                        "mcp_used": True,
                     }
                     await self.emit_tool_result(
                         resolved_tool_name,
@@ -4893,6 +4918,7 @@ class BaseAgent(ABC):
                         tool_status="completed",
                         alias_used=alias_used,
                         input_repaired=repaired_changes or None,
+                        evidence_metadata=fallback_evidence_metadata,
                         extra_metadata=proxy_metadata,
                     )
                     if not is_write_tool and not cache_bypass:
@@ -4948,7 +4974,7 @@ class BaseAgent(ABC):
                     if isinstance(mcp_result.metadata, dict)
                     else {}
                 )
-                merged_meta = {**write_scope_metadata, **mcp_result_meta}
+                runtime_meta = {**write_scope_metadata, "mcp_used": True}
 
                 if mcp_result.handled:
                     mcp_output = str(mcp_result.data or mcp_result.error or "")
@@ -4961,7 +4987,8 @@ class BaseAgent(ABC):
                             tool_status="completed",
                             alias_used=alias_used,
                             input_repaired=repaired_changes or None,
-                            extra_metadata=merged_meta or None,
+                            evidence_metadata=mcp_result_meta or None,
+                            extra_metadata=runtime_meta or None,
                         )
                         self._record_tool_context(
                             tool_name=resolved_tool_name,
@@ -4997,9 +5024,9 @@ class BaseAgent(ABC):
                         fallback_depth=_fallback_depth,
                     )
                     if fallback_hit and mcp_result.should_fallback:
-                        fallback_tool_name, fallback_output = fallback_hit
+                        fallback_tool_name, fallback_output, fallback_evidence_metadata = fallback_hit
                         merged_fallback_metadata = {
-                            **merged_meta,
+                            **runtime_meta,
                             "mcp_fallback_used": True,
                             "mcp_fallback_error": mcp_result.error or "unknown",
                             "mcp_runtime_fallback_used": True,
@@ -5015,6 +5042,7 @@ class BaseAgent(ABC):
                             tool_status="completed",
                             alias_used=alias_used,
                             input_repaired=repaired_changes or None,
+                            evidence_metadata=fallback_evidence_metadata,
                             extra_metadata=merged_fallback_metadata or None,
                         )
                         
@@ -5041,7 +5069,7 @@ class BaseAgent(ABC):
 
                     if mcp_result.should_fallback and local_tool_available:
                         mcp_fallback_metadata = {
-                            **merged_meta,
+                            **runtime_meta,
                             "mcp_fallback_used": True,
                             "mcp_fallback_error": mcp_result.error or "unknown",
                             "mcp_runtime_fallback_used": True,
@@ -5056,7 +5084,10 @@ class BaseAgent(ABC):
                             tool_status="failed",
                             alias_used=alias_used,
                             input_repaired=repaired_changes or None,
-                            extra_metadata=merged_meta or None,
+                            evidence_metadata=mcp_result_meta or None,
+                            error=mcp_result.error or "unknown",
+                            error_code="mcp_execution_failed",
+                            extra_metadata=runtime_meta or None,
                         )
                         failure_output = (
                             "MCP 工具执行失败\n\n"
@@ -5076,7 +5107,10 @@ class BaseAgent(ABC):
                             tool_status="failed",
                             alias_used=alias_used,
                             input_repaired=repaired_changes or None,
-                            extra_metadata=merged_meta or None,
+                            evidence_metadata=mcp_result_meta or None,
+                            error=mcp_result.error or "unknown",
+                            error_code="mcp_no_local_fallback",
+                            extra_metadata=runtime_meta or None,
                         )
                         failure_output = (
                             "MCP 工具执行失败且无本地回退\n\n"
@@ -5169,6 +5203,8 @@ class BaseAgent(ABC):
                     tool_status="failed",
                     alias_used=alias_used,
                     input_repaired=repaired_changes or None,
+                    error=f"超时 ({timeout}s)",
+                    error_code="timeout",
                     extra_metadata=(
                         {**write_scope_metadata, **mcp_fallback_metadata}
                         if (write_scope_metadata or mcp_fallback_metadata)
@@ -5190,6 +5226,8 @@ class BaseAgent(ABC):
                     tool_status="cancelled",
                     alias_used=alias_used,
                     input_repaired=repaired_changes or None,
+                    error="已取消",
+                    error_code="cancelled",
                     extra_metadata=(
                         {**write_scope_metadata, **mcp_fallback_metadata}
                         if (write_scope_metadata or mcp_fallback_metadata)
@@ -5201,6 +5239,7 @@ class BaseAgent(ABC):
             duration_ms = int((time.time() - start) * 1000)
             #  修复：确保传递有意义的结果字符串，避免 "None"
             result_preview = str(result.data) if result.data is not None else (result.error if result.error else "")
+            result_metadata = dict(result.metadata) if isinstance(result.metadata, dict) else {}
             await self.emit_tool_result(
                 resolved_tool_name,
                 result_preview,
@@ -5209,11 +5248,14 @@ class BaseAgent(ABC):
                 tool_status="completed" if result.success else "failed",
                 alias_used=alias_used,
                 input_repaired=repaired_changes or None,
+                evidence_metadata=result_metadata or None,
+                error=str(result.error or "") or None,
+                error_code=str(getattr(result, "error_code", "") or "") or None,
                 extra_metadata=(
                     {**write_scope_metadata, **mcp_fallback_metadata}
                     if (write_scope_metadata or mcp_fallback_metadata)
                     else None
-                ),
+                    ),
             )
 
             if retry_guard_key:
@@ -5336,6 +5378,8 @@ class BaseAgent(ABC):
                     tool_status="failed",
                     alias_used=alias_used,
                     input_repaired=repaired_changes or None,
+                    error=str(e),
+                    error_code=type(e).__name__,
                     extra_metadata=(
                         {**write_scope_metadata, **mcp_fallback_metadata}
                         if (write_scope_metadata or mcp_fallback_metadata)

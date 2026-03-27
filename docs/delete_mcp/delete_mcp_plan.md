@@ -1,279 +1,278 @@
-# 清理已退役工具运行时与嵌入检索残留方案
+# Delete MCP/RAG 清理实施计划
 
-## 目标
+## Summary
 
-- 基于当前仓库现状，清理所有已退役的 `mcp*`、`MCP_*`、`rag*`、Embedding 命名、运行时分支、兼容字段与界面文案。
-- 保留当前真实使用的能力：本地工具执行、skill catalog、flow 分析、Docker sandbox、写入范围守卫、Markdown memory 同步。
-- 将仍需保留的运行时目录、工具说明同步和写入约束统一改为中性命名。
-- 本文只依据仓库内已确认内容编写；仓库外部署是否仍依赖旧变量或旧目录，不作为默认前提，而作为发布前检查项处理。
+- 本计划已合并前端、后端、部署视角的审阅结论，目标是一次性清理仓库中所有已退役的 `mcp*`、`MCP_*`、`rag*`、Embedding 命名、运行时分支、兼容字段与界面文案。
+- 本次采用破坏式清理策略：
+  - 后端不再产出任何 `metadata.mcp_*`、`mcp_*` 错误分类、`mcp_*` shared memory source、`MCP`/`RAG` 用户可见文案。
+  - 不保留双写或 UI-only 兼容层。
+- 当前主要部署形态按“源码 compose”处理；因此部署 runbook 以 `docker compose` 为准，不以 artifact 部署链为默认前提。
+- 本轮只更新当前活文档和开发文档；历史设计/规划文档不做全仓同步改写。
+- 在开始代码修改前，必须先修正文档中的 4 个错误前提：
+  - live 启动入口是 `backend/app/runtime/container_startup.py`，不是 `backend/docker-entrypoint.sh`
+  - `agent_tasks_execution.py` 与 `agent_tasks_mcp.py` 各自都维护了一份 tool playbook / skills memory helper，必须先统一归属
+  - `config.py` 里的 `_sanitize_mcp_config()` 当前并不参与 `/config/me` 响应，只是被测试引用
+  - `install_codex_skills.sh` 不是当前源码 compose 主链的 live 执行路径，不能按“现行关键启动步骤”处理
 
-## 已确认的仓库现状
+## Important Interface Changes
 
-### 部署与运行时
-
-- `backend/Dockerfile`、`docker-compose.yml`、`docker-compose.full.yml` 仍创建或挂载 `/app/data/mcp`，并显式注入 `MCP_*` 与 `XDG_CONFIG_HOME=/app/data/mcp/xdg-config`。
-- `backend/.env`、`backend/env.example`、`backend/app/core/config.py` 仍保留 `MCP_*`、`XDG_CONFIG_HOME`、Embedding / RAG 配置。
-- `backend/docker-entrypoint.sh`、`backend/scripts/install_codex_skills.sh`、`backend/scripts/build_skill_registry.py` 仍使用当前挂载在 `/app/data/mcp` 的持久化目录；卷改名是有状态变更，不是纯文本替换。
-- `docker/sandbox/Dockerfile` 仍安装 `@modelcontextprotocol/*`、`@tobilu/qmd`，并使用 `/workspace/.VulHunter/mcp/*` 与 `QMD_DATA_DIR`。
-
-### 后端代码
-
-- `backend/app/api/v1/endpoints/agent_tasks_execution.py` 与 `backend/app/api/v1/endpoints/agent_tasks_mcp.py` 仍构建 runtime 对象、执行 gate / probe、同步 `MCP_TOOL_PLAYBOOK.md`，并在步骤名、日志、shared memory source / title 中保留旧命名。
-- `backend/app/services/agent/agents/base.py` 仍包含 strict routing、proxy fallback、`mcp_*` metadata、旧错误分类与审计标题拼装逻辑。
-- `backend/app/services/agent/mcp/*` 仍存在；写入范围守卫仍混在该包内，而不是中性运行时模块。
-- `backend/app/api/v1/endpoints/config.py` 仍通过 `_sanitize_mcp_config()` 返回 `preferMcp`、`skillAvailability`、`deprecatedConfigs` 等结构，并对 `otherConfig.mcpConfig` 做 strip。
-- `backend/pyproject.toml` 仍包含 `fastmcp`。
-- `backend/app/api/v1/api.py` 与 `backend/app/api/v1/endpoints/embedding_config.py` 仍暴露 `/embedding/*`。
-- `backend/app/services/rag/*` 仍在仓库内；其中 `splitter.py` 提供的 tree-sitter 能力仍被 `backend/app/services/flow_parser_runtime.py`、`backend/app/services/agent/flow/lightweight/ast_index.py`、`backend/app/services/agent/flow/lightweight/function_locator.py` 使用，不能直接整包删除。
-- `backend/app/services/agent/tools/rag_tool.py`、`backend/app/services/agent/knowledge/rag_knowledge.py`、`backend/app/services/agent/config.py` 中的 `rag_enabled` / `rag_top_k` 仍为残留支线。
-- `backend/app/models/agent_task.py`、`backend/scripts/create_agent_demo_data.py` 仍保留 `RAG_QUERY`、`RAG_RESULT`、`rag_search`、`rag_index` 命名。
-
-### 前端与测试
-
-- `frontend/src/pages/intelligent-scan/mcpCatalog.ts` 是未被使用的死文件；仓库检索未发现任何引用。
-- `AgentAudit` 仍在日志状态、导出与原始事件详情层暴露旧命名：
-  - `frontend/src/pages/AgentAudit/TaskDetailPage.tsx` 仍根据 `metadata.mcp_*` 生成 `MCP:` 与 `MCP 路由：`。
-  - `frontend/src/pages/AgentAudit/TaskDetailPage.tsx` 仍把 `mcp_runtime_error` 和包含 `mcp|adapter|command_not_found` 的原因归类为 `mcp`，并把该分类写入恢复提示日志。
-  - `frontend/src/pages/AgentAudit/toolEvidence.ts` 在缺少 `command_chain` 时会把 `mcp_adapter` 拼进 fallback command chain；该值会出现在日志详情弹层。
-  - `frontend/src/pages/AgentAudit/components/AuditDetailDialog.tsx` 与导出逻辑会原样显示或导出事件的 `title`、`content`、`detail`，因此不会自动抹掉这些旧字段。
-  - `frontend/src/pages/AgentAudit/components/LogEntry.tsx` 主列表默认会做摘要化显示，不直接展示 `MCP`；`frontend/tests/agentAuditLogEntry.test.tsx` 已验证这一点。
-- `frontend/src/components/agent/AgentModeSelector.tsx` 仍展示“跨文件关联 + RAG”与“使用 RAG 技术进行代码语义检索”；该文案当前出现在 `ProjectDetail -> CreateScanTaskDialog -> AgentModeSelector` 的建任务弹窗链路，不在任务管理页默认建任务流中。
-- `frontend/src/components/agent/EmbeddingConfig.tsx` 与 `frontend/src/components/system/SystemConfig.tsx` 仍保留 embedding 配置分支；当前唯一 live 路由 `/scan-config/intelligent-engine` 固定传入 `visibleSections=["llm"]`，因此前端没有 live 路由直接渲染 `EmbeddingConfig`，但仓库中的默认分支与 `/embedding/*` 接口依赖仍在。
-- 当前 external-tools 的列表、详情和测试全链路均走 `/api/v1/skills/*` 的 `scan-core` 静态 catalog/detail/test 接口，而不是 `mcpCatalog.ts` 或 backend mirror registry。
-
-### 文档与生成物
-
-- `backend/docs/agent-tools/MCP_TOOL_PLAYBOOK.md` 与 `backend/scripts/generate_runtime_tool_docs.py` 仍生成旧命名，并保留 `rag_query` 示例或误用说明。
-- `docs/agentic_scan_core/workflow_overview.md`、`docs/architecture.md`、`scripts/README-COMPOSE.md` 仍使用旧叙事或引用不存在的部署路径。
-
-## 目标状态
-
-- Backend runtime 目录统一为 `/app/data/runtime/xdg-*`；sandbox runtime 目录统一为 `/workspace/.VulHunter/runtime/xdg-*`。
-- 写入约束改为中性配置名：
+- 配置项统一改名为中性写入范围命名：
   - `AGENT_WRITE_SCOPE_HARD_LIMIT`
   - `AGENT_WRITE_SCOPE_DEFAULT_MAX_FILES`
   - `AGENT_WRITE_SCOPE_REQUIRE_EVIDENCE_BINDING`
   - `AGENT_WRITE_SCOPE_FORBID_PROJECT_WIDE_WRITES`
-- 仅保留对历史 `otherConfig.mcpConfig` 的单向兼容清洗：
-  - 读取用户配置时 strip
-  - 写入用户配置时忽略
-  - 不再返回 `preferMcp`、`skillAvailability`、`deprecatedConfigs`、`mcpConfig`
-- 不再暴露任何 Embedding、vector retrieval、`rag_*` 用户界面、接口、工具或 demo data 命名。
-- 审计日志与 shared memory 只描述工具调用事实，不展示 transport、adapter 或已退役运行时命名。
-- 保留且继续工作的能力仅包括：本地工具执行、skill catalog、flow parser / tree-sitter 解析、Docker sandbox、写入范围守卫、Markdown memory 同步。
+- 删除公开接口 `/embedding/*`。
+- 删除以下可见或可消费的旧字段/事件/命名：
+  - `metadata.mcp_*`
+  - `source="mcp_tool_playbook_sync"`
+  - `title="MCP 工具说明同步"`
+  - `retry_error_class="mcp_runtime_error"`
+  - `mcp_error` / `mcp_error_class`
+  - `AgentEventType.RAG_QUERY`
+  - `AgentEventType.RAG_RESULT`
+- 前端审计分类统一改为中性命名：
+  - `TerminalFailureClass: "runtime"` 取代 `"mcp"`
+- 文档生成物统一改名：
+  - `backend/docs/agent-tools/MCP_TOOL_PLAYBOOK.md` 改为 `TOOL_PLAYBOOK.md`
 
-## 实施变更
+## Implementation Changes
 
-### 1. 部署与持久化目录
+### 1. 先统一模块归属，再删旧模块
 
-- 修改 `backend/Dockerfile`
-  - 删除 `/app/data/mcp` 与 `xdg-*` 创建逻辑。
-  - 改为只创建 `/app/data/runtime/xdg-data`、`/app/data/runtime/xdg-cache`、`/app/data/runtime/xdg-config`。
-  - 删除 runtime 阶段对 `scripts/install_codex_skills.sh` 与 `scripts/build_skill_registry.py` 的复制。
-- 修改 `docker-compose.yml` 与 `docker-compose.full.yml`
-  - 将 `mcp_data:/app/data/mcp` 改为 `backend_runtime_data:/app/data/runtime`。
-  - 删除显式 `MCP_ENABLED`、`MCP_REQUIRE_ALL_READY_ON_STARTUP`、`CODEX_SKILLS_AUTO_INSTALL`、`SKILL_REGISTRY_AUTO_SYNC_ON_STARTUP`、`XDG_CONFIG_HOME` 注入。
-  - 底部卷定义同步改名。
-- 修改 `backend/.env` 与 `backend/env.example`
-  - 删除 `MCP_*`、`XDG_CONFIG_HOME=/app/data/mcp/xdg-config`、Embedding / RAG 段落与相关注释。
-  - 将仍需保留的写入范围配置迁移到中性命名。
-- 修改 `backend/app/core/config.py`
-  - 删除 `MCP_*`、`XDG_CONFIG_HOME`、`EMBEDDING_*`、`RAG_*` 配置。
-  - 新增中性写入范围配置字段。
-- 修改 `docker/sandbox/Dockerfile`
-  - 删除 `@modelcontextprotocol/server-memory`、`@modelcontextprotocol/server-sequential-thinking`、`@tobilu/qmd` 安装与 `command -v qmd` 检查。
-  - 删除 `/workspace/.VulHunter/mcp/*`、`/workspace/.VulHunter/qmd`、`QMD_DATA_DIR`。
-  - 删除与 `.VulHunter/mcp/xdg-*` 绑定的 `XDG_DATA_HOME`、`XDG_CACHE_HOME`、`XDG_CONFIG_HOME`；当前仓库内没有其他文件引用这些 sandbox 路径。
-- 删除 `backend/scripts/install_codex_skills.sh` 与 `backend/scripts/build_skill_registry.py`。
-- 修改 `backend/docker-entrypoint.sh`
-  - 删除 skills 自动安装与 registry 构建逻辑。
-- 对 volume 改名单独写明一次性操作
-  - 在切换卷名前，先审计并导出旧 `mcp_data` 中仍需保留的文件。
-  - 导出完成后删除旧 `mcp_data` 运行卷，并切换到 `backend_runtime_data`。
+- 新建 `backend/app/api/v1/endpoints/agent_tasks_tool_runtime.py`，作为唯一 owner，承接：
+  - write-scope guard 构建
+  - `TOOL_SHARED_CATALOG.md` 同步
+  - `TOOL_PLAYBOOK.md` 读取与 shared memory 同步
+  - tool skills snapshot 构建与 skills memory 同步
+- 新建 `backend/app/services/agent/write_scope.py`，迁出：
+  - `TaskWriteScopeGuard`
+  - `WriteScopeDecision`
+  - `HARD_MAX_WRITABLE_FILES_PER_TASK`
+- 先把所有导入改到新模块，再删除：
+  - `backend/app/api/v1/endpoints/agent_tasks_mcp.py`
+  - `backend/app/services/agent/mcp/write_scope.py`
+- 同步更新 facade 与布局测试：
+  - `backend/app/api/v1/endpoints/agent_tasks.py`
+  - `backend/tests/test_agent_tasks_module_layout.py`
 
-### 2. 后端执行链路去旧运行时命名
+### 2. 一次性移除 MCP runtime 体系
 
-- 将 `backend/app/services/agent/mcp/write_scope.py` 提取到 `backend/app/services/agent/write_scope.py`。
-- 将 `backend/app/api/v1/endpoints/agent_tasks_mcp.py` 改为 `backend/app/api/v1/endpoints/agent_tasks_tool_runtime.py`。
-  - 仅保留写入范围守卫构建、工具文档同步与必要的路径规范化逻辑。
-  - 删除 gate、probe、bootstrap helper 与相关命名。
-- 修改 `backend/app/api/v1/endpoints/agent_tasks.py`
-  - 删除对 `agent_tasks_mcp` 的 facade re-export，改为新的中性 helper 模块。
-- 修改 `backend/app/api/v1/endpoints/agent_tasks_execution.py`
-  - 删除 `_build_task_mcp_runtime`、`_bootstrap_task_mcp_runtime`、`_probe_required_mcp_runtime` 调用与相关步骤文案。
-  - 不再向 agent / orchestrator 调用 `set_mcp_runtime(...)`。
-  - 改为直接构建 `TaskWriteScopeGuard` 并向 agent / orchestrator 调用 `set_write_scope_guard(...)`。
-- 修改 `backend/app/services/agent/agents/base.py`
-  - 删除 strict runtime routing、proxy fallback、`mcp_*` metadata、旧错误分类与标题 / 内容格式化。
-  - 保留本地工具执行、写入范围校验、普通 fallback、工具事件与缓存逻辑。
-- 修改 `backend/app/services/agent/agents/verification.py`
-  - 删除 `_mcp_attempt`、`mcp_symbol_index` 等函数定位标记，改为中性函数定位命名。
-- 删除无实际价值的旧运行时壳层模块
-  - `app/services/agent/mcp/runtime.py`
-  - `app/services/agent/mcp/router.py`
-  - `app/services/agent/mcp/catalog.py`
-  - `app/services/agent/mcp/protocol_verify.py`
-  - `app/services/agent/mcp/probe_specs.py`
-  - `app/services/agent/mcp/virtual_tools.py`
-  - `app/services/agent/mcp/__init__.py`
-- 删除 `backend/pyproject.toml` 中的 `fastmcp`，并同步 lock 文件。
+- 删除：
+  - `backend/app/services/agent/mcp/runtime.py`
+  - `router.py`
+  - `catalog.py`
+  - `protocol_verify.py`
+  - `probe_specs.py`
+  - `virtual_tools.py`
+  - `__init__.py`
+- `backend/app/api/v1/endpoints/agent_tasks_execution.py` 删除：
+  - `_build_task_mcp_runtime`
+  - `_bootstrap_task_mcp_runtime`
+  - `_probe_required_mcp_runtime`
+  - “正在初始化 MCP 运行时”及 gate/probe 步骤
+  - `set_mcp_runtime(...)`
+- 启动链改为只做：
+  - `_initialize_tools(...)`
+  - write-scope guard 注入
+  - tool docs / skills memory sync
+- `backend/app/services/agent/agents/base.py` 改为仅支持本地工具执行 + write-scope guard：
+  - 删除 `_mcp_runtime`
+  - 删除 strict MCP routing / proxy fallback / adapter 选择
+  - 删除 `mcp_*` metadata 拼装
+  - 删除 `mcp_unavailable` 分类
+  - 新增 `set_write_scope_guard(...)`
+  - 所有失败 metadata 改为中性 runtime 命名
+- `backend/app/services/agent/agents/orchestrator.py`、system prompts、`TOOL_USAGE_GUIDE` 删除 “MCP 工具链” 表述，统一为“标准工具链”或“本地工具链”
 
-### 3. 配置接口与历史兼容清理
+### 3. 修正 runtime 错误分类与 verification 命名
 
-- 修改 `backend/app/api/v1/endpoints/config.py`
-  - 删除 `_sanitize_mcp_config()` 与相关返回结构。
-  - 保留对历史 `otherConfig.mcpConfig` 的 strip 行为。
-  - 将写入范围默认值与清洗逻辑迁移到中性命名。
-- 删除 `backend/app/api/v1/endpoints/embedding_config.py`。
-- 修改 `backend/app/api/v1/api.py`
-  - 删除 `/embedding/*` router 注册。
-- 清理 `backend/app/models/agent_task.py` 中的 `RAG_QUERY` / `RAG_RESULT` 事件类型，并同步更新 `backend/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 与 `backend/scripts/create_agent_demo_data.py`。
+- `backend/app/api/v1/endpoints/agent_tasks_runtime.py`
+  - `code: "mcp_runtime_error"` 改为 `tool_runtime_error`
+  - `category: "mcp"` 改为 `runtime`
+- `backend/app/services/agent/agents/base.py`
+  - `mcp_error` / `mcp_error_class` 改为 `runtime_error` / `runtime_error_class`
+  - `mcp_unavailable` 改为 `tool_unavailable`
+- `backend/app/services/agent/agents/verification.py`
+  - `_mcp_attempt` 改为 `_function_locator_attempt`
+  - `function_resolution_method` / `function_resolution_engine` 从 `mcp_symbol_index` 改为中性值
+  - 日志文本与 fallback 统一去掉 `MCP`
+- 所有依赖旧错误名的测试同步改为中性断言：
+  - `backend/tests/test_agent_tool_retry_guard.py`
+  - `backend/tests/test_agent_scan_mode_coverage_diagnostics.py`
+  - `backend/tests/test_verification_function_locator_fallback.py`
 
-### 4. 嵌入检索与知识库残留清理
+### 4. 清掉死兼容代码和相关测试
 
-- 从 `backend/app/services/rag/splitter.py` 中提取仍被 flow / function locator 使用的通用 tree-sitter 解析能力到中性模块。
-- 修改以下调用方，使其不再从 `app.services.rag` 导入通用解析能力
+- `backend/app/api/v1/endpoints/config.py`
+  - 删除 `_default_mcp_write_policy()`
+  - 删除 `_sanitize_mcp_write_policy()`
+  - 删除 `_sanitize_mcp_config()`
+  - 保留且仅保留 `otherConfig.mcpConfig` 的 strip 行为
+- 说明：
+  - `/config/me` 与默认配置不新增中性 write-scope 返回字段
+  - write-scope 继续由服务端设置控制，不经用户配置下发
+- 删除或重写这些测试：
+  - `backend/tests/test_mcp_catalog.py`
+  - `backend/tests/test_mcp_write_scope_guard.py`
+  - `backend/tests/test_agent_task_mcp_bootstrap.py`
+  - `backend/tests/test_mcp_tool_routing.py`
+  - `backend/tests/test_mcp_all_agents_write_policy.py`
+  - `backend/tests/test_mcp_router_codebadger_cpg_query.py`
+
+### 5. 移除 RAG / Embedding，但保留 tree-sitter 能力
+
+- 新建中性 parser 模块，迁出 `TreeSitterParser`
+- 修改调用方：
   - `backend/app/services/flow_parser_runtime.py`
   - `backend/app/services/agent/flow/lightweight/ast_index.py`
   - `backend/app/services/agent/flow/lightweight/function_locator.py`
-- 在提取完成后删除纯 Embedding / vector retrieval 模块
+- 删除：
   - `backend/app/services/rag/embeddings.py`
-  - `backend/app/services/rag/indexer.py`
-  - `backend/app/services/rag/retriever.py`
-  - `backend/app/services/rag/__init__.py`
-- 删除未接入当前主链路的 RAG 残留
+  - `indexer.py`
+  - `retriever.py`
+  - `__init__.py`
   - `backend/app/services/agent/tools/rag_tool.py`
   - `backend/app/services/agent/knowledge/rag_knowledge.py`
-  - `backend/app/services/agent/config.py` 中的 `rag_enabled` / `rag_top_k`
-  - `backend/app/services/agent/knowledge/tools.py` 中的向量检索依赖
-- 修改 `backend/scripts/create_agent_demo_data.py`
-  - 删除 `rag_index`、`rag_search`、`RAG_QUERY`、`RAG_RESULT` 演示数据。
-- 修改 `backend/scripts/generate_runtime_tool_docs.py`
-  - 删除 `rag_query` 等已退役工具名与相关文案。
+- `backend/app/services/agent/knowledge/tools.py` 删除知识库检索工具入口
+- `backend/app/services/agent/config.py` 删除 `rag_enabled` / `rag_top_k`
+- `backend/app/models/agent_task.py` 与 `backend/app/db/schema_snapshots/baseline_5b0f3c9a6d7e.py` 删除 `RAG_QUERY` / `RAG_RESULT`
+- `backend/scripts/create_agent_demo_data.py` 删除 `rag_index` / `rag_search` / `RAG_*` 演示数据
+- 删除 `backend/app/api/v1/endpoints/embedding_config.py`
+- `backend/app/api/v1/api.py` 删除 embedding router 注册
 
-### 5. 前端界面与审计文案清理
+### 6. 前端做一轮完整中性化
 
-- 删除 `frontend/src/pages/intelligent-scan/mcpCatalog.ts`。
-- 修改 `frontend/src/pages/AgentAudit/TaskDetailPage.tsx`
-  - 删除 `MCP:` 与 `MCP 路由：` 标题和内容生成。
-  - 不再从 `metadata.mcp_*` 组装用户可见文案。
-- 修改 `frontend/src/pages/AgentAudit/types.ts`
-  - 将 `TerminalFailureClass` 中的 `'mcp'` 改为 `'runtime'`。
-- 修改 `frontend/src/pages/AgentAudit/TaskDetailPage.tsx`
-  - 将 `classifyTerminalFailure()` 中返回的 `"mcp"` 分支改为 `"runtime"`。
-- 修改 `frontend/src/pages/AgentAudit/toolEvidence.ts`
-  - fallback 命令链不再拼接 `mcp_adapter`。
-- 修改 `frontend/src/components/agent/AgentModeSelector.tsx`
-  - 删除 RAG 相关卖点与说明文案。
-- 删除 `frontend/src/components/agent/EmbeddingConfig.tsx`。
-- 修改 `frontend/src/components/system/SystemConfig.tsx`
-  - 删除 `embedding` section、页签与组件引用。
-- 修改 `frontend/src/pages/ScanConfigIntelligentEngine.tsx`
-  - 删除已注释掉的 `EmbeddingConfig` 残留与“搜索增强模块”相关旧说明。
-- 更新相关前端 fixture 与快照，避免继续使用 `MCP: ...` 或 RAG 文案。
+- 删除：
+  - `frontend/src/components/agent/EmbeddingConfig.tsx`
+  - `frontend/src/pages/intelligent-scan/mcpCatalog.ts`
+- `frontend/src/components/system/SystemConfig.tsx`
+  - 删除 `embedding` section
+  - 删除 `ConfigSection` 中的 `"embedding"`
+  - 删除对应 tab、import、默认 section 数组中的 embedding
+- `frontend/src/pages/ScanConfigIntelligentEngine.tsx`
+  - 删除注释残留“搜索增强模块”
+- `frontend/src/components/agent/AgentModeSelector.tsx`
+  - 删除所有 `RAG` 文案
+  - 智能扫描说明改为“跨文件关联 + 结构化代码分析”等中性表述
+- `frontend/src/pages/AgentAudit/types.ts`
+  - `TerminalFailureClass` 中 `'mcp'` 改为 `'runtime'`
+- `frontend/src/pages/AgentAudit/TaskDetailPage.tsx`
+  - 删除 `（MCP: ...）`
+  - 删除 `MCP 路由：...`
+  - 失败分类改为识别中性 runtime 错误
+- `frontend/src/pages/AgentAudit/toolEvidence.ts`
+  - fallback command chain 不再注入 `mcp_adapter`
+- `frontend/src/pages/AgentAudit/components/AuditDetailDialog.tsx`
+  - 保留显示原始 detail 的能力，但依赖后端不再下发旧字段
+- 更新前端测试与 fixture，确保任何可见文本都不再出现 `MCP` / `RAG`
 
-### 6. 文档、生成物与命名清理
+### 7. 工具文档、skills snapshot、提示词生成链统一改名
 
-- 将 `backend/docs/agent-tools/MCP_TOOL_PLAYBOOK.md` 重命名为 `TOOL_PLAYBOOK.md`。
-- 修改 `backend/scripts/generate_runtime_tool_docs.py`
-  - 输出文件名改为 `TOOL_PLAYBOOK.md`。
-  - 标题、矩阵列名、说明文字全部改为中性工具文档命名。
-  - 删除 `rag_query` 等已退役示例。
-- 修改 `backend/scripts/validate_runtime_tool_docs.py`
-  - 校验目标文件名同步改为 `TOOL_PLAYBOOK.md`。
-- 修改 `backend/app/api/v1/endpoints/agent_tasks_execution.py` 与新的 tool runtime helper
-  - `_load_mcp_tool_playbook`、`_sync_mcp_tool_playbook_to_memory`、`mcp_tool_playbook_sync` 改为中性命名。
-  - shared memory source、title、summary 与日志全部去旧命名。
-- 修改 `scripts/README-COMPOSE.md`
-  - 移除旧环境变量描述。
-  - 修正不存在的 `deploy/compose/docker-compose.prod*.yml` 引用。
-- 修改 `docs/agentic_scan_core/workflow_overview.md`
-  - 将“初始化 MCP 运行时并做 required MCP 门禁检查”改为中性的“初始化工具运行时或写入范围守卫”。
-- 修改 `docs/architecture.md`
-  - 删除“可选 RAG”表述。
-
-## 测试与回归验证
-
-### 本轮已执行验证
-
-- 2026-03-26 已执行并通过：
-  - `uv run --project . pytest -s tests/test_config_mcp_backend_owned.py::test_update_my_config_strips_frontend_mcp_payload_and_does_not_return_mcp_config`
-  - `uv run --project . pytest -s tests/test_config_mcp_backend_owned.py::test_get_my_config_strips_legacy_mcp_config_from_response`
-  - `uv run --project . pytest -s tests/test_skill_registry_api.py::test_skill_catalog_endpoint_returns_scan_core_items`
-  - `uv run --project . pytest -s tests/test_runtime_tool_docs_coverage.py::test_runtime_tool_docs_coverage`
-  - `uv run --project . pytest -s tests/test_agent_prompt_contracts.py::test_shared_tool_usage_prompt_only_mentions_core_scan_tools`
-  - `uv run --project . pytest -s tests/test_agent_tool_input_repair.py::test_execute_tool_blocks_virtual_alias_when_virtual_routing_disabled`
-  - `pnpm test:node -- tests/agentAuditLogEntry.test.tsx tests/agentAuditToolEvidenceDialog.test.tsx tests/scanConfigExternalToolsLayout.test.tsx tests/scanConfigExternalToolDetail.test.tsx tests/scanConfigIntelligentEngineSkillSection.test.tsx`
-- 这些通过项已经确认以下事实：
-  - `/config` 仍只对历史 `otherConfig.mcpConfig` 做 strip，前端 payload 中的旧字段不会被持久化或回传。
-  - `/skills/catalog` 当前直接返回 `scan-core` 静态目录，不依赖 mirror skill registry。
-  - runtime tool docs 当前仍完整存在，后续改名 `TOOL_PLAYBOOK.md` 时需要同步更新校验脚本。
-  - prompt 合同与工具输入修复仍明确把 `rag_query` 视为退役或虚拟工具名。
-  - 前端 `LogEntry` 组件当前会对展示文本做去 `MCP` 处理，但导出日志、原始事件详情、失败分类与 fallback command chain 仍保留旧命名，因此计划中的前端清理范围成立。
-
-### 需要同步修改或删除的测试
-
-- `backend/tests/test_docker_compose_dev_flow.py`
-- `backend/tests/test_mcp_catalog.py`
-- `backend/tests/test_mcp_tool_routing.py`
-- `backend/tests/test_agent_task_mcp_bootstrap.py`
-- `backend/tests/test_mcp_write_scope_guard.py`
-- `backend/tests/test_mcp_all_agents_write_policy.py`
-- `backend/tests/test_mcp_router_codebadger_cpg_query.py`
-- `backend/tests/test_agent_tasks_module_layout.py`
-- `backend/tests/test_agent_task_project_root_normalization.py`
-- `backend/tests/test_tool_skills_memory_sync.py`
+- `backend/docs/agent-tools/MCP_TOOL_PLAYBOOK.md` 改为 `TOOL_PLAYBOOK.md`
+- `backend/scripts/generate_runtime_tool_docs.py`
+  - `PLAYBOOK_PATH` 指向新文件名
+  - 删除 `rag_query` 与退役知识库工具叙述
+  - 标题与说明全部改为中性工具文档命名
+- `backend/scripts/validate_runtime_tool_docs.py` 同步新文件名
 - `backend/tests/test_runtime_tool_docs_coverage.py`
-- `backend/tests/test_agent_scan_mode_coverage_diagnostics.py`
-- `backend/tests/test_agent_tool_retry_guard.py`
-- `backend/tests/test_verification_function_locator_fallback.py`
-- `backend/tests/test_startup_interrupted_recovery.py`
-- `backend/tests/test_startup_schema_migration.py`
-- `backend/tests/test_remote_repository_scan_removal.py`
-- `backend/tests/test_legacy_cleanup.py`
-- `frontend/tests/agentAuditLogEntry.test.tsx`
+  - 改断言到 `TOOL_PLAYBOOK.md`
+- `backend/tests/test_tool_skills_memory_sync.py`
+  - 不再断言 `MCP 工具说明同步`
+  - 改断言中性标题与 source
+- `backend/app/services/agent/skills/scan_core.py`
+  - 删除空壳 `SCAN_CORE_MCP_BOUND_SKILL_IDS`
+  - 删除相关 `*_MCP_*` 命名
+- 提示词合同测试继续要求 scan-core 工具集合不变，但不得再出现 retired alias
 
-### 需要保留并继续通过的聚焦断言
+### 8. 部署与容器修改按真实 live 入口执行
 
-- `backend/tests/test_config_mcp_backend_owned.py::test_update_my_config_strips_frontend_mcp_payload_and_does_not_return_mcp_config`
-- `backend/tests/test_config_mcp_backend_owned.py::test_get_my_config_strips_legacy_mcp_config_from_response`
-- `backend/tests/test_skill_registry_api.py::test_skill_catalog_endpoint_returns_scan_core_items`
-- `backend/tests/test_runtime_tool_docs_coverage.py::test_runtime_tool_docs_coverage`
-- `backend/tests/test_agent_prompt_contracts.py::test_shared_tool_usage_prompt_only_mentions_core_scan_tools`
-- `backend/tests/test_agent_tool_input_repair.py::test_execute_tool_blocks_virtual_alias_when_virtual_routing_disabled`
-- `frontend/tests/agentAuditLogEntry.test.tsx`
+- `backend/app/runtime/container_startup.py`
+  - 删除 `_run_optional_skill_setup()`
+  - 删除对 `install_codex_skills.sh` / `build_skill_registry.py` 的调用
+- `backend/Dockerfile`
+  - `dev-runtime` 和 `runtime` 都改为创建 `/app/data/runtime/xdg-*`
+  - 删除 `/app/data/mcp`
+  - 删除旧 `XDG_*=/app/data/mcp/xdg-*`
+  - `runtime` 删除 `COPY scripts/build_skill_registry.py`
+- `docker-compose.yml` 与 `docker-compose.full.yml`
+  - `mcp_data:/app/data/mcp` 改为 `backend_runtime_data:/app/data/runtime`
+  - 删除 `MCP_*`
+  - 删除 `XDG_CONFIG_HOME=/app/data/mcp/xdg-config`
+  - 删除 `CODEX_SKILLS_*`
+  - 删除 `SKILL_REGISTRY_*`
+- `backend/.env` 与 `backend/env.example`
+  - 删除 `MCP_*`
+  - 删除 `XDG_CONFIG_HOME`
+  - 删除 `EMBEDDING_*`
+  - 删除 `VECTOR_DB_TYPE` / `CHROMA_*`
+  - 新增中性 `AGENT_WRITE_SCOPE_*`
+- `docker/sandbox/Dockerfile`
+  - 删除 `@modelcontextprotocol/*`
+  - 删除 `@tobilu/qmd`
+  - 删除 `QMD_DATA_DIR`
+  - 路径统一为 `/workspace/.VulHunter/runtime/xdg-*`
+- `backend/docker-entrypoint.sh`、`backend/scripts/install_codex_skills.sh`、`backend/scripts/build_skill_registry.py`
+  - 作为死文件清理
+  - 不再当作 live 启动逻辑的一部分
 
-### 当前已知的基线失败
+### 9. 源码 compose 卷迁移 runbook
 
-- 2026-03-26 聚合执行时，以下失败已存在，但不能直接作为本方案是否正确的判断依据：
-  - `tests/test_agent_tool_registry.py::test_smart_audit_tool_registry_contains_only_core_scan_surface`
-  - `tests/test_agent_prompt_contracts.py::test_verification_prompt_requires_flow_fields_and_report_preconditions`
-  - `tests/test_agent_tool_input_repair.py` 中多个 `read_file` / single-scope 相关失败
-  - `tests/test_docker_compose_dev_flow.py::test_nexus_web_dockerfile_persists_runtime_pnpm`
-- 这些失败涉及工具面收敛、验证提示词、`read_file` 行为与 `nexus-web` Dockerfile 断言，不应被误写成 “MCP/RAG 清理导致的新问题”。
+- 默认旧卷为 named volume `mcp_data`
+- 迁移步骤固定写入文档：
+  - 停止 `backend`
+  - 备份旧 `mcp_data`
+  - 列出旧卷目录树
+  - 仅迁移 `xdg-data` / `xdg-cache` / `xdg-config`
+  - 不迁移 `skill-registry` / `codex-home` / `qmd`
+  - 创建并切换到 `backend_runtime_data`
+  - 启动 compose
+  - 校验新挂载、env、健康状态
+  - 若失败，回滚到旧 compose 和旧卷名
+- 不默认假设 bind mount、外部卷驱动或 artifact 部署链
 
-### 建议执行的验证命令
+### 10. 文档更新范围
 
-统一按仓库约定使用 `uv run --project . pytest -s`：
+- 更新：
+  - `docs/delete_mcp/delete_mcp_plan.md`
+  - `docs/agentic_scan_core/workflow_overview.md`
+  - `docs/architecture.md`
+  - `scripts/README-COMPOSE.md`
+- 不改历史设计文档；如需引用，标注“历史设计，不代表当前实现”
 
-```bash
-uv run --project . pytest -s tests/test_config_mcp_backend_owned.py::test_update_my_config_strips_frontend_mcp_payload_and_does_not_return_mcp_config
-uv run --project . pytest -s tests/test_config_mcp_backend_owned.py::test_get_my_config_strips_legacy_mcp_config_from_response
-uv run --project . pytest -s tests/test_skill_registry_api.py::test_skill_catalog_endpoint_returns_scan_core_items
-uv run --project . pytest -s tests/test_runtime_tool_docs_coverage.py::test_runtime_tool_docs_coverage
-uv run --project . pytest -s tests/test_agent_prompt_contracts.py::test_shared_tool_usage_prompt_only_mentions_core_scan_tools
-uv run --project . pytest -s tests/test_agent_tool_input_repair.py::test_execute_tool_blocks_virtual_alias_when_virtual_routing_disabled
-```
+## Test Plan
 
-并补充一个新的聚焦验证：
+- 后端必须验证：
+  - `/config` 仍只 strip `otherConfig.mcpConfig`
+  - `agent task` 启动链不再构建 runtime 对象，只注入 write-scope guard
+  - `BaseAgent` 不再产生任何 `mcp_*` metadata
+  - `VerificationAgent` 使用中性函数定位命名
+  - `TOOL_PLAYBOOK.md`、skills snapshot、prompt contracts 无旧别名
+  - 删除 `fastmcp` 后，所有依赖 stub `fastmcp` 的测试同步收敛或删除
+- 前端必须验证：
+  - AgentAudit 列表、详情、导出文本不再出现 `MCP:` / `MCP 路由：`
+  - 终态分类显示 `runtime`
+  - `AgentModeSelector` 无 `RAG`
+  - `SystemConfig` 任意 visibleSections 下都不再含 embedding section
+- 源码 compose smoke 必做：
+  - `docker compose config` 不再含 `mcp_data`、`MCP_*`、旧 `XDG_CONFIG_HOME`
+  - backend 容器内 `env` 只出现新 `XDG_*`
+  - backend `/health`
+  - 跑一次真实 agent 任务，验证：
+    - 日志无 `MCP`
+    - shared memory 无旧 source
+    - sandbox 任务可执行
+- 建议命令：
+  - `uv run --project . pytest -s backend/tests/test_config_mcp_backend_owned.py backend/tests/test_agent_tasks_module_layout.py backend/tests/test_runtime_tool_docs_coverage.py backend/tests/test_tool_skills_memory_sync.py backend/tests/test_agent_prompt_contracts.py backend/tests/test_agent_tool_input_repair.py`
+  - `pnpm test:node -- frontend/tests/agentAuditLogEntry.test.tsx`
+  - `docker compose up --build -d`
+  - `docker compose exec backend env | rg 'MCP_|XDG_|CODEX_SKILLS|SKILL_REGISTRY'`
+  - `docker compose exec backend env | rg '/app/data/runtime|/app/data/mcp'`
 
-- 验证 agent task 执行时仍会注入 write-scope guard，但不再构建任何旧 runtime 对象。
-- 验证 `/config` 仅保留历史 `otherConfig.mcpConfig` 的 strip 行为，不再返回旧兼容字段。
-- 验证前端 AgentAudit 页面与导出日志不再出现 `MCP:`、`MCP 路由：`、RAG 文案。
+## Assumptions
 
-## 发布前检查项
-
-- 确认仓库外部部署、脚本或 CI 不再依赖 `MCP_*`、`XDG_CONFIG_HOME=/app/data/mcp/xdg-config`、`/embedding/*`、`QMD_DATA_DIR`、`qmd` 命令。
-- 确认旧 `mcp_data` 卷已完成审计与导出，切换后不再保留 `mcp_data` 作为运行卷。
-- 确认外部消费方不会继续解析旧审计标题、旧 shared memory source 名称或 `metadata.mcp_*` 字段。
-- 确认用户已有 `otherConfig.embedding_config` 或类似历史数据在本轮按静默忽略处理，不再迁移回写。
+- 兼容策略已确定为“直接移除旧字段”，不保留双写或 UI-only 兼容层。
+- 文档范围已确定为“只改当前活文档”。
+- 部署形态已确定为“源码 compose”。
+- 卷迁移按 named volume `mcp_data -> backend_runtime_data` 编写。
+- `skill-registry`、`codex-home`、`qmd` 视为历史残留，不做迁移目标。
+- subagent 审阅已完成并收口，本计划为完整替换版。

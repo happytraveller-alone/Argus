@@ -222,7 +222,7 @@ export default function DashboardChartsPanels({
 	}, [confidenceByLanguageChartData]);
 
 	const cweBarData = useMemo(
-			() =>
+		() =>
 			cweDistributionData.map((item) => ({
 				cweId: item.cwe_id,
 				cweName: item.cwe_name || item.cwe_id,
@@ -278,12 +278,12 @@ export default function DashboardChartsPanels({
 
 	const projectScanRunsChartHeight = useMemo(() => {
 		const rowCount = Math.max(1, projectScanRunsData.length);
-		return Math.min(520, Math.max(280, rowCount * 36));
+		return Math.min(420, Math.max(220, rowCount * 28));
 	}, [projectScanRunsData.length]);
 
 	const projectVulnsChartHeight = useMemo(() => {
 		const rowCount = Math.max(1, projectVulnsData.length);
-		return Math.min(520, Math.max(280, rowCount * 36));
+		return Math.min(420, Math.max(220, rowCount * 28));
 	}, [projectVulnsData.length]);
 
 	const renderProjectVulnsTooltip = (payload: {
@@ -357,10 +357,10 @@ export default function DashboardChartsPanels({
 								<BarChart
 									data={projectScanRunsData}
 									layout="horizontal"
-									margin={{ top: 6, right: 6, left: 4, bottom: 50 }}
-									barCategoryGap={16}
-									barGap={6}
-									barSize={18}
+									margin={{ top: 3, right: 3, left: 2, bottom: 50 }}
+									barCategoryGap={2}
+									barGap={0}
+									barSize={12}
 								>
 									<CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
 									<XAxis
@@ -440,10 +440,10 @@ export default function DashboardChartsPanels({
 								<BarChart
 									data={projectVulnsData}
 									layout="horizontal"
-									margin={{ top: 6, right: 6, left: 4, bottom: 50 }}
-									barCategoryGap={16}
-									barGap={6}
-									barSize={18}
+									margin={{ top: 4, right: 4, left: 2, bottom: 50 }}
+									barCategoryGap={4}
+									barGap={0}
+									barSize={14}
 								>
 									<CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
 									<XAxis
@@ -617,13 +617,13 @@ export default function DashboardChartsPanels({
 											if (!active || !payload?.length) return null;
 											const item = payload[0]?.payload as
 												| {
-														cweId: string;
-														cweName: string;
-														totalFindings: number;
-														opengrepFindings: number;
-														agentFindings: number;
-														banditFindings: number;
-												  }
+													cweId: string;
+													cweName: string;
+													totalFindings: number;
+													opengrepFindings: number;
+													agentFindings: number;
+													banditFindings: number;
+												}
 												| undefined;
 											if (!item) return null;
 											return (

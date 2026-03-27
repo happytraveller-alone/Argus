@@ -83,26 +83,30 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
                 _build_agent_event(
                     "tool_result",
                     tool_name="get_code_window",
-                    tool_output="文件: src/main.c",
-                    metadata={
-                        "render_type": "code_window",
-                        "display_command": "get_code_window",
-                        "command_chain": ["get_code_window"],
-                        "entries": [
-                            {
-                                "file_path": "src/main.c",
-                                "start_line": 1,
-                                "end_line": 3,
-                                "focus_line": 2,
-                                "language": "c",
-                                "lines": [
-                                    {"line_number": 1, "text": "int main() {", "kind": "context"},
-                                    {"line_number": 2, "text": "  return 0;", "kind": "focus"},
-                                    {"line_number": 3, "text": "}", "kind": "context"},
-                                ],
-                            }
-                        ],
+                    tool_output={
+                        "result": "文件: src/main.c",
+                        "truncated": False,
+                        "metadata": {
+                            "render_type": "code_window",
+                            "display_command": "get_code_window",
+                            "command_chain": ["get_code_window"],
+                            "entries": [
+                                {
+                                    "file_path": "src/main.c",
+                                    "start_line": 1,
+                                    "end_line": 3,
+                                    "focus_line": 2,
+                                    "language": "c",
+                                    "lines": [
+                                        {"line_number": 1, "text": "int main() {", "kind": "context"},
+                                        {"line_number": 2, "text": "  return 0;", "kind": "focus"},
+                                        {"line_number": 3, "text": "}", "kind": "context"},
+                                    ],
+                                }
+                            ],
+                        },
                     },
+                    metadata={},
                 )
             )
             await self.event_emitter.emit_event(
@@ -146,8 +150,8 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
     assert event_types[-1] == "done"
 
     tool_result_event = next(event for event in events if event["type"] == "tool_result")
-    assert tool_result_event["metadata"]["display_command"] == "get_code_window"
-    assert tool_result_event["metadata"]["entries"][0]["file_path"] == "src/main.c"
+    assert tool_result_event["tool_output"]["metadata"]["display_command"] == "get_code_window"
+    assert tool_result_event["tool_output"]["metadata"]["entries"][0]["file_path"] == "src/main.c"
 
     result_event = next(event for event in events if event["type"] == "result")
     assert result_event["data"]["final_text"] == "已基于 libplist 回答用户问题。"
@@ -193,28 +197,32 @@ async def test_run_structured_tool_test_endpoint_streams_expected_events_and_res
                 _build_agent_event(
                     "tool_result",
                     tool_name=self.skill_id,
-                    tool_output='{"summary":"ok"}',
-                    metadata={
-                        "render_type": "flow_analysis",
-                        "display_command": self.skill_id,
-                        "command_chain": [self.skill_id],
-                        "entries": [
-                            {
-                                "file_path": "src/xplist.c",
-                                "source_nodes": ["plist_xml"],
-                                "sink_nodes": ["xmlParseMemory"],
-                                "taint_steps": ["plist_xml -> xmlParseMemory"],
-                                "call_chain": ["plist_from_xml -> xmlParseMemory"],
-                                "blocked_reasons": [],
-                                "reachability": "reachable",
-                                "path_found": True,
-                                "path_score": 0.91,
-                                "confidence": 0.91,
-                                "engine": "rules",
-                                "next_actions": [],
-                            }
-                        ],
+                    tool_output={
+                        "result": '{"summary":"ok"}',
+                        "truncated": False,
+                        "metadata": {
+                            "render_type": "flow_analysis",
+                            "display_command": self.skill_id,
+                            "command_chain": [self.skill_id],
+                            "entries": [
+                                {
+                                    "file_path": "src/xplist.c",
+                                    "source_nodes": ["plist_xml"],
+                                    "sink_nodes": ["xmlParseMemory"],
+                                    "taint_steps": ["plist_xml -> xmlParseMemory"],
+                                    "call_chain": ["plist_from_xml -> xmlParseMemory"],
+                                    "blocked_reasons": [],
+                                    "reachability": "reachable",
+                                    "path_found": True,
+                                    "path_score": 0.91,
+                                    "confidence": 0.91,
+                                    "engine": "rules",
+                                    "next_actions": [],
+                                }
+                            ],
+                        },
                     },
+                    metadata={},
                 )
             )
             await self.event_emitter.emit_event(
@@ -275,6 +283,10 @@ async def test_run_structured_tool_test_endpoint_streams_expected_events_and_res
     assert "result" in event_types
     assert "project_cleanup" in event_types
     assert event_types[-1] == "done"
+
+    tool_result_event = next(event for event in events if event["type"] == "tool_result")
+    assert tool_result_event["tool_output"]["metadata"]["display_command"] == "dataflow_analysis"
+    assert tool_result_event["tool_output"]["metadata"]["entries"][0]["file_path"] == "src/xplist.c"
 
     result_event = next(event for event in events if event["type"] == "result")
     assert result_event["data"]["tool_name"] == "dataflow_analysis"

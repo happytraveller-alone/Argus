@@ -117,6 +117,7 @@ async def create_agent_task(
         agent_config={
             "authorization_confirmed": bool(request.authorization_confirmed),
             "use_prompt_skills": bool(request.use_prompt_skills),
+            "tool_evidence_protocol": "native_v1",
         },
         max_iterations=request.max_iterations or 50,
         timeout_seconds=request.timeout_seconds or 1800,
@@ -275,6 +276,11 @@ async def get_agent_task(
             "audit_scope": task.audit_scope,
             "target_vulnerabilities": task.target_vulnerabilities,
             "verification_level": _normalize_verification_level(task.verification_level),
+            "tool_evidence_protocol": (
+                "native_v1"
+                if isinstance(task.agent_config, dict) and task.agent_config.get("tool_evidence_protocol") == "native_v1"
+                else "legacy"
+            ),
             "exclude_patterns": task.exclude_patterns,
             "target_files": task.target_files,
             "report": task.report,

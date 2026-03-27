@@ -98,7 +98,12 @@ async def create_agent_demo_task(db: AsyncSession, project: Project, user_id: st
 
         # LLM 配置
         llm_config={"provider": "openai", "model": "gpt-4", "temperature": 0.1},
-        agent_config={"max_depth": 3, "enable_verification": True, "enable_poc_generation": True},
+        agent_config={
+            "max_depth": 3,
+            "enable_verification": True,
+            "enable_poc_generation": True,
+            "tool_evidence_protocol": "native_v1",
+        },
         max_iterations=50,
         token_budget=100000,
         timeout_seconds=1800,

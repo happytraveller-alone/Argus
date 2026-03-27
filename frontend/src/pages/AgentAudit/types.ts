@@ -22,6 +22,11 @@ export type LogType =
 
 export type ToolStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 export type ProgressStatus = 'running' | 'completed';
+export type ToolEvidenceMissingState =
+  | 'historical_rerun_required'
+  | 'missing_failed'
+  | 'missing_cancelled'
+  | 'missing_completed';
 export type TerminalFailureClass =
   | 'timeout'
   | 'mcp'
@@ -64,6 +69,7 @@ export interface LogItem {
     callId?: string;
   };
   toolEvidence?: ParsedToolEvidence | ToolEvidencePayload | null;
+  toolEvidenceMissingState?: ToolEvidenceMissingState | null;
   severity?: string;
   agentName?: string;
   agentRawName?: string;

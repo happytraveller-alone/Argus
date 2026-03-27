@@ -645,14 +645,34 @@ export default function ProjectDetail() {
 		() =>
 			[
 				{
+					id: "sequence",
+					header: "序号",
+					enableSorting: false,
+					meta: {
+						label: "序号",
+						plainHeader: true,
+						width: "6%",
+						headerClassName: "w-[6%] border-r border-border/50 text-center",
+						cellClassName:
+							"border-r border-border/30 text-center text-sm text-muted-foreground whitespace-nowrap",
+					},
+					cell: ({ row, table }) => {
+						const pageRowIndex = table
+							.getRowModel()
+							.rows.findIndex((candidateRow) => candidateRow.id === row.id);
+						const pagination = table.getState().pagination;
+						return pagination.pageIndex * pagination.pageSize + pageRowIndex + 1;
+					},
+				},
+				{
 					id: "taskId",
 					accessorFn: (row) => row.id,
 					header: "任务ID",
 					meta: {
 						label: "任务ID",
 						plainHeader: true,
-						minWidth: "28%",
-						headerClassName: "w-[28%] border-r border-border/50 text-center",
+						minWidth: "24%",
+						headerClassName: "w-[24%] border-r border-border/50 text-center",
 						cellClassName:
 							"border-r border-border/30 text-center text-sm text-foreground whitespace-nowrap",
 					},
@@ -677,8 +697,8 @@ export default function ProjectDetail() {
 					meta: {
 						label: "创建时间",
 						plainHeader: true,
-						width: "18%",
-						headerClassName: "w-[18%] border-r border-border/50 text-center",
+						width: "16%",
+						headerClassName: "w-[16%] border-r border-border/50 text-center",
 						cellClassName:
 							"border-r border-border/30 text-center text-sm text-muted-foreground",
 					},

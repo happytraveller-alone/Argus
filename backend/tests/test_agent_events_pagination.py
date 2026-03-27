@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.api.v1.endpoints.agent_tasks_routes_tasks import get_agent_task
 from app.api.v1.endpoints.agent_tasks import list_agent_events
 from app.models.agent_task import AgentTask
 from app.models.project import Project
@@ -40,7 +41,16 @@ async def test_agent_events_pagination_fetches_all_without_duplicates():
             created_at=datetime(2026, 2, 12, 8, 0, 0, tzinfo=timezone.utc),
             tool_name="demo_tool" if idx == 1 else None,
             tool_input=None,
-            tool_output={"result": large_tool_output} if idx == 1 else None,
+            tool_output={
+                "result": large_tool_output,
+                "truncated": False,
+                "metadata": {
+                    "render_type": "analysis_summary",
+                    "display_command": "demo_tool",
+                    "command_chain": ["demo_tool"],
+                    "entries": [],
+                },
+            } if idx == 1 else None,
             tool_duration_ms=None,
             progress_percent=None,
             finding_id=None,
@@ -110,3 +120,70 @@ async def test_agent_events_pagination_fetches_all_without_duplicates():
     )
     assert len(first_page) == 1
     assert first_page[0].tool_output["result"] == large_tool_output
+    assert first_page[0].tool_output["metadata"]["display_command"] == "demo_tool"
+
+
+@pytest.mark.asyncio
+async def test_get_agent_task_detail_includes_tool_evidence_protocol(monkeypatch):
+    task_id = "task-native-protocol"
+    task = SimpleNamespace(
+        id=task_id,
+        project_id="project-1",
+        name="native evidence task",
+        description=None,
+        task_type="agent_audit",
+        status="completed",
+        current_phase="reporting",
+        current_step=None,
+        total_files=0,
+        indexed_files=0,
+        analyzed_files=0,
+        total_chunks=0,
+        total_iterations=1,
+        tool_calls_count=1,
+        tokens_used=10,
+        findings_count=0,
+        verified_count=0,
+        false_positive_count=0,
+        critical_count=0,
+        high_count=0,
+        medium_count=0,
+        low_count=0,
+        quality_score=0.0,
+        security_score=0.0,
+        progress_percentage=100.0,
+        created_at=datetime(2026, 2, 12, 8, 0, 0, tzinfo=timezone.utc),
+        started_at=None,
+        completed_at=None,
+        error_message=None,
+        audit_scope=None,
+        target_vulnerabilities=None,
+        verification_level="analysis_with_poc_plan",
+        exclude_patterns=None,
+        target_files=None,
+        report=None,
+        agent_config={"tool_evidence_protocol": "native_v1"},
+    )
+
+    db = AsyncMock()
+
+    async def get_side_effect(model, _id):
+        if model is AgentTask:
+            return task
+        if model is Project:
+            return SimpleNamespace(id="project-1")
+        return None
+
+    db.get = AsyncMock(side_effect=get_side_effect)
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.agent_tasks_routes_tasks._load_verified_severity_counts",
+        AsyncMock(return_value={task_id: {}}),
+    )
+
+    response = await get_agent_task(
+        task_id=task_id,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert response.tool_evidence_protocol == "native_v1"

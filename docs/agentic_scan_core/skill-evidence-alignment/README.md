@@ -31,6 +31,15 @@
 
 这 17 个 skill 才是配置页展示集合。`read_file`、`extract_function` 仅保留历史 evidence 兼容解析；`think`、`reflect` 不属于当前 runtime scan-core skill，不进入配置页展示集合。
 
+自 `tool_evidence_protocol = native_v1` 起，`tool_result` 的正式协议固定为：
+
+- `tool_output.result`：时间线 / 导出使用的文本结果
+- `tool_output.truncated`：是否截断
+- `tool_output.metadata`：原生结构化 evidence，包含 `render_type`、`display_command`、`command_chain`、`entries`
+- `event_metadata`：只保留 `tool_status`、`tool_call_id`、`validation_error`、`input_repaired`、`mcp_*`、`cache_*`、`write_scope_*` 等运行态字段
+
+历史任务不会再做旧文本回填；若任务仍标记为 `legacy` 且未保存原生 evidence，前端只提示“需要重跑任务才能查看结构化详情”。
+
 ## 2. 当前不一致点与 Skill 对齐矩阵
 
 当前主要分叉点有 3 处：

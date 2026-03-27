@@ -98,13 +98,32 @@ export function ProjectPotentialVulnerabilitiesSection({
 		() =>
 			[
 				{
+					id: "sequence",
+					header: "序号",
+					enableSorting: false,
+					meta: {
+						label: "序号",
+						plainHeader: true,
+						headerClassName: "w-[6%] border-r border-border/50 text-center",
+						cellClassName:
+							"border-r border-border/30 text-center text-sm text-muted-foreground whitespace-nowrap",
+					},
+					cell: ({ row, table }) => {
+						const pageRowIndex = table
+							.getRowModel()
+							.rows.findIndex((candidateRow) => candidateRow.id === row.id);
+						const pagination = table.getState().pagination;
+						return pagination.pageIndex * pagination.pageSize + pageRowIndex + 1;
+					},
+				},
+				{
 					id: "findingId",
 					accessorFn: (row) => row.id,
 					header: "漏洞ID",
 					meta: {
 						label: "漏洞ID",
 						plainHeader: true,
-						headerClassName: "w-[24%] border-r border-border/50 text-center",
+						headerClassName: "w-[22%] border-r border-border/50 text-center",
 						cellClassName:
 							"border-r border-border/30 text-center text-sm text-foreground whitespace-nowrap",
 					},
@@ -117,7 +136,7 @@ export function ProjectPotentialVulnerabilitiesSection({
 					meta: {
 						label: "漏洞",
 						plainHeader: true,
-						headerClassName: "w-[22%] border-r border-border/50 text-center",
+						headerClassName: "w-[26%] border-r border-border/50 text-center",
 						cellClassName: "border-r border-border/30 text-left",
 					},
 					cell: ({ row }) => (
@@ -188,7 +207,7 @@ export function ProjectPotentialVulnerabilitiesSection({
 					meta: {
 						label: "操作",
 						plainHeader: true,
-						headerClassName: "w-[16%] text-center",
+						headerClassName: "w-[12%] text-center",
 						cellClassName: "text-center",
 					},
 					cell: ({ row }) => (

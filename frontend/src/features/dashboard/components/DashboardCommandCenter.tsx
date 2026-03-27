@@ -157,9 +157,9 @@ export const HORIZONTAL_STATS_AXIS_FONT_SIZE = 16;
 export const HORIZONTAL_STATS_LABEL_FONT_SIZE = 16;
 export const HORIZONTAL_STATS_Y_AXIS_MIN_WIDTH = 84;
 export const HORIZONTAL_STATS_Y_AXIS_MAX_WIDTH = 120;
-export const HORIZONTAL_STATS_BAR_SIZE = 14;
-export const HORIZONTAL_STATS_ROW_HEIGHT = 60;
-export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 10;
+export const HORIZONTAL_STATS_BAR_SIZE = 12;
+export const HORIZONTAL_STATS_ROW_HEIGHT = 46;
+export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 4;
 export const HORIZONTAL_STATS_CHART_MARGIN = {
 	top: 8,
 	right: 24,
@@ -902,7 +902,7 @@ function HorizontalStatsChart({
 		);
 	}
 
-	const chartHeight = Math.max(rows.length * HORIZONTAL_STATS_ROW_HEIGHT, 260);
+	const chartHeight = Math.max(rows.length * HORIZONTAL_STATS_ROW_HEIGHT, 220);
 	const yAxisWidth = estimateHorizontalStatsYAxisWidth(rows);
 	const xAxisProps = getHorizontalStatsXAxisProps(viewId, rows);
 	const primaryTone = rows[0]?.tone ?? "low";

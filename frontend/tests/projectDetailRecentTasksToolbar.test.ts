@@ -17,3 +17,14 @@ test("ProjectDetail 最近任务工具栏只保留搜索并隐藏筛选重置密
 		/toolbar:\s*\{[\s\S]*filters:\s*\[[\s\S]*columnId:\s*"status"/,
 	);
 });
+
+test("ProjectDetail 最近任务表格在最左侧增加连续序号列", () => {
+	const source = readFileSync(
+		"/home/xyf/AuditTool/frontend/src/pages/ProjectDetail.tsx",
+		"utf8",
+	);
+
+	assert.match(source, /id:\s*"sequence"/);
+	assert.match(source, /header:\s*"序号"/);
+	assert.match(source, /pageIndex \* pagination\.pageSize \+ pageRowIndex \+ 1/);
+});

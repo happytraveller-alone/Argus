@@ -97,6 +97,22 @@ function buildToolListSummary(item: LogItem): string {
     return `${primaryTitle} · 报告摘要 · ${first?.severity || "unknown"}`;
   }
 
+  if (item.toolEvidenceMissingState === "historical_rerun_required") {
+    return `${primaryTitle} · 历史任务缺少结构化证据，请重跑任务`;
+  }
+
+  if (item.toolEvidenceMissingState === "missing_failed") {
+    return `${primaryTitle} · 执行失败，未记录结构化证据`;
+  }
+
+  if (item.toolEvidenceMissingState === "missing_cancelled") {
+    return `${primaryTitle} · 已取消，未记录结构化证据`;
+  }
+
+  if (item.toolEvidenceMissingState === "missing_completed") {
+    return `${primaryTitle} · 已完成，但未记录结构化证据`;
+  }
+
   if (item.tool?.status === "failed") {
     return `${primaryTitle} · 执行失败，详情可查看原始结果`;
   }

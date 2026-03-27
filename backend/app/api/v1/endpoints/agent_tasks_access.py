@@ -26,6 +26,12 @@ def build_agent_task_response(
     tool_calls_count = int(task.tool_calls_count or 0)
     tokens_used = int(task.tokens_used or 0)
     verified_counts = dict(verified_severity_counts or {})
+    agent_config = task.agent_config if isinstance(task.agent_config, dict) else {}
+    tool_evidence_protocol = (
+        "native_v1"
+        if agent_config.get("tool_evidence_protocol") == "native_v1"
+        else "legacy"
+    )
 
     orchestrator = _running_orchestrators.get(task.id)
     if orchestrator and task.status in (
@@ -77,6 +83,7 @@ def build_agent_task_response(
         audit_scope=task.audit_scope,
         target_vulnerabilities=task.target_vulnerabilities,
         verification_level=task.verification_level,
+        tool_evidence_protocol=tool_evidence_protocol,
         exclude_patterns=task.exclude_patterns,
         target_files=task.target_files,
         report=task.report,

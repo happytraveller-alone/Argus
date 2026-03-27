@@ -456,13 +456,12 @@ function SkillFinalResult({
   const cleanup = resolveCleanupSummary(result, events);
   const latestEvidence = [...events].reverse().find((event) => {
     if (event.type !== "tool_result") return false;
-    return Boolean(
-      parseToolEvidenceFromLog({
-        toolName: event.tool_name,
-        toolOutput: event.tool_output,
-        toolMetadata: event.metadata ?? null,
-      }),
-    );
+    const parsed = parseToolEvidenceFromLog({
+      toolName: event.tool_name,
+      toolOutput: event.tool_output,
+      toolMetadata: event.metadata ?? null,
+    });
+    return Boolean(parsed?.payload);
   });
   const evidence = latestEvidence
     ? parseToolEvidenceFromLog({
@@ -497,7 +496,7 @@ function SkillFinalResult({
       ) : (
         <div className="text-sm text-muted-foreground">暂无最终结果，运行测试后会在这里展示 `final_text` 与清理状态。</div>
       )}
-      {evidence ? <ToolEvidencePreview evidence={evidence} /> : null}
+      {evidence?.payload ? <ToolEvidencePreview evidence={evidence} /> : null}
       {cleanup ? (
         <div className="rounded border border-border/30 bg-black/30 p-3 text-xs font-mono text-muted-foreground">
           <div>{cleanup.success ? "临时目录已清理" : "临时目录清理失败"}</div>

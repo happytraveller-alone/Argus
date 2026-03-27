@@ -1,7 +1,7 @@
 """Schemas and constants for agent task endpoints."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Literal, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -129,6 +129,7 @@ class AgentTaskResponse(BaseModel):
     audit_scope: Optional[dict] = None
     target_vulnerabilities: Optional[List[str]] = None
     verification_level: Optional[str] = None
+    tool_evidence_protocol: Optional[Literal["legacy", "native_v1"]] = None
     exclude_patterns: Optional[List[str]] = None
     target_files: Optional[List[str]] = None
     

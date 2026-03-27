@@ -15,6 +15,7 @@ from app.api.v1.endpoints.config import (
     _resolve_verify_project,
 )
 from app.services.agent.agents.skill_test import SkillTestAgent
+from app.services.agent.event_manager import normalize_tool_output_envelope
 from app.services.agent.skills.scan_core import (
     SCAN_CORE_DEFAULT_TEST_PROJECT_NAME,
     get_scan_core_skill_test_policy,
@@ -239,6 +240,8 @@ class StructuredToolTestRunner:
         cleanup_error = None
         pending_error: Exception | None = None
         result_payload: Dict[str, Any] | None = None
+        execution_payload: Dict[str, Any] | None = None
+        tool_result_emitted = False
 
         await self.event_emitter.emit_event(
             "project_prepare",
@@ -310,16 +313,26 @@ class StructuredToolTestRunner:
                 )
             )
             tool_result = await tool.execute(**execution_payload)
+            tool_output = normalize_tool_output_envelope(
+                {
+                    "result": tool_result.to_string(max_length=800),
+                    "truncated": False,
+                    "metadata": dict(tool_result.metadata) if isinstance(tool_result.metadata, dict) else None,
+                    "error": str(tool_result.error or "") or None,
+                    "error_code": str(getattr(tool_result, "error_code", "") or "") or None,
+                }
+            )
             await self.event_emitter.emit(
                 SimpleNamespace(
                     event_type="tool_result",
                     message=f"{self.skill_id} 执行完成" if tool_result.success else f"{self.skill_id} 执行失败",
                     tool_name=self.skill_id,
                     tool_input=execution_payload,
-                    tool_output=tool_result.data,
-                    metadata=tool_result.metadata,
+                    tool_output=tool_output,
+                    metadata={},
                 )
             )
+            tool_result_emitted = True
             if not tool_result.success:
                 raise RuntimeError(str(tool_result.error or f"{self.skill_id} 执行失败"))
 
@@ -345,6 +358,24 @@ class StructuredToolTestRunner:
                 },
             }
         except Exception as exc:
+            if execution_payload is not None and not tool_result_emitted:
+                await self.event_emitter.emit(
+                    SimpleNamespace(
+                        event_type="tool_result",
+                        message=f"{self.skill_id} 执行失败",
+                        tool_name=self.skill_id,
+                        tool_input=execution_payload,
+                        tool_output=normalize_tool_output_envelope(
+                            {
+                                "result": str(exc),
+                                "truncated": False,
+                                "error": str(exc),
+                                "error_code": type(exc).__name__,
+                            }
+                        ),
+                        metadata={},
+                    )
+                )
             pending_error = exc
         finally:
             if temp_dir:

@@ -62,7 +62,7 @@ const VULNERABILITY_METRIC_CHIP_CLASSNAMES = {
 const METRIC_CHIP_VALUE_CLASSNAME =
   "text-center font-semibold tabular-nums text-[18px]";
 const HEADER_CELL_CLASSNAME =
-  "border-b-2 border-border/95 bg-muted/75 text-center font-mono text-sm font-semibold uppercase tracking-[0.18em] text-foreground/80";
+  "border-b-2 border-border/95 bg-muted/75 text-center font-mono text-base font-semibold uppercase tracking-[0.18em] text-foreground/80";
 const HEADER_CONTENT_CLASSNAME = "text-base";
 const BODY_CELL_CLASSNAME = "border-b-2 border-border/95";
 const DIVIDER_CELL_CLASSNAME = "border-r-2 border-border/90";
@@ -337,7 +337,7 @@ function buildColumns(
       header: "发现漏洞",
       meta: {
         label: "发现漏洞",
-        minWidth: 142,
+        minWidth: 120,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
         headerContentClassName: HEADER_CONTENT_CLASSNAME,
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
@@ -359,7 +359,7 @@ function buildColumns(
       header: "AI验证漏洞",
       meta: {
         label: "AI验证",
-        minWidth: 142,
+        minWidth: 115,
         headerClassName: `${HEADER_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,
         headerContentClassName: HEADER_CONTENT_CLASSNAME,
         cellClassName: `${BODY_CELL_CLASSNAME} ${DIVIDER_CELL_CLASSNAME} text-center`,

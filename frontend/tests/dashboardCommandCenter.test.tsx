@@ -362,9 +362,9 @@ test("DashboardCommandCenter uses enlarged axes and fixed chart spacing constant
 	assert.equal(module.HORIZONTAL_STATS_LABEL_FONT_SIZE, 16);
 	assert.equal(module.HORIZONTAL_STATS_Y_AXIS_MIN_WIDTH, 84);
 	assert.equal(module.HORIZONTAL_STATS_Y_AXIS_MAX_WIDTH, 120);
-	assert.equal(module.HORIZONTAL_STATS_BAR_SIZE, 14);
-	assert.equal(module.HORIZONTAL_STATS_ROW_HEIGHT, 60);
-	assert.equal(module.HORIZONTAL_STATS_BAR_CATEGORY_GAP, 10);
+	assert.equal(module.HORIZONTAL_STATS_BAR_SIZE, 12);
+	assert.equal(module.HORIZONTAL_STATS_ROW_HEIGHT, 46);
+	assert.equal(module.HORIZONTAL_STATS_BAR_CATEGORY_GAP, 4);
 	assert.deepEqual(module.HORIZONTAL_STATS_CHART_MARGIN, {
 		top: 8,
 		right: 24,

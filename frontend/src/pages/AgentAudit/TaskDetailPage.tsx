@@ -84,6 +84,7 @@ import type {
   LogItem,
   TerminalFailureClass,
   TerminalRecoveryState,
+  ToolEvidenceMissingState,
 } from "./types";
 import {
   accumulateTokenUsage,
@@ -108,6 +109,7 @@ import {
   buildAgentFindingDetailRoute,
 } from "@/shared/utils/findingRoute";
 import {
+  expectsNativeToolEvidence,
   isToolEvidenceCapableTool,
   parseToolEvidenceFromLog,
 } from "./toolEvidence";
@@ -215,6 +217,37 @@ function extractToolOutputText(value: unknown): string {
     }
   }
   return eventToString(value);
+}
+
+function resolveTaskToolEvidenceProtocol(
+  task: { tool_evidence_protocol?: "legacy" | "native_v1" | null } | null | undefined,
+): "legacy" | "native_v1" | null {
+  const protocol = task?.tool_evidence_protocol;
+  return protocol === "native_v1" ? "native_v1" : protocol === "legacy" ? "legacy" : null;
+}
+
+function resolveToolEvidenceMissingState(input: {
+  expectsNativeEvidence: boolean;
+  taskProtocol: "legacy" | "native_v1" | null;
+  toolStatus: "completed" | "failed" | "cancelled";
+  hasNativePayload: boolean;
+}): ToolEvidenceMissingState | null {
+  if (!input.expectsNativeEvidence || input.hasNativePayload) {
+    return null;
+  }
+  if (input.taskProtocol === "legacy") {
+    return "historical_rerun_required";
+  }
+  if (input.taskProtocol !== "native_v1") {
+    return null;
+  }
+  if (input.toolStatus === "failed") {
+    return "missing_failed";
+  }
+  if (input.toolStatus === "cancelled") {
+    return "missing_cancelled";
+  }
+  return "missing_completed";
 }
 
 function toNonEmptyId(value: unknown): string | null {
@@ -1689,6 +1722,7 @@ function AgentAuditPageContent() {
             },
             agentName,
             toolEvidence: existing?.toolEvidence ?? null,
+            toolEvidenceMissingState: null,
             detail: baseDetail,
           });
           return;
@@ -1720,6 +1754,7 @@ function AgentAuditPageContent() {
             agentName,
             agentRawName: agentRawName || undefined,
             toolEvidence: null,
+            toolEvidenceMissingState: null,
             detail: baseDetail,
           },
         });
@@ -1773,6 +1808,7 @@ function AgentAuditPageContent() {
         const routePrefix = buildToolRouteContentPrefix(metadata);
         const outputText = sanitizeAuditText(extractToolOutputText(event.tool_output));
         const expectsStructuredEvidence = isToolEvidenceCapableTool(toolName);
+        const expectsNativeEvidence = expectsNativeToolEvidence(toolName);
         const toolCallId = extractToolCallId(metadata, event);
         const writeScopeAllowed =
           typeof metadata?.write_scope_allowed === "boolean"
@@ -1858,6 +1894,12 @@ function AgentAuditPageContent() {
             toolInput: effectiveToolInput,
             logContent: existing?.content,
           });
+          const toolEvidenceMissingState = resolveToolEvidenceMissingState({
+            expectsNativeEvidence,
+            taskProtocol: resolveTaskToolEvidenceProtocol(task),
+            toolStatus,
+            hasNativePayload: Boolean(parsedToolEvidence?.payload),
+          });
 
           const previousContent = existing?.content ? `${existing.content}\n\n` : "";
           const outputBlock = outputText
@@ -1880,6 +1922,9 @@ function AgentAuditPageContent() {
             },
             agentName: agentName || existing?.agentName,
             toolEvidence: parsedToolEvidence ?? (expectsStructuredEvidence ? null : existing?.toolEvidence ?? null),
+            toolEvidenceMissingState:
+              toolEvidenceMissingState ??
+              (expectsStructuredEvidence ? null : existing?.toolEvidenceMissingState ?? null),
             detail: {
               ...(priorDetail ?? {}),
               ...baseDetail,
@@ -1919,14 +1964,31 @@ function AgentAuditPageContent() {
             },
             agentName,
             agentRawName: agentRawName || undefined,
-            toolEvidence:
-              parseToolEvidenceFromLog({
+            toolEvidence: (() => {
+              const parsedToolEvidence = parseToolEvidenceFromLog({
                 toolName,
                 toolOutput: baseDetail.tool_output,
                 toolMetadata: sanitizedMetadata,
                 toolInput: baseDetail.tool_input,
                 logContent: outputText,
-              }) ?? (expectsStructuredEvidence ? null : undefined),
+              });
+              return parsedToolEvidence ?? (expectsStructuredEvidence ? null : undefined);
+            })(),
+            toolEvidenceMissingState: (() => {
+              const parsedToolEvidence = parseToolEvidenceFromLog({
+                toolName,
+                toolOutput: baseDetail.tool_output,
+                toolMetadata: sanitizedMetadata,
+                toolInput: baseDetail.tool_input,
+                logContent: outputText,
+              });
+              return resolveToolEvidenceMissingState({
+                expectsNativeEvidence,
+                taskProtocol: resolveTaskToolEvidenceProtocol(task),
+                toolStatus,
+                hasNativePayload: Boolean(parsedToolEvidence?.payload),
+              });
+            })(),
             detail: {
               ...baseDetail,
               metadata: sanitizedMetadata,

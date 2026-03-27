@@ -31,7 +31,7 @@ import FindingCodeWindow from "./FindingCodeWindow";
 import FindingNarrativeMarkdown from "./FindingNarrativeMarkdown";
 import { collectRawEvidenceEntries } from "./findingNarrative";
 import ToolEvidenceDetail from "./ToolEvidenceDetail";
-import { asParsedToolEvidence, isToolEvidenceCapableTool } from "../toolEvidence";
+import { isToolEvidenceCapableTool } from "../toolEvidence";
 
 interface AuditDetailDialogProps {
   open: boolean;
@@ -132,8 +132,6 @@ export function AuditDetailContent({
   finding,
   agentNode,
 }: AuditDetailContentProps) {
-  const parsedToolEvidence =
-    detailType === "log" && logItem ? asParsedToolEvidence(logItem.toolEvidence) : null;
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar py-4 space-y-4">
       {detailType === "log" && logItem && (
@@ -153,22 +151,18 @@ export function AuditDetailContent({
               {logItem.tool?.name ? (
                 <Badge variant="outline">{logItem.tool.name}</Badge>
               ) : null}
-              {parsedToolEvidence ? (
-                <Badge variant="outline" className="font-mono normal-case">
-                  {parsedToolEvidence.state}
-                </Badge>
-              ) : null}
             </div>
           </Section>
 
           {isToolEvidenceCapableTool(logItem.tool?.name) ? (
-            <Section title="结构化证据">
-              <ToolEvidenceDetail
-                toolName={logItem.tool?.name}
-                evidence={logItem.toolEvidence ?? null}
-                rawOutput={logItem.detail?.tool_output}
-              />
-            </Section>
+            <ToolEvidenceDetail
+              toolName={logItem.tool?.name}
+              evidence={logItem.toolEvidence ?? null}
+              rawOutput={logItem.detail?.tool_output}
+              missingState={logItem.toolEvidenceMissingState ?? null}
+              runtimeMetadata={(logItem.detail?.metadata as Record<string, unknown> | undefined) ?? null}
+              toolStatus={logItem.tool?.status}
+            />
           ) : null}
 
           {logItem.content && !isToolEvidenceCapableTool(logItem.tool?.name) && (
@@ -195,113 +189,118 @@ export function AuditDetailContent({
             </Section>
           )}
         </>
-      )}
+      )
+      }
 
-      {detailType === "finding" && finding && (
-        <>
-          {(() => {
-            const code = pickFindingCode(finding);
-            if (!code) return null;
-            return (
-              <FindingCodeWindow
-                code={code.code}
-                filePath={finding.file_path}
-                lineStart={code.lineStart}
-                lineEnd={code.lineEnd}
-                highlightStartLine={finding.line_start ?? code.lineStart}
-                highlightEndLine={finding.line_end ?? code.lineEnd}
-                focusLine={finding.line_start ?? code.lineStart}
-                title="命中代码"
-              />
-            );
-          })()}
+      {
+        detailType === "finding" && finding && (
+          <>
+            {(() => {
+              const code = pickFindingCode(finding);
+              if (!code) return null;
+              return (
+                <FindingCodeWindow
+                  code={code.code}
+                  filePath={finding.file_path}
+                  lineStart={code.lineStart}
+                  lineEnd={code.lineEnd}
+                  highlightStartLine={finding.line_start ?? code.lineStart}
+                  highlightEndLine={finding.line_end ?? code.lineEnd}
+                  focusLine={finding.line_start ?? code.lineStart}
+                  title="命中代码"
+                />
+              );
+            })()}
 
-          <Section title="概览">
-            <h3 className="text-sm font-semibold break-words">
-              {localizeAuditText(finding.title)}
-            </h3>
-            <div className="text-xs text-muted-foreground">
-              定位: {formatLocation(finding)}
-            </div>
-          </Section>
-
-          <Section title="漏洞详情（根因）">
-            <FindingNarrativeMarkdown
-              finding={{
-                description: finding.description,
-                description_markdown: finding.description_markdown,
-                code_context: finding.code_context,
-                code_snippet: finding.code_snippet,
-                file_path: finding.file_path,
-                line_start: finding.line_start,
-                line_end: finding.line_end,
-                function_trigger_flow: finding.function_trigger_flow,
-                verification_evidence: finding.verification_evidence,
-                reachability_file: finding.reachability_file,
-                reachability_function: finding.reachability_function,
-                reachability_function_start_line:
-                  finding.reachability_function_start_line,
-                reachability_function_end_line:
-                  finding.reachability_function_end_line,
-              }}
-              className="rounded-md border border-border bg-background p-3"
-            />
-
-            <Collapsible className="rounded-md border border-border bg-card/60">
-              <CollapsibleTrigger className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
-                <span>原始证据</span>
-                <ChevronDown className="w-4 h-4" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="px-3 pb-3 space-y-2">
-                {getRawEvidenceFromFinding(finding).map((item) => (
-                  <div key={item.key} className="space-y-1">
-                    <div className="text-[11px] text-muted-foreground font-mono">
-                      {item.label}
-                      {item.truncated ? " (已截断至 2000 字)" : ""}
-                    </div>
-                    <pre className="text-xs font-mono bg-background border border-border rounded-md p-2 whitespace-pre-wrap break-words">
-                      {item.value}
-                    </pre>
-                  </div>
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
-          </Section>
-        </>
-      )}
-
-      {detailType === "agent" && agentNode && (
-        <>
-          <Section title="概览">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline">{toZhAgentName(agentNode.agent_type)}</Badge>
-              <Badge variant="outline">{toZhStatus(agentNode.status)}</Badge>
-            </div>
-            <h3 className="text-sm font-semibold break-words">{agentNode.agent_name}</h3>
-            <div className="text-xs text-muted-foreground">
-              迭代 {agentNode.iterations} | 工具调用 {agentNode.tool_calls} | Tokens{" "}
-              {agentNode.tokens_used}
-            </div>
-          </Section>
-
-          {agentNode.task_description && (
-            <Section title="当前任务">
-              <div className="text-sm whitespace-pre-wrap break-words">
-                {agentNode.task_description}
+            <Section title="概览">
+              <h3 className="text-sm font-semibold break-words">
+                {localizeAuditText(finding.title)}
+              </h3>
+              <div className="text-xs text-muted-foreground">
+                定位: {formatLocation(finding)}
               </div>
             </Section>
-          )}
 
-          {agentNode.result_summary && (
-            <Section title="执行摘要">
-              <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[35vh]">
-                {agentNode.result_summary}
-              </pre>
+            <Section title="漏洞详情（根因）">
+              <FindingNarrativeMarkdown
+                finding={{
+                  description: finding.description,
+                  description_markdown: finding.description_markdown,
+                  code_context: finding.code_context,
+                  code_snippet: finding.code_snippet,
+                  file_path: finding.file_path,
+                  line_start: finding.line_start,
+                  line_end: finding.line_end,
+                  function_trigger_flow: finding.function_trigger_flow,
+                  verification_evidence: finding.verification_evidence,
+                  reachability_file: finding.reachability_file,
+                  reachability_function: finding.reachability_function,
+                  reachability_function_start_line:
+                    finding.reachability_function_start_line,
+                  reachability_function_end_line:
+                    finding.reachability_function_end_line,
+                }}
+                className="rounded-md border border-border bg-background p-3"
+              />
+
+              <Collapsible className="rounded-md border border-border bg-card/60">
+                <CollapsibleTrigger className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                  <span>原始证据</span>
+                  <ChevronDown className="w-4 h-4" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-3 pb-3 space-y-2">
+                  {getRawEvidenceFromFinding(finding).map((item) => (
+                    <div key={item.key} className="space-y-1">
+                      <div className="text-[11px] text-muted-foreground font-mono">
+                        {item.label}
+                        {item.truncated ? " (已截断至 2000 字)" : ""}
+                      </div>
+                      <pre className="text-xs font-mono bg-background border border-border rounded-md p-2 whitespace-pre-wrap break-words">
+                        {item.value}
+                      </pre>
+                    </div>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
             </Section>
-          )}
-        </>
-      )}
-    </div>
+          </>
+        )
+      }
+
+      {
+        detailType === "agent" && agentNode && (
+          <>
+            <Section title="概览">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline">{toZhAgentName(agentNode.agent_type)}</Badge>
+                <Badge variant="outline">{toZhStatus(agentNode.status)}</Badge>
+              </div>
+              <h3 className="text-sm font-semibold break-words">{agentNode.agent_name}</h3>
+              <div className="text-xs text-muted-foreground">
+                迭代 {agentNode.iterations} | 工具调用 {agentNode.tool_calls} | Tokens{" "}
+                {agentNode.tokens_used}
+              </div>
+            </Section>
+
+            {agentNode.task_description && (
+              <Section title="当前任务">
+                <div className="text-sm whitespace-pre-wrap break-words">
+                  {agentNode.task_description}
+                </div>
+              </Section>
+            )}
+
+            {agentNode.result_summary && (
+              <Section title="执行摘要">
+                <pre className="text-xs font-mono bg-background border border-border rounded-md p-3 whitespace-pre-wrap break-words overflow-auto max-h-[35vh]">
+                  {agentNode.result_summary}
+                </pre>
+              </Section>
+            )}
+          </>
+        )
+      }
+    </div >
   );
 }
 

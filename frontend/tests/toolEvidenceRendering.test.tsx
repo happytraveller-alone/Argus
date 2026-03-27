@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   parseToolEvidence,
+  parseToolEvidenceFromLog,
   type ToolEvidencePayload,
 } from "../src/pages/AgentAudit/toolEvidence.ts";
 import ToolEvidencePreview from "../src/pages/AgentAudit/components/ToolEvidencePreview.tsx";
@@ -369,6 +370,70 @@ test("parseToolEvidence 支持 analysis_summary 严格解析", () => {
   assert.equal(parsed.entries[0]?.hitCount, 3);
 });
 
+test("parseToolEvidenceFromLog 在 metadata 非法时回退到 tool_output 顶层协议", () => {
+  const parsed = parseToolEvidenceFromLog({
+    toolName: "smart_scan",
+    toolOutput: {
+      result: "summary",
+      truncated: false,
+      metadata: {
+        render_type: "analysis_summary",
+        display_command: "",
+        command_chain: [],
+        entries: [],
+      },
+      render_type: "analysis_summary",
+      display_command: "smart_scan",
+      command_chain: ["smart_scan"],
+      entries: [
+        {
+          title: "Smart Scan Summary",
+          summary: "Scanned 6 files and found 3 potential issues.",
+          severity_stats: { high: 2, medium: 1 },
+          hit_count: 3,
+          key_files: ["src/auth.ts"],
+          highlights: ["sql_injection @ src/auth.ts:88"],
+          next_actions: ["继续查看关键命中上下文并确认可利用性。"],
+        },
+      ],
+    },
+    toolMetadata: null,
+  });
+
+  assert.equal(parsed?.payload?.renderType, "analysis_summary");
+  assert.equal(parsed?.payload?.displayCommand, "smart_scan");
+});
+
+test("parseToolEvidenceFromLog 支持仅 event metadata 提供原生 evidence", () => {
+  const parsed = parseToolEvidenceFromLog({
+    toolName: "verify_vulnerability",
+    toolOutput: {
+      result: "confirmed",
+      truncated: false,
+    },
+    toolMetadata: {
+      render_type: "verification_summary",
+      display_command: "verify_vulnerability",
+      command_chain: ["verify_vulnerability"],
+      entries: [
+        {
+          vulnerability_type: "sql_injection",
+          target: "http://example.test/users?id=1",
+          payload: "' OR 1=1 --",
+          verdict: "confirmed",
+          evidence: "SQL error echoed in response",
+          response_status: 500,
+          runtime_status: "passed",
+          error: null,
+        },
+      ],
+    },
+  });
+
+  assert.equal(parsed?.payload?.renderType, "verification_summary");
+  assert.equal(parsed?.payload?.displayCommand, "verify_vulnerability");
+});
+
 test("ToolEvidencePreview 渲染 verification_summary 摘要", () => {
   const markup = renderToStaticMarkup(
     createElement(ToolEvidencePreview, { evidence: verificationSummaryEvidence }),
@@ -444,7 +509,7 @@ test("FindingCodeWindow 支持在 demo 中切换 terminal-flat 外观", () => {
   assert.match(markup, /data-appearance="terminal-flat"/);
 });
 
-test("ToolEvidenceDetail 对旧协议显示不可展示提示和原始 JSON 入口", () => {
+test("ToolEvidenceDetail 在缺少 native evidence 且无 AgentAudit 缺失态时不渲染共享兜底文案", () => {
   const markup = renderToStaticMarkup(
     createElement(ToolEvidenceDetail, {
       toolName: "search_code",
@@ -453,6 +518,5 @@ test("ToolEvidenceDetail 对旧协议显示不可展示提示和原始 JSON 入�
     }),
   );
 
-  assert.match(markup, /无法安全提炼结构化证据，已回退原始 JSON/);
-  assert.match(markup, /查看原始数据/);
+  assert.equal(markup, "");
 });

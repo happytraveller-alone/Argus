@@ -8,7 +8,8 @@ import {
 } from "@/components/ui/collapsible";
 import FindingCodeWindow from "./FindingCodeWindow";
 import type { ParsedToolEvidence, ToolEvidencePayload } from "../toolEvidence";
-import { asParsedToolEvidence, isToolEvidenceCapableTool } from "../toolEvidence";
+import { asParsedToolEvidence } from "../toolEvidence";
+import type { ToolEvidenceMissingState, ToolStatus } from "../types";
 import {
   buildToolEvidenceDetailViewModel,
   type ToolEvidencePrimaryPanel,
@@ -66,14 +67,103 @@ function RawDataSection({
   );
 }
 
-function RawOnlyEvidence({ evidence }: { evidence: ParsedToolEvidence }) {
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function extractResultText(rawOutput: unknown): string {
+  if (typeof rawOutput === "string") return rawOutput;
+  const record = toRecord(rawOutput);
+  return typeof record?.result === "string" ? record.result : "";
+}
+
+function MissingEvidenceDetail({
+  missingState,
+  rawOutput,
+  runtimeMetadata,
+  toolStatus,
+}: {
+  missingState: ToolEvidenceMissingState;
+  rawOutput: unknown;
+  runtimeMetadata?: Record<string, unknown> | null;
+  toolStatus?: ToolStatus;
+}) {
+  const resultText = extractResultText(rawOutput);
+  const outputRecord = toRecord(rawOutput);
+  const errorCode =
+    (typeof outputRecord?.error_code === "string" && outputRecord.error_code) ||
+    (typeof runtimeMetadata?.error_code === "string" && runtimeMetadata.error_code) ||
+    "";
+  const validationError =
+    typeof runtimeMetadata?.validation_error === "string" ? runtimeMetadata.validation_error : "";
+  const inputRepaired =
+    runtimeMetadata?.input_repaired !== undefined
+      ? JSON.stringify(runtimeMetadata.input_repaired, null, 2)
+      : "";
+  const statusLabel =
+    toolStatus === "failed"
+      ? "失败"
+      : toolStatus === "cancelled"
+        ? "已取消"
+        : toolStatus === "completed"
+          ? "已完成"
+          : "未知";
+  const headline =
+    missingState === "historical_rerun_required"
+      ? "历史任务未保存结构化证据，需要重跑任务才能查看结构化详情。"
+      : missingState === "missing_failed"
+        ? "该工具执行失败，且当前事件未记录结构化证据。"
+        : missingState === "missing_cancelled"
+          ? "该工具已取消，且当前事件未记录结构化证据。"
+          : "该事件未记录结构化证据。";
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-100">
-        {evidence.notices?.[0] || "仅能展示原始 JSON。"}
+        {headline}
       </div>
+
+      {missingState !== "historical_rerun_required" ? (
+        <DetailSection title="失败详情">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">tool_status</div>
+              <div className="mt-1 break-words font-mono text-sm">{statusLabel}</div>
+            </div>
+            {errorCode ? (
+              <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2.5">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">error_code</div>
+                <div className="mt-1 break-words font-mono text-sm">{errorCode}</div>
+              </div>
+            ) : null}
+            {validationError ? (
+              <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2.5 md:col-span-2">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">validation_error</div>
+                <div className="mt-1 break-words font-mono text-sm">{validationError}</div>
+              </div>
+            ) : null}
+            {inputRepaired ? (
+              <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2.5 md:col-span-2">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">input_repaired</div>
+                <pre className="mt-1 break-words whitespace-pre-wrap font-mono text-sm">{inputRepaired}</pre>
+              </div>
+            ) : null}
+          </div>
+        </DetailSection>
+      ) : null}
+
+      {resultText ? (
+        <DetailSection title="输出结果">
+          <pre className="max-h-[52vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/70 bg-background px-3 py-3 text-xs font-mono">
+            {resultText}
+          </pre>
+        </DetailSection>
+      ) : null}
+
       <RawDataSection
-        content={JSON.stringify(evidence.rawOutput ?? null, null, 2)}
+        content={JSON.stringify(rawOutput ?? null, null, 2)}
         triggerLabel="查看原始数据"
       />
     </div>
@@ -166,28 +256,32 @@ export default function ToolEvidenceDetail({
   toolName,
   evidence,
   rawOutput,
+  missingState,
+  runtimeMetadata,
+  toolStatus,
 }: {
   toolName?: string | null;
   evidence: ParsedToolEvidence | ToolEvidencePayload | null;
   rawOutput: unknown;
+  missingState?: ToolEvidenceMissingState | null;
+  runtimeMetadata?: Record<string, unknown> | null;
+  toolStatus?: ToolStatus;
 }) {
-  const parsed = asParsedToolEvidence(evidence);
-  if (!parsed) {
-    return isToolEvidenceCapableTool(toolName) ? (
-      <RawOnlyEvidence
-        evidence={{
-          state: "raw-only",
-          payload: null,
-          rawOutput,
-          notices: ["无法安全提炼结构化证据，已回退原始 JSON。"],
-        }}
+  if (missingState) {
+    return (
+      <MissingEvidenceDetail
+        missingState={missingState}
+        rawOutput={rawOutput}
+        runtimeMetadata={runtimeMetadata}
+        toolStatus={toolStatus}
       />
-    ) : null;
+    );
   }
 
-  if (!parsed.payload) {
-    return <RawOnlyEvidence evidence={parsed} />;
-  }
+  const parsed = asParsedToolEvidence(evidence);
+  if (!parsed) return null;
+
+  if (!parsed.payload) return null;
 
   const viewModel = buildToolEvidenceDetailViewModel({
     toolName,
@@ -195,9 +289,7 @@ export default function ToolEvidenceDetail({
     rawOutput,
   });
 
-  if (!viewModel) {
-    return <RawOnlyEvidence evidence={parsed} />;
-  }
+  if (!viewModel) return null;
 
   return (
     <div className="space-y-4">

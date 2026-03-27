@@ -137,7 +137,7 @@ class QueueEventEmitter:
             if event_data.tool_input:
                 payload["tool_input"] = event_data.tool_input
             if event_data.tool_output:
-                payload["tool_output"] = str(event_data.tool_output)[:2000]
+                payload["tool_output"] = event_data.tool_output
             if event_data.metadata:
                 payload["metadata"] = event_data.metadata
         else:

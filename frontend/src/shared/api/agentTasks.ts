@@ -58,6 +58,7 @@ export interface AgentTask {
   audit_scope: AgentAuditScope | null;
   target_vulnerabilities: string[] | null;
   verification_level: string | null;
+  tool_evidence_protocol?: "legacy" | "native_v1" | null;
   exclude_patterns: string[] | null;
   target_files: string[] | null;
 

@@ -157,6 +157,40 @@ test("LogEntry 工具行在缺少结构化证据时显示兜底摘要", () => {
   assert.doesNotMatch(markup, /MCP/);
 });
 
+test("LogEntry 工具行对历史任务缺失结构化证据显示重跑提示", () => {
+  const markup = renderLogEntry(
+    createToolLog({
+      toolEvidence: null,
+      toolEvidenceMissingState: "historical_rerun_required",
+    }),
+  );
+
+  assert.match(markup, /历史任务缺少结构化证据，请重跑任务/);
+});
+
+test("LogEntry 工具行对 native_v1 缺失结构化证据显示明确终态摘要", () => {
+  const failedMarkup = renderLogEntry(
+    createToolLog({
+      tool: {
+        name: "search_code",
+        status: "failed",
+        duration: 120,
+      },
+      toolEvidence: null,
+      toolEvidenceMissingState: "missing_failed",
+    }),
+  );
+  const completedMarkup = renderLogEntry(
+    createToolLog({
+      toolEvidence: null,
+      toolEvidenceMissingState: "missing_completed",
+    }),
+  );
+
+  assert.match(failedMarkup, /执行失败，未记录结构化证据/);
+  assert.match(completedMarkup, /已完成，但未记录结构化证据/);
+});
+
 test("LogEntry 以五列表格化布局展示阶段列并保留查看详情操作", () => {
   const markup = renderLogEntry(
     createToolLog({

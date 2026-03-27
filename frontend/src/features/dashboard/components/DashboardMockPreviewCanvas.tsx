@@ -65,9 +65,9 @@ const TONE_STYLES: Record<
 export const HORIZONTAL_STATS_AXIS_FONT_SIZE = 16;
 export const HORIZONTAL_STATS_LABEL_FONT_SIZE = 16;
 export const HORIZONTAL_STATS_Y_AXIS_WIDTH = 128;
-export const HORIZONTAL_STATS_BAR_SIZE = 14;
-export const HORIZONTAL_STATS_ROW_HEIGHT = 60;
-export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 10;
+export const HORIZONTAL_STATS_BAR_SIZE = 12;
+export const HORIZONTAL_STATS_ROW_HEIGHT = 46;
+export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 4;
 export const HORIZONTAL_STATS_META_ROW_CLASSNAME =
 	"mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between";
 export const HORIZONTAL_STATS_META_LEGEND_CLASSNAME =
@@ -404,7 +404,7 @@ function HorizontalStatsChart({
 		() => getHorizontalLegendItems(rows, stacked),
 		[rows, stacked],
 	);
-	const chartHeight = Math.max(rows.length * HORIZONTAL_STATS_ROW_HEIGHT, 260);
+	const chartHeight = Math.max(rows.length * HORIZONTAL_STATS_ROW_HEIGHT, 220);
 
 	return (
 		<div className="space-y-5">

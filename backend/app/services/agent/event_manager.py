@@ -24,6 +24,37 @@ def _truncate_payload(value: str, max_chars: int = MAX_EVENT_PAYLOAD_CHARS) -> t
     return value[:max_chars], True
 
 
+def _stringify_tool_output(value: Any) -> str:
+    if value is None or value == "None":
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, indent=2)
+    except Exception:
+        return str(value)
+
+
+def normalize_tool_output_envelope(tool_output: Any) -> Dict[str, Any]:
+    if hasattr(tool_output, "to_dict"):
+        tool_output = tool_output.to_dict()
+
+    if isinstance(tool_output, dict):
+        is_envelope = any(
+            key in tool_output for key in ("result", "truncated", "metadata", "error", "error_code")
+        )
+        if is_envelope:
+            result_text = _stringify_tool_output(tool_output.get("result"))
+            safe_result, truncated = _truncate_payload(result_text)
+            normalized = dict(tool_output)
+            normalized["result"] = safe_result
+            normalized["truncated"] = bool(tool_output.get("truncated")) or truncated
+            return normalized
+
+    safe_result, truncated = _truncate_payload(_stringify_tool_output(tool_output))
+    return {"result": safe_result, "truncated": truncated}
+
+
 @dataclass
 class AgentEventData:
     """Agent 事件数据"""
@@ -150,15 +181,7 @@ class AgentEventEmitter:
         message: Optional[str] = None,
     ):
         """发射工具结果事件"""
-        # 处理输出，确保可序列化
-        if hasattr(tool_output, 'to_dict'):
-            output_data = tool_output.to_dict()
-        elif isinstance(tool_output, str):
-            safe_result, truncated = _truncate_payload(tool_output)
-            output_data = {"result": safe_result, "truncated": truncated}
-        else:
-            safe_result, truncated = _truncate_payload(str(tool_output))
-            output_data = {"result": safe_result, "truncated": truncated}
+        output_data = normalize_tool_output_envelope(tool_output)
 
         await self.emit(AgentEventData(
             event_type="tool_result",

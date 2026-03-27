@@ -28,7 +28,7 @@ function MetricCard({
 }) {
   return (
     <div className="cyber-card flex min-w-[180px] flex-col gap-2 p-4">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="flex items-center gap-2 text-base font-semibold uppercase tracking-wider text-muted-foreground">
         <span className="text-primary">{icon}</span>
         <span>{label}</span>
       </div>
@@ -39,7 +39,7 @@ function MetricCard({
           className="h-1.5 bg-muted [&>div]:bg-emerald-500"
         />
       ) : null}
-      <div className="text-xs text-muted-foreground">{subtext}</div>
+      <div className="text-base text-muted-foreground">{subtext}</div>
     </div>
   );
 }
@@ -77,7 +77,7 @@ export const StatsPanel = memo(function StatsPanel({ summary, projectName }: Sta
         />
         <MetricCard
           icon={<TrendingUp className="h-4 w-4" />}
-          label="Token 消耗"
+          label="词元消耗"
           value={formatTokenValue(summary.tokensTotal)}
           subtext=""
         />

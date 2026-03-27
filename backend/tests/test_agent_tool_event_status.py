@@ -17,7 +17,27 @@ class _DummyAgent(BaseAgent):
 
 class _SuccessTool:
     async def execute(self, **kwargs):
-        return SimpleNamespace(success=True, data={"ok": True, "input": kwargs}, error=None, metadata={})
+        return SimpleNamespace(
+            success=True,
+            data={"ok": True, "input": kwargs},
+            error=None,
+            metadata={
+                "render_type": "analysis_summary",
+                "display_command": "demo_tool",
+                "command_chain": ["demo_tool"],
+                "entries": [
+                    {
+                        "title": "Demo Tool Summary",
+                        "summary": "ok",
+                        "severity_stats": {},
+                        "hit_count": 0,
+                        "key_files": [],
+                        "highlights": [],
+                        "next_actions": [],
+                    }
+                ],
+            },
+        )
 
 
 class _FailTool:
@@ -45,6 +65,61 @@ class _SearchLikeTool:
 
     async def execute(self, **kwargs):
         return SimpleNamespace(success=True, data={"keyword": kwargs.get("keyword")}, error=None, metadata={})
+
+
+class _McpSuccessRuntime:
+    router = SimpleNamespace(can_route=lambda *_: True)
+
+    def can_handle(self, tool_name):
+        return tool_name == "demo_tool"
+
+    def should_prefer_mcp(self):
+        return True
+
+    async def execute_tool(self, *, tool_name, tool_input, agent_name=None, alias_used=None):
+        return SimpleNamespace(
+            handled=True,
+            success=True,
+            data="mcp ok",
+            error=None,
+            metadata={
+                "render_type": "analysis_summary",
+                "display_command": tool_name,
+                "command_chain": [tool_name],
+                "entries": [
+                    {
+                        "title": "MCP Summary",
+                        "summary": "ok",
+                        "severity_stats": {},
+                        "hit_count": 0,
+                        "key_files": [],
+                        "highlights": [],
+                        "next_actions": [],
+                    }
+                ],
+            },
+            should_fallback=False,
+        )
+
+
+class _McpFallbackRuntime:
+    router = SimpleNamespace(can_route=lambda *_: True)
+
+    def can_handle(self, tool_name):
+        return tool_name == "demo_tool"
+
+    def should_prefer_mcp(self):
+        return True
+
+    async def execute_tool(self, *, tool_name, tool_input, agent_name=None, alias_used=None):
+        return SimpleNamespace(
+            handled=True,
+            success=False,
+            data="mcp failed",
+            error="adapter down",
+            metadata={"mcp_runtime_domain": "stdio"},
+            should_fallback=True,
+        )
 
 
 def _make_agent(tool_name: str, tool_impl):
@@ -90,6 +165,8 @@ async def test_tool_call_and_result_share_same_tool_call_id():
     assert result_event.metadata.get("tool_call_id")
     assert call_event.metadata["tool_call_id"] == result_event.metadata["tool_call_id"]
     assert result_event.metadata.get("tool_status") == "completed"
+    assert result_event.tool_output["metadata"]["render_type"] == "analysis_summary"
+    assert "render_type" not in (result_event.metadata or {})
 
 
 @pytest.mark.asyncio
@@ -102,6 +179,7 @@ async def test_tool_status_terminal_failed_for_error_result():
     tool_result_events = _get_events_by_type(emitter, "tool_result")
     assert len(tool_result_events) == 1
     assert tool_result_events[0].metadata.get("tool_status") == "failed"
+    assert tool_result_events[0].tool_output.get("error") == "failed by test"
 
 
 @pytest.mark.asyncio
@@ -143,3 +221,35 @@ async def test_tool_validation_missing_required_field_returns_recoverable_error(
     assert len(tool_result_events) == 1
     assert tool_result_events[0].metadata.get("tool_status") == "failed"
     assert tool_result_events[0].metadata.get("validation_error")
+
+
+@pytest.mark.asyncio
+async def test_tool_result_keeps_native_metadata_for_mcp_success():
+    agent, emitter = _make_agent("demo_tool", _SuccessTool())
+    agent.set_mcp_runtime(_McpSuccessRuntime())
+
+    output = await agent.execute_tool("demo_tool", {"path": "a.py"})
+
+    assert output == "mcp ok"
+    tool_result_events = _get_events_by_type(emitter, "tool_result")
+    assert len(tool_result_events) == 1
+    result_event = tool_result_events[0]
+    assert result_event.metadata.get("tool_status") == "completed"
+    assert result_event.tool_output["metadata"]["display_command"] == "demo_tool"
+    assert result_event.metadata.get("mcp_used") is True
+
+
+@pytest.mark.asyncio
+async def test_tool_result_keeps_native_metadata_for_mcp_fallback_success():
+    agent, emitter = _make_agent("demo_tool", _SuccessTool())
+    agent.set_mcp_runtime(_McpFallbackRuntime())
+
+    output = await agent.execute_tool("demo_tool", {"path": "a.py"})
+
+    assert output
+    tool_result_events = _get_events_by_type(emitter, "tool_result")
+    assert len(tool_result_events) == 1
+    result_event = tool_result_events[0]
+    assert result_event.metadata.get("tool_status") == "completed"
+    assert result_event.metadata.get("mcp_fallback_used") is True
+    assert result_event.tool_output["metadata"]["render_type"] == "analysis_summary"

@@ -97,7 +97,7 @@ export default function SkillTestEventLog({
                     <span className="break-all whitespace-pre-wrap">{formatSkillEventMessage(event)}</span>
                   )}
                 </div>
-                {evidence ? <ToolEvidencePreview evidence={evidence} /> : null}
+                {evidence?.payload ? <ToolEvidencePreview evidence={evidence} /> : null}
               </div>
             );
           })}

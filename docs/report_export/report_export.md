@@ -223,7 +223,7 @@ class AgentTask(Base):
     analyzed_files    = Column(Integer)          # 扫描文件数
     total_iterations  = Column(Integer)          # Agent 迭代次数
     tool_calls_count  = Column(Integer)          # 工具调用次数
-    tokens_used       = Column(Integer)          # Token 消耗量
+    tokens_used       = Column(Integer)          # 词元消耗量
     started_at        = Column(DateTime)
     completed_at      = Column(DateTime)
     findings          = relationship("AgentFinding", cascade="all, delete-orphan")

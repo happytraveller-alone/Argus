@@ -225,6 +225,27 @@ test("ScanConfigExternalToolDetailContent 渲染 skill 概览、事件流、结�
   assert.match(markup, /\/tmp\/skill-test-get_code_window-1234/);
 });
 
+test("ScanConfigExternalToolDetailContent 仅把带 native payload 的事件当作 latest evidence", () => {
+  const markup = renderContent({
+    events: [
+      ...streamEvents,
+      {
+        id: 6,
+        type: "tool_result",
+        tool_name: "get_code_window",
+        tool_output: { result: "legacy-only", truncated: false },
+        metadata: {
+          tool_status: "completed",
+        },
+        ts: 1710000005,
+      },
+    ],
+  });
+
+  assert.match(markup, /src\/main\.c:1-3/);
+  assert.match(markup, /return 0;/);
+});
+
 test("ScanConfigExternalToolDetailContent 对 structured_tool 渲染结构化参数表单", () => {
   const markup = renderContent({
     toolId: "dataflow_analysis",
