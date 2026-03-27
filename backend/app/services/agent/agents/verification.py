@@ -745,7 +745,7 @@ class VerificationAgent(BaseAgent):
         file_path = str(finding.get("file_path") or "unknown")
         line_start = finding.get("line_start") or 1
         return {
-            "description": f"{vuln_type} 的非武器化验证思路",
+            "description": f"Mock PoC: {vuln_type} 的非武器化验证思路",
             "steps": [
                 f"在测试环境准备并定位目标代码：{file_path}:{line_start}",
                 "构造最小化的可控输入，触发可疑分支并记录行为差异",
@@ -760,6 +760,25 @@ class VerificationAgent(BaseAgent):
                 "出现与漏洞描述一致的异常响应/执行路径",
             ],
         }
+
+    def _normalize_mock_poc(self, poc_value: Any) -> Any:
+        if poc_value is None:
+            return None
+        if isinstance(poc_value, dict):
+            normalized = dict(poc_value)
+            description = str(normalized.get("description") or "").strip()
+            if description:
+                if not description.lower().startswith("mock poc"):
+                    normalized["description"] = f"Mock PoC: {description}"
+            else:
+                normalized["description"] = "Mock PoC: 非武器化验证方案"
+            return normalized
+        text = str(poc_value).strip()
+        if not text:
+            return None
+        if text.lower().startswith("mock poc"):
+            return text
+        return f"Mock PoC: {text}"
 
     def _normalize_int_line(self, value: Any, default: int) -> int:
         try:
@@ -1524,7 +1543,6 @@ class VerificationAgent(BaseAgent):
                 or merged.get("recommendation")
                 or self._get_recommendation(str(merged.get("vulnerability_type") or ""))
             )
-            fix_code = merged.get("fix_code") or self._build_default_fix_code(merged)
             if not suggestion:
                 suggestion = self._get_recommendation(str(merged.get("vulnerability_type") or ""))
 
@@ -1532,6 +1550,7 @@ class VerificationAgent(BaseAgent):
             poc_value = merged.get("poc") if allow_poc else None
             if allow_poc and not poc_value:
                 poc_value = self._build_default_poc_plan(merged)
+            poc_value = self._normalize_mock_poc(poc_value)
 
             vuln_profile = resolve_vulnerability_profile(
                 merged.get("vulnerability_type"),
@@ -1667,7 +1686,7 @@ class VerificationAgent(BaseAgent):
                     "verification_result": verification_result,
                     "function_trigger_flow": flow,
                     "suggestion": str(suggestion),
-                    "fix_code": str(fix_code),
+                    "fix_code": None,
                     "poc": poc_value,
                     # === 新字段：函数定位状态透明度 ===
                     "localization_status": localization_status,

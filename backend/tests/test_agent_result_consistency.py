@@ -151,3 +151,56 @@ async def test_save_findings_filters_pseudo_c_attribute_function_name(tmp_path):
     assert saved_finding.function_name != "__attribute__"
     reachability_target = saved_finding.verification_result.get("reachability_target") or {}
     assert reachability_target.get("function") == "parse_node"
+
+
+@pytest.mark.asyncio
+async def test_save_findings_does_not_autofill_fix_code_for_verification_stage(tmp_path):
+    source_file = tmp_path / "src" / "service.py"
+    source_file.parent.mkdir(parents=True, exist_ok=True)
+    source_file.write_text(
+        "\n".join(
+            [
+                "def handle(payload):",
+                "    query = \"SELECT * FROM t WHERE id=\" + payload",
+                "    return query",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+
+    findings = [
+        {
+            "title": "Verification finding",
+            "severity": "high",
+            "vulnerability_type": "sql_injection",
+            "file_path": "src/service.py",
+            "line_start": 2,
+            "description": "query string concatenation",
+            "confidence": 0.9,
+            "verification_stage_completed": True,
+            "verification_result": {
+                "authenticity": "confirmed",
+                "reachability": "reachable",
+                "evidence": "verified by controlled request replay",
+                "verification_stage_completed": True,
+            },
+        }
+    ]
+
+    saved_count = await _save_findings(
+        db,
+        task_id="task-consistency-2",
+        findings=findings,
+        project_root=str(tmp_path),
+        save_diagnostics={},
+    )
+
+    assert saved_count == 1
+    saved_finding = db.add.call_args.args[0]
+    assert saved_finding.suggestion
+    assert saved_finding.fix_code is None

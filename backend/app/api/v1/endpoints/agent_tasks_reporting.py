@@ -142,18 +142,8 @@ def _build_finding_markdown_report(
         sections.append(str(suggestion))
         sections.append("")
 
-    fix_code = finding_data.get("fix_code")
-    if fix_code:
-        lang = infer_code_fence_language(str(file_path or ""))
-        sections.append("## 参考修复代码")
-        sections.append("")
-        sections.append(f"```{lang if file_path else 'text'}")
-        sections.append(str(fix_code).strip())
-        sections.append("```")
-        sections.append("")
-
     if bool(finding_data.get("has_poc")):
-        sections.append("## 概念验证 (PoC)")
+        sections.append("## Mock PoC")
         sections.append("")
         poc_description = finding_data.get("poc_description")
         if poc_description:
@@ -170,7 +160,7 @@ def _build_finding_markdown_report(
 
         poc_code = finding_data.get("poc_code")
         if poc_code:
-            sections.append("### PoC 代码")
+            sections.append("### Mock PoC 代码")
             sections.append("")
             sections.append("```")
             sections.append(str(poc_code).strip())
@@ -927,7 +917,7 @@ async def generate_audit_report(
     md_lines.append(f"- **工具调用次数:** {task.tool_calls_count}")
     md_lines.append(f"- **Token 消耗:** {task.tokens_used:,}")
     if with_poc > 0:
-        md_lines.append(f"- **生成的 PoC:** {with_poc}")
+        md_lines.append(f"- **生成的 Mock PoC:** {with_poc}")
     md_lines.append("")
 
     # Detailed Findings
@@ -955,7 +945,7 @@ async def generate_audit_report(
 
             for i, f in enumerate(severity_findings, 1):
                 verified_badge = "[已验证]" if f.is_verified else "[未验证]"
-                poc_badge = " [含 PoC]" if f.has_poc else ""
+                poc_badge = " [含 Mock PoC]" if f.has_poc else ""
 
                 md_lines.append(
                     f"### {severity_level.upper()}-{i}: {_escape_markdown_inline(f.title)}"
@@ -1034,17 +1024,9 @@ async def generate_audit_report(
                     md_lines.append(f.suggestion)
                     md_lines.append("")
 
-                if f.fix_code:
-                    md_lines.append("**参考修复代码:**")
-                    md_lines.append("")
-                    md_lines.append(f"```{lang if f.file_path else 'text'}")
-                    md_lines.append(f.fix_code.strip().replace('\\n', '\n').replace('\r\n', '\n'))
-                    md_lines.append("```")
-                    md_lines.append("")
-
-                #  添加 PoC 详情
+                #  添加 Mock PoC 详情
                 if f.has_poc:
-                    md_lines.append("**概念验证 (PoC):**")
+                    md_lines.append("**Mock PoC:**")
                     md_lines.append("")
 
                     if f.poc_description:
@@ -1059,7 +1041,7 @@ async def generate_audit_report(
                         md_lines.append("")
 
                     if f.poc_code:
-                        md_lines.append("**PoC 代码:**")
+                        md_lines.append("**Mock PoC 代码:**")
                         md_lines.append("")
                         md_lines.append("```")
                         md_lines.append(f.poc_code.strip().replace('\\n', '\n').replace('\r\n', '\n'))

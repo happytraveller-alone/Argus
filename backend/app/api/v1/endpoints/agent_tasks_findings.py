@@ -1103,13 +1103,15 @@ async def _save_findings(
                 or finding.get("report")
             )
 
-            if not suggestion_text or not fix_code_text:
+            need_default_suggestion = not suggestion_text
+            need_default_fix_code = (not fix_code_text) and (not verification_stage_completed)
+            if need_default_suggestion or need_default_fix_code:
                 default_suggestion, default_fix_code = _build_default_remediation(raw_type)
-                if not suggestion_text:
+                if need_default_suggestion:
                     suggestion_text = default_suggestion
-                if not fix_code_text:
+                if need_default_fix_code:
                     fix_code_text = default_fix_code
-                if not fix_description_text:
+                if need_default_fix_code and not fix_description_text:
                     fix_description_text = "基于漏洞类型自动补全修复建议，请结合业务逻辑复核。"
 
             # 9) verification metadata

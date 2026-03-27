@@ -208,6 +208,30 @@ def test_markdown_to_html_supports_parenthesized_ordered_list():
     assert "<li>危险调用：system(sanitize_command)</li>" in html
 
 
+def test_build_finding_markdown_report_hides_fix_code_and_uses_mock_poc():
+    task = _make_task(task_id="task-1")
+    project = SimpleNamespace(id="project-1", name="Demo")
+    report = reporting_endpoint._build_finding_markdown_report(
+        task=task,
+        project=project,
+        finding_id="finding-1",
+        finding_data={
+            "display_title": "Mock PoC Finding",
+            "severity": "high",
+            "vulnerability_type": "command_injection",
+            "has_poc": True,
+            "poc_description": "Mock PoC: 仅用于测试环境复现",
+            "poc_code": "echo 'mock'",
+            "fix_code": "should not be rendered",
+        },
+    )
+
+    assert "参考修复代码" not in report
+    assert "概念验证 (PoC)" not in report
+    assert "## Mock PoC" in report
+    assert "### Mock PoC 代码" in report
+
+
 @pytest.mark.asyncio
 async def test_generate_report_strips_redundant_embedded_titles():
     task = _make_task(
