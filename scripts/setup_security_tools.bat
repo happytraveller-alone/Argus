@@ -1,4 +1,14 @@
 @echo off
+:: scripts/setup_security_tools.bat — VulHunter 安全工具安装引导脚本（Windows）
+::
+:: 用法:
+::   双击运行，或在 CMD 中执行: scripts\setup_security_tools.bat
+::
+:: 说明:
+::   此批处理脚本仅作为引导入口，实际安装逻辑由同目录下的
+::   setup_security_tools.ps1（PowerShell 增强版）执行。
+::   会自动检查 PowerShell 是否可用，并以 Bypass 策略调用 .ps1 脚本。
+
 chcp 65001 >nul 2>&1
 title VulHunter 安全工具安装
 

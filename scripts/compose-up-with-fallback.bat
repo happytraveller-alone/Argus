@@ -1,4 +1,22 @@
 @echo off
+:: scripts/compose-up-with-fallback.bat — Windows docker compose 简易包装脚本
+::
+:: 用法:
+::   scripts\compose-up-with-fallback.bat              — 等效于 docker compose up -d --build
+::   scripts\compose-up-with-fallback.bat up           — 前台启动
+::   scripts\compose-up-with-fallback.bat down         — 停止并移除容器
+::
+:: 说明:
+::   此脚本为 Windows CMD 用户提供基础的国内镜像源预设，无镜像探测能力。
+::   如需镜像源自动探测与故障转移，请使用 PowerShell 版本:
+::     powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
+::
+:: 预设镜像源（可通过同名环境变量覆盖）:
+::   DOCKERHUB_LIBRARY_MIRROR  — docker.m.daocloud.io/library
+::   GHCR_REGISTRY             — ghcr.nju.edu.cn
+::   FRONTEND_NPM_REGISTRY     — https://registry.npmmirror.com
+::   BACKEND_PYPI_INDEX_PRIMARY — https://mirrors.aliyun.com/pypi/simple/
+
 REM =============================================
 REM VulHunter Docker Compose Wrapper for Windows
 REM =============================================

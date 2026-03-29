@@ -1,8 +1,22 @@
 # =============================================
 # VulHunter Docker Compose Wrapper for Windows (PowerShell)
 # =============================================
-# This script provides mirror selection and fallback for Windows environments
-# Usage: powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1 [compose-args]
+# scripts/compose-up-with-fallback.ps1 — 带镜像源探测的 docker compose 包装脚本（Windows PowerShell）
+#
+# 用法:
+#   powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1 up -d --build
+#   powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1 down
+#
+# 说明:
+#   探测 DockerHub / GHCR / NPM / PyPI 各类镜像源的响应延迟，选出最快的镜像源后
+#   设置对应环境变量并调用 docker compose。比 .bat 版本多了镜像排序能力。
+#
+# 关键环境变量（可预设跳过探测）:
+#   DOCKERHUB_LIBRARY_MIRROR  — DockerHub 镜像源
+#   GHCR_REGISTRY             — GHCR 镜像源
+#   FRONTEND_NPM_REGISTRY     — 前端 NPM 镜像源
+#   BACKEND_PYPI_INDEX_PRIMARY — Backend PyPI 主索引
 
 param(
     [Parameter(ValueFromRemainingArguments=$true)]
@@ -11,6 +25,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# 带颜色的日志函数
 function Log-Info {
     param([string]$Message)
     Write-Host "[INFO] $Message" -ForegroundColor Green
@@ -26,6 +41,7 @@ function Log-Error {
     Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
 
+# 检测 docker compose 命令，优先使用插件形式，回退到独立二进制
 function Detect-ComposeCommand {
     try {
         $null = docker compose version 2>&1
@@ -45,6 +61,7 @@ function Detect-ComposeCommand {
     exit 127
 }
 
+# 测试指定 URL 是否可访问（用于镜像可用性检查）
 function Test-Url {
     param(
         [string]$Url,
@@ -59,6 +76,8 @@ function Test-Url {
     }
 }
 
+# 对指定 URL 发起多次 HEAD 请求，返回响应时间中位数（秒）
+# 全部失败时返回 9999（排在末尾作为兜底）
 function Measure-UrlLatency {
     param(
         [string]$Url,
@@ -93,6 +112,8 @@ function Measure-UrlLatency {
     return $median
 }
 
+# 对候选镜像列表逐一探测延迟，按延迟升序返回排序后的数组
+# Kind 可选: dockerhub / ghcr / npm / pypi
 function Rank-Candidates {
     param(
         [string]$Kind,

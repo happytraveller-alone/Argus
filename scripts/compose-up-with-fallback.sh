@@ -1,10 +1,38 @@
 #!/usr/bin/env bash
+# scripts/compose-up-with-fallback.sh — 带镜像源探测与故障转移的 docker compose 包装脚本
+#
+# 用法:
+#   ./scripts/compose-up-with-fallback.sh              # 等效于 docker compose up -d --build
+#   ./scripts/compose-up-with-fallback.sh up           # 前台 attached 模式（服务 ready 后打印横幅）
+#   ./scripts/compose-up-with-fallback.sh up -d --build
+#   ./scripts/compose-up-with-fallback.sh down
+#   ./scripts/compose-up-with-fallback.sh logs -f backend
+#
+# 核心功能:
+#   1. 并行探测多个 DockerHub / GHCR / PyPI / NPM / APT 镜像源延迟，按响应速度排序
+#   2. 按排序结果依次尝试（多 phase 故障转移），每个 phase 内部支持 PHASE_RETRY_COUNT 次重试
+#   3. 前台 up 模式下，后台监测前端/后端 ready，就绪后打印访问地址
+#   4. 可选通过 VULHUNTER_OPEN_BROWSER=1 在就绪后自动打开浏览器
+#
+# 关键环境变量（均可通过 export 覆盖，跳过自动探测）:
+#   DOCKERHUB_LIBRARY_MIRROR        — 指定 DockerHub 镜像源（跳过探测）
+#   GHCR_REGISTRY                   — 指定 GHCR 镜像源（跳过探测）
+#   FRONTEND_NPM_REGISTRY           — 前端 NPM 镜像源
+#   BACKEND_PYPI_INDEX_PRIMARY      — Backend PyPI 主索引
+#   SANDBOX_PYPI_INDEX_PRIMARY      — Sandbox PyPI 主索引
+#   PHASE_RETRY_COUNT               — 每个 phase 的最大重试次数（默认 3）
+#   PROBE_ATTEMPTS                  — 每个候选镜像的探测次数（默认 3，取中位数）
+#   VULHUNTER_READY_TIMEOUT_SECONDS — 等待服务就绪超时秒数（默认 900）
+#   VULHUNTER_OPEN_BROWSER          — 设为 1 时服务就绪后自动打开浏览器
+
 set -euo pipefail
 
+# ─── 日志工具 ─────────────────────────────────────────────────────────────────
 log_info() {
   echo "[INFO] $*"
 }
 
+# 输出到 stderr，用于后台探测子进程中不污染 stdout 的日志
 log_info_err() {
   echo "[INFO] $*" >&2
 }
@@ -17,6 +45,8 @@ log_error() {
   echo "[ERROR] $*" >&2
 }
 
+# ─── Compose 命令检测 ─────────────────────────────────────────────────────────
+# 优先使用 `docker compose`（插件形式），回退到独立的 docker-compose 二进制
 detect_compose_cmd() {
   if docker compose version >/dev/null 2>&1; then
     COMPOSE_BIN=(docker compose)
@@ -30,6 +60,9 @@ detect_compose_cmd() {
   exit 127
 }
 
+# ─── Compose 参数分析 ─────────────────────────────────────────────────────────
+# 判断 compose 参数是否为"前台 up"（有 up 且没有 -d/--detach）
+# 返回 0 表示是前台 up，返回 1 表示不是
 compose_args_target_attached_up() {
   local -a args=("$@")
   local seen_up=0
@@ -38,16 +71,18 @@ compose_args_target_attached_up() {
 
   while [ "$idx" -lt "${#args[@]}" ]; do
     arg="${args[$idx]}"
-    if [ "$seen_up" -eq 0 ]; then
+    if [ "$seen_up" -eq 0 ]; do
       case "$arg" in
         up)
           seen_up=1
           ;;
+        # 跳过带参数的选项（消耗下一个 token）
         -f|--file|--env-file|-p|--project-name|--project-directory|--profile|--ansi|--parallel)
           idx=$((idx + 1))
           ;;
         -*)
           ;;
+        # 遇到非选项非 up 的位置参数，说明不是 up 子命令
         *)
           return 1
           ;;
@@ -65,6 +100,8 @@ compose_args_target_attached_up() {
   [ "$seen_up" -eq 1 ]
 }
 
+# 判断 compose 参数是否为"后台 up"（有 up 且有 -d/--detach）
+# 返回 0 表示是后台 up，返回 1 表示不是
 compose_args_target_detached_up() {
   local -a args=("$@")
   local seen_up=0
@@ -100,6 +137,7 @@ compose_args_target_detached_up() {
   return 1
 }
 
+# 校验参数必须是正整数，否则打印错误并退出
 require_positive_int() {
   local name="$1"
   local value="$2"
@@ -109,6 +147,9 @@ require_positive_int() {
   fi
 }
 
+# ─── 服务就绪检测 ─────────────────────────────────────────────────────────────
+# 轮询前端和后端 HTTP 健康端点，两者均返回 200 才算就绪
+# 超时后返回 1
 wait_for_services_ready() {
   if ! command -v curl >/dev/null 2>&1; then
     log_warn "curl not found; skipping readiness banner"
@@ -152,6 +193,8 @@ wait_for_services_ready() {
   done
 }
 
+# ─── 浏览器打开 ───────────────────────────────────────────────────────────────
+# 依次尝试 wslview / powershell.exe / xdg-open / open，取第一个可用的
 open_browser_url() {
   local url="$1"
   local -a openers=(wslview powershell.exe xdg-open open)
@@ -203,6 +246,10 @@ notify_when_ready() {
   return 1
 }
 
+# ─── CSV 工具函数 ─────────────────────────────────────────────────────────────
+# 以下函数用于处理逗号分隔的镜像候选列表
+
+# 去除字符串首尾空白
 trim() {
   local value="$1"
   value="${value#"${value%%[![:space:]]*}"}"
@@ -296,6 +343,8 @@ dedupe_csv() {
   printf '%s' "$out"
 }
 
+# ─── 镜像探测 ─────────────────────────────────────────────────────────────────
+# 根据镜像类型（dockerhub/ghcr/npm/pypi/apt）构造探测 URL
 build_probe_url() {
   local kind="$1"
   local candidate="$2"
@@ -333,6 +382,8 @@ build_probe_url() {
   esac
 }
 
+# 对单个 URL 做 PROBE_ATTEMPTS 次 curl 请求，返回响应时间中位数（秒）
+# 所有请求均失败时返回 1
 probe_median_seconds() {
   local url="$1"
   local -a samples=()
@@ -368,6 +419,8 @@ probe_median_seconds() {
   '
 }
 
+# 串行探测候选列表，按中位延迟排序后返回 CSV（最快优先）
+# 探测失败的候选以延迟 9999 排在末尾（保留为兜底）
 rank_candidates() {
   local kind="$1"
   local label="$2"
@@ -417,6 +470,8 @@ rank_candidates() {
   printf '%s' "$ranked"
 }
 
+# 并行探测候选列表（每个候选开一个后台子进程），结果写入临时文件后汇总排序
+# 相比串行版本大幅减少总探测时间，适合候选列表较多的场景
 rank_candidates_parallel() {
   local kind="$1"
   local label="$2"
@@ -515,6 +570,8 @@ rank_candidates_parallel() {
   printf '%s' "$ranked"
 }
 
+# 从排序后的 CSV 中选出 primary 和 fallback 镜像
+# explicit_primary/fallback 非空时直接使用，否则取排序列表的第 1/2 项
 choose_primary_fallback() {
   local ranked_csv="$1"
   local explicit_primary="$2"
@@ -539,6 +596,10 @@ choose_primary_fallback() {
   printf '%s|%s' "$primary" "$fallback"
 }
 
+# ─── 带重试的 compose 执行 ────────────────────────────────────────────────────
+# 每次调用代表一个"phase"（使用特定的 dockerhub_mirror + ghcr_registry 组合）
+# 单个 phase 内部最多重试 retry_count 次，失败后返回非零退出码
+# 前台 up 模式下，会在后台启动 ready watcher，compose 退出后清理它
 run_with_retries() {
   local phase="$1"
   local retry_count="$2"
