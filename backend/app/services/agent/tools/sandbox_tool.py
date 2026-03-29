@@ -148,7 +148,7 @@ class SandboxManager:
     def _format_image_resolution_error(self, candidates: List[str], attempt_errors: List[str]) -> str:
         attempted = ", ".join(candidates) or str(self.config.image or "<unset>")
         detail_text = " | ".join(attempt_errors[-3:]) if attempt_errors else "镜像不存在或拉取失败"
-        build_hint = "cd backend/docker/sandbox && docker build -t vulhunter/sandbox:latest ."
+        build_hint = "cd docker/sandbox && docker build -t vulhunter/sandbox:latest ."
         return (
             f"未找到可用沙箱镜像。已尝试: {attempted}。"
             f"详情: {detail_text}。"

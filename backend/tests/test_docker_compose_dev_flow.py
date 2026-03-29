@@ -44,7 +44,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "target: dev-runtime" in compose_text
     assert "target: dev" in compose_text
     assert "context: ." in compose_text
-    assert "dockerfile: backend/docker/backend.Dockerfile" in compose_text
+    assert "dockerfile: docker/backend.Dockerfile" in compose_text
     assert "./backend:/app" in compose_text
     assert ".:/workspace:ro" in compose_text
     assert "./frontend:/app" in compose_text
@@ -155,7 +155,7 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "vulhunter/backend-dev-local:latest" not in full_overlay_text
     assert "vulhunter/frontend-local:latest" in full_overlay_text
     assert "context: ." in full_overlay_text
-    assert "dockerfile: backend/docker/backend.Dockerfile" in full_overlay_text
+    assert "dockerfile: docker/backend.Dockerfile" in full_overlay_text
     assert "working_dir: !reset null" in full_overlay_text
     assert "command: !reset null" in full_overlay_text
     assert "./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" in full_overlay_text
@@ -454,15 +454,15 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "build_gitleaks_runner" in workflow_text
     assert "build_phpstan_runner" in workflow_text
     assert "build_flow_parser_runner" in workflow_text
-    assert "./backend/docker/backend.Dockerfile" in workflow_text
-    assert "./backend/docker/frontend.Dockerfile" in workflow_text
+    assert "./docker/backend.Dockerfile" in workflow_text
+    assert "./docker/frontend.Dockerfile" in workflow_text
     assert "context: ." in workflow_text
-    assert "./backend/docker/yasa-runner.Dockerfile" in workflow_text
-    assert "./backend/docker/opengrep-runner.Dockerfile" in workflow_text
-    assert "./backend/docker/bandit-runner.Dockerfile" in workflow_text
-    assert "./backend/docker/gitleaks-runner.Dockerfile" in workflow_text
-    assert "./backend/docker/phpstan-runner.Dockerfile" in workflow_text
-    assert "./backend/docker/flow-parser-runner.Dockerfile" in workflow_text
+    assert "./docker/yasa-runner.Dockerfile" in workflow_text
+    assert "./docker/opengrep-runner.Dockerfile" in workflow_text
+    assert "./docker/bandit-runner.Dockerfile" in workflow_text
+    assert "./docker/gitleaks-runner.Dockerfile" in workflow_text
+    assert "./docker/phpstan-runner.Dockerfile" in workflow_text
+    assert "./docker/flow-parser-runner.Dockerfile" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ github.event.inputs.tag }}" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ github.event.inputs.tag }}" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ github.event.inputs.tag }}" in workflow_text
@@ -481,5 +481,5 @@ def test_release_workflow_packages_yasa_override_assets() -> None:
 
     assert ".dockerignore" in workflow_text
     assert "frontend/yasa-engine-overrides/" in workflow_text
-    assert 'cp -R "$ROOT_DIR/backend/docker" "$tmp_root/backend/"' in package_script
+    assert 'cp -R "$ROOT_DIR/docker" "$tmp_root/"' in package_script
     assert 'cp -R "$ROOT_DIR/frontend/yasa-engine-overrides" "$tmp_root/frontend/"' in package_script

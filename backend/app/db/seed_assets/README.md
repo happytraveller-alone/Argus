@@ -24,6 +24,6 @@ Default demo projects are no longer stored as repo-tracked ZIP files.
 ## Update procedure
 
 1. Update the pinned seed manifest in `backend/app/db/init_db.py`.
-2. Adjust probe/download settings in `backend/docker/env/backend/env.example` if mirror behavior needs tuning.
+2. Adjust probe/download settings in `docker/env/backend/env.example` if mirror behavior needs tuning.
 3. Run backend seed tests:
    - `cd backend && ./.venv/bin/pytest tests/test_seed_archive.py tests/test_init_db_libplist_seed.py -q`

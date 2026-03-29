@@ -115,15 +115,14 @@ pack_docker_layout() {
   local tmp_root
   tmp_root="$(mktemp -d)"
   mkdir -p \
-    "$tmp_root/backend" \
     "$tmp_root/frontend"
 
   cp "$ROOT_DIR/.dockerignore" "$tmp_root/"
   cp "$ROOT_DIR/docker-compose.yml" "$tmp_root/"
   cp "$ROOT_DIR/docker-compose.full.yml" "$tmp_root/"
-  cp -R "$ROOT_DIR/backend/docker" "$tmp_root/backend/"
+  cp -R "$ROOT_DIR/docker" "$tmp_root/"
   cp -R "$ROOT_DIR/frontend/yasa-engine-overrides" "$tmp_root/frontend/"
-  rm -f "$tmp_root/backend/docker/env/backend/.env" "$tmp_root/backend/docker/env/frontend/.env"
+  rm -f "$tmp_root/docker/env/backend/.env" "$tmp_root/docker/env/frontend/.env"
 
   tar -czf "$pkg_path" -C "$tmp_root" .
   rm -rf "$tmp_root"

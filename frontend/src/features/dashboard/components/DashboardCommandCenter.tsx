@@ -611,18 +611,16 @@ function ViewSidebar({
 							type="button"
 							aria-pressed={active}
 							onClick={() => onChange(view.id)}
-							className={`group flex w-full items-start gap-3 rounded-sm border px-3 py-3 text-left transition duration-200 ${
-								active
-									? "border-primary/30 bg-muted/70 text-foreground shadow-sm"
-									: "border-transparent bg-background/60 text-muted-foreground hover:border-border hover:bg-muted/40"
-							}`}
+							className={`group flex w-full items-start gap-3 rounded-sm border px-3 py-3 text-left transition duration-200 ${active
+								? "border-primary/30 bg-muted/70 text-foreground shadow-sm"
+								: "border-transparent bg-background/60 text-muted-foreground hover:border-border hover:bg-muted/40"
+								}`}
 						>
 							<div
-								className={`mt-0.5 rounded-sm p-2 ${
-									active
-										? "bg-primary/10 text-primary"
-										: "bg-muted/70 text-muted-foreground"
-								}`}
+								className={`mt-0.5 rounded-sm p-2 ${active
+									? "bg-primary/10 text-primary"
+									: "bg-muted/70 text-muted-foreground"
+									}`}
 							>
 								{view.id === "trend" ? (
 									<Activity className="h-4 w-4" />
@@ -645,11 +643,10 @@ function ViewSidebar({
 										{view.label}
 									</span>
 									<ChevronRight
-										className={`h-4 w-4 transition ${
-											active
-												? "translate-x-0 text-primary"
-												: "-translate-x-1 text-muted-foreground/70 group-hover:translate-x-0"
-										}`}
+										className={`h-4 w-4 transition ${active
+											? "translate-x-0 text-primary"
+											: "-translate-x-1 text-muted-foreground/70 group-hover:translate-x-0"
+											}`}
 									/>
 								</div>
 								<p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -718,7 +715,7 @@ function TaskStatusPanel({
 					})
 				)}
 			</div>
-			<div className="flex items-start justify-between gap-4">
+			<div className="flex items-start justify-between gap-6">
 				<div>
 					<h2 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>最近任务</h2>
 				</div>
@@ -789,9 +786,9 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 					<p className="truncate text-sm font-semibold text-foreground">
 						{task.title}
 					</p>
-					<p className="mt-1 text-xs text-muted-foreground">
+					{/* <p className="mt-1 text-xs text-muted-foreground">
 						{task.task_type} · {formatCreatedAt(task.created_at)}
-					</p>
+					</p> */}
 				</div>
 				<a
 					href={task.detail_path || "/tasks/static"}
@@ -801,7 +798,7 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 				</a>
 			</div>
 			<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-				<span>{task.task_type}</span>
+				{/* <span>{task.task_type}</span> */}
 				<span>执行进度 {progress}%</span>
 			</div>
 			<div className="mt-2 h-2 rounded-full bg-muted/70">
@@ -974,11 +971,11 @@ function HorizontalStatsChart({
 	const primaryTone = rows[0]?.tone ?? "low";
 	const legendItems = stacked
 		? [
-				{ label: "严重", tone: "critical" as Tone },
-				{ label: "高危", tone: "high" as Tone },
-				{ label: "中危", tone: "medium" as Tone },
-				{ label: "低危", tone: "low" as Tone },
-			]
+			{ label: "严重", tone: "critical" as Tone },
+			{ label: "高危", tone: "high" as Tone },
+			{ label: "中危", tone: "medium" as Tone },
+			{ label: "低危", tone: "low" as Tone },
+		]
 		: [{ label: "总数", tone: primaryTone }];
 
 	return (

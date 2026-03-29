@@ -598,7 +598,7 @@ COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/build_skill_registry.py /app/scripts/build_skill_registry.py
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
-COPY backend/docker /opt/backend-build-context/backend/docker
+COPY docker /opt/backend-build-context/docker
 COPY backend/app /opt/backend-build-context/backend/app
 COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
 COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py

@@ -37,12 +37,12 @@ cd AuditTool
 ### 2. Configure backend environment variables
 
 ```bash
-cp backend/docker/env/backend/env.example backend/docker/env/backend/.env
+cp docker/env/backend/env.example docker/env/backend/.env
 ```
 
 At minimum, set your model-related configuration such as `LLM_API_KEY`, `LLM_PROVIDER`, and `LLM_MODEL`. Do not commit real secrets into the repository.
 
-All Dockerfiles, runner image build files, and Docker-specific environment files now live under `backend/docker/`.
+All Dockerfiles, runner image build files, and Docker-specific environment files now live under `docker/`.
 
 ### 3. Start the services
 
@@ -75,3 +75,49 @@ Related docs:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 [`docs/AGENT_AUDIT.md`](docs/AGENT_AUDIT.md) ·
 [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md)
+
+## Linux One-Click Deployment (Ubuntu / Debian)
+
+For Ubuntu / Debian systems, the repository ships a unified deployment entry point at [`scripts/deploy-linux.sh`](scripts/deploy-linux.sh) with two modes:
+
+| Mode | Description |
+|------|-------------|
+| **docker** | Full-featured default — all services run inside Docker Compose containers (recommended) |
+| **local** | Frontend, backend, and nexus-web run on the host; PostgreSQL/Redis use local system services; scan runners, flow parser, and PoC sandbox **still require the Docker daemon** |
+
+> **Note:** `local` mode is not "Docker-free". Scan-related containers still need a working Docker Engine on the host.
+
+### Usage
+
+```bash
+# Interactive menu (no arguments)
+./scripts/deploy-linux.sh
+
+# Non-interactive mode
+./scripts/deploy-linux.sh docker   # Start in Docker mode
+./scripts/deploy-linux.sh local    # Start in Local mode
+
+# Status (covers both docker and local)
+./scripts/deploy-linux.sh status
+
+# Stop all services
+./scripts/deploy-linux.sh stop
+```
+
+### Local Mode Details
+
+- Auto-installs: `git`, `curl`, `python3`, `uv`, `nodejs ≥20`, `pnpm`, `postgresql`, `redis-server`, `docker.io`
+- Auto-generates `backend/.env.local` with localhost overrides for database/Redis
+- Runs `alembic upgrade head` for database migrations
+- Frontend uses the build-then-preview path (`pnpm build` → `vite preview`) on port 3000
+- nexus-web is automatically cloned to `nexus-web/src` on first run; subsequent runs run `git fetch`
+- PIDs are written to `.deploy/pids/`, logs to `.deploy/logs/`
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|---------|
+| Port already in use | Run `./scripts/deploy-linux.sh stop` then retry, or free the port manually |
+| `docker: permission denied` | Run `newgrp docker` or log out and back in to apply the docker group |
+| nexus-web clone timeout | Set `NEXUS_WEB_GIT_MIRROR_PREFIX=` (empty) to bypass the mirror and connect directly, or configure a proxy |
+| Backend migration fails | Check PostgreSQL status: `sudo systemctl status postgresql` |

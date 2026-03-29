@@ -76,5 +76,5 @@ def test_docker_publish_workflow_builds_pmd_runner() -> None:
     workflow_text = workflow_path.read_text(encoding="utf-8")
 
     assert "build_pmd_runner" in workflow_text
-    assert "./backend/docker/pmd-runner.Dockerfile" in workflow_text
+    assert "./docker/pmd-runner.Dockerfile" in workflow_text
     assert "ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ github.event.inputs.tag }}" in workflow_text

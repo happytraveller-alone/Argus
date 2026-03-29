@@ -618,7 +618,7 @@ install_docker_sandbox() {
     log_success "Docker 已运行"
 
     # 构建沙盒镜像
-    local sandbox_dir="$PROJECT_ROOT/backend/docker/sandbox"
+    local sandbox_dir="$PROJECT_ROOT/docker/sandbox"
     local dockerfile="$sandbox_dir/Dockerfile"
 
     if [[ ! -f "$dockerfile" ]]; then
@@ -783,7 +783,7 @@ verify_installation() {
 update_env_config() {
     log_header "更新环境配置"
 
-    local env_file="$PROJECT_ROOT/backend/docker/env/backend/.env"
+    local env_file="$PROJECT_ROOT/docker/env/backend/.env"
 
     if [[ ! -f "$env_file" ]]; then
         log_warning ".env 文件不存在，跳过配置更新"

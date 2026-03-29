@@ -5,7 +5,7 @@ import path from "path";
 
 // https://vite.dev/config/
 export default defineConfig({
-  envDir: path.resolve(__dirname, "../backend/docker/env/frontend"),
+  envDir: path.resolve(__dirname, "../docker/env/frontend"),
   plugins: [
     react(),
     svgr({

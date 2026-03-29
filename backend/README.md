@@ -79,5 +79,5 @@ OpenAPI docs: `http://localhost:8000/docs`.
 See:
 
 - `docs/CONFIGURATION.md`
-- `backend/docker/env/backend/env.example`
+- `docker/env/backend/env.example`
 - `backend/pyproject.toml`

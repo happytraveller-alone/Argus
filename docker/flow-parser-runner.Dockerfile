@@ -53,7 +53,7 @@ RUN --mount=type=cache,id=vulhunter-flow-parser-runner-apt-lists,target=/var/lib
     rm -rf /var/lib/apt/lists/*; \
     python3 -m venv /opt/flow-parser-venv
 
-COPY backend/docker/flow-parser-runner.requirements.txt /tmp/flow-parser-runner.requirements.txt
+COPY docker/flow-parser-runner.requirements.txt /tmp/flow-parser-runner.requirements.txt
 
 # Runtime deps pinned in requirements: tree-sitter, tree-sitter-language-pack, code2flow
 RUN set -eux; \

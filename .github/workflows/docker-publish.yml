@@ -118,7 +118,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ./frontend
-          file: ./backend/docker/frontend.Dockerfile
+          file: ./docker/frontend.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -131,7 +131,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/backend.Dockerfile
+          file: ./docker/backend.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -144,7 +144,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/yasa-runner.Dockerfile
+          file: ./docker/yasa-runner.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -157,7 +157,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/opengrep-runner.Dockerfile
+          file: ./docker/opengrep-runner.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -170,7 +170,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/bandit-runner.Dockerfile
+          file: ./docker/bandit-runner.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -183,7 +183,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/gitleaks-runner.Dockerfile
+          file: ./docker/gitleaks-runner.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -196,7 +196,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/phpstan-runner.Dockerfile
+          file: ./docker/phpstan-runner.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -209,7 +209,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/flow-parser-runner.Dockerfile
+          file: ./docker/flow-parser-runner.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -222,7 +222,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/pmd-runner.Dockerfile
+          file: ./docker/pmd-runner.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -234,8 +234,8 @@ jobs:
         if: ${{ github.event.inputs.build_sandbox == 'true' }}
         uses: docker/build-push-action@v7
         with:
-          context: ./backend/docker/sandbox
-          file: ./backend/docker/sandbox/Dockerfile
+          context: ./docker/sandbox
+          file: ./docker/sandbox/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |

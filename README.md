@@ -37,12 +37,12 @@ cd AuditTool
 ### 2. 配置后端环境变量
 
 ```bash
-cp backend/docker/env/backend/env.example backend/docker/env/backend/.env
+cp docker/env/backend/env.example docker/env/backend/.env
 ```
 
 至少补充你的模型相关配置，例如 `LLM_API_KEY`、`LLM_PROVIDER`、`LLM_MODEL`。不要把真实密钥提交到仓库。
 
-所有 Dockerfile、runner 镜像构建文件和 Docker 用环境文件现在统一放在 `backend/docker/`。
+所有 Dockerfile、runner 镜像构建文件和 Docker 用环境文件现在统一放在 `docker/`。
 
 ### 3. 启动服务
 
@@ -75,3 +75,49 @@ backend 启动时会自行执行 runner preflight，校验 `SCANNER_*_IMAGE` / `
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 [`docs/AGENT_AUDIT.md`](docs/AGENT_AUDIT.md) ·
 [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md)
+
+## Linux 一键部署（Ubuntu / Debian）
+
+针对 Ubuntu / Debian 系统，仓库提供统一的 Linux 部署入口脚本 [`scripts/deploy-linux.sh`](scripts/deploy-linux.sh)，支持两种模式：
+
+| 模式 | 说明 |
+|------|------|
+| **docker** | 全功能默认模式，所有服务均跑在 Docker Compose 容器内（推荐） |
+| **local** | 前端、后端、nexus-web 在宿主机本地运行；PostgreSQL/Redis 使用本机服务；扫描 runner、flow parser、PoC 沙箱**仍依赖 Docker daemon** |
+
+> **注意**：`local` 模式并非"完全无 Docker"，扫描相关容器仍需 Docker Engine 在宿主机可用。
+
+### 使用方法
+
+```bash
+# 交互式菜单（无参数）
+./scripts/deploy-linux.sh
+
+# 直接指定模式
+./scripts/deploy-linux.sh docker   # Docker 模式启动
+./scripts/deploy-linux.sh local    # Local 模式启动
+
+# 查看运行状态（同时覆盖 docker + local 两种启动结果）
+./scripts/deploy-linux.sh status
+
+# 停止所有服务
+./scripts/deploy-linux.sh stop
+```
+
+### Local 模式说明
+
+- 自动安装：`git`、`curl`、`python3`、`uv`、`nodejs ≥20`、`pnpm`、`postgresql`、`redis-server`、`docker.io`
+- 自动生成 `backend/.env.local`，覆盖数据库/Redis 连接为 localhost
+- 执行 `alembic upgrade head` 完成数据库迁移
+- frontend 使用构建后预览模式（`pnpm build` → `vite preview`），端口 3000
+- nexus-web 首次部署自动拉取到 `nexus-web/src`，后续更新执行 `git fetch`
+- 进程 PID 写入 `.deploy/pids/`，日志写入 `.deploy/logs/`
+
+### 常见排查
+
+| 问题 | 解决方法 |
+|------|---------|
+| 端口被占用 | `./scripts/deploy-linux.sh stop` 后重试，或手动释放端口 |
+| `docker: permission denied` | 执行 `newgrp docker` 或重新登录，使 docker 组生效 |
+| nexus-web 拉取超时 | 设置环境变量 `NEXUS_WEB_GIT_MIRROR_PREFIX=` 为空以直连，或配置代理 |
+| backend 迁移失败 | 检查 PostgreSQL 是否运行：`sudo systemctl status postgresql` |

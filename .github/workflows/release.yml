@@ -109,8 +109,6 @@ jobs:
           # 打包后端源码
           tar -czf release/vulhunter-backend-${{ steps.version.outputs.VERSION }}.tar.gz \
             --exclude=backend/.venv \
-            --exclude=backend/docker/env/backend/.env \
-            --exclude=backend/__pycache__ \
             --exclude=backend/uploads \
             backend/
           
@@ -120,29 +118,29 @@ jobs:
             docker-compose.yml \
             docker-compose.full.yml \
             frontend/.dockerignore \
-            backend/docker/backend.Dockerfile \
-            backend/docker/frontend.Dockerfile \
-            backend/docker/nexus-web.Dockerfile \
-            backend/docker/bandit-runner.Dockerfile \
-            backend/docker/flow-parser-runner.Dockerfile \
-            backend/docker/gitleaks-runner.Dockerfile \
-            backend/docker/opengrep-runner.Dockerfile \
-            backend/docker/phpstan-runner.Dockerfile \
-            backend/docker/pmd-runner.Dockerfile \
-            backend/docker/yasa-runner.Dockerfile \
-            backend/docker/flow-parser-runner.requirements.txt \
-            backend/docker/env/backend/env.example \
-            backend/docker/env/frontend/.env.example \
+            docker/backend.Dockerfile \
+            docker/frontend.Dockerfile \
+            docker/nexus-web.Dockerfile \
+            docker/bandit-runner.Dockerfile \
+            docker/flow-parser-runner.Dockerfile \
+            docker/gitleaks-runner.Dockerfile \
+            docker/opengrep-runner.Dockerfile \
+            docker/phpstan-runner.Dockerfile \
+            docker/pmd-runner.Dockerfile \
+            docker/yasa-runner.Dockerfile \
+            docker/flow-parser-runner.requirements.txt \
+            docker/env/backend/env.example \
+            docker/env/frontend/.env.example \
             frontend/yasa-engine-overrides/ \
-            backend/docker/sandbox/
+            docker/sandbox/
           
           # 打包完整源码（包括配置文件）
           tar -czf release/vulhunter-source-${{ steps.version.outputs.VERSION }}.tar.gz \
             --exclude=frontend/node_modules \
             --exclude=frontend/dist \
             --exclude=backend/.venv \
-            --exclude=backend/docker/env/backend/.env \
-            --exclude=backend/docker/env/frontend/.env \
+            --exclude=docker/env/backend/.env \
+            --exclude=docker/env/frontend/.env \
             --exclude=backend/uploads \
             --exclude=.git \
             --exclude=release \
@@ -234,7 +232,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ./frontend
-          file: ./backend/docker/frontend.Dockerfile
+          file: ./docker/frontend.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -248,7 +246,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./backend/docker/backend.Dockerfile
+          file: ./docker/backend.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -261,8 +259,8 @@ jobs:
       - name: 构建并推送沙箱 Docker 镜像
         uses: docker/build-push-action@v7
         with:
-          context: ./backend/docker/sandbox
-          file: ./backend/docker/sandbox/Dockerfile
+          context: ./docker/sandbox
+          file: ./docker/sandbox/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |

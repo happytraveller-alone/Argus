@@ -32,7 +32,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: backend/docker/backend.Dockerfile
+      dockerfile: docker/backend.Dockerfile
       target: dev-runtime
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
@@ -68,7 +68,7 @@ services:
     ports:
       - "${VULHUNTER_BACKEND_PORT:-8000}:8000"
     env_file:
-      - ./backend/docker/env/backend/.env
+      - ./docker/env/backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
@@ -140,7 +140,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: ${FRONTEND_DOCKERFILE:-../backend/docker/frontend.Dockerfile}
+      dockerfile: ${FRONTEND_DOCKERFILE:-../docker/frontend.Dockerfile}
       target: dev
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
@@ -202,7 +202,7 @@ services:
 
   sandbox:
     build:
-      context: ./backend/docker/sandbox
+      context: ./docker/sandbox
       dockerfile: Dockerfile
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
@@ -236,7 +236,7 @@ services:
   nexus-web:
     build:
       context: ./nexus-web
-      dockerfile: ../backend/docker/nexus-web.Dockerfile
+      dockerfile: ../docker/nexus-web.Dockerfile
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
         - NEXUS_WEB_REPO_URL=${NEXUS_WEB_REPO_URL:-https://github.com/happytraveller-alone/nexus-web.git}
