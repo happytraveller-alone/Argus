@@ -1,48 +1,27 @@
 #!/usr/bin/env bash
-# scripts/lib/nexus.sh — nexus-web 外部拉取与本地启动
+# scripts/lib/nexus.sh — nexus-web submodule 同步与本地启动
 # 依赖 common.sh 已被 source。
+#
+# nexus-web 源码通过 git submodule 管理（nexus-web/src/），
+# 不再在运行时克隆外部仓库；每次 git pull 后执行
+#   git submodule update --init --remote nexus-web/src
+# 即可同步到上游最新 commit。
 
 NEXUS_SRC_DIR="${REPO_ROOT}/nexus-web/src"
-NEXUS_REPO_URL="${NEXUS_WEB_REPO_URL:-https://github.com/happytraveller-alone/nexus-web.git}"
-NEXUS_GIT_MIRROR_PREFIX="${NEXUS_WEB_GIT_MIRROR_PREFIX:-https://v6.gh-proxy.org/}"
-NEXUS_GIT_REF="${NEXUS_WEB_GIT_REF:-}"
 NEXUS_PNPM_VERSION="${NEXUS_WEB_PNPM_VERSION:-10.32.1}"
 
-# ─── 拉取源码 ──────────────────────────────────────────────────────────────────
+# ─── 同步 submodule ────────────────────────────────────────────────────────────
+# 确保 nexus-web/src submodule 已初始化并拉到最新 commit
 nexus_fetch_source() {
-  if [ -d "${NEXUS_SRC_DIR}/.git" ]; then
-    log_step "nexus-web 源码已存在，执行 git fetch 更新..."
-    cd "${NEXUS_SRC_DIR}"
-    git fetch --depth=1 origin 2>/dev/null || log_warn "nexus-web git fetch 失败，使用已有代码继续。"
-    if [ -n "${NEXUS_GIT_REF}" ]; then
-      git fetch --depth=1 origin "${NEXUS_GIT_REF}" 2>/dev/null || true
-      git checkout --detach FETCH_HEAD 2>/dev/null || true
-    fi
-    cd "${REPO_ROOT}"
-    return 0
-  fi
-
-  mkdir -p "${REPO_ROOT}/nexus-web"
-  log_step "拉取 nexus-web 源码（通过 mirror）..."
-
-  local clone_url="${NEXUS_GIT_MIRROR_PREFIX}${NEXUS_REPO_URL}"
-  if git clone --depth=1 "${clone_url}" "${NEXUS_SRC_DIR}" 2>/dev/null; then
-    log_success "nexus-web 源码拉取成功（mirror）"
+  if [ ! -f "${NEXUS_SRC_DIR}/package.json" ]; then
+    log_step "nexus-web submodule 未初始化，执行 git submodule update --init ..."
+    git -C "${REPO_ROOT}" submodule update --init nexus-web/src \
+      || { log_error "git submodule update 失败，请检查网络或手动执行"; exit 1; }
   else
-    log_warn "mirror 拉取失败，回退到直连..."
-    if git clone --depth=1 "${NEXUS_REPO_URL}" "${NEXUS_SRC_DIR}"; then
-      log_success "nexus-web 源码拉取成功（直连）"
-    else
-      log_error "nexus-web 源码拉取失败，请检查网络或手动克隆到 ${NEXUS_SRC_DIR}"
-      exit 1
-    fi
-  fi
-
-  if [ -n "${NEXUS_GIT_REF}" ]; then
-    cd "${NEXUS_SRC_DIR}"
-    git fetch --depth=1 origin "${NEXUS_GIT_REF}" || true
-    git checkout --detach FETCH_HEAD || true
-    cd "${REPO_ROOT}"
+    log_step "同步 nexus-web submodule 到最新 commit ..."
+    # --remote 跟踪上游分支最新 commit（等效于在 submodule 内执行 git pull）
+    git -C "${REPO_ROOT}" submodule update --remote --merge nexus-web/src \
+      || log_warn "nexus-web submodule 同步失败，使用当前已有代码继续。"
   fi
 }
 

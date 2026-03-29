@@ -239,9 +239,7 @@ services:
       dockerfile: ../docker/nexus-web.Dockerfile
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - NEXUS_WEB_REPO_URL=${NEXUS_WEB_REPO_URL:-https://github.com/happytraveller-alone/nexus-web.git}
-        - NEXUS_WEB_GIT_MIRROR_PREFIX=${NEXUS_WEB_GIT_MIRROR_PREFIX:-https://v6.gh-proxy.org/}
-        - NEXUS_WEB_GIT_REF=${NEXUS_WEB_GIT_REF:-}
+        # 源码由 git submodule（nexus-web/src/）提供，不再需要运行时 git clone 相关参数
         - NEXUS_WEB_NPM_REGISTRY=${NEXUS_WEB_NPM_REGISTRY:-https://registry.npmmirror.com}
         - NEXUS_WEB_NPM_REGISTRY_FALLBACK=${NEXUS_WEB_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}
         - NEXUS_WEB_PNPM_VERSION=${NEXUS_WEB_PNPM_VERSION:-10.32.1}

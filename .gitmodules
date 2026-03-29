@@ -1,0 +1,3 @@
+[submodule "nexus-web/src"]
+	path = nexus-web/src
+	url = https://github.com/happytraveller-alone/nexus-web.git

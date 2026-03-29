@@ -1,32 +1,8 @@
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
 
-FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:20-alpine AS source
-
-WORKDIR /src
-
-ARG NEXUS_WEB_REPO_URL=https://github.com/happytraveller-alone/nexus-web.git
-ARG NEXUS_WEB_GIT_MIRROR_PREFIX=https://v6.gh-proxy.org/
-ARG NEXUS_WEB_GIT_REF=
-ARG NEXUS_WEB_PNPM_VERSION=10.32.1
-
-RUN apk add --no-cache git
-
-RUN set -eux; \
-    git clone --depth=1 "${NEXUS_WEB_GIT_MIRROR_PREFIX}${NEXUS_WEB_REPO_URL}" .; \
-    if [ -n "${NEXUS_WEB_GIT_REF}" ]; then \
-      git fetch --depth=1 origin "${NEXUS_WEB_GIT_REF}"; \
-      git checkout --detach FETCH_HEAD; \
-    fi
-
-RUN NEXUS_WEB_PNPM_VERSION="${NEXUS_WEB_PNPM_VERSION}" node -e '\
-const fs = require("fs");\
-const path = "/src/package.json";\
-const pkg = JSON.parse(fs.readFileSync(path, "utf8"));\
-if (pkg.packageManager) process.exit(0);\
-pkg.packageManager = `pnpm@${process.env.NEXUS_WEB_PNPM_VERSION}`;\
-fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);\
-'
-
+# ─── deps 阶段：安装 pnpm 依赖 ────────────────────────────────────────────────
+# build context 为 nexus-web/，nexus-web 源码由 git submodule 提供（nexus-web/src/）
+# 不再在构建时克隆外部仓库，离线/内网环境友好，版本由 submodule commit 锁定
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/node:20-alpine AS deps
 
 WORKDIR /app
@@ -38,7 +14,19 @@ ARG NEXUS_WEB_PNPM_VERSION=10.32.1
 ENV PNPM_HOME=/pnpm
 ENV PATH=/pnpm:${PATH}
 
-COPY --from=source /src/package.json /src/pnpm-lock.yaml ./
+# 只复制 lockfile 相关文件，充分利用 Docker 层缓存；
+# 源码来自 submodule（nexus-web/src/），build context 根即为 nexus-web/
+COPY src/package.json src/pnpm-lock.yaml ./
+
+# 修补 packageManager 字段（若上游 package.json 缺少该字段，corepack 需要它）
+RUN NEXUS_WEB_PNPM_VERSION="${NEXUS_WEB_PNPM_VERSION}" node -e '\
+const fs = require("fs");\
+const path = "/app/package.json";\
+const pkg = JSON.parse(fs.readFileSync(path, "utf8"));\
+if (pkg.packageManager) process.exit(0);\
+pkg.packageManager = `pnpm@${process.env.NEXUS_WEB_PNPM_VERSION}`;\
+fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);\
+'
 
 RUN --mount=type=cache,id=nexus-web-npm,target=/root/.npm \
     --mount=type=cache,id=nexus-web-corepack,target=/root/.cache/node/corepack \
@@ -107,20 +95,17 @@ RUN --mount=type=cache,id=nexus-web-npm,target=/root/.npm \
     pnpm config set fetch-retries 1; \
     install_nexus_deps "${NEXUS_WEB_NPM_REGISTRY}" || install_nexus_deps "${FALLBACK_REGISTRY}"
 
+# ─── build 阶段：复制完整源码并构建 ──────────────────────────────────────────
 FROM deps AS build
 
 WORKDIR /app
 
-# RUN apk add --no-cache git
+# 将 submodule 中的完整源码复制进来（覆盖 deps 阶段只有 lockfile 的目录）
+COPY src/. ./
 
-COPY --from=source /src/. ./
-# COPY patches/nexus-web-build.patch /tmp/nexus-web-build.patch
-
-# RUN set -eux; \
-#     git apply --check /tmp/nexus-web-build.patch; \
-#     git apply /tmp/nexus-web-build.patch; \
-#     pnpm build
 RUN pnpm build
+
+# ─── runtime 阶段：nginx 静态服务 ─────────────────────────────────────────────
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/nginx:1.27-alpine AS runtime
 
 RUN set -eux; \
@@ -129,6 +114,7 @@ RUN set -eux; \
     mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp; \
     chown -R nginx:nginx /usr/share/nginx/html /tmp /var/cache/nginx
 
+# nginx.conf 由主仓库的 nexus-web/nginx.conf 提供（随 build context 传入）
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=build --chown=nginx:nginx /app/dist/ /usr/share/nginx/html/
 
