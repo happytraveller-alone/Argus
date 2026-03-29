@@ -1,0 +1,73 @@
+# Docker 构建上下文忽略文件
+# 用于 sandbox-runner 和其他镜像构建
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist
+build
+.venv
+venv
+*.log
+
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# 测试和临时文件
+.pytest_cache
+.coverage
+htmlcov
+*.cover
+.hypothesis
+.tox
+test-*
+.DS_Store
+
+# 文档
+*.md
+!requirements.txt
+
+# 数据库
+*.sqlite
+*.db
+
+# 日志
+logs
+*.log
+
+# 环境文件
+.env
+.env.*
+!.env.example
+
+# Docker
+docker-compose*.yml
+!docker-compose.yml
+Dockerfile.*
+!Dockerfile
+
+# 其他
+*.bak
+*.tmp
+*.swp
+.cache

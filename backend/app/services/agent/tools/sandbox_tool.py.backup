@@ -44,11 +44,10 @@ class SandboxConfig:
 
 class SandboxManager:
     """
-    沙箱管理器 - 兼容门面 (Phase 1)
-
-    保持公开接口不变,内部委托给 SandboxRunnerClient
+    沙箱管理器
+    管理 Docker 容器的创建、执行和清理
     """
-
+    
     def __init__(self, config: Optional[SandboxConfig] = None):
         self.config = config or SandboxConfig()
         self._docker_client = None
@@ -56,13 +55,9 @@ class SandboxManager:
         self._init_error = None
         self._resolved_image = str(self.config.image or "").strip()
         self._last_image_candidates: List[str] = []
-
-        # Phase 1: 新增 runner client (如果启用)
-        self._runner_client = None
-        self._use_new_runner = getattr(settings, "SANDBOX_RUNNER_ENABLED", True)
     
     async def initialize(self):
-        """初始化 Docker 客户端和 Runner Client"""
+        """初始化 Docker 客户端"""
         if self._initialized:
             logger.info("SandboxManager already initialized")
             return
@@ -73,17 +68,6 @@ class SandboxManager:
             self._docker_client = docker.from_env()
             # 测试连接
             self._docker_client.ping()
-
-            # 初始化 runner client (如果启用)
-            if self._use_new_runner:
-                try:
-                    from app.services.sandbox_runner_client import SandboxRunnerClient
-                    self._runner_client = SandboxRunnerClient()
-                    logger.info("✅ SandboxRunnerClient initialized successfully")
-                except Exception as e:
-                    logger.warning(f"Failed to initialize SandboxRunnerClient: {e}")
-                    self._runner_client = None
-
             self._initialized = True
             self._init_error = None
             logger.info("Docker sandbox manager initialized successfully")
@@ -227,19 +211,6 @@ class SandboxManager:
                 "exit_code": -1,
             }
 
-        # Phase 1: 如果启用了新 runner,使用新路径
-        if self._use_new_runner and self._runner_client:
-            return await self._execute_command_via_runner(
-                command=command,
-                working_dir=working_dir,
-                env=env,
-                timeout=timeout,
-                host_project_dir=host_project_dir,
-                project_root=project_root,
-            )
-
-        # 否则使用原始实现 (保持兼容)
-
         timeout = timeout or self.config.timeout
 
         # 禁用代理环境变量，防止 Docker 自动注入的代理干扰容器网络
@@ -380,14 +351,14 @@ class SandboxManager:
     ) -> Dict[str, Any]:
         """
         在沙箱中对指定目录执行工具命令
-
+        
         Args:
             command: 要执行的命令
             host_workdir: 宿主机上的工作目录（将被挂载到 /workspace）
             timeout: 超时时间
             env: 环境变量
             network_mode: 网络模式 (none, bridge, host)
-
+            
         Returns:
             执行结果
         """
@@ -399,18 +370,7 @@ class SandboxManager:
                 "stderr": "",
                 "exit_code": -1,
             }
-
-        # Phase 1: 如果启用了新 runner,使用新路径
-        if self._use_new_runner and self._runner_client:
-            return await self._execute_tool_command_via_runner(
-                command=command,
-                host_workdir=host_workdir,
-                timeout=timeout,
-                env=env,
-                network_mode=network_mode,
-            )
-
-        # 否则使用原始实现 (保持兼容)
+        
         timeout = timeout or self.config.timeout
 
         # 禁用代理环境变量，防止 Docker 自动注入的代理干扰容器网络
@@ -678,150 +638,6 @@ class SandboxManager:
             verification_result["error"] = str(e)
         
         return verification_result
-
-    # === Phase 1: 新 Runner 实现方法 ===
-
-    async def _execute_command_via_runner(
-        self,
-        command: str,
-        working_dir: Optional[str] = None,
-        env: Optional[Dict[str, str]] = None,
-        timeout: Optional[int] = None,
-        host_project_dir: Optional[str] = None,
-        project_root: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        使用 SandboxRunnerClient 执行命令 (新实现)
-
-        保持返回格式与旧版本完全一致
-        """
-        timeout = timeout or self.config.timeout
-
-        # 禁用代理环境变量
-        no_proxy_env = {
-            "HTTP_PROXY": "",
-            "HTTPS_PROXY": "",
-            "http_proxy": "",
-            "https_proxy": "",
-            "NO_PROXY": "*",
-            "no_proxy": "*",
-        }
-
-        # 挂载项目目录时设置 PYTHONPATH
-        project_env: Dict[str, str] = {}
-        if host_project_dir and os.path.isdir(host_project_dir):
-            project_env["PYTHONPATH"] = "/project"
-
-        # 合并环境变量
-        container_env = {**no_proxy_env, **project_env, **(env or {})}
-
-        try:
-            # 判断使用哪种 profile
-            if project_root and os.path.isdir(project_root):
-                # 使用 tool_workdir profile (只读挂载项目)
-                result = await asyncio.to_thread(
-                    self._runner_client.execute_in_project,
-                    command=["sh", "-c", command],
-                    project_dir=project_root,
-                    timeout=timeout,
-                    env=container_env,
-                    network_mode=self.config.network_mode,
-                    read_only=self.config.read_only,
-                )
-            else:
-                # 使用 isolated_exec profile
-                result = await asyncio.to_thread(
-                    self._runner_client.execute_isolated,
-                    command=["sh", "-c", command],
-                    timeout=timeout,
-                    env=container_env,
-                )
-
-            # 转换为旧格式
-            return {
-                "success": result.success,
-                "stdout": result.stdout[:10000] if result.stdout else "",
-                "stderr": result.stderr[:2000] if result.stderr else "",
-                "exit_code": result.exit_code,
-                "error": result.error,
-                "image": result.image,
-                "image_candidates": result.image_candidates,
-            }
-
-        except Exception as e:
-            logger.error(f"Sandbox execution error (runner): {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "stdout": "",
-                "stderr": "",
-                "exit_code": -1,
-                "image": self._resolved_image,
-                "image_candidates": list(self._last_image_candidates),
-            }
-
-    async def _execute_tool_command_via_runner(
-        self,
-        command: str,
-        host_workdir: str,
-        timeout: Optional[int] = None,
-        env: Optional[Dict[str, str]] = None,
-        network_mode: str = "none",
-    ) -> Dict[str, Any]:
-        """
-        使用 SandboxRunnerClient 执行工具命令 (新实现)
-        """
-        timeout = timeout or self.config.timeout
-
-        # 禁用代理环境变量
-        no_proxy_env = {
-            "HTTP_PROXY": "",
-            "HTTPS_PROXY": "",
-            "http_proxy": "",
-            "https_proxy": "",
-            "NO_PROXY": "*",
-            "no_proxy": "*",
-        }
-        container_env = {**no_proxy_env, **(env or {})}
-
-        try:
-            # 清除代理变量前缀
-            unset_proxy_prefix = "unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy 2>/dev/null; "
-            wrapped_command = unset_proxy_prefix + command
-
-            # 使用 tool_workdir profile
-            result = await asyncio.to_thread(
-                self._runner_client.execute_in_project,
-                command=["sh", "-c", wrapped_command],
-                project_dir=host_workdir,
-                timeout=timeout,
-                env=container_env,
-                network_mode=network_mode,
-                read_only=True,  # 工具命令默认只读
-            )
-
-            # 转换为旧格式
-            return {
-                "success": result.success,
-                "stdout": result.stdout[:50000] if result.stdout else "",
-                "stderr": result.stderr[:5000] if result.stderr else "",
-                "exit_code": result.exit_code,
-                "error": result.error,
-                "image": result.image,
-                "image_candidates": result.image_candidates,
-            }
-
-        except Exception as e:
-            logger.error(f"Tool execution error (runner): {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "stdout": "",
-                "stderr": "",
-                "exit_code": -1,
-                "image": self._resolved_image,
-                "image_candidates": list(self._last_image_candidates),
-            }
 
 
 class SandboxCommandInput(BaseModel):

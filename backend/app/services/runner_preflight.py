@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -148,6 +149,25 @@ def get_configured_runner_preflight_specs() -> list[RunnerPreflightSpec]:
             build_context=build_context,
             build_args=common_args,
         ),
+        RunnerPreflightSpec(
+            name="sandbox-runner",
+            image=str(getattr(settings, "SANDBOX_RUNNER_IMAGE", "vulhunter/sandbox-runner:latest")),
+            command=["python3", "-c", "import requests; import httpx; import jwt; print('Sandbox Runner OK')"],
+            timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
+            dockerfile="docker/sandbox-runner.Dockerfile",
+            build_context=build_context,
+            build_args=_clean_build_args(
+                {
+                    **common_args,
+                    "SANDBOX_RUNNER_APT_MIRROR_PRIMARY": os.environ.get("SANDBOX_RUNNER_APT_MIRROR_PRIMARY", "mirrors.aliyun.com"),
+                    "SANDBOX_RUNNER_APT_SECURITY_PRIMARY": os.environ.get("SANDBOX_RUNNER_APT_SECURITY_PRIMARY", "mirrors.aliyun.com"),
+                    "SANDBOX_RUNNER_APT_MIRROR_FALLBACK": os.environ.get("SANDBOX_RUNNER_APT_MIRROR_FALLBACK", "deb.debian.org"),
+                    "SANDBOX_RUNNER_APT_SECURITY_FALLBACK": os.environ.get("SANDBOX_RUNNER_APT_SECURITY_FALLBACK", "security.debian.org"),
+                    "SANDBOX_RUNNER_PYPI_INDEX_PRIMARY": os.environ.get("SANDBOX_RUNNER_PYPI_INDEX_PRIMARY", "https://mirrors.aliyun.com/pypi/simple/"),
+                    "SANDBOX_RUNNER_NPM_REGISTRY": os.environ.get("SANDBOX_RUNNER_NPM_REGISTRY", "https://registry.npmmirror.com"),
+                }
+            ),
+        ),
     ]
 
 
@@ -165,14 +185,43 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
         raise RuntimeError(f"runner image missing and no dockerfile configured for {spec.name}")
 
     logger.info("runner preflight build: %s (%s)", spec.name, spec.image)
-    client.images.build(
-        path=str(build_context),
-        dockerfile=spec.dockerfile,
-        tag=spec.image,
-        buildargs=dict(spec.build_args),
-        rm=True,
-        pull=False,
-    )
+
+    # 使用 subprocess 调用 docker build 以支持 BuildKit
+    # Docker Python SDK 的 images.build() 不完全支持 BuildKit 特性如 --mount
+    import subprocess
+
+    build_cmd = [
+        "docker", "build",
+        "-f", spec.dockerfile,
+        "-t", spec.image,
+        str(build_context),
+    ]
+
+    # 添加构建参数
+    for key, value in spec.build_args.items():
+        build_cmd.extend(["--build-arg", f"{key}={value}"])
+
+    # 启用 BuildKit
+    env = os.environ.copy()
+    env["DOCKER_BUILDKIT"] = "1"
+
+    logger.info("running build command: %s", " ".join(build_cmd))
+
+    try:
+        result = subprocess.run(
+            build_cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5分钟构建超时
+            check=True,
+        )
+        logger.info("build completed for %s: %s", spec.name, spec.image)
+    except subprocess.CalledProcessError as e:
+        logger.error("build failed for %s: stdout=%s stderr=%s", spec.name, e.stdout, e.stderr)
+        raise RuntimeError(f"build failed for {spec.name}: {e.stderr}")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"build timeout for {spec.name} (>300s)")
 
 
 def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResult:

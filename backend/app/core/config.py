@@ -160,6 +160,11 @@ class Settings(BaseSettings):
     REPORT_MAX_WORKERS: int = 3  # Report 阶段最大 worker 数量
     
     # 沙箱配置（必须）
+    # Sandbox Runner 配置 (Phase 1)
+    SANDBOX_RUNNER_IMAGE: str = "vulhunter/sandbox-runner:latest"  # 轻量级 sandbox runner 镜像
+    SANDBOX_RUNNER_ENABLED: bool = True  # 启用新 runner 抽象
+
+    # Sandbox 配置 (保持兼容,作为 fallback)
     SANDBOX_IMAGE: str = "vulhunter/sandbox:latest"  # 沙箱 Docker 镜像
     SANDBOX_MEMORY_LIMIT: str = "512m"  # 沙箱内存限制
     SANDBOX_CPU_LIMIT: float = 1.0  # 沙箱 CPU 限制
