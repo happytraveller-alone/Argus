@@ -9,7 +9,7 @@ ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
 ARG BACKEND_APT_SECURITY_FALLBACK=security.debian.org
 ARG BACKEND_PYPI_INDEX_PRIMARY=https://mirrors.aliyun.com/pypi/simple/
 ARG BACKEND_PYPI_INDEX_FALLBACK=https://pypi.org/simple
-ARG BACKEND_PYPI_INDEX_CANDIDATES=https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://pypi.org/simple
+ARG BACKEND_PYPI_INDEX_CANDIDATES=https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple
 ARG BACKEND_INSTALL_CJK_FONTS=0
 ARG BACKEND_INSTALL_YASA=1
 ARG YASA_VERSION=v0.2.33
@@ -100,7 +100,7 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
   set -eux; \
   uv_http_timeout=45; \
   step_timeout=300; \
-  pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \
+  pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://pypi.org/simple}"; \
   best_index="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}"; \
   ordered="$(python3 /usr/local/bin/package_source_selector.py \
     --candidates "${pypi_index_candidates}" --kind pypi --timeout-seconds 2 2>/dev/null || true)"; \
@@ -118,6 +118,7 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
       if timeout "${step_timeout}" env \
         VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
         UV_INDEX_URL="${idx}" UV_HTTP_TIMEOUT="${uv_http_timeout}" \
+        UV_CONCURRENT_DOWNLOADS=50 UV_CONCURRENT_INSTALLS=8 \
       uv pip install --no-deps --index-url "${idx}" -r requirements-heavy.txt; then \
         return 0; \
       fi; \
@@ -151,7 +152,7 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
   else \
     best_index="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}"; \
   fi; \
-  pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \
+  pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://pypi.org/simple}"; \
   sync_with_index() { \
     idx="$1"; attempt=1; \
     while [ "${attempt}" -le 2 ]; do \
@@ -159,6 +160,7 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
       if timeout "${uv_step_timeout}" env \
         VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
         UV_HTTP_TIMEOUT="${uv_http_timeout}" UV_INDEX_URL="${idx}" PIP_INDEX_URL="${idx}" \
+        UV_CONCURRENT_DOWNLOADS=50 UV_CONCURRENT_INSTALLS=8 \
       uv sync --active --frozen --no-dev; then \
         return 0; \
       else \
