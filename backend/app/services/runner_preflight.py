@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -60,18 +61,20 @@ def _backend_build_context() -> str:
 
 
 def _common_runner_build_args() -> dict[str, str]:
+    # 可选配置项：空字符串视为"未设置"，让 Dockerfile ARG 默认值生效
+    # proxy 相关 key 明确传空字符串以清除宿主机代理继承
     return _clean_build_args(
         {
-            "DOCKERHUB_LIBRARY_MIRROR": os.environ.get("DOCKERHUB_LIBRARY_MIRROR"),
-            "BACKEND_APT_MIRROR_PRIMARY": os.environ.get("BACKEND_APT_MIRROR_PRIMARY"),
-            "BACKEND_APT_SECURITY_PRIMARY": os.environ.get("BACKEND_APT_SECURITY_PRIMARY"),
-            "BACKEND_APT_MIRROR_FALLBACK": os.environ.get("BACKEND_APT_MIRROR_FALLBACK"),
-            "BACKEND_APT_SECURITY_FALLBACK": os.environ.get("BACKEND_APT_SECURITY_FALLBACK"),
-            "BACKEND_PYPI_INDEX_PRIMARY": os.environ.get("BACKEND_PYPI_INDEX_PRIMARY"),
-            "BACKEND_PYPI_INDEX_FALLBACK": os.environ.get("BACKEND_PYPI_INDEX_FALLBACK"),
-            "BACKEND_PYPI_INDEX_CANDIDATES": os.environ.get("BACKEND_PYPI_INDEX_CANDIDATES"),
-            "BACKEND_INSTALL_YASA": os.environ.get("BACKEND_INSTALL_YASA"),
-            "YASA_VERSION": os.environ.get("YASA_VERSION"),
+            "DOCKERHUB_LIBRARY_MIRROR": os.environ.get("DOCKERHUB_LIBRARY_MIRROR") or None,
+            "BACKEND_APT_MIRROR_PRIMARY": os.environ.get("BACKEND_APT_MIRROR_PRIMARY") or None,
+            "BACKEND_APT_SECURITY_PRIMARY": os.environ.get("BACKEND_APT_SECURITY_PRIMARY") or None,
+            "BACKEND_APT_MIRROR_FALLBACK": os.environ.get("BACKEND_APT_MIRROR_FALLBACK") or None,
+            "BACKEND_APT_SECURITY_FALLBACK": os.environ.get("BACKEND_APT_SECURITY_FALLBACK") or None,
+            "BACKEND_PYPI_INDEX_PRIMARY": os.environ.get("BACKEND_PYPI_INDEX_PRIMARY") or None,
+            "BACKEND_PYPI_INDEX_FALLBACK": os.environ.get("BACKEND_PYPI_INDEX_FALLBACK") or None,
+            "BACKEND_PYPI_INDEX_CANDIDATES": os.environ.get("BACKEND_PYPI_INDEX_CANDIDATES") or None,
+            "BACKEND_INSTALL_YASA": os.environ.get("BACKEND_INSTALL_YASA") or None,
+            "YASA_VERSION": os.environ.get("YASA_VERSION") or None,
             "http_proxy": "",
             "https_proxy": "",
             "HTTP_PROXY": "",
@@ -93,7 +96,13 @@ def get_configured_runner_preflight_specs() -> list[RunnerPreflightSpec]:
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
             dockerfile="docker/yasa-runner.Dockerfile",
             build_context=build_context,
-            build_args=common_args,
+            build_args=_clean_build_args(
+                {
+                    **common_args,
+                    "YASA_BUILD_FROM_SOURCE": os.environ.get("YASA_BUILD_FROM_SOURCE", "0") or "0",
+                    "YASA_UAST_VERSION": os.environ.get("YASA_UAST_VERSION") or None,
+                }
+            ),
         ),
         RunnerPreflightSpec(
             name="opengrep",
@@ -184,14 +193,20 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
     if not spec.dockerfile:
         raise RuntimeError(f"runner image missing and no dockerfile configured for {spec.name}")
 
+    dockerfile_path = build_context / spec.dockerfile
+    if not dockerfile_path.exists():
+        raise RuntimeError(
+            f"runner dockerfile not found for {spec.name}: {dockerfile_path} "
+            f"(build_context={build_context})"
+        )
+
     logger.info("runner preflight build: %s (%s)", spec.name, spec.image)
 
     # 使用 subprocess 调用 docker build 以支持 BuildKit
     # Docker Python SDK 的 images.build() 不完全支持 BuildKit 特性如 --mount
-    import subprocess
-
     build_cmd = [
         "docker", "build",
+        "--progress=plain",
         "-f", spec.dockerfile,
         "-t", spec.image,
         str(build_context),
@@ -201,28 +216,44 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
     for key, value in spec.build_args.items():
         build_cmd.extend(["--build-arg", f"{key}={value}"])
 
-    # 启用 BuildKit
+    # 启用 BuildKit；构建超时通过环境变量配置，默认 900s（15分钟）
     env = os.environ.copy()
     env["DOCKER_BUILDKIT"] = "1"
+    build_timeout = int(os.environ.get("RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS", 900) or 900)
 
     logger.info("running build command: %s", " ".join(build_cmd))
 
-    try:
-        result = subprocess.run(
-            build_cmd,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5分钟构建超时
-            check=True,
-            cwd=str(build_context),  # Dockerfile 相对路径从构建上下文解析
-        )
-        logger.info("build completed for %s: %s", spec.name, spec.image)
-    except subprocess.CalledProcessError as e:
-        logger.error("build failed for %s: stdout=%s stderr=%s", spec.name, e.stdout, e.stderr)
-        raise RuntimeError(f"build failed for {spec.name}: {e.stderr}")
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"build timeout for {spec.name} (>300s)")
+    last_error: Exception | None = None
+    for attempt in range(1, 3):  # 最多 2 次尝试
+        try:
+            subprocess.run(
+                build_cmd,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=build_timeout,
+                check=True,
+                cwd=str(build_context),  # Dockerfile 相对路径从构建上下文解析
+            )
+            logger.info("build completed for %s: %s", spec.name, spec.image)
+            return
+        except subprocess.CalledProcessError as e:
+            last_error = e
+            logger.warning(
+                "build failed for %s (attempt %d/2): stdout=%s stderr=%s",
+                spec.name, attempt, e.stdout[-2000:] if e.stdout else "", e.stderr[-2000:] if e.stderr else "",
+            )
+            if attempt < 2:
+                time.sleep(5)
+        except subprocess.TimeoutExpired as e:
+            last_error = e
+            logger.warning("build timeout for %s (attempt %d/2, >%ds)", spec.name, attempt, build_timeout)
+            if attempt < 2:
+                time.sleep(5)
+
+    if isinstance(last_error, subprocess.CalledProcessError):
+        raise RuntimeError(f"build failed for {spec.name}: {last_error.stderr}")
+    raise RuntimeError(f"build timeout for {spec.name} (>{build_timeout}s)")
 
 
 def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResult:

@@ -12,6 +12,7 @@ from pathlib import Path
 DEFAULT_PYPI_INDEX_CANDIDATES = (
     "https://mirrors.aliyun.com/pypi/simple/,"
     "https://pypi.tuna.tsinghua.edu.cn/simple,"
+    "https://pypi.mirrors.ustc.edu.cn/simple/,"
     "https://pypi.org/simple"
 )
 
@@ -75,13 +76,20 @@ def _compute_lock_hash(app_root: Path) -> str:
     return digest.hexdigest()
 
 
-def _select_pypi_index() -> str:
-    if os.environ.get("UV_INDEX_URL"):
-        return str(os.environ["UV_INDEX_URL"]).strip()
-    if os.environ.get("PIP_INDEX_URL"):
-        return str(os.environ["PIP_INDEX_URL"]).strip()
+def _get_ordered_pypi_candidates() -> list[str]:
+    """Return an ordered list of PyPI indexes to try.
 
-    candidates = os.environ.get("PYPI_INDEX_CANDIDATES", DEFAULT_PYPI_INDEX_CANDIDATES)
+    If UV_INDEX_URL / PIP_INDEX_URL is explicitly set, that single index is used as-is.
+    Otherwise, all candidates from PYPI_INDEX_CANDIDATES are ranked by latency via
+    package_source_selector.py and returned in order so the caller can fall back on failure.
+    """
+    explicit = os.environ.get("UV_INDEX_URL") or os.environ.get("PIP_INDEX_URL")
+    if explicit:
+        return [explicit.strip()]
+
+    raw = os.environ.get("PYPI_INDEX_CANDIDATES", DEFAULT_PYPI_INDEX_CANDIDATES)
+    all_candidates = [c.strip() for c in raw.split(",") if c.strip()]
+
     selector = Path("/usr/local/bin/package_source_selector.py")
     if selector.exists():
         result = subprocess.run(
@@ -89,7 +97,7 @@ def _select_pypi_index() -> str:
                 "python3",
                 str(selector),
                 "--candidates",
-                candidates,
+                raw,
                 "--kind",
                 "pypi",
                 "--timeout-seconds",
@@ -99,11 +107,16 @@ def _select_pypi_index() -> str:
             text=True,
             check=False,
         )
-        selected = (result.stdout or "").strip().splitlines()
-        if selected:
-            return selected[0].strip()
+        ranked = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+        if ranked:
+            # Append any candidate not returned by the selector (keep full coverage)
+            seen = set(ranked)
+            for c in all_candidates:
+                if c not in seen:
+                    ranked.append(c)
+            return ranked
 
-    return candidates.split(",", 1)[0].strip()
+    return all_candidates
 
 
 def _sync_backend_env_if_needed(app_root: Path) -> None:
@@ -122,14 +135,30 @@ def _sync_backend_env_if_needed(app_root: Path) -> None:
 
     print("Syncing backend dependencies with uv...")
     Path("/root/.cache/uv").mkdir(parents=True, exist_ok=True)
-    selected = _select_pypi_index()
-    if selected:
-        os.environ["UV_INDEX_URL"] = selected
-        os.environ["PIP_INDEX_URL"] = selected
-        print(f"Selected PyPI index: {selected}")
-    subprocess.run(["uv", "sync", "--active", "--frozen", "--no-dev"], cwd=str(app_root), check=True)
-    if current_hash:
-        stamp_file.write_text(f"{current_hash}\n", encoding="utf-8")
+
+    candidates = _get_ordered_pypi_candidates()
+    print(f"PyPI index candidates: {candidates}")
+
+    for index_url in candidates:
+        print(f"uv sync via {index_url} ...")
+        env = {**os.environ, "UV_INDEX_URL": index_url, "PIP_INDEX_URL": index_url}
+        result = subprocess.run(
+            ["uv", "sync", "--active", "--frozen", "--no-dev"],
+            cwd=str(app_root),
+            env=env,
+        )
+        if result.returncode == 0:
+            # Propagate the successful index for any subsequent pip/uv calls in this process
+            os.environ["UV_INDEX_URL"] = index_url
+            os.environ["PIP_INDEX_URL"] = index_url
+            if current_hash:
+                stamp_file.write_text(f"{current_hash}\n", encoding="utf-8")
+            return
+        print(f"uv sync failed via {index_url} (exit {result.returncode}), trying next index...")
+
+    raise RuntimeError(
+        f"uv sync failed on all {len(candidates)} PyPI indexes: {candidates}"
+    )
 
 
 def _wait_for_db(max_retries: int = 30, sleep_seconds: int = 2) -> None:
