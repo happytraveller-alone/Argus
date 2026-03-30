@@ -236,3 +236,5 @@ output/
 backend/data/
 
 ./dist/
+# 强制允许提交 nexus-web 下的 dist 目录
+!nexus-web/dist/
