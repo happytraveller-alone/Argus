@@ -4,6 +4,7 @@ import argparse
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
@@ -93,10 +94,16 @@ def order_candidates_by_probe(
     if not candidates:
         return []
 
-    results = [
-        probe_candidate(candidate, probe_paths=probe_paths, timeout_seconds=timeout_seconds)
-        for candidate in candidates
-    ]
+    # 并行探测所有候选源，总等待时间由最慢的单次探测决定（而非串行累加）
+    with ThreadPoolExecutor(max_workers=len(candidates)) as executor:
+        futures = {
+            executor.submit(
+                probe_candidate, candidate, probe_paths=probe_paths, timeout_seconds=timeout_seconds
+            ): candidate
+            for candidate in candidates
+        }
+        results = [future.result() for future in as_completed(futures)]
+
     candidate_index = {candidate: index for index, candidate in enumerate(candidates)}
 
     successful = sorted(

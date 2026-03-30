@@ -1,0 +1,29 @@
+# 重量级依赖预安装文件 - 固定版本必须与 uv.lock 保持一致
+#
+# 用途：在独立 Docker 层中预安装这些包，使其与 uv.lock / pyproject.toml
+#       的更新解耦。当轻量级工具包版本升级时，此层的 Docker 缓存不失效，
+#       uv sync 只需安装剩余少量包，显著提升重复构建速度。
+#
+# 维护方式：当 uv.lock 中以下包版本发生变化时，同步更新此文件。
+# 可用以下命令重新生成（在 backend/ 目录执行）：
+#   python3 -c "
+#   import re, sys
+#   lock = open('uv.lock').read()
+#   heavy = ['litellm','openai','tiktoken','weasyprint','fastmcp']
+#   for pkg in heavy:
+#       m = re.search(r'^name = \"' + pkg + r'\"\nversion = \"([^\"]+)\"', lock, re.M)
+#       if m: print(f'{pkg}=={m.group(1)}')
+#   "
+
+# LiteLLM（LLM 抽象层，最大单包，带 openai SDK）
+litellm==1.80.10
+openai==2.12.0
+
+# Tokenizer（含 Rust 原生扩展，首次安装需编译）
+tiktoken==0.12.0
+
+# PDF 报告生成
+weasyprint==67.0
+
+# MCP 客户端
+fastmcp==2.14.5

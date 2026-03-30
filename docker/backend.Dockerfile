@@ -86,101 +86,105 @@ COPY --from=uvbin /uv /usr/local/bin/uv
 ENV UV_INDEX_URL=${BACKEND_PYPI_INDEX_PRIMARY}
 ENV PIP_INDEX_URL=${BACKEND_PYPI_INDEX_PRIMARY}
 
-# 复制依赖文件与镜像源测速脚本
-COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
+# 镜像源测速脚本（最先复制，几乎不会变化）
 COPY backend/scripts/package_source_selector.py /usr/local/bin/package_source_selector.py
 
-# 安装 Python 依赖到虚拟环境
+# ── 重量级依赖预安装层 ───────────────────────────────────────────────────────────
+# requirements-heavy.txt 的变更频率远低于 uv.lock：
+#   - 仅升级轻量工具包 → 此层 Docker 缓存命中，uv sync 只安装少量剩余包
+#   - 升级 heavy 包版本 → 此层失效，但依然受益于 uv wheel 缓存
+# 注意：此文件中的版本号必须与 uv.lock 保持一致。
+COPY backend/requirements-heavy.txt ./requirements-heavy.txt
+
 RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
   set -eux; \
-  cmd_timeout=420; \
-  uv_step_timeout=90; \
-  if [ "${cmd_timeout}" -lt "${uv_step_timeout}" ]; then uv_step_timeout="${cmd_timeout}"; fi; \
   uv_http_timeout=45; \
+  step_timeout=300; \
   pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \
-  append_unique_index() { \
-  index_url="$(printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; \
-  target_file="$2"; \
-  [ -n "${index_url}" ] || return 0; \
-  touch "${target_file}"; \
-  if ! grep -Fxq "${index_url}" "${target_file}"; then \
-  printf '%s\n' "${index_url}" >> "${target_file}"; \
+  best_index="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}"; \
+  ordered="$(python3 /usr/local/bin/package_source_selector.py \
+    --candidates "${pypi_index_candidates}" --kind pypi --timeout-seconds 2 2>/dev/null || true)"; \
+  if [ -n "${ordered}" ]; then \
+    first="$(printf '%s\n' "${ordered}" | head -1)"; \
+    [ -z "${first}" ] || best_index="${first}"; \
   fi; \
-  }; \
-  append_csv_indexes() { \
-  csv="$1"; \
-  target_file="$2"; \
-  old_ifs="$IFS"; \
-  IFS=','; \
-  set -- ${csv}; \
-  IFS="$old_ifs"; \
-  for item do \
-  append_unique_index "${item}" "${target_file}"; \
-  done; \
-  }; \
-  order_indexes() { \
-  raw_candidates="$1"; \
-  python3 /usr/local/bin/package_source_selector.py --candidates "${raw_candidates}" --kind pypi --timeout-seconds 2 || printf '%s\n' "${raw_candidates}" | tr ',' '\n'; \
-  }; \
-  sync_with_index() { \
-  index_url="$1"; \
-  attempt=1; \
-  while [ "${attempt}" -le 2 ]; do \
-  echo "uv sync via ${index_url} (attempt ${attempt}/2, timeout ${uv_step_timeout}s)"; \
-  if timeout "${uv_step_timeout}" env VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" UV_HTTP_TIMEOUT="${uv_http_timeout}" UV_INDEX_URL="${index_url}" PIP_INDEX_URL="${index_url}" uv sync --active --frozen --no-dev; then \
-  return 0; \
-  else \
-  status="$?"; \
-  fi; \
-  if [ "${status}" -eq 124 ]; then \
-  echo "uv sync timed out via ${index_url} after ${uv_step_timeout}s (attempt ${attempt}/2)." >&2; \
-  else \
-  echo "uv sync failed via ${index_url} (attempt ${attempt}/2, exit ${status})." >&2; \
-  fi; \
-  sleep $((attempt + 1)); \
-  attempt=$((attempt + 1)); \
-  done; \
-  return 1; \
-  }; \
-  ranked_candidates_file="$(mktemp)"; \
-  ordered_indexes_file="$(mktemp)"; \
-  attempt_indexes_file="$(mktemp)"; \
-  if [ -n "${BACKEND_PYPI_INDEX_PRIMARY:-}" ]; then \
-  append_unique_index "${BACKEND_PYPI_INDEX_PRIMARY}" "${attempt_indexes_file}"; \
-  fi; \
-  if [ -n "${BACKEND_PYPI_INDEX_FALLBACK:-}" ]; then \
-  append_unique_index "${BACKEND_PYPI_INDEX_FALLBACK}" "${attempt_indexes_file}"; \
-  fi; \
-  append_csv_indexes "${pypi_index_candidates}" "${ranked_candidates_file}"; \
-  ordered_indexes=""; \
-  if [ -s "${ranked_candidates_file}" ]; then \
-  pypi_index_candidates="$(paste -sd, "${ranked_candidates_file}")"; \
-  ordered_indexes="$(order_indexes "${pypi_index_candidates}")"; \
-  fi; \
-  if [ -n "${ordered_indexes}" ]; then \
-  printf '%s\n' "${ordered_indexes}" > "${ordered_indexes_file}"; \
-  elif [ -s "${ranked_candidates_file}" ]; then \
-  cp "${ranked_candidates_file}" "${ordered_indexes_file}"; \
-  fi; \
-  if [ -s "${ordered_indexes_file}" ]; then \
-  while IFS= read -r index_url; do \
-  append_unique_index "${index_url}" "${attempt_indexes_file}"; \
-  done < "${ordered_indexes_file}"; \
-  fi; \
+  printf '%s\n' "${best_index}" > /tmp/pypi-best-index; \
+  echo "Selected PyPI index: ${best_index}"; \
   uv venv "${BACKEND_VENV_PATH}"; \
-  echo "uv sync candidate order:"; \
-  cat "${attempt_indexes_file}"; \
-  install_result=1; \
-  while IFS= read -r index_url; do \
-  [ -n "${index_url}" ] || continue; \
-  if sync_with_index "${index_url}"; then \
-  install_result=0; \
-  break; \
+  install_heavy() { \
+    idx="$1"; attempt=1; \
+    while [ "${attempt}" -le 2 ]; do \
+      echo "uv pip install heavy deps via ${idx} (attempt ${attempt}/2)"; \
+      if timeout "${step_timeout}" env \
+        VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
+        UV_INDEX_URL="${idx}" UV_HTTP_TIMEOUT="${uv_http_timeout}" \
+      uv pip install --index-url "${idx}" -r requirements-heavy.txt; then \
+        return 0; \
+      fi; \
+      sleep $((attempt + 1)); attempt=$((attempt + 1)); \
+    done; return 1; \
+  }; \
+  if install_heavy "${best_index}"; then \
+    exit 0; \
   fi; \
-  done < "${attempt_indexes_file}"; \
-  rm -f "${ranked_candidates_file}" "${ordered_indexes_file}" "${attempt_indexes_file}"; \
-  [ "${install_result}" -eq 0 ]; \
-  printf 'ready\n' > /tmp/builder-network-ready
+  OLD_IFS="${IFS}"; IFS=','; set -- ${pypi_index_candidates}; IFS="${OLD_IFS}"; \
+  for idx in "$@"; do \
+    stripped="$(printf '%s' "${idx}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; \
+    [ -n "${stripped}" ] && [ "${stripped}" != "${best_index}" ] || continue; \
+    if install_heavy "${stripped}"; then \
+      printf '%s\n' "${stripped}" > /tmp/pypi-best-index; \
+      exit 0; \
+    fi; \
+  done; \
+  echo "ERROR: Failed to install heavy packages from all mirrors" >&2; exit 1
+
+# ── 完整依赖同步层（基于 uv.lock 精确锁定）────────────────────────────────────────
+# 重量级包已在 venv 中，uv sync 直接跳过它们，仅安装剩余轻量级包，速度显著提升。
+COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
+
+RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
+  set -eux; \
+  uv_step_timeout=240; \
+  uv_http_timeout=45; \
+  if [ -f /tmp/pypi-best-index ] && [ -s /tmp/pypi-best-index ]; then \
+    best_index="$(cat /tmp/pypi-best-index)"; \
+  else \
+    best_index="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}"; \
+  fi; \
+  pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"; \
+  sync_with_index() { \
+    idx="$1"; attempt=1; \
+    while [ "${attempt}" -le 2 ]; do \
+      echo "uv sync via ${idx} (attempt ${attempt}/2, timeout ${uv_step_timeout}s)"; \
+      if timeout "${uv_step_timeout}" env \
+        VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
+        UV_HTTP_TIMEOUT="${uv_http_timeout}" UV_INDEX_URL="${idx}" PIP_INDEX_URL="${idx}" \
+      uv sync --active --frozen --no-dev; then \
+        return 0; \
+      else \
+        status="$?"; \
+      fi; \
+      if [ "${status}" -eq 124 ]; then \
+        echo "uv sync timed out via ${idx} after ${uv_step_timeout}s (attempt ${attempt}/2)." >&2; \
+      else \
+        echo "uv sync failed via ${idx} (attempt ${attempt}/2, exit ${status})." >&2; \
+      fi; \
+      sleep $((attempt + 1)); attempt=$((attempt + 1)); \
+    done; return 1; \
+  }; \
+  echo "uv sync using index: ${best_index}"; \
+  if sync_with_index "${best_index}"; then \
+    printf 'ready\n' > /tmp/builder-network-ready; exit 0; \
+  fi; \
+  OLD_IFS="${IFS}"; IFS=','; set -- ${pypi_index_candidates}; IFS="${OLD_IFS}"; \
+  for idx in "$@"; do \
+    stripped="$(printf '%s' "${idx}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; \
+    [ -n "${stripped}" ] && [ "${stripped}" != "${best_index}" ] || continue; \
+    if sync_with_index "${stripped}"; then \
+      printf 'ready\n' > /tmp/builder-network-ready; exit 0; \
+    fi; \
+  done; \
+  echo "ERROR: uv sync failed on all mirrors" >&2; exit 1
 
 # ============================================
 # 多阶段构建 - 运行时基础阶段

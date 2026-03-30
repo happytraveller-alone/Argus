@@ -38,39 +38,17 @@ dependencies = [
     "litellm>=1.0.0",
     "tiktoken>=0.5.2",
     # ============ Report Generation ============
-    "reportlab>=4.0.0",
     "weasyprint>=60.0",
     "jinja2>=3.1.6",
     # ============ Utilities ============
     "json-repair>=0.30.0",
     "aiofiles>=23.2.1",
-    # ============ LangChain & LangGraph ============
-    "langchain>=0.1.0",
-    "langchain-community>=0.0.20",
-    "langchain-openai>=0.0.5",
-    "langgraph>=0.0.40",
-    # ============ Vector Database ============
-    "chromadb>=0.4.22",
-    "pygments>=2.17.0",
     # ============ Docker Sandbox ============
     "docker>=7.0.0",
-    # ============ Security Tools ============
-    "bandit>=1.7.0",
-    "safety>=2.3.0",
-    "pip-audit>=2.6.0",
-    # ============ Kunlun-M Dependencies (MIT License) ============
-    # https://github.com/LoRexxar/Kunlun-M
-    "pyjsparser>=2.7.1",
-    "phply>=1.2.6",
-    "esprima>=4.0.1",
-    "jsbeautifier>=1.14.0",
-    "colorlog>=6.0.0",
-    "portalocker>=2.0.0",
-    "prettytable>=3.0.0",
+    # ============ Archive / File Handling ============
     "rarfile>=4.0",
-    "beautifulsoup4>=4.12.0",
-    "django>=4.2.0",
-    "py7zr>=1.1.2",
+    "py7zr>=0.20.0,!=1.1.2",
+    # ============ Code Analysis Utilities ============
     "pycloc>=0.0.1a0",
     "gitpython>=3.1.46",
 ]
