@@ -118,7 +118,7 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
       if timeout "${step_timeout}" env \
         VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
         UV_INDEX_URL="${idx}" UV_HTTP_TIMEOUT="${uv_http_timeout}" \
-      uv pip install --index-url "${idx}" -r requirements-heavy.txt; then \
+      uv pip install --no-deps --index-url "${idx}" -r requirements-heavy.txt; then \
         return 0; \
       fi; \
       sleep $((attempt + 1)); attempt=$((attempt + 1)); \
