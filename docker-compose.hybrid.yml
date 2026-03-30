@@ -1,53 +1,50 @@
 # =============================================
-# VulHunter v3.0.4 Docker Compose 日常开发默认配置
+# VulHunter v3.0.4 Docker Compose 混合构建覆盖层
 # =============================================
-# 默认入口: docker compose up（所有镜像从 GHCR 拉取，无需本地构建）
-# 注意: backend 会在启动期通过 Docker SDK 执行 runner preflight。
-# 这些自检容器是一次性容器，成功或失败后都会立即删除，不作为 compose service 常驻。
-# 真正执行扫描时，backend 会继续按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`
-# 动态拉起临时 runner 容器（镜像默认从 GHCR 拉取）。
-# 混合构建(frontend+backend本地构建，其余拉云端): docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
-# 全量本地构建: docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
-# 预构建镜像部署模板: deploy/compose/docker-compose.prod.yml / docker-compose.prod.cn.yml
+# 用法:
+# docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
+#
+# 构建策略:
+#   本地构建 : frontend、backend
+#   云端拉取 : scanner runners、nexus-web、sandbox、db、redis（不变）
+#
+# 适用场景: 仅修改了 frontend / backend 代码，无需重新构建所有 runner 镜像。
 
 services:
-  db:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/postgres:15-alpine
-    restart: unless-stopped
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: ${POSTGRES_DB:-vulhunter}
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - vulhunter-network
-
   backend:
-    image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}}
-    restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./backend:/app
-      - .:/workspace:ro
-      - backend_venv:/opt/backend-venv
-      - backend_uv_cache:/root/.cache/uv
+    image: vulhunter/backend-local:latest
+    build: !override
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - UV_IMAGE=${UV_IMAGE:-ghcr.nju.edu.cn/astral-sh/uv:latest}
+        - DOCKER_CLI_IMAGE=${DOCKER_CLI_IMAGE:-docker:cli}
+        - BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        - BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        - BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
+        - BACKEND_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
+        - BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
+        - BACKEND_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
+        - BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
+        - BACKEND_INSTALL_CJK_FONTS=${BACKEND_INSTALL_CJK_FONTS:-0}
+        - BACKEND_INSTALL_YASA=${BACKEND_INSTALL_YASA:-1}
+        - YASA_VERSION=${YASA_VERSION:-v0.2.33}
+        - http_proxy=
+        - https_proxy=
+        - HTTP_PROXY=
+        - HTTPS_PROXY=
+        - all_proxy=
+        - ALL_PROXY=
+    working_dir: !reset null
+    command: !reset null
+    # 本地构建镜像已内置 /app，无需挂载源码；仅保留数据卷和 Docker Socket
+    volumes: !override
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime
       - scan_workspace:/tmp/vulhunter/scans
       - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "${VULHUNTER_BACKEND_PORT:-8000}:8000"
-    env_file:
-      - ./docker/env/backend/.env
-    environment:
+    environment: !override
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       REDIS_URL: redis://redis:6379/0
@@ -59,26 +56,28 @@ services:
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
+      # sandbox 使用云端镜像
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
       RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
+      # runners 从云端拉取，无需严格模式
       RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-false}"
       RUNNER_PREFLIGHT_TIMEOUT_SECONDS: "${RUNNER_PREFLIGHT_TIMEOUT_SECONDS:-30}"
       RUNNER_PREFLIGHT_MAX_CONCURRENCY: "${RUNNER_PREFLIGHT_MAX_CONCURRENCY:-2}"
       RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS: "${RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS:-900}"
-      RUNNER_PREFLIGHT_BUILD_CONTEXT: /workspace
       DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
       BACKEND_APT_MIRROR_PRIMARY: ${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
       BACKEND_APT_SECURITY_PRIMARY: ${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
       BACKEND_APT_MIRROR_FALLBACK: ${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
       BACKEND_APT_SECURITY_FALLBACK: ${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-      BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
-      BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
+      BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
+      BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
       BACKEND_INSTALL_YASA: ${BACKEND_INSTALL_YASA:-1}
       YASA_VERSION: ${YASA_VERSION:-v0.2.33}
+      # scanner runner 镜像全部使用云端 GHCR
       SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}
@@ -86,12 +85,12 @@ services:
       SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-phpstan-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-flow-parser-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"
       FLOW_PARSER_RUNNER_BATCH_MAX_FILES: "${FLOW_PARSER_RUNNER_BATCH_MAX_FILES:-100}"
       FLOW_PARSER_RUNNER_BATCH_MAX_BYTES: "${FLOW_PARSER_RUNNER_BATCH_MAX_BYTES:-8388608}"
+      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"
       YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}
       GIT_MIRROR_ENABLED: ${GIT_MIRROR_ENABLED:-true}
       GIT_MIRROR_PREFIX: ${GIT_MIRROR_PREFIX:-https://gh-proxy.org}
@@ -107,93 +106,40 @@ services:
       http_proxy: ""
       https_proxy: ""
       NO_PROXY: "*"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null"]
-      interval: 5s
-      timeout: 3s
-      start_period: 10s
-      retries: 60
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - vulhunter-network
 
   frontend:
-    image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}}
-    restart: unless-stopped
-    volumes:
+    image: vulhunter/frontend-local:latest
+    build: !override
+      context: ./frontend
+      dockerfile: ${FRONTEND_DOCKERFILE:-../docker/frontend.Dockerfile}
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}
+        - FRONTEND_NPM_REGISTRY_FALLBACK=${FRONTEND_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}
+        - PNPM_VERSION=${PNPM_VERSION:-9.15.4}
+        - BUILD_WEAK_NETWORK=${BUILD_WEAK_NETWORK:-false}
+        - BUILD_ARCH=${BUILD_ARCH:-}
+        - http_proxy=
+        - https_proxy=
+        - HTTP_PROXY=
+        - HTTPS_PROXY=
+        - all_proxy=
+        - ALL_PROXY=
+    working_dir: !reset null
+    command: !reset null
+    volumes: !override
       - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    ports:
+    ports: !override
       - "${VULHUNTER_FRONTEND_PORT:-3000}:80"
-    environment:
+    environment: !override
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
       https_proxy: ""
       NO_PROXY: "*"
       VITE_API_BASE_URL: /api/v1
-    depends_on:
-      backend:
-        condition: service_healthy
-    logging:
-      driver: "none"
-    networks:
-      - vulhunter-network
-
-  redis:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - vulhunter-network
-
-  sandbox:
-    image: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
-    profiles: ["build"]
-    restart: "no"
-    command: ["echo", "Sandbox image built successfully"]
-
-  adminer:
-    image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
-    restart: unless-stopped
-    profiles: ["tools"]
-    ports:
-      - "8081:8080"
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - vulhunter-network
-  
-  nexus-web:
-    image: ${NEXUS_WEB_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${NEXUS_WEB_IMAGE_NAMESPACE:-happytraveller-alone}/nexus-web:${NEXUS_WEB_IMAGE_TAG:-latest}}
-    restart: unless-stopped
-    ports:
-      - "${VULHUNTER_NEXUS_WEB_PORT:-5174}:5174"
-    networks:
-      - vulhunter-network
-
-networks:
-  vulhunter-network:
-    driver: bridge
-
-volumes:
-  postgres_data:
-  backend_venv:
-  backend_uv_cache:
-  backend_uploads:
-  backend_runtime_data:
-  scan_workspace:
-    name: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
-  redis_data:
