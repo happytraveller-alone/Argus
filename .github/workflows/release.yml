@@ -127,12 +127,15 @@ jobs:
             docker/opengrep-runner.Dockerfile \
             docker/phpstan-runner.Dockerfile \
             docker/pmd-runner.Dockerfile \
+            docker/sandbox.Dockerfile \
             docker/yasa-runner.Dockerfile \
+            docker/sandbox-runner.Dockerfile \
+            docker/sandbox-runner.requirements.txt \
+            docker/docker-compose.sandbox-runner.yml \
             docker/flow-parser-runner.requirements.txt \
             docker/env/backend/env.example \
             docker/env/frontend/.env.example \
-            frontend/yasa-engine-overrides/ \
-            docker/sandbox/
+            frontend/yasa-engine-overrides/
           
           # 打包完整源码（包括配置文件）
           tar -czf release/vulhunter-source-${{ steps.version.outputs.VERSION }}.tar.gz \
@@ -259,8 +262,8 @@ jobs:
       - name: 构建并推送沙箱 Docker 镜像
         uses: docker/build-push-action@v7
         with:
-          context: ./docker/sandbox
-          file: ./docker/sandbox/Dockerfile
+          context: .
+          file: ./docker/sandbox.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |

@@ -200,8 +200,8 @@ services:
 
   sandbox:
     build:
-      context: ./docker/sandbox
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/sandbox.Dockerfile
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
         - SANDBOX_BASE_IMAGE=${SANDBOX_BASE_IMAGE:-docker.m.daocloud.io/python:3.11-slim}

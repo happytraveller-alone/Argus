@@ -16,7 +16,7 @@
 
 - `SandboxManager` 的调用面比文档最初假设更广，不止 `run_code`、`sandbox_exec`、`verify_vulnerability` 在使用。
 - 现有 scanner runner 的 compose / workflow 交付链路已经成熟，但 sandbox 与 scanner 的职责不同，不能机械照搬。
-- `docker/sandbox/Dockerfile` 目前承载大量真实运行能力，直接拆出新镜像会放大迁移成本和兼容风险。
+- `docker/sandbox.Dockerfile` 目前承载大量真实运行能力，直接拆出新镜像会放大迁移成本和兼容风险。
 - 原文中的若干测试命令与仓库实际 `uv` / `pytest` 调用方式不一致，按原文执行会直接失败。
 
 因此，本计划改为两阶段：
@@ -72,7 +72,7 @@
 - ✅ `SCAN_WORKSPACE_ROOT`: `"/tmp/vulhunter/scans"`
 - ❌ `SANDBOX_RUNNER_IMAGE` - **需新增**
 
-**Docker 镜像** (`docker/sandbox/`):
+**Docker 镜像** (`docker/sandbox.Dockerfile`):
 - ✅ `Dockerfile` (10KB) - 完整的 sandbox 运行时镜像
 - ✅ `seccomp.json` - 安全策略配置
 - ✅ `build.sh` / `build.ps1` / `build.bat` - 构建脚本
@@ -1799,7 +1799,7 @@ Document in the implementation summary:
 - 抽离专用 `backend/docker/sandbox-runner.Dockerfile`
 - 为 compose 增加 `sandbox-runner` 一次性预热服务
 - 为 workflow 增加 sandbox runner 镜像构建和发布
-- 从 `docker/sandbox/Dockerfile` 中进一步裁剪运行时能力
+- 从 `docker/sandbox.Dockerfile` 中进一步裁剪运行时能力
 
 只有当满足以下前提时，才进入 Phase 2：
 
@@ -2270,7 +2270,7 @@ timeout_seconds=60,
 - [Docker SDK for Python](https://docker-py.readthedocs.io/)
 - [Scanner Runner 实现](../backend/app/services/scanner_runner.py)
 - [Flow Parser Runner 实现](../backend/app/services/flow_parser_runner.py)
-- [Sandbox Dockerfile](../docker/sandbox/Dockerfile)
+- [Sandbox Dockerfile](../docker/sandbox.Dockerfile)
 - [项目 CLAUDE.md](../CLAUDE.md)
 
 ---

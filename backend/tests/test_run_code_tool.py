@@ -119,6 +119,17 @@ class TestSandboxManagerImageResolution:
 
         assert selected == "VulHunter/sandbox:latest"
 
+    def test_format_image_resolution_error_uses_root_sandbox_dockerfile_hint(self):
+        manager = SandboxManager(SandboxConfig(image="custom/sandbox:latest"))
+
+        message = manager._format_image_resolution_error(
+            ["custom/sandbox:latest"],
+            ["custom/sandbox:latest: not found"],
+        )
+
+        assert "docker build -f docker/sandbox.Dockerfile -t vulhunter/sandbox:latest ." in message
+        assert "cd docker/sandbox" not in message
+
 
 class TestBuildCommand:
     """测试命令构建功能"""

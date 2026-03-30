@@ -618,24 +618,22 @@ install_docker_sandbox() {
     log_success "Docker 已运行"
 
     # 构建沙盒镜像
-    local sandbox_dir="$PROJECT_ROOT/docker/sandbox"
-    local dockerfile="$sandbox_dir/Dockerfile"
+    local dockerfile="$PROJECT_ROOT/docker/sandbox.Dockerfile"
 
     if [[ ! -f "$dockerfile" ]]; then
-        log_warning "沙盒 Dockerfile 不存在，创建默认配置..."
-        mkdir -p "$sandbox_dir"
-        create_sandbox_dockerfile "$sandbox_dir"
+        log_warning "沙盒 Dockerfile 不存在: ${dockerfile}"
+        return 1
     fi
 
     log_info "构建 VulHunter 沙盒镜像..."
 
-    cd "$sandbox_dir"
+    cd "$PROJECT_ROOT"
 
     # 带重试的构建
     for attempt in $(seq 1 $MAX_RETRIES); do
         log_info "构建镜像 (尝试 $attempt/$MAX_RETRIES)..."
 
-        if docker build -t VulHunter-sandbox:latest -f Dockerfile . 2>&1; then
+        if docker build -t VulHunter-sandbox:latest -f docker/sandbox.Dockerfile . 2>&1; then
             log_success "沙盒镜像构建成功: VulHunter-sandbox:latest"
 
             # 验证

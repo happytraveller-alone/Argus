@@ -604,22 +604,21 @@ function Install-DockerSandbox {
     Write-ColorOutput "Docker 已运行" "Success"
 
     # 构建沙盒镜像
-    $sandboxDir = Join-Path $ProjectRoot "docker\sandbox"
-    $dockerfile = Join-Path $sandboxDir "Dockerfile"
+    $dockerfile = Join-Path $ProjectRoot "docker\sandbox.Dockerfile"
 
     if (-not (Test-Path $dockerfile)) {
-        Write-ColorOutput "创建沙盒 Dockerfile..." "Info"
-        New-SandboxDockerfile -Path $sandboxDir
+        Write-ColorOutput "沙盒 Dockerfile 不存在: $dockerfile" "Warning"
+        return $false
     }
 
     Write-ColorOutput "构建 VulHunter 沙盒镜像..." "Info"
 
-    Push-Location $sandboxDir
+    Push-Location $ProjectRoot
     try {
         for ($attempt = 1; $attempt -le $MAX_RETRIES; $attempt++) {
             Write-ColorOutput "构建镜像 (尝试 $attempt/$MAX_RETRIES)..." "Info"
 
-            docker build -t VulHunter-sandbox:latest -f Dockerfile . 2>&1
+            docker build -t VulHunter-sandbox:latest -f docker/sandbox.Dockerfile . 2>&1
 
             if ($LASTEXITCODE -eq 0) {
                 Write-ColorOutput "沙盒镜像构建成功: VulHunter-sandbox:latest" "Success"

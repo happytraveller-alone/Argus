@@ -234,8 +234,8 @@ jobs:
         if: ${{ github.event.inputs.build_sandbox == 'true' }}
         uses: docker/build-push-action@v7
         with:
-          context: ./docker/sandbox
-          file: ./docker/sandbox/Dockerfile
+          context: .
+          file: ./docker/sandbox.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
