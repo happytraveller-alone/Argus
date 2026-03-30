@@ -1,5 +1,5 @@
 ARG DOCKERHUB_LIBRARY_MIRROR
-FROM ${DOCKERHUB_LIBRARY_MIRROR}/nginx:alpine
+FROM ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/nginx:alpine
 
 COPY ./dist /usr/share/nginx/html
 
