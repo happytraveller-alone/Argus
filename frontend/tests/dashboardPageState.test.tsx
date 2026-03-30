@@ -59,6 +59,14 @@ function createEmptySnapshot(): DashboardSnapshotResponse {
 			interrupted: 0,
 			cancelled: 0,
 		},
+		task_status_by_scan_type: {
+			pending: { static: 0, intelligent: 0, hybrid: 0 },
+			running: { static: 0, intelligent: 0, hybrid: 0 },
+			completed: { static: 0, intelligent: 0, hybrid: 0 },
+			failed: { static: 0, intelligent: 0, hybrid: 0 },
+			interrupted: { static: 0, intelligent: 0, hybrid: 0 },
+			cancelled: { static: 0, intelligent: 0, hybrid: 0 },
+		},
 		engine_breakdown: [],
 		project_hotspots: [],
 		language_risk: [],
@@ -180,4 +188,23 @@ test("dashboard page state ignores cwe buckets that only contain zero findings",
 	});
 
 	assert.equal(state.variant, "blocking-error");
+});
+
+test("dashboard snapshot consumers can tolerate older payloads without task_status_by_scan_type", async () => {
+	const source = await importOrFail<any>("../src/pages/Dashboard.tsx");
+	const snapshot = createSnapshotWithContent() as Record<string, unknown>;
+	delete snapshot.task_status_by_scan_type;
+
+	const normalized = source.normalizeSnapshot(snapshot);
+
+	assert.deepEqual(normalized.task_status_by_scan_type.running, {
+		static: 0,
+		intelligent: 0,
+		hybrid: 0,
+	});
+	assert.deepEqual(normalized.task_status_by_scan_type.completed, {
+		static: 0,
+		intelligent: 0,
+		hybrid: 0,
+	});
 });

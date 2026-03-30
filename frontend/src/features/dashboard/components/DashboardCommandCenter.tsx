@@ -7,6 +7,7 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Cpu,
+	Eye,
 	ListOrdered,
 } from "lucide-react";
 import {
@@ -22,6 +23,11 @@ import {
 	YAxis,
 } from "recharts";
 import { Button } from "@/components/ui/button";
+import {
+	Tooltip as UiTooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getEstimatedTaskProgressPercent } from "@/features/tasks/services/taskProgress";
 import type {
 	DashboardDailyActivityItem,
@@ -31,6 +37,7 @@ import type {
 	DashboardProjectRiskDistributionItem,
 	DashboardRecentTaskItem,
 	DashboardSnapshotResponse,
+	DashboardTaskStatusScanTypeBreakdown,
 	DashboardStaticEngineRuleTotalItem,
 	DashboardVerifiedVulnerabilityTypeItem,
 } from "@/shared/types";
@@ -72,6 +79,19 @@ interface DashboardViewMeta {
 	yAxisLabel: string;
 }
 
+interface TaskStatusRow {
+	key: "completed" | "running" | "failed" | "interrupted" | "cancelled";
+	label: string;
+	value: number;
+	tone: Tone;
+	scanTypeBreakdown: DashboardTaskStatusScanTypeBreakdown;
+}
+
+type TaskStatusTooltipItem = {
+	label: string;
+	value: number;
+};
+
 const VIEW_ITEMS: DashboardViewMeta[] = [
 	{
 		id: "trend",
@@ -105,13 +125,13 @@ const VIEW_ITEMS: DashboardViewMeta[] = [
 	},
 	{
 		id: "static-engine-rules",
-		label: "静态扫描引擎规则统计图",
+		label: "扫描规则统计图",
 		description: "展示各静态扫描引擎当前规则数量。",
 		yAxisLabel: "引擎名称",
 	},
 	{
 		id: "language-lines",
-		label: "语言代码行数统计图",
+		label: "项目语言统计图",
 		description: "展示当前项目涉及语言代码行数 Top10。",
 		yAxisLabel: "语言类型",
 	},
@@ -274,6 +294,20 @@ export function getHorizontalStatsXAxisProps(
 
 function formatNumber(value: number | null | undefined) {
 	return Math.max(Number(value || 0), 0).toLocaleString("zh-CN");
+}
+
+export function formatHorizontalStatsTooltipValue(
+	viewId: DashboardViewId,
+	value: number,
+	name: string,
+): [string, string] {
+	const formattedValue = formatNumber(Number(value));
+
+	if (viewId === "project-risk") {
+		return [formattedValue, `${name}漏洞数量`];
+	}
+
+	return [formattedValue, name];
 }
 
 function truncateDecimal(value: number, digits: number) {
@@ -500,31 +534,116 @@ function buildRowsForView(
 function buildTaskStatusRows(snapshot: DashboardSnapshotResponse) {
 	return [
 		{
+			key: "completed" as const,
 			label: "已完成",
 			value: snapshot.task_status_breakdown.completed,
 			tone: "low" as Tone,
+			scanTypeBreakdown: snapshot.task_status_by_scan_type.completed,
 		},
 		{
+			key: "running" as const,
 			label: "运行中",
 			value: snapshot.task_status_breakdown.running,
 			tone: "neutral" as Tone,
+			scanTypeBreakdown: snapshot.task_status_by_scan_type.running,
 		},
 		{
+			key: "failed" as const,
 			label: "失败",
 			value: snapshot.task_status_breakdown.failed,
 			tone: "critical" as Tone,
+			scanTypeBreakdown: snapshot.task_status_by_scan_type.failed,
 		},
 		{
+			key: "interrupted" as const,
 			label: "已中断",
 			value: snapshot.task_status_breakdown.interrupted,
 			tone: "high" as Tone,
+			scanTypeBreakdown: snapshot.task_status_by_scan_type.interrupted,
 		},
 		{
+			key: "cancelled" as const,
 			label: "已取消",
 			value: snapshot.task_status_breakdown.cancelled,
 			tone: "medium" as Tone,
+			scanTypeBreakdown: snapshot.task_status_by_scan_type.cancelled,
 		},
-	].filter((item) => item.value > 0);
+	].filter((item): item is TaskStatusRow => item.value > 0);
+}
+
+function buildTaskStatusTooltipAriaLabel(row: TaskStatusRow) {
+	return `查看${row.label}状态下的扫描类型细分`;
+}
+
+export function buildTaskStatusTooltipItems(
+	breakdown: DashboardTaskStatusScanTypeBreakdown,
+): TaskStatusTooltipItem[] {
+	return [
+		{ label: "静态扫描", value: breakdown.static },
+		{ label: "智能扫描", value: breakdown.intelligent },
+		{ label: "混合扫描", value: breakdown.hybrid },
+	];
+}
+
+function TaskStatusTooltipContent({ row }: { row: TaskStatusRow }) {
+	const items = buildTaskStatusTooltipItems(row.scanTypeBreakdown);
+
+	return (
+		<div className="space-y-3">
+			<div>
+				<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+					任务状态
+				</p>
+				<p className="mt-1 font-semibold text-foreground">{row.label}</p>
+			</div>
+			<div className="space-y-2">
+				{items.map((item) => (
+					<div
+						key={item.label}
+						className="flex items-center justify-between gap-6 text-sm"
+					>
+						<span className="text-muted-foreground">{item.label}</span>
+						<span className="font-semibold tabular-nums text-foreground">
+							{formatNumber(item.value)}
+						</span>
+					</div>
+				))}
+			</div>
+			<div className="border-t border-border pt-2">
+				<div className="flex items-center justify-between gap-6 text-sm">
+					<span className="text-muted-foreground">合计</span>
+					<span className="font-semibold tabular-nums text-foreground">
+						{formatNumber(row.value)}
+					</span>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+export function getRecentTaskProjectTitle(task: DashboardRecentTaskItem): string {
+	const title = String(task.title || "").trim();
+	if (!title) {
+		return "-";
+	}
+
+	const segments = title.split("·");
+	if (segments.length < 2) {
+		return title;
+	}
+
+	return segments[segments.length - 1]?.trim() || title;
+}
+
+function getRecentTaskTypeBadgeClassName(taskType: string | null | undefined): string {
+	const normalized = String(taskType || "").trim();
+	if (normalized.includes("混合")) {
+		return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+	}
+	if (normalized.includes("智能")) {
+		return "border-sky-500/30 bg-sky-500/10 text-sky-300";
+	}
+	return "border-amber-500/30 bg-amber-500/10 text-amber-300";
 }
 
 export function paginateRecentTasks(
@@ -705,10 +824,44 @@ function TaskStatusPanel({
 						return (
 							<div key={item.label} className="space-y-2">
 								<div className="flex items-center justify-between gap-3 text-sm">
-									<span className="text-foreground">{item.label}</span>
-									<span className={`font-medium ${tone.text}`}>
-										{formatNumber(item.value)}
-									</span>
+									<UiTooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												aria-label={buildTaskStatusTooltipAriaLabel(item)}
+												className="inline-flex items-center rounded-sm border border-border/70 bg-muted/20 px-2.5 py-1 text-left text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+											>
+												{item.label}
+											</button>
+										</TooltipTrigger>
+										<TooltipContent
+											side="top"
+											align="start"
+											sideOffset={6}
+											className="w-[17rem] max-w-[calc(100vw-2rem)] border border-border bg-card px-3 py-3 text-sm text-foreground shadow-xl"
+										>
+											<TaskStatusTooltipContent row={item} />
+										</TooltipContent>
+									</UiTooltip>
+									<UiTooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												aria-label={buildTaskStatusTooltipAriaLabel(item)}
+												className={`rounded-sm px-2 py-1 font-medium transition hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${tone.text}`}
+											>
+												{formatNumber(item.value)}
+											</button>
+										</TooltipTrigger>
+										<TooltipContent
+											side="top"
+											align="end"
+											sideOffset={6}
+											className="w-[17rem] max-w-[calc(100vw-2rem)] border border-border bg-card px-3 py-3 text-sm text-foreground shadow-xl"
+										>
+											<TaskStatusTooltipContent row={item} />
+										</TooltipContent>
+									</UiTooltip>
 								</div>
 								<div className="h-3 rounded-full bg-muted/70">
 									<div
@@ -783,27 +936,29 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 		status: task.status,
 		createdAt: task.created_at,
 	});
+	const projectTitle = getRecentTaskProjectTitle(task);
 	return (
 		<div className={`${DASHBOARD_PANEL_CLASSNAME} px-4 py-4`}>
-			<div className="flex items-start justify-between gap-3">
+			<div className="flex items-start justify-between gap-1">
 				<div className="min-w-0">
-					<p className="truncate text-xs text-muted-foreground">
-						{task.title}
+					<p className="truncate text-sm font-semibold tracking-[0.01em] text-foreground">
+						{projectTitle}
 					</p>
-					{/* <p className="mt-1 text-xs text-muted-foreground">
-						{task.task_type}
-					</p> */}
 				</div>
 				<a
 					href={task.detail_path || "/tasks/static"}
-					className="cyber-btn-outline inline-flex h-8 shrink-0 items-center px-3 text-xs"
+					aria-label={`查看 ${projectTitle} 详情`}
+					title={`查看 ${projectTitle} 详情`}
+					className="cyber-btn-outline inline-flex h-4 w-8 shrink-0 items-center justify-center px-0 text-xs"
 				>
-					查看详情
+					<Eye className="h-3 w-4" />
 				</a>
 			</div>
-			<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-				<span>{task.task_type}</span>
-				<span>执行进度 {progress}%</span>
+			<div className="mt-3 flex items-center justify-between gap-1 text-xs text-muted-foreground">
+				<span>
+					{task.task_type}
+				</span>
+				<span>{progress}%</span>
 			</div>
 			<div className="mt-2 h-2 rounded-full bg-muted/70">
 				<div
@@ -1043,10 +1198,9 @@ function HorizontalStatsChart({
 							<Tooltip
 								cursor={{ fill: "rgba(148, 163, 184, 0.12)" }}
 								contentStyle={DASHBOARD_TOOLTIP_STYLE}
-								formatter={(value: number) => [
-									formatNumber(Number(value)),
-									"数量",
-								]}
+								formatter={(value: number, name: string) =>
+									formatHorizontalStatsTooltipValue(viewId, value, name)
+								}
 								labelFormatter={(
 									label: string,
 									payload: Array<{ payload?: HorizontalRow }>,

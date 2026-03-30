@@ -86,6 +86,38 @@ function createSnapshotFixture() {
 			interrupted: 1,
 			cancelled: 0,
 		},
+		task_status_by_scan_type: {
+			pending: {
+				static: 0,
+				intelligent: 0,
+				hybrid: 0,
+			},
+			running: {
+				static: 1,
+				intelligent: 0,
+				hybrid: 1,
+			},
+			completed: {
+				static: 10,
+				intelligent: 1,
+				hybrid: 1,
+			},
+			failed: {
+				static: 1,
+				intelligent: 0,
+				hybrid: 0,
+			},
+			interrupted: {
+				static: 1,
+				intelligent: 0,
+				hybrid: 0,
+			},
+			cancelled: {
+				static: 0,
+				intelligent: 0,
+				hybrid: 0,
+			},
+		},
 		engine_breakdown: [
 			{
 				engine: "llm",
@@ -276,8 +308,8 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /语言风险统计图/);
 	assert.match(markup, /漏洞类型统计图/);
 	assert.match(markup, /扫描引擎统计图/);
-	assert.match(markup, /静态扫描引擎规则统计图/);
-	assert.match(markup, /语言代码行数统计图/);
+	assert.match(markup, /扫描规则统计图/);
+	assert.match(markup, /项目语言统计图/);
 	assert.match(markup, /任务状态/);
 	assert.match(markup, /横坐标：日期/);
 	assert.match(markup, /纵坐标：漏洞数量/);
@@ -285,18 +317,50 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /已验证/);
 	assert.match(markup, /data-panel="trend"/);
 	assert.match(markup, /aria-pressed="true"/);
-	assert.match(markup, /混合扫描 · Alpha Gateway/);
-	assert.match(markup, /智能扫描 · Beta API/);
-	assert.match(markup, /静态扫描 · Gamma Portal/);
-	assert.match(markup, /静态扫描 · Delta PHP/);
+	assert.match(markup, /Alpha Gateway/);
+	assert.match(markup, /Beta API/);
+	assert.match(markup, /Gamma Portal/);
+	assert.match(markup, /Delta PHP/);
+	assert.match(markup, /查看已完成状态下的扫描类型细分/);
 	assert.doesNotMatch(markup, /静态扫描 · Echo Console/);
-	assert.match(markup, /查看详情/);
+	assert.match(markup, /aria-label="查看 Alpha Gateway 详情"/);
 	assert.match(markup, /上一页/);
 	assert.match(markup, /下一页/);
 	assert.doesNotMatch(markup, /共 \d+ 条/);
 	assert.doesNotMatch(markup, /第 \d+ \/ \d+ 页/);
 	assert.doesNotMatch(markup, /排行榜/);
 	assert.doesNotMatch(markup, /等待中/);
+});
+
+test("task status tooltip items preserve subtype counts, including zero values", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+
+	assert.deepEqual(
+		module.buildTaskStatusTooltipItems({
+			static: 10,
+			intelligent: 1,
+			hybrid: 1,
+		}),
+		[
+			{ label: "静态扫描", value: 10 },
+			{ label: "智能扫描", value: 1 },
+			{ label: "混合扫描", value: 1 },
+		],
+	);
+	assert.deepEqual(
+		module.buildTaskStatusTooltipItems({
+			static: 0,
+			intelligent: 0,
+			hybrid: 0,
+		}),
+		[
+			{ label: "静态扫描", value: 0 },
+			{ label: "智能扫描", value: 0 },
+			{ label: "混合扫描", value: 0 },
+		],
+	);
 });
 
 test("DashboardCommandCenter recent static task uses the provided aggregated detail path", async () => {
@@ -329,6 +393,7 @@ test("DashboardCommandCenter recent static task uses the provided aggregated det
 		markup,
 		/href="\/static-analysis\/gl-batch\?gitleaksTaskId=gl-batch&amp;banditTaskId=ba-batch"/,
 	);
+	assert.match(markup, /aria-label="查看 Gamma Portal 详情"/);
 	assert.doesNotMatch(markup, /href="\/tasks\/static"/);
 });
 
@@ -351,6 +416,36 @@ test("DashboardCommandCenter shows an empty state when no recent tasks are avail
 	assert.doesNotMatch(markup, /共 \d+ 条/);
 	assert.doesNotMatch(markup, /上一页/);
 	assert.doesNotMatch(markup, /下一页/);
+});
+
+test("DashboardCommandCenter keeps task status tooltip counts visible even when all subtype counts are zero", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+	const snapshot = createSnapshotFixture();
+	snapshot.task_status_breakdown = {
+		pending: 0,
+		running: 1,
+		completed: 0,
+		failed: 0,
+		interrupted: 0,
+		cancelled: 0,
+	};
+	snapshot.task_status_by_scan_type.running = {
+		static: 0,
+		intelligent: 0,
+		hybrid: 0,
+	};
+
+	const markup = renderToStaticMarkup(
+		createElement(module.default, {
+			snapshot,
+			rangeDays: 14,
+			onRangeDaysChange: () => {},
+		}),
+	);
+
+	assert.match(markup, /查看运行中状态下的扫描类型细分/);
 });
 
 test("DashboardCommandCenter uses enlarged axes and fixed chart spacing constants", async () => {
@@ -512,6 +607,62 @@ test("formatCumulativeDuration formats scan durations with zh units", async () =
 	assert.equal(module.formatCumulativeDuration(61000), "1分 1秒");
 	assert.equal(module.formatCumulativeDuration(3605000), "1时 0分 5秒");
 	assert.equal(module.formatCumulativeDuration(90061000), "1天 1时 1分 1秒");
+});
+
+test("project-risk tooltip formatter returns severity-specific labels", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+
+	assert.deepEqual(
+		module.formatHorizontalStatsTooltipValue("project-risk", 3, "严重"),
+		["3", "严重漏洞数量"],
+	);
+	assert.deepEqual(
+		module.formatHorizontalStatsTooltipValue("project-risk", 7, "高危"),
+		["7", "高危漏洞数量"],
+	);
+	assert.deepEqual(
+		module.formatHorizontalStatsTooltipValue("language-risk", 28, "数量"),
+		["28", "数量"],
+	);
+});
+
+test("recent task title formatter strips the scan type prefix and preserves bare project names", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+	const [hybridTask, intelligentTask, staticTask] = createSnapshotFixture().recent_tasks;
+
+	assert.equal(module.getRecentTaskProjectTitle(hybridTask), "Alpha Gateway");
+	assert.equal(module.getRecentTaskProjectTitle(intelligentTask), "Beta API");
+	assert.equal(module.getRecentTaskProjectTitle(staticTask), "Gamma Portal");
+	assert.equal(
+		module.getRecentTaskProjectTitle({
+			...staticTask,
+			title: "Standalone Project",
+		}),
+		"Standalone Project",
+	);
+});
+
+test("DashboardCommandCenter renders icon-only recent task links with explicit assistive labels", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+
+	const markup = renderToStaticMarkup(
+		createElement(module.default, {
+			snapshot: createSnapshotFixture(),
+			rangeDays: 14,
+			onRangeDaysChange: () => {},
+		}),
+	);
+
+	assert.match(markup, /aria-label="查看 Alpha Gateway 详情"/);
+	assert.match(markup, /aria-label="查看 Beta API 详情"/);
+	assert.match(markup, /aria-label="查看 Gamma Portal 详情"/);
+	assert.doesNotMatch(markup, /查看混合扫描状态说明/);
 });
 
 test("recent task pagination uses four items per page and clamps invalid pages", async () => {

@@ -39,6 +39,22 @@ def test_parse_dashboard_language_info_accepts_legacy_language_maps():
     }
 
 
+def _assert_task_status_by_scan_type_totals(snapshot) -> None:
+    for status_name in (
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "interrupted",
+        "cancelled",
+    ):
+        total = getattr(snapshot.task_status_breakdown, status_name)
+        breakdown = getattr(snapshot.task_status_by_scan_type, status_name)
+        assert total == (
+            breakdown.static + breakdown.intelligent + breakdown.hybrid
+        )
+
+
 def _build_empty_project_info_side_effect():
     project_rows = [("p1", "Alpha", "zip")]
     management_metrics_rows = [("p1", "ready", 0, 0, 0, 0)]
@@ -486,6 +502,12 @@ async def test_dashboard_snapshot_v2_exposes_summary_and_windowed_panels(monkeyp
     assert snapshot.task_status_breakdown.completed == 8
     assert snapshot.task_status_breakdown.failed == 2
     assert snapshot.task_status_breakdown.running == 1
+    assert snapshot.task_status_by_scan_type.completed.static == 6
+    assert snapshot.task_status_by_scan_type.completed.intelligent == 0
+    assert snapshot.task_status_by_scan_type.completed.hybrid == 1
+    assert snapshot.task_status_by_scan_type.running.intelligent == 1
+    assert snapshot.task_status_by_scan_type.failed.static == 2
+    _assert_task_status_by_scan_type_totals(snapshot)
     assert [item.engine for item in snapshot.engine_breakdown] == [
         "llm",
         "opengrep",
@@ -671,6 +693,10 @@ async def test_dashboard_snapshot_v2_groups_multi_engine_static_recent_tasks(mon
     )
 
     assert snapshot.task_status_breakdown.completed == 1
+    assert snapshot.task_status_by_scan_type.completed.static == 1
+    assert snapshot.task_status_by_scan_type.completed.intelligent == 0
+    assert snapshot.task_status_by_scan_type.completed.hybrid == 0
+    _assert_task_status_by_scan_type_totals(snapshot)
     assert len(snapshot.recent_tasks) == 1
     recent_task = snapshot.recent_tasks[0]
     assert recent_task.task_id == "gl-batch"

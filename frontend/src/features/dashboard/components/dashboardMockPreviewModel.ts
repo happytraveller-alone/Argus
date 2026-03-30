@@ -79,12 +79,12 @@ export const DASHBOARD_PREVIEW_VIEWS: DashboardPreviewView[] = [
 	},
 	{
 		id: "static-engine-rules",
-		label: "静态扫描引擎规则统计图",
+		label: "扫描规则统计图",
 		description: "查看各静态扫描引擎规则数量分布情况",
 	},
 	{
 		id: "language-lines",
-		label: "语言代码行数统计图",
+		label: "项目语言统计图",
 		description: "查看项目涉及语言的代码行数量分布情况",
 	},
 ];

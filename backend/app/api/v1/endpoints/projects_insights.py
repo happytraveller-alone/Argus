@@ -11,6 +11,22 @@ router = APIRouter()
 STATIC_SCAN_BATCH_MARKER_PREFIX = "[[STATIC_BATCH:"
 STATIC_SCAN_BATCH_MARKER_SUFFIX = "]]"
 STATIC_SCAN_PAIRING_WINDOW_MS = 60 * 1000
+DASHBOARD_TASK_STATUS_KEYS = (
+    "pending",
+    "running",
+    "completed",
+    "failed",
+    "interrupted",
+    "cancelled",
+)
+DASHBOARD_SCAN_TYPE_KEYS = ("static", "intelligent", "hybrid")
+
+
+def _build_empty_task_status_by_scan_type() -> Dict[str, Dict[str, int]]:
+    return {
+        status_key: {scan_type: 0 for scan_type in DASHBOARD_SCAN_TYPE_KEYS}
+        for status_key in DASHBOARD_TASK_STATUS_KEYS
+    }
 
 
 def _extract_static_scan_batch_id(name: Any) -> Optional[str]:
@@ -752,6 +768,7 @@ async def get_dashboard_snapshot(
         "interrupted": 0,
         "cancelled": 0,
     }
+    task_status_by_scan_type = _build_empty_task_status_by_scan_type()
     engine_metrics: Dict[str, Dict[str, int]] = {
         engine: {
             "completed_scans": 0,
@@ -912,6 +929,7 @@ async def get_dashboard_snapshot(
         timestamp: Optional[datetime],
         duration_ms: int,
         *,
+        scan_type: str,
         include_in_task_breakdown: bool = True,
     ) -> None:
         hotspot = ensure_hotspot(project_id)
@@ -928,6 +946,10 @@ async def get_dashboard_snapshot(
             task_status_breakdown[status_bucket] = _to_non_negative_int(
                 task_status_breakdown.get(status_bucket, 0)
             ) + 1
+            if scan_type in DASHBOARD_SCAN_TYPE_KEYS:
+                task_status_by_scan_type[status_bucket][scan_type] = _to_non_negative_int(
+                    task_status_by_scan_type.get(status_bucket, {}).get(scan_type, 0)
+                ) + 1
 
         if status_bucket == "completed":
             success_totals["completed"] += 1
@@ -1039,6 +1061,7 @@ async def get_dashboard_snapshot(
             status,
             task_timestamp,
             duration_ms,
+            scan_type="static",
             include_in_task_breakdown=False,
         )
         static_recent_task_records.append(
@@ -1081,6 +1104,7 @@ async def get_dashboard_snapshot(
             status,
             task_timestamp,
             duration_ms,
+            scan_type="static",
             include_in_task_breakdown=False,
         )
         static_recent_task_records.append(
@@ -1129,6 +1153,7 @@ async def get_dashboard_snapshot(
             status,
             task_timestamp,
             duration_ms,
+            scan_type="static",
             include_in_task_breakdown=False,
         )
         static_recent_task_records.append(
@@ -1171,6 +1196,7 @@ async def get_dashboard_snapshot(
             status,
             task_timestamp,
             duration_ms,
+            scan_type="static",
             include_in_task_breakdown=False,
         )
         static_recent_task_records.append(
@@ -1213,6 +1239,7 @@ async def get_dashboard_snapshot(
             status,
             task_timestamp,
             duration_ms,
+            scan_type="static",
             include_in_task_breakdown=False,
         )
         static_recent_task_records.append(
@@ -1266,7 +1293,14 @@ async def get_dashboard_snapshot(
                 (_coerce_datetime(completed_at) - _coerce_datetime(started_at)).total_seconds() * 1000
             )
             agent_duration_ms += duration_ms
-        register_task("llm", normalized_project_id, status, task_timestamp, duration_ms)
+        register_task(
+            "llm",
+            normalized_project_id,
+            status,
+            task_timestamp,
+            duration_ms,
+            scan_type="intelligent" if source_mode == "intelligent" else "hybrid",
+        )
         register_recent_task(
             task_id=task_id,
             project_id=normalized_project_id,
@@ -1285,6 +1319,9 @@ async def get_dashboard_snapshot(
         status_bucket = _bucket_dashboard_task_status(item.get("status"))
         task_status_breakdown[status_bucket] = _to_non_negative_int(
             task_status_breakdown.get(status_bucket, 0)
+        ) + 1
+        task_status_by_scan_type[status_bucket]["static"] = _to_non_negative_int(
+            task_status_by_scan_type.get(status_bucket, {}).get("static", 0)
         ) + 1
     recent_task_items.extend(static_recent_tasks)
 
@@ -1941,6 +1978,14 @@ async def get_dashboard_snapshot(
             false_positive_count=window_counts["false_positive"],
         ),
         task_status_breakdown=DashboardTaskStatusBreakdownItem(**task_status_breakdown),
+        task_status_by_scan_type=DashboardTaskStatusByScanTypeItem(
+            **{
+                status_key: DashboardTaskStatusScanTypeBreakdownItem(
+                    **task_status_by_scan_type[status_key]
+                )
+                for status_key in DASHBOARD_TASK_STATUS_KEYS
+            }
+        ),
         engine_breakdown=engine_breakdown,
         project_hotspots=sorted_hotspots,
         language_risk=[

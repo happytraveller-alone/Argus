@@ -991,6 +991,7 @@ class DashboardSnapshotResponse(BaseModel):
     daily_activity: List["DashboardDailyActivityItem"]
     verification_funnel: "DashboardVerificationFunnelItem"
     task_status_breakdown: "DashboardTaskStatusBreakdownItem"
+    task_status_by_scan_type: "DashboardTaskStatusByScanTypeItem"
     engine_breakdown: List["DashboardEngineBreakdownItem"]
     project_hotspots: List["DashboardProjectHotspotItem"]
     language_risk: List["DashboardLanguageRiskItem"]
@@ -1063,6 +1064,21 @@ class DashboardTaskStatusBreakdownItem(BaseModel):
     failed: int
     interrupted: int
     cancelled: int
+
+
+class DashboardTaskStatusScanTypeBreakdownItem(BaseModel):
+    static: int
+    intelligent: int
+    hybrid: int
+
+
+class DashboardTaskStatusByScanTypeItem(BaseModel):
+    pending: DashboardTaskStatusScanTypeBreakdownItem
+    running: DashboardTaskStatusScanTypeBreakdownItem
+    completed: DashboardTaskStatusScanTypeBreakdownItem
+    failed: DashboardTaskStatusScanTypeBreakdownItem
+    interrupted: DashboardTaskStatusScanTypeBreakdownItem
+    cancelled: DashboardTaskStatusScanTypeBreakdownItem
 
 
 class DashboardEngineBreakdownItem(BaseModel):

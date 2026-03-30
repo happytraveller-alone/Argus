@@ -236,6 +236,21 @@ export interface DashboardRecentTaskItem {
   detail_path: string;
 }
 
+export interface DashboardTaskStatusScanTypeBreakdown {
+  static: number;
+  intelligent: number;
+  hybrid: number;
+}
+
+export interface DashboardTaskStatusByScanTypeItem {
+  pending: DashboardTaskStatusScanTypeBreakdown;
+  running: DashboardTaskStatusScanTypeBreakdown;
+  completed: DashboardTaskStatusScanTypeBreakdown;
+  failed: DashboardTaskStatusScanTypeBreakdown;
+  interrupted: DashboardTaskStatusScanTypeBreakdown;
+  cancelled: DashboardTaskStatusScanTypeBreakdown;
+}
+
 export interface DashboardProjectRiskDistributionItem {
   project_id: string;
   project_name: string;
@@ -275,6 +290,7 @@ export interface DashboardSnapshotResponse {
   daily_activity: DashboardDailyActivityItem[];
   verification_funnel: DashboardVerificationFunnelItem;
   task_status_breakdown: DashboardTaskStatusBreakdownItem;
+  task_status_by_scan_type: DashboardTaskStatusByScanTypeItem;
   engine_breakdown: DashboardEngineBreakdownItem[];
   project_hotspots: DashboardProjectHotspotItem[];
   language_risk: DashboardLanguageRiskItem[];

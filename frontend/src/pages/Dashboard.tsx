@@ -28,6 +28,17 @@ const DashboardCommandCenter = lazy(
 
 type RangeDays = 7 | 14 | 30;
 
+function createEmptyTaskStatusByScanType() {
+	return {
+		pending: { static: 0, intelligent: 0, hybrid: 0 },
+		running: { static: 0, intelligent: 0, hybrid: 0 },
+		completed: { static: 0, intelligent: 0, hybrid: 0 },
+		failed: { static: 0, intelligent: 0, hybrid: 0 },
+		interrupted: { static: 0, intelligent: 0, hybrid: 0 },
+		cancelled: { static: 0, intelligent: 0, hybrid: 0 },
+	};
+}
+
 const EMPTY_SNAPSHOT: DashboardSnapshotResponse = {
 	generated_at: "",
 	total_scan_duration_ms: 0,
@@ -66,6 +77,7 @@ const EMPTY_SNAPSHOT: DashboardSnapshotResponse = {
 		interrupted: 0,
 		cancelled: 0,
 	},
+	task_status_by_scan_type: createEmptyTaskStatusByScanType(),
 	engine_breakdown: [],
 	project_hotspots: [],
 	language_risk: [],
@@ -103,9 +115,42 @@ function DashboardFallback() {
 	);
 }
 
-function normalizeSnapshot(snapshot: DashboardSnapshotResponse): DashboardSnapshotResponse {
+export function normalizeSnapshot(
+	snapshot: DashboardSnapshotResponse,
+): DashboardSnapshotResponse {
+	const taskStatusByScanType = {
+		...createEmptyTaskStatusByScanType(),
+		...(snapshot.task_status_by_scan_type || {}),
+	};
+
 	return {
 		...snapshot,
+		task_status_by_scan_type: {
+			pending: {
+				...createEmptyTaskStatusByScanType().pending,
+				...(taskStatusByScanType.pending || {}),
+			},
+			running: {
+				...createEmptyTaskStatusByScanType().running,
+				...(taskStatusByScanType.running || {}),
+			},
+			completed: {
+				...createEmptyTaskStatusByScanType().completed,
+				...(taskStatusByScanType.completed || {}),
+			},
+			failed: {
+				...createEmptyTaskStatusByScanType().failed,
+				...(taskStatusByScanType.failed || {}),
+			},
+			interrupted: {
+				...createEmptyTaskStatusByScanType().interrupted,
+				...(taskStatusByScanType.interrupted || {}),
+			},
+			cancelled: {
+				...createEmptyTaskStatusByScanType().cancelled,
+				...(taskStatusByScanType.cancelled || {}),
+			},
+		},
 		daily_activity: (snapshot.daily_activity || []).map((item) => ({
 			...item,
 			yasa_findings: Math.max(Number(item.yasa_findings || 0), 0),
