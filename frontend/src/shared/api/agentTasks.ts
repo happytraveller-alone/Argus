@@ -209,6 +209,7 @@ export interface AgentStaticBootstrapScope {
   phpstan_enabled?: boolean;
   yasa_enabled?: boolean;
   yasa_language?: "python" | "javascript" | "typescript" | "golang" | "java" | "auto";
+  yasa_rule_config_id?: string | null;
 }
 
 export interface AgentAuditScope extends Record<string, unknown> {

@@ -60,6 +60,7 @@ import { useZipFile } from "./hooks/useZipFile";
 import FileSelectionDialog from "./FileSelectionDialog";
 import AgentModeSelector, {
 	type ScanMode,
+	type StaticTool,
 	type StaticToolSelection,
 } from "@/components/agent/AgentModeSelector";
 import AdvancedOptionsSection from "./create-scan-task/AdvancedOptionsSection";
@@ -91,6 +92,8 @@ import {
 	appendStaticScanBatchMarker,
 	createStaticScanBatchId,
 } from "@/shared/utils/staticScanBatch";
+import StaticEngineConfigDialog from "@/components/scan/create-scan-task/StaticEngineConfigDialog";
+import { buildScanEngineConfigRoute } from "@/shared/constants/scanEngines";
 
 interface CreateScanTaskDialogProps {
 	open: boolean;
@@ -150,6 +153,7 @@ export default function CreateScanTaskDialog({
 	const [selectedYasaRuleConfigId, setSelectedYasaRuleConfigId] = useState<string>("default");
 	const [staticRules, setStaticRules] = useState<OpengrepRule[]>([]);
 	const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
+	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
 
 	const { projects, loading, loadProjects } = useProjects();
 	const selectedProject = projects.find((p) => p.id === selectedProjectId);
@@ -225,6 +229,7 @@ export default function CreateScanTaskDialog({
 			setStaticTools({ opengrep: true, gitleaks: false, bandit: false, phpstan: false, yasa: false, pmd: false });
 			setYasaLanguage("auto");
 			setSelectedYasaRuleConfigId("default");
+			setConfigEngine(null);
 			setSourceMode("existing");
 			setNewProjectName("");
 			setNewProjectFile(null);
@@ -749,6 +754,15 @@ export default function CreateScanTaskDialog({
 		staticTools.pmd,
 	]);
 
+	const handleOpenEngineConfig = (engine: StaticTool) => {
+		setConfigEngine(engine);
+	};
+
+	const handleNavigateToEngineConfig = (engine: StaticTool) => {
+		onOpenChange(false);
+		navigate(buildScanEngineConfigRoute(engine));
+	};
+
 	return (
 		<>
 			<Dialog open={open} onOpenChange={onOpenChange}>
@@ -917,68 +931,8 @@ export default function CreateScanTaskDialog({
 									yasa: isYasaBlockedProject ? getYasaBlockedProjectMessage() : undefined,
 									pmd: isPmdBlockedProject ? getPmdBlockedProjectMessage() : undefined,
 								}}
+								onOpenStaticToolConfig={handleOpenEngineConfig}
 							/>
-						)}
-						{scanMode === "static" && staticTools.yasa && (
-							<div className="space-y-2 border border-border rounded p-3 bg-muted/30">
-								<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-									YASA 规则配置
-								</Label>
-								<Select
-									value={selectedYasaRuleConfigId}
-									onValueChange={setSelectedYasaRuleConfigId}
-								>
-									<SelectTrigger className="h-9 cyber-input max-w-[340px]">
-										<SelectValue placeholder="选择规则配置" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="default">内置默认</SelectItem>
-										{yasaRuleConfigs.map((config) => (
-											<SelectItem key={config.id} value={config.id}>
-												{config.name} ({config.language})
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-								<Label className="font-mono font-bold uppercase text-xs text-muted-foreground">
-									YASA 语言
-								</Label>
-								<Select
-									value={yasaLanguage}
-									onValueChange={(value) =>
-										setYasaLanguage(parseYasaLanguageOption(value))
-									}
-									disabled={selectedYasaRuleConfigId !== "default"}
-								>
-									<SelectTrigger className="h-9 cyber-input max-w-[240px]">
-										<SelectValue placeholder="选择语言" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="auto">自动识别</SelectItem>
-										<SelectItem value="python">python</SelectItem>
-										<SelectItem value="javascript">javascript</SelectItem>
-										<SelectItem value="typescript">typescript</SelectItem>
-										<SelectItem value="golang">golang</SelectItem>
-										<SelectItem value="java">java</SelectItem>
-									</SelectContent>
-								</Select>
-								{selectedYasaRuleConfigId === "default" &&
-									yasaLanguage === "auto" &&
-									!resolveYasaLanguageFromProgrammingLanguages(
-										sourceMode === "existing"
-											? selectedProject?.programming_languages
-											: undefined,
-									) && (
-										<p className="text-xs text-amber-300">
-											YASA 将自动跳过（不影响其它引擎）：未检测到可支持语言
-										</p>
-									)}
-								{isYasaBlockedProject && (
-									<p className="text-xs text-amber-300">
-										{getYasaBlockedProjectMessage()}
-									</p>
-								)}
-							</div>
 						)}
 
 						{/* 配置区域 */}
@@ -1094,6 +1048,39 @@ export default function CreateScanTaskDialog({
 					</div>
 				</DialogContent>
 			</Dialog>
+			<StaticEngineConfigDialog
+				engine={configEngine ?? "opengrep"}
+				open={configEngine !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfigEngine(null);
+				}}
+				scanMode="static"
+				enabled={configEngine ? staticTools[configEngine] : false}
+				creating={creating}
+				blockedReason={
+					configEngine === "yasa" && isYasaBlockedProject
+						? getYasaBlockedProjectMessage()
+						: configEngine === "pmd" && isPmdBlockedProject
+							? getPmdBlockedProjectMessage()
+							: null
+				}
+				yasaLanguage={yasaLanguage}
+				onYasaLanguageChange={(value) => setYasaLanguage(parseYasaLanguageOption(value))}
+				yasaRuleConfigs={yasaRuleConfigs}
+				selectedYasaRuleConfigId={selectedYasaRuleConfigId}
+				onSelectedYasaRuleConfigIdChange={setSelectedYasaRuleConfigId}
+				showYasaAutoSkipHint={
+					configEngine === "yasa" &&
+					selectedYasaRuleConfigId === "default" &&
+					yasaLanguage === "auto" &&
+					!resolveYasaLanguageFromProgrammingLanguages(
+						sourceMode === "existing"
+							? selectedProject?.programming_languages
+							: undefined,
+					)
+				}
+				onNavigateToEngineConfig={(engine) => handleNavigateToEngineConfig(engine)}
+			/>
 
 			{sourceMode === "existing" && selectedProjectId ? (
 				<FileSelectionDialog

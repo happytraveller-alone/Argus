@@ -32,6 +32,7 @@ from app.db.static_finding_paths import normalize_static_scan_file_path
 from app.models.agent_task import AgentTask
 from app.models.bandit import BanditRuleState
 from app.models.opengrep import OpengrepRule
+from app.models.yasa import YasaRuleConfig
 from app.services.bandit_rules_snapshot import load_bandit_builtin_snapshot
 from app.services.agent.bootstrap import (
     BanditBootstrapScanner,
@@ -185,6 +186,7 @@ def _resolve_static_bootstrap_config(
         "phpstan_enabled": False,
         "yasa_enabled": False,
         "yasa_language": "auto",
+        "yasa_rule_config_id": None,
     }
     if source_mode == "hybrid":
         defaults = {
@@ -195,6 +197,7 @@ def _resolve_static_bootstrap_config(
             "phpstan_enabled": False,
             "yasa_enabled": False,
             "yasa_language": "auto",
+            "yasa_rule_config_id": None,
         }
 
     audit_scope = task.audit_scope if isinstance(task.audit_scope, dict) else {}
@@ -225,6 +228,17 @@ def _resolve_static_bootstrap_config(
         static_bootstrap.get("yasa_enabled", defaults["yasa_enabled"])
     )
     raw_yasa_language = static_bootstrap.get("yasa_language", defaults["yasa_language"])
+    raw_yasa_rule_config_value = static_bootstrap.get(
+        "yasa_rule_config_id",
+        defaults["yasa_rule_config_id"],
+    )
+    raw_yasa_rule_config_id = (
+        str(raw_yasa_rule_config_value).strip()
+        if raw_yasa_rule_config_value is not None
+        else ""
+    )
+    if raw_yasa_rule_config_value is not None and not raw_yasa_rule_config_id:
+        raise HTTPException(status_code=400, detail="yasa_rule_config_id 不能为空")
     try:
         normalized_yasa_language = normalize_yasa_language(
             str(raw_yasa_language or "").strip(),
@@ -240,6 +254,7 @@ def _resolve_static_bootstrap_config(
         phpstan_enabled = False
         yasa_enabled = False
         normalized_yasa_language = "auto"
+        raw_yasa_rule_config_id = ""
 
     return {
         "mode": mode,
@@ -249,6 +264,42 @@ def _resolve_static_bootstrap_config(
         "phpstan_enabled": phpstan_enabled,
         "yasa_enabled": yasa_enabled,
         "yasa_language": normalized_yasa_language,
+        "yasa_rule_config_id": raw_yasa_rule_config_id or None,
+    }
+
+
+async def _resolve_embedded_yasa_settings(
+    *,
+    db: AsyncSession,
+    programming_languages: Any,
+    yasa_language: str,
+    yasa_rule_config_id: Optional[str],
+) -> Dict[str, Any]:
+    selected_yasa_rule_config: Optional[YasaRuleConfig] = None
+    normalized_rule_config_id = str(yasa_rule_config_id or "").strip() or None
+    if normalized_rule_config_id:
+        rule_result = await db.execute(
+            select(YasaRuleConfig).where(YasaRuleConfig.id == normalized_rule_config_id)
+        )
+        selected_yasa_rule_config = rule_result.scalar_one_or_none()
+        if selected_yasa_rule_config is None:
+            raise RuntimeError("YASA 预处理失败：自定义规则配置不存在")
+        if not bool(selected_yasa_rule_config.is_active):
+            raise RuntimeError("YASA 预处理失败：自定义规则配置已禁用")
+
+    resolved_yasa_language = (
+        str(selected_yasa_rule_config.language or "").strip().lower()
+        if selected_yasa_rule_config is not None
+        else resolve_yasa_language_with_preference(
+            preferred_language=yasa_language,
+            programming_languages=programming_languages,
+        )
+    )
+    return {
+        "rule_config_id": normalized_rule_config_id,
+        "selected_rule_config": selected_yasa_rule_config,
+        "resolved_language": resolved_yasa_language,
+        "requested_language": yasa_language or "auto",
     }
 
 def _normalize_bootstrap_confidence(confidence: Any) -> Optional[str]:
@@ -594,6 +645,7 @@ async def _prepare_embedded_bootstrap_findings(
     phpstan_enabled: bool = False,
     yasa_enabled: bool = False,
     yasa_language: str = "auto",
+    yasa_rule_config_id: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], Optional[str], str]:
     opengrep_candidates: List[Dict[str, Any]] = []
     bandit_candidates: List[Dict[str, Any]] = []
@@ -807,10 +859,14 @@ async def _prepare_embedded_bootstrap_findings(
             yasa_candidates = []
             yasa_total_findings = 0
         else:
-            resolved_yasa_language = resolve_yasa_language_with_preference(
-                preferred_language=yasa_language,
+            yasa_settings = await _resolve_embedded_yasa_settings(
+                db=db,
                 programming_languages=programming_languages,
+                yasa_language=yasa_language,
+                yasa_rule_config_id=yasa_rule_config_id,
             )
+            selected_yasa_rule_config = yasa_settings["selected_rule_config"]
+            resolved_yasa_language = yasa_settings["resolved_language"]
             if not resolved_yasa_language:
                 skip_reason = (
                     f"YASA 已跳过：未检测到可支持语言（支持 {YASA_SUPPORTED_LANGUAGES_TEXT}）"
@@ -838,12 +894,16 @@ async def _prepare_embedded_bootstrap_findings(
                             "bootstrap_source": "embedded_yasa",
                             "bootstrap_total_findings": 0,
                             "bootstrap_candidate_count": 0,
-                            "bootstrap_yasa_requested_language": yasa_language or "auto",
+                            "bootstrap_yasa_requested_language": yasa_settings["requested_language"],
                             "bootstrap_yasa_resolved_language": resolved_yasa_language,
+                            "bootstrap_yasa_rule_config_id": yasa_settings["rule_config_id"] or "",
                         },
                     )
                 try:
-                    scanner = YasaBootstrapScanner(language=resolved_yasa_language)
+                    scanner = YasaBootstrapScanner(
+                        language=resolved_yasa_language,
+                        custom_rule_config=selected_yasa_rule_config,
+                    )
                     scan_result = await scanner.scan(project_root)
                 except FileNotFoundError as exc:
                     if event_emitter:
@@ -913,6 +973,7 @@ async def _prepare_embedded_bootstrap_findings(
                 "bootstrap_yasa_total_findings": yasa_total_findings,
                 "bootstrap_yasa_candidate_count": len(yasa_candidates),
                 "bootstrap_yasa_requested_language": yasa_language or "auto",
+                "bootstrap_yasa_rule_config_id": yasa_rule_config_id or "",
             },
         )
     return merged_candidates, None, bootstrap_source

@@ -3,8 +3,9 @@
  * Cyberpunk Terminal Aesthetic
  */
 
-import { Bot, Zap, CheckCircle2, Clock, Shield, Code } from "lucide-react";
+import { Bot, Zap, CheckCircle2, Clock, Shield, Code, Settings2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/utils/utils";
 
 export type ScanMode = "static" | "agent";
@@ -28,6 +29,7 @@ interface AgentModeSelectorProps {
   onStaticToolsChange?: (next: StaticToolSelection) => void;
   disabledStaticTools?: Partial<Record<StaticTool, boolean>>;
   blockedStaticToolMessages?: Partial<Record<StaticTool, string>>;
+  onOpenStaticToolConfig?: (tool: StaticTool) => void;
 }
 
 export default function AgentModeSelector({
@@ -38,6 +40,7 @@ export default function AgentModeSelector({
   onStaticToolsChange,
   disabledStaticTools,
   blockedStaticToolMessages,
+  onOpenStaticToolConfig,
 }: AgentModeSelectorProps) {
   const isStaticSelected = value === "static";
   const isAgentSelected = value === "agent";
@@ -57,6 +60,18 @@ export default function AgentModeSelector({
       [tool]: checked,
     });
   };
+
+  const staticToolItems: Array<{
+    key: StaticTool;
+    label: string;
+  }> = [
+    { key: "opengrep", label: "规则扫描" },
+    { key: "gitleaks", label: "密钥泄露扫描" },
+    { key: "bandit", label: "Python 安全扫描" },
+    { key: "phpstan", label: "PHPStan 扫描" },
+    { key: "yasa", label: "YASA 扫描" },
+    { key: "pmd", label: "PMD Java 扫描" },
+  ];
 
   return (
     <div className="space-y-3">
@@ -141,72 +156,35 @@ export default function AgentModeSelector({
               <div className="text-[10px] uppercase tracking-wider text-sky-700 dark:text-sky-300 font-bold font-mono">
                 静态工具
               </div>
-              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
-                <Checkbox
-                  checked={resolvedTools.opengrep}
-                  onCheckedChange={(checked) =>
-                    updateStaticTool("opengrep", Boolean(checked))
-                  }
-                  disabled={disabled || Boolean(disabledStaticTools?.opengrep)}
-                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                />
-                {/* <span className="tracking-wider">规则扫描</span> */}
-              </label>
-              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
-                <Checkbox
-                  checked={resolvedTools.gitleaks}
-                  onCheckedChange={(checked) =>
-                    updateStaticTool("gitleaks", Boolean(checked))
-                  }
-                  disabled={disabled || Boolean(disabledStaticTools?.gitleaks)}
-                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                />
-                <span className="tracking-wider">密钥泄露扫描</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
-                <Checkbox
-                  checked={resolvedTools.bandit}
-                  onCheckedChange={(checked) =>
-                    updateStaticTool("bandit", Boolean(checked))
-                  }
-                  disabled={disabled || Boolean(disabledStaticTools?.bandit)}
-                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                />
-                <span className="tracking-wider">Python 安全扫描</span>
-              </label>
-              {/* PHPStan integration: static tool selector entry */}
-              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
-                <Checkbox
-                  checked={resolvedTools.phpstan}
-                  onCheckedChange={(checked) =>
-                    updateStaticTool("phpstan", Boolean(checked))
-                  }
-                  disabled={disabled || Boolean(disabledStaticTools?.phpstan)}
-                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                />
-              </label>
-              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
-                <Checkbox
-                  checked={resolvedTools.yasa}
-                  onCheckedChange={(checked) =>
-                    updateStaticTool("yasa", Boolean(checked))
-                  }
-                  disabled={disabled || Boolean(disabledStaticTools?.yasa)}
-                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                />
-                <span className="tracking-wider">YASA 扫描</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
-                <Checkbox
-                  checked={resolvedTools.pmd}
-                  onCheckedChange={(checked) =>
-                    updateStaticTool("pmd", Boolean(checked))
-                  }
-                  disabled={disabled || Boolean(disabledStaticTools?.pmd)}
-                  className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                />
-                <span className="tracking-wider">PMD Java 扫描</span>
-              </label>
+              {staticToolItems.map((tool) => (
+                <div
+                  key={tool.key}
+                  className="flex items-center justify-between gap-2 rounded border border-sky-500/15 bg-background/30 px-2 py-1.5"
+                >
+                  <label className="flex min-w-0 items-center gap-2 text-xs font-mono text-sky-700 dark:text-sky-300 cursor-pointer">
+                    <Checkbox
+                      checked={resolvedTools[tool.key]}
+                      onCheckedChange={(checked) =>
+                        updateStaticTool(tool.key, Boolean(checked))
+                      }
+                      disabled={disabled || Boolean(disabledStaticTools?.[tool.key])}
+                      className="border-border data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
+                    />
+                    <span className="tracking-wider">{tool.label}</span>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-sky-700 hover:bg-sky-500/10 hover:text-sky-600 dark:text-sky-300"
+                    disabled={disabled || !onOpenStaticToolConfig}
+                    aria-label={`配置 ${tool.label}`}
+                    onClick={() => onOpenStaticToolConfig?.(tool.key)}
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
               {blockedStaticToolMessages?.yasa ? (
                 <p className="text-[10px] text-amber-300">
                   {blockedStaticToolMessages.yasa}

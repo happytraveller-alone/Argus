@@ -13,11 +13,13 @@ from app.api.v1.endpoints.static_tasks_shared import (
     cleanup_scan_workspace,
     copy_project_tree_to_scan_dir,
     ensure_scan_logs_dir,
+    ensure_scan_meta_dir,
     ensure_scan_output_dir,
     ensure_scan_project_dir,
     ensure_scan_workspace,
 )
 from app.core.config import settings
+from app.models.yasa import YasaRuleConfig
 from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 from app.services.yasa_runtime import (
     YASA_RUNNER_BINARY,
@@ -100,11 +102,18 @@ class YasaBootstrapScanner(StaticBootstrapScanner):
     scanner_name = "yasa"
     source = "yasa_bootstrap"
 
-    def __init__(self, *, language: str = "python", timeout_seconds: Optional[int] = None):
+    def __init__(
+        self,
+        *,
+        language: str = "python",
+        timeout_seconds: Optional[int] = None,
+        custom_rule_config: Optional[YasaRuleConfig] = None,
+    ):
         normalized = str(language or "").strip().lower() or "python"
         self.profile = resolve_yasa_language_profile(normalized)
         configured_timeout = int(getattr(settings, "YASA_TIMEOUT_SECONDS", 600) or 600)
         self.timeout_seconds = max(1, int(timeout_seconds or configured_timeout))
+        self.custom_rule_config = custom_rule_config
 
     def _build_rule_config(self) -> Optional[str]:
         try:
@@ -154,14 +163,35 @@ class YasaBootstrapScanner(StaticBootstrapScanner):
         project_dir = ensure_scan_project_dir("yasa-bootstrap", task_id)
         output_dir = ensure_scan_output_dir("yasa-bootstrap", task_id)
         ensure_scan_logs_dir("yasa-bootstrap", task_id)
+        meta_dir = ensure_scan_meta_dir("yasa-bootstrap", task_id)
         shutil.rmtree(project_dir, ignore_errors=True)
         copy_project_tree_to_scan_dir(project_root, project_dir)
+        checker_pack_ids = [self.profile["checker_pack"]]
+        checker_ids: List[str] | None = None
+        if self.custom_rule_config is not None:
+            checker_pack_ids = [
+                item.strip()
+                for item in str(self.custom_rule_config.checker_pack_ids or "").split(",")
+                if item.strip()
+            ]
+            checker_ids = [
+                item.strip()
+                for item in str(self.custom_rule_config.checker_ids or "").split(",")
+                if item.strip()
+            ] or None
+            staged_rule_config = meta_dir / "custom-rule-config.json"
+            staged_rule_config.write_text(
+                str(self.custom_rule_config.rule_config_json or ""),
+                encoding="utf-8",
+            )
+            rule_config_file = str(Path("/scan/meta") / staged_rule_config.name)
         cmd = build_yasa_scan_command(
             binary=YASA_RUNNER_BINARY,
             source_path="/scan/project",
             language=self.profile["language"],
             report_dir="/scan/output",
-            checker_pack_ids=[self.profile["checker_pack"]],
+            checker_pack_ids=checker_pack_ids,
+            checker_ids=checker_ids,
             rule_config_file=rule_config_file,
             use_runner_paths=True,
         )

@@ -445,6 +445,9 @@ async def _execute_agent_task(task_id: str):
                         yasa_language=str(
                             static_bootstrap_config.get("yasa_language") or "auto"
                         ),
+                        yasa_rule_config_id=static_bootstrap_config.get(
+                            "yasa_rule_config_id"
+                        ),
                     )
 
                 (

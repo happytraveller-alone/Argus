@@ -42,3 +42,33 @@ export function stripCreateProjectScanArchiveSuffix(fileName: string) {
 		"",
 	);
 }
+
+export function buildHybridStaticBootstrapConfig(params: {
+	opengrepEnabled: boolean;
+	banditEnabled: boolean;
+	gitleaksEnabled: boolean;
+	phpstanEnabled: boolean;
+	yasaEnabled: boolean;
+	yasaLanguage: string;
+	selectedYasaRuleConfigId: string;
+}) {
+	return {
+		mode: "embedded" as const,
+		opengrep_enabled: params.opengrepEnabled,
+		bandit_enabled: params.banditEnabled,
+		gitleaks_enabled: params.gitleaksEnabled,
+		phpstan_enabled: params.phpstanEnabled,
+		yasa_enabled: params.yasaEnabled,
+		yasa_language: params.yasaLanguage as
+			| "python"
+			| "javascript"
+			| "typescript"
+			| "golang"
+			| "java"
+			| "auto",
+		yasa_rule_config_id:
+			params.selectedYasaRuleConfigId !== "default"
+				? params.selectedYasaRuleConfigId
+				: null,
+	};
+}

@@ -335,7 +335,7 @@ export default function PmdRules({
       if (result.customConfigsLoadError) {
         toast.error(
           result.customConfigsLoadError ||
-            PMD_CUSTOM_RULE_CONFIGS_LOAD_ERROR_FALLBACK,
+          PMD_CUSTOM_RULE_CONFIGS_LOAD_ERROR_FALLBACK,
         );
       }
     } finally {
@@ -550,7 +550,7 @@ export default function PmdRules({
         <div className="cyber-card p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="stat-label">有效 ruleset 总数</p>
+              <p className="stat-label">有效规则总数</p>
               <p className="stat-value">{stats.total}</p>
             </div>
             <div className="stat-icon text-primary">
@@ -561,7 +561,7 @@ export default function PmdRules({
         <div className="cyber-card p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="stat-label">内置 ruleset</p>
+              <p className="stat-label">内置规则</p>
               <p className="stat-value">{stats.builtin}</p>
             </div>
             <div className="stat-icon text-cyan-400">
@@ -572,7 +572,7 @@ export default function PmdRules({
         <div className="cyber-card p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="stat-label">自定义 ruleset</p>
+              <p className="stat-label">自定义规则</p>
               <p className="stat-value">{stats.custom}</p>
             </div>
             <div className="stat-icon text-indigo-400">
@@ -612,69 +612,69 @@ export default function PmdRules({
       ) : null}
 
       {/* <div className="cyber-card space-y-4 overflow-hidden p-4"> */}
-        <DataTable
-          data={rows}
-          columns={columns}
-          state={tableState}
-          onStateChange={setTableState}
-          loading={loading}
-          error={builtinLoadError || undefined}
-          emptyState={{
-            title: "暂无可展示的 PMD ruleset",
-            description:
-              builtinRulesets.length === 0 && customRuleConfigs.length === 0
-                ? "当前没有可展示的 PMD ruleset"
-                : "调整筛选条件后重试",
-          }}
-          toolbar={{
-            searchPlaceholder: "搜索名称、文件名或描述...",
-            leadingActions: engineSelector,
-            showGlobalSearch: false,
-            showColumnVisibility: false,
-            showDensityToggle: false,
-            showReset: false,
-          }}
-          selection={{
-            enableRowSelection: true,
-            summary: buildSelectionSummary,
-            actions: () => (
-              <>
-                <Button type="button" size="sm" className="cyber-btn-primary h-8" disabled>
-                  批量启用
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="cyber-btn-outline h-8"
-                  disabled
-                >
-                  批量禁用
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 text-muted-foreground"
-                  disabled
-                >
-                  取消操作
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="cyber-btn-primary h-9"
-                  onClick={() => setShowImportDialog(true)}
-                >
-                  导入自定义规则
-                </Button>
-              </>
-            ),
-          }}
-          pagination={{ enabled: true, pageSizeOptions: [10, 20, 50] }}
-          tableClassName="min-w-[1180px]"
-          getRowId={(row) => row.id}
-        />
+      <DataTable
+        data={rows}
+        columns={columns}
+        state={tableState}
+        onStateChange={setTableState}
+        loading={loading}
+        error={builtinLoadError || undefined}
+        emptyState={{
+          title: "暂无可展示的 PMD ruleset",
+          description:
+            builtinRulesets.length === 0 && customRuleConfigs.length === 0
+              ? "当前没有可展示的 PMD ruleset"
+              : "调整筛选条件后重试",
+        }}
+        toolbar={{
+          searchPlaceholder: "搜索名称、文件名或描述...",
+          leadingActions: engineSelector,
+          showGlobalSearch: false,
+          showColumnVisibility: false,
+          showDensityToggle: false,
+          showReset: false,
+        }}
+        selection={{
+          enableRowSelection: true,
+          summary: buildSelectionSummary,
+          actions: () => (
+            <>
+              <Button type="button" size="sm" className="cyber-btn-primary h-8" disabled>
+                批量启用
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cyber-btn-outline h-8"
+                disabled
+              >
+                批量禁用
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 text-muted-foreground"
+                disabled
+              >
+                取消操作
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="cyber-btn-primary h-9"
+                onClick={() => setShowImportDialog(true)}
+              >
+                导入自定义规则
+              </Button>
+            </>
+          ),
+        }}
+        pagination={{ enabled: true, pageSizeOptions: [10, 20, 50] }}
+        tableClassName="min-w-[1180px]"
+        getRowId={(row) => row.id}
+      />
       {/* </div> */}
 
       <Dialog open={showDetail} onOpenChange={setShowDetail}>

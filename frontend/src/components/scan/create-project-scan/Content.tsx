@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Layers,
   Loader2,
+  Settings2,
   Shield,
   TerminalSquare,
   Upload,
@@ -34,6 +35,8 @@ import {
   type LLMProviderItem,
 } from "@/shared/llm/providerCatalog";
 import { isZipProject } from "@/shared/utils/projectUtils";
+import type { StaticTool } from "@/components/agent/AgentModeSelector";
+import StaticEngineConfigDialog from "@/components/scan/create-scan-task/StaticEngineConfigDialog";
 import {
   normalizeCreateProjectScanProvider,
 } from "./utils";
@@ -125,6 +128,9 @@ export default function CreateProjectScanDialogContent({
   createButtonVariant,
   canCreate,
   handleCreate,
+  configEngine,
+  setConfigEngine,
+  onNavigateToEngineConfig,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -203,11 +209,63 @@ export default function CreateProjectScanDialogContent({
   createButtonVariant: "single" | "dual";
   canCreate: boolean;
   handleCreate: (action?: "primary" | "secondary") => void | Promise<void>;
+  configEngine: StaticTool | null;
+  setConfigEngine: (engine: StaticTool | null) => void;
+  onNavigateToEngineConfig: (engine: StaticTool) => void;
 }) {
   const { t } = useI18n();
   const shouldShowAgentPrecheckHint = mode === "agent" || mode === "hybrid";
+  const staticEngineItems: Array<{
+    key: StaticTool;
+    title: string;
+    checked: boolean;
+    setChecked: (enabled: boolean) => void;
+    disabled?: boolean;
+    visible?: boolean;
+  }> = [
+    {
+      key: "opengrep",
+      title: "Opengrep",
+      checked: opengrepEnabled,
+      setChecked: setOpengrepEnabled,
+    },
+    {
+      key: "gitleaks",
+      title: "Gitleaks",
+      checked: gitleaksEnabled,
+      setChecked: setGitleaksEnabled,
+    },
+    {
+      key: "bandit",
+      title: "Bandit",
+      checked: banditEnabled,
+      setChecked: setBanditEnabled,
+    },
+    {
+      key: "phpstan",
+      title: "PHPStan",
+      checked: phpstanEnabled,
+      setChecked: setPhpstanEnabled,
+    },
+    {
+      key: "yasa",
+      title: "YASA",
+      checked: yasaEnabled,
+      setChecked: setYasaEnabled,
+      disabled: isYasaBlockedProject,
+    },
+    {
+      key: "pmd",
+      title: "PMD",
+      checked: pmdEnabled,
+      setChecked: setPmdEnabled,
+      disabled: isPmdBlockedProject,
+      visible: mode === "static",
+    },
+  ];
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!w-[min(92vw,760px)] !max-w-none max-h-[88vh] p-0 gap-0 flex flex-col cyber-dialog border border-border rounded-lg">
         <DialogHeader className="px-6 py-4 border-b border-border bg-muted">
@@ -475,129 +533,38 @@ export default function CreateProjectScanDialogContent({
                 </p> */}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
-                  <Checkbox
-                    checked={opengrepEnabled}
-                    onCheckedChange={(checked) => setOpengrepEnabled(Boolean(checked))}
-                    disabled={creating}
-                    className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                  />
-                  <div>
-                    <p className="text-sm text-foreground font-semibold">Opengrep</p>
-                    {/* <p className="text-xs text-muted-foreground">规则扫描</p> */}
-                  </div>
-                </label>
-                <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
-                  <Checkbox
-                    checked={gitleaksEnabled}
-                    onCheckedChange={(checked) => setGitleaksEnabled(Boolean(checked))}
-                    disabled={creating}
-                    className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                  />
-                  <div>
-                    <p className="text-sm text-foreground font-semibold">Gitleaks</p>
-                    {/* <p className="text-xs text-muted-foreground">密钥泄露扫描</p> */}
-                  </div>
-                </label>
-                <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
-                  <Checkbox
-                    checked={banditEnabled}
-                    onCheckedChange={(checked) => setBanditEnabled(Boolean(checked))}
-                    disabled={creating}
-                    className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                  />
-                  <div>
-                    <p className="text-sm text-foreground font-semibold">Bandit</p>
-                    {/* <p className="text-xs text-muted-foreground">Python 安全扫描</p> */}
-                  </div>
-                </label>
-                <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
-                  <Checkbox
-                    checked={phpstanEnabled}
-                    onCheckedChange={(checked) => setPhpstanEnabled(Boolean(checked))}
-                    disabled={creating}
-                    className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                  />
-                  <div>
-                    <p className="text-sm text-foreground font-semibold">PHPStan</p>
-                    {/* <p className="text-xs text-muted-foreground">PHP 规则扫描</p> */}
-                  </div>
-                </label>
-                <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
-                  <Checkbox
-                    checked={yasaEnabled}
-                    onCheckedChange={(checked) => setYasaEnabled(Boolean(checked))}
-                    disabled={creating || isYasaBlockedProject}
-                    className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                  />
-                  <div>
-                    <p className="text-sm text-foreground font-semibold">YASA</p>
-                    {/* <p className="text-xs text-muted-foreground">多语言静态分析</p> */}
-                  </div>
-                </label>
-                {mode === "static" ? (
-                  <label className="border border-border rounded p-3 flex items-center gap-3 cursor-pointer hover:border-sky-500/30">
-                    <Checkbox
-                      checked={pmdEnabled}
-                      onCheckedChange={(checked) => setPmdEnabled(Boolean(checked))}
-                      disabled={creating || isPmdBlockedProject}
-                      className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
-                    />
-                    <div>
-                      <p className="text-sm text-foreground font-semibold">PMD</p>
-                      {/* <p className="text-xs text-muted-foreground">Java 规则扫描</p> */}
+                {staticEngineItems
+                  .filter((item) => item.visible !== false)
+                  .map((item) => (
+                    <div
+                      key={item.key}
+                      className="border border-border rounded p-3 flex items-center justify-between gap-3 hover:border-sky-500/30"
+                    >
+                      <label className="flex min-w-0 items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={item.checked}
+                          onCheckedChange={(checked) => item.setChecked(Boolean(checked))}
+                          disabled={creating || item.disabled}
+                          className="data-[state=checked]:bg-sky-500 data-[state=checked]:border-sky-500"
+                        />
+                        <div>
+                          <p className="text-sm text-foreground font-semibold">{item.title}</p>
+                        </div>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground hover:bg-sky-500/10"
+                        onClick={() => setConfigEngine(item.key)}
+                        disabled={creating}
+                        aria-label={`配置 ${item.title} 引擎`}
+                      >
+                        <Settings2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </label>
-                ) : null}
+                  ))}
               </div>
-              {yasaEnabled && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">YASA 规则配置</p>
-                    <Select
-                      value={selectedYasaRuleConfigId}
-                      onValueChange={setSelectedYasaRuleConfigId}
-                    >
-                      <SelectTrigger className="h-8 w-[300px] cyber-input">
-                        <SelectValue placeholder="选择规则配置" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default">内置默认</SelectItem>
-                        {yasaRuleConfigs.map((config) => (
-                          <SelectItem key={config.id} value={config.id}>
-                            {config.name} ({config.language})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">YASA 语言</p>
-                    <Select
-                      value={yasaLanguage}
-                      onValueChange={setYasaLanguage}
-                      disabled={selectedYasaRuleConfigId !== "default"}
-                    >
-                      <SelectTrigger className="h-8 w-[220px] cyber-input">
-                        <SelectValue placeholder="选择语言" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="auto">自动识别</SelectItem>
-                        <SelectItem value="python">python</SelectItem>
-                        <SelectItem value="javascript">javascript</SelectItem>
-                        <SelectItem value="typescript">typescript</SelectItem>
-                        <SelectItem value="golang">golang</SelectItem>
-                        <SelectItem value="java">java</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {showYasaAutoSkipHint && (
-                    <p className="text-xs text-amber-300">
-                      YASA 将自动跳过（不影响其它引擎）：未检测到可支持语言
-                    </p>
-                  )}
-                </div>
-              )}
               {isYasaBlockedProject && (
                 <p className="text-xs text-amber-300">{yasaBlockedMessage}</p>
               )}
@@ -871,5 +838,30 @@ export default function CreateProjectScanDialogContent({
         </div>
       </DialogContent>
     </Dialog>
+    <StaticEngineConfigDialog
+      engine={configEngine ?? "opengrep"}
+      open={configEngine !== null}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setConfigEngine(null);
+      }}
+      scanMode={mode === "hybrid" ? "hybrid" : "static"}
+      enabled={configEngine ? staticEngineItems.find((item) => item.key === configEngine)?.checked ?? false : false}
+      creating={creating}
+      blockedReason={
+        configEngine === "yasa"
+          ? (isYasaBlockedProject ? yasaBlockedMessage : null)
+          : configEngine === "pmd"
+            ? (isPmdBlockedProject ? pmdBlockedMessage : null)
+            : null
+      }
+      yasaLanguage={yasaLanguage}
+      onYasaLanguageChange={setYasaLanguage}
+      yasaRuleConfigs={yasaRuleConfigs}
+      selectedYasaRuleConfigId={selectedYasaRuleConfigId}
+      onSelectedYasaRuleConfigIdChange={setSelectedYasaRuleConfigId}
+      showYasaAutoSkipHint={configEngine === "yasa" && showYasaAutoSkipHint}
+      onNavigateToEngineConfig={onNavigateToEngineConfig}
+    />
+    </>
   );
 }

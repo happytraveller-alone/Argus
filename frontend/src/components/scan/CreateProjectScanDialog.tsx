@@ -35,7 +35,9 @@ import {
 	appendStaticScanBatchMarker,
 	createStaticScanBatchId,
 } from "@/shared/utils/staticScanBatch";
+import type { StaticTool } from "@/components/agent/AgentModeSelector";
 import CreateProjectScanDialogContent from "./create-project-scan/Content";
+import { buildScanEngineConfigRoute } from "@/shared/constants/scanEngines";
 import {
 	buildLlmProviderOptions,
 	type LLMProviderItem,
@@ -62,6 +64,7 @@ import {
 } from "./create-project-scan/llmGate";
 import {
 	CREATE_PROJECT_SCAN_PROVIDER_KEY_FIELD_MAP,
+	buildHybridStaticBootstrapConfig,
 	buildCreateProjectStaticTaskRoute,
 	extractCreateProjectScanApiErrorMessage,
 	isSevereCreateProjectScanRule,
@@ -135,6 +138,7 @@ export default function CreateProjectScanDialog({
 	const [yasaLanguage, setYasaLanguage] = useState<YasaLanguageOption>("auto");
 	const [yasaRuleConfigs, setYasaRuleConfigs] = useState<YasaRuleConfig[]>([]);
 	const [selectedYasaRuleConfigId, setSelectedYasaRuleConfigId] = useState<string>("default");
+	const [configEngine, setConfigEngine] = useState<StaticTool | null>(null);
 	const [activeRules, setActiveRules] = useState<OpengrepRule[]>([]);
 	const [loadingRules, setLoadingRules] = useState(false);
 
@@ -281,6 +285,7 @@ export default function CreateProjectScanDialog({
 		setYasaEnabled(false);
 		setYasaLanguage("auto");
 		setSelectedYasaRuleConfigId("default");
+		setConfigEngine(null);
 		setShowLlmQuickFixPanel(false);
 		setLlmProviderOptions(
 			buildLlmProviderOptions({ backendProviders: [], currentProviderId: "openai" }),
@@ -712,15 +717,15 @@ export default function CreateProjectScanDialog({
 		audit_scope: {
 			static_bootstrap:
 				source === "hybrid"
-					? {
-							mode: "embedded" as const,
-							opengrep_enabled: opengrepEnabled,
-							bandit_enabled: banditEnabled,
-							gitleaks_enabled: gitleaksEnabled,
-							phpstan_enabled: phpstanEnabled,
-							yasa_enabled: yasaEnabled,
-							yasa_language: yasaEnabled ? yasaLanguage : "auto",
-						}
+					? buildHybridStaticBootstrapConfig({
+							opengrepEnabled,
+							banditEnabled,
+							gitleaksEnabled,
+							phpstanEnabled,
+							yasaEnabled,
+							yasaLanguage: yasaEnabled ? yasaLanguage : "auto",
+							selectedYasaRuleConfigId,
+						})
 					: {
 							mode: "disabled" as const,
 							opengrep_enabled: false,
@@ -1166,6 +1171,10 @@ export default function CreateProjectScanDialog({
 			llmGateStatus.missingFields.includes(field)
 				? "border-rose-500/60 focus-visible:ring-rose-500"
 				: "";
+	const handleNavigateToEngineConfig = (engine: StaticTool) => {
+		onOpenChange(false);
+		navigate(buildScanEngineConfigRoute(engine));
+	};
 	return (
 		<CreateProjectScanDialogContent
 			open={open}
@@ -1241,6 +1250,9 @@ export default function CreateProjectScanDialog({
 			createButtonVariant={createButtonVariant}
 			canCreate={canCreate}
 			handleCreate={handleCreate}
+			configEngine={configEngine}
+			setConfigEngine={setConfigEngine}
+			onNavigateToEngineConfig={handleNavigateToEngineConfig}
 		/>
 	);
 }

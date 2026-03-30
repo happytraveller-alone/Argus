@@ -16,6 +16,7 @@ from app.api.v1.endpoints.agent_tasks import (
 )
 import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
+from app.models.yasa import YasaRuleConfig
 
 
 class _ScalarListResult:
@@ -27,6 +28,14 @@ class _ScalarListResult:
 
     def all(self):
         return self._rows
+
+
+class _ScalarOneResult:
+    def __init__(self, row):
+        self._row = row
+
+    def scalar_one_or_none(self):
+        return self._row
 
 
 @pytest.mark.asyncio
@@ -775,6 +784,7 @@ def test_resolve_static_bootstrap_config_supports_phpstan():
         "phpstan_enabled": True,
         "yasa_enabled": False,
         "yasa_language": "auto",
+        "yasa_rule_config_id": None,
     }
 
     disabled_task = SimpleNamespace(
@@ -797,6 +807,7 @@ def test_resolve_static_bootstrap_config_supports_phpstan():
         "phpstan_enabled": False,
         "yasa_enabled": False,
         "yasa_language": "auto",
+        "yasa_rule_config_id": None,
     }
 
 
@@ -815,6 +826,36 @@ def test_resolve_static_bootstrap_config_accepts_manual_yasa_language():
     assert config["yasa_language"] == "javascript"
 
 
+def test_resolve_static_bootstrap_config_preserves_yasa_rule_config_id():
+    task = SimpleNamespace(
+        audit_scope={
+            "static_bootstrap": {
+                "mode": "embedded",
+                "yasa_enabled": True,
+                "yasa_language": "auto",
+                "yasa_rule_config_id": "cfg-1",
+            }
+        }
+    )
+    config = _resolve_static_bootstrap_config(task, source_mode="hybrid")
+    assert config["yasa_rule_config_id"] == "cfg-1"
+
+
+def test_resolve_static_bootstrap_config_accepts_yasa_rule_config_id():
+    task = SimpleNamespace(
+        audit_scope={
+            "static_bootstrap": {
+                "mode": "embedded",
+                "yasa_enabled": True,
+                "yasa_language": "auto",
+                "yasa_rule_config_id": "custom-yasa-1",
+            }
+        }
+    )
+    config = _resolve_static_bootstrap_config(task, source_mode="hybrid")
+    assert config["yasa_rule_config_id"] == "custom-yasa-1"
+
+
 def test_resolve_static_bootstrap_config_rejects_invalid_yasa_language():
     task = SimpleNamespace(
         audit_scope={
@@ -827,3 +868,87 @@ def test_resolve_static_bootstrap_config_rejects_invalid_yasa_language():
     )
     with pytest.raises(HTTPException, match="不支持语言: php"):
         _resolve_static_bootstrap_config(task, source_mode="hybrid")
+
+
+@pytest.mark.asyncio
+async def test_prepare_embedded_bootstrap_yasa_uses_custom_rule_config(monkeypatch):
+    custom_rule_config = YasaRuleConfig(
+        id="cfg-1",
+        name="custom-yasa",
+        language="javascript",
+        checker_pack_ids="pack-js",
+        checker_ids="checker-js",
+        rule_config_json='{"rules":[]}',
+        is_active=True,
+        source="custom",
+    )
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarOneResult(custom_rule_config))
+    event_emitter = SimpleNamespace(
+        emit_info=AsyncMock(),
+        emit_warning=AsyncMock(),
+        emit_error=AsyncMock(),
+    )
+    captured: dict[str, object] = {}
+
+    class _FakeYasaBootstrapScanner:
+        def __init__(self, *, language, custom_rule_config=None, timeout_seconds=None):
+            captured["language"] = language
+            captured["custom_rule_config"] = custom_rule_config
+
+        async def scan(self, project_root):
+            return SimpleNamespace(total_findings=0, findings=[])
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.agent_tasks_bootstrap.YasaBootstrapScanner",
+        _FakeYasaBootstrapScanner,
+    )
+
+    candidates, bootstrap_task_id, source = await _prepare_embedded_bootstrap_findings(
+        db=db,
+        project_root="/tmp/project",
+        event_emitter=event_emitter,
+        programming_languages='["javascript"]',
+        opengrep_enabled=False,
+        yasa_enabled=True,
+        yasa_language="auto",
+        yasa_rule_config_id="cfg-1",
+    )
+
+    assert source == "embedded_yasa"
+    assert bootstrap_task_id is None
+    assert candidates == []
+    assert captured["language"] == "javascript"
+    assert captured["custom_rule_config"] is custom_rule_config
+
+
+@pytest.mark.asyncio
+async def test_prepare_embedded_bootstrap_yasa_rejects_disabled_rule_config():
+    disabled_rule_config = YasaRuleConfig(
+        id="cfg-2",
+        name="disabled-yasa",
+        language="javascript",
+        checker_pack_ids="pack-js",
+        checker_ids="checker-js",
+        rule_config_json='{"rules":[]}',
+        is_active=False,
+        source="custom",
+    )
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarOneResult(disabled_rule_config))
+    event_emitter = SimpleNamespace(
+        emit_info=AsyncMock(),
+        emit_warning=AsyncMock(),
+        emit_error=AsyncMock(),
+    )
+
+    with pytest.raises(RuntimeError, match="自定义规则配置已禁用"):
+        await _prepare_embedded_bootstrap_findings(
+            db=db,
+            project_root="/tmp/project",
+            event_emitter=event_emitter,
+            programming_languages='["javascript"]',
+            opengrep_enabled=False,
+            yasa_enabled=True,
+            yasa_rule_config_id="cfg-2",
+        )
