@@ -28,10 +28,10 @@ export interface DashboardPreviewLeaderboardRow {
 
 export interface DashboardPreviewTrendPoint {
 	date: string;
-	total: number;
-	verified: number;
-	intelligent: number;
-	hybrid: number;
+	totalNewFindings: number;
+	staticFindings: number;
+	intelligentVerifiedFindings: number;
+	hybridVerifiedFindings: number;
 }
 
 export interface DashboardPreviewTaskStatus {
@@ -55,7 +55,7 @@ export const DASHBOARD_PREVIEW_VIEWS: DashboardPreviewView[] = [
 	{
 		id: "trend",
 		label: "漏洞态势趋势",
-		description: "查看近七日新增风险与已验证漏洞的波动",
+		description: "查看近七日当日新增漏洞发现与来源构成的波动",
 	},
 	{
 		id: "project-risk",
@@ -90,13 +90,13 @@ export const DASHBOARD_PREVIEW_VIEWS: DashboardPreviewView[] = [
 ];
 
 export const DASHBOARD_PREVIEW_TREND: DashboardPreviewTrendPoint[] = [
-	{ date: "03-17", total: 18, verified: 9, intelligent: 7, hybrid: 11 },
-	{ date: "03-18", total: 26, verified: 13, intelligent: 11, hybrid: 15 },
-	{ date: "03-19", total: 21, verified: 12, intelligent: 8, hybrid: 13 },
-	{ date: "03-20", total: 34, verified: 19, intelligent: 15, hybrid: 19 },
-	{ date: "03-21", total: 29, verified: 17, intelligent: 12, hybrid: 17 },
-	{ date: "03-22", total: 41, verified: 24, intelligent: 18, hybrid: 23 },
-	{ date: "03-23", total: 37, verified: 22, intelligent: 16, hybrid: 21 },
+	{ date: "03-17", totalNewFindings: 18, staticFindings: 9, intelligentVerifiedFindings: 3, hybridVerifiedFindings: 6 },
+	{ date: "03-18", totalNewFindings: 26, staticFindings: 14, intelligentVerifiedFindings: 4, hybridVerifiedFindings: 8 },
+	{ date: "03-19", totalNewFindings: 21, staticFindings: 11, intelligentVerifiedFindings: 3, hybridVerifiedFindings: 7 },
+	{ date: "03-20", totalNewFindings: 34, staticFindings: 18, intelligentVerifiedFindings: 5, hybridVerifiedFindings: 11 },
+	{ date: "03-21", totalNewFindings: 29, staticFindings: 15, intelligentVerifiedFindings: 4, hybridVerifiedFindings: 10 },
+	{ date: "03-22", totalNewFindings: 41, staticFindings: 20, intelligentVerifiedFindings: 7, hybridVerifiedFindings: 14 },
+	{ date: "03-23", totalNewFindings: 37, staticFindings: 18, intelligentVerifiedFindings: 6, hybridVerifiedFindings: 13 },
 ];
 
 const PROJECT_RISK_ROWS: DashboardPreviewLeaderboardRow[] = [

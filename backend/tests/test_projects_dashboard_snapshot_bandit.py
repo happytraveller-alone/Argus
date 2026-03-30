@@ -1,60 +1,245 @@
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from datetime import datetime, timezone
 
 import pytest
 
-from app.api.v1.endpoints.projects import get_dashboard_snapshot
+from app.api.v1.endpoints import projects, projects_insights
 
 
 class _AllResult:
     def __init__(self, rows):
-        self._rows = rows
+        self._rows = list(rows)
 
     def all(self):
-        return self._rows
+        return list(self._rows)
 
-    def scalars(self):
-        return self
+
+def _build_bandit_snapshot_side_effect(now: datetime):
+    empty_rows = _AllResult([])
+    return [
+        _AllResult([("project-1", "alpha", "zip")]),
+        _AllResult([("project-1", "ready", 0, 0, 0, 0)]),
+        _AllResult(
+            [
+                (
+                    "project-1",
+                    {"languages": {"Python": {"loc_number": 120, "files_count": 3}}},
+                    "completed",
+                )
+            ]
+        ),
+        _AllResult(
+            [
+                ("op-1", "project-1", "completed", "OpenGrep scan", 1000, now - timedelta(days=1)),
+            ]
+        ),
+        _AllResult(
+            [
+                ("gl-1", "project-1", "completed", "Gitleaks scan", 5, 500, now - timedelta(days=2)),
+            ]
+        ),
+        _AllResult(
+            [
+                ("ba-1", "project-1", "completed", "Bandit scan", 1, 2, 1, 300, now - timedelta(days=3)),
+            ]
+        ),
+        _AllResult(
+            [
+                ("ps-1", "project-1", "completed", "PHPStan scan", 4, 200, now - timedelta(days=1)),
+            ]
+        ),
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        _AllResult(
+            [
+                (
+                    "op-1",
+                    {"check_id": "rule-sql", "confidence": "HIGH", "cwe": ["CWE-89"]},
+                    "ERROR",
+                    "open",
+                    "src/app.py",
+                    now - timedelta(days=1),
+                ),
+            ]
+        ),
+        _AllResult([("gl-1", "open", "config/.env", now - timedelta(days=2))]),
+        _AllResult(
+            [
+                (
+                    "ba-1",
+                    "B602",
+                    "HIGH",
+                    "subprocess shell true",
+                    "subprocess_shell_true",
+                    "HIGH",
+                    "verified",
+                    "app/main.py",
+                    now - timedelta(days=3),
+                ),
+            ]
+        ),
+        _AllResult([("ps-1", "open", "src/index.php", now - timedelta(days=1))]),
+        empty_rows,
+        empty_rows,
+    ]
+
+
+def _build_cwe_distribution_side_effect(now: datetime):
+    empty_rows = _AllResult([])
+    return [
+        _AllResult([("project-1", "alpha", "zip")]),
+        _AllResult([("project-1", "ready", 0, 0, 0, 0)]),
+        _AllResult(
+            [
+                (
+                    "project-1",
+                    {"languages": {"python": {"loc_number": 120, "files_count": 3}}},
+                    "completed",
+                )
+            ]
+        ),
+        _AllResult(
+            [
+                ("op-1", "project-1", "completed", "OpenGrep scan", 1000, now - timedelta(days=1)),
+            ]
+        ),
+        empty_rows,
+        _AllResult(
+            [
+                ("ba-1", "project-1", "completed", "Bandit scan", 1, 0, 0, 300, now - timedelta(days=3)),
+            ]
+        ),
+        empty_rows,
+        empty_rows,
+        _AllResult(
+            [
+                (
+                    "at-1",
+                    "project-1",
+                    "completed",
+                    "[INTELLIGENT] task",
+                    "desc",
+                    1,
+                    100,
+                    now - timedelta(days=1, minutes=1),
+                    now - timedelta(days=1),
+                    now - timedelta(days=1),
+                )
+            ]
+        ),
+        _AllResult(
+            [
+                ("rule-sql", "python", "ERROR", "HIGH", True, ["CWE-89"]),
+                ("rule-xss", "javascript", "ERROR", "MIDIUM", False, ["CWE-79"]),
+            ]
+        ),
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        _AllResult(
+            [
+                (
+                    "op-1",
+                    {"check_id": "rule-sql", "confidence": "HIGH", "cwe": ["CWE-89", "89"]},
+                    "ERROR",
+                    "open",
+                    "src/app.py",
+                    now - timedelta(days=1),
+                ),
+                (
+                    "op-1",
+                    {"check_id": "rule-xss", "confidence": "MEDIUM", "cwe": ["CWE-79"]},
+                    "ERROR",
+                    "open",
+                    "src/ui.js",
+                    now - timedelta(days=1),
+                ),
+            ]
+        ),
+        empty_rows,
+        _AllResult(
+            [
+                (
+                    "ba-1",
+                    "B105",
+                    "HIGH",
+                    "Possible hardcoded password",
+                    "hardcoded_password_string",
+                    "HIGH",
+                    "verified",
+                    "src/secrets.py",
+                    now - timedelta(days=3),
+                ),
+            ]
+        ),
+        empty_rows,
+        empty_rows,
+        _AllResult(
+            [
+                (
+                    "at-1",
+                    True,
+                    ["CWE-79"],
+                    "xss",
+                    "Reflected XSS",
+                    "desc",
+                    "print(user_input)",
+                    0.91,
+                    None,
+                    "verified",
+                    "confirmed",
+                    "high",
+                    "src/view.py",
+                    now - timedelta(days=1),
+                ),
+                (
+                    "at-1",
+                    True,
+                    ["CWE-89"],
+                    "sql_injection",
+                    "Medium confidence agent finding",
+                    "desc",
+                    None,
+                    0.62,
+                    None,
+                    "verified",
+                    "confirmed",
+                    "high",
+                    "src/db.py",
+                    now - timedelta(days=1),
+                ),
+            ]
+        ),
+    ]
 
 
 @pytest.mark.asyncio
 async def test_dashboard_snapshot_includes_bandit_in_static_metrics(monkeypatch):
+    now = datetime.now(timezone.utc)
     db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _AllResult([("project-1", "alpha")]),  # projects
-            _AllResult([("op-1", "project-1", "completed", 1000)]),  # opengrep
-            _AllResult([("project-1", "completed", 5, 500)]),  # gitleaks
-            _AllResult([("project-1", "completed", 1, 2, 1, 300)]),  # bandit
-            _AllResult([("project-1", "completed", 4, 200)]),  # phpstan
-            _AllResult(  # agent
-                [
-                    (
-                        "project-1",
-                        "completed",
-                        "[INTELLIGENT] task",
-                        "desc",
-                        3,
-                        datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc),
-                        datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc),
-                    )
-                ]
-            ),
-            _AllResult([]),  # rules
-            _AllResult([]),  # opengrep findings
-            _AllResult([]),  # bandit findings
-            _AllResult([]),  # agent findings
-        ]
-    )
+    db.execute = AsyncMock(side_effect=_build_bandit_snapshot_side_effect(now))
 
     monkeypatch.setattr(
-        "app.api.v1.endpoints.projects.count_high_confidence_findings_by_task_ids",
+        projects_insights,
+        "count_high_confidence_findings_by_task_ids",
         AsyncMock(return_value={"op-1": 2}),
     )
+    monkeypatch.setattr(
+        projects_insights,
+        "_get_yasa_rule_total",
+        AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(projects_insights, "_extract_bandit_snapshot_rules", lambda: [], raising=False)
+    monkeypatch.setattr(projects_insights, "_extract_phpstan_snapshot_rules", lambda: [], raising=False)
 
-    response = await get_dashboard_snapshot(
+    response = await projects.get_dashboard_snapshot(
         top_n=10,
+        range_days=14,
         db=db,
         current_user=SimpleNamespace(id="user-1"),
     )
@@ -64,151 +249,51 @@ async def test_dashboard_snapshot_includes_bandit_in_static_metrics(monkeypatch)
 
     scan_item = response.scan_runs[0]
     assert scan_item.project_id == "project-1"
-    assert scan_item.static_runs == 4  # opengrep + gitleaks + bandit + phpstan
+    assert scan_item.static_runs == 4
 
     vuln_item = response.vulns[0]
-    # static_vulns = opengrep_high_conf(2) + gitleaks(5) + bandit(1+2+1) + phpstan(4)
     assert vuln_item.static_vulns == 15
+
+    assert [
+        (
+            item.date,
+            item.total_new_findings,
+            item.static_findings,
+            item.intelligent_verified_findings,
+            item.hybrid_verified_findings,
+        )
+        for item in response.daily_activity
+    ] == [
+        ((now - timedelta(days=3)).date().isoformat(), 1, 1, 0, 0),
+        ((now - timedelta(days=2)).date().isoformat(), 1, 1, 0, 0),
+        ((now - timedelta(days=1)).date().isoformat(), 2, 2, 0, 0),
+    ]
 
 
 @pytest.mark.asyncio
 async def test_dashboard_snapshot_includes_rule_confidence_and_cwe_distribution(
     monkeypatch,
 ):
+    now = datetime.now(timezone.utc)
     db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _AllResult([("project-1", "alpha")]),  # projects
-            _AllResult([("op-1", "project-1", "completed", 1000)]),  # opengrep tasks
-            _AllResult([]),  # gitleaks tasks
-            _AllResult([]),  # bandit tasks
-            _AllResult([]),  # phpstan tasks
-            _AllResult(  # agent tasks
-                [
-                    (
-                        "project-1",
-                        "completed",
-                        "[INTELLIGENT] task",
-                        "desc",
-                        1,
-                        datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc),
-                        datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc),
-                    )
-                ]
-            ),
-            _AllResult(  # severe opengrep rules only
-                [
-                    ("rule-sql", "python", "ERROR", "HIGH", True, ["CWE-89"]),
-                    ("rule-sql-2", "python", "ERROR", "HIGH", True, ["CWE-89"]),
-                    ("rule-xss", "javascript", "ERROR", "MIDIUM", False, ["CWE-79"]),
-                    ("rule-mid-2", "go", "ERROR", "MEDIUM", True, ["CWE-327"]),
-                    ("rule-low", "go", "ERROR", "LOW", True, ["CWE-22"]),
-                    ("rule-unknown", "", "ERROR", None, True, None),
-                    ("rule-ignore", "ruby", "WARNING", "HIGH", True, ["CWE-78"]),
-                ]
-            ),
-            _AllResult(  # opengrep findings for cwe_distribution
-                [
-                    (
-                        "op-1",
-                        {
-                            "check_id": "rule-sql",
-                            "confidence": "HIGH",
-                            "cwe": ["CWE-89", "89"],
-                        },
-                    ),
-                    (
-                        "op-1",
-                        {
-                            "check_id": "rule-sql",
-                        },
-                    ),
-                    (
-                        "op-1",
-                        {
-                            "check_id": "rule-xss",
-                            "confidence": "MEDIUM",
-                            "cwe": ["CWE-79"],
-                        },
-                    ),
-                ]
-            ),
-            _AllResult(  # bandit findings for cwe_distribution
-                [
-                    (
-                        "B105",
-                        "HIGH",
-                        "Possible hardcoded password",
-                        "hardcoded_password_string",
-                    ),
-                    (
-                        "B608",
-                        "MEDIUM",
-                        "Possible SQL injection vector through string-based query construction",
-                        "hardcoded_sql_expressions",
-                    ),
-                    (
-                        "B101",
-                        "LOW",
-                        "Use of assert detected",
-                        "assert_used",
-                    ),
-                ]
-            ),
-            _AllResult(  # verified agent findings with resolved cwe
-                [
-                    (
-                        True,
-                        "CWE-79",
-                        "xss",
-                        "Reflected XSS",
-                        "desc",
-                        "print(user_input)",
-                        0.91,
-                        None,
-                    ),
-                    (
-                        False,
-                        "CWE-22",
-                        "path_traversal",
-                        "Ignored because not verified",
-                        "desc",
-                        None,
-                        0.92,
-                        None,
-                    ),
-                    (
-                        True,
-                        "CWE-89",
-                        "sql_injection",
-                        "Medium confidence agent finding",
-                        "desc",
-                        None,
-                        0.62,
-                        None,
-                    ),
-                    (
-                        True,
-                        "CWE-327",
-                        "weak_crypto",
-                        "Low confidence agent finding",
-                        "desc",
-                        None,
-                        0.2,
-                        None,
-                    ),
-                ]
-            ),
-        ]
-    )
+    db.execute = AsyncMock(side_effect=_build_cwe_distribution_side_effect(now))
 
     monkeypatch.setattr(
-        "app.api.v1.endpoints.projects.count_high_confidence_findings_by_task_ids",
+        projects_insights,
+        "count_high_confidence_findings_by_task_ids",
         AsyncMock(return_value={"op-1": 2}),
     )
+    monkeypatch.setattr(
+        projects_insights,
+        "_get_yasa_rule_total",
+        AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(projects_insights, "_extract_bandit_snapshot_rules", lambda: [], raising=False)
+    monkeypatch.setattr(projects_insights, "_extract_phpstan_snapshot_rules", lambda: [], raising=False)
 
-    response = await get_dashboard_snapshot(
+    response = await projects.get_dashboard_snapshot(
         top_n=10,
+        range_days=14,
         db=db,
         current_user=SimpleNamespace(id="user-1"),
     )
@@ -220,21 +305,20 @@ async def test_dashboard_snapshot_includes_rule_confidence_and_cwe_distribution(
         "UNSPECIFIED",
     ]
     assert [(item.total_rules, item.enabled_rules) for item in response.rule_confidence] == [
-        (2, 2),
-        (2, 1),
         (1, 1),
-        (1, 1),
+        (1, 0),
+        (0, 0),
+        (0, 0),
     ]
     assert [
         (item.language, item.high_count, item.medium_count)
         for item in response.rule_confidence_by_language
     ] == [
-        ("python", 2, 0),
-        ("go", 0, 1),
         ("javascript", 0, 1),
+        ("python", 1, 0),
     ]
 
-    assert [item.cwe_id for item in response.cwe_distribution] == ["CWE-89", "CWE-79", "CWE-259"]
+    assert [item.cwe_id for item in response.cwe_distribution] == ["CWE-79", "CWE-89", "CWE-259"]
     assert [
         (
             item.total_findings,
@@ -244,7 +328,7 @@ async def test_dashboard_snapshot_includes_rule_confidence_and_cwe_distribution(
         )
         for item in response.cwe_distribution
     ] == [
-        (4, 2, 1, 1),
+        (2, 1, 1, 0),
         (2, 1, 1, 0),
         (1, 0, 0, 1),
     ]

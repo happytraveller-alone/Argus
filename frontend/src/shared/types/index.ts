@@ -173,6 +173,10 @@ export interface DashboardDailyActivityItem {
   phpstan_findings: number;
   pmd_findings?: number;
   yasa_findings: number;
+  static_findings: number;
+  intelligent_verified_findings: number;
+  hybrid_verified_findings: number;
+  total_new_findings: number;
 }
 
 export interface DashboardVerificationFunnelItem {

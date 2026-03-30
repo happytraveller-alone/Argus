@@ -60,6 +60,10 @@ function createSnapshotFixture() {
 				bandit_findings: 1,
 				phpstan_findings: 2,
 				yasa_findings: 1,
+				static_findings: 11,
+				intelligent_verified_findings: 2,
+				hybrid_verified_findings: 3,
+				total_new_findings: 16,
 			},
 			{
 				date: "2026-03-21",
@@ -70,6 +74,10 @@ function createSnapshotFixture() {
 				bandit_findings: 2,
 				phpstan_findings: 2,
 				yasa_findings: 1,
+				static_findings: 14,
+				intelligent_verified_findings: 1,
+				hybrid_verified_findings: 4,
+				total_new_findings: 19,
 			},
 		],
 		verification_funnel: {
@@ -313,8 +321,10 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.match(markup, /任务状态/);
 	assert.match(markup, /横坐标：日期/);
 	assert.match(markup, /纵坐标：漏洞数量/);
-	assert.match(markup, /新增风险/);
-	assert.match(markup, /已验证/);
+	assert.match(markup, /当日累计新增漏洞发现/);
+	assert.match(markup, /当日静态扫描漏洞发现/);
+	assert.match(markup, /当前智能扫描漏洞发现/);
+	assert.match(markup, /混合扫描漏洞发现/);
 	assert.match(markup, /data-panel="trend"/);
 	assert.match(markup, /aria-pressed="true"/);
 	assert.match(markup, /Alpha Gateway/);
@@ -330,6 +340,43 @@ test("DashboardCommandCenter renders the live single-page dashboard layout", asy
 	assert.doesNotMatch(markup, /第 \d+ \/ \d+ 页/);
 	assert.doesNotMatch(markup, /排行榜/);
 	assert.doesNotMatch(markup, /等待中/);
+});
+
+test("DashboardCommandCenter builds trend rows with new daily metrics and share buckets", async () => {
+	const module = await importOrFail<any>(
+		"../src/features/dashboard/components/DashboardCommandCenter.tsx",
+	);
+	const snapshot = createSnapshotFixture();
+	const rows = module.buildTrendRows(snapshot.daily_activity);
+
+	assert.deepEqual(rows, [
+		{
+			date: "03-20",
+			totalNewFindings: 16,
+			staticFindings: 11,
+			intelligentVerifiedFindings: 2,
+			hybridVerifiedFindings: 3,
+			staticShare: 0.6875,
+			intelligentShare: 0.125,
+			hybridShare: 0.1875,
+			staticLabel: 11,
+			intelligentLabel: 2,
+			hybridLabel: 3,
+		},
+		{
+			date: "03-21",
+			totalNewFindings: 19,
+			staticFindings: 14,
+			intelligentVerifiedFindings: 1,
+			hybridVerifiedFindings: 4,
+			staticShare: 14 / 19,
+			intelligentShare: 1 / 19,
+			hybridShare: 4 / 19,
+			staticLabel: 14,
+			intelligentLabel: 1,
+			hybridLabel: 4,
+		},
+	]);
 });
 
 test("task status tooltip items preserve subtype counts, including zero values", async () => {

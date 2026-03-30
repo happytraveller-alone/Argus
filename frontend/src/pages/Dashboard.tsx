@@ -153,7 +153,22 @@ export function normalizeSnapshot(
 		},
 		daily_activity: (snapshot.daily_activity || []).map((item) => ({
 			...item,
+			agent_findings: Math.max(Number(item.agent_findings || 0), 0),
+			opengrep_findings: Math.max(Number(item.opengrep_findings || 0), 0),
+			gitleaks_findings: Math.max(Number(item.gitleaks_findings || 0), 0),
+			bandit_findings: Math.max(Number(item.bandit_findings || 0), 0),
+			phpstan_findings: Math.max(Number(item.phpstan_findings || 0), 0),
 			yasa_findings: Math.max(Number(item.yasa_findings || 0), 0),
+			static_findings: Math.max(Number(item.static_findings || 0), 0),
+			intelligent_verified_findings: Math.max(
+				Number(item.intelligent_verified_findings || 0),
+				0,
+			),
+			hybrid_verified_findings: Math.max(
+				Number(item.hybrid_verified_findings || 0),
+				0,
+			),
+			total_new_findings: Math.max(Number(item.total_new_findings || 0), 0),
 		})),
 		cwe_distribution: (snapshot.cwe_distribution || []).map((item) => {
 			const cweDisplay = resolveCweDisplay({

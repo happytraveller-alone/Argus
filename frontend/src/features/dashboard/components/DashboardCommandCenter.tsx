@@ -11,12 +11,12 @@ import {
 	ListOrdered,
 } from "lucide-react";
 import {
-	Area,
-	AreaChart,
 	Bar,
 	BarChart,
 	CartesianGrid,
+	ComposedChart,
 	LabelList,
+	Line,
 	ResponsiveContainer,
 	Tooltip,
 	XAxis,
@@ -92,11 +92,25 @@ type TaskStatusTooltipItem = {
 	value: number;
 };
 
+type TrendRow = {
+	date: string;
+	totalNewFindings: number;
+	staticFindings: number;
+	intelligentVerifiedFindings: number;
+	hybridVerifiedFindings: number;
+	staticShare: number;
+	intelligentShare: number;
+	hybridShare: number;
+	staticLabel: number;
+	intelligentLabel: number;
+	hybridLabel: number;
+};
+
 const VIEW_ITEMS: DashboardViewMeta[] = [
 	{
 		id: "trend",
 		label: "漏洞态势统计图",
-		description: "查看近一段时间新增风险与 AI 验证漏洞的波动。",
+		description: "查看近一段时间当日新增漏洞发现与来源构成的波动。",
 		yAxisLabel: "漏洞数量",
 	},
 	{
@@ -371,27 +385,69 @@ export function formatCumulativeDuration(
 	return `${seconds}秒`;
 }
 
-function totalFindingsForTrend(item: DashboardDailyActivityItem) {
+function toShare(value: number, total: number) {
+	if (total <= 0) return 0;
+	return value / total;
+}
+
+export function buildTrendRows(items: DashboardDailyActivityItem[]): TrendRow[] {
+	return items.map((item) => {
+		const totalNewFindings = Math.max(Number(item.total_new_findings || 0), 0);
+		const staticFindings = Math.max(Number(item.static_findings || 0), 0);
+		const intelligentVerifiedFindings = Math.max(
+			Number(item.intelligent_verified_findings || 0),
+			0,
+		);
+		const hybridVerifiedFindings = Math.max(
+			Number(item.hybrid_verified_findings || 0),
+			0,
+		);
+
+		return {
+			date: formatTrendDate(item.date),
+			totalNewFindings,
+			staticFindings,
+			intelligentVerifiedFindings,
+			hybridVerifiedFindings,
+			staticShare: toShare(staticFindings, totalNewFindings),
+			intelligentShare: toShare(intelligentVerifiedFindings, totalNewFindings),
+			hybridShare: toShare(hybridVerifiedFindings, totalNewFindings),
+			staticLabel: staticFindings,
+			intelligentLabel: intelligentVerifiedFindings,
+			hybridLabel: hybridVerifiedFindings,
+		};
+	});
+}
+
+function renderTrendLabel(value: number | string) {
+	return Number(value || 0) > 0 ? formatNumber(Number(value || 0)) : "";
+}
+
+function renderTrendTooltip(payload: {
+	active?: boolean;
+	label?: string;
+	payload?: Array<{ payload?: TrendRow }>;
+}) {
+	if (!payload.active || !Array.isArray(payload.payload) || payload.payload.length === 0) {
+		return null;
+	}
+	const row = payload.payload[0]?.payload;
+	if (!row) return null;
+
 	return (
-		Number(item.agent_findings || 0) +
-		Number(item.opengrep_findings || 0) +
-		Number(item.gitleaks_findings || 0) +
-		Number(item.bandit_findings || 0) +
-		Number(item.phpstan_findings || 0) +
-		Number(item.yasa_findings || 0)
+		<div
+			className="rounded border border-border bg-card px-3 py-2 text-xs shadow-xl"
+			style={DASHBOARD_TOOLTIP_STYLE}
+		>
+			<p className="font-semibold text-foreground">{row.date}</p>
+			<div className="mt-2 space-y-1 text-muted-foreground">
+				{/* <p>当日累计新增漏洞发现：{formatNumber(row.totalNewFindings)}</p> */}
+				<p>当日静态扫描漏洞发现：{formatNumber(row.staticFindings)}</p>
+				<p>当日智能扫描漏洞发现：{formatNumber(row.intelligentVerifiedFindings)}</p>
+				<p>当日混合扫描漏洞发现：{formatNumber(row.hybridVerifiedFindings)}</p>
+			</div>
+		</div>
 	);
-}
-
-function verifiedFindingsForTrend(item: DashboardDailyActivityItem) {
-	return Number(item.agent_findings || 0);
-}
-
-function buildTrendRows(items: DashboardDailyActivityItem[]) {
-	return items.map((item) => ({
-		date: formatTrendDate(item.date),
-		total: Math.max(totalFindingsForTrend(item), 0),
-		verified: Math.max(verifiedFindingsForTrend(item), 0),
-	}));
 }
 
 function buildProjectRiskRows(
@@ -976,12 +1032,23 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 		[snapshot.daily_activity],
 	);
 	const peakItem = trendRows.reduce(
-		(result, item) => (item.total > result.total ? item : result),
-		{ date: "-", total: 0, verified: 0 },
+		(result, item) =>
+			item.totalNewFindings > result.totalNewFindings ? item : result,
+		{
+			date: "-",
+			totalNewFindings: 0,
+			staticFindings: 0,
+			intelligentVerifiedFindings: 0,
+			hybridVerifiedFindings: 0,
+			staticShare: 0,
+			intelligentShare: 0,
+			hybridShare: 0,
+			staticLabel: 0,
+			intelligentLabel: 0,
+			hybridLabel: 0,
+		},
 	);
-	const llmTotal = snapshot.engine_breakdown.find(
-		(item) => item.engine === "llm",
-	);
+	const latestItem = trendRows[trendRows.length - 1];
 
 	if (trendRows.length === 0) {
 		return (
@@ -997,28 +1064,37 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 			<div className="flex flex-col gap-2">
 				<h3 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>漏洞态势统计图</h3>
 				<p className={DASHBOARD_PANEL_DESCRIPTION_CLASSNAME}>
-					查看近一段时间新增风险与 AI 已验证漏洞的波动趋势。
+					查看近一段时间当日新增漏洞发现与静态、智能、混合来源构成的波动趋势。
 				</p>
 			</div>
-			<div className="grid gap-3 sm:grid-cols-3">
+			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 				{[
+					// {
+					// 	label: "当日累计新增漏洞发现",
+					// 	value: formatNumber(peakItem.totalNewFindings),
+					// 	meta: peakItem.date === "-" ? "" : `峰值 ${peakItem.date}`,
+					// },
 					{
-						label: "AI发现漏洞",
-						value: formatNumber(llmTotal?.effective_findings ?? 0),
-						meta: "",
+						label: "当日静态扫描漏洞发现",
+						value: formatNumber(latestItem?.staticFindings ?? 0),
+						meta: latestItem ? `${latestItem.date} 最新` : "",
 					},
 					{
-						label: "AI累计已验证漏洞",
-						value: formatNumber(snapshot.summary.current_verified_findings),
-						meta: "",
+						label: "当日智能扫描漏洞发现",
+						value: formatNumber(latestItem?.intelligentVerifiedFindings ?? 0),
+						meta: latestItem ? `${latestItem.date} 最新` : "",
 					},
-
+					{
+						label: "当日混合扫描漏洞发现",
+						value: formatNumber(latestItem?.hybridVerifiedFindings ?? 0),
+						meta: latestItem ? `${latestItem.date} 最新` : "",
+					},
 				].map((item) => (
 					<div
 						key={item.label}
-						className={`${DASHBOARD_PANEL_CLASSNAME} px-4 py-3`}
+						className={`${DASHBOARD_PANEL_CLASSNAME} px-2 py-3`}
 					>
-						<p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+						<p className="text-xs uppercase tracking-[0.20em] text-muted-foreground">
 							{item.label}
 						</p>
 						<p className="mt-2 text-xl font-semibold text-foreground">
@@ -1036,21 +1112,31 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 						纵坐标：漏洞数量
 					</div>
 					<div className={HORIZONTAL_STATS_META_LEGEND_CLASSNAME}>
-						<span
+						{/* <span
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.low.chip}`}
 						>
-							新增风险
+							当日累计新增漏洞发现
+						</span> */}
+						<span
+							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.medium.chip}`}
+						>
+							当日静态扫描漏洞发现
 						</span>
 						<span
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.high.chip}`}
 						>
-							已验证
+							当日智能扫描漏洞发现
+						</span>
+						<span
+							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.critical.chip}`}
+						>
+							当日混合扫描漏洞发现
 						</span>
 					</div>
 				</div>
 				<div className="h-[calc(100%-52px)] w-full">
 					<ResponsiveContainer width="100%" height="100%">
-						<AreaChart
+						<ComposedChart
 							data={trendRows}
 							margin={{ top: 12, right: 12, left: -10, bottom: 0 }}
 						>
@@ -1069,26 +1155,72 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 								axisLine={false}
 								tickLine={false}
 							/>
-							<Tooltip contentStyle={DASHBOARD_TOOLTIP_STYLE} />
-							<Area
-								type="monotone"
-								dataKey="total"
-								name="新增风险"
-								stroke={TONE_STYLES.low.fill}
-								fill={TONE_STYLES.low.fill}
-								fillOpacity={0.12}
-								strokeWidth={2.4}
-							/>
-							<Area
-								type="monotone"
-								dataKey="verified"
-								name="已验证"
-								stroke={TONE_STYLES.high.fill}
+							<Tooltip content={renderTrendTooltip} />
+							<Bar
+								dataKey="staticShare"
+								stackId="share"
+								name="当日静态扫描漏洞发现"
+								fill={TONE_STYLES.medium.fill}
+								fillOpacity={0.28}
+								barSize={18}
+							>
+								<LabelList dataKey="staticLabel" position="insideTop" formatter={renderTrendLabel} />
+							</Bar>
+							<Bar
+								dataKey="intelligentShare"
+								stackId="share"
+								name="当日智能扫描漏洞发现"
 								fill={TONE_STYLES.high.fill}
-								fillOpacity={0.12}
-								strokeWidth={2.2}
+								fillOpacity={0.32}
+							>
+								<LabelList
+									dataKey="intelligentLabel"
+									position="insideTop"
+									formatter={renderTrendLabel}
+								/>
+							</Bar>
+							<Bar
+								dataKey="hybridShare"
+								stackId="share"
+								name="当日混合扫描漏洞发现"
+								fill={TONE_STYLES.critical.fill}
+								fillOpacity={0.36}
+							>
+								<LabelList dataKey="hybridLabel" position="insideTop" formatter={renderTrendLabel} />
+							</Bar>
+							{/* <Line
+								type="monotone"
+								dataKey="totalNewFindings"
+								name="当日累计新增漏洞发现"
+								stroke={TONE_STYLES.low.fill}
+								strokeWidth={2.4}
+								dot={{ r: 3 }}
+							/> */}
+							<Line
+								type="monotone"
+								dataKey="staticFindings"
+								name="当日静态扫描漏洞发现"
+								stroke={TONE_STYLES.medium.fill}
+								strokeWidth={2}
+								dot={false}
 							/>
-						</AreaChart>
+							<Line
+								type="monotone"
+								dataKey="intelligentVerifiedFindings"
+								name="当日智能扫描漏洞发现"
+								stroke={TONE_STYLES.high.fill}
+								strokeWidth={2.2}
+								dot={false}
+							/>
+							<Line
+								type="monotone"
+								dataKey="hybridVerifiedFindings"
+								name="当日混合扫描漏洞发现"
+								stroke={TONE_STYLES.critical.fill}
+								strokeWidth={2.2}
+								dot={false}
+							/>
+						</ComposedChart>
 					</ResponsiveContainer>
 				</div>
 			</div>

@@ -29,8 +29,8 @@ test("DashboardMockPreview renders single-page command center with sidebar and t
 	assert.match(markup, /语言风险统计图/);
 	assert.match(markup, /漏洞类型统计图/);
 	assert.match(markup, /扫描引擎统计图/);
-	assert.match(markup, /静态扫描引擎规则统计图/);
-	assert.match(markup, /语言代码行数统计图/);
+	assert.match(markup, /扫描规则统计图/);
+	assert.match(markup, /项目语言统计图/);
 	assert.match(markup, /任务状态/);
 	assert.match(markup, /项目总数/);
 	assert.match(markup, /累计发现漏洞总数/);
@@ -44,8 +44,10 @@ test("DashboardMockPreview renders single-page command center with sidebar and t
 	assert.match(markup, /aria-pressed="true"/);
 	assert.match(markup, /横坐标：日期/);
 	assert.match(markup, /纵坐标：漏洞数量/);
-	assert.match(markup, /新增风险/);
-	assert.match(markup, /已验证/);
+	assert.match(markup, /当日累计新增漏洞发现/);
+	assert.match(markup, /当日静态扫描漏洞发现/);
+	assert.match(markup, /当前智能扫描漏洞发现/);
+	assert.match(markup, /混合扫描漏洞发现/);
 	// assert.match(markup, /最近创建任务/);
 	assert.match(markup, /查看详情/);
 	assert.match(markup, /混合扫描 · Alpha Gateway/);
@@ -138,6 +140,13 @@ test("dashboard mock preview model exposes seven switchable views with sorted ch
 	assert.equal(recentTasks[0].progress, 92);
 	assert.equal(recentTasks[0].createdAt >= recentTasks[1].createdAt, true);
 	assert.equal(recentTasks[4].title, "静态扫描 · Vega Billing");
+	assert.deepEqual(module.DASHBOARD_PREVIEW_TREND[0], {
+		date: "03-17",
+		totalNewFindings: 18,
+		staticFindings: 9,
+		intelligentVerifiedFindings: 3,
+		hybridVerifiedFindings: 6,
+	});
 });
 
 test("dashboard mock preview chart sizing uses enlarged axes and narrower bars", async () => {
@@ -149,8 +158,8 @@ test("dashboard mock preview chart sizing uses enlarged axes and narrower bars",
 	assert.equal(module.HORIZONTAL_STATS_LABEL_FONT_SIZE, 16);
 	assert.equal(module.HORIZONTAL_STATS_Y_AXIS_WIDTH, 128);
 	assert.equal(module.HORIZONTAL_STATS_BAR_SIZE, 14);
-	assert.equal(module.HORIZONTAL_STATS_ROW_HEIGHT, 60);
-	assert.equal(module.HORIZONTAL_STATS_BAR_CATEGORY_GAP, 10);
+	assert.equal(module.HORIZONTAL_STATS_ROW_HEIGHT, 46);
+	assert.equal(module.HORIZONTAL_STATS_BAR_CATEGORY_GAP, 4);
 	assert.equal(
 		module.HORIZONTAL_STATS_META_ROW_CLASSNAME,
 		"mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",

@@ -454,6 +454,152 @@ def _build_project_risk_distribution_from_metrics_side_effect():
     ]
 
 
+def _build_agent_trend_split_side_effect(now: datetime):
+    project_rows = [("p1", "Alpha", "zip")]
+    management_metrics_rows = [("p1", "ready", 0, 0, 0, 0)]
+    project_info_rows = [("p1", {"languages": {}}, "completed")]
+    empty_rows = _RowsResult([])
+
+    agent_rows = [
+        (
+            "int-1",
+            "p1",
+            "completed",
+            "[INTELLIGENT] audit",
+            "",
+            1,
+            100,
+            now - timedelta(days=1, minutes=3),
+            now - timedelta(days=1),
+            now - timedelta(days=1),
+        ),
+        (
+            "hy-1",
+            "p1",
+            "completed",
+            "[HYBRID] audit",
+            "",
+            1,
+            100,
+            now - timedelta(days=1, minutes=2),
+            now - timedelta(days=1),
+            now - timedelta(days=1),
+        ),
+        (
+            "int-fp",
+            "p1",
+            "completed",
+            "[INTELLIGENT] audit",
+            "",
+            0,
+            100,
+            now - timedelta(days=1, minutes=1),
+            now - timedelta(days=1),
+            now - timedelta(days=1),
+        ),
+        (
+            "hy-pending",
+            "p1",
+            "completed",
+            "[HYBRID] audit",
+            "",
+            0,
+            100,
+            now - timedelta(days=2, minutes=1),
+            now - timedelta(days=2),
+            now - timedelta(days=2),
+        ),
+    ]
+    agent_finding_rows = [
+        (
+            "int-1",
+            True,
+            ["CWE-79"],
+            "xss",
+            "Verified intelligent finding",
+            "",
+            "",
+            0.91,
+            0.91,
+            "verified",
+            "confirmed",
+            "high",
+            "src/intelligent.ts",
+            now - timedelta(days=1),
+        ),
+        (
+            "hy-1",
+            True,
+            ["CWE-89"],
+            "sql-injection",
+            "Verified hybrid finding",
+            "",
+            "",
+            0.84,
+            0.84,
+            "verified",
+            "likely",
+            "critical",
+            "src/hybrid.ts",
+            now - timedelta(days=1),
+        ),
+        (
+            "int-fp",
+            False,
+            ["CWE-22"],
+            "path-traversal",
+            "False positive intelligent finding",
+            "",
+            "",
+            0.8,
+            0.8,
+            "false_positive",
+            "false_positive",
+            "high",
+            "src/ignored.ts",
+            now - timedelta(days=1),
+        ),
+        (
+            "hy-pending",
+            False,
+            ["CWE-352"],
+            "csrf",
+            "Unverified hybrid finding",
+            "",
+            "",
+            0.76,
+            0.76,
+            "open",
+            "pending",
+            "medium",
+            "src/unverified.ts",
+            now - timedelta(days=2),
+        ),
+    ]
+
+    return [
+        _RowsResult(project_rows),
+        _RowsResult(management_metrics_rows),
+        _RowsResult(project_info_rows),
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        _RowsResult(agent_rows),
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        empty_rows,
+        _RowsResult(agent_finding_rows),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_dashboard_snapshot_v2_exposes_summary_and_windowed_panels(monkeypatch):
     now = datetime.now(timezone.utc)
@@ -502,7 +648,7 @@ async def test_dashboard_snapshot_v2_exposes_summary_and_windowed_panels(monkeyp
     assert snapshot.task_status_breakdown.completed == 8
     assert snapshot.task_status_breakdown.failed == 2
     assert snapshot.task_status_breakdown.running == 1
-    assert snapshot.task_status_by_scan_type.completed.static == 6
+    assert snapshot.task_status_by_scan_type.completed.static == 7
     assert snapshot.task_status_by_scan_type.completed.intelligent == 0
     assert snapshot.task_status_by_scan_type.completed.hybrid == 1
     assert snapshot.task_status_by_scan_type.running.intelligent == 1
@@ -523,7 +669,21 @@ async def test_dashboard_snapshot_v2_exposes_summary_and_windowed_panels(monkeyp
     assert snapshot.recent_tasks[2].task_type == "静态扫描"
     assert len(snapshot.recent_tasks) == 11
     assert snapshot.recent_tasks[-1].task_id == "ps2"
-    assert [item.date for item in snapshot.daily_activity]
+    assert [
+        (
+            item.date,
+            item.total_new_findings,
+            item.static_findings,
+            item.intelligent_verified_findings,
+            item.hybrid_verified_findings,
+        )
+        for item in snapshot.daily_activity
+    ] == [
+        ((now - timedelta(days=4)).date().isoformat(), 0, 0, 0, 0),
+        ((now - timedelta(days=3)).date().isoformat(), 1, 1, 0, 0),
+        ((now - timedelta(days=2)).date().isoformat(), 2, 2, 0, 0),
+        ((now - timedelta(days=1)).date().isoformat(), 7, 6, 0, 1),
+    ]
 
 
 @pytest.mark.asyncio
@@ -666,6 +826,59 @@ async def test_dashboard_snapshot_v2_static_engine_rule_totals_follow_engine_pag
     assert totals["bandit"] == 5
     assert totals["phpstan"] == 4
     assert totals["yasa"] == 5
+
+
+@pytest.mark.asyncio
+async def test_dashboard_snapshot_v2_splits_intelligent_and_hybrid_verified_daily_activity(
+    monkeypatch,
+):
+    now = datetime.now(timezone.utc)
+    db = SimpleNamespace(execute=AsyncMock(side_effect=_build_agent_trend_split_side_effect(now)))
+    monkeypatch.setattr(
+        projects_insights,
+        "count_high_confidence_findings_by_task_ids",
+        AsyncMock(return_value={}),
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_get_yasa_rule_total",
+        AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_extract_bandit_snapshot_rules",
+        lambda: [],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        projects_insights,
+        "_extract_phpstan_snapshot_rules",
+        lambda: [],
+        raising=False,
+    )
+
+    snapshot = await projects.get_dashboard_snapshot(
+        top_n=10,
+        range_days=7,
+        db=db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    previous_day = (now - timedelta(days=2)).date().isoformat()
+    latest_day = (now - timedelta(days=1)).date().isoformat()
+    assert [
+        (
+            item.date,
+            item.total_new_findings,
+            item.static_findings,
+            item.intelligent_verified_findings,
+            item.hybrid_verified_findings,
+        )
+        for item in snapshot.daily_activity
+    ] == [
+        (previous_day, 0, 0, 0, 0),
+        (latest_day, 2, 0, 1, 1),
+    ]
 
 
 @pytest.mark.asyncio

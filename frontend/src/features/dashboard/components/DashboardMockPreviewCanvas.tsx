@@ -9,12 +9,12 @@ import {
 	ListOrdered,
 } from "lucide-react";
 import {
-	Area,
-	AreaChart,
 	Bar,
 	BarChart,
 	CartesianGrid,
+	ComposedChart,
 	LabelList,
+	Line,
 	ResponsiveContainer,
 	Tooltip,
 	XAxis,
@@ -65,7 +65,7 @@ const TONE_STYLES: Record<
 export const HORIZONTAL_STATS_AXIS_FONT_SIZE = 16;
 export const HORIZONTAL_STATS_LABEL_FONT_SIZE = 16;
 export const HORIZONTAL_STATS_Y_AXIS_WIDTH = 128;
-export const HORIZONTAL_STATS_BAR_SIZE = 12;
+export const HORIZONTAL_STATS_BAR_SIZE = 14;
 export const HORIZONTAL_STATS_ROW_HEIGHT = 46;
 export const HORIZONTAL_STATS_BAR_CATEGORY_GAP = 4;
 export const HORIZONTAL_STATS_META_ROW_CLASSNAME =
@@ -243,6 +243,30 @@ function TaskStatusPanel() {
 }
 
 function TrendPanel() {
+	const trendRows = useMemo(
+		() =>
+			DASHBOARD_PREVIEW_TREND.map((item) => {
+				const total = Math.max(Number(item.totalNewFindings || 0), 0);
+				const staticFindings = Math.max(Number(item.staticFindings || 0), 0);
+				const intelligentVerifiedFindings = Math.max(
+					Number(item.intelligentVerifiedFindings || 0),
+					0,
+				);
+				const hybridVerifiedFindings = Math.max(
+					Number(item.hybridVerifiedFindings || 0),
+					0,
+				);
+				return {
+					...item,
+					staticShare: total > 0 ? staticFindings / total : 0,
+					intelligentShare:
+						total > 0 ? intelligentVerifiedFindings / total : 0,
+					hybridShare: total > 0 ? hybridVerifiedFindings / total : 0,
+				};
+			}),
+		[],
+	);
+
 	return (
 		<div data-panel="trend" className="space-y-5">
 			<div className="flex flex-col gap-2">
@@ -250,14 +274,15 @@ function TrendPanel() {
 					漏洞态势趋势
 				</h3>
 				<p className="max-w-2xl text-sm leading-6 text-slate-400">
-					查看近七日新增风险与已验证漏洞的波动趋势。
+					查看近七日当日新增漏洞发现与静态、智能、混合来源构成的波动趋势。
 				</p>
 			</div>
-			<div className="grid gap-3 sm:grid-cols-3">
+			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 				{[
-					{ label: "近 7 日峰值", value: "41", meta: "03-22" },
-					{ label: "已验证漏洞", value: "22", meta: "今日累计" },
-					{ label: "混合扫描贡献", value: "21", meta: "今日占比最高" },
+					{ label: "当日累计新增漏洞发现", value: "41", meta: "03-22 峰值" },
+					{ label: "当日静态扫描漏洞发现", value: "18", meta: "03-23 最新" },
+					{ label: "当日智能扫描漏洞发现", value: "6", meta: "03-23 最新" },
+					{ label: "当日混合扫描漏洞发现", value: "13", meta: "03-23 最新" },
 				].map((item) => (
 					<div
 						key={item.label}
@@ -281,28 +306,28 @@ function TrendPanel() {
 						<span
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.low.chip}`}
 						>
-							新增风险
+							当日累计新增漏洞发现
+						</span>
+						<span
+							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.medium.chip}`}
+						>
+							当日静态扫描漏洞发现
 						</span>
 						<span
 							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.high.chip}`}
 						>
-							已验证
+							当日智能扫描漏洞发现
+						</span>
+						<span
+							className={`rounded-full border px-3 py-1 text-xs tracking-[0.18em] ${TONE_STYLES.critical.chip}`}
+						>
+							当日混合扫描漏洞发现
 						</span>
 					</div>
 				</div>
 				<div className="h-[calc(100%-52px)] w-full">
 					<ResponsiveContainer width="100%" height="100%">
-						<AreaChart data={DASHBOARD_PREVIEW_TREND} margin={{ top: 12, right: 12, left: -10, bottom: 0 }}>
-							<defs>
-								<linearGradient id="previewTotal" x1="0" x2="0" y1="0" y2="1">
-									<stop offset="0%" stopColor="#22d3ee" stopOpacity={0.45} />
-									<stop offset="100%" stopColor="#22d3ee" stopOpacity={0.02} />
-								</linearGradient>
-								<linearGradient id="previewVerified" x1="0" x2="0" y1="0" y2="1">
-									<stop offset="0%" stopColor="#f97316" stopOpacity={0.38} />
-									<stop offset="100%" stopColor="#f97316" stopOpacity={0.02} />
-								</linearGradient>
-							</defs>
+						<ComposedChart data={trendRows} margin={{ top: 12, right: 12, left: -10, bottom: 0 }}>
 							<CartesianGrid stroke="rgba(100,116,139,0.15)" strokeDasharray="4 4" />
 							<XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 12 }} axisLine={false} tickLine={false} />
 							<YAxis tick={{ fill: "#94a3b8", fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -314,9 +339,20 @@ function TrendPanel() {
 									color: "#e2e8f0",
 								}}
 							/>
-							<Area type="monotone" dataKey="total" name="新增风险" stroke="#22d3ee" fill="url(#previewTotal)" strokeWidth={2.4} />
-							<Area type="monotone" dataKey="verified" name="已验证" stroke="#f97316" fill="url(#previewVerified)" strokeWidth={2.2} />
-						</AreaChart>
+							<Bar dataKey="staticShare" stackId="share" fill="#fbbf24" fillOpacity={0.32} barSize={18}>
+								<LabelList dataKey="staticFindings" position="insideTop" formatter={(value: number) => (value > 0 ? formatNumber(value) : "")} />
+							</Bar>
+							<Bar dataKey="intelligentShare" stackId="share" fill="#fb923c" fillOpacity={0.34}>
+								<LabelList dataKey="intelligentVerifiedFindings" position="insideTop" formatter={(value: number) => (value > 0 ? formatNumber(value) : "")} />
+							</Bar>
+							<Bar dataKey="hybridShare" stackId="share" fill="#f43f5e" fillOpacity={0.38}>
+								<LabelList dataKey="hybridVerifiedFindings" position="insideTop" formatter={(value: number) => (value > 0 ? formatNumber(value) : "")} />
+							</Bar>
+							<Line type="monotone" dataKey="totalNewFindings" name="当日累计新增漏洞发现" stroke="#38bdf8" strokeWidth={2.4} dot={{ r: 3 }} />
+							<Line type="monotone" dataKey="staticFindings" name="当日静态扫描漏洞发现" stroke="#fbbf24" strokeWidth={2} dot={false} />
+							<Line type="monotone" dataKey="intelligentVerifiedFindings" name="当日智能扫描漏洞发现" stroke="#fb923c" strokeWidth={2} dot={false} />
+							<Line type="monotone" dataKey="hybridVerifiedFindings" name="当日混合扫描漏洞发现" stroke="#f43f5e" strokeWidth={2} dot={false} />
+						</ComposedChart>
 					</ResponsiveContainer>
 				</div>
 			</div>

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import deps
-from app.api.v1.endpoints import projects
+from app.api.v1.endpoints import projects, projects_insights
 from app.db.session import get_db
 
 from test_dashboard_snapshot_v2 import _build_execute_side_effect
@@ -39,7 +39,7 @@ def _build_test_client():
 @pytest.mark.parametrize("range_days", [7, 14, 30])
 def test_dashboard_snapshot_accepts_supported_range_days(range_days, monkeypatch):
     monkeypatch.setattr(
-        projects,
+        projects_insights,
         "count_high_confidence_findings_by_task_ids",
         AsyncMock(return_value={"og1": 1, "og2": 1}),
     )
@@ -58,7 +58,7 @@ def test_dashboard_snapshot_accepts_supported_range_days(range_days, monkeypatch
 
 def test_dashboard_snapshot_rejects_unsupported_range_days(monkeypatch):
     monkeypatch.setattr(
-        projects,
+        projects_insights,
         "count_high_confidence_findings_by_task_ids",
         AsyncMock(return_value={"og1": 1, "og2": 1}),
     )
@@ -77,7 +77,7 @@ def test_dashboard_snapshot_rejects_unsupported_range_days(monkeypatch):
 
 def test_dashboard_snapshot_defaults_range_days_when_omitted(monkeypatch):
     monkeypatch.setattr(
-        projects,
+        projects_insights,
         "count_high_confidence_findings_by_task_ids",
         AsyncMock(return_value={"og1": 1, "og2": 1}),
     )

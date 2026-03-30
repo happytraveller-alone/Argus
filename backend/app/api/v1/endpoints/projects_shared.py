@@ -1048,6 +1048,10 @@ class DashboardDailyActivityItem(BaseModel):
     bandit_findings: int
     phpstan_findings: int
     yasa_findings: int
+    static_findings: int
+    intelligent_verified_findings: int
+    hybrid_verified_findings: int
+    total_new_findings: int
 
 
 class DashboardVerificationFunnelItem(BaseModel):

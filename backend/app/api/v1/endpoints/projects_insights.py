@@ -791,6 +791,7 @@ async def get_dashboard_snapshot(
     phpstan_task_project_map: Dict[str, str] = {}
     yasa_task_project_map: Dict[str, str] = {}
     agent_task_project_map: Dict[str, str] = {}
+    agent_task_source_mode_map: Dict[str, str] = {}
     recent_task_items: List[Dict[str, Any]] = []
     static_recent_task_records: List[Dict[str, Any]] = []
     window_scanned_projects: set[str] = set()
@@ -967,6 +968,27 @@ async def get_dashboard_snapshot(
                 duration_totals["window_sum"] += duration_ms
                 duration_totals["window_count"] += 1
                 _update_window_activity(activity_map, normalized_timestamp, window_start, "completed_scans")
+
+    def ensure_activity_bucket(timestamp: Optional[datetime]) -> Optional[Dict[str, int]]:
+        normalized = _coerce_datetime(timestamp)
+        if normalized is None or normalized < window_start:
+            return None
+        return activity_map.setdefault(
+            _dashboard_activity_bucket(normalized),
+            {
+                "completed_scans": 0,
+                "agent_findings": 0,
+                "opengrep_findings": 0,
+                "gitleaks_findings": 0,
+                "bandit_findings": 0,
+                "phpstan_findings": 0,
+                "yasa_findings": 0,
+                "static_findings": 0,
+                "intelligent_verified_findings": 0,
+                "hybrid_verified_findings": 0,
+                "total_new_findings": 0,
+            },
+        )
 
         if status_bucket in {"completed", "failed", "interrupted", "cancelled"}:
             success_totals["terminal"] += 1
@@ -1274,6 +1296,7 @@ async def get_dashboard_snapshot(
         source_mode = _resolve_agent_source_mode(name, description)
         if normalized_task_id:
             agent_task_project_map[normalized_task_id] = normalized_project_id
+            agent_task_source_mode_map[normalized_task_id] = source_mode
         total_model_tokens += _to_non_negative_int(tokens_used)
         verified = _to_non_negative_int(verified_count)
         project_vulns = ensure_vulns(normalized_project_id)
@@ -1571,6 +1594,7 @@ async def get_dashboard_snapshot(
         project_id = agent_task_project_map.get(str(task_id or ""))
         if not project_id:
             continue
+        source_mode = agent_task_source_mode_map.get(str(task_id or ""), "hybrid")
         is_false_positive = _is_agent_finding_false_positive(status, verdict)
         verified_flag = _is_agent_finding_verified(is_verified, status, verdict)
         is_effective = _is_agent_finding_effective(status, verdict)
@@ -1592,6 +1616,16 @@ async def get_dashboard_snapshot(
 
         if not verified_flag or not is_effective:
             continue
+        activity_bucket = ensure_activity_bucket(_coerce_datetime(created_at))
+        if activity_bucket is not None:
+            field_name = (
+                "intelligent_verified_findings"
+                if source_mode == "intelligent"
+                else "hybrid_verified_findings"
+            )
+            activity_bucket[field_name] = _to_non_negative_int(
+                activity_bucket.get(field_name, 0)
+            ) + 1
         normalized_confidence = _normalize_agent_confidence(
             ai_confidence if ai_confidence is not None else confidence
         )
@@ -1721,10 +1755,38 @@ async def get_dashboard_snapshot(
         ),
     )
 
-    daily_activity = [
-        DashboardDailyActivityItem(date=date, **activity)
-        for date, activity in sorted(activity_map.items(), key=lambda item: item[0])
-    ]
+    daily_activity = []
+    for date, activity in sorted(activity_map.items(), key=lambda item: item[0]):
+        activity_payload = dict(activity)
+        static_findings = (
+            _to_non_negative_int(activity_payload.get("opengrep_findings", 0))
+            + _to_non_negative_int(activity_payload.get("gitleaks_findings", 0))
+            + _to_non_negative_int(activity_payload.get("bandit_findings", 0))
+            + _to_non_negative_int(activity_payload.get("phpstan_findings", 0))
+            + _to_non_negative_int(activity_payload.get("yasa_findings", 0))
+        )
+        intelligent_verified_findings = _to_non_negative_int(
+            activity_payload.pop("intelligent_verified_findings", 0)
+        )
+        hybrid_verified_findings = _to_non_negative_int(
+            activity_payload.pop("hybrid_verified_findings", 0)
+        )
+        activity_payload.pop("static_findings", None)
+        activity_payload.pop("total_new_findings", None)
+        daily_activity.append(
+            DashboardDailyActivityItem(
+                date=date,
+                **activity_payload,
+                static_findings=static_findings,
+                intelligent_verified_findings=intelligent_verified_findings,
+                hybrid_verified_findings=hybrid_verified_findings,
+                total_new_findings=(
+                    static_findings
+                    + intelligent_verified_findings
+                    + hybrid_verified_findings
+                ),
+            )
+        )
 
     engine_breakdown = [
         DashboardEngineBreakdownItem(
