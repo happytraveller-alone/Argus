@@ -75,7 +75,7 @@ interface DashboardViewMeta {
 const VIEW_ITEMS: DashboardViewMeta[] = [
 	{
 		id: "trend",
-		label: "漏洞态势趋势",
+		label: "漏洞态势统计图",
 		description: "查看近一段时间新增风险与 AI 验证漏洞的波动。",
 		yAxisLabel: "漏洞数量",
 	},
@@ -180,6 +180,8 @@ const DASHBOARD_PANEL_DESCRIPTION_CLASSNAME =
 	"max-w-2xl text-sm leading-6 text-muted-foreground";
 const DASHBOARD_META_LABEL_CLASSNAME =
 	"text-left text-xs uppercase tracking-[0.18em] text-muted-foreground";
+const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =
+	"text-base uppercase tracking-[0.18em] text-muted-foreground";
 const DASHBOARD_TOOLTIP_STYLE = {
 	backgroundColor: "hsl(var(--card))",
 	borderColor: "hsl(var(--border))",
@@ -578,7 +580,7 @@ function PreviewHeader({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 					key={item.label}
 					className={`${DASHBOARD_PANEL_CLASSNAME} px-4 py-4`}
 				>
-					<div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+					<div className={DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME}>
 						{item.label}
 					</div>
 					<div className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
@@ -639,7 +641,7 @@ function ViewSidebar({
 							</div>
 							<div className="min-w-0 flex-1">
 								<div className="flex items-center justify-between gap-3">
-									<span className="font-medium tracking-[0.02em]">
+									<span className="font-bold tracking-[0.02em]">
 										{view.label}
 									</span>
 									<ChevronRight
@@ -715,7 +717,7 @@ function TaskStatusPanel({
 					})
 				)}
 			</div>
-			<div className="flex items-start justify-between gap-6">
+			<div className="mt-8 flex items-start justify-between gap-6">
 				<div>
 					<h2 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>最近任务</h2>
 				</div>
@@ -734,39 +736,37 @@ function TaskStatusPanel({
 				</div>
 				{recentTasksPagination.totalPages > 1 ? (
 					<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
-						<div className="flex items-center gap-2">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="cyber-btn-outline h-8 px-3"
-								onClick={() =>
-									setRecentTasksPage((page) => Math.max(page - 1, 1))
-								}
-								disabled={recentTasksPagination.currentPage <= 1}
-							>
-								<ChevronLeft className="h-4 w-4" />
-								上一页
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="cyber-btn-outline h-8 px-3"
-								onClick={() =>
-									setRecentTasksPage((page) =>
-										Math.min(page + 1, recentTasksPagination.totalPages),
-									)
-								}
-								disabled={
-									recentTasksPagination.currentPage >=
-									recentTasksPagination.totalPages
-								}
-							>
-								下一页
-								<ChevronRight className="h-4 w-4" />
-							</Button>
-						</div>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="cyber-btn-outline h-8 px-3"
+							onClick={() =>
+								setRecentTasksPage((page) => Math.max(page - 1, 1))
+							}
+							disabled={recentTasksPagination.currentPage <= 1}
+						>
+							<ChevronLeft className="h-4 w-4" />
+							上一页
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="cyber-btn-outline h-8 px-3"
+							onClick={() =>
+								setRecentTasksPage((page) =>
+									Math.min(page + 1, recentTasksPagination.totalPages),
+								)
+							}
+							disabled={
+								recentTasksPagination.currentPage >=
+								recentTasksPagination.totalPages
+							}
+						>
+							下一页
+							<ChevronRight className="h-4 w-4" />
+						</Button>
 					</div>
 				) : null}
 			</div>
@@ -783,7 +783,7 @@ function RecentTaskCard({ task }: { task: DashboardRecentTaskItem }) {
 		<div className={`${DASHBOARD_PANEL_CLASSNAME} px-4 py-4`}>
 			<div className="flex items-start justify-between gap-3">
 				<div className="min-w-0">
-					<p className="truncate text-sm font-semibold text-foreground">
+					<p className="truncate text-xs text-muted-foreground">
 						{task.title}
 					</p>
 					{/* <p className="mt-1 text-xs text-muted-foreground">
@@ -827,7 +827,7 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 	if (trendRows.length === 0) {
 		return (
 			<div data-panel="trend" className="space-y-4">
-				<h3 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>漏洞态势趋势</h3>
+				<h3 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>漏洞态势统计图</h3>
 				<p className="text-sm text-muted-foreground">暂无趋势数据</p>
 			</div>
 		);
@@ -836,7 +836,7 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 	return (
 		<div data-panel="trend" className="space-y-5">
 			<div className="flex flex-col gap-2">
-				<h3 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>漏洞态势趋势</h3>
+				<h3 className={DASHBOARD_PANEL_TITLE_CLASSNAME}>漏洞态势统计图</h3>
 				<p className={DASHBOARD_PANEL_DESCRIPTION_CLASSNAME}>
 					查看近一段时间新增风险与 AI 已验证漏洞的波动趋势。
 				</p>
@@ -844,20 +844,16 @@ function TrendPanel({ snapshot }: { snapshot: DashboardSnapshotResponse }) {
 			<div className="grid gap-3 sm:grid-cols-3">
 				{[
 					{
-						label: "区间峰值",
-						value: formatNumber(peakItem.total),
-						meta: peakItem.date,
-					},
-					{
-						label: "AI 已验证漏洞",
-						value: formatNumber(snapshot.summary.current_verified_findings),
-						meta: "累计验证",
-					},
-					{
-						label: "LLM 贡献",
+						label: "AI发现漏洞",
 						value: formatNumber(llmTotal?.effective_findings ?? 0),
-						meta: "智能扫描 + 混合扫描",
+						meta: "",
 					},
+					{
+						label: "AI累计已验证漏洞",
+						value: formatNumber(snapshot.summary.current_verified_findings),
+						meta: "",
+					},
+
 				].map((item) => (
 					<div
 						key={item.label}

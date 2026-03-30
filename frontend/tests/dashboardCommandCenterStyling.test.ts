@@ -29,3 +29,55 @@ test("DashboardCommandCenter uses shared card tokens and avoids gradient dashboa
 	assert.doesNotMatch(source, /bg-gradient-to-r/);
 	assert.doesNotMatch(source, /<linearGradient/);
 });
+
+test("DashboardCommandCenter chart sidebar labels use bold weight", () => {
+	const source = readFileSync(dashboardCommandCenterPath, "utf8");
+
+	assert.match(source, /<span className="font-bold tracking-\[0\.02em\]">/);
+});
+
+test("DashboardCommandCenter summary card descriptions use enlarged label text", () => {
+	const source = readFileSync(dashboardCommandCenterPath, "utf8");
+
+	assert.match(
+		source,
+		/const DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME =\s*"text-base uppercase tracking-\[0\.18em\] text-muted-foreground"/,
+	);
+	assert.match(source, /<div className=\{DASHBOARD_SUMMARY_CARD_LABEL_CLASSNAME\}>/);
+});
+
+test("DashboardCommandCenter recent task titles match progress text styling instead of bold headings", () => {
+	const source = readFileSync(dashboardCommandCenterPath, "utf8");
+
+	assert.match(source, /<p className="truncate text-xs text-muted-foreground">/);
+	assert.match(
+		source,
+		/<div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">/,
+	);
+	assert.doesNotMatch(
+		source,
+		/<p className="truncate text-sm font-semibold text-foreground">/,
+	);
+});
+
+test("DashboardCommandCenter recent tasks section adds top spacing away from task status", () => {
+	const source = readFileSync(dashboardCommandCenterPath, "utf8");
+
+	assert.match(
+		source,
+		/<div className="mt-8 flex items-start justify-between gap-6">[\s\S]*<h2 className=\{DASHBOARD_PANEL_TITLE_CLASSNAME\}>最近任务<\/h2>/,
+	);
+});
+
+test("DashboardCommandCenter recent task pagination places previous and next buttons on opposite sides", () => {
+	const source = readFileSync(dashboardCommandCenterPath, "utf8");
+
+	assert.match(
+		source,
+		/<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border\/70 pt-4">[\s\S]*上一页[\s\S]*下一页[\s\S]*<\/div>/,
+	);
+	assert.doesNotMatch(
+		source,
+		/<div className="flex items-center gap-2">[\s\S]*上一页[\s\S]*下一页[\s\S]*<\/div>/,
+	);
+});

@@ -28,3 +28,16 @@ test("ProjectDetail 最近任务表格在最左侧增加连续序号列", () => 
 	assert.match(source, /header:\s*"序号"/);
 	assert.match(source, /pageIndex \* pagination\.pageSize \+ pageRowIndex \+ 1/);
 });
+
+test("ProjectDetail 最近任务状态 badge 统一使用非加粗字重", () => {
+	const source = readFileSync(
+		"/home/xyf/AuditTool/frontend/src/pages/ProjectDetail.tsx",
+		"utf8",
+	);
+
+	assert.match(source, /cyber-badge-success font-normal/);
+	assert.match(source, /cyber-badge-info font-normal/);
+	assert.match(source, /cyber-badge-danger font-normal/);
+	assert.match(source, /cyber-badge-muted font-normal/);
+	assert.match(source, /border-orange-500\/30 font-normal/);
+});
