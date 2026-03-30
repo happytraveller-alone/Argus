@@ -859,7 +859,7 @@ export default function ProjectDetail() {
 			</div>
 			<div className="relative z-10">
 				<iframe
-					ref={iframeRef}
+					// ref={iframeRef}
 					src="http://localhost:5175"
 					title="Nexus-itemDetail"
 					className="w-full border-0 rounded-lg"
