@@ -28,6 +28,7 @@
 #   PROBE_ATTEMPTS                  — 每个候选镜像的探测次数（默认 3，取中位数）
 #   VULHUNTER_READY_TIMEOUT_SECONDS — 等待服务就绪超时秒数（默认 900）
 #   VULHUNTER_OPEN_BROWSER          — 设为 1 时服务就绪后自动打开浏览器
+#   FALLBACK_LOCAL_BUILD            — 设为 0 禁用远程拉取失败后的自动本地构建回退（默认 1）
 
 set -euo pipefail
 
@@ -138,6 +139,32 @@ compose_args_target_detached_up() {
     idx=$((idx + 1))
   done
 
+  return 1
+}
+
+# 判断 compose 参数是否已包含 docker-compose.full.yml
+# 返回 0 表示包含，返回 1 表示不包含
+compose_args_contains_full_yml() {
+  local -a args=("$@")
+  local idx=0
+  local arg=""
+
+  while [ "$idx" -lt "${#args[@]}" ]; do
+    arg="${args[$idx]}"
+    case "$arg" in
+      -f|--file)
+        idx=$((idx + 1))
+        if [ "$idx" -lt "${#args[@]}" ]; then
+          case "${args[$idx]}" in
+            *docker-compose.full.yml)
+              return 0
+              ;;
+          esac
+        fi
+        ;;
+    esac
+    idx=$((idx + 1))
+  done
   return 1
 }
 
@@ -704,6 +731,154 @@ run_with_retries() {
   return "$rc"
 }
 
+# ─── 本地构建回退 ─────────────────────────────────────────────────────────────
+# 将 COMPOSE_ARGS 转换为本地构建回退参数：
+#   1. 剥离现有 -f/--file 标志
+#   2. 注入 -f docker-compose.yml -f docker-compose.full.yml
+#   3. 在子命令参数中追加 --build（若尚未存在）
+# 使用 bash nameref 将结果写入调用方的数组变量
+build_local_fallback_compose_args() {
+  local -n _out_arr="$1"
+  shift
+  local -a input_args=("$@")
+  local -a global_opts=()
+  local -a subcmd_args=()
+  local found_subcmd=0
+  local idx=0
+  local arg=""
+
+  while [ "$idx" -lt "${#input_args[@]}" ]; do
+    arg="${input_args[$idx]}"
+    if [ "$found_subcmd" -eq 0 ]; then
+      case "$arg" in
+        -f|--file)
+          # 跳过现有 -f 标志及其值
+          idx=$((idx + 1))
+          ;;
+        --env-file|-p|--project-name|--project-directory|--profile|--ansi|--parallel)
+          global_opts+=("$arg")
+          idx=$((idx + 1))
+          if [ "$idx" -lt "${#input_args[@]}" ]; then
+            global_opts+=("${input_args[$idx]}")
+          fi
+          ;;
+        -*)
+          global_opts+=("$arg")
+          ;;
+        *)
+          found_subcmd=1
+          subcmd_args+=("$arg")
+          ;;
+      esac
+    else
+      subcmd_args+=("$arg")
+    fi
+    idx=$((idx + 1))
+  done
+
+  _out_arr=()
+  if [ "${#global_opts[@]}" -gt 0 ]; then
+    _out_arr+=("${global_opts[@]}")
+  fi
+  _out_arr+=(-f docker-compose.yml -f docker-compose.full.yml)
+  if [ "${#subcmd_args[@]}" -gt 0 ]; then
+    _out_arr+=("${subcmd_args[@]}")
+  fi
+
+  local has_build=0
+  local item
+  if [ "${#subcmd_args[@]}" -gt 0 ]; then
+    for item in "${subcmd_args[@]}"; do
+      if [ "$item" = "--build" ]; then
+        has_build=1
+        break
+      fi
+    done
+  fi
+  if [ "$has_build" -eq 0 ]; then
+    _out_arr+=(--build)
+  fi
+}
+
+# 尝试使用 docker-compose.full.yml 覆盖层进行本地构建回退。
+# 使用探测阶段选出的最佳镜像源。成功返回 0，失败返回非零。
+run_local_build_fallback() {
+  local -a local_compose_args=()
+  build_local_fallback_compose_args local_compose_args "${COMPOSE_ARGS[@]}"
+
+  local dockerhub_mirror="${DOCKERHUB_LIBRARY_MIRROR_PRIMARY_SELECTED}"
+  local ghcr_registry="${GHCR_REGISTRY_PRIMARY_SELECTED}"
+  local uv_image="${UV_IMAGE:-${ghcr_registry}/astral-sh/uv:latest}"
+  local sandbox_base_image="${SANDBOX_BASE_IMAGE:-${dockerhub_mirror}/python:3.11-slim}"
+  local sandbox_image="${SANDBOX_IMAGE:-vulhunter/sandbox-local:latest}"
+
+  log_info "============================================================"
+  log_info "LOCAL BUILD FALLBACK"
+  log_info "All remote pull phases failed. Falling back to local build."
+  log_info "This will build images from source using docker-compose.full.yml."
+  log_info "This may take significantly longer than pulling pre-built images."
+  log_info "Set FALLBACK_LOCAL_BUILD=0 to disable this behavior."
+  log_info "============================================================"
+  log_info "Local build compose command: ${COMPOSE_BIN[*]} ${local_compose_args[*]}"
+  log_info "DOCKERHUB_LIBRARY_MIRROR=${dockerhub_mirror}"
+  log_info "UV_IMAGE=${uv_image}"
+  log_info "SANDBOX_BASE_IMAGE=${sandbox_base_image}"
+
+  local rc=0
+  local ready_watcher_pid=""
+
+  if [ "$IS_ATTACHED_UP" -eq 1 ]; then
+    notify_when_ready 1 &
+    ready_watcher_pid="$!"
+  fi
+
+  set +e
+  DOCKERHUB_LIBRARY_MIRROR="${dockerhub_mirror}" \
+    GHCR_REGISTRY="${ghcr_registry}" \
+    VULHUNTER_IMAGE_NAMESPACE="${VULHUNTER_IMAGE_NAMESPACE}" \
+    NEXUS_WEB_IMAGE_NAMESPACE="${NEXUS_WEB_IMAGE_NAMESPACE}" \
+    VULHUNTER_IMAGE_TAG="${VULHUNTER_IMAGE_TAG}" \
+    NEXUS_WEB_IMAGE_TAG="${NEXUS_WEB_IMAGE_TAG}" \
+    UV_IMAGE="${uv_image}" \
+    SANDBOX_BASE_IMAGE="${sandbox_base_image}" \
+    SANDBOX_IMAGE="${sandbox_image}" \
+    FRONTEND_NPM_REGISTRY="${FRONTEND_NPM_REGISTRY_SELECTED}" \
+    FRONTEND_NPM_REGISTRY_FALLBACK="${FRONTEND_NPM_REGISTRY_FALLBACK_SELECTED}" \
+    BACKEND_PYPI_INDEX_PRIMARY="${BACKEND_PYPI_INDEX_PRIMARY_SELECTED}" \
+    BACKEND_PYPI_INDEX_FALLBACK="${BACKEND_PYPI_INDEX_FALLBACK_SELECTED}" \
+    SANDBOX_PYPI_INDEX_PRIMARY="${SANDBOX_PYPI_INDEX_PRIMARY_SELECTED}" \
+    SANDBOX_PYPI_INDEX_FALLBACK="${SANDBOX_PYPI_INDEX_FALLBACK_SELECTED}" \
+    BACKEND_APT_MIRROR_PRIMARY="${BACKEND_APT_MIRROR_PRIMARY_SELECTED}" \
+    BACKEND_APT_SECURITY_PRIMARY="${BACKEND_APT_SECURITY_PRIMARY_SELECTED}" \
+    BACKEND_APT_MIRROR_FALLBACK="${BACKEND_APT_MIRROR_FALLBACK_SELECTED}" \
+    BACKEND_APT_SECURITY_FALLBACK="${BACKEND_APT_SECURITY_FALLBACK_SELECTED}" \
+    SANDBOX_APT_MIRROR_PRIMARY="${SANDBOX_APT_MIRROR_PRIMARY_SELECTED}" \
+    SANDBOX_APT_SECURITY_PRIMARY="${SANDBOX_APT_SECURITY_PRIMARY_SELECTED}" \
+    SANDBOX_APT_MIRROR_FALLBACK="${SANDBOX_APT_MIRROR_FALLBACK_SELECTED}" \
+    SANDBOX_APT_SECURITY_FALLBACK="${SANDBOX_APT_SECURITY_FALLBACK_SELECTED}" \
+    SANDBOX_NPM_REGISTRY_PRIMARY="${SANDBOX_NPM_REGISTRY_PRIMARY_SELECTED}" \
+    SANDBOX_NPM_REGISTRY_FALLBACK="${SANDBOX_NPM_REGISTRY_FALLBACK_SELECTED}" \
+    "${COMPOSE_BIN[@]}" "${local_compose_args[@]}"
+  rc=$?
+  set -e
+
+  if [ -n "$ready_watcher_pid" ]; then
+    kill "$ready_watcher_pid" >/dev/null 2>&1 || true
+    wait "$ready_watcher_pid" >/dev/null 2>&1 || true
+  fi
+
+  if [ "$rc" -eq 0 ]; then
+    if [ "$IS_DETACHED_UP" -eq 1 ]; then
+      notify_when_ready 0 || true
+    fi
+    log_info "Local build fallback succeeded"
+  else
+    log_error "Local build fallback also failed, exit_code=${rc}"
+  fi
+
+  return "$rc"
+}
+
 detect_compose_cmd
 
 if [ "$#" -eq 0 ]; then
@@ -736,6 +911,7 @@ PROBE_TIMEOUT_SECONDS="${PROBE_TIMEOUT_SECONDS:-10}"
 PROBE_CONNECT_TIMEOUT_SECONDS="${PROBE_CONNECT_TIMEOUT_SECONDS:-3}"
 APT_PROBE_CODENAME="${APT_PROBE_CODENAME:-trixie}"
 READY_TIMEOUT_SECONDS="${VULHUNTER_READY_TIMEOUT_SECONDS:-900}"
+FALLBACK_LOCAL_BUILD="${FALLBACK_LOCAL_BUILD:-1}"
 FRONTEND_PUBLIC_PORT="${VULHUNTER_FRONTEND_PORT:-3000}"
 BACKEND_PUBLIC_PORT="${VULHUNTER_BACKEND_PORT:-8000}"
 FRONTEND_READY_URL="http://127.0.0.1:${FRONTEND_PUBLIC_PORT}/"
@@ -920,6 +1096,19 @@ for ((phase_index = 0; phase_index < PHASE_COUNT; phase_index++)); do
   fi
 
 done
+
+# ─── 本地构建回退门控 ─────────────────────────────────────────────────────────
+if [ "${FALLBACK_LOCAL_BUILD}" = "1" ] \
+    && { [ "$IS_ATTACHED_UP" -eq 1 ] || [ "$IS_DETACHED_UP" -eq 1 ]; } \
+    && ! compose_args_contains_full_yml "${COMPOSE_ARGS[@]}"; then
+
+  if run_local_build_fallback; then
+    exit 0
+  fi
+
+  log_error "All ranked phases AND local build fallback exhausted. Exiting with failure."
+  exit 1
+fi
 
 log_error "All ranked phases exhausted. Exiting with failure."
 exit 1

@@ -78,6 +78,7 @@ scripts\compose-up-with-fallback.bat
 | 适用平台 | Linux / macOS / WSL / Windows（Docker Desktop + Linux containers） | Linux / macOS / WSL | Windows | Windows |
 | 镜像源探测与排序 | 否 | 是 | 是 | 否 |
 | 多阶段故障转移 | 否 | 是 | 简化版 | 否 |
+| 本地构建回退 | 否 | 是 | 否 | 否 |
 | 并行探测 | 否 | 是 | 否 | 否 |
 | 自定义重试次数 | 否 | 是 | 否 | 否 |
 | 统一 `services ready` 提示 | 否 | 是 | 否 | 否 |
@@ -182,6 +183,9 @@ export VULHUNTER_READY_TIMEOUT_SECONDS=900
 # 服务 ready 后自动打开默认浏览器（显式开启）
 export VULHUNTER_OPEN_BROWSER=1
 
+# 禁用远程拉取失败后的自动本地构建回退（默认启用）
+export FALLBACK_LOCAL_BUILD=0
+
 # 执行
 ./scripts/compose-up-with-fallback.sh
 ```
@@ -205,6 +209,23 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 确保 Docker Desktop 正在运行：
 - Windows（Docker Desktop + Linux containers）: 检查系统托盘中的 Docker 图标，并确认已切换到 Linux containers
 - Linux/Mac: 运行 `docker ps` 验证
+
+### 本地构建回退（Legacy Bash helper）
+
+当所有远程镜像拉取阶段全部失败时（例如 GHCR packages 是 private 的），Legacy Bash helper 会自动回退到使用 `docker-compose.full.yml` 进行本地构建。此行为默认启用。
+
+- 仅对 `up` 命令生效（`down`、`logs` 等不触发回退）
+- 如果你已经在参数中指定了 `-f docker-compose.full.yml`，回退会被跳过
+- 回退会复用探测阶段选出的最佳镜像源
+- 自动注入 `--build` 标志
+
+```bash
+# 禁用自动本地构建回退
+export FALLBACK_LOCAL_BUILD=0
+
+# 启用（默认）
+export FALLBACK_LOCAL_BUILD=1
+```
 
 ### 镜像拉取失败
 

@@ -114,10 +114,53 @@ printf 'URL=%s\\n' "${1:-}" >>"${STUB_BROWSER_LOG:?}"
     browser_path.chmod(browser_path.stat().st_mode | stat.S_IXUSR)
 
 
+def _write_fake_docker_with_fallback(bin_dir: Path) -> None:
+    """Docker stub that fails for remote pull but succeeds for local build."""
+    docker_path = bin_dir / "docker"
+    docker_path.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "compose" ] && [ "${2:-}" = "version" ]; then
+  echo "Docker Compose version fake"
+  exit 0
+fi
+
+{
+  printf 'COMPOSE_MENU=%s\\n' "${COMPOSE_MENU-__UNSET__}"
+  printf 'ARGS='
+  printf '%s ' "$@"
+  printf '\\n'
+} >>"${STUB_DOCKER_LOG:?}"
+
+# Succeed if this is a local build fallback invocation
+for arg in "$@"; do
+  if [ "$arg" = "docker-compose.full.yml" ]; then
+    exit 0
+  fi
+done
+
+# Otherwise use configured exit code
+if [ "${STUB_DOCKER_EXIT_CODE:-0}" != "0" ]; then
+  echo "${STUB_DOCKER_ERROR:-error from registry: denied}" >&2
+fi
+exit "${STUB_DOCKER_EXIT_CODE:-0}"
+""",
+        encoding="utf-8",
+    )
+    docker_path.chmod(docker_path.stat().st_mode | stat.S_IXUSR)
+
+
 def _run_compose_wrapper(
-    tmp_path: Path, args: list[str], extra_env: dict[str, str] | None = None
+    tmp_path: Path,
+    args: list[str],
+    extra_env: dict[str, str] | None = None,
+    docker_stub_writer=None,
 ) -> subprocess.CompletedProcess[str]:
-    _write_fake_docker(tmp_path)
+    if docker_stub_writer:
+        docker_stub_writer(tmp_path)
+    else:
+        _write_fake_docker(tmp_path)
     _write_fake_curl(tmp_path)
     log_path = tmp_path / "docker-invocation.log"
     curl_log_path = tmp_path / "curl-invocation.log"
@@ -294,6 +337,7 @@ def test_wrapper_failure_surfaces_remote_image_hint(tmp_path: Path) -> None:
         extra_env={
             "STUB_DOCKER_EXIT_CODE": "1",
             "STUB_DOCKER_ERROR": "error from registry: denied",
+            "FALLBACK_LOCAL_BUILD": "0",
         },
     )
     combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
@@ -301,3 +345,92 @@ def test_wrapper_failure_surfaces_remote_image_hint(tmp_path: Path) -> None:
     assert result.returncode == 1, combined_output
     assert "anonymous GHCR pull failed or the image namespace/tag is incorrect" in combined_output
     assert "ghcr.io/unbengable12/vulhunter-backend:latest" in combined_output
+
+
+# ─── Local build fallback tests ──────────────────────────────────────────────
+
+
+def test_local_build_fallback_triggers_on_remote_failure(tmp_path: Path) -> None:
+    """Remote pull fails → fallback triggers → succeeds via local build."""
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["up", "-d"],
+        extra_env={
+            "STUB_DOCKER_EXIT_CODE": "1",
+            "STUB_DOCKER_ERROR": "error from registry: denied",
+            "FALLBACK_LOCAL_BUILD": "1",
+        },
+        docker_stub_writer=_write_fake_docker_with_fallback,
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 0, combined_output
+    assert "LOCAL BUILD FALLBACK" in combined_output
+    assert "Local build fallback succeeded" in combined_output
+
+    log_output = _read_log(tmp_path / "docker-invocation.log")
+    assert "docker-compose.full.yml" in log_output
+    assert "--build" in log_output
+
+
+def test_local_build_fallback_disabled_by_env(tmp_path: Path) -> None:
+    """FALLBACK_LOCAL_BUILD=0 → fallback does not trigger."""
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["up", "-d"],
+        extra_env={
+            "STUB_DOCKER_EXIT_CODE": "1",
+            "STUB_DOCKER_ERROR": "error from registry: denied",
+            "FALLBACK_LOCAL_BUILD": "0",
+        },
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 1, combined_output
+    assert "LOCAL BUILD FALLBACK" not in combined_output
+    assert "All ranked phases exhausted" in combined_output
+
+
+def test_local_build_fallback_skipped_for_non_up_commands(tmp_path: Path) -> None:
+    """Non-up commands (e.g. 'down') should not trigger local build fallback."""
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["down"],
+        extra_env={
+            "STUB_DOCKER_EXIT_CODE": "1",
+            "FALLBACK_LOCAL_BUILD": "1",
+        },
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 1, combined_output
+    assert "LOCAL BUILD FALLBACK" not in combined_output
+
+
+def test_local_build_fallback_injects_build_flag(tmp_path: Path) -> None:
+    """Verify fallback args contain docker-compose.full.yml and --build."""
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["up"],
+        extra_env={
+            "STUB_DOCKER_EXIT_CODE": "1",
+            "STUB_DOCKER_ERROR": "error from registry: denied",
+            "FALLBACK_LOCAL_BUILD": "1",
+        },
+        docker_stub_writer=_write_fake_docker_with_fallback,
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 0, combined_output
+    log_output = _read_log(tmp_path / "docker-invocation.log")
+
+    # Find the fallback invocation line (with docker-compose.full.yml)
+    fallback_lines = [
+        line for line in log_output.splitlines()
+        if "docker-compose.full.yml" in line and line.startswith("ARGS=")
+    ]
+    assert len(fallback_lines) >= 1, f"No fallback invocation found in log:\n{log_output}"
+    fallback_args = fallback_lines[0]
+    assert "-f docker-compose.yml" in fallback_args
+    assert "-f docker-compose.full.yml" in fallback_args
+    assert "--build" in fallback_args
