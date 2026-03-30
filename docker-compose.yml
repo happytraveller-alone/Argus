@@ -1,11 +1,11 @@
 # =============================================
 # VulHunter v3.0.4 Docker Compose 日常开发默认配置
 # =============================================
-# 默认入口: docker compose up --build
+# 默认入口: docker compose up（所有镜像从 GHCR 拉取，无需本地构建）
 # 注意: backend 会在启动期通过 Docker SDK 执行 runner preflight。
 # 这些自检容器是一次性容器，成功或失败后都会立即删除，不作为 compose service 常驻。
 # 真正执行扫描时，backend 会继续按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`
-# 动态拉起临时 runner 容器。
+# 动态拉起临时 runner 容器（镜像默认从 GHCR 拉取）。
 # 全量本地构建: docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 # 预构建镜像部署模板: deploy/compose/docker-compose.prod.yml / docker-compose.prod.cn.yml
 
@@ -30,30 +30,7 @@ services:
       - vulhunter-network
 
   backend:
-    build:
-      context: .
-      dockerfile: docker/backend.Dockerfile
-      target: dev-runtime
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - UV_IMAGE=${UV_IMAGE:-ghcr.nju.edu.cn/astral-sh/uv:latest}
-        - BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
-        - BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
-        - BACKEND_APT_SECURITY_FALLBACK=${BACKEND_APT_SECURITY_FALLBACK:-security.debian.org}
-        - BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-}
-        - BACKEND_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-}
-        - BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
-        - BACKEND_INSTALL_CJK_FONTS=${BACKEND_INSTALL_CJK_FONTS:-0}
-        - BACKEND_INSTALL_YASA=${BACKEND_INSTALL_YASA:-1}
-        - YASA_VERSION=${YASA_VERSION:-v0.2.33}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    image: vulhunter/backend-dev-local:latest
+    image: ${BACKEND_IMAGE:-ghcr.io/vulhunter/vulhunter-backend:latest}
     restart: unless-stopped
     working_dir: /app
     volumes:
@@ -76,7 +53,7 @@ services:
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
-      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox:latest}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ghcr.io/vulhunter/vulhunter-sandbox:latest}
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
@@ -96,13 +73,15 @@ services:
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
       BACKEND_INSTALL_YASA: ${BACKEND_INSTALL_YASA:-1}
       YASA_VERSION: ${YASA_VERSION:-v0.2.33}
-      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}
-      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}
-      SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}
-      SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}
-      SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-vulhunter/phpstan-runner-local:latest}
-      SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}
-      FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}
+      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-ghcr.io/vulhunter/vulhunter-yasa-runner:latest}
+      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-ghcr.io/vulhunter/vulhunter-opengrep-runner:latest}
+      SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-ghcr.io/vulhunter/vulhunter-bandit-runner:latest}
+      SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-ghcr.io/vulhunter/vulhunter-gitleaks-runner:latest}
+      SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-ghcr.io/vulhunter/vulhunter-phpstan-runner:latest}
+      SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-ghcr.io/vulhunter/vulhunter-pmd-runner:latest}
+      FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-ghcr.io/vulhunter/vulhunter-flow-parser-runner:latest}
+      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-ghcr.io/vulhunter/vulhunter-sandbox-runner:latest}
+      SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"
       FLOW_PARSER_RUNNER_BATCH_MAX_FILES: "${FLOW_PARSER_RUNNER_BATCH_MAX_FILES:-100}"
@@ -137,24 +116,7 @@ services:
       - vulhunter-network
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: ${FRONTEND_DOCKERFILE:-../docker/frontend.Dockerfile}
-      target: dev
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}
-        - FRONTEND_NPM_REGISTRY_FALLBACK=${FRONTEND_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}
-        - PNPM_VERSION=${PNPM_VERSION:-9.15.4}
-        - BUILD_WEAK_NETWORK=${BUILD_WEAK_NETWORK:-false}
-        - BUILD_ARCH=${BUILD_ARCH:-}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    image: vulhunter/frontend-local:latest
+    image: ${FRONTEND_IMAGE:-ghcr.io/vulhunter/vulhunter-frontend:latest}
     restart: unless-stopped
     working_dir: /app
     volumes:
@@ -200,22 +162,7 @@ services:
       - vulhunter-network
 
   sandbox:
-    build:
-      context: .
-      dockerfile: docker/sandbox.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-        - SANDBOX_BASE_IMAGE=${SANDBOX_BASE_IMAGE:-docker.m.daocloud.io/python:3.11-slim}
-        - SANDBOX_APT_MIRROR_PRIMARY=${SANDBOX_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
-        - SANDBOX_APT_SECURITY_PRIMARY=${SANDBOX_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
-        - SANDBOX_APT_MIRROR_FALLBACK=${SANDBOX_APT_MIRROR_FALLBACK:-deb.debian.org}
-        - SANDBOX_APT_SECURITY_FALLBACK=${SANDBOX_APT_SECURITY_FALLBACK:-security.debian.org}
-        - SANDBOX_PYPI_INDEX_PRIMARY=${SANDBOX_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
-        - SANDBOX_PYPI_INDEX_FALLBACK=${SANDBOX_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
-        - SANDBOX_NPM_REGISTRY_PRIMARY=${SANDBOX_NPM_REGISTRY_PRIMARY:-https://registry.npmmirror.com}
-        - SANDBOX_NPM_REGISTRY_FALLBACK=${SANDBOX_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}
-        - SANDBOX_PNPM_CMD_TIMEOUT_SECONDS=${SANDBOX_PNPM_CMD_TIMEOUT_SECONDS:-420}
-    image: vulhunter/sandbox:latest
+    image: ${SANDBOX_IMAGE:-ghcr.io/vulhunter/vulhunter-sandbox:latest}
     profiles: ["build"]
     restart: "no"
     command: ["echo", "Sandbox image built successfully"]

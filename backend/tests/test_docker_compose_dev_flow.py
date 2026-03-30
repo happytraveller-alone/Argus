@@ -36,15 +36,14 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert 'condition: service_completed_successfully' not in compose_text
     for runner_service in RUNNER_SERVICE_NAMES:
         assert f"\n  {runner_service}:" not in compose_text
-    assert "image: vulhunter/backend-dev-local:latest" in compose_text
-    assert "image: vulhunter/frontend-local:latest" in compose_text
-    assert "vulhunter/backend-local:latest" not in compose_text
+    assert "ghcr.io/vulhunter/vulhunter-backend:latest" in compose_text
+    assert "ghcr.io/vulhunter/vulhunter-frontend:latest" in compose_text
     assert "vulhunter/backend-dev:latest" not in compose_text
     assert "vulhunter/frontend-dev:latest" not in compose_text
-    assert "target: dev-runtime" in compose_text
-    assert "target: dev" in compose_text
-    assert "context: ." in compose_text
-    assert "dockerfile: docker/backend.Dockerfile" in compose_text
+    assert "target: dev-runtime" not in compose_text
+    assert "target: dev" not in compose_text
+    assert "build:" not in compose_text
+    assert "dockerfile:" not in compose_text
     assert "./backend:/app" in compose_text
     assert ".:/workspace:ro" in compose_text
     assert "./frontend:/app" in compose_text
@@ -58,24 +57,24 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert 'BACKEND_PUBLIC_URL: http://localhost:${VULHUNTER_BACKEND_PORT:-8000}' in compose_text
     assert "command: /app/scripts/dev-entrypoint.sh" not in compose_text
     assert "command:\n      - sh\n      - /app/scripts/dev-entrypoint.sh" not in compose_text
-    assert "- BACKEND_PYPI_INDEX_PRIMARY=${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
-    assert "- BACKEND_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
-    assert "- BACKEND_INSTALL_YASA=${BACKEND_INSTALL_YASA:-1}" in compose_text
-    assert "- YASA_VERSION=${YASA_VERSION:-v0.2.33}" in compose_text
+    assert "BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}" in compose_text
+    assert "BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}" in compose_text
+    assert "BACKEND_INSTALL_YASA: ${BACKEND_INSTALL_YASA:-1}" in compose_text
+    assert "YASA_VERSION: ${YASA_VERSION:-v0.2.33}" in compose_text
     assert (
-        "${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,"
+        "BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,"
         "https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"
     ) in compose_text
     assert "YASA_ENABLED: ${YASA_ENABLED:-true}" in compose_text
     assert "SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}" in compose_text
     assert "SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}" in compose_text
-    assert "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-vulhunter/yasa-runner-local:latest}" in compose_text
-    assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-vulhunter/opengrep-runner-local:latest}" in compose_text
-    assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-vulhunter/bandit-runner-local:latest}" in compose_text
-    assert "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-vulhunter/gitleaks-runner-local:latest}" in compose_text
-    assert "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-vulhunter/phpstan-runner-local:latest}" in compose_text
-    assert "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}" in compose_text
-    assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-vulhunter/flow-parser-runner-local:latest}" in compose_text
+    assert "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-ghcr.io/vulhunter/vulhunter-yasa-runner:latest}" in compose_text
+    assert "SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-ghcr.io/vulhunter/vulhunter-opengrep-runner:latest}" in compose_text
+    assert "SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-ghcr.io/vulhunter/vulhunter-bandit-runner:latest}" in compose_text
+    assert "SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-ghcr.io/vulhunter/vulhunter-gitleaks-runner:latest}" in compose_text
+    assert "SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-ghcr.io/vulhunter/vulhunter-phpstan-runner:latest}" in compose_text
+    assert "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-ghcr.io/vulhunter/vulhunter-pmd-runner:latest}" in compose_text
+    assert "FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-ghcr.io/vulhunter/vulhunter-flow-parser-runner:latest}" in compose_text
     assert 'FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"' in compose_text
     assert 'FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"' in compose_text
     assert "YASA_TIMEOUT_SECONDS: ${YASA_TIMEOUT_SECONDS:-600}" in compose_text
@@ -85,11 +84,8 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "RUNNER_PREFLIGHT_BUILD_CONTEXT: /workspace" in compose_text
     assert "MCP_REQUIRE_ALL_READY_ON_STARTUP" not in compose_text
     assert '/bin/sh", "-lc"' not in compose_text
-    assert (
-        "- BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-"
-        "https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,"
-        "https://pypi.org/simple}"
-    ) in compose_text
+    assert "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-ghcr.io/vulhunter/vulhunter-sandbox-runner:latest}" in compose_text
+    assert 'SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"' in compose_text
     assert "BACKEND_NPM_REGISTRY_PRIMARY" not in compose_text
     assert "BACKEND_NPM_REGISTRY_FALLBACK" not in compose_text
     assert "BACKEND_NPM_REGISTRY_CANDIDATES" not in compose_text
@@ -185,6 +181,12 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "BACKEND_PNPM_CMD_TIMEOUT_SECONDS" not in full_overlay_text
     assert "BACKEND_PNPM_INSTALL_OPTIONAL" not in full_overlay_text
     assert "MCP_REQUIRED_RUNTIME_DOMAIN" not in full_overlay_text
+    assert "  sandbox:" in full_overlay_text
+    assert "vulhunter/sandbox-local:latest" in full_overlay_text
+    assert "docker/sandbox.Dockerfile" in full_overlay_text
+    assert "SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox-local:latest}" in full_overlay_text
+    assert "SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-vulhunter/sandbox-runner-local:latest}" in full_overlay_text
+    assert 'SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"' in full_overlay_text
     assert "\n  frontend-dev:" not in full_overlay_text
 
 
@@ -454,12 +456,15 @@ def test_docker_publish_pushes_all_runner_images() -> None:
         encoding="utf-8"
     )
 
+    assert "push:" in workflow_text
+    assert "'v*.*.*'" in workflow_text
     assert "build_yasa_runner" in workflow_text
     assert "build_opengrep_runner" in workflow_text
     assert "build_bandit_runner" in workflow_text
     assert "build_gitleaks_runner" in workflow_text
     assert "build_phpstan_runner" in workflow_text
     assert "build_flow_parser_runner" in workflow_text
+    assert "build_sandbox_runner" in workflow_text
     assert "./docker/backend.Dockerfile" in workflow_text
     assert "./docker/frontend.Dockerfile" in workflow_text
     assert "context: ." in workflow_text
@@ -469,12 +474,14 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "./docker/gitleaks-runner.Dockerfile" in workflow_text
     assert "./docker/phpstan-runner.Dockerfile" in workflow_text
     assert "./docker/flow-parser-runner.Dockerfile" in workflow_text
-    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ github.event.inputs.tag }}" in workflow_text
-    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ github.event.inputs.tag }}" in workflow_text
-    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ github.event.inputs.tag }}" in workflow_text
-    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ github.event.inputs.tag }}" in workflow_text
-    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ github.event.inputs.tag }}" in workflow_text
-    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ github.event.inputs.tag }}" in workflow_text
+    assert "./docker/sandbox-runner.Dockerfile" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
+    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
 
 
 def test_release_workflow_packages_yasa_override_assets() -> None:

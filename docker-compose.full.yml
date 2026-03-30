@@ -47,7 +47,7 @@ services:
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
-      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox:latest}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vulhunter/sandbox-local:latest}
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
@@ -137,6 +137,24 @@ services:
       https_proxy: ""
       NO_PROXY: "*"
       VITE_API_BASE_URL: /api/v1
+
+  sandbox:
+    image: vulhunter/sandbox-local:latest
+    build: !override
+      context: .
+      dockerfile: docker/sandbox.Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - SANDBOX_BASE_IMAGE=${SANDBOX_BASE_IMAGE:-docker.m.daocloud.io/python:3.11-slim}
+        - SANDBOX_APT_MIRROR_PRIMARY=${SANDBOX_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
+        - SANDBOX_APT_SECURITY_PRIMARY=${SANDBOX_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
+        - SANDBOX_APT_MIRROR_FALLBACK=${SANDBOX_APT_MIRROR_FALLBACK:-deb.debian.org}
+        - SANDBOX_APT_SECURITY_FALLBACK=${SANDBOX_APT_SECURITY_FALLBACK:-security.debian.org}
+        - SANDBOX_PYPI_INDEX_PRIMARY=${SANDBOX_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
+        - SANDBOX_PYPI_INDEX_FALLBACK=${SANDBOX_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
+        - SANDBOX_NPM_REGISTRY_PRIMARY=${SANDBOX_NPM_REGISTRY_PRIMARY:-https://registry.npmmirror.com}
+        - SANDBOX_NPM_REGISTRY_FALLBACK=${SANDBOX_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}
+        - SANDBOX_PNPM_CMD_TIMEOUT_SECONDS=${SANDBOX_PNPM_CMD_TIMEOUT_SECONDS:-420}
 
   nexus-web:
     image: vulhunter/nexus-web-local:latest

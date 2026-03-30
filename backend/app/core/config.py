@@ -117,12 +117,12 @@ class Settings(BaseSettings):
     ZIP_STORAGE_PATH: str = "./uploads/zip_files"  # ZIP文件存储目录
     SCAN_WORKSPACE_ROOT: str = "/tmp/vulhunter/scans"
     SCAN_WORKSPACE_VOLUME: str = "vulhunter_scan_workspace"
-    SCANNER_YASA_IMAGE: str = "vulhunter/yasa-runner:latest"
-    SCANNER_OPENGREP_IMAGE: str = "vulhunter/opengrep-runner:latest"
-    SCANNER_BANDIT_IMAGE: str = "vulhunter/bandit-runner:latest"
-    SCANNER_GITLEAKS_IMAGE: str = "vulhunter/gitleaks-runner:latest"
-    SCANNER_PHPSTAN_IMAGE: str = "vulhunter/phpstan-runner:latest"
-    SCANNER_PMD_IMAGE: str = "vulhunter/pmd-runner:latest"
+    SCANNER_YASA_IMAGE: str = "ghcr.io/vulhunter/vulhunter-yasa-runner:latest"
+    SCANNER_OPENGREP_IMAGE: str = "ghcr.io/vulhunter/vulhunter-opengrep-runner:latest"
+    SCANNER_BANDIT_IMAGE: str = "ghcr.io/vulhunter/vulhunter-bandit-runner:latest"
+    SCANNER_GITLEAKS_IMAGE: str = "ghcr.io/vulhunter/vulhunter-gitleaks-runner:latest"
+    SCANNER_PHPSTAN_IMAGE: str = "ghcr.io/vulhunter/vulhunter-phpstan-runner:latest"
+    SCANNER_PMD_IMAGE: str = "ghcr.io/vulhunter/vulhunter-pmd-runner:latest"
     RUNNER_PREFLIGHT_ENABLED: bool = True
     RUNNER_PREFLIGHT_STRICT: bool = False
     RUNNER_PREFLIGHT_TIMEOUT_SECONDS: int = 30
@@ -161,11 +161,11 @@ class Settings(BaseSettings):
     
     # 沙箱配置（必须）
     # Sandbox Runner 配置 (Phase 1)
-    SANDBOX_RUNNER_IMAGE: str = "vulhunter/sandbox-runner:latest"  # 轻量级 sandbox runner 镜像
+    SANDBOX_RUNNER_IMAGE: str = "ghcr.io/vulhunter/vulhunter-sandbox-runner:latest"  # 轻量级 sandbox runner 镜像
     SANDBOX_RUNNER_ENABLED: bool = True  # 启用新 runner 抽象
 
     # Sandbox 配置 (保持兼容,作为 fallback)
-    SANDBOX_IMAGE: str = "vulhunter/sandbox:latest"  # 沙箱 Docker 镜像
+    SANDBOX_IMAGE: str = "ghcr.io/vulhunter/vulhunter-sandbox:latest"  # 沙箱 Docker 镜像
     SANDBOX_MEMORY_LIMIT: str = "512m"  # 沙箱内存限制
     SANDBOX_CPU_LIMIT: float = 1.0  # 沙箱 CPU 限制
     SANDBOX_TIMEOUT: int = 60  # 沙箱命令超时（秒）
@@ -183,7 +183,7 @@ class Settings(BaseSettings):
     FLOW_LIGHTWEIGHT_ENABLED: bool = True
     LOGIC_AUTHZ_ENABLED: bool = True
     FLOW_UNREACHABLE_POLICY: str = "degrade_likely"
-    FLOW_PARSER_RUNNER_IMAGE: str = "vulhunter/flow-parser-runner:latest"
+    FLOW_PARSER_RUNNER_IMAGE: str = "ghcr.io/vulhunter/vulhunter-flow-parser-runner:latest"
     FLOW_PARSER_RUNNER_ENABLED: bool = True
     FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: int = 120
     FLOW_PARSER_RUNNER_BATCH_MAX_FILES: int = 100

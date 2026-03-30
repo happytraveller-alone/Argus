@@ -187,6 +187,18 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
     except DOCKER_NOT_FOUND:
         pass
 
+    # 优先尝试从 registry 拉取
+    try:
+        logger.info("runner preflight pull: %s (%s)", spec.name, spec.image)
+        client.images.pull(spec.image)
+        logger.info("pull completed for %s: %s", spec.name, spec.image)
+        return
+    except Exception:
+        logger.info(
+            "pull failed for %s (%s), falling back to local build",
+            spec.name, spec.image,
+        )
+
     build_context = Path(spec.build_context or _backend_build_context())
     if not build_context.exists():
         raise RuntimeError(f"runner build context not found for {spec.name}: {build_context}")

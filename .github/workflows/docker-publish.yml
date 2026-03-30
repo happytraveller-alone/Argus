@@ -2,6 +2,9 @@ name: Docker Publish
 
 # 只构建并推送 Docker 镜像，不创建 Release 或 Tag
 on:
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       tag:
@@ -59,6 +62,11 @@ on:
         required: false
         type: boolean
         default: true
+      build_sandbox_runner:
+        description: '构建 sandbox-runner 镜像'
+        required: false
+        type: boolean
+        default: true
       build_nexus_web:
         description: '构建 nexus-web 镜像'
         required: false
@@ -81,25 +89,39 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v6
 
+      - name: 确定镜像标签
+        id: image-tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [ "${EVENT_NAME}" == "push" ]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "build_all=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${INPUT_TAG}" >> $GITHUB_OUTPUT
+            echo "build_all=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: 设置 Node.js
-        if: ${{ github.event.inputs.build_frontend == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
         uses: actions/setup-node@v6
         with:
           node-version: '20'
 
       - name: 安装 pnpm
-        if: ${{ github.event.inputs.build_frontend == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
         uses: pnpm/action-setup@v5
         with:
           version: 9
 
       - name: 安装前端依赖
-        if: ${{ github.event.inputs.build_frontend == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
         working-directory: ./frontend
         run: pnpm install --frozen-lockfile
 
       - name: 构建前端项目
-        if: ${{ github.event.inputs.build_frontend == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
         working-directory: ./frontend
         run: pnpm build
         env:
@@ -119,7 +141,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: 构建并推送前端 Docker 镜像
-        if: ${{ github.event.inputs.build_frontend == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: ./frontend
@@ -127,12 +149,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-frontend:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
       - name: 构建并推送后端 Docker 镜像
-        if: ${{ github.event.inputs.build_backend == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_backend == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -140,12 +163,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-backend:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
       - name: 构建并推送 YASA runner Docker 镜像
-        if: ${{ github.event.inputs.build_yasa_runner == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_yasa_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -153,12 +177,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-yasa-runner:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=yasa-runner
           cache-to: type=gha,mode=max,scope=yasa-runner
 
       - name: 构建并推送 OpenGrep runner Docker 镜像
-        if: ${{ github.event.inputs.build_opengrep_runner == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_opengrep_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -166,12 +191,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-opengrep-runner:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=opengrep-runner
           cache-to: type=gha,mode=max,scope=opengrep-runner
 
       - name: 构建并推送 Bandit runner Docker 镜像
-        if: ${{ github.event.inputs.build_bandit_runner == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_bandit_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -179,12 +205,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-bandit-runner:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=bandit-runner
           cache-to: type=gha,mode=max,scope=bandit-runner
 
       - name: 构建并推送 Gitleaks runner Docker 镜像
-        if: ${{ github.event.inputs.build_gitleaks_runner == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_gitleaks_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -192,12 +219,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-gitleaks-runner:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=gitleaks-runner
           cache-to: type=gha,mode=max,scope=gitleaks-runner
 
       - name: 构建并推送 PHPStan runner Docker 镜像
-        if: ${{ github.event.inputs.build_phpstan_runner == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_phpstan_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -205,12 +233,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-phpstan-runner:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=phpstan-runner
           cache-to: type=gha,mode=max,scope=phpstan-runner
 
       - name: 构建并推送 flow/parser runner Docker 镜像
-        if: ${{ github.event.inputs.build_flow_parser_runner == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_flow_parser_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -218,12 +247,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-flow-parser-runner:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=flow-parser-runner
           cache-to: type=gha,mode=max,scope=flow-parser-runner
 
       - name: 构建并推送 PMD runner Docker 镜像
-        if: ${{ github.event.inputs.build_pmd_runner == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_pmd_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -231,12 +261,13 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-pmd-runner:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=pmd-runner
           cache-to: type=gha,mode=max,scope=pmd-runner
 
       - name: 构建并推送沙箱 Docker 镜像
-        if: ${{ github.event.inputs.build_sandbox == 'true' }}
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_sandbox == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -244,9 +275,24 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-sandbox:latest', github.repository_owner) || '' }}
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox
+
+      - name: 构建并推送 sandbox-runner Docker 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_sandbox_runner == 'true' }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./docker/sandbox-runner.Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-sandbox-runner:latest', github.repository_owner) || '' }}
+          cache-from: type=gha,scope=sandbox-runner
+          cache-to: type=gha,mode=max,scope=sandbox-runner
 
       - name: 构建并推送 nexus-web Docker 镜像
         if: ${{ github.event.inputs.build_nexus_web == 'true' }}
@@ -257,7 +303,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/nexus-web:${{ github.event.inputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/nexus-web:${{ steps.image-tag.outputs.tag }}
           cache-from: type=gha,scope=nexus-web
           cache-to: type=gha,mode=max,scope=nexus-web
 
@@ -265,36 +311,39 @@ jobs:
         run: |
           echo "## 镜像已推送到 GHCR" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ github.event.inputs.build_frontend }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_frontend }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_yasa_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_yasa_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_bandit_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_bandit_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_gitleaks_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_gitleaks_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox_runner }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ github.event.inputs.build_nexus_web }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/nexus-web:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`ghcr.io/${{ github.repository_owner }}/nexus-web:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
