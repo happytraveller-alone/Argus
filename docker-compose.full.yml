@@ -137,3 +137,18 @@ services:
       https_proxy: ""
       NO_PROXY: "*"
       VITE_API_BASE_URL: /api/v1
+
+  nexus-web:
+    image: vulhunter/nexus-web-local:latest
+    build: !override
+      context: ./nexus-web
+      dockerfile: ../docker/nexus-web.Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+        - NEXUS_WEB_NPM_REGISTRY=${NEXUS_WEB_NPM_REGISTRY:-https://registry.npmmirror.com}
+        - NEXUS_WEB_NPM_REGISTRY_FALLBACK=${NEXUS_WEB_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}
+        - NEXUS_WEB_PNPM_VERSION=${NEXUS_WEB_PNPM_VERSION:-10.32.1}
+    ports: !override
+      - "${VULHUNTER_NEXUS_WEB_PORT:-5174}:5174"
+    networks:
+      - vulhunter-network

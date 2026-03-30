@@ -59,6 +59,11 @@ on:
         required: false
         type: boolean
         default: true
+      build_nexus_web:
+        description: '构建 nexus-web 镜像'
+        required: false
+        type: boolean
+        default: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -243,6 +248,19 @@ jobs:
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox
 
+      - name: 构建并推送 nexus-web Docker 镜像
+        if: ${{ github.event.inputs.build_nexus_web == 'true' }}
+        uses: docker/build-push-action@v7
+        with:
+          context: ./nexus-web/src
+          file: ./nexus-web/src/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/nexus-web:${{ github.event.inputs.tag }}
+          cache-from: type=gha,scope=nexus-web
+          cache-to: type=gha,mode=max,scope=nexus-web
+
       - name: 输出镜像信息
         run: |
           echo "## 镜像已推送到 GHCR" >> $GITHUB_STEP_SUMMARY
@@ -276,4 +294,7 @@ jobs:
           fi
           if [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
             echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ github.event.inputs.build_nexus_web }}" == "true" ]; then
+            echo "- \`ghcr.io/${{ github.repository_owner }}/nexus-web:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi

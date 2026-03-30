@@ -233,13 +233,12 @@ services:
       - vulhunter-network
   
   nexus-web:
-    build:
-      context: ./nexus-web
-      dockerfile: ../docker/nexus-web.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+    image: ${NEXUS_WEB_IMAGE:-ghcr.io/happytraveller-alone/nexus-web:latest}
+    restart: unless-stopped
     ports:
-      - "5174:5174"
+      - "${VULHUNTER_NEXUS_WEB_PORT:-5174}:5174"
+    networks:
+      - vulhunter-network
 
 networks:
   vulhunter-network:
