@@ -14,7 +14,7 @@ from typing import Any, Dict, List
 
 
 def _load_tree_sitter_parser():
-    splitter_path = Path(__file__).resolve().parent / "app" / "services" / "rag" / "splitter.py"
+    splitter_path = Path(__file__).resolve().parent / "app" / "services" / "parser.py"
     spec = importlib.util.spec_from_file_location("flow_parser_runner_splitter", splitter_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"failed to load splitter module: {splitter_path}")
