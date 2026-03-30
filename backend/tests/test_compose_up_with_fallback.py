@@ -9,7 +9,11 @@ SCRIPT_PATH = REPO_ROOT / "scripts" / "compose-up-with-fallback.sh"
 
 _EXPLICIT_MIRROR_ENV = {
     "DOCKERHUB_LIBRARY_MIRROR": "docker.m.daocloud.io/library",
-    "GHCR_REGISTRY": "ghcr.nju.edu.cn",
+    "GHCR_REGISTRY": "ghcr.io",
+    "VULHUNTER_IMAGE_NAMESPACE": "unbengable12",
+    "NEXUS_WEB_IMAGE_NAMESPACE": "unbengable12",
+    "VULHUNTER_IMAGE_TAG": "latest",
+    "NEXUS_WEB_IMAGE_TAG": "latest",
     "FRONTEND_NPM_REGISTRY": "https://registry.npmmirror.com",
     "FRONTEND_NPM_REGISTRY_FALLBACK": "https://registry.npmjs.org",
     "SANDBOX_NPM_REGISTRY_PRIMARY": "https://registry.npmmirror.com",
@@ -40,12 +44,18 @@ if [ "${1:-}" = "compose" ] && [ "${2:-}" = "version" ]; then
   exit 0
 fi
 
+if [ "${STUB_DOCKER_EXIT_CODE:-0}" != "0" ]; then
+  echo "${STUB_DOCKER_ERROR:-error from registry: denied}" >&2
+fi
+
 {
   printf 'COMPOSE_MENU=%s\n' "${COMPOSE_MENU-__UNSET__}"
   printf 'ARGS='
   printf '%s ' "$@"
   printf '\n'
 } >>"${STUB_DOCKER_LOG:?}"
+
+exit "${STUB_DOCKER_EXIT_CODE:-0}"
 """,
         encoding="utf-8",
     )
@@ -147,13 +157,13 @@ def test_compose_wrapper_defaults_apt_probe_codename_to_trixie() -> None:
 
 
 def test_attached_up_disables_compose_menu_by_default(tmp_path: Path) -> None:
-    result = _run_compose_wrapper(tmp_path, ["up", "--build"])
+    result = _run_compose_wrapper(tmp_path, ["up"])
     combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
     assert result.returncode == 0, combined_output
     log_output = _read_log(tmp_path / "docker-invocation.log")
 
     assert "COMPOSE_MENU=false" in log_output
-    assert "ARGS=compose up --build " in log_output
+    assert "ARGS=compose up " in log_output
 
 
 def test_attached_up_with_global_file_flags_disables_compose_menu(tmp_path: Path) -> None:
@@ -168,8 +178,20 @@ def test_attached_up_with_global_file_flags_disables_compose_menu(tmp_path: Path
     assert "ARGS=compose -f docker-compose.yml -f docker-compose.full.yml up --build " in log_output
 
 
+def test_attached_explicit_local_build_flags_are_preserved(tmp_path: Path) -> None:
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["-f", "docker-compose.yml", "-f", "docker-compose.full.yml", "up", "--build"],
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+    assert result.returncode == 0, combined_output
+    log_output = _read_log(tmp_path / "docker-invocation.log")
+
+    assert "ARGS=compose -f docker-compose.yml -f docker-compose.full.yml up --build " in log_output
+
+
 def test_detached_up_keeps_compose_menu_unset(tmp_path: Path) -> None:
-    result = _run_compose_wrapper(tmp_path, ["up", "-d", "--build"])
+    result = _run_compose_wrapper(tmp_path, ["up", "-d"])
     combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
     assert result.returncode == 0, combined_output
     log_output = _read_log(tmp_path / "docker-invocation.log")
@@ -180,7 +202,7 @@ def test_detached_up_keeps_compose_menu_unset(tmp_path: Path) -> None:
 def test_explicit_compose_menu_is_preserved(tmp_path: Path) -> None:
     result = _run_compose_wrapper(
         tmp_path,
-        ["up", "--build"],
+        ["up"],
         extra_env={"COMPOSE_MENU": "true"},
     )
     combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
@@ -191,7 +213,7 @@ def test_explicit_compose_menu_is_preserved(tmp_path: Path) -> None:
 
 
 def test_detached_up_prints_ready_banner_after_successful_probes(tmp_path: Path) -> None:
-    result = _run_compose_wrapper(tmp_path, ["up", "-d", "--build"])
+    result = _run_compose_wrapper(tmp_path, ["up", "-d"])
     combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
 
     assert result.returncode == 0, combined_output
@@ -208,7 +230,7 @@ def test_detached_up_can_open_browser_after_ready(tmp_path: Path) -> None:
     browser_log_path = tmp_path / "browser-invocation.log"
     result = _run_compose_wrapper(
         tmp_path,
-        ["up", "-d", "--build"],
+        ["up", "-d"],
         extra_env={
             "VULHUNTER_OPEN_BROWSER": "1",
             "STUB_BROWSER_LOG": str(browser_log_path),
@@ -224,7 +246,7 @@ def test_detached_up_can_open_browser_after_ready(tmp_path: Path) -> None:
 def test_detached_up_ready_timeout_warns_without_failing(tmp_path: Path) -> None:
     result = _run_compose_wrapper(
         tmp_path,
-        ["up", "-d", "--build"],
+        ["up", "-d"],
         extra_env={
             "STUB_CURL_MODE": "timeout",
             "VULHUNTER_READY_TIMEOUT_SECONDS": "1",
@@ -234,3 +256,48 @@ def test_detached_up_ready_timeout_warns_without_failing(tmp_path: Path) -> None
 
     assert result.returncode == 0, combined_output
     assert "timed out waiting for frontend/backend readiness" in combined_output
+
+
+def test_wrapper_defaults_to_remote_up_without_build(tmp_path: Path) -> None:
+    result = _run_compose_wrapper(tmp_path, [])
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+    assert result.returncode == 0, combined_output
+    log_output = _read_log(tmp_path / "docker-invocation.log")
+
+    assert "ARGS=compose up -d " in log_output
+    assert "--build" not in log_output
+
+
+def test_wrapper_logs_resolved_remote_images(tmp_path: Path) -> None:
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["up"],
+        extra_env={
+            "VULHUNTER_IMAGE_NAMESPACE": "acme-sec",
+            "NEXUS_WEB_IMAGE_NAMESPACE": "acme-ui",
+            "VULHUNTER_IMAGE_TAG": "v9",
+            "NEXUS_WEB_IMAGE_TAG": "v2",
+        },
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 0, combined_output
+    assert "BACKEND_IMAGE_RESOLVED=ghcr.io/acme-sec/vulhunter-backend:v9" in combined_output
+    assert "FRONTEND_IMAGE_RESOLVED=ghcr.io/acme-sec/vulhunter-frontend:v9" in combined_output
+    assert "NEXUS_WEB_IMAGE_RESOLVED=ghcr.io/acme-ui/nexus-web:v2" in combined_output
+
+
+def test_wrapper_failure_surfaces_remote_image_hint(tmp_path: Path) -> None:
+    result = _run_compose_wrapper(
+        tmp_path,
+        ["up"],
+        extra_env={
+            "STUB_DOCKER_EXIT_CODE": "1",
+            "STUB_DOCKER_ERROR": "error from registry: denied",
+        },
+    )
+    combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+    assert result.returncode == 1, combined_output
+    assert "anonymous GHCR pull failed or the image namespace/tag is incorrect" in combined_output
+    assert "ghcr.io/unbengable12/vulhunter-backend:latest" in combined_output

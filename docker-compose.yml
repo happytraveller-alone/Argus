@@ -30,7 +30,7 @@ services:
       - vulhunter-network
 
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/vulhunter/vulhunter-backend:latest}
+    image: ${BACKEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-backend:${VULHUNTER_IMAGE_TAG:-latest}}
     restart: unless-stopped
     working_dir: /app
     volumes:
@@ -50,10 +50,15 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       REDIS_URL: redis://redis:6379/0
+      GHCR_REGISTRY: ${GHCR_REGISTRY:-ghcr.io}
+      VULHUNTER_IMAGE_NAMESPACE: ${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}
+      VULHUNTER_IMAGE_TAG: ${VULHUNTER_IMAGE_TAG:-latest}
+      NEXUS_WEB_IMAGE_NAMESPACE: ${NEXUS_WEB_IMAGE_NAMESPACE:-unbengable12}
+      NEXUS_WEB_IMAGE_TAG: ${NEXUS_WEB_IMAGE_TAG:-latest}
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
-      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ghcr.io/vulhunter/vulhunter-sandbox:latest}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
@@ -73,14 +78,14 @@ services:
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
       BACKEND_INSTALL_YASA: ${BACKEND_INSTALL_YASA:-1}
       YASA_VERSION: ${YASA_VERSION:-v0.2.33}
-      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-ghcr.io/vulhunter/vulhunter-yasa-runner:latest}
-      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-ghcr.io/vulhunter/vulhunter-opengrep-runner:latest}
-      SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-ghcr.io/vulhunter/vulhunter-bandit-runner:latest}
-      SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-ghcr.io/vulhunter/vulhunter-gitleaks-runner:latest}
-      SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-ghcr.io/vulhunter/vulhunter-phpstan-runner:latest}
-      SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-ghcr.io/vulhunter/vulhunter-pmd-runner:latest}
-      FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-ghcr.io/vulhunter/vulhunter-flow-parser-runner:latest}
-      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-ghcr.io/vulhunter/vulhunter-sandbox-runner:latest}
+      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-phpstan-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-flow-parser-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"
@@ -116,7 +121,7 @@ services:
       - vulhunter-network
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/vulhunter/vulhunter-frontend:latest}
+    image: ${FRONTEND_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-frontend:${VULHUNTER_IMAGE_TAG:-latest}}
     restart: unless-stopped
     working_dir: /app
     volumes:
@@ -162,7 +167,7 @@ services:
       - vulhunter-network
 
   sandbox:
-    image: ${SANDBOX_IMAGE:-ghcr.io/vulhunter/vulhunter-sandbox:latest}
+    image: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
     profiles: ["build"]
     restart: "no"
     command: ["echo", "Sandbox image built successfully"]
@@ -180,7 +185,7 @@ services:
       - vulhunter-network
   
   nexus-web:
-    image: ${NEXUS_WEB_IMAGE:-ghcr.io/happytraveller-alone/nexus-web:latest}
+    image: ${NEXUS_WEB_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${NEXUS_WEB_IMAGE_NAMESPACE:-unbengable12}/nexus-web:${NEXUS_WEB_IMAGE_TAG:-latest}}
     restart: unless-stopped
     ports:
       - "${VULHUNTER_NEXUS_WEB_PORT:-5174}:5174"

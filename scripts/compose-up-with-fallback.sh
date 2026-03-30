@@ -2,21 +2,25 @@
 # scripts/compose-up-with-fallback.sh — 带镜像源探测与故障转移的 docker compose 包装脚本
 #
 # 用法:
-#   ./scripts/compose-up-with-fallback.sh              # 等效于 docker compose up -d --build
+#   ./scripts/compose-up-with-fallback.sh              # 等效于 docker compose up -d
 #   ./scripts/compose-up-with-fallback.sh up           # 前台 attached 模式（服务 ready 后打印横幅）
 #   ./scripts/compose-up-with-fallback.sh up -d --build
 #   ./scripts/compose-up-with-fallback.sh down
 #   ./scripts/compose-up-with-fallback.sh logs -f backend
 #
 # 核心功能:
-#   1. 并行探测多个 DockerHub / GHCR / PyPI / NPM / APT 镜像源延迟，按响应速度排序
+#   1. 探测 DockerHub / GHCR / PyPI / NPM / APT 配置，并打印 compose 实际消费的远程镜像
 #   2. 按排序结果依次尝试（多 phase 故障转移），每个 phase 内部支持 PHASE_RETRY_COUNT 次重试
 #   3. 前台 up 模式下，后台监测前端/后端 ready，就绪后打印访问地址
 #   4. 可选通过 VULHUNTER_OPEN_BROWSER=1 在就绪后自动打开浏览器
 #
 # 关键环境变量（均可通过 export 覆盖，跳过自动探测）:
 #   DOCKERHUB_LIBRARY_MIRROR        — 指定 DockerHub 镜像源（跳过探测）
-#   GHCR_REGISTRY                   — 指定 GHCR 镜像源（跳过探测）
+#   GHCR_REGISTRY                   — 指定 GHCR registry（默认 ghcr.io）
+#   VULHUNTER_IMAGE_NAMESPACE       — backend/frontend/runner/sandbox 默认命名空间
+#   NEXUS_WEB_IMAGE_NAMESPACE       — nexus-web 默认命名空间
+#   VULHUNTER_IMAGE_TAG             — backend/frontend/runner/sandbox 默认 tag
+#   NEXUS_WEB_IMAGE_TAG             — nexus-web 默认 tag
 #   FRONTEND_NPM_REGISTRY           — 前端 NPM 镜像源
 #   BACKEND_PYPI_INDEX_PRIMARY      — Backend PyPI 主索引
 #   SANDBOX_PYPI_INDEX_PRIMARY      — Sandbox PyPI 主索引
@@ -71,7 +75,7 @@ compose_args_target_attached_up() {
 
   while [ "$idx" -lt "${#args[@]}" ]; do
     arg="${args[$idx]}"
-    if [ "$seen_up" -eq 0 ]; do
+    if [ "$seen_up" -eq 0 ]; then
       case "$arg" in
         up)
           seen_up=1
@@ -608,19 +612,33 @@ run_with_retries() {
   local uv_image="$5"
   local sandbox_base_image="$6"
   local sandbox_image="$7"
+  local backend_image_resolved=""
+  local frontend_image_resolved=""
+  local nexus_web_image_resolved=""
 
   local attempt=1
   local rc=1
   local ready_watcher_pid=""
   while [ "$attempt" -le "$retry_count" ]; do
+    backend_image_resolved="${BACKEND_IMAGE:-${ghcr_registry}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-backend:${VULHUNTER_IMAGE_TAG}}"
+    frontend_image_resolved="${FRONTEND_IMAGE:-${ghcr_registry}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-frontend:${VULHUNTER_IMAGE_TAG}}"
+    nexus_web_image_resolved="${NEXUS_WEB_IMAGE:-${ghcr_registry}/${NEXUS_WEB_IMAGE_NAMESPACE}/nexus-web:${NEXUS_WEB_IMAGE_TAG}}"
     log_info "Phase=${phase} attempt ${attempt}/${retry_count}"
     log_info "DOCKERHUB_LIBRARY_MIRROR=${dockerhub_mirror}"
     log_info "GHCR_REGISTRY=${ghcr_registry}"
+    log_info "VULHUNTER_IMAGE_NAMESPACE=${VULHUNTER_IMAGE_NAMESPACE}"
+    log_info "NEXUS_WEB_IMAGE_NAMESPACE=${NEXUS_WEB_IMAGE_NAMESPACE}"
+    log_info "VULHUNTER_IMAGE_TAG=${VULHUNTER_IMAGE_TAG}"
+    log_info "NEXUS_WEB_IMAGE_TAG=${NEXUS_WEB_IMAGE_TAG}"
     log_info "UV_IMAGE=${uv_image}"
     log_info "SANDBOX_BASE_IMAGE=${sandbox_base_image}"
     log_info "SANDBOX_IMAGE=${sandbox_image}"
+    log_info "BACKEND_IMAGE_RESOLVED=${backend_image_resolved}"
+    log_info "FRONTEND_IMAGE_RESOLVED=${frontend_image_resolved}"
+    log_info "NEXUS_WEB_IMAGE_RESOLVED=${nexus_web_image_resolved}"
     log_info "FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY_SELECTED}"
     log_info "FRONTEND_NPM_REGISTRY_FALLBACK=${FRONTEND_NPM_REGISTRY_FALLBACK_SELECTED}"
+    log_warn "GHCR registry host rewrites do not bypass private-package permissions; default remote mode expects anonymous pull access or an explicit full image override."
 
     ready_watcher_pid=""
     if [ "$IS_ATTACHED_UP" -eq 1 ]; then
@@ -631,6 +649,10 @@ run_with_retries() {
     set +e
     DOCKERHUB_LIBRARY_MIRROR="${dockerhub_mirror}" \
       GHCR_REGISTRY="${ghcr_registry}" \
+      VULHUNTER_IMAGE_NAMESPACE="${VULHUNTER_IMAGE_NAMESPACE}" \
+      NEXUS_WEB_IMAGE_NAMESPACE="${NEXUS_WEB_IMAGE_NAMESPACE}" \
+      VULHUNTER_IMAGE_TAG="${VULHUNTER_IMAGE_TAG}" \
+      NEXUS_WEB_IMAGE_TAG="${NEXUS_WEB_IMAGE_TAG}" \
       UV_IMAGE="${uv_image}" \
       SANDBOX_BASE_IMAGE="${sandbox_base_image}" \
       SANDBOX_IMAGE="${sandbox_image}" \
@@ -668,6 +690,10 @@ run_with_retries() {
     fi
 
     log_warn "Phase=${phase} failed on attempt ${attempt}, exit_code=${rc}"
+    log_warn "anonymous GHCR pull failed or the image namespace/tag is incorrect"
+    log_warn "resolved backend image: ${backend_image_resolved}"
+    log_warn "resolved frontend image: ${frontend_image_resolved}"
+    log_warn "resolved nexus-web image: ${nexus_web_image_resolved}"
     if [ "$attempt" -lt "$retry_count" ]; then
       log_info "Retrying in ${RETRY_INTERVAL_SECONDS}s..."
       sleep "${RETRY_INTERVAL_SECONDS}"
@@ -681,7 +707,7 @@ run_with_retries() {
 detect_compose_cmd
 
 if [ "$#" -eq 0 ]; then
-  COMPOSE_ARGS=(up -d --build)
+  COMPOSE_ARGS=(up -d)
 else
   COMPOSE_ARGS=("$@")
 fi
@@ -725,9 +751,8 @@ require_positive_int "PROBE_CONNECT_TIMEOUT_SECONDS" "${PROBE_CONNECT_TIMEOUT_SE
 require_positive_int "VULHUNTER_READY_TIMEOUT_SECONDS" "${READY_TIMEOUT_SECONDS}"
 
 DOCKERHUB_CN_CANDIDATES_DEFAULT="${CN_DOCKERHUB_LIBRARY_MIRRORS:-${CN_DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library,docker.1ms.run/library}}"
-GHCR_CN_CANDIDATES_DEFAULT="${CN_GHCR_REGISTRIES:-${CN_GHCR_REGISTRY:-ghcr.nju.edu.cn,ghcr.m.daocloud.io}}"
 DOCKERHUB_CANDIDATES_DEFAULT="${DOCKERHUB_LIBRARY_MIRROR_CANDIDATES:-${DOCKERHUB_CN_CANDIDATES_DEFAULT},${OFFICIAL_DOCKERHUB_LIBRARY_MIRROR:-docker.io/library}}"
-GHCR_CANDIDATES_DEFAULT="${GHCR_REGISTRY_CANDIDATES:-${GHCR_CN_CANDIDATES_DEFAULT},${OFFICIAL_GHCR_REGISTRY:-ghcr.io}}"
+GHCR_CANDIDATES_DEFAULT="${GHCR_REGISTRY_CANDIDATES:-${OFFICIAL_GHCR_REGISTRY:-ghcr.io}}"
 FRONTEND_NPM_CANDIDATES_DEFAULT="${FRONTEND_NPM_REGISTRY_CANDIDATES:-https://registry.npmmirror.com,https://registry.npmjs.org}"
 SANDBOX_NPM_CANDIDATES_DEFAULT="${SANDBOX_NPM_REGISTRY_CANDIDATES:-https://registry.npmmirror.com,https://registry.npmjs.org}"
 BACKEND_PYPI_CANDIDATES_DEFAULT="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}"
@@ -839,6 +864,9 @@ fi
 [ "$PHASE_COUNT" -ge 1 ] || PHASE_COUNT=1
 
 VULHUNTER_IMAGE_TAG="${VULHUNTER_IMAGE_TAG:-latest}"
+NEXUS_WEB_IMAGE_TAG="${NEXUS_WEB_IMAGE_TAG:-latest}"
+VULHUNTER_IMAGE_NAMESPACE="${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}"
+NEXUS_WEB_IMAGE_NAMESPACE="${NEXUS_WEB_IMAGE_NAMESPACE:-unbengable12}"
 
 log_info "Compose command: ${COMPOSE_BIN[*]}"
 log_info "Compose args: ${COMPOSE_ARGS[*]}"
@@ -875,7 +903,7 @@ for ((phase_index = 0; phase_index < PHASE_COUNT; phase_index++)); do
   if [ -n "${SANDBOX_IMAGE:-}" ]; then
     sandbox_image="${SANDBOX_IMAGE}"
   else
-    sandbox_image="${ghcr_registry}/lintsinghua/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG}"
+    sandbox_image="${ghcr_registry}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG}"
   fi
 
   phase_name="rank-$((phase_index + 1))"

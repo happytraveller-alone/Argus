@@ -49,7 +49,7 @@ cp docker/env/backend/env.example docker/env/backend/.env
 默认推荐直接使用 Docker Compose：
 
 ```bash
-docker compose up --build
+docker compose up
 ```
 
 Windows 请使用 Docker Desktop + Linux containers。
@@ -57,10 +57,18 @@ Windows 请使用 Docker Desktop + Linux containers。
 如需显式执行全量本地构建，请叠加 `docker-compose.full.yml`：
 
 ```bash
+./scripts/compose-up-local-build.sh
+
+# 或保留原始 compose 命令
 docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
-默认 `docker compose up --build` 的 compose 层只拉起常驻服务，compose 不再声明一次性 runner 预热 / 自检服务。
+默认 `docker compose up` 为远程镜像模式，只拉起常驻服务；基础 compose 上追加 `--build` 不会把主服务切成本地构建。
+如需切到本地构建，请显式叠加 `docker-compose.full.yml`。
+默认远程镜像地址可通过 `GHCR_REGISTRY`、`VULHUNTER_IMAGE_NAMESPACE`、`NEXUS_WEB_IMAGE_NAMESPACE`、`VULHUNTER_IMAGE_TAG`、`NEXUS_WEB_IMAGE_TAG` 覆盖。
+默认远程模式按匿名可拉取设计；如果你使用自有命名空间，请确保对应 GHCR 包对匿名拉取开放，或直接通过 `*_IMAGE` 环境变量覆盖完整镜像地址。
+
+默认 `docker compose up` 的 compose 层只拉起常驻服务，compose 不再声明一次性 runner 预热 / 自检服务。
 backend 启动时会自行执行 runner preflight，校验 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` 指向的镜像和命令是否可用；真正执行扫描时，backend 仍会通过 Docker SDK 按镜像名动态拉起临时 runner 容器。
 
 如需查看可选的 legacy 包装脚本说明，请参考 [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md)。

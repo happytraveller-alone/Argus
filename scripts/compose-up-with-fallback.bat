@@ -2,7 +2,7 @@
 :: scripts/compose-up-with-fallback.bat — Windows docker compose 简易包装脚本
 ::
 :: 用法:
-::   scripts\compose-up-with-fallback.bat              — 等效于 docker compose up -d --build
+::   scripts\compose-up-with-fallback.bat              — 等效于 docker compose up -d
 ::   scripts\compose-up-with-fallback.bat up           — 前台启动
 ::   scripts\compose-up-with-fallback.bat down         — 停止并移除容器
 ::
@@ -13,7 +13,9 @@
 ::
 :: 预设镜像源（可通过同名环境变量覆盖）:
 ::   DOCKERHUB_LIBRARY_MIRROR  — docker.m.daocloud.io/library
-::   GHCR_REGISTRY             — ghcr.nju.edu.cn
+::   GHCR_REGISTRY             — ghcr.io
+::   VULHUNTER_IMAGE_NAMESPACE — backend/frontend/runner/sandbox 默认命名空间
+::   NEXUS_WEB_IMAGE_NAMESPACE — nexus-web 默认命名空间
 ::   FRONTEND_NPM_REGISTRY     — https://registry.npmmirror.com
 ::   BACKEND_PYPI_INDEX_PRIMARY — https://mirrors.aliyun.com/pypi/simple/
 
@@ -46,7 +48,7 @@ echo [INFO] Using compose command: %COMPOSE_CMD%
 
 REM Set default compose args
 if "%~1"=="" (
-    set "COMPOSE_ARGS=up -d --build"
+    set "COMPOSE_ARGS=up -d"
 ) else (
     set "COMPOSE_ARGS=%*"
 )
@@ -57,10 +59,14 @@ set "COMPOSE_DOCKER_CLI_BUILD=1"
 
 REM Set default mirrors (China mirrors for better connectivity)
 if not defined DOCKERHUB_LIBRARY_MIRROR set "DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library"
-if not defined GHCR_REGISTRY set "GHCR_REGISTRY=ghcr.nju.edu.cn"
+if not defined GHCR_REGISTRY set "GHCR_REGISTRY=ghcr.io"
+if not defined VULHUNTER_IMAGE_NAMESPACE set "VULHUNTER_IMAGE_NAMESPACE=unbengable12"
+if not defined NEXUS_WEB_IMAGE_NAMESPACE set "NEXUS_WEB_IMAGE_NAMESPACE=unbengable12"
+if not defined VULHUNTER_IMAGE_TAG set "VULHUNTER_IMAGE_TAG=latest"
+if not defined NEXUS_WEB_IMAGE_TAG set "NEXUS_WEB_IMAGE_TAG=latest"
 if not defined UV_IMAGE set "UV_IMAGE=%GHCR_REGISTRY%/astral-sh/uv:latest"
 if not defined SANDBOX_BASE_IMAGE set "SANDBOX_BASE_IMAGE=%DOCKERHUB_LIBRARY_MIRROR%/python:3.11-slim"
-if not defined SANDBOX_IMAGE set "SANDBOX_IMAGE=%GHCR_REGISTRY%/lintsinghua/vulhunter-sandbox:latest"
+if not defined SANDBOX_IMAGE set "SANDBOX_IMAGE=%GHCR_REGISTRY%/%VULHUNTER_IMAGE_NAMESPACE%/vulhunter-sandbox:%VULHUNTER_IMAGE_TAG%"
 if not defined FRONTEND_NPM_REGISTRY set "FRONTEND_NPM_REGISTRY=https://registry.npmmirror.com"
 if not defined FRONTEND_NPM_REGISTRY_FALLBACK set "FRONTEND_NPM_REGISTRY_FALLBACK=https://registry.npmjs.org"
 if not defined BACKEND_PYPI_INDEX_PRIMARY set "BACKEND_PYPI_INDEX_PRIMARY=https://mirrors.aliyun.com/pypi/simple/"
@@ -76,9 +82,29 @@ if not defined SANDBOX_NPM_REGISTRY_FALLBACK set "SANDBOX_NPM_REGISTRY_FALLBACK=
 
 echo [INFO] DOCKERHUB_LIBRARY_MIRROR=%DOCKERHUB_LIBRARY_MIRROR%
 echo [INFO] GHCR_REGISTRY=%GHCR_REGISTRY%
+echo [INFO] VULHUNTER_IMAGE_NAMESPACE=%VULHUNTER_IMAGE_NAMESPACE%
+echo [INFO] NEXUS_WEB_IMAGE_NAMESPACE=%NEXUS_WEB_IMAGE_NAMESPACE%
+echo [INFO] VULHUNTER_IMAGE_TAG=%VULHUNTER_IMAGE_TAG%
+echo [INFO] NEXUS_WEB_IMAGE_TAG=%NEXUS_WEB_IMAGE_TAG%
 echo [INFO] UV_IMAGE=%UV_IMAGE%
 echo [INFO] SANDBOX_BASE_IMAGE=%SANDBOX_BASE_IMAGE%
 echo [INFO] SANDBOX_IMAGE=%SANDBOX_IMAGE%
+if defined BACKEND_IMAGE (
+    echo [INFO] BACKEND_IMAGE_RESOLVED=%BACKEND_IMAGE%
+) else (
+    echo [INFO] BACKEND_IMAGE_RESOLVED=%GHCR_REGISTRY%/%VULHUNTER_IMAGE_NAMESPACE%/vulhunter-backend:%VULHUNTER_IMAGE_TAG%
+)
+if defined FRONTEND_IMAGE (
+    echo [INFO] FRONTEND_IMAGE_RESOLVED=%FRONTEND_IMAGE%
+) else (
+    echo [INFO] FRONTEND_IMAGE_RESOLVED=%GHCR_REGISTRY%/%VULHUNTER_IMAGE_NAMESPACE%/vulhunter-frontend:%VULHUNTER_IMAGE_TAG%
+)
+if defined NEXUS_WEB_IMAGE (
+    echo [INFO] NEXUS_WEB_IMAGE_RESOLVED=%NEXUS_WEB_IMAGE%
+) else (
+    echo [INFO] NEXUS_WEB_IMAGE_RESOLVED=%GHCR_REGISTRY%/%NEXUS_WEB_IMAGE_NAMESPACE%/nexus-web:%NEXUS_WEB_IMAGE_TAG%
+)
+echo [WARN] GHCR host rewrite does not bypass private package permissions; default remote mode expects anonymous pull access or an explicit full image override.
 
 REM Execute docker compose
 echo [INFO] Executing: %COMPOSE_CMD% %COMPOSE_ARGS%
@@ -86,6 +112,7 @@ echo [INFO] Executing: %COMPOSE_CMD% %COMPOSE_ARGS%
 
 if %errorlevel% neq 0 (
     echo [ERROR] Docker compose failed with exit code %errorlevel%
+    echo [ERROR] anonymous GHCR pull failed or the image namespace/tag is incorrect
     echo [INFO] For advanced mirror selection and automatic fallback, use PowerShell version:
     echo [INFO]   powershell -ExecutionPolicy Bypass -File scripts\compose-up-with-fallback.ps1
     exit /b %errorlevel%

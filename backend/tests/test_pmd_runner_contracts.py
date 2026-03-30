@@ -4,7 +4,7 @@ from pathlib import Path
 def _repo_root() -> Path:
     current = Path(__file__).resolve()
     for candidate in current.parents:
-        if (candidate / "backend" / "docker" / "backend.Dockerfile").exists():
+        if (candidate / "docker" / "backend.Dockerfile").exists():
             return candidate
     raise AssertionError("failed to locate repository root from test path")
 
@@ -17,7 +17,7 @@ def _stage_block(dockerfile_text: str, stage_header: str) -> str:
 
 
 def test_backend_dockerfile_no_longer_installs_local_pmd_runtime() -> None:
-    dockerfile_path = _repo_root() / "backend" / "docker" / "backend.Dockerfile"
+    dockerfile_path = _repo_root() / "docker" / "backend.Dockerfile"
     dockerfile_text = dockerfile_path.read_text(encoding="utf-8")
 
     runtime_base_block = _stage_block(dockerfile_text, "FROM python-base AS runtime-base")
@@ -39,7 +39,10 @@ def test_compose_exposes_scanner_pmd_image_without_compose_runner_service() -> N
     compose_path = _repo_root() / "docker-compose.yml"
     compose_text = compose_path.read_text(encoding="utf-8")
 
-    assert "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-vulhunter/pmd-runner-local:latest}" in compose_text
+    assert (
+        "SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
+        "vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
+    ) in compose_text
     assert "\n  pmd-runner:\n" not in compose_text
     assert "runner preflight / warmup" not in compose_text
     assert "动态拉起临时 runner 容器" in compose_text
@@ -62,13 +65,13 @@ def test_external_tools_manual_pmd_section_documents_runner_requirements() -> No
     assert "SCANNER_PMD_IMAGE" in manual_text
     assert "按需" in manual_text
     assert "runner 容器" in manual_text
-    assert "启动期 preflight / warmup" in manual_text
-    assert 'restart: "no"' in manual_text
+    assert "默认 `docker compose up` 会先拉取远程 backend 镜像" in manual_text
     assert "Docker SDK" in manual_text
     assert "动态拉起临时 runner 容器" in manual_text
     assert "手工 smoke test" in manual_text
     assert "默认自动验收" in manual_text
-    assert "docker compose up --build" in manual_text
+    assert "docker compose up" in manual_text
+    assert "docker compose up --build" not in manual_text
 
 
 def test_docker_publish_workflow_builds_pmd_runner() -> None:
@@ -77,4 +80,4 @@ def test_docker_publish_workflow_builds_pmd_runner() -> None:
 
     assert "build_pmd_runner" in workflow_text
     assert "./docker/pmd-runner.Dockerfile" in workflow_text
-    assert "ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ github.event.inputs.tag }}" in workflow_text
+    assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text

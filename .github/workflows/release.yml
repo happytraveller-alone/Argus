@@ -22,6 +22,9 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  GHCR_REGISTRY: ghcr.io
+  VULHUNTER_IMAGE_NAMESPACE: unbengable12
+  NEXUS_WEB_IMAGE_NAMESPACE: unbengable12
 
 jobs:
   build-and-release:
@@ -190,8 +193,8 @@ jobs:
           echo "- \`checksums.txt\`: 文件校验和" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "### Docker 镜像" >> CHANGELOG.md
-          echo "- Frontend: \`ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ steps.version.outputs.VERSION }}\`" >> CHANGELOG.md
-          echo "- Backend: \`ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ steps.version.outputs.VERSION }}\`" >> CHANGELOG.md
+          echo "- Frontend: \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:${{ steps.version.outputs.VERSION }}\`" >> CHANGELOG.md
+          echo "- Backend: \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:${{ steps.version.outputs.VERSION }}\`" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "### 快速部署" >> CHANGELOG.md
           echo "\`\`\`bash" >> CHANGELOG.md
@@ -218,7 +221,7 @@ jobs:
       - name: 登录到 GitHub Container Registry
         uses: docker/login-action@v4
         with:
-          registry: ghcr.io
+          registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       
@@ -239,8 +242,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:latest
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:${{ steps.version.outputs.VERSION }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:latest
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
       
@@ -253,8 +256,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/vulhunter-backend:latest
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:${{ steps.version.outputs.VERSION }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:latest
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
       
@@ -267,10 +270,30 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:latest
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox:${{ steps.version.outputs.VERSION }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox:latest
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox
+
+      - name: 验证 GHCR 匿名拉取
+        shell: bash
+        run: |
+          set -euo pipefail
+          images=(
+            "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-frontend:${{ steps.version.outputs.VERSION }}"
+            "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-backend:${{ steps.version.outputs.VERSION }}"
+            "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-sandbox:${{ steps.version.outputs.VERSION }}"
+          )
+
+          docker logout ghcr.io || true
+
+          for image in "${images[@]}"; do
+            echo "Verifying anonymous pull access for ${image}"
+            if ! docker manifest inspect "${image}" >/dev/null; then
+              echo "::error::Anonymous pull check failed for ${image}. Ensure the package exists, uses the expected namespace, and is public."
+              exit 1
+            fi
+          done
       
       # 19. 更新 README 中的版本号
       - name: 更新 README 版本号

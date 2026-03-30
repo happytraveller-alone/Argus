@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 from pathlib import Path
 from typing import List, Union, Optional, Self
 from pydantic import AnyHttpUrl, field_validator, model_validator
@@ -6,6 +7,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BACKEND_ENV_FILE = Path(__file__).resolve().parents[3] / "backend" / "docker" / "env" / "backend" / ".env"
+
+
+def _default_ghcr_registry() -> str:
+    return str(os.environ.get("GHCR_REGISTRY") or "ghcr.io").strip() or "ghcr.io"
+
+
+def _default_namespace(env_name: str, fallback: str) -> str:
+    return str(os.environ.get(env_name) or fallback).strip() or fallback
+
+
+def _default_tag(env_name: str, fallback: str = "latest") -> str:
+    return str(os.environ.get(env_name) or fallback).strip() or fallback
+
+
+def _default_image(name: str) -> str:
+    return (
+        f"{_default_ghcr_registry()}/"
+        f"{_default_namespace('VULHUNTER_IMAGE_NAMESPACE', 'unbengable12')}/"
+        f"{name}:{_default_tag('VULHUNTER_IMAGE_TAG')}"
+    )
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "VulHunter"
@@ -117,12 +139,15 @@ class Settings(BaseSettings):
     ZIP_STORAGE_PATH: str = "./uploads/zip_files"  # ZIP文件存储目录
     SCAN_WORKSPACE_ROOT: str = "/tmp/vulhunter/scans"
     SCAN_WORKSPACE_VOLUME: str = "vulhunter_scan_workspace"
-    SCANNER_YASA_IMAGE: str = "ghcr.io/vulhunter/vulhunter-yasa-runner:latest"
-    SCANNER_OPENGREP_IMAGE: str = "ghcr.io/vulhunter/vulhunter-opengrep-runner:latest"
-    SCANNER_BANDIT_IMAGE: str = "ghcr.io/vulhunter/vulhunter-bandit-runner:latest"
-    SCANNER_GITLEAKS_IMAGE: str = "ghcr.io/vulhunter/vulhunter-gitleaks-runner:latest"
-    SCANNER_PHPSTAN_IMAGE: str = "ghcr.io/vulhunter/vulhunter-phpstan-runner:latest"
-    SCANNER_PMD_IMAGE: str = "ghcr.io/vulhunter/vulhunter-pmd-runner:latest"
+    GHCR_REGISTRY: str = _default_ghcr_registry()
+    VULHUNTER_IMAGE_NAMESPACE: str = _default_namespace("VULHUNTER_IMAGE_NAMESPACE", "unbengable12")
+    VULHUNTER_IMAGE_TAG: str = _default_tag("VULHUNTER_IMAGE_TAG")
+    SCANNER_YASA_IMAGE: str = _default_image("vulhunter-yasa-runner")
+    SCANNER_OPENGREP_IMAGE: str = _default_image("vulhunter-opengrep-runner")
+    SCANNER_BANDIT_IMAGE: str = _default_image("vulhunter-bandit-runner")
+    SCANNER_GITLEAKS_IMAGE: str = _default_image("vulhunter-gitleaks-runner")
+    SCANNER_PHPSTAN_IMAGE: str = _default_image("vulhunter-phpstan-runner")
+    SCANNER_PMD_IMAGE: str = _default_image("vulhunter-pmd-runner")
     RUNNER_PREFLIGHT_ENABLED: bool = True
     RUNNER_PREFLIGHT_STRICT: bool = False
     RUNNER_PREFLIGHT_TIMEOUT_SECONDS: int = 30
@@ -161,11 +186,11 @@ class Settings(BaseSettings):
     
     # 沙箱配置（必须）
     # Sandbox Runner 配置 (Phase 1)
-    SANDBOX_RUNNER_IMAGE: str = "ghcr.io/vulhunter/vulhunter-sandbox-runner:latest"  # 轻量级 sandbox runner 镜像
+    SANDBOX_RUNNER_IMAGE: str = _default_image("vulhunter-sandbox-runner")  # 轻量级 sandbox runner 镜像
     SANDBOX_RUNNER_ENABLED: bool = True  # 启用新 runner 抽象
 
     # Sandbox 配置 (保持兼容,作为 fallback)
-    SANDBOX_IMAGE: str = "ghcr.io/vulhunter/vulhunter-sandbox:latest"  # 沙箱 Docker 镜像
+    SANDBOX_IMAGE: str = _default_image("vulhunter-sandbox")  # 沙箱 Docker 镜像
     SANDBOX_MEMORY_LIMIT: str = "512m"  # 沙箱内存限制
     SANDBOX_CPU_LIMIT: float = 1.0  # 沙箱 CPU 限制
     SANDBOX_TIMEOUT: int = 60  # 沙箱命令超时（秒）
@@ -183,7 +208,7 @@ class Settings(BaseSettings):
     FLOW_LIGHTWEIGHT_ENABLED: bool = True
     LOGIC_AUTHZ_ENABLED: bool = True
     FLOW_UNREACHABLE_POLICY: str = "degrade_likely"
-    FLOW_PARSER_RUNNER_IMAGE: str = "ghcr.io/vulhunter/vulhunter-flow-parser-runner:latest"
+    FLOW_PARSER_RUNNER_IMAGE: str = _default_image("vulhunter-flow-parser-runner")
     FLOW_PARSER_RUNNER_ENABLED: bool = True
     FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: int = 120
     FLOW_PARSER_RUNNER_BATCH_MAX_FILES: int = 100

@@ -75,6 +75,9 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  GHCR_REGISTRY: ghcr.io
+  VULHUNTER_IMAGE_NAMESPACE: unbengable12
+  NEXUS_WEB_IMAGE_NAMESPACE: unbengable12
 
 jobs:
   build-and-push:
@@ -130,7 +133,7 @@ jobs:
       - name: 登录到 GitHub Container Registry
         uses: docker/login-action@v4
         with:
-          registry: ghcr.io
+          registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -149,8 +152,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-frontend:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-frontend:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -163,8 +166,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-backend:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-backend:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -177,8 +180,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-yasa-runner:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-yasa-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=yasa-runner
           cache-to: type=gha,mode=max,scope=yasa-runner
 
@@ -191,8 +194,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-opengrep-runner:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-opengrep-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=opengrep-runner
           cache-to: type=gha,mode=max,scope=opengrep-runner
 
@@ -205,8 +208,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-bandit-runner:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-bandit-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=bandit-runner
           cache-to: type=gha,mode=max,scope=bandit-runner
 
@@ -219,8 +222,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-gitleaks-runner:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-gitleaks-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=gitleaks-runner
           cache-to: type=gha,mode=max,scope=gitleaks-runner
 
@@ -233,8 +236,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-phpstan-runner:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-phpstan-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=phpstan-runner
           cache-to: type=gha,mode=max,scope=phpstan-runner
 
@@ -247,8 +250,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-flow-parser-runner:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-flow-parser-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=flow-parser-runner
           cache-to: type=gha,mode=max,scope=flow-parser-runner
 
@@ -261,8 +264,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-pmd-runner:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-pmd-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=pmd-runner
           cache-to: type=gha,mode=max,scope=pmd-runner
 
@@ -275,8 +278,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-sandbox:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-sandbox:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox
 
@@ -289,8 +292,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.image-tag.outputs.build_all == 'true' && format('ghcr.io/{0}/vulhunter-sandbox-runner:latest', github.repository_owner) || '' }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-sandbox-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=sandbox-runner
           cache-to: type=gha,mode=max,scope=sandbox-runner
 
@@ -303,47 +306,104 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/nexus-web:${{ steps.image-tag.outputs.tag }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.NEXUS_WEB_IMAGE_NAMESPACE }}/nexus-web:${{ steps.image-tag.outputs.tag }}
           cache-from: type=gha,scope=nexus-web
           cache-to: type=gha,mode=max,scope=nexus-web
+
+      - name: 验证 GHCR 匿名拉取
+        shell: bash
+        run: |
+          set -euo pipefail
+          images=()
+
+          add_image() {
+            images+=("$1")
+          }
+
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_frontend }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_yasa_runner }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_bandit_runner }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_gitleaks_runner }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox_runner }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}"
+          fi
+          if [ "${{ github.event.inputs.build_nexus_web }}" == "true" ]; then
+            add_image "${GHCR_REGISTRY}/${NEXUS_WEB_IMAGE_NAMESPACE}/nexus-web:${{ steps.image-tag.outputs.tag }}"
+          fi
+
+          docker logout ghcr.io || true
+
+          for image in "${images[@]}"; do
+            echo "Verifying anonymous pull access for ${image}"
+            if ! docker manifest inspect "${image}" >/dev/null; then
+              echo "::error::Anonymous pull check failed for ${image}. Ensure the package exists, uses the expected namespace, and is public."
+              exit 1
+            fi
+          done
 
       - name: 输出镜像信息
         run: |
           echo "## 镜像已推送到 GHCR" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_frontend }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_yasa_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-yasa-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_bandit_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-bandit-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_gitleaks_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-gitleaks-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-phpstan-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-flow-parser-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-pmd-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox_runner }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
           if [ "${{ github.event.inputs.build_nexus_web }}" == "true" ]; then
-            echo "- \`ghcr.io/${{ github.repository_owner }}/nexus-web:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.NEXUS_WEB_IMAGE_NAMESPACE }}/nexus-web:${{ steps.image-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi

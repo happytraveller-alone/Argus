@@ -49,7 +49,7 @@ All Dockerfiles, runner image build files, and Docker-specific environment files
 The default recommended entrypoint is plain Docker Compose:
 
 ```bash
-docker compose up --build
+docker compose up
 ```
 
 On Windows, use Docker Desktop with Linux containers.
@@ -57,10 +57,18 @@ On Windows, use Docker Desktop with Linux containers.
 For the full local build path, add the `docker-compose.full.yml` overlay:
 
 ```bash
+./scripts/compose-up-local-build.sh
+
+# Or keep the raw compose command
 docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
-The default `docker compose up --build` path now only brings up the long-lived compose services and no longer declares one-shot compose runner warmup services.
+The default `docker compose up` path is the remote-image path. Adding `--build` to the base compose file does not switch the main services to local builds.
+Use the `docker-compose.full.yml` overlay explicitly when you want local image builds.
+The default remote image addresses can be overridden through `GHCR_REGISTRY`, `VULHUNTER_IMAGE_NAMESPACE`, `NEXUS_WEB_IMAGE_NAMESPACE`, `VULHUNTER_IMAGE_TAG`, and `NEXUS_WEB_IMAGE_TAG`.
+The remote mode assumes anonymous pull access. If you publish under your own namespace, make sure the GHCR packages are publicly pullable or override the full `*_IMAGE` values directly.
+
+The default `docker compose up` path now only brings up the long-lived compose services and no longer declares one-shot compose runner warmup services.
 Instead, backend runs runner preflight during startup to verify the images and commands behind `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`, and actual scan execution still happens in temporary runner containers started on demand by backend through the Docker SDK.
 
 For optional legacy wrapper helpers, see [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md).
