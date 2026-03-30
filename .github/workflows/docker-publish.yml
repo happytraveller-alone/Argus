@@ -310,6 +310,60 @@ jobs:
           cache-from: type=gha,scope=nexus-web
           cache-to: type=gha,mode=max,scope=nexus-web
 
+      - name: 设置 GHCR 包为公开可见性
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          set_public() {
+            local pkg_name="$1"
+            echo "Setting ${pkg_name} visibility to public..."
+            if gh api --method PATCH "/user/packages/container/${pkg_name}" \
+              -f visibility=public --silent 2>/dev/null; then
+              echo "${pkg_name} set to public successfully"
+            else
+              echo "::warning::Could not set ${pkg_name} to public via API (may already be public or require manual action)."
+            fi
+          }
+
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_frontend }}" == "true" ]; then
+            set_public "vulhunter-frontend"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_backend }}" == "true" ]; then
+            set_public "vulhunter-backend"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_yasa_runner }}" == "true" ]; then
+            set_public "vulhunter-yasa-runner"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_opengrep_runner }}" == "true" ]; then
+            set_public "vulhunter-opengrep-runner"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_bandit_runner }}" == "true" ]; then
+            set_public "vulhunter-bandit-runner"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_gitleaks_runner }}" == "true" ]; then
+            set_public "vulhunter-gitleaks-runner"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_phpstan_runner }}" == "true" ]; then
+            set_public "vulhunter-phpstan-runner"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_flow_parser_runner }}" == "true" ]; then
+            set_public "vulhunter-flow-parser-runner"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_pmd_runner }}" == "true" ]; then
+            set_public "vulhunter-pmd-runner"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox }}" == "true" ]; then
+            set_public "vulhunter-sandbox"
+          fi
+          if [ "${{ steps.image-tag.outputs.build_all }}" == "true" ] || [ "${{ github.event.inputs.build_sandbox_runner }}" == "true" ]; then
+            set_public "vulhunter-sandbox-runner"
+          fi
+          if [ "${{ github.event.inputs.build_nexus_web }}" == "true" ]; then
+            set_public "nexus-web"
+          fi
+
       - name: 验证 GHCR 匿名拉取
         shell: bash
         run: |
@@ -361,8 +415,17 @@ jobs:
 
           for image in "${images[@]}"; do
             echo "Verifying anonymous pull access for ${image}"
-            if ! docker manifest inspect "${image}" >/dev/null; then
-              echo "::error::Anonymous pull check failed for ${image}. Ensure the package exists, uses the expected namespace, and is public."
+            success=false
+            for attempt in 1 2 3; do
+              if docker manifest inspect "${image}" >/dev/null 2>&1; then
+                success=true
+                break
+              fi
+              echo "Attempt ${attempt}/3 failed, waiting 20s before retry..."
+              sleep 20
+            done
+            if [ "${success}" = "false" ]; then
+              echo "::error::Anonymous pull check failed for ${image}. Ensure the package is set to public in GitHub Settings (https://github.com/users/${VULHUNTER_IMAGE_NAMESPACE}/packages)."
               exit 1
             fi
           done
