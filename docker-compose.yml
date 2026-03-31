@@ -160,12 +160,6 @@ services:
     networks:
       - vulhunter-network
 
-  sandbox:
-    image: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
-    profiles: ["build"]
-    restart: "no"
-    command: ["echo", "Sandbox image built successfully"]
-
   adminer:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
     restart: unless-stopped
