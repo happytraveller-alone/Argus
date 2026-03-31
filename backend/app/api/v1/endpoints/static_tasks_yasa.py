@@ -59,7 +59,9 @@ from app.services.yasa_rules_snapshot import (
 )
 from app.services.yasa_language import (
     YASA_SUPPORTED_LANGUAGES,
+    collect_yasa_language_counts_from_source_tree,
     is_yasa_blocked_project_language,
+    resolve_yasa_language_from_source_tree,
     resolve_yasa_language_from_programming_languages,
     resolve_yasa_language_profile,
 )
@@ -219,10 +221,15 @@ def _resolve_language_profile(language: Optional[str]) -> Dict[str, str]:
     return resolve_yasa_language_profile(language)
 
 
-def _detect_language_from_project(project: Project) -> Optional[str]:
-    return resolve_yasa_language_from_programming_languages(
-        getattr(project, "programming_languages", None)
-    )
+def _detect_language_from_project(
+    project: Project,
+    *,
+    project_root: Optional[str] = None,
+) -> Optional[str]:
+    resolved_from_source = resolve_yasa_language_from_source_tree(project_root)
+    if resolved_from_source:
+        return resolved_from_source
+    return resolve_yasa_language_from_programming_languages(getattr(project, "programming_languages", None))
 
 
 def _assert_yasa_project_language_supported(project: Project) -> None:
@@ -1198,7 +1205,12 @@ async def create_yasa_scan(
         if not bool(selected_rule_config.is_active):
             raise HTTPException(status_code=409, detail="YASA 自定义规则配置已禁用")
 
-    detected_language = request.language or _detect_language_from_project(project)
+    requested_language = str(request.language or "").strip()
+    used_auto_detection = not requested_language or requested_language.lower() == "auto"
+    if requested_language and requested_language.lower() != "auto":
+        detected_language = requested_language
+    else:
+        detected_language = _detect_language_from_project(project, project_root=project_root)
     if selected_rule_config is not None:
         detected_language = selected_rule_config.language
 
@@ -1226,6 +1238,14 @@ async def create_yasa_scan(
         rule_config_name=selected_rule_config.name if selected_rule_config else None,
         rule_config_source=selected_rule_config.source if selected_rule_config else None,
     )
+
+    detection_counts = collect_yasa_language_counts_from_source_tree(project_root)
+    if used_auto_detection and detection_counts:
+        logger.info(
+            "YASA language auto detection via source_tree_suffix for project %s: %s",
+            request.project_id,
+            detection_counts,
+        )
     db.add(scan_task)
     await db.commit()
     await db.refresh(scan_task)

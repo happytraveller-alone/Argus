@@ -540,22 +540,13 @@ export default function CreateProjectScanDialog({
 		const selectedRuleConfig = yasaRuleConfigs.find(
 			(item) => item.id === selectedYasaRuleConfigId,
 		);
-		const autoResolvedYasaLanguage = resolveYasaLanguageFromProgrammingLanguages(
-			project.programming_languages,
-		);
 		const requestedYasaLanguage =
 			selectedRuleConfig?.language ||
-			(yasaLanguage !== "auto" ? yasaLanguage : autoResolvedYasaLanguage);
+			(yasaLanguage !== "auto" ? yasaLanguage : undefined);
 		let shouldRunYasa = yasaEnabled;
 		if (isYasaBlockedProjectLanguage(project.programming_languages)) {
 			shouldRunYasa = false;
 			toast.info(getYasaBlockedProjectMessage());
-		}
-		if (shouldRunYasa && !requestedYasaLanguage) {
-			shouldRunYasa = false;
-			toast.info(
-				`YASA 已跳过：未检测到可支持语言（支持 java/golang/typescript/python）`,
-			);
 		}
 		if (
 			!opengrepEnabled &&

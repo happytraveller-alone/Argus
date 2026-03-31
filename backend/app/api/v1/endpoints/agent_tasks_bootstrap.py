@@ -47,6 +47,7 @@ from app.services.agent.utils.vulnerability_naming import (
 )
 from app.services.yasa_language import (
     YASA_SUPPORTED_LANGUAGES_TEXT,
+    collect_yasa_language_counts_from_source_tree,
     is_yasa_blocked_project_language,
     normalize_yasa_language,
     resolve_yasa_language_with_preference,
@@ -272,6 +273,7 @@ def _resolve_static_bootstrap_config(
 async def _resolve_embedded_yasa_settings(
     *,
     db: AsyncSession,
+    project_root: str,
     programming_languages: Any,
     yasa_language: str,
     yasa_rule_config_id: Optional[str],
@@ -294,6 +296,7 @@ async def _resolve_embedded_yasa_settings(
         else resolve_yasa_language_with_preference(
             preferred_language=yasa_language,
             programming_languages=programming_languages,
+            source_root=project_root,
         )
     )
     return {
@@ -862,12 +865,19 @@ async def _prepare_embedded_bootstrap_findings(
         else:
             yasa_settings = await _resolve_embedded_yasa_settings(
                 db=db,
+                project_root=project_root,
                 programming_languages=programming_languages,
                 yasa_language=yasa_language,
                 yasa_rule_config_id=yasa_rule_config_id,
             )
             selected_yasa_rule_config = yasa_settings["selected_rule_config"]
             resolved_yasa_language = yasa_settings["resolved_language"]
+            source_tree_language_counts = collect_yasa_language_counts_from_source_tree(project_root)
+            detection_source = "source_tree_suffix"
+            if yasa_settings["rule_config_id"]:
+                detection_source = "rule_config"
+            elif str(yasa_settings["requested_language"] or "").strip().lower() not in {"", "auto"}:
+                detection_source = "manual_request"
             if not resolved_yasa_language:
                 skip_reason = (
                     f"YASA 已跳过：未检测到可支持语言（支持 {YASA_SUPPORTED_LANGUAGES_TEXT}）"
@@ -881,6 +891,8 @@ async def _prepare_embedded_bootstrap_findings(
                             "bootstrap_source": "embedded_yasa_skipped",
                             "bootstrap_yasa_skipped_reason": skip_reason,
                             "bootstrap_yasa_requested_language": yasa_language or "auto",
+                            "bootstrap_yasa_language_detection_source": detection_source,
+                            "bootstrap_yasa_language_counts": source_tree_language_counts,
                         },
                     )
                 yasa_candidates = []
@@ -898,6 +910,8 @@ async def _prepare_embedded_bootstrap_findings(
                             "bootstrap_yasa_requested_language": yasa_settings["requested_language"],
                             "bootstrap_yasa_resolved_language": resolved_yasa_language,
                             "bootstrap_yasa_rule_config_id": yasa_settings["rule_config_id"] or "",
+                            "bootstrap_yasa_language_detection_source": detection_source,
+                            "bootstrap_yasa_language_counts": source_tree_language_counts,
                         },
                     )
                 try:

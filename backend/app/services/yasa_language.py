@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 YASA_SUPPORTED_LANGUAGES: tuple[str, ...] = (
     "java",
@@ -55,6 +57,33 @@ _YASA_LANGUAGE_PRIORITY: tuple[str, ...] = (
     "typescript",
     "python",
 )
+
+_YASA_LANGUAGE_SUFFIX_MAP: Dict[str, Tuple[str, ...]] = {
+    "python": (".py",),
+    "typescript": (".ts", ".tsx"),
+    "golang": (".go",),
+    "java": (".java",),
+}
+
+_YASA_SUFFIX_LANGUAGE_MAP: Dict[str, str] = {}
+for _language, _suffixes in _YASA_LANGUAGE_SUFFIX_MAP.items():
+    for _suffix in _suffixes:
+        _YASA_SUFFIX_LANGUAGE_MAP[_suffix] = _language
+
+_YASA_LANGUAGE_SCAN_SKIP_DIRS: set[str] = {
+    ".git",
+    "node_modules",
+    "vendor",
+    "dist",
+    "build",
+    "target",
+    ".idea",
+    ".vscode",
+    "__pycache__",
+    ".next",
+}
+
+MAX_YASA_LANGUAGE_DETECTION_FILES = 120000
 
 
 def _split_csv(value: Optional[str]) -> List[str]:
@@ -135,16 +164,77 @@ def resolve_yasa_language_from_programming_languages(raw_languages: Any) -> Opti
     return mapped[0]
 
 
+def collect_yasa_language_counts_from_source_tree(source_root: Optional[str]) -> Dict[str, int]:
+    normalized_root = str(source_root or "").strip()
+    if not normalized_root:
+        return {}
+
+    root_path = Path(normalized_root)
+    if not root_path.exists() or not root_path.is_dir():
+        return {}
+
+    counts: Dict[str, int] = {}
+    scanned_files = 0
+
+    for current_root, dirs, files in os.walk(root_path):
+        dirs[:] = [
+            item
+            for item in dirs
+            if item not in _YASA_LANGUAGE_SCAN_SKIP_DIRS and not item.startswith(".")
+        ]
+        for filename in files:
+            scanned_files += 1
+            if scanned_files > MAX_YASA_LANGUAGE_DETECTION_FILES:
+                return counts
+            suffix = Path(filename).suffix.lower()
+            language = _YASA_SUFFIX_LANGUAGE_MAP.get(suffix)
+            if not language:
+                continue
+            counts[language] = int(counts.get(language, 0) or 0) + 1
+
+    return counts
+
+
+def resolve_yasa_language_from_source_tree(source_root: Optional[str]) -> Optional[str]:
+    counts = collect_yasa_language_counts_from_source_tree(source_root)
+    if not counts:
+        return None
+
+    best_language = None
+    best_count = -1
+    priority_index = {lang: index for index, lang in enumerate(_YASA_LANGUAGE_PRIORITY)}
+
+    for language, count in counts.items():
+        normalized_count = int(count or 0)
+        if normalized_count > best_count:
+            best_language = language
+            best_count = normalized_count
+            continue
+        if normalized_count != best_count:
+            continue
+        if best_language is None:
+            best_language = language
+            continue
+        if priority_index.get(language, 10_000) < priority_index.get(best_language, 10_000):
+            best_language = language
+
+    return best_language
+
+
 def resolve_yasa_language_with_preference(
     *,
     preferred_language: Optional[str],
     programming_languages: Any,
+    source_root: Optional[str] = None,
 ) -> Optional[str]:
     normalized_preference = normalize_yasa_language(preferred_language, allow_auto=True)
     if is_yasa_blocked_project_language(programming_languages):
         return None
     if normalized_preference and normalized_preference != "auto":
         return normalized_preference
+    resolved_from_source = resolve_yasa_language_from_source_tree(source_root)
+    if resolved_from_source:
+        return resolved_from_source
     return resolve_yasa_language_from_programming_languages(programming_languages)
 
 

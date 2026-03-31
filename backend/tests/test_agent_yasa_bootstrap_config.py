@@ -21,6 +21,7 @@ async def test_resolve_embedded_yasa_settings_prefers_rule_config(monkeypatch):
 
     settings = await agent_tasks_bootstrap._resolve_embedded_yasa_settings(
         db=_FakeDb(),
+        project_root="/tmp/project",
         programming_languages=["python"],
         yasa_language="auto",
         yasa_rule_config_id="custom-yasa-1",
@@ -47,6 +48,7 @@ async def test_resolve_embedded_yasa_settings_rejects_disabled_rule_config():
     with pytest.raises(RuntimeError, match="已禁用"):
         await agent_tasks_bootstrap._resolve_embedded_yasa_settings(
             db=_FakeDb(),
+            project_root="/tmp/project",
             programming_languages=["python"],
             yasa_language="auto",
             yasa_rule_config_id="custom-yasa-1",

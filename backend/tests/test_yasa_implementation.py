@@ -54,3 +54,11 @@ def test_detect_language_supports_csv_and_json_string():
 
     unsupported_project = SimpleNamespace(programming_languages="php")
     assert _detect_language_from_project(unsupported_project) is None
+
+
+def test_detect_language_prefers_source_tree_suffix(tmp_path):
+    from app.api.v1.endpoints.static_tasks_yasa import _detect_language_from_project  # noqa: PLC0415
+
+    (tmp_path / "main.py").write_text("print('x')", encoding="utf-8")
+    project = SimpleNamespace(programming_languages='["java"]')
+    assert _detect_language_from_project(project, project_root=str(tmp_path)) == "python"
