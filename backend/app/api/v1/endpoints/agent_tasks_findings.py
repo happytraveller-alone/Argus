@@ -1049,7 +1049,11 @@ async def _save_findings(
                 and localization_status == "failed"
             ):
                 # 定位失败不再作为硬过滤条件：保留发现并记录降级状态，避免有效漏洞被误丢弃
-                mark_filtered("missing_enclosing_function")
+                logger.info(
+                    "[SaveFindings] Function localization degraded to partial: %s:%s",
+                    stored_file_path or "unknown",
+                    line_start or 0,
+                )
                 localization_status = "partial"
             
             # 降级策略：函数定位失败时仍允许保存，且确保 function_name 始终非空
@@ -1059,6 +1063,18 @@ async def _save_findings(
                     f"[SaveFindings] Fallback function_name for {stored_file_path}:{line_start} -> "
                     f"{reachability_target_function} (localization_status={localization_status})"
                 )
+            # 严格门禁：全局作用域（无法绑定具体函数）默认不入库，避免噪声污染。
+            # 其余定位失败场景保留降级保存策略，以减少真实漏洞误丢弃。
+            placeholder_function = str(reachability_target_function or "").strip()
+            if (
+                authenticity != "false_positive"
+                and line_start is not None
+                and int(line_start) <= 1
+                and localization_status in {"failed", "partial", "unknown"}
+                and placeholder_function.startswith("<function_")
+            ):
+                mark_filtered("missing_enclosing_function", finding)
+                continue
 
             # 8) title/description/suggestion
             title = finding.get("title")

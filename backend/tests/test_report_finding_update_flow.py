@@ -107,6 +107,71 @@ async def test_save_verification_result_accepts_legacy_batch_findings_payload():
     assert buffered and buffered[0]["finding_identity"].startswith("fid:")
 
 
+@pytest.mark.asyncio
+async def test_save_verification_result_is_saved_false_when_callback_saves_zero():
+    async def _save_callback(findings: List[Dict[str, Any]]) -> int:
+        return 0
+
+    tool = SaveVerificationResultTool(task_id="task-zero-save", save_callback=_save_callback)
+    result = await tool.execute(
+        file_path="src/demo.py",
+        line_start=12,
+        function_name="demo",
+        title="src/demo.py中demo函数SQL注入漏洞",
+        vulnerability_type="sql_injection",
+        severity="high",
+        verdict="confirmed",
+        confidence=0.88,
+        reachability="reachable",
+        verification_evidence="zero-save callback for regression test",
+    )
+
+    assert result.success is True
+    assert isinstance(result.data, dict)
+    assert result.data.get("total_saved") == 0
+    assert result.data.get("saved") is False
+    assert tool.saved_count == 0
+    assert tool.is_saved is False
+
+
+@pytest.mark.asyncio
+async def test_save_verification_result_clone_for_worker_resets_buffer_and_dedup_state():
+    persisted_batches: List[List[Dict[str, Any]]] = []
+
+    async def _save_callback(findings: List[Dict[str, Any]]) -> int:
+        persisted_batches.append([dict(item) for item in findings])
+        return len(findings)
+
+    tool = SaveVerificationResultTool(task_id="task-clone", save_callback=_save_callback)
+    payload = {
+        "file_path": "src/clone_demo.py",
+        "line_start": 21,
+        "function_name": "handler",
+        "title": "src/clone_demo.py中handler函数SQL注入漏洞",
+        "vulnerability_type": "sql_injection",
+        "severity": "high",
+        "verdict": "confirmed",
+        "confidence": 0.9,
+        "reachability": "reachable",
+        "verification_evidence": "worker clone should not share dedup state",
+    }
+    first = await tool.execute(**payload)
+    assert first.success is True
+    assert tool.is_saved is True
+    assert len(tool.buffered_findings) == 1
+
+    cloned = tool.clone_for_worker()
+    assert isinstance(cloned, SaveVerificationResultTool)
+    assert cloned is not tool
+    assert cloned.buffered_findings == []
+    assert cloned.saved_count is None
+    assert cloned.is_saved is False
+
+    second = await cloned.execute(**payload)
+    assert second.success is True
+    assert len(persisted_batches) == 2
+
+
 def test_report_project_fallback_handles_non_numeric_confidence_text():
     agent = ReportAgent(llm_service=_SequenceLLM([]), tools={}, event_emitter=None)
     markdown = agent._build_project_report_fallback(

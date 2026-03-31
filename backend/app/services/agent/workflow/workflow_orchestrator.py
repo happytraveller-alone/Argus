@@ -292,8 +292,25 @@ class WorkflowOrchestratorAgent(OrchestratorAgent):
             vuln_stats = {}
             if self._vuln_queue_service:
                 try:
-                    vuln_size = self._vuln_queue_service.size(task_id)
-                    vuln_stats = self._vuln_queue_service.stats(task_id)
+                    vuln_size_getter = getattr(self._vuln_queue_service, "size", None)
+                    if not callable(vuln_size_getter):
+                        vuln_size_getter = getattr(
+                            self._vuln_queue_service,
+                            "get_queue_size",
+                            None,
+                        )
+                    vuln_stats_getter = getattr(self._vuln_queue_service, "stats", None)
+                    if not callable(vuln_stats_getter):
+                        vuln_stats_getter = getattr(
+                            self._vuln_queue_service,
+                            "get_queue_stats",
+                            None,
+                        )
+
+                    vuln_size = int(vuln_size_getter(task_id)) if callable(vuln_size_getter) else 0
+                    vuln_stats = vuln_stats_getter(task_id) if callable(vuln_stats_getter) else {}
+                    if not isinstance(vuln_stats, dict):
+                        vuln_stats = {}
                     logger.info(
                         "[QueueStatus|%s] Vuln队列: size=%d, enqueued=%d, dequeued=%d, deduplicated=%d",
                         stage,

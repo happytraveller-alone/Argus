@@ -5,6 +5,7 @@ Agent 工具基类
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Type
 from dataclasses import dataclass, field
+import copy
 import inspect
 import json
 from pydantic import BaseModel, ValidationError
@@ -135,6 +136,19 @@ class AgentTool(ABC):
 
     def clear_runtime_context(self) -> None:
         self._runtime_context = {}
+
+    def clone_for_worker(self) -> "AgentTool":
+        """
+        生成 worker 专用工具实例，避免并发任务共享同一可变状态。
+
+        默认策略使用浅拷贝并重置运行时计数/上下文；
+        具体工具可按需覆写该方法补充自定义状态重置。
+        """
+        cloned = copy.copy(self)
+        cloned._call_count = 0
+        cloned._total_duration_ms = 0
+        cloned._runtime_context = {}
+        return cloned
 
     def _build_expected_args(self) -> Optional[Dict[str, Any]]:
         """构建预期参数字典，兼容 Pydantic v1 和 v2"""

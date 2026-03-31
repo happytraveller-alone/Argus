@@ -266,6 +266,7 @@ class MockQueue:
     def __init__(self, items):
         self.items = list(items)
         self.index = 0
+        self.requeued: list[dict[str, Any]] = []
 
     def dequeue(self, task_id: str):
         if self.index >= len(self.items):
@@ -276,6 +277,23 @@ class MockQueue:
 
     def dequeue_finding(self, task_id: str):
         return self.dequeue(task_id)
+
+    def enqueue(self, task_id: str, item: dict[str, Any]) -> bool:
+        self.requeued.append(dict(item))
+        self.items.append(dict(item))
+        return True
+
+    def enqueue_finding(self, task_id: str, item: dict[str, Any]) -> bool:
+        return self.enqueue(task_id, item)
+
+
+class _StatefulTool:
+    def __init__(self, tag: str) -> None:
+        self.tag = tag
+        self.history: list[str] = []
+
+    def clone_for_worker(self) -> "_StatefulTool":
+        return _StatefulTool(self.tag)
 
 
 @pytest.mark.asyncio
@@ -359,6 +377,7 @@ async def test_sequential_fallback():
 @pytest.mark.asyncio
 async def test_worker_isolation():
     orchestrator = MockOrchestrator()
+    orchestrator.sub_agents["analysis"].tools["stateful_tool"] = _StatefulTool("analysis")
     executor = ParallelPhaseExecutor(orchestrator, "analysis", max_workers=3, enable_parallel=True)
 
     worker_agents = [executor._create_worker_agent(i) for i in range(3)]
@@ -366,6 +385,28 @@ async def test_worker_isolation():
     assert len({id(agent) for agent in worker_agents}) == 3
     assert len({agent.name for agent in worker_agents}) == 3
     assert all("worker" in agent.name for agent in worker_agents)
+    assert worker_agents[0].tools["stateful_tool"] is not orchestrator.sub_agents["analysis"].tools["stateful_tool"]
+    assert worker_agents[0].tools["stateful_tool"] is not worker_agents[1].tools["stateful_tool"]
+
+
+@pytest.mark.asyncio
+async def test_parallel_analysis_requeues_failed_item_and_raises():
+    orchestrator = MockOrchestrator()
+    risk_point = {"file_path": "broken.py", "line_start": 77}
+    queue = MockQueue([risk_point])
+    executor = ParallelPhaseExecutor(orchestrator, "analysis", max_workers=2, enable_parallel=True)
+    state = WorkflowState()
+
+    async def _fail_dispatch(worker_agent, params):
+        raise RuntimeError("synthetic dispatch failure")
+
+    with patch.object(executor, "_dispatch_to_worker_agent", side_effect=_fail_dispatch):
+        with pytest.raises(RuntimeError, match="Analysis phase aborted"):
+            await executor.run_parallel_analysis(state=state, task_id="test_task", recon_queue=queue)
+
+    assert queue.requeued
+    assert queue.requeued[0]["file_path"] == "broken.py"
+    assert queue.requeued[0]["line_start"] == 77
 
 
 @pytest.mark.asyncio

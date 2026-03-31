@@ -664,12 +664,23 @@ class SaveVerificationResultTool(AgentTool):
 
     @property
     def is_saved(self) -> bool:
-        """返回是否已通过回调成功持久化（saved_count 不为 None）"""
-        return self._saved_count is not None
+        """返回是否已通过回调成功持久化（累计保存条数 > 0）。"""
+        return int(self._saved_count or 0) > 0
 
     @property
     def saved_count(self) -> Optional[int]:
         return self._saved_count
+
+    def clone_for_worker(self) -> "SaveVerificationResultTool":
+        """
+        为并行 worker 克隆独立工具实例，保留持久化回调但隔离缓冲状态。
+        """
+        cloned = super().clone_for_worker()
+        if isinstance(cloned, SaveVerificationResultTool):
+            cloned._buffered_findings = []
+            cloned._saved_count = None
+            cloned._seen_payload_digests = set()
+        return cloned
 
     @staticmethod
     def _build_payload_digest(findings: List[Dict[str, Any]]) -> str:

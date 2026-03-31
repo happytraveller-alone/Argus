@@ -13,7 +13,7 @@ import copy
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict
 
 from .models import WorkflowPhase, WorkflowState, WorkflowStepRecord
 
@@ -56,6 +56,70 @@ class ParallelPhaseExecutor:
         self.active_workers: set[int] = set()
         self.lock = asyncio.Lock()  # 保护共享状态
 
+    def _accumulate_orchestrator_usage(self, worker_result: dict[str, Any]) -> None:
+        """
+        将 worker 级统计累加到 orchestrator。
+
+        兼容测试桩或降级场景：当 orchestrator 尚未声明相关属性时，按 0 初始化。
+        """
+        metrics = (
+            ("_tool_calls", "_worker_tool_calls"),
+            ("_total_tokens", "_worker_tokens_used"),
+            ("_iteration", "_worker_iterations"),
+        )
+        for attr_name, payload_key in metrics:
+            current_value = int(getattr(self.orchestrator, attr_name, 0) or 0)
+            delta = int(worker_result.get(payload_key, 0) or 0)
+            setattr(self.orchestrator, attr_name, current_value + delta)
+
+    @staticmethod
+    def _build_item_label(item: Any) -> str:
+        if not isinstance(item, dict):
+            return "unknown_item"
+        file_path = str(item.get("file_path") or "").strip()
+        line = item.get("line_start") or item.get("line")
+        if file_path:
+            return f"{file_path}:{line or ''}".rstrip(":")
+        title = str(item.get("title") or "").strip()
+        return title or "unknown_item"
+
+    def _requeue_failed_item(
+        self,
+        *,
+        task_id: str,
+        item: Dict[str, Any],
+        queue: Any,
+        queue_kind: str,
+    ) -> bool:
+        """
+        worker 失败兜底：将已出队的 item 回补到队列，避免静默丢失。
+        """
+        try:
+            if queue_kind == "recon":
+                return bool(queue.enqueue(task_id, item))
+            if queue_kind == "vuln":
+                return bool(queue.enqueue_finding(task_id, item))
+            if queue_kind == "bl":
+                return bool(queue.enqueue(task_id, item))
+        except Exception as exc:
+            logger.error(
+                "[ParallelExecutor] Failed to requeue item: kind=%s task=%s error=%s",
+                queue_kind,
+                task_id,
+                exc,
+            )
+            return False
+        return False
+
+    @staticmethod
+    def _format_worker_errors(errors: list[tuple[int, Exception]]) -> str:
+        if not errors:
+            return ""
+        parts = [f"worker_{idx}:{type(exc).__name__}:{exc}" for idx, exc in errors[:5]]
+        if len(errors) > 5:
+            parts.append(f"...+{len(errors) - 5} more")
+        return "; ".join(parts)
+
     def _create_worker_agent(self, worker_id: int) -> "BaseAgent":
         """
         克隆 agent 实例，创建独立的会话内存
@@ -75,9 +139,10 @@ class ParallelPhaseExecutor:
         base_agent = self.orchestrator.sub_agents[self.agent_type]
 
         # 创建 worker agent（使用相同的构造参数）
+        worker_tools = self._clone_tools_for_worker(base_agent.tools)
         worker_agent = base_agent.__class__(
             llm_service=base_agent.llm_service,
-            tools=base_agent.tools,
+            tools=worker_tools,
             event_emitter=base_agent.event_emitter,
         )
 
@@ -115,6 +180,35 @@ class ParallelPhaseExecutor:
 
         logger.info(f"[ParallelExecutor] Created worker agent: {worker_agent.name}")
         return worker_agent
+
+    def _clone_tools_for_worker(self, tools: Any) -> Any:
+        if not isinstance(tools, dict):
+            return tools
+        cloned: dict[str, Any] = {}
+        for tool_name, tool_obj in tools.items():
+            cloned[tool_name] = self._clone_single_tool_for_worker(tool_name, tool_obj)
+        return cloned
+
+    def _clone_single_tool_for_worker(self, tool_name: str, tool_obj: Any) -> Any:
+        clone_method = getattr(tool_obj, "clone_for_worker", None)
+        if callable(clone_method):
+            try:
+                return clone_method()
+            except Exception as exc:
+                logger.warning(
+                    "[ParallelExecutor] clone_for_worker failed for tool '%s': %s",
+                    tool_name,
+                    exc,
+                )
+
+        try:
+            return copy.copy(tool_obj)
+        except Exception:
+            logger.debug(
+                "[ParallelExecutor] Tool '%s' is not cloneable; fallback to shared instance",
+                tool_name,
+            )
+            return tool_obj
 
     def _build_previous_results(self) -> dict[str, Any]:
         previous_results: dict[str, Any] = {
@@ -459,9 +553,16 @@ class ParallelPhaseExecutor:
             results = await asyncio.gather(*worker_tasks, return_exceptions=True)
 
             # 处理 worker 错误（不阻塞其他 worker，忽略正常取消）
+            worker_errors: list[tuple[int, Exception]] = []
             for i, result in enumerate(results):
                 if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
                     logger.error(f"[ParallelExecutor] Worker {i} failed: {result}", exc_info=result)
+                    worker_errors.append((i, result))
+            if worker_errors:
+                raise RuntimeError(
+                    "[ParallelExecutor] Analysis phase aborted: "
+                    + self._format_worker_errors(worker_errors)
+                )
 
         except asyncio.CancelledError:
             # 确保所有 worker task 收到取消信号
@@ -535,6 +636,8 @@ class ParallelPhaseExecutor:
                 )
 
                 step_start = time.time()
+                worker_result: dict[str, Any] = {}
+                item_error: Exception | None = None
 
                 # 调度到 worker agent（隔离实例）
                 params = {
@@ -553,58 +656,76 @@ class ParallelPhaseExecutor:
 
                 try:
                     await self._dispatch_to_worker_agent(worker_agent, params)
+                    worker_result = getattr(worker_agent, '_agent_results', {}).get(self.agent_type, {})
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
                     logger.error(f"[Worker-{worker_id}] Dispatch failed: {exc}", exc_info=True)
+                    item_error = exc
                 finally:
                     self.orchestrator._last_recon_risk_point = None
 
                 duration_ms = int((time.time() - step_start) * 1000)
+                try:
+                    # 合并 worker 结果到 orchestrator（加锁）
+                    async with self.lock:
+                        analysis_success = bool(worker_result.get("_run_success")) and item_error is None
+                        self._accumulate_orchestrator_usage(worker_result)
 
-                # 合并 worker 结果到 orchestrator（加锁）
-                async with self.lock:
-                    worker_result = getattr(worker_agent, '_agent_results', {}).get(self.agent_type, {})
-                    analysis_success = bool(worker_result.get("_run_success"))
-                    self.orchestrator._tool_calls += int(worker_result.get("_worker_tool_calls", 0) or 0)
-                    self.orchestrator._total_tokens += int(
-                        worker_result.get("_worker_tokens_used", 0) or 0
-                    )
-                    self.orchestrator._iteration += int(worker_result.get("_worker_iterations", 0) or 0)
+                        if worker_result:
+                            self._merge_phase_result(
+                                worker_result,
+                                handoff=getattr(worker_agent, "_latest_handoff", None),
+                            )
 
-                    if worker_result:
-                        self._merge_phase_result(
-                            worker_result,
-                            handoff=getattr(worker_agent, "_latest_handoff", None),
+                        worker_findings = worker_result.get("findings", [])
+                        self._merge_findings_into_all_findings(worker_findings)
+
+                        state.step_records.append(
+                            WorkflowStepRecord(
+                                phase=WorkflowPhase.ANALYSIS,
+                                agent=f"{self.agent_type}_worker_{worker_id}",
+                                injected_context=risk_point,
+                                success=analysis_success,
+                                error=(
+                                    str(item_error)
+                                    if item_error is not None
+                                    else worker_result.get("_run_error")
+                                ),
+                                findings_count=len(self.orchestrator._all_findings),
+                                duration_ms=duration_ms,
+                            )
                         )
 
-                    worker_findings = worker_result.get("findings", [])
-                    self._merge_findings_into_all_findings(worker_findings)
-
-                    state.step_records.append(
-                        WorkflowStepRecord(
-                            phase=WorkflowPhase.ANALYSIS,
-                            agent=f"{self.agent_type}_worker_{worker_id}",
-                            injected_context=risk_point,
-                            success=analysis_success,
-                            error=None if analysis_success else worker_result.get("_run_error"),
-                            findings_count=len(self.orchestrator._all_findings),
-                            duration_ms=duration_ms,
+                        logger.info(
+                            f"[Worker-{worker_id}] Analysis iteration {iteration} done: "
+                            f"risk_point={fp_repr}, success={analysis_success}, "
+                            f"cumulative_findings={len(self.orchestrator._all_findings)}"
                         )
-                    )
 
-                    logger.info(
-                        f"[Worker-{worker_id}] Analysis iteration {iteration} done: "
-                        f"risk_point={fp_repr}, success={analysis_success}, "
-                        f"cumulative_findings={len(self.orchestrator._all_findings)}"
-                    )
+                    if item_error is not None:
+                        requeued = self._requeue_failed_item(
+                            task_id=task_id,
+                            item=risk_point,
+                            queue=recon_queue,
+                            queue_kind="recon",
+                        )
+                        logger.error(
+                            "[Worker-%s] Analysis item failed and requeued=%s: %s",
+                            worker_id,
+                            requeued,
+                            self._build_item_label(risk_point),
+                        )
+                        raise RuntimeError(
+                            f"analysis_worker_{worker_id} failed for {self._build_item_label(risk_point)}"
+                        ) from item_error
+                finally:
+                    # 重置 worker agent 内存（任务隔离）
+                    worker_agent.reset_session_memory()
 
-                # 重置 worker agent 内存（任务隔离）
-                worker_agent.reset_session_memory()
-
-                # 标记 worker 为空闲（finally 确保取消时也能清理）
-                async with self.lock:
-                    self.active_workers.discard(worker_id)
+                    # 标记 worker 为空闲（finally 确保取消时也能清理）
+                    async with self.lock:
+                        self.active_workers.discard(worker_id)
 
         logger.info(f"[Worker-{worker_id}] Analysis worker completed {iteration} iterations")
 
@@ -706,9 +827,16 @@ class ParallelPhaseExecutor:
             results = await asyncio.gather(*worker_tasks, return_exceptions=True)
 
             # 处理 worker 错误（忽略正常取消）
+            worker_errors: list[tuple[int, Exception]] = []
             for i, result in enumerate(results):
                 if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
                     logger.error(f"[ParallelExecutor] Worker {i} failed: {result}", exc_info=result)
+                    worker_errors.append((i, result))
+            if worker_errors:
+                raise RuntimeError(
+                    "[ParallelExecutor] Verification phase aborted: "
+                    + self._format_worker_errors(worker_errors)
+                )
 
         except asyncio.CancelledError:
             for task in worker_tasks:
@@ -801,6 +929,8 @@ class ParallelPhaseExecutor:
                 )
 
                 step_start = time.time()
+                worker_result: dict[str, Any] = {}
+                item_error: Exception | None = None
 
                 # 调度到 worker agent
                 params = {
@@ -816,58 +946,76 @@ class ParallelPhaseExecutor:
 
                 try:
                     await self._dispatch_to_worker_agent(worker_agent, params)
+                    worker_result = getattr(worker_agent, '_agent_results', {}).get(self.agent_type, {})
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
                     logger.error(f"[Worker-{worker_id}] Dispatch failed: {exc}", exc_info=True)
+                    item_error = exc
                 finally:
                     # 确保取消时也能清理 active_workers
                     async with self.lock:
                         self.active_workers.discard(worker_id)
 
                 duration_ms = int((time.time() - step_start) * 1000)
+                try:
+                    # 合并结果（加锁）
+                    async with self.lock:
+                        verification_success = bool(worker_result.get("_run_success")) and item_error is None
+                        self._accumulate_orchestrator_usage(worker_result)
 
-                # 合并结果（加锁）
-                async with self.lock:
-                    worker_result = getattr(worker_agent, '_agent_results', {}).get(self.agent_type, {})
-                    verification_success = bool(worker_result.get("_run_success"))
-                    self.orchestrator._tool_calls += int(worker_result.get("_worker_tool_calls", 0) or 0)
-                    self.orchestrator._total_tokens += int(
-                        worker_result.get("_worker_tokens_used", 0) or 0
-                    )
-                    self.orchestrator._iteration += int(worker_result.get("_worker_iterations", 0) or 0)
+                        if worker_result:
+                            self._merge_phase_result(
+                                worker_result,
+                                handoff=getattr(worker_agent, "_latest_handoff", None),
+                            )
 
-                    if worker_result:
-                        self._merge_phase_result(
-                            worker_result,
-                            handoff=getattr(worker_agent, "_latest_handoff", None),
+                        self._merge_findings_into_all_findings(worker_result.get("findings", []))
+
+                        if verification_success and fingerprint:
+                            self.orchestrator._verified_queue_fingerprints.add(fingerprint)
+
+                        state.step_records.append(
+                            WorkflowStepRecord(
+                                phase=WorkflowPhase.VERIFICATION,
+                                agent=f"{self.agent_type}_worker_{worker_id}",
+                                injected_context=finding,
+                                success=verification_success,
+                                error=(
+                                    str(item_error)
+                                    if item_error is not None
+                                    else worker_result.get("_run_error")
+                                ),
+                                findings_count=len(self.orchestrator._all_findings),
+                                duration_ms=duration_ms,
+                            )
                         )
 
-                    self._merge_findings_into_all_findings(worker_result.get("findings", []))
-
-                    if verification_success and fingerprint:
-                        self.orchestrator._verified_queue_fingerprints.add(fingerprint)
-
-                    state.step_records.append(
-                        WorkflowStepRecord(
-                            phase=WorkflowPhase.VERIFICATION,
-                            agent=f"{self.agent_type}_worker_{worker_id}",
-                            injected_context=finding,
-                            success=verification_success,
-                            error=None if verification_success else worker_result.get("_run_error"),
-                            findings_count=len(self.orchestrator._all_findings),
-                            duration_ms=duration_ms,
+                        logger.info(
+                            f"[Worker-{worker_id}] Verification iteration {iteration} done: "
+                            f"finding={title_repr}, success={verification_success}, "
+                            f"cumulative_findings={len(self.orchestrator._all_findings)}"
                         )
-                    )
 
-                    logger.info(
-                        f"[Worker-{worker_id}] Verification iteration {iteration} done: "
-                        f"finding={title_repr}, success={verification_success}, "
-                        f"cumulative_findings={len(self.orchestrator._all_findings)}"
-                    )
-
-                # 重置内存
-                worker_agent.reset_session_memory()
+                    if item_error is not None:
+                        requeued = self._requeue_failed_item(
+                            task_id=task_id,
+                            item=finding,
+                            queue=vuln_queue,
+                            queue_kind="vuln",
+                        )
+                        logger.error(
+                            "[Worker-%s] Verification item failed and requeued=%s: %s",
+                            worker_id,
+                            requeued,
+                            self._build_item_label(finding),
+                        )
+                        raise RuntimeError(
+                            f"verification_worker_{worker_id} failed for {self._build_item_label(finding)}"
+                        ) from item_error
+                finally:
+                    # 重置内存
+                    worker_agent.reset_session_memory()
 
         logger.info(f"[Worker-{worker_id}] Verification worker completed {iteration} iterations")
 
@@ -1134,6 +1282,8 @@ class ParallelPhaseExecutor:
                 )
 
                 step_start = time.time()
+                worker_result: dict[str, Any] = {}
+                item_error: Exception | None = None
 
                 params = {
                     "agent": self.agent_type,
@@ -1149,64 +1299,82 @@ class ParallelPhaseExecutor:
 
                 try:
                     await self._dispatch_to_worker_agent(worker_agent, params)
+                    worker_result = getattr(worker_agent, '_agent_results', {}).get(self.agent_type, {})
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
                     logger.error(f"[BLWorker-{worker_id}] Dispatch failed: {exc}", exc_info=True)
+                    item_error = exc
                 finally:
                     # 确保取消时也能清理 active_workers
                     async with self.lock:
                         self.active_workers.discard(worker_id)
 
                 duration_ms = int((time.time() - step_start) * 1000)
+                try:
+                    async with self.lock:
+                        bl_success = bool(worker_result.get("_run_success")) and item_error is None
+                        self._accumulate_orchestrator_usage(worker_result)
 
-                async with self.lock:
-                    worker_result = getattr(worker_agent, '_agent_results', {}).get(self.agent_type, {})
-                    bl_success = bool(worker_result.get("_run_success"))
-                    self.orchestrator._tool_calls += int(worker_result.get("_worker_tool_calls", 0) or 0)
-                    self.orchestrator._total_tokens += int(
-                        worker_result.get("_worker_tokens_used", 0) or 0
-                    )
-                    self.orchestrator._iteration += int(worker_result.get("_worker_iterations", 0) or 0)
+                        if worker_result:
+                            self._merge_phase_result(
+                                worker_result,
+                                handoff=getattr(worker_agent, "_latest_handoff", None),
+                            )
 
-                    if worker_result:
-                        self._merge_phase_result(
-                            worker_result,
-                            handoff=getattr(worker_agent, "_latest_handoff", None),
+                        worker_findings = worker_result.get("findings", [])
+                        self._merge_findings_into_all_findings(worker_findings)
+                        state.bl_analysis_confirmed_count += int(worker_result.get("risk_points_confirmed") or 0)
+                        state.bl_analysis_false_positive_suspects += int(
+                            worker_result.get("false_positive_suspects") or 0
+                        )
+                        state.bl_findings_with_complete_evidence += int(
+                            worker_result.get("findings_with_complete_evidence") or 0
+                        )
+                        state.bl_analysis_with_evidence += int(
+                            worker_result.get("analysis_with_evidence") or 0
                         )
 
-                    worker_findings = worker_result.get("findings", [])
-                    self._merge_findings_into_all_findings(worker_findings)
-                    state.bl_analysis_confirmed_count += int(worker_result.get("risk_points_confirmed") or 0)
-                    state.bl_analysis_false_positive_suspects += int(
-                        worker_result.get("false_positive_suspects") or 0
-                    )
-                    state.bl_findings_with_complete_evidence += int(
-                        worker_result.get("findings_with_complete_evidence") or 0
-                    )
-                    state.bl_analysis_with_evidence += int(
-                        worker_result.get("analysis_with_evidence") or 0
-                    )
-
-                    state.step_records.append(
-                        WorkflowStepRecord(
-                            phase=WorkflowPhase.BUSINESS_LOGIC_ANALYSIS,
-                            agent=f"{self.agent_type}_worker_{worker_id}",
-                            injected_context=risk_point,
-                            success=bl_success,
-                            error=None if bl_success else worker_result.get("_run_error"),
-                            findings_count=len(self.orchestrator._all_findings),
-                            duration_ms=duration_ms,
+                        state.step_records.append(
+                            WorkflowStepRecord(
+                                phase=WorkflowPhase.BUSINESS_LOGIC_ANALYSIS,
+                                agent=f"{self.agent_type}_worker_{worker_id}",
+                                injected_context=risk_point,
+                                success=bl_success,
+                                error=(
+                                    str(item_error)
+                                    if item_error is not None
+                                    else worker_result.get("_run_error")
+                                ),
+                                findings_count=len(self.orchestrator._all_findings),
+                                duration_ms=duration_ms,
+                            )
                         )
-                    )
 
-                    logger.info(
-                        f"[BLWorker-{worker_id}] BL analysis iteration {iteration} done: "
-                        f"risk_point={fp_repr}, success={bl_success}, "
-                        f"cumulative_findings={len(self.orchestrator._all_findings)}"
-                    )
+                        logger.info(
+                            f"[BLWorker-{worker_id}] BL analysis iteration {iteration} done: "
+                            f"risk_point={fp_repr}, success={bl_success}, "
+                            f"cumulative_findings={len(self.orchestrator._all_findings)}"
+                        )
 
-                worker_agent.reset_session_memory()
+                    if item_error is not None:
+                        requeued = self._requeue_failed_item(
+                            task_id=task_id,
+                            item=risk_point,
+                            queue=bl_queue,
+                            queue_kind="bl",
+                        )
+                        logger.error(
+                            "[BLWorker-%s] BL analysis item failed and requeued=%s: %s",
+                            worker_id,
+                            requeued,
+                            self._build_item_label(risk_point),
+                        )
+                        raise RuntimeError(
+                            f"bl_analysis_worker_{worker_id} failed for {self._build_item_label(risk_point)}"
+                        ) from item_error
+                finally:
+                    worker_agent.reset_session_memory()
 
         logger.info(f"[BLWorker-{worker_id}] BL analysis worker completed {iteration} iterations")
 
