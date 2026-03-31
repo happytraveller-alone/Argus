@@ -123,7 +123,12 @@ COPY . .
 ENV VITE_API_BASE_URL=__API_BASE_URL__
 
 # 构建生产版本
-RUN pnpm build
+# - VITE_CACHE_DIR 指向 BuildKit cache mount，跨构建复用 vite 转换缓存
+# - NODE_OPTIONS 防止大型 bundle 触发 OOM
+RUN --mount=type=cache,id=vulhunter-frontend-vite-build,target=/tmp/vite-build-cache \
+    VITE_CACHE_DIR=/tmp/vite-build-cache \
+    NODE_OPTIONS="--max-old-space-size=3072" \
+    pnpm build
 
 # =============================================
 # 生产镜像 - 使用 Nginx (支持 SSE 反向代理)

@@ -108,30 +108,6 @@ jobs:
             echo "build_all=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: 设置 Node.js
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-
-      - name: 安装 pnpm
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
-        uses: pnpm/action-setup@v5
-        with:
-          version: 9
-
-      - name: 安装前端依赖
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
-        working-directory: ./frontend
-        run: pnpm install --frozen-lockfile
-
-      - name: 构建前端项目
-        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
-        working-directory: ./frontend
-        run: pnpm build
-        env:
-          VITE_USE_LOCAL_DB: 'true'
-
       - name: 登录到 GitHub Container Registry
         uses: docker/login-action@v4
         with:
