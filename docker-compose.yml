@@ -177,12 +177,14 @@ services:
       - vulhunter-network
   
   nexus-web:
-    image: ${NEXUS_WEB_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${NEXUS_WEB_IMAGE_NAMESPACE:-happytraveller-alone}/nexus-web:${NEXUS_WEB_IMAGE_TAG:-latest}}
-    restart: unless-stopped
+    build:
+      context: ./nexus-web
+      dockerfile: ../docker/nexus-web.Dockerfile
+      args:
+        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
     ports:
-      - "${VULHUNTER_NEXUS_WEB_PORT:-5174}:5174"
-    networks:
-      - vulhunter-network
+      - "5174:5174"
+    restart: always
 
 networks:
   vulhunter-network:
