@@ -149,7 +149,7 @@ async def test_launch_static_background_job_registers_and_cleans_up():
         (
             static_tasks_yasa,
             "create_yasa_scan",
-            static_tasks_yasa.YasaScanTaskCreate(project_id="project-1", target_path=".", language="javascript"),
+            static_tasks_yasa.YasaScanTaskCreate(project_id="project-1", target_path=".", language="typescript"),
         ),
     ],
 )
@@ -163,7 +163,7 @@ async def test_static_scan_create_routes_launch_async_job_and_release_request_se
         id="project-1",
         name="demo-project",
         source_type="zip",
-        programming_languages="javascript",
+        programming_languages="typescript",
     )
     rules = [SimpleNamespace(id="rule-1")]
     db = _CreateSession(project=project, rules=rules)
@@ -265,7 +265,7 @@ async def test_create_agent_task_launches_async_job_and_releases_request_session
         (
             static_tasks_yasa,
             "create_yasa_scan",
-            static_tasks_yasa.YasaScanTaskCreate(project_id="project-1", target_path=".", language="javascript"),
+            static_tasks_yasa.YasaScanTaskCreate(project_id="project-1", target_path=".", language="typescript"),
         ),
     ],
 )
@@ -279,7 +279,7 @@ async def test_static_scan_create_routes_do_not_touch_detached_orm_after_releasi
         id="project-1",
         name="demo-project",
         source_type="zip",
-        programming_languages="javascript",
+        programming_languages="typescript",
     )
     rules = [SimpleNamespace(id="rule-1")]
     db = _DetachedOnCloseSession(project=project, rules=rules)

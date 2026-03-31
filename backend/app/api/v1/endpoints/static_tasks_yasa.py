@@ -227,7 +227,10 @@ def _detect_language_from_project(project: Project) -> Optional[str]:
 
 def _assert_yasa_project_language_supported(project: Project) -> None:
     if is_yasa_blocked_project_language(getattr(project, "programming_languages", None)):
-        raise HTTPException(status_code=400, detail="YASA 引擎暂不支持 C/C++ 项目")
+        raise HTTPException(
+            status_code=400,
+            detail="YASA 引擎仅支持 Java / Go / TypeScript / Python 项目",
+        )
 
 
 def _resolve_yasa_binary() -> str:
@@ -1374,7 +1377,7 @@ async def import_yasa_rule_config(
     if normalized_language not in _SUPPORTED_YASA_LANGUAGES:
         raise HTTPException(
             status_code=400,
-            detail="language 无效，YASA 仅支持 python/javascript/typescript/golang/java",
+            detail="language 无效，YASA 仅支持 java/golang/typescript/python",
         )
 
     payload_text = str(rule_config_json or "").strip()
@@ -1490,7 +1493,7 @@ async def update_yasa_rule_config(
         if normalized_language not in _SUPPORTED_YASA_LANGUAGES:
             raise HTTPException(
                 status_code=400,
-                detail="language 无效，YASA 仅支持 python/javascript/typescript/golang/java",
+                detail="language 无效，YASA 仅支持 java/golang/typescript/python",
             )
         row.language = normalized_language
     if request.name is not None:
@@ -1571,7 +1574,7 @@ async def list_yasa_rules(
                 status_code=400,
                 detail=(
                     f"不支持语言: {normalized_language}，"
-                    "YASA 仅支持 python/javascript/typescript/golang/java"
+                    "YASA 仅支持 java/golang/typescript/python"
                 ),
             )
         rules = [item for item in rules if normalized_language in item.languages]

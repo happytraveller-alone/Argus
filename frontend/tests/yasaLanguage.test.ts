@@ -7,17 +7,22 @@ import {
   resolveYasaLanguageFromProgrammingLanguages,
 } from "../src/shared/utils/yasaLanguage.ts";
 
-test("isYasaBlockedProjectLanguage blocks C/C++ aliases", () => {
-  assert.equal(isYasaBlockedProjectLanguage('["cpp","java"]'), true);
-  assert.equal(isYasaBlockedProjectLanguage("c++,python"), true);
-  assert.equal(isYasaBlockedProjectLanguage(["cc", "golang"]), true);
+test("isYasaBlockedProjectLanguage blocks projects without whitelist languages", () => {
+  assert.equal(isYasaBlockedProjectLanguage('["cpp","java"]'), false);
+  assert.equal(isYasaBlockedProjectLanguage("c++,python"), false);
+  assert.equal(isYasaBlockedProjectLanguage(["cc", "golang"]), false);
+  assert.equal(isYasaBlockedProjectLanguage('["typescript","swift"]'), false);
+  assert.equal(isYasaBlockedProjectLanguage('["javascript"]'), true);
   assert.equal(isYasaBlockedProjectLanguage('["java","python"]'), false);
 });
 
-test("resolveYasaLanguageFromProgrammingLanguages returns null for blocked C/C++ projects", () => {
-  assert.equal(resolveYasaLanguageFromProgrammingLanguages('["cpp","java"]'), null);
+test("resolveYasaLanguageFromProgrammingLanguages returns null for blocked projects", () => {
+  assert.equal(resolveYasaLanguageFromProgrammingLanguages('["javascript"]'), null);
 });
 
 test("getYasaBlockedProjectMessage returns fixed user-facing copy", () => {
-  assert.equal(getYasaBlockedProjectMessage(), "YASA 引擎暂不支持 C/C++ 项目");
+  assert.equal(
+    getYasaBlockedProjectMessage(),
+    "YASA 引擎仅支持 Java / Go / TypeScript / Python 项目",
+  );
 });

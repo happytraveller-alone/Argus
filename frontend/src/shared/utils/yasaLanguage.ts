@@ -1,42 +1,26 @@
 const YASA_LANGUAGE_ALIAS: Record<string, string> = {
   py: "python",
   python: "python",
-  js: "javascript",
-  javascript: "javascript",
-  node: "javascript",
-  nodejs: "javascript",
   ts: "typescript",
   typescript: "typescript",
   go: "golang",
   golang: "golang",
   java: "java",
-  kotlin: "java",
-  scala: "java",
 };
-
-const YASA_BLOCKED_LANGUAGE_ALIASES = new Set([
-  "c",
-  "cpp",
-  "c++",
-  "cc",
-  "cxx",
-]);
 
 const YASA_LANGUAGE_PRIORITY = [
   "java",
   "golang",
-  "python",
   "typescript",
-  "javascript",
+  "python",
 ] as const;
 
 export const YASA_LANGUAGE_OPTIONS = [
   "auto",
-  "python",
-  "javascript",
-  "typescript",
-  "golang",
   "java",
+  "golang",
+  "typescript",
+  "python",
 ] as const;
 
 export type YasaLanguageOption = (typeof YASA_LANGUAGE_OPTIONS)[number];
@@ -73,16 +57,19 @@ function parseProgrammingLanguages(value: unknown): string[] {
 
 export function isYasaBlockedProjectLanguage(programmingLanguages: unknown): boolean {
   const parsed = parseProgrammingLanguages(programmingLanguages);
-  return parsed.some((item) => YASA_BLOCKED_LANGUAGE_ALIASES.has(String(item || "").trim().toLowerCase()));
+  if (parsed.length === 0) return true;
+  return !parsed.some((item) => {
+    const normalized = String(item || "").trim().toLowerCase();
+    return Boolean(YASA_LANGUAGE_ALIAS[normalized]);
+  });
 }
 
 export function parseYasaLanguageOption(value: unknown): YasaLanguageOption {
   const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "python") return "python";
-  if (normalized === "javascript") return "javascript";
-  if (normalized === "typescript") return "typescript";
-  if (normalized === "golang") return "golang";
   if (normalized === "java") return "java";
+  if (normalized === "golang") return "golang";
+  if (normalized === "typescript") return "typescript";
+  if (normalized === "python") return "python";
   return "auto";
 }
 
@@ -91,12 +78,6 @@ export function resolveYasaLanguageFromProgrammingLanguages(
 ): string | null {
   const parsedLanguages = parseProgrammingLanguages(programmingLanguages);
   if (isYasaBlockedProjectLanguage(parsedLanguages)) return null;
-  // YASA auto policy: PHP-like projects should be skipped even if other
-  // supported languages are also detected.
-  const hasPhpLikeLanguage = parsedLanguages.some((item) =>
-    String(item || "").trim().toLowerCase().startsWith("php"),
-  );
-  if (hasPhpLikeLanguage) return null;
 
   const candidates = parsedLanguages
     .map((item) => YASA_LANGUAGE_ALIAS[String(item || "").trim().toLowerCase()])
@@ -113,11 +94,11 @@ export function resolveYasaLanguageFromProgrammingLanguages(
 
 export function getYasaUnsupportedLanguageMessage(language?: string): string {
   if (language?.trim()) {
-    return `不支持语言: ${language.trim().toLowerCase()}，YASA 仅支持 python/javascript/typescript/golang/java`;
+    return `不支持语言: ${language.trim().toLowerCase()}，YASA 仅支持 java/golang/typescript/python`;
   }
   return "未检测到可用于 YASA 的项目语言，请在创建时手动指定支持语言";
 }
 
 export function getYasaBlockedProjectMessage(): string {
-  return "YASA 引擎暂不支持 C/C++ 项目";
+  return "YASA 引擎仅支持 Java / Go / TypeScript / Python 项目";
 }

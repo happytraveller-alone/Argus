@@ -118,7 +118,7 @@ test("buildHybridStaticBootstrapConfig omits yasa_rule_config_id for default sel
       gitleaksEnabled: false,
       phpstanEnabled: true,
       yasaEnabled: true,
-      yasaLanguage: "javascript",
+      yasaLanguage: "typescript",
       selectedYasaRuleConfigId: "default",
     }),
     {
@@ -128,7 +128,7 @@ test("buildHybridStaticBootstrapConfig omits yasa_rule_config_id for default sel
       gitleaks_enabled: false,
       phpstan_enabled: true,
       yasa_enabled: true,
-      yasa_language: "javascript",
+      yasa_language: "typescript",
       yasa_rule_config_id: null,
     },
   );

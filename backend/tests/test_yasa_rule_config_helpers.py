@@ -48,15 +48,15 @@ def test_validate_checker_bindings_rejects_unknown_ids():
         raise AssertionError("Expected HTTPException")
 
 
-def test_assert_yasa_project_language_supported_rejects_c_cpp():
+def test_assert_yasa_project_language_supported_rejects_non_whitelist_language():
     class _Project:
-        programming_languages = '["cpp","java"]'
+        programming_languages = '["javascript"]'
 
     try:
         _assert_yasa_project_language_supported(_Project())
     except HTTPException as exc:
         assert exc.status_code == 400
-        assert "YASA 引擎暂不支持 C/C++ 项目" in str(exc.detail)
+        assert "YASA 引擎仅支持 Java / Go / TypeScript / Python 项目" in str(exc.detail)
     else:
         raise AssertionError("Expected HTTPException")
 

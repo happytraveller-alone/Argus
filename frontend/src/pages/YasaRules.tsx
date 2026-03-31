@@ -359,11 +359,10 @@ function buildColumns(
 				label: "编程语言",
 				filterVariant: "select",
 				filterOptions: [
-					{ label: "python", value: "python" },
-					{ label: "javascript", value: "javascript" },
-					{ label: "typescript", value: "typescript" },
-					{ label: "golang", value: "golang" },
 					{ label: "java", value: "java" },
+					{ label: "golang", value: "golang" },
+					{ label: "typescript", value: "typescript" },
+					{ label: "python", value: "python" },
 				],
 			},
 			filterFn: (row, filterValue) => {
@@ -1140,11 +1139,10 @@ export default function YasaRules({
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="python">python</SelectItem>
-									<SelectItem value="javascript">javascript</SelectItem>
-									<SelectItem value="typescript">typescript</SelectItem>
-									<SelectItem value="golang">golang</SelectItem>
 									<SelectItem value="java">java</SelectItem>
+									<SelectItem value="golang">golang</SelectItem>
+									<SelectItem value="typescript">typescript</SelectItem>
+									<SelectItem value="python">python</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>

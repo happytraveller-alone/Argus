@@ -208,7 +208,7 @@ export interface AgentStaticBootstrapScope {
   gitleaks_enabled?: boolean;
   phpstan_enabled?: boolean;
   yasa_enabled?: boolean;
-  yasa_language?: "python" | "javascript" | "typescript" | "golang" | "java" | "auto";
+  yasa_language?: "java" | "golang" | "typescript" | "python" | "auto";
   yasa_rule_config_id?: string | null;
 }
 

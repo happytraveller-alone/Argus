@@ -844,7 +844,7 @@ async def _prepare_embedded_bootstrap_findings(
 
     if yasa_enabled:
         if is_yasa_blocked_project_language(programming_languages):
-            skip_reason = "YASA 引擎暂不支持 C/C++ 项目"
+            skip_reason = "YASA 引擎仅支持 Java / Go / TypeScript / Python 项目"
             if event_emitter:
                 await event_emitter.emit_info(
                     skip_reason,
@@ -854,7 +854,7 @@ async def _prepare_embedded_bootstrap_findings(
                         "bootstrap_source": "embedded_yasa_skipped",
                         "bootstrap_yasa_skipped_reason": skip_reason,
                         "bootstrap_yasa_requested_language": yasa_language or "auto",
-                        "blocked_reason": "c_cpp_unsupported",
+                        "blocked_reason": "unsupported_project_language",
                     },
                 )
             yasa_candidates = []

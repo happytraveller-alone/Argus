@@ -369,7 +369,7 @@ export default function CreateScanTaskDialog({
 		if (shouldRunYasa && !requestedYasaLanguage) {
 			shouldRunYasa = false;
 			toast.info(
-				"YASA 已跳过：未检测到可支持语言（支持 python/javascript/typescript/golang/java）",
+				"YASA 已跳过：未检测到可支持语言（支持 java/golang/typescript/python）",
 			);
 		}
 		if (

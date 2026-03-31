@@ -166,11 +166,10 @@ export function StaticEngineConfigDialogContent({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="auto">自动识别</SelectItem>
-                  <SelectItem value="python">python</SelectItem>
-                  <SelectItem value="javascript">javascript</SelectItem>
-                  <SelectItem value="typescript">typescript</SelectItem>
-                  <SelectItem value="golang">golang</SelectItem>
                   <SelectItem value="java">java</SelectItem>
+                  <SelectItem value="golang">golang</SelectItem>
+                  <SelectItem value="typescript">typescript</SelectItem>
+                  <SelectItem value="python">python</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -4,17 +4,16 @@ import json
 from typing import Any, Dict, List, Optional
 
 YASA_SUPPORTED_LANGUAGES: tuple[str, ...] = (
-    "python",
-    "javascript",
-    "typescript",
-    "golang",
     "java",
+    "golang",
+    "typescript",
+    "python",
 )
 
 YASA_SUPPORTED_LANGUAGES_TEXT = "/".join(YASA_SUPPORTED_LANGUAGES)
 
 YASA_LANGUAGE_ERROR_TEMPLATE = (
-    "不支持语言: {language}，YASA 仅支持 python/javascript/typescript/golang/java"
+    "不支持语言: {language}，YASA 仅支持 java/golang/typescript/python"
 )
 
 YASA_PROFILE_MAPPING: Dict[str, Dict[str, str]] = {
@@ -22,11 +21,6 @@ YASA_PROFILE_MAPPING: Dict[str, Dict[str, str]] = {
         "language": "python",
         "checker_pack": "taint-flow-python-default",
         "rule_config": "rule_config_python.json",
-    },
-    "javascript": {
-        "language": "javascript",
-        "checker_pack": "taint-flow-javascript-default",
-        "rule_config": "rule_config_js.json",
     },
     "typescript": {
         "language": "typescript",
@@ -48,33 +42,18 @@ YASA_PROFILE_MAPPING: Dict[str, Dict[str, str]] = {
 _YASA_LANGUAGE_ALIAS: Dict[str, str] = {
     "py": "python",
     "python": "python",
-    "js": "javascript",
-    "javascript": "javascript",
-    "node": "javascript",
-    "nodejs": "javascript",
     "ts": "typescript",
     "typescript": "typescript",
     "go": "golang",
     "golang": "golang",
     "java": "java",
-    "kotlin": "java",
-    "scala": "java",
-}
-
-_YASA_BLOCKED_LANGUAGE_ALIASES: set[str] = {
-    "c",
-    "cpp",
-    "c++",
-    "cc",
-    "cxx",
 }
 
 _YASA_LANGUAGE_PRIORITY: tuple[str, ...] = (
     "java",
     "golang",
-    "python",
     "typescript",
-    "javascript",
+    "python",
 )
 
 
@@ -105,11 +84,15 @@ def parse_programming_languages(raw_languages: Any) -> List[str]:
 
 def is_yasa_blocked_project_language(raw_languages: Any) -> bool:
     project_languages = parse_programming_languages(raw_languages)
+    if not project_languages:
+        return True
+
     for item in project_languages:
         normalized = str(item or "").strip().lower()
-        if normalized in _YASA_BLOCKED_LANGUAGE_ALIASES:
-            return True
-    return False
+        resolved = _YASA_LANGUAGE_ALIAS.get(normalized)
+        if resolved and resolved in YASA_SUPPORTED_LANGUAGES:
+            return False
+    return True
 
 
 def normalize_yasa_language(
@@ -162,11 +145,6 @@ def resolve_yasa_language_with_preference(
         return None
     if normalized_preference and normalized_preference != "auto":
         return normalized_preference
-    # YASA auto policy: PHP-like projects should be skipped even if other
-    # supported languages are also detected.
-    project_languages = parse_programming_languages(programming_languages)
-    if any(str(item).strip().lower().startswith("php") for item in project_languages):
-        return None
     return resolve_yasa_language_from_programming_languages(programming_languages)
 
 

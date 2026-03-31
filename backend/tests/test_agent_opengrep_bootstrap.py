@@ -817,13 +817,13 @@ def test_resolve_static_bootstrap_config_accepts_manual_yasa_language():
             "static_bootstrap": {
                 "mode": "embedded",
                 "yasa_enabled": True,
-                "yasa_language": "javascript",
+                "yasa_language": "typescript",
             }
         }
     )
     config = _resolve_static_bootstrap_config(task, source_mode="hybrid")
     assert config["yasa_enabled"] is True
-    assert config["yasa_language"] == "javascript"
+    assert config["yasa_language"] == "typescript"
 
 
 def test_resolve_static_bootstrap_config_preserves_yasa_rule_config_id():

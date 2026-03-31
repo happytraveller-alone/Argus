@@ -60,11 +60,10 @@ export function buildHybridStaticBootstrapConfig(params: {
 		phpstan_enabled: params.phpstanEnabled,
 		yasa_enabled: params.yasaEnabled,
 		yasa_language: params.yasaLanguage as
-			| "python"
-			| "javascript"
-			| "typescript"
-			| "golang"
 			| "java"
+			| "golang"
+			| "typescript"
+			| "python"
 			| "auto",
 		yasa_rule_config_id:
 			params.selectedYasaRuleConfigId !== "default"

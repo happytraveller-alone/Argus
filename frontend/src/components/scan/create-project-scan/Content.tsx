@@ -172,7 +172,7 @@ export default function CreateProjectScanDialogContent({
   setYasaEnabled: (enabled: boolean) => void;
   pmdEnabled: boolean;
   setPmdEnabled: (enabled: boolean) => void;
-  yasaLanguage: "auto" | "python" | "javascript" | "typescript" | "golang" | "java";
+  yasaLanguage: "auto" | "java" | "golang" | "typescript" | "python";
   setYasaLanguage: (language: string) => void;
   yasaRuleConfigs: YasaRuleConfigItem[];
   selectedYasaRuleConfigId: string;
