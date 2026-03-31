@@ -175,7 +175,9 @@ function forwardSignal(child, signal) {
 }
 
 export async function main() {
-  const appDir = process.cwd();
+  const appDir = process.env.FRONTEND_WORKDIR
+    ? path.resolve(process.env.FRONTEND_WORKDIR)
+    : process.cwd();
   configurePnpm(appDir);
 
   const installState = determineInstallState({ appDir });
