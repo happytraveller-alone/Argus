@@ -463,6 +463,12 @@ async def _execute_pmd_scan(
         if workspace_dir is not None:
             cleanup_scan_workspace("pmd", task_id)
         _clear_scan_task_cancel("pmd", task_id)
+        if project_root and project_root.startswith("/tmp") and os.path.exists(project_root):
+            try:
+                shutil.rmtree(project_root, ignore_errors=True)
+                logger.info(f"Cleaned up temporary project directory: {project_root}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary directory {project_root}: {e}")
 
 
 async def _get_custom_rule_config_or_404(db: AsyncSession, rule_config_id: str) -> PmdRuleConfig:

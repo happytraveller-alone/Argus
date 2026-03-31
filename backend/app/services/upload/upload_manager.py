@@ -130,9 +130,10 @@ class UploadManager:
             
             # 只返回前 N 个文件
             if len(file_list) > limit:
+                total_files = len(file_list)
                 file_list = file_list[:limit]
                 file_list.append({
-                    'path': f'... 还有 {len(file_list) - limit} 个文件',
+                    'path': f'... 还有 {total_files - limit} 个文件',
                     'size': 0
                 })
             

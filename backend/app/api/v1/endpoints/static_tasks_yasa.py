@@ -1129,6 +1129,12 @@ async def _execute_yasa_scan(
         if workspace_dir is not None:
             cleanup_scan_workspace("yasa", task_id)
         _clear_scan_task_cancel("yasa", task_id)
+        if project_root and project_root.startswith("/tmp") and os.path.exists(project_root):
+            try:
+                shutil.rmtree(project_root, ignore_errors=True)
+                logger.info(f"Cleaned up temporary project directory: {project_root}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary directory {project_root}: {e}")
 
 
 @router.get("/yasa/runtime-config", response_model=YasaRuntimeConfigResponse)

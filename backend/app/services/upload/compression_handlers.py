@@ -1,13 +1,25 @@
 import zipfile
 import tarfile
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 from .compression_strategy import CompressionStrategy
 
 
-def _preserve_tarinfo(tarinfo: tarfile.TarInfo) -> tarfile.TarInfo:
-    """Keep each TarInfo untouched so extraction metadata is preserved."""
+def _preserve_tarinfo(
+    tarinfo: tarfile.TarInfo,
+    path: str,
+) -> Optional[tarfile.TarInfo]:
+    """
+    Tar extraction filter.
+
+    Python 3.12+ passes both `(tarinfo, path)` into the callback.
+    Prefer the stdlib data filter when available for safer extraction,
+    while keeping backward compatibility.
+    """
+    data_filter = getattr(tarfile, "data_filter", None)
+    if callable(data_filter):
+        return data_filter(tarinfo, path)
     return tarinfo
 
 

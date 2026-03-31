@@ -597,6 +597,12 @@ async def _execute_bandit_scan(
         if workspace_dir is not None:
             cleanup_scan_workspace("bandit", task_id)
         _clear_scan_task_cancel("bandit", task_id)
+        if project_root and project_root.startswith("/tmp") and os.path.exists(project_root):
+            try:
+                shutil.rmtree(project_root, ignore_errors=True)
+                logger.info(f"Cleaned up temporary project directory: {project_root}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary directory {project_root}: {e}")
 
 
 @router.get("/bandit/rules", response_model=List[BanditRuleResponse])
@@ -762,7 +768,7 @@ async def update_bandit_rule_enabled(
 
 
 @router.post("/bandit/rules/batch-enabled")
-@router.post("/bandit/rules/batch/enabled")
+@router.post("/bandit/rules/batch/enabled", include_in_schema=False)
 async def batch_update_bandit_rules_enabled(
     request: BanditRuleBatchEnabledUpdateRequest,
     db: AsyncSession = Depends(get_db),
@@ -913,7 +919,7 @@ async def restore_bandit_rule(
 
 
 @router.post("/bandit/rules/batch-delete")
-@router.post("/bandit/rules/batch/delete")
+@router.post("/bandit/rules/batch/delete", include_in_schema=False)
 async def batch_delete_bandit_rules(
     request: BanditRuleBatchDeletedUpdateRequest,
     db: AsyncSession = Depends(get_db),
@@ -930,7 +936,7 @@ async def batch_delete_bandit_rules(
 
 
 @router.post("/bandit/rules/batch-restore")
-@router.post("/bandit/rules/batch/restore")
+@router.post("/bandit/rules/batch/restore", include_in_schema=False)
 async def batch_restore_bandit_rules(
     request: BanditRuleBatchDeletedUpdateRequest,
     db: AsyncSession = Depends(get_db),
