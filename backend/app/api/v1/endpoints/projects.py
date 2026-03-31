@@ -17,6 +17,7 @@ router.include_router(_crud.router)
 create_project = _crud.create_project
 read_projects = _crud.read_projects
 read_project = _crud.read_project
+download_project_archive = _crud.download_project_archive
 get_project_info = _crud.get_project_info
 update_project = _crud.update_project
 

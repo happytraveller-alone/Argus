@@ -6,6 +6,22 @@ from app.services.project_metrics import project_metrics_refresher
 router = APIRouter()
 
 
+def _build_archive_download_name(project: Project, project_id: str) -> str:
+    """
+    构建下载文件名：优先使用项目 name，并规范为 zip 后缀。
+    """
+    raw_name = (project.name or "").strip()
+    candidate = raw_name or project_id
+    candidate = candidate.replace("/", "_").replace("\\", "_")
+    candidate = candidate.replace("\r", "").replace("\n", "").replace("\x00", "")
+    candidate = candidate.strip()
+    if not candidate:
+        candidate = project_id
+    if not candidate.lower().endswith(".zip"):
+        candidate = f"{candidate}.zip"
+    return candidate
+
+
 @router.post("/", response_model=ProjectResponse)
 async def create_project(
     *,
@@ -78,6 +94,33 @@ async def read_project(
     # 检查权限：只有项目所有者可以查看
 
     return project
+
+
+@router.get("/{project_id}/archive")
+async def download_project_archive(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> FileResponse:
+    """
+    根据 project_id 下载本地保存的项目压缩包，下载名称与项目 name 同名。
+    """
+    project = await db.get(Project, project_id)
+    _raise_if_project_hidden(project)
+
+    if project.source_type != "zip":
+        raise HTTPException(status_code=400, detail="仅ZIP类型项目支持下载压缩包")
+
+    zip_path = await load_project_zip(project_id)
+    if not zip_path or not os.path.exists(zip_path):
+        raise HTTPException(status_code=404, detail="未找到项目压缩包")
+
+    archive_filename = _build_archive_download_name(project, project_id)
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=archive_filename,
+    )
 
 
 @router.get("/info/{id}", response_model=ProjectInfoResponse)
