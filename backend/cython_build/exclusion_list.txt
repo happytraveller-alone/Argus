@@ -1,0 +1,20 @@
+# Cython 编译排除列表（相对于 backend/app/ 根目录）
+# 这些文件必须保留 .py 形式，不参与编译
+
+# Python 包标识文件（Cython 不编译 __init__.py，保持包结构）
+__init__.py
+
+# 应用入口点（CMD 直接引用）
+main.py
+runtime/container_startup.py
+
+# 启动器脚本（被 COPY --chmod=755 作为可执行文件直接调用）
+runtime/launchers/yasa_uast4py_launcher.py
+runtime/launchers/opengrep_launcher.py
+runtime/launchers/phpstan_launcher.py
+runtime/launchers/yasa_engine_launcher.py
+runtime/launchers/yasa_launcher.py
+
+# Alembic migration baseline（Alembic 框架要求源文件）
+db/schema_snapshots/baseline_5b0f3c9a6d7e.py
+db/patches/

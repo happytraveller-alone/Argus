@@ -433,10 +433,10 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'CMD ["python3", "/opt/flow-parser/flow_parser_runner.py", "--help"]' in flow_parser_runner_text
 
 
-def test_backend_dockerfile_uses_official_docker_cli_image_for_local_builds() -> None:
+def test_backend_dockerfile_derives_docker_cli_image_from_selected_mirror() -> None:
     backend_text = (REPO_ROOT / "docker" / "backend.Dockerfile").read_text(encoding="utf-8")
 
-    assert "ARG DOCKER_CLI_IMAGE=docker:cli" in backend_text
+    assert "ARG DOCKER_CLI_IMAGE=${DOCKERHUB_LIBRARY_MIRROR}/docker:cli" in backend_text
     assert "ARG DOCKER_CLI_IMAGE=docker.m.daocloud.io/docker:cli" not in backend_text
 
 

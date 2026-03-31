@@ -579,6 +579,64 @@ EXPOSE 8000
 
 CMD ["python3", "-m", "app.runtime.container_startup", "dev"]
 
+# ============================================================
+# Cython 编译阶段：将 Python 源码编译为 .so 扩展（代码混淆）
+# 基于 builder 阶段（已含 gcc、Python 头文件、完整 venv）
+# ============================================================
+FROM builder AS cython-compiler
+
+# 安装 Cython（builder 的 venv 中）
+RUN --mount=type=cache,id=vulhunter-cython-pip,target=/root/.cache/pip \
+    /opt/backend-venv/bin/pip install --quiet "Cython>=3.0.0,<4.0.0"
+
+# 复制源码和编译脚本
+COPY backend/app /build/app
+COPY backend/cython_build /build/cython_build
+
+# 执行编译，产物写入 /build/compiled/
+RUN set -eux; \
+    cd /build; \
+    /opt/backend-venv/bin/python cython_build/setup.py build_ext \
+        --build-lib /build/compiled \
+        --build-temp /build/tmp; \
+    SO_COUNT=$(find /build/compiled -name "*.so" | wc -l); \
+    echo "[Cython] 编译完成，.so 文件数: ${SO_COUNT}"; \
+    test "${SO_COUNT}" -gt 50
+
+# ============================================================
+# 组装最终 app/ 目录：.so 编译产物 + 必须保留 .py 的文件
+# ============================================================
+FROM cython-compiler AS runtime-app-assembler
+
+RUN set -eux; \
+    mkdir -p /final/app; \
+    # 1. 复制所有 .so 编译产物（按包路径排列）
+    cp -r /build/compiled/app/. /final/app/; \
+    # 2. 复制所有 __init__.py（Cython 不编译它们，保持包结构）
+    find /build/app -name "__init__.py" | while IFS= read -r f; do \
+        rel="${f#/build/app/}"; \
+        mkdir -p "/final/app/$(dirname "${rel}")"; \
+        cp "${f}" "/final/app/${rel}"; \
+    done; \
+    # 3. 复制入口文件（CMD 直接引用，必须保留 .py）
+    cp /build/app/main.py /final/app/main.py; \
+    mkdir -p /final/app/runtime; \
+    cp /build/app/runtime/container_startup.py /final/app/runtime/container_startup.py; \
+    # 4. 复制 launchers 目录（COPY --chmod=755 可执行脚本）
+    cp -r /build/app/runtime/launchers /final/app/runtime/launchers; \
+    # 5. 复制 schema_snapshots 目录（Alembic baseline）
+    mkdir -p /final/app/db; \
+    cp -r /build/app/db/schema_snapshots /final/app/db/schema_snapshots; \
+    # 6. 复制 patches 目录（若存在）
+    if [ -d /build/app/db/patches ]; then \
+        cp -r /build/app/db/patches /final/app/db/patches; \
+    fi; \
+    # 验证：核心 .so 文件存在
+    echo "[Assembler] 验证关键 .so 文件:"; \
+    ls /final/app/core/*.so 2>/dev/null | head -5; \
+    ls /final/app/services/agent/*.so 2>/dev/null | head -5; \
+    echo "[Assembler] 组装完成"
+
 FROM runtime-base AS runtime
 
 # 提前复制 builder 产物，避免 runtime 与 builder 并行下载导致网络争抢
@@ -605,13 +663,16 @@ RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/ru
 
 
 # 仅复制运行时所需代码与脚本，避免把测试/文档打进运行镜像
-COPY backend/app /app/app
+# 使用 Cython 编译产物（.so）替代 Python 源码，实现代码混淆
+COPY --from=runtime-app-assembler /final/app /app/app
+# 删除残留的 .c 中间文件（若有）
+RUN find /app/app -name "*.c" -delete 2>/dev/null || true
 COPY backend/static /app/static
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
 COPY docker /opt/backend-build-context/docker
-COPY backend/app /opt/backend-build-context/backend/app
+COPY --from=runtime-app-assembler /final/app /opt/backend-build-context/backend/app
 COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
 COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py
 COPY frontend/yasa-engine-overrides /opt/backend-build-context/frontend/yasa-engine-overrides
@@ -621,5 +682,17 @@ RUN mkdir -p /app/uploads/zip_files /app/data/runtime /app/data/runtime/xdg-conf
 
 # 暴露端口
 EXPOSE 8000
+
+# 验证核心模块可从 .so 正确导入（确保 Cython 编译产物完整）
+RUN /opt/backend-venv/bin/python - <<'PYEOF'
+import importlib.util
+mods = ['app.core.config', 'app.services.agent.config', 'app.db.session']
+for mod_name in mods:
+    spec = importlib.util.find_spec(mod_name)
+    assert spec is not None, 'Module ' + mod_name + ' not found'
+    assert spec.origin.endswith('.so'), 'Expected .so for ' + mod_name + ', got ' + spec.origin
+    print('[Cython] ' + mod_name + ': OK (' + spec.origin.split('/')[-1] + ')')
+print('[Cython] All core module verifications PASSED')
+PYEOF
 
 CMD ["python3", "-m", "app.runtime.container_startup", "prod"]

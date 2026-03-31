@@ -7,18 +7,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_backend_dockerfile_uses_official_docker_cli_image_for_local_builds() -> None:
+def test_backend_dockerfile_derives_docker_cli_image_from_selected_mirror() -> None:
     dockerfile_text = (REPO_ROOT / "docker" / "backend.Dockerfile").read_text(encoding="utf-8")
 
-    assert "ARG DOCKER_CLI_IMAGE=docker:cli" in dockerfile_text
+    assert "ARG DOCKER_CLI_IMAGE=${DOCKERHUB_LIBRARY_MIRROR}/docker:cli" in dockerfile_text
     assert "ARG DOCKER_CLI_IMAGE=docker.m.daocloud.io/docker:cli" not in dockerfile_text
 
 
-def test_full_overlay_prefers_official_dockerhub_mirror_for_local_builds() -> None:
-    compose_text = (REPO_ROOT / "docker-compose.full.yml").read_text(encoding="utf-8")
+def test_local_build_script_prefers_official_dockerhub_defaults_for_local_builds() -> None:
+    script_text = (REPO_ROOT / "scripts" / "compose-up-local-build.sh").read_text(encoding="utf-8")
 
-    assert "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.io/library}" in compose_text
-    assert "DOCKER_CLI_IMAGE=${DOCKER_CLI_IMAGE:-docker:cli}" in compose_text
+    assert 'export DOCKERHUB_LIBRARY_MIRROR="${DOCKERHUB_LIBRARY_MIRROR:-docker.io/library}"' in script_text
+    assert 'export DOCKER_CLI_IMAGE="${DOCKER_CLI_IMAGE:-docker:cli}"' in script_text
 
 
 def test_local_build_script_builds_services_sequentially_before_up() -> None:

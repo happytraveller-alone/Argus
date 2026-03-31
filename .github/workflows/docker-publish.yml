@@ -87,6 +87,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write      # Cosign keyless signing 所需
+      attestations: write  # SBOM attestation 所需
 
     steps:
       - name: 检出代码
@@ -137,6 +139,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: 安装 Cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.3'
+
+      - name: 安装 Syft (SBOM 生成)
+        uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: 'v1.18.0'
+
       - name: 设置 QEMU
         uses: docker/setup-qemu-action@v4
 
@@ -144,6 +156,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: 构建并推送前端 Docker 镜像
+        id: build-frontend
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -157,7 +170,22 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
+      - name: 签名前端镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_frontend == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-frontend.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-frontend.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-frontend.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
+
       - name: 构建并推送后端 Docker 镜像
+        id: build-backend
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_backend == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -171,7 +199,22 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
+      - name: 签名后端镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_backend == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-backend.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-backend.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-backend.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
+
       - name: 构建并推送 YASA runner Docker 镜像
+        id: build-yasa
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_yasa_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -185,7 +228,22 @@ jobs:
           cache-from: type=gha,scope=yasa-runner
           cache-to: type=gha,mode=max,scope=yasa-runner
 
+      - name: 签名 YASA runner 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_yasa_runner == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-yasa.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-yasa-runner
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-yasa-runner.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-yasa-runner.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
+
       - name: 构建并推送 OpenGrep runner Docker 镜像
+        id: build-opengrep
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_opengrep_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -199,7 +257,22 @@ jobs:
           cache-from: type=gha,scope=opengrep-runner
           cache-to: type=gha,mode=max,scope=opengrep-runner
 
+      - name: 签名 OpenGrep runner 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_opengrep_runner == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-opengrep.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-opengrep-runner
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-opengrep-runner.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-opengrep-runner.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
+
       - name: 构建并推送 Bandit runner Docker 镜像
+        id: build-bandit
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_bandit_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -213,7 +286,22 @@ jobs:
           cache-from: type=gha,scope=bandit-runner
           cache-to: type=gha,mode=max,scope=bandit-runner
 
+      - name: 签名 Bandit runner 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_bandit_runner == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-bandit.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-bandit-runner
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-bandit-runner.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-bandit-runner.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
+
       - name: 构建并推送 Gitleaks runner Docker 镜像
+        id: build-gitleaks
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_gitleaks_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -227,7 +315,22 @@ jobs:
           cache-from: type=gha,scope=gitleaks-runner
           cache-to: type=gha,mode=max,scope=gitleaks-runner
 
+      - name: 签名 Gitleaks runner 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_gitleaks_runner == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-gitleaks.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-gitleaks-runner
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-gitleaks-runner.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-gitleaks-runner.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
+
       - name: 构建并推送 PHPStan runner Docker 镜像
+        id: build-phpstan
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_phpstan_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -241,7 +344,22 @@ jobs:
           cache-from: type=gha,scope=phpstan-runner
           cache-to: type=gha,mode=max,scope=phpstan-runner
 
+      - name: 签名 PHPStan runner 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_phpstan_runner == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-phpstan.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-phpstan-runner
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-phpstan-runner.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-phpstan-runner.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
+
       - name: 构建并推送 flow/parser runner Docker 镜像
+        id: build-flow-parser
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_flow_parser_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -255,7 +373,22 @@ jobs:
           cache-from: type=gha,scope=flow-parser-runner
           cache-to: type=gha,mode=max,scope=flow-parser-runner
 
+      - name: 签名 flow-parser runner 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_flow_parser_runner == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-flow-parser.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-flow-parser-runner
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-flow-parser-runner.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-flow-parser-runner.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
+
       - name: 构建并推送 PMD runner Docker 镜像
+        id: build-pmd
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_pmd_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -268,6 +401,20 @@ jobs:
             ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-pmd-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=pmd-runner
           cache-to: type=gha,mode=max,scope=pmd-runner
+
+      - name: 签名 PMD runner 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_pmd_runner == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-pmd.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-pmd-runner
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-pmd-runner.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-pmd-runner.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
 
       - name: 构建并推送沙箱 Docker 镜像
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_sandbox == 'true' }}
@@ -284,6 +431,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=sandbox
 
       - name: 构建并推送 sandbox-runner Docker 镜像
+        id: build-sandbox-runner
         if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_sandbox_runner == 'true' }}
         uses: docker/build-push-action@v7
         with:
@@ -296,6 +444,20 @@ jobs:
             ${{ steps.image-tag.outputs.build_all == 'true' && format('{0}/{1}/vulhunter-sandbox-runner:latest', env.GHCR_REGISTRY, env.VULHUNTER_IMAGE_NAMESPACE) || '' }}
           cache-from: type=gha,scope=sandbox-runner
           cache-to: type=gha,mode=max,scope=sandbox-runner
+
+      - name: 签名 sandbox-runner 镜像
+        if: ${{ steps.image-tag.outputs.build_all == 'true' || github.event.inputs.build_sandbox_runner == 'true' }}
+        env:
+          DIGEST: ${{ steps.build-sandbox-runner.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox-runner
+          TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          cosign sign --yes "${IMAGE}:${TAG}@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-sandbox-runner.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-sandbox-runner.spdx.json \
+            --type spdx \
+            "${IMAGE}:${TAG}@${DIGEST}"
 
       - name: 构建并推送 nexus-web Docker 镜像
         if: ${{ github.event.inputs.build_nexus_web == 'true' }}

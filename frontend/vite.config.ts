@@ -1,10 +1,59 @@
-import { defineConfig } from "vite";
+import { defineConfig, type ConfigEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import svgr from "vite-plugin-svgr";
 import path from "path";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }: ConfigEnv) => {
+  const isProduction = mode === "production";
+
+  // 仅在生产构建时加载混淆插件，避免开发模式性能损耗
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const obfuscatorPlugin = isProduction
+    ? (() => {
+        const { default: javascriptObfuscator } = require("vite-plugin-javascript-obfuscator");
+        return javascriptObfuscator({
+          options: {
+            // 标识符混淆（低成本高收益）
+            identifierNamesGenerator: "hexadecimal",
+            renameGlobals: false,        // 不重命名全局：避免破坏 React 运行时
+
+            // 字符串混淆（中等成本，SSE 安全）
+            stringArray: true,
+            stringArrayEncoding: ["base64"],
+            stringArrayThreshold: 0.75,  // 75% 字符串被混淆
+            stringArrayRotate: true,
+            stringArrayShuffle: true,
+            splitStrings: false,          // 关闭：避免破坏 EventSource URL 构造
+
+            // 关闭高风险选项
+            controlFlowFlattening: false, // 关闭：构建时间翻倍，SSE 处理器有风险
+            selfDefending: false,         // 关闭：与 React 不兼容
+            debugProtection: false,       // 关闭：会破坏 SSE DevTools 调试
+
+            // 适度保护
+            disableConsoleOutput: true,
+            deadCodeInjection: false,     // 关闭：显著增加包体积
+            unicodeEscapeSequence: false, // 关闭：大幅增加体积
+
+            // 构建配置
+            sourceMap: false,
+            target: "browser",
+          },
+          // 只混淆应用自身入口 chunk，跳过第三方依赖 chunk
+          include: ["**/assets/index-*.js"],
+          exclude: [
+            "**/assets/vendor-*.js",
+            "**/assets/charts-*.js",
+            "**/assets/ai-*.js",
+            "**/assets/ui-*.js",
+            "**/assets/utils-*.js",
+          ],
+        });
+      })()
+    : null;
+
+  return {
   envDir: path.resolve(__dirname, "../docker/env/frontend"),
   plugins: [
     react(),
@@ -15,6 +64,7 @@ export default defineConfig({
         namedExport: "ReactComponent",
       },
     }),
+    ...(obfuscatorPlugin ? [obfuscatorPlugin] : []),
   ],
   resolve: {
     alias: {
@@ -99,4 +149,5 @@ export default defineConfig({
       'sonner'
     ],
   },
+  };
 });
