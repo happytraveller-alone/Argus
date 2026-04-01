@@ -13,7 +13,6 @@ from app.api.v1.endpoints.static_tasks_shared import (
     cleanup_scan_workspace,
     copy_project_tree_to_scan_dir,
     ensure_scan_logs_dir,
-    ensure_scan_meta_dir,
     ensure_scan_output_dir,
     ensure_scan_project_dir,
     ensure_scan_workspace,
@@ -110,6 +109,8 @@ class YasaBootstrapScanner(StaticBootstrapScanner):
         custom_rule_config: Optional[YasaRuleConfig] = None,
     ):
         normalized = str(language or "").strip().lower() or "python"
+        if normalized in {"javascript", "js"}:
+            normalized = "typescript"
         self.profile = resolve_yasa_language_profile(normalized)
         configured_timeout = int(getattr(settings, "YASA_TIMEOUT_SECONDS", 600) or 600)
         self.timeout_seconds = max(1, int(timeout_seconds or configured_timeout))
@@ -163,7 +164,8 @@ class YasaBootstrapScanner(StaticBootstrapScanner):
         project_dir = ensure_scan_project_dir("yasa-bootstrap", task_id)
         output_dir = ensure_scan_output_dir("yasa-bootstrap", task_id)
         ensure_scan_logs_dir("yasa-bootstrap", task_id)
-        meta_dir = ensure_scan_meta_dir("yasa-bootstrap", task_id)
+        meta_dir = Path(workspace_dir) / "meta"
+        meta_dir.mkdir(parents=True, exist_ok=True)
         shutil.rmtree(project_dir, ignore_errors=True)
         copy_project_tree_to_scan_dir(project_root, project_dir)
         checker_pack_ids = [self.profile["checker_pack"]]

@@ -61,6 +61,7 @@ from app.services.yasa_language import (
     YASA_SUPPORTED_LANGUAGES,
     collect_yasa_language_counts_from_source_tree,
     is_yasa_blocked_project_language,
+    parse_programming_languages,
     resolve_yasa_language_from_source_tree,
     resolve_yasa_language_from_programming_languages,
     resolve_yasa_language_profile,
@@ -196,6 +197,28 @@ def _build_yasa_scan_task_response(task: YasaScanTask) -> YasaScanTaskResponse:
 
 
 _SUPPORTED_YASA_LANGUAGES = YASA_SUPPORTED_LANGUAGES
+YASA_SINGLE_FILE_TIMEOUT_SECONDS = 90
+
+_YASA_SCAN_SKIP_DIRS: set[str] = {
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    ".idea",
+    ".vscode",
+    "__pycache__",
+    ".next",
+    "vendor",
+}
+
+_YASA_FILE_SUFFIX_BY_LANGUAGE: dict[str, tuple[str, ...]] = {
+    "java": (".java",),
+    "golang": (".go",),
+    "typescript": (".ts", ".tsx"),
+    "javascript": (".js", ".jsx", ".ts", ".tsx"),
+    "python": (".py",),
+}
 
 
 def _normalize_csv(values: Optional[List[str]]) -> Optional[str]:
@@ -217,6 +240,58 @@ def _split_csv_form(value: Optional[str]) -> List[str]:
     return _split_csv(value)
 
 
+def _is_timeout_like_error(*texts: Optional[str]) -> bool:
+    for raw in texts:
+        text = str(raw or "").strip().lower()
+        if not text:
+            continue
+        if any(
+            token in text
+            for token in (
+                "timeout",
+                "timed out",
+                "time out",
+                "deadline exceeded",
+                "read timed out",
+            )
+        ):
+            return True
+    return False
+
+
+def _collect_yasa_scan_target_files(
+    *,
+    project_dir: Path,
+    full_target_path: str,
+    language: str,
+) -> List[Path]:
+    target = Path(full_target_path).resolve()
+    project_root = project_dir.resolve()
+    try:
+        target.relative_to(project_root)
+    except ValueError as exc:
+        raise ValueError(f"target path escapes project directory: {target}") from exc
+
+    if target.is_file():
+        return [target]
+
+    suffixes = _YASA_FILE_SUFFIX_BY_LANGUAGE.get(str(language or "").strip().lower(), tuple())
+    collected: List[Path] = []
+    for current_root, dirs, files in os.walk(target):
+        dirs[:] = [
+            dirname
+            for dirname in dirs
+            if dirname not in _YASA_SCAN_SKIP_DIRS and not dirname.startswith(".")
+        ]
+        for filename in files:
+            suffix = Path(filename).suffix.lower()
+            if suffixes and suffix not in suffixes:
+                continue
+            collected.append((Path(current_root) / filename).resolve())
+    collected.sort(key=lambda item: str(item).lower())
+    return collected
+
+
 def _resolve_language_profile(language: Optional[str]) -> Dict[str, str]:
     return resolve_yasa_language_profile(language)
 
@@ -229,7 +304,17 @@ def _detect_language_from_project(
     resolved_from_source = resolve_yasa_language_from_source_tree(project_root)
     if resolved_from_source:
         return resolved_from_source
-    return resolve_yasa_language_from_programming_languages(getattr(project, "programming_languages", None))
+    resolved = resolve_yasa_language_from_programming_languages(
+        getattr(project, "programming_languages", None)
+    )
+    if resolved:
+        return resolved
+
+    # Backward compatibility: keep legacy javascript marker discoverable in helper path.
+    for item in parse_programming_languages(getattr(project, "programming_languages", None)):
+        if str(item or "").strip().lower() in {"javascript", "js"}:
+            return "javascript"
+    return None
 
 
 def _assert_yasa_project_language_supported(project: Project) -> None:
@@ -640,7 +725,6 @@ async def _execute_yasa_scan(
     workspace_dir: Optional[Path] = None
     output_dir: Optional[Path] = None
     full_target_path: Optional[str] = None
-    runner_source_path = Path("/scan/project")
     active_container_id: Optional[str] = None
     runtime_config: Dict[str, int] = {}
 
@@ -748,9 +832,7 @@ async def _execute_yasa_scan(
             task.status = "running"
             await db.commit()
 
-        timeout_seconds = max(1, int(runtime_config["yasa_timeout_seconds"]))
-        heartbeat_seconds = max(1, int(runtime_config["yasa_exec_heartbeat_seconds"]))
-        orphan_stale_seconds = max(30, int(runtime_config["yasa_orphan_stale_seconds"]))
+        configured_timeout_seconds = max(1, int(runtime_config["yasa_timeout_seconds"]))
 
         workspace_dir = ensure_scan_workspace("yasa", task_id)
         project_dir = ensure_scan_project_dir("yasa", task_id)
@@ -839,52 +921,21 @@ async def _execute_yasa_scan(
                 if default_rule_config:
                     resolved_rule_config = default_rule_config
 
-        normalized_target_path = str(target_path or ".").strip()
-        if normalized_target_path not in {"", "."}:
-            runner_source_path = runner_source_path / normalized_target_path
-
-        cmd = build_yasa_scan_command(
-            binary=YASA_RUNNER_BINARY,
-            source_path=str(runner_source_path),
+        scan_targets = _collect_yasa_scan_target_files(
+            project_dir=project_dir,
+            full_target_path=full_target_path,
             language=normalized_language,
-            report_dir="/scan/output",
-            checker_pack_ids=packs,
-            checker_ids=checker_values,
-            rule_config_file=resolved_rule_config or None,
-            use_runner_paths=True,
         )
-
-        scan_started_at = datetime.utcnow()
-        orphan_since: Optional[datetime] = None
+        findings_payload: List[Dict[str, Any]] = []
+        timed_out_files: List[str] = []
+        files_scanned_successfully = 0
 
         def _on_container_started(container_id: str) -> None:
             nonlocal active_container_id
             active_container_id = container_id
             _register_scan_container("yasa", task_id, container_id)
 
-        process_future = asyncio.create_task(
-            run_scanner_container(
-                ScannerRunSpec(
-                    scanner_type="yasa",
-                    image=str(
-                        getattr(settings, "SCANNER_YASA_IMAGE", "vulhunter/yasa-runner:latest")
-                    ),
-                    workspace_dir=str(workspace_dir),
-                    command=cmd,
-                    timeout_seconds=timeout_seconds,
-                    env={"YASA_RESOURCE_DIR": YASA_RUNNER_RESOURCE_DIR},
-                    artifact_paths=["output/report.sarif"],
-                ),
-                on_container_started=_on_container_started,
-            )
-        )
-
-        process_result = None
-        while True:
-            if process_future.done():
-                process_result = await process_future
-                break
-
+        for index, absolute_file in enumerate(scan_targets, start=1):
             if _is_scan_task_cancelled("yasa", task_id):
                 await _stop_scan_container("yasa", task_id)
                 cleanup_stats = _force_cleanup_yasa_processes(
@@ -892,8 +943,6 @@ async def _execute_yasa_scan(
                     report_dir=str(output_dir) if output_dir is not None else None,
                     source_path=full_target_path,
                 )
-                if not process_future.done():
-                    process_future.cancel()
                 await _update_task_state(
                     "interrupted",
                     error_message="扫描任务已中止（用户操作）",
@@ -909,125 +958,107 @@ async def _execute_yasa_scan(
                 )
                 return
 
-            if active_container_id:
-                is_active = await asyncio.to_thread(
-                    _is_yasa_scan_container_active,
-                    active_container_id,
-                )
-                if not is_active:
-                    if orphan_since is None:
-                        orphan_since = datetime.utcnow()
-                    orphan_elapsed = int((datetime.utcnow() - orphan_since).total_seconds())
-                    if orphan_elapsed >= orphan_stale_seconds:
-                        await _stop_scan_container("yasa", task_id)
-                        cleanup_stats = _force_cleanup_yasa_processes(
-                            task_id=task_id,
-                            report_dir=str(output_dir) if output_dir is not None else None,
-                            source_path=full_target_path,
-                        )
-                        if not process_future.done():
-                            process_future.cancel()
-                        await _update_task_state(
-                            "interrupted",
-                            error_message="扫描容器丢失，已自动标记为中止",
-                            diagnostics_metadata={
-                                "termination_reason": "orphan_recovery",
-                                "runner_mode": "container",
-                                "orphan_recovered": True,
-                                "container_id": active_container_id,
-                                "process_cleanup_applied": bool(cleanup_stats["matched"]),
-                                "cleanup_matched": cleanup_stats["matched"],
-                                "cleanup_terminated": cleanup_stats["terminated"],
-                                "cleanup_killed": cleanup_stats["killed"],
-                            },
-                        )
-                        return
-                else:
-                    orphan_since = None
-            else:
-                startup_elapsed = int((datetime.utcnow() - scan_started_at).total_seconds())
-                if startup_elapsed >= orphan_stale_seconds:
-                    await _stop_scan_container("yasa", task_id)
-                    if not process_future.done():
-                        process_future.cancel()
-                    await _update_task_state(
-                        "interrupted",
-                        error_message="扫描容器未在预期时间内启动，已自动标记为中止",
-                        diagnostics_metadata={
-                            "termination_reason": "container_start_timeout",
-                            "runner_mode": "container",
-                            "orphan_recovered": True,
-                        },
-                    )
-                    return
+            relative_file = absolute_file.relative_to(project_dir)
+            runner_file = Path("/scan/project") / relative_file
+            report_subdir = Path("output") / f"file_{index:05d}"
+            runner_report_dir = str(Path("/scan") / report_subdir)
+            local_report_path = workspace_dir / report_subdir / "report.sarif"
 
-            await _touch_running_task()
-            await asyncio.sleep(heartbeat_seconds)
-
-        if process_result is None:
-            raise RuntimeError("YASA 执行结果为空")
-
-        if _is_scan_task_cancelled("yasa", task_id):
-            await _update_task_state(
-                "interrupted",
-                error_message="扫描任务已中止（用户操作）",
-                diagnostics_metadata={
-                    "termination_reason": "manual_interrupt",
-                    "runner_mode": "container",
-                    "container_id": active_container_id or "",
-                },
+            cmd = build_yasa_scan_command(
+                binary=YASA_RUNNER_BINARY,
+                source_path=str(runner_file),
+                language=normalized_language,
+                report_dir=runner_report_dir,
+                checker_pack_ids=packs,
+                checker_ids=checker_values,
+                rule_config_file=resolved_rule_config or None,
+                use_runner_paths=True,
             )
-            return
 
-        sarif_path = output_dir / "report.sarif"
-        findings_payload: List[Dict[str, Any]] = []
-        if sarif_path.exists():
             try:
-                sarif_data = json.loads(sarif_path.read_text(encoding="utf-8", errors="ignore"))
-                findings_payload = _parse_yasa_sarif_output(sarif_data)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Failed to parse YASA SARIF for task %s: %s", task_id, exc)
+                process_result = await run_scanner_container(
+                    ScannerRunSpec(
+                        scanner_type="yasa",
+                        image=str(
+                            getattr(settings, "SCANNER_YASA_IMAGE", "vulhunter/yasa-runner:latest")
+                        ),
+                        workspace_dir=str(workspace_dir),
+                        command=cmd,
+                        timeout_seconds=YASA_SINGLE_FILE_TIMEOUT_SECONDS,
+                        env={"YASA_RESOURCE_DIR": YASA_RUNNER_RESOURCE_DIR},
+                        artifact_paths=[str(report_subdir / "report.sarif")],
+                    ),
+                    on_container_started=_on_container_started,
+                )
+            except Exception as runner_exc:  # noqa: BLE001
+                # 兼容 docker-py 直接抛出的 ReadTimeout/timeout 异常：
+                # 单文件超时应跳过当前文件，而不是终止整个任务。
+                if _is_timeout_like_error(str(runner_exc)):
+                    timed_out_files.append(relative_file.as_posix())
+                    await _touch_running_task()
+                    continue
+                raise
 
-        if (not process_result.success or process_result.exit_code != 0) and not findings_payload:
-            stderr_text = ""
-            stdout_text = ""
-            if process_result.stderr_path:
-                stderr_text = Path(process_result.stderr_path).read_text(
-                    encoding="utf-8",
-                    errors="ignore",
-                ).strip()
-            if process_result.stdout_path:
-                stdout_text = Path(process_result.stdout_path).read_text(
-                    encoding="utf-8",
-                    errors="ignore",
-                ).strip()
-            diagnostics_log = _read_diagnostics_summary(str(output_dir))
-            short_message = (
-                str(process_result.error or "").strip()
-                or stderr_text
-                or stdout_text
-                or "YASA runner 执行失败"
-            )
-            await _update_task_state(
-                "failed",
-                error_message=short_message,
-                diagnostics_summary=_build_failure_diagnostics_summary(
-                    language=normalized_language,
-                    checker_packs=packs,
-                    rule_config_file=resolved_rule_config or None,
-                    source_path=str(runner_source_path),
-                    report_dir=str(output_dir),
-                    stderr_text=stderr_text,
-                    stdout_text=stdout_text,
-                    diagnostics_log=diagnostics_log,
-                ),
-                diagnostics_metadata={
-                    "termination_reason": "runner_failed",
-                    "runner_mode": "container",
-                    "timeout_seconds": timeout_seconds,
-                },
-            )
-            return
+            _pop_scan_container("yasa", task_id)
+            active_container_id = None
+
+            file_findings: List[Dict[str, Any]] = []
+            if local_report_path.exists():
+                try:
+                    sarif_data = json.loads(local_report_path.read_text(encoding="utf-8", errors="ignore"))
+                    file_findings = _parse_yasa_sarif_output(sarif_data)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Failed to parse YASA SARIF for task %s: %s", task_id, exc)
+
+            if (not process_result.success or process_result.exit_code != 0) and not file_findings:
+                stderr_text = ""
+                stdout_text = ""
+                if process_result.stderr_path:
+                    stderr_text = Path(process_result.stderr_path).read_text(
+                        encoding="utf-8",
+                        errors="ignore",
+                    ).strip()
+                if process_result.stdout_path:
+                    stdout_text = Path(process_result.stdout_path).read_text(
+                        encoding="utf-8",
+                        errors="ignore",
+                    ).strip()
+                if _is_timeout_like_error(process_result.error, stderr_text, stdout_text):
+                    timed_out_files.append(relative_file.as_posix())
+                    await _touch_running_task()
+                    continue
+
+                diagnostics_log = _read_diagnostics_summary(str(workspace_dir / report_subdir))
+                short_message = (
+                    str(process_result.error or "").strip()
+                    or stderr_text
+                    or stdout_text
+                    or "YASA runner 执行失败"
+                )
+                await _update_task_state(
+                    "failed",
+                    error_message=short_message,
+                    diagnostics_summary=_build_failure_diagnostics_summary(
+                        language=normalized_language,
+                        checker_packs=packs,
+                        rule_config_file=resolved_rule_config or None,
+                        source_path=relative_file.as_posix(),
+                        report_dir=str(workspace_dir / report_subdir),
+                        stderr_text=stderr_text,
+                        stdout_text=stdout_text,
+                        diagnostics_log=diagnostics_log,
+                    ),
+                    diagnostics_metadata={
+                        "termination_reason": "runner_failed",
+                        "runner_mode": "container",
+                        "timeout_seconds": YASA_SINGLE_FILE_TIMEOUT_SECONDS,
+                    },
+                )
+                return
+
+            files_scanned_successfully += 1
+            findings_payload.extend(file_findings)
+            await _touch_running_task()
 
         completion_log = _read_diagnostics_summary(str(output_dir))
         metadata_summary = {
@@ -1035,7 +1066,16 @@ async def _execute_yasa_scan(
             "rule_config_name": task_rule_config_name or "",
             "rule_config_source": task_rule_config_source,
         }
-        completion_payload: Dict[str, Any] = {"rule_config": metadata_summary}
+        completion_payload: Dict[str, Any] = {
+            "rule_config": metadata_summary,
+            "scan_stats": {
+                "files_total": len(scan_targets),
+                "files_scanned": files_scanned_successfully,
+                "files_timed_out": len(timed_out_files),
+                "per_file_timeout_seconds": YASA_SINGLE_FILE_TIMEOUT_SECONDS,
+                "skipped_files_sample": timed_out_files[:20],
+            },
+        }
         if completion_log:
             completion_payload["summary"] = completion_log
         elif not findings_payload:
@@ -1048,7 +1088,9 @@ async def _execute_yasa_scan(
             diagnostics_metadata={
                 "termination_reason": "completed",
                 "runner_mode": "container",
-                "timeout_seconds": timeout_seconds,
+                "timeout_seconds": configured_timeout_seconds,
+                "per_file_timeout_seconds": YASA_SINGLE_FILE_TIMEOUT_SECONDS,
+                "files_timed_out": len(timed_out_files),
                 "orphan_recovered": False,
             },
             language_value=normalized_language,
@@ -1058,13 +1100,7 @@ async def _execute_yasa_scan(
             rule_config_id_value=rule_config_id or None,
             rule_config_name_value=task_rule_config_name,
             rule_config_source_value=task_rule_config_source,
-            files_scanned_count=len(
-                {
-                    str(item.get("file_path") or "").strip()
-                    for item in findings_payload
-                    if str(item.get("file_path") or "").strip()
-                }
-            ),
+            files_scanned_count=files_scanned_successfully,
         )
         if updated_task is not None:
             project_metrics_refresher.enqueue(updated_task.project_id)
@@ -1248,7 +1284,8 @@ async def create_yasa_scan(
         )
     db.add(scan_task)
     await db.commit()
-    await db.refresh(scan_task)
+    if hasattr(db, "refresh"):
+        await db.refresh(scan_task)
     response = _build_yasa_scan_task_response(scan_task)
     task_id = response.id
     language_value = scan_task.language

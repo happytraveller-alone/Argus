@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -124,7 +125,7 @@ async def test_execute_yasa_scan_uses_short_lived_sessions_and_persists_findings
         name="yasa",
         status="pending",
         target_path=".",
-        language="javascript",
+        language="typescript",
     )
     load_session = _FakeYasaSession(task)
     persist_session = _FakeYasaSession(task)
@@ -162,10 +163,10 @@ async def test_execute_yasa_scan_uses_short_lived_sessions_and_persists_findings
     async def _fake_run_scanner_container(spec, **kwargs):
         assert spec.scanner_type == "yasa"
         assert spec.image == "vulhunter/yasa-runner:test"
-        assert spec.timeout_seconds == 600
-        report_dir = tmp_path / "workspace" / "output"
-        report_dir.mkdir(parents=True, exist_ok=True)
-        (report_dir / "report.sarif").write_text(
+        assert spec.timeout_seconds == 90
+        report_path = tmp_path / "workspace" / spec.artifact_paths[0]
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
             """
             {
               "runs": [
@@ -190,7 +191,7 @@ async def test_execute_yasa_scan_uses_short_lived_sessions_and_persists_findings
               ]
             }
             """
-            % str(tmp_path / "src" / "main.js"),
+            % str(tmp_path / "src" / "main.ts"),
             encoding="utf-8",
         )
         return SimpleNamespace(
@@ -206,13 +207,13 @@ async def test_execute_yasa_scan_uses_short_lived_sessions_and_persists_findings
 
     source_root = tmp_path / "src"
     source_root.mkdir()
-    (source_root / "main.js").write_text("console.log('ok');", encoding="utf-8")
+    (source_root / "main.ts").write_text("console.log('ok');", encoding="utf-8")
 
     await static_tasks_yasa._execute_yasa_scan(
         task_id="yasa-task-1",
         project_root=str(tmp_path),
         target_path=".",
-        language="javascript",
+        language="typescript",
         checker_pack_ids=None,
         checker_ids=None,
         rule_config_file=None,
@@ -224,7 +225,7 @@ async def test_execute_yasa_scan_uses_short_lived_sessions_and_persists_findings
     assert task.files_scanned == 1
     assert session_factory.calls >= 2
     assert len(persist_session.findings) == 1
-    assert persist_session.findings[0].file_path.endswith("main.js")
+    assert persist_session.findings[0].file_path.endswith("main.ts")
 
 
 @pytest.mark.asyncio
@@ -238,7 +239,7 @@ async def test_execute_yasa_scan_uses_scanner_runner_and_shared_workspace(
         name="yasa",
         status="pending",
         target_path=".",
-        language="javascript",
+        language="typescript",
     )
     load_session = _FakeYasaSession(task)
     persist_session = _FakeYasaSession(task)
@@ -251,7 +252,7 @@ async def test_execute_yasa_scan_uses_scanner_runner_and_shared_workspace(
     logs_dir.mkdir(parents=True)
     repo_root = tmp_path / "repo"
     (repo_root / "src").mkdir(parents=True)
-    (repo_root / "src" / "main.js").write_text("console.log('ok');", encoding="utf-8")
+    (repo_root / "src" / "main.ts").write_text("console.log('ok');", encoding="utf-8")
 
     monkeypatch.setattr(static_tasks_yasa, "async_session_factory", session_factory)
     monkeypatch.setattr(static_tasks_yasa, "_is_scan_task_cancelled", lambda *_args, **_kwargs: False)
@@ -280,7 +281,9 @@ async def test_execute_yasa_scan_uses_scanner_runner_and_shared_workspace(
 
     async def _fake_run_scanner_container(spec, **_kwargs):
         seen["spec"] = spec
-        (output_dir / "report.sarif").write_text(
+        report_path = project_dir.parent / spec.artifact_paths[0]
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
             """
             {
               "runs": [
@@ -293,7 +296,7 @@ async def test_execute_yasa_scan_uses_scanner_runner_and_shared_workspace(
                       "locations": [
                         {
                           "physicalLocation": {
-                            "artifactLocation": {"uri": "src/main.js"},
+                            "artifactLocation": {"uri": "src/main.ts"},
                             "region": {"startLine": 5, "endLine": 5}
                           }
                         }
@@ -321,7 +324,7 @@ async def test_execute_yasa_scan_uses_scanner_runner_and_shared_workspace(
         task_id=task.id,
         project_root=str(repo_root),
         target_path=".",
-        language="javascript",
+        language="typescript",
         checker_pack_ids=None,
         checker_ids=None,
         rule_config_file=None,
@@ -329,6 +332,7 @@ async def test_execute_yasa_scan_uses_scanner_runner_and_shared_workspace(
     )
 
     assert seen["spec"].image == "vulhunter/yasa-runner:test"
+    assert seen["spec"].timeout_seconds == 90
     assert task.status == "completed"
     assert task.total_findings == 1
     assert len(persist_session.findings) == 1
@@ -346,7 +350,7 @@ async def test_execute_yasa_scan_marks_failed_when_runner_fails_without_local_fa
         name="yasa",
         status="pending",
         target_path=".",
-        language="javascript",
+        language="typescript",
     )
     load_session = _FakeYasaSession(task)
     persist_session = _FakeYasaSession(task)
@@ -357,7 +361,7 @@ async def test_execute_yasa_scan_marks_failed_when_runner_fails_without_local_fa
     output_dir.mkdir(parents=True)
     repo_root = tmp_path / "repo"
     (repo_root / "src").mkdir(parents=True)
-    (repo_root / "src" / "main.js").write_text("console.log('ok');", encoding="utf-8")
+    (repo_root / "src" / "main.ts").write_text("console.log('ok');", encoding="utf-8")
 
     monkeypatch.setattr(static_tasks_yasa, "async_session_factory", session_factory)
     monkeypatch.setattr(static_tasks_yasa, "_is_scan_task_cancelled", lambda *_args, **_kwargs: False)
@@ -397,7 +401,7 @@ async def test_execute_yasa_scan_marks_failed_when_runner_fails_without_local_fa
         task_id=task.id,
         project_root=str(repo_root),
         target_path=".",
-        language="javascript",
+        language="typescript",
         checker_pack_ids=None,
         checker_ids=None,
         rule_config_file=None,
@@ -406,6 +410,371 @@ async def test_execute_yasa_scan_marks_failed_when_runner_fails_without_local_fa
 
     assert task.status == "failed"
     assert "runner image missing" in str(task.error_message)
+
+
+@pytest.mark.asyncio
+async def test_execute_yasa_scan_skips_timed_out_file_and_continues(
+    monkeypatch,
+    tmp_path,
+):
+    task = YasaScanTask(
+        id="yasa-task-timeout-partial",
+        project_id="project-1",
+        name="yasa",
+        status="pending",
+        target_path=".",
+        language="typescript",
+    )
+    load_session = _FakeYasaSession(task)
+    persist_session = _FakeYasaSession(task)
+    session_factory = _SessionFactory(load_session, persist_session)
+    workspace_dir = tmp_path / "scans" / "yasa" / task.id
+    project_dir = workspace_dir / "project"
+    output_dir = workspace_dir / "output"
+    repo_root = tmp_path / "repo"
+    (repo_root / "src").mkdir(parents=True)
+    (repo_root / "src" / "slow.ts").write_text("const slow = 1;\n", encoding="utf-8")
+    (repo_root / "src" / "fast.ts").write_text("const fast = 1;\n", encoding="utf-8")
+    (repo_root / "src" / "ignored.py").write_text("print('x')\n", encoding="utf-8")
+
+    monkeypatch.setattr(static_tasks_yasa, "async_session_factory", session_factory)
+    monkeypatch.setattr(static_tasks_yasa, "_is_scan_task_cancelled", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(static_tasks_yasa, "_clear_scan_task_cancel", lambda *_args, **_kwargs: None)
+
+    async def _fake_load_runtime_config(*_args, **_kwargs):
+        return {
+            "yasa_timeout_seconds": 600,
+            "yasa_exec_heartbeat_seconds": 15,
+            "yasa_orphan_stale_seconds": 120,
+        }
+
+    monkeypatch.setattr(
+        static_tasks_yasa,
+        "load_global_yasa_runtime_config",
+        _fake_load_runtime_config,
+        raising=False,
+    )
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_workspace", lambda *_args, **_kwargs: workspace_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_project_dir", lambda *_args, **_kwargs: project_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_output_dir", lambda *_args, **_kwargs: output_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_logs_dir", lambda *_args, **_kwargs: workspace_dir / "logs", raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_meta_dir", lambda *_args, **_kwargs: workspace_dir / "meta", raising=False)
+
+    seen_sources = []
+
+    async def _fake_run_scanner_container(spec, **_kwargs):
+        source_index = spec.command.index("--sourcePath") + 1
+        source_path = spec.command[source_index]
+        seen_sources.append(source_path)
+        if source_path.endswith("slow.ts"):
+            return SimpleNamespace(
+                success=False,
+                container_id="container-yasa-timeout",
+                exit_code=1,
+                stdout_path=None,
+                stderr_path=None,
+                error="scanner timed out after 90s",
+            )
+
+        report_path = workspace_dir / spec.artifact_paths[0]
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            """
+            {
+              "runs": [
+                {
+                  "results": [
+                    {
+                      "ruleId": "demo.rule",
+                      "message": {"text": "partial finding"},
+                      "level": "warning",
+                      "locations": [
+                        {
+                          "physicalLocation": {
+                            "artifactLocation": {"uri": "src/fast.ts"},
+                            "region": {"startLine": 3, "endLine": 3}
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """,
+            encoding="utf-8",
+        )
+        return SimpleNamespace(
+            success=True,
+            container_id="container-yasa-fast",
+            exit_code=0,
+            stdout_path=None,
+            stderr_path=None,
+            error=None,
+        )
+
+    monkeypatch.setattr(static_tasks_yasa, "run_scanner_container", _fake_run_scanner_container, raising=False)
+
+    await static_tasks_yasa._execute_yasa_scan(
+        task_id=task.id,
+        project_root=str(repo_root),
+        target_path=".",
+        language="typescript",
+        checker_pack_ids=None,
+        checker_ids=None,
+        rule_config_file=None,
+        rule_config_id=None,
+    )
+
+    assert task.status == "completed"
+    assert task.total_findings == 1
+    assert task.files_scanned == 1
+    diagnostics = json.loads(task.diagnostics_summary or "{}")
+    scan_stats = diagnostics.get("scan_stats") or {}
+    assert scan_stats.get("files_total") == 2
+    assert scan_stats.get("files_timed_out") == 1
+    assert "src/slow.ts" in (scan_stats.get("skipped_files_sample") or [])
+    assert all(not source.endswith("ignored.py") for source in seen_sources)
+
+
+@pytest.mark.asyncio
+async def test_execute_yasa_scan_all_timed_out_files_still_mark_completed(
+    monkeypatch,
+    tmp_path,
+):
+    task = YasaScanTask(
+        id="yasa-task-timeout-all",
+        project_id="project-1",
+        name="yasa",
+        status="pending",
+        target_path=".",
+        language="typescript",
+    )
+    load_session = _FakeYasaSession(task)
+    persist_session = _FakeYasaSession(task)
+    session_factory = _SessionFactory(load_session, persist_session)
+    workspace_dir = tmp_path / "scans" / "yasa" / task.id
+    project_dir = workspace_dir / "project"
+    output_dir = workspace_dir / "output"
+    repo_root = tmp_path / "repo"
+    (repo_root / "src").mkdir(parents=True)
+    (repo_root / "src" / "a.ts").write_text("const a = 1;\n", encoding="utf-8")
+    (repo_root / "src" / "b.ts").write_text("const b = 1;\n", encoding="utf-8")
+
+    monkeypatch.setattr(static_tasks_yasa, "async_session_factory", session_factory)
+    monkeypatch.setattr(static_tasks_yasa, "_is_scan_task_cancelled", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(static_tasks_yasa, "_clear_scan_task_cancel", lambda *_args, **_kwargs: None)
+    async def _fake_load_runtime_config(*_args, **_kwargs):
+        return {
+            "yasa_timeout_seconds": 600,
+            "yasa_exec_heartbeat_seconds": 15,
+            "yasa_orphan_stale_seconds": 120,
+        }
+
+    monkeypatch.setattr(
+        static_tasks_yasa,
+        "load_global_yasa_runtime_config",
+        _fake_load_runtime_config,
+        raising=False,
+    )
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_workspace", lambda *_args, **_kwargs: workspace_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_project_dir", lambda *_args, **_kwargs: project_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_output_dir", lambda *_args, **_kwargs: output_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_logs_dir", lambda *_args, **_kwargs: workspace_dir / "logs", raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_meta_dir", lambda *_args, **_kwargs: workspace_dir / "meta", raising=False)
+    async def _fake_run_scanner_container(*_args, **_kwargs):
+        return SimpleNamespace(
+            success=False,
+            container_id="container-yasa-timeout",
+            exit_code=1,
+            stdout_path=None,
+            stderr_path=None,
+            error="read timed out",
+        )
+
+    monkeypatch.setattr(
+        static_tasks_yasa,
+        "run_scanner_container",
+        _fake_run_scanner_container,
+        raising=False,
+    )
+
+    await static_tasks_yasa._execute_yasa_scan(
+        task_id=task.id,
+        project_root=str(repo_root),
+        target_path=".",
+        language="typescript",
+        checker_pack_ids=None,
+        checker_ids=None,
+        rule_config_file=None,
+        rule_config_id=None,
+    )
+
+    assert task.status == "completed"
+    assert task.total_findings == 0
+    assert task.files_scanned == 0
+    diagnostics = json.loads(task.diagnostics_summary or "{}")
+    scan_stats = diagnostics.get("scan_stats") or {}
+    assert scan_stats.get("files_total") == 2
+    assert scan_stats.get("files_timed_out") == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_yasa_scan_timeout_exception_is_skipped_per_file(
+    monkeypatch,
+    tmp_path,
+):
+    task = YasaScanTask(
+        id="yasa-task-timeout-exception",
+        project_id="project-1",
+        name="yasa",
+        status="pending",
+        target_path=".",
+        language="typescript",
+    )
+    load_session = _FakeYasaSession(task)
+    persist_session = _FakeYasaSession(task)
+    session_factory = _SessionFactory(load_session, persist_session)
+    workspace_dir = tmp_path / "scans" / "yasa" / task.id
+    project_dir = workspace_dir / "project"
+    output_dir = workspace_dir / "output"
+    repo_root = tmp_path / "repo"
+    (repo_root / "src").mkdir(parents=True)
+    (repo_root / "src" / "only.ts").write_text("const only = 1;\n", encoding="utf-8")
+
+    monkeypatch.setattr(static_tasks_yasa, "async_session_factory", session_factory)
+    monkeypatch.setattr(static_tasks_yasa, "_is_scan_task_cancelled", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(static_tasks_yasa, "_clear_scan_task_cancel", lambda *_args, **_kwargs: None)
+
+    async def _fake_load_runtime_config(*_args, **_kwargs):
+        return {
+            "yasa_timeout_seconds": 600,
+            "yasa_exec_heartbeat_seconds": 15,
+            "yasa_orphan_stale_seconds": 120,
+        }
+
+    monkeypatch.setattr(
+        static_tasks_yasa,
+        "load_global_yasa_runtime_config",
+        _fake_load_runtime_config,
+        raising=False,
+    )
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_workspace", lambda *_args, **_kwargs: workspace_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_project_dir", lambda *_args, **_kwargs: project_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_output_dir", lambda *_args, **_kwargs: output_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_logs_dir", lambda *_args, **_kwargs: workspace_dir / "logs", raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_meta_dir", lambda *_args, **_kwargs: workspace_dir / "meta", raising=False)
+
+    async def _fake_run_scanner_container(*_args, **_kwargs):
+        raise RuntimeError("UnixHTTPConnectionPool(host='localhost', port=None): Read timed out.")
+
+    monkeypatch.setattr(
+        static_tasks_yasa,
+        "run_scanner_container",
+        _fake_run_scanner_container,
+        raising=False,
+    )
+
+    await static_tasks_yasa._execute_yasa_scan(
+        task_id=task.id,
+        project_root=str(repo_root),
+        target_path=".",
+        language="typescript",
+        checker_pack_ids=None,
+        checker_ids=None,
+        rule_config_file=None,
+        rule_config_id=None,
+    )
+
+    assert task.status == "completed"
+    assert task.total_findings == 0
+    assert task.files_scanned == 0
+    diagnostics = json.loads(task.diagnostics_summary or "{}")
+    scan_stats = diagnostics.get("scan_stats") or {}
+    assert scan_stats.get("files_total") == 1
+    assert scan_stats.get("files_timed_out") == 1
+    assert "src/only.ts" in (scan_stats.get("skipped_files_sample") or [])
+
+
+@pytest.mark.asyncio
+async def test_execute_yasa_scan_single_target_file_timeout_marks_completed(
+    monkeypatch,
+    tmp_path,
+):
+    task = YasaScanTask(
+        id="yasa-task-single-file-timeout",
+        project_id="project-1",
+        name="yasa",
+        status="pending",
+        target_path="src/slow.ts",
+        language="typescript",
+    )
+    load_session = _FakeYasaSession(task)
+    persist_session = _FakeYasaSession(task)
+    session_factory = _SessionFactory(load_session, persist_session)
+    workspace_dir = tmp_path / "scans" / "yasa" / task.id
+    project_dir = workspace_dir / "project"
+    output_dir = workspace_dir / "output"
+    repo_root = tmp_path / "repo"
+    (repo_root / "src").mkdir(parents=True)
+    (repo_root / "src" / "slow.ts").write_text("const slow = 1;\n", encoding="utf-8")
+    (repo_root / "src" / "other.ts").write_text("const other = 1;\n", encoding="utf-8")
+
+    monkeypatch.setattr(static_tasks_yasa, "async_session_factory", session_factory)
+    monkeypatch.setattr(static_tasks_yasa, "_is_scan_task_cancelled", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(static_tasks_yasa, "_clear_scan_task_cancel", lambda *_args, **_kwargs: None)
+    async def _fake_load_runtime_config(*_args, **_kwargs):
+        return {
+            "yasa_timeout_seconds": 600,
+            "yasa_exec_heartbeat_seconds": 15,
+            "yasa_orphan_stale_seconds": 120,
+        }
+
+    monkeypatch.setattr(
+        static_tasks_yasa,
+        "load_global_yasa_runtime_config",
+        _fake_load_runtime_config,
+        raising=False,
+    )
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_workspace", lambda *_args, **_kwargs: workspace_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_project_dir", lambda *_args, **_kwargs: project_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_output_dir", lambda *_args, **_kwargs: output_dir, raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_logs_dir", lambda *_args, **_kwargs: workspace_dir / "logs", raising=False)
+    monkeypatch.setattr(static_tasks_yasa, "ensure_scan_meta_dir", lambda *_args, **_kwargs: workspace_dir / "meta", raising=False)
+    async def _fake_run_scanner_container(*_args, **_kwargs):
+        return SimpleNamespace(
+            success=False,
+            container_id="container-yasa-timeout",
+            exit_code=1,
+            stdout_path=None,
+            stderr_path=None,
+            error="timeout",
+        )
+
+    monkeypatch.setattr(
+        static_tasks_yasa,
+        "run_scanner_container",
+        _fake_run_scanner_container,
+        raising=False,
+    )
+
+    await static_tasks_yasa._execute_yasa_scan(
+        task_id=task.id,
+        project_root=str(repo_root),
+        target_path="src/slow.ts",
+        language="typescript",
+        checker_pack_ids=None,
+        checker_ids=None,
+        rule_config_file=None,
+        rule_config_id=None,
+    )
+
+    assert task.status == "completed"
+    diagnostics = json.loads(task.diagnostics_summary or "{}")
+    scan_stats = diagnostics.get("scan_stats") or {}
+    assert scan_stats.get("files_total") == 1
+    assert scan_stats.get("files_timed_out") == 1
+    assert scan_stats.get("skipped_files_sample") == ["src/slow.ts"]
 
 
 @pytest.mark.asyncio

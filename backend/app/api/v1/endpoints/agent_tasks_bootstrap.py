@@ -846,7 +846,7 @@ async def _prepare_embedded_bootstrap_findings(
         )
 
     if yasa_enabled:
-        if is_yasa_blocked_project_language(programming_languages):
+        if is_yasa_blocked_project_language(programming_languages) and not str(yasa_rule_config_id or "").strip():
             skip_reason = "YASA 引擎仅支持 Java / Go / TypeScript / Python 项目"
             if event_emitter:
                 await event_emitter.emit_info(
