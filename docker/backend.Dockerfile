@@ -12,6 +12,10 @@ ARG BACKEND_PYPI_INDEX_FALLBACK=https://pypi.org/simple
 ARG BACKEND_PYPI_INDEX_CANDIDATES=https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple
 ARG BACKEND_INSTALL_CJK_FONTS=1
 ARG DOCKER_CLI_IMAGE=${DOCKERHUB_LIBRARY_MIRROR}/docker:cli
+# CONTAINER_CLI_PROVIDER: 容器 CLI 提供方
+#   docker (默认) — 仅使用 Docker CLI；配合 DOCKER_HOST 可透明路由到 Podman socket
+#   podman — 额外安装 podman-remote，使 runner_preflight 可调用 podman build
+ARG CONTAINER_CLI_PROVIDER=docker
 FROM ${UV_IMAGE} AS uvbin
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim AS python-base
@@ -199,6 +203,7 @@ ARG BACKEND_APT_SECURITY_FALLBACK
 ARG BACKEND_PYPI_INDEX_PRIMARY
 ARG BACKEND_PYPI_INDEX_FALLBACK
 ARG BACKEND_PYPI_INDEX_CANDIDATES
+ARG CONTAINER_CLI_PROVIDER=docker
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -275,6 +280,18 @@ COPY backend/scripts/package_source_selector.py /usr/local/bin/package_source_se
 # buildx 是 Docker 23+ 执行 BuildKit 构建的必要插件（--mount=type=cache 等特性依赖它）
 COPY --from=docker-cli-src /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli-src /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
+
+# Podman 支持：当 CONTAINER_CLI_PROVIDER=podman 时安装 podman-remote 并建立软链接
+# podman-remote 是无守护进程的 podman 客户端，连接宿主机 Podman socket 执行 podman build
+# 若使用默认的 docker（CONTAINER_CLI_PROVIDER=docker），此步骤跳过，不增加镜像体积
+RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
+  --mount=type=cache,id=vulhunter-backend-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
+  if [ "${CONTAINER_CLI_PROVIDER}" = "podman" ]; then \
+    set -eux; \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends podman-remote && \
+    ln -sf /usr/bin/podman-remote /usr/local/bin/podman; \
+  fi
 
 
 # ============================================

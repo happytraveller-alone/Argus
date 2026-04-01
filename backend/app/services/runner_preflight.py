@@ -214,10 +214,15 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
 
     logger.info("runner preflight build: %s (%s)", spec.name, spec.image)
 
-    # 使用 subprocess 调用 docker build 以支持 BuildKit
+    # 优先读取 CONTAINER_CLI 环境变量，默认使用 docker
+    # 设置为 podman 时，直接调用 podman build（原生支持 --mount=type=cache，无需 BuildKit 守护进程）
+    container_cli = os.environ.get("CONTAINER_CLI", "docker").strip() or "docker"
+    is_podman = container_cli == "podman"
+
+    # 使用 subprocess 调用 build 命令以支持 BuildKit / buildah 缓存挂载特性
     # Docker Python SDK 的 images.build() 不完全支持 BuildKit 特性如 --mount
     build_cmd = [
-        "docker", "build",
+        container_cli, "build",
         "--progress=plain",
         "-f", spec.dockerfile,
         "-t", spec.image,
@@ -228,9 +233,18 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
     for key, value in spec.build_args.items():
         build_cmd.extend(["--build-arg", f"{key}={value}"])
 
-    # 启用 BuildKit；构建超时通过环境变量配置，默认 900s（15分钟）
     env = os.environ.copy()
-    env["DOCKER_BUILDKIT"] = "1"
+    if is_podman:
+        # podman build 基于 buildah，原生支持 RUN --mount=type=cache
+        # 设置 BUILDAH_FORMAT=docker 确保与 Docker 镜像格式兼容
+        env["BUILDAH_FORMAT"] = "docker"
+        # 避免 podman build 继承 DOCKER_BUILDKIT（对 podman 无意义）
+        env.pop("DOCKER_BUILDKIT", None)
+    else:
+        # 启用 BuildKit；docker build 在 BuildKit 模式下才支持 --mount=type=cache
+        env["DOCKER_BUILDKIT"] = "1"
+
+    # 构建超时通过环境变量配置，默认 900s（15分钟）
     build_timeout = int(os.environ.get("RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS", 900) or 900)
 
     logger.info("running build command: %s", " ".join(build_cmd))

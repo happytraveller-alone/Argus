@@ -43,7 +43,7 @@ services:
       - backend_uploads:/app/uploads
       - backend_runtime_data:/app/data/runtime
       - scan_workspace:/tmp/vulhunter/scans
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     environment: !override
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
@@ -99,6 +99,8 @@ services:
       XDG_DATA_HOME: /app/data/runtime/xdg-data
       XDG_CACHE_HOME: /app/data/runtime/xdg-cache
       XDG_CONFIG_HOME: /app/data/runtime/xdg-config
+      DOCKER_HOST: ${DOCKER_HOST:-}
+      CONTAINER_CLI: ${CONTAINER_CLI:-docker}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""

@@ -36,6 +36,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$REPO_ROOT/scripts/lib/compose-env.sh"
 
 ensure_backend_docker_env_file "$REPO_ROOT"
+# 在读取 .env 之前，自动探测 Podman socket 并设置 DOCKER_SOCKET_PATH
+# （若 .env 中已有明确配置，此调用是无操作的）
+load_container_socket_env
 
 # ─── 日志工具 ─────────────────────────────────────────────────────────────────
 log_info() {
@@ -56,19 +59,45 @@ log_error() {
 }
 
 # ─── Compose 命令检测 ─────────────────────────────────────────────────────────
-# 优先使用 `docker compose`（插件形式），回退到独立的 docker-compose 二进制
+# 优先使用 `docker compose`（插件形式），其次 `podman compose`，
+# 最后回退到独立的 docker-compose 二进制
 detect_compose_cmd() {
   if docker compose version >/dev/null 2>&1; then
     COMPOSE_BIN=(docker compose)
+    IS_PODMAN_COMPOSE=0
+    return
+  fi
+  # podman compose -f 需要 Podman 4.x+；3.x 的 compose 子命令不支持 -f 标志
+  local _podman_major=0
+  if command -v podman >/dev/null 2>&1; then
+    _podman_major="$(podman -v 2>/dev/null | awk '{print $NF}' | cut -d. -f1)"
+    _podman_major="${_podman_major:-0}"
+  fi
+  if [ "$_podman_major" -ge 4 ] 2>/dev/null && podman compose version >/dev/null 2>&1; then
+    COMPOSE_BIN=(podman compose)
+    IS_PODMAN_COMPOSE=1
+    log_info "podman compose (Podman ${_podman_major}.x) detected as compose backend"
+    return
+  fi
+  # podman-compose Python 工具：兼容 Podman 3.x/4.x
+  if command -v podman-compose >/dev/null 2>&1; then
+    COMPOSE_BIN=(podman-compose)
+    IS_PODMAN_COMPOSE=1
+    log_info "podman-compose detected as compose backend"
     return
   fi
   if command -v docker-compose >/dev/null 2>&1; then
     COMPOSE_BIN=(docker-compose)
+    IS_PODMAN_COMPOSE=0
     return
   fi
-  log_error "docker compose (or docker-compose) not found"
+  log_error "no compose tool found (docker compose / podman compose / podman-compose / docker-compose)"
+  if [ "$_podman_major" -ge 1 ] && [ "$_podman_major" -lt 4 ] 2>/dev/null; then
+    log_error "Podman ${_podman_major}.x detected: podman compose -f requires Podman 4.x+; install podman-compose: pip install podman-compose"
+  fi
   exit 127
 }
+IS_PODMAN_COMPOSE=0
 
 # ─── Compose 参数分析 ─────────────────────────────────────────────────────────
 # 判断 compose 参数是否为"前台 up"（有 up 且没有 -d/--detach）
@@ -906,8 +935,17 @@ if compose_args_target_detached_up "${COMPOSE_ARGS[@]}"; then
   IS_DETACHED_UP=1
 fi
 
-export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
-export COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}"
+# Podman compose 使用 podman build（基于 buildah），不需要也不应设置 DOCKER_BUILDKIT
+# Docker compose 则需要 DOCKER_BUILDKIT=1 以支持 --mount=type=cache 等 BuildKit 特性
+if [ "${IS_PODMAN_COMPOSE}" -eq 1 ]; then
+  export BUILDAH_FORMAT="${BUILDAH_FORMAT:-docker}"
+  # 显式清除，避免 docker-in-podman 路径误设
+  unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD 2>/dev/null || true
+  log_info "Podman compose: BUILDAH_FORMAT=${BUILDAH_FORMAT}, DOCKER_BUILDKIT unset"
+else
+  export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+  export COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}"
+fi
 
 PHASE_RETRY_COUNT="${PHASE_RETRY_COUNT:-${CN_RETRY_COUNT:-3}}"
 RETRY_INTERVAL_SECONDS="${RETRY_INTERVAL_SECONDS:-5}"
