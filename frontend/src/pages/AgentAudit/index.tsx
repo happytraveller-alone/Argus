@@ -63,7 +63,7 @@ export function HomeScanCards() {
   }, [resolvedTheme]);
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-[100dvh] relative overflow-hidden">
       <div className="absolute inset-0 z-10">
         <iframe
           ref={iframeRef}
@@ -73,59 +73,54 @@ export function HomeScanCards() {
         />
       </div>
 
-      <div className="relative z-20 w-full max-w-[1200px] mx-auto px-6 text-center pointer-events-none">
-        <div className="mb-12 flex items-center justify-center gap-5">
-          <button
-            onClick={cycleLogoVariant}
-            className="
-              pointer-events-auto
-              w-20 h-20 rounded-3xl
-              border border-primary/40 bg-primary/10
-              flex items-center justify-center
-              shadow-[0_0_50px_rgba(59,130,246,0.5)]
-              transition hover:scale-105
-            "
-          >
-            <img
-              src={logoSrc}
-              alt="VulHunter"
-              className="w-16 h-16 object-contain"
-            />
-          </button>
+      <div className="relative z-20 w-full max-w-[1200px] mx-auto px-6 text-center pointer-events-none min-h-[100dvh] flex flex-col">
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="mb-12 flex items-center justify-center gap-5">
+            <button
+              onClick={cycleLogoVariant}
+              className="
+                pointer-events-auto
+                w-20 h-20 rounded-3xl
+                border border-primary/40 bg-primary/10
+                flex items-center justify-center
+                shadow-[0_0_50px_rgba(59,130,246,0.5)]
+                transition hover:scale-105
+              "
+            >
+              <img
+                src={logoSrc}
+                alt="VulHunter"
+                className="w-16 h-16 object-contain"
+              />
+            </button>
 
-          <h1 className="text-6xl font-bold tracking-wider font-mono">
-            VulHunter
-          </h1>
+            <h1 className="text-6xl font-bold tracking-wider font-mono">
+              VulHunter
+            </h1>
+          </div>
+
+          <div className="mb-14">
+            <button
+              onClick={() =>
+                navigate("/tasks/hybrid?openCreate=1&source=home-primary")
+              }
+              className="
+                pointer-events-auto
+                group relative px-14 py-5 text-xl font-bold text-white rounded-2xl
+                bg-gradient-to-r from-blue-500 to-indigo-600
+                shadow-[0_0_35px_rgba(59,130,246,0.7)]
+                transition hover:scale-105 hover:shadow-[0_0_60px_rgba(59,130,246,0.9)]
+              "
+            >
+              <span className="flex items-center gap-3 justify-center">
+                一键开始安全审计
+                <ArrowRight className="w-6 h-6 transition group-hover:translate-x-1" />
+              </span>
+            </button>
+          </div>
         </div>
 
-        <div className="mb-14">
-          <button
-            onClick={() =>
-              navigate("/tasks/hybrid?openCreate=1&source=home-primary")
-            }
-            className="
-              pointer-events-auto
-              group relative px-14 py-5 text-xl font-bold text-white rounded-2xl
-              bg-gradient-to-r from-blue-500 to-indigo-600
-              shadow-[0_0_35px_rgba(59,130,246,0.7)]
-              transition hover:scale-105 hover:shadow-[0_0_60px_rgba(59,130,246,0.9)]
-            "
-          >
-            <span className="flex items-center gap-3 justify-center">
-              一键开始安全审计
-              <ArrowRight className="w-6 h-6 transition group-hover:translate-x-1" />
-            </span>
-          </button>
-        </div>
-
-        {/* <div className="flex items-center justify-center gap-3 mb-14 flex-wrap">
-          <span className="text-sm text-foreground/60">
-            1000+ 漏洞规则 · AI Agent 推理
-          </span>
-          <span className="text-foreground/20 text-sm">|</span>
-        </div> */}
-
-        <div className="mt-auto pt-40 pb-20 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <div className="pb-20 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto w-full">
           {homeScanCards.map((card) => {
             const Icon = card.icon;
 
