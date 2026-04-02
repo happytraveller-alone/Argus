@@ -326,6 +326,7 @@ FROM builder AS cython-compiler
 
 # 安装 Cython 和 setuptools（builder 使用 uv 管理 venv，无 pip，用 uv pip install）
 ARG BACKEND_PYPI_INDEX_PRIMARY
+ARG BACKEND_CYTHON_JOBS=4
 RUN --mount=type=cache,id=vulhunter-cython-uv,target=/root/.cache/uv \
     VIRTUAL_ENV=/opt/backend-venv \
     UV_INDEX_URL="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}" \
@@ -343,8 +344,8 @@ RUN --mount=type=cache,id=vulhunter-cython-ccache,target=/root/.ccache,sharing=s
     export CC="ccache gcc" CXX="ccache g++"; \
     export CCACHE_DIR=/root/.ccache; \
     export CCACHE_MAXSIZE=2G; \
-    NPROC=$(nproc); \
-    echo "[Cython] 并行编译（nproc=${NPROC}），ccache dir=${CCACHE_DIR}"; \
+    NPROC="${BACKEND_CYTHON_JOBS}"; \
+    echo "[Cython] 并行编译（jobs=${NPROC}），ccache dir=${CCACHE_DIR}"; \
     cd /build; \
     /opt/backend-venv/bin/python cython_build/setup.py build_ext \
         --build-lib /build/compiled \
@@ -446,7 +447,11 @@ RUN set -eux; \
         { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
     echo "[Bytecode] 关键 legacy .pyc 验证通过"
 
-FROM runtime-base AS runtime
+# ============================================================
+# runtime-cython: 全量 Cython + strip + pyc（最强混淆，资源占用高）
+# 仅在确实需要 .so 级保护时显式使用 --target runtime-cython
+# ============================================================
+FROM runtime-base AS runtime-cython
 
 # 提前复制 builder 产物，避免 runtime 与 builder 并行下载导致网络争抢
 COPY --from=builder /opt/backend-venv /opt/backend-venv
@@ -538,6 +543,124 @@ for mod_name in pyc_mods:
     assert spec.origin.endswith('.pyc'), 'Expected .pyc for ' + mod_name + ', got ' + spec.origin
     print('[Bytecode] ' + mod_name + ': OK (' + spec.origin.split('/')[-1] + ')')
 print('[Cython] All core module verifications PASSED')
+PYEOF
+
+CMD ["python3", "-m", "app.runtime.container_startup", "prod"]
+
+# ============================================================
+# runtime: 平衡型生产 target
+# 跳过全量 Cython，保留轻量混淆（legacy .pyc）+ 非 root + 精简 build context
+# 默认推荐此 target，避免全量 Cython 在构建阶段占满 CPU / 内存
+# ============================================================
+FROM runtime-base AS runtime
+
+COPY --from=builder /opt/backend-venv /opt/backend-venv
+
+RUN set -eux; \
+  for site_packages_dir in $(python3 -c 'import site; [print(path) for path in site.getsitepackages() if "site-packages" in path]'); do \
+  find "${site_packages_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; \
+  done; \
+  rm -rf /root/.cache/pip; \
+  rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11
+
+ENV VIRTUAL_ENV=/opt/backend-venv
+ENV PATH=/opt/backend-venv/bin:${PATH}
+ENV PYTHONNOUSERSITE=1
+ENV RUNNER_PREFLIGHT_BUILD_CONTEXT=/opt/backend-build-context
+
+ENV XDG_DATA_HOME=/app/data/runtime/xdg-data
+ENV XDG_CACHE_HOME=/app/data/runtime/xdg-cache
+ENV XDG_CONFIG_HOME=/app/data/runtime/xdg-config
+RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config
+
+COPY backend/app /app/app
+RUN find /app/app -name "*.c" -delete 2>/dev/null || true
+COPY backend/static /app/static
+COPY backend/docs/agent-tools /app/docs/agent-tools
+COPY backend/alembic /app/alembic
+COPY backend/alembic.ini /app/alembic.ini
+COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
+COPY docker /opt/backend-build-context/docker
+COPY backend/app/runtime/launchers /opt/backend-build-context/backend/app/runtime/launchers
+COPY backend/app/services/parser.py /opt/backend-build-context/backend/app/services/parser.py
+COPY backend/docs/agent-tools /opt/backend-build-context/backend/docs/agent-tools
+COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
+COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py
+COPY frontend/yasa-engine-overrides /opt/backend-build-context/frontend/yasa-engine-overrides
+
+RUN mkdir -p \
+  /app/uploads/zip_files \
+  /app/data/runtime \
+  /app/data/runtime/xdg-config \
+  /app/docs \
+  /opt/backend-build-context/backend/app/services \
+  /opt/backend-build-context/backend/scripts \
+  /opt/backend-build-context/backend/docs \
+  /opt/backend-build-context/frontend
+
+# 默认 target 只对少量高价值入口做轻量混淆，避免再触发全量 Cython/GCC 编译。
+RUN set -eux; \
+    BYTECODE_TARGETS="\
+      /app/app/main.py \
+      /app/app/runtime/container_startup.py \
+      /app/app/runtime/launchers/yasa_uast4py_launcher.py \
+      /app/app/runtime/launchers/opengrep_launcher.py \
+      /app/app/runtime/launchers/phpstan_launcher.py \
+      /app/app/runtime/launchers/yasa_engine_launcher.py \
+      /app/app/runtime/launchers/yasa_launcher.py \
+      /app/app/api/v1/endpoints/agent_tasks_reporting.py"; \
+    TARGET_COUNT=0; \
+    for src in ${BYTECODE_TARGETS}; do \
+        test -f "${src}"; \
+        /opt/backend-venv/bin/python -m compileall -q -b "${src}"; \
+        test -f "${src}c"; \
+        rm -f "${src}"; \
+        TARGET_COUNT=$((TARGET_COUNT + 1)); \
+        echo "[Bytecode] protected: ${src#/app/}"; \
+    done; \
+    PY_REMAINING=$(find /app/app -name "*.py" ! -name "__init__.py" | wc -l); \
+    echo "[Bytecode] 受保护文件数: ${TARGET_COUNT}"; \
+    echo "[Bytecode] 剩余源码文件数（白名单外保留）: ${PY_REMAINING}"; \
+    test -f /app/app/main.pyc || \
+        { echo "ERROR: main.pyc 未生成" >&2; exit 1; }; \
+    test -f /app/app/runtime/container_startup.pyc || \
+        { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
+    echo "[Bytecode] 关键 legacy .pyc 验证通过"
+
+RUN test -f /opt/backend-build-context/backend/app/runtime/launchers/phpstan_launcher.py && \
+  test -f /opt/backend-build-context/backend/app/services/parser.py
+
+RUN groupadd --gid 1001 appgroup && \
+  useradd --uid 1001 --gid appgroup \
+    --no-create-home --shell /usr/sbin/nologin appuser && \
+  chown -R appuser:appgroup \
+    /app \
+    /opt/backend-venv \
+    /opt/backend-build-context
+
+USER appuser
+
+EXPOSE 8000
+
+RUN /opt/backend-venv/bin/python - <<'PYEOF'
+import importlib.util
+pyc_mods = [
+    'app.main',
+    'app.runtime.container_startup',
+    'app.api.v1.endpoints.agent_tasks_reporting',
+]
+for mod_name in pyc_mods:
+    spec = importlib.util.find_spec(mod_name)
+    assert spec is not None, 'Module ' + mod_name + ' not found'
+    assert spec.origin.endswith('.pyc'), 'Expected .pyc for ' + mod_name + ', got ' + spec.origin
+    print('[Bytecode] ' + mod_name + ': OK (' + spec.origin.split('/')[-1] + ')')
+source_mods = ['app.core.config', 'app.db.session']
+for mod_name in source_mods:
+    spec = importlib.util.find_spec(mod_name)
+    assert spec is not None, 'Module ' + mod_name + ' not found'
+    assert spec.origin.endswith('.py'), 'Expected .py for ' + mod_name + ', got ' + spec.origin
+    print('[Source] ' + mod_name + ': OK (' + spec.origin.split('/')[-1] + ')')
+print('[Runtime] Balanced obfuscation verifications PASSED')
 PYEOF
 
 CMD ["python3", "-m", "app.runtime.container_startup", "prod"]

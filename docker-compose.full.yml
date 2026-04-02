@@ -3,6 +3,7 @@
 # =============================================
 # 用法:
 # docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+# backend target 固定为 runtime-plain，仅用于本地开发/全量联调；不要用于发布镜像。
 # 注意: backend 会在启动期通过 Docker SDK 执行 runner preflight。
 # 这些自检容器是一次性容器，成功或失败后都会立即删除，不作为 compose service 常驻。
 # 真正执行扫描时，backend 会继续按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`
@@ -14,6 +15,7 @@ services:
     build: !override
       context: .
       dockerfile: docker/backend.Dockerfile
+      # 本地联调显式使用源码 target，避免误走发布用 runtime/runtime-cython
       target: runtime-plain
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}

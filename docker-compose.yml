@@ -9,6 +9,8 @@
 # 该文件默认不再依赖 backend/frontend 宿主机源码挂载；本地开发请显式叠加对应 overlay。
 # 混合构建(frontend+backend本地构建，其余拉云端): docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
 # 全量本地构建: docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+# 平衡型发布构建(backend -> runtime): docker compose -f docker-compose.yml -f docker-compose.release.yml build backend
+# 重型混淆发布构建(backend -> runtime-cython): docker compose -f docker-compose.yml -f docker-compose.release-cython.yml build backend
 # 兼容 overlay: docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d
 
 services:

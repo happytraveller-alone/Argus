@@ -3,6 +3,7 @@
 # =============================================
 # 用法:
 # docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
+# backend target 固定为 runtime-plain，仅用于本地开发调试；不要用于发布镜像。
 #
 # 构建策略:
 #   本地构建 : frontend、backend
@@ -16,6 +17,7 @@ services:
     build: !override
       context: .
       dockerfile: docker/backend.Dockerfile
+      # 本地开发显式使用源码 target，避免误走发布用 runtime/runtime-cython
       target: runtime-plain
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
