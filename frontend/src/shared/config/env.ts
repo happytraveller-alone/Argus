@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "../api/apiBase";
+
 /**
  * 前端环境变量配置
  * 
@@ -12,7 +14,7 @@ export const env = {
   APP_ID: import.meta.env.VITE_APP_ID || 'vulhunter',
   
   // API 基础URL
-  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  API_BASE_URL: getApiBaseUrl(),
   
   // ==================== 开发环境标识 ====================
   isDev: import.meta.env.DEV,

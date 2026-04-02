@@ -9,7 +9,7 @@ SKIP_BUILD="false"
 BUILD_SANDBOX="true"   # NEW: default build sandbox; can disable via --no-sandbox
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 IMAGE_BACKEND="vulhunter/backend-local:latest"
-IMAGE_FRONTEND="vulhunter/frontend-local:latest"
+IMAGE_FRONTEND="vulhunter/frontend-release:latest"
 BUILD_RETRIES="${BUILD_RETRIES:-2}"
 BUILD_RETRY_INTERVAL_SECONDS="${BUILD_RETRY_INTERVAL_SECONDS:-5}"
 
@@ -75,7 +75,7 @@ require_container_cmd() {
   if ! command -v "$DOCKER_BIN" >/dev/null 2>&1; then
     echo "Missing required container runtime command: ${DOCKER_BIN}" >&2
     echo "Hint: install Docker (or set DOCKER_BIN to an available runtime command), then rerun." >&2
-    echo "Example: DOCKER_BIN=nerdctl ./scripts/package-release-artifacts.sh --skip-build" >&2
+    echo "Example: DOCKER_BIN=nerdctl ./deploy/package-release-artifacts.sh --skip-build" >&2
     exit 1
   fi
 }
@@ -103,7 +103,9 @@ pack_frontend_dist() {
   local cid
   cid="$($DOCKER_BIN create "$IMAGE_FRONTEND")"
   trap '$DOCKER_BIN rm -f "$cid" >/dev/null 2>&1 || true; rm -rf "$tmp_root"' RETURN
-  "$DOCKER_BIN" cp "${cid}:/usr/share/nginx/html/." "$tmp_root/"
+  mkdir -p "$tmp_root/site" "$tmp_root/nginx"
+  "$DOCKER_BIN" cp "${cid}:/usr/share/nginx/html/." "$tmp_root/site/"
+  cp "$ROOT_DIR/deploy/frontend/default.conf" "$tmp_root/nginx/default.conf"
   tar -czf "$pkg_path" -C "$tmp_root" .
   "$DOCKER_BIN" rm -f "$cid" >/dev/null
   rm -rf "$tmp_root"
@@ -115,11 +117,13 @@ pack_docker_layout() {
   local tmp_root
   tmp_root="$(mktemp -d)"
   mkdir -p \
+    "$tmp_root/deploy" \
     "$tmp_root/frontend"
 
   cp "$ROOT_DIR/.dockerignore" "$tmp_root/"
   cp "$ROOT_DIR/docker-compose.yml" "$tmp_root/"
   cp "$ROOT_DIR/docker-compose.full.yml" "$tmp_root/"
+  cp -R "$ROOT_DIR/deploy/compose" "$tmp_root/deploy/"
   cp -R "$ROOT_DIR/docker" "$tmp_root/"
   cp -R "$ROOT_DIR/frontend/yasa-engine-overrides" "$tmp_root/frontend/"
   rm -f "$tmp_root/docker/env/backend/.env" "$tmp_root/docker/env/frontend/.env"
@@ -152,6 +156,23 @@ run_compose_build_with_retries() {
     sleep "${BUILD_RETRY_INTERVAL_SECONDS}"
     attempt=$((attempt + 1))
   done
+}
+
+build_frontend_runtime_image() {
+  log "building frontend runtime image: ${IMAGE_FRONTEND}"
+
+  "$DOCKER_BIN" build \
+    -f "${ROOT_DIR}/docker/frontend.Dockerfile" \
+    -t "${IMAGE_FRONTEND}" \
+    --build-arg "DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}" \
+    --build-arg "FRONTEND_APK_MIRROR=${FRONTEND_APK_MIRROR:-mirrors.aliyun.com}" \
+    --build-arg "FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY:-https://registry.npmmirror.com}" \
+    --build-arg "FRONTEND_NPM_REGISTRY_FALLBACK=${FRONTEND_NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org}" \
+    --build-arg "PNPM_VERSION=${PNPM_VERSION:-9.15.4}" \
+    --build-arg "BUILD_WEAK_NETWORK=${BUILD_WEAK_NETWORK:-false}" \
+    --build-arg "BUILD_ARCH=${BUILD_ARCH:-}" \
+    --build-arg "VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api/v1}" \
+    "${ROOT_DIR}/frontend"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -213,21 +234,23 @@ log "output: ${DIST_DIR}"
 
 if [[ "$SKIP_BUILD" != "true" ]]; then
   if [[ "$BUILD_SANDBOX" == "true" ]]; then
-    log "building runtime images with docker compose (backend, frontend, sandbox)"
-    if ! run_compose_build_with_retries backend frontend sandbox; then
-      echo "Docker build failed after ${BUILD_RETRIES} attempts (sandbox included)." >&2
+    log "building backend and sandbox runtime images with docker compose"
+    if ! run_compose_build_with_retries backend sandbox; then
+      echo "Docker build failed after ${BUILD_RETRIES} attempts (backend/sandbox)." >&2
       echo "Hint: check network/mirror availability, then rerun the packaging command." >&2
-      echo "Temporary bypass (not recommended for complete release): bash scripts/package-release-artifacts.sh --no-sandbox" >&2
+      echo "Temporary bypass (not recommended for complete release): bash deploy/package-release-artifacts.sh --no-sandbox" >&2
       exit 1
     fi
   else
-    log "building runtime images with docker compose (backend, frontend) [--no-sandbox]"
-    if ! run_compose_build_with_retries backend frontend; then
-      echo "Docker build failed after ${BUILD_RETRIES} attempts." >&2
+    log "building backend runtime image with docker compose [--no-sandbox]"
+    if ! run_compose_build_with_retries backend; then
+      echo "Docker build failed after ${BUILD_RETRIES} attempts (backend)." >&2
       echo "Hint: check network/mirror availability, then rerun the packaging command." >&2
       exit 1
     fi
   fi
+
+  build_frontend_runtime_image
 else
   log "skip docker build"
 fi

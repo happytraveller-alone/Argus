@@ -41,6 +41,19 @@ ensure_backend_env() {
   log "created empty .env (no template found)"
 }
 
+extract_frontend_bundle() {
+  local pkg_path="$1"
+  local bundle_dir="${TARGET_DIR}/deploy/runtime/frontend"
+
+  rm -rf "$bundle_dir"
+  mkdir -p "$bundle_dir"
+
+  tar -xzf "$pkg_path" -C "$bundle_dir"
+
+  [[ -f "${bundle_dir}/site/index.html" ]] || die "frontend bundle missing site/index.html"
+  [[ -f "${bundle_dir}/nginx/default.conf" ]] || die "frontend bundle missing nginx/default.conf"
+}
+
 find_latest_artifact() {
   local pattern="$1"
   local latest
@@ -108,6 +121,7 @@ fi
 TAG_PREFIX="v${VERSION}"
 SOURCE_PKG="$(resolve_artifact source "$TAG_PREFIX")"
 DOCKER_PKG="$(resolve_artifact docker "$TAG_PREFIX")"
+FRONTEND_PKG="$(resolve_artifact frontend "$TAG_PREFIX")"
 
 log "version: ${VERSION}"
 
@@ -121,12 +135,16 @@ tar -xzf "$SOURCE_PKG" -C "$TARGET_DIR"
 log "extract docker layout"
 tar -xzf "$DOCKER_PKG" -C "$TARGET_DIR"
 
+log "extract frontend bundle"
+extract_frontend_bundle "$FRONTEND_PKG"
+
 ensure_backend_env
 
 if [[ "$START_STACK" == "true" ]]; then
   "$DOCKER_BIN" compose \
     -f "${TARGET_DIR}/docker-compose.yml" \
     -f "${TARGET_DIR}/docker-compose.full.yml" \
+    -f "${TARGET_DIR}/deploy/compose/docker-compose.release-static-frontend.yml" \
     up -d --build
 fi
 

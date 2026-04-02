@@ -49,10 +49,18 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 ### 3. 启动服务
 
-默认推荐直接使用 Docker Compose：
+默认推荐直接使用 Docker Compose。本仓库现在明确区分两种后端运行形态：
+
+- `dev-with-source-mount`: `docker compose up`
+- `self-contained-image`: `docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d`
+
+本地开发联调使用前者；无源码部署使用后者。
 
 ```bash
 docker compose up
+
+# 无源码部署（backend 不挂载 ./backend 或仓库根目录）
+docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d
 ```
 
 Windows 请使用 Docker Desktop + Linux containers。
@@ -68,8 +76,10 @@ docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 
 首次拉取源码、仅存在 `docker/env/backend/env.example` 时，`./scripts/compose-up-local-build.sh` 会自动生成 `docker/env/backend/.env`，避免本地构建入口因为缺少 backend env 文件而中断。
 
-默认 `docker compose up` 为远程镜像模式，只拉起常驻服务；基础 compose 上追加 `--build` 不会把主服务切成本地构建。
+默认 `docker compose up` 为远程镜像模式的 `dev-with-source-mount`，只拉起常驻服务；基础 compose 上追加 `--build` 不会把主服务切成本地构建。
 如需切到本地构建，请显式叠加 `docker-compose.full.yml`。
+如需无源码部署，请显式叠加 `docker-compose.self-contained.yml`。
+生产 release artifact 部署不走这条前端本地构建链路：`deploy/package-release-artifacts.sh` 现在会产出可直接部署的 `vulhunter-frontend-v*.tar.gz`，包内包含静态站点文件和 deploy 侧 nginx 配置；目标机由 `deploy/deploy-release-artifacts.sh` 解压后，通过 `deploy/compose/docker-compose.release-static-frontend.yml` 直接挂载该包启动 frontend。
 默认远程镜像地址可通过 `GHCR_REGISTRY`、`VULHUNTER_IMAGE_NAMESPACE`、`NEXUS_WEB_IMAGE_NAMESPACE`、`VULHUNTER_IMAGE_TAG`、`NEXUS_WEB_IMAGE_TAG` 覆盖。
 默认远程模式按匿名可拉取设计；如果你使用自有命名空间，请确保对应 GHCR 包对匿名拉取开放，或直接通过 `*_IMAGE` 环境变量覆盖完整镜像地址。
 
@@ -77,6 +87,28 @@ docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 backend 启动时会自行执行 runner preflight，校验 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` 指向的镜像和命令是否可用；真正执行扫描时，backend 仍会通过 Docker SDK 按镜像名动态拉起临时 runner 容器。
 
 如需查看可选的 legacy 包装脚本说明，请参考 [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md)。
+
+### 3.1 Release Artifact 生产部署
+
+前端静态包直部署使用 release artifact，而不是在目标机重新构建前端：
+
+```bash
+# 构建 release artifacts（在打包机）
+./deploy/package-release-artifacts.sh
+
+# 在目标机解压并启动
+./deploy/deploy-release-artifacts.sh \
+  --artifacts /path/to/dist/release \
+  --target /opt/vulhunter \
+  --version 3.0.4
+```
+
+该部署链路会：
+
+- 解压 `vulhunter-frontend-v<version>.tar.gz` 到 `deploy/runtime/frontend/`
+- 直接挂载 `deploy/runtime/frontend/site` 和 `deploy/runtime/frontend/nginx/default.conf`
+- 通过同源 `/api` 代理把前端请求转发到 backend
+- 保留默认开发 compose 的远程镜像 / 本地构建入口，不要求目标机安装前端构建工具链
 
 ### 4. 访问服务
 

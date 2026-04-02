@@ -434,16 +434,26 @@ COPY --from=runtime-app-assembler /final/app /app/app
 # 删除残留的 .c 中间文件（若有）
 RUN find /app/app -name "*.c" -delete 2>/dev/null || true
 COPY backend/static /app/static
+COPY backend/docs/agent-tools /app/docs/agent-tools
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
 COPY docker /opt/backend-build-context/docker
 COPY --from=runtime-app-assembler /final/app /opt/backend-build-context/backend/app
+COPY backend/docs/agent-tools /opt/backend-build-context/backend/docs/agent-tools
 COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
 COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py
+COPY frontend/yasa-engine-overrides /opt/backend-build-context/frontend/yasa-engine-overrides
 
 # 创建运行时持久化目录
-RUN mkdir -p /app/uploads/zip_files /app/data/runtime /app/data/runtime/xdg-config /opt/backend-build-context/backend/scripts /opt/backend-build-context/frontend
+RUN mkdir -p \
+  /app/uploads/zip_files \
+  /app/data/runtime \
+  /app/data/runtime/xdg-config \
+  /app/docs \
+  /opt/backend-build-context/backend/scripts \
+  /opt/backend-build-context/backend/docs \
+  /opt/backend-build-context/frontend
 
 # 暴露端口
 EXPOSE 8000
@@ -491,15 +501,25 @@ RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/ru
 # 直接复制 Python 源码（跳过 Cython 编译加固）
 COPY backend/app /app/app
 COPY backend/static /app/static
+COPY backend/docs/agent-tools /app/docs/agent-tools
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
 COPY docker /opt/backend-build-context/docker
 COPY backend/app /opt/backend-build-context/backend/app
+COPY backend/docs/agent-tools /opt/backend-build-context/backend/docs/agent-tools
 COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
 COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py
+COPY frontend/yasa-engine-overrides /opt/backend-build-context/frontend/yasa-engine-overrides
 
-RUN mkdir -p /app/uploads/zip_files /app/data/runtime /app/data/runtime/xdg-config /opt/backend-build-context/backend/scripts /opt/backend-build-context/frontend
+RUN mkdir -p \
+  /app/uploads/zip_files \
+  /app/data/runtime \
+  /app/data/runtime/xdg-config \
+  /app/docs \
+  /opt/backend-build-context/backend/scripts \
+  /opt/backend-build-context/backend/docs \
+  /opt/backend-build-context/frontend
 
 EXPOSE 8000
 

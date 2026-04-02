@@ -9,24 +9,37 @@ VulHunter backend is a FastAPI service that powers repository-scale auditing, in
 
 ## Run with Docker (recommended)
 
+Backend Docker deployment now has two explicit modes:
+
+- `dev-with-source-mount`: local development, backend mounts host source tree
+- `self-contained-image`: deployment mode, backend runs without mounting host source code
+
 From the repository root:
 
 ```bash
-docker compose up --build
+# dev-with-source-mount
+docker compose up
+
+# self-contained-image
+docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d
+
+# full local build
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
 Frontend is exposed at `http://localhost:3000`, backend at `http://localhost:8000`.
 On Windows, use Docker Desktop with Linux containers.
 If `docker/env/backend/.env` is missing on first startup, Compose now bootstraps it automatically from `docker/env/backend/env.example`.
-If either host port is already in use, start Compose with `VULHUNTER_FRONTEND_PORT` / `VULHUNTER_BACKEND_PORT`, for example `VULHUNTER_BACKEND_PORT=18000 docker compose up --build`.
+If either host port is already in use, start Compose with `VULHUNTER_FRONTEND_PORT` / `VULHUNTER_BACKEND_PORT`, for example `VULHUNTER_BACKEND_PORT=18000 docker compose up`.
 For the full local build path, run `./scripts/compose-up-local-build.sh` or `docker compose -f docker-compose.yml -f docker-compose.full.yml up --build`.
+For source-free deployment, use `docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d`.
 The default compose startup now only brings up the long-lived services.
 Instead, backend runs the configured runner preflight during startup to verify the images and commands behind `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`.
 Those compose services are not the runtime scan workers. During actual scans, backend uses the Docker SDK and `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` to start temporary runner containers on demand.
 
 ### Default seed projects (persistent)
 
-On first startup (`docker compose up --build`), backend downloads the pinned GitHub archive snapshots for the demo user and stores them as persistent ZIP projects:
+On first startup (`docker compose up` or `docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d`), backend downloads the pinned GitHub archive snapshots for the demo user and stores them as persistent ZIP projects:
 
 - `libplist`
 - `DVWA`

@@ -119,8 +119,8 @@ RUN --mount=type=cache,id=vulhunter-frontend-pnpm,target=/pnpm/store \
 # 复制源代码
 COPY . .
 
-# 构建时使用占位符，运行时由 entrypoint 注入 API 地址
-ENV VITE_API_BASE_URL=__API_BASE_URL__
+ARG VITE_API_BASE_URL=/api/v1
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 # 构建生产版本
 # - VITE_CACHE_DIR 指向 BuildKit cache mount，跨构建复用 vite 转换缓存
@@ -139,8 +139,7 @@ FROM ${DOCKERHUB_LIBRARY_MIRROR}/nginx:alpine
 ARG FRONTEND_APK_MIRROR=mirrors.aliyun.com
 RUN if [ -n "${FRONTEND_APK_MIRROR}" ]; then \
       sed -i "s/dl-cdn.alpinelinux.org/${FRONTEND_APK_MIRROR}/g" /etc/apk/repositories; \
-    fi \
-    && apk add --no-cache nodejs
+    fi
 
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -148,10 +147,6 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # 复制 Nginx 配置 (包含 SSE 反向代理配置)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 复制运行时注入程序
-COPY scripts/prod-runtime.mjs /usr/local/bin/frontend-runtime.mjs
-
 EXPOSE 80
 
-ENTRYPOINT ["node", "/usr/local/bin/frontend-runtime.mjs"]
 CMD ["nginx", "-g", "daemon off;"]

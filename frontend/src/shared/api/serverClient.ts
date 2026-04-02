@@ -1,19 +1,8 @@
 import axios from "axios";
-
-// API base URL - points to /api/v1 on the backend
-const viteEnv =
-	typeof import.meta !== "undefined" &&
-	typeof import.meta.env === "object" &&
-	import.meta.env !== null
-		? import.meta.env
-		: undefined;
-const baseURL =
-	(typeof viteEnv?.VITE_API_BASE_URL === "string" &&
-		viteEnv.VITE_API_BASE_URL.trim()) ||
-	"/api/v1";
+import { getApiBaseUrl } from "./apiBase";
 
 export const apiClient = axios.create({
-    baseURL,
+    baseURL: getApiBaseUrl(),
     headers: {
         "Content-Type": "application/json",
     },

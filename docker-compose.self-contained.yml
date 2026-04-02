@@ -1,0 +1,20 @@
+# =============================================
+# VulHunter self-contained-image 覆盖层
+# =============================================
+# 用法:
+# docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d
+#
+# 目标:
+#   backend 容器不再依赖宿主机源码目录
+#   fallback build 固定使用镜像内的 /opt/backend-build-context
+
+services:
+  backend:
+    volumes: !override
+      - ./docker/env/backend:/docker/env/backend
+      - backend_uploads:/app/uploads
+      - backend_runtime_data:/app/data/runtime
+      - scan_workspace:/tmp/vulhunter/scans
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+    environment:
+      RUNNER_PREFLIGHT_BUILD_CONTEXT: /opt/backend-build-context

@@ -2,11 +2,12 @@
 
 本项目默认推荐直接使用 Docker Compose，而不是包装脚本。
 默认启动只拉起常驻 compose 服务。
+本指南聚焦开发 / 联调 compose 链路；生产 release artifact 部署只复用其中的 backend / infra compose，frontend 改为直接消费打包好的静态包。
 runner preflight 改由 backend 启动时托管执行 runner preflight，统一校验 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` 指向的镜像和命令；真正执行扫描时仍由 backend 按镜像名动态拉起临时 runner 容器。
 
 ## 默认启动方式
 
-### 日常本地开发默认入口
+### 日常本地开发默认入口（dev-with-source-mount）
 
 ```bash
 docker compose up
@@ -27,6 +28,22 @@ NEXUS_WEB_IMAGE_TAG
 如果需要完全覆盖单个服务，继续使用 `BACKEND_IMAGE` / `FRONTEND_IMAGE` / `NEXUS_WEB_IMAGE` / `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE` / `SANDBOX_IMAGE`。
 默认远程模式按匿名可拉取设计；切换 registry host 不能绕过私有包权限。
 
+### 无源码部署入口（self-contained-image）
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d
+```
+
+该覆盖层会移除 backend 对 `./backend` 和仓库根目录 `.` 的源码挂载，运行时仅保留：
+
+- `./docker/env/backend:/docker/env/backend`
+- `backend_uploads:/app/uploads`
+- `backend_runtime_data:/app/data/runtime`
+- `scan_workspace:/tmp/vulhunter/scans`
+- `/var/run/docker.sock:/var/run/docker.sock`
+
+同时固定 `RUNNER_PREFLIGHT_BUILD_CONTEXT=/opt/backend-build-context`，确保 runner fallback build 只使用镜像内上下文。
+
 ### 全量本地构建入口
 
 ```bash
@@ -39,6 +56,26 @@ docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 推荐优先使用 `./scripts/compose-up-local-build.sh`。该脚本会按 `backend -> frontend -> nexus-web` 顺序串行构建，再执行 `up -d`，可避开部分 Docker Desktop / Buildx 环境下的并发元数据解析错误。
 如果首次拉取源码后只有 `docker/env/backend/env.example`，该脚本会自动生成 `docker/env/backend/.env`，避免本地构建入口因为缺少 backend env 文件而提前失败。
 原始 compose 命令仍保留，适合已经确认本机并发构建稳定的场景。
+
+### Release Artifact 生产部署（前端静态包直部署）
+
+```bash
+# 打包机
+./deploy/package-release-artifacts.sh
+
+# 目标机
+./deploy/deploy-release-artifacts.sh \
+  --artifacts /path/to/dist/release \
+  --target /opt/vulhunter \
+  --version 3.0.4
+```
+
+该链路会继续使用 `docker-compose.yml + docker-compose.full.yml` 提供 backend / infra 的现有部署行为，但 frontend 不再沿用 `docker-compose.full.yml` 的本地构建 dev server，而是额外叠加 `deploy/compose/docker-compose.release-static-frontend.yml`：
+
+- frontend artifact 内含 `site/` 静态站点和 `nginx/default.conf`
+- 目标机解压到 `deploy/runtime/frontend/` 后直接作为 nginx 挂载内容
+- 保持同源 `/api` 反向代理，不依赖目标机安装 Node.js / pnpm 等前端构建工具
+- 默认开发 compose 入口 `docker compose up`、`docker-compose.full.yml`、`docker-compose.self-contained.yml` 不受影响
 
 ## 平台支持
 
@@ -321,4 +358,4 @@ scripts\compose-up-with-fallback.bat
 - `VULHUNTER_OPEN_BROWSER=1` 仅在 legacy Bash helper 中生效；直接使用 `docker compose up` 不会自动打开浏览器。
 - 显式全量本地构建请叠加 `docker-compose.full.yml`。
 - Adminer 已并入 `tools` profile：`docker compose --profile tools up -d adminer`。
-- 预构建镜像部署模板已迁移到 `deploy/compose/docker-compose.prod.yml` 与 `deploy/compose/docker-compose.prod.cn.yml`。
+- release artifact 的 frontend 静态包覆盖层位于 `deploy/compose/docker-compose.release-static-frontend.yml`，供 `deploy/deploy-release-artifacts.sh` 使用；默认开发 compose 不会自动叠加它。

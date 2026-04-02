@@ -1,14 +1,15 @@
 # =============================================
 # VulHunter v3.0.4 Docker Compose 日常开发默认配置
 # =============================================
-# 默认入口: docker compose up（所有镜像从 GHCR 拉取，无需本地构建）
+# 默认入口: docker compose up（dev-with-source-mount，所有镜像从 GHCR 拉取）
 # 注意: backend 会在启动期通过 Docker SDK 执行 runner preflight。
 # 这些自检容器是一次性容器，成功或失败后都会立即删除，不作为 compose service 常驻。
 # 真正执行扫描时，backend 会继续按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`
 # 动态拉起临时 runner 容器（镜像默认从 GHCR 拉取）。
+# 该文件保留宿主机源码挂载，仅用于本地开发联调；无源码部署请叠加 docker-compose.self-contained.yml。
 # 混合构建(frontend+backend本地构建，其余拉云端): docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
 # 全量本地构建: docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
-# 预构建镜像部署模板: deploy/compose/docker-compose.prod.yml / docker-compose.prod.cn.yml
+# 无源码部署: docker compose -f docker-compose.yml -f docker-compose.self-contained.yml up -d
 
 services:
   db:
@@ -35,6 +36,7 @@ services:
     restart: unless-stopped
     working_dir: /app
     volumes:
+      # dev-with-source-mount：宿主机源码挂载到容器内，便于本地联调与 fallback build
       - ./backend:/app
       - .:/workspace:ro
       - ./docker/env/backend:/docker/env/backend
@@ -79,7 +81,7 @@ services:
       BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
-      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
+      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
       SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
