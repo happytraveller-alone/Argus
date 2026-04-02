@@ -247,7 +247,6 @@ RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/ap
   }; \
   RUNTIME_PACKAGES=" \
   libpq5 \
-  curl \
   git \
   libpango-1.0-0 \
   libpangoft2-1.0-0 \
@@ -403,6 +402,50 @@ RUN set -eux; \
     ls /final/app/services/agent/*.so 2>/dev/null | head -5; \
     echo "[Assembler] 组装完成"
 
+# ── Layer 1 增强：.so 符号剥离 ──────────────────────────────
+RUN set -eux; \
+    SO_COUNT=$(find /final/app -name "*.so" | wc -l); \
+    echo "[Strip] 开始剥离 ${SO_COUNT} 个 .so 文件符号"; \
+    find /final/app -name "*.so" \
+        -exec strip --strip-all --remove-section=.comment {} \; ; \
+    echo "[Strip] 符号剥离完成"; \
+    find /final/app -name "*.so" | head -5 | while read -r so; do \
+        file "$so" | grep -q "ELF.*shared object" || \
+        { echo "INVALID ELF: $so" >&2; exit 1; }; \
+    done; \
+    echo "[Strip] ELF 完整性验证通过"
+
+# ── Layer 2：白名单 .py → legacy .pyc 编译 + 删除源码 ───────
+# 删除源码后，Python 需要相邻的 legacy .pyc；仅保留 __pycache__ 不足以导入。
+# 只保护运行时入口与少量残余源码，避免误删 Alembic/patch/build-context 依赖文件。
+RUN set -eux; \
+    BYTECODE_TARGETS="\
+      /final/app/main.py \
+      /final/app/runtime/container_startup.py \
+      /final/app/runtime/launchers/yasa_uast4py_launcher.py \
+      /final/app/runtime/launchers/opengrep_launcher.py \
+      /final/app/runtime/launchers/phpstan_launcher.py \
+      /final/app/runtime/launchers/yasa_engine_launcher.py \
+      /final/app/runtime/launchers/yasa_launcher.py \
+      /final/app/api/v1/endpoints/agent_tasks_reporting.py"; \
+    TARGET_COUNT=0; \
+    for src in ${BYTECODE_TARGETS}; do \
+        test -f "${src}"; \
+        /opt/backend-venv/bin/python -m compileall -q -b "${src}"; \
+        test -f "${src}c"; \
+        rm -f "${src}"; \
+        TARGET_COUNT=$((TARGET_COUNT + 1)); \
+        echo "[Bytecode] protected: ${src#/final/}"; \
+    done; \
+    PY_REMAINING=$(find /final/app -name "*.py" ! -name "__init__.py" | wc -l); \
+    echo "[Bytecode] 受保护文件数: ${TARGET_COUNT}"; \
+    echo "[Bytecode] 剩余源码文件数（白名单外保留）: ${PY_REMAINING}"; \
+    test -f /final/app/main.pyc || \
+        { echo "ERROR: main.pyc 未生成" >&2; exit 1; }; \
+    test -f /final/app/runtime/container_startup.pyc || \
+        { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
+    echo "[Bytecode] 关键 legacy .pyc 验证通过"
+
 FROM runtime-base AS runtime
 
 # 提前复制 builder 产物，避免 runtime 与 builder 并行下载导致网络争抢
@@ -439,7 +482,9 @@ COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
 COPY docker /opt/backend-build-context/docker
-COPY --from=runtime-app-assembler /final/app /opt/backend-build-context/backend/app
+# runner preflight 的 build context 仍需要少量源码文件，避免把整份 Python 源码继续打进镜像
+COPY backend/app/runtime/launchers /opt/backend-build-context/backend/app/runtime/launchers
+COPY backend/app/services/parser.py /opt/backend-build-context/backend/app/services/parser.py
 COPY backend/docs/agent-tools /opt/backend-build-context/backend/docs/agent-tools
 COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
 COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py
@@ -451,22 +496,47 @@ RUN mkdir -p \
   /app/data/runtime \
   /app/data/runtime/xdg-config \
   /app/docs \
+  /opt/backend-build-context/backend/app/services \
   /opt/backend-build-context/backend/scripts \
   /opt/backend-build-context/backend/docs \
   /opt/backend-build-context/frontend
 
+RUN test -f /opt/backend-build-context/backend/app/runtime/launchers/phpstan_launcher.py && \
+  test -f /opt/backend-build-context/backend/app/services/parser.py
+
+# ── 非 root 用户：降权运行，减小容器逃逸风险 ───────────────
+RUN groupadd --gid 1001 appgroup && \
+  useradd --uid 1001 --gid appgroup \
+    --no-create-home --shell /usr/sbin/nologin appuser && \
+  chown -R appuser:appgroup \
+    /app \
+    /opt/backend-venv \
+    /opt/backend-build-context
+
+USER appuser
+
 # 暴露端口
 EXPOSE 8000
 
-# 验证核心模块可从 .so 正确导入（确保 Cython 编译产物完整）
+# 验证核心模块可从 .so / .pyc 正确导入（确保运行时入口与 Cython 产物完整）
 RUN /opt/backend-venv/bin/python - <<'PYEOF'
 import importlib.util
-mods = ['app.core.config', 'app.services.agent.config', 'app.db.session']
-for mod_name in mods:
+cython_mods = ['app.core.config', 'app.services.agent.config', 'app.db.session']
+for mod_name in cython_mods:
     spec = importlib.util.find_spec(mod_name)
     assert spec is not None, 'Module ' + mod_name + ' not found'
     assert spec.origin.endswith('.so'), 'Expected .so for ' + mod_name + ', got ' + spec.origin
     print('[Cython] ' + mod_name + ': OK (' + spec.origin.split('/')[-1] + ')')
+pyc_mods = [
+    'app.main',
+    'app.runtime.container_startup',
+    'app.api.v1.endpoints.agent_tasks_reporting',
+]
+for mod_name in pyc_mods:
+    spec = importlib.util.find_spec(mod_name)
+    assert spec is not None, 'Module ' + mod_name + ' not found'
+    assert spec.origin.endswith('.pyc'), 'Expected .pyc for ' + mod_name + ', got ' + spec.origin
+    print('[Bytecode] ' + mod_name + ': OK (' + spec.origin.split('/')[-1] + ')')
 print('[Cython] All core module verifications PASSED')
 PYEOF
 

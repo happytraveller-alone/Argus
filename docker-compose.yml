@@ -105,9 +105,13 @@ services:
       https_proxy: ""
       NO_PROXY: "*"
     healthcheck:
-      test: [ "CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null" ]
+      test:
+        - "CMD"
+        - "/opt/backend-venv/bin/python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       start_period: 10s
       retries: 60
     depends_on:
