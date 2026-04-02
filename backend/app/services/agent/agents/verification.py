@@ -23,6 +23,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from app.services.json_safe import dump_json_safe
+
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
 from .react_parser import parse_react_response
 from .verification_table import VerificationFindingTable
@@ -2616,9 +2618,9 @@ class VerificationAgent(BaseAgent):
                         "tool_dispatch",
                         iteration=self._iteration,
                         tool=step.action,
-                        action_input=json.dumps(step.action_input or {}, ensure_ascii=False)[:500],
+                        action_input=dump_json_safe(step.action_input or {}, ensure_ascii=False)[:500],
                     )
-                    tool_call_key = f"{step.action}:{json.dumps(step.action_input or {}, sort_keys=True)}"
+                    tool_call_key = f"{step.action}:{dump_json_safe(step.action_input or {}, sort_keys=True)}"
 
                     if not hasattr(self, "_tool_call_counts"):
                         self._tool_call_counts = {}

@@ -13,15 +13,18 @@ const dialogPath = path.join(
 	"src/pages/project-detail/components/ProjectTaskFindingsDialog.tsx",
 );
 
-test("ProjectTaskFindingsDialog 对智能和混合任务只请求已验证漏洞并展示已验证计数文案", () => {
+test("ProjectTaskFindingsDialog 对智能和混合任务请求全部非误报漏洞并展示总数文案", () => {
 	const source = readFileSync(dialogPath, "utf8");
 
 	assert.match(
 		source,
-		/getAgentFindings\(taskId,\s*\{\s*is_verified:\s*true,\s*include_false_positive:\s*false,\s*\}\)/,
+		/getAgentFindings\(taskId,\s*\{\s*include_false_positive:\s*false,\s*\}\)/,
 	);
-	assert.match(source, /已验证漏洞共 \{allRows\.length\.toLocaleString\(\)\} 条/);
-	assert.match(source, /title: allRows\.length === 0 \? "暂无已验证漏洞" : "暂无符合条件的漏洞"/);
+	assert.match(source, /漏洞共 \{allRows\.length\.toLocaleString\(\)\} 条/);
+	assert.match(
+		source,
+		/title:\s*allRows\.length === 0\s*\?\s*"暂无漏洞"\s*:\s*"暂无符合条件的漏洞"/,
+	);
 	assert.match(source, /route: isFalsePositiveAgentFinding\(finding\)\s*\?\s*null\s*:/);
 	assert.match(source, /row\.original\.route \?/);
 });

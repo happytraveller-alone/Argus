@@ -97,7 +97,6 @@ import {
   buildStatsSummary,
   createTokenUsageAccumulator,
   isFalsePositiveFinding,
-  isVisibleVerifiedVulnerability,
   readAgentAuditFindingsPagination,
   writeAgentAuditFindingsPagination,
 } from "./detailViewModel";
@@ -543,6 +542,9 @@ function toDialogFinding(item: RealtimeMergedFindingItem): AgentFinding {
     context_end_line: item.context_end_line ?? null,
     status: falsePositive ? "false_positive" : isVerified ? "verified" : "pending",
     is_verified: isVerified,
+    verdict: falsePositive
+      ? "false_positive"
+      : (item.verdict ?? item.authenticity ?? null),
     reachability: null,
     authenticity: falsePositive
       ? "false_positive"
@@ -574,7 +576,18 @@ function applyManualStatusToPersistedFinding(
     ...finding,
     status: target,
     is_verified: target === "verified",
-    authenticity: target === "false_positive" ? "false_positive" : null,
+    verdict:
+      target === "false_positive"
+        ? "false_positive"
+        : target === "verified"
+          ? "confirmed"
+          : (finding.verdict ?? null),
+    authenticity:
+      target === "false_positive"
+        ? "false_positive"
+        : target === "verified"
+          ? "confirmed"
+          : (finding.authenticity ?? null),
   };
 }
 
@@ -586,7 +599,17 @@ function applyManualStatusToRealtimeFinding(
   return {
     ...item,
     status: target,
-    authenticity: falsePositive ? "false_positive" : null,
+    verdict:
+      target === "false_positive"
+        ? "false_positive"
+        : target === "verified"
+          ? "confirmed"
+          : (item.verdict ?? item.authenticity ?? null),
+    authenticity: falsePositive
+      ? "false_positive"
+      : target === "verified"
+        ? "confirmed"
+        : null,
     is_verified: target === "verified",
     verification_progress: target === "verified" ? "verified" : "pending",
     display_severity: falsePositive
@@ -659,7 +682,7 @@ function AgentAuditPageContent() {
   const [, setHighlightedAgentId] = useState<string | null>(null);
 
   // Realtime panels state
-  const [realtimeFindings, setRealtimeFindings] = useState<RealtimeMergedFindingItem[]>([]);
+  const [, setRealtimeFindings] = useState<RealtimeMergedFindingItem[]>([]);
   const [findingStatusUpdatingKey, setFindingStatusUpdatingKey] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState(() => createTokenUsageAccumulator());
@@ -713,33 +736,21 @@ function AgentAuditPageContent() {
       .map(agentFindingToRealtimeItem)
       .filter((item): item is RealtimeMergedFindingItem => Boolean(item));
   }, [findings]);
-  const verifiedPersistedDisplayFindings = useMemo(
-    () =>
-      persistedDisplayFindings.filter((item) => isVisibleVerifiedVulnerability(item)),
+  const visibleManagedFindings = useMemo(
+    () => persistedDisplayFindings,
     [persistedDisplayFindings],
-  );
-  const verifiedRealtimeFindings = useMemo(
-    () => realtimeFindings.filter((item) => isVisibleVerifiedVulnerability(item)),
-    [realtimeFindings],
-  );
-  const visibleVerifiedFindings = useMemo(
-    () =>
-      mergeRealtimeFindingsBatch(verifiedRealtimeFindings, verifiedPersistedDisplayFindings, {
-        source: "db",
-      }),
-    [verifiedPersistedDisplayFindings, verifiedRealtimeFindings],
   );
   const statsSummary = useMemo(
     () =>
       task
         ? buildStatsSummary({
           task,
-          displayFindings: visibleVerifiedFindings,
+          displayFindings: visibleManagedFindings,
           tokenUsage,
           now: statsNow,
         })
         : null,
-    [statsNow, task, tokenUsage, visibleVerifiedFindings],
+    [statsNow, task, tokenUsage, visibleManagedFindings],
   );
   const selectedLogItem = useMemo(
     () =>
@@ -753,10 +764,10 @@ function AgentAuditPageContent() {
       if (detailDialog?.type !== "finding") return null;
       const persistedFinding = findings.find((item) => item.id === detailDialog.id);
       if (persistedFinding) return persistedFinding;
-      const realtimeFinding = visibleVerifiedFindings.find((item) => item.id === detailDialog.id);
+      const realtimeFinding = visibleManagedFindings.find((item) => item.id === detailDialog.id);
       return realtimeFinding ? toDialogFinding(realtimeFinding) : null;
     },
-    [detailDialog, findings, visibleVerifiedFindings],
+    [detailDialog, findings, visibleManagedFindings],
   );
   const handleFindingsFiltersChange = useCallback(
     (nextFilters: FindingsViewFilters, _options?: FindingsFiltersChangeOptions) => {
@@ -1209,7 +1220,7 @@ function AgentAuditPageContent() {
       if (!taskId) return;
       if (
         findings.some((item) => !isFalsePositiveFinding(item) && item.id === detailId) ||
-        visibleVerifiedFindings.some((item) => item.id === detailId)
+        visibleManagedFindings.some((item) => item.id === detailId)
       ) {
         navigate(
           buildAgentFindingDetailRoute({
@@ -1244,7 +1255,7 @@ function AgentAuditPageContent() {
     navigate,
     taskId,
     treeNodes,
-    visibleVerifiedFindings,
+    visibleManagedFindings,
   ]);
 
   // ============ Data Loading ============
@@ -1300,9 +1311,16 @@ function AgentAuditPageContent() {
         setIsFindingsLoading(true);
       }
       setFindingsError(null);
+      const normalizedTaskStatus = String(task?.status || "").trim().toLowerCase();
+      if (!TERMINAL_STATUSES.has(normalizedTaskStatus)) {
+        setFindings([]);
+        if (!silent) {
+          setIsFindingsLoading(false);
+        }
+        return;
+      }
       try {
         const data = await getAgentFindings(taskId, {
-          is_verified: true,
           include_false_positive: false,
         });
         setFindings(data);
@@ -1316,7 +1334,7 @@ function AgentAuditPageContent() {
         }
       }
     },
-    [taskId, setFindings],
+    [task?.status, taskId, setFindings],
   );
 
   const loadBootstrapInputFindings = useCallback(async (scanTaskId: string) => {
@@ -3450,7 +3468,7 @@ function AgentAuditPageContent() {
             <div className="h-full">
               <RealtimeFindingsPanel
                 taskId={task?.id || ""}
-                items={visibleVerifiedFindings}
+                items={visibleManagedFindings}
                 isRunning={isRunning}
                 isLoading={isFindingsLoading}
                 currentPhase={task?.current_phase ?? null}

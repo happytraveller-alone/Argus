@@ -18,6 +18,8 @@ import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
+from app.services.json_safe import dump_json_safe
+
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
 from .react_parser import parse_react_response
 from ..json_parser import AgentJsonParser
@@ -770,7 +772,7 @@ Final Answer: [JSON格式的结果]"""
                     await self.emit_llm_action(step.action, step.action_input or {})
 
                     action_signature = (
-                        f"{step.action}:{json.dumps(step.action_input or {}, ensure_ascii=False, sort_keys=True)}"
+                        f"{step.action}:{dump_json_safe(step.action_input or {}, ensure_ascii=False, sort_keys=True)}"
                     )
                     if action_signature == last_action_signature:
                         repeated_action_streak += 1
@@ -794,7 +796,7 @@ Final Answer: [JSON格式的结果]"""
                         continue
                     
                     #  循环检测：追踪工具调用失败历史
-                    tool_call_key = f"{step.action}:{json.dumps(step.action_input or {}, sort_keys=True)}"
+                    tool_call_key = f"{step.action}:{dump_json_safe(step.action_input or {}, sort_keys=True)}"
                     if not hasattr(self, '_failed_tool_calls'):
                         self._failed_tool_calls = {}
                     

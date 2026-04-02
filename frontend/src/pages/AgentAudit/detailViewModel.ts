@@ -30,6 +30,7 @@ export interface RealtimeFindingLike {
   fingerprint?: string | null;
   timestamp?: string | null;
   status?: string | null;
+  verdict?: string | null;
   authenticity?: string | null;
   detailMode?: "detail" | "false_positive_reason" | null;
 }
@@ -279,6 +280,10 @@ export function isVisibleVerifiedVulnerability(item: RealtimeFindingLike): boole
   );
 }
 
+export function isVisibleManagedFinding(item: RealtimeFindingLike): boolean {
+  return !isFalsePositiveFinding(item);
+}
+
 export function getAgentAuditFindingDisplayStatus(
   item: RealtimeFindingLike,
 ): AgentAuditFindingDisplayStatus {
@@ -292,7 +297,6 @@ export function getAgentAuditFindingDisplayStatus(
   if (
     item.is_verified ||
     status === "verified" ||
-    status === "likely" ||
     verificationProgress === "verified"
   ) {
     return "verified";
@@ -382,9 +386,15 @@ export function buildStatsSummary(input: {
   now: Date;
 }): AgentAuditStatsSummary {
   const { task, displayFindings, tokenUsage, now } = input;
-  const verifiedTotal = displayFindings.length
-    ? displayFindings.filter((item) => isVisibleVerifiedVulnerability(item)).length
-    : Math.max(toFiniteNumber(task?.verified_count), 0);
+  const managedFindings = displayFindings.filter((item) =>
+    isVisibleManagedFinding(item),
+  );
+  const totalFindings = managedFindings.length
+    ? managedFindings.length
+    : Math.max(toFiniteNumber(task?.findings_count), 0);
+  const falsePositiveFindings = displayFindings.length
+    ? displayFindings.filter((item) => isFalsePositiveFinding(item)).length
+    : Math.max(toFiniteNumber(task?.false_positive_count), 0);
 
   const startedAt = task?.started_at ? new Date(task.started_at).getTime() : Number.NaN;
   const completedAt = task?.completed_at ? new Date(task.completed_at).getTime() : Number.NaN;
@@ -413,9 +423,9 @@ export function buildStatsSummary(input: {
       now.getTime(),
     ),
     durationMs,
-    totalFindings: verifiedTotal,
-    effectiveFindings: verifiedTotal,
-    falsePositiveFindings: 0,
+    totalFindings,
+    effectiveFindings: totalFindings,
+    falsePositiveFindings,
     iterations: Math.max(toFiniteNumber(task?.total_iterations), 0),
     toolCalls: Math.max(toFiniteNumber(task?.tool_calls_count), 0),
     tokensTotal,

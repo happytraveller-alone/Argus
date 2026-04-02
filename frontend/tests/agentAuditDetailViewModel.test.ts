@@ -219,6 +219,18 @@ test("isVerifiedFinding 识别 is_verified 和 verification_progress", () => {
   );
 });
 
+test("getAgentAuditFindingDisplayStatus 不再把 likely 直接显示为确报", () => {
+  assert.equal(
+    detailViewModel.getAgentAuditFindingDisplayStatus({
+      id: "likely-1",
+      status: "likely",
+      is_verified: false,
+      verification_progress: "pending",
+    }),
+    "open",
+  );
+});
+
 test("isVisibleVerifiedVulnerability 会过滤各类误报信号", () => {
   const base = {
     id: "finding-1",
@@ -272,7 +284,7 @@ test("isVisibleVerifiedVulnerability 会过滤各类误报信号", () => {
   );
 });
 
-test("buildStatsSummary 仅统计 verified 且非误报的漏洞", () => {
+test("buildStatsSummary 统计当前管理列表中的非误报漏洞", () => {
   const summary = buildStatsSummary({
     task: {
       status: "completed",
@@ -320,12 +332,12 @@ test("buildStatsSummary 仅统计 verified 且非误报的漏洞", () => {
     now: new Date("2026-03-12T08:00:00.000Z"),
   });
 
-  assert.equal(summary.totalFindings, 2);
-  assert.equal(summary.effectiveFindings, 2);
-  assert.equal(summary.falsePositiveFindings, 0);
+  assert.equal(summary.totalFindings, 3);
+  assert.equal(summary.effectiveFindings, 3);
+  assert.equal(summary.falsePositiveFindings, 2);
 });
 
-test("buildStatsSummary 在无展示数据时回退到 task.verified_count", () => {
+test("buildStatsSummary 在无展示数据时回退到 task.findings_count 和 false_positive_count", () => {
   const summary = buildStatsSummary({
     task: {
       status: "completed",
@@ -341,7 +353,7 @@ test("buildStatsSummary 在无展示数据时回退到 task.verified_count", () 
     now: new Date("2026-03-12T08:00:00.000Z"),
   });
 
-  assert.equal(summary.totalFindings, 3);
-  assert.equal(summary.effectiveFindings, 3);
-  assert.equal(summary.falsePositiveFindings, 0);
+  assert.equal(summary.totalFindings, 12);
+  assert.equal(summary.effectiveFindings, 12);
+  assert.equal(summary.falsePositiveFindings, 9);
 });

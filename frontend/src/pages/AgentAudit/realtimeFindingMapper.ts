@@ -196,10 +196,12 @@ export function fromAgentFinding(
   const falsePositive = isFalsePositiveSignal({
     status: finding.status,
     authenticity: finding.authenticity,
+    verdict: finding.verdict,
   });
   const verificationProgress = normalizeVerificationProgress({
     status: finding.status,
     authenticity: finding.authenticity,
+    verdict: finding.verdict,
     isVerified: finding.is_verified,
   });
   const displaySeverity = normalizeDisplaySeverity(finding.severity, falsePositive);
@@ -221,6 +223,7 @@ export function fromAgentFinding(
     line_end: finding.line_end ?? null,
     cwe_id: toOptionalString(finding.cwe_id),
     status: toOptionalString(finding.status),
+    verdict: toOptionalString(finding.verdict),
     verification_status: toOptionalString(findingRecord.verification_status),
     code_snippet: finding.code_snippet ?? null,
     code_context: finding.code_context ?? null,

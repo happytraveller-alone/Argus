@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.api.v1.endpoints.agent_tasks import _save_findings
+from app.models.agent_task import FindingStatus
 import app.models.opengrep  # noqa: F401
 import app.models.gitleaks  # noqa: F401
 
@@ -88,7 +89,12 @@ async def test_save_findings_requires_verification_result_and_keeps_verified_pay
     assert saved_finding.file_path == "src/service.py"
     assert saved_finding.suggestion
     assert saved_finding.fix_code
+    assert saved_finding.status == FindingStatus.NEEDS_REVIEW
+    assert saved_finding.is_verified is False
+    assert saved_finding.verified_at is None
+    assert saved_finding.verdict == "confirmed"
     assert saved_finding.verification_result["authenticity"] == "confirmed"
+    assert saved_finding.verification_result["status"] == FindingStatus.NEEDS_REVIEW
     assert saved_finding.verification_result["reachability"] == "reachable"
     assert saved_finding.verification_result["evidence"] == "verified by controlled request replay"
     reachability_target = saved_finding.verification_result.get("reachability_target")
@@ -215,6 +221,9 @@ async def test_save_findings_does_not_autofill_fix_code_for_verification_stage(t
     saved_finding = db.add.call_args.args[0]
     assert saved_finding.suggestion
     assert saved_finding.fix_code is None
+    assert saved_finding.status == FindingStatus.NEEDS_REVIEW
+    assert saved_finding.is_verified is False
+    assert saved_finding.verification_result["status"] == FindingStatus.NEEDS_REVIEW
 
 
 @pytest.mark.asyncio

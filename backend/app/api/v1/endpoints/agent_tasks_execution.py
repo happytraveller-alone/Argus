@@ -780,49 +780,56 @@ async def _execute_agent_task(task_id: str):
                             or ""
                         ).strip().lower()
                         verdict_for_state = str(finding_row.verdict or "").strip().lower()
-                        if status_for_state in {"false_positive", "false-positive", "not_vulnerable", "not_exists"}:
+                        current_manual_status = str(
+                            finding_row.status or ""
+                        ).strip().lower()
+                        if (
+                            current_manual_status == FindingStatus.FALSE_POSITIVE
+                            or status_for_state
+                            in {"false_positive", "false-positive", "not_vulnerable", "not_exists"}
+                            or verdict_for_state == "false_positive"
+                        ):
                             finding_row.status = FindingStatus.FALSE_POSITIVE
-                        elif status_for_state in {"verified", "true_positive", "exists", "vulnerable", "confirmed"}:
+                        elif current_manual_status == FindingStatus.VERIFIED:
                             finding_row.status = FindingStatus.VERIFIED
-                        elif status_for_state in {"likely", "uncertain", "unknown", "needs_review", "needs-review"}:
-                            finding_row.status = FindingStatus.LIKELY
-                        elif verdict_for_state == "false_positive":
-                            finding_row.status = FindingStatus.FALSE_POSITIVE
-                        elif verdict_for_state == "confirmed":
-                            finding_row.status = FindingStatus.VERIFIED
-                        elif verdict_for_state in {"likely", "uncertain"}:
-                            finding_row.status = FindingStatus.LIKELY
+                        else:
+                            finding_row.status = FindingStatus.NEEDS_REVIEW
 
                         # status 与 verdict 冲突时，以 status 语义为准
                         if finding_row.status == FindingStatus.FALSE_POSITIVE and finding_row.verdict in {"confirmed", "likely"}:
                             finding_row.verdict = "false_positive"
                             verification_result["verdict"] = "false_positive"
                             verification_result["authenticity"] = "false_positive"
-                        elif finding_row.status == FindingStatus.VERIFIED and finding_row.verdict in {"likely", "uncertain"}:
+                        elif finding_row.status == FindingStatus.VERIFIED and finding_row.verdict in {"likely", "uncertain", ""}:
                             finding_row.verdict = "confirmed"
                             verification_result["verdict"] = "confirmed"
                             verification_result["authenticity"] = "confirmed"
-                        elif finding_row.status == FindingStatus.LIKELY and str(finding_row.verdict or "").strip().lower() in {"false_positive", "uncertain"}:
-                            finding_row.verdict = "likely"
-                            verification_result["verdict"] = "likely"
-                            verification_result["authenticity"] = "likely"
-                        elif finding_row.status == FindingStatus.VERIFIED and str(finding_row.verdict or "").strip().lower() == "false_positive":
-                            finding_row.verdict = "likely"
-                            verification_result["verdict"] = "likely"
-                            verification_result["authenticity"] = "likely"
 
-                        # is_verified 语义：是否已经过 verification 阶段（程序设置）
+                        # is_verified 仅表示人工已确认为真实漏洞。
                         verification_stage_completed = bool(
                             verification_result.get("verification_stage_completed")
-                            or finding_row.is_verified
-                            or finding_row.status in {
-                                FindingStatus.VERIFIED,
-                                FindingStatus.LIKELY,
-                                FindingStatus.UNCERTAIN,
-                                FindingStatus.FALSE_POSITIVE,
+                            or verdict_for_state in {
+                                "confirmed",
+                                "likely",
+                                "uncertain",
+                                "false_positive",
+                            }
+                            or status_for_state in {
+                                "verified",
+                                "likely",
+                                "uncertain",
+                                "needs_review",
+                                "needs-review",
+                                "false_positive",
+                                "false-positive",
                             }
                         )
-                        finding_row.is_verified = verification_stage_completed
+                        finding_row.is_verified = finding_row.status == FindingStatus.VERIFIED
+                        finding_row.verified_at = (
+                            datetime.now(timezone.utc)
+                            if finding_row.is_verified
+                            else None
+                        )
                         verification_result["verification_stage_completed"] = verification_stage_completed
                         verification_result["status"] = finding_row.status
 

@@ -35,6 +35,70 @@ from .agent_tasks_runtime import *
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+_MANUAL_FINDING_STATUS_ALIASES = {
+    "new": FindingStatus.NEEDS_REVIEW,
+    "open": FindingStatus.NEEDS_REVIEW,
+    "pending": FindingStatus.NEEDS_REVIEW,
+    "needs_review": FindingStatus.NEEDS_REVIEW,
+    "needs-review": FindingStatus.NEEDS_REVIEW,
+    "verified": FindingStatus.VERIFIED,
+    "confirmed": FindingStatus.VERIFIED,
+    "false_positive": FindingStatus.FALSE_POSITIVE,
+    "false-positive": FindingStatus.FALSE_POSITIVE,
+}
+
+
+def _is_manually_verified_status(status: Any) -> bool:
+    return str(status or "").strip().lower() == FindingStatus.VERIFIED
+
+
+def _normalize_manual_finding_status(status: Any) -> str:
+    normalized = str(status or "").strip().lower()
+    mapped = _MANUAL_FINDING_STATUS_ALIASES.get(normalized)
+    if not mapped:
+        raise HTTPException(status_code=400, detail=f"无效的状态: {status}")
+    return mapped
+
+
+async def _recompute_task_finding_counters(
+    db: AsyncSession,
+    task: AgentTask,
+) -> None:
+    result = await db.execute(
+        select(AgentFinding).where(AgentFinding.task_id == task.id)
+    )
+    findings = result.scalars().all()
+
+    task.findings_count = 0
+    task.verified_count = 0
+    task.false_positive_count = 0
+    task.critical_count = 0
+    task.high_count = 0
+    task.medium_count = 0
+    task.low_count = 0
+
+    for finding in findings:
+        normalized_status = str(getattr(finding, "status", "") or "").strip().lower()
+        if normalized_status == FindingStatus.FALSE_POSITIVE:
+            task.false_positive_count += 1
+            continue
+
+        task.findings_count += 1
+        severity = str(getattr(finding, "severity", "") or "").strip().lower()
+        if severity == VulnerabilitySeverity.CRITICAL:
+            task.critical_count += 1
+        elif severity == VulnerabilitySeverity.HIGH:
+            task.high_count += 1
+        elif severity == VulnerabilitySeverity.MEDIUM:
+            task.medium_count += 1
+        elif severity == VulnerabilitySeverity.LOW:
+            task.low_count += 1
+
+        if bool(getattr(finding, "is_verified", False)) or _is_manually_verified_status(
+            normalized_status
+        ):
+            task.verified_count += 1
+
 @router.get("/{task_id}/findings", response_model=List[AgentFindingResponse])
 async def list_agent_findings(
     task_id: str,
@@ -71,7 +135,6 @@ async def list_agent_findings(
             or_(
                 AgentFinding.is_verified == True,
                 AgentFinding.status == FindingStatus.VERIFIED,
-                AgentFinding.status == FindingStatus.LIKELY,
             )
         )
     
@@ -109,8 +172,7 @@ async def list_agent_findings(
             for item in serialized_findings
             if (
                 getattr(item, "is_verified", False)
-                or str(getattr(item, "status", "") or "").strip().lower()
-                in {FindingStatus.VERIFIED, FindingStatus.LIKELY}
+                or _is_manually_verified_status(getattr(item, "status", None))
             )
         ]
     return serialized_findings
@@ -243,14 +305,42 @@ async def update_finding_status(
     if not finding or finding.task_id != task_id:
         raise HTTPException(status_code=404, detail="发现不存在")
     
-    try:
-        finding.status = FindingStatus(status)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"无效的状态: {status}")
-    
+    normalized_status = _normalize_manual_finding_status(status)
+    finding.status = normalized_status
+    finding.is_verified = normalized_status == FindingStatus.VERIFIED
+    finding.verified_at = (
+        datetime.now(timezone.utc)
+        if normalized_status == FindingStatus.VERIFIED
+        else None
+    )
+    if normalized_status == FindingStatus.VERIFIED:
+        finding.verdict = "confirmed"
+    elif normalized_status == FindingStatus.FALSE_POSITIVE:
+        finding.verdict = "false_positive"
+
+    verification_result = (
+        dict(finding.verification_result)
+        if isinstance(finding.verification_result, dict)
+        else {}
+    )
+    verification_result["status"] = normalized_status
+    verification_result["verification_stage_completed"] = True
+    if normalized_status == FindingStatus.VERIFIED:
+        verification_result["authenticity"] = "confirmed"
+        verification_result["verdict"] = "confirmed"
+    elif normalized_status == FindingStatus.FALSE_POSITIVE:
+        verification_result["authenticity"] = "false_positive"
+        verification_result["verdict"] = "false_positive"
+    finding.verification_result = verification_result
+
+    await _recompute_task_finding_counters(db, task)
     await db.commit()
     
-    return {"message": "状态已更新", "finding_id": finding_id, "status": status}
+    return {
+        "message": "状态已更新",
+        "finding_id": finding_id,
+        "status": normalized_status,
+    }
 
 
 # ============ Helper Functions ============

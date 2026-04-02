@@ -346,7 +346,6 @@ export default function ProjectDetail() {
 				const agentFindingsResult = await Promise.allSettled(
 					sourceAgentTasks.map((task) =>
 						getAgentFindings(task.id, {
-							is_verified: true,
 							include_false_positive: false,
 						}),
 					),

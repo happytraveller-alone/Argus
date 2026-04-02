@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -1157,7 +1158,9 @@ async def _save_findings(
                     fix_description_text = "基于漏洞类型自动补全修复建议，请结合业务逻辑复核。"
 
             # 9) verification metadata
-            is_verified = verification_stage_completed
+            is_verified = bool(finding.get("is_verified")) and (
+                normalized_status == FindingStatus.VERIFIED
+            )
             verification_method_text = _normalize_optional_text(finding.get("verification_method"))
             if not verification_method_text:
                 verification_method_text = "agent_verification"
@@ -1170,7 +1173,9 @@ async def _save_findings(
             verification_result_payload = dict(verification_result_payload_input)
             if finding_identity:
                 verification_result_payload["finding_identity"] = finding_identity
-            verification_result_payload["status"] = normalized_status
+            verification_result_payload["status"] = (
+                FindingStatus.VERIFIED if is_verified else FindingStatus.NEEDS_REVIEW
+            )
             verification_result_payload["verification_stage_completed"] = verification_stage_completed
             existing_reachability_target = (
                 verification_result_payload_input.get("reachability_target")
@@ -1189,10 +1194,11 @@ async def _save_findings(
             # status 映射：由 LLM/status 输入表达漏洞是否存在，程序只负责规范化
             if normalized_status == FindingStatus.FALSE_POSITIVE:
                 db_status = FindingStatus.FALSE_POSITIVE
-            elif normalized_status == FindingStatus.LIKELY:
-                db_status = FindingStatus.LIKELY
-            else:
+            elif is_verified:
                 db_status = FindingStatus.VERIFIED
+            else:
+                db_status = FindingStatus.NEEDS_REVIEW
+            verified_at_value = datetime.now(timezone.utc) if is_verified else None
             
             # verification_result_payload 中添加新字段
             existing_reachability_target = (
@@ -1378,6 +1384,7 @@ async def _save_findings(
                 db_finding.poc_steps = poc_steps
                 db_finding.verification_method = verification_method_text
                 db_finding.verification_result = verification_result_payload
+                db_finding.verified_at = verified_at_value
                 db_finding.finding_metadata = _merge_finding_metadata_payload(
                     db_finding.finding_metadata if isinstance(db_finding.finding_metadata, dict) else None,
                     finding_metadata_payload or None,
@@ -1425,6 +1432,7 @@ async def _save_findings(
                     poc_steps=poc_steps,
                     verification_method=verification_method_text,
                     verification_result=verification_result_payload,
+                    verified_at=verified_at_value,
                     finding_metadata=finding_metadata_payload or None,
                     finding_identity=finding_identity,
                     cvss_score=cvss_score,

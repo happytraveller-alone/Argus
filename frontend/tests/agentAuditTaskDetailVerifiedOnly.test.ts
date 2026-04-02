@@ -13,15 +13,15 @@ const taskDetailPagePath = path.join(
 	"src/pages/AgentAudit/TaskDetailPage.tsx",
 );
 
-test("TaskDetailPage 以 visibleVerifiedFindings 作为 verified-only 页面级数据源", () => {
+test("TaskDetailPage 以 visibleManagedFindings 作为漏洞管理页数据源", () => {
 	const source = readFileSync(taskDetailPagePath, "utf8");
 
-	assert.match(source, /const visibleVerifiedFindings = useMemo\(/);
-	assert.match(source, /items=\{visibleVerifiedFindings\}/);
-	assert.match(source, /displayFindings: visibleVerifiedFindings/);
+	assert.match(source, /const visibleManagedFindings = useMemo\(/);
+	assert.match(source, /items=\{visibleManagedFindings\}/);
+	assert.match(source, /displayFindings: visibleManagedFindings/);
 	assert.match(
 		source,
-		/getAgentFindings\(taskId,\s*\{\s*is_verified:\s*true,\s*include_false_positive:\s*false,\s*\}\)/,
+		/getAgentFindings\(taskId,\s*\{\s*include_false_positive:\s*false,\s*\}\)/,
 	);
 	assert.match(source, /if\s*\(\s*falsePositive\s*\)\s*return;/);
 	assert.match(source, /!isFalsePositiveFinding\(item\)\s*&&\s*item\.id === detailId/);

@@ -18,6 +18,8 @@ import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
+from app.services.json_safe import dump_json_safe
+
 from .base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern, TaskHandoff
 from .react_parser import parse_react_response
 from ..json_parser import AgentJsonParser
@@ -978,7 +980,7 @@ Final Answer: {{"findings": [...], "summary": "..."}}"""
                             continue
 
                     #  循环检测：追踪工具调用失败历史
-                    tool_call_key = f"{step.action}:{json.dumps(action_input or {}, sort_keys=True)}"
+                    tool_call_key = f"{step.action}:{dump_json_safe(action_input or {}, sort_keys=True)}"
                     if not hasattr(self, '_failed_tool_calls'):
                         self._failed_tool_calls = {}
                     

@@ -29,6 +29,8 @@ import threading
 import tempfile
 from pathlib import Path
 
+from app.services.json_safe import dump_json_safe, normalize_json_safe
+
 from ..core.state import AgentState, AgentStatus
 from ..core.registry import agent_registry
 from ..core.message import message_bus, MessageType, AgentMessage
@@ -1242,17 +1244,18 @@ class BaseAgent(ABC):
     
     async def emit_llm_action(self, action: str, action_input: Dict):
         """发射 LLM 动作决策事件"""
+        safe_action_input = normalize_json_safe(action_input or {})
         self._trace(
             "llm_action",
             action=action,
-            action_input=json.dumps(action_input or {}, ensure_ascii=False)[:500],
+            action_input=dump_json_safe(safe_action_input, ensure_ascii=False)[:500],
         )
         await self.emit_event(
             "llm_action",
             f"[{self.name}] 执行动作: {action}",
             metadata={
                 "action": action,
-                "action_input": action_input,
+                "action_input": safe_action_input,
             }
         )
     
@@ -1304,10 +1307,11 @@ class BaseAgent(ABC):
         extra_metadata: Optional[Dict[str, Any]] = None,
     ):
         """发射工具调用事件"""
+        safe_tool_input = normalize_json_safe(tool_input or {})
         self._trace(
             "tool_call",
             tool_name=tool_name,
-            tool_input=json.dumps(tool_input or {}, ensure_ascii=False)[:500],
+            tool_input=dump_json_safe(safe_tool_input, ensure_ascii=False)[:500],
             tool_call_id=tool_call_id,
             alias_used=alias_used,
         )
@@ -1326,7 +1330,7 @@ class BaseAgent(ABC):
             "tool_call",
             f"[{self.name}] 调用工具: {tool_name}",
             tool_name=tool_name,
-            tool_input=tool_input,
+            tool_input=safe_tool_input,
             metadata=metadata,
         )
     
@@ -4439,7 +4443,11 @@ class BaseAgent(ABC):
             write_scope_metadata = {**runtime_policy_metadata, **write_scope_metadata}
         is_write_tool = self._is_write_tool(resolved_tool_name)
 
-        serialized_input = json.dumps(repaired_input, ensure_ascii=False, sort_keys=True)
+        serialized_input = dump_json_safe(
+            repaired_input,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
         tool_call_key = f"{resolved_tool_name}:{serialized_input}"
         call_count = self._tool_repeat_call_counts.get(tool_call_key, 0) + 1
         self._tool_repeat_call_counts[tool_call_key] = call_count
@@ -5335,7 +5343,7 @@ class BaseAgent(ABC):
 
 **请求工具**: {requested_tool_name}
 **实际工具**: {resolved_tool_name}
-**参数**: {json.dumps(repaired_input, ensure_ascii=False, indent=2) if repaired_input else '无'}
+**参数**: {dump_json_safe(repaired_input, ensure_ascii=False, indent=2) if repaired_input else '无'}
 **错误类型**: {type(e).__name__}
 **错误信息**: {str(e)}
 **堆栈跟踪**:

@@ -78,6 +78,7 @@ export type RealtimeMergedFindingItem = {
 	context_start_line?: number | null;
 	context_end_line?: number | null;
 	status?: string | null;
+	verdict?: string | null;
 	verification_status?: string | null;
 	authenticity?: string | null;
 	verification_evidence?: string | null;
@@ -273,7 +274,7 @@ export default function RealtimeFindingsPanel(props: {
 	const emptyStateMessage = props.isRunning
 		? getEmptyStateMessage(props.currentPhase)
 		: props.items.length === 0
-			? "暂无已验证漏洞"
+			? "暂无漏洞"
 			: "暂无符合条件的漏洞";
 
 	useEffect(() => {

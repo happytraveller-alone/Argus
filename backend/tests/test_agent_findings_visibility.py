@@ -332,7 +332,7 @@ async def test_list_agent_findings_verified_only_keeps_status_verified_items():
 
 
 @pytest.mark.asyncio
-async def test_list_agent_findings_verified_only_includes_status_likely_items():
+async def test_list_agent_findings_verified_only_excludes_status_likely_items():
     task_id = "task-status-likely"
     now = datetime(2026, 2, 12, 9, 0, 0, tzinfo=timezone.utc)
 
@@ -382,4 +382,4 @@ async def test_list_agent_findings_verified_only_includes_status_likely_items():
         current_user=SimpleNamespace(id="user-1"),
     )
 
-    assert [item.id for item in results] == ["finding-likely-status"]
+    assert results == []

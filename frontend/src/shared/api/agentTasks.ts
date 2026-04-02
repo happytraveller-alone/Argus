@@ -141,6 +141,7 @@ export interface AgentFinding {
 
   status: string;
   is_verified: boolean;
+  verdict?: string | null;
   reachability: string | null;
   authenticity: string | null;
   verification_evidence: string | null;

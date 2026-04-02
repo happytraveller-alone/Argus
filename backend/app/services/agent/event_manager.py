@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 import uuid
 
+from app.services.json_safe import dump_json_safe, normalize_json_safe
+
 logger = logging.getLogger(__name__)
 
 # Keep full-fidelity logs for UI detail dialog and export.
@@ -30,7 +32,7 @@ def _stringify_tool_output(value: Any) -> str:
     if isinstance(value, str):
         return value
     try:
-        return json.dumps(value, ensure_ascii=False, indent=2)
+        return dump_json_safe(value, ensure_ascii=False, indent=2)
     except Exception:
         return str(value)
 
@@ -38,6 +40,7 @@ def _stringify_tool_output(value: Any) -> str:
 def normalize_tool_output_envelope(tool_output: Any) -> Dict[str, Any]:
     if hasattr(tool_output, "to_dict"):
         tool_output = tool_output.to_dict()
+    tool_output = normalize_json_safe(tool_output)
 
     if isinstance(tool_output, dict):
         is_envelope = any(
@@ -151,11 +154,12 @@ class AgentEventEmitter:
     
     async def emit_llm_action(self, action: str, action_input: Dict):
         """发射 LLM 动作事件"""
-        input_str = json.dumps(action_input, ensure_ascii=False)[:200]
+        safe_action_input = normalize_json_safe(action_input or {})
+        input_str = dump_json_safe(safe_action_input, ensure_ascii=False)[:200]
         await self.emit(AgentEventData(
             event_type="llm_action",
             message=f"⚡ LLM 动作: {action}\n   参数: {input_str}",
-            metadata={"action": action, "action_input": action_input},
+            metadata={"action": action, "action_input": safe_action_input},
         ))
     
     async def emit_tool_call(
