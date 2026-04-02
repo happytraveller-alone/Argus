@@ -23,7 +23,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -61,7 +61,7 @@ services:
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
-      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
@@ -79,14 +79,14 @@ services:
       BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-}
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://mirrors.bfsu.edu.cn/pypi/web/simple/,https://pypi.org/simple}
-      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-phpstan-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
+      SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
+      SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
+      SCANNER_GITLEAKS_IMAGE: ${SCANNER_GITLEAKS_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-gitleaks-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
+      SCANNER_PHPSTAN_IMAGE: ${SCANNER_PHPSTAN_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-phpstan-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
+      SCANNER_PMD_IMAGE: ${SCANNER_PMD_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-pmd-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
       FLOW_PARSER_RUNNER_IMAGE: ${FLOW_PARSER_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-flow-parser-runner:${VULHUNTER_IMAGE_TAG:-latest}}
-      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-latest}}
+      SANDBOX_RUNNER_IMAGE: ${SANDBOX_RUNNER_IMAGE:-${GHCR_REGISTRY:-ghcr.nju.edu.cn}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox-runner:${VULHUNTER_IMAGE_TAG:-dev-v0.1}}
       SANDBOX_RUNNER_ENABLED: "${SANDBOX_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_ENABLED: "${FLOW_PARSER_RUNNER_ENABLED:-true}"
       FLOW_PARSER_RUNNER_TIMEOUT_SECONDS: "${FLOW_PARSER_RUNNER_TIMEOUT_SECONDS:-120}"
@@ -110,7 +110,7 @@ services:
       https_proxy: ""
       NO_PROXY: "*"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null"]
+      test: [ "CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null" ]
       interval: 5s
       timeout: 3s
       start_period: 10s
@@ -153,7 +153,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -163,7 +163,7 @@ services:
   adminer:
     image: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/adminer:latest
     restart: unless-stopped
-    profiles: ["tools"]
+    profiles: [ "tools" ]
     ports:
       - "8081:8080"
     depends_on:
@@ -171,7 +171,7 @@ services:
         condition: service_healthy
     networks:
       - vulhunter-network
-  
+
   nexus-web:
     image: vulhunter/nexus-web-local:latest
     build:
