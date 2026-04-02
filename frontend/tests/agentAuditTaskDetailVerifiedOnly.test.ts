@@ -13,7 +13,7 @@ const taskDetailPagePath = path.join(
 	"src/pages/AgentAudit/TaskDetailPage.tsx",
 );
 
-test("TaskDetailPage 以 visibleManagedFindings 作为漏洞管理页数据源", () => {
+test("TaskDetailPage 重进页面时保留 false_positive 漏洞用于管理视图展示", () => {
 	const source = readFileSync(taskDetailPagePath, "utf8");
 
 	assert.match(source, /const visibleManagedFindings = useMemo\(/);
@@ -21,7 +21,7 @@ test("TaskDetailPage 以 visibleManagedFindings 作为漏洞管理页数据源",
 	assert.match(source, /displayFindings: visibleManagedFindings/);
 	assert.match(
 		source,
-		/getAgentFindings\(taskId,\s*\{\s*include_false_positive:\s*false,\s*\}\)/,
+		/getAgentFindings\(taskId,\s*\{\s*include_false_positive:\s*true,\s*\}\)/,
 	);
 	assert.match(source, /if\s*\(\s*falsePositive\s*\)\s*return;/);
 	assert.match(source, /!isFalsePositiveFinding\(item\)\s*&&\s*item\.id === detailId/);

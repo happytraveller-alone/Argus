@@ -1321,7 +1321,7 @@ function AgentAuditPageContent() {
       }
       try {
         const data = await getAgentFindings(taskId, {
-          include_false_positive: false,
+          include_false_positive: true,
         });
         setFindings(data);
       } catch (err) {
