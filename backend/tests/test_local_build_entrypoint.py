@@ -14,10 +14,10 @@ def test_backend_dockerfile_derives_docker_cli_image_from_selected_mirror() -> N
     assert "ARG DOCKER_CLI_IMAGE=docker.m.daocloud.io/docker:cli" not in dockerfile_text
 
 
-def test_local_build_script_prefers_official_dockerhub_defaults_for_local_builds() -> None:
+def test_local_build_script_prefers_daocloud_defaults_for_local_builds() -> None:
     script_text = (REPO_ROOT / "scripts" / "compose-up-local-build.sh").read_text(encoding="utf-8")
 
-    assert 'export DOCKERHUB_LIBRARY_MIRROR="${DOCKERHUB_LIBRARY_MIRROR:-docker.io/library}"' in script_text
+    assert 'export DOCKERHUB_LIBRARY_MIRROR="${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}"' in script_text
     assert 'export DOCKER_CLI_IMAGE="${DOCKER_CLI_IMAGE:-docker:cli}"' in script_text
 
 
@@ -29,6 +29,7 @@ def test_local_build_script_builds_services_sequentially_before_up() -> None:
     assert '"${COMPOSE[@]}" build backend' in script_text
     assert '"${COMPOSE[@]}" build frontend' in script_text
     assert '"${COMPOSE[@]}" build nexus-web' in script_text
+    assert '"${COMPOSE[@]}" build nexus-itemDetail' in script_text
     assert '"${COMPOSE[@]}" up -d' in script_text
 
 
@@ -106,4 +107,5 @@ def test_local_build_script_bootstraps_backend_env_from_example(tmp_path: Path) 
     assert "build backend" in log_output
     assert "build frontend" in log_output
     assert "build nexus-web" in log_output
+    assert "build nexus-itemDetail" in log_output
     assert "up -d" in log_output

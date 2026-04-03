@@ -154,12 +154,14 @@ services:
       VITE_HMR_CLIENT_PORT: "${VULHUNTER_FRONTEND_PORT:-3000}"
 
   nexus-web:
-    image: vulhunter/nexus-web-local:latest
+    image: ${NEXUS_WEB_IMAGE:-docker.m.daocloud.io/vulhunter/nexus-web-local:latest}
     build:
       context: ./nexus-web
       dockerfile: ../docker/nexus-web.Dockerfile
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+      tags:
+        - ${NEXUS_WEB_LOCAL_IMAGE_ALIAS:-vulhunter/nexus-web-local:latest}
     ports:
       - "${VULHUNTER_NEXUS_WEB_PORT:-5174}:5174"
     networks:
@@ -167,12 +169,14 @@ services:
     restart: always
 
   nexus-itemDetail:
-    image: vulhunter/nexus-item-detail-local:latest
+    image: ${NEXUS_ITEM_DETAIL_IMAGE:-docker.m.daocloud.io/vulhunter/nexus-item-detail-local:latest}
     build:
       context: ./nexus-itemDetail
       dockerfile: ../docker/nexus-web.Dockerfile
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
+      tags:
+        - ${NEXUS_ITEM_DETAIL_LOCAL_IMAGE_ALIAS:-vulhunter/nexus-item-detail-local:latest}
     ports:
       - "5175:5175"
     networks:

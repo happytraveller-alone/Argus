@@ -52,7 +52,7 @@ All Dockerfiles, runner image build files, and Docker-specific environment files
 The default recommended entrypoint is plain Docker Compose with an image-first core stack:
 
 - `backend`, `frontend`, `db`, `redis`, and the scan/sandbox runtime images pull published images by default
-- `nexus-web` and `nexus-itemDetail` remain the explicit local-build exception
+- `nexus-web` and `nexus-itemDetail` remain the explicit local-build exception, but their default image names now point to `docker.m.daocloud.io` so a cache miss no longer falls back to `docker.io`
 - `docker-compose.self-contained.yml` remains available only as a compatibility overlay
 
 ```bash
@@ -70,11 +70,11 @@ For the full local build path, add the `docker-compose.full.yml` overlay:
 docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
-On a fresh checkout where only `docker/env/backend/env.example` exists, `./scripts/compose-up-local-build.sh` now bootstraps `docker/env/backend/.env` automatically so the local-build entrypoint does not fail early on a missing backend env file.
+On a fresh checkout where only `docker/env/backend/env.example` exists, `./scripts/compose-up-local-build.sh` now bootstraps `docker/env/backend/.env` automatically so the local-build entrypoint does not fail early on a missing backend env file. The helper now builds `backend -> frontend -> nexus-web -> nexus-itemDetail` sequentially, and the locally built `nexus-*` images reuse the same DaoCloud-qualified names referenced by compose.
 
 The default `docker compose up` path now uses remote images for the core stack. Adding `--build` to the base compose file does not switch the main services to local builds.
 Use the `docker-compose.full.yml` overlay explicitly when you want local image builds.
-The default remote image addresses can be overridden through `GHCR_REGISTRY`, `VULHUNTER_IMAGE_NAMESPACE`, and `VULHUNTER_IMAGE_TAG`.
+The default remote image addresses can be overridden through `GHCR_REGISTRY`, `VULHUNTER_IMAGE_NAMESPACE`, and `VULHUNTER_IMAGE_TAG`. `nexus-web` and `nexus-itemDetail` also support full-image overrides through `NEXUS_WEB_IMAGE` and `NEXUS_ITEM_DETAIL_IMAGE`.
 The remote mode assumes anonymous pull access. If you publish under your own namespace, make sure the GHCR packages are publicly pullable or override the full `*_IMAGE` values directly.
 
 The default `docker compose up` path now only brings up the long-lived compose services and no longer declares one-shot compose runner warmup services.

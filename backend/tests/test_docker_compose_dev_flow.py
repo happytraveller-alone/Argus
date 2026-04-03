@@ -137,8 +137,12 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "CODEX_SKILLS_AUTO_INSTALL" not in compose_text
     assert 'profiles: [ "tools" ]' in compose_text
     assert "adminer:" in compose_text
+    assert "image: ${NEXUS_WEB_IMAGE:-docker.m.daocloud.io/vulhunter/nexus-web-local:latest}" in compose_text
+    assert "image: ${NEXUS_ITEM_DETAIL_IMAGE:-docker.m.daocloud.io/vulhunter/nexus-item-detail-local:latest}" in compose_text
     assert "build:\n      context: ./nexus-web" in compose_text
     assert "build:\n      context: ./nexus-itemDetail" in compose_text
+    assert "tags:\n        - ${NEXUS_WEB_LOCAL_IMAGE_ALIAS:-vulhunter/nexus-web-local:latest}" in compose_text
+    assert "tags:\n        - ${NEXUS_ITEM_DETAIL_LOCAL_IMAGE_ALIAS:-vulhunter/nexus-item-detail-local:latest}" in compose_text
     assert "YASA_HOST_BIN_PATH" not in compose_text
     assert "YASA_HOST_RESOURCE_DIR" not in compose_text
     assert "YASA_BIN_PATH:" not in compose_text
@@ -191,6 +195,8 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "vulhunter/backend-local:latest" in full_overlay_text
     assert "vulhunter/backend-dev-local:latest" not in full_overlay_text
     assert "vulhunter/frontend-local:latest" in full_overlay_text
+    assert "image: ${NEXUS_WEB_IMAGE:-docker.m.daocloud.io/vulhunter/nexus-web-local:latest}" in full_overlay_text
+    assert "image: ${NEXUS_ITEM_DETAIL_IMAGE:-docker.m.daocloud.io/vulhunter/nexus-item-detail-local:latest}" in full_overlay_text
     assert "context: ." in full_overlay_text
     assert "dockerfile: docker/backend.Dockerfile" in full_overlay_text
     assert "working_dir: !reset null" in full_overlay_text
@@ -312,6 +318,7 @@ def test_scripts_and_packaging_use_new_compose_layout() -> None:
     assert '"${COMPOSE[@]}" build backend' in local_build_script
     assert '"${COMPOSE[@]}" build frontend' in local_build_script
     assert '"${COMPOSE[@]}" build nexus-web' in local_build_script
+    assert '"${COMPOSE[@]}" build nexus-itemDetail' in local_build_script
     assert '"${COMPOSE[@]}" up -d' in local_build_script
 
 
