@@ -556,7 +556,7 @@ async def test_generate_report_json_respects_export_options():
 
 
 @pytest.mark.asyncio
-async def test_generate_report_excludes_uncertain_findings_from_exports():
+async def test_generate_report_exports_pending_findings_from_legacy_uncertain_rows():
     task = _make_task(report="项目报告正文")
     project = SimpleNamespace(id="project-1", name="Demo")
     confirmed = _make_finding(
@@ -592,8 +592,9 @@ async def test_generate_report_excludes_uncertain_findings_from_exports():
 
     body = markdown_response.body.decode("utf-8")
     assert "Confirmed Finding" in body
-    assert "Uncertain Finding" not in body
-    assert "should not be exported" not in body
+    assert "Uncertain Finding" in body
+    assert "should not be exported" in body
+    assert "待确认" in body
 
     json_db = AsyncMock()
     json_db.get = AsyncMock(side_effect=[task, project])
@@ -606,8 +607,20 @@ async def test_generate_report_excludes_uncertain_findings_from_exports():
         current_user=SimpleNamespace(id="user-1"),
     )
 
-    assert payload["summary"]["total_findings"] == 1
-    assert [item["id"] for item in payload["findings"]] == ["finding-confirmed"]
+    assert payload["summary"]["total_findings"] == 2
+    assert payload["summary"]["status_distribution"] == {
+        "pending": 1,
+        "verified": 1,
+        "false_positive": 0,
+    }
+    assert payload["summary"]["pending_findings"] == 1
+    assert payload["summary"]["false_positive_findings"] == 0
+    assert [item["id"] for item in payload["findings"]] == [
+        "finding-confirmed",
+        "finding-uncertain",
+    ]
+    assert payload["findings"][1]["status"] == "pending"
+    assert payload["findings"][1]["status_label"] == "待确认"
 
 
 @pytest.mark.asyncio
@@ -649,8 +662,8 @@ async def test_generate_report_keeps_status_verified_findings_even_when_is_verif
     body = response.body.decode("utf-8")
     assert "Likely Verified Finding" in body
     assert "should be exported because status is verified" in body
-    assert "Uncertain Finding" not in body
-    assert "should not be exported" not in body
+    assert "Uncertain Finding" in body
+    assert "should not be exported" in body
 
 
 @pytest.mark.asyncio
@@ -726,7 +739,7 @@ async def test_generate_report_normalizes_inline_code_escapes_in_stored_reports(
 
 
 @pytest.mark.asyncio
-async def test_generate_report_uses_clean_empty_project_report_when_all_findings_filtered():
+async def test_generate_report_keeps_pending_only_tasks_non_empty():
     task = _make_task(
         report=(
             "# 项目风险评估报告：Demo\n\n"
@@ -758,12 +771,84 @@ async def test_generate_report_uses_clean_empty_project_report_when_all_findings
     )
 
     body = response.body.decode("utf-8")
-    assert "本次导出范围内未发现可确认风险。" in body
-    assert "导出报告仅保留可确认的漏洞结论" in body
-    assert "本次导出范围内无可确认漏洞。" in body
-    assert "uncertain：" not in body
-    assert "false_positive" not in body
-    assert "安排人工复核" not in body
+    assert "本次导出范围内未发现可确认风险。" not in body
+    assert "导出报告仅保留可确认的漏洞结论" not in body
+    assert "本次导出范围内无可确认漏洞。" not in body
+    assert "Uncertain Finding" in body
+    assert "待确认" in body
+
+
+@pytest.mark.asyncio
+async def test_generate_report_exports_verified_pending_and_false_positive_sections():
+    task = _make_task(report="项目报告正文")
+    project = SimpleNamespace(id="project-1", name="Demo")
+    verified = _make_finding(
+        id="finding-verified",
+        title="Verified Finding",
+        status="verified",
+        is_verified=True,
+        verdict="confirmed",
+        severity="critical",
+    )
+    pending = _make_finding(
+        id="finding-pending",
+        title="Pending Finding",
+        status="needs_review",
+        is_verified=False,
+        verdict="likely",
+        severity="high",
+    )
+    false_positive = _make_finding(
+        id="finding-fp",
+        title="False Positive Finding",
+        status="false_positive",
+        is_verified=False,
+        verdict="false_positive",
+        severity="medium",
+    )
+
+    markdown_db = AsyncMock()
+    markdown_db.get = AsyncMock(side_effect=[task, project])
+    markdown_db.execute = AsyncMock(return_value=_ScalarListResult([false_positive, pending, verified]))
+
+    markdown_response = await generate_audit_report(
+        task_id="task-three-status",
+        format="markdown",
+        db=markdown_db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    markdown_body = markdown_response.body.decode("utf-8")
+    assert "## 确报" in markdown_body
+    assert "## 待确认" in markdown_body
+    assert "## 误报" in markdown_body
+    assert "Verified Finding" in markdown_body
+    assert "Pending Finding" in markdown_body
+    assert "False Positive Finding" in markdown_body
+
+    json_db = AsyncMock()
+    json_db.get = AsyncMock(side_effect=[task, project])
+    json_db.execute = AsyncMock(return_value=_ScalarListResult([false_positive, pending, verified]))
+
+    payload = await generate_audit_report(
+        task_id="task-three-status",
+        format="json",
+        db=json_db,
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert payload["summary"]["status_distribution"] == {
+        "pending": 1,
+        "verified": 1,
+        "false_positive": 1,
+    }
+    assert payload["summary"]["pending_findings"] == 1
+    assert payload["summary"]["false_positive_findings"] == 1
+    assert [item["status"] for item in payload["findings"]] == [
+        "verified",
+        "pending",
+        "false_positive",
+    ]
 
 
 @pytest.mark.asyncio

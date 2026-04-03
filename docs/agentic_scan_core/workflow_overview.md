@@ -161,7 +161,7 @@ bootstrap candidate 和 seed finding 都不是最终漏洞。
 - `VERIFICATION`
   逐条消费 `vuln_queue`，做验证、PoC/Harness、结论持久化。
 - `REPORT`
-  为 `confirmed` / `likely` finding 生成漏洞报告，并生成项目级风险评估报告。
+  为运行期已收敛的 finding 生成漏洞报告素材，并生成项目级风险评估报告。
 
 ### 5.2 混合扫描如何影响阶段推进
 
@@ -268,7 +268,13 @@ LLM 的职责主要集中在每个子智能体内部：
 - 单漏洞详情报告：挂在 finding 维度
 - 项目级风险评估报告：挂在 task 维度
 
-也就是说，ReportAgent 不仅会为单条 `confirmed/likely` finding 生成 Markdown 报告，还会汇总全部非误报 finding，产出项目级风险报告。
+也就是说，ReportAgent 负责生成运行期存量 Markdown 素材；真正导出给用户的报告，会在导出阶段按当前 findings 重新做三态归一化：
+
+- `确报`
+- `待确认`
+- `误报`
+
+导出阶段不会再沿用“仅 confirmed/likely 才可见”的旧假设，而是默认汇总当前任务下全部可导出的三态结果。
 
 ## 8. 前端为什么能展示“过程 + 结果”
 

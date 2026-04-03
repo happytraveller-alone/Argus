@@ -367,42 +367,53 @@ def _resolve_report_export_finding_verdict(finding_row: AgentFinding) -> str:
     )
 
 
-def _should_export_finding_in_report(finding_row: AgentFinding) -> bool:
-    """
-    Report export should include actionable findings only.
-
-    `is_verified` means the finding passed through verification stage, which also
-    includes `uncertain` and `false_positive`. Export therefore needs an extra
-    state check and should only keep confirmed/likely findings (plus legacy rows
-    that only persisted `status=verified`).
-    """
+def _resolve_report_export_status(finding_row: AgentFinding) -> Optional[str]:
     normalized_status = _resolve_report_export_finding_status(finding_row)
     normalized_verdict = _resolve_report_export_finding_verdict(finding_row)
 
+    if normalized_status in {FindingStatus.FIXED, FindingStatus.WONT_FIX, FindingStatus.DUPLICATE}:
+        return None
     if normalized_status == FindingStatus.FALSE_POSITIVE:
-        return False
-    if normalized_status == FindingStatus.UNCERTAIN:
-        return False
-    if normalized_status in {FindingStatus.VERIFIED, FindingStatus.LIKELY}:
-        return True
+        return FindingStatus.FALSE_POSITIVE
+    if normalized_verdict == "false_positive":
+        return FindingStatus.FALSE_POSITIVE
+    if normalized_status == FindingStatus.VERIFIED:
+        return FindingStatus.VERIFIED
+    if normalized_verdict == "confirmed":
+        return FindingStatus.VERIFIED
     if normalized_status in {
         FindingStatus.NEW,
         FindingStatus.ANALYZING,
         FindingStatus.NEEDS_REVIEW,
-        FindingStatus.FIXED,
-        FindingStatus.WONT_FIX,
-        FindingStatus.DUPLICATE,
+        FindingStatus.LIKELY,
+        FindingStatus.UNCERTAIN,
     }:
-        return False
-    if normalized_verdict == "false_positive":
-        return False
-    if normalized_verdict == "uncertain":
-        return False
-    if normalized_verdict in {"confirmed", "likely"}:
-        return True
+        return "pending"
+    if normalized_verdict in {"likely", "uncertain"}:
+        return "pending"
+    if normalized_status in {"open", "pending"}:
+        return "pending"
+    if bool(getattr(finding_row, "is_verified", False)):
+        return FindingStatus.VERIFIED
+    return "pending"
 
-    # Backward compatibility for old rows that only stored the verification-stage flag.
-    return bool(getattr(finding_row, "is_verified", False))
+
+def _get_report_export_status_label(status: str) -> str:
+    if status == FindingStatus.VERIFIED:
+        return "确报"
+    if status == FindingStatus.FALSE_POSITIVE:
+        return "误报"
+    return "待确认"
+
+
+def _get_report_export_status_rank(status: str) -> int:
+    if status == FindingStatus.VERIFIED:
+        return 0
+    if status == "pending":
+        return 1
+    if status == FindingStatus.FALSE_POSITIVE:
+        return 2
+    return 3
 
 
 def _parse_inline_distribution_pairs(raw_text: Optional[str]) -> List[Tuple[str, str]]:
@@ -514,8 +525,10 @@ def _build_project_report_fallback(
     project: Project,
     findings: List[AgentFinding],
     report_descriptions: Dict[str, Dict[str, Optional[str]]],
+    export_statuses: Optional[Dict[str, str]] = None,
     export_options: ReportExportOptions = DEFAULT_REPORT_EXPORT_OPTIONS,
 ) -> str:
+    status_map = export_statuses or {}
     if not findings:
         return "\n".join(
             [
@@ -523,11 +536,11 @@ def _build_project_report_fallback(
                 "",
                 "## 结论",
                 "",
-                "本次导出范围内未发现可确认风险。",
+                "本次导出范围内无可导出的漏洞条目。",
                 "",
                 "## 说明",
                 "",
-                "导出报告仅保留可确认的漏洞结论；低置信度和已排除条目不会写入本报告。",
+                "导出报告默认按待确认、确报、误报三态汇总当前任务的漏洞结果。",
                 "",
                 "## 建议",
                 "",
@@ -536,7 +549,7 @@ def _build_project_report_fallback(
         )
 
     severity_stats = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    verdict_stats = {"confirmed": 0, "likely": 0}
+    status_stats = {"pending": 0, "verified": 0, "false_positive": 0}
     vuln_type_stats: Dict[str, int] = {}
 
     for finding_row in findings:
@@ -544,19 +557,9 @@ def _build_project_report_fallback(
         if severity in severity_stats:
             severity_stats[severity] += 1
 
-        verification_payload = (
-            getattr(finding_row, "verification_result", None)
-            if isinstance(getattr(finding_row, "verification_result", None), dict)
-            else {}
-        )
-        verdict = (
-            str(getattr(finding_row, "verdict", "") or "").strip().lower()
-            or str(verification_payload.get("verdict") or verification_payload.get("authenticity") or "").strip().lower()
-        )
-        if verdict not in verdict_stats:
-            verdict = "confirmed" if bool(getattr(finding_row, "is_verified", False)) else ""
-        if verdict in verdict_stats:
-            verdict_stats[verdict] += 1
+        export_status = status_map.get(str(getattr(finding_row, "id", "") or ""), "pending")
+        if export_status in status_stats:
+            status_stats[export_status] += 1
 
         vulnerability_type = str(getattr(finding_row, "vulnerability_type", "") or "").strip().lower() or "other"
         vuln_type_stats[vulnerability_type] = vuln_type_stats.get(vulnerability_type, 0) + 1
@@ -591,8 +594,9 @@ def _build_project_report_fallback(
             "## 项目概览",
             "",
             f"- 漏洞总数：{len(findings)}",
-            f"- confirmed：{verdict_stats.get('confirmed', 0)}",
-            f"- likely：{verdict_stats.get('likely', 0)}",
+            f"- 待确认：{status_stats.get('pending', 0)}",
+            f"- 确报：{status_stats.get('verified', 0)}",
+            f"- 误报：{status_stats.get('false_positive', 0)}",
             "",
         ]
 
@@ -650,7 +654,7 @@ def _build_project_report_fallback(
         [
             "## 业务影响评估",
             "",
-            "- 高危漏洞可能导致核心数据泄露、权限绕过或远程代码执行，建议优先治理 confirmed/high-risk 项。",
+            "- 确报高危漏洞优先级最高；待确认条目需要继续复核，误报条目可作为验证结论留档。",
             "",
         ]
     )
@@ -659,9 +663,9 @@ def _build_project_report_fallback(
             [
                 "## 优先级修复计划",
                 "",
-                "- P0：confirmed 且严重程度为 critical/high 的漏洞，立即修复并回归验证。",
-                "- P1：likely 或 medium 风险漏洞，纳入最近迭代修复计划。",
-                "- P2：low 风险项纳入常规加固与基线治理计划。",
+                "- P0：确报且严重程度为 critical/high 的漏洞，立即修复并回归验证。",
+                "- P1：待确认或 medium 风险漏洞，纳入最近迭代复核与修复计划。",
+                "- P2：误报条目保留判定依据，作为规则调优和验证样本。",
                 "",
                 "## 后续治理建议",
                 "",
@@ -795,6 +799,7 @@ def _build_finding_markdown_report(
     vuln_type = str(finding_data.get("vulnerability_type") or "unknown")
     authenticity = str(finding_data.get("authenticity") or "unknown")
     reachability = str(finding_data.get("reachability") or "unknown")
+    status_label = str(finding_data.get("status_label") or "").strip()
 
     sections.append(f"# 漏洞详情报告：{_escape_markdown_inline(title)}")
     sections.append("")
@@ -803,6 +808,8 @@ def _build_finding_markdown_report(
 
     sections.append("## 漏洞概览")
     sections.append("")
+    if status_label:
+        sections.append(f"- **状态:** {_escape_markdown_inline(status_label)}")
     sections.append(f"- **严重程度:** {severity}")
     sections.append(f"- **漏洞类型:** {_render_markdown_code_span(vuln_type)}")
     sections.append(f"- **真实性判定:** {_escape_markdown_inline(authenticity)}")
@@ -890,6 +897,7 @@ def _build_finding_markdown_report(
 def _build_finding_payload_from_row(
     finding_row: AgentFinding,
     report_descriptions: Dict[str, Dict[str, Optional[str]]],
+    export_status: str,
     export_options: ReportExportOptions = DEFAULT_REPORT_EXPORT_OPTIONS,
 ) -> Dict[str, Any]:
     finding_id = str(getattr(finding_row, "id", "") or "")
@@ -922,6 +930,8 @@ def _build_finding_payload_from_row(
             report_descriptions.get(finding_id, {}).get("display_title")
             or getattr(finding_row, "title", None)
         ),
+        "status": export_status,
+        "status_label": _get_report_export_status_label(export_status),
         "title": getattr(finding_row, "title", None),
         "severity": getattr(finding_row, "severity", None),
         "vulnerability_type": getattr(finding_row, "vulnerability_type", None),
@@ -1356,15 +1366,17 @@ def _build_task_export_markdown(
     project: Project,
     findings: List[AgentFinding],
     report_descriptions: Dict[str, Dict[str, Optional[str]]],
+    export_statuses: Dict[str, str],
     project_report_fallback: str,
     export_options: ReportExportOptions,
 ) -> str:
     stored_project_report = _normalize_optional_text(getattr(task, "report", None))
-    if not findings:
-        # 当导出范围内没有可确认漏洞时，统一使用导出专用项目摘要，
-        # 避免沿用包含低置信度条目的历史项目报告。
+    if not findings or not _uses_default_report_export_options(export_options):
         project_report_raw = project_report_fallback
-    elif not _uses_default_report_export_options(export_options):
+    elif any(
+        export_statuses.get(str(getattr(finding_row, "id", "") or ""), "pending") != FindingStatus.VERIFIED
+        for finding_row in findings
+    ):
         project_report_raw = project_report_fallback
     elif _should_use_project_report_fallback(stored_project_report, project_report_fallback):
         project_report_raw = project_report_fallback
@@ -1393,50 +1405,76 @@ def _build_task_export_markdown(
     if not findings:
         lines.append("## 漏洞报告")
         lines.append("")
-        lines.append("本次导出范围内无可确认漏洞。")
+        lines.append("本次导出范围内无可导出的漏洞条目。")
         lines.append("")
         content = "\n".join(lines)
         if export_options.compact_mode:
             return _compact_markdown(content)
         return content
 
-    for index, finding_row in enumerate(findings, start=1):
-        finding_report = None
-        if _uses_default_report_export_options(export_options):
-            finding_report = _normalize_optional_text(getattr(finding_row, "report", None))
-        if not finding_report:
-            finding_payload = _build_finding_payload_from_row(
-                finding_row,
-                report_descriptions,
-                export_options=export_options,
-            )
-            finding_report = _build_finding_markdown_report(
-                task=task,
-                project=project,
-                finding_id=str(getattr(finding_row, "id", "") or ""),
-                finding_data=finding_payload,
-                export_options=export_options,
-            )
-        finding_report = _normalize_embedded_markdown(
-            finding_report,
-            title_patterns=[
-                r"漏洞详情报告",
-                r"漏洞报告",
-            ],
-            level_offset=1,
-        )
-        finding_report = _strip_finding_export_noise(finding_report)
-        finding_title = (
-            report_descriptions.get(str(getattr(finding_row, "id", "") or ""), {}).get("display_title")
-            or _normalize_optional_text(getattr(finding_row, "title", None))
-        )
-        if finding_title:
-            lines.append(f"## 漏洞报告 {index}: {_escape_markdown_inline(finding_title)}")
-        else:
-            lines.append(f"## 漏洞报告 {index}")
+    section_order = [
+        (FindingStatus.VERIFIED, "确报"),
+        ("pending", "待确认"),
+        (FindingStatus.FALSE_POSITIVE, "误报"),
+    ]
+    finding_index = 1
+
+    for export_status, section_title in section_order:
+        section_findings = [
+            finding_row
+            for finding_row in findings
+            if export_statuses.get(str(getattr(finding_row, "id", "") or ""), "pending") == export_status
+        ]
+        if not section_findings:
+            continue
+
+        lines.append(f"## {section_title}")
         lines.append("")
-        lines.append(str(finding_report).strip() if finding_report else "_无漏洞报告内容_")
-        lines.append("")
+
+        for finding_row in section_findings:
+            finding_report = None
+            if (
+                _uses_default_report_export_options(export_options)
+                and export_status == FindingStatus.VERIFIED
+            ):
+                finding_report = _normalize_optional_text(getattr(finding_row, "report", None))
+            if not finding_report:
+                finding_payload = _build_finding_payload_from_row(
+                    finding_row,
+                    report_descriptions,
+                    export_status=export_status,
+                    export_options=export_options,
+                )
+                finding_report = _build_finding_markdown_report(
+                    task=task,
+                    project=project,
+                    finding_id=str(getattr(finding_row, "id", "") or ""),
+                    finding_data=finding_payload,
+                    export_options=export_options,
+                )
+            finding_report = _normalize_embedded_markdown(
+                finding_report,
+                title_patterns=[
+                    r"漏洞详情报告",
+                    r"漏洞报告",
+                ],
+                level_offset=1,
+            )
+            finding_report = _strip_finding_export_noise(finding_report)
+            finding_title = (
+                report_descriptions.get(str(getattr(finding_row, "id", "") or ""), {}).get("display_title")
+                or _normalize_optional_text(getattr(finding_row, "title", None))
+            )
+            if finding_title:
+                lines.append(
+                    f"### 漏洞报告 {finding_index}: {_escape_markdown_inline(finding_title)}"
+                )
+            else:
+                lines.append(f"### 漏洞报告 {finding_index}")
+            lines.append("")
+            lines.append(str(finding_report).strip() if finding_report else "_无漏洞报告内容_")
+            lines.append("")
+            finding_index += 1
 
     content = "\n".join(lines)
     if export_options.compact_mode:
@@ -1468,7 +1506,7 @@ async def generate_audit_report(
     if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
     
-    # 读取任务下全部 findings，由导出层统一按 status/verdict 做兼容过滤。
+    # 读取任务下全部 findings，由导出层统一按 status/verdict 做兼容归一化。
     findings_result = await db.execute(
         select(AgentFinding)
         .where(AgentFinding.task_id == task_id)
@@ -1484,12 +1522,25 @@ async def generate_audit_report(
         )
     )
     all_task_findings = findings_result.scalars().all()
-    findings = [
-        finding_row
-        for finding_row in all_task_findings
-        if _should_export_finding_in_report(finding_row)
-    ]
-    findings = sorted(findings, key=_finding_sort_key)
+    export_statuses: Dict[str, str] = {}
+    findings: List[AgentFinding] = []
+    for finding_row in all_task_findings:
+        export_status = _resolve_report_export_status(finding_row)
+        if export_status is None:
+            continue
+        finding_id = str(getattr(finding_row, "id", "") or "")
+        export_statuses[finding_id] = export_status
+        findings.append(finding_row)
+    findings = sorted(
+        findings,
+        key=lambda finding_row: (
+            _get_report_export_status_rank(
+                export_statuses.get(str(getattr(finding_row, "id", "") or ""), "pending")
+            ),
+            _finding_sort_key(finding_row)[0],
+            _finding_sort_key(finding_row)[1],
+        ),
+    )
     
     #  Helper function to normalize severity for comparison (case-insensitive)
     def normalize_severity(sev: str) -> str:
@@ -1497,7 +1548,7 @@ async def generate_audit_report(
     
     # Log findings for debugging
     logger.info(
-        "[Report] Task %s: found %d task findings, exporting %d actionable findings",
+        "[Report] Task %s: found %d task findings, exporting %d report findings",
         task_id,
         len(all_task_findings),
         len(findings),
@@ -1605,13 +1656,33 @@ async def generate_audit_report(
         }
     
     if format == "json":
+        status_distribution = {
+            "pending": sum(
+                1
+                for finding_row in findings
+                if export_statuses.get(str(getattr(finding_row, "id", "") or ""), "pending") == "pending"
+            ),
+            "verified": sum(
+                1
+                for finding_row in findings
+                if export_statuses.get(str(getattr(finding_row, "id", "") or ""), "pending") == FindingStatus.VERIFIED
+            ),
+            "false_positive": sum(
+                1
+                for finding_row in findings
+                if export_statuses.get(str(getattr(finding_row, "id", "") or ""), "pending") == FindingStatus.FALSE_POSITIVE
+            ),
+        }
         # Enhanced JSON report with full metadata
         payload: Dict[str, Any] = {
             "summary": {
                 "security_score": task.security_score,
                 "total_files_analyzed": task.analyzed_files,
                 "total_findings": len(findings),
-                "verified_findings": sum(1 for f in findings if f.is_verified),
+                "verified_findings": status_distribution["verified"],
+                "pending_findings": status_distribution["pending"],
+                "false_positive_findings": status_distribution["false_positive"],
+                "status_distribution": status_distribution,
                 "severity_distribution": {
                     "critical": sum(1 for f in findings if normalize_severity(f.severity) == 'critical'),
                     "high": sum(1 for f in findings if normalize_severity(f.severity) == 'high'),
@@ -1627,6 +1698,10 @@ async def generate_audit_report(
             "findings": [
                 {
                     "id": f.id,
+                    "status": export_statuses.get(str(f.id), "pending"),
+                    "status_label": _get_report_export_status_label(
+                        export_statuses.get(str(f.id), "pending")
+                    ),
                     "finding_identity": (
                         getattr(f, "finding_identity", None)
                         if export_options.include_metadata
@@ -1704,7 +1779,21 @@ async def generate_audit_report(
     high = sum(1 for f in findings if normalize_severity(f.severity) == 'high')
     medium = sum(1 for f in findings if normalize_severity(f.severity) == 'medium')
     low = sum(1 for f in findings if normalize_severity(f.severity) == 'low')
-    verified = sum(1 for f in findings if f.is_verified)
+    verified = sum(
+        1
+        for f in findings
+        if export_statuses.get(str(getattr(f, "id", "") or ""), "pending") == FindingStatus.VERIFIED
+    )
+    pending = sum(
+        1
+        for f in findings
+        if export_statuses.get(str(getattr(f, "id", "") or ""), "pending") == "pending"
+    )
+    false_positive = sum(
+        1
+        for f in findings
+        if export_statuses.get(str(getattr(f, "id", "") or ""), "pending") == FindingStatus.FALSE_POSITIVE
+    )
     with_poc = sum(1 for f in findings if f.has_poc)
 
     # Calculate duration
@@ -1762,17 +1851,21 @@ async def generate_audit_report(
     # Findings Summary
     md_lines.append("### 漏洞发现概览")
     md_lines.append("")
-    md_lines.append(f"| 严重程度 | 数量 | 已验证 |")
-    md_lines.append(f"|----------|-------|----------|")
+    md_lines.append(f"| 严重程度 | 数量 |")
+    md_lines.append(f"|----------|-------|")
     if critical > 0:
-        md_lines.append(f"| **严重 (CRITICAL)** | {critical} | {sum(1 for f in findings if normalize_severity(f.severity) == 'critical' and f.is_verified)} |")
+        md_lines.append(f"| **严重 (CRITICAL)** | {critical} |")
     if high > 0:
-        md_lines.append(f"| **高危 (HIGH)** | {high} | {sum(1 for f in findings if normalize_severity(f.severity) == 'high' and f.is_verified)} |")
+        md_lines.append(f"| **高危 (HIGH)** | {high} |")
     if medium > 0:
-        md_lines.append(f"| **中危 (MEDIUM)** | {medium} | {sum(1 for f in findings if normalize_severity(f.severity) == 'medium' and f.is_verified)} |")
+        md_lines.append(f"| **中危 (MEDIUM)** | {medium} |")
     if low > 0:
-        md_lines.append(f"| **低危 (LOW)** | {low} | {sum(1 for f in findings if normalize_severity(f.severity) == 'low' and f.is_verified)} |")
-    md_lines.append(f"| **总计** | {total} | {verified} |")
+        md_lines.append(f"| **低危 (LOW)** | {low} |")
+    md_lines.append(f"| **总计** | {total} |")
+    md_lines.append("")
+    md_lines.append(f"- **确报:** {verified}")
+    md_lines.append(f"- **待确认:** {pending}")
+    md_lines.append(f"- **误报:** {false_positive}")
     md_lines.append("")
 
     # Audit Metrics
@@ -1949,6 +2042,7 @@ async def generate_audit_report(
             project=project,
             findings=findings,
             report_descriptions=report_descriptions,
+            export_statuses=export_statuses,
             export_options=export_options,
         )
         or legacy_content
@@ -1958,6 +2052,7 @@ async def generate_audit_report(
         project=project,
         findings=findings,
         report_descriptions=report_descriptions,
+        export_statuses=export_statuses,
         project_report_fallback=project_report_fallback,
         export_options=export_options,
     )

@@ -3,8 +3,6 @@ import { Switch } from "@/components/ui/switch";
 import FindingNarrativeMarkdown from "../components/FindingNarrativeMarkdown";
 import type { AgentTask } from "@/shared/api/agentTasks";
 import {
-  AlertTriangle,
-  Bug,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -82,38 +80,35 @@ export const EnhancedStatsPanel = memo(function EnhancedStatsPanel({
 }: {
   task: AgentTask;
 }) {
-  const totalFindings = task.findings_count || 0;
-  const criticalAndHigh = (task.critical_count || 0) + (task.high_count || 0);
   const verified = task.verified_count || 0;
+  const falsePositive = task.false_positive_count || 0;
+  const pending = Math.max((task.findings_count || 0) - verified, 0);
   const score = task.security_score || 0;
 
   const stats = [
     {
-      icon: <Bug className="w-4 h-4" />,
-      label: "漏洞总数",
-      value: totalFindings,
-      color: "text-foreground",
-      iconColor: "text-rose-600 dark:text-rose-400",
-      trend: totalFindings > 0 ? "up" : null,
-    },
-    {
-      icon: <AlertTriangle className="w-4 h-4" />,
-      label: "高危问题",
-      value: criticalAndHigh,
-      color:
-        criticalAndHigh > 0
-          ? "text-rose-600 dark:text-rose-400"
-          : "text-muted-foreground",
-      iconColor: "text-orange-600 dark:text-orange-400",
-      trend: criticalAndHigh > 0 ? "critical" : null,
+      icon: <Search className="w-4 h-4" />,
+      label: "待确认",
+      value: pending,
+      color: pending > 0 ? "text-amber-500 dark:text-amber-300" : "text-muted-foreground",
+      iconColor: "text-amber-500 dark:text-amber-300",
+      trend: pending > 0 ? "up" : null,
     },
     {
       icon: <CheckCircle2 className="w-4 h-4" />,
-      label: "已验证",
+      label: "确报",
       value: verified,
       color: "text-emerald-600 dark:text-emerald-400",
       iconColor: "text-emerald-600 dark:text-emerald-400",
       trend: null,
+    },
+    {
+      icon: <X className="w-4 h-4" />,
+      label: "误报",
+      value: falsePositive,
+      color: falsePositive > 0 ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
+      iconColor: "text-rose-600 dark:text-rose-400",
+      trend: falsePositive > 0 ? "critical" : null,
     },
   ];
 

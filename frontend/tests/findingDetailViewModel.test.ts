@@ -439,6 +439,19 @@ test("buildAgentFindingDetailModel 的误报分支保留判定依据展示", () 
   );
 });
 
+test("finding detail view source uses unified pending/verified/false-positive copy", () => {
+  const source = readFileSync(
+    new URL("../src/pages/finding-detail/viewModel.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /return "确报"/);
+  assert.match(source, /return "待确认"/);
+  assert.match(source, /return "误报"/);
+  assert.doesNotMatch(source, /return "已验证"/);
+  assert.doesNotMatch(source, /return "待处理"/);
+});
+
 test("buildFullFileDisplayLines 生成全文视图并保持焦点与高亮区间", () => {
   const lines = buildFullFileDisplayLines({
     content: ["alpha", "beta", "gamma", "delta"].join("\n"),

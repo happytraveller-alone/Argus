@@ -229,6 +229,7 @@ test("getAgentAuditFindingDisplayStatus 不再把 likely 直接显示为确报",
     }),
     "open",
   );
+  assert.equal(detailViewModel.getAgentAuditFindingStatusLabel("open"), "待确认");
 });
 
 test("isVisibleVerifiedVulnerability 会过滤各类误报信号", () => {

@@ -310,7 +310,7 @@ export function getAgentAuditFindingStatusLabel(
 ): string {
   if (status === "verified") return "确报";
   if (status === "false_positive") return "误报";
-  return "待验证";
+  return "待确认";
 }
 
 export function getAgentAuditFindingStatusBadgeClass(

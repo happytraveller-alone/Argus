@@ -376,10 +376,20 @@ function normalizeToolStatus(
 
 function toCnVerificationStatus(value: unknown): string {
   const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "verified") return "已验证";
+  if (normalized === "verified" || normalized === "confirmed") return "确报";
   if (normalized === "running") return "验证中";
-  if (normalized === "pending") return "待验证";
-  if (normalized === "false_positive") return "假阳性";
+  if (
+    normalized === "pending" ||
+    normalized === "open" ||
+    normalized === "needs_review" ||
+    normalized === "likely" ||
+    normalized === "uncertain" ||
+    normalized === "new" ||
+    normalized === "analyzing"
+  ) {
+    return "待确认";
+  }
+  if (normalized === "false_positive") return "误报";
   return normalized || "未知状态";
 }
 
@@ -2198,7 +2208,7 @@ function AgentAuditPageContent() {
             .slice(0, 3)
             .map((item) => toCnVerificationStatus(item?.status))
             .join(" / ");
-          const compactProgress = `逐漏洞验证进度：已验证 ${verifiedCount}，待验证 ${pendingCount}，假阳性 ${falsePositiveCount}`;
+          const compactProgress = `逐漏洞验证进度：确报 ${verifiedCount}，待确认 ${pendingCount}，误报 ${falsePositiveCount}`;
           dispatch({
             type: "ADD_LOG",
             payload: {
@@ -2227,7 +2237,7 @@ function AgentAuditPageContent() {
           const compactProgress =
             `漏洞表收敛进度（第 ${round} 轮）：` +
             `上下文待收集 ${contextPending}，已就绪 ${contextReady}，失败 ${contextFailed}；` +
-            `待验证 ${verifyUnverified}，已验证 ${verified}，假阳性 ${falsePositive}`;
+            `待确认 ${verifyUnverified}，确报 ${verified}，误报 ${falsePositive}`;
           dispatch({
             type: "ADD_LOG",
             payload: {

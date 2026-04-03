@@ -297,12 +297,21 @@ function buildStatusLabel(value: unknown): string {
   if (!raw) return MISSING_VALUE;
 
   const normalized = normalizeToken(raw).replace(/[\s-]+/g, "_");
-  if (normalized === "verified") return "已验证";
-  if (normalized === "open") return "待处理";
+  if (normalized === "verified" || normalized === "confirmed") return "确报";
+  if (
+    normalized === "open" ||
+    normalized === "pending" ||
+    normalized === "needs_review" ||
+    normalized === "likely" ||
+    normalized === "uncertain" ||
+    normalized === "new" ||
+    normalized === "analyzing"
+  ) {
+    return "待确认";
+  }
   if (normalized === "false_positive") return "误报";
   if (normalized === "closed") return "已关闭";
   if (normalized === "resolved") return "已处理";
-  if (normalized === "confirmed") return "已确认";
   return raw;
 }
 

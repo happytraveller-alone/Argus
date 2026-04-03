@@ -8,10 +8,10 @@
 
 DeepAudit 后端提供三种格式的漏洞审计报告导出：**PDF**、**Markdown**、**JSON**。报告内容由两个阶段产生：
 
-1. **ReportAgent 阶段**（扫描期间）：为每条已验证漏洞生成 Markdown 格式的详情报告，并对整个项目生成风险评估报告，分别存储于数据库字段 `AgentFinding.report` 和 `AgentTask.report`。
-2. **导出阶段**（按需请求）：用户调用导出 API，系统从数据库拉取数据，过滤掉 `status/verdict=uncertain`（典型为 `confidence=0.5`）与 `false_positive` 条目后，再组装并转换为目标格式返回。
+1. **ReportAgent 阶段**（扫描期间）：生成运行期可复用的漏洞详情 Markdown 素材与项目级风险评估素材，分别存储于数据库字段 `AgentFinding.report` 和 `AgentTask.report`。
+2. **导出阶段**（按需请求）：用户调用导出 API，系统从数据库拉取当前任务 findings，按导出三态做归一化后再组装并转换为目标格式返回。
 
-> 若过滤后无可确认漏洞，项目报告会退化为一份简短“无可确认风险”摘要，而不会继续输出包含 `uncertain` 统计或人工复核建议的兜底模板。
+> 默认导出三态为：`待确认`、`确报`、`误报`。其中 `likely`、`uncertain`、`needs_review`、`new`、`analyzing` 等内部/兼容状态统一归入 `待确认`。
 
 ---
 
@@ -181,7 +181,7 @@ GET /api/v1/agent-tasks/{task_id}/findings/{finding_id}/report?format=markdown|j
 ║  generate_audit_report(task_id, format)                  ║
 ║      │                                                   ║
 ║      ├─[1] 从 DB 加载 AgentTask + AgentFinding[]        ║
-║      │       └─ 仅保留 confirmed/likely/legacy verified ║
+║      │       └─ 归一化为 pending/verified/false_positive ║
 ║      │                                                   ║
 ║      ├─[2] _build_report_descriptions()                  ║
 ║      │       ├─ _resolve_vulnerability_profile()         ║
@@ -287,7 +287,7 @@ class AgentFinding(Base):
 | `ReportAgent.run` | `agents/report.py` | 生成漏洞详情及项目级 Markdown 报告 |
 | `CreateVulnerabilityReportTool._execute` | `tools/reporting_tool.py` | Agent 工具：记录单条漏洞 |
 
-> 导出过滤规则：`is_verified` 仅表示“完成 verification 阶段”，并不等价于“应导出”。报告导出只保留 `status=verified` 或 `verdict in {confirmed, likely}` 的条目；`uncertain` / `false_positive` 不进入最终报告。
+> 导出归一化规则：`is_verified` 仅表示兼容布尔字段，不再作为导出筛选依据。报告导出默认返回 `pending | verified | false_positive` 三态结果，并在 JSON 中额外提供 `status_distribution`、`pending_findings`、`false_positive_findings` 等摘要字段。
 
 ---
 
@@ -304,7 +304,7 @@ class AgentFinding(Base):
 
 ## 九、ReportAgent 内部流程
 
-ReportAgent（`app/services/agent/agents/report.py`）在扫描完成后对每条已验证漏洞独立运行：
+ReportAgent（`app/services/agent/agents/report.py`）在扫描完成后生成运行期可复用的报告素材：
 
 ```
 输入：AgentFinding（已验证）+ 源码访问权限
