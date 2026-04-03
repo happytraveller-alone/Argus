@@ -44,9 +44,77 @@ export interface TaskStatsLike {
   findings_count?: number | null;
   verified_count?: number | null;
   false_positive_count?: number | null;
+  critical_count?: number | null;
+  high_count?: number | null;
+  medium_count?: number | null;
+  low_count?: number | null;
+  verified_critical_count?: number | null;
+  verified_high_count?: number | null;
+  verified_medium_count?: number | null;
+  verified_low_count?: number | null;
+  defect_summary?: AgentAuditDefectSummaryLike | null;
   total_iterations?: number | null;
   tool_calls_count?: number | null;
   tokens_used?: number | null;
+}
+
+export interface AgentAuditDefectSummaryLike {
+  scope?: "all_findings" | null;
+  total_count?: number | null;
+  severity_counts?: Partial<AgentAuditSeverityCounts> | null;
+  status_counts?: Partial<AgentAuditStatusCounts> | null;
+}
+
+export interface AgentAuditStatusCounts {
+  pending: number;
+  verified: number;
+  false_positive: number;
+}
+
+export interface AgentAuditSeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+}
+
+export interface AgentAuditVerifiedSeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface AgentAuditFindingSummary {
+  totalCount: number;
+  findingsCount: number;
+  verifiedCount: number;
+  falsePositiveCount: number;
+  statusCounts: AgentAuditStatusCounts;
+  severityCounts: AgentAuditSeverityCounts;
+  effectiveSeverityCounts: AgentAuditSeverityCounts;
+  verifiedSeverityCounts: AgentAuditVerifiedSeverityCounts;
+}
+
+export interface AgentAuditTaskFindingCountersPatch {
+  findings_count: number;
+  verified_count: number;
+  false_positive_count: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  verified_critical_count: number;
+  verified_high_count: number;
+  verified_medium_count: number;
+  verified_low_count: number;
+  defect_summary: {
+    scope: "all_findings";
+    total_count: number;
+    severity_counts: AgentAuditSeverityCounts;
+    status_counts: AgentAuditStatusCounts;
+  };
 }
 
 export interface AgentAuditStatsSummary {
@@ -178,6 +246,33 @@ function toFiniteNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function createEmptyStatusCounts(): AgentAuditStatusCounts {
+  return {
+    pending: 0,
+    verified: 0,
+    false_positive: 0,
+  };
+}
+
+function createEmptySeverityCounts(): AgentAuditSeverityCounts {
+  return {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    info: 0,
+  };
+}
+
+function createEmptyVerifiedSeverityCounts(): AgentAuditVerifiedSeverityCounts {
+  return {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+  };
+}
+
 function toPositiveNumberOrNull(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -270,6 +365,102 @@ export function isFalsePositiveFinding(item: RealtimeFindingLike): boolean {
 export function isVerifiedFinding(item: RealtimeFindingLike): boolean {
   if (item.is_verified) return true;
   return String(item.verification_progress || "").trim().toLowerCase() === "verified";
+}
+
+function normalizeSummarySeverity(
+  item: RealtimeFindingLike,
+): keyof AgentAuditSeverityCounts | null {
+  const severity = String(item.severity || item.display_severity || "")
+    .trim()
+    .toLowerCase();
+  if (
+    severity === "critical" ||
+    severity === "high" ||
+    severity === "medium" ||
+    severity === "low" ||
+    severity === "info"
+  ) {
+    return severity;
+  }
+  return null;
+}
+
+export function summarizeAgentAuditFindings(
+  findings: RealtimeFindingLike[],
+): AgentAuditFindingSummary {
+  const statusCounts = createEmptyStatusCounts();
+  const severityCounts = createEmptySeverityCounts();
+  const effectiveSeverityCounts = createEmptySeverityCounts();
+  const verifiedSeverityCounts = createEmptyVerifiedSeverityCounts();
+
+  for (const finding of findings) {
+    const severity = normalizeSummarySeverity(finding);
+    const falsePositive = isFalsePositiveFinding(finding);
+    const verified = !falsePositive && isVerifiedFinding(finding);
+
+    if (severity) {
+      severityCounts[severity] += 1;
+      if (!falsePositive) {
+        effectiveSeverityCounts[severity] += 1;
+      }
+      if (
+        verified &&
+        (severity === "critical" ||
+          severity === "high" ||
+          severity === "medium" ||
+          severity === "low")
+      ) {
+        verifiedSeverityCounts[severity] += 1;
+      }
+    }
+
+    if (falsePositive) {
+      statusCounts.false_positive += 1;
+    } else if (verified) {
+      statusCounts.verified += 1;
+    } else {
+      statusCounts.pending += 1;
+    }
+  }
+
+  return {
+    totalCount: findings.length,
+    findingsCount: statusCounts.pending + statusCounts.verified,
+    verifiedCount: statusCounts.verified,
+    falsePositiveCount: statusCounts.false_positive,
+    statusCounts,
+    severityCounts,
+    effectiveSeverityCounts,
+    verifiedSeverityCounts,
+  };
+}
+
+export function buildAgentAuditTaskFindingCountersPatch(input: {
+  task: TaskStatsLike | null | undefined;
+  findings: RealtimeFindingLike[];
+}): AgentAuditTaskFindingCountersPatch {
+  const { task, findings } = input;
+  const summary = summarizeAgentAuditFindings(findings);
+
+  return {
+    findings_count: summary.findingsCount,
+    verified_count: summary.verifiedCount,
+    false_positive_count: summary.falsePositiveCount,
+    critical_count: summary.effectiveSeverityCounts.critical,
+    high_count: summary.effectiveSeverityCounts.high,
+    medium_count: summary.effectiveSeverityCounts.medium,
+    low_count: summary.effectiveSeverityCounts.low,
+    verified_critical_count: summary.verifiedSeverityCounts.critical,
+    verified_high_count: summary.verifiedSeverityCounts.high,
+    verified_medium_count: summary.verifiedSeverityCounts.medium,
+    verified_low_count: summary.verifiedSeverityCounts.low,
+    defect_summary: {
+      scope: task?.defect_summary?.scope === "all_findings" ? "all_findings" : "all_findings",
+      total_count: summary.totalCount,
+      severity_counts: summary.severityCounts,
+      status_counts: summary.statusCounts,
+    },
+  };
 }
 
 export function isVisibleVerifiedVulnerability(item: RealtimeFindingLike): boolean {

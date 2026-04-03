@@ -95,6 +95,7 @@ import {
   resolveAgentAuditBackTarget,
   resolveAgentAuditDetailTitle,
   buildStatsSummary,
+  buildAgentAuditTaskFindingCountersPatch,
   createTokenUsageAccumulator,
   isFalsePositiveFinding,
   readAgentAuditFindingsPagination,
@@ -126,6 +127,7 @@ import {
 const EVENT_PAGE_SIZE = 500;
 const EVENT_BATCH_SAFETY_LIMIT = 200;
 const FINDINGS_REFRESH_INTERVAL = 10000;
+const FINDINGS_PAGE_SIZE = 200;
 const BOOTSTRAP_FINDING_PAGE_SIZE = 200;
 const EVENT_DEDUP_WINDOW_SIZE = 5000;
 const TERMINAL_RECOVERY_MAX_ATTEMPTS = 2;
@@ -705,6 +707,8 @@ function AgentAuditPageContent() {
   const findingsContainerRef = useRef<HTMLDivElement | null>(null);
   const agentContainerRef = useRef<HTMLDivElement | null>(null);
   const logsRef = useRef(logs);
+  const findingsRef = useRef(findings);
+  const taskSnapshotRef = useRef(task);
   const toolLogIdByCallIdRef = useRef<Map<string, string>>(new Map());
   const pendingToolBucketsRef = useRef<Map<string, string[]>>(new Map());
   const agentTreeRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(
@@ -797,12 +801,23 @@ function AgentAuditPageContent() {
       try {
         await updateAgentFindingStatus(taskId, item.id, target);
 
-        const nextFindings = findings.map((finding) =>
+        const currentFindings = findingsRef.current;
+        const currentTask = taskSnapshotRef.current;
+        const nextFindings = currentFindings.map((finding) =>
           finding.id === item.id
             ? applyManualStatusToPersistedFinding(finding, target)
             : finding,
         );
         setFindings(nextFindings);
+        if (currentTask) {
+          setTask({
+            ...currentTask,
+            ...buildAgentAuditTaskFindingCountersPatch({
+              task: currentTask,
+              findings: nextFindings,
+            }),
+          });
+        }
         setRealtimeFindings((prev) =>
           prev.map((current) =>
             current.id === item.id
@@ -810,6 +825,16 @@ function AgentAuditPageContent() {
               : current,
           ),
         );
+        void getAgentTask(taskId)
+          .then((snapshot) => {
+            setTask(snapshot);
+          })
+          .catch((reloadError) => {
+            console.warn(
+              "[AgentAudit] failed to refresh task counters after manual status update",
+              reloadError,
+            );
+          });
 
         toast.success(target === "verified" ? "已标记为确报" : "已标记为误报");
       } catch (error) {
@@ -827,7 +852,7 @@ function AgentAuditPageContent() {
         );
       }
     },
-    [findings, setFindings, taskId],
+    [setFindings, setTask, taskId],
   );
   const selectedAgentNode = useMemo(
     () =>
@@ -1070,6 +1095,14 @@ function AgentAuditPageContent() {
   useEffect(() => {
     logsRef.current = logs;
   }, [logs]);
+
+  useEffect(() => {
+    findingsRef.current = findings;
+  }, [findings]);
+
+  useEffect(() => {
+    taskSnapshotRef.current = task;
+  }, [task]);
 
   useEffect(() => {
     taskStatusRef.current = task?.status;
@@ -1330,10 +1363,20 @@ function AgentAuditPageContent() {
         return;
       }
       try {
-        const data = await getAgentFindings(taskId, {
-          include_false_positive: true,
-        });
-        setFindings(data);
+        const allFindings: AgentFinding[] = [];
+        let skip = 0;
+        for (let batch = 0; batch < EVENT_BATCH_SAFETY_LIMIT; batch += 1) {
+          const page = await getAgentFindings(taskId, {
+            include_false_positive: true,
+            skip,
+            limit: FINDINGS_PAGE_SIZE,
+          });
+          if (!page.length) break;
+          allFindings.push(...page);
+          skip += page.length;
+          if (page.length < FINDINGS_PAGE_SIZE) break;
+        }
+        setFindings(allFindings);
       } catch (err) {
         console.error(err);
         const message = err instanceof Error ? err.message : "加载扫描结果失败";

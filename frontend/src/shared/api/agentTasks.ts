@@ -336,6 +336,8 @@ export async function getAgentFindings(
     vulnerability_type?: string;
     is_verified?: boolean;
     include_false_positive?: boolean;
+    skip?: number;
+    limit?: number;
   }
 ): Promise<AgentFinding[]> {
   const normalizedParams =

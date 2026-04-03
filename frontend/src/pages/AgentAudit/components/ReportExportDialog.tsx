@@ -117,6 +117,7 @@ export const ReportExportDialog = memo(function ReportExportDialog({
   open,
   onOpenChange,
   task,
+  findings,
 }: ReportExportDialogProps) {
   const [activeFormat, setActiveFormat] = useState<ReportFormat>("markdown");
   const [preview, setPreview] = useState<ReportPreview>({
@@ -133,6 +134,22 @@ export const ReportExportDialog = memo(function ReportExportDialog({
     useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
   const previewCache = useRef<Map<string, string>>(new Map());
+  const reportRevision = useMemo(
+    () =>
+      findings
+        .map((finding) =>
+          [
+            finding.id,
+            finding.status ?? "",
+            finding.verdict ?? "",
+            finding.authenticity ?? "",
+            finding.is_verified ? "1" : "0",
+          ].join(":"),
+        )
+        .sort()
+        .join("|"),
+    [findings],
+  );
 
   const searchMatchCount = useMemo(() => {
     if (!searchQuery || !preview.content) return 0;
@@ -146,7 +163,7 @@ export const ReportExportDialog = memo(function ReportExportDialog({
   const fetchPreview = useCallback(
     async (format: ReportFormat, forceRefresh = false) => {
       if (!task) return;
-      const cacheKey = buildReportPreviewCacheKey(format, exportOptions);
+      const cacheKey = `${buildReportPreviewCacheKey(format, exportOptions)}::${task.id}::${reportRevision}`;
       const requestFormat = format === "pdf" ? "markdown" : format;
 
       if (!forceRefresh && previewCache.current.has(cacheKey)) {
@@ -187,14 +204,14 @@ export const ReportExportDialog = memo(function ReportExportDialog({
         }));
       }
     },
-    [exportOptions, task],
+    [exportOptions, reportRevision, task],
   );
 
   useEffect(() => {
     if (open && task) {
       void fetchPreview(activeFormat);
     }
-  }, [activeFormat, exportOptions, fetchPreview, open, task]);
+  }, [activeFormat, exportOptions, fetchPreview, open, reportRevision, task]);
 
   useEffect(() => {
     if (!open) {
@@ -379,7 +396,7 @@ export const ReportExportDialog = memo(function ReportExportDialog({
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="px-6 py-4 border-b border-border bg-card/80">
-            <EnhancedStatsPanel task={task} />
+            <EnhancedStatsPanel task={task} findings={findings} />
           </div>
 
           <div className="flex-1 flex min-h-0">

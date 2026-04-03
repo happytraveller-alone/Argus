@@ -1,7 +1,7 @@
 import { memo, type ReactNode } from "react";
 import { Switch } from "@/components/ui/switch";
 import FindingNarrativeMarkdown from "../components/FindingNarrativeMarkdown";
-import type { AgentTask } from "@/shared/api/agentTasks";
+import type { AgentFinding, AgentTask } from "@/shared/api/agentTasks";
 import {
   Check,
   CheckCircle2,
@@ -13,6 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { getReportExportScoreColor } from "./utils";
+import { summarizeAgentAuditFindings } from "../detailViewModel";
 
 export type ReportFormat = "markdown" | "json" | "pdf";
 
@@ -77,12 +78,34 @@ const CircularProgress = memo(function CircularProgress({
 
 export const EnhancedStatsPanel = memo(function EnhancedStatsPanel({
   task,
+  findings = [],
 }: {
   task: AgentTask;
+  findings?: AgentFinding[];
 }) {
-  const verified = task.verified_count || 0;
-  const falsePositive = task.false_positive_count || 0;
-  const pending = Math.max((task.findings_count || 0) - verified, 0);
+  const expectedTotalFindings = Number(
+    task.defect_summary?.total_count ??
+      ((task.findings_count || 0) + (task.false_positive_count || 0)),
+  );
+  const hasExhaustiveLiveFindings =
+    findings.length > 0 &&
+    (expectedTotalFindings <= 0 || findings.length >= expectedTotalFindings);
+  const liveSummary = hasExhaustiveLiveFindings
+    ? summarizeAgentAuditFindings(findings)
+    : null;
+  const statusCounts = task.defect_summary?.status_counts;
+  const verified = liveSummary
+    ? liveSummary.verifiedCount
+    : Number(statusCounts?.verified ?? task.verified_count ?? 0);
+  const falsePositive = liveSummary
+    ? liveSummary.falsePositiveCount
+    : Number(statusCounts?.false_positive ?? task.false_positive_count ?? 0);
+  const pending = liveSummary
+    ? liveSummary.statusCounts.pending
+    : Number(
+        statusCounts?.pending ??
+          Math.max((task.findings_count || 0) - verified, 0),
+      );
   const score = task.security_score || 0;
 
   const stats = [
