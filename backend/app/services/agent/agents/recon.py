@@ -27,14 +27,48 @@ from ..json_parser import AgentJsonParser
 logger = logging.getLogger(__name__)
 
 WEB_FRAMEWORK_HINTS = {
-    "react", "vue", "angular", "express", "django", "flask",
-    "fastapi", "spring", "laravel", "rails", "next.js", "nuxt",
+    "react", "vue", "angular", "express", "koa", "fastify", "hapi",
+    "django", "flask", "fastapi", "spring", "laravel", "rails",
+    "next", "next.js", "nestjs", "nest", "nuxt", "sveltekit",
+    "remix", "hono", "adonisjs",
 }
 WEB_SIGNAL_HINTS = {
     "http", "https", "route", "router", "controller", "request",
     "response", "middleware", "template", "csrf", "session", "cookie",
-    "rest", "graphql", "api",
+    "rest", "graphql", "api", "webhook", "callback", "consumer",
+    "subscriber", "queue", "job", "rpc", "grpc", "resolver",
+    "guard", "interceptor", "req", "res", "ctx",
 }
+FRAMEWORK_OBSERVATION_HINTS = {
+    "React": ("react",),
+    "Next.js": ("next.config", "\"next\"", "'next'", "next/server", "nextrequest", "nextresponse", "pages/api/"),
+    "NestJS": ("@nestjs", "nest-cli.json", "app.controller.ts", "app.module.ts"),
+    "Vue": ("vue",),
+    "Nuxt": ("nuxt", "nuxt.config"),
+    "Angular": ("angular", "@angular/"),
+    "Express": ("express",),
+    "Koa": ("koa", "koa-router"),
+    "Fastify": ("fastify",),
+    "Hapi": ("@hapi", " hapi"),
+    "Hono": ("hono",),
+    "SvelteKit": ("@sveltejs/kit", "+server.ts", "+page.server.ts"),
+    "Remix": ("@remix-run",),
+    "Django": ("django",),
+    "Flask": ("flask",),
+    "FastAPI": ("fastapi",),
+    "Spring": ("spring",),
+    "Streamlit": ("streamlit",),
+}
+DATABASE_OBSERVATION_HINTS = {
+    "MySQL": ("mysql", "mysql2", "pymysql"),
+    "PostgreSQL": ("postgres", "postgresql", "asyncpg", '"pg"', "'pg'"),
+    "MongoDB": ("mongodb", "mongoose", "pymongo"),
+    "Redis": ("redis",),
+    "SQLite": ("sqlite",),
+}
+SOURCE_FILE_PATTERN = re.compile(
+    r'[\w./@\-\[\]+]+\.(?:py|js|jsx|mjs|cjs|ts|tsx|mts|cts|java|php|go|rb)\b'
+)
 WEB_VULNERABILITY_FOCUS_DEFAULT = [
     "sql_injection",
     "xss",
@@ -108,12 +142,12 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 
 | 接口类型 | 说明 | 常见位置 | 重点检查项 |
 |---------|------|---------|-----------|
-| **认证接口** | 登录、注册、密码重置、JWT 验证 | `auth.py`, `login.js`, `AuthController.java`, `AuthService.go` | 暴力破解、凭证填充、会话固定、密码复杂度 |
+| **认证接口** | 登录、注册、密码重置、JWT 验证 | `auth.py`, `login.js`, `auth.controller.ts`, `app/api/auth/[...]/route.ts`, `AuthController.java`, `AuthService.go` | 暴力破解、凭证填充、会话固定、密码复杂度 |
 | **文件上传** | 头像上传、附件上传、批量导入、文件导入导出 | `upload.py`, `file.js`, `UploadService.go`, `FileController.java` | 文件类型绕过、大小限制、路径遍历、WebShell 上传 |
 | **管理员功能** | 用户管理、角色权限、配置修改、数据导出、系统设置 | `admin/`, `management/`, `system/`, `config/` | 垂直越权、敏感操作未审计、配置泄露 |
 | **支付相关** | 订单创建、支付回调、金额修改、退款、优惠券 | `order.py`, `payment/`, `pay.js`, `OrderService.java` | 金额篡改、支付绕过、重放攻击、条件竞争 |
 | **数据查询** | 搜索、筛选、导出、报表、数据可视化 | `search.py`, `query.js`, `report/`, `DataController` | SQL 注入、越权访问、敏感数据泄露、DoS |
-| **外部回调** | Webhook、支付回调、通知回调、第三方接口、OAuth | `webhook/`, `callback/`, `notify/`, `oauth/` | SSRF、签名绕过、重放攻击、参数篡改 |
+| **外部回调** | Webhook、支付回调、通知回调、第三方接口、OAuth | `webhook/`, `callback/`, `notify/`, `oauth/`, `*.controller.ts`, `*.resolver.ts`, `app/api/**/route.ts` | SSRF、签名绕过、重放攻击、参数篡改 |
 | **内部工具** | 调试接口、测试接口、开发工具、运维接口 | `debug/`, `test/`, `dev/`, `actuator/`, `swagger-ui` | 未授权访问、信息泄露、生产环境未关闭 |
 | **API 网关** | 限流、认证、路由转发、协议转换 | `gateway/`, `middleware/`, `interceptor/` | 认证绕过、请求走私、参数污染 |
 
@@ -122,7 +156,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 **Java**: 代码执行，命令执行，SQL 操作，反序列化，文件操作，XML 处理，反射调用等
 **PHP**: 代码执行，命令执行，SQL 操作，文件操作，反序列化，模板渲染，网络请求，正则表达式等
 **Python**: 代码执行，命令执行，SQL 注入，反序列化，文件操作，模板渲染，动态导入，网络请求，随机数，哈希算法等
-**JavaScript/Node.js**: 代码执行，代码注入，命令执行，文件操作，反序列化，原型链污染，模板渲染，网络请求，正则表达式，随机数等
+**JavaScript/Node.js/TypeScript**: 代码执行，代码注入，命令执行，文件操作，反序列化，原型链污染，模板渲染，网络请求，SSR/Server Action/API Route 入口，GraphQL Resolver，正则表达式，随机数等
 **GO**: 代码执行，命令执行，SQL操作，反序列化，文件操作，模板渲染等
 **C/C++**: 缓冲区溢出，格式化字符串，整数溢出，命令执行，文件操作，内存泄漏，竞争条件，不安全的随机，DDL/共享库，SQL 操作等
 **Ruby**: 代码执行，命令执行，反序列化，文件操作，模板注入，网络请求，不安全的随机等
@@ -133,7 +167,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 ## 🔄 工作流程（必须按顺序执行）
 
 ### 阶段一：项目概览（建立地图）
-1. 使用 `list_files` 查看根目录，识别主要目录和关键文件（`package.json`, `requirements.txt`, `go.mod`, `pom.xml` 等）
+1. 使用 `list_files` 查看根目录，识别主要目录和关键文件（`package.json`, `tsconfig.json`, `next.config.*`, `nest-cli.json`, `requirements.txt`, `go.mod`, `pom.xml` 等）
 2. 读取包管理文件，确定技术栈（语言、框架、依赖库）
 3. 使用 `search_code` 和 `get_file_outline` / `get_code_window` 进一步了解项目架构
 
@@ -144,6 +178,8 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
    - "哪里处理文件上传和路径拼接？"
    - "哪里进行密码验证和 session 管理？"
    - "哪里调用了系统命令或 subprocess？"
+   - "TypeScript 项目里哪里存在 `pages/api/*.ts`、`app/api/**/route.ts`、`*.controller.ts`、`*.resolver.ts`、`middleware.ts`、`server action`、`consumer`、`job handler`？"
+   - "哪里使用了 `new Function`、`vm.runIn*`、`child_process.exec/spawn/execSync`、`prisma.$queryRaw*`、`typeorm.query`、`sequelize.query`、`dangerouslySetInnerHTML`？"
 5. 依次遍历所有关键代码目录，使用 `list_files` 获取文件列表
 6. 对重点文件（路由、控制器、工具类、中间件），使用 `get_file_outline` 获取结构，再用 `get_code_window` 读取关键位置
 7. **全局模式搜索**：使用 `search_code` 对特定危险函数进行项目级搜索（`eval`, `exec`, `subprocess`, `execute`, `raw`, `pickle.loads` 等）
@@ -199,6 +235,7 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
    - 工具函数（`utils/`, `helpers/`）
    - 中间件（`middleware/`）
    - 前端代码中的敏感逻辑（如有）
+   - TypeScript 服务端入口（如 `src/main.ts`, `src/app.controller.ts`, `pages/api/`, `app/api/**/route.ts`, `middleware.ts`, `server.ts`, `worker.ts`）
 10. 统计推送的风险点数量，确保达到最低要求
 11. 输出 Final Answer，简要总结扫描结果
 
@@ -582,6 +619,11 @@ class ReconAgent(BaseAgent):
         initial_message += f"""
 ## 任务上下文
 {task_context or task or '进行全面深入的项目信息收集和风险侦查，为安全审计提供完整的项目画像。'}
+
+## TypeScript 项目补充要求
+- 若发现 `tsconfig.json`、`next.config.*`、`nest-cli.json`、`package.json`、`.ts`、`.tsx`，应按 TypeScript 项目处理，不要只按“泛 Node.js”略过
+- 优先枚举 `pages/api/`、`app/api/**/route.ts`、`src/main.ts`、`src/app.controller.ts`、`*.controller.ts`、`*.resolver.ts`、`middleware.ts`、`server.ts`、`worker.ts`
+- 重点关注 `req.body/query/params`、`request.nextUrl.searchParams`、`@Body/@Param/@Query`、GraphQL resolver 参数到危险 sink/敏感操作的路径
 
 ## 可用工具
 {self.get_tools_description()}
@@ -1184,6 +1226,21 @@ Final Answer:""",
 
     # ──────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _append_unique(values: List[str], value: str) -> None:
+        if value and value not in values:
+            values.append(value)
+
+    def _extend_matches_from_hints(
+        self,
+        values: List[str],
+        observation: str,
+        hint_map: Dict[str, tuple[str, ...]],
+    ) -> None:
+        for label, hints in hint_map.items():
+            if any(hint in observation for hint in hints):
+                self._append_unique(values, label)
+
     def _summarize_from_steps(self) -> Dict[str, Any]:
         """从步骤中汇总结果 - 增强版，从 LLM 思考过程中提取更多信息"""
         # 默认结果结构
@@ -1195,7 +1252,7 @@ Final Answer:""",
                 "databases": [],
             },
             "project_profile": {
-                "is_web_project": False,
+                "is_web_project": None,
                 "web_project_confidence": 0.0,
                 "signals": [],
                 "web_vulnerability_focus": [],
@@ -1221,67 +1278,64 @@ Final Answer:""",
                 obs_lower = step.observation.lower()
                 
                 # 识别语言
-                if "package.json" in obs_lower or ".js" in obs_lower or ".ts" in obs_lower:
-                    result["tech_stack"]["languages"].append("JavaScript/TypeScript")
+                has_typescript_signal = any(
+                    token in obs_lower
+                    for token in ("tsconfig.json", ".ts", ".tsx", ".mts", ".cts", "typescript")
+                )
+                has_javascript_signal = any(
+                    token in obs_lower
+                    for token in ("package.json", ".js", ".jsx", ".mjs", ".cjs", "javascript")
+                )
+                if has_typescript_signal:
+                    self._append_unique(result["tech_stack"]["languages"], "TypeScript")
+                if has_javascript_signal:
+                    self._append_unique(result["tech_stack"]["languages"], "JavaScript")
+                if not has_typescript_signal and "package.json" in obs_lower:
+                    self._append_unique(result["tech_stack"]["languages"], "JavaScript/TypeScript")
                 if "requirements.txt" in obs_lower or "setup.py" in obs_lower or ".py" in obs_lower:
-                    result["tech_stack"]["languages"].append("Python")
+                    self._append_unique(result["tech_stack"]["languages"], "Python")
                 if "go.mod" in obs_lower or ".go" in obs_lower:
-                    result["tech_stack"]["languages"].append("Go")
+                    self._append_unique(result["tech_stack"]["languages"], "Go")
                 if "pom.xml" in obs_lower or ".java" in obs_lower:
-                    result["tech_stack"]["languages"].append("Java")
+                    self._append_unique(result["tech_stack"]["languages"], "Java")
                 if ".php" in obs_lower:
-                    result["tech_stack"]["languages"].append("PHP")
+                    self._append_unique(result["tech_stack"]["languages"], "PHP")
                 if ".rb" in obs_lower or "gemfile" in obs_lower:
-                    result["tech_stack"]["languages"].append("Ruby")
+                    self._append_unique(result["tech_stack"]["languages"], "Ruby")
                 
                 # 识别框架
-                if "react" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("React")
-                if "vue" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("Vue")
-                if "angular" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("Angular")
-                if "django" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("Django")
-                if "flask" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("Flask")
-                if "fastapi" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("FastAPI")
-                if "express" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("Express")
-                if "spring" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("Spring")
-                if "streamlit" in obs_lower:
-                    result["tech_stack"]["frameworks"].append("Streamlit")
+                self._extend_matches_from_hints(
+                    result["tech_stack"]["frameworks"],
+                    obs_lower,
+                    FRAMEWORK_OBSERVATION_HINTS,
+                )
                 
                 # 识别数据库
-                if "mysql" in obs_lower or "pymysql" in obs_lower:
-                    result["tech_stack"]["databases"].append("MySQL")
-                if "postgres" in obs_lower or "asyncpg" in obs_lower:
-                    result["tech_stack"]["databases"].append("PostgreSQL")
-                if "mongodb" in obs_lower or "pymongo" in obs_lower:
-                    result["tech_stack"]["databases"].append("MongoDB")
-                if "redis" in obs_lower:
-                    result["tech_stack"]["databases"].append("Redis")
-                if "sqlite" in obs_lower:
-                    result["tech_stack"]["databases"].append("SQLite")
+                self._extend_matches_from_hints(
+                    result["tech_stack"]["databases"],
+                    obs_lower,
+                    DATABASE_OBSERVATION_HINTS,
+                )
                 
                 #  识别高风险区域（从观察中提取）
-                risk_keywords = ["api", "auth", "login", "password", "secret", "key", "token", 
-                               "admin", "upload", "download", "exec", "eval", "sql", "query"]
+                risk_keywords = [
+                    "api", "auth", "login", "password", "secret", "key", "token",
+                    "admin", "upload", "download", "exec", "eval", "sql", "query",
+                    "webhook", "callback", "route", "controller", "resolver",
+                    "middleware", "guard", "payment",
+                ]
                 for keyword in risk_keywords:
                     if keyword in obs_lower:
                         # 尝试从观察中提取文件路径
-                        file_matches = re.findall(r'[\w/]+\.(?:py|js|ts|java|php|go|rb)', step.observation)
-                        for file_path in file_matches[:3]:  # 限制数量
-                            if file_path not in result["high_risk_areas"]:
-                                result["high_risk_areas"].append(file_path)
+                        file_matches = SOURCE_FILE_PATTERN.findall(step.observation)
+                        for file_path in file_matches[:8]:  # 限制数量
+                            self._append_unique(result["high_risk_areas"], file_path)
         
         # 去重
-        result["tech_stack"]["languages"] = list(set(result["tech_stack"]["languages"]))
-        result["tech_stack"]["frameworks"] = list(set(result["tech_stack"]["frameworks"]))
-        result["tech_stack"]["databases"] = list(set(result["tech_stack"]["databases"]))
-        result["high_risk_areas"] = list(set(result["high_risk_areas"]))[:20]  # 限制数量
+        result["tech_stack"]["languages"] = list(dict.fromkeys(result["tech_stack"]["languages"]))
+        result["tech_stack"]["frameworks"] = list(dict.fromkeys(result["tech_stack"]["frameworks"]))
+        result["tech_stack"]["databases"] = list(dict.fromkeys(result["tech_stack"]["databases"]))
+        result["high_risk_areas"] = list(dict.fromkeys(result["high_risk_areas"]))[:20]  # 限制数量
         result["risk_points"] = self._extract_risk_points(result)
         result = self._ensure_project_profile(result)
         

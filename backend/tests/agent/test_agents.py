@@ -9,7 +9,7 @@ import os
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from app.services.agent.agents.base import BaseAgent, AgentConfig, AgentResult, AgentType, AgentPattern
-from app.services.agent.agents.recon import ReconAgent
+from app.services.agent.agents.recon import ReconAgent, ReconStep
 from app.services.agent.agents.analysis import AnalysisAgent
 from app.services.agent.agents.verification import VerificationAgent
 
@@ -85,6 +85,35 @@ class TestReconAgent:
         
         # 应该发现高风险区域
         assert len(high_risk_areas) > 0
+
+    def test_recon_agent_summary_identifies_typescript_frameworks_and_routes(
+        self, mock_llm_service, mock_event_emitter
+    ):
+        """回退汇总应能识别 TypeScript 服务项目线索。"""
+        agent = ReconAgent(
+            llm_service=mock_llm_service,
+            tools={},
+            event_emitter=mock_event_emitter,
+        )
+        agent._steps = [
+            ReconStep(
+                thought="发现 TypeScript 服务端入口",
+                observation=(
+                    "package.json tsconfig.json next.config.ts nest-cli.json "
+                    "src/app.controller.ts src/main.ts "
+                    "app/api/auth/[userId]/route.ts pages/api/admin/reset.ts"
+                ),
+            )
+        ]
+
+        result = agent._summarize_from_steps()
+        tech_stack = result["tech_stack"]
+
+        assert "TypeScript" in tech_stack["languages"]
+        assert "Next.js" in tech_stack["frameworks"]
+        assert "NestJS" in tech_stack["frameworks"]
+        assert result["project_profile"]["is_web_project"] is True
+        assert "app/api/auth/[userId]/route.ts" in result["high_risk_areas"]
 
 
 class TestAnalysisAgent:

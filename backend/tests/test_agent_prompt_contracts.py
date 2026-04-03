@@ -48,6 +48,9 @@ def test_recon_prompt_requires_input_surfaces_and_trust_boundaries():
     assert "trust_boundaries" in RECON_SYSTEM_PROMPT
     assert "target_files" in RECON_SYSTEM_PROMPT
     assert "高风险区域" in RECON_SYSTEM_PROMPT
+    assert "tsconfig.json" in RECON_SYSTEM_PROMPT
+    assert "pages/api" in RECON_SYSTEM_PROMPT
+    assert "app/api/**/route.ts" in RECON_SYSTEM_PROMPT
 
 
 
@@ -70,6 +73,9 @@ def test_business_logic_prompts_require_tool_usage_and_failure_handling():
     assert "Action Input" in BL_RECON_SYSTEM_PROMPT
     assert "list_files" in BL_RECON_SYSTEM_PROMPT
     assert "push_bl_risk_point_to_queue" in BL_RECON_SYSTEM_PROMPT
+    assert "tsconfig.json" in BL_RECON_SYSTEM_PROMPT
+    assert "@Controller" in BL_RECON_SYSTEM_PROMPT
+    assert "pages/api/" in BL_RECON_SYSTEM_PROMPT
 
     assert "工具使用方法（必须遵循）" in BL_ANALYSIS_SYSTEM_PROMPT
     assert "工具调用失败处理（关键）" in BL_ANALYSIS_SYSTEM_PROMPT
