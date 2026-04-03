@@ -29,7 +29,8 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
-      retries: 5
+      start_period: 30s
+      retries: 12
     networks:
       - vulhunter-network
 
@@ -114,8 +115,9 @@ services:
         - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
       interval: 5s
       timeout: 5s
-      start_period: 10s
-      retries: 60
+      # Cold start may need several minutes for runner preflight image pulls.
+      start_period: 180s
+      retries: 120
     depends_on:
       db:
         condition: service_healthy
