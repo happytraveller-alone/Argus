@@ -232,6 +232,45 @@ export function getAgentSeverityCounts(
 	};
 }
 
+function getAgentTaskDefectSummaryStats(
+	task:
+		| Pick<
+				AgentTask,
+				| "defect_summary"
+				| "verified_count"
+				| "verified_critical_count"
+				| "verified_high_count"
+				| "verified_medium_count"
+				| "verified_low_count"
+		  >
+		| null,
+): {
+	critical: number;
+	high: number;
+	medium: number;
+	low: number;
+	total: number;
+} {
+	const severityCounts = task?.defect_summary?.severity_counts;
+	if (severityCounts) {
+		return {
+			critical: toNonNegativeInt(severityCounts.critical),
+			high: toNonNegativeInt(severityCounts.high),
+			medium: toNonNegativeInt(severityCounts.medium),
+			low: toNonNegativeInt(severityCounts.low),
+			total: toNonNegativeInt(task?.defect_summary?.total_count),
+		};
+	}
+
+	return {
+		critical: toNonNegativeInt(task?.verified_critical_count),
+		high: toNonNegativeInt(task?.verified_high_count),
+		medium: toNonNegativeInt(task?.verified_medium_count),
+		low: toNonNegativeInt(task?.verified_low_count),
+		total: toNonNegativeInt(task?.verified_count),
+	};
+}
+
 export function mergeSeverityCounts(...counts: SeverityCounts[]): SeverityCounts {
 	return counts.reduce<SeverityCounts>(
 		(acc, item) => ({
@@ -435,13 +474,7 @@ function toAgentActivities(
 			task.description,
 		),
 		status: task.status,
-		agentFindingStats: {
-			critical: Math.max(task.verified_critical_count || 0, 0),
-			high: Math.max(task.verified_high_count || 0, 0),
-			medium: Math.max(task.verified_medium_count || 0, 0),
-			low: Math.max(task.verified_low_count || 0, 0),
-			total: Math.max(task.verified_count || 0, 0),
-		},
+		agentFindingStats: getAgentTaskDefectSummaryStats(task),
 		createdAt: task.created_at,
 		startedAt: task.started_at,
 		completedAt: task.completed_at,

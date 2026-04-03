@@ -74,6 +74,31 @@ class AgentTaskCreate(BaseModel):
     use_prompt_skills: bool = Field(False, description="是否启用 Prompt Skills")
 
 
+class AgentTaskDefectSummarySeverityCounts(BaseModel):
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+    info: int = 0
+
+
+class AgentTaskDefectSummaryStatusCounts(BaseModel):
+    pending: int = 0
+    verified: int = 0
+    false_positive: int = 0
+
+
+class AgentTaskDefectSummary(BaseModel):
+    scope: Literal["all_findings"] = "all_findings"
+    total_count: int = 0
+    severity_counts: AgentTaskDefectSummarySeverityCounts = Field(
+        default_factory=AgentTaskDefectSummarySeverityCounts
+    )
+    status_counts: AgentTaskDefectSummaryStatusCounts = Field(
+        default_factory=AgentTaskDefectSummaryStatusCounts
+    )
+
+
 class AgentTaskResponse(BaseModel):
     """Agent 任务响应 - 包含所有前端需要的字段"""
     id: str
@@ -112,6 +137,7 @@ class AgentTaskResponse(BaseModel):
     verified_high_count: int = 0
     verified_medium_count: int = 0
     verified_low_count: int = 0
+    defect_summary: Optional[AgentTaskDefectSummary] = None
     
     # 评分
     quality_score: float = 0.0

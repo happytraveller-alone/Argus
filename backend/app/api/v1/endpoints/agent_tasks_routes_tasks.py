@@ -68,6 +68,74 @@ async def _load_verified_severity_counts(
         }
     return counts_by_task
 
+
+async def _load_defect_summaries(
+    db: AsyncSession,
+    task_ids: List[str],
+) -> Dict[str, Dict[str, Any]]:
+    if not task_ids:
+        return {}
+
+    normalized_status = func.lower(func.coalesce(AgentFinding.status, ""))
+    normalized_verdict = func.lower(func.coalesce(AgentFinding.verdict, ""))
+    normalized_severity = func.lower(func.coalesce(AgentFinding.severity, ""))
+
+    false_positive_condition = (normalized_status == "false_positive") | (
+        normalized_verdict == "false_positive"
+    )
+    verified_condition = (~false_positive_condition) & (
+        AgentFinding.is_verified.is_(True) | (normalized_status == "verified")
+    )
+    pending_condition = (~false_positive_condition) & (~verified_condition)
+
+    rows = await db.execute(
+        select(
+            AgentFinding.task_id,
+            func.count(AgentFinding.id).label("total_count"),
+            func.sum(case((normalized_severity == "critical", 1), else_=0)).label("critical"),
+            func.sum(case((normalized_severity == "high", 1), else_=0)).label("high"),
+            func.sum(case((normalized_severity == "medium", 1), else_=0)).label("medium"),
+            func.sum(case((normalized_severity == "low", 1), else_=0)).label("low"),
+            func.sum(case((normalized_severity == "info", 1), else_=0)).label("info"),
+            func.sum(case((pending_condition, 1), else_=0)).label("pending"),
+            func.sum(case((verified_condition, 1), else_=0)).label("verified"),
+            func.sum(case((false_positive_condition, 1), else_=0)).label("false_positive"),
+        )
+        .where(AgentFinding.task_id.in_(task_ids))
+        .group_by(AgentFinding.task_id)
+    )
+
+    summaries: Dict[str, Dict[str, Any]] = {}
+    for (
+        task_id,
+        total_count,
+        critical,
+        high,
+        medium,
+        low,
+        info,
+        pending,
+        verified,
+        false_positive,
+    ) in rows.fetchall():
+        summaries[str(task_id)] = {
+            "scope": "all_findings",
+            "total_count": int(total_count or 0),
+            "severity_counts": {
+                "critical": int(critical or 0),
+                "high": int(high or 0),
+                "medium": int(medium or 0),
+                "low": int(low or 0),
+                "info": int(info or 0),
+            },
+            "status_counts": {
+                "pending": int(pending or 0),
+                "verified": int(verified or 0),
+                "false_positive": int(false_positive or 0),
+            },
+        }
+    return summaries
+
 @router.post("/", response_model=AgentTaskResponse)
 async def create_agent_task(
     request: AgentTaskCreate,
@@ -187,10 +255,15 @@ async def list_agent_tasks(
         db,
         [task.id for task in tasks],
     )
+    defect_summaries = await _load_defect_summaries(
+        db,
+        [task.id for task in tasks],
+    )
     return [
         build_agent_task_response(
             task,
             verified_severity_counts=verified_severity_counts.get(task.id),
+            defect_summary=defect_summaries.get(task.id),
         )
         for task in tasks
     ]
@@ -213,80 +286,16 @@ async def get_agent_task(
     project = await db.get(Project, task.project_id)
     if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
-    
-    # 构建响应，确保所有字段都包含
+
     try:
-        # 计算进度百分比（由模型属性统一计算，终态不强制归零）
-        progress = float(task.progress_percentage) if hasattr(task, "progress_percentage") else 0.0
-
-        # 任务统计：DB 持久值 + 运行时值取 max，避免中断瞬间出现统计回退
-        total_iterations = int(task.total_iterations or 0)
-        tool_calls_count = int(task.tool_calls_count or 0)
-        tokens_used = int(task.tokens_used or 0)
-
-        orchestrator = _running_orchestrators.get(task_id)
-        if orchestrator and task.status in (
-            AgentTaskStatus.RUNNING,
-            AgentTaskStatus.CANCELLED,
-            AgentTaskStatus.FAILED,
-        ):
-            runtime_stats = _collect_orchestrator_stats(orchestrator)
-            total_iterations = max(total_iterations, int(runtime_stats["iterations"]))
-            tool_calls_count = max(tool_calls_count, int(runtime_stats["tool_calls"]))
-            tokens_used = max(tokens_used, int(runtime_stats["tokens_used"]))
-        
-        # 手动构建响应数据
+        task.verification_level = _normalize_verification_level(task.verification_level)
         verified_severity_counts = await _load_verified_severity_counts(db, [task.id])
-        response_data = {
-            "id": task.id,
-            "project_id": task.project_id,
-            "name": task.name,
-            "description": task.description,
-            "task_type": task.task_type or "agent_audit",
-            "status": task.status,
-            "current_phase": task.current_phase,
-            "current_step": task.current_step,
-            "total_files": task.total_files or 0,
-            "indexed_files": task.indexed_files or 0,
-            "analyzed_files": task.analyzed_files or 0,
-            "total_chunks": task.total_chunks or 0,
-            "total_iterations": total_iterations,
-            "tool_calls_count": tool_calls_count,
-            "tokens_used": tokens_used,
-            "findings_count": task.findings_count or 0,
-            "total_findings": task.findings_count or 0,  # 兼容字段
-            "verified_count": task.verified_count or 0,
-            "verified_findings": task.verified_count or 0,  # 兼容字段
-            "false_positive_count": task.false_positive_count or 0,
-            "critical_count": task.critical_count or 0,
-            "high_count": task.high_count or 0,
-            "medium_count": task.medium_count or 0,
-            "low_count": task.low_count or 0,
-            "verified_critical_count": verified_severity_counts.get(task.id, {}).get("critical", 0),
-            "verified_high_count": verified_severity_counts.get(task.id, {}).get("high", 0),
-            "verified_medium_count": verified_severity_counts.get(task.id, {}).get("medium", 0),
-            "verified_low_count": verified_severity_counts.get(task.id, {}).get("low", 0),
-            "quality_score": float(task.quality_score or 0.0),
-            "security_score": float(task.security_score) if task.security_score is not None else None,
-            "progress_percentage": progress,
-            "created_at": task.created_at,
-            "started_at": task.started_at,
-            "completed_at": task.completed_at,
-            "error_message": task.error_message,
-            "audit_scope": task.audit_scope,
-            "target_vulnerabilities": task.target_vulnerabilities,
-            "verification_level": _normalize_verification_level(task.verification_level),
-            "tool_evidence_protocol": (
-                "native_v1"
-                if isinstance(task.agent_config, dict) and task.agent_config.get("tool_evidence_protocol") == "native_v1"
-                else "legacy"
-            ),
-            "exclude_patterns": task.exclude_patterns,
-            "target_files": task.target_files,
-            "report": task.report,
-        }
-        
-        return AgentTaskResponse(**response_data)
+        defect_summaries = await _load_defect_summaries(db, [task.id])
+        return build_agent_task_response(
+            task,
+            verified_severity_counts=verified_severity_counts.get(task.id),
+            defect_summary=defect_summaries.get(task.id),
+        )
     except Exception as e:
         logger.error(f"Error serializing task {task_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"序列化任务数据失败: {str(e)}")

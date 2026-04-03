@@ -42,6 +42,22 @@ export interface AgentTask {
   verified_high_count?: number;
   verified_medium_count?: number;
   verified_low_count?: number;
+  defect_summary?: {
+    scope: "all_findings";
+    total_count: number;
+    severity_counts: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+      info: number;
+    };
+    status_counts: {
+      pending: number;
+      verified: number;
+      false_positive: number;
+    };
+  } | null;
 
   // 评分
   quality_score: number;

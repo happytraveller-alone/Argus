@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from app.models.agent_task import AgentTask, AgentTaskStatus
 from app.models.project import Project
-from .agent_tasks_contracts import AgentTaskResponse
+from .agent_tasks_contracts import AgentTaskDefectSummary, AgentTaskResponse
 from .agent_tasks_runtime import _collect_orchestrator_stats, _running_orchestrators
 
 
@@ -20,6 +20,7 @@ def ensure_project_access(task: AgentTask, project: Project | None) -> Project:
 def build_agent_task_response(
     task: AgentTask,
     verified_severity_counts: Mapping[str, int] | None = None,
+    defect_summary: Dict[str, Any] | AgentTaskDefectSummary | None = None,
 ) -> AgentTaskResponse:
     progress = float(task.progress_percentage) if hasattr(task, "progress_percentage") else 0.0
     total_iterations = int(task.total_iterations or 0)
@@ -73,6 +74,13 @@ def build_agent_task_response(
         verified_high_count=int(verified_counts.get("high", 0) or 0),
         verified_medium_count=int(verified_counts.get("medium", 0) or 0),
         verified_low_count=int(verified_counts.get("low", 0) or 0),
+        defect_summary=(
+            defect_summary
+            if isinstance(defect_summary, AgentTaskDefectSummary)
+            else AgentTaskDefectSummary(**defect_summary)
+            if isinstance(defect_summary, dict)
+            else None
+        ),
         quality_score=float(task.quality_score or 0.0),
         security_score=float(task.security_score) if task.security_score is not None else None,
         progress_percentage=progress,
