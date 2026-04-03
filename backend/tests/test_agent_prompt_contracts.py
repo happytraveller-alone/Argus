@@ -48,6 +48,10 @@ def test_recon_prompt_requires_input_surfaces_and_trust_boundaries():
     assert "trust_boundaries" in RECON_SYSTEM_PROMPT
     assert "target_files" in RECON_SYSTEM_PROMPT
     assert "高风险区域" in RECON_SYSTEM_PROMPT
+    assert "侦查完成条件（关键）" in RECON_SYSTEM_PROMPT
+    assert "Recon 队列仍为空" in RECON_SYSTEM_PROMPT
+    assert "风险点入队最小要求" in RECON_SYSTEM_PROMPT
+    assert "`confidence`" in RECON_SYSTEM_PROMPT
     assert "tsconfig.json" in RECON_SYSTEM_PROMPT
     assert "pages/api" in RECON_SYSTEM_PROMPT
     assert "app/api/**/route.ts" in RECON_SYSTEM_PROMPT

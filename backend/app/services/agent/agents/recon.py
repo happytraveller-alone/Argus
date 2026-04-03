@@ -108,6 +108,26 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 3. **必须覆盖关键目录** —— 至少遍历 `src/`, `app/`, `lib/`, `api/`, `utils/`, `config/`, `handlers/`, `controllers/`, `routes/`, `middleware/`, `services/`, `models/`
 4. **必须使用工具** —— 推送前必须通过 `list_files`, `search_code`, `get_code_window`, `get_file_outline` 等工具获取真实项目信息，在指定文件或者目录时，需要使用相对路径（如 `src/auth/login.py`），禁止使用绝对路径或者假设路径
 
+## 侦查完成条件（关键）
+
+1. **你的首要目标不是写总结，而是为 Analysis 产出可消费的风险点**
+2. **如果 Recon 队列仍为空，不要因为“暂未发现明显问题”就过早结束**；必须继续扩大覆盖面
+3. **对有进一步审计价值的可疑点，宁可降低 `confidence` 也应入队**，不要因把握不满 100% 而省略
+4. **只有在完成关键覆盖并能说明已检查证据后，才允许空结果收尾**
+5. **每次侦查都要尽量覆盖：入口点、input_surfaces、trust_boundaries、敏感 sink、target_files**
+
+## 风险点入队最小要求
+
+每个风险点至少要提供：
+- `file_path`
+- `line_start`
+- `description`（说明“为什么值得后续深挖”）
+- `vulnerability_type`
+- `severity`
+- `confidence`
+
+如果同一轮识别到多个风险点，优先使用批量入队，避免只停留在技术栈/目录总结层面。
+
 ═══════════════════════════════════════════════════════════════
 
 ## 📌 风险点的定义
@@ -619,6 +639,26 @@ class ReconAgent(BaseAgent):
         initial_message += f"""
 ## 任务上下文
 {task_context or task or '进行全面深入的项目信息收集和风险侦查，为安全审计提供完整的项目画像。'}
+
+## 本轮侦查硬性目标
+- 先识别真实入口点，再沿着 input_surfaces -> trust_boundaries -> sink 的方向展开
+- 发现可疑点后立即调用入队工具，不要等到最后统一总结
+- 如果当前还没有任何风险点入队，继续扩大覆盖面，而不是直接结束
+- 对存在后续分析价值但证据尚不完整的点，也应以较低 confidence 入队
+
+## 最低覆盖清单
+- 路由/控制器/Resolver/API 入口
+- 认证、授权、会话、管理员功能
+- 文件上传/下载、模板渲染、动态执行、反序列化
+- 数据查询、ORM/SQL、搜索、报表、导出
+- Webhook/Callback/OAuth/第三方集成
+- 中间件、后台任务、定时任务、消息消费、配置与密钥文件
+
+## 结束前自检
+- 是否已经识别 `input_surfaces`、`trust_boundaries`、`target_files`
+- 是否至少检查了最关键的入口点和敏感操作路径
+- 如果仍未入队任何风险点，是否已经明确扩大过搜索范围，而不是只查看少量文件
+- Final Answer 里除了总结，还要明确列出高风险区域和初步发现
 
 ## TypeScript 项目补充要求
 - 若发现 `tsconfig.json`、`next.config.*`、`nest-cli.json`、`package.json`、`.ts`、`.tsx`，应按 TypeScript 项目处理，不要只按“泛 Node.js”略过

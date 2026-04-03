@@ -3,7 +3,7 @@ Test suite for AuditWorkflowEngine and WorkflowOrchestratorAgent.
 
 验证确定性 Workflow 的核心行为：
 1. WorkflowState 阶段转换正确性
-2. Recon 阶段只调度一次
+2. Recon 阶段在队列为空时有限重试，已有风险点时不重复调度
 3. Analysis 阶段按 Recon 队列条目数调度（一风险点一次）
 4. Verification 阶段按漏洞队列条目数调度（一漏洞一次）
 5. 重复指纹自动跳过（幂等）
@@ -230,8 +230,9 @@ class TestAuditWorkflowEnginePhases:
 
     @pytest.mark.asyncio
     async def test_recon_only_once(self, orchestrator_with_queues):
-        """Recon 只被调度一次"""
+        """Recon 队列已有风险点时，只调度一次 Recon"""
         orch, recon_q, vuln_q = orchestrator_with_queues
+        recon_q.enqueue(TASK_ID, _make_risk_point("seed.py", 12))
         calls = _install_dispatch_mock(orch, vuln_q)
 
         engine = AuditWorkflowEngine(recon_q, vuln_q, TASK_ID, orch)
@@ -267,6 +268,7 @@ class TestAuditWorkflowEnginePhases:
     ):
         """智能审计模式下不启用跳过 Recon 逻辑。"""
         orch, recon_q, vuln_q = orchestrator_with_queues
+        recon_q.enqueue(TASK_ID, _make_risk_point("intelligent.py", 31))
         calls = _install_dispatch_mock(orch, vuln_q)
         config = {
             "audit_source_mode": "intelligent",
@@ -280,6 +282,100 @@ class TestAuditWorkflowEnginePhases:
 
         recon_calls = [c for c in calls if c["agent"] == "recon"]
         assert len(recon_calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_recon_retries_until_queue_receives_risk_point(self, orchestrator_with_queues):
+        """首轮 Recon 未产出风险点时，应继续 Recon，直到队列有结果。"""
+        orch, recon_q, vuln_q = orchestrator_with_queues
+        calls: List[Dict[str, Any]] = []
+        recon_attempts = [0]
+
+        async def mock_dispatch(params: Dict) -> str:
+            calls.append(dict(params))
+            agent_name = str(params.get("agent", "")).lower()
+
+            if agent_name == "recon":
+                recon_attempts[0] += 1
+                if recon_attempts[0] == 2:
+                    recon_q.enqueue(TASK_ID, _make_risk_point("retry.py", 88))
+                orch._agent_results["recon"] = {"_run_success": True, "high_risk_areas": []}
+                return "Recon 完成"
+
+            if agent_name == "analysis":
+                risk_point = params.get("risk_point") or {}
+                finding = _make_finding(
+                    "Retry finding",
+                    file_path=risk_point.get("file_path", "retry.py"),
+                    line_start=risk_point.get("line_start", 88),
+                )
+                vuln_q.enqueue_finding(TASK_ID, finding)
+                orch._agent_results["analysis"] = {
+                    "_run_success": True,
+                    "findings": [finding],
+                }
+                return "Analysis 完成"
+
+            if agent_name == "verification":
+                finding_from_params = params.get("finding") or {}
+                orch._agent_results["verification"] = {
+                    "_run_success": True,
+                    "findings": [finding_from_params],
+                }
+                if isinstance(finding_from_params, dict) and finding_from_params:
+                    orch._all_findings.append(orch._normalize_finding(finding_from_params))
+                return "Verification 完成"
+
+            return "未知 Agent"
+
+        orch._dispatch_agent = mock_dispatch
+
+        engine = AuditWorkflowEngine(recon_q, vuln_q, TASK_ID, orch)
+        state = await engine.run({}, {}, "/tmp", TASK_ID)
+
+        recon_calls = [c for c in calls if c["agent"] == "recon"]
+        analysis_calls = [c for c in calls if c["agent"] == "analysis"]
+
+        assert len(recon_calls) == 2
+        assert "上一轮 Recon 未向 Recon 队列产出任何风险点" in recon_calls[1]["context"]
+        assert len(analysis_calls) == 1
+        assert state.analysis_risk_points_total == 1
+
+    @pytest.mark.asyncio
+    async def test_recon_stops_retrying_after_max_empty_attempts(self, orchestrator_with_queues):
+        """Recon 连续空队列时，应在上限后停止重试，避免死循环。"""
+        orch, recon_q, vuln_q = orchestrator_with_queues
+        calls: List[Dict[str, Any]] = []
+
+        async def mock_dispatch(params: Dict) -> str:
+            calls.append(dict(params))
+            agent_name = str(params.get("agent", "")).lower()
+
+            if agent_name == "recon":
+                orch._agent_results["recon"] = {"_run_success": True, "high_risk_areas": []}
+                return "Recon 完成"
+
+            if agent_name == "analysis":
+                orch._agent_results["analysis"] = {"_run_success": True, "findings": []}
+                return "Analysis 完成"
+
+            if agent_name == "verification":
+                orch._agent_results["verification"] = {"_run_success": True, "findings": []}
+                return "Verification 完成"
+
+            return "未知 Agent"
+
+        orch._dispatch_agent = mock_dispatch
+
+        engine = AuditWorkflowEngine(recon_q, vuln_q, TASK_ID, orch)
+        state = await engine.run({}, {}, "/tmp", TASK_ID)
+
+        recon_calls = [c for c in calls if c["agent"] == "recon"]
+        analysis_calls = [c for c in calls if c["agent"] == "analysis"]
+
+        assert len(recon_calls) == engine.RECON_EMPTY_QUEUE_MAX_ATTEMPTS
+        assert len(analysis_calls) == 0
+        assert state.analysis_risk_points_total == 0
+        assert state.phase == WorkflowPhase.COMPLETE
 
     @pytest.mark.asyncio
     async def test_analysis_called_per_risk_point(self, orchestrator_with_queues):

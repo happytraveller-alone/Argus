@@ -112,3 +112,29 @@ async def test_agents_inject_prompt_skill_section_toggle(
         assert config["prompt_skills"][agent_key] in initial_message
     else:
         assert prompt_section_header not in initial_message
+
+
+@pytest.mark.asyncio
+async def test_recon_initial_prompt_includes_queue_and_coverage_requirements(
+    mock_llm_service,
+    mock_event_emitter,
+    temp_project_dir,
+):
+    agent = ReconAgent(mock_llm_service, tools={}, event_emitter=mock_event_emitter)
+
+    await agent.run(
+        {
+            "project_info": {"name": "demo", "root": temp_project_dir, "file_count": 1},
+            "config": _build_config(False),
+        }
+    )
+
+    assert agent._conversation_history
+    initial_message = str(agent._conversation_history[1].get("content") or "")
+
+    assert "## 本轮侦查硬性目标" in initial_message
+    assert "如果当前还没有任何风险点入队，继续扩大覆盖面，而不是直接结束" in initial_message
+    assert "## 最低覆盖清单" in initial_message
+    assert "Webhook/Callback/OAuth/第三方集成" in initial_message
+    assert "## 结束前自检" in initial_message
+    assert "Final Answer 里除了总结，还要明确列出高风险区域和初步发现" in initial_message

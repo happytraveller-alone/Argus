@@ -46,6 +46,8 @@ class AuditWorkflowEngine:
     引擎会依次执行三个阶段，每个阶段结束后更新 WorkflowState。
     """
 
+    RECON_EMPTY_QUEUE_MAX_ATTEMPTS = 3
+
     def __init__(
         self,
         recon_queue_service: Any,
@@ -204,7 +206,7 @@ class AuditWorkflowEngine:
                 )
             else:
                 await orc.emit_event("info", "🔎 [Workflow] 开始 Recon 阶段")
-                await self._run_recon_phase(state)
+                await self._run_recon_until_queue_ready(state, task_id)
             
             #  业务逻辑侦察阶段（与 Recon 相互独立，可并行；这里在 Recon 完成后启动）
             # 注意：由于 bootstrap 模式下 Recon 可能被跳过，BL Recon 不受影响，始终运行
@@ -217,8 +219,8 @@ class AuditWorkflowEngine:
                     logger.info("[WorkflowEngine] No business_logic_recon agent registered, skipping BL Recon phase")
                     await orc.emit_event("info", " [Workflow] 未配置 BusinessLogicReconAgent，跳过 BL Recon 阶段")
             
-            #  Recon 结束后调用 LLM 对风险点进行去重
-            if state.recon_done and not orc.is_cancelled:
+            #  bootstrap 注入场景仍保留 Recon 队列去重；常规 Recon 已在重试闭环内完成去重
+            if should_skip_recon_phase and state.recon_done and not orc.is_cancelled:
                 await self._dedup_recon_risk_queue(self.task_id)
 
             #  BL Recon 结束后对业务逻辑风险点去重
@@ -748,7 +750,85 @@ class AuditWorkflowEngine:
     # 阶段实现
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def _run_recon_phase(self, state: WorkflowState) -> None:
+    async def _run_recon_until_queue_ready(self, state: WorkflowState, task_id: str) -> None:
+        """
+        调度 Recon Agent，直到风险队列非空，或达到最小兜底重试上限。
+
+        设计目标：
+        - 首轮 Recon 若未产出任何可分析风险点，则继续补充侦查，避免过早进入空 Analysis。
+        - 始终限制最大尝试次数，防止在零产出项目上进入无限循环。
+        """
+        orc = self.orchestrator
+        max_attempts = max(1, int(self.RECON_EMPTY_QUEUE_MAX_ATTEMPTS))
+
+        for attempt in range(1, max_attempts + 1):
+            if attempt > 1:
+                await orc.emit_event(
+                    "warning",
+                    (
+                        "[Workflow] Recon 风险队列为空，继续进行补充侦查："
+                        f"第 {attempt}/{max_attempts} 次"
+                    ),
+                )
+
+            await self._run_recon_phase(
+                state,
+                attempt=attempt,
+                task_context=self._build_recon_retry_context(attempt, max_attempts),
+            )
+
+            if orc.is_cancelled or not state.recon_done:
+                return
+
+            await self._dedup_recon_risk_queue(task_id)
+
+            queue_size = int(self.recon_queue.size(task_id))
+            if queue_size > 0:
+                logger.info(
+                    "[WorkflowEngine] Recon queue ready after attempt=%s size=%s",
+                    attempt,
+                    queue_size,
+                )
+                if attempt > 1:
+                    await orc.emit_event(
+                        "info",
+                        (
+                            "[Workflow] Recon 补充侦查完成："
+                            f"第 {attempt} 次后产出 {queue_size} 条风险点"
+                        ),
+                    )
+                return
+
+        logger.warning(
+            "[WorkflowEngine] Recon queue still empty after %s attempts; proceeding with downstream phases",
+            max_attempts,
+        )
+        await orc.emit_event(
+            "warning",
+            (
+                "[Workflow] Recon 已连续侦查 "
+                f"{max_attempts} 次但风险队列仍为空，将继续后续阶段"
+            ),
+        )
+
+    @staticmethod
+    def _build_recon_retry_context(attempt: int, max_attempts: int) -> str:
+        if attempt <= 1:
+            return ""
+        return (
+            "上一轮 Recon 未向 Recon 队列产出任何风险点（当前队列为空）。\n"
+            f"这是第 {attempt}/{max_attempts} 次补充侦查。\n"
+            "请继续扩大覆盖面，避免只重复查看已检查区域，优先补查：入口路由、鉴权/权限、"
+            "上传下载、模板渲染、动态执行、数据库访问、回调/webhook、中间件、管理后台与配置文件。\n"
+            "如果发现可疑点，请立即推送到 Recon 队列。"
+        )
+
+    async def _run_recon_phase(
+        self,
+        state: WorkflowState,
+        attempt: int = 1,
+        task_context: str = "",
+    ) -> None:
         """调度 Recon Agent 一次（Recon Agent 内部会将风险点推送到 recon_risk_queue）。"""
         orc = self.orchestrator
         step_start = time.time()
@@ -757,6 +837,8 @@ class AuditWorkflowEngine:
             "agent": "recon",
             "task": "收集项目信息、识别技术栈与高风险区域，并将风险点推送到 Recon 队列",
         }
+        if task_context:
+            params["context"] = task_context
         try:
             observation = await orc._dispatch_agent(params)
         except asyncio.CancelledError:
@@ -781,7 +863,8 @@ class AuditWorkflowEngine:
             )
         )
         logger.info(
-            "[WorkflowEngine] Recon phase done: success=%s, all_findings_so_far=%s",
+            "[WorkflowEngine] Recon phase done: attempt=%s success=%s, all_findings_so_far=%s",
+            attempt,
             recon_success,
             len(orc._all_findings),
         )
