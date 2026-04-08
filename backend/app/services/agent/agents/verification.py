@@ -487,7 +487,7 @@ class VerificationAgent(BaseAgent):
             name="Verification",
             agent_type=AgentType.VERIFICATION,
             pattern=AgentPattern.REACT,
-            max_iterations=25,
+            max_iterations=300,
             system_prompt=full_system_prompt,
         )
         super().__init__(config, llm_service, tools, event_emitter)

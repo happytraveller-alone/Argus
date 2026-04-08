@@ -230,7 +230,7 @@ class ReportAgent(BaseAgent):
             name="Report",
             agent_type=AgentType.REPORT,
             pattern=AgentPattern.REACT,
-            max_iterations=12,
+            max_iterations=100,
             system_prompt=full_system_prompt,
         )
         super().__init__(config, llm_service, tools, event_emitter)
