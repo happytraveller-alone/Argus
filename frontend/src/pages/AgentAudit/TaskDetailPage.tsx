@@ -134,7 +134,10 @@ const TERMINAL_RECOVERY_MAX_ATTEMPTS = 2;
 const TERMINAL_RECOVERY_RETRY_INTERVAL_MS = 1500;
 const TERMINAL_RECOVERY_DEBOUNCE_MS = 30_000;
 const STREAM_SELF_HEAL_RETRY_MS = 4000;
-const LOG_VIEWPORT_HEIGHT_PX = 200;
+const LOG_VIEWPORT_DEFAULT_HEIGHT_PX = 200;
+const LOG_VIEWPORT_MIN_HEIGHT_PX = 96;
+const FINDINGS_PANEL_MIN_HEIGHT_PX = 320;
+const DETAIL_CONTENT_GAP_PX = 12;
 const LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX = 24;
 
 const TERMINAL_STATUSES = new Set([
@@ -699,10 +702,19 @@ function AgentAuditPageContent() {
   const [projectName, setProjectName] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState(() => createTokenUsageAccumulator());
   const [statsNow, setStatsNow] = useState(() => new Date());
+  const [isEventLogsVisible, setIsEventLogsVisible] = useState(true);
+  const [logViewportHeight, setLogViewportHeight] = useState(
+    LOG_VIEWPORT_DEFAULT_HEIGHT_PX,
+  );
   const verifiedFindingsManuallyClearedRef = useRef(false);
 
+  const detailContentRef = useRef<HTMLDivElement | null>(null);
+  const failedReasonRef = useRef<HTMLDivElement | null>(null);
+  const statsSectionRef = useRef<HTMLDivElement | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
+  const eventLogsSectionRef = useRef<HTMLDivElement | null>(null);
+  const eventLogsChromeHeightRef = useRef(0);
   const hasInitializedLogViewportRef = useRef(false);
   const findingsContainerRef = useRef<HTMLDivElement | null>(null);
   const agentContainerRef = useRef<HTMLDivElement | null>(null);
@@ -754,6 +766,94 @@ function AgentAuditPageContent() {
     () => persistedDisplayFindings,
     [persistedDisplayFindings],
   );
+  const failedReason = useMemo(() => {
+    if (task?.status !== "failed") return null;
+    const reason = terminalFailureReason || task.error_message || "";
+    const normalized = reason.trim();
+    return normalized || "任务执行失败";
+  }, [task?.status, task?.error_message, terminalFailureReason]);
+  const failedStep = useMemo(
+    () => (failedReason ? extractStepName(failedReason) : null),
+    [failedReason],
+  );
+
+  const syncEventLogsLayout = useCallback(() => {
+    const detailContent = detailContentRef.current;
+    const statsSection = statsSectionRef.current;
+    if (!detailContent || !statsSection) {
+      return;
+    }
+
+    const detailContentHeight = detailContent.clientHeight;
+    const statsHeight = statsSection.offsetHeight;
+    const hasFailedReason = Boolean(failedReason);
+    const failedHeight = hasFailedReason ? (failedReasonRef.current?.offsetHeight ?? 0) : 0;
+    const logsSection = eventLogsSectionRef.current;
+
+    if (logsSection) {
+      const measuredChromeHeight = logsSection.offsetHeight - logViewportHeight;
+      if (Number.isFinite(measuredChromeHeight) && measuredChromeHeight > 0) {
+        eventLogsChromeHeightRef.current = measuredChromeHeight;
+      }
+    }
+
+    const eventLogsChromeHeight = eventLogsChromeHeightRef.current;
+    const fixedSectionCount = 1 + (hasFailedReason ? 1 : 0);
+    const gapCountWithLogs = fixedSectionCount + 1;
+    const maxLogViewportHeight =
+      detailContentHeight -
+      statsHeight -
+      failedHeight -
+      eventLogsChromeHeight -
+      gapCountWithLogs * DETAIL_CONTENT_GAP_PX -
+      FINDINGS_PANEL_MIN_HEIGHT_PX;
+
+    if (!Number.isFinite(maxLogViewportHeight)) {
+      return;
+    }
+
+    if (maxLogViewportHeight < LOG_VIEWPORT_MIN_HEIGHT_PX) {
+      setIsEventLogsVisible((current) => (current ? false : current));
+      return;
+    }
+
+    const nextLogViewportHeight = Math.min(
+      LOG_VIEWPORT_DEFAULT_HEIGHT_PX,
+      Math.floor(maxLogViewportHeight),
+    );
+    setIsEventLogsVisible((current) => (current ? current : true));
+    setLogViewportHeight((currentHeight) =>
+      currentHeight === nextLogViewportHeight ? currentHeight : nextLogViewportHeight,
+    );
+  }, [failedReason, logViewportHeight]);
+
+  useEffect(() => {
+    syncEventLogsLayout();
+  }, [syncEventLogsLayout]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined" || !detailContentRef.current) {
+      syncEventLogsLayout();
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      syncEventLogsLayout();
+    });
+    observer.observe(detailContentRef.current);
+    if (failedReasonRef.current) {
+      observer.observe(failedReasonRef.current);
+    }
+    if (statsSectionRef.current) {
+      observer.observe(statsSectionRef.current);
+    }
+    if (eventLogsSectionRef.current) {
+      observer.observe(eventLogsSectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [failedReason, isEventLogsVisible, isLoading, showSplash, syncEventLogsLayout, task?.id]);
+
   const statsSummary = useMemo(
     () =>
       task
@@ -860,16 +960,6 @@ function AgentAuditPageContent() {
         ? treeNodes.find((item) => item.agent_id === detailDialog.id) || null
         : null,
     [detailDialog, treeNodes],
-  );
-  const failedReason = useMemo(() => {
-    if (task?.status !== "failed") return null;
-    const reason = terminalFailureReason || task.error_message || "";
-    const normalized = reason.trim();
-    return normalized || "任务执行失败";
-  }, [task?.status, task?.error_message, terminalFailureReason]);
-  const failedStep = useMemo(
-    () => (failedReason ? extractStepName(failedReason) : null),
-    [failedReason],
   );
   const detailTitle = useMemo(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -3494,9 +3584,12 @@ function AgentAuditPageContent() {
 
       {/* Main content */}
       <div className="flex-1 overflow-hidden relative p-3 bg-muted/10">
-        <div className="h-full flex flex-col gap-3">
+        <div ref={detailContentRef} className="h-full flex flex-col gap-3">
           {failedReason && (
-            <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3">
+            <div
+              ref={failedReasonRef}
+              className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3"
+            >
               <div className="text-sm font-semibold text-rose-600 dark:text-rose-300">
                 智能扫描失败{failedStep ? `（${failedStep}）` : ""}
               </div>
@@ -3507,7 +3600,7 @@ function AgentAuditPageContent() {
           )}
 
           {/* Full-width stats row */}
-          <div className="flex-shrink-0">
+          <div ref={statsSectionRef} className="flex-shrink-0">
             <div
               ref={agentContainerRef}
               className="overflow-x-auto custom-scrollbar"
@@ -3544,122 +3637,127 @@ function AgentAuditPageContent() {
           </div>
 
           {/* Bottom: Full-width event logs */}
-          <div className="flex-shrink-0 overflow-hidden rounded-xl bg-card/50">
-            <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Terminal className="w-4 h-4 text-primary" />
-                <span className="text-sm font-semibold">事件日志</span>
-                {isConnected ? (
-                  <Badge
-                    variant="outline"
-                    className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
-                  >
-                    已连接
-                  </Badge>
-                ) : null}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          {isEventLogsVisible ? (
+            <div
+              ref={eventLogsSectionRef}
+              className="flex-shrink-0 overflow-hidden rounded-xl bg-card/50"
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Terminal className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold">事件日志</span>
+                  {isConnected ? (
+                    <Badge
+                      variant="outline"
+                      className="text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300 bg-emerald-500/10"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>导出日志</span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleExportLogs("json")}>
-                      导出为 JSON
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExportLogs("markdown")}>
-                      导出为 Markdown
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => toast.info("导出范围：全部活动日志")}>
-                      当前为全部导出
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      已连接
+                    </Badge>
+                  ) : null}
+                </div>
 
-                <button
-                  onClick={handleToggleAutoScroll}
-                  className={
-                    isAutoScroll
-                      ? "flex items-center gap-2 rounded-md border border-primary/50 bg-primary/15 px-3 py-1.5 text-xs text-primary"
-                      : "flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }
-                >
-                  <ArrowDown className="w-3.5 h-3.5" />
-                  <span>自动滚动</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>导出日志</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleExportLogs("json")}>
+                        导出为 JSON
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleExportLogs("markdown")}>
+                        导出为 Markdown
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => toast.info("导出范围：全部活动日志")}>
+                        当前为全部导出
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <button
+                    onClick={handleToggleAutoScroll}
+                    className={
+                      isAutoScroll
+                        ? "flex items-center gap-2 rounded-md border border-primary/50 bg-primary/15 px-3 py-1.5 text-xs text-primary"
+                        : "flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    <span>自动滚动</span>
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="pt-2">
-              <div className="overflow-x-auto custom-scrollbar">
-                <div
-                  style={{ minWidth: `${EVENT_LOG_TABLE_MIN_WIDTH_PX}px` }}
-                >
+              <div className="pt-2">
+                <div className="overflow-x-auto custom-scrollbar">
                   <div
-                    className="grid items-center gap-3 border-b border-border/60 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.24em] text-muted-foreground/80"
-                    style={{ gridTemplateColumns: EVENT_LOG_GRID_TEMPLATE }}
+                    style={{ minWidth: `${EVENT_LOG_TABLE_MIN_WIDTH_PX}px` }}
                   >
-                    <span>时间戳</span>
-                    <span>类型标签</span>
-                    <span>事件概况</span>
-                    <span>操作</span>
-                  </div>
-                  <div
-                    ref={logsContainerRef}
-                    onScroll={handleLogsScroll}
-                    className="overflow-y-auto custom-scrollbar-dark"
-                    style={{ height: LOG_VIEWPORT_HEIGHT_PX, maxHeight: "30vh" }}
-                  >
-                    {filteredLogs.length === 0 ? (
-                      <div className="flex h-full items-center justify-center px-3">
-                        <div className="text-center text-muted-foreground">
-                          {isRunning ? (
-                            <div className="flex flex-col items-center gap-3">
-                              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    <div
+                      className="grid items-center gap-3 border-b border-border/60 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.24em] text-muted-foreground/80"
+                      style={{ gridTemplateColumns: EVENT_LOG_GRID_TEMPLATE }}
+                    >
+                      <span>时间戳</span>
+                      <span>类型标签</span>
+                      <span>事件概况</span>
+                      <span>操作</span>
+                    </div>
+                    <div
+                      ref={logsContainerRef}
+                      onScroll={handleLogsScroll}
+                      className="overflow-y-auto custom-scrollbar-dark transition-[height] duration-150"
+                      style={{ height: logViewportHeight }}
+                    >
+                      {filteredLogs.length === 0 ? (
+                        <div className="flex h-full items-center justify-center px-3">
+                          <div className="text-center text-muted-foreground">
+                            {isRunning ? (
+                              <div className="flex flex-col items-center gap-3">
+                                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                                <span className="text-sm font-mono tracking-wide">
+                                  等待活动日志...
+                                </span>
+                              </div>
+                            ) : (
                               <span className="text-sm font-mono tracking-wide">
-                                等待活动日志...
+                                暂无活动日志
                               </span>
-                            </div>
-                          ) : (
-                            <span className="text-sm font-mono tracking-wide">
-                              暂无活动日志
-                            </span>
-                          )}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-border/60 px-3">
-                        {filteredLogs.map((item) => (
-                          <LogEntry
-                            key={item.id}
-                            item={item}
-                            anchorId={`log-item-${item.id}`}
-                            highlighted={highlightedLogId === item.id}
-                            onOpenDetail={() =>
-                              openDetailDialog({
-                                type: "log",
-                                id: item.id,
-                                anchorId: `log-item-${item.id}`,
-                              })
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
-                    <div ref={logEndRef} />
+                      ) : (
+                        <div className="divide-y divide-border/60 px-3">
+                          {filteredLogs.map((item) => (
+                            <LogEntry
+                              key={item.id}
+                              item={item}
+                              anchorId={`log-item-${item.id}`}
+                              highlighted={highlightedLogId === item.id}
+                              onOpenDetail={() =>
+                                openDetailDialog({
+                                  type: "log",
+                                  id: item.id,
+                                  anchorId: `log-item-${item.id}`,
+                                })
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                      <div ref={logEndRef} />
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+          ) : null}
           </div>
         </div>
       {/* Export dialog */}
