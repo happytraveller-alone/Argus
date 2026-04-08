@@ -1,11 +1,8 @@
 import zipfile
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
-from app.models.project import Project
 from app.services.agent import skill_test_runner as runner_module
 from app.services.agent.agents.base import AgentResult
 
@@ -43,18 +40,8 @@ async def test_skill_test_runner_extracts_nested_project_and_cleans_temp_dir(mon
     archive_path = tmp_path / "libplist.zip"
     _make_libplist_zip(archive_path)
 
-    project = Project(
-        id="project-1",
-        owner_id="user-1",
-        name="libplist",
-        source_type="zip",
-        is_active=True,
-    )
     emitter = _RecorderEmitter()
     captured_project_root: dict[str, str] = {}
-
-    async def _fake_resolve_verify_project(**kwargs):
-        return project, str(archive_path), False
 
     def _fake_build_tools(skill_id: str, project_root: str, llm_service):
         captured_project_root["value"] = project_root
@@ -67,7 +54,6 @@ async def test_skill_test_runner_extracts_nested_project_and_cleans_temp_dir(mon
         async def run(self, input_data):
             return AgentResult(success=True, data={"final_text": "读取完成"})
 
-    monkeypatch.setattr(runner_module, "_resolve_verify_project", _fake_resolve_verify_project)
     monkeypatch.setattr(runner_module, "build_skill_test_tools", _fake_build_tools)
     monkeypatch.setattr(runner_module, "SkillTestAgent", _FakeAgent)
 
@@ -76,8 +62,9 @@ async def test_skill_test_runner_extracts_nested_project_and_cleans_temp_dir(mon
         prompt="读取入口函数",
         max_iterations=3,
         llm_service=object(),
-        db=AsyncMock(),
-        current_user=SimpleNamespace(id="user-1"),
+        project_name="libplist",
+        zip_path=str(archive_path),
+        fallback_used=False,
         event_emitter=emitter,
     )
 
@@ -96,17 +83,7 @@ async def test_skill_test_runner_cleans_temp_dir_when_agent_fails(monkeypatch, t
     archive_path = tmp_path / "libplist.zip"
     _make_libplist_zip(archive_path)
 
-    project = Project(
-        id="project-1",
-        owner_id="user-1",
-        name="libplist",
-        source_type="zip",
-        is_active=True,
-    )
     emitter = _RecorderEmitter()
-
-    async def _fake_resolve_verify_project(**kwargs):
-        return project, str(archive_path), False
 
     class _FailingAgent:
         def __init__(self, **kwargs):
@@ -115,7 +92,6 @@ async def test_skill_test_runner_cleans_temp_dir_when_agent_fails(monkeypatch, t
         async def run(self, input_data):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(runner_module, "_resolve_verify_project", _fake_resolve_verify_project)
     monkeypatch.setattr(
         runner_module,
         "build_skill_test_tools",
@@ -128,8 +104,9 @@ async def test_skill_test_runner_cleans_temp_dir_when_agent_fails(monkeypatch, t
         prompt="读取入口函数",
         max_iterations=3,
         llm_service=object(),
-        db=AsyncMock(),
-        current_user=SimpleNamespace(id="user-1"),
+        project_name="libplist",
+        zip_path=str(archive_path),
+        fallback_used=False,
         event_emitter=emitter,
     )
 

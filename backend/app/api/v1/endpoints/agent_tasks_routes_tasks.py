@@ -367,6 +367,7 @@ async def stream_agent_events(
     project = await db.get(Project, task.project_id)
     if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
+    await _release_request_db_session(db)
     
     async def event_generator():
         """生成 SSE 事件流"""
@@ -467,6 +468,7 @@ async def stream_agent_with_thinking(
     project = await db.get(Project, task.project_id)
     if not project:
         raise HTTPException(status_code=403, detail="无权访问此任务")
+    await _release_request_db_session(db)
     
     # 定义 SSE 格式化函数
     def format_sse_event(event_data: Dict[str, Any]) -> str:

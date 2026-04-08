@@ -51,8 +51,11 @@ def test_build_skill_test_tool_allowlist_only_allows_selected_skill():
 
 @pytest.mark.asyncio
 async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkeypatch):
+    captured_runner_kwargs: dict[str, object] = {}
+
     class _FakeRunner:
         def __init__(self, **kwargs):
+            captured_runner_kwargs.update(kwargs)
             self.event_emitter = kwargs["event_emitter"]
             self.skill_id = kwargs["skill_id"]
 
@@ -129,6 +132,14 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
 
     monkeypatch.setattr(skills_module, "_get_user_config", AsyncMock(return_value={"llmConfig": {}}), raising=False)
     monkeypatch.setattr(skills_module, "_init_llm_service", AsyncMock(return_value=object()), raising=False)
+    monkeypatch.setattr(
+        skills_module,
+        "_resolve_verify_project",
+        AsyncMock(return_value=(SimpleNamespace(name="libplist"), "/tmp/libplist.zip", False)),
+        raising=False,
+    )
+    release_mock = AsyncMock()
+    monkeypatch.setattr(skills_module, "_release_request_db_session", release_mock, raising=False)
     monkeypatch.setattr(skills_module, "SkillTestRunner", _FakeRunner, raising=False)
 
     response = await skills_module.run_skill_test(
@@ -156,12 +167,21 @@ async def test_run_skill_test_endpoint_streams_expected_events_and_result(monkey
     result_event = next(event for event in events if event["type"] == "result")
     assert result_event["data"]["final_text"] == "已基于 libplist 回答用户问题。"
     assert result_event["data"]["cleanup"]["success"] is True
+    assert "db" not in captured_runner_kwargs
+    assert "current_user" not in captured_runner_kwargs
+    assert captured_runner_kwargs["project_name"] == "libplist"
+    assert captured_runner_kwargs["zip_path"] == "/tmp/libplist.zip"
+    assert captured_runner_kwargs["fallback_used"] is False
+    release_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_run_structured_tool_test_endpoint_streams_expected_events_and_result(monkeypatch):
+    captured_runner_kwargs: dict[str, object] = {}
+
     class _FakeRunner:
         def __init__(self, **kwargs):
+            captured_runner_kwargs.update(kwargs)
             self.event_emitter = kwargs["event_emitter"]
             self.skill_id = kwargs["skill_id"]
             self.request_payload = kwargs["request_payload"]
@@ -257,6 +277,14 @@ async def test_run_structured_tool_test_endpoint_streams_expected_events_and_res
         raising=False,
     )
     monkeypatch.setattr(skills_module, "_init_llm_service", AsyncMock(return_value=object()), raising=False)
+    monkeypatch.setattr(
+        skills_module,
+        "_resolve_verify_project",
+        AsyncMock(return_value=(SimpleNamespace(name="libplist"), "/tmp/libplist.zip", False)),
+        raising=False,
+    )
+    release_mock = AsyncMock()
+    monkeypatch.setattr(skills_module, "_release_request_db_session", release_mock, raising=False)
     monkeypatch.setattr(skills_module, "StructuredToolTestRunner", _FakeRunner, raising=False)
 
     response = await skills_module.run_structured_tool_test(
@@ -292,3 +320,9 @@ async def test_run_structured_tool_test_endpoint_streams_expected_events_and_res
     assert result_event["data"]["tool_name"] == "dataflow_analysis"
     assert result_event["data"]["runner_image"] == "vulhunter/flow-parser-runner-local:latest"
     assert result_event["data"]["target_function"] == "plist_from_xml"
+    assert "db" not in captured_runner_kwargs
+    assert "current_user" not in captured_runner_kwargs
+    assert captured_runner_kwargs["project_name"] == "libplist"
+    assert captured_runner_kwargs["zip_path"] == "/tmp/libplist.zip"
+    assert captured_runner_kwargs["fallback_used"] is False
+    release_mock.assert_awaited_once()

@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
+from app.api.v1.endpoints.static_tasks_shared import _release_request_db_session
 from app.db.session import get_db
 from app.models.user import User
 
@@ -524,6 +525,7 @@ async def test_recon_agent(
         "task_context": "",
         "max_iterations": request.max_iterations,
     }
+    await _release_request_db_session(db)
 
     return StreamingResponse(
         _run_agent_streaming(agent.run(input_data), queue),
@@ -576,6 +578,7 @@ async def test_analysis_agent(
         "task_context": "",
         "max_iterations": request.max_iterations,
     }
+    await _release_request_db_session(db)
 
     return StreamingResponse(
         _run_agent_streaming(agent.run(input_data), queue),
@@ -615,6 +618,7 @@ async def test_verification_agent(
         "project_root": project_root,
         "max_iterations": request.max_iterations,
     }
+    await _release_request_db_session(db)
 
     return StreamingResponse(
         _run_agent_streaming(agent.run(input_data), queue),
@@ -653,6 +657,7 @@ async def test_business_logic_agent(
         "quick_mode": request.quick_mode,
         "max_iterations": request.max_iterations,
     }
+    await _release_request_db_session(db)
 
     return StreamingResponse(
         _run_agent_streaming(agent.run(input_data), queue),
@@ -697,6 +702,7 @@ async def test_business_logic_recon_agent(
         "framework_hint": request.framework_hint,
         "max_iterations": request.max_iterations,
     }
+    await _release_request_db_session(db)
 
     return StreamingResponse(
         _run_agent_streaming(agent.run(input_data), queue),
@@ -739,6 +745,7 @@ async def test_business_logic_analysis_agent(
         "project_root": project_root,
         "max_iterations": request.max_iterations,
     }
+    await _release_request_db_session(db)
 
     return StreamingResponse(
         _run_agent_streaming(agent.run(input_data), queue),

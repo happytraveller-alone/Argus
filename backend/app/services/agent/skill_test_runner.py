@@ -12,7 +12,6 @@ from fastapi import HTTPException
 
 from app.api.v1.endpoints.config import (
     _normalize_extracted_project_root,
-    _resolve_verify_project,
 )
 from app.services.agent.agents.skill_test import SkillTestAgent
 from app.services.agent.event_manager import normalize_tool_output_envelope
@@ -208,15 +207,17 @@ class StructuredToolTestRunner:
         skill_id: str,
         request_payload: Dict[str, Any],
         llm_service: Any | None = None,
-        db: Any,
-        current_user: Any,
+        project_name: str,
+        zip_path: str,
+        fallback_used: bool,
         event_emitter: Any,
     ):
         self.skill_id = str(skill_id or "").strip()
         self.request_payload = dict(request_payload or {})
         self.llm_service = llm_service
-        self.db = db
-        self.current_user = current_user
+        self.project_name = str(project_name or "").strip()
+        self.zip_path = str(zip_path or "").strip()
+        self.fallback_used = bool(fallback_used)
         self.event_emitter = event_emitter
 
     async def run(self) -> Dict[str, Any]:
@@ -224,12 +225,9 @@ class StructuredToolTestRunner:
         if str(policy.get("test_mode") or "") != "structured_tool":
             raise HTTPException(status_code=400, detail="当前 skill 暂不支持结构化工具测试")
 
-        project, zip_path, fallback_used = await _resolve_verify_project(
-            db=self.db,
-            current_user=self.current_user,
-        )
-        project_name = str(getattr(project, "name", "") or "").strip()
-        if fallback_used or project_name != SCAN_CORE_DEFAULT_TEST_PROJECT_NAME:
+        project_name = self.project_name
+        zip_path = self.zip_path
+        if self.fallback_used or project_name != SCAN_CORE_DEFAULT_TEST_PROJECT_NAME:
             raise HTTPException(
                 status_code=400,
                 detail="未找到可用于技能测试的默认 libplist ZIP 项目，请先修复默认 libplist 资源。",
@@ -416,16 +414,18 @@ class SkillTestRunner:
         prompt: str,
         max_iterations: int,
         llm_service: Any,
-        db: Any,
-        current_user: Any,
+        project_name: str,
+        zip_path: str,
+        fallback_used: bool,
         event_emitter: Any,
     ):
         self.skill_id = str(skill_id or "").strip()
         self.prompt = str(prompt or "").strip()
         self.max_iterations = int(max_iterations or 4)
         self.llm_service = llm_service
-        self.db = db
-        self.current_user = current_user
+        self.project_name = str(project_name or "").strip()
+        self.zip_path = str(zip_path or "").strip()
+        self.fallback_used = bool(fallback_used)
         self.event_emitter = event_emitter
 
     async def run(self) -> Dict[str, Any]:
@@ -436,12 +436,9 @@ class SkillTestRunner:
                 detail=str(policy.get("test_reason") or "当前 skill 暂不支持测试"),
             )
 
-        project, zip_path, fallback_used = await _resolve_verify_project(
-            db=self.db,
-            current_user=self.current_user,
-        )
-        project_name = str(getattr(project, "name", "") or "").strip()
-        if fallback_used or project_name != SCAN_CORE_DEFAULT_TEST_PROJECT_NAME:
+        project_name = self.project_name
+        zip_path = self.zip_path
+        if self.fallback_used or project_name != SCAN_CORE_DEFAULT_TEST_PROJECT_NAME:
             raise HTTPException(
                 status_code=400,
                 detail="未找到可用于技能测试的默认 libplist ZIP 项目，请先修复默认 libplist 资源。",

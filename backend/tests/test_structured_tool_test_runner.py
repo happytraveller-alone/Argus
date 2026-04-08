@@ -1,11 +1,8 @@
 import zipfile
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
-from app.models.project import Project
 from app.services.agent import skill_test_runner as runner_module
 from app.services.agent.tools.base import ToolResult
 
@@ -59,18 +56,8 @@ async def test_structured_tool_test_runner_resolves_function_via_flow_parser_and
     archive_path = tmp_path / "libplist.zip"
     _make_libplist_zip(archive_path)
 
-    project = Project(
-        id="project-1",
-        owner_id="user-1",
-        name="libplist",
-        source_type="zip",
-        is_active=True,
-    )
     emitter = _RecorderEmitter()
     seen_payload: dict[str, object] = {}
-
-    async def _fake_resolve_verify_project(**kwargs):
-        return project, str(archive_path), False
 
     class _FakeRunnerClient:
         image = "vulhunter/flow-parser-runner-local:latest"
@@ -124,7 +111,6 @@ async def test_structured_tool_test_runner_resolves_function_via_flow_parser_and
                 },
             )
 
-    monkeypatch.setattr(runner_module, "_resolve_verify_project", _fake_resolve_verify_project)
     monkeypatch.setattr(runner_module, "get_flow_parser_runner_client", lambda: _FakeRunnerClient())
     monkeypatch.setattr(runner_module, "build_structured_tool_test_tool", lambda *args, **kwargs: _FakeTool())
 
@@ -138,8 +124,9 @@ async def test_structured_tool_test_runner_resolves_function_via_flow_parser_and
                 "sink_hints": ["xmlReadMemory", "xmlParseMemory", "xml_to_node"],
             },
         },
-        db=AsyncMock(),
-        current_user=SimpleNamespace(id="user-1"),
+        project_name="libplist",
+        zip_path=str(archive_path),
+        fallback_used=False,
         event_emitter=emitter,
     )
 
@@ -177,17 +164,7 @@ async def test_structured_tool_test_runner_emits_failed_tool_result_when_tool_ra
     archive_path = tmp_path / "libplist.zip"
     _make_libplist_zip(archive_path)
 
-    project = Project(
-        id="project-1",
-        owner_id="user-1",
-        name="libplist",
-        source_type="zip",
-        is_active=True,
-    )
     emitter = _RecorderEmitter()
-
-    async def _fake_resolve_verify_project(**kwargs):
-        return project, str(archive_path), False
 
     class _FakeRunnerClient:
         image = "vulhunter/flow-parser-runner-local:latest"
@@ -215,7 +192,6 @@ async def test_structured_tool_test_runner_emits_failed_tool_result_when_tool_ra
         async def execute(self, **kwargs):
             raise RuntimeError("tool boom")
 
-    monkeypatch.setattr(runner_module, "_resolve_verify_project", _fake_resolve_verify_project)
     monkeypatch.setattr(runner_module, "get_flow_parser_runner_client", lambda: _FakeRunnerClient())
     monkeypatch.setattr(runner_module, "build_structured_tool_test_tool", lambda *args, **kwargs: _ExplodingTool())
 
@@ -229,8 +205,9 @@ async def test_structured_tool_test_runner_emits_failed_tool_result_when_tool_ra
                 "sink_hints": ["xmlReadMemory", "xmlParseMemory"],
             },
         },
-        db=AsyncMock(),
-        current_user=SimpleNamespace(id="user-1"),
+        project_name="libplist",
+        zip_path=str(archive_path),
+        fallback_used=False,
         event_emitter=emitter,
     )
 

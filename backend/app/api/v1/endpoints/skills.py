@@ -19,6 +19,8 @@ from app.api.v1.endpoints.agent_test import (
     _init_llm_service,
     _run_agent_streaming,
 )
+from app.api.v1.endpoints.config import _resolve_verify_project
+from app.api.v1.endpoints.static_tasks_shared import _release_request_db_session
 from app.db.session import get_db
 from app.models.prompt_skill import PromptSkill
 from app.models.user_config import UserConfig
@@ -455,6 +457,10 @@ async def run_skill_test(
 
     user_config = await _get_user_config(db, str(current_user.id))
     llm_service = await _init_llm_service(user_config)
+    project, zip_path, fallback_used = await _resolve_verify_project(
+        db=db,
+        current_user=current_user,
+    )
     queue: asyncio.Queue = asyncio.Queue()
     emitter = QueueEventEmitter(queue)
     runner = SkillTestRunner(
@@ -462,10 +468,12 @@ async def run_skill_test(
         prompt=request.prompt,
         max_iterations=request.max_iterations,
         llm_service=llm_service,
-        db=db,
-        current_user=current_user,
+        project_name=str(getattr(project, "name", "") or "").strip(),
+        zip_path=zip_path,
+        fallback_used=fallback_used,
         event_emitter=emitter,
     )
+    await _release_request_db_session(db)
 
     return StreamingResponse(
         _run_agent_streaming(runner.run(), queue),
@@ -489,16 +497,22 @@ async def run_structured_tool_test(
 
     user_config = await _get_user_config(db, str(current_user.id))
     llm_service = await _init_llm_service(user_config)
+    project, zip_path, fallback_used = await _resolve_verify_project(
+        db=db,
+        current_user=current_user,
+    )
     queue: asyncio.Queue = asyncio.Queue()
     emitter = QueueEventEmitter(queue)
     runner = StructuredToolTestRunner(
         skill_id=skill_id,
         request_payload=request.model_dump(),
         llm_service=llm_service,
-        db=db,
-        current_user=current_user,
+        project_name=str(getattr(project, "name", "") or "").strip(),
+        zip_path=zip_path,
+        fallback_used=fallback_used,
         event_emitter=emitter,
     )
+    await _release_request_db_session(db)
 
     return StreamingResponse(
         _run_agent_streaming(runner.run(), queue),
