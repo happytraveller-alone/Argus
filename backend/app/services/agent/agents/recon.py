@@ -353,7 +353,7 @@ class ReconAgent(BaseAgent):
             name="Recon",
             agent_type=AgentType.RECON,
             pattern=AgentPattern.REACT,
-            max_iterations=200,  #  增加迭代次数以支持全面侦查
+            max_iterations=1000,  #  增加迭代次数以支持全面侦查
             system_prompt=full_system_prompt,
         )
         super().__init__(config, llm_service, tools, event_emitter)
