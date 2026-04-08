@@ -6,9 +6,11 @@ import App from "./App.tsx";
 import { AppWrapper } from "@/components/layout/PageMeta";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { LanguageProvider } from "@/shared/i18n";
+import { installTranslatorDomCompatPatch } from "@/shared/utils/browserDomCompat";
 import "@/shared/utils/fetchWrapper"; // 初始化fetch拦截器
 
 localStorage.removeItem("theme");
+installTranslatorDomCompatPatch();
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
