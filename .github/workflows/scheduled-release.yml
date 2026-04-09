@@ -22,8 +22,6 @@ jobs:
           gh workflow run docker-publish.yml \
             --ref main \
             -f tag=latest \
-            -f build_frontend=true \
-            -f build_backend=true \
             -f build_yasa_runner=true \
             -f build_opengrep_runner=true \
             -f build_bandit_runner=true \

@@ -71,6 +71,8 @@ def test_scheduled_release_workflow_no_longer_uses_git_tags_as_release_state() -
     assert "git describe --tags" not in workflow_text
     assert "git tag -a" not in workflow_text
     assert "git push origin ${{ steps.check.outputs.version }}" not in workflow_text
+    assert "-f build_frontend=true" not in workflow_text
+    assert "-f build_backend=true" not in workflow_text
 
 
 def test_release_helper_script_no_longer_creates_or_pushes_git_tags() -> None:

@@ -510,10 +510,23 @@ def test_docker_publish_pushes_all_runner_images() -> None:
         encoding="utf-8"
     )
 
-    assert "\non:\n  workflow_dispatch:\n" in workflow_text
-    assert "\n  push:\n" not in workflow_text
+    assert "\n  push:\n" in workflow_text
+    assert "\n    branches:\n      - main\n" in workflow_text
+    assert "\n    paths:\n" in workflow_text
+    assert "\non:\n  push:\n" in workflow_text
+    assert "workflow_dispatch:" in workflow_text
     assert "'v*.*.*'" not in workflow_text
+    assert "detect-changes:" in workflow_text
+    assert "dorny/paths-filter@v3" in workflow_text
+    assert "needs.detect-changes.outputs.frontend == 'true'" in workflow_text
+    assert "needs.detect-changes.outputs.backend == 'true'" in workflow_text
     assert "tag:" in workflow_text
+    assert "build-frontend-latest:" in workflow_text
+    assert "build-backend-latest:" in workflow_text
+    assert "build-manual:" in workflow_text
+    assert "if: github.event_name == 'push'" in workflow_text
+    assert "if: github.event_name == 'workflow_dispatch'" in workflow_text
+    assert "platforms: linux/amd64" in workflow_text
     assert "build_yasa_runner" in workflow_text
     assert "build_opengrep_runner" in workflow_text
     assert "build_bandit_runner" in workflow_text
@@ -544,6 +557,25 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-sandbox-runner:${{ steps.image-tag.outputs.tag }}" in workflow_text
     assert "docker logout ghcr.io || true" in workflow_text
     assert "docker manifest inspect" in workflow_text
+
+
+def test_main_push_auto_builds_frontend_and_backend_latest_only() -> None:
+    workflow_text = (REPO_ROOT / ".github" / "workflows" / "docker-publish.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "build-frontend-latest:" in workflow_text
+    assert "build-backend-latest:" in workflow_text
+    assert "vulhunter-frontend:latest" in workflow_text
+    assert "vulhunter-backend:latest" in workflow_text
+    assert "platforms: linux/amd64" in workflow_text
+    assert "platforms: linux/amd64,linux/arm64" in workflow_text
+    assert "- 'frontend/**'" in workflow_text
+    assert "- 'backend/**'" in workflow_text
+    assert "- 'docker/frontend.Dockerfile'" in workflow_text
+    assert "- 'docker/backend.Dockerfile'" in workflow_text
+    assert "- '.github/workflows/docker-publish.yml'" in workflow_text
+    assert "- 'frontend/yasa-engine-overrides/**'" in workflow_text
 
 
 def test_release_workflow_builds_slim_release_tree() -> None:

@@ -1,6 +1,16 @@
 name: Docker Publish
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/docker-publish.yml'
+      - '.dockerignore'
+      - 'docker/frontend.Dockerfile'
+      - 'docker/backend.Dockerfile'
+      - 'frontend/**'
+      - 'backend/**'
   workflow_dispatch:
     inputs:
       tag:
@@ -70,7 +80,237 @@ env:
   VULHUNTER_IMAGE_NAMESPACE: unbengable12
 
 jobs:
-  build-and-push:
+  detect-changes:
+    if: github.event_name == 'push'
+    name: 检测镜像相关变更
+    runs-on: ubuntu-latest
+
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: 识别前后端相关变更
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - '.github/workflows/docker-publish.yml'
+              - 'docker/frontend.Dockerfile'
+              - 'frontend/**'
+            backend:
+              - '.github/workflows/docker-publish.yml'
+              - '.dockerignore'
+              - 'docker/backend.Dockerfile'
+              - 'backend/**'
+              - 'frontend/yasa-engine-overrides/**'
+
+  build-frontend-latest:
+    if: github.event_name == 'push' && needs.detect-changes.outputs.frontend == 'true'
+    name: 自动构建前端 latest
+    runs-on: ubuntu-latest
+    needs: detect-changes
+
+    concurrency:
+      group: docker-publish-frontend-latest-main
+      cancel-in-progress: true
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 登录到 GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 安装 Cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.3'
+
+      - name: 安装 Syft (SBOM 生成)
+        uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: 'v1.18.0'
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: 构建并推送前端 Docker 镜像
+        id: build-frontend
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          file: ./docker/frontend.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:latest
+          cache-from: type=gha,scope=frontend-latest
+          cache-to: type=gha,mode=max,scope=frontend-latest
+
+      - name: 签名前端镜像
+        env:
+          DIGEST: ${{ steps.build-frontend.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend
+        run: |
+          cosign sign --yes "${IMAGE}:latest@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-frontend.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-frontend.spdx.json \
+            --type spdx \
+            "${IMAGE}:latest@${DIGEST}"
+
+      - name: 设置前端 GHCR 包为公开可见性
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api --method PATCH "/user/packages/container/vulhunter-frontend" \
+            -f visibility=public --silent 2>/dev/null; then
+            echo "vulhunter-frontend set to public successfully"
+          else
+            echo "::warning::Could not set vulhunter-frontend to public via API (may already be public or require manual action)."
+          fi
+
+      - name: 验证前端 GHCR 匿名拉取
+        run: |
+          set -euo pipefail
+          image="${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-frontend:latest"
+          docker logout ghcr.io || true
+          for attempt in 1 2 3; do
+            if docker manifest inspect "${image}" >/dev/null 2>&1; then
+              exit 0
+            fi
+            echo "Attempt ${attempt}/3 failed, waiting 20s before retry..."
+            sleep 20
+          done
+          echo "::error::Anonymous pull check failed for ${image}. Ensure the package is set to public in GitHub Settings (https://github.com/users/${VULHUNTER_IMAGE_NAMESPACE}/packages)."
+          exit 1
+
+      - name: 输出前端镜像信息
+        run: |
+          echo "## 自动刷新前端 latest 镜像" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
+
+  build-backend-latest:
+    if: github.event_name == 'push' && needs.detect-changes.outputs.backend == 'true'
+    name: 自动构建后端 latest
+    runs-on: ubuntu-latest
+    needs: detect-changes
+
+    concurrency:
+      group: docker-publish-backend-latest-main
+      cancel-in-progress: true
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 登录到 GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 安装 Cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.3'
+
+      - name: 安装 Syft (SBOM 生成)
+        uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: 'v1.18.0'
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: 构建并推送后端 Docker 镜像
+        id: build-backend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./docker/backend.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:latest
+          build-args: |
+            DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
+          cache-from: |
+            type=registry,ref=${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:buildcache-amd64-latest
+            type=gha,scope=backend-latest
+          cache-to: |
+            type=registry,ref=${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:buildcache-amd64-latest,mode=max
+            type=gha,mode=max,scope=backend-latest
+
+      - name: 签名后端镜像
+        env:
+          DIGEST: ${{ steps.build-backend.outputs.digest }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend
+        run: |
+          cosign sign --yes "${IMAGE}:latest@${DIGEST}"
+          syft "${IMAGE}@${DIGEST}" -o spdx-json --file /tmp/sbom-backend.spdx.json
+          cosign attest --yes \
+            --predicate /tmp/sbom-backend.spdx.json \
+            --type spdx \
+            "${IMAGE}:latest@${DIGEST}"
+
+      - name: 设置后端 GHCR 包为公开可见性
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api --method PATCH "/user/packages/container/vulhunter-backend" \
+            -f visibility=public --silent 2>/dev/null; then
+            echo "vulhunter-backend set to public successfully"
+          else
+            echo "::warning::Could not set vulhunter-backend to public via API (may already be public or require manual action)."
+          fi
+
+      - name: 验证后端 GHCR 匿名拉取
+        run: |
+          set -euo pipefail
+          image="${GHCR_REGISTRY}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-backend:latest"
+          docker logout ghcr.io || true
+          for attempt in 1 2 3; do
+            if docker manifest inspect "${image}" >/dev/null 2>&1; then
+              exit 0
+            fi
+            echo "Attempt ${attempt}/3 failed, waiting 20s before retry..."
+            sleep 20
+          done
+          echo "::error::Anonymous pull check failed for ${image}. Ensure the package is set to public in GitHub Settings (https://github.com/users/${VULHUNTER_IMAGE_NAMESPACE}/packages)."
+          exit 1
+
+      - name: 输出后端镜像信息
+        run: |
+          echo "## 自动刷新后端 latest 镜像" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.GHCR_REGISTRY }}/${{ env.VULHUNTER_IMAGE_NAMESPACE }}/vulhunter-backend:latest\`" >> $GITHUB_STEP_SUMMARY
+
+  build-manual:
+    if: github.event_name == 'workflow_dispatch'
     name: 构建并推送镜像
     runs-on: ubuntu-latest
 
