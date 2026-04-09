@@ -643,7 +643,8 @@ async def _execute_agent_task(task_id: str):
                     "max_iterations": task.max_iterations or 50,
                     "audit_source_mode": source_mode,
                     "static_bootstrap_candidate_count": len(bootstrap_findings or []),
-                    "skip_recon_when_bootstrap_available": True,
+                    # 混合扫描中即使存在静态候选，也继续执行自主 Recon 再汇总进入 Analysis。
+                    "skip_recon_when_bootstrap_available": False,
                     # seed_findings（继续使用 bootstrap_findings 字段承载：固定优先候选种子）
                     "bootstrap_findings": seed_findings,
                     "bootstrap_source": bootstrap_source,

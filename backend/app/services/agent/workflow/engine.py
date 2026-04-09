@@ -126,6 +126,27 @@ class AuditWorkflowEngine:
     # 公开入口
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _seed_bootstrap_findings_to_recon_queue(
+        self,
+        task_id: str,
+        bootstrap_findings: Any,
+    ) -> int:
+        """将静态预扫候选注入 recon 队列，返回成功注入条数。"""
+        if not isinstance(bootstrap_findings, list) or not bootstrap_findings:
+            return 0
+
+        seeded_count = 0
+        for finding in bootstrap_findings:
+            if not isinstance(finding, dict):
+                continue
+            try:
+                enqueued = self.recon_queue.enqueue(task_id, finding)
+            except Exception:
+                enqueued = False
+            if enqueued:
+                seeded_count += 1
+        return seeded_count
+
     async def run(
         self,
         project_info: Dict[str, Any],
@@ -148,16 +169,13 @@ class AuditWorkflowEngine:
         orc = self.orchestrator
         runtime_config = config if isinstance(config, dict) else {}
         audit_source_mode = str(runtime_config.get("audit_source_mode") or "hybrid").strip().lower()
-        static_bootstrap_candidate_count = int(
-            runtime_config.get("static_bootstrap_candidate_count") or 0
-        )
-        skip_recon_when_bootstrap_available = bool(
-            runtime_config.get("skip_recon_when_bootstrap_available", True)
-        )
-        should_skip_recon_phase = (
+        static_bootstrap_candidate_count = int(runtime_config.get("static_bootstrap_candidate_count") or 0)
+        bootstrap_findings = runtime_config.get("bootstrap_findings") or []
+        should_seed_bootstrap_before_recon = (
             audit_source_mode == "hybrid"
-            and skip_recon_when_bootstrap_available
             and static_bootstrap_candidate_count > 0
+            and isinstance(bootstrap_findings, list)
+            and len(bootstrap_findings) > 0
         )
         
         #  记录起始内存
@@ -167,46 +185,27 @@ class AuditWorkflowEngine:
         try:
             # ── 阶段 1: RECON ──────────────────────────────────────────────
             state.phase = WorkflowPhase.RECON
-            if should_skip_recon_phase:
-                seeded_count = 0
-                bootstrap_findings = runtime_config.get("bootstrap_findings") or []
-                for finding in bootstrap_findings:
-                    if not isinstance(finding, dict):
-                        continue
-                    try:
-                        enqueued = self.recon_queue.enqueue(task_id, finding)
-                    except Exception:
-                        enqueued = False
-                    if enqueued:
-                        seeded_count += 1
-
-                state.recon_done = True
-                state.step_records.append(
-                    WorkflowStepRecord(
-                        phase=WorkflowPhase.RECON,
-                        agent="recon",
-                        success=True,
-                        error=None,
-                        findings_count=len(orc._all_findings),
-                        duration_ms=0,
-                    )
+            seeded_count = 0
+            if should_seed_bootstrap_before_recon:
+                seeded_count = self._seed_bootstrap_findings_to_recon_queue(
+                    task_id=task_id,
+                    bootstrap_findings=bootstrap_findings,
                 )
                 await orc.emit_event(
                     "info",
                     (
-                        " [Workflow] 混合扫描检测到静态预扫结果，跳过 Recon 阶段，"
-                        f"并注入 {seeded_count} 条候选进入 Analysis 队列"
+                        " [Workflow] 混合扫描已注入静态预扫候选，"
+                        f"seeded_to_recon_queue={seeded_count}，继续执行自主 Recon 并汇总进入 Analysis"
                     ),
                 )
                 logger.info(
-                    "[WorkflowEngine] Skip recon for hybrid mode: "
+                    "[WorkflowEngine] Seeded bootstrap findings before recon: "
                     "static_bootstrap_candidate_count=%s seeded_to_recon_queue=%s",
                     static_bootstrap_candidate_count,
                     seeded_count,
                 )
-            else:
-                await orc.emit_event("info", "🔎 [Workflow] 开始 Recon 阶段")
-                await self._run_recon_until_queue_ready(state, task_id)
+            await orc.emit_event("info", "🔎 [Workflow] 开始 Recon 阶段")
+            await self._run_recon_until_queue_ready(state, task_id)
             
             #  业务逻辑侦察阶段（与 Recon 相互独立，可并行；这里在 Recon 完成后启动）
             # 注意：由于 bootstrap 模式下 Recon 可能被跳过，BL Recon 不受影响，始终运行
@@ -219,8 +218,8 @@ class AuditWorkflowEngine:
                     logger.info("[WorkflowEngine] No business_logic_recon agent registered, skipping BL Recon phase")
                     await orc.emit_event("info", " [Workflow] 未配置 BusinessLogicReconAgent，跳过 BL Recon 阶段")
             
-            #  bootstrap 注入场景仍保留 Recon 队列去重；常规 Recon 已在重试闭环内完成去重
-            if should_skip_recon_phase and state.recon_done and not orc.is_cancelled:
+            #  bootstrap 注入场景保留 Recon 队列去重；常规 Recon 已在重试闭环内完成去重
+            if seeded_count > 0 and state.recon_done and not orc.is_cancelled:
                 await self._dedup_recon_risk_queue(self.task_id)
 
             #  BL Recon 结束后对业务逻辑风险点去重

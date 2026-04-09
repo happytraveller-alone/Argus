@@ -139,6 +139,8 @@ const LOG_VIEWPORT_MIN_HEIGHT_PX = 96;
 const FINDINGS_PANEL_MIN_HEIGHT_PX = 320;
 const DETAIL_CONTENT_GAP_PX = 12;
 const LOG_AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD_PX = 24;
+const SMALL_SCREEN_SPLIT_BREAKPOINT_PX = 1536;
+const SMALL_SCREEN_SPLIT_HEIGHT_BREAKPOINT_PX = 900;
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -664,6 +666,14 @@ function AgentAuditPageContent() {
   } = useAgentAuditState();
 
   // Local state
+  const isCompactViewport = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      window.innerWidth < SMALL_SCREEN_SPLIT_BREAKPOINT_PX ||
+      window.innerHeight < SMALL_SCREEN_SPLIT_HEIGHT_BREAKPOINT_PX
+    );
+  }, []);
+
   const [showSplash, setShowSplash] = useState(!taskId);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -703,6 +713,9 @@ function AgentAuditPageContent() {
   const [tokenUsage, setTokenUsage] = useState(() => createTokenUsageAccumulator());
   const [statsNow, setStatsNow] = useState(() => new Date());
   const [isEventLogsVisible, setIsEventLogsVisible] = useState(true);
+  const [isSmallScreenSplit, setIsSmallScreenSplit] = useState<boolean>(() => {
+    return isCompactViewport();
+  });
   const [logViewportHeight, setLogViewportHeight] = useState(
     LOG_VIEWPORT_DEFAULT_HEIGHT_PX,
   );
@@ -800,6 +813,31 @@ function AgentAuditPageContent() {
     const eventLogsChromeHeight = eventLogsChromeHeightRef.current;
     const fixedSectionCount = 1 + (hasFailedReason ? 1 : 0);
     const gapCountWithLogs = fixedSectionCount + 1;
+
+    if (isSmallScreenSplit) {
+      const availablePanelsHeight =
+        detailContentHeight -
+        statsHeight -
+        failedHeight -
+        gapCountWithLogs * DETAIL_CONTENT_GAP_PX;
+      if (!Number.isFinite(availablePanelsHeight) || availablePanelsHeight <= 0) {
+        return;
+      }
+      const panelHeight = Math.max(
+        LOG_VIEWPORT_MIN_HEIGHT_PX,
+        Math.floor(availablePanelsHeight / 2),
+      );
+      const nextLogViewportHeight = Math.max(
+        LOG_VIEWPORT_MIN_HEIGHT_PX,
+        panelHeight - eventLogsChromeHeight,
+      );
+      setIsEventLogsVisible(true);
+      setLogViewportHeight((currentHeight) =>
+        currentHeight === nextLogViewportHeight ? currentHeight : nextLogViewportHeight,
+      );
+      return;
+    }
+
     const maxLogViewportHeight =
       detailContentHeight -
       statsHeight -
@@ -825,7 +863,23 @@ function AgentAuditPageContent() {
     setLogViewportHeight((currentHeight) =>
       currentHeight === nextLogViewportHeight ? currentHeight : nextLogViewportHeight,
     );
-  }, [failedReason, logViewportHeight]);
+  }, [failedReason, isSmallScreenSplit, logViewportHeight]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => {
+      setIsSmallScreenSplit(isCompactViewport());
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [isCompactViewport]);
+
+  useEffect(() => {
+    if (isSmallScreenSplit) {
+      setIsEventLogsVisible(true);
+    }
+  }, [isSmallScreenSplit]);
 
   useEffect(() => {
     syncEventLogsLayout();
@@ -3610,7 +3664,13 @@ function AgentAuditPageContent() {
           </div>
 
           {/* Full-width findings panel (expanded) */}
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div
+            className={
+              isSmallScreenSplit
+                ? "min-h-0 flex-[1_1_0%] overflow-hidden"
+                : "min-h-0 flex-1 overflow-hidden"
+            }
+          >
             <div className="h-full">
               <RealtimeFindingsPanel
                 taskId={task?.id || ""}
@@ -3637,10 +3697,14 @@ function AgentAuditPageContent() {
           </div>
 
           {/* Bottom: Full-width event logs */}
-          {isEventLogsVisible ? (
+          {(isSmallScreenSplit || isEventLogsVisible) ? (
             <div
               ref={eventLogsSectionRef}
-              className="flex-shrink-0 overflow-hidden rounded-xl bg-card/50"
+              className={
+                isSmallScreenSplit
+                  ? "min-h-0 flex-[1_1_0%] overflow-hidden rounded-xl bg-card/50 flex flex-col"
+                  : "flex-shrink-0 overflow-hidden rounded-xl bg-card/50"
+              }
             >
               <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -3695,10 +3759,17 @@ function AgentAuditPageContent() {
                 </div>
               </div>
 
-              <div className="pt-2">
-                <div className="overflow-x-auto custom-scrollbar">
+              <div className={isSmallScreenSplit ? "pt-2 min-h-0 flex-1" : "pt-2"}>
+                <div
+                  className={
+                    isSmallScreenSplit
+                      ? "overflow-x-auto custom-scrollbar h-full"
+                      : "overflow-x-auto custom-scrollbar"
+                  }
+                >
                   <div
                     style={{ minWidth: `${EVENT_LOG_TABLE_MIN_WIDTH_PX}px` }}
+                    className={isSmallScreenSplit ? "h-full min-h-0 flex flex-col" : undefined}
                   >
                     <div
                       className="grid items-center gap-3 border-b border-border/60 px-5 py-2 text-[11px] font-mono uppercase tracking-[0.24em] text-muted-foreground/80"
@@ -3712,8 +3783,12 @@ function AgentAuditPageContent() {
                     <div
                       ref={logsContainerRef}
                       onScroll={handleLogsScroll}
-                      className="overflow-y-auto custom-scrollbar-dark transition-[height] duration-150"
-                      style={{ height: logViewportHeight }}
+                      className={
+                        isSmallScreenSplit
+                          ? "overflow-y-auto custom-scrollbar-dark h-full min-h-0"
+                          : "overflow-y-auto custom-scrollbar-dark transition-[height] duration-150"
+                      }
+                      style={isSmallScreenSplit ? undefined : { height: logViewportHeight }}
                     >
                       {filteredLogs.length === 0 ? (
                         <div className="flex h-full items-center justify-center px-3">

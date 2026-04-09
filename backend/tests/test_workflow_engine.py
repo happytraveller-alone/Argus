@@ -242,13 +242,15 @@ class TestAuditWorkflowEnginePhases:
         assert len(recon_calls) == 1
 
     @pytest.mark.asyncio
-    async def test_hybrid_with_bootstrap_candidates_skips_recon(self, orchestrator_with_queues):
-        """混合扫描且静态预扫有候选时：跳过 Recon，直接进入 Analysis。"""
+    async def test_hybrid_with_bootstrap_candidates_continues_recon_and_analysis(
+        self, orchestrator_with_queues
+    ):
+        """混合扫描且静态预扫有候选时：先注入 seed，再继续 Recon，再进入 Analysis。"""
         orch, recon_q, vuln_q = orchestrator_with_queues
         calls = _install_dispatch_mock(orch, vuln_q)
         config = {
             "audit_source_mode": "hybrid",
-            "skip_recon_when_bootstrap_available": True,
+            "skip_recon_when_bootstrap_available": False,
             "static_bootstrap_candidate_count": 1,
             "bootstrap_findings": [_make_risk_point("seed.py", 88)],
         }
@@ -258,9 +260,85 @@ class TestAuditWorkflowEnginePhases:
 
         recon_calls = [c for c in calls if c["agent"] == "recon"]
         analysis_calls = [c for c in calls if c["agent"] == "analysis"]
-        assert len(recon_calls) == 0
+        assert len(recon_calls) == 1
         assert len(analysis_calls) >= 1
+        analysis_risk_points = [
+            c.get("risk_point")
+            for c in analysis_calls
+            if isinstance(c.get("risk_point"), dict)
+        ]
+        assert any(
+            rp.get("file_path") == "seed.py" and int(rp.get("line_start") or 0) == 88
+            for rp in analysis_risk_points
+        )
         assert state.recon_done is True
+
+    @pytest.mark.asyncio
+    async def test_hybrid_bootstrap_and_recon_results_are_aggregated_into_analysis_queue(
+        self, orchestrator_with_queues
+    ):
+        """静态 seed 与 Recon 产出应汇总后进入 Analysis 阶段。"""
+        orch, recon_q, vuln_q = orchestrator_with_queues
+        calls: List[Dict[str, Any]] = []
+        analyzed_risk_points: List[Dict[str, Any]] = []
+
+        async def mock_dispatch(params: Dict) -> str:
+            calls.append(dict(params))
+            agent_name = str(params.get("agent", "")).lower()
+
+            if agent_name == "recon":
+                recon_q.enqueue(TASK_ID, _make_risk_point("recon.py", 21))
+                orch._agent_results["recon"] = {"_run_success": True, "high_risk_areas": []}
+                return "Recon 完成"
+
+            if agent_name == "analysis":
+                risk_point = params.get("risk_point") or {}
+                if isinstance(risk_point, dict):
+                    analyzed_risk_points.append(risk_point)
+                finding = _make_finding(
+                    "Hybrid aggregated finding",
+                    file_path=risk_point.get("file_path", "hybrid.py"),
+                    line_start=int(risk_point.get("line_start") or 1),
+                )
+                vuln_q.enqueue_finding(TASK_ID, finding)
+                orch._agent_results["analysis"] = {"_run_success": True, "findings": [finding]}
+                return "Analysis 完成"
+
+            if agent_name == "verification":
+                finding_from_params = params.get("finding") or {}
+                orch._agent_results["verification"] = {
+                    "_run_success": True,
+                    "findings": [finding_from_params],
+                }
+                if isinstance(finding_from_params, dict) and finding_from_params:
+                    normalized = orch._normalize_finding(finding_from_params)
+                    if normalized:
+                        orch._all_findings.append(normalized)
+                return "Verification 完成"
+
+            return "未知 Agent"
+
+        orch._dispatch_agent = mock_dispatch
+        config = {
+            "audit_source_mode": "hybrid",
+            "skip_recon_when_bootstrap_available": False,
+            "static_bootstrap_candidate_count": 1,
+            "bootstrap_findings": [_make_risk_point("seed.py", 88)],
+        }
+        engine = AuditWorkflowEngine(recon_q, vuln_q, TASK_ID, orch)
+        await engine.run({}, config, "/tmp", TASK_ID)
+
+        recon_calls = [c for c in calls if str(c.get("agent", "")).lower() == "recon"]
+        analysis_calls = [c for c in calls if str(c.get("agent", "")).lower() == "analysis"]
+        assert len(recon_calls) == 1
+        assert len(analysis_calls) == 2
+        consumed_keys = {
+            (str(rp.get("file_path") or ""), int(rp.get("line_start") or 0))
+            for rp in analyzed_risk_points
+            if isinstance(rp, dict)
+        }
+        assert ("seed.py", 88) in consumed_keys
+        assert ("recon.py", 21) in consumed_keys
 
     @pytest.mark.asyncio
     async def test_intelligent_mode_does_not_skip_recon_even_with_bootstrap_candidates(
