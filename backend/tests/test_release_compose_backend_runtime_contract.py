@@ -26,6 +26,13 @@ def test_release_compose_contract_uses_only_supported_commands_and_cloud_runners
         "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
         "vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in compose_text
+    assert "nexus-web:\n    image: ${NEXUS_WEB_IMAGE:-vulhunter/nexus-web-local:latest}" in compose_text
+    assert "nexus-itemDetail:\n    image: ${NEXUS_ITEM_DETAIL_IMAGE:-vulhunter/nexus-item-detail-local:latest}" in compose_text
+    assert "context: ./nexus-web" in compose_text
+    assert "context: ./nexus-itemDetail" in compose_text
+    assert "dockerfile: ../docker/nexus-web.Dockerfile" in compose_text
+    assert "NEXUS_WEB_PULL_POLICY" in compose_text
+    assert "NEXUS_ITEM_DETAIL_PULL_POLICY" in compose_text
     assert "RUNNER_PREFLIGHT_BUILD_CONTEXT" not in compose_text
     assert "RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS" not in compose_text
 
@@ -42,6 +49,8 @@ def test_release_compose_contract_uses_only_supported_commands_and_cloud_runners
         "SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/"
         "vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}"
     ) in hybrid_text
+    assert "nexus-web" not in hybrid_text
+    assert "nexus-itemDetail" not in hybrid_text
     assert "-runner-local:latest" not in hybrid_text
     assert "RUNNER_PREFLIGHT_BUILD_CONTEXT" not in hybrid_text
     assert "RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS" not in hybrid_text
