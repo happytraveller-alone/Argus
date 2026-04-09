@@ -183,6 +183,14 @@ def test_release_generator_writes_sanitized_compose_files(tmp_path: Path) -> Non
     assert "RUNNER_PREFLIGHT_BUILD_CONTEXT" not in hybrid_text
 
 
+def test_release_backend_template_no_longer_copies_removed_backend_static_tree() -> None:
+    template_text = (REPO_ROOT / "scripts" / "release-templates" / "backend.Dockerfile").read_text(
+        encoding="utf-8"
+    )
+
+    assert "COPY backend/static /app/static" not in template_text
+
+
 def test_generated_release_docs_only_publish_two_supported_commands(tmp_path: Path) -> None:
     output_dir = tmp_path / "release-tree"
     result = _run_release_generator(output_dir)

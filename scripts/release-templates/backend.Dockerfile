@@ -105,7 +105,6 @@ RUN set -eux; \
 
 COPY --from=builder /opt/backend-venv /opt/backend-venv
 COPY backend/app /app/app
-COPY backend/static /app/static
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py

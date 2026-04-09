@@ -76,6 +76,7 @@ def test_backend_runtime_targets_do_not_embed_local_runner_build_context() -> No
         assert "/opt/backend-build-context" not in section
         assert "backend/docs/agent-tools" not in section
         assert "RUNNER_PREFLIGHT_BUILD_CONTEXT" not in section
+        assert "COPY backend/static /app/static" not in section
 
     assert "subprocess.run(" not in runner_preflight_text
     assert "falling back to local build" not in runner_preflight_text

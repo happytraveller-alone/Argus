@@ -479,7 +479,6 @@ RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/ru
 COPY --from=runtime-app-assembler /final/app /app/app
 # 删除残留的 .c 中间文件（若有）
 RUN find /app/app -name "*.c" -delete 2>/dev/null || true
-COPY backend/static /app/static
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
@@ -554,7 +553,6 @@ RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/ru
 
 COPY backend/app /app/app
 RUN find /app/app -name "*.c" -delete 2>/dev/null || true
-COPY backend/static /app/static
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
@@ -654,7 +652,6 @@ RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/ru
 
 # 直接复制 Python 源码（跳过 Cython 编译加固）
 COPY backend/app /app/app
-COPY backend/static /app/static
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py

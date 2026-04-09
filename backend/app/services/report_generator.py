@@ -383,8 +383,6 @@ class ReportGenerator:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             # 尝试多个可能的路径
             possible_paths = [
-                # Docker 容器内路径
-                os.path.join(current_dir, '../../static/images/logo_nobg.png'),
                 # 本地开发路径
                 os.path.abspath(os.path.join(current_dir, '../../../frontend/public/images/logo_nobg.png')),
             ]
