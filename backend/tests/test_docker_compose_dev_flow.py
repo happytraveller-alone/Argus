@@ -64,7 +64,7 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert ".:/workspace:ro" not in compose_text
     assert "./frontend:/app" not in compose_text
     assert "./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" not in compose_text
-    assert "/opt/backend-venv" not in compose_text
+    assert "- /opt/backend-venv" not in compose_text
     assert "/app/.venv" not in compose_text
     assert "/root/.cache/uv" not in compose_text
     assert "/app/node_modules" not in compose_text
@@ -329,39 +329,27 @@ def test_scripts_and_packaging_use_new_compose_layout() -> None:
 def test_readmes_document_backend_managed_preflight_behavior() -> None:
     root_readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     root_readme_en = (REPO_ROOT / "README_EN.md").read_text(encoding="utf-8")
-    backend_readme = (REPO_ROOT / "backend" / "README.md").read_text(encoding="utf-8")
     compose_readme = (REPO_ROOT / "scripts" / "README-COMPOSE.md").read_text(encoding="utf-8")
 
-    assert "backend 启动时会自行执行 runner preflight" in root_readme
-    assert "compose 不再声明一次性 runner 预热 / 自检服务" in root_readme
     assert "docker compose up" in root_readme
-    assert "docker compose up --build" not in root_readme
-    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" in root_readme
-    assert "默认推荐直接使用 Docker Compose" in root_readme
+    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in root_readme
+    assert "docker-compose.full.yml" not in root_readme
+    assert "docker-compose.self-contained.yml" not in root_readme
+    assert "package-release-artifacts.sh" not in root_readme
     assert "scripts/README-COMPOSE.md" in root_readme
-    assert "核心栈镜像优先" in root_readme
-    assert "nexus-web" in root_readme
-    assert "backend runs runner preflight during startup" in root_readme_en
-    assert "no longer declares one-shot compose runner warmup services" in root_readme_en
     assert "docker compose up" in root_readme_en
-    assert "docker compose up --build" not in root_readme_en
-    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" in root_readme_en
-    assert "The default recommended entrypoint is plain Docker Compose" in root_readme_en
+    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in root_readme_en
+    assert "docker-compose.full.yml" not in root_readme_en
+    assert "docker-compose.self-contained.yml" not in root_readme_en
+    assert "package-release-artifacts.sh" not in root_readme_en
     assert "scripts/README-COMPOSE.md" in root_readme_en
-    assert "backend runs the configured runner preflight during startup" in backend_readme
-    assert "default compose startup now only brings up the long-lived services" in backend_readme
-    assert "Docker SDK" in backend_readme
-    assert "SCANNER_*_IMAGE" in backend_readme
-    assert "backend 启动时托管执行 runner preflight" in compose_readme
-    assert "默认启动只拉起常驻 compose 服务" in compose_readme
     assert "docker compose up" in compose_readme
-    assert "docker compose up --build" not in compose_readme
-    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" in compose_readme
-    assert "docker-compose.full.yml" in compose_readme
-    assert "核心栈镜像优先" in compose_readme
-    assert "Docker Desktop + Linux containers" in compose_readme
-    assert "runner 预热 / 自检容器" not in compose_readme
-    assert "runner preflight / warmup" not in root_readme_en
+    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in compose_readme
+    assert "docker-compose.full.yml" not in compose_readme
+    assert "docker-compose.self-contained.yml" not in compose_readme
+    assert "package-release-artifacts.sh" not in compose_readme
+    assert "deploy-release-artifacts.sh" not in compose_readme
+    assert "docker/env/backend/env.example" in compose_readme
 
 
 def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
@@ -556,23 +544,14 @@ def test_docker_publish_pushes_all_runner_images() -> None:
     assert "docker manifest inspect" in workflow_text
 
 
-def test_release_workflow_packages_yasa_override_assets() -> None:
+def test_release_workflow_builds_slim_release_tree() -> None:
     workflow_text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
-    package_script = (REPO_ROOT / "deploy" / "package-release-artifacts.sh").read_text(
-        encoding="utf-8"
-    )
 
-    assert ".dockerignore" in workflow_text
-    assert "docker-compose.hybrid.yml" in workflow_text
-    assert "docker-compose.self-contained.yml" in workflow_text
-    assert "frontend/yasa-engine-overrides/" in workflow_text
-    assert "VULHUNTER_IMAGE_NAMESPACE" in workflow_text
-    assert "docker-publish.yml" in workflow_text
-    assert "docker/build-push-action" not in workflow_text
-    assert "docker/login-action" not in workflow_text
-    assert "docker manifest inspect" not in workflow_text
-    assert "docker compose up -d" not in workflow_text
-    assert 'cp -R "$ROOT_DIR/docker" "$tmp_root/"' in package_script
-    assert 'cp -R "$ROOT_DIR/frontend/yasa-engine-overrides" "$tmp_root/frontend/"' in package_script
+    assert "generate-release-branch.sh" in workflow_text
+    assert "--validate" in workflow_text
+    assert "docker compose config" in workflow_text
+    assert "git push --force origin HEAD:release" in workflow_text
+    assert "workflow_dispatch:" in workflow_text
+    assert "tags:" not in workflow_text

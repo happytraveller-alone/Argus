@@ -1,0 +1,12 @@
+# Directories copied into the generated release tree before pruning/sanitizing.
+backend/
+frontend/
+
+# Runtime Docker files and env templates needed by the release tree.
+docker/frontend.Dockerfile
+docker/env/backend/env.example
+docker/env/frontend/.env.example
+
+# Legal notices retained in the generated release tree.
+LICENSE
+NOTICE

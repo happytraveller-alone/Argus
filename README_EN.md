@@ -1,140 +1,51 @@
-# VulHunter - Repository-Scale Vulnerability Hunting and Security Auditing
+# VulHunter Slim Release
 
 <p align="center">
   <a href="README.md">简体中文</a> | <strong>English</strong>
 </p>
 
-VulHunter is built for repository-scale security auditing and vulnerability hunting. It combines Multi-Agent orchestration, rule-based scanning, RAG-powered semantic retrieval, and LLM reasoning to connect the full path from suspicious code discovery to optional vulnerability validation.
-
-## Use Cases
-
-- Run a focused security audit before release, delivery, or open-source publication.
-- Re-scan existing repositories on a regular basis for leaked secrets, dependency risks, and dangerous code patterns.
-- Perform fast triage on third-party repositories, outsourced code, or legacy projects before deeper manual review.
-- Give security and engineering teams one place to review findings, inspect evidence, and export audit results.
-
-## How It Finds Vulnerabilities
-
-VulHunter follows a workflow of orchestration -> triage -> deep analysis -> validation:
-
-1. **Multi-Agent orchestration**: an orchestrator coordinates recon, analysis, and verification stages.
-2. **Static scanning for first-pass triage**: rule scans, dependency audits, and secret detection surface risky entry points quickly.
-3. **RAG-based semantic retrieval**: repository code is indexed for semantic search so related context and similar patterns can be recalled.
-4. **LLM-driven deep analysis**: suspicious code paths are examined with code context, data-flow clues, and security reasoning.
-5. **Optional PoC sandbox validation**: verification scripts can run in Docker isolation to confirm real issues and reduce false positives.
-
-This workflow is designed for repository-wide audits where both coverage and analysis depth matter.
-
-## Quick Deployment
-
-### 1. Clone the repository
+This release branch keeps only the slim-source files required to run VulHunter. It supports exactly two entrypoints:
 
 ```bash
-git clone https://github.com/unbengable12/AuditTool.git
-cd AuditTool
+docker compose up
+docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
 ```
 
-### 2. Configure backend environment variables
+## Before You Start
 
-On the first Docker Compose startup, if `docker/env/backend/.env` is missing, the stack now auto-generates it from `docker/env/backend/env.example`.
-You can still pre-create it manually if you prefer:
+1. Copy the backend environment file:
 
 ```bash
 cp docker/env/backend/env.example docker/env/backend/.env
 ```
 
-At minimum, set your model-related configuration such as `LLM_API_KEY`, `LLM_PROVIDER`, and `LLM_MODEL`. Do not commit real secrets into the repository.
+2. Fill in at least:
+   `LLM_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL`
 
-All Dockerfiles, runner image build files, and Docker-specific environment files now live under `docker/`.
+3. Make sure Docker Compose is installed and the Docker daemon is reachable.
 
-### 3. Start the services
+## Supported Commands
 
-The default recommended entrypoint is plain Docker Compose with an image-first core stack:
-
-- `backend`, `frontend`, `db`, `redis`, and the scan/sandbox runtime images pull published images by default
-- `nexus-web` and `nexus-itemDetail` remain the explicit local-build exception and now build directly from the two repository folders instead of trying a remote pull first
-- `docker-compose.self-contained.yml` remains available only as a compatibility overlay
+### 1. Default image-based startup
 
 ```bash
 docker compose up
 ```
 
-On Windows, use Docker Desktop with Linux containers.
+Use this when you want the core stack to start from published `backend`, `frontend`, runner, and sandbox images.
 
-For the full local build path, add the `docker-compose.full.yml` overlay:
+### 2. Local frontend/backend rebuild
 
 ```bash
-./scripts/compose-up-local-build.sh
-
-# Or keep the raw compose command
-docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
 ```
 
-On a fresh checkout where only `docker/env/backend/env.example` exists, `./scripts/compose-up-local-build.sh` now bootstraps `docker/env/backend/.env` automatically so the local-build entrypoint does not fail early on a missing backend env file. The helper now builds `backend -> frontend -> nexus-web -> nexus-itemDetail` sequentially, and the locally built `nexus-*` images reuse the default local tags referenced by compose.
+Use this when you want to rebuild only the `frontend` and `backend` sources shipped in this branch while keeping database, Redis, runners, and sandbox image-based.
 
-The default `docker compose up` path now uses remote images for the core stack. Adding `--build` to the base compose file does not switch the main services to local builds.
-Use the `docker-compose.full.yml` overlay explicitly when you want local image builds.
-The default remote image addresses can be overridden through `GHCR_REGISTRY`, `VULHUNTER_IMAGE_NAMESPACE`, and `VULHUNTER_IMAGE_TAG`. `nexus-web` and `nexus-itemDetail` also support image-name overrides through `NEXUS_WEB_IMAGE` and `NEXUS_ITEM_DETAIL_IMAGE`; if you want them to pull remotely again, also set `NEXUS_WEB_PULL_POLICY` / `NEXUS_ITEM_DETAIL_PULL_POLICY` to values such as `missing` or `always`.
-The remote mode assumes anonymous pull access. If you publish under your own namespace, make sure the GHCR packages are publicly pullable or override the full `*_IMAGE` values directly.
-
-The default `docker compose up` path now only brings up the long-lived compose services and no longer declares one-shot compose runner warmup services.
-Instead, backend runs runner preflight during startup to verify the images and commands behind `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`, and actual scan execution still happens in temporary runner containers started on demand by backend through the Docker SDK.
-
-For optional legacy wrapper helpers, see [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md).
-
-### 4. Open the application
+## Endpoints
 
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:8000`
 - OpenAPI: `http://localhost:8000/docs`
 
-Related docs:
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
-[`docs/AGENT_AUDIT.md`](docs/AGENT_AUDIT.md) ·
-[`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md)
-
-## Linux One-Click Deployment (Ubuntu / Debian)
-
-For Ubuntu / Debian systems, the repository ships a unified deployment entry point at [`scripts/deploy-linux.sh`](scripts/deploy-linux.sh) with two modes:
-
-| Mode | Description |
-|------|-------------|
-| **docker** | Full-featured default — all services run inside Docker Compose containers (recommended) |
-| **local** | Frontend, backend, and nexus-web run on the host; PostgreSQL/Redis use local system services; scan runners, flow parser, and PoC sandbox **still require the Docker daemon** |
-
-> **Note:** `local` mode is not "Docker-free". Scan-related containers still need a working Docker Engine on the host.
-
-### Usage
-
-```bash
-# Interactive menu (no arguments)
-./scripts/deploy-linux.sh
-
-# Non-interactive mode
-./scripts/deploy-linux.sh docker   # Start in Docker mode
-./scripts/deploy-linux.sh local    # Start in Local mode
-
-# Status (covers both docker and local)
-./scripts/deploy-linux.sh status
-
-# Stop all services
-./scripts/deploy-linux.sh stop
-```
-
-### Local Mode Details
-
-- Auto-installs: `git`, `curl`, `python3`, `uv`, `nodejs ≥20`, `pnpm`, `postgresql`, `redis-server`, `docker.io`
-- Auto-generates `backend/.env.local` with localhost overrides for database/Redis
-- Runs `alembic upgrade head` for database migrations
-- Frontend uses the build-then-preview path (`pnpm build` → `vite preview`) on port 3000
-- nexus-web is automatically cloned to `nexus-web/src` on first run; subsequent runs run `git fetch`
-- PIDs are written to `.deploy/pids/`, logs to `.deploy/logs/`
-
-### Troubleshooting
-
-| Problem | Solution |
-|---------|---------|
-| Port already in use | Run `./scripts/deploy-linux.sh stop` then retry, or free the port manually |
-| `docker: permission denied` | Run `newgrp docker` or log out and back in to apply the docker group |
-| nexus-web clone timeout | Set `NEXUS_WEB_GIT_MIRROR_PREFIX=` (empty) to bypass the mirror and connect directly, or configure a proxy |
-| Backend migration fails | Check PostgreSQL status: `sudo systemctl status postgresql` |
+See [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md) for the compose contract.

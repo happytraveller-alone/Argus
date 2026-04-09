@@ -1,28 +1,13 @@
-# =============================================
-# VulHunter v3.0.4 Docker Compose 混合构建覆盖层
-# =============================================
-# 用法:
-# docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
-# backend target 固定为 runtime-plain，仅用于本地开发调试；不要用于发布镜像。
-#
-# 构建策略:
-#   本地构建 : frontend、backend
-#   云端拉取 : scanner runners、sandbox、db、redis（nexus-* 继续沿用基础 compose 本地 build）
-#
-# 适用场景: 仅修改了 frontend / backend 代码，无需重新构建所有 runner 镜像。
-
 services:
   backend:
     image: vulhunter/backend-local:latest
     build: !override
       context: .
       dockerfile: docker/backend.Dockerfile
-      # 本地开发显式使用源码 target，避免误走发布用 runtime/runtime-cython
-      target: runtime-plain
+      target: runtime-release
       args:
         - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
         - UV_IMAGE=${UV_IMAGE:-ghcr.nju.edu.cn/astral-sh/uv:latest}
-        - DOCKER_CLI_IMAGE=${DOCKER_CLI_IMAGE:-docker.m.daocloud.io/library/docker:cli}
         - BACKEND_APT_MIRROR_PRIMARY=${BACKEND_APT_MIRROR_PRIMARY:-mirrors.aliyun.com}
         - BACKEND_APT_SECURITY_PRIMARY=${BACKEND_APT_SECURITY_PRIMARY:-mirrors.aliyun.com}
         - BACKEND_APT_MIRROR_FALLBACK=${BACKEND_APT_MIRROR_FALLBACK:-deb.debian.org}
@@ -31,21 +16,6 @@ services:
         - BACKEND_PYPI_INDEX_FALLBACK=${BACKEND_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
         - BACKEND_PYPI_INDEX_CANDIDATES=${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
         - BACKEND_INSTALL_CJK_FONTS=${BACKEND_INSTALL_CJK_FONTS:-1}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
-    working_dir: !reset null
-    command: !reset null
-    # 本地构建镜像已内置 /app，无需挂载源码；仅保留数据卷和 Docker Socket
-    volumes: !override
-      - ./docker/env/backend:/docker/env/backend
-      - backend_uploads:/app/uploads
-      - backend_runtime_data:/app/data/runtime
-      - scan_workspace:/tmp/vulhunter/scans
-      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     environment: !override
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
       ASYNCPG_DSN: postgresql://postgres:postgres@db:5432/${POSTGRES_DB:-vulhunter}
@@ -56,14 +26,12 @@ services:
       RESET_STATIC_SCAN_TABLES_ON_DEPLOY: "false"
       AGENT_ENABLED: "true"
       SANDBOX_ENABLED: "true"
-      # sandbox 使用云端镜像
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-sandbox:${VULHUNTER_IMAGE_TAG:-latest}}
       YASA_ENABLED: ${YASA_ENABLED:-true}
       SCAN_WORKSPACE_ROOT: ${SCAN_WORKSPACE_ROOT:-/tmp/vulhunter/scans}
       SCAN_WORKSPACE_VOLUME: ${SCAN_WORKSPACE_VOLUME:-vulhunter_scan_workspace}
       RUNNER_PREFLIGHT_ENABLED: "${RUNNER_PREFLIGHT_ENABLED:-true}"
-      # runners 从云端拉取，无需严格模式
-      RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-false}"
+      RUNNER_PREFLIGHT_STRICT: "${RUNNER_PREFLIGHT_STRICT:-true}"
       RUNNER_PREFLIGHT_TIMEOUT_SECONDS: "${RUNNER_PREFLIGHT_TIMEOUT_SECONDS:-30}"
       RUNNER_PREFLIGHT_MAX_CONCURRENCY: "${RUNNER_PREFLIGHT_MAX_CONCURRENCY:-2}"
       DOCKERHUB_LIBRARY_MIRROR: ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
@@ -74,7 +42,6 @@ services:
       BACKEND_PYPI_INDEX_PRIMARY: ${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}
       BACKEND_PYPI_INDEX_FALLBACK: ${BACKEND_PYPI_INDEX_FALLBACK:-https://pypi.org/simple}
       BACKEND_PYPI_INDEX_CANDIDATES: ${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.org/simple}
-      # scanner runner 镜像全部使用云端 GHCR
       SCANNER_YASA_IMAGE: ${SCANNER_YASA_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-yasa-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_OPENGREP_IMAGE: ${SCANNER_OPENGREP_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-opengrep-runner:${VULHUNTER_IMAGE_TAG:-latest}}
       SCANNER_BANDIT_IMAGE: ${SCANNER_BANDIT_IMAGE:-${GHCR_REGISTRY:-ghcr.io}/${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}/vulhunter-bandit-runner:${VULHUNTER_IMAGE_TAG:-latest}}
@@ -105,11 +72,6 @@ services:
       http_proxy: ""
       https_proxy: ""
       NO_PROXY: "*"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
   frontend:
     image: vulhunter/frontend-local:latest
@@ -124,12 +86,6 @@ services:
         - PNPM_VERSION=${PNPM_VERSION:-9.15.4}
         - BUILD_WEAK_NETWORK=${BUILD_WEAK_NETWORK:-false}
         - BUILD_ARCH=${BUILD_ARCH:-}
-        - http_proxy=
-        - https_proxy=
-        - HTTP_PROXY=
-        - HTTPS_PROXY=
-        - all_proxy=
-        - ALL_PROXY=
     working_dir: /app
     command: !reset null
     volumes: !override

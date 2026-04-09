@@ -14,6 +14,12 @@ fastmcp_client_stub = types.ModuleType("fastmcp.client")
 fastmcp_transports_stub = types.ModuleType("fastmcp.client.transports")
 fastmcp_transports_stub.StdioTransport = object
 fastmcp_transports_stub.StreamableHttpTransport = object
+docker_stub = types.ModuleType("docker")
+docker_stub.from_env = lambda: None
+docker_stub.errors = SimpleNamespace(
+    DockerException=RuntimeError,
+    ImageNotFound=type("ImageNotFound", (Exception,), {}),
+)
 git_stub = types.ModuleType("git")
 git_stub.Repo = object
 alembic_config_stub = types.ModuleType("alembic.config")
@@ -27,12 +33,69 @@ alembic_script_stub.ScriptDirectory = type(
 sys.modules.setdefault("fastmcp", fastmcp_stub)
 sys.modules.setdefault("fastmcp.client", fastmcp_client_stub)
 sys.modules.setdefault("fastmcp.client.transports", fastmcp_transports_stub)
+sys.modules.setdefault("docker", docker_stub)
 sys.modules.setdefault("git", git_stub)
 sys.modules.setdefault("alembic.config", alembic_config_stub)
 sys.modules.setdefault("alembic.script", alembic_script_stub)
 
 
 from app.services import runner_preflight
+
+
+def test_get_configured_runner_preflight_specs_do_not_include_local_build_metadata() -> None:
+    specs = runner_preflight.get_configured_runner_preflight_specs()
+
+    assert specs
+    for spec in specs:
+        assert spec.image
+        assert spec.command
+        assert spec.dockerfile is None
+        assert spec.build_context is None
+        assert spec.build_args == {}
+
+
+def test_ensure_runner_image_pulls_missing_cloud_image_without_local_build(monkeypatch):
+    seen: dict[str, object] = {}
+
+    class _FakeImages:
+        def get(self, image):
+            seen["get"] = image
+            raise runner_preflight.DOCKER_NOT_FOUND("missing")
+
+        def pull(self, image):
+            seen["pull"] = image
+            return object()
+
+    runner_preflight._ensure_runner_image(SimpleNamespace(images=_FakeImages()), runner_preflight.RunnerPreflightSpec(
+        name="bandit",
+        image="ghcr.io/acme/vulhunter-bandit-runner:latest",
+        command=["bandit", "--version"],
+        timeout_seconds=10,
+    ))
+
+    assert seen == {
+        "get": "ghcr.io/acme/vulhunter-bandit-runner:latest",
+        "pull": "ghcr.io/acme/vulhunter-bandit-runner:latest",
+    }
+
+
+def test_ensure_runner_image_raises_when_cloud_pull_fails(monkeypatch):
+    class _FakeImages:
+        def get(self, _image):
+            raise runner_preflight.DOCKER_NOT_FOUND("missing")
+
+        def pull(self, _image):
+            raise RuntimeError("registry denied")
+
+    spec = runner_preflight.RunnerPreflightSpec(
+        name="bandit",
+        image="ghcr.io/acme/vulhunter-bandit-runner:latest",
+        command=["bandit", "--version"],
+        timeout_seconds=10,
+    )
+
+    with pytest.raises(RuntimeError, match="pull failed for bandit"):
+        runner_preflight._ensure_runner_image(SimpleNamespace(images=_FakeImages()), spec)
 
 
 def test_run_runner_preflight_sync_uses_explicit_command_and_removes_container(monkeypatch):

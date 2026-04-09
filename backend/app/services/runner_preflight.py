@@ -2,12 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import subprocess
-import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
 
 import docker
 
@@ -44,138 +39,55 @@ class RunnerPreflightResult:
     container_id: str | None
 
 
-def _clean_build_args(raw: dict[str, Any]) -> dict[str, str]:
-    cleaned: dict[str, str] = {}
-    for key, value in raw.items():
-        if value is None:
-            continue
-        cleaned[str(key)] = str(value)
-    return cleaned
-
-
-def _backend_build_context() -> str:
-    configured = str(os.environ.get("RUNNER_PREFLIGHT_BUILD_CONTEXT", "")).strip()
-    if configured:
-        return configured
-    return "/app"
-
-
-def _common_runner_build_args() -> dict[str, str]:
-    # 可选配置项：空字符串视为"未设置"，让 Dockerfile ARG 默认值生效
-    # proxy 相关 key 明确传空字符串以清除宿主机代理继承
-    return _clean_build_args(
-        {
-            "DOCKERHUB_LIBRARY_MIRROR": os.environ.get("DOCKERHUB_LIBRARY_MIRROR") or None,
-            "BACKEND_APT_MIRROR_PRIMARY": os.environ.get("BACKEND_APT_MIRROR_PRIMARY") or None,
-            "BACKEND_APT_SECURITY_PRIMARY": os.environ.get("BACKEND_APT_SECURITY_PRIMARY") or None,
-            "BACKEND_APT_MIRROR_FALLBACK": os.environ.get("BACKEND_APT_MIRROR_FALLBACK") or None,
-            "BACKEND_APT_SECURITY_FALLBACK": os.environ.get("BACKEND_APT_SECURITY_FALLBACK") or None,
-            "BACKEND_PYPI_INDEX_PRIMARY": os.environ.get("BACKEND_PYPI_INDEX_PRIMARY") or None,
-            "BACKEND_PYPI_INDEX_FALLBACK": os.environ.get("BACKEND_PYPI_INDEX_FALLBACK") or None,
-            "BACKEND_PYPI_INDEX_CANDIDATES": os.environ.get("BACKEND_PYPI_INDEX_CANDIDATES") or None,
-            "BACKEND_INSTALL_YASA": os.environ.get("BACKEND_INSTALL_YASA") or None,
-            "YASA_VERSION": os.environ.get("YASA_VERSION") or None,
-            "http_proxy": "",
-            "https_proxy": "",
-            "HTTP_PROXY": "",
-            "HTTPS_PROXY": "",
-            "all_proxy": "",
-            "ALL_PROXY": "",
-        }
-    )
-
-
 def get_configured_runner_preflight_specs() -> list[RunnerPreflightSpec]:
-    build_context = _backend_build_context()
-    common_args = _common_runner_build_args()
     return [
         RunnerPreflightSpec(
             name="yasa",
             image=str(getattr(settings, "SCANNER_YASA_IMAGE", "vulhunter/yasa-runner:latest")),
             command=["/opt/yasa/bin/yasa", "--version"],
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-            dockerfile="docker/yasa-runner.Dockerfile",
-            build_context=build_context,
-            build_args=_clean_build_args(
-                {
-                    **common_args,
-                    "YASA_BUILD_FROM_SOURCE": os.environ.get("YASA_BUILD_FROM_SOURCE", "0") or "0",
-                    "YASA_UAST_VERSION": os.environ.get("YASA_UAST_VERSION") or None,
-                }
-            ),
         ),
         RunnerPreflightSpec(
             name="opengrep",
             image=str(getattr(settings, "SCANNER_OPENGREP_IMAGE", "vulhunter/opengrep-runner:latest")),
             command=["opengrep", "--version"],
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-            dockerfile="docker/opengrep-runner.Dockerfile",
-            build_context=build_context,
-            build_args=common_args,
         ),
         RunnerPreflightSpec(
             name="bandit",
             image=str(getattr(settings, "SCANNER_BANDIT_IMAGE", "vulhunter/bandit-runner:latest")),
             command=["bandit", "--version"],
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-            dockerfile="docker/bandit-runner.Dockerfile",
-            build_context=build_context,
-            build_args=common_args,
         ),
         RunnerPreflightSpec(
             name="gitleaks",
             image=str(getattr(settings, "SCANNER_GITLEAKS_IMAGE", "vulhunter/gitleaks-runner:latest")),
             command=["gitleaks", "version"],
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-            dockerfile="docker/gitleaks-runner.Dockerfile",
-            build_context=build_context,
-            build_args=common_args,
         ),
         RunnerPreflightSpec(
             name="phpstan",
             image=str(getattr(settings, "SCANNER_PHPSTAN_IMAGE", "vulhunter/phpstan-runner:latest")),
             command=["php", "/opt/phpstan/phpstan", "--version"],
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-            dockerfile="docker/phpstan-runner.Dockerfile",
-            build_context=build_context,
-            build_args=common_args,
         ),
         RunnerPreflightSpec(
             name="pmd",
             image=str(getattr(settings, "SCANNER_PMD_IMAGE", "vulhunter/pmd-runner:latest")),
             command=["pmd", "--version"],
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-            dockerfile="docker/pmd-runner.Dockerfile",
-            build_context=build_context,
-            build_args=common_args,
         ),
         RunnerPreflightSpec(
             name="flow-parser",
             image=str(getattr(settings, "FLOW_PARSER_RUNNER_IMAGE", "vulhunter/flow-parser-runner:latest")),
             command=["python3", "/opt/flow-parser/flow_parser_runner.py", "--help"],
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-            dockerfile="docker/flow-parser-runner.Dockerfile",
-            build_context=build_context,
-            build_args=common_args,
         ),
         RunnerPreflightSpec(
             name="sandbox-runner",
             image=str(getattr(settings, "SANDBOX_RUNNER_IMAGE", "vulhunter/sandbox-runner:latest")),
             command=["python3", "-c", "import requests; import httpx; import jwt; print('Sandbox Runner OK')"],
             timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-            dockerfile="docker/sandbox-runner.Dockerfile",
-            build_context=build_context,
-            build_args=_clean_build_args(
-                {
-                    **common_args,
-                    "SANDBOX_RUNNER_APT_MIRROR_PRIMARY": os.environ.get("SANDBOX_RUNNER_APT_MIRROR_PRIMARY", "mirrors.aliyun.com"),
-                    "SANDBOX_RUNNER_APT_SECURITY_PRIMARY": os.environ.get("SANDBOX_RUNNER_APT_SECURITY_PRIMARY", "mirrors.aliyun.com"),
-                    "SANDBOX_RUNNER_APT_MIRROR_FALLBACK": os.environ.get("SANDBOX_RUNNER_APT_MIRROR_FALLBACK", "deb.debian.org"),
-                    "SANDBOX_RUNNER_APT_SECURITY_FALLBACK": os.environ.get("SANDBOX_RUNNER_APT_SECURITY_FALLBACK", "security.debian.org"),
-                    "SANDBOX_RUNNER_PYPI_INDEX_PRIMARY": os.environ.get("SANDBOX_RUNNER_PYPI_INDEX_PRIMARY", "https://mirrors.aliyun.com/pypi/simple/"),
-                    "SANDBOX_RUNNER_NPM_REGISTRY": os.environ.get("SANDBOX_RUNNER_NPM_REGISTRY", "https://registry.npmmirror.com"),
-                }
-            ),
         ),
     ]
 
@@ -193,93 +105,9 @@ def _ensure_runner_image(client, spec: RunnerPreflightSpec) -> None:
         client.images.pull(spec.image)
         logger.info("pull completed for %s: %s", spec.name, spec.image)
         return
-    except Exception:
-        logger.info(
-            "pull failed for %s (%s), falling back to local build",
-            spec.name, spec.image,
-        )
-
-    build_context = Path(spec.build_context or _backend_build_context())
-    if not build_context.exists():
-        raise RuntimeError(f"runner build context not found for {spec.name}: {build_context}")
-    if not spec.dockerfile:
-        raise RuntimeError(f"runner image missing and no dockerfile configured for {spec.name}")
-
-    dockerfile_path = build_context / spec.dockerfile
-    if not dockerfile_path.exists():
-        raise RuntimeError(
-            f"runner dockerfile not found for {spec.name}: {dockerfile_path} "
-            f"(build_context={build_context})"
-        )
-
-    logger.info("runner preflight build: %s (%s)", spec.name, spec.image)
-
-    # 优先读取 CONTAINER_CLI 环境变量，默认使用 docker
-    # 设置为 podman 时，直接调用 podman build（原生支持 --mount=type=cache，无需 BuildKit 守护进程）
-    container_cli = os.environ.get("CONTAINER_CLI", "docker").strip() or "docker"
-    is_podman = container_cli == "podman"
-
-    # 使用 subprocess 调用 build 命令以支持 BuildKit / buildah 缓存挂载特性
-    # Docker Python SDK 的 images.build() 不完全支持 BuildKit 特性如 --mount
-    build_cmd = [
-        container_cli, "build",
-        "--progress=plain",
-        "-f", spec.dockerfile,
-        "-t", spec.image,
-        str(build_context),
-    ]
-
-    # 添加构建参数
-    for key, value in spec.build_args.items():
-        build_cmd.extend(["--build-arg", f"{key}={value}"])
-
-    env = os.environ.copy()
-    if is_podman:
-        # podman build 基于 buildah，原生支持 RUN --mount=type=cache
-        # 设置 BUILDAH_FORMAT=docker 确保与 Docker 镜像格式兼容
-        env["BUILDAH_FORMAT"] = "docker"
-        # 避免 podman build 继承 DOCKER_BUILDKIT（对 podman 无意义）
-        env.pop("DOCKER_BUILDKIT", None)
-    else:
-        # 启用 BuildKit；docker build 在 BuildKit 模式下才支持 --mount=type=cache
-        env["DOCKER_BUILDKIT"] = "1"
-
-    # 构建超时通过环境变量配置，默认 900s（15分钟）
-    build_timeout = int(os.environ.get("RUNNER_PREFLIGHT_BUILD_TIMEOUT_SECONDS", 900) or 900)
-
-    logger.info("running build command: %s", " ".join(build_cmd))
-
-    last_error: Exception | None = None
-    for attempt in range(1, 3):  # 最多 2 次尝试
-        try:
-            subprocess.run(
-                build_cmd,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=build_timeout,
-                check=True,
-                cwd=str(build_context),  # Dockerfile 相对路径从构建上下文解析
-            )
-            logger.info("build completed for %s: %s", spec.name, spec.image)
-            return
-        except subprocess.CalledProcessError as e:
-            last_error = e
-            logger.warning(
-                "build failed for %s (attempt %d/2): stdout=%s stderr=%s",
-                spec.name, attempt, e.stdout[-2000:] if e.stdout else "", e.stderr[-2000:] if e.stderr else "",
-            )
-            if attempt < 2:
-                time.sleep(5)
-        except subprocess.TimeoutExpired as e:
-            last_error = e
-            logger.warning("build timeout for %s (attempt %d/2, >%ds)", spec.name, attempt, build_timeout)
-            if attempt < 2:
-                time.sleep(5)
-
-    if isinstance(last_error, subprocess.CalledProcessError):
-        raise RuntimeError(f"build failed for {spec.name}: {last_error.stderr}")
-    raise RuntimeError(f"build timeout for {spec.name} (>{build_timeout}s)")
+    except Exception as exc:
+        logger.warning("pull failed for %s (%s): %s", spec.name, spec.image, exc)
+        raise RuntimeError(f"pull failed for {spec.name}: {exc}") from exc
 
 
 def run_runner_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightResult:

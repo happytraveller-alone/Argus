@@ -310,7 +310,6 @@ RUN set -eux; \
 ENV VIRTUAL_ENV=/opt/backend-venv
 ENV PATH=/opt/backend-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
-ENV RUNNER_PREFLIGHT_BUILD_CONTEXT=/app
 
 RUN mkdir -p /app /opt/backend-venv /root/.cache/uv /app/uploads/zip_files /app/data/runtime
 
@@ -466,7 +465,6 @@ RUN set -eux; \
 ENV VIRTUAL_ENV=/opt/backend-venv
 ENV PATH=/opt/backend-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
-ENV RUNNER_PREFLIGHT_BUILD_CONTEXT=/opt/backend-build-context
 
 # Runtime 持久化目录
 ENV XDG_DATA_HOME=/app/data/runtime/xdg-data
@@ -482,32 +480,15 @@ COPY --from=runtime-app-assembler /final/app /app/app
 # 删除残留的 .c 中间文件（若有）
 RUN find /app/app -name "*.c" -delete 2>/dev/null || true
 COPY backend/static /app/static
-COPY backend/docs/agent-tools /app/docs/agent-tools
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
-COPY docker /opt/backend-build-context/docker
-# runner preflight 的 build context 仍需要少量源码文件，避免把整份 Python 源码继续打进镜像
-COPY backend/app/runtime/launchers /opt/backend-build-context/backend/app/runtime/launchers
-COPY backend/app/services/parser.py /opt/backend-build-context/backend/app/services/parser.py
-COPY backend/docs/agent-tools /opt/backend-build-context/backend/docs/agent-tools
-COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
-COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py
-COPY frontend/yasa-engine-overrides /opt/backend-build-context/frontend/yasa-engine-overrides
 
 # 创建运行时持久化目录
 RUN mkdir -p \
   /app/uploads/zip_files \
   /app/data/runtime \
-  /app/data/runtime/xdg-config \
-  /app/docs \
-  /opt/backend-build-context/backend/app/services \
-  /opt/backend-build-context/backend/scripts \
-  /opt/backend-build-context/backend/docs \
-  /opt/backend-build-context/frontend
-
-RUN test -f /opt/backend-build-context/backend/app/runtime/launchers/phpstan_launcher.py && \
-  test -f /opt/backend-build-context/backend/app/services/parser.py
+  /app/data/runtime/xdg-config
 
 # ── 非 root 用户：降权运行，减小容器逃逸风险 ───────────────
 RUN groupadd --gid 1001 appgroup && \
@@ -515,8 +496,7 @@ RUN groupadd --gid 1001 appgroup && \
     --no-create-home --shell /usr/sbin/nologin appuser && \
   chown -R appuser:appgroup \
     /app \
-    /opt/backend-venv \
-    /opt/backend-build-context
+    /opt/backend-venv
 
 USER appuser
 
@@ -549,7 +529,7 @@ CMD ["python3", "-m", "app.runtime.container_startup", "prod"]
 
 # ============================================================
 # runtime: 平衡型生产 target
-# 跳过全量 Cython，保留轻量混淆（legacy .pyc）+ 非 root + 精简 build context
+# 跳过全量 Cython，保留轻量混淆（legacy .pyc）+ 非 root 运行
 # 默认推荐此 target，避免全量 Cython 在构建阶段占满 CPU / 内存
 # ============================================================
 FROM runtime-base AS runtime
@@ -566,7 +546,6 @@ RUN set -eux; \
 ENV VIRTUAL_ENV=/opt/backend-venv
 ENV PATH=/opt/backend-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
-ENV RUNNER_PREFLIGHT_BUILD_CONTEXT=/opt/backend-build-context
 
 ENV XDG_DATA_HOME=/app/data/runtime/xdg-data
 ENV XDG_CACHE_HOME=/app/data/runtime/xdg-cache
@@ -576,27 +555,14 @@ RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/ru
 COPY backend/app /app/app
 RUN find /app/app -name "*.c" -delete 2>/dev/null || true
 COPY backend/static /app/static
-COPY backend/docs/agent-tools /app/docs/agent-tools
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
-COPY docker /opt/backend-build-context/docker
-COPY backend/app/runtime/launchers /opt/backend-build-context/backend/app/runtime/launchers
-COPY backend/app/services/parser.py /opt/backend-build-context/backend/app/services/parser.py
-COPY backend/docs/agent-tools /opt/backend-build-context/backend/docs/agent-tools
-COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
-COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py
-COPY frontend/yasa-engine-overrides /opt/backend-build-context/frontend/yasa-engine-overrides
 
 RUN mkdir -p \
   /app/uploads/zip_files \
   /app/data/runtime \
-  /app/data/runtime/xdg-config \
-  /app/docs \
-  /opt/backend-build-context/backend/app/services \
-  /opt/backend-build-context/backend/scripts \
-  /opt/backend-build-context/backend/docs \
-  /opt/backend-build-context/frontend
+  /app/data/runtime/xdg-config
 
 # 默认 target 只对少量高价值入口做轻量混淆，避免再触发全量 Cython/GCC 编译。
 RUN set -eux; \
@@ -627,16 +593,12 @@ RUN set -eux; \
         { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
     echo "[Bytecode] 关键 legacy .pyc 验证通过"
 
-RUN test -f /opt/backend-build-context/backend/app/runtime/launchers/phpstan_launcher.py && \
-  test -f /opt/backend-build-context/backend/app/services/parser.py
-
 RUN groupadd --gid 1001 appgroup && \
   useradd --uid 1001 --gid appgroup \
     --no-create-home --shell /usr/sbin/nologin appuser && \
   chown -R appuser:appgroup \
     /app \
-    /opt/backend-venv \
-    /opt/backend-build-context
+    /opt/backend-venv
 
 USER appuser
 
@@ -683,7 +645,6 @@ RUN set -eux; \
 ENV VIRTUAL_ENV=/opt/backend-venv
 ENV PATH=/opt/backend-venv/bin:${PATH}
 ENV PYTHONNOUSERSITE=1
-ENV RUNNER_PREFLIGHT_BUILD_CONTEXT=/opt/backend-build-context
 
 # Runtime 持久化目录
 ENV XDG_DATA_HOME=/app/data/runtime/xdg-data
@@ -694,25 +655,14 @@ RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/ru
 # 直接复制 Python 源码（跳过 Cython 编译加固）
 COPY backend/app /app/app
 COPY backend/static /app/static
-COPY backend/docs/agent-tools /app/docs/agent-tools
 COPY backend/alembic /app/alembic
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
-COPY docker /opt/backend-build-context/docker
-COPY backend/app /opt/backend-build-context/backend/app
-COPY backend/docs/agent-tools /opt/backend-build-context/backend/docs/agent-tools
-COPY backend/scripts/package_source_selector.py /opt/backend-build-context/backend/scripts/package_source_selector.py
-COPY backend/scripts/flow_parser_runner.py /opt/backend-build-context/backend/scripts/flow_parser_runner.py
-COPY frontend/yasa-engine-overrides /opt/backend-build-context/frontend/yasa-engine-overrides
 
 RUN mkdir -p \
   /app/uploads/zip_files \
   /app/data/runtime \
-  /app/data/runtime/xdg-config \
-  /app/docs \
-  /opt/backend-build-context/backend/scripts \
-  /opt/backend-build-context/backend/docs \
-  /opt/backend-build-context/frontend
+  /app/data/runtime/xdg-config
 
 EXPOSE 8000
 
