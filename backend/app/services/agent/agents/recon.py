@@ -106,7 +106,9 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 1. **禁止自行分析可行性** —— 只需标记"可疑区域"，准确描述风险即可（如"此处使用了 eval，可能导致代码注入"），具体验证由后续 Agent 完成
 2. **必须基于实际代码** —— 只推送通过 `get_code_window` 或 `get_file_outline` 确认存在的代码位置，**杜绝幻觉**
 3. **必须覆盖关键目录** —— 至少遍历 `src/`, `app/`, `lib/`, `api/`, `utils/`, `config/`, `handlers/`, `controllers/`, `routes/`, `middleware/`, `services/`, `models/`
-4. **必须使用工具** —— 推送前必须通过 `list_files`, `search_code`, `get_code_window`, `get_file_outline` 等工具获取真实项目信息，在指定文件或者目录时，需要使用相对路径（如 `src/auth/login.py`），禁止使用绝对路径或者假设路径
+4. **必须先建模再下钻** —— 第一轮必须先使用 `list_files` 查看项目根目录；随后继续对关键目录执行 `list_files`，建立项目地图（主要模块、入口目录、配置文件、关键语言/框架文件）
+5. **必须优先搜索再确认** —— 完成项目建模后，定位风险点时优先使用 `search_code` 做全局/语义搜索；只有命中候选位置后，才使用 `get_code_window` 或 `get_file_outline` 读取上下文、确认行号和结构
+6. **必须使用工具** —— 推送前必须通过 `list_files`, `search_code`, `get_code_window`, `get_file_outline` 等工具获取真实项目信息，在指定文件或者目录时，需要使用相对路径（如 `src/auth/login.py`），禁止使用绝对路径或者假设路径
 
 ## 侦查完成条件（关键）
 
@@ -115,6 +117,13 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 3. **对有进一步审计价值的可疑点，宁可降低 `confidence` 也应入队**，不要因把握不满 100% 而省略
 4. **只有在完成关键覆盖并能说明已检查证据后，才允许空结果收尾**
 5. **每次侦查都要尽量覆盖：入口点、input_surfaces、trust_boundaries、敏感 sink、target_files**
+
+## 工具使用顺序（强制）
+
+1. 先用 `list_files` 对项目根目录和关键子目录建模，形成项目地图
+2. 再优先用 `search_code` 围绕入口点、高风险模式、敏感 sink 做全局搜索
+3. 最后用 `get_code_window` / `get_file_outline` 对 `search_code` 命中的候选位置做确认
+4. 确认后立即调用 `push_risk_point_to_queue` 或 `push_risk_points_to_queue`
 
 ## 风险点入队最小要求
 
@@ -187,12 +196,13 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 ## 🔄 工作流程（必须按顺序执行）
 
 ### 阶段一：项目概览（建立地图）
-1. 使用 `list_files` 查看根目录，识别主要目录和关键文件（`package.json`, `tsconfig.json`, `next.config.*`, `nest-cli.json`, `requirements.txt`, `go.mod`, `pom.xml` 等）
-2. 读取包管理文件，确定技术栈（语言、框架、依赖库）
-3. 使用 `search_code` 和 `get_file_outline` / `get_code_window` 进一步了解项目架构
+1. **首个 Action 必须是** `list_files` 查看根目录（通常为 `{"directory": "."}`），识别主要目录和关键文件（`package.json`, `tsconfig.json`, `next.config.*`, `nest-cli.json`, `requirements.txt`, `go.mod`, `pom.xml` 等）
+2. 继续对关键目录执行 `list_files`，建立项目地图：主要模块、入口目录、配置文件、任务/消费者、测试与脚本位置
+3. 读取包管理文件，确定技术栈（语言、框架、依赖库）
+4. 完成建模后，**优先使用 `search_code`** 围绕入口点、高风险模式、敏感 sink 做全局/语义搜索；再使用 `get_file_outline` / `get_code_window` 确认命中位置
 
 ### 阶段二：深度遍历与风险挖掘（地毯式搜索）
-4. **代码搜索先行**：使用 `search_code` 和 `get_code_window` 搜索高风险关键词，快速定位可疑区域：
+5. **代码搜索先行**：优先使用 `search_code` 搜索高风险关键词，快速定位可疑区域；命中后再用 `get_code_window` 确认上下文：
    - "哪里使用了 eval 或 exec 执行动态代码？"
    - "哪里拼接 SQL 查询字符串？"
    - "哪里处理文件上传和路径拼接？"
@@ -200,10 +210,10 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
    - "哪里调用了系统命令或 subprocess？"
    - "TypeScript 项目里哪里存在 `pages/api/*.ts`、`app/api/**/route.ts`、`*.controller.ts`、`*.resolver.ts`、`middleware.ts`、`server action`、`consumer`、`job handler`？"
    - "哪里使用了 `new Function`、`vm.runIn*`、`child_process.exec/spawn/execSync`、`prisma.$queryRaw*`、`typeorm.query`、`sequelize.query`、`dangerouslySetInnerHTML`？"
-5. 依次遍历所有关键代码目录，使用 `list_files` 获取文件列表
-6. 对重点文件（路由、控制器、工具类、中间件），使用 `get_file_outline` 获取结构，再用 `get_code_window` 读取关键位置
-7. **全局模式搜索**：使用 `search_code` 对特定危险函数进行项目级搜索（`eval`, `exec`, `subprocess`, `execute`, `raw`, `pickle.loads` 等）
-8. **即时推送**：每当发现符合高风险模式的具体代码行，立即构造风险点并调用 `push_risk_point_to_queue`；若读取同一文件后发现多个风险点，可改用 `push_risk_points_to_queue` 批量入队，减少调用轮次
+6. 对尚未覆盖的关键代码目录，继续使用 `list_files` 获取文件列表，补齐搜索盲区
+7. 对重点文件（路由、控制器、工具类、中间件），先使用 `get_file_outline` 获取结构，再用 `get_code_window` 读取关键位置
+8. **全局模式搜索**：持续优先使用 `search_code` 对特定危险函数进行项目级搜索（`eval`, `exec`, `subprocess`, `execute`, `raw`, `pickle.loads` 等）
+9. **即时推送**：每当发现符合高风险模式的具体代码行，立即构造风险点并调用 `push_risk_point_to_queue`；若读取同一文件后发现多个风险点，可改用 `push_risk_points_to_queue` 批量入队，减少调用轮次
 
 #### 风险点格式要求（单条）：
 ```json
@@ -250,14 +260,14 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 - 仅发现单个风险点时，使用 `push_risk_point_to_queue` 单条推送
 
 ### 阶段三：收尾与确认（质量检查）
-9. 确认已覆盖所有主要目录，检查是否遗漏：
+10. 确认已覆盖所有主要目录，检查是否遗漏：
    - 配置文件（`config/`, `settings/`）
    - 工具函数（`utils/`, `helpers/`）
    - 中间件（`middleware/`）
    - 前端代码中的敏感逻辑（如有）
    - TypeScript 服务端入口（如 `src/main.ts`, `src/app.controller.ts`, `pages/api/`, `app/api/**/route.ts`, `middleware.ts`, `server.ts`, `worker.ts`）
-10. 统计推送的风险点数量，确保达到最低要求
-11. 输出 Final Answer，简要总结扫描结果
+11. 统计推送的风险点数量，确保达到最低要求
+12. 输出 Final Answer，简要总结扫描结果
 
 ═══════════════════════════════════════════════════════════════
 
@@ -637,6 +647,8 @@ class ReconAgent(BaseAgent):
 {task_context or task or '进行全面深入的项目信息收集和风险侦查，为安全审计提供完整的项目画像。'}
 
 ## 本轮侦查硬性目标
+- 第一个 Action 必须是 `list_files`，先对根目录和关键目录建模，再进入具体风险挖掘
+- 完成建模后，优先使用 `search_code` 做全局/语义搜索，再用 `get_code_window` / `get_file_outline` 验证命中位置
 - 先识别真实入口点，再沿着 input_surfaces -> trust_boundaries -> sink 的方向展开
 - 发现可疑点后立即调用入队工具，不要等到最后统一总结
 - 如果当前还没有任何风险点入队，继续扩大覆盖面，而不是直接结束
@@ -666,7 +678,7 @@ class ReconAgent(BaseAgent):
 
 ## 🎯 开始侦查！
 
-请开始你的信息收集工作。首先思考应该收集什么信息，然后**立即**选择合适的工具执行（输出 Action）。不要只输出 Thought，必须紧接着输出 Action。"""
+请开始你的信息收集工作。先用 `list_files` 对项目建模，再优先使用 `search_code` 展开搜索，然后**立即**选择合适的工具执行（输出 Action）。不要只输出 Thought，必须紧接着输出 Action。"""
 
         # 初始化对话历史
         self._conversation_history = [
@@ -784,6 +796,8 @@ class ReconAgent(BaseAgent):
                     else:
                         #  更有针对性的重试提示
                         retry_prompt = f"""收到空响应。请根据以下格式输出你的思考和行动：
+
+如果你还没有完成项目建模，第一个 Action 必须优先使用 `list_files` 查看根目录；完成建模后，优先使用 `search_code` 搜索可疑区域，再用 `get_code_window` / `get_file_outline` 确认。
 
 Thought: [你对当前情况的分析]
 Action: [工具名称，如 list_files, get_code_window, get_file_outline, search_code]
