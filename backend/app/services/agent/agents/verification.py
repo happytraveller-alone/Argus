@@ -143,6 +143,32 @@ VERIFICATION_SYSTEM_PROMPT = """你是 VulHunter 的漏洞验证 Agent，一个*
 
 ═══════════════════════════════════════════════════════════════
 
+## 事实 / 推论 / 结论 三分法（必须执行）
+
+你必须把每个发现的验证分析拆成三层，禁止把推测写成事实：
+1. **已知事实 (`known_facts`)**：只能写工具直接返回的代码、配置、日志、运行输出、文件路径、行号、调用关系，或能被代码语义直接推出的事实。
+2. **待验证推论 (`inferences_to_verify`)**：列出关键中间判断，例如“输入可控”“sink 可达”“过滤可绕过”“分支必定可进入”；每条都要说明它依赖哪些事实、还缺什么证据。
+3. **最终结论 (`final_conclusion`)**：只能基于已经获得直接支持的事实和推论得出；若关键一跳仍缺证据，必须降级为 `uncertain` 或降低 confidence。
+
+在 Final Answer 的每个 finding 中，除 verdict 等字段外，还必须显式列出：
+- `known_facts`: 已确认事实列表
+- `inferences_to_verify`: 关键推论列表；每项至少说明 `claim`、`basis`、`support_status`
+- `final_conclusion`: 最终结论摘要，且不得引入新的未验证内容
+
+禁止把以下内容写成事实：猜测的调用链、未读取到的分支行为、默认假设的框架安全行为、未执行验证却宣称“可稳定触发”的结果。
+
+═══════════════════════════════════════════════════════════════
+
+## 推理链逐跳审计（必须执行）
+
+每当你在思考、工具分析或最终结论中使用“因此”“从而”“所以”“说明”“意味着”“可见”等连接词时，必须逐跳自检：
+1. 连接词前面的陈述是**已知事实**，还是**尚未证实的推论**？
+2. 连接词后面的陈述，是否能被前面的内容**直接**以代码证据、控制流/数据流证据或明确逻辑规则推出？
+3. 如果不能直接推出，必须把后一句降级为“待验证推论”，继续调用工具补证；禁止脑补把缺失链路补齐。
+4. 任意一跳缺少直接代码或逻辑支持时，不得输出 `confirmed` / `likely` 这类强结论。
+
+═══════════════════════════════════════════════════════════════
+
 ## 工具使用指南
 
 ### 核心验证工具（按优先级使用）
@@ -387,6 +413,7 @@ for current_user, from_user, to_user, amount in payloads:
 步骤6: 判定与推送
     └─> 根据结果确定 verdict 和 confidence
     └─> 构造 finding 对象（含 verification_result）
+    └─> finding 中必须显式区分 known_facts / inferences_to_verify / final_conclusion
     └─> verification_result.flow 必须概括验证链路
     └─> function_trigger_flow 必须保留函数级触发路径
 
@@ -407,6 +434,9 @@ for current_user, from_user, to_user, amount in payloads:
 6. **格式严格**：使用纯文本 `Thought: / Action: / Action Input: / Final Answer:`，**禁止 Markdown 标记（**、###、* 等）**
 7. **禁止交互**：不允许"请选择/请确认后继续"等语句
 8. **结果保存**：**验证完漏洞需要调用 save_verification_result 工具保存结果**
+9. **区分事实与推论**：`known_facts` 只能来自工具返回、代码内容或可被代码语义直接证明的逻辑事实
+10. **逐跳审计推理链**：凡出现“因此/从而/所以/说明/意味着”等推理连接，必须核查前后两步是否有直接支持；缺支持就继续取证或降级
+11. **禁止脑补强结论**：任何关键推论未被直接支持前，不得给出 `confirmed` / `likely`
 
 `function_name` 为必填：
 - 优先使用定位结果（TreeSitter/regex/get_symbol_body）
@@ -2906,12 +2936,15 @@ class VerificationAgent(BaseAgent):
 4. **若反证成功则立即终止** - 直接判定为 `false_positive` 并结束该发现的继续验证
 5. **若反证失败再做正向验证** - 继续分析代码逻辑并使用 `run_code` 做正向验证
 6. **正向验证要结合 Mock** - 如可能，使用 Mock/Fuzzing Harness 验证真实触发条件
+7. **明确区分事实/推论/结论** - 输出时显式列出 `known_facts`、`inferences_to_verify`、`final_conclusion`
+8. **逐跳质问推理链** - 每个“因此/从而/所以”前后的推理都要检查是否有代码或逻辑的直接支持，缺证据就继续取证或降级结论
 
 ## 验证要求
 - 验证级别: {config.get('verification_level', 'standard')}
 - 必须提供明确的验证结论: `confirmed` (确认) / `likely` (可能) / `uncertain` (待复核) / `false_positive` (误报)
 - 必须提供置信度 (0-1)
 - 必须提供可达性分析: `reachable` / `likely_reachable` / `unknown` / `unreachable`
+- Final Answer 的每个 finding 必须显式列出 `known_facts` / `inferences_to_verify` / `final_conclusion`
 
 ## 可用工具
 {self.get_tools_description()}
@@ -2921,6 +2954,7 @@ class VerificationAgent(BaseAgent):
 2. 优先尝试反证漏洞不存在；若反证成功，立即终止并给出 `false_positive`
 3. 若反证失败，再使用其他工具 (run_code, search_code, get_symbol_body) 做正向验证和 Mock 验证
 4. 给出最终验证结论
+5. 输出结果时，必须把事实、推论和结论分开写；所有推理跳跃都要先检查是否有直接支持
 
 {f'💡 参考 Analysis Agent 的分析要点。' if handoff_context else ''}"""
         else:
@@ -2965,9 +2999,12 @@ class VerificationAgent(BaseAgent):
 4. **反证成功则立即终止该发现的继续验证** - 直接判定为 `false_positive`
 5. **反证失败再进入正向验证** - 结合 `run_code` 与 Mock/Fuzzing Harness 验证漏洞是否可触发
 6. **不要假设文件在子目录中** - 使用发现中提供的精确路径
+7. **明确区分事实/推论/结论** - 每个发现都要列出 `known_facts`、`inferences_to_verify`、`final_conclusion`
+8. **逐跳检查推理链** - 对“因此/从而/所以”等连接词前后的每一步都核查是否有直接代码或逻辑支持
 
 ## 验证要求
 - 验证级别: {config.get('verification_level', 'standard')}
+- Final Answer 的每个 finding 必须显式列出 `known_facts` / `inferences_to_verify` / `final_conclusion`
 
 ## 可用工具
 {self.get_tools_description()}
@@ -2977,6 +3014,7 @@ class VerificationAgent(BaseAgent):
 2. 优先尝试反证漏洞不存在，反证成功就立即结束该发现
 3. 只有在反证失败后，才继续做正向验证和 Mock 验证
 4. 最后判断是否为真实漏洞
+5. 输出结果时，必须把事实、推论和结论分开写；所有推理跳跃都要先检查是否有直接支持
 {f'特别注意 Analysis Agent 提到的关注点。' if handoff_context else ''}"""
 
         use_prompt_skills = bool(config.get("use_prompt_skills", False))
