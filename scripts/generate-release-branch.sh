@@ -84,6 +84,10 @@ validate_release_tree() {
     "frontend/package.json"
     "frontend/pnpm-lock.yaml"
     "frontend/vite.config.ts"
+    "frontend/scripts/clean.mjs"
+    "frontend/scripts/chunkObfuscatorPlugin.ts"
+    "frontend/scripts/obfuscatorOptions.ts"
+    "frontend/scripts/dev-launcher.mjs"
     "frontend/src/app/main.tsx"
     "frontend/yasa-engine-overrides/src/config.ts"
     "nexus-web/dist/index.html"
@@ -92,6 +96,7 @@ validate_release_tree() {
     "nexus-itemDetail/nginx.conf"
   )
   forbidden_paths=(
+    "NOTICE"
     ".github"
     "deploy"
     "docs"
@@ -99,6 +104,12 @@ validate_release_tree() {
     "docker-compose.self-contained.yml"
     "backend/tests"
     "frontend/tests"
+    "frontend/scripts/dev-entrypoint.sh"
+    "frontend/scripts/generate-cwe-catalog.mjs"
+    "frontend/scripts/run-in-dev-container.sh"
+    "frontend/scripts/run-node-tests.mjs"
+    "frontend/scripts/setup.cjs"
+    "frontend/scripts/setup.sh"
     "scripts/compose-up-local-build.sh"
     "scripts/compose-up-with-fallback.sh"
   )
@@ -149,6 +160,16 @@ prune_nexus_runtime_bundle() {
   [[ -f "$bundle_root/nginx.conf" ]] || die "nexus runtime bundle missing nginx.conf: ${bundle_root#$OUTPUT_DIR/}"
 }
 
+prune_frontend_release_scripts() {
+  local scripts_root="$OUTPUT_DIR/frontend/scripts"
+
+  [[ -d "$scripts_root" ]] || return 0
+
+  find "$scripts_root" -mindepth 1 -maxdepth 1 \
+    ! \( -name "clean.mjs" -o -name "chunkObfuscatorPlugin.ts" -o -name "obfuscatorOptions.ts" -o -name "dev-launcher.mjs" \) \
+    -exec rm -rf {} +
+}
+
 prune_release_tree() {
   rm -rf \
     "$OUTPUT_DIR/.github" \
@@ -168,6 +189,7 @@ prune_release_tree() {
     "$OUTPUT_DIR/frontend/node_modules"
 
   rm -f \
+    "$OUTPUT_DIR/NOTICE" \
     "$OUTPUT_DIR/docker-compose.full.yml" \
     "$OUTPUT_DIR/docker-compose.self-contained.yml" \
     "$OUTPUT_DIR/docker-compose.release.yml" \
@@ -179,6 +201,7 @@ prune_release_tree() {
     "$OUTPUT_DIR/backend/SANDBOX_RUNNER_MIGRATION.md" \
     "$OUTPUT_DIR/backend/get-pip.py"
 
+  prune_frontend_release_scripts
   prune_nexus_runtime_bundle "$OUTPUT_DIR/nexus-web"
   prune_nexus_runtime_bundle "$OUTPUT_DIR/nexus-itemDetail"
 

@@ -135,34 +135,26 @@ git add README.md 2>/dev/null || true
 git add docker-compose.yml 2>/dev/null || true
 git commit -m "chore: bump version to v$NEW_VERSION" || true
 
-# 创建 tag
-print_info "创建 Git tag..."
-git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
-
 # 推送
 print_info "推送到远程仓库..."
 echo ""
 print_warn "即将执行以下操作:"
 echo "  1. git push origin main"
-echo "  2. git push origin v$NEW_VERSION"
 echo ""
 read -p "确认推送? (y/N) " -n 1 -r
 echo
 
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     git push origin main || print_warn "推送 main 分支失败（可能没有更改）"
-    git push origin "v$NEW_VERSION"
     
     echo ""
     print_info "版本 v$NEW_VERSION 发布成功！"
     echo ""
-    print_info "GitHub Actions 将自动开始构建和发布流程"
+    print_info "GitHub Actions 将自动刷新 release 分支"
     print_info "查看进度: https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/actions"
 else
-    print_warn "已创建本地 tag，但未推送到远程"
+    print_warn "版本号已更新，但未推送到远程"
     print_info "如需推送，请手动执行:"
     echo "  git push origin main"
-    echo "  git push origin v$NEW_VERSION"
 fi
-
 

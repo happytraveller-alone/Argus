@@ -50,6 +50,31 @@ def test_release_workflow_generates_validates_and_force_pushes_release_branch() 
     assert "--validate" in workflow_text
     assert "git push --force origin HEAD:release" in workflow_text
     assert "fetch-depth: 0" in workflow_text
+    assert "git checkout --orphan" in workflow_text
+    assert "origin/release" not in workflow_text
+    assert "git fetch origin release" not in workflow_text
+    assert "git checkout -B release origin/release" not in workflow_text
+    assert "git ls-remote --tags" in workflow_text
+    assert "git push origin --delete" in workflow_text
+    assert "release-tag-cleanup.txt" in workflow_text
+
+
+def test_scheduled_release_workflow_no_longer_uses_git_tags_as_release_state() -> None:
+    workflow_text = (REPO_ROOT / ".github" / "workflows" / "scheduled-release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "git describe --tags" not in workflow_text
+    assert "git tag -a" not in workflow_text
+    assert "git push origin ${{ steps.check.outputs.version }}" not in workflow_text
+
+
+def test_release_helper_script_no_longer_creates_or_pushes_git_tags() -> None:
+    script_text = (REPO_ROOT / "scripts" / "release.sh").read_text(encoding="utf-8")
+
+    assert 'git tag -a "v$NEW_VERSION"' not in script_text
+    assert 'git push origin "v$NEW_VERSION"' not in script_text
+    assert "已创建本地 tag" not in script_text
 
 
 def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
@@ -77,6 +102,10 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
         "frontend/package.json",
         "frontend/pnpm-lock.yaml",
         "frontend/vite.config.ts",
+        "frontend/scripts/clean.mjs",
+        "frontend/scripts/chunkObfuscatorPlugin.ts",
+        "frontend/scripts/obfuscatorOptions.ts",
+        "frontend/scripts/dev-launcher.mjs",
         "frontend/src/app/main.tsx",
         "frontend/yasa-engine-overrides/src/config.ts",
         "nexus-web/dist/index.html",
@@ -88,6 +117,7 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
         assert (output_dir / rel_path).exists(), rel_path
 
     forbidden_paths = [
+        "NOTICE",
         ".github",
         "deploy",
         "docs",
@@ -95,6 +125,12 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
         "docker-compose.self-contained.yml",
         "backend/tests",
         "frontend/tests",
+        "frontend/scripts/dev-entrypoint.sh",
+        "frontend/scripts/generate-cwe-catalog.mjs",
+        "frontend/scripts/run-in-dev-container.sh",
+        "frontend/scripts/run-node-tests.mjs",
+        "frontend/scripts/setup.cjs",
+        "frontend/scripts/setup.sh",
         "scripts/compose-up-local-build.sh",
         "scripts/compose-up-with-fallback.sh",
     ]

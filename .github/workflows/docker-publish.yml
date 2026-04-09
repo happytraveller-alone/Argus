@@ -1,10 +1,6 @@
 name: Docker Publish
 
-# 只构建并推送 Docker 镜像，不创建 Release 或 Tag
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       tag:
@@ -91,16 +87,10 @@ jobs:
       - name: 确定镜像标签
         id: image-tag
         env:
-          EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          if [ "${EVENT_NAME}" == "push" ]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-            echo "build_all=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${INPUT_TAG}" >> $GITHUB_OUTPUT
-            echo "build_all=false" >> $GITHUB_OUTPUT
-          fi
+          echo "tag=${INPUT_TAG:-latest}" >> $GITHUB_OUTPUT
+          echo "build_all=false" >> $GITHUB_OUTPUT
 
       - name: 登录到 GitHub Container Registry
         uses: docker/login-action@v4

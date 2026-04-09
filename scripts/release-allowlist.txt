@@ -10,6 +10,5 @@ docker/env/frontend/.env.example
 nexus-web/
 nexus-itemDetail/
 
-# Legal notices retained in the generated release tree.
+# Legal files retained in the generated release tree.
 LICENSE
-NOTICE

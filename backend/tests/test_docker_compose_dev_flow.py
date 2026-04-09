@@ -510,8 +510,10 @@ def test_docker_publish_pushes_all_runner_images() -> None:
         encoding="utf-8"
     )
 
-    assert "push:" in workflow_text
-    assert "'v*.*.*'" in workflow_text
+    assert "\non:\n  workflow_dispatch:\n" in workflow_text
+    assert "\n  push:\n" not in workflow_text
+    assert "'v*.*.*'" not in workflow_text
+    assert "tag:" in workflow_text
     assert "build_yasa_runner" in workflow_text
     assert "build_opengrep_runner" in workflow_text
     assert "build_bandit_runner" in workflow_text

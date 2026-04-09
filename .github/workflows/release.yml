@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: release-branch
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -31,6 +35,33 @@ jobs:
           docker compose config >/dev/null
           docker compose -f docker-compose.yml -f docker-compose.hybrid.yml config >/dev/null
 
+      - name: Delete public release tags and releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLEANUP_FILE: scripts/release-tag-cleanup.txt
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f "${CLEANUP_FILE}" ]]; then
+            echo "No release tag cleanup file found; skipping."
+            exit 0
+          fi
+
+          while IFS= read -r raw_tag || [[ -n "${raw_tag}" ]]; do
+            tag="$(printf '%s' "${raw_tag}" | sed 's/[[:space:]]*#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//')"
+            [[ -n "${tag}" ]] || continue
+
+            if git ls-remote --tags --refs origin "refs/tags/${tag}" | grep -q .; then
+              release_id="$(gh api -X GET "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '.id' 2>/dev/null || true)"
+              if [[ -n "${release_id}" ]]; then
+                gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+              fi
+              git push origin --delete "${tag}" || true
+            fi
+
+            git tag -d "${tag}" >/dev/null 2>&1 || true
+          done < "${CLEANUP_FILE}"
+
       - name: Publish release branch
         env:
           RELEASE_DIR: ${{ runner.temp }}/release-tree
@@ -38,7 +69,7 @@ jobs:
           set -euo pipefail
 
           PUBLISH_DIR="${RUNNER_TEMP}/release-publish"
-          git worktree add --force "${PUBLISH_DIR}" HEAD
+          git worktree add --detach --force "${PUBLISH_DIR}" HEAD
 
           cleanup() {
             git worktree remove --force "${PUBLISH_DIR}" || true
@@ -47,12 +78,7 @@ jobs:
 
           cd "${PUBLISH_DIR}"
 
-          if git ls-remote --exit-code --heads origin release >/dev/null 2>&1; then
-            git fetch origin release
-            git checkout -B release origin/release
-          else
-            git checkout --orphan release
-          fi
+          git checkout --orphan "release-publish-${GITHUB_RUN_ID}"
 
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a "${RELEASE_DIR}/." .
@@ -61,10 +87,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
 
-          if git diff --cached --quiet; then
-            echo "release branch already up to date"
-            exit 0
-          fi
-
-          git commit -m "chore: update release branch from ${GITHUB_SHA}"
+          git commit -m "chore: refresh release branch snapshot"
           git push --force origin HEAD:release
