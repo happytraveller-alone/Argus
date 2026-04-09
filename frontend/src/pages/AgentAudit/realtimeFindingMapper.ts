@@ -14,6 +14,7 @@ type FalsePositiveSignalInput = {
 
 type VerificationProgressInput = FalsePositiveSignalInput & {
   eventType?: unknown;
+  verificationStatus?: unknown;
   isVerified?: unknown;
 };
 
@@ -129,17 +130,9 @@ export function isFalsePositiveSignal(input: FalsePositiveSignalInput): boolean 
 export function normalizeVerificationProgress(
   input: VerificationProgressInput,
 ): RealtimeVerificationProgress {
-  if (isFalsePositiveSignal(input)) {
-    return "verified";
-  }
-
-  const eventType = toNormalizedToken(input.eventType);
   const status = toNormalizedToken(input.status);
-  if (
-    isTruthyBoolean(input.isVerified) ||
-    eventType === "finding_verified" ||
-    status === "verified"
-  ) {
+  const verificationStatus = toNormalizedToken(input.verificationStatus);
+  if (status === "verified" || verificationStatus === "verified") {
     return "verified";
   }
   return "pending";
@@ -195,13 +188,10 @@ export function fromAgentFinding(
   });
   const falsePositive = isFalsePositiveSignal({
     status: finding.status,
-    authenticity: finding.authenticity,
-    verdict: finding.verdict,
   });
   const verificationProgress = normalizeVerificationProgress({
     status: finding.status,
-    authenticity: finding.authenticity,
-    verdict: finding.verdict,
+    verificationStatus: findingRecord.verification_status,
     isVerified: finding.is_verified,
   });
   const displaySeverity = normalizeDisplaySeverity(finding.severity, falsePositive);
@@ -242,7 +232,7 @@ export function fromAgentFinding(
     authenticity: toOptionalString(finding.authenticity),
     confidence: toOptionalConfidence(finding.ai_confidence ?? finding.confidence),
     timestamp: finding.created_at ?? null,
-    is_verified: verificationProgress === "verified",
+    is_verified: toNormalizedToken(finding.status) === "verified",
     verification_todo_id: toOptionalString(findingRecord.verification_todo_id),
     verification_fingerprint: toOptionalString(
       findingRecord.verification_fingerprint,
@@ -268,14 +258,11 @@ export function fromAgentEvent(event: AgentEvent): RealtimeMergedFindingItem | n
   }
   const falsePositive = isFalsePositiveSignal({
     status: metadata.status,
-    authenticity: metadata.authenticity,
-    verdict: metadata.verdict,
   });
   const verificationProgress = normalizeVerificationProgress({
     eventType,
     status: metadata.status,
-    authenticity: metadata.authenticity,
-    verdict: metadata.verdict,
+    verificationStatus: metadata.verification_status,
     isVerified: metadata.is_verified,
   });
 
@@ -350,7 +337,7 @@ export function fromAgentEvent(event: AgentEvent): RealtimeMergedFindingItem | n
     authenticity: toOptionalString(metadata.authenticity),
     confidence,
     timestamp,
-    is_verified: verificationProgress === "verified",
+    is_verified: toNormalizedToken(metadata.status) === "verified",
     verification_todo_id: toOptionalString(metadata.verification_todo_id),
     verification_fingerprint: toOptionalString(metadata.verification_fingerprint),
     detailMode: falsePositive ? "false_positive_reason" : "detail",

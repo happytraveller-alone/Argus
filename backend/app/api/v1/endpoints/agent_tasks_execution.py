@@ -44,6 +44,25 @@ from .agent_tasks_runtime import *
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_terminal_agent_findings(
+    findings: List[AgentFinding],
+) -> List[AgentFinding]:
+    """Normalize automatically generated findings to pending review on task end."""
+    for item in findings:
+        item.status = FindingStatus.NEEDS_REVIEW
+        item.is_verified = False
+        item.verified_at = None
+        verification_result = (
+            dict(item.verification_result)
+            if isinstance(getattr(item, "verification_result", None), dict)
+            else {}
+        )
+        verification_result["status"] = FindingStatus.NEEDS_REVIEW
+        verification_result["verification_stage_completed"] = True
+        item.verification_result = verification_result
+    return findings
+
 async def _execute_agent_task(task_id: str):
     """
     在后台执行 Agent 任务 - 使用动态 Agent 树架构
@@ -1099,9 +1118,10 @@ async def _execute_agent_task(task_id: str):
                     select(AgentFinding).where(AgentFinding.task_id == task_id)
                 )
                 persisted_findings = persisted_findings_result.scalars().all()
-                # effective_findings: all non-false-positive findings (confirmed, likely, uncertain).
-                # uncertain findings (is_verified=False) are legitimate security concerns that
-                # should be surfaced to the user and counted in the "入库" total.
+                persisted_findings = _normalize_terminal_agent_findings(
+                    persisted_findings
+                )
+                # effective_findings: all non-false-positive findings.
                 effective_findings = [
                     item for item in persisted_findings
                     if str(item.status) != FindingStatus.FALSE_POSITIVE
@@ -1115,15 +1135,7 @@ async def _execute_agent_task(task_id: str):
                     if isinstance(finding_save_diagnostics, dict)
                     else {}
                 )
-                false_positive_discarded_count = (
-                    int(filtered_reasons.get("false_positive_discarded", 0))
-                    if isinstance(filtered_reasons, dict)
-                    else 0
-                )
-                false_positive_count = max(
-                    len(false_positive_findings),
-                    false_positive_discarded_count,
-                )
+                false_positive_count = len(false_positive_findings)
                 agent_payloads: Dict[str, Any] = {}
 
                 # ============ Markdown 长期记忆写入（shared + per-agent） ============

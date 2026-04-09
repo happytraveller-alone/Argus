@@ -8,7 +8,7 @@ import {
   filterIntelligentActivities,
 } from "../src/features/tasks/services/taskActivities.ts";
 
-test("fetchTaskActivities maps verified severity stats for intelligent and hybrid task summaries", async () => {
+test("fetchTaskActivities maps effective severity stats for intelligent and hybrid task summaries", async () => {
   const originalGet = apiClient.get;
 
   apiClient.get = (async (url: string) => {
@@ -156,9 +156,9 @@ test("fetchTaskActivities maps verified severity stats for intelligent and hybri
 
     assert.equal(intelligent.length, 1);
     assert.deepEqual(intelligent[0]?.agentFindingStats, {
-      critical: 2,
-      high: 3,
-      medium: 1,
+      critical: 1,
+      high: 2,
+      medium: 3,
       low: 1,
       total: 7,
     });
@@ -177,7 +177,7 @@ test("fetchTaskActivities maps verified severity stats for intelligent and hybri
   }
 });
 
-test("fetchTaskActivities falls back to verified severity stats when defect_summary is absent", async () => {
+test("fetchTaskActivities falls back to effective severity stats when defect_summary is absent", async () => {
   const originalGet = apiClient.get;
 
   apiClient.get = (async (url: string) => {
@@ -250,11 +250,11 @@ test("fetchTaskActivities falls back to verified severity stats when defect_summ
     const intelligent = filterIntelligentActivities(activities, "");
     assert.equal(intelligent.length, 1);
     assert.deepEqual(intelligent[0]?.agentFindingStats, {
-      critical: 0,
+      critical: 1,
       high: 1,
       medium: 1,
       low: 0,
-      total: 2,
+      total: 3,
     });
   } finally {
     apiClient.get = originalGet;

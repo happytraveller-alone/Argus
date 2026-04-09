@@ -95,7 +95,7 @@ class SandboxManager:
 
     def _image_candidates(self) -> List[str]:
         explicit_image = str(self.config.image or settings.SANDBOX_IMAGE or "").strip()
-        ghcr_registry = str(os.environ.get("GHCR_REGISTRY") or "ghcr.nju.edu.cn").strip() or "ghcr.nju.edu.cn"
+        ghcr_registry = str(os.environ.get("GHCR_REGISTRY") or "ghcr.io").strip() or "ghcr.io"
         image_tag = str(os.environ.get("VULHUNTER_IMAGE_TAG") or "latest").strip() or "latest"
         remote_image = f"{ghcr_registry}/lintsinghua/vulhunter-sandbox:{image_tag}"
         ordered_candidates = [

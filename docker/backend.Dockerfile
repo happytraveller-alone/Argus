@@ -2,7 +2,7 @@
 # 多阶段构建 - 构建阶段
 # ============================================
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
-ARG UV_IMAGE=ghcr.nju.edu.cn/astral-sh/uv:latest
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
 ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
@@ -105,39 +105,39 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
   pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://pypi.org/simple}"; \
   best_index="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}"; \
   ordered="$(python3 /usr/local/bin/package_source_selector.py \
-    --candidates "${pypi_index_candidates}" --kind pypi --timeout-seconds 2 2>/dev/null || true)"; \
+  --candidates "${pypi_index_candidates}" --kind pypi --timeout-seconds 2 2>/dev/null || true)"; \
   if [ -n "${ordered}" ]; then \
-    first="$(printf '%s\n' "${ordered}" | head -1)"; \
-    [ -z "${first}" ] || best_index="${first}"; \
+  first="$(printf '%s\n' "${ordered}" | head -1)"; \
+  [ -z "${first}" ] || best_index="${first}"; \
   fi; \
   printf '%s\n' "${best_index}" > /tmp/pypi-best-index; \
   echo "Selected PyPI index: ${best_index}"; \
   uv venv "${BACKEND_VENV_PATH}"; \
   install_heavy() { \
-    idx="$1"; attempt=1; \
-    while [ "${attempt}" -le 2 ]; do \
-      echo "uv pip install heavy deps via ${idx} (attempt ${attempt}/2)"; \
-      if timeout "${step_timeout}" env \
-        VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
-        UV_INDEX_URL="${idx}" UV_HTTP_TIMEOUT="${uv_http_timeout}" \
-        UV_CONCURRENT_DOWNLOADS=50 UV_CONCURRENT_INSTALLS=8 \
-      uv pip install --no-deps --index-url "${idx}" -r requirements-heavy.txt; then \
-        return 0; \
-      fi; \
-      sleep $((attempt + 1)); attempt=$((attempt + 1)); \
-    done; return 1; \
+  idx="$1"; attempt=1; \
+  while [ "${attempt}" -le 2 ]; do \
+  echo "uv pip install heavy deps via ${idx} (attempt ${attempt}/2)"; \
+  if timeout "${step_timeout}" env \
+  VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
+  UV_INDEX_URL="${idx}" UV_HTTP_TIMEOUT="${uv_http_timeout}" \
+  UV_CONCURRENT_DOWNLOADS=50 UV_CONCURRENT_INSTALLS=8 \
+  uv pip install --no-deps --index-url "${idx}" -r requirements-heavy.txt; then \
+  return 0; \
+  fi; \
+  sleep $((attempt + 1)); attempt=$((attempt + 1)); \
+  done; return 1; \
   }; \
   if install_heavy "${best_index}"; then \
-    exit 0; \
+  exit 0; \
   fi; \
   OLD_IFS="${IFS}"; IFS=','; set -- ${pypi_index_candidates}; IFS="${OLD_IFS}"; \
   for idx in "$@"; do \
-    stripped="$(printf '%s' "${idx}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; \
-    [ -n "${stripped}" ] && [ "${stripped}" != "${best_index}" ] || continue; \
-    if install_heavy "${stripped}"; then \
-      printf '%s\n' "${stripped}" > /tmp/pypi-best-index; \
-      exit 0; \
-    fi; \
+  stripped="$(printf '%s' "${idx}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; \
+  [ -n "${stripped}" ] && [ "${stripped}" != "${best_index}" ] || continue; \
+  if install_heavy "${stripped}"; then \
+  printf '%s\n' "${stripped}" > /tmp/pypi-best-index; \
+  exit 0; \
+  fi; \
   done; \
   echo "ERROR: Failed to install heavy packages from all mirrors" >&2; exit 1
 
@@ -150,43 +150,43 @@ RUN --mount=type=cache,id=vulhunter-backend-uv-cache,target=/root/.cache/uv \
   uv_step_timeout=240; \
   uv_http_timeout=45; \
   if [ -f /tmp/pypi-best-index ] && [ -s /tmp/pypi-best-index ]; then \
-    best_index="$(cat /tmp/pypi-best-index)"; \
+  best_index="$(cat /tmp/pypi-best-index)"; \
   else \
-    best_index="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}"; \
+  best_index="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}"; \
   fi; \
   pypi_index_candidates="${BACKEND_PYPI_INDEX_CANDIDATES:-https://mirrors.aliyun.com/pypi/simple/,https://pypi.tuna.tsinghua.edu.cn/simple,https://pypi.mirrors.ustc.edu.cn/simple/,https://mirrors.cloud.tencent.com/pypi/simple/,https://mirrors.huaweicloud.com/repository/pypi/simple/,https://pypi.org/simple}"; \
   sync_with_index() { \
-    idx="$1"; attempt=1; \
-    while [ "${attempt}" -le 2 ]; do \
-      echo "uv sync via ${idx} (attempt ${attempt}/2, timeout ${uv_step_timeout}s)"; \
-      if timeout "${uv_step_timeout}" env \
-        VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
-        UV_HTTP_TIMEOUT="${uv_http_timeout}" UV_INDEX_URL="${idx}" PIP_INDEX_URL="${idx}" \
-        UV_CONCURRENT_DOWNLOADS=50 UV_CONCURRENT_INSTALLS=8 \
-      uv sync --active --frozen --no-dev; then \
-        return 0; \
-      else \
-        status="$?"; \
-      fi; \
-      if [ "${status}" -eq 124 ]; then \
-        echo "uv sync timed out via ${idx} after ${uv_step_timeout}s (attempt ${attempt}/2)." >&2; \
-      else \
-        echo "uv sync failed via ${idx} (attempt ${attempt}/2, exit ${status})." >&2; \
-      fi; \
-      sleep $((attempt + 1)); attempt=$((attempt + 1)); \
-    done; return 1; \
+  idx="$1"; attempt=1; \
+  while [ "${attempt}" -le 2 ]; do \
+  echo "uv sync via ${idx} (attempt ${attempt}/2, timeout ${uv_step_timeout}s)"; \
+  if timeout "${uv_step_timeout}" env \
+  VIRTUAL_ENV="${BACKEND_VENV_PATH}" PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
+  UV_HTTP_TIMEOUT="${uv_http_timeout}" UV_INDEX_URL="${idx}" PIP_INDEX_URL="${idx}" \
+  UV_CONCURRENT_DOWNLOADS=50 UV_CONCURRENT_INSTALLS=8 \
+  uv sync --active --frozen --no-dev; then \
+  return 0; \
+  else \
+  status="$?"; \
+  fi; \
+  if [ "${status}" -eq 124 ]; then \
+  echo "uv sync timed out via ${idx} after ${uv_step_timeout}s (attempt ${attempt}/2)." >&2; \
+  else \
+  echo "uv sync failed via ${idx} (attempt ${attempt}/2, exit ${status})." >&2; \
+  fi; \
+  sleep $((attempt + 1)); attempt=$((attempt + 1)); \
+  done; return 1; \
   }; \
   echo "uv sync using index: ${best_index}"; \
   if sync_with_index "${best_index}"; then \
-    printf 'ready\n' > /tmp/builder-network-ready; exit 0; \
+  printf 'ready\n' > /tmp/builder-network-ready; exit 0; \
   fi; \
   OLD_IFS="${IFS}"; IFS=','; set -- ${pypi_index_candidates}; IFS="${OLD_IFS}"; \
   for idx in "$@"; do \
-    stripped="$(printf '%s' "${idx}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; \
-    [ -n "${stripped}" ] && [ "${stripped}" != "${best_index}" ] || continue; \
-    if sync_with_index "${stripped}"; then \
-      printf 'ready\n' > /tmp/builder-network-ready; exit 0; \
-    fi; \
+  stripped="$(printf '%s' "${idx}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"; \
+  [ -n "${stripped}" ] && [ "${stripped}" != "${best_index}" ] || continue; \
+  if sync_with_index "${stripped}"; then \
+  printf 'ready\n' > /tmp/builder-network-ready; exit 0; \
+  fi; \
   done; \
   echo "ERROR: uv sync failed on all mirrors" >&2; exit 1
 
@@ -286,10 +286,10 @@ COPY --from=docker-cli-src /usr/local/libexec/docker/cli-plugins/docker-buildx /
 RUN --mount=type=cache,id=vulhunter-backend-runtime-apt-lists,target=/var/lib/apt/lists,sharing=locked \
   --mount=type=cache,id=vulhunter-backend-runtime-apt-cache,target=/var/cache/apt,sharing=locked \
   if [ "${CONTAINER_CLI_PROVIDER}" = "podman" ]; then \
-    set -eux; \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends podman-remote && \
-    ln -sf /usr/bin/podman-remote /usr/local/bin/podman; \
+  set -eux; \
+  apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends podman-remote && \
+  ln -sf /usr/bin/podman-remote /usr/local/bin/podman; \
   fi
 
 
@@ -327,9 +327,9 @@ FROM builder AS cython-compiler
 ARG BACKEND_PYPI_INDEX_PRIMARY
 ARG BACKEND_CYTHON_JOBS=4
 RUN --mount=type=cache,id=vulhunter-cython-uv,target=/root/.cache/uv \
-    VIRTUAL_ENV=/opt/backend-venv \
-    UV_INDEX_URL="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}" \
-    uv pip install "Cython>=3.0.0,<4.0.0" "setuptools>=68"
+  VIRTUAL_ENV=/opt/backend-venv \
+  UV_INDEX_URL="${BACKEND_PYPI_INDEX_PRIMARY:-https://mirrors.aliyun.com/pypi/simple/}" \
+  uv pip install "Cython>=3.0.0,<4.0.0" "setuptools>=68"
 
 # 复制源码和编译脚本
 COPY backend/app /build/app
@@ -339,21 +339,21 @@ COPY backend/cython_build /build/cython_build
 # --parallel $(nproc): 并行 gcc 编译所有 .c 文件（4vCPU→ ~6 分钟，原串行 ~22 分钟）
 # CC=ccache gcc: 跨构建缓存编译产物（源码不变时 hit 率 ~100%，近乎瞬间完成）
 RUN --mount=type=cache,id=vulhunter-cython-ccache,target=/root/.ccache,sharing=shared \
-    set -eux; \
-    export CC="ccache gcc" CXX="ccache g++"; \
-    export CCACHE_DIR=/root/.ccache; \
-    export CCACHE_MAXSIZE=2G; \
-    NPROC="${BACKEND_CYTHON_JOBS}"; \
-    echo "[Cython] 并行编译（jobs=${NPROC}），ccache dir=${CCACHE_DIR}"; \
-    cd /build; \
-    /opt/backend-venv/bin/python cython_build/setup.py build_ext \
-        --build-lib /build/compiled \
-        --build-temp /build/tmp \
-        --parallel "${NPROC}"; \
-    SO_COUNT=$(find /build/compiled -name "*.so" | wc -l); \
-    echo "[Cython] 编译完成，.so 文件数: ${SO_COUNT}"; \
-    ccache --show-stats; \
-    test "${SO_COUNT}" -gt 50
+  set -eux; \
+  export CC="ccache gcc" CXX="ccache g++"; \
+  export CCACHE_DIR=/root/.ccache; \
+  export CCACHE_MAXSIZE=2G; \
+  NPROC="${BACKEND_CYTHON_JOBS}"; \
+  echo "[Cython] 并行编译（jobs=${NPROC}），ccache dir=${CCACHE_DIR}"; \
+  cd /build; \
+  /opt/backend-venv/bin/python cython_build/setup.py build_ext \
+  --build-lib /build/compiled \
+  --build-temp /build/tmp \
+  --parallel "${NPROC}"; \
+  SO_COUNT=$(find /build/compiled -name "*.so" | wc -l); \
+  echo "[Cython] 编译完成，.so 文件数: ${SO_COUNT}"; \
+  ccache --show-stats; \
+  test "${SO_COUNT}" -gt 50
 
 # ============================================================
 # 组装最终 app/ 目录：.so 编译产物 + 必须保留 .py 的文件
@@ -361,90 +361,90 @@ RUN --mount=type=cache,id=vulhunter-cython-ccache,target=/root/.ccache,sharing=s
 FROM cython-compiler AS runtime-app-assembler
 
 RUN set -eux; \
-    mkdir -p /final/app; \
-    # 1. 复制所有 .so 编译产物（按包路径排列）
-    cp -r /build/compiled/app/. /final/app/; \
-    # 2. 复制所有 __init__.py（Cython 不编译它们，保持包结构）
-    find /build/app -name "__init__.py" | while IFS= read -r f; do \
-        rel="${f#/build/app/}"; \
-        mkdir -p "/final/app/$(dirname "${rel}")"; \
-        cp "${f}" "/final/app/${rel}"; \
-    done; \
-    # 3. 复制入口文件（CMD 直接引用，必须保留 .py）
-    cp /build/app/main.py /final/app/main.py; \
-    mkdir -p /final/app/runtime; \
-    cp /build/app/runtime/container_startup.py /final/app/runtime/container_startup.py; \
-    # 4. 复制 launchers 目录（COPY --chmod=755 可执行脚本）
-    cp -r /build/app/runtime/launchers /final/app/runtime/launchers; \
-    # 5. 复制 schema_snapshots 目录（Alembic baseline）
-    mkdir -p /final/app/db; \
-    cp -r /build/app/db/schema_snapshots /final/app/db/schema_snapshots; \
-    # 6. 复制 patches 目录（若存在）
-    if [ -d /build/app/db/patches ]; then \
-        cp -r /build/app/db/patches /final/app/db/patches; \
-    fi; \
-    # 7. 兜底：将所有无对应 .so 的 .py 文件（即 Cython 排除的模块）复制到 /final/app
-    #    确保未来新增排除文件时无需再修改此 Dockerfile
-    find /build/app -name "*.py" | while IFS= read -r f; do \
-        rel="${f#/build/app/}"; \
-        dir="$(dirname "${rel}")"; \
-        base="$(basename "${rel%.py}")"; \
-        if [ -z "$(find /final/app/"${dir}" -name "${base}.cpython-*.so" 2>/dev/null | head -1)" ] && \
-           [ ! -f "/final/app/${rel}" ]; then \
-            mkdir -p "/final/app/${dir}"; \
-            cp "${f}" "/final/app/${rel}"; \
-            echo "[Assembler] 保留 .py(无对应.so): ${rel}"; \
-        fi; \
-    done; \
-    # 验证：核心 .so 文件存在
-    echo "[Assembler] 验证关键 .so 文件:"; \
-    ls /final/app/core/*.so 2>/dev/null | head -5; \
-    ls /final/app/services/agent/*.so 2>/dev/null | head -5; \
-    echo "[Assembler] 组装完成"
+  mkdir -p /final/app; \
+  # 1. 复制所有 .so 编译产物（按包路径排列）
+  cp -r /build/compiled/app/. /final/app/; \
+  # 2. 复制所有 __init__.py（Cython 不编译它们，保持包结构）
+  find /build/app -name "__init__.py" | while IFS= read -r f; do \
+  rel="${f#/build/app/}"; \
+  mkdir -p "/final/app/$(dirname "${rel}")"; \
+  cp "${f}" "/final/app/${rel}"; \
+  done; \
+  # 3. 复制入口文件（CMD 直接引用，必须保留 .py）
+  cp /build/app/main.py /final/app/main.py; \
+  mkdir -p /final/app/runtime; \
+  cp /build/app/runtime/container_startup.py /final/app/runtime/container_startup.py; \
+  # 4. 复制 launchers 目录（COPY --chmod=755 可执行脚本）
+  cp -r /build/app/runtime/launchers /final/app/runtime/launchers; \
+  # 5. 复制 schema_snapshots 目录（Alembic baseline）
+  mkdir -p /final/app/db; \
+  cp -r /build/app/db/schema_snapshots /final/app/db/schema_snapshots; \
+  # 6. 复制 patches 目录（若存在）
+  if [ -d /build/app/db/patches ]; then \
+  cp -r /build/app/db/patches /final/app/db/patches; \
+  fi; \
+  # 7. 兜底：将所有无对应 .so 的 .py 文件（即 Cython 排除的模块）复制到 /final/app
+  #    确保未来新增排除文件时无需再修改此 Dockerfile
+  find /build/app -name "*.py" | while IFS= read -r f; do \
+  rel="${f#/build/app/}"; \
+  dir="$(dirname "${rel}")"; \
+  base="$(basename "${rel%.py}")"; \
+  if [ -z "$(find /final/app/"${dir}" -name "${base}.cpython-*.so" 2>/dev/null | head -1)" ] && \
+  [ ! -f "/final/app/${rel}" ]; then \
+  mkdir -p "/final/app/${dir}"; \
+  cp "${f}" "/final/app/${rel}"; \
+  echo "[Assembler] 保留 .py(无对应.so): ${rel}"; \
+  fi; \
+  done; \
+  # 验证：核心 .so 文件存在
+  echo "[Assembler] 验证关键 .so 文件:"; \
+  ls /final/app/core/*.so 2>/dev/null | head -5; \
+  ls /final/app/services/agent/*.so 2>/dev/null | head -5; \
+  echo "[Assembler] 组装完成"
 
 # ── Layer 1 增强：.so 符号剥离 ──────────────────────────────
 RUN set -eux; \
-    SO_COUNT=$(find /final/app -name "*.so" | wc -l); \
-    echo "[Strip] 开始剥离 ${SO_COUNT} 个 .so 文件符号"; \
-    find /final/app -name "*.so" \
-        -exec strip --strip-all --remove-section=.comment {} \; ; \
-    echo "[Strip] 符号剥离完成"; \
-    find /final/app -name "*.so" | head -5 | while read -r so; do \
-        file "$so" | grep -q "ELF.*shared object" || \
-        { echo "INVALID ELF: $so" >&2; exit 1; }; \
-    done; \
-    echo "[Strip] ELF 完整性验证通过"
+  SO_COUNT=$(find /final/app -name "*.so" | wc -l); \
+  echo "[Strip] 开始剥离 ${SO_COUNT} 个 .so 文件符号"; \
+  find /final/app -name "*.so" \
+  -exec strip --strip-all --remove-section=.comment {} \; ; \
+  echo "[Strip] 符号剥离完成"; \
+  find /final/app -name "*.so" | head -5 | while read -r so; do \
+  file "$so" | grep -q "ELF.*shared object" || \
+  { echo "INVALID ELF: $so" >&2; exit 1; }; \
+  done; \
+  echo "[Strip] ELF 完整性验证通过"
 
 # ── Layer 2：白名单 .py → legacy .pyc 编译 + 删除源码 ───────
 # 删除源码后，Python 需要相邻的 legacy .pyc；仅保留 __pycache__ 不足以导入。
 # 只保护运行时入口与少量残余源码，避免误删 Alembic/patch/build-context 依赖文件。
 RUN set -eux; \
-    BYTECODE_TARGETS="\
-      /final/app/main.py \
-      /final/app/runtime/container_startup.py \
-      /final/app/runtime/launchers/yasa_uast4py_launcher.py \
-      /final/app/runtime/launchers/opengrep_launcher.py \
-      /final/app/runtime/launchers/phpstan_launcher.py \
-      /final/app/runtime/launchers/yasa_engine_launcher.py \
-      /final/app/runtime/launchers/yasa_launcher.py \
-      /final/app/api/v1/endpoints/agent_tasks_reporting.py"; \
-    TARGET_COUNT=0; \
-    for src in ${BYTECODE_TARGETS}; do \
-        test -f "${src}"; \
-        /opt/backend-venv/bin/python -m compileall -q -b "${src}"; \
-        test -f "${src}c"; \
-        rm -f "${src}"; \
-        TARGET_COUNT=$((TARGET_COUNT + 1)); \
-        echo "[Bytecode] protected: ${src#/final/}"; \
-    done; \
-    PY_REMAINING=$(find /final/app -name "*.py" ! -name "__init__.py" | wc -l); \
-    echo "[Bytecode] 受保护文件数: ${TARGET_COUNT}"; \
-    echo "[Bytecode] 剩余源码文件数（白名单外保留）: ${PY_REMAINING}"; \
-    test -f /final/app/main.pyc || \
-        { echo "ERROR: main.pyc 未生成" >&2; exit 1; }; \
-    test -f /final/app/runtime/container_startup.pyc || \
-        { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
-    echo "[Bytecode] 关键 legacy .pyc 验证通过"
+  BYTECODE_TARGETS="\
+  /final/app/main.py \
+  /final/app/runtime/container_startup.py \
+  /final/app/runtime/launchers/yasa_uast4py_launcher.py \
+  /final/app/runtime/launchers/opengrep_launcher.py \
+  /final/app/runtime/launchers/phpstan_launcher.py \
+  /final/app/runtime/launchers/yasa_engine_launcher.py \
+  /final/app/runtime/launchers/yasa_launcher.py \
+  /final/app/api/v1/endpoints/agent_tasks_reporting.py"; \
+  TARGET_COUNT=0; \
+  for src in ${BYTECODE_TARGETS}; do \
+  test -f "${src}"; \
+  /opt/backend-venv/bin/python -m compileall -q -b "${src}"; \
+  test -f "${src}c"; \
+  rm -f "${src}"; \
+  TARGET_COUNT=$((TARGET_COUNT + 1)); \
+  echo "[Bytecode] protected: ${src#/final/}"; \
+  done; \
+  PY_REMAINING=$(find /final/app -name "*.py" ! -name "__init__.py" | wc -l); \
+  echo "[Bytecode] 受保护文件数: ${TARGET_COUNT}"; \
+  echo "[Bytecode] 剩余源码文件数（白名单外保留）: ${PY_REMAINING}"; \
+  test -f /final/app/main.pyc || \
+  { echo "ERROR: main.pyc 未生成" >&2; exit 1; }; \
+  test -f /final/app/runtime/container_startup.pyc || \
+  { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
+  echo "[Bytecode] 关键 legacy .pyc 验证通过"
 
 # ============================================================
 # runtime-cython: 全量 Cython + strip + pyc（最强混淆，资源占用高）
@@ -492,10 +492,10 @@ RUN mkdir -p \
 # ── 非 root 用户：降权运行，减小容器逃逸风险 ───────────────
 RUN groupadd --gid 1001 appgroup && \
   useradd --uid 1001 --gid appgroup \
-    --no-create-home --shell /usr/sbin/nologin appuser && \
+  --no-create-home --shell /usr/sbin/nologin appuser && \
   chown -R appuser:appgroup \
-    /app \
-    /opt/backend-venv
+  /app \
+  /opt/backend-venv
 
 USER appuser
 
@@ -564,39 +564,39 @@ RUN mkdir -p \
 
 # 默认 target 只对少量高价值入口做轻量混淆，避免再触发全量 Cython/GCC 编译。
 RUN set -eux; \
-    BYTECODE_TARGETS="\
-      /app/app/main.py \
-      /app/app/runtime/container_startup.py \
-      /app/app/runtime/launchers/yasa_uast4py_launcher.py \
-      /app/app/runtime/launchers/opengrep_launcher.py \
-      /app/app/runtime/launchers/phpstan_launcher.py \
-      /app/app/runtime/launchers/yasa_engine_launcher.py \
-      /app/app/runtime/launchers/yasa_launcher.py \
-      /app/app/api/v1/endpoints/agent_tasks_reporting.py"; \
-    TARGET_COUNT=0; \
-    for src in ${BYTECODE_TARGETS}; do \
-        test -f "${src}"; \
-        /opt/backend-venv/bin/python -m compileall -q -b "${src}"; \
-        test -f "${src}c"; \
-        rm -f "${src}"; \
-        TARGET_COUNT=$((TARGET_COUNT + 1)); \
-        echo "[Bytecode] protected: ${src#/app/}"; \
-    done; \
-    PY_REMAINING=$(find /app/app -name "*.py" ! -name "__init__.py" | wc -l); \
-    echo "[Bytecode] 受保护文件数: ${TARGET_COUNT}"; \
-    echo "[Bytecode] 剩余源码文件数（白名单外保留）: ${PY_REMAINING}"; \
-    test -f /app/app/main.pyc || \
-        { echo "ERROR: main.pyc 未生成" >&2; exit 1; }; \
-    test -f /app/app/runtime/container_startup.pyc || \
-        { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
-    echo "[Bytecode] 关键 legacy .pyc 验证通过"
+  BYTECODE_TARGETS="\
+  /app/app/main.py \
+  /app/app/runtime/container_startup.py \
+  /app/app/runtime/launchers/yasa_uast4py_launcher.py \
+  /app/app/runtime/launchers/opengrep_launcher.py \
+  /app/app/runtime/launchers/phpstan_launcher.py \
+  /app/app/runtime/launchers/yasa_engine_launcher.py \
+  /app/app/runtime/launchers/yasa_launcher.py \
+  /app/app/api/v1/endpoints/agent_tasks_reporting.py"; \
+  TARGET_COUNT=0; \
+  for src in ${BYTECODE_TARGETS}; do \
+  test -f "${src}"; \
+  /opt/backend-venv/bin/python -m compileall -q -b "${src}"; \
+  test -f "${src}c"; \
+  rm -f "${src}"; \
+  TARGET_COUNT=$((TARGET_COUNT + 1)); \
+  echo "[Bytecode] protected: ${src#/app/}"; \
+  done; \
+  PY_REMAINING=$(find /app/app -name "*.py" ! -name "__init__.py" | wc -l); \
+  echo "[Bytecode] 受保护文件数: ${TARGET_COUNT}"; \
+  echo "[Bytecode] 剩余源码文件数（白名单外保留）: ${PY_REMAINING}"; \
+  test -f /app/app/main.pyc || \
+  { echo "ERROR: main.pyc 未生成" >&2; exit 1; }; \
+  test -f /app/app/runtime/container_startup.pyc || \
+  { echo "ERROR: container_startup.pyc 未生成" >&2; exit 1; }; \
+  echo "[Bytecode] 关键 legacy .pyc 验证通过"
 
 RUN groupadd --gid 1001 appgroup && \
   useradd --uid 1001 --gid appgroup \
-    --no-create-home --shell /usr/sbin/nologin appuser && \
+  --no-create-home --shell /usr/sbin/nologin appuser && \
   chown -R appuser:appgroup \
-    /app \
-    /opt/backend-venv
+  /app \
+  /opt/backend-venv
 
 USER appuser
 

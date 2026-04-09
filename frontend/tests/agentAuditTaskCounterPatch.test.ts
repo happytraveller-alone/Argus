@@ -100,14 +100,23 @@ test("buildAgentAuditTaskFindingCountersPatch 覆盖判真判假后的 task coun
         is_verified: false,
         authenticity: "false_positive",
       },
+      {
+        id: "auto-confirmed-now",
+        severity: "critical",
+        status: "needs_review",
+        is_verified: false,
+        verdict: "confirmed",
+        authenticity: "confirmed",
+        verification_progress: "pending",
+      },
     ],
   });
 
   assert.deepEqual(patch, {
-    findings_count: 1,
+    findings_count: 2,
     verified_count: 1,
     false_positive_count: 1,
-    critical_count: 0,
+    critical_count: 1,
     high_count: 0,
     medium_count: 1,
     low_count: 0,
@@ -117,16 +126,16 @@ test("buildAgentAuditTaskFindingCountersPatch 覆盖判真判假后的 task coun
     verified_low_count: 0,
     defect_summary: {
       scope: "all_findings",
-      total_count: 2,
+      total_count: 3,
       severity_counts: {
-        critical: 0,
+        critical: 1,
         high: 1,
         medium: 1,
         low: 0,
         info: 0,
       },
       status_counts: {
-        pending: 0,
+        pending: 1,
         verified: 1,
         false_positive: 1,
       },

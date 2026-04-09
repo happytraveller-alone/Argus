@@ -208,10 +208,11 @@ test("loaded finding table may clamp invalid page after data is ready", () => {
 
 test("isVerifiedFinding 识别 is_verified 和 verification_progress", () => {
   assert.equal(isVerifiedFinding({ id: "pending-1" }), false);
-  assert.equal(isVerifiedFinding({ id: "verified-1", is_verified: true }), true);
+  assert.equal(isVerifiedFinding({ id: "verified-1", is_verified: true }), false);
   assert.equal(
     isVerifiedFinding({
       id: "verified-2",
+      status: "verified",
       is_verified: false,
       verification_progress: "verified",
     }),
@@ -232,9 +233,41 @@ test("getAgentAuditFindingDisplayStatus 不再把 likely 直接显示为确报",
   assert.equal(detailViewModel.getAgentAuditFindingStatusLabel("open"), "待确认");
 });
 
+test("getAgentAuditFindingDisplayStatus 在终态不会把 confirmed uncertain blocked 显示为确报", () => {
+  for (const item of [
+    {
+      id: "confirmed-1",
+      status: "needs_review",
+      verdict: "confirmed",
+      authenticity: "confirmed",
+      is_verified: false,
+      verification_progress: "pending",
+    },
+    {
+      id: "uncertain-1",
+      status: "uncertain",
+      verdict: "uncertain",
+      authenticity: "uncertain",
+      is_verified: false,
+      verification_progress: "pending",
+    },
+    {
+      id: "blocked-1",
+      status: "blocked",
+      verdict: "blocked",
+      authenticity: "blocked",
+      is_verified: false,
+      verification_progress: "pending",
+    },
+  ]) {
+    assert.equal(detailViewModel.getAgentAuditFindingDisplayStatus(item), "open");
+  }
+});
+
 test("isVisibleVerifiedVulnerability 会过滤各类误报信号", () => {
   const base = {
     id: "finding-1",
+    status: "verified",
     is_verified: true,
     verification_progress: "verified",
   };
@@ -299,12 +332,14 @@ test("buildStatsSummary 统计当前管理列表中的非误报漏洞", () => {
     displayFindings: [
       {
         id: "verified-1",
+        status: "verified",
         is_verified: true,
         display_severity: "high",
         confidence: 0.92,
       },
       {
         id: "verified-2",
+        status: "verified",
         verification_progress: "verified",
         display_severity: "medium",
         confidence: 0.67,
@@ -317,14 +352,16 @@ test("buildStatsSummary 统计当前管理列表中的非误报漏洞", () => {
       },
       {
         id: "false-positive-1",
-        is_verified: true,
+        status: "false_positive",
+        is_verified: false,
         authenticity: "false_positive",
         display_severity: "low",
         confidence: 0.42,
       },
       {
         id: "false-positive-2",
-        verification_progress: "verified",
+        status: "false_positive",
+        verification_progress: "pending",
         display_severity: "invalid",
         confidence: 0.31,
       },

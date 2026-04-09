@@ -92,6 +92,7 @@ import type {
 import {
   accumulateTokenUsage,
   type AgentAuditFindingDisplayStatus,
+  getAgentAuditFindingDisplayStatus,
   resolveAgentAuditBackTarget,
   resolveAgentAuditDetailTitle,
   buildStatsSummary,
@@ -522,11 +523,7 @@ function toSafeTrimmedString(value: unknown): string {
 }
 
 function isRealtimeFalsePositive(item: RealtimeMergedFindingItem): boolean {
-  return (
-    item.detailMode === "false_positive_reason" ||
-    toSafeTrimmedString(item.authenticity).toLowerCase() === "false_positive" ||
-    item.display_severity === "invalid"
-  );
+  return getAgentAuditFindingDisplayStatus(item) === "false_positive";
 }
 
 function isAgentFindingFalsePositiveSnapshot(finding: AgentFinding | null | undefined): boolean {
@@ -538,8 +535,9 @@ function isAgentFindingFalsePositiveSnapshot(finding: AgentFinding | null | unde
 }
 
 function toDialogFinding(item: RealtimeMergedFindingItem): AgentFinding {
-  const falsePositive = isRealtimeFalsePositive(item);
-  const isVerified = item.verification_progress === "verified" || item.is_verified;
+  const displayStatus = getAgentAuditFindingDisplayStatus(item);
+  const falsePositive = displayStatus === "false_positive";
+  const isVerified = displayStatus === "verified";
   return {
     id: item.id,
     task_id: "",

@@ -97,7 +97,7 @@ class StubSandboxManager:
 
 class TestSandboxManagerImageResolution:
     def test_image_candidates_prefer_explicit_then_local_then_remote(self, monkeypatch):
-        monkeypatch.setenv("GHCR_REGISTRY", "ghcr.nju.edu.cn")
+        monkeypatch.setenv("GHCR_REGISTRY", "docker.m.daocloud.io")
         monkeypatch.setenv("VULHUNTER_IMAGE_TAG", "latest")
         manager = SandboxManager(SandboxConfig(image="custom/sandbox:latest"))
 
@@ -108,11 +108,11 @@ class TestSandboxManagerImageResolution:
             "vulhunter/sandbox:latest",
             "VulHunter/sandbox:latest",
             "VulHunter-sandbox:latest",
-            "ghcr.nju.edu.cn/lintsinghua/vulhunter-sandbox:latest",
+            "docker.m.daocloud.io/lintsinghua/vulhunter-sandbox:latest",
         ]
 
     def test_select_runtime_image_uses_local_legacy_fallback_when_present(self):
-        manager = SandboxManager(SandboxConfig(image="ghcr.nju.edu.cn/lintsinghua/vulhunter-sandbox:latest"))
+        manager = SandboxManager(SandboxConfig(image="docker.m.daocloud.io/lintsinghua/vulhunter-sandbox:latest"))
         manager._docker_client = SimpleNamespace(images=SimpleNamespace(get=lambda image: {"VulHunter/sandbox:latest": object()}[image]))
 
         selected = manager._select_runtime_image(manager._image_candidates())

@@ -621,6 +621,7 @@ async def test_generate_report_exports_pending_findings_from_legacy_uncertain_ro
     ]
     assert payload["findings"][1]["status"] == "pending"
     assert payload["findings"][1]["status_label"] == "待确认"
+    assert payload["findings"][1]["is_verified"] is False
 
 
 @pytest.mark.asyncio
@@ -664,6 +665,9 @@ async def test_generate_report_keeps_status_verified_findings_even_when_is_verif
     assert "should be exported because status is verified" in body
     assert "Uncertain Finding" in body
     assert "should not be exported" in body
+    assert "- 待确认：1" in body
+    assert "- 确报：1" in body
+    assert "- 误报：0" in body
 
 
 @pytest.mark.asyncio
@@ -848,6 +852,16 @@ async def test_generate_report_exports_verified_pending_and_false_positive_secti
         "verified",
         "pending",
         "false_positive",
+    ]
+    assert [item["status_label"] for item in payload["findings"]] == [
+        "确报",
+        "待确认",
+        "误报",
+    ]
+    assert [item["is_verified"] for item in payload["findings"]] == [
+        True,
+        False,
+        False,
     ]
 
 

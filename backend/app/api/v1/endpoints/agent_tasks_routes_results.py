@@ -27,6 +27,7 @@ from app.models.agent_task import (
 )
 from app.models.project import Project
 from app.models.user import User
+from app.services.project_metrics import project_metrics_refresher
 
 from .agent_tasks_contracts import *
 from .agent_tasks_findings import *
@@ -335,6 +336,7 @@ async def update_finding_status(
 
     await _recompute_task_finding_counters(db, task)
     await db.commit()
+    project_metrics_refresher.enqueue(task.project_id)
     
     return {
         "message": "状态已更新",

@@ -81,11 +81,15 @@ export function mergeRealtimeFindingsBatch(
     }
 
     const preferIncoming = options.source === "db";
+    const mergedStatus = preferIncoming
+      ? (item.status ?? existing.status ?? null)
+      : (existing.status ?? item.status ?? null);
+    const mergedVerificationStatus = preferIncoming
+      ? (item.verification_status ?? existing.verification_status ?? null)
+      : (existing.verification_status ?? item.verification_status ?? null);
     const verificationProgress =
-      existing.is_verified === true ||
-      item.is_verified === true ||
-      existing.verification_progress === "verified" ||
-      item.verification_progress === "verified"
+      String(mergedStatus || "").trim().toLowerCase() === "verified" ||
+      String(mergedVerificationStatus || "").trim().toLowerCase() === "verified"
         ? "verified"
         : "pending";
     const mergedSeverity = preferIncoming
@@ -146,12 +150,8 @@ export function mergeRealtimeFindingsBatch(
       cwe_id: preferIncoming
         ? (item.cwe_id ?? existing.cwe_id)
         : (existing.cwe_id ?? item.cwe_id),
-      status: preferIncoming
-        ? (item.status ?? existing.status ?? null)
-        : (existing.status ?? item.status ?? null),
-      verification_status: preferIncoming
-        ? (item.verification_status ?? existing.verification_status ?? null)
-        : (existing.verification_status ?? item.verification_status ?? null),
+      status: mergedStatus,
+      verification_status: mergedVerificationStatus,
       code_snippet: preferIncoming
         ? (item.code_snippet ?? existing.code_snippet)
         : (existing.code_snippet ?? item.code_snippet),
@@ -194,7 +194,7 @@ export function mergeRealtimeFindingsBatch(
         ? (item.confidence ?? existing.confidence ?? null)
         : (existing.confidence ?? item.confidence ?? null),
       timestamp: pickNewerIsoTimestamp(existing.timestamp, item.timestamp),
-      is_verified: verificationProgress === "verified",
+      is_verified: String(mergedStatus || "").trim().toLowerCase() === "verified",
     });
   }
 

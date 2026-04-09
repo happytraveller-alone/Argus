@@ -236,12 +236,11 @@ function getAgentTaskDefectSummaryStats(
 	task:
 		| Pick<
 				AgentTask,
-				| "defect_summary"
-				| "verified_count"
-				| "verified_critical_count"
-				| "verified_high_count"
-				| "verified_medium_count"
-				| "verified_low_count"
+				| "findings_count"
+				| "critical_count"
+				| "high_count"
+				| "medium_count"
+				| "low_count"
 		  >
 		| null,
 ): {
@@ -251,23 +250,12 @@ function getAgentTaskDefectSummaryStats(
 	low: number;
 	total: number;
 } {
-	const severityCounts = task?.defect_summary?.severity_counts;
-	if (severityCounts) {
-		return {
-			critical: toNonNegativeInt(severityCounts.critical),
-			high: toNonNegativeInt(severityCounts.high),
-			medium: toNonNegativeInt(severityCounts.medium),
-			low: toNonNegativeInt(severityCounts.low),
-			total: toNonNegativeInt(task?.defect_summary?.total_count),
-		};
-	}
-
 	return {
-		critical: toNonNegativeInt(task?.verified_critical_count),
-		high: toNonNegativeInt(task?.verified_high_count),
-		medium: toNonNegativeInt(task?.verified_medium_count),
-		low: toNonNegativeInt(task?.verified_low_count),
-		total: toNonNegativeInt(task?.verified_count),
+		critical: toNonNegativeInt(task?.critical_count),
+		high: toNonNegativeInt(task?.high_count),
+		medium: toNonNegativeInt(task?.medium_count),
+		low: toNonNegativeInt(task?.low_count),
+		total: toNonNegativeInt(task?.findings_count),
 	};
 }
 

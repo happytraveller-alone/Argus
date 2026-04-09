@@ -1724,7 +1724,10 @@ async def generate_audit_report(
                     "code_snippet": (
                         f.code_snippet if export_options.include_code_snippets else None
                     ),
-                    "is_verified": f.is_verified,
+                    "is_verified": (
+                        export_statuses.get(str(f.id), "pending")
+                        == FindingStatus.VERIFIED
+                    ),
                     "has_poc": f.has_poc,
                     "poc_code": f.poc_code,
                     "poc_description": f.poc_description,
@@ -1903,7 +1906,15 @@ async def generate_audit_report(
             md_lines.append("")
 
             for i, f in enumerate(severity_findings, 1):
-                verified_badge = "[已验证]" if f.is_verified else "[未验证]"
+                export_status = export_statuses.get(
+                    str(getattr(f, "id", "") or ""),
+                    "pending",
+                )
+                verified_badge = (
+                    "[已验证]"
+                    if export_status == FindingStatus.VERIFIED
+                    else "[未验证]"
+                )
                 poc_badge = " [含 Mock PoC]" if f.has_poc else ""
 
                 md_lines.append(

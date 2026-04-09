@@ -30,6 +30,7 @@ export interface RealtimeFindingLike {
   fingerprint?: string | null;
   timestamp?: string | null;
   status?: string | null;
+  verification_status?: string | null;
   verdict?: string | null;
   authenticity?: string | null;
   detailMode?: "detail" | "false_positive_reason" | null;
@@ -348,23 +349,16 @@ function hasDisplayableConfidence(item: RealtimeFindingLike): boolean {
   return typeof item.confidence === "number" && Number.isFinite(item.confidence);
 }
 
-export function isFalsePositiveFinding(item: RealtimeFindingLike): boolean {
-  const status = String(item.status || "").trim().toLowerCase();
-  const authenticity = String(item.authenticity || "").trim().toLowerCase();
-  const detailMode = String(item.detailMode || "").trim().toLowerCase();
-  const displaySeverity = String(item.display_severity || "").trim().toLowerCase();
+function normalizeFindingStatusToken(value: unknown): string {
+  return String(value || "").trim().toLowerCase().replace(/[-\s]+/g, "_");
+}
 
-  return (
-    status === "false_positive" ||
-    authenticity === "false_positive" ||
-    detailMode === "false_positive_reason" ||
-    displaySeverity === "invalid"
-  );
+export function isFalsePositiveFinding(item: RealtimeFindingLike): boolean {
+  return normalizeFindingStatusToken(item.status) === "false_positive";
 }
 
 export function isVerifiedFinding(item: RealtimeFindingLike): boolean {
-  if (item.is_verified) return true;
-  return String(item.verification_progress || "").trim().toLowerCase() === "verified";
+  return getAgentAuditFindingDisplayStatus(item) === "verified";
 }
 
 function normalizeSummarySeverity(
@@ -478,21 +472,9 @@ export function isVisibleManagedFinding(item: RealtimeFindingLike): boolean {
 export function getAgentAuditFindingDisplayStatus(
   item: RealtimeFindingLike,
 ): AgentAuditFindingDisplayStatus {
-  if (isFalsePositiveFinding(item)) return "false_positive";
-
-  const status = String(item.status || "").trim().toLowerCase();
-  const verificationProgress = String(item.verification_progress || "")
-    .trim()
-    .toLowerCase();
-
-  if (
-    item.is_verified ||
-    status === "verified" ||
-    verificationProgress === "verified"
-  ) {
-    return "verified";
-  }
-
+  const status = normalizeFindingStatusToken(item.status);
+  if (status === "false_positive") return "false_positive";
+  if (status === "verified") return "verified";
   return "open";
 }
 

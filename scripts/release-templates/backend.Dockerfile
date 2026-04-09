@@ -1,5 +1,5 @@
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
-ARG UV_IMAGE=ghcr.nju.edu.cn/astral-sh/uv:latest
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
 ARG BACKEND_APT_MIRROR_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_SECURITY_PRIMARY=mirrors.aliyun.com
 ARG BACKEND_APT_MIRROR_FALLBACK=deb.debian.org
@@ -33,15 +33,15 @@ RUN set -eux; \
   printf 'deb https://%s/debian-security bookworm-security main\n' "${BACKEND_APT_SECURITY_PRIMARY}" >> /etc/apt/sources.list || true; \
   apt-get update || true; \
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    libffi-dev \
-    libpq-dev || \
+  build-essential \
+  gcc \
+  libffi-dev \
+  libpq-dev || \
   (rm -f /etc/apt/sources.list && \
-   printf 'deb https://%s/debian bookworm main\n' "${BACKEND_APT_MIRROR_FALLBACK}" > /etc/apt/sources.list && \
-   printf 'deb https://%s/debian-security bookworm-security main\n' "${BACKEND_APT_SECURITY_FALLBACK}" >> /etc/apt/sources.list && \
-   apt-get update && \
-   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential gcc libffi-dev libpq-dev); \
+  printf 'deb https://%s/debian bookworm main\n' "${BACKEND_APT_MIRROR_FALLBACK}" > /etc/apt/sources.list && \
+  printf 'deb https://%s/debian-security bookworm-security main\n' "${BACKEND_APT_SECURITY_FALLBACK}" >> /etc/apt/sources.list && \
+  apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential gcc libffi-dev libpq-dev); \
   rm -rf /var/lib/apt/lists/*
 
 COPY --from=uvbin /uv /usr/local/bin/uv
@@ -50,17 +50,17 @@ COPY backend/pyproject.toml backend/uv.lock backend/requirements-heavy.txt ./
 RUN set -eux; \
   uv venv "${BACKEND_VENV_PATH}"; \
   env \
-    VIRTUAL_ENV="${BACKEND_VENV_PATH}" \
-    PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
-    UV_INDEX_URL="${BACKEND_PYPI_INDEX_PRIMARY}" \
-    PIP_INDEX_URL="${BACKEND_PYPI_INDEX_PRIMARY}" \
-    uv sync --active --frozen --no-dev || \
+  VIRTUAL_ENV="${BACKEND_VENV_PATH}" \
+  PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
+  UV_INDEX_URL="${BACKEND_PYPI_INDEX_PRIMARY}" \
+  PIP_INDEX_URL="${BACKEND_PYPI_INDEX_PRIMARY}" \
+  uv sync --active --frozen --no-dev || \
   env \
-    VIRTUAL_ENV="${BACKEND_VENV_PATH}" \
-    PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
-    UV_INDEX_URL="${BACKEND_PYPI_INDEX_FALLBACK}" \
-    PIP_INDEX_URL="${BACKEND_PYPI_INDEX_FALLBACK}" \
-    uv sync --active --frozen --no-dev
+  VIRTUAL_ENV="${BACKEND_VENV_PATH}" \
+  PATH="${BACKEND_VENV_PATH}/bin:${PATH}" \
+  UV_INDEX_URL="${BACKEND_PYPI_INDEX_FALLBACK}" \
+  PIP_INDEX_URL="${BACKEND_PYPI_INDEX_FALLBACK}" \
+  uv sync --active --frozen --no-dev
 
 FROM ${DOCKERHUB_LIBRARY_MIRROR}/python:3.11-slim AS runtime-release
 
@@ -88,18 +88,18 @@ RUN set -eux; \
   printf 'deb https://%s/debian-security bookworm-security main\n' "${BACKEND_APT_SECURITY_PRIMARY}" >> /etc/apt/sources.list || true; \
   apt-get update || true; \
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    libpq5 \
-    libffi8 \
-    libcairo2 \
-    libpango-1.0-0 \
-    libgdk-pixbuf-2.0-0 \
-    shared-mime-info \
-    fonts-dejavu-core || \
+  libpq5 \
+  libffi8 \
+  libcairo2 \
+  libpango-1.0-0 \
+  libgdk-pixbuf-2.0-0 \
+  shared-mime-info \
+  fonts-dejavu-core || \
   (rm -f /etc/apt/sources.list && \
-   printf 'deb https://%s/debian bookworm main\n' "${BACKEND_APT_MIRROR_FALLBACK}" > /etc/apt/sources.list && \
-   printf 'deb https://%s/debian-security bookworm-security main\n' "${BACKEND_APT_SECURITY_FALLBACK}" >> /etc/apt/sources.list && \
-   apt-get update && \
-   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libpq5 libffi8 libcairo2 libpango-1.0-0 libgdk-pixbuf-2.0-0 shared-mime-info fonts-dejavu-core); \
+  printf 'deb https://%s/debian bookworm main\n' "${BACKEND_APT_MIRROR_FALLBACK}" > /etc/apt/sources.list && \
+  printf 'deb https://%s/debian-security bookworm-security main\n' "${BACKEND_APT_SECURITY_FALLBACK}" >> /etc/apt/sources.list && \
+  apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libpq5 libffi8 libcairo2 libpango-1.0-0 libgdk-pixbuf-2.0-0 shared-mime-info fonts-dejavu-core); \
   rm -rf /var/lib/apt/lists/*; \
   mkdir -p /app/uploads/zip_files /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/runtime/xdg-config
 

@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 import sys
 import types
 
@@ -15,6 +15,7 @@ if "docker" not in sys.modules:
     sys.modules["docker"] = docker_stub
 
 from app.api.v1.endpoints.agent_tasks_reporting import generate_audit_report
+from app.api.v1.endpoints import agent_tasks_routes_results as results_module
 from app.api.v1.endpoints.agent_tasks_routes_results import update_finding_status
 from app.models.agent_task import AgentFinding, AgentTask, FindingStatus, VulnerabilitySeverity
 from app.models.project import Project
@@ -32,7 +33,9 @@ class _ScalarListResult:
 
 
 @pytest.mark.asyncio
-async def test_update_finding_status_marks_finding_verified_and_recomputes_task_counters():
+async def test_update_finding_status_marks_finding_verified_and_recomputes_task_counters(
+    monkeypatch,
+):
     task = SimpleNamespace(
         id="task-1",
         project_id="project-1",
@@ -76,6 +79,8 @@ async def test_update_finding_status_marks_finding_verified_and_recomputes_task_
     db.get = AsyncMock(side_effect=get_side_effect)
     db.execute = AsyncMock(return_value=_ScalarListResult([finding]))
     db.commit = AsyncMock()
+    enqueue = Mock()
+    monkeypatch.setattr(results_module.project_metrics_refresher, "enqueue", enqueue)
 
     result = await update_finding_status(
         task_id=task.id,
@@ -97,6 +102,7 @@ async def test_update_finding_status_marks_finding_verified_and_recomputes_task_
     assert task.verified_count == 1
     assert task.false_positive_count == 0
     assert task.high_count == 1
+    enqueue.assert_called_once_with(task.project_id)
 
 
 @pytest.mark.asyncio
