@@ -94,6 +94,40 @@ class TestFileTools:
         assert "config/settings.py" in str(result.data)
 
     @pytest.mark.asyncio
+    async def test_file_search_tool_offset_exhaustion_does_not_trigger_scope_fallback(self, temp_project_dir):
+        """测试文件搜索工具 - directory 内已有命中但被 offset 翻完时，不应错误回退到项目根目录"""
+        src_dir = os.path.join(temp_project_dir, "src")
+        config_dir = os.path.join(temp_project_dir, "config")
+        os.makedirs(src_dir, exist_ok=True)
+        os.makedirs(config_dir, exist_ok=True)
+        keyword = "OFFSET_ONLY_MARKER"
+
+        with open(os.path.join(src_dir, "offset_hits.py"), "w", encoding="utf-8") as f:
+            f.write(
+                f"value = '{keyword}'\n"
+                "other = 1\n"
+                f"another = '{keyword}'\n"
+            )
+        with open(os.path.join(config_dir, "fallback_hit.py"), "w", encoding="utf-8") as f:
+            f.write(f"value = '{keyword}'\n")
+
+        tool = FileSearchTool(temp_project_dir)
+        result = await tool.execute(
+            keyword=keyword,
+            file_pattern="*.py",
+            directory="src",
+            offset=2,
+            max_results=10,
+        )
+
+        assert result.success is True
+        assert result.metadata.get("scope_fallback_applied") is False
+        assert result.metadata.get("effective_directory") == "src"
+        assert result.metadata.get("match_count_raw") == 2
+        assert result.metadata.get("match_count_returned") == 0
+        assert "config/fallback_hit.py" not in str(result.data)
+
+    @pytest.mark.asyncio
     async def test_file_search_tool_single_file_mode_with_file_path(self, temp_project_dir):
         """测试文件搜索工具 - 支持 file_path 单文件搜索"""
         tool = FileSearchTool(temp_project_dir)

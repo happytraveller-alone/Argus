@@ -70,7 +70,11 @@ async def test_file_search_tool_preserves_grep_command_chain(temp_project_dir):
         }
     ]
 
-    with patch.object(tool, "_run_search_engines_sync", return_value=(mocked_results, 1, "grep")):
+    with patch.object(
+        tool,
+        "_run_search_engines_sync",
+        return_value=(mocked_results, 1, {"src/cmd_vuln.py": 1}, "grep"),
+    ):
         result = await tool.execute(keyword="os.system", directory="src")
 
     assert result.success is True

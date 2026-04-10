@@ -162,9 +162,12 @@ class UpdateReconFileTreeTool(AgentTool):
                     success=False,
                     error="action=build 时必须提供非空的 files 列表",
                 )
+            previous_tree = set(self._tree)
+            previous_done = set(self._done)
             self._tree = [_normalize_path(f) for f in files if str(f or "").strip()]
             self._tree = [f for f in self._tree if f]  # 过滤空路径
-            self._done = set()
+            preserved_done = {item for item in previous_done if item in previous_tree and item in self._tree}
+            self._done = preserved_done
 
             markdown = _build_markdown(self._tree, self._done)
             self._save_markdown(markdown)

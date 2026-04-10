@@ -211,6 +211,24 @@ def _install_dispatch_mock(orch, vuln_queue, findings_to_push: Optional[List] = 
 
 
 class TestAuditWorkflowEnginePhases:
+    def test_recon_phase_context_skips_bl_fallback_when_bl_recon_is_available(
+        self, orchestrator_with_queues
+    ):
+        """若 workflow 已启用 BL Recon，则常规 Recon 上下文不应强制追加业务逻辑兜底说明。"""
+        orch, recon_q, vuln_q = orchestrator_with_queues
+        orch.sub_agents["business_logic_recon"] = MagicMock()
+
+        engine = AuditWorkflowEngine(
+            recon_q,
+            vuln_q,
+            TASK_ID,
+            orch,
+            business_logic_queue_service=MagicMock(),
+        )
+
+        assert engine._build_recon_phase_context("已有上下文") == "已有上下文"
+        assert engine._build_recon_phase_context("") == ""
+
     @pytest.mark.asyncio
     async def test_full_workflow_phases(self, orchestrator_with_queues):
         """完整路径：Recon → Analysis（1 风险点）→ Verification（1 漏洞）→ COMPLETE"""
@@ -241,6 +259,22 @@ class TestAuditWorkflowEnginePhases:
 
         recon_calls = [c for c in calls if c["agent"] == "recon"]
         assert len(recon_calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_recon_first_attempt_includes_bl_fallback_context_when_bl_recon_missing(
+        self, orchestrator_with_queues
+    ):
+        """未配置 BL Recon 时，workflow 应显式要求 regular recon 覆盖业务逻辑候选。"""
+        orch, recon_q, vuln_q = orchestrator_with_queues
+        recon_q.enqueue(TASK_ID, _make_risk_point("seed.py", 12))
+        calls = _install_dispatch_mock(orch, vuln_q)
+
+        engine = AuditWorkflowEngine(recon_q, vuln_q, TASK_ID, orch)
+        await engine.run({}, {}, "/tmp", TASK_ID)
+
+        recon_call = next(c for c in calls if c["agent"] == "recon")
+        assert "BusinessLogicReconAgent" in recon_call.get("context", "")
+        assert "IDOR" in recon_call.get("context", "")
 
     @pytest.mark.asyncio
     async def test_hybrid_with_bootstrap_candidates_continues_recon_and_analysis(
@@ -418,6 +452,58 @@ class TestAuditWorkflowEnginePhases:
         assert "上一轮 Recon 未向 Recon 队列产出任何风险点" in recon_calls[1]["context"]
         assert len(analysis_calls) == 1
         assert state.analysis_risk_points_total == 1
+
+    @pytest.mark.asyncio
+    async def test_recon_llm_dedup_prompt_keeps_structural_fields_visible(
+        self, orchestrator_with_queues
+    ):
+        """Recon workflow 级 LLM 去重必须看到结构化字段，避免误删同一行的不同风险点。"""
+        orch, recon_q, vuln_q = orchestrator_with_queues
+        recon_q.enqueue(
+            TASK_ID,
+            {
+                "file_path": "src/auth.py",
+                "line_start": 42,
+                "description": "User input reaches SQL query",
+                "severity": "high",
+                "vulnerability_type": "sql_injection",
+                "entry_function": "login",
+                "input_surface": "req.body.username",
+                "trust_boundary": "HTTP -> auth -> SQL",
+                "source": "req.body.username",
+                "sink": "cursor.execute(sql)",
+            },
+        )
+        recon_q.enqueue(
+            TASK_ID,
+            {
+                "file_path": "src/auth.py",
+                "line_start": 42,
+                "description": "User input reaches SQL query",
+                "severity": "high",
+                "vulnerability_type": "sql_injection",
+                "entry_function": "reset_password",
+                "input_surface": "req.body.email",
+                "trust_boundary": "HTTP -> reset -> SQL",
+                "source": "req.body.email",
+                "sink": "cursor.execute(reset_sql)",
+            },
+        )
+        orch.stream_llm_call = AsyncMock(
+            return_value=('{"duplicates": [], "explanation": "none"}', 0)
+        )
+
+        engine = AuditWorkflowEngine(recon_q, vuln_q, TASK_ID, orch)
+        await engine._dedup_recon_risk_queue(TASK_ID)
+
+        prompt = orch.stream_llm_call.await_args.args[0][0]["content"]
+        assert "entry_function" in prompt
+        assert "input_surface" in prompt
+        assert "trust_boundary" in prompt
+        assert "source" in prompt
+        assert "sink" in prompt
+        assert "默认视为不同风险点" in prompt
+        assert recon_q.size(TASK_ID) == 2
 
     @pytest.mark.asyncio
     async def test_recon_stops_retrying_after_max_empty_attempts(self, orchestrator_with_queues):

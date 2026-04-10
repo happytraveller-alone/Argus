@@ -31,8 +31,26 @@ class RedisReconRiskQueue:
     def _fingerprint(risk_point: Dict[str, Any]) -> str:
         file_path = str(risk_point.get("file_path") or "").strip().lower()
         line_start = int(risk_point.get("line_start") or 0)
-        description = str(risk_point.get("description") or "").strip().lower()
-        return f"{file_path}|{line_start}|{description}"
+        vuln_type = str(risk_point.get("vulnerability_type") or "").strip().lower()
+        entry_function = str(risk_point.get("entry_function") or "").strip().lower()
+        source = str(risk_point.get("source") or "").strip().lower()
+        sink = str(risk_point.get("sink") or "").strip().lower()
+        input_surface = str(risk_point.get("input_surface") or "").strip().lower()
+        trust_boundary = str(risk_point.get("trust_boundary") or "").strip().lower()
+        description = " ".join(str(risk_point.get("description") or "").strip().lower().split())
+        return "|".join(
+            [
+                file_path,
+                str(line_start),
+                vuln_type,
+                entry_function,
+                source,
+                sink,
+                input_surface,
+                trust_boundary,
+                description,
+            ]
+        )
 
     def enqueue(self, task_id: str, risk_point: Dict[str, Any]) -> bool:
         try:
@@ -181,8 +199,26 @@ class InMemoryReconRiskQueue:
     def _fingerprint(risk_point: Dict[str, Any]) -> str:
         file_path = str(risk_point.get("file_path") or "").strip().lower()
         line_start = int(risk_point.get("line_start") or 0)
-        description = str(risk_point.get("description") or "").strip().lower()
-        return f"{file_path}|{line_start}|{description}"
+        vuln_type = str(risk_point.get("vulnerability_type") or "").strip().lower()
+        entry_function = str(risk_point.get("entry_function") or "").strip().lower()
+        source = str(risk_point.get("source") or "").strip().lower()
+        sink = str(risk_point.get("sink") or "").strip().lower()
+        input_surface = str(risk_point.get("input_surface") or "").strip().lower()
+        trust_boundary = str(risk_point.get("trust_boundary") or "").strip().lower()
+        description = " ".join(str(risk_point.get("description") or "").strip().lower().split())
+        return "|".join(
+            [
+                file_path,
+                str(line_start),
+                vuln_type,
+                entry_function,
+                source,
+                sink,
+                input_surface,
+                trust_boundary,
+                description,
+            ]
+        )
 
     def enqueue(self, task_id: str, risk_point: Dict[str, Any]) -> bool:
         try:

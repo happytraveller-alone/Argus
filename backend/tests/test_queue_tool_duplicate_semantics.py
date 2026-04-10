@@ -74,6 +74,23 @@ async def test_push_risk_points_batch_reports_duplicate_count():
 
 
 @pytest.mark.asyncio
+async def test_recon_queue_keeps_structurally_distinct_points_on_same_line():
+    queue = InMemoryReconRiskQueue()
+    tool = PushRiskPointsBatchToQueueTool(queue_service=queue, task_id=TASK_ID)
+    base = _make_recon_point()
+
+    first = dict(base, entry_function="login", trust_boundary="HTTP -> auth -> SQL")
+    second = dict(base, entry_function="admin_search", trust_boundary="HTTP -> admin -> SQL")
+
+    result = await tool.execute(risk_points=[first, second])
+
+    assert result.success is True
+    assert result.data["enqueued"] == 2
+    assert result.data["duplicate_skipped"] == 0
+    assert result.data["queue_size"] == 2
+
+
+@pytest.mark.asyncio
 async def test_push_bl_risk_point_duplicate_is_idempotent_success():
     queue = InMemoryBusinessLogicRiskQueue()
     tool = PushBLRiskPointToQueueTool(queue_service=queue, task_id=TASK_ID)

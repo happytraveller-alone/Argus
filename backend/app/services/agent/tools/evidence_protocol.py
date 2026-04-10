@@ -198,7 +198,7 @@ def validate_evidence_metadata(
         if render_type == "search_hits":
             if not str(entry.get("file_path") or "").strip():
                 raise ValueError("entry.file_path is required")
-            if not isinstance(entry.get("match_line"), int):
+            if entry.get("match_kind") != "file_summary" and not isinstance(entry.get("match_line"), int):
                 raise ValueError("entry.match_line is required")
             if "match_text" not in entry:
                 raise ValueError("entry.match_text is required")

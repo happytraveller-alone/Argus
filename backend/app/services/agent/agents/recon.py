@@ -15,7 +15,7 @@ import ast
 import json
 import logging
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set, Tuple
 from dataclasses import dataclass
 
 from app.services.json_safe import dump_json_safe
@@ -75,8 +75,6 @@ WEB_VULNERABILITY_FOCUS_DEFAULT = [
     "command_injection",
     "path_traversal",
     "ssrf",
-    "idor",
-    "auth_bypass",
     "csrf",
     "open_redirect",
     "ssti",
@@ -87,6 +85,7 @@ WEB_VULNERABILITY_FOCUS_DEFAULT = [
 RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项目**进行全面扫描，**识别所有潜在的高风险代码区域**，并将每个风险点通过 `push_risk_point_to_queue` 推入队列，供后续分析 Agent 验证。
 
 在侦察输出中，必须显式记录 `input_surfaces`、`trust_boundaries` 与 `target_files`，并用这些字段约束后续分析范围。
+常规 Recon 重点关注代码安全风险；IDOR、状态机绕过、金额篡改、权限提升等业务逻辑问题默认由 BusinessLogicReconAgent 负责，除非白名单中不存在对应业务逻辑工具/队列。
 
 ═══════════════════════════════════════════════════════════════
 
@@ -104,11 +103,12 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 ## 关键约束（必须严格遵守）
 
 1. **禁止自行分析可行性** —— 只需标记"可疑区域"，准确描述风险即可（如"此处使用了 eval，可能导致代码注入"），具体验证由后续 Agent 完成
-2. **必须基于实际代码** —— 只推送通过 `get_code_window` 或 `get_file_outline` 确认存在的代码位置，**杜绝幻觉**
+2. **必须基于实际代码** —— 只推送通过 `get_code_window`、`get_file_outline`、`get_function_summary`、`get_symbol_body`、`locate_enclosing_function` 等工具确认存在的代码位置，**杜绝幻觉**
 3. **必须覆盖关键目录** —— 至少遍历 `src/`, `app/`, `lib/`, `api/`, `utils/`, `config/`, `handlers/`, `controllers/`, `routes/`, `middleware/`, `services/`, `models/`
 4. **必须先建模再下钻** —— 第一轮必须先使用 `list_files` 查看项目根目录；随后继续对关键目录执行 `list_files`，建立项目地图（主要模块、入口目录、配置文件、关键语言/框架文件）
 5. **必须优先搜索再确认** —— 完成项目建模后，定位风险点时优先使用 `search_code` 做全局/语义搜索；只有命中候选位置后，才使用 `get_code_window` 或 `get_file_outline` 读取上下文、确认行号和结构
 6. **必须使用工具** —— 推送前必须通过 `list_files`, `search_code`, `get_code_window`, `get_file_outline` 等工具获取真实项目信息，在指定文件或者目录时，需要使用相对路径（如 `src/auth/login.py`），禁止使用绝对路径或者假设路径
+7. **必须维护覆盖状态** —— 若白名单提供 `update_recon_file_tree`，在建立文件地图后同步构建侦查文件树，并在完成某个文件确认后标记已侦查，避免重复查看同一小片区域
 
 ## 侦查完成条件（关键）
 
@@ -117,12 +117,13 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 3. **对有进一步审计价值的可疑点，宁可降低 `confidence` 也应入队**，不要因把握不满 100% 而省略
 4. **只有在完成关键覆盖并能说明已检查证据后，才允许空结果收尾**
 5. **每次侦查都要尽量覆盖：入口点、input_surfaces、trust_boundaries、敏感 sink、target_files**
+6. **输出的 `risk_points` 必须尽量结构化** —— 推荐补充 `entry_function`、`input_surface`、`trust_boundary`、`source`、`sink`、`related_symbols`、`evidence_refs`
 
 ## 工具使用顺序（强制）
 
 1. 先用 `list_files` 对项目根目录和关键子目录建模，形成项目地图
 2. 再优先用 `search_code` 围绕入口点、高风险模式、敏感 sink 做全局搜索
-3. 最后用 `get_code_window` / `get_file_outline` 对 `search_code` 命中的候选位置做确认
+3. 最后用 `get_code_window` / `get_file_outline` / `get_function_summary` / `get_symbol_body` / `locate_enclosing_function` 对 `search_code` 命中的候选位置做确认
 4. 确认后立即调用 `push_risk_point_to_queue` 或 `push_risk_points_to_queue`
 
 ## 风险点入队最小要求
@@ -134,6 +135,15 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
 - `vulnerability_type`
 - `severity`
 - `confidence`
+
+推荐尽量补充：
+- `entry_function`
+- `input_surface`
+- `trust_boundary`
+- `source`
+- `sink`
+- `related_symbols`
+- `evidence_refs`
 
 如果同一轮识别到多个风险点，优先使用批量入队，避免只停留在技术栈/目录总结层面。
 
@@ -210,8 +220,9 @@ RECON_SYSTEM_PROMPT = """你是 VulHunter 的侦察 Agent，负责对**完整项
    - "哪里调用了系统命令或 subprocess？"
    - "TypeScript 项目里哪里存在 `pages/api/*.ts`、`app/api/**/route.ts`、`*.controller.ts`、`*.resolver.ts`、`middleware.ts`、`server action`、`consumer`、`job handler`？"
    - "哪里使用了 `new Function`、`vm.runIn*`、`child_process.exec/spawn/execSync`、`prisma.$queryRaw*`、`typeorm.query`、`sequelize.query`、`dangerouslySetInnerHTML`？"
+   - 如果热门关键词命中过多，可用 `group_by_file=true` / `count_only=true` 先看分布，再结合 `directory`、`file_pattern`、`offset` 翻页收敛，不要只看前 10 条
 6. 对尚未覆盖的关键代码目录，继续使用 `list_files` 获取文件列表，补齐搜索盲区
-7. 对重点文件（路由、控制器、工具类、中间件），先使用 `get_file_outline` 获取结构，再用 `get_code_window` 读取关键位置
+7. 对重点文件（路由、控制器、工具类、中间件），先使用 `get_file_outline` 获取结构，再用 `get_code_window` 读取关键位置；必要时补充 `get_function_summary` / `get_symbol_body` / `locate_enclosing_function`
 8. **全局模式搜索**：持续优先使用 `search_code` 对特定危险函数进行项目级搜索（`eval`, `exec`, `subprocess`, `execute`, `raw`, `pickle.loads` 等）
 9. **即时推送**：每当发现符合高风险模式的具体代码行，立即构造风险点并调用 `push_risk_point_to_queue`；若读取同一文件后发现多个风险点，可改用 `push_risk_points_to_queue` 批量入队，减少调用轮次
 
@@ -371,6 +382,15 @@ class ReconAgent(BaseAgent):
         self._conversation_history: List[Dict[str, str]] = []
         self._steps: List[ReconStep] = []
         self._recon_queue_snapshot: Dict[str, Any] = {}
+        self._risk_points_pushed: List[Dict[str, Any]] = []
+        self._risk_point_identities: Set[Tuple[str, int, str, str, str, str, str, str, str]] = set()
+        self._observed_input_surfaces: List[str] = []
+        self._observed_trust_boundaries: List[str] = []
+        self._observed_target_files: List[str] = []
+        self._coverage_directories: List[str] = []
+        self._coverage_files_discovered: List[str] = []
+        self._coverage_files_read: List[str] = []
+        self._coverage_tracker_file_count: int = 0
     
     def _parse_llm_response(self, response: str) -> ReconStep:
         """解析 LLM 响应（共享 ReAct 解析器）"""
@@ -394,18 +414,95 @@ class ReconAgent(BaseAgent):
             ]
         return step
 
+    @staticmethod
+    def _normalize_string_list(value: Any, *, limit: int = 12) -> List[str]:
+        if value in (None, "", [], {}):
+            return []
+        candidates = value if isinstance(value, list) else [value]
+        normalized: List[str] = []
+        for item in candidates:
+            text = str(item or "").strip()
+            if not text or text in normalized:
+                continue
+            normalized.append(text[:300])
+            if len(normalized) >= limit:
+                break
+        return normalized
+
+    @staticmethod
+    def _safe_positive_int(value: Any) -> Optional[int]:
+        try:
+            parsed = int(value)
+        except Exception:
+            return None
+        return parsed if parsed > 0 else None
+
+    @staticmethod
+    def _normalize_risk_point_text(value: Any) -> str:
+        return " ".join(str(value or "").strip().lower().split())
+
+    def _risk_point_identity(self, point: Dict[str, Any]) -> Tuple[str, int, str, str, str, str, str, str, str]:
+        return (
+            str(point.get("file_path") or "").strip().lower(),
+            int(point.get("line_start") or 1),
+            str(point.get("vulnerability_type") or "potential_issue").strip().lower(),
+            str(point.get("entry_function") or "").strip().lower(),
+            str(point.get("source") or "").strip().lower(),
+            str(point.get("sink") or "").strip().lower(),
+            str(point.get("input_surface") or "").strip().lower(),
+            str(point.get("trust_boundary") or "").strip().lower(),
+            self._normalize_risk_point_text(point.get("description")),
+        )
+
+    def _remember_input_surface(self, value: Any) -> None:
+        for item in self._normalize_string_list(value, limit=8):
+            self._append_unique(self._observed_input_surfaces, item)
+
+    def _remember_trust_boundary(self, value: Any) -> None:
+        for item in self._normalize_string_list(value, limit=8):
+            self._append_unique(self._observed_trust_boundaries, item)
+
+    def _remember_target_file(self, value: Any) -> None:
+        for item in self._normalize_string_list(value, limit=32):
+            self._append_unique(self._observed_target_files, item)
+
+    def _remember_coverage_directory(self, value: Any) -> None:
+        raw = str(value or "").strip()
+        if not raw:
+            return
+        normalized = raw.replace("\\", "/").strip() or "."
+        self._append_unique(self._coverage_directories, normalized)
+
+    def _remember_discovered_file(self, value: Any) -> None:
+        raw = str(value or "").strip()
+        if not raw:
+            return
+        normalized = raw.replace("\\", "/").strip()
+        self._append_unique(self._coverage_files_discovered, normalized)
+        self._remember_target_file(normalized)
+
+    def _remember_read_file(self, value: Any) -> None:
+        raw = str(value or "").strip()
+        if not raw:
+            return
+        normalized = raw.replace("\\", "/").strip()
+        self._append_unique(self._coverage_files_read, normalized)
+        self._remember_target_file(normalized)
+
     def _normalize_risk_point(self, candidate: Any) -> Optional[Dict[str, Any]]:
         if not isinstance(candidate, dict):
             return None
         file_path = str(candidate.get("file_path") or "").strip()
         if not file_path:
             return None
-        try:
-            line_start = int(candidate.get("line_start") or candidate.get("line") or 1)
-        except Exception:
+        line_start = self._safe_positive_int(candidate.get("line_start"))
+        if line_start is None:
+            line_start = self._safe_positive_int(candidate.get("line"))
+        if line_start is None:
             line_start = 1
-        if line_start <= 0:
-            line_start = 1
+        line_end = self._safe_positive_int(candidate.get("line_end"))
+        if line_end is not None and line_end < line_start:
+            line_end = line_start
         description = str(candidate.get("description") or candidate.get("title") or "").strip()
         if not description:
             description = f"潜在风险点，来自 {file_path}:{line_start}"
@@ -413,12 +510,11 @@ class ReconAgent(BaseAgent):
         if severity not in {"critical", "high", "medium", "low", "info"}:
             severity = "high"
         vuln_type = str(candidate.get("vulnerability_type") or candidate.get("type") or "potential_issue").lower()
-        confidence = None
         try:
             confidence = float(candidate.get("confidence") or 0.6)
         except Exception:
             confidence = 0.6
-        return {
+        normalized = {
             "file_path": file_path,
             "line_start": line_start,
             "description": description,
@@ -426,6 +522,27 @@ class ReconAgent(BaseAgent):
             "vulnerability_type": vuln_type,
             "confidence": max(0.0, min(1.0, confidence)),
         }
+        if line_end is not None:
+            normalized["line_end"] = line_end
+
+        for field in ("entry_function", "input_surface", "trust_boundary", "source", "sink", "context"):
+            value = str(candidate.get(field) or "").strip()
+            if value:
+                normalized[field] = value[:500]
+
+        related_symbols = self._normalize_string_list(candidate.get("related_symbols"), limit=12)
+        if related_symbols:
+            normalized["related_symbols"] = related_symbols
+
+        evidence_refs = self._normalize_string_list(candidate.get("evidence_refs"), limit=12)
+        if evidence_refs:
+            normalized["evidence_refs"] = evidence_refs
+
+        target_files = self._normalize_string_list(candidate.get("target_files"), limit=20)
+        if target_files:
+            normalized["target_files"] = target_files
+
+        return normalized
 
     def _parse_risk_area(self, area: str) -> Optional[Dict[str, Any]]:
         text = str(area or "").strip()
@@ -469,6 +586,16 @@ class ReconAgent(BaseAgent):
             return "path_traversal"
         if "ssrf" in lowered:
             return "ssrf"
+        if "csrf" in lowered:
+            return "csrf"
+        if "redirect" in lowered:
+            return "open_redirect"
+        if any(keyword in lowered for keyword in ["template", "jinja", "ssti"]):
+            return "ssti"
+        if "xxe" in lowered or "xml" in lowered:
+            return "xxe"
+        if any(keyword in lowered for keyword in ["pickle", "deserialize", "yaml.load", "marshal"]):
+            return "deserialization"
         if any(keyword in lowered for keyword in ["secret", "key", "token", "env"]):
             return "hardcoded_secret"
         return "potential_issue"
@@ -502,27 +629,240 @@ class ReconAgent(BaseAgent):
     def _ensure_risk_points(self, result: Dict[str, Any]) -> List[Dict[str, Any]]:
         points = result.get("risk_points")
         if isinstance(points, list) and points:
-            return points
+            normalized_points: List[Dict[str, Any]] = []
+            for item in points:
+                normalized = self._normalize_risk_point(item)
+                if normalized:
+                    normalized_points.append(normalized)
+            result["risk_points"] = normalized_points
+            return normalized_points
         extracted = self._extract_risk_points(result)
         result["risk_points"] = extracted
         return extracted
 
+    def _track_risk_point(self, candidate: Any) -> Optional[Dict[str, Any]]:
+        normalized = self._normalize_risk_point(candidate)
+        if not normalized:
+            return None
+        identity = self._risk_point_identity(normalized)
+        if identity in self._risk_point_identities:
+            return normalized
+        self._risk_point_identities.add(identity)
+        self._risk_points_pushed.append(normalized)
+        self._remember_read_file(normalized.get("file_path"))
+        self._remember_input_surface(normalized.get("input_surface"))
+        self._remember_trust_boundary(normalized.get("trust_boundary"))
+        for target_file in normalized.get("target_files", []) or []:
+            self._remember_target_file(target_file)
+        return normalized
+
+    def _merge_risk_points(self, *sources: Any) -> List[Dict[str, Any]]:
+        merged: List[Dict[str, Any]] = []
+        seen: Set[Tuple[str, int, str, str, str, str, str, str, str]] = set()
+        for source in sources:
+            if not isinstance(source, list):
+                continue
+            for candidate in source:
+                normalized = self._normalize_risk_point(candidate)
+                if not normalized:
+                    continue
+                identity = self._risk_point_identity(normalized)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                merged.append(normalized)
+        return merged
+
+    def _build_coverage_summary(self) -> Dict[str, Any]:
+        return {
+            "directories_scanned": self._coverage_directories[:40],
+            "files_discovered": self._coverage_files_discovered[:400],
+            "files_read": self._coverage_files_read[:200],
+            "directories_scanned_count": len(self._coverage_directories),
+            "files_discovered_count": len(self._coverage_files_discovered),
+            "files_read_count": len(self._coverage_files_read),
+            "tracker_enabled": "update_recon_file_tree" in self.tools,
+            "tracker_built": self._coverage_tracker_file_count > 0,
+        }
+
+    def _apply_runtime_recon_state(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(result, dict):
+            return result
+
+        extracted_points = self._ensure_risk_points(result)
+        merged_points = self._merge_risk_points(self._risk_points_pushed, extracted_points)
+        result["risk_points"] = merged_points
+        result["risk_points_pushed"] = len(self._risk_points_pushed)
+        high_risk_areas = self._normalize_string_list(result.get("high_risk_areas"), limit=64)
+        for point in merged_points:
+            file_path = str(point.get("file_path") or "").strip()
+            if file_path and file_path not in high_risk_areas:
+                high_risk_areas.append(file_path)
+        result["high_risk_areas"] = high_risk_areas[:64]
+
+        input_surfaces = self._normalize_string_list(result.get("input_surfaces"), limit=24)
+        for item in self._observed_input_surfaces:
+            if item not in input_surfaces:
+                input_surfaces.append(item)
+        for point in merged_points:
+            self._remember_input_surface(point.get("input_surface"))
+            value = str(point.get("input_surface") or "").strip()
+            if value and value not in input_surfaces:
+                input_surfaces.append(value)
+        result["input_surfaces"] = input_surfaces[:24]
+
+        trust_boundaries = self._normalize_string_list(result.get("trust_boundaries"), limit=24)
+        for item in self._observed_trust_boundaries:
+            if item not in trust_boundaries:
+                trust_boundaries.append(item)
+        for point in merged_points:
+            self._remember_trust_boundary(point.get("trust_boundary"))
+            value = str(point.get("trust_boundary") or "").strip()
+            if value and value not in trust_boundaries:
+                trust_boundaries.append(value)
+        result["trust_boundaries"] = trust_boundaries[:24]
+
+        target_files = self._normalize_string_list(result.get("target_files"), limit=64)
+        for item in self._observed_target_files:
+            if item not in target_files:
+                target_files.append(item)
+        for point in merged_points:
+            for file_path in point.get("target_files", []) or []:
+                if file_path not in target_files:
+                    target_files.append(file_path)
+        result["target_files"] = target_files[:64]
+        result["coverage_summary"] = self._build_coverage_summary()
+        return result
+
+    async def _refresh_recon_file_tree(self, action: str, **payload: Any) -> None:
+        if "update_recon_file_tree" not in self.tools:
+            return
+        tool_input = {"action": action, **payload}
+        try:
+            await self.execute_tool("update_recon_file_tree", tool_input)
+        except Exception as exc:
+            logger.debug("[Recon] update_recon_file_tree failed: %s", exc)
+
+    async def _update_coverage_from_last_tool(self, action_name: str, action_input: Dict[str, Any]) -> None:
+        context = getattr(self, "_last_successful_tool_context", None) or {}
+        if str(context.get("tool_name") or "") != str(action_name or ""):
+            return
+        metadata = context.get("tool_metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        if action_name == "list_files":
+            directory = metadata.get("directory") or action_input.get("directory") or "."
+            self._remember_coverage_directory(directory)
+            for file_path in metadata.get("files", []) or []:
+                self._remember_discovered_file(file_path)
+            if self._coverage_files_discovered and len(self._coverage_files_discovered) != self._coverage_tracker_file_count:
+                await self._refresh_recon_file_tree(
+                    "build",
+                    files=sorted(self._coverage_files_discovered),
+                )
+                self._coverage_tracker_file_count = len(self._coverage_files_discovered)
+            return
+
+        if action_name == "search_code":
+            for directory in (
+                metadata.get("effective_directory"),
+                metadata.get("original_directory"),
+                action_input.get("directory"),
+            ):
+                self._remember_coverage_directory(directory)
+            return
+
+        if action_name in {
+            "get_code_window",
+            "get_file_outline",
+            "get_function_summary",
+            "get_symbol_body",
+            "locate_enclosing_function",
+        }:
+            file_path = metadata.get("file_path") or action_input.get("file_path") or action_input.get("path")
+            self._remember_read_file(file_path)
+            if file_path:
+                if file_path not in self._coverage_files_discovered:
+                    self._remember_discovered_file(file_path)
+                    await self._refresh_recon_file_tree(
+                        "build",
+                        files=sorted(self._coverage_files_discovered),
+                    )
+                    self._coverage_tracker_file_count = len(self._coverage_files_discovered)
+                await self._refresh_recon_file_tree("mark_done", file_path=file_path)
+
+    def _track_live_push_action(self, action_name: str, action_input: Dict[str, Any], observation: Any) -> None:
+        payload = self._parse_tool_output(observation)
+        if action_name == "push_risk_point_to_queue":
+            if isinstance(payload, dict) and payload.get("enqueue_status") in {"enqueued", "duplicate_skipped"}:
+                self._track_risk_point(action_input)
+            return
+        if action_name == "push_risk_points_to_queue":
+            if not isinstance(payload, dict):
+                return
+            candidates = action_input.get("risk_points") or []
+            if not isinstance(candidates, list) or not candidates:
+                return
+            try:
+                enqueued = max(0, int(payload.get("enqueued") or 0))
+            except Exception:
+                enqueued = 0
+            try:
+                duplicate_skipped = max(0, int(payload.get("duplicate_skipped") or 0))
+            except Exception:
+                duplicate_skipped = 0
+            if enqueued + duplicate_skipped < len(candidates):
+                return
+            for candidate in candidates:
+                self._track_risk_point(candidate)
+
     async def _push_risk_points_to_queue(self, risk_points: List[Dict[str, Any]]):
         if not risk_points:
             return
-        if "push_risk_point_to_queue" not in self.tools:
+        if "push_risk_point_to_queue" not in self.tools and "push_risk_points_to_queue" not in self.tools:
             return
-        for point in risk_points:
-            tool_input = {
-                "file_path": point["file_path"],
-                "line_start": point["line_start"],
-                "description": point["description"],
-                "severity": point.get("severity", "high"),
-                "confidence": point.get("confidence", 0.6),
-                "vulnerability_type": point.get("vulnerability_type", "potential_issue"),
-            }
+        pending_points = [
+            point
+            for point in self._merge_risk_points(risk_points)
+            if self._risk_point_identity(point) not in self._risk_point_identities
+        ]
+        if not pending_points:
+            return
+
+        if len(pending_points) > 1 and "push_risk_points_to_queue" in self.tools:
             try:
-                await self.execute_tool("push_risk_point_to_queue", tool_input)
+                batch_observation = await self.execute_tool(
+                    "push_risk_points_to_queue",
+                    {"risk_points": pending_points},
+                )
+                payload = self._parse_tool_output(batch_observation)
+                if isinstance(payload, dict):
+                    try:
+                        enqueued = max(0, int(payload.get("enqueued") or 0))
+                    except Exception:
+                        enqueued = 0
+                    try:
+                        duplicate_skipped = max(0, int(payload.get("duplicate_skipped") or 0))
+                    except Exception:
+                        duplicate_skipped = 0
+                else:
+                    enqueued = 0
+                    duplicate_skipped = 0
+                if enqueued + duplicate_skipped >= len(pending_points):
+                    for point in pending_points:
+                        self._track_risk_point(point)
+                    return
+            except Exception as exc:
+                logger.warning("[Recon] Batch risk queue push failed, falling back to single push: %s", exc)
+
+        for point in pending_points:
+            tool_input = dict(point)
+            try:
+                observation = await self.execute_tool("push_risk_point_to_queue", tool_input)
+                payload = self._parse_tool_output(observation)
+                if isinstance(payload, dict) and payload.get("enqueue_status") in {"enqueued", "duplicate_skipped"}:
+                    self._track_risk_point(point)
             except Exception as exc:
                 logger.warning("[Recon] Risk queue push failed: %s", exc)
 
@@ -540,9 +880,11 @@ class ReconAgent(BaseAgent):
     async def _sync_recon_queue(self, result: Dict[str, Any]):
         if not isinstance(result, dict):
             return
+        result = self._apply_runtime_recon_state(result)
         risk_points = self._ensure_risk_points(result)
         await self._push_risk_points_to_queue(risk_points)
         await self._refresh_recon_queue_status()
+        result["risk_points_pushed"] = len(self._risk_points_pushed)
         result["recon_queue_status"] = self._recon_queue_snapshot
     
     def _parse_tool_output(self, raw_output: Any) -> Any:
@@ -580,6 +922,18 @@ class ReconAgent(BaseAgent):
         exclude_patterns = config.get("exclude_patterns", [])
         self._empty_retry_count = 0
         targeted_empty_recovery_used = False
+        self._risk_points_pushed = []
+        self._risk_point_identities = set()
+        self._observed_input_surfaces = []
+        self._observed_trust_boundaries = []
+        self._observed_target_files = []
+        self._coverage_directories = []
+        self._coverage_files_discovered = []
+        self._coverage_files_read = []
+        self._coverage_tracker_file_count = 0
+        for target_file in target_files if isinstance(target_files, list) else []:
+            self._remember_target_file(target_file)
+            self._remember_discovered_file(target_file)
         
         # 构建初始消息
         initial_message = f"""请开始收集项目信息。
@@ -648,11 +1002,14 @@ class ReconAgent(BaseAgent):
 
 ## 本轮侦查硬性目标
 - 第一个 Action 必须是 `list_files`，先对根目录和关键目录建模，再进入具体风险挖掘
-- 完成建模后，优先使用 `search_code` 做全局/语义搜索，再用 `get_code_window` / `get_file_outline` 验证命中位置
+- 完成建模后，优先使用 `search_code` 做全局搜索；命中过多时先用 `group_by_file=true` 或 `count_only=true` 看分布，再配合 `directory` / `file_pattern` / `offset` 收敛
+- 命中候选后，再用 `get_code_window` / `get_file_outline` / `get_function_summary` / `get_symbol_body` / `locate_enclosing_function` 验证命中位置
 - 先识别真实入口点，再沿着 input_surfaces -> trust_boundaries -> sink 的方向展开
 - 发现可疑点后立即调用入队工具，不要等到最后统一总结
+- 如果白名单包含 `update_recon_file_tree`，请在文件地图逐步清晰后维护侦查文件树，避免重复查看同一小片代码
 - 如果当前还没有任何风险点入队，继续扩大覆盖面，而不是直接结束
 - 对存在后续分析价值但证据尚不完整的点，也应以较低 confidence 入队
+- 业务逻辑问题（如 IDOR/支付/状态机/权限提升）默认由 BusinessLogicReconAgent 负责；常规 Recon 优先产出代码安全风险点
 
 ## 最低覆盖清单
 - 路由/控制器/Resolver/API 入口
@@ -666,7 +1023,7 @@ class ReconAgent(BaseAgent):
 - 是否已经识别 `input_surfaces`、`trust_boundaries`、`target_files`
 - 是否至少检查了最关键的入口点和敏感操作路径
 - 如果仍未入队任何风险点，是否已经明确扩大过搜索范围，而不是只查看少量文件
-- Final Answer 里除了总结，还要明确列出高风险区域和初步发现
+- Final Answer 里除了总结，还要明确列出高风险区域、初步发现、风险点、coverage_summary
 
 ## TypeScript 项目补充要求
 - 若发现 `tsconfig.json`、`next.config.*`、`nest-cli.json`、`package.json`、`.ts`、`.tsx`，应按 TypeScript 项目处理，不要只按“泛 Node.js”略过
@@ -687,6 +1044,12 @@ class ReconAgent(BaseAgent):
         ]
         
         self._steps = []
+        if self._coverage_files_discovered:
+            await self._refresh_recon_file_tree(
+                "build",
+                files=sorted(self._coverage_files_discovered),
+            )
+            self._coverage_tracker_file_count = len(self._coverage_files_discovered)
         final_result = None
         error_message = None  #  跟踪错误信息
         last_action_signature: Optional[str] = None
@@ -911,6 +1274,8 @@ Final Answer: [JSON格式的结果]"""
                         # 成功调用，重置失败计数
                         if tool_call_key in self._failed_tool_calls:
                             del self._failed_tool_calls[tool_call_key]
+                        await self._update_coverage_from_last_tool(step.action, step.action_input or {})
+                        self._track_live_push_action(step.action, step.action_input or {}, observation)
                     
                     #  工具执行后检查取消状态
                     if self.is_cancelled:
@@ -970,6 +1335,11 @@ Final Answer: [JSON格式的结果]"""
     "entry_points": [{"type": "...", "file": "...", "description": "..."}],
     "high_risk_areas": ["file1.py", "file2.js"],
     "initial_findings": [{"title": "...", "description": "...", "file_path": "..."}],
+    "risk_points": [{"file_path": "...", "line_start": 1, "description": "...", "vulnerability_type": "..."}],
+    "input_surfaces": ["request.body.email"],
+    "trust_boundaries": ["HTTP request -> controller -> SQL"],
+    "target_files": ["src/auth/login.py"],
+    "coverage_summary": {"files_read_count": 0, "directories_scanned_count": 0},
     "summary": "项目总结描述"
 }
 ```
@@ -1034,6 +1404,7 @@ Final Answer:""",
             if not final_result:
                 final_result = self._summarize_from_steps()
             if isinstance(final_result, dict):
+                final_result = self._apply_runtime_recon_state(final_result)
                 final_result = self._ensure_project_profile(final_result)
                 await self._sync_recon_queue(final_result)
             
@@ -1162,8 +1533,12 @@ Final Answer:""",
             },
             "entry_points": [],
             "high_risk_areas": [],
+            "input_surfaces": [],
+            "trust_boundaries": [],
+            "target_files": [],
             "dependencies": {},
             "initial_findings": [],
+            "coverage_summary": {},
             "summary": "",  #  新增：汇总 LLM 的思考
         }
         
@@ -1239,7 +1614,14 @@ Final Answer:""",
         result["tech_stack"]["frameworks"] = list(dict.fromkeys(result["tech_stack"]["frameworks"]))
         result["tech_stack"]["databases"] = list(dict.fromkeys(result["tech_stack"]["databases"]))
         result["high_risk_areas"] = list(dict.fromkeys(result["high_risk_areas"]))[:20]  # 限制数量
-        result["risk_points"] = self._extract_risk_points(result)
+        result["risk_points"] = self._merge_risk_points(self._risk_points_pushed, self._extract_risk_points(result))
+        for point in result["risk_points"]:
+            self._remember_read_file(point.get("file_path"))
+            self._remember_input_surface(point.get("input_surface"))
+            self._remember_trust_boundary(point.get("trust_boundary"))
+            if point.get("file_path") not in result["high_risk_areas"]:
+                result["high_risk_areas"].append(point.get("file_path"))
+        result = self._apply_runtime_recon_state(result)
         result = self._ensure_project_profile(result)
         
         #  汇总 LLM 的思考作为 summary
@@ -1269,18 +1651,21 @@ Final Answer:""",
         """
         # 提取关键发现
         key_findings = []
-        for f in final_result.get("initial_findings", [])[:10]:
+        for f in final_result.get("risk_points", [])[:15]:
             if isinstance(f, dict):
+                key_findings.append(f)
+        for f in final_result.get("initial_findings", [])[:10]:
+            if isinstance(f, dict) and f not in key_findings:
                 key_findings.append(f)
 
         # 构建建议行动
         suggested_actions = []
-        for area in final_result.get("high_risk_areas", [])[:10]:
-            if isinstance(area, str):
+        for area in final_result.get("risk_points", [])[:15]:
+            if isinstance(area, dict):
                 suggested_actions.append({
                     "action": "deep_analysis",
-                    "target": area,
-                    "reason": "高风险区域需要深入分析"
+                    "target": f"{area.get('file_path', '')}:{area.get('line_start', 1)}",
+                    "reason": area.get("description", "高风险区域需要深入分析")[:160],
                 })
 
         # 提取入口点作为关注点
@@ -1296,6 +1681,12 @@ Final Answer:""",
             "tech_stack": final_result.get("tech_stack", {}),
             "project_profile": final_result.get("project_profile", {}),
             "project_structure": final_result.get("project_structure", {}),
+            "risk_points": final_result.get("risk_points", [])[:50],
+            "input_surfaces": final_result.get("input_surfaces", [])[:24],
+            "trust_boundaries": final_result.get("trust_boundaries", [])[:24],
+            "target_files": final_result.get("target_files", [])[:64],
+            "coverage_summary": final_result.get("coverage_summary", {}),
+            "recon_queue_status": final_result.get("recon_queue_status", {}),
             # "recommended_tools": final_result.get("recommended_tools", {}),
             "recommended_tools": {},  #  目前不传递工具推荐
             "dependencies": final_result.get("dependencies", {}),
@@ -1318,7 +1709,8 @@ Final Answer:""",
             elif profile.get("is_web_project") is False:
                 summary += "判定为非Web项目; "
         summary += f"入口点={len(final_result.get('entry_points', []))}个; "
-        summary += f"高风险区域={len(final_result.get('high_risk_areas', []))}个"
+        summary += f"高风险区域={len(final_result.get('high_risk_areas', []))}个; "
+        summary += f"风险点={len(final_result.get('risk_points', []))}个"
 
         return self.create_handoff(
             to_agent="analysis",

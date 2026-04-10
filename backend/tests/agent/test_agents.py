@@ -115,6 +115,89 @@ class TestReconAgent:
         assert result["project_profile"]["is_web_project"] is True
         assert "app/api/auth/[userId]/route.ts" in result["high_risk_areas"]
 
+    def test_recon_agent_keeps_structurally_distinct_risk_points(
+        self, mock_llm_service, mock_event_emitter
+    ):
+        agent = ReconAgent(
+            llm_service=mock_llm_service,
+            tools={},
+            event_emitter=mock_event_emitter,
+        )
+        base_point = {
+            "file_path": "src/auth.py",
+            "line_start": 42,
+            "description": "User-controlled SQL reaches query builder",
+            "severity": "high",
+            "confidence": 0.8,
+            "vulnerability_type": "sql_injection",
+        }
+
+        first = dict(base_point, entry_function="login", trust_boundary="HTTP -> auth -> SQL")
+        second = dict(base_point, entry_function="reset_password", trust_boundary="CLI -> admin task -> SQL")
+
+        agent._track_risk_point(first)
+        agent._track_risk_point(second)
+        merged = agent._merge_risk_points([first, second])
+
+        assert len(agent._risk_points_pushed) == 2
+        assert len(merged) == 2
+        assert {item["entry_function"] for item in merged} == {"login", "reset_password"}
+
+    @pytest.mark.asyncio
+    async def test_recon_agent_batch_push_partial_result_falls_back_to_single_pushes(
+        self, mock_llm_service, mock_event_emitter
+    ):
+        agent = ReconAgent(
+            llm_service=mock_llm_service,
+            tools={
+                "push_risk_points_to_queue": object(),
+                "push_risk_point_to_queue": object(),
+            },
+            event_emitter=mock_event_emitter,
+        )
+        risk_points = [
+            {
+                "file_path": "src/auth.py",
+                "line_start": 10,
+                "description": "Unsafe SQL in login flow",
+                "severity": "high",
+                "confidence": 0.8,
+                "vulnerability_type": "sql_injection",
+                "entry_function": "login",
+            },
+            {
+                "file_path": "src/admin.py",
+                "line_start": 18,
+                "description": "Unsafe SQL in admin flow",
+                "severity": "high",
+                "confidence": 0.75,
+                "vulnerability_type": "sql_injection",
+                "entry_function": "admin_search",
+            },
+        ]
+        calls = []
+
+        async def fake_execute_tool(tool_name, tool_input):
+            calls.append((tool_name, tool_input))
+            if tool_name == "push_risk_points_to_queue":
+                return {"enqueued": 1, "duplicate_skipped": 0, "queue_size": 1}
+            return {
+                "enqueue_status": "enqueued",
+                "duplicate_skipped": False,
+                "queue_size": len(calls),
+            }
+
+        agent.execute_tool = fake_execute_tool
+
+        await agent._push_risk_points_to_queue(risk_points)
+
+        assert [name for name, _payload in calls] == [
+            "push_risk_points_to_queue",
+            "push_risk_point_to_queue",
+            "push_risk_point_to_queue",
+        ]
+        assert len(agent._risk_points_pushed) == 2
+
 
 class TestAnalysisAgent:
     """Analysis Agent 测试"""

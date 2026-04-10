@@ -564,8 +564,11 @@ class FileSearchInput(BaseModel):
     file_pattern: Optional[str] = Field(default=None, description="文件名模式，如 *.py, *.js")
     directory: Optional[str] = Field(default=None, description="搜索目录（相对路径）")
     case_sensitive: bool = Field(default=False, description="是否区分大小写")
-    max_results: int = Field(default=10, description="最大结果数，默认不超过 10 条")
+    max_results: int = Field(default=10, description="最大结果数，默认 10 条，最多 50 条")
     is_regex: bool = Field(default=False, description="是否使用正则表达式")
+    offset: int = Field(default=0, description="分页偏移量，基于唯一命中行计数")
+    group_by_file: bool = Field(default=False, description="是否按文件聚合命中分布")
+    count_only: bool = Field(default=False, description="是否仅返回命中统计，不返回逐行结果")
 
     @model_validator(mode="after")
     def normalize_single_file_alias(self) -> "FileSearchInput":
@@ -739,7 +742,8 @@ class FileSearchTool(AgentTool):
         case_sensitive: bool,
         is_regex: bool,
         max_results: int,
-    ) -> tuple[List[Dict[str, Any]], int]:
+        offset: int = 0,
+    ) -> tuple[List[Dict[str, Any]], int, Dict[str, int]]:
         cmd = self._build_rg_command(
             keyword=keyword,
             search_dir=search_dir,
@@ -760,6 +764,7 @@ class FileSearchTool(AgentTool):
         results: List[Dict[str, Any]] = []
         seen_key: set[tuple[str, int]] = set()
         raw_match_count = 0
+        file_match_counts: Dict[str, int] = {}
         stdout_text = str(proc.stdout or "")
         for raw_line in stdout_text.splitlines():
             parts = raw_line.split(":", 3)
@@ -790,6 +795,9 @@ class FileSearchTool(AgentTool):
                 continue
             seen_key.add(dedup_key)
             raw_match_count += 1
+            file_match_counts[relative_path] = file_match_counts.get(relative_path, 0) + 1
+            if raw_match_count <= offset:
+                continue
             if len(results) < max_results:
                 results.append(
                     {
@@ -802,7 +810,7 @@ class FileSearchTool(AgentTool):
                     }
                 )
 
-        return results, raw_match_count
+        return results, raw_match_count, file_match_counts
 
     def _build_grep_command(
         self,
@@ -835,7 +843,8 @@ class FileSearchTool(AgentTool):
         case_sensitive: bool,
         is_regex: bool,
         max_results: int,
-    ) -> tuple[List[Dict[str, Any]], int]:
+        offset: int = 0,
+    ) -> tuple[List[Dict[str, Any]], int, Dict[str, int]]:
         cmd = self._build_grep_command(
             keyword=keyword,
             search_dir=search_dir,
@@ -856,6 +865,7 @@ class FileSearchTool(AgentTool):
         results: List[Dict[str, Any]] = []
         seen_key: set[tuple[str, int]] = set()
         raw_match_count = 0
+        file_match_counts: Dict[str, int] = {}
         for raw_line in str(proc.stdout or "").splitlines():
             parts = raw_line.split(":", 2)
             if len(parts) < 3:
@@ -879,6 +889,9 @@ class FileSearchTool(AgentTool):
                 continue
             seen_key.add(dedup_key)
             raw_match_count += 1
+            file_match_counts[relative_path] = file_match_counts.get(relative_path, 0) + 1
+            if raw_match_count <= offset:
+                continue
             if len(results) < max_results:
                 results.append(
                     {
@@ -891,7 +904,7 @@ class FileSearchTool(AgentTool):
                     }
                 )
 
-        return results, raw_match_count
+        return results, raw_match_count, file_match_counts
 
     def _search_with_python_sync(
         self,
@@ -901,11 +914,13 @@ class FileSearchTool(AgentTool):
         case_sensitive: bool,
         is_regex: bool,
         max_results: int,
-    ) -> tuple[List[Dict[str, Any]], int]:
+        offset: int = 0,
+    ) -> tuple[List[Dict[str, Any]], int, Dict[str, int]]:
         flags = 0 if case_sensitive else re.IGNORECASE
         pattern = re.compile(keyword if is_regex else re.escape(keyword), flags)
         results: List[Dict[str, Any]] = []
         raw_match_count = 0
+        file_match_counts: Dict[str, int] = {}
 
         for root, dirs, files in os.walk(search_dir):
             rel_dir = os.path.relpath(root, self.project_root).replace("\\", "/")
@@ -937,6 +952,9 @@ class FileSearchTool(AgentTool):
                     if not pattern.search(line):
                         continue
                     raw_match_count += 1
+                    file_match_counts[relative_path] = file_match_counts.get(relative_path, 0) + 1
+                    if raw_match_count <= offset:
+                        continue
                     if len(results) < max_results:
                         results.append(
                             {
@@ -948,7 +966,7 @@ class FileSearchTool(AgentTool):
                                 "match_kind": "text",
                             }
                         )
-        return results, raw_match_count
+        return results, raw_match_count, file_match_counts
 
     def _run_search_engines_sync(
         self,
@@ -958,44 +976,48 @@ class FileSearchTool(AgentTool):
         case_sensitive: bool,
         is_regex: bool,
         max_results: int,
-    ) -> tuple[List[Dict[str, Any]], int, str]:
+        offset: int = 0,
+    ) -> tuple[List[Dict[str, Any]], int, Dict[str, int], str]:
         if shutil.which("rg"):
             try:
-                results, files_searched = self._search_with_rg_sync(
+                results, files_searched, file_match_counts = self._search_with_rg_sync(
                     keyword=keyword,
                     search_dir=search_dir,
                     normalized_patterns=normalized_patterns,
                     case_sensitive=case_sensitive,
                     is_regex=is_regex,
                     max_results=max_results,
+                    offset=offset,
                 )
-                return results, files_searched, "rg"
+                return results, files_searched, file_match_counts, "rg"
             except Exception:
                 pass
 
         if shutil.which("grep"):
             try:
-                results, files_searched = self._search_with_grep_sync(
+                results, files_searched, file_match_counts = self._search_with_grep_sync(
                     keyword=keyword,
                     search_dir=search_dir,
                     normalized_patterns=normalized_patterns,
                     case_sensitive=case_sensitive,
                     is_regex=is_regex,
                     max_results=max_results,
+                    offset=offset,
                 )
-                return results, files_searched, "grep"
+                return results, files_searched, file_match_counts, "grep"
             except Exception:
                 pass
 
-        results, files_searched = self._search_with_python_sync(
+        results, files_searched, file_match_counts = self._search_with_python_sync(
             keyword=keyword,
             search_dir=search_dir,
             normalized_patterns=normalized_patterns,
             case_sensitive=case_sensitive,
             is_regex=is_regex,
             max_results=max_results,
+            offset=offset,
         )
-        return results, files_searched, "python"
+        return results, files_searched, file_match_counts, "python"
 
     @property
     def name(self) -> str:
@@ -1018,7 +1040,10 @@ class FileSearchTool(AgentTool):
 - directory: 可选，搜索目录 (相对于项目根目录)
 - case_sensitive: 是否区分大小写（默认 false）
 - is_regex: 是否使用正则表达式（默认 false）
-- max_results: 最大返回结果数（默认10，最多10）
+- max_results: 最大返回结果数（默认10，最多50）
+- offset: 分页偏移量，适合热门关键词翻页继续搜索
+- group_by_file: 按文件聚合命中分布，先看哪些文件最值得下钻
+- count_only: 仅返回统计和 Top 文件，不返回逐行命中
 
 注意:
 - test / tests 目录默认被排除在搜索范围之外
@@ -1038,8 +1063,11 @@ class FileSearchTool(AgentTool):
         file_pattern: Optional[str] = None,
         directory: Optional[str] = None,
         case_sensitive: bool = False,
-        max_results: int = 50,
+        max_results: int = 10,
         is_regex: bool = False,
+        offset: int = 0,
+        group_by_file: bool = False,
+        count_only: bool = False,
         **kwargs
     ) -> ToolResult:
         try:
@@ -1087,8 +1115,9 @@ class FileSearchTool(AgentTool):
                 except re.error as exc:
                     return ToolResult(success=False, error=f"无效的搜索模式: {exc}")
 
-            safe_max_results = max(1, min(int(max_results or 10), 10))
-            results, raw_match_count, engine = await asyncio.to_thread(
+            safe_offset = max(0, int(offset or 0))
+            safe_max_results = max(1, min(int(max_results or 10), 50))
+            results, raw_match_count, file_match_counts, engine = await asyncio.to_thread(
                 self._run_search_engines_sync,
                 keyword,
                 search_dir_abs,
@@ -1096,12 +1125,13 @@ class FileSearchTool(AgentTool):
                 case_sensitive,
                 is_regex,
                 safe_max_results,
+                safe_offset,
             )
 
             scope_fallback_applied = False
             effective_directory = search_dir_rel
-            if not single_file_mode and not results and search_dir_rel not in {"", "."}:
-                fallback_results, fallback_raw_match_count, fallback_engine = await asyncio.to_thread(
+            if not single_file_mode and raw_match_count == 0 and search_dir_rel not in {"", "."}:
+                fallback_results, fallback_raw_match_count, fallback_file_counts, fallback_engine = await asyncio.to_thread(
                     self._run_search_engines_sync,
                     keyword,
                     self.project_root,
@@ -1109,15 +1139,25 @@ class FileSearchTool(AgentTool):
                     case_sensitive,
                     is_regex,
                     safe_max_results,
+                    safe_offset,
                 )
-                if fallback_results:
+                if fallback_results or fallback_raw_match_count > 0:
                     scope_fallback_applied = True
                     effective_directory = "."
                     results = fallback_results
                     raw_match_count = fallback_raw_match_count
+                    file_match_counts = fallback_file_counts
                     engine = fallback_engine
 
-            if not results:
+            top_files = [
+                {"file_path": file_path, "match_count": count}
+                for file_path, count in sorted(
+                    file_match_counts.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:safe_max_results]
+            ]
+
+            if raw_match_count == 0:
                 command_chain = _unique_command_chain([engine])
                 display_command = _build_display_command(command_chain)
                 entries: List[Dict[str, Any]] = []
@@ -1152,23 +1192,41 @@ class FileSearchTool(AgentTool):
                         "effective_directory": effective_directory,
                         "single_file_mode": single_file_mode,
                         "target_file": single_file_rel,
+                        "offset": safe_offset,
+                        "group_by_file": bool(group_by_file),
+                        "count_only": bool(count_only),
                     },
                 )
 
             entries: List[Dict[str, Any]] = []
             aggregate_command_chain: List[str] = [engine]
-            for item in results:
-                entries.append(
-                    {
-                        "file_path": item["file"],
-                        "line": int(item["line"]),
-                        "match_line": int(item["line"]),
-                        "column": item.get("column"),
-                        "match_text": str(item["match"]),
-                        "symbol_name": item.get("symbol_name"),
-                        "match_kind": item.get("match_kind") or "text",
-                    }
-                )
+            if not count_only and not group_by_file:
+                for item in results:
+                    entries.append(
+                        {
+                            "file_path": item["file"],
+                            "line": int(item["line"]),
+                            "match_line": int(item["line"]),
+                            "column": item.get("column"),
+                            "match_text": str(item["match"]),
+                            "symbol_name": item.get("symbol_name"),
+                            "match_kind": item.get("match_kind") or "text",
+                        }
+                    )
+
+            if group_by_file:
+                for grouped in top_files:
+                    entries.append(
+                        {
+                            "file_path": grouped["file_path"],
+                            "line": None,
+                            "match_line": None,
+                            "column": None,
+                            "match_text": f"命中 {grouped['match_count']} 次",
+                            "symbol_name": None,
+                            "match_kind": "file_summary",
+                        }
+                    )
 
             aggregate_command_chain = _unique_command_chain(aggregate_command_chain)
             display_command = _build_display_command(aggregate_command_chain)
@@ -1179,20 +1237,38 @@ class FileSearchTool(AgentTool):
                 entries=entries,
             )
 
+            visible_returned = 0 if count_only else len(results)
+            has_more = raw_match_count > safe_offset + visible_returned
             output_parts = [
                 f"搜索关键字: '{keyword}'",
                 f"原始命中数: {raw_match_count}",
-                f"返回结果数: {len(entries)}",
+                f"分页偏移: {safe_offset}",
+                f"返回结果数: {0 if count_only else len(entries)}",
                 f"执行链路: {display_command}",
             ]
-            for entry in entries:
-                location = f"{entry['file_path']}:{entry['match_line']}"
-                if entry.get("column"):
-                    location += f":{entry['column']}"
-                output_parts.append(f"- {location} {entry['match_text']}")
-            if raw_match_count > safe_max_results:
+
+            if top_files:
+                output_parts.append("Top 文件:")
+                for grouped in top_files[:10]:
+                    output_parts.append(f"- {grouped['file_path']} ({grouped['match_count']})")
+
+            if not count_only:
+                for entry in entries:
+                    if not entry.get("match_line"):
+                        output_parts.append(f"- {entry['file_path']} {entry['match_text']}")
+                        continue
+                    location = f"{entry['file_path']}:{entry['match_line']}"
+                    if entry.get("column"):
+                        location += f":{entry['column']}"
+                    output_parts.append(f"- {location} {entry['match_text']}")
+
+            if has_more:
                 output_parts.append(
-                    "\n命中过多，请继续通过 directory、file_pattern 或更精确的 regex 收敛搜索。"
+                    f"\n仍有剩余命中，可继续使用 offset={safe_offset + max(1, visible_returned or safe_max_results)} 翻页。"
+                )
+            if raw_match_count > safe_max_results and not count_only and not group_by_file:
+                output_parts.append(
+                    "\n命中过多，请继续通过 directory、file_pattern、group_by_file、count_only 或更精确的 regex 收敛搜索。"
                 )
 
             return ToolResult(
@@ -1202,9 +1278,9 @@ class FileSearchTool(AgentTool):
                     "keyword": keyword,
                     "matches": raw_match_count,
                     "match_count_raw": raw_match_count,
-                    "match_count_returned": len(entries),
-                    "overflow_count": max(0, raw_match_count - len(entries)),
-                    "files_searched": 1 if single_file_mode else max(1, len({entry["file_path"] for entry in entries})),
+                    "match_count_returned": 0 if count_only else len(entries),
+                    "overflow_count": max(0, raw_match_count - safe_offset - visible_returned),
+                    "files_searched": 1 if single_file_mode else max(1, len(file_match_counts)),
                     "normalized_file_patterns": normalized_patterns,
                     "results": [
                         {
@@ -1215,19 +1291,27 @@ class FileSearchTool(AgentTool):
                         }
                         for entry in entries[:10]
                     ],
+                    "file_match_counts": top_files,
                     "engine": engine,
                     "render_type": "search_hits",
                     "command_chain": aggregate_command_chain,
                     "display_command": display_command,
                     "entries": entries,
                     "recommended_followup_tool": (
-                        "search_code" if raw_match_count > safe_max_results else "get_code_window"
+                        "search_code"
+                        if (has_more or group_by_file or count_only or raw_match_count > safe_max_results)
+                        else "get_code_window"
                     ),
                     "scope_fallback_applied": scope_fallback_applied,
                     "original_directory": search_dir_rel,
                     "effective_directory": effective_directory,
                     "single_file_mode": single_file_mode,
                     "target_file": single_file_rel,
+                    "offset": safe_offset,
+                    "next_offset": safe_offset + max(1, visible_returned or safe_max_results),
+                    "group_by_file": bool(group_by_file),
+                    "count_only": bool(count_only),
+                    "has_more": has_more,
                 },
             )
         except Exception as e:

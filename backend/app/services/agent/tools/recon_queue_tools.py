@@ -34,13 +34,22 @@ def _validate_recon_queue_service_binding(
 
 
 class ReconRiskPointInput(BaseModel):
-    file_path: str = Field(..., description="风险点文件路径")
+    file_path: str = Field(..., description="风险点文件路径（相对于项目根目录）")
     line_start: int = Field(..., description="风险点起始行号")
     description: str = Field(..., description="风险描述")
     severity: Optional[str] = Field("high", description="严重程度")
     confidence: Optional[float] = Field(0.6, description="置信度 0.0-1.0")
     vulnerability_type: Optional[str] = Field("potential_issue", description="漏洞类型")
     context: Optional[str] = Field(None, description="附加上下文")
+    line_end: Optional[int] = Field(None, description="风险点结束行号")
+    entry_function: Optional[str] = Field(None, description="风险点所属入口/函数名")
+    input_surface: Optional[str] = Field(None, description="最直接的输入面，如 req.body.name / request.args.id")
+    trust_boundary: Optional[str] = Field(None, description="涉及的信任边界，如 HTTP -> controller -> SQL")
+    source: Optional[str] = Field(None, description="输入源标识")
+    sink: Optional[str] = Field(None, description="敏感 sink 标识")
+    related_symbols: Optional[List[str]] = Field(None, description="相关函数/符号")
+    evidence_refs: Optional[List[str]] = Field(None, description="证据锚点，如 file.py:42、AuthService.login")
+    target_files: Optional[List[str]] = Field(None, description="当前风险点关联的目标文件")
 
 
 class ReconRiskPointsBatchInput(BaseModel):
@@ -129,6 +138,8 @@ class PushRiskPointToQueueTool(AgentTool):
         - severity：critical/high/medium/low/info，缺省为 high
         - vulnerability_type：比如 sql_injection、xss、command_injection 等
         - confidence：0.0-1.0，用来记录推断的置信度
+        - entry_function / input_surface / trust_boundary / source / sink：推荐补充上下文，帮助 Analysis 更快建立证据链
+        - related_symbols / evidence_refs / target_files：可选的结构化辅助定位信息
 
         重复推送同一风险点时会执行幂等跳过，不视为失败。
         调用后会返回当前队列大小，可据此判断是否需要等待消费。"""
@@ -370,6 +381,8 @@ class IsReconRiskPointInQueueTool(AgentTool):
         file_path: str = Field(...)
         line_start: int = Field(...)
         description: Optional[str] = Field("")
+        vulnerability_type: Optional[str] = Field("")
+        entry_function: Optional[str] = Field("")
 
     def __init__(self, *, queue_service: Any, task_id: str):
         super().__init__()
@@ -399,13 +412,21 @@ class IsReconRiskPointInQueueTool(AgentTool):
         return self.Input
 
     async def _execute(
-        self, file_path: str, line_start: int, description: str = "", **kwargs
+        self,
+        file_path: str,
+        line_start: int,
+        description: str = "",
+        vulnerability_type: str = "",
+        entry_function: str = "",
+        **kwargs,
     ) -> ToolResult:
         try:
             point = {
                 "file_path": file_path,
                 "line_start": line_start,
                 "description": description,
+                "vulnerability_type": vulnerability_type,
+                "entry_function": entry_function,
             }
             exists = self.queue_service.contains(self.task_id, point)
             return ToolResult(success=True, data={"in_queue": exists})

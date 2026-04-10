@@ -51,6 +51,12 @@ class AuditWorkflowEngine:
 
     RECON_EMPTY_QUEUE_MAX_ATTEMPTS = 3
     AGENT_COUNT_CONFIG_FILE = "config.yml"
+    RECON_BL_FALLBACK_CONTEXT = (
+        "当前 workflow 未启用 BusinessLogicReconAgent 或业务逻辑风险队列。\n"
+        "本轮常规 Recon 需要同时覆盖代码安全风险与业务逻辑风险候选，"
+        "包括但不限于：IDOR、权限绕过、状态机/流程绕过、金额篡改、竞态条件、越权访问。\n"
+        "若发现存在后续分析价值的可疑点，请继续推入 Recon 队列，不要因为缺少 BL 专属阶段而跳过。"
+    )
 
     def __init__(
         self,
@@ -133,6 +139,21 @@ class AuditWorkflowEngine:
             f"(enabled={self.workflow_config.should_parallelize_report}), "
             f"bl_queue={'enabled' if business_logic_queue_service else 'disabled'}"
         )
+
+    def _has_business_logic_recon_support(self) -> bool:
+        if self.bl_queue is None:
+            return False
+        sub_agents = getattr(self.orchestrator, "sub_agents", {}) or {}
+        return sub_agents.get("business_logic_recon") is not None
+
+    def _build_recon_phase_context(self, task_context: str = "") -> str:
+        parts: List[str] = []
+        base_context = str(task_context or "").strip()
+        if base_context:
+            parts.append(base_context)
+        if not self._has_business_logic_recon_support():
+            parts.append(self.RECON_BL_FALLBACK_CONTEXT)
+        return "\n\n".join(parts)
 
     def _resolve_workflow_config(self, workflow_config: WorkflowConfig) -> WorkflowConfig:
         resolved_config = copy.deepcopy(workflow_config)
@@ -515,9 +536,25 @@ class AuditWorkflowEngine:
                         "id": i,
                         "file_path": rp.get("file_path", ""),
                         "line_start": rp.get("line_start", 0),
+                        "line_end": rp.get("line_end"),
                         "description": rp.get("description", ""),
                         "severity": rp.get("severity", ""),
                         "vulnerability_type": rp.get("vulnerability_type", ""),
+                        "entry_function": rp.get("entry_function", ""),
+                        "input_surface": rp.get("input_surface", ""),
+                        "trust_boundary": rp.get("trust_boundary", ""),
+                        "source": rp.get("source", ""),
+                        "sink": rp.get("sink", ""),
+                        "related_symbols": (
+                            list(rp.get("related_symbols", [])[:6])
+                            if isinstance(rp.get("related_symbols"), list)
+                            else []
+                        ),
+                        "evidence_refs": (
+                            list(rp.get("evidence_refs", [])[:6])
+                            if isinstance(rp.get("evidence_refs"), list)
+                            else []
+                        ),
                     }
                     for i, rp in enumerate(all_risk_points[:50])  # 限制数量避免 token 过多
                 ],
@@ -531,9 +568,11 @@ class AuditWorkflowEngine:
 {risk_points_json}
 
 分析标准：
-1. 相同文件、相同或相邻行号、相同漏洞类型 → 重复
-2. 相同文件、类似描述、相同漏洞类型 → 可能重复
-3. 不同文件 → 即使描述相似也不算重复
+1. 只有在“相同文件、相同或相邻行号、相同漏洞类型”且 `entry_function/source/sink/input_surface/trust_boundary` 没有实质差异时，才可判定为重复
+2. 如果 `entry_function/source/sink/input_surface/trust_boundary` 任一字段存在明确差异，默认视为不同风险点，不要去重
+3. 同一文件同一行，但入口函数不同、信任边界不同、source/sink 不同，通常代表不同分析单元，默认不要合并
+4. 不同文件 → 即使描述相似也不算重复
+5. 必须采取保守策略；拿不准时宁可保留，不要误删
 
 请输出：
 {{
@@ -937,8 +976,9 @@ class AuditWorkflowEngine:
             "agent": "recon",
             "task": "收集项目信息、识别技术栈与高风险区域，并将风险点推送到 Recon 队列",
         }
-        if task_context:
-            params["context"] = task_context
+        effective_context = self._build_recon_phase_context(task_context)
+        if effective_context:
+            params["context"] = effective_context
         try:
             observation = await orc._dispatch_agent(params)
         except asyncio.CancelledError:

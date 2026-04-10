@@ -341,6 +341,12 @@ class AnalysisAgent(BaseAgent):
         if isinstance(recon_data, dict) and "data" in recon_data:
             recon_data = recon_data["data"]
         if isinstance(recon_data, dict):
+            recon_risk_points = recon_data.get("risk_points", [])
+            if isinstance(recon_risk_points, list):
+                for item in recon_risk_points:
+                    normalized = self._normalize_risk_point(item if isinstance(item, dict) else {})
+                    if normalized:
+                        return normalized
             high_risk_areas = recon_data.get("high_risk_areas", [])
             if isinstance(high_risk_areas, list):
                 for area in high_risk_areas:
@@ -465,6 +471,9 @@ class AnalysisAgent(BaseAgent):
         entry_points = recon_data.get("entry_points", [])
         high_risk_areas = recon_data.get("high_risk_areas", plan.get("high_risk_areas", []))
         initial_findings = recon_data.get("initial_findings", [])
+        input_surfaces = recon_data.get("input_surfaces", [])
+        trust_boundaries = recon_data.get("trust_boundaries", [])
+        coverage_summary = recon_data.get("coverage_summary", {})
         bootstrap_findings = previous_results.get("bootstrap_findings", [])
         if isinstance(bootstrap_findings, list):
             for bootstrap_item in bootstrap_findings[:20]:
@@ -577,6 +586,15 @@ class AnalysisAgent(BaseAgent):
 {json.dumps(high_risk_areas[:20], ensure_ascii=False)}
 
 **重要**: 请使用 get_code_window / get_file_outline 工具读取上述高风险文件，不要假设文件路径或使用其他路径。
+
+### Input Surfaces
+{json.dumps(input_surfaces[:20], ensure_ascii=False, indent=2) if input_surfaces else "无"}
+
+### Trust Boundaries
+{json.dumps(trust_boundaries[:20], ensure_ascii=False, indent=2) if trust_boundaries else "无"}
+
+### Recon Coverage Summary
+{json.dumps(coverage_summary, ensure_ascii=False, indent=2) if coverage_summary else "无"}
 
 ### 入口点 (前10个)
 {json.dumps(entry_points[:10], ensure_ascii=False, indent=2)}

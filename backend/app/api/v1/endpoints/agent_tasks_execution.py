@@ -1689,6 +1689,7 @@ async def _initialize_tools(
         SmartScanTool,
         QuickAuditTool,
         SymbolBodyTool,
+        UpdateReconFileTreeTool,
     )
     from app.services.agent.tools.queue_tools import (
         GetQueueStatusTool, DequeueFindingTool, PushFindingToQueueTool, IsFindingInQueueTool
@@ -1755,10 +1756,15 @@ async def _initialize_tools(
             queue_service=recon_queue_service,
             task_id=task_id,
         )
-        # recon_tools["get_recon_risk_queue_status"] = GetReconRiskQueueStatusTool(
-        #     queue_service=recon_queue_service,
-        #     task_id=task_id,
-        # )
+        recon_tools["get_recon_risk_queue_status"] = GetReconRiskQueueStatusTool(
+            queue_service=recon_queue_service,
+            task_id=task_id,
+        )
+        recon_tools["is_recon_risk_point_in_queue"] = IsReconRiskPointInQueueTool(
+            queue_service=recon_queue_service,
+            task_id=task_id,
+        )
+        recon_tools["update_recon_file_tree"] = UpdateReconFileTreeTool(task_id=task_id)
         logger.info(f"[Tools] Added Recon risk queue tools for task {task_id}")
 
     analysis_tools = {
@@ -1782,7 +1788,7 @@ async def _initialize_tools(
         "sandbox_exec": SandboxTool(sandbox_manager),
         "verify_vulnerability": VulnerabilityVerifyTool(sandbox_manager),
         "run_code": RunCodeTool(sandbox_manager, project_root),
-        # "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
+        "create_vulnerability_report": CreateVulnerabilityReportTool(project_root),
     }
 
     if task_id:

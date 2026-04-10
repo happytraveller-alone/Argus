@@ -32,6 +32,7 @@ from .run_code import ExtractFunctionTool
 from .control_flow_tool import ControlFlowAnalysisLightTool
 from .logic_authz_tool import LogicAuthzAnalysisTool
 from .verification_result_tools import SaveVerificationResultTool, UpdateVulnerabilityFindingTool
+from .recon_file_tree_tool import UpdateReconFileTreeTool
 
 __all__ = [
     "AgentTool",
@@ -69,4 +70,5 @@ __all__ = [
     "LogicAuthzAnalysisTool",
     "SaveVerificationResultTool",
     "UpdateVulnerabilityFindingTool",
+    "UpdateReconFileTreeTool",
 ]

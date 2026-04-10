@@ -96,6 +96,7 @@ NON_CACHEABLE_TOOL_NAMES: Set[str] = {
     "peek_recon_risk_queue",
     "clear_recon_risk_queue",
     "is_recon_risk_point_in_queue",
+    "update_recon_file_tree",
     "is_finding_in_queue",
     "push_bl_risk_point_to_queue",
     "push_bl_risk_points_to_queue",
@@ -113,6 +114,7 @@ STRICT_MODE_LOCAL_ONLY_TOOL_NAMES: Set[str] = {
     "peek_recon_risk_queue",
     "clear_recon_risk_queue",
     "is_recon_risk_point_in_queue",
+    "update_recon_file_tree",
     "push_finding_to_queue",
     "get_queue_status",
     "dequeue_finding",
@@ -306,6 +308,16 @@ class TaskHandoff:
         转换为 LLM 可理解的上下文格式
         这是关键！让 LLM 能够理解前序 Agent 的工作
         """
+        def _truncate_context_value(value: Any, *, limit: int = 600) -> str:
+            try:
+                rendered = json.dumps(value, ensure_ascii=False, indent=2)
+            except Exception:
+                rendered = str(value)
+            rendered = rendered.strip()
+            if len(rendered) > limit:
+                return rendered[: limit - 3] + "..."
+            return rendered
+
         lines = [
             f"## 来自 {self.from_agent} Agent 的任务交接",
             "",
@@ -358,7 +370,17 @@ class TaskHandoff:
             lines.append("### 优先分析区域")
             for area in self.priority_areas:
                 lines.append(f"- {area}")
-        
+            lines.append("")
+
+        if self.context_data:
+            lines.append("### 结构化上下文")
+            for key in sorted(self.context_data.keys()):
+                value = self.context_data.get(key)
+                if value in (None, "", [], {}, ()):
+                    continue
+                lines.append(f"- {key}:")
+                lines.append(_truncate_context_value(value))
+
         return "\n".join(lines)
 
 
@@ -440,6 +462,7 @@ class BaseAgent(ABC):
         #  最近一次工具输出快照（用于避免 llm_observation 复写同一段 tool_result）
         self._last_tool_result_snapshot: Optional[Dict[str, Any]] = None
         self._last_tool_result_payload: Optional[Dict[str, Any]] = None
+        self._last_successful_tool_context: Optional[Dict[str, Any]] = None
         self._last_llm_stream_meta: Dict[str, Any] = {}
         self._thinking_push_mode: str = "stream"
         self._last_llm_thought_digest: Optional[str] = None
@@ -5230,6 +5253,11 @@ class BaseAgent(ABC):
 
             if result.success:
                 metadata_dict = dict(result.metadata) if isinstance(result.metadata, dict) else {}
+                self._last_successful_tool_context = {
+                    "tool_name": resolved_tool_name,
+                    "tool_input": dict(repaired_input),
+                    "tool_metadata": dict(metadata_dict),
+                }
                 self._record_tool_context(
                     tool_name=resolved_tool_name,
                     tool_input=repaired_input,

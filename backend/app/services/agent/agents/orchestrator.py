@@ -2243,6 +2243,39 @@ Action Input: {{}}
             if high_risk_areas:
                 insights.append(f"发现 {len(high_risk_areas)} 个高风险区域需要重点分析")
                 priority_areas.extend(high_risk_areas[:15])
+                context_data["high_risk_areas"] = high_risk_areas[:30]
+
+            risk_points = recon_data.get("risk_points", [])
+            if risk_points:
+                context_data["risk_points"] = risk_points[:50]
+                for point in risk_points[:15]:
+                    if isinstance(point, dict):
+                        key_findings.append(point)
+                        suggested_actions.append({
+                            "action": "deep_analysis",
+                            "target": f"{point.get('file_path', '')}:{point.get('line_start', 1)}",
+                            "reason": point.get("description", "需要深入分析")[:160],
+                        })
+
+            input_surfaces = recon_data.get("input_surfaces", [])
+            if input_surfaces:
+                context_data["input_surfaces"] = input_surfaces[:20]
+
+            trust_boundaries = recon_data.get("trust_boundaries", [])
+            if trust_boundaries:
+                context_data["trust_boundaries"] = trust_boundaries[:20]
+
+            target_files = recon_data.get("target_files", [])
+            if target_files:
+                context_data["target_files"] = target_files[:50]
+
+            coverage_summary = recon_data.get("coverage_summary", {})
+            if coverage_summary:
+                context_data["coverage_summary"] = coverage_summary
+
+            recon_queue_status = recon_data.get("recon_queue_status", {})
+            if recon_queue_status:
+                context_data["recon_queue_status"] = recon_queue_status
 
             # 提取初步发现
             initial_findings = recon_data.get("initial_findings", [])
@@ -2268,6 +2301,12 @@ Action Input: {{}}
                 recon_data = self._agent_results["recon"]
                 context_data["tech_stack"] = recon_data.get("tech_stack", {})
                 context_data["entry_points"] = recon_data.get("entry_points", [])[:10]
+                context_data["input_surfaces"] = recon_data.get("input_surfaces", [])[:20]
+                context_data["trust_boundaries"] = recon_data.get("trust_boundaries", [])[:20]
+                context_data["risk_points"] = recon_data.get("risk_points", [])[:30]
+                coverage_summary = recon_data.get("coverage_summary", {})
+                if coverage_summary:
+                    context_data["coverage_summary"] = coverage_summary
 
             if "analysis" in self._agent_results:
                 work_completed.append("完成代码深度分析（Verification 将执行全量候选验证）")
