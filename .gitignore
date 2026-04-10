@@ -238,3 +238,10 @@ backend/data/
 ./dist/
 
 backend/pytest*
+
+
+/data/
+.codex
+.claude
+claude/
+codex/
