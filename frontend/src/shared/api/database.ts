@@ -53,6 +53,8 @@ export interface SkillCatalogItemPayload {
   name: string;
   namespace: string;
   summary: string;
+  category?: string;
+  capabilities?: string[] | null;
   entrypoint: string;
   aliases: string[];
   has_scripts: boolean;
@@ -77,7 +79,6 @@ export interface SkillCatalogItemPayload {
   agent_label?: string | null;
   scope?: PromptSkillScopePayload | null;
   content?: string | null;
-  capabilities?: string[] | null;
 }
 
 interface SkillCatalogResponsePayload {
@@ -137,6 +138,13 @@ export interface ExternalToolScanCoreDetailPayload {
   name: string;
   namespace: string;
   summary: string;
+  category: string;
+  goal: string;
+  task_list: string[];
+  input_checklist: string[];
+  example_input: string;
+  pitfalls: string[];
+  sample_prompts: string[];
   entrypoint: string;
   mirror_dir: string;
   source_root: string;

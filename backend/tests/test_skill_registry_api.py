@@ -51,7 +51,6 @@ async def test_skill_detail_endpoint_exposes_supported_test_metadata():
     assert response.test_reason in (None, "")
     assert response.default_test_project_name == "libplist"
 
-
 @pytest.mark.asyncio
 async def test_skill_detail_endpoint_exposes_disabled_test_metadata():
     response = await skills_module.get_skill_detail(

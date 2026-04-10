@@ -68,7 +68,7 @@ async def check_agent_services():
         client.ping()
         logger.info("  - Docker 服务可用")
     except ImportError:
-        issues.append("Docker Python 库未安装 (pip install docker)")
+        issues.append("Docker Python 库未安装（请在 backend 目录执行 uv sync）")
     except Exception as e:
         issues.append(f"Docker 服务不可用: {e}")
     finally:

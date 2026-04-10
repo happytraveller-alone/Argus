@@ -93,6 +93,8 @@ def build_scan_core_catalog_item(item: Mapping[str, Any]) -> Dict[str, Any]:
         "name": str(item.get("name") or tool_id),
         "namespace": RESOURCE_NAMESPACE_SCAN_CORE,
         "summary": str(item.get("summary") or ""),
+        "category": str(item.get("category") or ""),
+        "capabilities": list(item.get("capabilities") or []),
         "status_label": build_status_label(is_enabled=True),
         "is_enabled": True,
         "is_available": True,

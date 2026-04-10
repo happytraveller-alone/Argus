@@ -34,6 +34,7 @@ jobs:
         run: |
           docker compose config >/dev/null
           docker compose -f docker-compose.yml -f docker-compose.hybrid.yml config >/dev/null
+          docker compose -f docker-compose.yml -f docker-compose.full.yml config >/dev/null
 
       - name: Delete public release tags and releases
         env:

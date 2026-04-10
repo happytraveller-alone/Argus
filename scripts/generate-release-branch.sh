@@ -39,6 +39,30 @@ trim() {
   printf '%s' "$value"
 }
 
+copy_directory_filtered() {
+  local src_dir="$1"
+  local dest_dir="$2"
+
+  mkdir -p "$dest_dir"
+
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a \
+      --exclude '.venv/' \
+      --exclude '.venv-*/' \
+      --exclude '.pytest_cache/' \
+      --exclude '.mypy_cache/' \
+      --exclude '__pycache__/' \
+      --exclude 'node_modules/' \
+      "$src_dir"/ "$dest_dir"/
+    return
+  fi
+
+  cp -R "$src_dir"/. "$dest_dir"
+  find "$dest_dir" \
+    \( -name '.venv' -o -name '.venv-*' -o -name '.pytest_cache' -o -name '.mypy_cache' -o -name '__pycache__' -o -name 'node_modules' \) \
+    -exec rm -rf {} +
+}
+
 copy_allowlisted_entry() {
   local raw_line="$1"
   local src_rel dest_rel src_abs dest_abs
@@ -59,7 +83,11 @@ copy_allowlisted_entry() {
   [[ -e "$src_abs" ]] || die "allowlisted path does not exist: $src_rel"
 
   mkdir -p "$(dirname "$dest_abs")"
-  cp -R "$src_abs" "$dest_abs"
+  if [[ -d "$src_abs" ]]; then
+    copy_directory_filtered "$src_abs" "$dest_abs"
+  else
+    cp -R "$src_abs" "$dest_abs"
+  fi
 }
 
 validate_release_tree() {
@@ -70,13 +98,12 @@ validate_release_tree() {
     "README_EN.md"
     "docker-compose.yml"
     "docker-compose.hybrid.yml"
-    "scripts/README-COMPOSE.md"
+    "docker-compose.full.yml"
     "docker/backend.Dockerfile"
     "docker/frontend.Dockerfile"
     "docker/env/backend/env.example"
     "backend/alembic.ini"
     "backend/pyproject.toml"
-    "backend/requirements-heavy.txt"
     "backend/uv.lock"
     "backend/app/main.py"
     "backend/app/services/runner_preflight.py"
@@ -95,7 +122,6 @@ validate_release_tree() {
     ".github"
     "deploy"
     "docs"
-    "docker-compose.full.yml"
     "docker-compose.self-contained.yml"
     "backend/tests"
     "frontend/tests"
@@ -105,8 +131,7 @@ validate_release_tree() {
     "frontend/scripts/run-node-tests.mjs"
     "frontend/scripts/setup.cjs"
     "frontend/scripts/setup.sh"
-    "scripts/compose-up-local-build.sh"
-    "scripts/compose-up-with-fallback.sh"
+    "scripts"
   )
 
   for rel_path in "${required_paths[@]}"; do
@@ -163,7 +188,6 @@ prune_release_tree() {
 
   rm -f \
     "$OUTPUT_DIR/NOTICE" \
-    "$OUTPUT_DIR/docker-compose.full.yml" \
     "$OUTPUT_DIR/docker-compose.self-contained.yml" \
     "$OUTPUT_DIR/docker-compose.release.yml" \
     "$OUTPUT_DIR/docker-compose.release-cython.yml" \
@@ -171,8 +195,7 @@ prune_release_tree() {
     "$OUTPUT_DIR/docker-compose.podman.yml" \
     "$OUTPUT_DIR/backend/.env" \
     "$OUTPUT_DIR/backend/README.md" \
-    "$OUTPUT_DIR/backend/SANDBOX_RUNNER_MIGRATION.md" \
-    "$OUTPUT_DIR/backend/get-pip.py"
+    "$OUTPUT_DIR/backend/SANDBOX_RUNNER_MIGRATION.md"
 
   prune_frontend_release_scripts
 
@@ -181,13 +204,11 @@ prune_release_tree() {
 
 overlay_release_templates() {
   mkdir -p \
-    "$OUTPUT_DIR/scripts" \
     "$OUTPUT_DIR/docker" \
     "$OUTPUT_DIR/backend/app/services"
 
   cp "$TEMPLATE_DIR/README.md" "$OUTPUT_DIR/README.md"
   cp "$TEMPLATE_DIR/README_EN.md" "$OUTPUT_DIR/README_EN.md"
-  cp "$TEMPLATE_DIR/README-COMPOSE.md" "$OUTPUT_DIR/scripts/README-COMPOSE.md"
   cp "$TEMPLATE_DIR/docker-compose.release-slim.yml" "$OUTPUT_DIR/docker-compose.yml"
   cp "$TEMPLATE_DIR/docker-compose.hybrid.release-slim.yml" "$OUTPUT_DIR/docker-compose.hybrid.yml"
   cp "$TEMPLATE_DIR/backend.Dockerfile" "$OUTPUT_DIR/docker/backend.Dockerfile"

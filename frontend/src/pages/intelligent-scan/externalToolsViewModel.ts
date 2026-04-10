@@ -6,7 +6,6 @@ import type {
   PromptSkillListPayload,
   SkillCatalogItemPayload,
 } from "@/shared/api/database";
-import type { SkillToolCatalogItem } from "./skillToolsCatalog.ts";
 import {
   buildPromptSkillDisplayName,
   resolvePromptAgentLabel,
@@ -274,17 +273,10 @@ export function buildExternalToolResources({
 
 export function buildExternalToolRows({
   resources,
-  staticSkillCatalog,
 }: {
   resources: ExternalToolResourcePayload[];
-  staticSkillCatalog: SkillToolCatalogItem[];
 }): ExternalToolRow[] {
-  const staticCatalogById = new Map(
-    staticSkillCatalog.map((item) => [item.id, item] as const),
-  );
-
   return resources.map((resource) => {
-    const staticSkill = staticCatalogById.get(resource.tool_id);
     const agentLabel =
       resource.tool_type === "skill"
         ? null
@@ -293,16 +285,13 @@ export function buildExternalToolRows({
             ? "全部智能体"
             : resolvePromptAgentLabel({ agentKey: resource.agent_key }));
     const capabilityCandidates = sanitizeCapabilities(resource.capabilities);
-    const staticCapabilities = sanitizeCapabilities(staticSkill?.taskList);
     const fallbackCapabilities = capabilityCandidates.length
       ? capabilityCandidates
-      : staticCapabilities.length
-        ? staticCapabilities
       : [
-          resource.tool_type === "prompt-custom"
-            ? `${scopeLabel(resource.scope || "global")} · ${agentLabel || "全部智能体"}`
-            : resource.summary,
-        ];
+        resource.tool_type === "prompt-custom"
+          ? `${scopeLabel(resource.scope || "global")} · ${agentLabel || "全部智能体"}`
+          : resource.summary,
+      ];
 
     return {
       ...resource,

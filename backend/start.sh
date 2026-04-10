@@ -12,11 +12,9 @@ if ! command -v uv &> /dev/null; then
     exit 1
 fi
 
-# 同步依赖（如果需要）
-if [ ! -d ".venv" ]; then
-    echo "首次运行，正在安装依赖..."
-    uv sync
-fi
+# 同步依赖
+echo "同步后端依赖..."
+uv sync --frozen
 
 # 运行数据库迁移
 echo "🔄 运行数据库迁移..."

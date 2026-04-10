@@ -19,7 +19,6 @@ import {
   type PromptSkillScopePayload,
 } from "@/shared/api/database";
 import PromptSkillEditorDialog from "./PromptSkillEditorDialog";
-import { SKILL_TOOLS_CATALOG } from "./skillToolsCatalog";
 import {
   buildExternalToolListState,
   buildExternalToolResources,
@@ -95,7 +94,6 @@ export default function SkillToolsPanel({
     () =>
       buildExternalToolRows({
         resources,
-        staticSkillCatalog: SKILL_TOOLS_CATALOG,
       }),
     [resources],
   );

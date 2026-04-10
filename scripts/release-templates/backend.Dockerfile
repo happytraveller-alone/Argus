@@ -45,7 +45,7 @@ RUN set -eux; \
   rm -rf /var/lib/apt/lists/*
 
 COPY --from=uvbin /uv /usr/local/bin/uv
-COPY backend/pyproject.toml backend/uv.lock backend/requirements-heavy.txt ./ 
+COPY backend/pyproject.toml backend/uv.lock ./
 
 RUN set -eux; \
   uv venv "${BACKEND_VENV_PATH}"; \

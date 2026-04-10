@@ -163,7 +163,9 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert 'CMD ["/bin/sh", "/app/docker-entrypoint.sh"]' not in backend_text
     assert "https://github.com/antgroup/YASA-Engine/archive/refs/tags/${YASA_VERSION}.tar.gz" not in backend_text
     assert "COPY frontend/yasa-engine-overrides /tmp/yasa-engine-overrides" not in backend_text
-    assert 'best_index="$(cat /tmp/pypi-best-index)"' in backend_text
+    assert 'best_index="$(cat /tmp/pypi-best-index)"' not in backend_text
+    assert 'ordered="$(python3 /usr/local/bin/package_source_selector.py \\' in backend_text
+    assert 'echo "Selected PyPI index: ${best_index}"' in backend_text
     assert 'for idx in "$@"; do \\' in backend_text
     assert 'sync_with_index "${BACKEND_PYPI_INDEX_PRIMARY}" || sync_with_index "${BACKEND_PYPI_INDEX_FALLBACK}"' not in backend_text
     assert "nodebase" not in backend_text
@@ -261,107 +263,47 @@ def test_nexus_web_dockerfile_is_removed() -> None:
     assert not (REPO_ROOT / "docker" / "nexus-web.Dockerfile").exists()
 
 
-def test_scripts_and_packaging_use_new_compose_layout() -> None:
-    dev_frontend_script_path = REPO_ROOT / "scripts" / "dev-frontend.sh"
-    dev_frontend_script = (
-        dev_frontend_script_path.read_text(encoding="utf-8")
-        if dev_frontend_script_path.exists()
-        else None
-    )
-    frontend_exec_script = (
-        REPO_ROOT / "frontend" / "scripts" / "run-in-dev-container.sh"
-    ).read_text(encoding="utf-8")
-    package_script_path = REPO_ROOT / "scripts" / "package-release-artifacts.sh"
-    package_script = (
-        package_script_path.read_text(encoding="utf-8")
-        if package_script_path.exists()
-        else None
-    )
-    deploy_script_path = REPO_ROOT / "scripts" / "deploy-release-artifacts.sh"
-    deploy_script = (
-        deploy_script_path.read_text(encoding="utf-8")
-        if deploy_script_path.exists()
-        else None
-    )
-    deb_build_script_path = REPO_ROOT / "packaging" / "deb" / "build_deb.sh"
-    deb_build_script = (
-        deb_build_script_path.read_text(encoding="utf-8")
-        if deb_build_script_path.exists()
-        else None
-    )
-    compose_wrapper_script = (
-        REPO_ROOT / "scripts" / "compose-up-with-fallback.sh"
-    ).read_text(encoding="utf-8")
-    compose_wrapper_ps1 = (
-        REPO_ROOT / "scripts" / "compose-up-with-fallback.ps1"
-    ).read_text(encoding="utf-8")
-    local_build_script = (
-        REPO_ROOT / "scripts" / "compose-up-local-build.sh"
-    ).read_text(encoding="utf-8")
+def test_removed_compose_wrapper_scripts_are_absent() -> None:
+    removed_paths = [
+        REPO_ROOT / "scripts" / "README-COMPOSE.md",
+        REPO_ROOT / "scripts" / "build-frontend.sh",
+        REPO_ROOT / "scripts" / "compose-up-local-build.sh",
+        REPO_ROOT / "scripts" / "compose-up-with-fallback.sh",
+        REPO_ROOT / "scripts" / "compose-up-with-fallback.ps1",
+        REPO_ROOT / "scripts" / "compose-up-with-fallback.bat",
+        REPO_ROOT / "scripts" / "setup-env.sh",
+        REPO_ROOT / "scripts" / "release.sh",
+        REPO_ROOT / "scripts" / "lib" / "compose-env.sh",
+    ]
 
-    if dev_frontend_script is not None:
-        assert "docker compose up -d db redis backend frontend" in dev_frontend_script
-        assert "frontend-dev" not in dev_frontend_script
-    assert 'COMPOSE=(docker compose -f "$REPO_ROOT/docker-compose.yml")' in frontend_exec_script
-    assert 'SERVICE="frontend"' in frontend_exec_script
-    assert "docker-compose.frontend-dev.yml" not in frontend_exec_script
-
-    if package_script is not None:
-        assert '-f "${ROOT_DIR}/docker-compose.full.yml"' in package_script
-        assert 'cp "$ROOT_DIR/docker-compose.full.yml" "$tmp_root/"' in package_script
-        assert '-f "${ROOT_DIR}/docker-compose.hybrid.yml"' in package_script
-        assert 'cp "$ROOT_DIR/docker-compose.hybrid.yml" "$tmp_root/"' in package_script
-        assert '-f "${ROOT_DIR}/docker-compose.self-contained.yml"' in package_script
-        assert 'cp "$ROOT_DIR/docker-compose.self-contained.yml" "$tmp_root/"' in package_script
-    if deploy_script is not None:
-        assert '-f "${TARGET_DIR}/docker-compose.full.yml"' in deploy_script
-
-    if deb_build_script is not None:
-        assert (REPO_ROOT / "deploy" / "compose" / "docker-compose.prod.yml").exists()
-        assert (REPO_ROOT / "deploy" / "compose" / "docker-compose.prod.cn.yml").exists()
-        assert 'cp "$ROOT_DIR/deploy/compose/docker-compose.prod.yml"' in deb_build_script
-        assert 'cp "$ROOT_DIR/deploy/compose/docker-compose.prod.cn.yml"' in deb_build_script
-    assert "detect_compose_cmd() {" in compose_wrapper_script
-    assert 'COMPOSE_ARGS=("$@")' in compose_wrapper_script
-    assert "function Detect-ComposeCommand" in compose_wrapper_ps1
-    assert "compose-up-with-fallback.ps1" in compose_wrapper_ps1
-    assert '"${COMPOSE[@]}" build backend' in local_build_script
-    assert '"${COMPOSE[@]}" build frontend' in local_build_script
-    assert '"${COMPOSE[@]}" build nexus-web' not in local_build_script
-    assert '"${COMPOSE[@]}" build nexus-itemDetail' not in local_build_script
-    assert '"${COMPOSE[@]}" up -d' in local_build_script
+    for path in removed_paths:
+        assert not path.exists(), str(path)
 
 
 def test_readmes_document_backend_managed_preflight_behavior() -> None:
     root_readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     root_readme_en = (REPO_ROOT / "README_EN.md").read_text(encoding="utf-8")
-    compose_readme = (REPO_ROOT / "scripts" / "README-COMPOSE.md").read_text(encoding="utf-8")
 
-    assert "docker compose up" in root_readme
+    assert "docker compose up --build" in root_readme
     assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in root_readme
-    assert "docker-compose.full.yml" not in root_readme
+    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" in root_readme
     assert "docker-compose.self-contained.yml" not in root_readme
     assert "package-release-artifacts.sh" not in root_readme
-    assert "scripts/README-COMPOSE.md" in root_readme
-    assert "docker compose up" in root_readme_en
+    assert "scripts/README-COMPOSE.md" not in root_readme
+    assert "docker compose up --build" in root_readme_en
     assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in root_readme_en
-    assert "docker-compose.full.yml" not in root_readme_en
+    assert "docker compose -f docker-compose.yml -f docker-compose.full.yml up --build" in root_readme_en
     assert "docker-compose.self-contained.yml" not in root_readme_en
     assert "package-release-artifacts.sh" not in root_readme_en
-    assert "scripts/README-COMPOSE.md" in root_readme_en
-    assert "docker compose up" in compose_readme
-    assert "docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build" in compose_readme
-    assert "docker-compose.full.yml" not in compose_readme
-    assert "docker-compose.self-contained.yml" not in compose_readme
-    assert "package-release-artifacts.sh" not in compose_readme
-    assert "deploy-release-artifacts.sh" not in compose_readme
-    assert "docker/env/backend/env.example" in compose_readme
+    assert "scripts/README-COMPOSE.md" not in root_readme_en
 
 
 def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     backend_text = (REPO_ROOT / "docker" / "backend.Dockerfile").read_text(
         encoding="utf-8"
     )
+    backend_readme_text = (REPO_ROOT / "backend" / "README.md").read_text(encoding="utf-8")
+    backend_start_text = (REPO_ROOT / "backend" / "start.sh").read_text(encoding="utf-8")
     pyproject_text = (REPO_ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
     yasa_runner_text = (REPO_ROOT / "docker" / "yasa-runner.Dockerfile").read_text(
         encoding="utf-8"
@@ -383,8 +325,10 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert "install_python_helpers()" not in backend_text
     assert "gitleaks; \\" not in backend_text
     assert "ENV BACKEND_VENV_PATH=/opt/backend-venv" in backend_text
+    assert "requirements-heavy.txt" not in backend_text
     assert 'uv venv "${BACKEND_VENV_PATH}"' in backend_text
     assert 'uv sync --active --frozen --no-dev' in backend_text
+    assert "COPY backend/pyproject.toml backend/uv.lock backend/README.md ./" in backend_text
     assert "COPY --from=builder /app/.venv /opt/backend-venv" not in backend_text
     assert "COPY --from=builder /opt/backend-venv /opt/backend-venv" not in dev_runtime_text
     assert "COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv" in dev_runtime_text
@@ -426,6 +370,12 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'code2flow --help >/dev/null 2>&1' in flow_parser_runner_text
     assert "python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1" in flow_parser_runner_text
     assert 'CMD ["python3", "/opt/flow-parser/flow_parser_runner.py", "--help"]' in flow_parser_runner_text
+    assert "source .venv/bin/activate" not in backend_readme_text
+    assert "uv run uvicorn app.main:app" in backend_readme_text
+    assert "uv run pytest" in backend_readme_text
+    assert "uv sync --frozen" in backend_start_text
+    assert "uv run alembic upgrade head" in backend_start_text
+    assert "uv run uvicorn app.main:app" in backend_start_text
 
 
 def test_backend_dockerfile_derives_docker_cli_image_from_selected_mirror() -> None:

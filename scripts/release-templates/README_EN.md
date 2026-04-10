@@ -1,14 +1,18 @@
 # VulHunter Release
 
 This branch is an auto-generated latest slim-source release snapshot from `main`.
-It supports exactly two startup commands:
+It supports exactly three startup commands:
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
 ## Before You Start
@@ -27,8 +31,9 @@ Set at least:
 
 ## Supported Modes
 
-- `docker compose up`: `backend`, `frontend`, runner images, and sandbox use published images; no extra third-page runtime is required.
+- `docker compose up --build`: start the default compose stack and build whatever the base definition marks as buildable.
 - `docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build`: on top of the default path, `frontend` and `backend` also switch to local builds.
+- `docker compose -f docker-compose.yml -f docker-compose.full.yml up --build`: enable the full local-build overlay for end-to-end verification.
 
 ## Runtime Notes
 
@@ -40,5 +45,3 @@ Set at least:
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:8000`
 - OpenAPI: `http://localhost:8000/docs`
-
-See [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md) for compose details.

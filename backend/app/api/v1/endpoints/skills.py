@@ -55,6 +55,8 @@ class SkillCatalogItem(BaseModel):
     name: str
     namespace: str
     summary: str
+    category: Optional[str] = None
+    capabilities: List[str] = Field(default_factory=list)
     entrypoint: Optional[str] = None
     aliases: List[str] = Field(default_factory=list)
     has_scripts: bool = False
@@ -85,6 +87,13 @@ class SkillDetailResponse(BaseModel):
     name: str
     namespace: str
     summary: str
+    category: str = ""
+    goal: str = ""
+    task_list: List[str] = Field(default_factory=list)
+    input_checklist: List[str] = Field(default_factory=list)
+    example_input: str = ""
+    pitfalls: List[str] = Field(default_factory=list)
+    sample_prompts: List[str] = Field(default_factory=list)
     entrypoint: str
     mirror_dir: str = ""
     source_root: str = ""

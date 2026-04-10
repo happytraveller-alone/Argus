@@ -1,7 +1,7 @@
 # =============================================
 # VulHunter v3.0.4 Docker Compose 日常开发默认配置
 # =============================================
-# 默认入口: docker compose up
+# 默认入口: docker compose up --build
 # 注意: backend 会在启动期通过 Docker SDK 执行 runner preflight。
 # 这些自检容器是一次性容器，成功或失败后都会立即删除，不作为 compose service 常驻。
 # 真正执行扫描时，backend 会继续按 `SCANNER_*_IMAGE` / `FLOW_PARSER_RUNNER_IMAGE`

@@ -4,11 +4,12 @@
   <a href="README.md">简体中文</a> | <strong>English</strong>
 </p>
 
-This release branch keeps only the slim-source files required to run VulHunter. It supports exactly two entrypoints:
+This release branch keeps only the slim-source files required to run VulHunter. It supports exactly three entrypoints:
 
 ```bash
-docker compose up
+docker compose up --build
 docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
 ```
 
 ## Before You Start
@@ -26,13 +27,13 @@ cp docker/env/backend/env.example docker/env/backend/.env
 
 ## Supported Commands
 
-### 1. Default image-based startup
+### 1. Default startup
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 
-Use this when you want the core stack to start from published `backend`, `frontend`, runner, and sandbox images.
+Use this when you want the default compose stack to start and build whatever the base definition marks as buildable.
 
 ### 2. Local frontend/backend rebuild
 
@@ -42,10 +43,16 @@ docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build
 
 Use this when you want to rebuild only the `frontend` and `backend` sources shipped in this branch while keeping database, Redis, runners, and sandbox image-based.
 
+### 3. Full local build
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+```
+
+Use this when you want the full local-build overlay for end-to-end local compose verification.
+
 ## Endpoints
 
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:8000`
 - OpenAPI: `http://localhost:8000/docs`
-
-See [`scripts/README-COMPOSE.md`](scripts/README-COMPOSE.md) for the compose contract.

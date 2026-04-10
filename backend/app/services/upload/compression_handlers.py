@@ -209,7 +209,7 @@ class SevenZCompressionStrategy(CompressionStrategy):
 
     async def extract(self, file_path: str, extract_to: str) -> List[str]:
         """解压 7Z 文件"""
-        # 需要安装 py7zr 包: pip install py7zr
+        # backend 依赖统一由 uv 管理；缺包时请更新 pyproject.toml 并执行 uv sync。
         try:
             import py7zr
         except ImportError:
@@ -266,7 +266,7 @@ class RarCompressionStrategy(CompressionStrategy):
 
     async def extract(self, file_path: str, extract_to: str) -> List[str]:
         """解压 RAR 文件"""
-        # 需要安装 rarfile 包: pip install rarfile
+        # backend 依赖统一由 uv 管理；缺包时请更新 pyproject.toml 并执行 uv sync。
         try:
             import rarfile
         except ImportError:

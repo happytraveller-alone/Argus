@@ -17,12 +17,6 @@ import {
 } from "@/shared/api/database";
 import PromptSkillEditorDialog from "@/pages/intelligent-scan/PromptSkillEditorDialog";
 import {
-  SKILL_TOOLS_CATALOG,
-  type SkillToolCatalogItem,
-} from "@/pages/intelligent-scan/skillToolsCatalog";
-import {
-} from "@/pages/intelligent-scan/externalToolsViewModel";
-import {
   buildPromptSkillAgentOptions,
   buildPromptSkillFormState,
   extractPromptSkillErrorMessage,
@@ -54,6 +48,13 @@ function normalizeScanCoreDetail(
     name: detail.name,
     namespace: detail.namespace,
     summary: detail.summary,
+    category: detail.category,
+    goal: detail.goal,
+    task_list: detail.task_list,
+    input_checklist: detail.input_checklist,
+    example_input: detail.example_input,
+    pitfalls: detail.pitfalls,
+    sample_prompts: detail.sample_prompts,
     entrypoint: detail.entrypoint,
     mirror_dir: detail.mirror_dir,
     source_root: detail.source_root,
@@ -82,26 +83,6 @@ function decodeToolId(rawToolId?: string) {
   } catch {
     return rawToolId;
   }
-}
-
-function buildSkillExamplePrompts(skillId: string): string[] {
-  const catalogPrompts: Record<string, string[]> = {
-    get_code_window: ["读取 plist 解析入口附近的最小代码窗口", "请围绕 src/main.c 第 12 行取证"],
-    search_code: ["搜索 plist_from_memory 的调用位置", "帮我定位 XML 解析相关函数"],
-    list_files: ["列出和 plist 解析最相关的源文件", "列出 src 目录下的核心 C 文件"],
-    get_file_outline: ["概览 src/main.c 的整体职责", "这个文件在 plist 解析流程里扮演什么角色？"],
-    get_function_summary: ["总结 plist_from_memory 函数做什么", "帮我理解主解析入口函数的风险点"],
-    locate_enclosing_function: ["src/xplist.c 第 120 行属于哪个函数？", "帮我确认 XML 解析锚点落在哪个函数里"],
-    get_symbol_body: ["提取 plist_from_memory 函数源码", "提取主解析入口函数代码"],
-    pattern_match: ["搜索是否存在 XML_PARSE_NOENT 风险模式", "帮我匹配危险解析选项"],
-    smart_scan: ["请快速扫描 libplist 的高风险区域", "用 smart_scan 看看哪些文件值得优先阅读"],
-    quick_audit: ["对 libplist 做一次快速审计", "请总结 libplist 的优先检查点"],
-  };
-  return catalogPrompts[skillId] ?? ["这个 skill 在 libplist 上最适合怎么测试？"];
-}
-
-function resolveToolName(toolId: string): string {
-  return SKILL_TOOLS_CATALOG.find((item) => item.id === toolId)?.id || toolId || "外部工具";
 }
 
 function formatTestModeLabel(testMode: SkillDetailResponse["test_mode"], testSupported: boolean) {
@@ -160,7 +141,6 @@ export interface ExternalToolDetailContentProps {
   toolType: ExternalToolType;
   toolId: string;
   toolName: string;
-  skillCatalogItem?: SkillToolCatalogItem | null;
   skillDetail?: SkillDetailResponse | null;
   promptSkillDetail?: PromptSkillDetailPayload | null;
   prompt: string;
@@ -225,16 +205,14 @@ function ToolHeader({
 }
 
 function SkillOverview({
-  skillCatalogItem,
   skillDetail,
 }: {
-  skillCatalogItem: SkillToolCatalogItem | null;
   skillDetail: SkillDetailResponse;
 }) {
   return (
     <div className="space-y-4 border-t border-border/50 pt-6">
       <div className="flex flex-wrap gap-2">
-        <Badge variant="outline">{skillCatalogItem?.category ?? "未分类"}</Badge>
+        <Badge variant="outline">{skillDetail.category || "未分类"}</Badge>
         <Badge variant="outline">
           {formatTestModeLabel(skillDetail.test_mode, skillDetail.test_supported)}
         </Badge>
@@ -244,12 +222,12 @@ function SkillOverview({
         <div className="space-y-3 rounded border border-border/40 bg-background/40 p-4">
           <div className="text-xs font-mono uppercase tracking-[0.28em] text-muted-foreground">概览</div>
           <p className="text-sm leading-7 text-foreground/90">{skillDetail.summary}</p>
-          <p className="text-sm leading-7 text-muted-foreground">{skillCatalogItem?.goal ?? "暂无补充目标说明。"}</p>
+          <p className="text-sm leading-7 text-muted-foreground">{skillDetail.goal || "暂无补充目标说明。"}</p>
         </div>
         <div className="space-y-3 rounded border border-border/40 bg-background/40 p-4">
           <div className="text-xs font-mono uppercase tracking-[0.28em] text-muted-foreground">任务列表</div>
           <ul className="space-y-2 text-sm leading-6 text-foreground/90">
-            {(skillCatalogItem?.taskList ?? []).map((item) => (
+            {skillDetail.task_list.map((item) => (
               <li key={item}>- {item}</li>
             ))}
           </ul>
@@ -257,7 +235,7 @@ function SkillOverview({
         <div className="space-y-3 rounded border border-border/40 bg-background/40 p-4">
           <div className="text-xs font-mono uppercase tracking-[0.28em] text-muted-foreground">输入说明</div>
           <ul className="space-y-2 text-sm leading-6 text-foreground/90">
-            {(skillCatalogItem?.inputChecklist ?? []).map((item) => (
+            {skillDetail.input_checklist.map((item) => (
               <li key={item}>- {item}</li>
             ))}
           </ul>
@@ -265,7 +243,7 @@ function SkillOverview({
         <div className="space-y-3 rounded border border-border/40 bg-background/40 p-4">
           <div className="text-xs font-mono uppercase tracking-[0.28em] text-muted-foreground">注意事项</div>
           <ul className="space-y-2 text-sm leading-6 text-foreground/90">
-            {(skillCatalogItem?.pitfalls ?? []).map((item) => (
+            {skillDetail.pitfalls.map((item) => (
               <li key={item}>- {item}</li>
             ))}
           </ul>
@@ -689,7 +667,6 @@ export function ScanConfigExternalToolDetailContent({
   toolType,
   toolId,
   toolName,
-  skillCatalogItem = null,
   skillDetail = null,
   promptSkillDetail = null,
   prompt,
@@ -736,7 +713,7 @@ export function ScanConfigExternalToolDetailContent({
             />
           ) : skillDetail ? (
             <div className="space-y-6 border-t border-border/50 pt-6">
-              <SkillOverview skillCatalogItem={skillCatalogItem} skillDetail={skillDetail} />
+              <SkillOverview skillDetail={skillDetail} />
               {skillDetail.test_mode === "structured_tool" ? (
                 <StructuredToolTestBench
                   toolId={toolId}
@@ -800,10 +777,6 @@ export default function ScanConfigExternalToolDetail() {
     buildPromptSkillFormState(null),
   );
 
-  const skillCatalogItem = useMemo(
-    () => SKILL_TOOLS_CATALOG.find((item) => item.id === toolId) ?? null,
-    [toolId],
-  );
   const agentOptions = useMemo(
     () =>
       buildPromptSkillAgentOptions({
@@ -823,9 +796,9 @@ export default function ScanConfigExternalToolDetail() {
     if (toolType === "prompt-builtin") {
       return toolId || "Prompt Skill";
     }
-    return resolveToolName(toolId);
-  }, [promptSkillDetail, toolId, toolType]);
-  const examplePrompts = useMemo(() => buildSkillExamplePrompts(toolId), [toolId]);
+    return skillDetail?.name || toolId || "外部工具";
+  }, [promptSkillDetail, skillDetail, toolId, toolType]);
+  const examplePrompts = useMemo(() => skillDetail?.sample_prompts ?? [], [skillDetail]);
   const { events, running, result, runPrompt, runStructured, stop } =
     useSkillTestStream(toolType === "skill" ? toolId : "");
 
@@ -1005,7 +978,6 @@ export default function ScanConfigExternalToolDetail() {
         toolType={toolType}
         toolId={toolId}
         toolName={toolName}
-        skillCatalogItem={skillCatalogItem}
         skillDetail={skillDetail}
         promptSkillDetail={promptSkillDetail}
         prompt={prompt}
