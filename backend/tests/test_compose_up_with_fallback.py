@@ -11,9 +11,7 @@ _EXPLICIT_MIRROR_ENV = {
     "DOCKERHUB_LIBRARY_MIRROR": "docker.m.daocloud.io/library",
     "GHCR_REGISTRY": "ghcr.io",
     "VULHUNTER_IMAGE_NAMESPACE": "unbengable12",
-    "NEXUS_WEB_IMAGE_NAMESPACE": "unbengable12",
     "VULHUNTER_IMAGE_TAG": "latest",
-    "NEXUS_WEB_IMAGE_TAG": "latest",
     "FRONTEND_NPM_REGISTRY": "https://registry.npmmirror.com",
     "FRONTEND_NPM_REGISTRY_FALLBACK": "https://registry.npmjs.org",
     "SANDBOX_NPM_REGISTRY_PRIMARY": "https://registry.npmmirror.com",
@@ -324,9 +322,7 @@ def test_wrapper_logs_resolved_remote_images(tmp_path: Path) -> None:
         ["up"],
         extra_env={
             "VULHUNTER_IMAGE_NAMESPACE": "acme-sec",
-            "NEXUS_WEB_IMAGE_NAMESPACE": "acme-ui",
             "VULHUNTER_IMAGE_TAG": "v9",
-            "NEXUS_WEB_IMAGE_TAG": "v2",
         },
     )
     combined_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
@@ -334,7 +330,7 @@ def test_wrapper_logs_resolved_remote_images(tmp_path: Path) -> None:
     assert result.returncode == 0, combined_output
     assert "BACKEND_IMAGE_RESOLVED=ghcr.io/acme-sec/vulhunter-backend:v9" in combined_output
     assert "FRONTEND_IMAGE_RESOLVED=ghcr.io/acme-sec/vulhunter-frontend:v9" in combined_output
-    assert "NEXUS_WEB_IMAGE_RESOLVED=ghcr.io/acme-ui/nexus-web:v2" in combined_output
+    assert "NEXUS_WEB_IMAGE_RESOLVED" not in combined_output
 
 
 def test_wrapper_failure_surfaces_remote_image_hint(tmp_path: Path) -> None:

@@ -175,42 +175,6 @@ services:
     networks:
       - vulhunter-network
 
-  nexus-web:
-    image: ${NEXUS_WEB_IMAGE:-vulhunter/nexus-web-local:latest}
-    pull_policy: ${NEXUS_WEB_PULL_POLICY:-build}
-    build:
-      context: ./nexus-web
-      dockerfile: ../docker/nexus-web.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-      tags:
-        - ${NEXUS_WEB_LOCAL_IMAGE_ALIAS:-vulhunter/nexus-web-local:latest}
-    ports:
-      - "${VULHUNTER_NEXUS_WEB_PORT:-5174}:5174"
-    networks:
-      - vulhunter-network
-    restart: always
-    mem_limit: 512m
-    pids_limit: 256
-
-  nexus-itemDetail:
-    image: ${NEXUS_ITEM_DETAIL_IMAGE:-vulhunter/nexus-item-detail-local:latest}
-    pull_policy: ${NEXUS_ITEM_DETAIL_PULL_POLICY:-build}
-    build:
-      context: ./nexus-itemDetail
-      dockerfile: ../docker/nexus-web.Dockerfile
-      args:
-        - DOCKERHUB_LIBRARY_MIRROR=${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}
-      tags:
-        - ${NEXUS_ITEM_DETAIL_LOCAL_IMAGE_ALIAS:-vulhunter/nexus-item-detail-local:latest}
-    ports:
-      - "5175:5175"
-    networks:
-      - vulhunter-network
-    restart: always
-    mem_limit: 512m
-    pids_limit: 256
-
 networks:
   vulhunter-network:
     driver: bridge

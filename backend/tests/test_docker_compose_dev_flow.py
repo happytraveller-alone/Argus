@@ -58,8 +58,8 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "target: dev" not in compose_text
     assert "\n  backend:\n" in compose_text
     assert "\n  frontend:\n" in compose_text
-    assert "\n  nexus-web:\n" in compose_text
-    assert "\n  nexus-itemDetail:\n" in compose_text
+    assert "\n  nexus-web:\n" not in compose_text
+    assert "\n  nexus-itemDetail:\n" not in compose_text
     assert "./backend:/app" not in compose_text
     assert ".:/workspace:ro" not in compose_text
     assert "./frontend:/app" not in compose_text
@@ -142,14 +142,11 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert "CODEX_SKILLS_AUTO_INSTALL" not in compose_text
     assert 'profiles: [ "tools" ]' in compose_text
     assert "adminer:" in compose_text
-    assert "image: ${NEXUS_WEB_IMAGE:-vulhunter/nexus-web-local:latest}" in compose_text
-    assert 'pull_policy: ${NEXUS_WEB_PULL_POLICY:-build}' in compose_text
-    assert "image: ${NEXUS_ITEM_DETAIL_IMAGE:-vulhunter/nexus-item-detail-local:latest}" in compose_text
-    assert 'pull_policy: ${NEXUS_ITEM_DETAIL_PULL_POLICY:-build}' in compose_text
-    assert "build:\n      context: ./nexus-web" in compose_text
-    assert "build:\n      context: ./nexus-itemDetail" in compose_text
-    assert "tags:\n        - ${NEXUS_WEB_LOCAL_IMAGE_ALIAS:-vulhunter/nexus-web-local:latest}" in compose_text
-    assert "tags:\n        - ${NEXUS_ITEM_DETAIL_LOCAL_IMAGE_ALIAS:-vulhunter/nexus-item-detail-local:latest}" in compose_text
+    assert "NEXUS_WEB_IMAGE" not in compose_text
+    assert "NEXUS_ITEM_DETAIL_IMAGE" not in compose_text
+    assert "./nexus-web" not in compose_text
+    assert "./nexus-itemDetail" not in compose_text
+    assert "docker/nexus-web.Dockerfile" not in compose_text
     assert "YASA_HOST_BIN_PATH" not in compose_text
     assert "YASA_HOST_RESOURCE_DIR" not in compose_text
     assert "YASA_BIN_PATH:" not in compose_text
@@ -201,10 +198,11 @@ def test_full_overlay_restores_full_local_build_defaults() -> None:
     assert "vulhunter/backend-local:latest" in full_overlay_text
     assert "vulhunter/backend-dev-local:latest" not in full_overlay_text
     assert "vulhunter/frontend-local:latest" in full_overlay_text
-    assert "image: ${NEXUS_WEB_IMAGE:-vulhunter/nexus-web-local:latest}" in full_overlay_text
-    assert 'pull_policy: ${NEXUS_WEB_PULL_POLICY:-build}' in full_overlay_text
-    assert "image: ${NEXUS_ITEM_DETAIL_IMAGE:-vulhunter/nexus-item-detail-local:latest}" in full_overlay_text
-    assert 'pull_policy: ${NEXUS_ITEM_DETAIL_PULL_POLICY:-build}' in full_overlay_text
+    assert "NEXUS_WEB_IMAGE" not in full_overlay_text
+    assert "NEXUS_ITEM_DETAIL_IMAGE" not in full_overlay_text
+    assert "./nexus-web" not in full_overlay_text
+    assert "./nexus-itemDetail" not in full_overlay_text
+    assert "docker/nexus-web.Dockerfile" not in full_overlay_text
     assert "context: ." in full_overlay_text
     assert "dockerfile: docker/backend.Dockerfile" in full_overlay_text
     assert "working_dir: !reset null" in full_overlay_text
@@ -259,15 +257,8 @@ def test_backend_dockerfile_builds_linux_arm64_yasa_from_source() -> None:
     assert 'CMD ["python3", "-m", "app.runtime.container_startup", "prod"]' in backend_text
 
 
-def test_nexus_web_dockerfile_pins_pnpm_before_nginx_runtime() -> None:
-    nexus_dockerfile = (REPO_ROOT / "docker" / "nexus-web.Dockerfile").read_text(
-        encoding="utf-8"
-    )
-
-    assert "FROM ${DOCKERHUB_LIBRARY_MIRROR:-docker.m.daocloud.io/library}/nginx:alpine" in nexus_dockerfile
-    assert "COPY ./dist /usr/share/nginx/html" in nexus_dockerfile
-    assert "COPY ./nginx.conf /etc/nginx/nginx.conf" in nexus_dockerfile
-    assert "EXPOSE 5174" in nexus_dockerfile
+def test_nexus_web_dockerfile_is_removed() -> None:
+    assert not (REPO_ROOT / "docker" / "nexus-web.Dockerfile").exists()
 
 
 def test_scripts_and_packaging_use_new_compose_layout() -> None:
@@ -336,8 +327,8 @@ def test_scripts_and_packaging_use_new_compose_layout() -> None:
     assert "compose-up-with-fallback.ps1" in compose_wrapper_ps1
     assert '"${COMPOSE[@]}" build backend' in local_build_script
     assert '"${COMPOSE[@]}" build frontend' in local_build_script
-    assert '"${COMPOSE[@]}" build nexus-web' in local_build_script
-    assert '"${COMPOSE[@]}" build nexus-itemDetail' in local_build_script
+    assert '"${COMPOSE[@]}" build nexus-web' not in local_build_script
+    assert '"${COMPOSE[@]}" build nexus-itemDetail' not in local_build_script
     assert '"${COMPOSE[@]}" up -d' in local_build_script
 
 

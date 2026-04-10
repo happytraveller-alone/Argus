@@ -57,6 +57,24 @@ def test_full_overlay_exposes_scanner_pmd_image_without_compose_runner_service()
     assert "动态拉起临时 runner 容器" in compose_text
 
 
+def test_active_compose_files_no_longer_reference_nexus_runtime_services() -> None:
+    repo_root = _repo_root()
+    compose_paths = [
+        repo_root / "docker-compose.yml",
+        repo_root / "docker-compose.full.yml",
+        repo_root / "scripts" / "release-templates" / "docker-compose.release-slim.yml",
+    ]
+
+    for compose_path in compose_paths:
+        compose_text = compose_path.read_text(encoding="utf-8")
+
+        assert "\n  nexus-web:\n" not in compose_text, compose_path.as_posix()
+        assert "\n  nexus-itemDetail:\n" not in compose_text, compose_path.as_posix()
+        assert "docker/nexus-web.Dockerfile" not in compose_text, compose_path.as_posix()
+        assert "5174" not in compose_text, compose_path.as_posix()
+        assert "5175" not in compose_text, compose_path.as_posix()
+
+
 def test_external_tools_manual_pmd_section_documents_runner_requirements() -> None:
     manual_test_path = _repo_root() / "backend" / "tests" / "test_external_tools_manual.py"
     manual_text = manual_test_path.read_text(encoding="utf-8")

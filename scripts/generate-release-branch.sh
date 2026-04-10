@@ -73,7 +73,6 @@ validate_release_tree() {
     "scripts/README-COMPOSE.md"
     "docker/backend.Dockerfile"
     "docker/frontend.Dockerfile"
-    "docker/nexus-web.Dockerfile"
     "docker/env/backend/env.example"
     "backend/alembic.ini"
     "backend/pyproject.toml"
@@ -90,10 +89,6 @@ validate_release_tree() {
     "frontend/scripts/dev-launcher.mjs"
     "frontend/src/app/main.tsx"
     "frontend/yasa-engine-overrides/src/config.ts"
-    "nexus-web/dist/index.html"
-    "nexus-web/nginx.conf"
-    "nexus-itemDetail/dist/index.html"
-    "nexus-itemDetail/nginx.conf"
   )
   forbidden_paths=(
     "NOTICE"
@@ -122,17 +117,6 @@ validate_release_tree() {
     [[ ! -e "$OUTPUT_DIR/$rel_path" ]] || die "forbidden path present in release tree: $rel_path"
   done
 
-  for rel_path in nexus-web nexus-itemDetail; do
-    [[ -d "$OUTPUT_DIR/$rel_path/dist" ]] || die "missing runtime bundle dist directory: $rel_path/dist"
-    [[ -f "$OUTPUT_DIR/$rel_path/nginx.conf" ]] || die "missing runtime bundle nginx config: $rel_path/nginx.conf"
-    [[ "$(find "$OUTPUT_DIR/$rel_path" -mindepth 1 -maxdepth 1 | wc -l)" -eq 2 ]] || \
-      die "runtime bundle contains unexpected top-level files: $rel_path"
-    [[ ! -e "$OUTPUT_DIR/$rel_path/src" ]] || die "runtime bundle leaked source directory: $rel_path/src"
-    [[ ! -e "$OUTPUT_DIR/$rel_path/node_modules" ]] || die "runtime bundle leaked node_modules: $rel_path/node_modules"
-    [[ ! -e "$OUTPUT_DIR/$rel_path/tests" ]] || die "runtime bundle leaked tests directory: $rel_path/tests"
-    [[ ! -e "$OUTPUT_DIR/$rel_path/package.json" ]] || die "runtime bundle leaked package.json: $rel_path/package.json"
-  done
-
   if find "$OUTPUT_DIR" \
     \( -name '.github' -o -name 'tests' -o -name '__pycache__' -o -name '.pytest_cache' -o -name 'node_modules' \) \
     -print -quit | grep -q .; then
@@ -147,17 +131,6 @@ clean_generated_tree() {
   find "$OUTPUT_DIR" \
     \( -name '*.pyc' -o -name '*.pyo' -o -name '.DS_Store' \) \
     -delete
-}
-
-prune_nexus_runtime_bundle() {
-  local bundle_root="$1"
-
-  [[ -d "$bundle_root" ]] || return 0
-
-  find "$bundle_root" -mindepth 1 -maxdepth 1 ! -name dist ! -name nginx.conf -exec rm -rf {} +
-
-  [[ -d "$bundle_root/dist" ]] || die "nexus runtime bundle missing dist directory: ${bundle_root#$OUTPUT_DIR/}"
-  [[ -f "$bundle_root/nginx.conf" ]] || die "nexus runtime bundle missing nginx.conf: ${bundle_root#$OUTPUT_DIR/}"
 }
 
 prune_frontend_release_scripts() {
@@ -202,8 +175,6 @@ prune_release_tree() {
     "$OUTPUT_DIR/backend/get-pip.py"
 
   prune_frontend_release_scripts
-  prune_nexus_runtime_bundle "$OUTPUT_DIR/nexus-web"
-  prune_nexus_runtime_bundle "$OUTPUT_DIR/nexus-itemDetail"
 
   rm -rf "$OUTPUT_DIR/scripts"
 }

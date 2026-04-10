@@ -25,12 +25,10 @@ RUNTIME_DIR="${DEPLOY_DIR}/runtime"
 
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
-NEXUS_PORT="${NEXUS_PORT:-5174}"
 
 FRONTEND_URL="http://localhost:${FRONTEND_PORT}"
 BACKEND_URL="http://localhost:${BACKEND_PORT}"
 BACKEND_DOCS_URL="http://localhost:${BACKEND_PORT}/docs"
-NEXUS_URL="http://localhost:${NEXUS_PORT}"
 
 # ─── 初始化目录 ───────────────────────────────────────────────────────────────
 ensure_deploy_dirs() {
@@ -170,6 +168,5 @@ print_ready_banner() {
   printf "${_CLR_GREEN}${_CLR_BOLD}==============================${_CLR_RESET}\n"
   printf "  前端:     %s\n" "${FRONTEND_URL}"
   printf "  后端 API: %s\n" "${BACKEND_DOCS_URL}"
-  printf "  Nexus:    %s\n" "${NEXUS_URL}"
   echo ""
 }

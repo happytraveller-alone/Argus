@@ -15,7 +15,6 @@
 ::   DOCKERHUB_LIBRARY_MIRROR  — docker.m.daocloud.io/library
 ::   GHCR_REGISTRY             — ghcr.io
 ::   VULHUNTER_IMAGE_NAMESPACE — backend/frontend/runner/sandbox 默认命名空间
-::   NEXUS_WEB_IMAGE_NAMESPACE — nexus-web 默认命名空间
 ::   FRONTEND_NPM_REGISTRY     — https://registry.npmmirror.com
 ::   BACKEND_PYPI_INDEX_PRIMARY — https://mirrors.aliyun.com/pypi/simple/
 
@@ -61,9 +60,7 @@ REM Set default mirrors (China mirrors for better connectivity)
 if not defined DOCKERHUB_LIBRARY_MIRROR set "DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library"
 if not defined GHCR_REGISTRY set "GHCR_REGISTRY=ghcr.io"
 if not defined VULHUNTER_IMAGE_NAMESPACE set "VULHUNTER_IMAGE_NAMESPACE=unbengable12"
-if not defined NEXUS_WEB_IMAGE_NAMESPACE set "NEXUS_WEB_IMAGE_NAMESPACE=unbengable12"
 if not defined VULHUNTER_IMAGE_TAG set "VULHUNTER_IMAGE_TAG=latest"
-if not defined NEXUS_WEB_IMAGE_TAG set "NEXUS_WEB_IMAGE_TAG=latest"
 if not defined UV_IMAGE set "UV_IMAGE=%GHCR_REGISTRY%/astral-sh/uv:latest"
 if not defined SANDBOX_BASE_IMAGE set "SANDBOX_BASE_IMAGE=%DOCKERHUB_LIBRARY_MIRROR%/python:3.11-slim"
 if not defined SANDBOX_IMAGE set "SANDBOX_IMAGE=%GHCR_REGISTRY%/%VULHUNTER_IMAGE_NAMESPACE%/vulhunter-sandbox:%VULHUNTER_IMAGE_TAG%"
@@ -83,9 +80,7 @@ if not defined SANDBOX_NPM_REGISTRY_FALLBACK set "SANDBOX_NPM_REGISTRY_FALLBACK=
 echo [INFO] DOCKERHUB_LIBRARY_MIRROR=%DOCKERHUB_LIBRARY_MIRROR%
 echo [INFO] GHCR_REGISTRY=%GHCR_REGISTRY%
 echo [INFO] VULHUNTER_IMAGE_NAMESPACE=%VULHUNTER_IMAGE_NAMESPACE%
-echo [INFO] NEXUS_WEB_IMAGE_NAMESPACE=%NEXUS_WEB_IMAGE_NAMESPACE%
 echo [INFO] VULHUNTER_IMAGE_TAG=%VULHUNTER_IMAGE_TAG%
-echo [INFO] NEXUS_WEB_IMAGE_TAG=%NEXUS_WEB_IMAGE_TAG%
 echo [INFO] UV_IMAGE=%UV_IMAGE%
 echo [INFO] SANDBOX_BASE_IMAGE=%SANDBOX_BASE_IMAGE%
 echo [INFO] SANDBOX_IMAGE=%SANDBOX_IMAGE%
@@ -98,11 +93,6 @@ if defined FRONTEND_IMAGE (
     echo [INFO] FRONTEND_IMAGE_RESOLVED=%FRONTEND_IMAGE%
 ) else (
     echo [INFO] FRONTEND_IMAGE_RESOLVED=%GHCR_REGISTRY%/%VULHUNTER_IMAGE_NAMESPACE%/vulhunter-frontend:%VULHUNTER_IMAGE_TAG%
-)
-if defined NEXUS_WEB_IMAGE (
-    echo [INFO] NEXUS_WEB_IMAGE_RESOLVED=%NEXUS_WEB_IMAGE%
-) else (
-    echo [INFO] NEXUS_WEB_IMAGE_RESOLVED=%GHCR_REGISTRY%/%NEXUS_WEB_IMAGE_NAMESPACE%/nexus-web:%NEXUS_WEB_IMAGE_TAG%
 )
 echo [WARN] GHCR host rewrite does not bypass private package permissions; default remote mode expects anonymous pull access or an explicit full image override.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/lib/local-mode.sh — Local 模式主链路
 # 依赖 common.sh 已被 source。
-# nexus 相关操作由 nexus.sh 提供。
+# 本地模式仅启动 frontend/backend；不再额外拉起第三页面服务。
 
 # ─── apt 依赖安装 ──────────────────────────────────────────────────────────────
 _apt_install_if_missing() {
@@ -230,7 +230,6 @@ local_status() {
 
   _service_status "backend"  "$BACKEND_PORT"
   _service_status "frontend" "$FRONTEND_PORT"
-  _service_status "nexus"    "$NEXUS_PORT"
 
   echo ""
   # 数据库/Redis 探活
@@ -252,7 +251,6 @@ local_stop() {
   log_step "停止本地服务..."
   stop_by_pid "backend"
   stop_by_pid "frontend"
-  stop_by_pid "nexus"
   log_success "所有本地服务已停止"
 }
 
@@ -269,7 +267,6 @@ local_start() {
   local_generate_frontend_env
   local_run_migrations
   local_start_backend
-  # nexus 由 nexus.sh 的 nexus_start 函数处理，在 deploy-linux.sh 中调用
   local_start_frontend
   print_ready_banner
 }

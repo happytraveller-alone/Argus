@@ -22,19 +22,6 @@ def _run_release_generator(output_dir: Path) -> subprocess.CompletedProcess[str]
         text=True,
     )
 
-
-def _assert_nexus_runtime_bundle(output_dir: Path, bundle_name: str) -> None:
-    bundle_root = output_dir / bundle_name
-    assert bundle_root.exists(), bundle_name
-    assert (bundle_root / "dist" / "index.html").exists(), f"{bundle_name}/dist/index.html"
-    assert (bundle_root / "nginx.conf").exists(), f"{bundle_name}/nginx.conf"
-    assert {path.name for path in bundle_root.iterdir()} == {"dist", "nginx.conf"}
-    assert not (bundle_root / "src").exists(), f"{bundle_name}/src"
-    assert not (bundle_root / "node_modules").exists(), f"{bundle_name}/node_modules"
-    assert not (bundle_root / "tests").exists(), f"{bundle_name}/tests"
-    assert not (bundle_root / "package.json").exists(), f"{bundle_name}/package.json"
-
-
 def test_release_workflow_generates_validates_and_force_pushes_release_branch() -> None:
     workflow_text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
@@ -98,7 +85,6 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
         "scripts/README-COMPOSE.md",
         "docker/backend.Dockerfile",
         "docker/frontend.Dockerfile",
-        "docker/nexus-web.Dockerfile",
         "docker/env/backend/env.example",
         "backend/alembic.ini",
         "backend/pyproject.toml",
@@ -114,10 +100,6 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
         "frontend/scripts/dev-launcher.mjs",
         "frontend/src/app/main.tsx",
         "frontend/yasa-engine-overrides/src/config.ts",
-        "nexus-web/dist/index.html",
-        "nexus-web/nginx.conf",
-        "nexus-itemDetail/dist/index.html",
-        "nexus-itemDetail/nginx.conf",
     ]
     for rel_path in required_paths:
         assert (output_dir / rel_path).exists(), rel_path
@@ -143,8 +125,8 @@ def test_release_generator_emits_latest_only_slim_tree(tmp_path: Path) -> None:
     for rel_path in forbidden_paths:
         assert not (output_dir / rel_path).exists(), rel_path
 
-    _assert_nexus_runtime_bundle(output_dir, "nexus-web")
-    _assert_nexus_runtime_bundle(output_dir, "nexus-itemDetail")
+    assert not (output_dir / "nexus-web").exists()
+    assert not (output_dir / "nexus-itemDetail").exists()
 
 
 def test_release_generator_writes_sanitized_compose_files(tmp_path: Path) -> None:
@@ -163,13 +145,13 @@ def test_release_generator_writes_sanitized_compose_files(tmp_path: Path) -> Non
     assert "frontend:" in compose_text
     assert "db:" in compose_text
     assert "redis:" in compose_text
-    assert "nexus-web:" in compose_text
-    assert "nexus-itemDetail:" in compose_text
-    assert "context: ./nexus-web" in compose_text
-    assert "context: ./nexus-itemDetail" in compose_text
-    assert "dockerfile: ../docker/nexus-web.Dockerfile" in compose_text
-    assert "image: ${NEXUS_WEB_IMAGE:-vulhunter/nexus-web-local:latest}" in compose_text
-    assert "image: ${NEXUS_ITEM_DETAIL_IMAGE:-vulhunter/nexus-item-detail-local:latest}" in compose_text
+    assert "nexus-web:" not in compose_text
+    assert "nexus-itemDetail:" not in compose_text
+    assert "context: ./nexus-web" not in compose_text
+    assert "context: ./nexus-itemDetail" not in compose_text
+    assert "dockerfile: ../docker/nexus-web.Dockerfile" not in compose_text
+    assert "NEXUS_WEB_IMAGE" not in compose_text
+    assert "NEXUS_ITEM_DETAIL_IMAGE" not in compose_text
 
     assert "docker-compose.full.yml" not in hybrid_text
     assert "docker-compose.self-contained.yml" not in hybrid_text
@@ -214,5 +196,5 @@ def test_generated_release_docs_only_publish_two_supported_commands(tmp_path: Pa
         assert "docker/env/backend/env.example" in doc
         assert "docker/env/backend/.env" in doc
         assert "LLM_API_KEY" in doc
-        assert "nexus-web" in doc
-        assert "nexus-itemDetail" in doc
+        assert "nexus-web" not in doc
+        assert "nexus-itemDetail" not in doc

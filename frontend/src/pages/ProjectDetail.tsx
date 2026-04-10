@@ -10,7 +10,7 @@ import {
 	FileText,
 	Loader2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -543,43 +543,6 @@ export default function ProjectDetail() {
 		}
 	}, [project]);
 
-	const nexusIframeRef = useRef<HTMLIFrameElement>(null);
-	const iframeReadyRef = useRef(false);
-	const archiveSentRef = useRef(false);  // 新增
-
-	const sendArchiveToIframe = useCallback(async (projectId: string) => {
-		if (archiveSentRef.current) return;  // 已发过，跳过
-		archiveSentRef.current = true;       // 标记已发
-		try {
-			const archive = await api.downloadProjectArchive(projectId);
-			const arrayBuffer = await archive.blob.arrayBuffer();
-			nexusIframeRef.current?.contentWindow?.postMessage(
-				{ type: 'LOAD_PROJECT_ZIP', filename: archive.filename, buffer: arrayBuffer },
-				'*',
-				[arrayBuffer],
-			);
-		} catch (error) {
-			archiveSentRef.current = false;    // 失败时重置，允许重试
-			console.error('Failed to fetch project archive:', error);
-			toast.error('获取项目压缩包失败');
-		}
-	}, []);
-
-	// iframe onLoad 时标记 ready，如果 project 已经有了就直接发
-	const handleIframeLoad = useCallback(() => {
-		iframeReadyRef.current = true;
-		if (project?.id) {
-			void sendArchiveToIframe(project.id);
-		}
-	}, [project, sendArchiveToIframe]);
-
-	// project 加载完成后，如果 iframe 已经 ready 就补发
-	useEffect(() => {
-		if (project?.id && iframeReadyRef.current) {
-			void sendArchiveToIframe(project.id);
-		}
-	}, [project?.id, sendArchiveToIframe]);
-
 	useEffect(() => {
 		if (
 			!shouldAutoGenerateProjectDescription({
@@ -892,16 +855,6 @@ export default function ProjectDetail() {
 						启动扫描
 					</Button> */}
 				</div>
-			</div>
-			<div className="relative z-10">
-				<iframe
-					ref={nexusIframeRef}
-          src={`http://${window.location.hostname}:5175`}
-					title="Nexus-itemDetail"
-					className="w-full border-0 rounded-lg"
-					style={{ height: '600px' }}
-					onLoad={handleIframeLoad}
-				/>
 			</div>
 			<div className="relative z-10 space-y-4 mt-6">
 				<ProjectDescriptionSection

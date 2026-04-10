@@ -27,15 +27,13 @@ Set at least:
 
 ## Supported Modes
 
-- `docker compose up`: `backend`, `frontend`, runner images, and sandbox use published cloud images; `nexus-web` and `nexus-itemDetail` still build locally from the bundled static runtime assets.
-- `docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build`: on top of the default path, `frontend` and `backend` also switch to local builds; `nexus-web` and `nexus-itemDetail` keep using the base compose local-build exception.
+- `docker compose up`: `backend`, `frontend`, runner images, and sandbox use published images; no extra third-page runtime is required.
+- `docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up --build`: on top of the default path, `frontend` and `backend` also switch to local builds.
 
-## Nexus Runtime Assets
+## Runtime Notes
 
-- The release snapshot keeps `nexus-web/dist/**`, `nexus-web/nginx.conf`, `nexus-itemDetail/dist/**`, and `nexus-itemDetail/nginx.conf`
 - The slim release flow does not restore the legacy release artifact or deploy script pipeline
-- `nexus-web` listens on `http://localhost:5174` by default
-- `nexus-itemDetail` listens on `http://localhost:5175` by default
+- The release snapshot no longer includes Nexus static runtime assets
 
 ## Endpoints
 

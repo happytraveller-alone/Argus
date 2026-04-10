@@ -28,8 +28,8 @@ def test_local_build_script_builds_services_sequentially_before_up() -> None:
     assert 'export COMPOSE_PARALLEL_LIMIT="${COMPOSE_PARALLEL_LIMIT:-1}"' in script_text
     assert '"${COMPOSE[@]}" build backend' in script_text
     assert '"${COMPOSE[@]}" build frontend' in script_text
-    assert '"${COMPOSE[@]}" build nexus-web' in script_text
-    assert '"${COMPOSE[@]}" build nexus-itemDetail' in script_text
+    assert '"${COMPOSE[@]}" build nexus-web' not in script_text
+    assert '"${COMPOSE[@]}" build nexus-itemDetail' not in script_text
     assert '"${COMPOSE[@]}" up -d' in script_text
 
 
@@ -106,6 +106,6 @@ def test_local_build_script_bootstraps_backend_env_from_example(tmp_path: Path) 
     assert "ARGS=compose -f" in log_output
     assert "build backend" in log_output
     assert "build frontend" in log_output
-    assert "build nexus-web" in log_output
-    assert "build nexus-itemDetail" in log_output
+    assert "build nexus-web" not in log_output
+    assert "build nexus-itemDetail" not in log_output
     assert "up -d" in log_output

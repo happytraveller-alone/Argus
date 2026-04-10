@@ -24,8 +24,6 @@ source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/docker-mode.sh"
 # shellcheck source=scripts/lib/local-mode.sh
 source "${SCRIPT_DIR}/lib/local-mode.sh"
-# shellcheck source=scripts/lib/nexus.sh
-source "${SCRIPT_DIR}/lib/nexus.sh"
 
 # ─── 参数解析 ─────────────────────────────────────────────────────────────────
 MODE="${1:-}"
@@ -92,13 +90,6 @@ _stop_all() {
   # Local
   ensure_deploy_dirs
   local_stop
-  nexus_stop
-}
-
-# ─── Local 完整启动（含 nexus） ───────────────────────────────────────────────
-_local_full_start() {
-  local_start   # 不含 nexus，见 local-mode.sh 末尾注释
-  nexus_start   # nexus 由 nexus.sh 单独处理
 }
 
 # ─── 主分发 ───────────────────────────────────────────────────────────────────
@@ -111,7 +102,7 @@ case "$MODE" in
     docker_start
     ;;
   local)
-    _local_full_start
+    local_start
     ;;
   status)
     _status_all

@@ -18,9 +18,7 @@
 #   DOCKERHUB_LIBRARY_MIRROR        — 指定 DockerHub 镜像源（跳过探测）
 #   GHCR_REGISTRY                   — 指定 GHCR registry（默认 ghcr.io）
 #   VULHUNTER_IMAGE_NAMESPACE       — backend/frontend/runner/sandbox 默认命名空间
-#   NEXUS_WEB_IMAGE_NAMESPACE       — nexus-web 默认命名空间
 #   VULHUNTER_IMAGE_TAG             — backend/frontend/runner/sandbox 默认 tag
-#   NEXUS_WEB_IMAGE_TAG             — nexus-web 默认 tag
 #   FRONTEND_NPM_REGISTRY           — 前端 NPM 镜像源
 #   BACKEND_PYPI_INDEX_PRIMARY      — Backend PyPI 主索引
 #   SANDBOX_PYPI_INDEX_PRIMARY      — Sandbox PyPI 主索引
@@ -675,28 +673,22 @@ run_with_retries() {
   local sandbox_image="$7"
   local backend_image_resolved=""
   local frontend_image_resolved=""
-  local nexus_web_image_resolved=""
-
   local attempt=1
   local rc=1
   local ready_watcher_pid=""
   while [ "$attempt" -le "$retry_count" ]; do
     backend_image_resolved="${BACKEND_IMAGE:-${ghcr_registry}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-backend:${VULHUNTER_IMAGE_TAG}}"
     frontend_image_resolved="${FRONTEND_IMAGE:-${ghcr_registry}/${VULHUNTER_IMAGE_NAMESPACE}/vulhunter-frontend:${VULHUNTER_IMAGE_TAG}}"
-    nexus_web_image_resolved="${NEXUS_WEB_IMAGE:-${ghcr_registry}/${NEXUS_WEB_IMAGE_NAMESPACE}/nexus-web:${NEXUS_WEB_IMAGE_TAG}}"
     log_info "Phase=${phase} attempt ${attempt}/${retry_count}"
     log_info "DOCKERHUB_LIBRARY_MIRROR=${dockerhub_mirror}"
     log_info "GHCR_REGISTRY=${ghcr_registry}"
     log_info "VULHUNTER_IMAGE_NAMESPACE=${VULHUNTER_IMAGE_NAMESPACE}"
-    log_info "NEXUS_WEB_IMAGE_NAMESPACE=${NEXUS_WEB_IMAGE_NAMESPACE}"
     log_info "VULHUNTER_IMAGE_TAG=${VULHUNTER_IMAGE_TAG}"
-    log_info "NEXUS_WEB_IMAGE_TAG=${NEXUS_WEB_IMAGE_TAG}"
     log_info "UV_IMAGE=${uv_image}"
     log_info "SANDBOX_BASE_IMAGE=${sandbox_base_image}"
     log_info "SANDBOX_IMAGE=${sandbox_image}"
     log_info "BACKEND_IMAGE_RESOLVED=${backend_image_resolved}"
     log_info "FRONTEND_IMAGE_RESOLVED=${frontend_image_resolved}"
-    log_info "NEXUS_WEB_IMAGE_RESOLVED=${nexus_web_image_resolved}"
     log_info "FRONTEND_NPM_REGISTRY=${FRONTEND_NPM_REGISTRY_SELECTED}"
     log_info "FRONTEND_NPM_REGISTRY_FALLBACK=${FRONTEND_NPM_REGISTRY_FALLBACK_SELECTED}"
     log_warn "GHCR registry host rewrites do not bypass private-package permissions; default remote mode expects anonymous pull access or an explicit full image override."
@@ -708,12 +700,10 @@ run_with_retries() {
     fi
 
     set +e
-    DOCKERHUB_LIBRARY_MIRROR="${dockerhub_mirror}" \
+      DOCKERHUB_LIBRARY_MIRROR="${dockerhub_mirror}" \
       GHCR_REGISTRY="${ghcr_registry}" \
       VULHUNTER_IMAGE_NAMESPACE="${VULHUNTER_IMAGE_NAMESPACE}" \
-      NEXUS_WEB_IMAGE_NAMESPACE="${NEXUS_WEB_IMAGE_NAMESPACE}" \
       VULHUNTER_IMAGE_TAG="${VULHUNTER_IMAGE_TAG}" \
-      NEXUS_WEB_IMAGE_TAG="${NEXUS_WEB_IMAGE_TAG}" \
       UV_IMAGE="${uv_image}" \
       SANDBOX_BASE_IMAGE="${sandbox_base_image}" \
       SANDBOX_IMAGE="${sandbox_image}" \
@@ -754,7 +744,6 @@ run_with_retries() {
     log_warn "anonymous GHCR pull failed or the image namespace/tag is incorrect"
     log_warn "resolved backend image: ${backend_image_resolved}"
     log_warn "resolved frontend image: ${frontend_image_resolved}"
-    log_warn "resolved nexus-web image: ${nexus_web_image_resolved}"
     if [ "$attempt" -lt "$retry_count" ]; then
       log_info "Retrying in ${RETRY_INTERVAL_SECONDS}s..."
       sleep "${RETRY_INTERVAL_SECONDS}"
@@ -772,8 +761,6 @@ run_with_retries() {
 #   3. 在子命令参数中追加 --build（若尚未存在）
 # 使用 bash nameref 将结果写入调用方的数组变量
 build_local_fallback_compose_args() {
-  local -n _out_arr="$1"
-  shift
   local -a input_args=("$@")
   local -a global_opts=()
   local -a subcmd_args=()
@@ -810,13 +797,13 @@ build_local_fallback_compose_args() {
     idx=$((idx + 1))
   done
 
-  _out_arr=()
+  LOCAL_FALLBACK_COMPOSE_ARGS=()
   if [ "${#global_opts[@]}" -gt 0 ]; then
-    _out_arr+=("${global_opts[@]}")
+    LOCAL_FALLBACK_COMPOSE_ARGS+=("${global_opts[@]}")
   fi
-  _out_arr+=(-f docker-compose.yml -f docker-compose.full.yml)
+  LOCAL_FALLBACK_COMPOSE_ARGS+=(-f docker-compose.yml -f docker-compose.full.yml)
   if [ "${#subcmd_args[@]}" -gt 0 ]; then
-    _out_arr+=("${subcmd_args[@]}")
+    LOCAL_FALLBACK_COMPOSE_ARGS+=("${subcmd_args[@]}")
   fi
 
   local has_build=0
@@ -830,15 +817,16 @@ build_local_fallback_compose_args() {
     done
   fi
   if [ "$has_build" -eq 0 ]; then
-    _out_arr+=(--build)
+    LOCAL_FALLBACK_COMPOSE_ARGS+=(--build)
   fi
 }
 
 # 尝试使用 docker-compose.full.yml 覆盖层进行本地构建回退。
 # 使用探测阶段选出的最佳镜像源。成功返回 0，失败返回非零。
 run_local_build_fallback() {
-  local -a local_compose_args=()
-  build_local_fallback_compose_args local_compose_args "${COMPOSE_ARGS[@]}"
+  LOCAL_FALLBACK_COMPOSE_ARGS=()
+  build_local_fallback_compose_args "${COMPOSE_ARGS[@]}"
+  local -a local_compose_args=("${LOCAL_FALLBACK_COMPOSE_ARGS[@]}")
 
   local dockerhub_mirror="${DOCKERHUB_LIBRARY_MIRROR_PRIMARY_SELECTED}"
   local ghcr_registry="${GHCR_REGISTRY_PRIMARY_SELECTED}"
@@ -870,9 +858,7 @@ run_local_build_fallback() {
   DOCKERHUB_LIBRARY_MIRROR="${dockerhub_mirror}" \
     GHCR_REGISTRY="${ghcr_registry}" \
     VULHUNTER_IMAGE_NAMESPACE="${VULHUNTER_IMAGE_NAMESPACE}" \
-    NEXUS_WEB_IMAGE_NAMESPACE="${NEXUS_WEB_IMAGE_NAMESPACE}" \
     VULHUNTER_IMAGE_TAG="${VULHUNTER_IMAGE_TAG}" \
-    NEXUS_WEB_IMAGE_TAG="${NEXUS_WEB_IMAGE_TAG}" \
     UV_IMAGE="${uv_image}" \
     SANDBOX_BASE_IMAGE="${sandbox_base_image}" \
     SANDBOX_IMAGE="${sandbox_image}" \
@@ -1083,9 +1069,7 @@ fi
 [ "$PHASE_COUNT" -ge 1 ] || PHASE_COUNT=1
 
 VULHUNTER_IMAGE_TAG="${VULHUNTER_IMAGE_TAG:-latest}"
-NEXUS_WEB_IMAGE_TAG="${NEXUS_WEB_IMAGE_TAG:-latest}"
 VULHUNTER_IMAGE_NAMESPACE="${VULHUNTER_IMAGE_NAMESPACE:-unbengable12}"
-NEXUS_WEB_IMAGE_NAMESPACE="${NEXUS_WEB_IMAGE_NAMESPACE:-unbengable12}"
 
 log_info "Compose command: ${COMPOSE_BIN[*]}"
 log_info "Compose args: ${COMPOSE_ARGS[*]}"

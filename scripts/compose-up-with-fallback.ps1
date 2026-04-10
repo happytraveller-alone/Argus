@@ -16,7 +16,6 @@
 #   DOCKERHUB_LIBRARY_MIRROR  — DockerHub 镜像源
 #   GHCR_REGISTRY             — GHCR registry（默认 ghcr.io）
 #   VULHUNTER_IMAGE_NAMESPACE — backend/frontend/runner/sandbox 默认命名空间
-#   NEXUS_WEB_IMAGE_NAMESPACE — nexus-web 默认命名空间
 #   FRONTEND_NPM_REGISTRY     — 前端 NPM 镜像源
 #   BACKEND_PYPI_INDEX_PRIMARY — Backend PyPI 主索引
 
@@ -234,16 +233,8 @@ if (-not $env:VULHUNTER_IMAGE_NAMESPACE) {
     $env:VULHUNTER_IMAGE_NAMESPACE = "unbengable12"
 }
 
-if (-not $env:NEXUS_WEB_IMAGE_NAMESPACE) {
-    $env:NEXUS_WEB_IMAGE_NAMESPACE = "unbengable12"
-}
-
 if (-not $env:VULHUNTER_IMAGE_TAG) {
     $env:VULHUNTER_IMAGE_TAG = "latest"
-}
-
-if (-not $env:NEXUS_WEB_IMAGE_TAG) {
-    $env:NEXUS_WEB_IMAGE_TAG = "latest"
 }
 
 if (-not $env:FRONTEND_NPM_REGISTRY) {
@@ -306,16 +297,13 @@ Log-Info "Selected mirrors:"
 Log-Info "  DOCKERHUB_LIBRARY_MIRROR=$env:DOCKERHUB_LIBRARY_MIRROR"
 Log-Info "  GHCR_REGISTRY=$env:GHCR_REGISTRY"
 Log-Info "  VULHUNTER_IMAGE_NAMESPACE=$env:VULHUNTER_IMAGE_NAMESPACE"
-Log-Info "  NEXUS_WEB_IMAGE_NAMESPACE=$env:NEXUS_WEB_IMAGE_NAMESPACE"
 Log-Info "  VULHUNTER_IMAGE_TAG=$env:VULHUNTER_IMAGE_TAG"
-Log-Info "  NEXUS_WEB_IMAGE_TAG=$env:NEXUS_WEB_IMAGE_TAG"
 Log-Info "  UV_IMAGE=$env:UV_IMAGE"
 Log-Info "  SANDBOX_BASE_IMAGE=$env:SANDBOX_BASE_IMAGE"
 Log-Info "  SANDBOX_IMAGE=$env:SANDBOX_IMAGE"
 Log-Info "  FRONTEND_NPM_REGISTRY=$env:FRONTEND_NPM_REGISTRY"
 Log-Info "  BACKEND_IMAGE_RESOLVED=$($env:BACKEND_IMAGE ? $env:BACKEND_IMAGE : "$($env:GHCR_REGISTRY)/$($env:VULHUNTER_IMAGE_NAMESPACE)/vulhunter-backend:$($env:VULHUNTER_IMAGE_TAG)")"
 Log-Info "  FRONTEND_IMAGE_RESOLVED=$($env:FRONTEND_IMAGE ? $env:FRONTEND_IMAGE : "$($env:GHCR_REGISTRY)/$($env:VULHUNTER_IMAGE_NAMESPACE)/vulhunter-frontend:$($env:VULHUNTER_IMAGE_TAG)")"
-Log-Info "  NEXUS_WEB_IMAGE_RESOLVED=$($env:NEXUS_WEB_IMAGE ? $env:NEXUS_WEB_IMAGE : "$($env:GHCR_REGISTRY)/$($env:NEXUS_WEB_IMAGE_NAMESPACE)/nexus-web:$($env:NEXUS_WEB_IMAGE_TAG)")"
 Log-Warn "GHCR registry host rewrites do not bypass private-package permissions; default remote mode expects anonymous pull access or an explicit full image override."
 
 # Execute docker compose
