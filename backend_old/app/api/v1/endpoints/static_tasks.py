@@ -2,7 +2,6 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import static_tasks_cache as _cache
 from app.api.v1.endpoints import static_tasks_opengrep as _opengrep
-from app.api.v1.endpoints import static_tasks_opengrep_rules as _opengrep_rules
 from app.api.v1.endpoints.static_tasks_shared import (
     deps,
     get_db,
@@ -13,15 +12,8 @@ from app.api.v1.endpoints.static_tasks_shared import (
 
 router = APIRouter()
 router.include_router(_opengrep.router)
-router.include_router(_opengrep_rules.router)
 router.include_router(_cache.router)
 
-
-OpengrepRuleSingleUploadRequest = _opengrep_rules.OpengrepRuleSingleUploadRequest
-OpengrepRuleSingleUploadResponse = _opengrep_rules.OpengrepRuleSingleUploadResponse
-OpengrepRuleBatchUpdateRequest = _opengrep_rules.OpengrepRuleBatchUpdateRequest
-OpengrepRulePatchUploadResponse = _opengrep_rules.OpengrepRulePatchUploadResponse
-PatchRuleCreationResponse = _opengrep_rules.PatchRuleCreationResponse
 
 OpengrepScanTaskCreate = _opengrep.OpengrepScanTaskCreate
 OpengrepScanTaskResponse = _opengrep.OpengrepScanTaskResponse
@@ -43,21 +35,6 @@ get_static_task_findings = _opengrep.get_static_task_findings
 get_static_task_finding = _opengrep.get_static_task_finding
 get_static_task_finding_context = _opengrep.get_static_task_finding_context
 update_static_task_finding = _opengrep.update_static_task_finding
-
-list_opengrep_rules = _opengrep_rules.list_opengrep_rules
-get_opengrep_rule = _opengrep_rules.get_opengrep_rule
-get_generating_rules = _opengrep_rules.get_generating_rules
-create_opengrep_rule = _opengrep_rules.create_opengrep_rule
-create_opengrep_generic_rule = _opengrep_rules.create_opengrep_generic_rule
-edit_opengrep_rule = _opengrep_rules.edit_opengrep_rule
-update_opengrep_rule = _opengrep_rules.update_opengrep_rule
-delete_opengrep_rule = _opengrep_rules.delete_opengrep_rule
-select_opengrep_rules = _opengrep_rules.select_opengrep_rules
-upload_opengrep_rule_json = _opengrep_rules.upload_opengrep_rule_json
-upload_patch_archive = _opengrep_rules.upload_patch_archive
-upload_patch_directory = _opengrep_rules.upload_patch_directory
-upload_opengrep_rules = _opengrep_rules.upload_opengrep_rules
-upload_opengrep_rules_directory = _opengrep_rules.upload_opengrep_rules_directory
 
 get_repo_cache_stats = _cache.get_repo_cache_stats
 cleanup_unused_cache = _cache.cleanup_unused_cache

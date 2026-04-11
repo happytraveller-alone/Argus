@@ -43,6 +43,10 @@
   - 删除 `backend_old/app/api/v1/endpoints/static_tasks_pmd.py`
   - `backend_old/app/api/v1/endpoints/static_tasks.py` 已移除 `_pmd` import、router include、runtime bind、schema alias、helper alias 与 re-export
   - inventory 中 `/api/v1/static-tasks/pmd/*` 已从 Python proxy 改为 Rust-owned (`migrate`)
+- Opengrep rules Python endpoint surface retired:
+  - 删除 `backend_old/app/api/v1/endpoints/static_tasks_opengrep_rules.py`
+  - `backend_old/app/api/v1/endpoints/static_tasks.py` 已移除 `_opengrep_rules` import、router include、schema alias、helper alias 与 re-export
+  - inventory 中 `/api/v1/static-tasks/rules*` 已从 Python proxy 改为 Rust-owned (`migrate`)
 
 ## Wait Correct Entries
 
@@ -95,6 +99,23 @@
   - `python-endpoints-inventory.csv` 中 `/api/v1/static-tasks/pmd/*` 全部由 `proxy` 切换为 `migrate`
   - source/owner 切换为 `static_tasks_rust` + `backend/src/routes/static_tasks.rs`
   - 汇总计数更新为 `migrate=106`、`proxy=46`，task-group `proxy=33`
+- 后续修复波次: Wave A static engine endpoint retirement
+- owner: Rust migration
+
+### 17. opengrep-rules endpoint surface retired from Python static tasks router
+
+- endpoint / feature: `/api/v1/static-tasks/rules*`
+- Python 旧行为:
+  - `backend_old/app/api/v1/endpoints/static_tasks.py` 通过 `_opengrep_rules` include/schema alias/helper alias/re-export 暴露 opengrep-rules endpoint
+  - `backend_old/app/api/v1/endpoints/static_tasks_opengrep_rules.py` 承载完整 opengrep-rules route surface
+- Rust 当前行为:
+  - `backend/src/routes/static_tasks.rs` 已提供 Rust-owned `/api/v1/static-tasks/rules*`
+  - Python `static_tasks.py` 已移除 `_opengrep_rules` import、`router.include_router(_opengrep_rules.router)`、schema alias、helper alias、re-export
+  - `backend_old/app/api/v1/endpoints/static_tasks_opengrep_rules.py` 已删除
+- inventory 更新:
+  - `python-endpoints-inventory.csv` 中 `/api/v1/static-tasks/rules*` 全部由 `proxy` 切换为 `migrate`
+  - source/owner 切换为 `static_tasks_rust` + `backend/src/routes/static_tasks.rs`
+  - 汇总计数更新为 `migrate=120`、`proxy=32`，task-group `proxy=19`
 - 后续修复波次: Wave A static engine endpoint retirement
 - owner: Rust migration
 
