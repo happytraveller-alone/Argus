@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const dialogPath =
-  "/home/xyf/AuditTool/frontend/src/pages/AgentAudit/components/ReportExportDialog.tsx";
+const dialogPath = new URL(
+  "../src/pages/AgentAudit/components/ReportExportDialog.tsx",
+  import.meta.url,
+);
 
 test("ReportExportDialog 文案不再把导出结果描述为仅已验证漏洞", () => {
   const source = readFileSync(dialogPath, "utf8");

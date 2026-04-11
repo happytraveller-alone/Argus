@@ -55,6 +55,11 @@
   - 删除 `backend_old/app/api/v1/endpoints/agent_test.py`
   - `backend_old/app/api/v1/api.py` 已移除 `agent_test` import 与 `api_router.include_router(..., prefix="/agent-test")` 挂载
   - inventory 中 `/api/v1/agent-test/*` 已从 Python proxy 改为 Rust-owned (`migrate`)
+- Agent-task reporting Python endpoint surface retired:
+  - 删除 `backend_old/app/api/v1/endpoints/agent_tasks_reporting.py`
+  - `backend_old/app/api/v1/endpoints/agent_tasks.py` 已移除 reporting import/re-export 与 reporting router 挂载
+  - Rust `backend/src/routes/agent_tasks.rs` 已覆盖 `/api/v1/agent-tasks/{task_id}/report` 与 `/api/v1/agent-tasks/{task_id}/findings/{finding_id}/report`
+  - inventory 中两条 agent-task report export route 已登记为 Rust-owned (`migrate`)
 
 ## Wait Correct Entries
 
@@ -174,8 +179,24 @@
 - inventory 更新:
   - `python-endpoints-inventory.csv` 中 `/api/v1/static-tasks/cache/*` 全部由 `proxy` 切换为 `migrate`
   - source/owner 切换为 `static_tasks_rust` + `backend/src/routes/static_tasks.rs`
-  - 汇总计数更新为 `migrate=139`、`proxy=13`，task-group `proxy=0`
+- 汇总计数更新为 `migrate=139`、`proxy=13`，task-group `proxy=0`
 - 后续修复波次: Wave A static tasks cache retirement
+- owner: Rust migration
+
+### 21. agent-task-reporting endpoint surface retired from Python agent tasks router
+
+- endpoint / feature: `/api/v1/agent-tasks/{task_id}/report`, `/api/v1/agent-tasks/{task_id}/findings/{finding_id}/report`
+- Python 旧行为:
+  - `backend_old/app/api/v1/endpoints/agent_tasks.py` 通过 `agent_tasks_reporting` 暴露 report export route
+  - `backend_old/app/api/v1/endpoints/agent_tasks_reporting.py` 承载 task report 与 finding report 导出逻辑
+- Rust 当前行为:
+  - `backend/src/routes/agent_tasks.rs` 已接管 task/finding report export，并支持 `format`、`include_code_snippets`、`include_remediation`、`include_metadata`、`compact_mode`
+  - Rust 导出提供 project-based 下载文件名，同时包含 `filename*` UTF-8 Content-Disposition
+  - Python `agent_tasks.py` 已移除 reporting 聚合入口，`agent_tasks_reporting.py` 已删除
+- inventory 更新:
+  - `python-endpoints-inventory.csv` 新增并登记两条 agent-task report route 为 `migrate`
+  - 汇总计数更新为 `migrate=141`、`proxy=13`，task-group `proxy=0`
+- 后续修复波次: Wave A task route retirement
 - owner: Rust migration
 
 ### 12. `backend_old/app/utils` runtime artifacts retired; only offline patch text remains

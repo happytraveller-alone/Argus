@@ -2,7 +2,7 @@ use axum::{
     body::{to_bytes, Body},
     http::{Method, Request, StatusCode},
 };
-use backend_rust::{app::build_router, config::AppConfig, state::AppState};
+use backend_rust::{app::build_router, config::AppConfig, db::task_state, state::AppState};
 use serde_json::{json, Value};
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -19,8 +19,12 @@ fn encode_path_segment(value: &str) -> String {
 }
 
 async fn create_project(app: &axum::Router) -> String {
+    create_project_with_name(app, "task-api-project").await
+}
+
+async fn create_project_with_name(app: &axum::Router, name: &str) -> String {
     let create_payload = json!({
-        "name": "task-api-project",
+        "name": name,
         "source_type": "zip",
         "default_branch": "main",
         "programming_languages": ["python", "typescript"]
@@ -42,6 +46,79 @@ async fn create_project(app: &axum::Router) -> String {
     let payload: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     payload["id"].as_str().unwrap().to_string()
+}
+
+async fn seed_agent_report_findings(
+    state: &AppState,
+    task_id: &str,
+) -> (String, String) {
+    let mut snapshot = task_state::load_snapshot(state).await.unwrap();
+    let record = snapshot.agent_tasks.get_mut(task_id).unwrap();
+    record.findings.clear();
+    let first_id = Uuid::new_v4().to_string();
+    let second_id = Uuid::new_v4().to_string();
+    record.findings.push(task_state::AgentFindingRecord {
+        id: first_id.clone(),
+        task_id: task_id.to_string(),
+        vulnerability_type: "sql_injection".to_string(),
+        severity: "high".to_string(),
+        title: "SQL injection in login".to_string(),
+        display_title: Some("登录 SQL 注入".to_string()),
+        description: Some("raw SQL string interpolation".to_string()),
+        description_markdown: Some("登录查询拼接了用户输入。".to_string()),
+        file_path: Some("src/auth/login.ts".to_string()),
+        line_start: Some(42),
+        line_end: Some(48),
+        resolved_file_path: Some("src/auth/login.ts".to_string()),
+        resolved_line_start: Some(42),
+        code_snippet: Some("SELECT * FROM users WHERE email = '${email}'".to_string()),
+        status: "verified".to_string(),
+        is_verified: true,
+        verdict: Some("confirmed".to_string()),
+        authenticity: Some("confirmed".to_string()),
+        suggestion: Some("use parameterized query".to_string()),
+        fix_code: Some("SELECT * FROM users WHERE email = ?".to_string()),
+        report: Some("first finding report".to_string()),
+        confidence: Some(0.95),
+        created_at: "2026-04-12T10:00:00Z".to_string(),
+        ..Default::default()
+    });
+    record.findings.push(task_state::AgentFindingRecord {
+        id: second_id.clone(),
+        task_id: task_id.to_string(),
+        vulnerability_type: "xss".to_string(),
+        severity: "medium".to_string(),
+        title: "Reflected XSS in search".to_string(),
+        display_title: Some("搜索页反射型 XSS".to_string()),
+        description: Some("unsafe HTML render".to_string()),
+        description_markdown: Some("搜索词进入了危险 HTML 渲染链路。".to_string()),
+        file_path: Some("src/web/search.tsx".to_string()),
+        line_start: Some(77),
+        line_end: Some(82),
+        resolved_file_path: Some("src/web/search.tsx".to_string()),
+        resolved_line_start: Some(77),
+        code_snippet: Some("<div dangerouslySetInnerHTML={...} />".to_string()),
+        status: "pending".to_string(),
+        is_verified: false,
+        verdict: Some("likely".to_string()),
+        authenticity: Some("likely".to_string()),
+        suggestion: Some("escape output".to_string()),
+        confidence: Some(0.71),
+        created_at: "2026-04-12T10:05:00Z".to_string(),
+        ..Default::default()
+    });
+    record.findings_count = 2;
+    record.verified_count = 1;
+    record.false_positive_count = 0;
+    record.critical_count = 0;
+    record.high_count = 1;
+    record.medium_count = 1;
+    record.low_count = 0;
+    record.verified_high_count = 1;
+    record.verified_medium_count = 0;
+    record.report = Some("## 项目风险结论\n\n存在高危注入风险，建议优先修复。".to_string());
+    task_state::save_snapshot(state, &snapshot).await.unwrap();
+    (first_id, second_id)
 }
 
 #[tokio::test]
@@ -198,6 +275,205 @@ async fn agent_task_routes_are_rust_owned_without_python_upstream() {
         .await
         .unwrap();
     assert_eq!(cancel_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn agent_task_report_exports_cover_task_and_finding_downloads() {
+    let state = AppState::from_config(isolated_test_config("agent-task-report-exports"))
+        .await
+        .expect("state should build");
+    let app = build_router(state.clone());
+    let project_id = create_project_with_name(&app, "审计项目 Demo").await;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/agent-tasks/")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "name": "report-export-task",
+                        "description": "report export contract test",
+                        "max_iterations": 2
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let create_json: Value =
+        serde_json::from_slice(&to_bytes(create_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    let task_id = create_json["id"].as_str().unwrap().to_string();
+
+    let (first_finding_id, second_finding_id) = seed_agent_report_findings(&state, &task_id).await;
+
+    let markdown_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/report?format=markdown&include_code_snippets=false&include_remediation=false&include_metadata=true&compact_mode=true"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(markdown_response.status(), StatusCode::OK);
+    assert_eq!(
+        markdown_response.headers()["content-type"],
+        "text/markdown; charset=utf-8"
+    );
+    let markdown_disposition = markdown_response
+        .headers()
+        .get("content-disposition")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(markdown_disposition.contains("attachment; filename=\""));
+    assert!(markdown_disposition.contains("filename*=UTF-8''"));
+    assert!(markdown_disposition.contains(".md"));
+    let markdown_body =
+        String::from_utf8(to_bytes(markdown_response.into_body(), usize::MAX).await.unwrap().to_vec())
+            .unwrap();
+    assert!(markdown_body.contains("# 漏洞报告：审计项目 Demo"));
+    assert!(markdown_body.contains("登录 SQL 注入"));
+    assert!(!markdown_body.contains("SELECT * FROM users WHERE email = '${email}'"));
+    assert!(!markdown_body.contains("use parameterized query"));
+
+    let json_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/report?format=json&include_code_snippets=true&include_remediation=true&include_metadata=true&compact_mode=false"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(json_response.status(), StatusCode::OK);
+    assert_eq!(json_response.headers()["content-type"], "application/json");
+    let json_payload: Value =
+        serde_json::from_slice(&to_bytes(json_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(json_payload["summary"]["total_findings"], 2);
+    assert_eq!(json_payload["summary"]["verified_findings"], 1);
+    assert_eq!(
+        json_payload["report_metadata"]["project_name"],
+        "审计项目 Demo"
+    );
+    assert_eq!(json_payload["findings"][0]["id"], first_finding_id);
+    assert_eq!(
+        json_payload["findings"][0]["code_snippet"],
+        "SELECT * FROM users WHERE email = '${email}'"
+    );
+    assert_eq!(json_payload["findings"][1]["id"], second_finding_id);
+
+    let pdf_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/agent-tasks/{task_id}/report?format=pdf"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pdf_response.status(), StatusCode::OK);
+    assert_eq!(pdf_response.headers()["content-type"], "application/pdf");
+    let pdf_disposition = pdf_response
+        .headers()
+        .get("content-disposition")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(pdf_disposition.contains("filename*=UTF-8''"));
+    assert!(pdf_disposition.contains(".pdf"));
+    let pdf_body = to_bytes(pdf_response.into_body(), usize::MAX).await.unwrap();
+    assert!(pdf_body.starts_with(b"%PDF-1.4"));
+
+    let finding_markdown_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/findings/{first_finding_id}/report?format=markdown&include_code_snippets=true&include_remediation=true&include_metadata=true"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(finding_markdown_response.status(), StatusCode::OK);
+    assert_eq!(
+        finding_markdown_response.headers()["content-type"],
+        "text/markdown; charset=utf-8"
+    );
+    let finding_md = String::from_utf8(
+        to_bytes(finding_markdown_response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(finding_md.contains("漏洞详情报告：登录 SQL 注入"));
+    assert!(finding_md.contains("SELECT * FROM users WHERE email = '${email}'"));
+    assert!(finding_md.contains("use parameterized query"));
+
+    let finding_json_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/findings/{first_finding_id}/report?format=json&include_code_snippets=false&include_remediation=false&include_metadata=false"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(finding_json_response.status(), StatusCode::OK);
+    assert_eq!(finding_json_response.headers()["content-type"], "application/json");
+    let finding_json: Value = serde_json::from_slice(
+        &to_bytes(finding_json_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(finding_json["report_metadata"]["finding_id"], first_finding_id);
+    assert!(finding_json["finding"].get("code_snippet").is_none());
+    assert!(finding_json["finding"].get("suggestion").is_none());
+
+    let finding_pdf_response = app
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/agent-tasks/{task_id}/findings/{first_finding_id}/report?format=pdf"
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(finding_pdf_response.status(), StatusCode::OK);
+    assert_eq!(
+        finding_pdf_response.headers()["content-type"],
+        "application/pdf"
+    );
+    let finding_pdf_disposition = finding_pdf_response
+        .headers()
+        .get("content-disposition")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(finding_pdf_disposition.contains("filename*=UTF-8''"));
+    assert!(finding_pdf_disposition.contains(".pdf"));
+    let finding_pdf_body = to_bytes(finding_pdf_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(finding_pdf_body.starts_with(b"%PDF-1.4"));
 }
 
 #[tokio::test]

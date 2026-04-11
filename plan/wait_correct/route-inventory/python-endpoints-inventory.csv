@@ -5,6 +5,8 @@ POST,/api/v1/agent-test/business-logic-recon/run,migrate,rust-owned agent-test r
 POST,/api/v1/agent-test/business-logic/run,migrate,rust-owned agent-test route group; python agent_test endpoint retired,agent_test_rust,/Users/apple/Project/AuditTool_private/backend/src/routes/agent_test.rs
 POST,/api/v1/agent-test/recon/run,migrate,rust-owned agent-test route group; python agent_test endpoint retired,agent_test_rust,/Users/apple/Project/AuditTool_private/backend/src/routes/agent_test.rs
 POST,/api/v1/agent-test/verification/run,migrate,rust-owned agent-test route group; python agent_test endpoint retired,agent_test_rust,/Users/apple/Project/AuditTool_private/backend/src/routes/agent_test.rs
+GET,/api/v1/agent-tasks/{task_id}/findings/{finding_id}/report,migrate,rust-owned agent-task report export; python agent_tasks_reporting endpoint retired,agent_tasks_rust,/Users/apple/Project/AuditTool_private/backend/src/routes/agent_tasks.rs
+GET,/api/v1/agent-tasks/{task_id}/report,migrate,rust-owned agent-task report export; python agent_tasks_reporting endpoint retired,agent_tasks_rust,/Users/apple/Project/AuditTool_private/backend/src/routes/agent_tasks.rs
 POST,/api/v1/config/agent-task-preflight,retire,old /config contract retired (replaced by /system-config),config,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/config.py
 GET,/api/v1/config/defaults,retire,old /config contract retired (replaced by /system-config),config,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/config.py
 POST,/api/v1/config/fetch-llm-models,retire,old /config contract retired (replaced by /system-config),config,/Users/apple/Project/AuditTool_private/backend_old/app/api/v1/endpoints/config.py

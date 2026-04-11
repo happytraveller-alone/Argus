@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+const dialogPath = new URL(
+  "../src/pages/AgentAudit/components/ReportExportDialog.tsx",
+  import.meta.url,
+);
+
 test("ReportExportDialog 导出请求会携带当前导出选项并按选项区分预览缓存", () => {
-  const source = readFileSync(
-    "/home/xyf/AuditTool/frontend/src/pages/AgentAudit/components/ReportExportDialog.tsx",
-    "utf8",
-  );
+  const source = readFileSync(dialogPath, "utf8");
 
   assert.match(source, /buildReportExportParams/);
   assert.match(source, /buildReportPreviewCacheKey/);

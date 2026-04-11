@@ -1,13 +1,13 @@
 # Python Endpoint Inventory Summary
 
-- Total routes: `179`
-- Migrate: `139`
+- Total routes: `181`
+- Migrate: `141`
 - Retire: `20`
 - Defer: `7`
 - Proxy: `13`
 
 - Task route groups (`/api/v1/agent-tasks/*` + `/api/v1/agent-test/*` + `/api/v1/static-tasks/*`) in Python inventory:
-  - Total: `101`
+  - Total: `103`
   - Proxy: `0`
 
 - Rust gateway status snapshot:
@@ -23,6 +23,7 @@
   - `/api/v1/static-tasks/tasks*` 与 `/api/v1/static-tasks/findings/{finding_id}/status` 已标记为 Rust-owned（Python opengrep-tasks endpoint surface retired）
   - `/api/v1/static-tasks/cache/*` 已标记为 Rust-owned（Python static-tasks-cache endpoint surface retired）
   - `/api/v1/agent-test/*` 已标记为 Rust-owned（Python agent_test endpoint surface retired）
+  - `/api/v1/agent-tasks/{task_id}/report` 与 `/api/v1/agent-tasks/{task_id}/findings/{finding_id}/report` 已标记为 Rust-owned（Python agent_tasks_reporting endpoint surface retired）
   - `backend/src/proxy.rs` 不存在，gateway 不再提供 Python catch-all proxy 文件入口
 
 - Deployment gate snapshot:

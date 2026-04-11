@@ -34,7 +34,6 @@ def test_api_router_excludes_rust_owned_route_modules():
     remaining_python_modules = {
         "app.api.v1.endpoints.agent_tasks_routes_tasks",
         "app.api.v1.endpoints.agent_tasks_routes_results",
-        "app.api.v1.endpoints.agent_tasks_reporting",
     }
 
     assert remaining_python_modules.issubset(endpoint_modules)
