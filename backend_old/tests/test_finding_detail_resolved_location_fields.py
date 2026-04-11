@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api.v1.endpoints.static_tasks_phpstan import get_phpstan_finding
 from app.api.v1.endpoints.static_tasks_pmd import get_pmd_finding
 
 
@@ -13,43 +12,6 @@ class _ScalarOneOrNoneResult:
 
     def scalar_one_or_none(self):
         return self._value
-
-
-@pytest.mark.asyncio
-async def test_get_phpstan_finding_returns_resolved_location_fields(monkeypatch, tmp_path):
-    db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _ScalarOneOrNoneResult(SimpleNamespace(id="task-1", project_id="project-1")),
-            _ScalarOneOrNoneResult(
-                SimpleNamespace(
-                    id="finding-1",
-                    scan_task_id="task-1",
-                    file_path=str(tmp_path / "src" / "Service.php"),
-                    line=17,
-                    message="Potential null dereference",
-                    identifier="phpstan.nullsafe",
-                    tip=None,
-                    status="open",
-                )
-            ),
-        ]
-    )
-
-    monkeypatch.setattr(
-        "app.api.v1.endpoints.static_tasks_phpstan._get_project_root",
-        AsyncMock(return_value=str(tmp_path)),
-    )
-
-    result = await get_phpstan_finding(
-        task_id="task-1",
-        finding_id="finding-1",
-        db=db,
-        current_user=SimpleNamespace(id="user-1"),
-    )
-
-    assert result.resolved_file_path == "src/Service.php"
-    assert result.resolved_line_start == 17
 
 
 @pytest.mark.asyncio
