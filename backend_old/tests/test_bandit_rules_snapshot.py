@@ -7,6 +7,19 @@ import pytest
 from app.services import bandit_rules_snapshot
 
 
+def test_bandit_builtin_snapshot_path_prefers_rust_asset_root():
+    expected = (
+        Path(__file__).resolve().parents[2]
+        / "backend"
+        / "assets"
+        / "scan_rule_assets"
+        / "bandit_builtin"
+        / "bandit_builtin_rules.json"
+    )
+
+    assert bandit_rules_snapshot._BANDIT_BUILTIN_JSON_PATH == expected
+
+
 class _FakeDescriptor:
     def __init__(self, *, name: str, plugin: object):
         self.name = name

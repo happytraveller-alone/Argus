@@ -211,3 +211,42 @@
 - 是否影响前端: 否，`/api/v1/system-config/*` 契约保持可用，默认值来源更集中
 - 后续修复波次: Wave A 后续 / Phase A core 收口
 - owner: Rust migration
+
+### 10. Python db asset readers now point at Rust-owned scan_rule_assets root
+
+- endpoint / feature: `backend_old/app/db/*` asset readers, `backend/assets/scan_rule_assets/*`
+- Python 旧行为:
+  - Python `init_db.py`、`gitleaks_rules_seed.py`、`bandit_rules_snapshot.py`、`pmd_rulesets.py`、`static_tasks_phpstan.py`
+    直接从 `backend_old/app/db/*` 读取 builtin rules、patch rules、patch artifacts、PMD XML 等资产
+- Rust 当前行为:
+  - Rust 已经把下列资产作为 rule store/source of truth 实际消费：
+    - `rules_opengrep`
+    - `rules_from_patches`
+    - `patches`
+    - `gitleaks_builtin`
+    - `bandit_builtin`
+    - `rules_pmd`
+  - Python 现已通过 `backend_old/app/db/__init__.py` helper 优先读取 `backend/assets/scan_rule_assets/*`
+- 对应 Python 哪些执行入口已删除:
+  - 已删除重复资产目录：
+    - `backend_old/app/db/rules`
+    - `backend_old/app/db/rules_from_patches`
+    - `backend_old/app/db/patches`
+    - `backend_old/app/db/gitleaks_builtin`
+    - `backend_old/app/db/bandit_builtin`
+    - `backend_old/app/db/rules_pmd`
+- 仍然只是 bridge 的 Python 代码:
+  - `backend_old/app/db/init_db.py`
+  - `backend_old/app/services/gitleaks_rules_seed.py`
+  - `backend_old/app/services/bandit_rules_snapshot.py`
+  - `backend_old/app/services/pmd_rulesets.py`
+  - `backend_old/app/api/v1/endpoints/static_tasks_phpstan.py`
+  - `backend_old/app/db/rules_phpstan`
+  - `backend_old/app/db/yasa_builtin`
+  - `backend_old/app/db/schema_snapshots/*`
+  - `backend_old/app/db/base.py`
+  - `backend_old/app/db/session.py`
+  - `backend_old/app/db/static_finding_paths.py`
+- 是否影响前端: 否，Python static-tasks / seed / rules 页继续可用，只是资产根收敛到 Rust owner root
+- 后续修复波次: Wave A 后续 / Phase A-C db asset cleanup
+- owner: Rust migration

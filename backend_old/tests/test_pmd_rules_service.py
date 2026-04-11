@@ -33,7 +33,13 @@ def test_build_pmd_presets_matches_tool_alias_contract():
 
 
 def test_list_builtin_pmd_rulesets_reads_repo_xml_and_returns_metadata():
-    expected_dir = Path(__file__).resolve().parents[1] / "app" / "db" / "rules_pmd"
+    expected_dir = (
+        Path(__file__).resolve().parents[2]
+        / "backend"
+        / "assets"
+        / "scan_rule_assets"
+        / "rules_pmd"
+    )
 
     assert pmd_rulesets.get_pmd_builtin_ruleset_dir() == expected_dir
 

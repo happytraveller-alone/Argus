@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -6,6 +7,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from app.api.v1.endpoints import static_tasks
 from app.db import init_db as init_db_module
+from app.services import gitleaks_rules_seed
 
 
 class _NestedContext:
@@ -51,3 +53,14 @@ async def test_list_gitleaks_rules_returns_explicit_migration_error_when_table_m
 
 def test_init_db_no_longer_exports_runtime_schema_fixer():
     assert not hasattr(init_db_module, "ensure_project_zip_hash_schema")
+
+
+def test_gitleaks_builtin_seed_path_prefers_rust_asset_root():
+    assert gitleaks_rules_seed._BUILTIN_TOML_PATH == (
+        Path(__file__).resolve().parents[2]
+        / "backend"
+        / "assets"
+        / "scan_rule_assets"
+        / "gitleaks_builtin"
+        / "gitleaks-default.toml"
+    )

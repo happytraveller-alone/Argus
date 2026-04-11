@@ -17,11 +17,11 @@ from pathlib import Path
 import tempfile
 from typing import Any, Dict, List, Tuple
 
+from app.db import bandit_builtin_snapshot_path
+
 logger = logging.getLogger(__name__)
 
-_BANDIT_BUILTIN_JSON_PATH = (
-    Path(__file__).resolve().parent.parent / "db" / "bandit_builtin" / "bandit_builtin_rules.json"
-)
+_BANDIT_BUILTIN_JSON_PATH = bandit_builtin_snapshot_path()
 _SCHEMA_VERSION = "1.0"
 _MAX_DOC_LENGTH = 4000
 

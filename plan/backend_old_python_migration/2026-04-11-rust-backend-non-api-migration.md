@@ -642,3 +642,55 @@
   - Rust 成为 token/hash/encryption/default-config 的唯一 live source of truth
 - 下一刀：
   - 继续沿 Phase A 往前推，把仍直接 import `backend_old/app/core/*` 的 Python live caller 收口，优先处理 `user_config_service.py`、`init_db.py`、`db/session.py` 和 runtime/runner 公共入口
+
+### 2026-04-11 Batch 1 / Slice 5
+
+- 已完成：
+  - `backend_old/app/db/__init__.py` 新增统一 asset helper，Python DB 侧读取 scan 相关资产时会优先走 Rust owner root：
+    - `backend/assets/scan_rule_assets/rules_opengrep`
+    - `backend/assets/scan_rule_assets/rules_from_patches`
+    - `backend/assets/scan_rule_assets/patches`
+    - `backend/assets/scan_rule_assets/gitleaks_builtin`
+    - `backend/assets/scan_rule_assets/bandit_builtin`
+    - `backend/assets/scan_rule_assets/rules_pmd`
+  - 已切换到 helper 的 Python 消费方：
+    - `backend_old/app/db/init_db.py`
+    - `backend_old/app/services/gitleaks_rules_seed.py`
+    - `backend_old/app/services/bandit_rules_snapshot.py`
+    - `backend_old/app/services/pmd_rulesets.py`
+    - `backend_old/app/api/v1/endpoints/static_tasks_phpstan.py`
+  - 已删除 `backend_old/app/db` 下重复资产目录：
+    - `rules`
+    - `rules_from_patches`
+    - `patches`
+    - `gitleaks_builtin`
+    - `bandit_builtin`
+    - `rules_pmd`
+  - 已补/更新回归测试：
+    - `backend_old/tests/test_pmd_rules_service.py`
+    - `backend_old/tests/test_bandit_rules_snapshot.py`
+    - `backend_old/tests/test_phpstan_rules_snapshot.py`
+    - `backend_old/tests/test_gitleaks_migration_contract.py`
+    - `backend_old/tests/test_external_tools_manual.py`
+  - 已验证：
+    - `cd backend_old && ./.venv/bin/pytest tests/test_pmd_rules_service.py tests/test_bandit_rules_snapshot.py tests/test_phpstan_rules_snapshot.py tests/test_gitleaks_migration_contract.py tests/test_init_db_libplist_seed.py -q`
+    - 结果：`30 passed`
+- 当前意义：
+  - Rust 已经在真实消费的 scan rule assets，不再需要在 `backend_old/app/db` 再维护一份重复副本
+  - Python live caller 继续保留，但其资产 source of truth 已开始收敛到 Rust owner root
+  - 这一步是真删除，不是只写台账
+- 仍未完成：
+  - `backend_old/app/db/base.py` 仍是 Python ORM / Alembic live 入口
+  - `backend_old/app/db/session.py` 仍是 Python FastAPI / service 层 DB session 入口
+  - `backend_old/app/db/init_db.py` 仍承担 demo user / seed project / legacy rule import 初始化职责
+  - `backend_old/app/db/static_finding_paths.py` 仍被 Python static-tasks / agent bootstrap 直接调用
+  - `backend_old/app/db/schema_snapshots/*` 仍被 Alembic baseline 兼容迁移使用
+  - `backend_old/app/db/rules_phpstan` 仍由 Python static-tasks 直接消费，Rust 尚未接管 phpstan 运行链路
+  - `backend_old/app/db/yasa_builtin` 仍由 Python YASA snapshot/service 直接消费，Rust 未接管
+- 删除条件：
+  - `base.py` / `session.py` / `init_db.py` / `static_finding_paths.py` 只有在对应 Python live caller 全部退场后才能删
+  - `schema_snapshots/*` 只有在 `backend_old/alembic` 不再依赖 baseline snapshot 后才能删
+  - `rules_phpstan` 只有在 Rust 真正接管 phpstan scanner/runtime 后才能删
+  - `yasa_builtin` 只有在 YASA 被彻底 retire 或迁离 Python live 路径后才能删
+- 下一刀：
+  - 继续 Phase A / C，优先决定 `session.py` 与 `init_db.py` 哪些职责可以从 Python live 路径抽走

@@ -8,6 +8,19 @@ import pytest
 from app.api.v1.endpoints import static_tasks
 
 
+def test_phpstan_rules_snapshot_path_prefers_rust_asset_root():
+    expected = (
+        Path(__file__).resolve().parents[2]
+        / "backend"
+        / "assets"
+        / "scan_rule_assets"
+        / "rules_phpstan"
+        / "phpstan_rules_combined.json"
+    )
+
+    assert static_tasks._phpstan._phpstan_rules_snapshot_path() == expected
+
+
 def test_update_phpstan_snapshot_rule_updates_target_rule(tmp_path: Path, monkeypatch):
     snapshot_path = tmp_path / "phpstan_rules_combined.json"
     snapshot_path.write_text(

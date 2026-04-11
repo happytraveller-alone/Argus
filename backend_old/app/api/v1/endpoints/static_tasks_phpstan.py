@@ -20,6 +20,10 @@ from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.db import (
+    phpstan_rule_sources_root_path as shared_phpstan_rule_sources_root_path,
+    phpstan_rules_snapshot_path as shared_phpstan_rules_snapshot_path,
+)
 from app.models.bandit import BanditFinding, BanditScanTask
 from app.models.gitleaks import GitleaksFinding, GitleaksRule, GitleaksScanTask
 from app.models.opengrep import OpengrepFinding, OpengrepRule, OpengrepScanTask
@@ -255,11 +259,11 @@ def _raise_phpstan_rules_migration_http_error(exc: ProgrammingError) -> None:
 
 
 def _phpstan_rules_snapshot_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "db" / "rules_phpstan" / "phpstan_rules_combined.json"
+    return shared_phpstan_rules_snapshot_path()
 
 
 def _phpstan_rule_sources_root_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "db" / "rules_phpstan" / "rule_sources"
+    return shared_phpstan_rule_sources_root_path()
 
 
 def _read_phpstan_rule_source_content(repo: str, source_file: str) -> Optional[str]:

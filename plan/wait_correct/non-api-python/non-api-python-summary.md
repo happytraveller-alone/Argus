@@ -111,6 +111,43 @@
 - target phase:
   - A now in progress
 
+### 1c. Rust-owned scan rule assets now serve Python db consumers
+
+- current state:
+  - Python `backend_old/app/db` 资产读取已开始优先走 Rust 资产根：
+    - `backend/assets/scan_rule_assets/rules_opengrep`
+    - `backend/assets/scan_rule_assets/rules_from_patches`
+    - `backend/assets/scan_rule_assets/patches`
+    - `backend/assets/scan_rule_assets/gitleaks_builtin`
+    - `backend/assets/scan_rule_assets/bandit_builtin`
+    - `backend/assets/scan_rule_assets/rules_pmd`
+  - `backend_old/app/db/__init__.py` 已新增统一 helper，供 Python live caller 读取 Rust-owned 资产根
+  - 已切到 helper 的 Python 消费方包括：
+    - `backend_old/app/db/init_db.py`
+    - `backend_old/app/services/gitleaks_rules_seed.py`
+    - `backend_old/app/services/bandit_rules_snapshot.py`
+    - `backend_old/app/services/pmd_rulesets.py`
+    - `backend_old/app/api/v1/endpoints/static_tasks_phpstan.py`
+  - 已删除 `backend_old/app/db` 下重复资产目录：
+    - `rules`
+    - `rules_from_patches`
+    - `patches`
+    - `gitleaks_builtin`
+    - `bandit_builtin`
+    - `rules_pmd`
+- still missing:
+  - `rules_phpstan` 仍由 Python static-tasks 直接消费，Rust 尚未接管 phpstan 运行链路，不能删
+  - `yasa_builtin` 仍仅由 Python `yasa_rules_snapshot.py` 消费，Rust 明确未继续接管，不能删
+  - `schema_snapshots/*` 仍是 Alembic baseline 兼容件，不能删
+  - `base.py` / `session.py` / `init_db.py` / `static_finding_paths.py` 仍是 Python live 入口，不能删
+- delete gate:
+  - `rules_phpstan` 只有在 Rust 真正接管 phpstan scanner/runtime 后才能删
+  - `yasa_builtin` 只有在 YASA 彻底退出 Python live 路径或被完全 retire 后才能删
+  - `schema_snapshots/*` 只有在 `backend_old/alembic` 不再依赖 baseline snapshot 时才能删
+- owner: Rust migration
+- target phase:
+  - A / C in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:

@@ -20,6 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from tqdm import tqdm
 
+from app.db import (
+    opengrep_internal_rules_dir,
+    opengrep_patch_artifacts_dir,
+    opengrep_patch_rules_dir,
+)
 from app.core.security import get_password_hash
 from app.models.opengrep import OpengrepRule
 from app.models.project import Project
@@ -403,7 +408,7 @@ def validate_opengrep_rule(yaml_content: str) -> bool:
 
 async def create_internal_opengrep_rules(db: AsyncSession) -> None:
     """
-    从 app/db/rules 目录读取所有 .yaml 文件并创建内置 opengrep 规则
+    从 Rust-owned scan_rule_assets（回退 legacy app/db/rules）读取内置 opengrep 规则
     - 判断规则 ID 是否已在表中,只添加不存在的规则
     - 验证每条规则是否可用
     """
@@ -415,7 +420,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
         return
 
     # 获取规则文件目录
-    rules_dir = Path(__file__).parent / "rules"
+    rules_dir = opengrep_internal_rules_dir()
     if not rules_dir.exists():
         logger.warning(f"规则目录不存在: {rules_dir}")
         return
@@ -552,7 +557,7 @@ async def create_internal_opengrep_rules(db: AsyncSession) -> None:
 
 async def create_patch_opengrep_rules(db: AsyncSession) -> None:
     """
-    从 app/db/rules_from_patches 目录递归读取所有 .yml 文件并创建 patch 来源的 opengrep 规则
+    从 Rust-owned scan_rule_assets（回退 legacy app/db/rules_from_patches）读取 patch 来源规则
     - 支持多层目录结构（按编程语言分类）
     - 判断规则 ID 是否已在表中，只添加不存在的规则
     - 验证每条规则是否可用
@@ -568,7 +573,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
     #     return
 
     # 获取规则文件目录
-    rules_dir = Path(__file__).parent / "rules_from_patches"
+    rules_dir = opengrep_patch_rules_dir()
     if not rules_dir.exists():
         logger.warning(f"Patch 规则目录不存在: {rules_dir}")
         return
@@ -649,7 +654,7 @@ async def create_patch_opengrep_rules(db: AsyncSession) -> None:
 
                 # 读取对应的 patch 文件内容
                 patch_content = None
-                patch_file = Path(__file__).parent / "patches" / f"{yaml_file.stem}.patch"
+                patch_file = opengrep_patch_artifacts_dir() / f"{yaml_file.stem}.patch"
                 if patch_file.exists():
                     try:
                         with open(patch_file, encoding='utf-8') as pf:

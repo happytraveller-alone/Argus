@@ -307,7 +307,7 @@ async def test_pmd(project_root: str):
     # 使用本仓库内提供的 PMD 规则文件进行测试
     result = await tool.execute(
         target_path=".",
-        ruleset="backend/app/db/rules_pmd/HardCodedCryptoKey.xml",
+        ruleset="backend/assets/scan_rule_assets/rules_pmd/HardCodedCryptoKey.xml",
         max_results=30
     )
     

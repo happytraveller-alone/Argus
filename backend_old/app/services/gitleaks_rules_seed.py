@@ -8,12 +8,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db import gitleaks_builtin_toml_path
 from app.models.gitleaks import GitleaksRule
 
 logger = logging.getLogger(__name__)
 
 
-_BUILTIN_TOML_PATH = Path(__file__).resolve().parent.parent / "db" / "gitleaks_builtin" / "gitleaks-default.toml"
+_BUILTIN_TOML_PATH = gitleaks_builtin_toml_path()
 
 
 def _to_clean_list(value: Any) -> list[str]:
