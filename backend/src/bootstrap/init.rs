@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde_json::json;
 
 use crate::{
-    db::system_config,
+    db::{projects, system_config},
     state::{AppState, BootstrapStatus, StartupInitStatus},
 };
 
@@ -15,15 +15,7 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
         });
     }
 
-    if state.db_pool.is_none() {
-        return Ok(StartupInitStatus {
-            status: "skipped".to_string(),
-            actions: vec!["file-mode startup init skipped".to_string()],
-            error: None,
-        });
-    }
-
-    if !rust_db_ready {
+    if state.db_pool.is_some() && !rust_db_ready {
         return Ok(StartupInitStatus {
             status: "skipped".to_string(),
             actions: vec!["database not ready for rust startup init".to_string()],
@@ -37,6 +29,12 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
         actions.push("created default rust system config".to_string());
     } else {
         actions.push("default rust system config already present".to_string());
+    }
+
+    if projects::ensure_initialized(state).await? {
+        actions.push("created empty rust project store".to_string());
+    } else {
+        actions.push("rust project store already present".to_string());
     }
 
     Ok(StartupInitStatus {

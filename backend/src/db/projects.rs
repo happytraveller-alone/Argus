@@ -11,6 +11,23 @@ use crate::state::{AppState, StoredProject, StoredProjectArchive};
 
 const PROJECTS_FILE_NAME: &str = "rust-projects.json";
 
+pub async fn ensure_initialized(state: &AppState) -> Result<bool> {
+    if state.db_pool.is_some() {
+        return Ok(false);
+    }
+
+    let _guard = state.file_store_lock.lock().await;
+    let path = projects_file_path(state);
+    match fs::metadata(&path).await {
+        Ok(_) => Ok(false),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            save_projects_unlocked(state, &BTreeMap::new()).await?;
+            Ok(true)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 pub async fn create_project(state: &AppState, project: StoredProject) -> Result<StoredProject> {
     if state.db_pool.is_some() {
         create_project_db(state, project).await

@@ -56,9 +56,17 @@ async fn bootstrap_reports_file_mode_when_database_is_not_configured() {
     assert_eq!(report.database.mode, "file");
     assert_eq!(report.database.status, "skipped");
     assert!(report.database.checked_tables.is_empty());
-    assert_eq!(report.init.status, "skipped");
+    assert_eq!(report.init.status, "ok");
+    assert!(
+        report.init.actions.iter().any(|action| action == "created default rust system config")
+    );
+    assert!(
+        report.init.actions.iter().any(|action| action == "created empty rust project store")
+    );
     assert_eq!(report.recovery.status, "skipped");
     assert_eq!(report.preflight.status, "skipped");
+    assert!(config.zip_storage_path.join("rust-system-config.json").exists());
+    assert!(config.zip_storage_path.join("rust-projects.json").exists());
 
     let _ = tokio::fs::remove_dir_all(&config.zip_storage_path).await;
 }
@@ -124,7 +132,7 @@ async fn health_includes_bootstrap_status() {
         payload["bootstrap"]["database"]["checked_tables"],
         serde_json::json!([])
     );
-    assert_eq!(payload["bootstrap"]["init"]["status"], "skipped");
+    assert_eq!(payload["bootstrap"]["init"]["status"], "ok");
     assert_eq!(payload["bootstrap"]["recovery"]["status"], "skipped");
     assert_eq!(payload["bootstrap"]["preflight"]["status"], "skipped");
 

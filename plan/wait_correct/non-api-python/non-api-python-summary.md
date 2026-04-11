@@ -43,6 +43,7 @@
   - `/health` 已暴露 bootstrap 状态
   - Rust DB bootstrap 只检查 Rust 自己依赖的表，不再盯 Python `alembic_version`
   - startup recovery / runner preflight 的 orchestration 已进入 Rust bootstrap
+  - file-mode 下 Rust 已会初始化默认 control-plane config 和空项目存储
 - still missing:
   - Python `app.main` 内的 schema version orchestration
   - `init_db()` 的完整 Rust 版本

@@ -438,15 +438,20 @@
     - `backend/src/bootstrap/recovery.rs`
     - `backend/src/bootstrap/preflight.rs`
   - startup recovery 和 runner preflight 的编排位置已从 Python `app.main` 迁到 Rust bootstrap
+  - Rust control-plane init 不再在 file-mode 下空转：
+    - 会初始化默认 `system_config`
+    - 会初始化空的 `rust-projects.json`
+    - 不会导入 demo 用户、旧规则、旧用户态数据
   - `backend/tests/bootstrap_startup.rs` 覆盖：
     - 文件存储根创建
-    - 无 DB 时 file-mode / skipped
+    - 无 DB 时 file-mode control-plane init
     - DB 不可达时 degraded/error 状态
     - 文件存储根不可创建时启动失败
 - 当前意义：
   - Rust public backend 不再只是 router 壳，已经开始拥有自己的启动前检查与状态报告
   - Rust DB 启动检查已经和 Python 旧 DB 语义解耦，Python 只保留参考价值
   - Rust 已开始 owner startup init / recovery / preflight 的 orchestration 外壳
+  - Rust 在 file-mode 下已经能独立自举最小 control-plane 状态
   - 这是 Batch 1 的第一刀，不是 Batch 1 完成
 - 仍未完成：
   - Python `app/main.py` 中的 schema version orchestration、`init_db()` 的完整语义仍未迁走
