@@ -86,10 +86,9 @@ mod tests {
             .expect("rules directory should exist");
 
         assert!(path.join("phpstan_rules_combined.json").exists());
-        assert!(
-            path.join("rule_sources/phpstan-src/src/Rules/Variables/UnsetRule.php")
-                .exists()
-        );
+        assert!(path
+            .join("rule_sources/phpstan-src/src/Rules/Variables/UnsetRule.php")
+            .exists());
         let _ = fs::remove_dir_all(&workspace).await;
     }
 

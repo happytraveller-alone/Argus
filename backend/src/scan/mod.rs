@@ -1,5 +1,5 @@
 pub mod bandit;
 pub mod gitleaks;
 pub mod opengrep;
-pub mod pmd;
 pub mod phpstan;
+pub mod pmd;

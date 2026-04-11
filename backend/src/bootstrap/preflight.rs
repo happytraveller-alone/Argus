@@ -269,7 +269,8 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
     }
 
     if let Some(phpstan_spec) = specs.iter_mut().find(|spec| spec.name == "phpstan") {
-        if let Some((workspace_dir, command, mounts)) = build_phpstan_preflight_inputs(state).await?
+        if let Some((workspace_dir, command, mounts)) =
+            build_phpstan_preflight_inputs(state).await?
         {
             phpstan_spec.command = command;
             phpstan_spec.mounts = mounts;

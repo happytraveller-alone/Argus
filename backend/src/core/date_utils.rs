@@ -156,14 +156,14 @@ mod tests {
 
     #[test]
     fn test_format_iso_naive_datetime() {
-        let primitive = PrimitiveDateTime::new(date!(2026-03-07), time!(12:00:00));
+        let primitive = PrimitiveDateTime::new(date!(2026 - 03 - 07), time!(12:00:00));
         let dt = DateTimeInput::from(primitive);
         assert_eq!(format_iso(dt), "2026-03-07T12:00:00");
     }
 
     #[test]
     fn test_format_iso_with_offset() {
-        let primitive = PrimitiveDateTime::new(date!(2026-03-07), time!(12:00:00));
+        let primitive = PrimitiveDateTime::new(date!(2026 - 03 - 07), time!(12:00:00));
         let offset = UtcOffset::from_hms(8, 0, 0).unwrap();
         let dt = DateTimeInput::from(primitive.assume_offset(offset));
         assert_eq!(format_iso(dt), "2026-03-07T12:00:00+08:00");
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_format_chinese_different_time() {
-        let primitive = PrimitiveDateTime::new(date!(2025-12-31), time!(23:59:59));
+        let primitive = PrimitiveDateTime::new(date!(2025 - 12 - 31), time!(23:59:59));
         let dt = DateTimeInput::from(primitive);
         assert_eq!(format_chinese(dt), "2025年12月31日 23:59:59");
     }
@@ -219,8 +219,14 @@ mod tests {
 
     #[test]
     fn test_relative_time_naive_datetime() {
-        let now = DateTimeInput::from(PrimitiveDateTime::new(date!(2026-03-07), time!(12:00:00)));
-        let dt = DateTimeInput::from(PrimitiveDateTime::new(date!(2026-03-07), time!(10:00:00)));
+        let now = DateTimeInput::from(PrimitiveDateTime::new(
+            date!(2026 - 03 - 07),
+            time!(12:00:00),
+        ));
+        let dt = DateTimeInput::from(PrimitiveDateTime::new(
+            date!(2026 - 03 - 07),
+            time!(10:00:00),
+        ));
         assert_eq!(relative_time(dt, Some(now)), "2小时前");
     }
 
