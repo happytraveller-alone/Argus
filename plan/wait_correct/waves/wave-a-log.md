@@ -142,6 +142,10 @@
   - `backend_old/tests/test_projects_create_with_zip.py`
   - `backend_old/tests/test_yasa_rules_api.py`
 - Rust 当前行为补充: 新增回归测试 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`，防止这些已迁路径重新挂回 Python
+- Rust 当前行为补充: 按“内网部署、无多用户管理”前提，已删除用户块旧 live endpoint：
+  - `backend_old/app/api/v1/endpoints/users.py`
+  - `backend_old/app/api/v1/endpoints/members.py`
+- Rust 当前行为补充: Python live router 已不再挂载 `/users` 与 `/projects/*/members`
 - 是否影响前端: 否，前端应继续走 Rust backend；这一步只是缩小 Python live surface
 - 后续修复波次: Wave A 后续 / API surface cleanup
 - owner: Rust migration

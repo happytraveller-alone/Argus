@@ -3,16 +3,12 @@ from app.api.v1.endpoints import (
     agent_tasks,
     agent_test,
     config,
-    members,
     prompts,
     rules,
     static_tasks,
-    users,
 )
 
 api_router = APIRouter()
-api_router.include_router(users.router, prefix="/users", tags=["users"])
-api_router.include_router(members.router, prefix="/projects", tags=["members"])
 api_router.include_router(config.router, prefix="/config", tags=["config"])
 api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(rules.router, prefix="/rules", tags=["rules"])
