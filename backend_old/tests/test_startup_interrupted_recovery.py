@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import signal
 import sys
 import types
 
@@ -25,7 +24,6 @@ import app.models.opengrep  # noqa: F401
 import app.models.bandit  # noqa: F401
 import app.models.phpstan  # noqa: F401
 import app.models.pmd_scan  # noqa: F401
-import app.models.yasa  # noqa: F401
 from app.main import (
     INTERRUPTED_ERROR_MESSAGE,
     RECOVERABLE_AGENT_TASK_STATUSES,
@@ -34,9 +32,6 @@ from app.main import (
     RECOVERABLE_OPENGREP_TASK_STATUSES,
     RECOVERABLE_PHPSTAN_TASK_STATUSES,
     RECOVERABLE_PMD_TASK_STATUSES,
-    RECOVERABLE_YASA_TASK_STATUSES,
-    _collect_stale_yasa_pids,
-    cleanup_stale_yasa_processes,
     recover_interrupted_tasks,
 )
 from app.models.agent_task import AgentTask, AgentTaskStatus
@@ -45,7 +40,6 @@ from app.models.opengrep import OpengrepScanTask
 from app.models.bandit import BanditScanTask
 from app.models.phpstan import PhpstanScanTask
 from app.models.pmd_scan import PmdScanTask
-from app.models.yasa import YasaScanTask
 
 
 class _FakeScalarResult:
@@ -81,7 +75,6 @@ class _FakeSession:
             BanditScanTask: RECOVERABLE_BANDIT_TASK_STATUSES,
             PhpstanScanTask: RECOVERABLE_PHPSTAN_TASK_STATUSES,
             PmdScanTask: RECOVERABLE_PMD_TASK_STATUSES,
-            YasaScanTask: RECOVERABLE_YASA_TASK_STATUSES,
         }[entity]
         filtered = [item for item in items if str(item.status).lower() in recoverable_statuses]
         return _FakeScalarResult(filtered)
@@ -143,15 +136,6 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
         status="running",
         error_message=None,
     )
-    yasa_task = YasaScanTask(
-        id="yasa-running",
-        project_id="project-1",
-        name="yasa",
-        target_path="/tmp/project",
-        status="running",
-        error_message=None,
-    )
-
     fake_session = _FakeSession(
         {
             AgentTask: [agent_task],
@@ -160,7 +144,6 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
             BanditScanTask: [bandit_task],
             PhpstanScanTask: [phpstan_task],
             PmdScanTask: [pmd_task],
-            YasaScanTask: [yasa_task],
         }
     )
     monkeypatch.setattr("app.main.AsyncSessionLocal", lambda: fake_session)
@@ -174,7 +157,6 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
         "bandit": 1,
         "phpstan": 1,
         "pmd": 1,
-        "yasa": 1,
     }
     assert fake_session.commit_calls == 1
     assert fake_session.rollback_calls == 0
@@ -195,8 +177,6 @@ async def test_recover_interrupted_tasks_marks_running_and_pending_tasks(monkeyp
     assert phpstan_task.error_message == INTERRUPTED_ERROR_MESSAGE
     assert pmd_task.status == "interrupted"
     assert pmd_task.error_message == INTERRUPTED_ERROR_MESSAGE
-    assert yasa_task.status == "interrupted"
-    assert yasa_task.error_message == INTERRUPTED_ERROR_MESSAGE
 
     assert interrupted_time.tzinfo is not None
 
@@ -237,7 +217,6 @@ async def test_recover_interrupted_tasks_preserves_terminal_statuses_and_existin
             BanditScanTask: [],
             PhpstanScanTask: [],
             PmdScanTask: [],
-            YasaScanTask: [],
         }
     )
     monkeypatch.setattr("app.main.AsyncSessionLocal", lambda: fake_session)
@@ -251,7 +230,6 @@ async def test_recover_interrupted_tasks_preserves_terminal_statuses_and_existin
         "bandit": 0,
         "phpstan": 0,
         "pmd": 0,
-        "yasa": 0,
     }
     assert fake_session.commit_calls == 0
     assert fake_session.rollback_calls == 1
@@ -265,49 +243,3 @@ async def test_recover_interrupted_tasks_preserves_terminal_statuses_and_existin
 
     assert gitleaks_failed.status == "failed"
     assert gitleaks_failed.error_message == "已存在的失败原因"
-
-
-def test_collect_stale_yasa_pids_filters_by_report_pattern(monkeypatch):
-    sample = "\n".join(
-        [
-            "1001 /home/jy/.local/bin/yasa-engine.real --report /tmp/yasa_report_abc",
-            "1002 /opt/yasa/bin/yasa --report /tmp/yasa_report_def",
-            "1003 /opt/yasa/bin/yasa --help",
-            "1004 python app.py",
-        ]
-    )
-    monkeypatch.setattr("app.main.subprocess.check_output", lambda *args, **kwargs: sample)
-    monkeypatch.setattr("app.main.os.getpid", lambda: 9999)
-
-    assert _collect_stale_yasa_pids() == [1001, 1002]
-
-
-@pytest.mark.asyncio
-async def test_cleanup_stale_yasa_processes_terms_and_kills(monkeypatch):
-    monkeypatch.setattr("app.main._collect_stale_yasa_pids", lambda: [2001, 2002])
-    monkeypatch.setattr("app.main.settings.YASA_STARTUP_FORCE_CLEANUP", True)
-    monkeypatch.setattr("app.main.settings.YASA_PROCESS_KILL_GRACE_SECONDS", 1)
-
-    async def _fast_sleep(_n):
-        return None
-
-    monkeypatch.setattr("app.main.asyncio.sleep", _fast_sleep)
-
-    alive = {2001, 2002}
-    signals: list[tuple[int, int]] = []
-
-    def _fake_kill(pid: int, sig: int):
-        signals.append((pid, sig))
-        if sig == 0:
-            if pid in alive:
-                return
-            raise ProcessLookupError
-        if sig == signal.SIGKILL and pid in alive:
-            alive.remove(pid)
-
-    monkeypatch.setattr("app.main.os.kill", _fake_kill)
-
-    result = await cleanup_stale_yasa_processes()
-    assert result["matched"] == 2
-    assert result["terminated"] == 2
-    assert result["killed"] == 2

@@ -42,12 +42,6 @@ class RunnerPreflightResult:
 def get_configured_runner_preflight_specs() -> list[RunnerPreflightSpec]:
     return [
         RunnerPreflightSpec(
-            name="yasa",
-            image=str(getattr(settings, "SCANNER_YASA_IMAGE", "vulhunter/yasa-runner:latest")),
-            command=["/opt/yasa/bin/yasa", "--version"],
-            timeout_seconds=int(getattr(settings, "RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30)),
-        ),
-        RunnerPreflightSpec(
             name="opengrep",
             image=str(getattr(settings, "SCANNER_OPENGREP_IMAGE", "vulhunter/opengrep-runner:latest")),
             command=["opengrep", "--version"],

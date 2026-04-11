@@ -11,7 +11,6 @@ from app.api.v1.endpoints import static_tasks_gitleaks
 from app.api.v1.endpoints import static_tasks_opengrep
 from app.api.v1.endpoints import static_tasks_phpstan
 from app.api.v1.endpoints import static_tasks_shared
-from app.api.v1.endpoints import static_tasks_yasa
 from app.api.v1.endpoints.agent_tasks_contracts import AgentTaskCreate
 from app.models.project import Project
 
@@ -146,11 +145,6 @@ async def test_launch_static_background_job_registers_and_cleans_up():
                 rule_ids=["rule-1"],
             ),
         ),
-        (
-            static_tasks_yasa,
-            "create_yasa_scan",
-            static_tasks_yasa.YasaScanTaskCreate(project_id="project-1", target_path=".", language="typescript"),
-        ),
     ],
 )
 async def test_static_scan_create_routes_launch_async_job_and_release_request_session(
@@ -261,11 +255,6 @@ async def test_create_agent_task_launches_async_job_and_releases_request_session
                 target_path=".",
                 rule_ids=["rule-1"],
             ),
-        ),
-        (
-            static_tasks_yasa,
-            "create_yasa_scan",
-            static_tasks_yasa.YasaScanTaskCreate(project_id="project-1", target_path=".", language="typescript"),
         ),
     ],
 )

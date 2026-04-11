@@ -225,7 +225,6 @@ backend/.*/
 skills-lock.json
 CLAUDE.md
 
-docs/plans/
 .*/
 !.github/
 !.github/workflows/

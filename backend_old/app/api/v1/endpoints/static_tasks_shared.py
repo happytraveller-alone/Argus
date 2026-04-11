@@ -385,13 +385,6 @@ def _is_scan_process_active(scan_type: str, task_id: str) -> bool:
     return bool(process and process.poll() is None)
 
 
-def _get_scan_process_kill_grace_seconds() -> int:
-    return max(
-        1,
-        int(getattr(settings, "YASA_PROCESS_KILL_GRACE_SECONDS", 2) or 2),
-    )
-
-
 def _terminate_scan_process(
     process: Optional[subprocess.Popen],
     scan_type: str,
@@ -404,7 +397,7 @@ def _terminate_scan_process(
 
     grace = grace_seconds
     if grace is None:
-        grace = _get_scan_process_kill_grace_seconds()
+        grace = 2
     grace = max(1, int(grace))
 
     used_group_kill = False
@@ -486,131 +479,6 @@ def _run_subprocess_with_tracking(
     finally:
         with _static_scan_process_lock:
             _static_running_scan_processes.pop(key, None)
-
-
-def _collect_yasa_process_pids(
-    *,
-    task_id: Optional[str] = None,
-    report_dir: Optional[str] = None,
-    source_path: Optional[str] = None,
-) -> List[int]:
-    """按任务特征收集 YASA 相关进程 PID（避免误杀无关进程）。"""
-    indicators: List[str] = []
-    if task_id:
-        indicators.append(str(task_id))
-        indicators.append(f"/tmp/yasa_report_{task_id}_")
-    if report_dir:
-        indicators.append(str(report_dir))
-    if source_path:
-        indicators.append(str(source_path))
-    indicators = [item for item in indicators if item]
-    if not indicators:
-        return []
-
-    try:
-        output = subprocess.check_output(
-            ["ps", "-eo", "pid=,cmd="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        return []
-
-    current_pid = os.getpid()
-    matched: set[int] = set()
-    for line in output.splitlines():
-        raw = line.strip()
-        if not raw:
-            continue
-        parts = raw.split(maxsplit=1)
-        if len(parts) != 2:
-            continue
-        pid_text, cmd = parts
-        lower_cmd = cmd.lower()
-        if "yasa" not in lower_cmd and "yasa-engine.real" not in lower_cmd:
-            continue
-        if not any(indicator in cmd for indicator in indicators):
-            continue
-        try:
-            pid = int(pid_text)
-        except ValueError:
-            continue
-        if pid > 1 and pid != current_pid:
-            matched.add(pid)
-
-    return sorted(matched)
-
-
-def _force_cleanup_yasa_processes(
-    *,
-    task_id: Optional[str] = None,
-    report_dir: Optional[str] = None,
-    source_path: Optional[str] = None,
-    grace_seconds: Optional[int] = None,
-) -> Dict[str, int]:
-    """兜底清理脱链的 YASA 进程。"""
-    pids = _collect_yasa_process_pids(
-        task_id=task_id,
-        report_dir=report_dir,
-        source_path=source_path,
-    )
-    if not pids:
-        return {"matched": 0, "terminated": 0, "killed": 0}
-
-    grace = grace_seconds
-    if grace is None:
-        grace = _get_scan_process_kill_grace_seconds()
-    grace = max(0, int(grace))
-
-    terminated = 0
-    killed = 0
-    for pid in pids:
-        terminated_this_pid = False
-        if os.name != "nt":
-            try:
-                pgid = os.getpgid(pid)
-                os.killpg(pgid, signal.SIGTERM)
-                terminated_this_pid = True
-            except Exception:
-                terminated_this_pid = False
-        if not terminated_this_pid:
-            try:
-                os.kill(pid, signal.SIGTERM)
-                terminated_this_pid = True
-            except Exception:
-                terminated_this_pid = False
-        if terminated_this_pid:
-            terminated += 1
-
-    if grace > 0:
-        time.sleep(grace)
-
-    for pid in pids:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            continue
-        except Exception:
-            continue
-
-        killed_this_pid = False
-        if os.name != "nt":
-            try:
-                pgid = os.getpgid(pid)
-                os.killpg(pgid, signal.SIGKILL)
-                killed_this_pid = True
-            except Exception:
-                killed_this_pid = False
-        if not killed_this_pid:
-            try:
-                os.kill(pid, signal.SIGKILL)
-                killed_this_pid = True
-            except Exception:
-                killed_this_pid = False
-        if killed_this_pid:
-            killed += 1
-
-    return {"matched": len(pids), "terminated": terminated, "killed": killed}
 
 
 def _as_utc_datetime(value: Optional[datetime]) -> Optional[datetime]:

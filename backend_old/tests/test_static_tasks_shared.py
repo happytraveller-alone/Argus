@@ -22,24 +22,24 @@ from app.api.v1.endpoints.static_tasks_opengrep import get_static_task_progress
 def test_ensure_scan_workspace_under_configured_root(tmp_path, monkeypatch):
     monkeypatch.setattr(static_tasks_shared.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path))
 
-    workspace = static_tasks_shared.ensure_scan_workspace("yasa", "task-123")
+    workspace = static_tasks_shared.ensure_scan_workspace("phpstan", "task-123")
 
-    assert workspace == tmp_path / "yasa" / "task-123"
+    assert workspace == tmp_path / "phpstan" / "task-123"
     assert workspace.is_dir()
 
 
 def test_ensure_scan_project_and_output_dirs_are_stable(tmp_path, monkeypatch):
     monkeypatch.setattr(static_tasks_shared.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path))
 
-    project_dir = static_tasks_shared.ensure_scan_project_dir("yasa", "task-456")
-    output_dir = static_tasks_shared.ensure_scan_output_dir("yasa", "task-456")
-    logs_dir = static_tasks_shared.ensure_scan_logs_dir("yasa", "task-456")
-    meta_dir = static_tasks_shared.ensure_scan_meta_dir("yasa", "task-456")
+    project_dir = static_tasks_shared.ensure_scan_project_dir("phpstan", "task-456")
+    output_dir = static_tasks_shared.ensure_scan_output_dir("phpstan", "task-456")
+    logs_dir = static_tasks_shared.ensure_scan_logs_dir("phpstan", "task-456")
+    meta_dir = static_tasks_shared.ensure_scan_meta_dir("phpstan", "task-456")
 
-    assert project_dir == tmp_path / "yasa" / "task-456" / "project"
-    assert output_dir == tmp_path / "yasa" / "task-456" / "output"
-    assert logs_dir == tmp_path / "yasa" / "task-456" / "logs"
-    assert meta_dir == tmp_path / "yasa" / "task-456" / "meta"
+    assert project_dir == tmp_path / "phpstan" / "task-456" / "project"
+    assert output_dir == tmp_path / "phpstan" / "task-456" / "output"
+    assert logs_dir == tmp_path / "phpstan" / "task-456" / "logs"
+    assert meta_dir == tmp_path / "phpstan" / "task-456" / "meta"
     assert project_dir.is_dir()
     assert output_dir.is_dir()
     assert logs_dir.is_dir()
@@ -49,12 +49,12 @@ def test_ensure_scan_project_and_output_dirs_are_stable(tmp_path, monkeypatch):
 def test_cleanup_scan_workspace_removes_task_tree(tmp_path, monkeypatch):
     monkeypatch.setattr(static_tasks_shared.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path))
 
-    workspace = static_tasks_shared.ensure_scan_workspace("yasa", "task-cleanup")
+    workspace = static_tasks_shared.ensure_scan_workspace("phpstan", "task-cleanup")
     marker = workspace / "output" / "report.sarif"
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("{}", encoding="utf-8")
 
-    static_tasks_shared.cleanup_scan_workspace("yasa", "task-cleanup")
+    static_tasks_shared.cleanup_scan_workspace("phpstan", "task-cleanup")
 
     assert not workspace.exists()
 
@@ -99,15 +99,15 @@ def test_resolve_backend_venv_executable_uses_configured_dir(tmp_path, monkeypat
 def test_scan_container_registry_tracks_container_id():
     static_tasks_shared._static_running_scan_containers.clear()
 
-    static_tasks_shared._register_scan_container("yasa", "task-container", "container-123")
+    static_tasks_shared._register_scan_container("phpstan", "task-container", "container-123")
 
     assert (
         static_tasks_shared._static_running_scan_containers[
-            static_tasks_shared._scan_task_key("yasa", "task-container")
+            static_tasks_shared._scan_task_key("phpstan", "task-container")
         ]
         == "container-123"
     )
-    assert static_tasks_shared._pop_scan_container("yasa", "task-container") == "container-123"
+    assert static_tasks_shared._pop_scan_container("phpstan", "task-container") == "container-123"
 
 
 def test_record_scan_progress_initializes_shared_store():
@@ -283,7 +283,7 @@ def test_scan_process_active_and_cancel_uses_shared_tracking():
 
     def _runner():
         result_holder["result"] = static_tasks_shared._run_subprocess_with_tracking(
-            "yasa",
+            "phpstan",
             task_id,
             ["bash", "-lc", "sleep 5"],
             timeout=10,
@@ -293,12 +293,12 @@ def test_scan_process_active_and_cancel_uses_shared_tracking():
     worker.start()
     time.sleep(0.2)
 
-    assert static_tasks_shared._is_scan_process_active("yasa", task_id) is True
-    assert static_tasks_shared._request_scan_task_cancel("yasa", task_id) is True
+    assert static_tasks_shared._is_scan_process_active("phpstan", task_id) is True
+    assert static_tasks_shared._request_scan_task_cancel("phpstan", task_id) is True
 
     worker.join(timeout=5)
     assert worker.is_alive() is False
-    assert static_tasks_shared._is_scan_process_active("yasa", task_id) is False
+    assert static_tasks_shared._is_scan_process_active("phpstan", task_id) is False
     assert "result" in result_holder
     completed = result_holder["result"]
     assert isinstance(completed, subprocess.CompletedProcess)
@@ -309,69 +309,10 @@ def test_scan_process_timeout_cleans_tracking_state():
     task_id = "shared-timeout-1"
     with pytest.raises(subprocess.TimeoutExpired):
         static_tasks_shared._run_subprocess_with_tracking(
-            "yasa",
+            "phpstan",
             task_id,
             ["bash", "-lc", "sleep 3"],
             timeout=1,
         )
 
-    assert static_tasks_shared._is_scan_process_active("yasa", task_id) is False
-
-
-def test_collect_yasa_process_pids_filters_by_task_id(monkeypatch):
-    output = "\n".join(
-        [
-            "101 /home/jy/.local/bin/yasa-engine.real --report /tmp/yasa_report_task-a_123",
-            "102 /home/jy/.local/bin/yasa-engine.real --report /tmp/yasa_report_task-b_456",
-            "103 /usr/bin/python other_script.py",
-        ]
-    )
-    monkeypatch.setattr(static_tasks_shared.subprocess, "check_output", lambda *args, **kwargs: output)
-    monkeypatch.setattr(static_tasks_shared.os, "getpid", lambda: 999999)
-
-    matched = static_tasks_shared._collect_yasa_process_pids(task_id="task-a")
-    assert matched == [101]
-
-
-def test_force_cleanup_yasa_processes_terminates_and_kills(monkeypatch):
-    monkeypatch.setattr(
-        static_tasks_shared,
-        "_collect_yasa_process_pids",
-        lambda **kwargs: [201, 202],
-    )
-    monkeypatch.setattr(static_tasks_shared.os, "name", "posix")
-    monkeypatch.setattr(static_tasks_shared.os, "getpgid", lambda pid: pid)
-    monkeypatch.setattr(static_tasks_shared.time, "sleep", lambda _seconds: None)
-
-    alive = {201, 202}
-    term_calls: list[tuple[int, int]] = []
-    kill_calls: list[tuple[int, int]] = []
-
-    def _kill(pid: int, sig: int):
-        # os.kill(pid, 0) used as liveness probe
-        if sig == 0:
-            if pid in alive:
-                return
-            raise ProcessLookupError
-        if sig == static_tasks_shared.signal.SIGTERM:
-            term_calls.append((pid, sig))
-        elif sig == static_tasks_shared.signal.SIGKILL:
-            kill_calls.append((pid, sig))
-            alive.discard(pid)
-
-    def _killpg(pgid: int, sig: int):
-        if sig == static_tasks_shared.signal.SIGTERM:
-            term_calls.append((pgid, sig))
-        elif sig == static_tasks_shared.signal.SIGKILL:
-            kill_calls.append((pgid, sig))
-            alive.discard(pgid)
-
-    monkeypatch.setattr(static_tasks_shared.os, "kill", _kill)
-    monkeypatch.setattr(static_tasks_shared.os, "killpg", _killpg)
-
-    result = static_tasks_shared._force_cleanup_yasa_processes(task_id="task-any", grace_seconds=0)
-    assert result["matched"] == 2
-    assert result["terminated"] == 2
-    assert result["killed"] == 2
-    assert len(term_calls) >= 2
-    assert len(kill_calls) >= 2
+    assert static_tasks_shared._is_scan_process_active("phpstan", task_id) is False

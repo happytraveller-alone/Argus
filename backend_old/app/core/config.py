@@ -141,7 +141,6 @@ class Settings(BaseSettings):
     GHCR_REGISTRY: str = _default_ghcr_registry()
     VULHUNTER_IMAGE_NAMESPACE: str = _default_namespace("VULHUNTER_IMAGE_NAMESPACE", "unbengable12")
     VULHUNTER_IMAGE_TAG: str = _default_tag("VULHUNTER_IMAGE_TAG")
-    SCANNER_YASA_IMAGE: str = _default_image("vulhunter-yasa-runner")
     SCANNER_OPENGREP_IMAGE: str = _default_image("vulhunter-opengrep-runner")
     SCANNER_BANDIT_IMAGE: str = _default_image("vulhunter-bandit-runner")
     SCANNER_GITLEAKS_IMAGE: str = _default_image("vulhunter-gitleaks-runner")
@@ -264,16 +263,6 @@ class Settings(BaseSettings):
     POC_TRIGGER_CHAIN_MAX_FLOWS: int = 3
     POC_TRIGGER_CHAIN_MAX_NODES: int = 80
     POC_TRIGGER_CHAIN_LLM_FALLBACK: bool = True
-
-    # YASA static engine
-    YASA_ENABLED: bool = True
-    YASA_BIN_PATH: str = "yasa"
-    YASA_RESOURCE_DIR: Optional[str] = None
-    YASA_TIMEOUT_SECONDS: int = 600
-    YASA_ORPHAN_STALE_SECONDS: int = 120
-    YASA_PROCESS_KILL_GRACE_SECONDS: int = 2
-    YASA_EXEC_HEARTBEAT_SECONDS: int = 15
-    YASA_STARTUP_FORCE_CLEANUP: bool = True
 
     model_config = SettingsConfigDict(
         case_sensitive=True,

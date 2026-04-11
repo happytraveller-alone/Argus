@@ -311,7 +311,6 @@ mod tests {
         assert!(paths
             .iter()
             .any(|path| path == &"rules_phpstan/phpstan_rules_combined.json"));
-        assert!(!paths.iter().any(|path| path.starts_with("yasa_builtin/")));
     }
 
     #[test]

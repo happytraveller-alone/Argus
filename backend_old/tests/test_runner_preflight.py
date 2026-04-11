@@ -409,7 +409,6 @@ async def test_lifespan_runs_runner_preflight_before_agent_service_check(monkeyp
 
     monkeypatch.setattr(main, "assert_database_schema_is_latest", _noop_async)
     monkeypatch.setattr(main, "recover_interrupted_tasks", _noop_async)
-    monkeypatch.setattr(main, "cleanup_stale_yasa_processes", _noop_async)
     monkeypatch.setattr(main, "run_configured_runner_preflights", _fake_preflight)
     monkeypatch.setattr(main, "check_agent_services", _fake_check_agent_services)
     monkeypatch.setattr(main, "init_db", _noop_async)

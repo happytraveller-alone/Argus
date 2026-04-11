@@ -15,7 +15,6 @@ import app.models.gitleaks  # noqa: F401
 import app.models.opengrep  # noqa: F401
 import app.models.phpstan  # noqa: F401
 import app.models.project_management_metrics  # noqa: F401
-import app.models.yasa  # noqa: F401
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.base import Base
@@ -29,7 +28,6 @@ from app.models.project import Project, ProjectMember
 from app.models.project_info import ProjectInfo
 from app.models.project_management_metrics import ProjectManagementMetrics
 from app.models.user import User
-from app.models.yasa import YasaFinding, YasaScanTask
 from app.services.project_transfer_service import (
     TRANSFER_EXPORT_VERSION,
     cleanup_export_bundle,
@@ -286,17 +284,6 @@ async def _build_full_source_bundle(tmp_path: Path) -> tuple[bytes, str, str]:
         await source_db.refresh(bandit_task)
         await source_db.refresh(phpstan_task)
 
-        yasa_task = YasaScanTask(
-            project_id=project.id,
-            name="yasa",
-            status="completed",
-            target_path=".",
-            language="python",
-        )
-        source_db.add(yasa_task)
-        await source_db.commit()
-        await source_db.refresh(yasa_task)
-
         source_db.add_all(
             [
                 OpengrepFinding(
@@ -327,20 +314,14 @@ async def _build_full_source_bundle(tmp_path: Path) -> tuple[bytes, str, str]:
                     message="Undefined variable",
                     status="open",
                 ),
-                YasaFinding(
-                    scan_task_id=yasa_task.id,
-                    level="warning",
-                    message="Potential issue",
-                    file_path="src/main.py",
-                ),
             ]
         )
         source_db.add(
             ProjectManagementMetrics(
                 project_id=project.id,
                 status="ready",
-                total_tasks=5,
-                completed_tasks=5,
+                total_tasks=4,
+                completed_tasks=4,
                 running_tasks=0,
             )
         )
@@ -421,16 +402,9 @@ async def test_import_projects_bundle_restores_graph_and_rebinds_user(tmp_path: 
             )
         ).scalar_one()
         assert gitleaks_finding.scan_task_id == gitleaks_task.id
-        yasa_task = (
-            await target_db.execute(select(YasaScanTask).where(YasaScanTask.project_id == imported_project_id))
-        ).scalar_one()
-        yasa_finding = (
-            await target_db.execute(select(YasaFinding).where(YasaFinding.scan_task_id == yasa_task.id))
-        ).scalar_one()
-        assert yasa_finding.scan_task_id == yasa_task.id
         metrics = await target_db.get(ProjectManagementMetrics, imported_project_id)
         assert metrics is not None
-        assert metrics.total_tasks == 5
+        assert metrics.total_tasks == 4
 
         assert source_user_id != target_user.id
     finally:
@@ -472,10 +446,6 @@ async def test_import_projects_bundle_merges_into_conflicting_project_by_zip_has
 
         projects = (await db.execute(select(Project))).scalars().all()
         assert len(projects) == 1
-        merged_yasa_tasks = (
-            await db.execute(select(YasaScanTask).where(YasaScanTask.project_id == existing_project.id))
-        ).scalars().all()
-        assert len(merged_yasa_tasks) == 1
     finally:
         await _close_session(db)
 

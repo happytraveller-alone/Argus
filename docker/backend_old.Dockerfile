@@ -374,11 +374,8 @@ RUN set -eux; \
   BYTECODE_TARGETS="\
   /final/app/main.py \
   /final/app/runtime/container_startup.py \
-  /final/app/runtime/launchers/yasa_uast4py_launcher.py \
   /final/app/runtime/launchers/opengrep_launcher.py \
   /final/app/runtime/launchers/phpstan_launcher.py \
-  /final/app/runtime/launchers/yasa_engine_launcher.py \
-  /final/app/runtime/launchers/yasa_launcher.py \
   /final/app/api/v1/endpoints/agent_tasks_reporting.py"; \
   TARGET_COUNT=0; \
   for src in ${BYTECODE_TARGETS}; do \
@@ -519,11 +516,8 @@ RUN set -eux; \
   BYTECODE_TARGETS="\
   /app/app/main.py \
   /app/app/runtime/container_startup.py \
-  /app/app/runtime/launchers/yasa_uast4py_launcher.py \
   /app/app/runtime/launchers/opengrep_launcher.py \
   /app/app/runtime/launchers/phpstan_launcher.py \
-  /app/app/runtime/launchers/yasa_engine_launcher.py \
-  /app/app/runtime/launchers/yasa_launcher.py \
   /app/app/api/v1/endpoints/agent_tasks_reporting.py"; \
   TARGET_COUNT=0; \
   for src in ${BYTECODE_TARGETS}; do \

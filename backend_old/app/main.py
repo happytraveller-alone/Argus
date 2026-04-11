@@ -222,8 +222,6 @@ RECOVERABLE_GITLEAKS_TASK_STATUSES = {"pending", "running"}
 RECOVERABLE_BANDIT_TASK_STATUSES = {"pending", "running"}
 # PHPStan interrupted recovery support
 RECOVERABLE_PHPSTAN_TASK_STATUSES = {"pending", "running"}
-# YASA interrupted recovery support
-RECOVERABLE_YASA_TASK_STATUSES = {"pending", "running"}
 # PMD interrupted recovery support
 RECOVERABLE_PMD_TASK_STATUSES = {"pending", "running"}
 
