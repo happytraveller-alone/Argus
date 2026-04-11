@@ -28,3 +28,12 @@ def test_internal_callers_no_longer_import_config_endpoint():
 
         assert forbidden not in content, f"{path.name} still depends on config endpoint"
         assert required in content, f"{path.name} should depend on user_config_service"
+
+
+def test_static_tasks_shared_no_longer_imports_db_session_module():
+    path = PROJECT_ROOT / "app/api/v1/endpoints/static_tasks_shared.py"
+    content = path.read_text(encoding="utf-8")
+
+    assert "from app.db.session import" not in content
+    assert "async_session_factory" not in content
+    assert "get_db" not in content

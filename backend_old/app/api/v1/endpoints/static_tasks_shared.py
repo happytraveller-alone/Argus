@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.config import settings
-from app.db.session import async_session_factory, get_db
 from app.models.opengrep import OpengrepRule
 from app.models.user_config import UserConfig
 from app.services.backend_venv import (
