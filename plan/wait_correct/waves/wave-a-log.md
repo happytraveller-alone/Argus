@@ -109,6 +109,17 @@
   - 删除 `backend_old/app/services/project_transfer_service.py`
   - 删除 `backend_old/tests/test_project_transfer_service.py`
   - `app.db.base` / `init_db` / `backend_old/app/db` blocker 列表已同步去掉 project transfer service 与对应旧测试
+- Legacy agent runtime/access/metrics helpers retired:
+  - 删除 `backend_old/app/api/v1/endpoints/agent_tasks_runtime.py`
+  - 删除 `backend_old/app/api/v1/endpoints/agent_tasks_access.py`
+  - 删除 `backend_old/app/services/project_metrics.py`
+  - 删除对应旧测试：
+    - `backend_old/tests/test_agent_tree_persistence.py`
+    - `backend_old/tests/test_agent_task_terminal_finalization.py`
+    - `backend_old/tests/test_agent_task_retry_abort.py`
+    - `backend_old/tests/test_agent_task_cancel_origin_retry.py`
+    - `backend_old/tests/test_project_metrics_service.py`
+  - `agent_tasks.py` facade 与 module-layout 检查已移除 runtime/access re-export 预期
 
 ## Wait Correct Entries
 
@@ -482,7 +493,7 @@
 - Rust 要接管并最终删掉 `backend_old/app/db`，必须依序通过下列八个门。第 1、2 项的 Rust 侧实现已完成，但本目录仍被 live Python 模块 import，因此还不能删除。
 - 1. 环境/配置 DB 拆分（已完成）：Rust 与 Python DB env/config plumbing 已分离，`PYTHON_DB_*` 与 `PYTHON_ALEMBIC_ENABLED` 仅留给 Python runtime，Rust `AppConfig`/`bootstrap` 直接读 `DATABASE_URL` 并自行检查 schema。
 - 2. 启动/迁移/健康分离（已完成）：Rust `bootstrap` 负责 startup preflight、legacy schema 校验与 `/health` 报告，Python 只服务尚未迁出的 runtime 功能，确认 Rust 的健康态覆盖这部分即可认定该门已过。
-- 3. 替换 `app.db.base` ownership：验证命令是 `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests`。当前 blocker 是 `backend_old/alembic/env.py`、`backend_old/tests/conftest.py`、`backend_old/tests/test_project_metrics_service.py` 和 `backend_old/app/models/*`。翻门条件是这些命中清零或只剩待删历史文件；owner 是 Rust migration Phase A/B。
+- 3. 替换 `app.db.base` ownership：验证命令是 `rg -n "from app\\.db\\.base import Base|from app\\.db\\.base import|app\\.db\\.base" backend_old/alembic backend_old/app backend_old/tests`。当前 blocker 是 `backend_old/alembic/env.py`、`backend_old/tests/conftest.py` 和 `backend_old/app/models/*`。翻门条件是这些命中清零或只剩待删历史文件；owner 是 Rust migration Phase A/B。
 - 4. 替换 `app.db.session` 调用者：验证命令是 `rg -n "from app\\.db\\.session import|app\\.db\\.session import|get_db|AsyncSessionLocal|async_session_factory" backend_old/app backend_old/tests backend_old/scripts`。当前 blocker 是 `static_tasks_shared.py`。翻门条件是 live caller 全部切到 Rust session/provider，且该命令不再命中 Python live 路径；owner 是 Rust migration Phase A/D。
 - 5. `init_db` 语义迁入 Rust：验证命令是 `rg -n "from app\\.db\\.init_db|import init_db|init_db\\(" backend_old/app backend_old/tests backend_old/scripts`。当前 blocker 已清零，说明 demo user、seed project、legacy rule seed、schema bootstrap 不再依赖 Python `init_db.py`；后续只需继续用 Rust bootstrap/preflight 合同测试守住该语义；owner 是 Rust migration Phase A。
 - 6. 删掉 `static_finding_paths` 依赖：验证命令是 `rg -n "static_finding_paths|resolve_static_finding_location|normalize_static_scan_file_path" backend_old/app backend_old/tests`。当前 blocker 是 `agent_tasks_bootstrap.py`、`app/services/agent/bootstrap/phpstan.py`、`bandit.py`、`opengrep.py` 和 `tests/test_static_finding_paths.py`。翻门条件是 `backend_old/app` 与 `backend_old/tests` 命中清零，逻辑改由 Rust service 或 Rust-owned compatibility layer 提供；owner 是 Rust migration Phase C/D。

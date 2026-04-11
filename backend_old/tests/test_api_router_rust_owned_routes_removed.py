@@ -57,3 +57,18 @@ def test_legacy_init_db_module_has_been_retired():
 def test_legacy_agent_tasks_execution_module_has_been_retired():
     execution_path = PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_execution.py"
     assert not execution_path.exists()
+
+
+def test_legacy_agent_tasks_runtime_module_has_been_retired():
+    runtime_path = PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_runtime.py"
+    assert not runtime_path.exists()
+
+
+def test_legacy_agent_tasks_access_module_has_been_retired():
+    access_path = PROJECT_ROOT / "app/api/v1/endpoints/agent_tasks_access.py"
+    assert not access_path.exists()
+
+
+def test_legacy_project_metrics_service_module_has_been_retired():
+    metrics_path = PROJECT_ROOT / "app/services/project_metrics.py"
+    assert not metrics_path.exists()
