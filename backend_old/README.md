@@ -71,8 +71,11 @@ uv sync --frozen
 
 ### 3) Run API server
 
+Legacy Python startup docs are retired. Use the Rust backend entrypoint instead:
+
 ```bash
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd ../backend
+./start.sh
 ```
 
 OpenAPI docs: `http://localhost:8000/docs`.
@@ -80,8 +83,7 @@ OpenAPI docs: `http://localhost:8000/docs`.
 ### 4) Common commands
 
 ```bash
-uv run alembic upgrade head
-uv run pytest
+cargo test
 ```
 
 ## Configuration Reference

@@ -322,7 +322,7 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert "requirements-heavy.txt" not in backend_text
     assert 'uv venv "${BACKEND_VENV_PATH}"' in backend_text
     assert 'uv sync --active --frozen --no-dev' in backend_text
-    assert "COPY backend/pyproject.toml backend/uv.lock backend/README.md ./" in backend_text
+    assert "COPY backend/Cargo.toml backend/Cargo.lock ./" in backend_text
     assert "COPY --from=builder /app/.venv /opt/backend-venv" not in backend_text
     assert "COPY --from=builder /opt/backend-venv /opt/backend-venv" not in dev_runtime_text
     assert "COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv" in dev_runtime_text
@@ -355,12 +355,12 @@ def test_backend_runtime_python_tools_are_installed_via_backend_venv() -> None:
     assert 'code2flow --help >/dev/null 2>&1' in flow_parser_runner_text
     assert "python3 /opt/flow-parser/flow_parser_runner.py --help >/dev/null 2>&1" in flow_parser_runner_text
     assert 'CMD ["python3", "/opt/flow-parser/flow_parser_runner.py", "--help"]' in flow_parser_runner_text
-    assert "source .venv/bin/activate" not in backend_readme_text
-    assert "uv run uvicorn app.main:app" in backend_readme_text
-    assert "uv run pytest" in backend_readme_text
-    assert "uv sync --frozen" in backend_start_text
-    assert "uv run alembic upgrade head" in backend_start_text
-    assert "uv run uvicorn app.main:app" in backend_start_text
+    assert "uvicorn app.main:app" not in backend_readme_text
+    assert "cargo run --bin backend-rust" in backend_readme_text
+    assert "cargo test" in backend_readme_text
+    assert "cargo build --bin backend-rust" in backend_start_text
+    assert "cargo run --bin backend-rust" in backend_start_text
+    assert "uvicorn app.main:app" not in backend_start_text
 
 
 def test_backend_dockerfile_derives_docker_cli_image_from_selected_mirror() -> None:

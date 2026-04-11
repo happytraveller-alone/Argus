@@ -195,5 +195,5 @@ fi
 
 run_optional_resets
 
-echo "Starting uvicorn with reload..."
-exec "${VENV_DIR}/bin/uvicorn" app.main:app --reload --host 0.0.0.0 --port 8000
+echo "Delegating dev startup to Rust backend runtime..."
+exec /usr/local/bin/backend-runtime-startup dev
