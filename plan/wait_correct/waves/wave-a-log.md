@@ -250,3 +250,32 @@
 - 是否影响前端: 否，Python static-tasks / seed / rules 页继续可用，只是资产根收敛到 Rust owner root
 - 后续修复波次: Wave A 后续 / Phase A-C db asset cleanup
 - owner: Rust migration
+
+### 11. phpstan db assets are now Rust-owned; YASA retirement has started but is not finished
+
+- endpoint / feature: `rules_phpstan/*`, Rust `scan/phpstan`, YASA db/runtime retirement
+- Python 旧行为:
+  - Python static-tasks/phpstan 完全从 `backend_old/app/db/rules_phpstan` 读取 snapshot 与源码目录
+  - YASA 仍有独立 db asset、模型、service、launcher、route 与 bootstrap 链路
+- Rust 当前行为:
+  - Rust 已新增 `backend/src/scan/phpstan.rs` 并实际消费 `rules_phpstan/*`
+  - Rust `phpstan` preflight 已使用 materialized snapshot + `rule_sources/`
+  - `backend_old/app/db/rules_phpstan` 已删除，Python 继续读 Rust 资产根
+- 对应 Python 哪些执行入口已删除:
+  - `backend_old/app/db/rules_phpstan/*`
+  - 已从聚合入口移除 YASA 的一部分导出/聚合依赖：
+    - `backend_old/app/api/v1/endpoints/static_tasks.py`
+    - `backend_old/app/services/agent/bootstrap/__init__.py`
+  - 已从模型聚合导出与项目关系中移除一部分 YASA 依赖：
+    - `backend_old/app/models/__init__.py`
+    - `backend_old/app/models/project.py`
+- 仍然只是 bridge / 未完成清理的 YASA 代码:
+  - `backend_old/app/api/v1/endpoints/static_tasks_yasa.py`
+  - `backend_old/app/api/v1/endpoints/agent_tasks_bootstrap.py`
+  - `backend_old/app/main.py`
+  - `backend_old/app/services/project_transfer_service.py`
+  - `backend_old/app/api/v1/endpoints/static_tasks_shared.py`
+  - 若干 YASA 专属测试
+- 是否影响前端: phpstan 不受影响；YASA 已进入退役中间态，尚未完成全链路删除
+- 后续修复波次: Wave A 后续 / YASA full retirement
+- owner: Rust migration

@@ -9,7 +9,6 @@ from app.api.v1.endpoints import static_tasks_opengrep as _opengrep
 from app.api.v1.endpoints import static_tasks_opengrep_rules as _opengrep_rules
 from app.api.v1.endpoints import static_tasks_pmd as _pmd
 from app.api.v1.endpoints import static_tasks_phpstan as _phpstan
-from app.api.v1.endpoints import static_tasks_yasa as _yasa
 from app.api.v1.endpoints.static_tasks_shared import (
     _clear_scan_task_cancel,
     _resolve_backend_venv_executable,
@@ -33,7 +32,6 @@ router.include_router(_bandit.router)
 router.include_router(_pmd.router)
 router.include_router(_phpstan.router)
 router.include_router(_gitleaks.router)
-router.include_router(_yasa.router)
 router.include_router(_cache.router)
 
 
@@ -70,15 +68,6 @@ def _bind_pmd_runtime() -> None:
     _pmd._sync_task_scan_duration = _sync_task_scan_duration
 
 
-def _bind_yasa_runtime() -> None:
-    _yasa.asyncio = asyncio
-    _yasa._clear_scan_task_cancel = _clear_scan_task_cancel
-    _yasa._get_project_root = _get_project_root
-    _yasa._is_scan_task_cancelled = _is_scan_task_cancelled
-    _yasa._request_scan_task_cancel = _request_scan_task_cancel
-    _yasa._run_subprocess_with_tracking = _run_subprocess_with_tracking
-    _yasa._sync_task_scan_duration = _sync_task_scan_duration
-
 def _bind_gitleaks_runtime() -> None:
     _gitleaks.asyncio = asyncio
     _gitleaks.async_session_factory = async_session_factory
@@ -108,11 +97,6 @@ async def _execute_pmd_scan(*args, **kwargs):
 async def _execute_gitleaks_scan(*args, **kwargs):
     _bind_gitleaks_runtime()
     return await _gitleaks._execute_gitleaks_scan(*args, **kwargs)
-
-
-async def _execute_yasa_scan(*args, **kwargs):
-    _bind_yasa_runtime()
-    return await _yasa._execute_yasa_scan(*args, **kwargs)
 
 
 OpengrepRuleSingleUploadRequest = _opengrep_rules.OpengrepRuleSingleUploadRequest
@@ -145,15 +129,10 @@ GitleaksScanTaskCreate = _gitleaks.GitleaksScanTaskCreate
 GitleaksScanTaskResponse = _gitleaks.GitleaksScanTaskResponse
 GitleaksFindingResponse = _gitleaks.GitleaksFindingResponse
 
-YasaScanTaskCreate = _yasa.YasaScanTaskCreate
-YasaScanTaskResponse = _yasa.YasaScanTaskResponse
-YasaFindingResponse = _yasa.YasaFindingResponse
-
 _parse_opengrep_output = _opengrep._parse_opengrep_output
 _parse_bandit_output_payload = _bandit._parse_bandit_output_payload
 _parse_phpstan_output_payload = _phpstan._parse_phpstan_output_payload
 _filter_phpstan_security_messages = _phpstan._filter_phpstan_security_messages
-_parse_yasa_sarif_output = _yasa._parse_yasa_sarif_output
 _build_effective_gitleaks_config_toml = _gitleaks._build_effective_gitleaks_config_toml
 
 list_static_tasks = _opengrep.list_static_tasks
@@ -241,15 +220,6 @@ delete_gitleaks_task = _gitleaks.delete_gitleaks_task
 get_gitleaks_findings = _gitleaks.get_gitleaks_findings
 get_gitleaks_finding = _gitleaks.get_gitleaks_finding
 update_gitleaks_finding_status = _gitleaks.update_gitleaks_finding_status
-
-create_yasa_scan = _yasa.create_yasa_scan
-list_yasa_tasks = _yasa.list_yasa_tasks
-get_yasa_task = _yasa.get_yasa_task
-interrupt_yasa_task = _yasa.interrupt_yasa_task
-delete_yasa_task = _yasa.delete_yasa_task
-get_yasa_findings = _yasa.get_yasa_findings
-get_yasa_finding = _yasa.get_yasa_finding
-update_yasa_finding_status = _yasa.update_yasa_finding_status
 
 list_pmd_presets = _pmd.list_pmd_presets
 list_builtin_pmd_rulesets = _pmd.list_builtin_pmd_rulesets

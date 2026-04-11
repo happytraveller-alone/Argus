@@ -466,15 +466,6 @@ async def _execute_agent_task(task_id: str):
                         phpstan_enabled=bool(
                             static_bootstrap_config.get("phpstan_enabled")
                         ),
-                        yasa_enabled=bool(
-                            static_bootstrap_config.get("yasa_enabled")
-                        ),
-                        yasa_language=str(
-                            static_bootstrap_config.get("yasa_language") or "auto"
-                        ),
-                        yasa_rule_config_id=static_bootstrap_config.get(
-                            "yasa_rule_config_id"
-                        ),
                     )
 
                 (

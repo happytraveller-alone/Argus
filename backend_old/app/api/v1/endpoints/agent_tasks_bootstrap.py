@@ -33,24 +33,15 @@ from app.db.static_finding_paths import normalize_static_scan_file_path
 from app.models.agent_task import AgentTask
 from app.models.bandit import BanditRuleState
 from app.models.opengrep import OpengrepRule
-from app.models.yasa import YasaRuleConfig
 from app.services.bandit_rules_snapshot import load_bandit_builtin_snapshot
 from app.services.agent.bootstrap import (
     BanditBootstrapScanner,
     OpenGrepBootstrapScanner,
     PhpstanBootstrapScanner,
-    YasaBootstrapScanner,
 )
 from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 from app.services.agent.utils.vulnerability_naming import (
     normalize_cwe_id as normalize_cwe_id_util,
-)
-from app.services.yasa_language import (
-    YASA_SUPPORTED_LANGUAGES_TEXT,
-    collect_yasa_language_counts_from_source_tree,
-    is_yasa_blocked_project_language,
-    normalize_yasa_language,
-    resolve_yasa_language_with_preference,
 )
 
 logger = logging.getLogger(__name__)
@@ -194,9 +185,6 @@ def _resolve_static_bootstrap_config(
         "bandit_enabled": False,
         "gitleaks_enabled": False,
         "phpstan_enabled": False,
-        "yasa_enabled": False,
-        "yasa_language": "auto",
-        "yasa_rule_config_id": None,
     }
     if source_mode == "hybrid":
         defaults = {
@@ -205,9 +193,6 @@ def _resolve_static_bootstrap_config(
             "bandit_enabled": False,
             "gitleaks_enabled": False,
             "phpstan_enabled": False,
-            "yasa_enabled": False,
-            "yasa_language": "auto",
-            "yasa_rule_config_id": None,
         }
 
     audit_scope = task.audit_scope if isinstance(task.audit_scope, dict) else {}
@@ -234,37 +219,12 @@ def _resolve_static_bootstrap_config(
     phpstan_enabled = bool(
         static_bootstrap.get("phpstan_enabled", defaults["phpstan_enabled"])
     )
-    yasa_enabled = bool(
-        static_bootstrap.get("yasa_enabled", defaults["yasa_enabled"])
-    )
-    raw_yasa_language = static_bootstrap.get("yasa_language", defaults["yasa_language"])
-    raw_yasa_rule_config_value = static_bootstrap.get(
-        "yasa_rule_config_id",
-        defaults["yasa_rule_config_id"],
-    )
-    raw_yasa_rule_config_id = (
-        str(raw_yasa_rule_config_value).strip()
-        if raw_yasa_rule_config_value is not None
-        else ""
-    )
-    if raw_yasa_rule_config_value is not None and not raw_yasa_rule_config_id:
-        raise HTTPException(status_code=400, detail="yasa_rule_config_id 不能为空")
-    try:
-        normalized_yasa_language = normalize_yasa_language(
-            str(raw_yasa_language or "").strip(),
-            allow_auto=True,
-        ) or "auto"
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if mode == "disabled":
         opengrep_enabled = False
         bandit_enabled = False
         gitleaks_enabled = False
         phpstan_enabled = False
-        yasa_enabled = False
-        normalized_yasa_language = "auto"
-        raw_yasa_rule_config_id = ""
 
     return {
         "mode": mode,
@@ -272,46 +232,6 @@ def _resolve_static_bootstrap_config(
         "bandit_enabled": bandit_enabled,
         "gitleaks_enabled": gitleaks_enabled,
         "phpstan_enabled": phpstan_enabled,
-        "yasa_enabled": yasa_enabled,
-        "yasa_language": normalized_yasa_language,
-        "yasa_rule_config_id": raw_yasa_rule_config_id or None,
-    }
-
-
-async def _resolve_embedded_yasa_settings(
-    *,
-    db: AsyncSession,
-    project_root: str,
-    programming_languages: Any,
-    yasa_language: str,
-    yasa_rule_config_id: Optional[str],
-) -> Dict[str, Any]:
-    selected_yasa_rule_config: Optional[YasaRuleConfig] = None
-    normalized_rule_config_id = str(yasa_rule_config_id or "").strip() or None
-    if normalized_rule_config_id:
-        rule_result = await db.execute(
-            select(YasaRuleConfig).where(YasaRuleConfig.id == normalized_rule_config_id)
-        )
-        selected_yasa_rule_config = rule_result.scalar_one_or_none()
-        if selected_yasa_rule_config is None:
-            raise RuntimeError("YASA 预处理失败：自定义规则配置不存在")
-        if not bool(selected_yasa_rule_config.is_active):
-            raise RuntimeError("YASA 预处理失败：自定义规则配置已禁用")
-
-    resolved_yasa_language = (
-        str(selected_yasa_rule_config.language or "").strip().lower()
-        if selected_yasa_rule_config is not None
-        else resolve_yasa_language_with_preference(
-            preferred_language=yasa_language,
-            programming_languages=programming_languages,
-            source_root=project_root,
-        )
-    )
-    return {
-        "rule_config_id": normalized_rule_config_id,
-        "selected_rule_config": selected_yasa_rule_config,
-        "resolved_language": resolved_yasa_language,
-        "requested_language": yasa_language or "auto",
     }
 
 def _normalize_bootstrap_confidence(confidence: Any) -> Optional[str]:
@@ -706,22 +626,17 @@ async def _prepare_embedded_bootstrap_findings(
     bandit_enabled: bool = False,
     gitleaks_enabled: bool = False,
     phpstan_enabled: bool = False,
-    yasa_enabled: bool = False,
-    yasa_language: str = "auto",
-    yasa_rule_config_id: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], Optional[str], str]:
     opengrep_candidates: List[Dict[str, Any]] = []
     bandit_candidates: List[Dict[str, Any]] = []
     gitleaks_candidates: List[Dict[str, Any]] = []
     phpstan_candidates: List[Dict[str, Any]] = []
-    yasa_candidates: List[Dict[str, Any]] = []
     opengrep_total_findings = 0
     bandit_total_findings = 0
     gitleaks_total_findings = 0
     phpstan_total_findings = 0
-    yasa_total_findings = 0
 
-    if not opengrep_enabled and not bandit_enabled and not gitleaks_enabled and not phpstan_enabled and not yasa_enabled:
+    if not opengrep_enabled and not bandit_enabled and not gitleaks_enabled and not phpstan_enabled:
         if event_emitter:
             await event_emitter.emit_info(
                 " 静态预扫未启用：返回空候选，继续后续流程",
@@ -947,125 +862,14 @@ async def _prepare_embedded_bootstrap_findings(
             len(phpstan_candidates),
         )
 
-    if yasa_enabled:
-        if is_yasa_blocked_project_language(programming_languages) and not str(yasa_rule_config_id or "").strip():
-            skip_reason = "YASA 引擎仅支持 Java / Go / TypeScript / Python 项目"
-            _log_embedded_bootstrap_skipped("YASA", project_root, skip_reason)
-            if event_emitter:
-                await event_emitter.emit_info(
-                    skip_reason,
-                    metadata={
-                        "bootstrap": True,
-                        "bootstrap_task_id": None,
-                        "bootstrap_source": "embedded_yasa_skipped",
-                        "bootstrap_yasa_skipped_reason": skip_reason,
-                        "bootstrap_yasa_requested_language": yasa_language or "auto",
-                        "blocked_reason": "unsupported_project_language",
-                    },
-                )
-            yasa_candidates = []
-            yasa_total_findings = 0
-        else:
-            yasa_settings = await _resolve_embedded_yasa_settings(
-                db=db,
-                project_root=project_root,
-                programming_languages=programming_languages,
-                yasa_language=yasa_language,
-                yasa_rule_config_id=yasa_rule_config_id,
-            )
-            selected_yasa_rule_config = yasa_settings["selected_rule_config"]
-            resolved_yasa_language = yasa_settings["resolved_language"]
-            source_tree_language_counts = collect_yasa_language_counts_from_source_tree(project_root)
-            detection_source = "source_tree_suffix"
-            if yasa_settings["rule_config_id"]:
-                detection_source = "rule_config"
-            elif str(yasa_settings["requested_language"] or "").strip().lower() not in {"", "auto"}:
-                detection_source = "manual_request"
-            if not resolved_yasa_language:
-                skip_reason = (
-                    f"YASA 已跳过：未检测到可支持语言（支持 {YASA_SUPPORTED_LANGUAGES_TEXT}）"
-                )
-                _log_embedded_bootstrap_skipped("YASA", project_root, skip_reason)
-                if event_emitter:
-                    await event_emitter.emit_info(
-                        skip_reason,
-                        metadata={
-                            "bootstrap": True,
-                            "bootstrap_task_id": None,
-                            "bootstrap_source": "embedded_yasa_skipped",
-                            "bootstrap_yasa_skipped_reason": skip_reason,
-                            "bootstrap_yasa_requested_language": yasa_language or "auto",
-                            "bootstrap_yasa_language_detection_source": detection_source,
-                            "bootstrap_yasa_language_counts": source_tree_language_counts,
-                        },
-                    )
-                yasa_candidates = []
-                yasa_total_findings = 0
-            else:
-                _log_embedded_bootstrap_start("YASA", project_root)
-                if event_emitter:
-                    await event_emitter.emit_info(
-                        "🧪 YASA 内嵌预扫开始",
-                        metadata={
-                            "bootstrap": True,
-                            "bootstrap_task_id": None,
-                            "bootstrap_source": "embedded_yasa",
-                            "bootstrap_total_findings": 0,
-                            "bootstrap_candidate_count": 0,
-                            "bootstrap_yasa_requested_language": yasa_settings["requested_language"],
-                            "bootstrap_yasa_resolved_language": resolved_yasa_language,
-                            "bootstrap_yasa_rule_config_id": yasa_settings["rule_config_id"] or "",
-                            "bootstrap_yasa_language_detection_source": detection_source,
-                            "bootstrap_yasa_language_counts": source_tree_language_counts,
-                        },
-                    )
-                try:
-                    scanner = YasaBootstrapScanner(
-                        language=resolved_yasa_language,
-                        custom_rule_config=selected_yasa_rule_config,
-                    )
-                    scan_result = await scanner.scan(project_root)
-                except FileNotFoundError as exc:
-                    _log_embedded_bootstrap_error("YASA", project_root, str(exc))
-                    if event_emitter:
-                        await event_emitter.emit_error("YASA 预处理失败：未安装 yasa")
-                    raise RuntimeError("YASA 预处理失败：未安装 yasa") from exc
-                except Exception as exc:
-                    _log_embedded_bootstrap_error("YASA", project_root, str(exc))
-                    if event_emitter:
-                        await event_emitter.emit_error(f"YASA 预处理失败：{str(exc)[:160]}")
-                    raise RuntimeError(f"YASA 预处理失败：{str(exc)[:200]}") from exc
-
-                yasa_total_findings = int(getattr(scan_result, "total_findings", 0) or 0)
-                normalized_yasa_findings = []
-                for finding in getattr(scan_result, "findings", []) or []:
-                    if hasattr(finding, "to_dict"):
-                        finding_payload = finding.to_dict()
-                    elif isinstance(finding, dict):
-                        finding_payload = dict(finding)
-                    else:
-                        continue
-                    normalized_yasa_findings.append(finding_payload)
-                yasa_candidates = _filter_bootstrap_findings(
-                    normalized_yasa_findings,
-                    exclude_patterns=exclude_patterns,
-                )
-                _log_embedded_bootstrap_success(
-                    "YASA",
-                    project_root,
-                    yasa_total_findings,
-                    len(yasa_candidates),
-                )
-
     merged_candidates = _dedupe_bootstrap_findings(
-        [*opengrep_candidates, *bandit_candidates, *gitleaks_candidates, *phpstan_candidates, *yasa_candidates]
+        [*opengrep_candidates, *bandit_candidates, *gitleaks_candidates, *phpstan_candidates]
     )
     total_findings = (
         opengrep_total_findings
         + bandit_total_findings
         + gitleaks_total_findings
         + phpstan_total_findings
-        + yasa_total_findings
     )
 
     enabled_sources: List[str] = []
@@ -1077,8 +881,6 @@ async def _prepare_embedded_bootstrap_findings(
         enabled_sources.append("gitleaks")
     if phpstan_enabled:
         enabled_sources.append("phpstan")
-    if yasa_enabled:
-        enabled_sources.append("yasa")
     bootstrap_source = f"embedded_{'_'.join(enabled_sources)}"
 
     if event_emitter:
@@ -1098,10 +900,6 @@ async def _prepare_embedded_bootstrap_findings(
                 "bootstrap_gitleaks_candidate_count": len(gitleaks_candidates),
                 "bootstrap_phpstan_total_findings": phpstan_total_findings,
                 "bootstrap_phpstan_candidate_count": len(phpstan_candidates),
-                "bootstrap_yasa_total_findings": yasa_total_findings,
-                "bootstrap_yasa_candidate_count": len(yasa_candidates),
-                "bootstrap_yasa_requested_language": yasa_language or "auto",
-                "bootstrap_yasa_rule_config_id": yasa_rule_config_id or "",
             },
         )
     return merged_candidates, None, bootstrap_source

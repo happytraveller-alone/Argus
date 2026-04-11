@@ -64,8 +64,6 @@ class Project(Base):
         "PhpstanScanTask", back_populates="project", cascade="all, delete-orphan"
     )
     # YASA 静态扫描任务关系（新增）
-    yasa_scan_tasks = relationship(
-        "YasaScanTask", back_populates="project", cascade="all, delete-orphan")
     # PMD 静态扫描任务关系（新增）
     pmd_scan_tasks = relationship(
         "PmdScanTask", back_populates="project", cascade="all, delete-orphan"

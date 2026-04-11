@@ -26,7 +26,6 @@ from app.services.backend_venv import (
     build_backend_venv_env,
     resolve_backend_venv_executable,
 )
-from app.services.yasa_runtime_config import get_cached_global_yasa_runtime_config
 from app.services.llm.service import LLMConfigError, LLMService
 from app.services.scanner_runner import stop_scanner_container_sync
 
@@ -386,6 +385,13 @@ def _is_scan_process_active(scan_type: str, task_id: str) -> bool:
     return bool(process and process.poll() is None)
 
 
+def _get_scan_process_kill_grace_seconds() -> int:
+    return max(
+        1,
+        int(getattr(settings, "YASA_PROCESS_KILL_GRACE_SECONDS", 2) or 2),
+    )
+
+
 def _terminate_scan_process(
     process: Optional[subprocess.Popen],
     scan_type: str,
@@ -398,16 +404,7 @@ def _terminate_scan_process(
 
     grace = grace_seconds
     if grace is None:
-        try:
-            runtime_config = get_cached_global_yasa_runtime_config()
-            grace = int(
-                runtime_config.get(
-                    "yasa_process_kill_grace_seconds",
-                    getattr(settings, "YASA_PROCESS_KILL_GRACE_SECONDS", 2) or 2,
-                )
-            )
-        except Exception:
-            grace = 2
+        grace = _get_scan_process_kill_grace_seconds()
     grace = max(1, int(grace))
 
     used_group_kill = False
@@ -562,16 +559,7 @@ def _force_cleanup_yasa_processes(
 
     grace = grace_seconds
     if grace is None:
-        try:
-            runtime_config = get_cached_global_yasa_runtime_config()
-            grace = int(
-                runtime_config.get(
-                    "yasa_process_kill_grace_seconds",
-                    getattr(settings, "YASA_PROCESS_KILL_GRACE_SECONDS", 2) or 2,
-                )
-            )
-        except Exception:
-            grace = 2
+        grace = _get_scan_process_kill_grace_seconds()
     grace = max(0, int(grace))
 
     terminated = 0

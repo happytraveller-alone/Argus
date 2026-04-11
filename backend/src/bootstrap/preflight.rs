@@ -8,7 +8,7 @@ use tokio::{
 };
 
 use crate::{
-    scan::{bandit, gitleaks, opengrep, pmd},
+    scan::{bandit, gitleaks, opengrep, phpstan, pmd},
     state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus},
 };
 
@@ -208,11 +208,7 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
         RunnerPreflightSpec {
             name: "phpstan",
             image: config.scanner_phpstan_image.clone(),
-            command: vec![
-                "php".to_string(),
-                "/opt/phpstan/phpstan".to_string(),
-                "--version".to_string(),
-            ],
+            command: phpstan::build_preflight_command(),
             mounts: Vec::new(),
         },
         RunnerPreflightSpec {
@@ -268,6 +264,15 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
         {
             bandit_spec.command = command;
             bandit_spec.mounts = mounts;
+            cleanup_dirs.push(workspace_dir);
+        }
+    }
+
+    if let Some(phpstan_spec) = specs.iter_mut().find(|spec| spec.name == "phpstan") {
+        if let Some((workspace_dir, command, mounts)) = build_phpstan_preflight_inputs(state).await?
+        {
+            phpstan_spec.command = command;
+            phpstan_spec.mounts = mounts;
             cleanup_dirs.push(workspace_dir);
         }
     }
@@ -378,6 +383,24 @@ async fn build_pmd_preflight_inputs(
     )))
 }
 
+async fn build_phpstan_preflight_inputs(
+    state: &AppState,
+) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
+    let workspace_dir =
+        std::env::temp_dir().join(format!("phpstan-preflight-{}", uuid::Uuid::new_v4()));
+    let rules_dir = phpstan::materialize_rules_directory(state, &workspace_dir).await?;
+    let Some(_rules_dir) = rules_dir else {
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Ok(None);
+    };
+
+    Ok(Some((
+        workspace_dir.clone(),
+        phpstan::build_preflight_command(),
+        vec![(workspace_dir, "/work".to_string())],
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{config::AppConfig, state::AppState};
@@ -442,6 +465,21 @@ mod tests {
             .iter()
             .any(|part| part.starts_with("/work/pmd-rules/")));
         assert_eq!(pmd.mounts.len(), 1);
+
+        let phpstan = specs
+            .iter()
+            .find(|spec| spec.name == "phpstan")
+            .expect("phpstan spec should exist");
+        assert_eq!(phpstan.command.first().map(String::as_str), Some("python3"));
+        assert!(phpstan
+            .command
+            .get(2)
+            .is_some_and(|script| script.contains("phpstan_rules_combined.json")));
+        assert!(phpstan
+            .command
+            .get(2)
+            .is_some_and(|script| script.contains("rule_sources")));
+        assert_eq!(phpstan.mounts.len(), 1);
 
         for cleanup_dir in cleanup_dirs {
             let _ = tokio::fs::remove_dir_all(cleanup_dir).await;

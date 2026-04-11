@@ -11,7 +11,6 @@ def test_static_tasks_split_modules_exist_and_aggregator_keeps_exports():
         "app.api.v1.endpoints.static_tasks_bandit",
         "app.api.v1.endpoints.static_tasks_phpstan",
         "app.api.v1.endpoints.static_tasks_gitleaks",
-        "app.api.v1.endpoints.static_tasks_yasa",
         "app.api.v1.endpoints.static_tasks_cache",
     ]
 
@@ -22,7 +21,6 @@ def test_static_tasks_split_modules_exist_and_aggregator_keeps_exports():
     assert hasattr(static_tasks, "_parse_opengrep_output")
     assert hasattr(static_tasks, "_parse_bandit_output_payload")
     assert hasattr(static_tasks, "_parse_phpstan_output_payload")
-    assert hasattr(static_tasks, "_parse_yasa_sarif_output")
     assert hasattr(static_tasks, "_build_effective_gitleaks_config_toml")
 
 
@@ -34,5 +32,4 @@ def test_static_tasks_router_keeps_split_route_prefixes():
     assert "/bandit/scan" in route_paths
     assert "/phpstan/scan" in route_paths
     assert "/gitleaks/scan" in route_paths
-    assert "/yasa/scan" in route_paths
     assert "/cache/repo-stats" in route_paths

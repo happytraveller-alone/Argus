@@ -759,9 +759,13 @@ async def list_phpstan_rules(
         states_by_rule_id=states_by_rule_id,
     )
 
+    if not isinstance(skip, int):
+        skip = 0
+    if not isinstance(limit, int):
+        limit = 1000
     keyword_text = str(keyword or "").strip().lower()
     source_text = str(source or "").strip()
-    deleted_text = str(deleted or "false").strip().lower()
+    deleted_text = deleted.strip().lower() if isinstance(deleted, str) else "false"
     if deleted_text not in {"false", "true", "all"}:
         raise HTTPException(status_code=400, detail="deleted 必须为 false/true/all")
     filtered: List[Dict[str, Any]] = []

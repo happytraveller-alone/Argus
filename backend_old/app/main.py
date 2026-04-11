@@ -25,7 +25,6 @@ from app.models.opengrep import OpengrepScanTask
 from app.models.bandit import BanditScanTask
 from app.models.phpstan import PhpstanScanTask
 from app.models.pmd_scan import PmdScanTask
-from app.models.yasa import YasaScanTask
 from sqlalchemy.future import select
 from sqlalchemy import text
 from alembic.config import Config as AlembicConfig
@@ -258,7 +257,6 @@ async def recover_interrupted_tasks() -> dict[str, int]:
             "gitleaks": 0,
             "bandit": 0,
             "phpstan": 0,
-            "yasa": 0,
             "pmd": 0,
         }
 
@@ -270,8 +268,6 @@ async def recover_interrupted_tasks() -> dict[str, int]:
             (BanditScanTask, RECOVERABLE_BANDIT_TASK_STATUSES, "bandit"),
             # PHPStan interrupted recovery support
             (PhpstanScanTask, RECOVERABLE_PHPSTAN_TASK_STATUSES, "phpstan"),
-            # YASA interrupted recovery support
-            (YasaScanTask, RECOVERABLE_YASA_TASK_STATUSES, "yasa"),
             # PMD interrupted recovery support
             (PmdScanTask, RECOVERABLE_PMD_TASK_STATUSES, "pmd"),
         ]
@@ -287,100 +283,18 @@ async def recover_interrupted_tasks() -> dict[str, int]:
         if any(counts.values()):
             await db.commit()
             logger.warning(
-                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, opengrep=%s, gitleaks=%s, bandit=%s, phpstan=%s, yasa=%s, pmd=%s",
+                "检测到上次中断遗留任务，已自动标记 interrupted：agent=%s, opengrep=%s, gitleaks=%s, bandit=%s, phpstan=%s, pmd=%s",
                 counts["agent"],
                 counts["opengrep"],
                 counts["gitleaks"],
                 counts["bandit"],
                 counts["phpstan"],
-                counts["yasa"],
                 counts["pmd"],
             )
         else:
             await db.rollback()
 
         return counts
-
-
-def _collect_stale_yasa_pids() -> list[int]:
-    """识别命中 /tmp/yasa_report_ 的遗留 YASA 进程。"""
-    try:
-        output = subprocess.check_output(
-            ["ps", "-eo", "pid=,cmd="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        return []
-
-    stale_pids: list[int] = []
-    for line in output.splitlines():
-        raw = line.strip()
-        if not raw:
-            continue
-        parts = raw.split(maxsplit=1)
-        if len(parts) != 2:
-            continue
-        pid_text, cmd = parts
-        lower_cmd = cmd.lower()
-        if (
-            "yasa" not in lower_cmd
-            and "yasa-engine.real" not in lower_cmd
-            and "yasa-engine" not in lower_cmd
-        ):
-            continue
-        if "/tmp/yasa_report_" not in cmd:
-            continue
-        try:
-            pid = int(pid_text)
-        except ValueError:
-            continue
-        if pid > 1 and pid != os.getpid():
-            stale_pids.append(pid)
-    return stale_pids
-
-
-async def cleanup_stale_yasa_processes() -> dict[str, int]:
-    if not bool(getattr(settings, "YASA_STARTUP_FORCE_CLEANUP", True)):
-        return {"matched": 0, "terminated": 0, "killed": 0}
-
-    grace_seconds = max(
-        1, int(getattr(settings, "YASA_PROCESS_KILL_GRACE_SECONDS", 2) or 2)
-    )
-    pids = _collect_stale_yasa_pids()
-    if not pids:
-        return {"matched": 0, "terminated": 0, "killed": 0}
-
-    terminated = 0
-    killed = 0
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGTERM)
-            terminated += 1
-        except ProcessLookupError:
-            continue
-        except Exception:
-            continue
-
-    await asyncio.sleep(grace_seconds)
-
-    for pid in pids:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            continue
-        except Exception:
-            continue
-        try:
-            os.kill(pid, signal.SIGKILL)
-            killed += 1
-        except ProcessLookupError:
-            continue
-        except Exception:
-            continue
-
-    return {"matched": len(pids), "terminated": terminated, "killed": killed}
-
 
 
 @asynccontextmanager
@@ -424,18 +338,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
         raise
-
-    try:
-        cleanup_summary = await cleanup_stale_yasa_processes()
-        if cleanup_summary["matched"] > 0:
-            logger.warning(
-                "启动时已清理遗留 YASA 进程：matched=%s, terminated=%s, killed=%s",
-                cleanup_summary["matched"],
-                cleanup_summary["terminated"],
-                cleanup_summary["killed"],
-            )
-    except Exception as e:
-        logger.warning(f"清理遗留 YASA 进程失败: {e}")
 
     try:
         await recover_interrupted_tasks()

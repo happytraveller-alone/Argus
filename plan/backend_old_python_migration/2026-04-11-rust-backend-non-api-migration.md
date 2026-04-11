@@ -694,3 +694,30 @@
   - `yasa_builtin` 只有在 YASA 被彻底 retire 或迁离 Python live 路径后才能删
 - 下一刀：
   - 继续 Phase A / C，优先决定 `session.py` 与 `init_db.py` 哪些职责可以从 Python live 路径抽走
+
+### 2026-04-11 Batch 1 / Slice 6
+
+- 已完成：
+  - Rust 新增 `backend/src/scan/phpstan.rs`
+    - 已能从 Rust 资产库读取 `rules_phpstan/*`
+    - 已能 materialize `phpstan_rules_combined.json` 与 `rule_sources/`
+    - 已补模块测试
+  - Rust `backend/src/bootstrap/preflight.rs` 已把 `phpstan` preflight 接到 Rust 资产 materialize 链路
+  - Python `backend_old/app/db/rules_phpstan` 已物理删除
+  - Python `static_tasks_phpstan.py` 继续通过 helper 从 Rust 资产根读取 phpstan snapshot / rule_sources
+  - 已验证：
+    - `cargo test`
+    - `cd backend_old && ./.venv/bin/pytest tests/test_phpstan_rules_snapshot.py tests/test_phpstan_rules_api.py tests/test_phpstan_static_tasks.py tests/test_phpstan_bootstrap_scanner.py -q`
+    - 结果：`27 passed`
+- 当前意义：
+  - `rules_phpstan` 不再只是“放在 Rust 目录里”，而是已经进入 Rust 真消费链路
+  - `backend_old/app/db/rules_phpstan` 的重复副本已经删除，phpstan DB 资产 source of truth 收口到 Rust
+- 仍未完成：
+  - Python `static_tasks_phpstan` live API 仍未迁到 Rust
+  - `phpstan_scan_tasks` / `phpstan_findings` / `phpstan_rule_states` 仍由 Python live runtime 持有
+  - 这一步完成的是 phpstan DB 资产接管，不是 phpstan 整条运行时接管
+- 已开始但未完成：
+  - YASA 退役已进入执行态，当前已移除部分模型/服务/launcher 与聚合导出
+  - 但仍有 `agent_tasks_bootstrap.py`、`main.py`、`project_transfer_service`、`static_tasks_shared.py` 等 live caller 残留引用，需要单独一刀收完
+- 下一刀：
+  - 单独做 YASA 全量退役，删除剩余 live caller、route、bootstrap、tests 和迁移残项

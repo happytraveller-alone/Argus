@@ -17,4 +17,3 @@ from .bandit import BanditScanTask, BanditFinding, BanditRuleState
 from .phpstan import PhpstanScanTask, PhpstanFinding, PhpstanRuleState
 from .pmd import PmdRuleConfig
 from .pmd_scan import PmdScanTask, PmdFinding
-from .yasa import YasaScanTask, YasaFinding, YasaRuleConfig
