@@ -647,6 +647,302 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
 }
 
 #[tokio::test]
+async fn opengrep_rule_batch_select_supports_rule_ids_keyword_and_current_state_filters() {
+    let state = AppState::from_config(isolated_test_config("opengrep-rule-select"))
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let create_rule = |name: &str, is_active: bool, source: &str, language: &str, severity: &str, confidence: &str| {
+        json!({
+            "name": name,
+            "pattern_yaml": format!("rules:\\n  - id: {}\\n    languages: [python]\\n    severity: WARNING\\n    message: demo\\n    pattern: dangerous_call", name.replace(' ', "-")),
+            "language": language,
+            "severity": severity,
+            "source": source,
+            "confidence": confidence,
+            "correct": true,
+            "is_active": is_active
+        })
+    };
+
+    let alpha_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/upload/json")
+                .header("content-type", "application/json")
+                .body(Body::from(create_rule("auth-alpha", false, "json", "python", "WARNING", "MEDIUM").to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(alpha_response.status(), StatusCode::OK);
+    let alpha_json: Value =
+        serde_json::from_slice(&to_bytes(alpha_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    let alpha_rule_id = alpha_json["id"].as_str().unwrap().to_string();
+
+    let beta_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/upload/json")
+                .header("content-type", "application/json")
+                .body(Body::from(create_rule("auth-beta", true, "upload", "javascript", "ERROR", "HIGH").to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(beta_response.status(), StatusCode::OK);
+    let beta_json: Value =
+        serde_json::from_slice(&to_bytes(beta_response.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    let beta_rule_id = beta_json["id"].as_str().unwrap().to_string();
+
+    let select_by_keyword = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/select")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "keyword": "auth-",
+                        "current_is_active": false,
+                        "is_active": true
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(select_by_keyword.status(), StatusCode::OK);
+    let select_by_keyword_json: Value = serde_json::from_slice(
+        &to_bytes(select_by_keyword.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(select_by_keyword_json["updated_count"], 1);
+    assert_eq!(select_by_keyword_json["is_active"], true);
+
+    let alpha_detail = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/static-tasks/rules/{alpha_rule_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let alpha_detail_json: Value =
+        serde_json::from_slice(&to_bytes(alpha_detail.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(alpha_detail_json["is_active"], true);
+
+    let beta_detail = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/static-tasks/rules/{beta_rule_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let beta_detail_json: Value =
+        serde_json::from_slice(&to_bytes(beta_detail.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(beta_detail_json["is_active"], true);
+
+    let select_by_rule_ids = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/select")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "rule_ids": [alpha_rule_id],
+                        "is_active": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(select_by_rule_ids.status(), StatusCode::OK);
+    let select_by_rule_ids_json: Value = serde_json::from_slice(
+        &to_bytes(select_by_rule_ids.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(select_by_rule_ids_json["updated_count"], 1);
+    assert_eq!(select_by_rule_ids_json["is_active"], false);
+
+    let alpha_after_rule_ids = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/static-tasks/rules/{alpha_rule_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let alpha_after_rule_ids_json: Value = serde_json::from_slice(
+        &to_bytes(alpha_after_rule_ids.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(alpha_after_rule_ids_json["is_active"], false);
+
+    let beta_after_rule_ids = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/static-tasks/rules/{beta_rule_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let beta_after_rule_ids_json: Value = serde_json::from_slice(
+        &to_bytes(beta_after_rule_ids.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(beta_after_rule_ids_json["is_active"], true);
+
+    let invalid_rule_ids = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/select")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "rule_ids": "not-an-array",
+                        "is_active": true
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_rule_ids.status(), StatusCode::BAD_REQUEST);
+
+    let invalid_rule_ids_item = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/select")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "rule_ids": [123],
+                        "is_active": true
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_rule_ids_item.status(), StatusCode::BAD_REQUEST);
+
+    let invalid_current_is_active = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/select")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "keyword": "auth-",
+                        "current_is_active": "false",
+                        "is_active": true
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_current_is_active.status(), StatusCode::BAD_REQUEST);
+
+    let select_by_dimensions = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/static-tasks/rules/select")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "source": "upload",
+                        "language": "javascript",
+                        "severity": "ERROR",
+                        "confidence": "HIGH",
+                        "current_is_active": true,
+                        "is_active": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(select_by_dimensions.status(), StatusCode::OK);
+    let select_by_dimensions_json: Value = serde_json::from_slice(
+        &to_bytes(select_by_dimensions.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(select_by_dimensions_json["updated_count"], 1);
+
+    let alpha_after = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/static-tasks/rules/{alpha_rule_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let alpha_after_json: Value =
+        serde_json::from_slice(&to_bytes(alpha_after.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(alpha_after_json["is_active"], false);
+
+    let beta_after = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/static-tasks/rules/{beta_rule_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let beta_after_json: Value =
+        serde_json::from_slice(&to_bytes(beta_after.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(beta_after_json["is_active"], false);
+}
+
+#[tokio::test]
 async fn agent_test_routes_are_rust_owned_without_python_upstream() {
     let state = AppState::from_config(isolated_test_config("agent-test-routes"))
         .await

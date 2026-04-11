@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axum::{
     extract::{Multipart, Path as AxumPath, Query, State},
@@ -215,10 +215,7 @@ async fn list_opengrep_rules(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Value>>, ApiError> {
-    let snapshot = load_task_snapshot(&state).await?;
-    let mut items = builtin_opengrep_rules(&state).await?;
-    items.extend(snapshot.opengrep_rules.into_values());
-    items.sort_by(|left, right| left.id.cmp(&right.id));
+    let items = merged_opengrep_rules(&state).await?;
     Ok(Json(
         items.into_iter()
             .filter(|rule| match query.source.as_deref() {
@@ -441,16 +438,74 @@ async fn batch_update_opengrep_rules(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    let is_active = payload
-        .get("is_active")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    let current = builtin_opengrep_rules(&state).await?;
+    let is_active = required_bool(&payload, "is_active")?;
+    let rule_ids = match payload.get("rule_ids") {
+        None => Vec::new(),
+        Some(value) => strict_string_array(value)
+            .ok_or_else(|| ApiError::BadRequest("rule_ids must be a string array".to_string()))?,
+    };
     let keyword = optional_string(&payload, "keyword");
-    let updated = current
-        .into_iter()
-        .filter(|rule| contains_keyword(&rule.name, keyword.as_deref()))
-        .count();
+    let language = optional_string(&payload, "language");
+    let source = optional_string(&payload, "source");
+    let severity = optional_string(&payload, "severity");
+    let confidence = optional_string(&payload, "confidence");
+    let current_is_active = match payload.get("current_is_active") {
+        None => None,
+        Some(value) => Some(
+            value
+                .as_bool()
+                .ok_or_else(|| {
+                    ApiError::BadRequest("current_is_active must be a boolean".to_string())
+                })?,
+        ),
+    };
+
+    let mut snapshot = load_task_snapshot(&state).await?;
+    let current = merged_opengrep_rules_from_snapshot(&snapshot, &state).await?;
+    let mut updated = 0usize;
+    for mut rule in current.into_iter().filter(|rule| {
+        if !rule_ids.is_empty() && !rule_ids.iter().any(|id| id == &rule.id) {
+            return false;
+        }
+        if !contains_keyword(&rule.name, keyword.as_deref()) {
+            return false;
+        }
+        if let Some(language) = language.as_deref() {
+            if !rule.language.eq_ignore_ascii_case(language) {
+                return false;
+            }
+        }
+        if let Some(source) = source.as_deref() {
+            if rule.source != source {
+                return false;
+            }
+        }
+        if let Some(severity) = severity.as_deref() {
+            if !rule.severity.eq_ignore_ascii_case(severity) {
+                return false;
+            }
+        }
+        if let Some(confidence) = confidence.as_deref() {
+            if rule
+                .confidence
+                .as_deref()
+                .is_none_or(|value| !value.eq_ignore_ascii_case(confidence))
+            {
+                return false;
+            }
+        }
+        if let Some(current_is_active) = current_is_active {
+            if rule.is_active != current_is_active {
+                return false;
+            }
+        }
+        true
+    }) {
+        rule.is_active = is_active;
+        snapshot.opengrep_rules.insert(rule.id.clone(), rule);
+        updated += 1;
+    }
+    save_task_snapshot(&state, &snapshot).await?;
     Ok(Json(json!({
         "message": "opengrep rule selection updated in rust backend",
         "updated_count": updated,
@@ -1737,11 +1792,7 @@ async fn find_opengrep_rule(
     state: &AppState,
     rule_id: &str,
 ) -> Result<task_state::OpengrepRuleRecord, ApiError> {
-    let snapshot = load_task_snapshot(state).await?;
-    if let Some(rule) = snapshot.opengrep_rules.get(rule_id) {
-        return Ok(rule.clone());
-    }
-    builtin_opengrep_rules(state)
+    merged_opengrep_rules(state)
         .await?
         .into_iter()
         .find(|rule| rule.id == rule_id)
@@ -1898,6 +1949,30 @@ async fn builtin_opengrep_rules(
             }
         })
         .collect())
+}
+
+async fn merged_opengrep_rules(
+    state: &AppState,
+) -> Result<Vec<task_state::OpengrepRuleRecord>, ApiError> {
+    let snapshot = load_task_snapshot(state).await?;
+    merged_opengrep_rules_from_snapshot(&snapshot, state).await
+}
+
+async fn merged_opengrep_rules_from_snapshot(
+    snapshot: &task_state::TaskStateSnapshot,
+    state: &AppState,
+) -> Result<Vec<task_state::OpengrepRuleRecord>, ApiError> {
+    let mut merged = builtin_opengrep_rules(state)
+        .await?
+        .into_iter()
+        .map(|rule| (rule.id.clone(), rule))
+        .collect::<BTreeMap<_, _>>();
+    for rule in snapshot.opengrep_rules.values() {
+        merged.insert(rule.id.clone(), rule.clone());
+    }
+    let mut items = merged.into_values().collect::<Vec<_>>();
+    items.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(items)
 }
 
 async fn builtin_gitleaks_rules(
@@ -2208,6 +2283,22 @@ fn string_array(value: &Value) -> Option<Vec<String>> {
             .filter_map(|item| item.as_str().map(ToString::to_string))
             .collect::<Vec<_>>()
     })
+}
+
+fn strict_string_array(value: &Value) -> Option<Vec<String>> {
+    let items = value.as_array()?;
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        out.push(item.as_str()?.to_string());
+    }
+    Some(out)
+}
+
+fn required_bool(payload: &Value, key: &str) -> Result<bool, ApiError> {
+    payload
+        .get(key)
+        .and_then(Value::as_bool)
+        .ok_or_else(|| ApiError::BadRequest(format!("{key} must be a boolean")))
 }
 
 fn contains_keyword(text: &str, keyword: Option<&str>) -> bool {

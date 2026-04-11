@@ -7,7 +7,6 @@ def test_static_tasks_split_modules_exist_and_aggregator_keeps_exports():
     module_names = [
         "app.api.v1.endpoints.static_tasks_shared",
         "app.api.v1.endpoints.static_tasks_opengrep",
-        "app.api.v1.endpoints.static_tasks_opengrep_rules",
         "app.api.v1.endpoints.static_tasks_cache",
     ]
 
@@ -22,5 +21,4 @@ def test_static_tasks_router_keeps_split_route_prefixes():
     route_paths = {route.path for route in static_tasks.router.routes}
 
     assert "/tasks" in route_paths
-    assert "/rules" in route_paths
     assert "/cache/repo-stats" in route_paths
