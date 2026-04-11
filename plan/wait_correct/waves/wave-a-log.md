@@ -114,6 +114,13 @@
   - `backend_old/app/api/v1/endpoints/skills.py`
 - Rust 当前行为补充: 已删除不再 live-mounted 的 Python projects 聚合壳：
   - `backend_old/app/api/v1/endpoints/projects.py`
+- Rust 当前行为补充: 已删除不再承担 bridge 职责的 Python projects 执行子模块：
+  - `backend_old/app/api/v1/endpoints/projects_crud.py`
+  - `backend_old/app/api/v1/endpoints/projects_files.py`
+  - `backend_old/app/api/v1/endpoints/projects_insights.py`
+  - `backend_old/app/api/v1/endpoints/projects_transfer.py`
+  - `backend_old/app/api/v1/endpoints/projects_uploads.py`
+  - `backend_old/app/api/v1/endpoints/projects_shared.py`
 - Rust 当前行为补充: 已删除只覆盖这两个旧 endpoint 的 Python 专属测试：
   - `backend_old/tests/test_prompt_skills_api.py`
   - `backend_old/tests/test_skill_registry_api.py`
@@ -131,6 +138,9 @@
   - `backend_old/tests/test_remote_repository_scan_removal.py`
   - `backend_old/tests/test_repository_https_only.py`
   - `backend_old/tests/test_file_tree.py`
+- Rust 当前行为补充: 已删除只绑定旧 `projects_*` Python 执行子模块的测试：
+  - `backend_old/tests/test_projects_create_with_zip.py`
+  - `backend_old/tests/test_yasa_rules_api.py`
 - Rust 当前行为补充: 新增回归测试 `backend_old/tests/test_api_router_rust_owned_routes_removed.py`，防止这些已迁路径重新挂回 Python
 - 是否影响前端: 否，前端应继续走 Rust backend；这一步只是缩小 Python live surface
 - 后续修复波次: Wave A 后续 / API surface cleanup
