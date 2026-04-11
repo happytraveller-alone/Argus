@@ -157,6 +157,47 @@ async fn system_config_helper_endpoints_are_available() {
     assert_eq!(preflight_json["reasonCode"], "default_config");
 }
 
+#[tokio::test]
+async fn system_config_defaults_follow_app_config() {
+    let mut config = isolated_test_config("system-config-defaults");
+    config.llm_provider = "gemini".to_string();
+    config.llm_model = "gemini-2.5-pro".to_string();
+    config.llm_base_url = "https://example.test/v1".to_string();
+    config.llm_timeout_seconds = 123;
+    config.max_analyze_files = 88;
+    config.llm_concurrency = 5;
+    config.llm_gap_ms = 2222;
+    config.gemini_api_key = "gemini-default-key".to_string();
+
+    let state = AppState::from_config(config)
+        .await
+        .expect("state should build");
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::get("/api/v1/system-config/defaults")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(payload["llmConfig"]["llmProvider"], "gemini");
+    assert_eq!(payload["llmConfig"]["llmModel"], "gemini-2.5-pro");
+    assert_eq!(
+        payload["llmConfig"]["llmBaseUrl"],
+        "https://example.test/v1"
+    );
+    assert_eq!(payload["llmConfig"]["llmTimeout"], 123000);
+    assert_eq!(payload["llmConfig"]["geminiApiKey"], "gemini-default-key");
+    assert_eq!(payload["otherConfig"]["maxAnalyzeFiles"], 88);
+    assert_eq!(payload["otherConfig"]["llmConcurrency"], 5);
+    assert_eq!(payload["otherConfig"]["llmGapMs"], 2222);
+}
+
 fn isolated_test_config(scope: &str) -> AppConfig {
     let mut config = AppConfig::for_tests();
     config.zip_storage_path =

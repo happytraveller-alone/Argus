@@ -14,6 +14,35 @@ pub struct AppConfig {
     pub runner_preflight_strict: bool,
     pub runner_preflight_timeout_seconds: u64,
     pub runner_preflight_max_concurrency: usize,
+    pub secret_key: String,
+    pub algorithm: String,
+    pub access_token_expire_minutes: i64,
+    pub llm_provider: String,
+    pub llm_api_key: String,
+    pub llm_model: String,
+    pub llm_base_url: String,
+    pub llm_timeout_seconds: i64,
+    pub llm_temperature: f64,
+    pub llm_max_tokens: i64,
+    pub llm_first_token_timeout_seconds: i64,
+    pub llm_stream_timeout_seconds: i64,
+    pub agent_timeout_seconds: i64,
+    pub sub_agent_timeout_seconds: i64,
+    pub tool_timeout_seconds: i64,
+    pub openai_api_key: String,
+    pub gemini_api_key: String,
+    pub claude_api_key: String,
+    pub qwen_api_key: String,
+    pub deepseek_api_key: String,
+    pub zhipu_api_key: String,
+    pub moonshot_api_key: String,
+    pub baidu_api_key: String,
+    pub minimax_api_key: String,
+    pub doubao_api_key: String,
+    pub ollama_base_url: String,
+    pub max_analyze_files: i64,
+    pub llm_concurrency: i64,
+    pub llm_gap_ms: i64,
     pub scanner_opengrep_image: String,
     pub scanner_bandit_image: String,
     pub scanner_gitleaks_image: String,
@@ -31,21 +60,50 @@ impl AppConfig {
 
         Ok(Self {
             bind_addr,
-            database_url: env::var("DATABASE_URL")
-                .ok()
-                .filter(|value| !value.trim().is_empty()),
-            python_upstream_base_url: env::var("PYTHON_UPSTREAM_BASE_URL")
-                .ok()
-                .filter(|value| !value.trim().is_empty()),
-            zip_storage_path: env::var("ZIP_STORAGE_PATH")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from("./uploads/zip_files")),
+            database_url: optional_env("DATABASE_URL"),
+            python_upstream_base_url: optional_env("PYTHON_UPSTREAM_BASE_URL"),
+            zip_storage_path: env_path("ZIP_STORAGE_PATH", "./uploads/zip_files"),
             startup_init_enabled: parse_bool_env("STARTUP_INIT_ENABLED", true),
             startup_recovery_enabled: parse_bool_env("STARTUP_RECOVERY_ENABLED", true),
             runner_preflight_enabled: parse_bool_env("RUNNER_PREFLIGHT_ENABLED", true),
             runner_preflight_strict: parse_bool_env("RUNNER_PREFLIGHT_STRICT", false),
             runner_preflight_timeout_seconds: parse_u64_env("RUNNER_PREFLIGHT_TIMEOUT_SECONDS", 30),
-            runner_preflight_max_concurrency: parse_usize_env("RUNNER_PREFLIGHT_MAX_CONCURRENCY", 2),
+            runner_preflight_max_concurrency: parse_usize_env(
+                "RUNNER_PREFLIGHT_MAX_CONCURRENCY",
+                2,
+            ),
+            secret_key: env::var("SECRET_KEY")
+                .unwrap_or_else(|_| "changethis_in_production_to_a_long_random_string".to_string()),
+            algorithm: env::var("ALGORITHM").unwrap_or_else(|_| "HS256".to_string()),
+            access_token_expire_minutes: parse_i64_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24 * 8),
+            llm_provider: env::var("LLM_PROVIDER").unwrap_or_else(|_| "openai".to_string()),
+            llm_api_key: env::var("LLM_API_KEY").unwrap_or_default(),
+            llm_model: env::var("LLM_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
+            llm_base_url: env::var("LLM_BASE_URL")
+                .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
+            llm_timeout_seconds: parse_i64_env("LLM_TIMEOUT", 300),
+            llm_temperature: parse_f64_env("LLM_TEMPERATURE", 0.05),
+            llm_max_tokens: parse_i64_env("LLM_MAX_TOKENS", 16_384),
+            llm_first_token_timeout_seconds: parse_i64_env("LLM_FIRST_TOKEN_TIMEOUT", 180),
+            llm_stream_timeout_seconds: parse_i64_env("LLM_STREAM_TIMEOUT", 180),
+            agent_timeout_seconds: parse_i64_env("AGENT_TIMEOUT_SECONDS", 3_600),
+            sub_agent_timeout_seconds: parse_i64_env("SUB_AGENT_TIMEOUT_SECONDS", 1_200),
+            tool_timeout_seconds: parse_i64_env("TOOL_TIMEOUT_SECONDS", 120),
+            openai_api_key: env::var("OPENAI_API_KEY").unwrap_or_default(),
+            gemini_api_key: env::var("GEMINI_API_KEY").unwrap_or_default(),
+            claude_api_key: env::var("CLAUDE_API_KEY").unwrap_or_default(),
+            qwen_api_key: env::var("QWEN_API_KEY").unwrap_or_default(),
+            deepseek_api_key: env::var("DEEPSEEK_API_KEY").unwrap_or_default(),
+            zhipu_api_key: env::var("ZHIPU_API_KEY").unwrap_or_default(),
+            moonshot_api_key: env::var("MOONSHOT_API_KEY").unwrap_or_default(),
+            baidu_api_key: env::var("BAIDU_API_KEY").unwrap_or_default(),
+            minimax_api_key: env::var("MINIMAX_API_KEY").unwrap_or_default(),
+            doubao_api_key: env::var("DOUBAO_API_KEY").unwrap_or_default(),
+            ollama_base_url: env::var("OLLAMA_BASE_URL")
+                .unwrap_or_else(|_| "http://localhost:11434/v1".to_string()),
+            max_analyze_files: parse_i64_env("MAX_ANALYZE_FILES", 0),
+            llm_concurrency: parse_i64_env("LLM_CONCURRENCY", 1),
+            llm_gap_ms: parse_i64_env("LLM_GAP_MS", 3_000),
             scanner_opengrep_image: env::var("SCANNER_OPENGREP_IMAGE")
                 .unwrap_or_else(|_| "vulhunter/opengrep-runner:latest".to_string()),
             scanner_bandit_image: env::var("SCANNER_BANDIT_IMAGE")
@@ -75,6 +133,35 @@ impl AppConfig {
             runner_preflight_strict: false,
             runner_preflight_timeout_seconds: 1,
             runner_preflight_max_concurrency: 1,
+            secret_key: "changethis_in_production_to_a_long_random_string".to_string(),
+            algorithm: "HS256".to_string(),
+            access_token_expire_minutes: 60 * 24 * 8,
+            llm_provider: "openai".to_string(),
+            llm_api_key: String::new(),
+            llm_model: "gpt-5".to_string(),
+            llm_base_url: "https://api.openai.com/v1".to_string(),
+            llm_timeout_seconds: 300,
+            llm_temperature: 0.05,
+            llm_max_tokens: 16_384,
+            llm_first_token_timeout_seconds: 180,
+            llm_stream_timeout_seconds: 180,
+            agent_timeout_seconds: 3_600,
+            sub_agent_timeout_seconds: 1_200,
+            tool_timeout_seconds: 120,
+            openai_api_key: String::new(),
+            gemini_api_key: String::new(),
+            claude_api_key: String::new(),
+            qwen_api_key: String::new(),
+            deepseek_api_key: String::new(),
+            zhipu_api_key: String::new(),
+            moonshot_api_key: String::new(),
+            baidu_api_key: String::new(),
+            minimax_api_key: String::new(),
+            doubao_api_key: String::new(),
+            ollama_base_url: "http://localhost:11434/v1".to_string(),
+            max_analyze_files: 0,
+            llm_concurrency: 1,
+            llm_gap_ms: 3_000,
             scanner_opengrep_image: "vulhunter/opengrep-runner:test".to_string(),
             scanner_bandit_image: "vulhunter/bandit-runner:test".to_string(),
             scanner_gitleaks_image: "vulhunter/gitleaks-runner:test".to_string(),
@@ -91,10 +178,25 @@ impl AppConfig {
     }
 }
 
+fn optional_env(key: &str) -> Option<String> {
+    env::var(key).ok().filter(|value| !value.trim().is_empty())
+}
+
+fn env_path(key: &str, default: &str) -> PathBuf {
+    env::var(key)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(default))
+}
+
 fn parse_bool_env(key: &str, default: bool) -> bool {
     env::var(key)
         .ok()
-        .map(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(default)
 }
 
@@ -106,6 +208,20 @@ fn parse_u64_env(key: &str, default: u64) -> u64 {
 }
 
 fn parse_usize_env(key: &str, default: usize) -> usize {
+    env::var(key)
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(default)
+}
+
+fn parse_i64_env(key: &str, default: i64) -> i64 {
+    env::var(key)
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(default)
+}
+
+fn parse_f64_env(key: &str, default: f64) -> f64 {
     env::var(key)
         .ok()
         .and_then(|value| value.trim().parse().ok())

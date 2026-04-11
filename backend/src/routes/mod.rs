@@ -3,8 +3,8 @@ pub mod search;
 pub mod skills;
 pub mod system_config;
 
-use axum::{routing::get, Json, Router};
 use axum::extract::State;
+use axum::{routing::get, Json, Router};
 use serde_json::json;
 
 use crate::state::AppState;

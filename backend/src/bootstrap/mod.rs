@@ -1,6 +1,6 @@
 mod init;
-mod legacy_schema;
 mod legacy_mirror_schema;
+mod legacy_schema;
 mod preflight;
 mod recovery;
 
@@ -307,12 +307,16 @@ async fn inspect_legacy_schema_versions(pool: &PgPool, status: &mut DatabaseBoot
     }
 }
 
-fn apply_legacy_schema_comparison(status: &mut DatabaseBootstrapStatus, current_versions: Vec<String>) {
+fn apply_legacy_schema_comparison(
+    status: &mut DatabaseBootstrapStatus,
+    current_versions: Vec<String>,
+) {
     let mut normalized_versions = current_versions;
     normalized_versions.sort();
     normalized_versions.dedup();
 
-    let matches_expected = same_versions(&status.legacy_schema.expected_heads, &normalized_versions);
+    let matches_expected =
+        same_versions(&status.legacy_schema.expected_heads, &normalized_versions);
     status.legacy_schema.current_versions = normalized_versions.clone();
     status.legacy_schema.matches_expected_heads = Some(matches_expected);
 
@@ -505,7 +509,11 @@ down_revision = (
         ));
         apply_legacy_schema_comparison(
             &mut status,
-            vec!["head_a".to_string(), "head_b".to_string(), "head_b".to_string()],
+            vec![
+                "head_a".to_string(),
+                "head_b".to_string(),
+                "head_b".to_string(),
+            ],
         );
 
         assert_eq!(status.legacy_schema.status, BootstrapStatus::Ok.as_str());
@@ -525,7 +533,10 @@ down_revision = (
         ));
         apply_legacy_schema_comparison(&mut status, Vec::new());
 
-        assert_eq!(status.legacy_schema.status, BootstrapStatus::Degraded.as_str());
+        assert_eq!(
+            status.legacy_schema.status,
+            BootstrapStatus::Degraded.as_str()
+        );
         assert_eq!(status.legacy_schema.matches_expected_heads, Some(false));
         assert!(status.legacy_schema.current_versions.is_empty());
         assert_eq!(status.status, BootstrapStatus::Degraded.as_str());
@@ -539,7 +550,10 @@ down_revision = (
         ));
         apply_legacy_schema_comparison(&mut status, vec!["unexpected_head".to_string()]);
 
-        assert_eq!(status.legacy_schema.status, BootstrapStatus::Degraded.as_str());
+        assert_eq!(
+            status.legacy_schema.status,
+            BootstrapStatus::Degraded.as_str()
+        );
         assert_eq!(status.legacy_schema.matches_expected_heads, Some(false));
         assert_eq!(
             status.legacy_schema.current_versions,

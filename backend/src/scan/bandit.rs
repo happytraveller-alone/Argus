@@ -17,7 +17,8 @@ pub async fn load_builtin_snapshot(state: &AppState) -> Result<Option<Value>> {
         BANDIT_ASSET_SOURCE_KIND,
         BANDIT_ASSET_PATH,
     )
-    .await? else {
+    .await?
+    else {
         return Ok(None);
     };
 
@@ -36,7 +37,8 @@ pub async fn materialize_builtin_snapshot(
         BANDIT_ASSET_SOURCE_KIND,
         BANDIT_ASSET_PATH,
     )
-    .await? else {
+    .await?
+    else {
         return Ok(None);
     };
 
@@ -81,7 +83,10 @@ mod tests {
 
     use crate::{config::AppConfig, state::AppState};
 
-    use super::{build_scan_command, load_builtin_snapshot, materialize_builtin_snapshot, select_preflight_test_ids};
+    use super::{
+        build_scan_command, load_builtin_snapshot, materialize_builtin_snapshot,
+        select_preflight_test_ids,
+    };
 
     #[tokio::test]
     async fn loads_bandit_builtin_snapshot_from_rule_assets() {
@@ -93,7 +98,13 @@ mod tests {
             .expect("snapshot should load")
             .expect("bandit snapshot should exist");
         assert_eq!(snapshot["schema_version"], "1.0");
-        assert!(snapshot["rules"].as_array().map(|rules| rules.len()).unwrap_or_default() > 10);
+        assert!(
+            snapshot["rules"]
+                .as_array()
+                .map(|rules| rules.len())
+                .unwrap_or_default()
+                > 10
+        );
     }
 
     #[tokio::test]
@@ -101,12 +112,15 @@ mod tests {
         let state = AppState::from_config(AppConfig::for_tests())
             .await
             .expect("state should build");
-        let workspace = std::env::temp_dir().join(format!("bandit-materialize-{}", uuid::Uuid::new_v4()));
+        let workspace =
+            std::env::temp_dir().join(format!("bandit-materialize-{}", uuid::Uuid::new_v4()));
         let path = materialize_builtin_snapshot(&state, &workspace)
             .await
             .expect("materialize should succeed")
             .expect("snapshot path should exist");
-        let content = fs::read_to_string(&path).await.expect("snapshot should be readable");
+        let content = fs::read_to_string(&path)
+            .await
+            .expect("snapshot should be readable");
         assert!(content.contains("\"test_id\": \"B101\""));
         let _ = fs::remove_dir_all(&workspace).await;
     }

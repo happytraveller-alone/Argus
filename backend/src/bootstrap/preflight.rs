@@ -1,7 +1,11 @@
 use std::{path::PathBuf, process::Command, sync::Arc};
 
 use anyhow::{anyhow, Result};
-use tokio::{sync::Semaphore, task::JoinSet, time::{timeout, Duration}};
+use tokio::{
+    sync::Semaphore,
+    task::JoinSet,
+    time::{timeout, Duration},
+};
 
 use crate::{
     scan::{bandit, gitleaks, opengrep, pmd},
@@ -29,7 +33,9 @@ pub async fn run(state: &AppState) -> Result<RunnerPreflightStatus> {
     }
 
     let (specs, cleanup_dirs) = configured_specs(state).await?;
-    let semaphore = Arc::new(Semaphore::new(config.runner_preflight_max_concurrency.max(1)));
+    let semaphore = Arc::new(Semaphore::new(
+        config.runner_preflight_max_concurrency.max(1),
+    ));
     let mut join_set = JoinSet::new();
 
     for spec in specs {
@@ -60,7 +66,13 @@ pub async fn run(state: &AppState) -> Result<RunnerPreflightStatus> {
     let failure_messages = checks
         .iter()
         .filter(|check| !check.success)
-        .map(|check| format!("{}: {}", check.name, check.error.clone().unwrap_or_else(|| "unknown".to_string())))
+        .map(|check| {
+            format!(
+                "{}: {}",
+                check.name,
+                check.error.clone().unwrap_or_else(|| "unknown".to_string())
+            )
+        })
         .collect::<Vec<_>>();
 
     let mut status = RunnerPreflightStatus {
@@ -123,7 +135,9 @@ fn run_single_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightCheckS
     let mut command = Command::new("docker");
     command.arg("run").arg("--rm");
     for (host_path, container_path) in &spec.mounts {
-        command.arg("-v").arg(format!("{}:{}", host_path.display(), container_path));
+        command
+            .arg("-v")
+            .arg(format!("{}:{}", host_path.display(), container_path));
     }
     command.arg(&spec.image).args(&spec.command);
     let output = command.output();
@@ -230,7 +244,9 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
     ];
 
     if let Some(gitleaks_spec) = specs.iter_mut().find(|spec| spec.name == "gitleaks") {
-        if let Some((workspace_dir, command, mounts)) = build_gitleaks_preflight_inputs(state).await? {
+        if let Some((workspace_dir, command, mounts)) =
+            build_gitleaks_preflight_inputs(state).await?
+        {
             gitleaks_spec.command = command;
             gitleaks_spec.mounts = mounts;
             cleanup_dirs.push(workspace_dir);
@@ -238,7 +254,9 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
     }
 
     if let Some(opengrep_spec) = specs.iter_mut().find(|spec| spec.name == "opengrep") {
-        if let Some((workspace_dir, command, mounts)) = build_opengrep_preflight_inputs(state).await? {
+        if let Some((workspace_dir, command, mounts)) =
+            build_opengrep_preflight_inputs(state).await?
+        {
             opengrep_spec.command = command;
             opengrep_spec.mounts = mounts;
             cleanup_dirs.push(workspace_dir);
@@ -246,7 +264,8 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
     }
 
     if let Some(bandit_spec) = specs.iter_mut().find(|spec| spec.name == "bandit") {
-        if let Some((workspace_dir, command, mounts)) = build_bandit_preflight_inputs(state).await? {
+        if let Some((workspace_dir, command, mounts)) = build_bandit_preflight_inputs(state).await?
+        {
             bandit_spec.command = command;
             bandit_spec.mounts = mounts;
             cleanup_dirs.push(workspace_dir);
@@ -267,7 +286,8 @@ async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>,
 async fn build_gitleaks_preflight_inputs(
     state: &AppState,
 ) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
-    let workspace_dir = std::env::temp_dir().join(format!("gitleaks-preflight-{}", uuid::Uuid::new_v4()));
+    let workspace_dir =
+        std::env::temp_dir().join(format!("gitleaks-preflight-{}", uuid::Uuid::new_v4()));
     let source_dir = workspace_dir.join("source");
     tokio::fs::create_dir_all(&source_dir).await?;
     let config_path = gitleaks::materialize_builtin_config(state, &workspace_dir).await?;
@@ -291,7 +311,8 @@ async fn build_gitleaks_preflight_inputs(
 async fn build_opengrep_preflight_inputs(
     state: &AppState,
 ) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
-    let workspace_dir = std::env::temp_dir().join(format!("opengrep-preflight-{}", uuid::Uuid::new_v4()));
+    let workspace_dir =
+        std::env::temp_dir().join(format!("opengrep-preflight-{}", uuid::Uuid::new_v4()));
     let rules_dir = opengrep::materialize_rule_directory(state, &workspace_dir).await?;
     let Some(_rules_dir) = rules_dir else {
         let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
@@ -309,7 +330,8 @@ async fn build_opengrep_preflight_inputs(
 async fn build_bandit_preflight_inputs(
     state: &AppState,
 ) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
-    let workspace_dir = std::env::temp_dir().join(format!("bandit-preflight-{}", uuid::Uuid::new_v4()));
+    let workspace_dir =
+        std::env::temp_dir().join(format!("bandit-preflight-{}", uuid::Uuid::new_v4()));
     let source_dir = workspace_dir.join("source");
     tokio::fs::create_dir_all(&source_dir).await?;
     tokio::fs::write(source_dir.join("demo.py"), "assert True\n").await?;
@@ -330,7 +352,8 @@ async fn build_bandit_preflight_inputs(
 async fn build_pmd_preflight_inputs(
     state: &AppState,
 ) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
-    let workspace_dir = std::env::temp_dir().join(format!("pmd-preflight-{}", uuid::Uuid::new_v4()));
+    let workspace_dir =
+        std::env::temp_dir().join(format!("pmd-preflight-{}", uuid::Uuid::new_v4()));
     let source_dir = workspace_dir.join("source");
     tokio::fs::create_dir_all(&source_dir).await?;
     tokio::fs::write(
@@ -367,13 +390,8 @@ mod tests {
         let state = AppState::from_config(config)
             .await
             .expect("state should build");
-        let (specs, cleanup_dirs) = configured_specs(&state)
-            .await
-            .expect("specs should build");
-        let names = specs
-            .iter()
-            .map(|spec| spec.name)
-            .collect::<Vec<_>>();
+        let (specs, cleanup_dirs) = configured_specs(&state).await.expect("specs should build");
+        let names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
         assert_eq!(
             names,
             vec![
@@ -419,7 +437,10 @@ mod tests {
             .expect("pmd spec should exist");
         assert_eq!(pmd.command.first().map(String::as_str), Some("pmd"));
         assert!(pmd.command.iter().any(|part| part == "-R"));
-        assert!(pmd.command.iter().any(|part| part.starts_with("/work/pmd-rules/")));
+        assert!(pmd
+            .command
+            .iter()
+            .any(|part| part.starts_with("/work/pmd-rules/")));
         assert_eq!(pmd.mounts.len(), 1);
 
         for cleanup_dir in cleanup_dirs {

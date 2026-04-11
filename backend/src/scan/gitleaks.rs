@@ -85,19 +85,26 @@ mod tests {
         let state = AppState::from_config(AppConfig::for_tests())
             .await
             .expect("state should build");
-        let workspace = std::env::temp_dir().join(format!("gitleaks-materialize-{}", uuid::Uuid::new_v4()));
+        let workspace =
+            std::env::temp_dir().join(format!("gitleaks-materialize-{}", uuid::Uuid::new_v4()));
         let path = materialize_builtin_config(&state, &workspace)
             .await
             .expect("materialize should succeed")
             .expect("config path should exist");
-        let content = fs::read_to_string(&path).await.expect("materialized config should be readable");
+        let content = fs::read_to_string(&path)
+            .await
+            .expect("materialized config should be readable");
         assert!(content.contains("1password-secret-key"));
         let _ = fs::remove_dir_all(&workspace).await;
     }
 
     #[test]
     fn builds_detect_command_with_optional_config() {
-        let with_config = build_detect_command("/work/source", "/work/report.json", Some("/work/gitleaks.toml"));
+        let with_config = build_detect_command(
+            "/work/source",
+            "/work/report.json",
+            Some("/work/gitleaks.toml"),
+        );
         assert_eq!(
             with_config,
             vec![

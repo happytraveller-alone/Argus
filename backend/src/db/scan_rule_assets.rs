@@ -167,10 +167,7 @@ pub async fn load_assets_by_engine(
             .collect());
     }
 
-    let source_kinds = source_kinds
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>();
+    let source_kinds = source_kinds.iter().copied().collect::<BTreeSet<_>>();
     Ok(discover_rule_assets()?
         .into_iter()
         .filter(|asset| asset.engine == engine && source_kinds.contains(asset.source_kind.as_str()))
@@ -276,7 +273,10 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
         "bandit_builtin" => Ok(("bandit", "builtin")),
         "rules_phpstan" => Ok(("phpstan", "builtin")),
         "rules_pmd" => Ok(("pmd", "builtin")),
-        _ => Err(anyhow!("unsupported rule asset root: {}", relative.display())),
+        _ => Err(anyhow!(
+            "unsupported rule asset root: {}",
+            relative.display()
+        )),
     }
 }
 
@@ -295,11 +295,22 @@ mod tests {
         let assets = discover_rule_assets().expect("rule assets should load");
         assert!(assets.len() > 7000);
 
-        let paths = assets.iter().map(|asset| asset.asset_path.as_str()).collect::<Vec<_>>();
-        assert!(paths.iter().any(|path| path == &"rules_opengrep/X509-subject-name-validation.yaml"));
-        assert!(paths.iter().any(|path| path == &"gitleaks_builtin/gitleaks-default.toml"));
-        assert!(paths.iter().any(|path| path == &"bandit_builtin/bandit_builtin_rules.json"));
-        assert!(paths.iter().any(|path| path == &"rules_phpstan/phpstan_rules_combined.json"));
+        let paths = assets
+            .iter()
+            .map(|asset| asset.asset_path.as_str())
+            .collect::<Vec<_>>();
+        assert!(paths
+            .iter()
+            .any(|path| path == &"rules_opengrep/X509-subject-name-validation.yaml"));
+        assert!(paths
+            .iter()
+            .any(|path| path == &"gitleaks_builtin/gitleaks-default.toml"));
+        assert!(paths
+            .iter()
+            .any(|path| path == &"bandit_builtin/bandit_builtin_rules.json"));
+        assert!(paths
+            .iter()
+            .any(|path| path == &"rules_phpstan/phpstan_rules_combined.json"));
         assert!(!paths.iter().any(|path| path.starts_with("yasa_builtin/")));
     }
 

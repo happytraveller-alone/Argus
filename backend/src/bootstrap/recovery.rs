@@ -161,9 +161,7 @@ fn build_recovery_update_sql(spec: &RecoverySpec) -> String {
         assignments.push("completed_at = COALESCE(completed_at, NOW())".to_string());
     }
     if spec.has_error_message {
-        assignments.push(
-            "error_message = COALESCE(NULLIF(error_message, ''), $1)".to_string(),
-        );
+        assignments.push("error_message = COALESCE(NULLIF(error_message, ''), $1)".to_string());
     }
     if spec.has_error_count {
         assignments.push("error_count = COALESCE(error_count, 0) + 1".to_string());
@@ -190,7 +188,10 @@ mod tests {
 
     #[test]
     fn recovery_specs_cover_all_startup_task_families() {
-        let names = RECOVERY_SPECS.iter().map(|spec| spec.name).collect::<Vec<_>>();
+        let names = RECOVERY_SPECS
+            .iter()
+            .map(|spec| spec.name)
+            .collect::<Vec<_>>();
         assert_eq!(
             names,
             vec!["agent", "opengrep", "gitleaks", "bandit", "phpstan", "pmd"]

@@ -601,3 +601,44 @@
   - 才能删除 `backend_old/alembic`
 - 下一刀：
   - 继续沿 “Alembic 被 Rust 替代” 这条主线，优先收口当前仍由 Python runtime 强依赖、但与 Rust bridge 最接近的 legacy 表族
+
+### 2026-04-11 Batch 1 / Slice 4
+
+- 已完成：
+  - Rust 新增 `backend/src/core/security.rs`
+    - 已实现 JWT access token 创建
+    - 已实现 bcrypt 密码 hash / verify
+    - 已补 Python 生成 JWT / bcrypt hash 的兼容测试
+  - Rust 新增 `backend/src/core/encryption.rs`
+    - 已实现基于 `SECRET_KEY` 派生的 Fernet-compatible 加解密
+    - 已补 Python 生成 Fernet token 的兼容测试
+    - 已补敏感 LLM key 字段选择性加密测试
+  - Rust `backend/src/config.rs` 已开始承接 core 级配置语义：
+    - `SECRET_KEY`
+    - `ALGORITHM`
+    - `ACCESS_TOKEN_EXPIRE_MINUTES`
+    - LLM 默认 provider/model/base URL/timeout/max tokens
+    - provider 专属 API key 默认值
+  - Rust `/api/v1/system-config/defaults` 已改为从 `AppConfig` 生成默认值
+  - Rust 向 legacy `user_configs` 做 shadow write 时，敏感 LLM key 字段已按 Rust 加密逻辑落密文，不再继续写明文 mirror
+  - Rust 新增回归测试：
+    - `backend/src/core/security.rs` 模块测试
+    - `backend/src/core/encryption.rs` 模块测试
+    - `backend/src/routes/system_config.rs` 模块测试
+    - `backend/tests/system_config_api.rs`
+- 当前意义：
+  - Rust 不再只有一个“能启动服务”的 `config.rs` 壳，已经开始拥有自己的 core config/security/encryption 原语
+  - `system-config` 这条 Rust-owned 控制面链路的默认值与敏感字段处理，不再继续完全依赖 Python core 模块
+  - 这一步解决的是 ownership 补齐，不是假删 Python 文件
+- 仍未完成：
+  - `backend_old/app/core/config.py` 仍被 Python runtime / llm / agent / runner / db session 广泛 import
+  - `backend_old/app/core/security.py` 仍被 `init_db.py`、`api/deps.py`、测试与若干 Python service 调用
+  - `backend_old/app/core/encryption.py` 仍被 `user_config_service.py` 及其上游 Python 端点调用
+  - 所以 `backend_old/app/core/*` 现在只能说“Rust 已部分 owned，Python 仍是 bridge”，还不能删除 live 文件
+- 删除条件：
+  - Python runtime / llm / agent / init_db / db session 不再 import `backend_old/app/core/config.py`
+  - Python side 不再调用 `backend_old/app/core/security.py`
+  - Python `user_config_service.py` 与相关 live endpoint 不再调用 `backend_old/app/core/encryption.py`
+  - Rust 成为 token/hash/encryption/default-config 的唯一 live source of truth
+- 下一刀：
+  - 继续沿 Phase A 往前推，把仍直接 import `backend_old/app/core/*` 的 Python live caller 收口，优先处理 `user_config_service.py`、`init_db.py`、`db/session.py` 和 runtime/runner 公共入口

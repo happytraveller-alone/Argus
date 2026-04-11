@@ -135,5 +135,8 @@ pub async fn ensure_initialized(pool: &PgPool) -> Result<Vec<String>> {
 
 #[cfg(test)]
 pub(crate) fn ensured_table_names() -> Vec<&'static str> {
-    LEGACY_MIRROR_TABLE_SPECS.iter().map(|spec| spec.name).collect()
+    LEGACY_MIRROR_TABLE_SPECS
+        .iter()
+        .map(|spec| spec.name)
+        .collect()
 }

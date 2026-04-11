@@ -10,20 +10,12 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::{
+    config::AppConfig,
+    core::encryption::encrypt_sensitive_fields,
     db::system_config,
     error::ApiError,
     state::{AppState, StoredSystemConfig},
 };
-
-const DEFAULT_LLM_TIMEOUT_MS: i64 = 300_000;
-const DEFAULT_AGENT_TIMEOUT_SECONDS: i64 = 3_600;
-const DEFAULT_SUB_AGENT_TIMEOUT_SECONDS: i64 = 1_200;
-const DEFAULT_TOOL_TIMEOUT_SECONDS: i64 = 120;
-const DEFAULT_LLM_FIRST_TOKEN_TIMEOUT_SECONDS: i64 = 180;
-const DEFAULT_LLM_STREAM_TIMEOUT_SECONDS: i64 = 180;
-const DEFAULT_LLM_MAX_TOKENS: i64 = 16_384;
-const DEFAULT_LLM_CONCURRENCY: i64 = 1;
-const DEFAULT_LLM_GAP_MS: i64 = 3_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,8 +123,8 @@ pub fn router() -> Router<AppState> {
         .route("/agent-preflight", post(agent_preflight))
 }
 
-pub async fn get_defaults() -> Json<SystemConfigPayload> {
-    Json(default_config())
+pub async fn get_defaults(State(state): State<AppState>) -> Json<SystemConfigPayload> {
+    Json(default_config(state.config.as_ref()))
 }
 
 pub async fn get_current(
@@ -141,14 +133,14 @@ pub async fn get_current(
     let stored = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    Ok(Json(merge_with_defaults(stored)))
+    Ok(Json(merge_with_defaults(state.config.as_ref(), stored)))
 }
 
 pub async fn put_current(
     State(state): State<AppState>,
     Json(payload): Json<SystemConfigPayload>,
 ) -> Result<Json<SystemConfigPayload>, ApiError> {
-    let defaults = default_config();
+    let defaults = default_config(state.config.as_ref());
     let stored = system_config::save_current(
         &state,
         merge_json(&defaults.llm_config, &payload.llm_config),
@@ -157,7 +149,7 @@ pub async fn put_current(
     .await
     .map_err(internal_error)?;
 
-    let merged = merge_with_defaults(Some(stored));
+    let merged = merge_with_defaults(state.config.as_ref(), Some(stored));
     sync_python_user_config_mirror(&state, Some(&merged)).await?;
     Ok(Json(merged))
 }
@@ -169,7 +161,7 @@ pub async fn delete_current(
         .await
         .map_err(internal_error)?;
     sync_python_user_config_mirror(&state, None).await?;
-    Ok(Json(default_config()))
+    Ok(Json(default_config(state.config.as_ref())))
 }
 
 async fn get_llm_providers() -> Json<LlmProviderCatalogResponse> {
@@ -264,7 +256,7 @@ pub async fn agent_preflight(
     let stored = system_config::load_current(&state)
         .await
         .map_err(internal_error)?;
-    let effective = merge_with_defaults(stored.clone());
+    let effective = merge_with_defaults(state.config.as_ref(), stored.clone());
     let effective_snapshot = build_quick_snapshot(&effective.llm_config);
 
     let Some(saved) = stored else {
@@ -311,44 +303,47 @@ pub async fn agent_preflight(
     }))
 }
 
-pub fn default_config() -> SystemConfigPayload {
+pub fn default_config(config: &AppConfig) -> SystemConfigPayload {
     SystemConfigPayload {
         llm_config: json!({
-            "llmProvider": "openai",
-            "llmApiKey": "",
-            "llmModel": "gpt-5",
-            "llmBaseUrl": "https://api.openai.com/v1",
-            "llmTimeout": DEFAULT_LLM_TIMEOUT_MS,
-            "llmTemperature": 0.05,
-            "llmMaxTokens": DEFAULT_LLM_MAX_TOKENS,
+            "llmProvider": config.llm_provider,
+            "llmApiKey": config.llm_api_key,
+            "llmModel": config.llm_model,
+            "llmBaseUrl": config.llm_base_url,
+            "llmTimeout": config.llm_timeout_seconds * 1000,
+            "llmTemperature": config.llm_temperature,
+            "llmMaxTokens": config.llm_max_tokens,
             "llmCustomHeaders": "",
-            "llmFirstTokenTimeout": DEFAULT_LLM_FIRST_TOKEN_TIMEOUT_SECONDS,
-            "llmStreamTimeout": DEFAULT_LLM_STREAM_TIMEOUT_SECONDS,
-            "agentTimeout": DEFAULT_AGENT_TIMEOUT_SECONDS,
-            "subAgentTimeout": DEFAULT_SUB_AGENT_TIMEOUT_SECONDS,
-            "toolTimeout": DEFAULT_TOOL_TIMEOUT_SECONDS,
-            "geminiApiKey": "",
-            "openaiApiKey": "",
-            "claudeApiKey": "",
-            "qwenApiKey": "",
-            "deepseekApiKey": "",
-            "zhipuApiKey": "",
-            "moonshotApiKey": "",
-            "baiduApiKey": "",
-            "minimaxApiKey": "",
-            "doubaoApiKey": "",
-            "ollamaBaseUrl": "http://localhost:11434/v1"
+            "llmFirstTokenTimeout": config.llm_first_token_timeout_seconds,
+            "llmStreamTimeout": config.llm_stream_timeout_seconds,
+            "agentTimeout": config.agent_timeout_seconds,
+            "subAgentTimeout": config.sub_agent_timeout_seconds,
+            "toolTimeout": config.tool_timeout_seconds,
+            "geminiApiKey": config.gemini_api_key,
+            "openaiApiKey": config.openai_api_key,
+            "claudeApiKey": config.claude_api_key,
+            "qwenApiKey": config.qwen_api_key,
+            "deepseekApiKey": config.deepseek_api_key,
+            "zhipuApiKey": config.zhipu_api_key,
+            "moonshotApiKey": config.moonshot_api_key,
+            "baiduApiKey": config.baidu_api_key,
+            "minimaxApiKey": config.minimax_api_key,
+            "doubaoApiKey": config.doubao_api_key,
+            "ollamaBaseUrl": config.ollama_base_url
         }),
         other_config: json!({
-            "maxAnalyzeFiles": 0,
-            "llmConcurrency": DEFAULT_LLM_CONCURRENCY,
-            "llmGapMs": DEFAULT_LLM_GAP_MS
+            "maxAnalyzeFiles": config.max_analyze_files,
+            "llmConcurrency": config.llm_concurrency,
+            "llmGapMs": config.llm_gap_ms
         }),
     }
 }
 
-fn merge_with_defaults(stored: Option<StoredSystemConfig>) -> SystemConfigPayload {
-    let defaults = default_config();
+fn merge_with_defaults(
+    config: &AppConfig,
+    stored: Option<StoredSystemConfig>,
+) -> SystemConfigPayload {
+    let defaults = default_config(config);
     match stored {
         Some(stored) => SystemConfigPayload {
             llm_config: merge_json(&defaults.llm_config, &stored.llm_config_json),
@@ -603,7 +598,7 @@ fn recommend_tokens(model: &str) -> i64 {
     .iter()
     .any(|hint| normalized.contains(hint))
     {
-        return DEFAULT_LLM_MAX_TOKENS;
+        return 16_384;
     }
     8_192
 }
@@ -632,6 +627,9 @@ async fn sync_python_user_config_mirror(
 
     match payload {
         Some(payload) => {
+            let (encrypted_llm_config, legacy_other_config) =
+                prepare_legacy_user_config_payload(payload, &state.config.secret_key)
+                    .map_err(internal_error)?;
             sqlx::query(
                 r#"
                 insert into user_configs (id, user_id, llm_config, other_config)
@@ -644,8 +642,8 @@ async fn sync_python_user_config_mirror(
             )
             .bind(Uuid::new_v4().to_string())
             .bind(bootstrap_user_id)
-            .bind(payload.llm_config.to_string())
-            .bind(payload.other_config.to_string())
+            .bind(encrypted_llm_config.to_string())
+            .bind(legacy_other_config.to_string())
             .execute(pool)
             .await
             .map_err(|error| ApiError::Internal(error.to_string()))?;
@@ -660,4 +658,113 @@ async fn sync_python_user_config_mirror(
     }
 
     Ok(())
+}
+
+fn prepare_legacy_user_config_payload(
+    payload: &SystemConfigPayload,
+    secret_key: &str,
+) -> Result<(Value, Value), anyhow::Error> {
+    Ok((
+        encrypt_sensitive_fields(&payload.llm_config, secret_key)?,
+        payload.other_config.clone(),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{default_config, prepare_legacy_user_config_payload};
+    use crate::{
+        config::AppConfig,
+        core::{encryption::decrypt_sensitive_string, security::decode_access_token},
+    };
+    use serde_json::json;
+
+    #[test]
+    fn default_config_reads_runtime_defaults_from_app_config() {
+        let mut config = AppConfig::for_tests();
+        config.llm_provider = "gemini".to_string();
+        config.llm_model = "gemini-2.5-pro".to_string();
+        config.llm_base_url = "https://example.test/v1".to_string();
+        config.llm_timeout_seconds = 123;
+        config.agent_timeout_seconds = 456;
+        config.sub_agent_timeout_seconds = 789;
+        config.tool_timeout_seconds = 42;
+        config.max_analyze_files = 77;
+        config.llm_concurrency = 9;
+        config.llm_gap_ms = 444;
+        config.gemini_api_key = "gemini-secret".to_string();
+        config.ollama_base_url = "http://ollama.internal/v1".to_string();
+
+        let defaults = default_config(&config);
+        assert_eq!(defaults.llm_config["llmProvider"], "gemini");
+        assert_eq!(defaults.llm_config["llmModel"], "gemini-2.5-pro");
+        assert_eq!(defaults.llm_config["llmBaseUrl"], "https://example.test/v1");
+        assert_eq!(defaults.llm_config["llmTimeout"], 123_000);
+        assert_eq!(defaults.llm_config["agentTimeout"], 456);
+        assert_eq!(defaults.llm_config["subAgentTimeout"], 789);
+        assert_eq!(defaults.llm_config["toolTimeout"], 42);
+        assert_eq!(defaults.llm_config["geminiApiKey"], "gemini-secret");
+        assert_eq!(
+            defaults.llm_config["ollamaBaseUrl"],
+            "http://ollama.internal/v1"
+        );
+        assert_eq!(defaults.other_config["maxAnalyzeFiles"], 77);
+        assert_eq!(defaults.other_config["llmConcurrency"], 9);
+        assert_eq!(defaults.other_config["llmGapMs"], 444);
+    }
+
+    #[test]
+    fn legacy_payload_encrypts_sensitive_llm_fields_only() {
+        let payload = super::SystemConfigPayload {
+            llm_config: json!({
+                "llmApiKey": "sk-test-openai",
+                "openaiApiKey": "sk-provider",
+                "llmModel": "gpt-5",
+                "llmBaseUrl": "https://api.openai.com/v1"
+            }),
+            other_config: json!({
+                "llmConcurrency": 3
+            }),
+        };
+
+        let (legacy_llm_config, legacy_other_config) =
+            prepare_legacy_user_config_payload(&payload, "test-secret")
+                .expect("legacy payload should build");
+        assert_ne!(
+            legacy_llm_config["llmApiKey"],
+            payload.llm_config["llmApiKey"]
+        );
+        assert_ne!(
+            legacy_llm_config["openaiApiKey"],
+            payload.llm_config["openaiApiKey"]
+        );
+        assert_eq!(
+            legacy_llm_config["llmModel"],
+            payload.llm_config["llmModel"]
+        );
+        assert_eq!(
+            legacy_llm_config["llmBaseUrl"],
+            payload.llm_config["llmBaseUrl"]
+        );
+        assert_eq!(legacy_other_config, payload.other_config);
+
+        let decrypted = decrypt_sensitive_string(
+            legacy_llm_config["llmApiKey"].as_str().unwrap(),
+            "test-secret",
+        )
+        .expect("encrypted mirror field should decrypt");
+        assert_eq!(decrypted, "sk-test-openai");
+    }
+
+    #[test]
+    fn jwt_helper_can_decode_python_compatible_tokens() {
+        let mut config = AppConfig::for_tests();
+        config.secret_key = "test-secret".to_string();
+        let claims = decode_access_token(
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE4OTM0NTYwMDAsInN1YiI6ImRlbW8tdXNlciJ9.eepyoq4hV8WE-WCj-_Xl6v0JxPms_XTPgA3iE6nTy3M",
+            &config,
+        )
+        .expect("token should decode");
+        assert_eq!(claims.sub, "demo-user");
+    }
 }

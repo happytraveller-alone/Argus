@@ -181,3 +181,33 @@
 - 是否影响前端: 否，前端应继续走 Rust backend；这一步只是缩小 Python live surface
 - 后续修复波次: Wave A 后续 / API surface cleanup
 - owner: Rust migration
+
+### 9. Rust now owns core security/encryption primitives and part of core config defaults
+
+- endpoint / feature: `backend/src/core/security.rs`, `backend/src/core/encryption.rs`, `backend/src/config.rs`, `/api/v1/system-config/*`
+- Python 旧行为:
+  - `backend_old/app/core/security.py` 负责 JWT access token、bcrypt hash/verify
+  - `backend_old/app/core/encryption.py` 负责基于 `SECRET_KEY` 派生 Fernet 密钥，对敏感 LLM key 字段加解密
+  - `backend_old/app/core/config.py` 负责 Python runtime 的 core 级环境配置
+- Rust 当前行为:
+  - Rust 已新增自己的 JWT / bcrypt 原语
+  - Rust 已新增自己的 Fernet-compatible 加解密原语
+  - Rust `AppConfig` 已开始承接 secret/token、LLM 默认值、workspace/cache/path、flow/function-locator 等 core 配置
+  - Rust `/api/v1/system-config/defaults` 已从 `AppConfig` 生成默认值
+  - Rust 向 legacy `user_configs` 做 shadow write 时，敏感字段已按 Rust 加密逻辑落密文
+- 对应 Python 哪些执行入口已删除:
+  - 本次没有删除 `backend_old/app/core/config.py`
+  - 本次没有删除 `backend_old/app/core/security.py`
+  - 本次没有删除 `backend_old/app/core/encryption.py`
+- 仍然只是 bridge 的 Python 代码:
+  - `backend_old/app/main.py`
+  - `backend_old/app/db/session.py`
+  - `backend_old/app/db/init_db.py`
+  - `backend_old/app/services/user_config_service.py`
+  - `backend_old/app/services/llm/*`
+  - `backend_old/app/services/agent/*`
+  - `backend_old/app/services/*runner*`
+  - 多个 `static-tasks` / `agent-tasks` Python 端点
+- 是否影响前端: 否，`/api/v1/system-config/*` 契约保持可用，默认值来源更集中
+- 后续修复波次: Wave A 后续 / Phase A core 收口
+- owner: Rust migration

@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use tokio::fs;
 
-use crate::{db::scan_rule_assets, state::{AppState, ScanRuleAsset}};
+use crate::{
+    db::scan_rule_assets,
+    state::{AppState, ScanRuleAsset},
+};
 
 const PMD_ENGINE: &str = "pmd";
 const PMD_SOURCE_KIND: &str = "builtin";
@@ -38,7 +41,11 @@ pub async fn materialize_ruleset_directory(
 pub fn select_preflight_ruleset(assets: &[ScanRuleAsset]) -> Option<String> {
     assets
         .iter()
-        .find(|asset| asset.asset_path.ends_with("JavaErrorProneEmptyCatchBlock.xml"))
+        .find(|asset| {
+            asset
+                .asset_path
+                .ends_with("JavaErrorProneEmptyCatchBlock.xml")
+        })
         .or_else(|| assets.first())
         .map(|asset| {
             asset
@@ -68,7 +75,10 @@ mod tests {
 
     use crate::{config::AppConfig, state::AppState};
 
-    use super::{build_check_command, load_builtin_rulesets, materialize_ruleset_directory, select_preflight_ruleset};
+    use super::{
+        build_check_command, load_builtin_rulesets, materialize_ruleset_directory,
+        select_preflight_ruleset,
+    };
 
     #[tokio::test]
     async fn loads_pmd_builtin_rulesets_from_rule_assets() {
@@ -79,7 +89,9 @@ mod tests {
             .await
             .expect("pmd assets should load");
         assert!(assets.len() > 100);
-        assert!(assets.iter().any(|asset| asset.asset_path == "rules_pmd/ApexBadCrypto.xml"));
+        assert!(assets
+            .iter()
+            .any(|asset| asset.asset_path == "rules_pmd/ApexBadCrypto.xml"));
     }
 
     #[tokio::test]
@@ -87,7 +99,8 @@ mod tests {
         let state = AppState::from_config(AppConfig::for_tests())
             .await
             .expect("state should build");
-        let workspace = std::env::temp_dir().join(format!("pmd-materialize-{}", uuid::Uuid::new_v4()));
+        let workspace =
+            std::env::temp_dir().join(format!("pmd-materialize-{}", uuid::Uuid::new_v4()));
         let path = materialize_ruleset_directory(&state, &workspace)
             .await
             .expect("materialize should succeed")
@@ -121,7 +134,10 @@ mod tests {
         let selected = select_preflight_ruleset(&assets).expect("ruleset should be selected");
         assert_eq!(selected, "JavaErrorProneEmptyCatchBlock.xml");
         assert_eq!(
-            build_check_command("/work/source", "/work/pmd-rules/JavaErrorProneEmptyCatchBlock.xml"),
+            build_check_command(
+                "/work/source",
+                "/work/pmd-rules/JavaErrorProneEmptyCatchBlock.xml"
+            ),
             vec![
                 "pmd",
                 "check",

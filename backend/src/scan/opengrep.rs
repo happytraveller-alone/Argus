@@ -74,9 +74,15 @@ mod tests {
             .await
             .expect("opengrep assets should load");
         assert!(assets.len() > 3000);
-        assert!(assets.iter().any(|asset| asset.asset_path == "rules_opengrep/X509-subject-name-validation.yaml"));
-        assert!(assets.iter().any(|asset| asset.asset_path.starts_with("rules_from_patches/")));
-        assert!(assets.iter().all(|asset| asset.source_kind != "patch_artifact"));
+        assert!(assets
+            .iter()
+            .any(|asset| asset.asset_path == "rules_opengrep/X509-subject-name-validation.yaml"));
+        assert!(assets
+            .iter()
+            .any(|asset| asset.asset_path.starts_with("rules_from_patches/")));
+        assert!(assets
+            .iter()
+            .all(|asset| asset.source_kind != "patch_artifact"));
     }
 
     #[tokio::test]
@@ -84,7 +90,8 @@ mod tests {
         let state = AppState::from_config(AppConfig::for_tests())
             .await
             .expect("state should build");
-        let workspace = std::env::temp_dir().join(format!("opengrep-materialize-{}", uuid::Uuid::new_v4()));
+        let workspace =
+            std::env::temp_dir().join(format!("opengrep-materialize-{}", uuid::Uuid::new_v4()));
         let path = materialize_rule_directory(&state, &workspace)
             .await
             .expect("materialize should succeed")

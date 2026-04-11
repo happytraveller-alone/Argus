@@ -77,6 +77,40 @@
 - target phase:
   - A now in progress
 
+### 1b. Rust core config/security/encryption is now partially owned
+
+- current state:
+  - Rust 新增：
+    - `backend/src/core/security.rs`
+    - `backend/src/core/encryption.rs`
+  - Rust `backend/src/config.rs` 已开始承接 core 级配置语义：
+    - `SECRET_KEY` / `ALGORITHM` / `ACCESS_TOKEN_EXPIRE_MINUTES`
+    - LLM 默认 provider/model/base URL 与超时/并发
+    - provider 专属 API key 默认值
+  - Rust `/api/v1/system-config/defaults` 已从 `AppConfig` 取默认值，不再散落硬编码
+  - Rust 写 legacy `user_configs` mirror 时，敏感 LLM key 字段已按 Rust 加密逻辑落密文，而不是继续明文 shadow write
+- still missing:
+  - Python 运行时仍直接 import：
+    - `backend_old/app/core/config.py`
+    - `backend_old/app/core/security.py`
+    - `backend_old/app/core/encryption.py`
+  - 当前直接依赖方仍包括：
+    - `backend_old/app/main.py`
+    - `backend_old/app/db/session.py`
+    - `backend_old/app/db/init_db.py`
+    - `backend_old/app/services/user_config_service.py`
+    - `backend_old/app/services/llm/*`
+    - `backend_old/app/services/agent/*`
+    - `backend_old/app/services/*runner*`
+    - 多个 `static-tasks` / `agent-tasks` Python 端点
+- delete gate:
+  - Python runtime / llm / agent / init_db / db session 不再 import 这些 core 模块
+  - Rust 成为 token/hash/encryption/default-config 的唯一 live source of truth
+  - legacy `user_configs` mirror 不再被 Python runtime 当作主读路径
+- owner: Rust migration
+- target phase:
+  - A now in progress
+
 ### 2. current Rust mirrors and proxy remain transitional
 
 - current state:
