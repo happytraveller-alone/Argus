@@ -1,7 +1,7 @@
 ARG DOCKERHUB_LIBRARY_MIRROR=docker.m.daocloud.io/library
 ARG DOCKER_CLI_IMAGE=${DOCKERHUB_LIBRARY_MIRROR}/docker:cli
 
-FROM ${DOCKERHUB_LIBRARY_MIRROR}/rust:1.90-slim AS builder
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/rust:1.90-slim-bookworm AS builder
 WORKDIR /app
 
 RUN apt-get update \
@@ -17,7 +17,7 @@ RUN cargo build --release --bin backend-rust
 
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli-src
 
-FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:bookworm-slim AS runtime-base
+FROM ${DOCKERHUB_LIBRARY_MIRROR}/debian:trixie-slim AS runtime-base
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl \

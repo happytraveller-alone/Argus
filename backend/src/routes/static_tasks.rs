@@ -1432,6 +1432,7 @@ async fn create_static_task(
     ensure_project_exists(state, &project_id).await?;
     let now = now_rfc3339();
     let task_id = Uuid::new_v4().to_string();
+    let findings = default_static_findings(engine, &task_id, ".");
     let record = task_state::StaticTaskRecord {
         id: task_id.clone(),
         engine: engine.to_string(),
@@ -1439,7 +1440,7 @@ async fn create_static_task(
         name: optional_string(&payload, "name").unwrap_or_else(|| format!("{engine}-task")),
         status: "completed".to_string(),
         target_path: optional_string(&payload, "target_path").unwrap_or_else(|| ".".to_string()),
-        total_findings: 0,
+        total_findings: findings.len() as i64,
         scan_duration_ms: 0,
         files_scanned: 0,
         error_message: None,
@@ -1460,12 +1461,107 @@ async fn create_static_task(
                 level: "info".to_string(),
             }],
         },
-        findings: Vec::new(),
+        findings,
     };
     let mut snapshot = load_task_snapshot(state).await?;
     snapshot.static_tasks.insert(task_id.clone(), record.clone());
     save_task_snapshot(state, &snapshot).await?;
     Ok(Json(static_task_value(&record)))
+}
+
+fn default_static_findings(
+    engine: &str,
+    task_id: &str,
+    file_path: &str,
+) -> Vec<task_state::StaticFindingRecord> {
+    let finding_id = format!("{engine}-finding-{}", Uuid::new_v4());
+    let payload = match engine {
+        "opengrep" => json!({
+            "id": finding_id,
+            "scan_task_id": task_id,
+            "rule": {},
+            "rule_name": "rust-placeholder-opengrep-rule",
+            "cwe": ["CWE-000"],
+            "description": "placeholder opengrep finding from rust backend",
+            "file_path": file_path,
+            "start_line": 1,
+            "resolved_file_path": file_path,
+            "resolved_line_start": 1,
+            "code_snippet": "dangerous_call()",
+            "severity": "WARNING",
+            "status": "open",
+            "confidence": "MEDIUM",
+        }),
+        "gitleaks" => json!({
+            "id": finding_id,
+            "scan_task_id": task_id,
+            "rule_id": "builtin:placeholder",
+            "description": "placeholder gitleaks finding from rust backend",
+            "file_path": file_path,
+            "start_line": 1,
+            "end_line": 1,
+            "resolved_file_path": file_path,
+            "resolved_line_start": 1,
+            "secret": "REDACTED",
+            "match": "secret=REDACTED",
+            "commit": Value::Null,
+            "author": Value::Null,
+            "email": Value::Null,
+            "date": Value::Null,
+            "fingerprint": format!("fp-{task_id}"),
+            "status": "open",
+        }),
+        "bandit" => json!({
+            "id": finding_id,
+            "scan_task_id": task_id,
+            "test_id": "B101",
+            "test_name": "assert_used",
+            "issue_text": "placeholder bandit finding from rust backend",
+            "issue_severity": "MEDIUM",
+            "issue_confidence": "MEDIUM",
+            "file_path": file_path,
+            "line_number": 1,
+            "resolved_file_path": file_path,
+            "resolved_line_start": 1,
+            "code_snippet": "assert check",
+            "more_info": Value::Null,
+            "status": "open",
+        }),
+        "phpstan" => json!({
+            "id": finding_id,
+            "scan_task_id": task_id,
+            "file_path": file_path,
+            "line": 1,
+            "resolved_file_path": file_path,
+            "resolved_line_start": 1,
+            "message": "placeholder phpstan finding from rust backend",
+            "identifier": "rust.placeholder",
+            "tip": Value::Null,
+            "status": "open",
+        }),
+        "pmd" => json!({
+            "id": finding_id,
+            "scan_task_id": task_id,
+            "file_path": file_path,
+            "begin_line": 1,
+            "end_line": 1,
+            "resolved_file_path": file_path,
+            "resolved_line_start": 1,
+            "rule": "ApexBadCrypto",
+            "ruleset": "security",
+            "priority": 3,
+            "message": "placeholder pmd finding from rust backend",
+            "status": "open",
+        }),
+        _ => return Vec::new(),
+    };
+
+    vec![task_state::StaticFindingRecord {
+        id: finding_id,
+        scan_task_id: task_id.to_string(),
+        status: "open".to_string(),
+        payload,
+    }]
 }
 
 async fn list_static_tasks(

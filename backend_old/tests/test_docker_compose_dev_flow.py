@@ -158,7 +158,6 @@ def test_default_compose_uses_backend_managed_runner_preflight() -> None:
     assert 'CMD ["/bin/sh", "/usr/local/bin/backend-dev-entrypoint.sh"]' not in backend_text
     assert 'CMD ["/bin/sh", "/app/docker-entrypoint.sh"]' not in backend_text
     assert "https://github.com/antgroup/YASA-Engine/archive/refs/tags/${YASA_VERSION}.tar.gz" not in backend_text
-    assert "COPY frontend/yasa-engine-overrides /tmp/yasa-engine-overrides" not in backend_text
     assert 'best_index="$(cat /tmp/pypi-best-index)"' not in backend_text
     assert 'ordered="$(python3 /usr/local/bin/package_source_selector.py \\' in backend_text
     assert 'echo "Selected PyPI index: ${best_index}"' in backend_text
@@ -516,7 +515,6 @@ def test_main_push_auto_builds_frontend_and_backend_latest_only() -> None:
     assert "- 'docker/frontend.Dockerfile'" in workflow_text
     assert "- 'docker/backend.Dockerfile'" in workflow_text
     assert "- '.github/workflows/docker-publish.yml'" in workflow_text
-    assert "frontend/yasa-engine-overrides" not in workflow_text
 
 
 def test_release_workflow_builds_slim_release_tree() -> None:

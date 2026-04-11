@@ -164,9 +164,19 @@ async fn check_database(
     }
 
     // Connectivity: run a trivial query, but never hang startup forever.
+    if let Err(err) = ensure_rust_schema(pool).await {
+        status.status = BootstrapStatus::Error.as_str().to_string();
+        status.error = Some(format!("failed to ensure rust schema: {err}"));
+        if status.legacy_schema.status == BootstrapStatus::NotRun.as_str() {
+            status.legacy_schema.status = status.status.clone();
+            status.legacy_schema.error = status.error.clone();
+        }
+        return status;
+    }
+
     let connectivity = timeout(
         Duration::from_secs(2),
-        sqlx::query_scalar::<_, i64>("SELECT 1").fetch_one(pool),
+        sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(pool),
     )
     .await;
 
@@ -259,6 +269,89 @@ async fn check_database(
     }
 
     status
+}
+
+async fn ensure_rust_schema(pool: &PgPool) -> Result<()> {
+    sqlx::query(
+        r#"
+        create table if not exists system_configs (
+            id text primary key,
+            llm_config_json jsonb not null default '{}'::jsonb,
+            other_config_json jsonb not null default '{}'::jsonb,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create table if not exists rust_projects (
+            id uuid primary key,
+            name text not null,
+            description text not null default '',
+            source_type text not null default 'zip',
+            repository_type text not null default 'other',
+            default_branch text not null default 'main',
+            programming_languages_json jsonb not null default '[]'::jsonb,
+            is_active boolean not null default true,
+            language_info_json jsonb not null default '{}'::jsonb,
+            info_status text not null default 'pending',
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create table if not exists rust_project_archives (
+            project_id uuid primary key references rust_projects(id) on delete cascade,
+            original_filename text not null,
+            storage_path text not null,
+            sha256 text not null,
+            file_size bigint not null default 0,
+            uploaded_at timestamptz not null default now()
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create table if not exists rust_scan_rule_assets (
+            engine text not null,
+            source_kind text not null,
+            asset_path text not null,
+            file_format text not null,
+            sha256 text not null,
+            content text not null,
+            metadata_json jsonb not null default '{}'::jsonb,
+            is_active boolean not null default true,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            primary key (engine, source_kind, asset_path)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        create index if not exists ix_rust_scan_rule_assets_engine_kind
+            on rust_scan_rule_assets (engine, source_kind, is_active)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }
 
 fn legacy_status_for_file_mode(

@@ -14,6 +14,10 @@ fn isolated_test_config(scope: &str) -> AppConfig {
     config
 }
 
+fn encode_path_segment(value: &str) -> String {
+    value.replace('%', "%25").replace('/', "%2F")
+}
+
 async fn create_project(app: &axum::Router) -> String {
     let create_payload = json!({
         "name": "task-api-project",
@@ -341,6 +345,305 @@ async fn static_task_routes_and_rule_catalogs_are_rust_owned_without_python_upst
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK, "follow-up route should work: {route}");
     }
+
+    let gitleaks_rules_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/static-tasks/gitleaks/rules?limit=5")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(gitleaks_rules_response.status(), StatusCode::OK);
+    let gitleaks_rules_json: Value = serde_json::from_slice(
+        &to_bytes(gitleaks_rules_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let gitleaks_rule_id = gitleaks_rules_json[0]["id"].as_str().unwrap().to_string();
+
+    let gitleaks_rule_detail = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/static-tasks/gitleaks/rules/{gitleaks_rule_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(gitleaks_rule_detail.status(), StatusCode::OK);
+
+    let bandit_rules_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/static-tasks/bandit/rules?limit=5")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bandit_rules_response.status(), StatusCode::OK);
+    let bandit_rules_json: Value = serde_json::from_slice(
+        &to_bytes(bandit_rules_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let bandit_rule_id = bandit_rules_json[0]["id"].as_str().unwrap().to_string();
+
+    let bandit_toggle_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/static-tasks/bandit/rules/{bandit_rule_id}/enabled"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "is_active": false }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bandit_toggle_response.status(), StatusCode::OK);
+
+    let phpstan_rules_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/static-tasks/phpstan/rules?limit=5")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(phpstan_rules_response.status(), StatusCode::OK);
+    let phpstan_rules_json: Value = serde_json::from_slice(
+        &to_bytes(phpstan_rules_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let phpstan_rule_id = phpstan_rules_json[0]["id"].as_str().unwrap().to_string();
+
+    let phpstan_rule_update = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PATCH)
+                .uri(format!(
+                    "/api/v1/static-tasks/phpstan/rules/{}",
+                    encode_path_segment(&phpstan_rule_id)
+                ))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "name": "patched-rule-name" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(phpstan_rule_update.status(), StatusCode::OK);
+
+    let pmd_builtin_response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/static-tasks/pmd/builtin-rulesets?limit=5")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pmd_builtin_response.status(), StatusCode::OK);
+    let pmd_builtin_json: Value = serde_json::from_slice(
+        &to_bytes(pmd_builtin_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let pmd_ruleset_id = pmd_builtin_json[0]["id"].as_str().unwrap().to_string();
+
+    let pmd_builtin_detail = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/static-tasks/pmd/builtin-rulesets/{}",
+                encode_path_segment(&pmd_ruleset_id)
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pmd_builtin_detail.status(), StatusCode::OK);
+
+    let opengrep_findings_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/static-tasks/tasks/{}/findings?limit=20", created_task_ids[0]))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let opengrep_findings_json: Value = serde_json::from_slice(
+        &to_bytes(opengrep_findings_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let opengrep_finding_id = opengrep_findings_json[0]["id"].as_str().unwrap().to_string();
+
+    let opengrep_finding_status = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/static-tasks/findings/{opengrep_finding_id}/status?status=verified"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(opengrep_finding_status.status(), StatusCode::OK);
+
+    let gitleaks_findings_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/static-tasks/gitleaks/tasks/{}/findings?limit=20",
+                created_task_ids[1]
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let gitleaks_findings_json: Value = serde_json::from_slice(
+        &to_bytes(gitleaks_findings_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let gitleaks_finding_id = gitleaks_findings_json[0]["id"].as_str().unwrap().to_string();
+
+    let gitleaks_finding_status = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/static-tasks/gitleaks/findings/{gitleaks_finding_id}/status?status=verified"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(gitleaks_finding_status.status(), StatusCode::OK);
+
+    let bandit_findings_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/static-tasks/bandit/tasks/{}/findings?limit=20",
+                created_task_ids[2]
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bandit_findings_json: Value = serde_json::from_slice(
+        &to_bytes(bandit_findings_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let bandit_finding_id = bandit_findings_json[0]["id"].as_str().unwrap().to_string();
+
+    let bandit_finding_status = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/static-tasks/bandit/findings/{bandit_finding_id}/status?status=verified"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bandit_finding_status.status(), StatusCode::OK);
+
+    let phpstan_findings_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/static-tasks/phpstan/tasks/{}/findings?limit=20",
+                created_task_ids[3]
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let phpstan_findings_json: Value = serde_json::from_slice(
+        &to_bytes(phpstan_findings_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let phpstan_finding_id = phpstan_findings_json[0]["id"].as_str().unwrap().to_string();
+
+    let phpstan_finding_status = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/static-tasks/phpstan/findings/{phpstan_finding_id}/status?status=verified"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(phpstan_finding_status.status(), StatusCode::OK);
+
+    let pmd_findings_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/static-tasks/pmd/tasks/{}/findings?limit=20",
+                created_task_ids[4]
+            ))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let pmd_findings_json: Value = serde_json::from_slice(
+        &to_bytes(pmd_findings_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let pmd_finding_id = pmd_findings_json[0]["id"].as_str().unwrap().to_string();
+
+    let pmd_finding_status = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/static-tasks/pmd/findings/{pmd_finding_id}/status?status=verified"
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pmd_finding_status.status(), StatusCode::OK);
 }
 
 #[tokio::test]
