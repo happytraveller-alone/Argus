@@ -48,7 +48,7 @@ pub fn build_validate_command(config_dir: &str) -> Vec<String> {
 }
 
 fn relative_rule_path(asset_path: &str) -> PathBuf {
-    if let Some(rest) = asset_path.strip_prefix("rules/") {
+    if let Some(rest) = asset_path.strip_prefix("rules_opengrep/") {
         return PathBuf::from("internal").join(rest);
     }
     if let Some(rest) = asset_path.strip_prefix("rules_from_patches/") {
@@ -74,7 +74,7 @@ mod tests {
             .await
             .expect("opengrep assets should load");
         assert!(assets.len() > 3000);
-        assert!(assets.iter().any(|asset| asset.asset_path == "rules/X509-subject-name-validation.yaml"));
+        assert!(assets.iter().any(|asset| asset.asset_path == "rules_opengrep/X509-subject-name-validation.yaml"));
         assert!(assets.iter().any(|asset| asset.asset_path.starts_with("rules_from_patches/")));
         assert!(assets.iter().all(|asset| asset.source_kind != "patch_artifact"));
     }

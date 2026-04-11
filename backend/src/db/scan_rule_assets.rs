@@ -225,7 +225,7 @@ fn collect_rule_asset_paths(root: &Path) -> Result<Vec<PathBuf>> {
         if matches!(
             top,
             Some(
-                "rules"
+                "rules_opengrep"
                     | "rules_from_patches"
                     | "patches"
                     | "gitleaks_builtin"
@@ -269,7 +269,7 @@ fn classify_rule_asset(relative: &Path) -> Result<(&'static str, &'static str)> 
         .ok_or_else(|| anyhow!("invalid rule asset path: {}", relative.display()))?;
 
     match top {
-        "rules" => Ok(("opengrep", "internal_rule")),
+        "rules_opengrep" => Ok(("opengrep", "internal_rule")),
         "rules_from_patches" => Ok(("opengrep", "patch_rule")),
         "patches" => Ok(("opengrep", "patch_artifact")),
         "gitleaks_builtin" => Ok(("gitleaks", "builtin")),
@@ -296,7 +296,7 @@ mod tests {
         assert!(assets.len() > 7000);
 
         let paths = assets.iter().map(|asset| asset.asset_path.as_str()).collect::<Vec<_>>();
-        assert!(paths.iter().any(|path| path == &"rules/X509-subject-name-validation.yaml"));
+        assert!(paths.iter().any(|path| path == &"rules_opengrep/X509-subject-name-validation.yaml"));
         assert!(paths.iter().any(|path| path == &"gitleaks_builtin/gitleaks-default.toml"));
         assert!(paths.iter().any(|path| path == &"bandit_builtin/bandit_builtin_rules.json"));
         assert!(paths.iter().any(|path| path == &"rules_phpstan/phpstan_rules_combined.json"));
