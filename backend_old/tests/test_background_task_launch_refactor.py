@@ -1,19 +1,19 @@
 import pytest
 
-from app.api.v1.endpoints import static_tasks_shared
+from app.services import static_scan_runtime
 
 
 @pytest.mark.asyncio
 async def test_launch_static_background_job_registers_and_cleans_up():
-    task = static_tasks_shared._launch_static_background_job(
+    task = static_scan_runtime._launch_static_background_job(
         "bandit",
         "task-1",
-        static_tasks_shared.asyncio.sleep(0),
+        static_scan_runtime.asyncio.sleep(0),
     )
 
-    key = static_tasks_shared._scan_task_key("bandit", "task-1")
-    assert static_tasks_shared._static_background_jobs[key] is task
+    key = static_scan_runtime._scan_task_key("bandit", "task-1")
+    assert static_scan_runtime._static_background_jobs[key] is task
 
     await task
 
-    assert key not in static_tasks_shared._static_background_jobs
+    assert key not in static_scan_runtime._static_background_jobs

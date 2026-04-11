@@ -19,15 +19,6 @@ from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.api.v1.endpoints.static_tasks_shared import (
-    cleanup_scan_workspace,
-    copy_project_tree_to_scan_dir,
-    ensure_scan_logs_dir,
-    ensure_scan_meta_dir,
-    ensure_scan_output_dir,
-    ensure_scan_project_dir,
-    ensure_scan_workspace,
-)
 from app.core.config import settings
 from app.models.agent_task import AgentTask
 from app.models.bandit import BanditRuleState
@@ -42,6 +33,15 @@ from app.services.scan_path_utils import normalize_scan_file_path
 from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 from app.services.agent.utils.vulnerability_naming import (
     normalize_cwe_id as normalize_cwe_id_util,
+)
+from app.services.static_scan_runtime import (
+    cleanup_scan_workspace,
+    copy_project_tree_to_scan_dir,
+    ensure_scan_logs_dir,
+    ensure_scan_meta_dir,
+    ensure_scan_output_dir,
+    ensure_scan_project_dir,
+    ensure_scan_workspace,
 )
 
 logger = logging.getLogger(__name__)

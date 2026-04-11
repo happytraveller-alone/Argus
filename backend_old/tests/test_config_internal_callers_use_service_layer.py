@@ -6,7 +6,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def test_internal_callers_no_longer_import_config_endpoint():
     caller_paths = [
-        PROJECT_ROOT / "app/api/v1/endpoints/static_tasks_shared.py",
+        PROJECT_ROOT / "app/services/static_scan_runtime.py",
         PROJECT_ROOT / "app/services/agent/skill_test_runner.py",
     ]
 
@@ -30,8 +30,8 @@ def test_internal_callers_no_longer_import_config_endpoint():
         assert required in content, f"{path.name} should depend on user_config_service"
 
 
-def test_static_tasks_shared_no_longer_imports_db_session_module():
-    path = PROJECT_ROOT / "app/api/v1/endpoints/static_tasks_shared.py"
+def test_static_scan_runtime_no_longer_imports_db_session_module():
+    path = PROJECT_ROOT / "app/services/static_scan_runtime.py"
     content = path.read_text(encoding="utf-8")
 
     assert "from app.db.session import" not in content

@@ -12,7 +12,11 @@ from uuid import uuid4
 
 import yaml
 
-from app.api.v1.endpoints.static_tasks_shared import (
+from app.core.config import settings
+from app.models.opengrep import OpengrepRule
+from app.services.scan_path_utils import normalize_scan_file_path
+from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
+from app.services.static_scan_runtime import (
     cleanup_scan_workspace,
     copy_project_tree_to_scan_dir,
     ensure_scan_logs_dir,
@@ -21,10 +25,6 @@ from app.api.v1.endpoints.static_tasks_shared import (
     ensure_scan_project_dir,
     ensure_scan_workspace,
 )
-from app.core.config import settings
-from app.models.opengrep import OpengrepRule
-from app.services.scan_path_utils import normalize_scan_file_path
-from app.services.scanner_runner import ScannerRunSpec, run_scanner_container
 
 from .base import (
     StaticBootstrapFinding,
