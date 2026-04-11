@@ -6,4 +6,4 @@
 - Defer: `7`
 - Proxy: `130`
 
-- Source inventory: `/Users/apple/Project/AuditTool_private/.worktrees/codex-rust-migration-a/plan/wait_correct/route-inventory/python-endpoints-inventory.csv`
+- Source inventory: `/Users/apple/Project/AuditTool_private/plan/wait_correct/route-inventory/python-endpoints-inventory.csv`
