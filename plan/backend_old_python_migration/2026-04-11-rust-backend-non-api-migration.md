@@ -569,3 +569,35 @@
   - `phpstan` 的 Rust 规则消费链路仍未接入
 - 下一刀：
   - 继续迁 Phase A / Phase C 交界处，把 Rust 对 schema/init 的“认知权”推进到“初始化与持久化语义 ownership”，优先收口 `init_db()` 仍然承载的 legacy 启动职责
+
+### 2026-04-11 Batch 1 / Slice 3
+
+- 已完成：
+  - Rust 新增 `backend/src/bootstrap/legacy_mirror_schema.rs`
+  - Rust startup init 在 DB 模式下会显式创建当前 Rust 已 owned 控制面所依赖的 legacy mirror 表：
+    - `users`
+    - `user_configs`
+    - `projects`
+    - `project_info`
+    - `project_management_metrics`
+    - `prompt_skills`
+  - Rust startup init policy 新增 allowlist 项：
+    - `legacy_control_plane_mirror_schema_sync`
+  - `backend/src/bootstrap/init.rs` 已在 `scan_rule_assets` 同步前执行 mirror schema sync
+  - 新增 Rust 单测覆盖：
+    - legacy mirror schema spec 范围是否覆盖当前 Rust-owned bridge
+    - startup init policy 是否显式允许该动作
+- 当前意义：
+  - 对于 Rust 已经在写入的 legacy compat bridge，schema 创建责任不再继续完全绑死在 `backend_old/alembic`
+  - 至少 `system-config / projects / skills builtin/custom prompt state` 这几条已迁控制面的 legacy mirror 表，Rust 已开始自己兜底
+  - 这是对 `backend_old/alembic` 的部分替代，不是全量替代
+- 仍未完成：
+  - `backend_old/alembic` 仍未整体被 Rust 替代
+  - Python runtime / static-tasks / agent-tasks 依赖的大量 legacy 表仍未迁到 Rust schema ownership
+  - 目前只能说 Rust 已开始接管“它自己还在桥接写入的 legacy 表”的 schema，不等于 Python 运行时全量表都已可由 Rust 生成
+- 删除条件：
+  - 只有当 Python runtime 不再依赖 `backend_old/alembic/env.py` 和对应 legacy versions 里的剩余表迁移
+  - 并且 Rust 已接管剩余 legacy task / finding / rule config / agent runtime 表 schema
+  - 才能删除 `backend_old/alembic`
+- 下一刀：
+  - 继续沿 “Alembic 被 Rust 替代” 这条主线，优先收口当前仍由 Python runtime 强依赖、但与 Rust bridge 最接近的 legacy 表族

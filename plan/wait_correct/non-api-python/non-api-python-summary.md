@@ -47,6 +47,13 @@
   - startup recovery / runner preflight 的 orchestration 已进入 Rust bootstrap
   - file-mode 下 Rust 已会初始化默认 control-plane config 和空项目存储
   - `backend/assets/scan_rule_assets/` 已成为 Rust 规则资产 root，并导入 `rust_scan_rule_assets`
+  - Rust 已开始为当前 Rust-owned 控制面桥接所需的 legacy mirror 表执行 schema 兜底创建：
+    - `users`
+    - `user_configs`
+    - `projects`
+    - `project_info`
+    - `project_management_metrics`
+    - `prompt_skills`
   - startup init allowlist / denylist / defer-list 已显式写入 Rust policy
   - Gitleaks 已开始实际消费 Rust 规则资产库中的 builtin config
   - Opengrep 已开始实际消费 Rust 规则资产库中的 internal / patch 规则目录
@@ -59,6 +66,7 @@
     - `error`
 - still missing:
   - Rust 只接管了 legacy schema version 的检查与报告，还没有接管 migration 执行策略
+  - Rust 目前只替代了当前 Rust-owned bridge 所需的一小部分 legacy schema，不是整个 `backend_old/alembic`
   - `init_db()` 的完整 Rust 版本
   - recovery 对 legacy task tables 的依赖删除
   - runner preflight 后续与 Rust runtime 的进一步打通

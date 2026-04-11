@@ -169,6 +169,15 @@
   - `backend_old/tests/test_config_internal_callers_use_service_layer.py`
 - Rust 当前行为补充: Python live router 已不再挂载 `/prompts` 与 `/rules`
 - Rust 当前行为补充: `prompts.py` 与 `rules.py` 已物理删除，旧模板/审计规则 live endpoint 完整退场
+- Rust 当前行为补充: 已新增 `backend/src/bootstrap/legacy_mirror_schema.rs`，在 DB 模式下由 Rust startup init 兜底创建当前 Rust-owned bridge 所依赖的 legacy mirror 表
+- Rust 当前行为补充: 当前由 Rust schema 兜底的 legacy mirror 表包括：
+  - `users`
+  - `user_configs`
+  - `projects`
+  - `project_info`
+  - `project_management_metrics`
+  - `prompt_skills`
+- Rust 当前行为补充: 这意味着 `backend_old/alembic` 对当前 Rust 已 owned 控制面桥接表不再是唯一 schema 来源，但整个 Alembic 目录仍未到可删除状态
 - 是否影响前端: 否，前端应继续走 Rust backend；这一步只是缩小 Python live surface
 - 后续修复波次: Wave A 后续 / API surface cleanup
 - owner: Rust migration

@@ -1,5 +1,6 @@
 mod init;
 mod legacy_schema;
+mod legacy_mirror_schema;
 mod preflight;
 mod recovery;
 

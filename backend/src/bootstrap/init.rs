@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde_json::json;
 
 use crate::{
+    bootstrap::legacy_mirror_schema,
     db::{projects, scan_rule_assets, system_config},
     state::{AppState, BootstrapStatus, StartupInitPolicy, StartupInitStatus},
 };
@@ -12,6 +13,7 @@ fn startup_init_policy() -> StartupInitPolicy {
             "default_rust_system_config".to_string(),
             "empty_rust_project_store".to_string(),
             "rust_scan_rule_asset_sync".to_string(),
+            "legacy_control_plane_mirror_schema_sync".to_string(),
         ],
         forbidden_at_startup: vec![
             "demo_user_bootstrap".to_string(),
@@ -66,6 +68,15 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
     }
 
     if state.db_pool.is_some() {
+        let ensured = legacy_mirror_schema::ensure_initialized(
+            state.db_pool.as_ref().expect("db pool checked"),
+        )
+        .await?;
+        actions.push(format!(
+            "legacy control-plane mirror schema synced: {}",
+            ensured.join(", ")
+        ));
+
         let summary = scan_rule_assets::ensure_initialized(state).await?;
         actions.push(format!(
             "scan rule assets synced: discovered={} inserted={} updated={} skipped={}",
@@ -86,6 +97,7 @@ pub async fn run(state: &AppState, rust_db_ready: bool) -> Result<StartupInitSta
 #[cfg(test)]
 mod tests {
     use super::startup_init_policy;
+    use crate::bootstrap::legacy_mirror_schema;
 
     #[test]
     fn startup_policy_allows_only_rust_control_plane_seeds() {
@@ -95,7 +107,8 @@ mod tests {
             vec![
                 "default_rust_system_config",
                 "empty_rust_project_store",
-                "rust_scan_rule_asset_sync"
+                "rust_scan_rule_asset_sync",
+                "legacy_control_plane_mirror_schema_sync"
             ]
         );
         assert!(policy
@@ -110,5 +123,20 @@ mod tests {
         assert!(policy
             .deferred_until_rust_owned
             .contains(&"legacy_rule_projection_tables".to_string()));
+    }
+
+    #[test]
+    fn legacy_mirror_schema_specs_cover_current_rust_owned_bridges() {
+        assert_eq!(
+            legacy_mirror_schema::ensured_table_names(),
+            vec![
+                "users",
+                "user_configs",
+                "projects",
+                "project_info",
+                "project_management_metrics",
+                "prompt_skills",
+            ]
+        );
     }
 }
