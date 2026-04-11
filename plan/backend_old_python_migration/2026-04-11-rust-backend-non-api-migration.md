@@ -423,3 +423,25 @@
 - `backend_old` 根目录 Python 文件：`4`
 - `backend_old/app` 非 API Python 文件：`251`
 - 本计划 inventory 总数：`255`
+
+## 执行记录
+
+### 2026-04-11 Batch 1 / Slice 1
+
+- 已完成：
+  - Rust 新增 `backend/src/bootstrap/mod.rs`
+  - `backend/src/main.rs` 在 `serve` 前执行 bootstrap
+  - `/health` 新增 bootstrap 状态回报
+  - `backend/tests/bootstrap_startup.rs` 覆盖：
+    - 文件存储根创建
+    - 无 DB 时 file-mode / skipped
+    - DB 不可达时 degraded/error 状态
+    - 文件存储根不可创建时启动失败
+- 当前意义：
+  - Rust public backend 不再只是 router 壳，已经开始拥有自己的启动前检查与状态报告
+  - 这是 Batch 1 的第一刀，不是 Batch 1 完成
+- 仍未完成：
+  - Python `app/main.py` 中的 schema version orchestration、`init_db()`、中断任务恢复、runner preflight 仍未迁走
+  - `backend_old/app/core/*`、`backend_old/app/db/*` 仍未被 Rust 完整替代
+- 下一刀：
+  - 继续迁 Phase A 剩余底座，把 DB/schema/startup recovery 的 source of truth 从 Python 挪到 Rust

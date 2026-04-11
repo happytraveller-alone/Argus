@@ -16,8 +16,8 @@
 ### 1. non-api python inventory is not yet migrated
 
 - current state:
-  - Rust 仅 owned `projects / system-config / search / skills` 和 gateway/proxy
-  - Python 仍拥有 bootstrap、db/model/schema、runtime、upload、scan orchestration、llm、agent 主链路
+  - Rust 已 owned `projects / system-config / search / skills`、gateway/proxy，以及新的 startup bootstrap shell
+  - Python 仍拥有 schema/init_db/recovery/preflight、db/model/schema、runtime、upload、scan orchestration、llm、agent 主链路
 - scope:
   - `backend_old/*.py`
   - `backend_old/app/**` except `backend_old/app/api/**`
@@ -34,6 +34,21 @@
   - 运行主链路不再调用对应 Python 文件
   - `projects/system-config/skills` 的 Python mirror 已删除
   - `/api/v1/*` fallback 不再承接相关能力
+
+### 1a. Rust startup bootstrap is now partially owned
+
+- current state:
+  - `backend/src/bootstrap/mod.rs` 已负责最小启动检查
+  - `backend/src/main.rs` 已在 `serve` 前执行 bootstrap
+  - `/health` 已暴露 bootstrap 状态
+- still missing:
+  - Python `app.main` 内的 schema version orchestration
+  - `init_db()`
+  - interrupted task recovery
+  - runner preflight
+- owner: Rust migration
+- target phase:
+  - A now in progress
 
 ### 2. current Rust mirrors and proxy remain transitional
 

@@ -78,3 +78,12 @@
 - 是否影响前端: 当前主路径可用，但迁移目标未完成，mirror 和 proxy 仍必须保留
 - 后续修复波次: Wave B / C / D / E / F
 - owner: Rust migration
+
+### 6. Rust startup bootstrap shell is now owned, but Python startup internals remain
+
+- endpoint / feature: `backend/src/bootstrap/mod.rs`, `/health`, Rust server startup path
+- Python 旧行为: Python `app.main` 在 lifespan 内负责 schema version check、`init_db()`、中断任务恢复、runner preflight
+- Rust 当前行为: Rust 启动前已经执行最小 bootstrap，负责文件存储根检查、DB 可用性检查、`alembic_version` 元数据最小检查，并把状态暴露到 `/health`
+- 是否影响前端: 否，HTTP 主路径保持可用；健康态变得更诚实
+- 后续修复波次: Wave A 后续 / Batch 1 Slice 2
+- owner: Rust migration
