@@ -438,7 +438,6 @@ COPY --from=runtime-app-assembler /final/app /app/app
 RUN find /app/app -name "*.c" -delete 2>/dev/null || true
 COPY backend_old/alembic /app/alembic
 COPY backend_old/alembic.ini /app/alembic.ini
-COPY backend_old/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
 
 # 创建运行时持久化目录
 RUN mkdir -p \
@@ -513,7 +512,6 @@ COPY backend_old/app /app/app
 RUN find /app/app -name "*.c" -delete 2>/dev/null || true
 COPY backend_old/alembic /app/alembic
 COPY backend_old/alembic.ini /app/alembic.ini
-COPY backend_old/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
 
 RUN mkdir -p \
   /app/uploads/zip_files \
@@ -605,7 +603,6 @@ RUN mkdir -p /app/data/runtime/xdg-data /app/data/runtime/xdg-cache /app/data/ru
 COPY backend_old/app /app/app
 COPY backend_old/alembic /app/alembic
 COPY backend_old/alembic.ini /app/alembic.ini
-COPY backend_old/scripts/reset_static_scan_tables.py /app/scripts/reset_static_scan_tables.py
 
 RUN mkdir -p \
   /app/uploads/zip_files \

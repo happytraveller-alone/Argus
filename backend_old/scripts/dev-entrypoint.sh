@@ -165,8 +165,7 @@ raise SystemExit(0 if asyncio.run(check_db()) else 1)
 
 run_optional_resets() {
     if [ "${RESET_STATIC_SCAN_TABLES_ON_DEPLOY:-false}" = "true" ] || [ "${RESET_STATIC_SCAN_TABLES_ON_DEPLOY:-0}" = "1" ]; then
-        echo "Resetting static scan tables..."
-        "${VENV_DIR}/bin/python" "${APP_ROOT}/scripts/reset_static_scan_tables.py"
+        echo "Skipping legacy static scan table reset script; Rust rule bootstrap is authoritative."
     fi
 }
 

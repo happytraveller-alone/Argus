@@ -377,14 +377,8 @@ pub fn run_optional_resets(app_root: &Path) -> Result<()> {
         return Ok(());
     }
 
-    println!("Resetting static scan tables...");
-    Command::new(venv_bin("python"))
-        .arg(app_root.join("scripts").join("reset_static_scan_tables.py"))
-        .status()
-        .context("running reset_static_scan_tables")?
-        .success()
-        .then_some(())
-        .ok_or_else(|| anyhow::anyhow!("reset static scan tables failed"))?;
+    let _ = app_root;
+    println!("Skipping legacy static scan table reset script; Rust rule bootstrap is authoritative.");
     Ok(())
 }
 
@@ -433,11 +427,16 @@ pub fn run(mode: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{backend_server_bin, DEFAULT_BACKEND_SERVER_BIN};
+    use super::{backend_server_bin, run_optional_resets, DEFAULT_BACKEND_SERVER_BIN};
+    use std::{env, fs};
+    use tempfile::TempDir;
+
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn backend_server_bin_defaults_to_rust_backend_binary() {
-        let _guard = std::env::remove_var("BACKEND_SERVER_BIN");
+        let _env_guard = ENV_MUTEX.lock().unwrap();
+        std::env::remove_var("BACKEND_SERVER_BIN");
         assert_eq!(
             backend_server_bin(),
             std::path::PathBuf::from(DEFAULT_BACKEND_SERVER_BIN)
@@ -446,11 +445,43 @@ mod tests {
 
     #[test]
     fn backend_server_bin_honors_override() {
+        let _env_guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("BACKEND_SERVER_BIN", "/tmp/custom-backend");
         assert_eq!(
             backend_server_bin(),
             std::path::PathBuf::from("/tmp/custom-backend")
         );
         std::env::remove_var("BACKEND_SERVER_BIN");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn optional_resets_do_not_require_legacy_python_script() {
+        let _env_guard = ENV_MUTEX.lock().unwrap();
+        let tmp = TempDir::new().unwrap();
+        let app_root = tmp.path().join("app");
+        fs::create_dir_all(&app_root).unwrap();
+        let venv_dir = tmp.path().join("venv");
+        let bin_dir = venv_dir.join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+
+        use std::os::unix::fs::PermissionsExt;
+        let python_bin = bin_dir.join("python");
+        fs::write(
+            &python_bin,
+            "#!/bin/sh\nif [ -e \"$1\" ]; then exit 0; fi\nexit 7\n",
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&python_bin).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&python_bin, perms).unwrap();
+
+        env::set_var("BACKEND_VENV_PATH", &venv_dir);
+        env::set_var("RESET_STATIC_SCAN_TABLES_ON_DEPLOY", "true");
+        let result = run_optional_resets(&app_root);
+        env::remove_var("BACKEND_VENV_PATH");
+        env::remove_var("RESET_STATIC_SCAN_TABLES_ON_DEPLOY");
+
+        assert!(result.is_ok(), "legacy reset script should no longer be required");
     }
 }
