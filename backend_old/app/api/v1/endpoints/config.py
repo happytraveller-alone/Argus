@@ -37,6 +37,7 @@ from app.services.llm.provider_registry import (
     resolve_llm_runtime_provider as resolve_provider_runtime,
 )
 from app.services.llm.types import LLMProvider
+from app.services import user_config_service
 from app.services.zip_storage import load_project_zip
 
 router = APIRouter()
@@ -156,25 +157,7 @@ async def _load_user_config_payload(
     db: AsyncSession,
     user_id: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    result = await db.execute(select(UserConfig).where(UserConfig.user_id == user_id))
-    user_config_record = result.scalar_one_or_none()
-
-    saved_llm_config: dict[str, Any] = {}
-    saved_other_config: dict[str, Any] = {}
-    if not user_config_record:
-        return saved_llm_config, saved_other_config
-
-    if user_config_record.llm_config:
-        saved_llm_config = decrypt_config(
-            json.loads(user_config_record.llm_config),
-            SENSITIVE_LLM_FIELDS,
-        )
-    if user_config_record.other_config:
-        saved_other_config = decrypt_config(
-            json.loads(user_config_record.other_config),
-            SENSITIVE_OTHER_FIELDS,
-        )
-    return saved_llm_config, saved_other_config
+    return await user_config_service.load_user_config_payload(db=db, user_id=user_id)
 
 
 async def _load_user_config_payload_with_effective_defaults(
@@ -470,18 +453,10 @@ async def _fetch_models_azure_openai(
     return [], {}
 
 def _sanitize_other_config(raw_other_config: Any) -> dict:
-    candidate = dict(raw_other_config) if isinstance(raw_other_config, dict) else {}
-    for retired_key in ("githubToken", "gitlabToken", "giteaToken", "outputLanguage"):
-        candidate.pop(retired_key, None)
-    candidate.pop("toolRuntimeConfig", None)
-    return candidate
+    return user_config_service.sanitize_other_config(raw_other_config)
 
 def _strip_runtime_config(raw_other_config: Any) -> dict:
-    candidate = dict(raw_other_config) if isinstance(raw_other_config, dict) else {}
-    for retired_key in ("githubToken", "gitlabToken", "giteaToken", "outputLanguage"):
-        candidate.pop(retired_key, None)
-    candidate.pop("toolRuntimeConfig", None)
-    return candidate
+    return user_config_service.strip_runtime_config(raw_other_config)
 
 def _normalize_extracted_project_root(base_path: str) -> str:
     candidates = [
@@ -566,19 +541,11 @@ async def _resolve_verify_project(
 
 def encrypt_config(config: dict, sensitive_fields: list) -> dict:
     """加密配置中的敏感字段"""
-    encrypted = config.copy()
-    for field in sensitive_fields:
-        if field in encrypted and encrypted[field]:
-            encrypted[field] = encrypt_sensitive_data(encrypted[field])
-    return encrypted
+    return user_config_service.encrypt_config(config, sensitive_fields)
 
 def decrypt_config(config: dict, sensitive_fields: list) -> dict:
     """解密配置中的敏感字段"""
-    decrypted = config.copy()
-    for field in sensitive_fields:
-        if field in decrypted and decrypted[field]:
-            decrypted[field] = decrypt_sensitive_data(decrypted[field])
-    return decrypted
+    return user_config_service.decrypt_config(config, sensitive_fields)
 
 class LLMConfigSchema(BaseModel):
     """LLM配置Schema"""
@@ -635,41 +602,7 @@ class UserConfigResponse(BaseModel):
 
 def get_default_config() -> dict:
     """获取系统默认配置"""
-    return {
-        "llmConfig": {
-            "llmProvider": settings.LLM_PROVIDER,
-            "llmApiKey": "",
-            "llmModel": settings.LLM_MODEL or "",
-            "llmBaseUrl": settings.LLM_BASE_URL or "",
-            "llmTimeout": settings.LLM_TIMEOUT * 1000,  # 转换为毫秒
-            "llmTemperature": settings.LLM_TEMPERATURE,
-            "llmMaxTokens": settings.LLM_MAX_TOKENS,
-            "llmCustomHeaders": "",
-            # Agent超时配置（秒）
-            "llmFirstTokenTimeout": getattr(settings, 'LLM_FIRST_TOKEN_TIMEOUT', 45),
-            "llmStreamTimeout": getattr(settings, 'LLM_STREAM_TIMEOUT', 120),
-            "agentTimeout": settings.AGENT_TIMEOUT_SECONDS,
-            "subAgentTimeout": getattr(settings, 'SUB_AGENT_TIMEOUT_SECONDS', 600),
-            "toolTimeout": getattr(settings, 'TOOL_TIMEOUT_SECONDS', 60),
-            # 平台专用配置
-            "geminiApiKey": settings.GEMINI_API_KEY or "",
-            "openaiApiKey": settings.OPENAI_API_KEY or "",
-            "claudeApiKey": settings.CLAUDE_API_KEY or "",
-            "qwenApiKey": settings.QWEN_API_KEY or "",
-            "deepseekApiKey": settings.DEEPSEEK_API_KEY or "",
-            "zhipuApiKey": settings.ZHIPU_API_KEY or "",
-            "moonshotApiKey": settings.MOONSHOT_API_KEY or "",
-            "baiduApiKey": settings.BAIDU_API_KEY or "",
-            "minimaxApiKey": settings.MINIMAX_API_KEY or "",
-            "doubaoApiKey": settings.DOUBAO_API_KEY or "",
-            "ollamaBaseUrl": settings.OLLAMA_BASE_URL or "http://localhost:11434/v1",
-        },
-        "otherConfig": {
-            "maxAnalyzeFiles": settings.MAX_ANALYZE_FILES,
-            "llmConcurrency": settings.LLM_CONCURRENCY,
-            "llmGapMs": settings.LLM_GAP_MS,
-        }
-    }
+    return user_config_service.get_default_user_config()
 
 @router.get("/defaults")
 async def get_default_config_endpoint() -> Any:

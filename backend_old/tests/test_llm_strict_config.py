@@ -16,6 +16,7 @@ from app.api.v1.endpoints.config import (
     test_llm_connection as llm_connection_endpoint,
 )
 from app.models.user_config import UserConfig
+from app.services import user_config_service
 from app.services.llm.factory import LLMFactory
 from app.services.llm.service import LLMConfigError, LLMService
 from app.services.llm.types import LLMConfig, LLMProvider
@@ -368,8 +369,8 @@ async def test_load_user_config_payload_with_effective_defaults_merges_env_value
 @pytest.mark.asyncio
 async def test_agent_tasks_runtime_user_config_uses_effective_defaults(monkeypatch):
     monkeypatch.setattr(
-        config_module,
-        "get_default_config",
+        user_config_service,
+        "get_default_user_config",
         lambda: {
             "llmConfig": {
                 "llmProvider": "openai",

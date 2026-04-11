@@ -468,9 +468,9 @@ def _validate_project_path(path: str) -> str:
 
 async def _get_user_config(db: AsyncSession, user_id: str) -> Optional[Dict]:
     try:
-        from app.api.v1.endpoints.config import _load_effective_user_config
+        from app.services.user_config_service import load_effective_user_config
 
-        return await _load_effective_user_config(
+        return await load_effective_user_config(
             db=db,
             user_id=user_id,
         )
