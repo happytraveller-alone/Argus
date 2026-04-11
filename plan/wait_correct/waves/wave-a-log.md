@@ -39,6 +39,10 @@
   - 删除 `backend_old/app/api/v1/endpoints/static_tasks_bandit.py`
   - `backend_old/app/api/v1/endpoints/static_tasks.py` 已移除 `_bandit` import、router include、runtime bind、schema alias、helper alias 与 re-export
   - inventory 中 `/api/v1/static-tasks/bandit/*` 已从 Python proxy 改为 Rust-owned (`migrate`)
+- PMD Python endpoint surface retired:
+  - 删除 `backend_old/app/api/v1/endpoints/static_tasks_pmd.py`
+  - `backend_old/app/api/v1/endpoints/static_tasks.py` 已移除 `_pmd` import、router include、runtime bind、schema alias、helper alias 与 re-export
+  - inventory 中 `/api/v1/static-tasks/pmd/*` 已从 Python proxy 改为 Rust-owned (`migrate`)
 
 ## Wait Correct Entries
 
@@ -74,6 +78,23 @@
   - `python-endpoints-inventory.csv` 中 `/api/v1/static-tasks/phpstan/*` 全部由 `proxy` 切换为 `migrate`
   - source/owner 切换为 `static_tasks_rust` + `backend/src/routes/static_tasks.rs`
   - 汇总计数更新为 `migrate=90`、`proxy=62`，task-group `proxy=49`
+- 后续修复波次: Wave A static engine endpoint retirement
+- owner: Rust migration
+
+### 16. pmd endpoint surface retired from Python static tasks router
+
+- endpoint / feature: `/api/v1/static-tasks/pmd/*`
+- Python 旧行为:
+  - `backend_old/app/api/v1/endpoints/static_tasks.py` 通过 `_pmd` include/runtime bind/schema alias/helper alias/re-export 暴露 pmd endpoint
+  - `backend_old/app/api/v1/endpoints/static_tasks_pmd.py` 承载完整 pmd route surface
+- Rust 当前行为:
+  - `backend/src/routes/static_tasks.rs` 已提供 Rust-owned `/api/v1/static-tasks/pmd/*`
+  - Python `static_tasks.py` 已移除 `_pmd` import、`router.include_router(_pmd.router)`、runtime bind、schema alias、helper alias、re-export
+  - `backend_old/app/api/v1/endpoints/static_tasks_pmd.py` 已删除
+- inventory 更新:
+  - `python-endpoints-inventory.csv` 中 `/api/v1/static-tasks/pmd/*` 全部由 `proxy` 切换为 `migrate`
+  - source/owner 切换为 `static_tasks_rust` + `backend/src/routes/static_tasks.rs`
+  - 汇总计数更新为 `migrate=106`、`proxy=46`，task-group `proxy=33`
 - 后续修复波次: Wave A static engine endpoint retirement
 - owner: Rust migration
 
