@@ -5,4 +5,5 @@ pub mod db;
 pub mod error;
 pub mod proxy;
 pub mod routes;
+pub mod scan;
 pub mod state;

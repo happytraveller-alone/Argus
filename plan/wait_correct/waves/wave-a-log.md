@@ -85,6 +85,7 @@
 - Python 旧行为: Python `app.main` 在 lifespan 内负责 schema version check、`init_db()`、中断任务恢复、runner preflight
 - Rust 当前行为: Rust 启动前已经执行 bootstrap，负责文件存储根检查、DB 可用性检查、Rust 自身依赖表检查，并开始接管 startup init / recovery / runner preflight 的 orchestration，同时把状态暴露到 `/health`
 - Rust 当前行为补充: `backend_old/app/db` 下扫描引擎规则资产已开始导入 Rust 自己维护的 `rust_scan_rule_assets`
+- Rust 当前行为补充: Gitleaks preflight 已经开始消费 Rust materialize 出来的 builtin config
 - 是否影响前端: 否，HTTP 主路径保持可用；健康态变得更诚实
 - 后续修复波次: Wave A 后续 / Batch 1 Slice 2
 - owner: Rust migration

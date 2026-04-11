@@ -1,18 +1,23 @@
-use std::{process::Command, sync::Arc};
+use std::{path::PathBuf, process::Command, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use tokio::{sync::Semaphore, task::JoinSet, time::{timeout, Duration}};
 
-use crate::{config::AppConfig, state::{BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus}};
+use crate::{
+    scan::gitleaks,
+    state::{AppState, BootstrapStatus, RunnerPreflightCheckStatus, RunnerPreflightStatus},
+};
 
 #[derive(Clone, Debug)]
 struct RunnerPreflightSpec {
     name: &'static str,
     image: String,
     command: Vec<String>,
+    mounts: Vec<(PathBuf, String)>,
 }
 
-pub async fn run(config: &AppConfig) -> Result<RunnerPreflightStatus> {
+pub async fn run(state: &AppState) -> Result<RunnerPreflightStatus> {
+    let config = &state.config;
     if !config.runner_preflight_enabled {
         return Ok(RunnerPreflightStatus {
             status: "skipped".to_string(),
@@ -23,7 +28,7 @@ pub async fn run(config: &AppConfig) -> Result<RunnerPreflightStatus> {
         });
     }
 
-    let specs = configured_specs(config);
+    let (specs, cleanup_dirs) = configured_specs(state).await?;
     let semaphore = Arc::new(Semaphore::new(config.runner_preflight_max_concurrency.max(1)));
     let mut join_set = JoinSet::new();
 
@@ -71,6 +76,10 @@ pub async fn run(config: &AppConfig) -> Result<RunnerPreflightStatus> {
         status.error = Some(failure_messages.join(", "));
     }
 
+    for cleanup_dir in cleanup_dirs {
+        let _ = tokio::fs::remove_dir_all(cleanup_dir).await;
+    }
+
     Ok(status)
 }
 
@@ -111,12 +120,13 @@ fn run_single_preflight_sync(spec: RunnerPreflightSpec) -> RunnerPreflightCheckS
         };
     }
 
-    let output = Command::new("docker")
-        .arg("run")
-        .arg("--rm")
-        .arg(&spec.image)
-        .args(&spec.command)
-        .output();
+    let mut command = Command::new("docker");
+    command.arg("run").arg("--rm");
+    for (host_path, container_path) in &spec.mounts {
+        command.arg("-v").arg(format!("{}:{}", host_path.display(), container_path));
+    }
+    command.arg(&spec.image).args(&spec.command);
+    let output = command.output();
 
     match output {
         Ok(output) => RunnerPreflightCheckStatus {
@@ -159,27 +169,33 @@ fn ensure_runner_image(image: &str) -> Result<()> {
     }
 }
 
-fn configured_specs(config: &AppConfig) -> Vec<RunnerPreflightSpec> {
-    vec![
+async fn configured_specs(state: &AppState) -> Result<(Vec<RunnerPreflightSpec>, Vec<PathBuf>)> {
+    let config = &state.config;
+    let mut cleanup_dirs = Vec::new();
+    let mut specs = vec![
         RunnerPreflightSpec {
             name: "yasa",
             image: config.scanner_yasa_image.clone(),
             command: vec!["/opt/yasa/bin/yasa".to_string(), "--version".to_string()],
+            mounts: Vec::new(),
         },
         RunnerPreflightSpec {
             name: "opengrep",
             image: config.scanner_opengrep_image.clone(),
             command: vec!["opengrep".to_string(), "--version".to_string()],
+            mounts: Vec::new(),
         },
         RunnerPreflightSpec {
             name: "bandit",
             image: config.scanner_bandit_image.clone(),
             command: vec!["bandit".to_string(), "--version".to_string()],
+            mounts: Vec::new(),
         },
         RunnerPreflightSpec {
             name: "gitleaks",
             image: config.scanner_gitleaks_image.clone(),
             command: vec!["gitleaks".to_string(), "version".to_string()],
+            mounts: Vec::new(),
         },
         RunnerPreflightSpec {
             name: "phpstan",
@@ -189,11 +205,13 @@ fn configured_specs(config: &AppConfig) -> Vec<RunnerPreflightSpec> {
                 "/opt/phpstan/phpstan".to_string(),
                 "--version".to_string(),
             ],
+            mounts: Vec::new(),
         },
         RunnerPreflightSpec {
             name: "pmd",
             image: config.scanner_pmd_image.clone(),
             command: vec!["pmd".to_string(), "--version".to_string()],
+            mounts: Vec::new(),
         },
         RunnerPreflightSpec {
             name: "flow-parser",
@@ -203,6 +221,7 @@ fn configured_specs(config: &AppConfig) -> Vec<RunnerPreflightSpec> {
                 "/opt/flow-parser/flow_parser_runner.py".to_string(),
                 "--help".to_string(),
             ],
+            mounts: Vec::new(),
         },
         RunnerPreflightSpec {
             name: "sandbox-runner",
@@ -212,21 +231,62 @@ fn configured_specs(config: &AppConfig) -> Vec<RunnerPreflightSpec> {
                 "-c".to_string(),
                 "import requests; import httpx; import jwt; print('Sandbox Runner OK')".to_string(),
             ],
+            mounts: Vec::new(),
         },
-    ]
+    ];
+
+    if let Some(gitleaks_spec) = specs.iter_mut().find(|spec| spec.name == "gitleaks") {
+        if let Some((workspace_dir, command, mounts)) = build_gitleaks_preflight_inputs(state).await? {
+            gitleaks_spec.command = command;
+            gitleaks_spec.mounts = mounts;
+            cleanup_dirs.push(workspace_dir);
+        }
+    }
+
+    Ok((specs, cleanup_dirs))
+}
+
+async fn build_gitleaks_preflight_inputs(
+    state: &AppState,
+) -> Result<Option<(PathBuf, Vec<String>, Vec<(PathBuf, String)>)>> {
+    let workspace_dir = std::env::temp_dir().join(format!("gitleaks-preflight-{}", uuid::Uuid::new_v4()));
+    let source_dir = workspace_dir.join("source");
+    tokio::fs::create_dir_all(&source_dir).await?;
+    let config_path = gitleaks::materialize_builtin_config(state, &workspace_dir).await?;
+    let Some(_config_path) = config_path else {
+        let _ = tokio::fs::remove_dir_all(&workspace_dir).await;
+        return Ok(None);
+    };
+
+    let command = gitleaks::build_detect_command(
+        "/work/source",
+        "/work/report.json",
+        Some("/work/gitleaks.toml"),
+    );
+    Ok(Some((
+        workspace_dir.clone(),
+        command,
+        vec![(workspace_dir, "/work".to_string())],
+    )))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::config::AppConfig;
+    use crate::{config::AppConfig, state::AppState};
 
     use super::configured_specs;
 
-    #[test]
-    fn configured_specs_cover_all_runner_families() {
+    #[tokio::test]
+    async fn configured_specs_cover_all_runner_families() {
         let config = AppConfig::for_tests();
-        let names = configured_specs(&config)
-            .into_iter()
+        let state = AppState::from_config(config)
+            .await
+            .expect("state should build");
+        let (specs, cleanup_dirs) = configured_specs(&state)
+            .await
+            .expect("specs should build");
+        let names = specs
+            .iter()
             .map(|spec| spec.name)
             .collect::<Vec<_>>();
         assert_eq!(
@@ -242,5 +302,17 @@ mod tests {
                 "sandbox-runner"
             ]
         );
+
+        let gitleaks = specs
+            .iter()
+            .find(|spec| spec.name == "gitleaks")
+            .expect("gitleaks spec should exist");
+        assert!(gitleaks.command.iter().any(|part| part == "detect"));
+        assert!(gitleaks.command.iter().any(|part| part == "--config"));
+        assert_eq!(gitleaks.mounts.len(), 1);
+
+        for cleanup_dir in cleanup_dirs {
+            let _ = tokio::fs::remove_dir_all(cleanup_dir).await;
+        }
     }
 }

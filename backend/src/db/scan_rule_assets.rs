@@ -107,6 +107,38 @@ pub async fn ensure_initialized(state: &AppState) -> Result<ScanRuleAssetImportS
     })
 }
 
+pub async fn load_asset_content(
+    state: &AppState,
+    engine: &str,
+    source_kind: &str,
+    asset_path: &str,
+) -> Result<Option<String>> {
+    if let Some(pool) = &state.db_pool {
+        let row = sqlx::query_scalar::<_, String>(
+            r#"
+            select content
+            from rust_scan_rule_assets
+            where engine = $1 and source_kind = $2 and asset_path = $3 and is_active = true
+            "#,
+        )
+        .bind(engine)
+        .bind(source_kind)
+        .bind(asset_path)
+        .fetch_optional(pool)
+        .await?;
+        return Ok(row);
+    }
+
+    Ok(discover_rule_assets()?
+        .into_iter()
+        .find(|asset| {
+            asset.engine == engine
+                && asset.source_kind == source_kind
+                && asset.asset_path == asset_path
+        })
+        .map(|asset| asset.content))
+}
+
 pub fn discover_rule_assets() -> Result<Vec<ScanRuleAsset>> {
     let root = rule_asset_root();
     let mut assets = Vec::new();

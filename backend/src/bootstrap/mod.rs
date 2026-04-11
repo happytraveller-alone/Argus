@@ -104,7 +104,7 @@ async fn build_report(state: &AppState) -> BootstrapReport {
         report.overall = BootstrapStatus::Degraded.as_str().to_string();
     }
 
-    report.preflight = match preflight::run(&state.config).await {
+    report.preflight = match preflight::run(state).await {
         Ok(status) => status,
         Err(error) => {
             report.overall = BootstrapStatus::Degraded.as_str().to_string();
